@@ -1450,8 +1450,19 @@ class Parameters:
         self.astrodust_f_cnm = float(kwargs.pop("astrodust_f_cnm", 0.28))
 
     def _lyc_reprocessed_by_default(self) -> str:
-        """``'all'`` under Cue, ``'young'`` for every other nebular backend."""
-        return "all" if getattr(self, "nebular_mode", None) == "cue" else "young"
+        """The default ``dust_lyc_reprocessed_by``.
+
+        ``'young'`` for every nebular backend except Cue. Under Cue, ``'all'`` when Cue
+        counts every stellar age, so the stellar SED gives up the LyC of every age Cue
+        re-emits; ``'young'`` when ``lyc_max_age_yr`` is finite, the former cut: the
+        stellar SED then keeps the LyC of the ages Cue does not count, as it did before
+        every age was counted (``'all'`` would remove it and re-emit none of it).
+        """
+        from tengri.components.nebular.ionizing_spectrum import LYC_ALL_AGES
+
+        if getattr(self, "nebular_mode", None) != "cue":
+            return "young"
+        return "all" if self.cue_lyc_max_age_yr == LYC_ALL_AGES else "young"
 
     def _check_cue_lyc_coupling(self) -> None:
         """Refuse the Cue/young pairing that creates the old population's LyC twice.
@@ -1468,7 +1479,8 @@ class Parameters:
         ------
         ConfigError
             If ``'young'`` is combined with Cue counting ages above both the young split
-            and the 100 Myr cut.
+            and the 100 Myr cut, or ``'all'`` with a finite ``lyc_max_age_yr`` (the LyC of
+            the ages Cue does not count would be removed and never re-emitted).
 
         Warns
         -----
@@ -1478,7 +1490,6 @@ class Parameters:
         """
         if (
             getattr(self, "nebular_mode", None) != "cue"
-            or self.dust_lyc_reprocessed_by != "young"
             or self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
         ):
             return
@@ -1488,6 +1499,21 @@ class Parameters:
         )
 
         cutoff = self.cue_lyc_max_age_yr
+        if self.dust_lyc_reprocessed_by == "all":
+            if cutoff != LYC_ALL_AGES:
+                raise ConfigError(
+                    "dust_attenuation lyc_reprocessed_by='all' with neb type 'cue' and "
+                    f"lyc_max_age_yr={cutoff:g} loses energy: 'all' removes the LyC of every "
+                    "stellar age from the SED, but Cue re-emits only the ages up to "
+                    "lyc_max_age_yr, so the older ages' LyC is neither re-emitted nor "
+                    "credited to the dust. Fix: use lyc_reprocessed_by='young' (the default "
+                    "with a finite lyc_max_age_yr; the SED then keeps the LyC of the ages Cue "
+                    "does not count, as before every age was counted), or drop lyc_max_age_yr "
+                    "to count every age."
+                )
+            return
+        if self.dust_lyc_reprocessed_by != "young":
+            return
         former_cut_yr = 10.0**MAX_NEB_LOG_AGE
         if cutoff != LYC_ALL_AGES and cutoff <= self.dust_t_birth_yr:
             return
@@ -2864,7 +2890,11 @@ class Parameters:
             _origin = (
                 "[user]"
                 if getattr(self, "dust_lyc_reprocessed_by_explicit", False)
-                else "[default: 'all' for cue]"
+                else (
+                    "[default: 'all' for cue]"
+                    if self.dust_lyc_reprocessed_by == "all"
+                    else "[default: 'young' for cue with a finite lyc_max_age_yr]"
+                )
             )
             lines.append(f"  LyC reprocessed by: {self.dust_lyc_reprocessed_by!r} {_origin}")
         lines.append("")

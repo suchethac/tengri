@@ -135,7 +135,7 @@ def _build(
         neb={
             "type": "cue",
             # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7).
-            "lyc_max_age_yr": 1.0e7,
+            "lyc_max_age_yr": 1.0e7 if reprocessed_by == "young" else "all",
             "neb_fesc": Fixed(fesc),
             "neb_fdust_frac": Fixed(0.2),
             "all_params": Fixed(DEFAULT),
@@ -288,7 +288,7 @@ class TestScreenedIsExplicitDefault:
             neb={
                 "type": "cue",
                 # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7).
-                "lyc_max_age_yr": 1.0e7,
+                "lyc_max_age_yr": 1.0e7 if reprocessed_by == "young" else "all",
                 "neb_fesc": Fixed(0.4),
                 "neb_fdust_frac": Fixed(0.2),
                 "all_params": Fixed(DEFAULT),

@@ -2145,7 +2145,25 @@ class DustSEDComponent(TemplateThreading):
                     # step exactly (off the 912 Å discontinuity itself, which
                     # R1's forced edge keeps every node off of when the mask is
                     # live) without re-deriving fesc at all.
-                    lyc_chunk = jnp.interp(sub_waves, wave, _lyc_t)
+                    #
+                    # Sub-band nodes are not SSP nodes: interpolating the step across
+                    # the SSP cell that straddles 912 A hands a node inside that cell
+                    # a fractional value (neither fesc nor 1), and which K puts a node
+                    # there is an accident of the quadrature (K=32 of the 2439 NUV
+                    # row: -1.85% against -0.09% at K=5 and -0.01% at K=64). The
+                    # nebular component evaluates the same step exactly at its own
+                    # nodes (``ionizing_mask(sub_waves)``); do the same, from the
+                    # published ``lyc_fesc``.
+                    _fesc_pub = state.derived.get("lyc_fesc")
+                    lyc_chunk = (
+                        jnp.interp(sub_waves, wave, _lyc_t)
+                        if _fesc_pub is None
+                        else jnp.where(
+                            ionizing_mask(sub_waves),
+                            jnp.asarray(_fesc_pub, dtype=_lyc_t.dtype),
+                            jnp.ones_like(sub_waves),
+                        )
+                    )
                     if self.config.lyc_reprocessed_by == "all":
                         lyc_factor_sub = lyc_chunk
                     else:

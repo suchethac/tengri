@@ -1016,7 +1016,7 @@ class TestRealGridIssueRows:
         return load_ssp_data(self.SSP_PATH)
 
     @staticmethod
-    def _build(real_ssp, z, approx, *, dust=False, igm=None, fesc=0.0):
+    def _build(real_ssp, z, approx, *, dust=False, igm=None, fesc=0.0, lyc_reprocessed_by=None):
         dust_group = (
             {
                 "type": "two_component",
@@ -1024,10 +1024,16 @@ class TestRealGridIssueRows:
                 "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
                 "tau_diff": 0.3,
+                **(
+                    {}
+                    if lyc_reprocessed_by is None
+                    else {"lyc_reprocessed_by": lyc_reprocessed_by}
+                ),
             }
             if dust
             else {"type": "none"}
         )
+        neb_extra = {"lyc_max_age_yr": 1.0e7} if lyc_reprocessed_by == "young" else {}
         igm_group = (
             {"type": "none"} if igm is None else {"type": igm, "all_params": Fixed(DEFAULT)}
         )
@@ -1042,7 +1048,12 @@ class TestRealGridIssueRows:
                 "all_params": Fixed(DEFAULT),
             },
             met={"logzsol": 0.0, "all_params": Fixed(DEFAULT)},
-            neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_fesc": Fixed(float(fesc))},
+            neb={
+                "type": "cue",
+                "all_params": Fixed(DEFAULT),
+                "neb_fesc": Fixed(float(fesc)),
+                **neb_extra,
+            },
             dust_attenuation=dust_group,
             igm=igm_group,
             redshift=Fixed(float(z)),
@@ -1182,6 +1193,34 @@ class TestRealGridIssueRows:
             f"dusty z={z} {band_name}: K=5 {errs[5] * 100:.2f}%, K=32 "
             f"{errs[32] * 100:.2f}% -- both exceed the 20% ratchet"
         )
+
+    @pytest.mark.parametrize("lyc_reprocessed_by", ["all", "young"])
+    def test_dusty_row_converges_to_a_k_independent_limit(self, real_ssp, lyc_reprocessed_by):
+        """K = 5, 32, 64 agree on the z=2 NUV dusty row, whichever population reprocesses LyC.
+
+        The sub-band Lyman-continuum factor is the step ``where(lambda < 912, fesc, 1)`` at
+        each quadrature node. Interpolating the step across the SSP cell that straddles
+        912 A gave a node inside that cell a fractional value, and which K puts a node
+        there is an accident: K=32 read -1.85% against -0.09% at K=5 and -0.01% at K=64
+        for 'all' (-1.10% for 'young'). With the step evaluated at the node every K lands
+        within 0.05% of the same limit (measured: -0.09% at K = 5, 12, 32, 64, 128).
+        """
+        z, band_idx = 2.0, 0
+        m_exact = self._build(real_ssp, z, None, dust=True, lyc_reprocessed_by=lyc_reprocessed_by)
+        p = self._params(m_exact)
+        e = np.asarray(m_exact.predict_photometry(p))
+        errs = {}
+        for K in (5, 32, 64):
+            m_lut = self._build(
+                real_ssp,
+                z,
+                WavePrecomp(band_integration="quadrature", n_subbands=K),
+                dust=True,
+                lyc_reprocessed_by=lyc_reprocessed_by,
+            )
+            errs[K] = float(self._rel(e, np.asarray(m_lut.predict_photometry(p)), band_idx))
+        assert max(errs.values()) - min(errs.values()) < 5e-4, errs
+        assert max(errs.values()) < 2e-3, errs
 
 
 def test_r2_graded_rule_spares_old_stars_flat_rule_does_not(lyc_ssp):

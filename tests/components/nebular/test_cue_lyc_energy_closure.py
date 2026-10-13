@@ -142,6 +142,44 @@ def test_young_split_with_a_matching_cutoff_closes_too(case):
     assert e_neb >= _MIN_REEMITTED * removed
 
 
+@pytest.mark.conservation
+@pytest.mark.parametrize("cutoff", [1.0e7, 1.0e8], ids=["cut_1e7", "cut_1e8"])
+@pytest.mark.parametrize("case", _CASES, ids=lambda c: f"tau{c[0]}_age{c[1]}")
+def test_finite_cutoff_neither_creates_nor_loses_energy(case, cutoff):
+    """A finite ``lyc_max_age_yr`` resolves to 'young': the SED keeps the LyC Cue does not count.
+
+    The default dust ``lyc_reprocessed_by`` is 'young' with a finite cutoff, so the stellar
+    SED keeps the LyC of the ages beyond the cut, as it did before every age was counted.
+    No energy is created (nebular <= removed) and none is lost beyond the re-emission
+    shortfall (nebular >= 0.9 x removed); the old LyC stays in the SED.
+    """
+    key = (("lyc_max_age_yr", cutoff),)
+    e_raw, e_left, e_neb = _ledger(*case, key, None)
+    removed = e_raw - e_left
+    assert e_neb <= removed * 1.001
+    assert e_neb >= _MIN_REEMITTED * removed
+    if case == _CASES[0]:
+        # quenched: the LyC is all old, so none of it is removed from the SED
+        assert e_left == pytest.approx(e_raw, rel=1e-9)
+    assert e_left > 0.45 * e_raw
+
+
+@pytest.mark.regression_bug
+@pytest.mark.parametrize("cutoff", [1.0e7, 1.0e8])
+def test_all_with_a_finite_cutoff_is_refused_as_an_energy_loss(cutoff):
+    """'all' removes every age's LyC but Cue re-emits only the counted ages: refused."""
+    with pytest.raises(ConfigError, match="loses energy"):
+        _spec({"lyc_max_age_yr": cutoff}, "all")
+
+
+@pytest.mark.regression_bug
+def test_default_with_a_finite_cutoff_is_young_with_its_provenance():
+    spec = _spec_default({"lyc_max_age_yr": 1.0e7})
+    assert spec.dust_lyc_reprocessed_by == "young"
+    assert "[default: 'young' for cue with a finite lyc_max_age_yr]" in spec.summary_str()
+    assert "lyc_reprocessed_by" not in spec.to_groups()["dust_attenuation"]
+
+
 @pytest.mark.regression_bug
 def test_young_with_all_ages_cue_is_refused_and_names_both_fixes():
     """The double count itself: 'young' + every age raises, with the two fixes in the message."""
@@ -170,6 +208,21 @@ def _spec(neb_extra, reprocessed_by):
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
             "lyc_reprocessed_by": reprocessed_by,
+        },
+        redshift=Fixed(0.1),
+    )
+
+
+def _spec_default(neb_extra):
+    from tengri.parameters.groups import parse_groups
+
+    return parse_groups(
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), **neb_extra},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.1),
     )
