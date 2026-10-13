@@ -1026,13 +1026,13 @@ def preintegrate_transposed(
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
         grid = np.sort(np.concatenate([wave_obs, fw_np]))
-        # Transmission is identically zero outside the filter table's
-        # support (left=0/right=0 below), so union-grid segments with both
-        # endpoints beyond an edge integrate to exactly zero. Keep one node
-        # past each edge (the straddle segments) and drop the rest: same
-        # clip as precompute_photometry_ztable.
-        lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
-        hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+        # The filter integral runs over the filter's own support, [fw[0], fw[-1]],
+        # and nothing outside it (#2817: no ramp across the straddle segment to the
+        # zero-filled transmission). Both edges are nodes of the union grid, so
+        # keeping exactly the nodes inside the support gives the same intervals
+        # as ``lnu_filter_integral``; a node kept past an edge would add that ramp.
+        lo = int(np.searchsorted(grid, fw_np[0]))
+        hi = int(np.searchsorted(grid, fw_np[-1], side="right"))
         grid = grid[lo:hi]
         trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
