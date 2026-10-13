@@ -85,5 +85,7 @@ def test_lnorm_age_gradient_matches_central_difference(models):
         return _loss(model, _params(model, a))
 
     fd = (at(age_gyr + h) - at(age_gyr - h)) / (2.0 * h)
-    assert jnp.isfinite(ad)
+    assert jnp.isfinite(ad), f"autodiff d/d{AGE_KEY} is {ad} at {age_gyr} Gyr"
+    # A zero on both sides would satisfy the relative check below vacuously.
+    assert ad != 0.0, f"autodiff d/d{AGE_KEY} is identically zero at {age_gyr} Gyr"
     assert abs(float(ad) - float(fd)) <= 1e-4 * abs(float(fd))
