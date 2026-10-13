@@ -2528,7 +2528,7 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     model : SEDModel
         The model :meth:`~SEDModel.enable_fast_nebular` is configuring. Its
         nebular backend's catalog is read through
-        :func:`~tengri.forward.properties._published_line_wavelengths_static`,
+        ``tengri.forward.properties._published_line_wavelengths_static``,
         the array the nebular component publishes as
         ``state.derived["line_waves"]``, bit-for-bit (#2239), with no forward
         pass (#2914).
