@@ -119,3 +119,44 @@ def test_unsampled_frac_leaves_gyr_value_in_force(synthetic_ssp_wide, family, st
     at_5 = _sed_at_z0(synthetic_ssp_wide, family, {f"{stem}_gyr": Fixed(5.0)})
     at_age0 = _sed_at_z0(synthetic_ssp_wide, family, {f"{stem}_gyr": Fixed(age0)})
     assert _rel(at_5, at_age0) > 1e-2, f"{family}: the Gyr onset is ignored"
+
+
+_PSB_TYPES = ("psb_suess2022", "psb_flex")
+
+
+@pytest.mark.parametrize("family", _PSB_TYPES)
+def test_psb_fraction_pair_at_gyr_defaults_matches_gyr_at_z0(synthetic_ssp_wide, family):
+    """The PSB quench-time fractions at their Gyr defaults' ratio reproduce the Gyr build at z = 0.
+
+    Both fractions are sampled, since a pair given in Gyr for one time and as a
+    fraction for the other is refused. The reference is the registry default in
+    Gyr; the frac build uses the same two timings as fractions of the same age.
+    """
+    from tengri.components.stellar.sfh.registry import _spec_public_prefix
+
+    age0 = float(age_at_z(0.0))
+    prefix = _spec_public_prefix(SFH_REGISTRY[family])
+    tlast_default = _gyr_default_named(family, f"{prefix}tlast_gyr")
+    tflex_default = _gyr_default_named(family, f"{prefix}tflex_gyr")
+    via_gyr = _sed_at_z0(synthetic_ssp_wide, family, {})
+    via_frac = _sed_at_z0(
+        synthetic_ssp_wide,
+        family,
+        {
+            "tlast_frac": Uniform(0.01 / age0, 1.0 / age0, default=tlast_default / age0),
+            "tflex_frac": Uniform(1.0 / age0, 5.0 / age0, default=tflex_default / age0),
+        },
+        params={
+            f"{prefix}tlast_frac": tlast_default / age0,
+            f"{prefix}tflex_frac": tflex_default / age0,
+        },
+    )
+    rel = _rel(via_frac, via_gyr)
+    assert rel <= 1e-10, f"{family}: relative SED difference {rel:.3e} > 1e-10"
+
+
+def _gyr_default_named(family, name):
+    """The registry default of one absolute-Gyr parameter of ``family``, as a float [Gyr]."""
+    dist = SFH_REGISTRY[family].params[name].default
+    value = dist.value if isinstance(dist, Fixed) else dist.default
+    return float(value)

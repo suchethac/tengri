@@ -661,3 +661,25 @@ class TestOnsetFracRoundTrip:
         assert f"{stem}_gyr" in sfh_dict
         assert f"{stem}_frac" in sfh_dict
         assert sfh_dict[f"{stem}_frac"] == Fixed(1.0)
+
+
+class TestPsbQuenchFracRoundTrip:
+    """Each PSB quench time's ``*_frac`` round-trips beside its ``*_gyr`` (#2748)."""
+
+    @pytest.mark.parametrize("family", ["psb_suess2022", "psb_flex"])
+    def test_tlast_and_tflex_fracs_round_trip_with_their_defaults(self, family):
+        original = parse_groups(
+            sfh={
+                "type": family,
+                "tlast_gyr": Fixed(0.5),
+                "tlast_frac": Fixed(1.0),
+                "tflex_gyr": Fixed(2.5),
+                "tflex_frac": Fixed(1.0),
+            },
+            redshift=Fixed(0.1),
+        )
+        sfh_dict = original.to_groups()["sfh"]
+        for stem in ("tlast", "tflex"):
+            assert f"{stem}_gyr" in sfh_dict
+            assert f"{stem}_frac" in sfh_dict
+            assert sfh_dict[f"{stem}_frac"] == Fixed(1.0)

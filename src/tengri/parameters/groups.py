@@ -3686,6 +3686,7 @@ def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     that normalization staying upstream of this call.
     """
     from tengri.components.stellar.sfh.registry import (
+        psb_quench_frac_names,
         psb_quench_param_names,
         validate_psb_quench_ordering,
     )
@@ -3702,7 +3703,15 @@ def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     for full_name in names:
         key = _override_key_for(full_name, sfh_dict, warn=False)
         given.append(sfh_dict[key] if key is not None else wildcard)
-    validate_psb_quench_ordering(sfh_type, *given)
+    # A fraction is named only by its own key: the wildcard never frees one
+    # (``all_params: FREE`` leaves the *_frac timings at their Fixed shim).
+    frac_given = []
+    for full_name in psb_quench_frac_names(sfh_type):
+        key = _override_key_for(full_name, sfh_dict, warn=False)
+        frac_given.append(sfh_dict[key] if key is not None else None)
+    validate_psb_quench_ordering(
+        sfh_type, *given, tlast_frac=frac_given[0], tflex_frac=frac_given[1]
+    )
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:

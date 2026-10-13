@@ -103,6 +103,13 @@ _AGE_UNIV_GYR_EXACT = float(age_at_z0_host())
 #: Lower bound of the delayed_bq main age [Gyr]; defined with its family below.
 _DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
 
+#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
+#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
+#: priors must not overlap or their joint support contains ladders whose
+#: flexible zone has negative width. Shared with the fraction priors below.
+_PSB_TLAST_CEIL_GYR = 1.0
+_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
+
 
 def _age_frac(gyr):
     """Fraction of the age of the universe at z=0 for an absolute Gyr timing (#2748).
@@ -143,6 +150,10 @@ _AGE_FRAC_PRIORS = {
     "sfh_snorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
     "sfh_tsnorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
     "sfh_norm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_psb2022_tlast_frac": _age_frac_prior(0.01, _PSB_TLAST_CEIL_GYR, 0.1),
+    "sfh_psb2022_tflex_frac": _age_frac_prior(_PSB_TFLEX_FLOOR_GYR, 5.0, 2.0),
+    "sfh_psb_flex_tlast_frac": _age_frac_prior(0.01, _PSB_TLAST_CEIL_GYR, 0.2),
+    "sfh_psb_flex_tflex_frac": _age_frac_prior(_PSB_TFLEX_FLOOR_GYR, 5.0, 2.0),
 }
 
 # ── Data structures ───────────────────────────────────────────────
@@ -2044,13 +2055,6 @@ _register(
 #     between fixed bins `i-1` and `i` (oldest fixed bin = reference, 0).
 _N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 
-#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
-#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
-#: priors must not overlap or their joint support contains ladders whose
-#: flexible zone has negative width.
-_PSB_TLAST_CEIL_GYR = 1.0
-_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
-
 _register(
     SFHModelSpec(
         name="psb_suess2022",
@@ -2068,6 +2072,13 @@ _register(
                 "must have lo > 0",
                 Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.1),
             ),
+            "sfh_psb2022_tlast_frac": ParamDef(
+                "Quenching-onset lookback time (youngest-bin width) as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_psb2022_tlast_gyr",
+            ),
             "sfh_psb2022_tflex_gyr": ParamDef(
                 "Upper boundary of the flexible quenching zone (Gyr); prior floor "
                 "equals the tlast_gyr ceiling so the zone can never have negative width",
@@ -2075,6 +2086,13 @@ _register(
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
                 z_capped_onset=True,
+            ),
+            "sfh_psb2022_tflex_frac": ParamDef(
+                "Upper boundary of the flexible quenching zone as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_psb2022_tflex_gyr",
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -2101,6 +2119,8 @@ _register(
             "sfh_psb2022_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb2022_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
             "sfh_psb2022_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb2022_tlast_frac": ("sfh_psb2022_tlast_frac", 1.0, 0.0),
+            "sfh_psb2022_tflex_frac": ("sfh_psb2022_tflex_frac", 1.0, 0.0),
             "sfh_psb2022_ratio_young": ("ratio_young", 1.0, 0.0),
             **{
                 f"sfh_psb2022_ratio_old_{i}": (f"ratio_old_{i}", 1.0, 0.0)
@@ -2168,6 +2188,13 @@ _register(
                 "must have lo > 0",
                 Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.2),
             ),
+            "sfh_psb_flex_tlast_frac": ParamDef(
+                "Quenching-onset lookback time (youngest-bin width) as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_psb_flex_tlast_gyr",
+            ),
             "sfh_psb_flex_tflex_gyr": ParamDef(
                 "Upper boundary of the flexible quenching zone (Gyr); prior floor "
                 "equals the tlast_gyr ceiling so the zone can never have negative width",
@@ -2175,6 +2202,13 @@ _register(
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
                 z_capped_onset=True,
+            ),
+            "sfh_psb_flex_tflex_frac": ParamDef(
+                "Upper boundary of the flexible quenching zone as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_psb_flex_tflex_gyr",
             ),
             "sfh_psb_flex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex_0); large positive = recent burst",
@@ -2210,6 +2244,8 @@ _register(
             "sfh_psb_flex_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_flex_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
             "sfh_psb_flex_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb_flex_tlast_frac": ("sfh_psb_flex_tlast_frac", 1.0, 0.0),
+            "sfh_psb_flex_tflex_frac": ("sfh_psb_flex_tflex_frac", 1.0, 0.0),
             "sfh_psb_flex_ratio_young": ("ratio_young", 1.0, 0.0),
             # The shape function counts its flexible bins off the ``flex_*``
             # kwarg names, so the internal name has to be exactly ``flex_i``.
@@ -2711,6 +2747,26 @@ def psb_quench_param_names(sfh_type) -> tuple[str, str] | None:
     return f"{prefix}tlast_gyr", f"{prefix}tflex_gyr"
 
 
+def psb_quench_frac_names(sfh_type) -> tuple[str, str] | None:
+    """The fraction twins of :func:`psb_quench_param_names` (#2748).
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of an SFH.
+
+    Returns
+    -------
+    tuple of str, or None
+        ``(tlast_frac, tflex_frac)`` fully prefixed, or ``None`` for any SFH
+        that has no flexible quenching zone.
+    """
+    gyr_names = psb_quench_param_names(sfh_type)
+    if gyr_names is None:
+        return None
+    return tuple(name[: -len("_gyr")] + "_frac" for name in gyr_names)
+
+
 def _reachable_range(spec, public_name, given):
     """Smallest and largest value a build can give one parameter, or None.
 
@@ -2745,7 +2801,77 @@ def _reachable_range(spec, public_name, given):
     return None
 
 
-def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
+def _is_named_gyr(value) -> bool:
+    """True when a Gyr quench time is given for the build, not left to its default."""
+    from tengri.parameters.priors import _is_default_fixed
+    from tengri.parameters.sentinels import DEFAULT
+
+    return value is not None and value is not DEFAULT and not _is_default_fixed(value)
+
+
+def _is_named_frac(value) -> bool:
+    """True when a quench fraction is given for the build.
+
+    The Fixed(1) shim of an unsampled fraction is not a named value: the Gyr
+    timing it shadows stands, as in :func:`route_timing_fracs`.
+    """
+    from tengri.parameters.priors import Fixed
+
+    if not _is_named_gyr(value):
+        return False
+    return not (isinstance(value, Fixed) and value.value == 1.0)
+
+
+def _describe_quench_range(name, rng) -> str:
+    if rng[0] == rng[1]:
+        return f"{name}={rng[0]:g} (pinned)"
+    return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
+
+
+def _refuse_quench_crossing(sfh_type, names, given, labels, unit) -> None:
+    """Raise if some reachable lower quench time exceeds some reachable upper one.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH being built.
+    names : tuple of str
+        Full parameter names of ``(tlast, tflex)`` in the registry.
+    given : tuple
+        What the grammar resolved for each of ``names``.
+    labels : tuple of str
+        Short names used in the message, e.g. ``("tlast_gyr", "tflex_gyr")``.
+    unit : str
+        Unit suffix for the values in the message, e.g. ``" Gyr"``.
+
+    Raises
+    ------
+    ValueError
+        If the zone ``[tlast, tflex]`` can have negative width.
+    """
+    spec = SFH_REGISTRY[sfh_type]
+    last = _reachable_range(spec, names[0], given[0])
+    flex = _reachable_range(spec, names[1], given[1])
+    if last is None or flex is None or last[1] <= flex[0]:
+        return
+    lo_label, hi_label = labels
+    raise ValueError(
+        f"sfh type={sfh_type!r} would put the flexible quenching zone "
+        f"[{lo_label}, {hi_label}] at negative width: "
+        f"{_describe_quench_range(lo_label, last)} reaches "
+        f"{last[1]:g}{unit}, above {_describe_quench_range(hi_label, flex)} at "
+        f"{flex[0]:g}{unit}. The zone starts at {lo_label} and ends at {hi_label}, so "
+        f"{lo_label} must stay at or below {hi_label} everywhere the build can "
+        f"reach; a crossing annihilates the flexible bin and lets the youngest "
+        f"bin overrun it, with the mass still closing and nothing raised. Raise "
+        f"{hi_label} above {last[1]:g}{unit}, or pin {lo_label} at or below "
+        f"{flex[0]:g}{unit}."
+    )
+
+
+def validate_psb_quench_ordering(
+    sfh_type, tlast, tflex, *, tlast_frac=None, tflex_frac=None
+) -> None:
     """Refuse a post-starburst build whose flexible zone could have negative width.
 
     Parameters
@@ -2759,25 +2885,38 @@ def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
         was not named (which pins it at the registry default).
     tflex : Distribution or float or None
         The same for ``tflex_gyr``.
+    tlast_frac : Distribution or float or None, optional
+        The same for the fraction twin ``tlast_frac`` (#2748).
+    tflex_frac : Distribution or float or None, optional
+        The same for the fraction twin ``tflex_frac``.
 
     Raises
     ------
+    ConfigError
+        If the two quench times are given in mixed units: a fraction for one
+        and Gyr (or nothing) for the other. An unnamed Gyr time stands at its
+        Gyr default, which cannot be ordered against a fraction of age(z)
+        without knowing the redshift.
     ValueError
-        If some ``tlast_gyr`` the build can reach is strictly greater than some
-        ``tflex_gyr`` it can reach.
+        If some ``tlast`` the build can reach is strictly greater than some
+        ``tflex`` it can reach, in the units the times were given in.
 
     Notes
     -----
-    The flexible zone is ``[tlast_gyr, tflex_gyr]``. The declared priors cannot
-    cross, because ``tflex_gyr``'s floor is ``tlast_gyr``'s ceiling, but a
-    pinned value bypasses its prior, so a build can still ask for
-    ``tlast_gyr > tflex_gyr``. Nothing downstream raises there: the ladder stops
-    ascending, the flexible bin takes a negative width, the youngest bin
-    overruns it, and the total mass still closes, because the same signed widths
-    that build the history also normalize it. Measured at ``tlast_gyr = 1.0,
-    tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass
-    1.000128 of the declared total. Silent, so it is refused here rather than
-    left to a mass-closure test that cannot see it.
+    The flexible zone is ``[tlast, tflex]``. The declared priors cannot
+    cross, because ``tflex``'s floor is ``tlast``'s ceiling, but a pinned value
+    bypasses its prior, so a build can still ask for ``tlast > tflex``. Nothing
+    downstream raises there: the ladder stops ascending, the flexible bin takes
+    a negative width, the youngest bin overruns it, and the total mass still
+    closes, because the same signed widths that build the history also normalize
+    it. Measured at ``tlast_gyr = 1.0, tflex_gyr = 0.5``: ladder
+    ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass 1.000128 of the declared
+    total. Silent, so it is refused here rather than left to a mass-closure test
+    that cannot see it.
+
+    A fraction pair is ordered in fraction units, which is exact at every
+    redshift: both fractions scale with the same age(z), so ``tlast <= tflex``
+    as fractions is ``tlast <= tflex`` in Gyr at any z.
 
     Equality is legal, and is the single point the two priors share. Measured at
     ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
@@ -2787,34 +2926,34 @@ def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
 
     **JIT-compatible**: not applicable; a build-time check on Python objects.
     """
-    names = psb_quench_param_names(sfh_type)
-    if names is None:
-        return
-    spec = SFH_REGISTRY[sfh_type]
-    last = _reachable_range(spec, names[0], tlast)
-    flex = _reachable_range(spec, names[1], tflex)
-    if last is None or flex is None:
-        return
-    if last[1] <= flex[0]:
-        return
+    from tengri.config.exceptions import ConfigError
 
-    def _describe(name, rng):
-        if rng[0] == rng[1]:
-            return f"{name}={rng[0]:g} (pinned)"
-        return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
-
-    raise ValueError(
-        f"sfh type={sfh_type!r} would put the flexible quenching zone "
-        f"[tlast_gyr, tflex_gyr] at negative width: "
-        f"{_describe('tlast_gyr', last)} reaches "
-        f"{last[1]:g} Gyr, above {_describe('tflex_gyr', flex)} at "
-        f"{flex[0]:g} Gyr. The zone starts at tlast_gyr and ends at tflex_gyr, so "
-        f"tlast_gyr must stay at or below tflex_gyr everywhere the build can "
-        f"reach; a crossing annihilates the flexible bin and lets the youngest "
-        f"bin overrun it, with the mass still closing and nothing raised. Raise "
-        f"tflex_gyr above {last[1]:g} Gyr, or pin tlast_gyr at or below "
-        f"{flex[0]:g} Gyr."
-    )
+    gyr_names = psb_quench_param_names(sfh_type)
+    if gyr_names is None:
+        return
+    frac_names = psb_quench_frac_names(sfh_type)
+    frac_given = (tlast_frac, tflex_frac)
+    gyr_given = (tlast, tflex)
+    if any(_is_named_frac(v) for v in frac_given):
+        if not all(_is_named_frac(v) for v in frac_given) or any(
+            _is_named_gyr(v) for v in gyr_given
+        ):
+            raise ConfigError(
+                f"sfh type={sfh_type!r} gives the two quench times in mixed units: "
+                "tlast and tflex must both be fractions of age(z) (tlast_frac, "
+                "tflex_frac), or both in Gyr (tlast_gyr, tflex_gyr). An unnamed "
+                "Gyr time stands at its Gyr default, which cannot be ordered "
+                "against a fraction of age(z) without the redshift."
+            )
+        _refuse_quench_crossing(
+            sfh_type,
+            frac_names,
+            frac_given,
+            ("tlast_frac", "tflex_frac"),
+            " of age(z)",
+        )
+        return
+    _refuse_quench_crossing(sfh_type, gyr_names, gyr_given, ("tlast_gyr", "tflex_gyr"), " Gyr")
 
 
 def _spec_public_prefix(spec) -> str:

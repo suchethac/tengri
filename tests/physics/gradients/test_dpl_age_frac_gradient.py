@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.gradient
 
@@ -69,6 +70,46 @@ def test_sed_and_gradient_wrt_frac_are_finite_and_nonzero(synthetic_ssp_wide, fa
 
     def sed_sum(frac):
         return jnp.sum(model.predict_state({name: frac}).sed_intrinsic)
+
+    value = sed_sum(_FRAC)
+    grad = jax.grad(sed_sum)(_FRAC)
+
+    assert bool(jnp.isfinite(value)) and float(value) > 0.0
+    assert bool(jnp.isfinite(grad)), f"d(SED)/d({name}) is not finite"
+    assert float(grad) != 0.0, f"d(SED)/d({name}) is exactly zero at frac={_FRAC}, z={_Z:g}"
+
+
+_PSB_TYPES = ("psb_suess2022", "psb_flex")
+
+
+@pytest.mark.parametrize("family", _PSB_TYPES)
+def test_psb_tflex_frac_gradient_is_finite_and_nonzero(synthetic_ssp_wide, family):
+    """d(SED)/d(tflex_frac) is finite and nonzero at frac = 0.99, z = 2 for both PSB families.
+
+    The tlast fraction is sampled alongside, as a pair in fractions is required.
+    Its ceiling is the tflex floor, so the zone stays non-negative over the draw.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY, _spec_public_prefix
+
+    age0 = float(age_at_z(0.0))
+    prefix = _spec_public_prefix(SFH_REGISTRY[family])
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        neb={"type": "none"},
+        sfh={
+            "type": family,
+            "all_params": Fixed(DEFAULT),
+            "tlast_frac": Uniform(0.01 / age0, 1.0 / age0, default=0.1 / age0),
+            "tflex_frac": Uniform(0.5, 1.0, default=_FRAC),
+            "log_total_mass": Fixed(_LOG_TOTAL_MASS),
+        },
+        redshift=Fixed(_Z),
+    )
+    name = f"{prefix}tflex_frac"
+    partner = {f"{prefix}tlast_frac": 0.1 / age0}
+
+    def sed_sum(frac):
+        return jnp.sum(model.predict_state({name: frac, **partner}).sed_intrinsic)
 
     value = sed_sum(_FRAC)
     grad = jax.grad(sed_sum)(_FRAC)
