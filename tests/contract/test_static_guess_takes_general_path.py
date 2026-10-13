@@ -52,7 +52,8 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/blocks/torus_library_transmission.py::_below_library_index": (
         "tracer → None; the caller (library sightline) then evaluates the X-ray absorption on "
         "the whole grid with a where-select below the library's first node — the original dense, "
-        "exact general path; the static index set is only an optimization for a concrete build grid."
+        "exact general path; the static index set is only an optimization for a concrete build "
+        "grid."
     ),
     "components/agn/blr.py::_fe2_is_concrete_narrow": (
         "traced FWHM takes the band-limited path, valid for FWHM >= 500 km/s only; a traced "
@@ -66,14 +67,6 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/blr.py::_fe2_total_power": (
         "concreteness via _fe2_is_concrete_narrow: traced width -> band-limited, NaN below 500 "
         "km/s (#2768, loud)"
-    ),
-    "components/agn/blocks/torus_library_transmission.py::_below_library_index": (
-        "traced wavelength -> None: the caller evaluates the absorption on the whole grid and "
-        "selects (the dense general form)"
-    ),
-    "utils/sed_quantities.py::_uv_anchor_plan": (
-        "traced wave -> mode 'traced': L_nu(1600 A) is taken on the runtime grid and NaN where "
-        "the grid does not span 1600 A (general path)"
     ),
     "components/nebular/nebular_grid_precompute.py::nebular_z_request": (
         "None only when redshift is Fixed and not catalog; catalog or free -> z grid (runtime)"
