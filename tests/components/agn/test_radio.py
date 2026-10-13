@@ -528,8 +528,8 @@ class TestRadioTotalDispatcher:
             assert jnp.allclose(L_eager, L_jit, rtol=1e-6), f"JIT parity fail for mode={mode}"
 
     def test_only_radio_band_emits(self):
-        """All three modes must return zero at optical/UV wavelengths."""
-        wave_optical = jnp.logspace(3.0, 6.9, 50)  # 1000 A – 8e6 A (below 1 mm)
+        """All three modes must return zero at optical/UV/near-IR wavelengths."""
+        wave_optical = jnp.logspace(3.0, 5.99, 50)  # 1000 A - 9.8e5 A (below 100 um)
         for mode in ("bell2003", "delvecchio2021", "mccheyne2022"):
             L = radio_total(
                 wave_optical,

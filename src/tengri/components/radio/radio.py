@@ -54,8 +54,13 @@ model's own paper, ``"tir"`` for the four q-based models) before calling them.
 (Bell 2003), encoded via the suppression function that scales luminosity by
 n(L) = 0.9 × (L/L*)^0.3 below threshold L* = 3e28 erg/s/Hz.
 
-**Radio frequency range**: λ > 1 mm (ν < 300 GHz). SED is zero shortward of
-this limit; radio-only modes skip optical/IR computation entirely.
+**Wavelength range**: the star-formation synchrotron power law runs down to
+λ = 100 μm (ν = 3 THz), the short edge of pcigale's radio module
+(``np.logspace(5, 11, 1000)`` nm), and is zero shortward. There it is a
+negligible fraction of the dust emission and sits outside the L_IR windows,
+which are integrated from the dust-emission SED, not this block. The thermal
+free-free (Murphy+2011, a radio calibration) and the AGN terms keep the 1 mm edge
+(λ > 1 mm, ν < 300 GHz). Radio-only modes skip optical/IR computation entirely.
 """
 
 import math
@@ -72,8 +77,15 @@ from tengri.utils.scale import pow10 as _pow10
 _L_STAR_SYNCH: float = 3.0e28  # erg/s/Hz at 1.4 GHz
 _L0_SYNCH = _L_STAR_SYNCH  # alias used in tests and external references
 
-# Wavelength boundary separating radio from IR (1 mm = 1e7 Angstrom = 300 GHz)
+# Short-wavelength edge of the thermal free-free term (1 mm = 1e7 Angstrom = 300 GHz).
 _RADIO_WAVE_MIN_AA: float = 1.0e7
+
+# Short-wavelength edge of the star-formation synchrotron power law (100 um = 1e6
+# Angstrom = 3 THz): the first node of pcigale's radio module,
+# ``np.logspace(5, 11, 1000)`` nm (sed_modules/radio.py). The power law has no physical
+# break at 1 mm; the former 1 mm edge dropped 1.3 % of the CIGALE SED at 1 mm and
+# 0.7 % at 850 um. Inclusive, so the edge node itself is kept.
+_SYNCH_WAVE_MIN_AA: float = 1.0e6
 
 # Murphy+2011 Eq. 11 free-free calibration constant [erg/s/Hz per (M☉/yr) at 1 GHz, Te=1e4 K]
 # Derivation: SFR/(M☉/yr) = 4.6e-28 × (Te/1e4)^{-0.45} × (ν/GHz)^{0.1} × L_ν[erg/s/Hz]
@@ -310,7 +322,7 @@ def radio_sfr_bell2003(
         L_tot_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
     L_ref = L_tot_ref - thermal_ref  # q calibrates the total (Bell 2003 Eq. 1)
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    return jnp.where(wavelength >= _SYNCH_WAVE_MIN_AA, L_nu, 0.0)
 
 
 # Backward-compatible alias
@@ -407,9 +419,16 @@ def radio_sfr_bell2003_split(
     else:
         # float32-safe (#1206): see radio_sfr_bell2003 for the same pattern.
         L_tot_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
-    thermal = f_thermal * (nu / nu_ref) ** (-alpha_thermal) if include_thermal else 0.0
-    L_nu = L_tot_ref * ((1.0 - f_thermal) * (nu / nu_ref) ** (-alpha_nonthermal) + thermal)
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    nonthermal = (1.0 - f_thermal) * (nu / nu_ref) ** (-alpha_nonthermal)
+    nonthermal = jnp.where(wavelength >= _SYNCH_WAVE_MIN_AA, nonthermal, 0.0)
+    if include_thermal:
+        # The thermal law is a radio calibration: it keeps the 1 mm edge.
+        thermal = jnp.where(
+            wavelength > _RADIO_WAVE_MIN_AA, f_thermal * (nu / nu_ref) ** (-alpha_thermal), 0.0
+        )
+    else:
+        thermal = 0.0
+    return L_tot_ref * (nonthermal + thermal)
 
 
 def sfr_from_lir(
@@ -684,7 +703,7 @@ def radio_sfr_delvecchio2021(
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
 
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    return jnp.where(wavelength >= _SYNCH_WAVE_MIN_AA, L_nu, 0.0)
 
 
 def radio_sfr_mccheyne2022(
@@ -803,7 +822,7 @@ def radio_sfr_mccheyne2022(
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
 
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    return jnp.where(wavelength >= _SYNCH_WAVE_MIN_AA, L_nu, 0.0)
 
 
 def radio_freefree(
