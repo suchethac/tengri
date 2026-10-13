@@ -86,7 +86,6 @@ def _run_gate(
     draft: bool = False,
     action: str = "synchronize",
     base_changed: bool = False,
-    before: str = "a" * 40,
 ) -> dict[str, str]:
     """Run the extracted gate script and return what it wrote to GITHUB_OUTPUT."""
     fake = tmp_path / "bin"
@@ -118,8 +117,6 @@ def _run_gate(
         "BASE_REF": "main",
         "BASE_CHANGED": "true" if base_changed else "false",
         "LABELS_JSON": json.dumps(labels or []),
-        "BEFORE_SHA": before,
-        "AFTER_SHA": "b" * 40,
     }
     done = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=120, check=False
@@ -288,10 +285,10 @@ EVERY = [
             EVERY,
         ),
         (
-            "push, docs only",
+            "push, docs only still runs the gallery (pushes are coalesced)",
             {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
-            "false",
+            "true",
             EVERY,
         ),
         (
@@ -303,7 +300,7 @@ EVERY = [
         ),
         (
             "push, new branch",
-            {"event": "push", "before": "0" * 40, "compare": {"files": [_f("docs/a.md")]}},
+            {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
             "true",
             EVERY,
@@ -514,3 +511,14 @@ def test_every_precision_and_parity_file_runs_in_exactly_one_shard():
             ):
                 continue  # ignored by the step itself (data-gated)
             assert len(owners) == 1, f"{test_file.name} is run by {owners}"
+
+
+def test_main_pushes_share_one_uncancelled_concurrency_group():
+    """Pushes coalesce: a fixed group, in-progress run finishes, one pending."""
+    import yaml
+
+    conc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))["concurrency"]
+    group, cancel = str(conc["group"]), str(conc["cancel-in-progress"])
+    assert "tests-main-push" in group
+    assert "run_id" not in group
+    assert "github.event_name != 'push'" in cancel
