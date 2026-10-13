@@ -687,35 +687,24 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the merged tree (origin/main, which carries #2694 and #2807, merged into this
-#: PR). Causes, all named: #2694 young-sliver SFH integral and #2807 AGN energy ledger (both in
-#: origin/main's pins), and this PR's own cause, #2837 library-torus sightline (owner ruling 9: the
-#: disc behind a library torus is dimmed by T = R_n/eta, Fritz eta = 1). Against origin/main's pins
-#: this PR's move is sum +4.98e-11 / +1.02e-5 / +4.09e-5 and first bin +1.35e-10 at all three (mbh
-#: 6 / 8 / 10), middle 0 / +1.02e-5 / +4.64e-5, last 0 / 0 / 0. Against the pins this branch
-#: carried before the merge (no #2694 or #2807): sum +2.12e-4 / +4.09e-4 / +4.63e-4; first bin
-#: +3.77e-3 at all three; middle +6.11e-6 / +2.57e-4 / +3.05e-4; last +1.29e-5 / +3.41e-5 /
-#: +3.17e-4. The pre-merge move is the sum of #2694, #2807 and this PR; the two main commits are
-#: not isolated per commit.
+#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked). Every
+#: cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy ledger,
+#: #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed by
+#: T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
+#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
+#: 6.0: sum +2.16e-4, rest_sed_0 +3.86e-3, mid +6.28e-6, last +1.23e-5;
+#: 8.0: sum +4.28e-4, rest_sed_0 +3.86e-3, mid +2.73e-4, last +3.40e-5;
+#: 10.0: sum +5.14e-4, rest_sed_0 +3.86e-3, mid +3.59e-4, last +3.24e-4.
+#: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (
-        1.5590143961429018e32,
-        81456209353478.72,
-        2.8901655421875684e28,
-        8.775409509850808e21,
-    ),
+    6.0: (1.5586759060882227e32, 81456209353478.88, 2.8901825691320397e28, 8.77332638502807e21),
     8.0: (
-        1.651100284308979e32,
-        2.2345886203830484e16,
-        3.0976934740207187e28,
-        8.825497527157806e21,
+        1.6507617942542995e32,
+        2.2345886203830524e16,
+        3.0977105009651904e28,
+        8.823414402335067e21,
     ),
-    10.0: (
-        1.6778419519189792e32,
-        2.3412454064433344e16,
-        3.1407772095541098e28,
-        9.551743066769245e21,
-    ),
+    10.0: (1.6775034618643003e32, 2.341245406443339e16, 3.140794236498581e28, 9.54965994194651e21),
 }
 
 
