@@ -59,8 +59,9 @@ n(L) = 0.9 × (L/L*)^0.3 below threshold L* = 3e28 erg/s/Hz.
 (``np.logspace(5, 11, 1000)`` nm), and is zero shortward. There it is a
 negligible fraction of the dust emission and sits outside the L_IR windows,
 which are integrated from the dust-emission SED, not this block. The thermal
-free-free (Murphy+2011, a radio calibration) and the AGN terms keep the 1 mm edge
-(λ > 1 mm, ν < 300 GHz). Radio-only modes skip optical/IR computation entirely.
+free-free (Murphy+2011, a radio calibration) keeps the 1 mm edge (λ > 1 mm,
+ν < 300 GHz). The AGN jet terms have no floor (#1071): the aging cutoff governs
+them. Radio-only modes skip optical/IR computation entirely.
 """
 
 import math

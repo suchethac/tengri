@@ -169,3 +169,36 @@ def test_model_sub_mm_synchrotron_and_ir_luminosities_unchanged(
     assert float(np.asarray(s1.derived["radio_L_ir_input"])) * 3.828e33 == pytest.approx(
         band_l_ir(s1, "tir"), rel=1e-4
     )
+
+
+def test_final_sed_l_tir_gains_the_sub_mm_synchrotron(synthetic_ssp_wide, synthetic_tophat_obs):
+    """``l_tir`` (8-1000 um of the final SED) now holds the synchrotron between 100 and 1000 um.
+
+    It is a share ~1e-5 of the TIR input: with L_nu(nu_ref) = L_TIR / (3.75e12 10^q) and a
+    power law, the 100-1000 um integral is
+    L_TIR / (3.75e12 10^q) nu_ref^alpha [nu^(1-alpha) / (1-alpha)] from 0.3 to 3 THz.
+    The energy-balance ``L_ir`` and ``sed_dust_ir`` are not affected (test above).
+    """
+    from tengri.utils.sed_quantities import compute_l_tir
+
+    def l_tir(model):
+        s = model.predict_state(model.spec.sample(jax.random.PRNGKey(0)))
+        return float(compute_l_tir(s.sed_intrinsic, s.wave)), s
+
+    with_r, without = (
+        _build(synthetic_ssp_wide, synthetic_tophat_obs, with_radio=r) for r in (True, False)
+    )
+    l1, s1 = l_tir(with_r)
+    l0, _ = l_tir(without)
+    l_in = float(np.asarray(s1.derived["radio_L_ir_input"])) * 3.828e33  # erg/s
+    nu_lo, nu_hi = _C_AA / 1.0e7, _C_AA / 1.0e6
+    analytic = (
+        l_in
+        / (3.75e12 * 10.0**_Q)
+        * 1.4e9**_ALPHA
+        * (nu_hi ** (1 - _ALPHA) - nu_lo ** (1 - _ALPHA))
+        / (1 - _ALPHA)
+    )
+    gain = (l1 - l0) * 3.828e33  # erg/s
+    assert gain == pytest.approx(analytic, rel=0.03)
+    assert 1e-6 < gain / l_in < 3e-5

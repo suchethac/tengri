@@ -37,7 +37,8 @@ from tests.contract.test_radio_freefree_switch import _synthetic_ssp
 
 pytestmark = pytest.mark.contract
 
-_RADIO_WAVE_MIN_AA = 1.0e7
+#: Free-free edge (``radio._RADIO_WAVE_MIN_AA``, 1 mm): above it the whole radio block is on.
+_FREEFREE_WAVE_MIN_AA = 1.0e7
 
 
 @pytest.fixture(scope="module")
@@ -120,7 +121,7 @@ def test_default_radio_is_the_q_relation_on_the_independent_tir(ssp, synthetic_t
     )
     a = np.asarray(absent.derived["sed_radio"])
     assert np.array_equal(a, np.asarray(explicit.derived["sed_radio"]))
-    band = np.asarray(absent.wave) > _RADIO_WAVE_MIN_AA
+    band = np.asarray(absent.wave) > _FREEFREE_WAVE_MIN_AA
     expected = np.asarray(radio_sfr_bell2003(absent.wave, band_l_ir(absent, "tir"), 2.5, 0.8))
     # Measured gap 3.1e-10: dense resampling of the SED vs the edge-exact cell integral.
     np.testing.assert_allclose(a[band], expected[band], rtol=1e-8)
@@ -131,7 +132,7 @@ def test_explicit_total_is_cigales_convention(ssp, synthetic_tophat_obs):
     """ir_window='total': the q relation on the published dust power L_ir, as pcigale does."""
     state = _state(_build(ssp, synthetic_tophat_obs, "total"))
     a = np.asarray(state.derived["sed_radio"])
-    band = np.asarray(state.wave) > _RADIO_WAVE_MIN_AA
+    band = np.asarray(state.wave) > _FREEFREE_WAVE_MIN_AA
     expected = np.asarray(radio_sfr_bell2003(state.wave, float(state.derived["L_ir"]), 2.5, 0.8))
     np.testing.assert_allclose(a[band], expected[band], rtol=1e-8)
 
@@ -146,7 +147,7 @@ def test_tir_scales_the_radio_flux_by_the_band_fraction(ssp, synthetic_tophat_ob
     l_tir = band_l_ir(tir, "tir")
     log_l_ir = tot.derived.get("log_L_ir")
     l_ir = float(10.0**log_l_ir) if log_l_ir is not None else float(tot.derived["L_ir"])
-    band = wave > _RADIO_WAVE_MIN_AA
+    band = wave > _FREEFREE_WAVE_MIN_AA
     ratio = np.asarray(tir.derived["sed_radio"])[band] / np.asarray(tot.derived["sed_radio"])[band]
     assert 0.5 < l_tir / l_ir < 1.0  # the 8-1000 um band holds only part of the dust power
     np.testing.assert_allclose(ratio, l_tir / l_ir, rtol=1e-8)
