@@ -83,7 +83,7 @@ def test_values_longward_of_1mm_are_unchanged():
 
 
 def test_free_free_at_500_um_is_the_murphy_power_law():
-    """Murphy+2011 Eqs. 4 and 11: L_nu = SFR/4.6e-28 (nu/GHz)^-0.1 at T_e = 1e4 K, SFR = 3.88e-44 L_IR."""
+    """Murphy+2011 Eqs. 4 and 11 at T_e = 1e4 K: L_nu = SFR/4.6e-28 (nu/GHz)^-0.1."""
     wave = np.array([500.0 * _UM, 100.0 * _UM])
     nu = _C_AA / wave
     expect = (1.0 / 4.6e-28) * (nu / 1.0e9) ** -0.1 * 3.88e-44 * _L_IR

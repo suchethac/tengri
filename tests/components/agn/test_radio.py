@@ -644,8 +644,8 @@ class TestFreeFree:
         assert abs(ratio - 10.0) < 1e-6, f"Linearity: ratio {ratio:.6f} != 10"
 
     def test_zero_below_radio_cutoff(self):
-        """Free-free must vanish at optical/UV wavelengths."""
-        wave_optical = jnp.logspace(3.0, 6.9, 50)
+        """Free-free must vanish at optical/UV/near-IR wavelengths (below the 100 um edge)."""
+        wave_optical = jnp.logspace(3.0, 5.99, 50)
         L = radio_freefree(wave_optical, _L_IR)
         assert jnp.all(L == 0.0)
 
