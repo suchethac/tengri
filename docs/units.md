@@ -67,8 +67,8 @@ The conversion is followed by a plausibility check on the Å range:
   divided by ten and rounded down. The ceiling covers the longest shipped
   filter, 1.31e8 Å (`planck_lfi_030`, about 1.3 cm), with room to spare. The
   message names the object, the measured range, the likely unit and the fix.
-- **Warned** when the unit is Angstrom and the range lies wholly inside
-  100-1340 Å, the extreme-UV gap where the ISM is opaque and no bandpass
+- **Warned** when the array is in Å and the range lies wholly inside
+  100–1340 Å, the extreme-UV gap where the ISM is opaque and no bandpass
   exists. Such a range is most likely nanometers. Stating `wave_unit="nm"`
   removes the warning.
 
