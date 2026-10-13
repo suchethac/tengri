@@ -21,8 +21,9 @@ X-ray depends on quantities owned by other components:
   Read from ``state.derived["log_mstar"]`` with a fallback to 10.0
   (i.e. 10¹⁰ M_⊙). X-ray's ``xray_total`` consumes the linear stellar
   mass in M_⊙, so the adapter exponentiates: ``M_* = 10**log_mstar``.
-- ``L_agn_bol`` (erg/s): produced by the AGN component. Read from
-  ``state.derived["L_agn_bol"]`` with a fallback to 0.0 (no AGN).
+- ``log_L_agn_bol`` (dex re erg/s): produced by the AGN component. Read from
+  ``state.derived["log_L_agn_bol"]``; absent means no AGN. The erg/s ``L_agn_bol`` is not read:
+  ~1e44 erg/s is ``inf`` in float32.
 - ``log_L_12um`` (dex re erg/s): νL_ν at 12 µm of the AGN disc, torus and polar
   dust, produced by the AGN component; anchors the ``lopez24`` corona. Absent
   means no AGN, and the corona is exactly zero.
@@ -53,7 +54,11 @@ from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
+<<<<<<< HEAD
     lmxb_stellar_age_gyr,
+=======
+    l_2500_from_bolometric,
+>>>>>>> origin/fix/2842-2851-agn-published-luminosities
     metallicity_from_history,
     xray_total_log_band_luminosities,
     xray_total_lopez24_log_band_luminosities,
@@ -194,9 +199,9 @@ class XRaySEDComponent(TemplateThreading):
                 "Read from stellar if present; falls back to 10.0",
             ),
             DerivedKey(
-                "L_agn_bol",
-                "erg/s",
-                "Read from AGN if present; falls back to 0.0",
+                "log_L_agn_bol",
+                "dex",
+                "Read from AGN if present; absent means no AGN",
             ),
             DerivedKey(
                 "L_2500_intrinsic",
@@ -425,7 +430,10 @@ class XRaySEDComponent(TemplateThreading):
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+        _log_l_bol_pub = derived.get("log_L_agn_bol")
+        log_l_agn_bol = (
+            jnp.asarray(-jnp.inf) if _log_l_bol_pub is None else jnp.asarray(_log_l_bol_pub)
+        )
 
         # The LMXB scaling is a steep polynomial in the stellar-population age
         # (Fragos+2013, Eq. 4: L_X/M_star against the "mass-weighted mean stellar
@@ -474,7 +482,7 @@ class XRaySEDComponent(TemplateThreading):
         L_2500 = jnp.asarray(derived.get("L_2500_intrinsic", 0.0))
         L_2500_skirtor = jnp.asarray(derived.get("L_2500_30deg", 0.0))
         # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
-        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
+        L_2500_fallback = l_2500_from_bolometric(log_l_agn_bol)
         l_2500 = jnp.where(
             L_2500 > 0.0,
             L_2500,

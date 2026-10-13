@@ -457,8 +457,38 @@ class DerivedState:
     # ``L_agn_bol`` is the accretion power integrated over all directions.
     # Published by the composable AGN only.
     log_L_agn_los: jnp.ndarray | None = None
-    L_agn_torus: jnp.ndarray | None = None
-    L_agn_absorbed: jnp.ndarray | None = None
+    # log10 of the AGN component luminosities published by the standalone AGN components
+    # [dex re erg/s]; the erg/s values (~1e44) are ``inf`` in float32 (NAMING_CONTRACT 4c).
+    # ``*_disc`` / ``*_torus`` / ``*_polar_dust`` are angle-integrated powers where the
+    # emitter is anisotropic (SKIRTOR, Kubota & Done 2018) and the ``_los`` siblings are the
+    # line-of-sight values of the emitted SED; ``log_L_agn_absorbed`` is the power the GRAHSP
+    # bi-attenuation screen removes.
+    log_L_agn_disc: jnp.ndarray | None = None
+    log_L_agn_disc_los: jnp.ndarray | None = None
+    log_L_agn_torus: jnp.ndarray | None = None
+    log_L_agn_torus_los: jnp.ndarray | None = None
+    log_L_agn_polar_dust: jnp.ndarray | None = None
+    log_L_agn_polar_dust_los: jnp.ndarray | None = None
+    log_L_agn_absorbed: jnp.ndarray | None = None
+    # The ADAF's accretion side (Mahadevan 1997, Eq. 4), composable AGN with the 'adaf' disc
+    # only: ``agn_adaf_mdot`` is mdot = Mdot / Mdot_Edd [dimensionless] derived from the
+    # radiated ``agn_log_lbol``, and ``log_L_agn_adaf_accretion`` is log10(mdot L_Edd) =
+    # log10(eta_eff Mdot c^2) [dex re erg/s] with eta_eff = 0.1, Mdot_Edd = L_Edd / (0.1 c^2).
+    agn_adaf_mdot: jnp.ndarray | None = None
+    log_L_agn_adaf_accretion: jnp.ndarray | None = None
+    # The same AGN powers in solar luminosities [Lsun], ``L_agn_<piece>_lsun`` beside each
+    # ``log_L_agn_<piece>``: 1e8 to 1e14 Lsun is representable in float32 where the erg/s value
+    # is not (NAMING_CONTRACT 4c). Formed from the dex value as pow10(log - log10(L_sun)).
+    L_agn_bol_lsun: jnp.ndarray | None = None
+    L_agn_los_lsun: jnp.ndarray | None = None
+    L_agn_disc_lsun: jnp.ndarray | None = None
+    L_agn_disc_los_lsun: jnp.ndarray | None = None
+    L_agn_torus_lsun: jnp.ndarray | None = None
+    L_agn_torus_los_lsun: jnp.ndarray | None = None
+    L_agn_polar_dust_lsun: jnp.ndarray | None = None
+    L_agn_polar_dust_los_lsun: jnp.ndarray | None = None
+    L_agn_absorbed_lsun: jnp.ndarray | None = None
+    L_agn_adaf_accretion_lsun: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];
     # drives X-ray alpha_ox (Just+2007). Published by the composable AGN (#722).
     L_2500_intrinsic: jnp.ndarray | None = None
