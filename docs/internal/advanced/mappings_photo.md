@@ -77,7 +77,7 @@ wave, lum = backend.predict_nebular_line_luminosities(
     neb_logZ_gas=None,      # None → tied to stellar metallicity
     neb_logn=2.0,
     neb_fesc=0.0,
-    neb_fesc_lya=0.0,
+    neb_fesc_lya=1.0,
 )
 # wave: (n_lines,) vacuum wavelengths in Angstrom
 # lum:  (n_lines,) luminosities in L_sun

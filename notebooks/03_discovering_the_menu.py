@@ -152,7 +152,7 @@ tengri.list_dust_emission_models()
 # %% [markdown]
 # ## Nebular backends
 #
-# - **`cue`**: A neural emulator on Cloudy 17.03 (Li+2024). Fast and smooth; requires a bare-stellar stellar population synthesis grid.
+# - **`cue`**: A neural emulator trained on Cloudy 22.00 (Li+2024). Fast and smooth; requires a bare-stellar stellar population synthesis grid.
 # - **`ssp`**: Baked-in nebular contribution from a wNE grid. Lightest option, locked to grid choices.
 # - **`cloudy`**: Direct Cloudy evaluation. Accurate and slow.
 # - **`none`**: Disable nebular emission.

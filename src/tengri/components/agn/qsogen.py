@@ -470,7 +470,7 @@ def _balmer_continuum(
     )
     tau_norm = taube * (wnorm / wavbe) ** 3
     bc_at_3000 = b_norm * (1.0 - jnp.exp(-jnp.clip(tau_norm, 0.0, 50.0)))
-    bc_at_3000 = jnp.maximum(bc_at_3000, 1e-60)
+    bc_at_3000 = jnp.maximum(bc_at_3000, representable_denominator(1e-60))
 
     scale = bcnorm * cont_at_3000 / bc_at_3000
 

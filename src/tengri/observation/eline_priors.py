@@ -379,8 +379,12 @@ def cloudy_grid_line_priors(
     grid_wavs = np.array(grid_data.line_wavelengths)
     hbeta_idx = int(np.argmin(np.abs(grid_wavs - 4862.68)))  # vacuum Hβ
     hbeta_lum = lin_lum[hbeta_idx]
-    if hbeta_lum < 1e-30:
-        hbeta_lum = 1.0  # safety fallback
+    if not hbeta_lum >= 1e-30:
+        raise ValueError(
+            f"Hbeta luminosity {float(hbeta_lum):.3e} at grid line index {hbeta_idx} "
+            f"({grid_wavs[hbeta_idx]:.2f} A) is below 1e-30 (or not finite); cannot "
+            "normalize the line priors to Hbeta"
+        )
     prior_means_all = lin_lum / hbeta_lum
 
     # Apply dex scatter

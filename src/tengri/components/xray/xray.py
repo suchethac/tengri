@@ -412,7 +412,7 @@ def pexrav_reflection(
     # −ln T is a faithful sample of σ over the full X-ray band.
     _LOG_NH_PROBE = 22.0
     sigma_phabs = (
-        -jnp.log(jnp.maximum(wabs_transmission(E_keV, _LOG_NH_PROBE), 1e-300))
+        -jnp.log(jnp.maximum(wabs_transmission(E_keV, _LOG_NH_PROBE), representable_floor(1e-300)))
         / 10.0**_LOG_NH_PROBE
     )
     g_branching = _SIGMA_THOMSON_CM2 / (_SIGMA_THOMSON_CM2 + sigma_phabs)
@@ -474,18 +474,19 @@ def _cutoff_powerlaw_band_norm(
     Returns
     -------
     jnp.ndarray
-        Band integral, floored at ``1e-60`` so it is safe as a divisor.
+        Band integral, floored at ``representable_floor(1e-60)`` so it is safe as a divisor.
 
     Notes
     -----
-    **JIT-compatible**: yes. The floor is the same ``jnp.maximum(..., 1e-60)``
+    **JIT-compatible**: yes. The floor is the same ``jnp.maximum(..., representable_floor(1e-60))``
     the inline sites used, so a degenerate spectrum still yields a finite
-    divisor rather than a division by zero.
+    divisor rather than a division by zero. ``1e-60`` is 0 in float32, hence
+    the dtype-aware floor.
     """
     E_fine = jnp.linspace(E_lo, E_hi, n_grid)  # keV
     nu_fine = E_fine * _KEV_TO_HZ
     spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
-    return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+    return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), representable_floor(1e-60))
 
 
 _LOG10_KEV_TO_HZ = float(np.log10(_KEV_TO_HZ))
@@ -1283,7 +1284,7 @@ def xray_agn_corona_from_disc(
     # would propagate as 0 * inf = NaN through L_2keV below. Compute α_ox
     # from a tiny positive floor; the spectrum is masked back to 0 at the
     # end when l_2500_erg_hz ≤ 0.
-    safe_l_2500 = jnp.maximum(l_2500_erg_hz, 1e-300)
+    safe_l_2500 = jnp.maximum(l_2500_erg_hz, representable_floor(1e-300))
     alpha_ox = alpha_ox_from_l2500(safe_l_2500, relation=alpha_ox_relation) + delta_alpha_ox
 
     # Derive L_2keV from alpha_ox definition (yang20.py:227):
@@ -1874,7 +1875,7 @@ def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
        https://doi.org/10.1051/0004-6361/202449801
     """
     a, b, c = 15.33, 11.48, 16.20
-    log_l = jnp.log10(jnp.maximum(l_bol_erg, 1e-100))
+    log_l = jnp.log10(jnp.maximum(l_bol_erg, representable_floor(1e-100)))
     k_x = a * (1.0 + (log_l / b) ** c)
     return jnp.maximum(k_x, 1.0)
 

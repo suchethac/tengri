@@ -15,6 +15,7 @@ high-z (z > 6) during reionization epoch.
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import representable_floor
 
 
 def compute_uv_slope(
@@ -90,7 +91,7 @@ def compute_uv_slope(
 
     # Log-space regression with masking
     log_wave = jnp.log10(jnp.where(w > 0, wavelength_aa, 1.0))
-    log_l = jnp.log10(jnp.where(w > 0, jnp.maximum(l_lambda, 1e-50), 1.0))
+    log_l = jnp.log10(jnp.where(w > 0, jnp.maximum(l_lambda, representable_floor(1e-50)), 1.0))
 
     n = jnp.sum(w)
     sum_x = jnp.sum(w * log_wave)

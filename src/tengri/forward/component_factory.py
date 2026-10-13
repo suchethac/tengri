@@ -966,8 +966,38 @@ def build_components(
     # dead code (the sort guarantees publisher-before-consumer);
     # the remaining checks are duplicate-publish and units mismatch.
     validate_pipeline(components)
+    _warn_unfed_optional_pair(components)
 
     return components
+
+
+def _warn_unfed_optional_pair(components: Sequence[SEDComponent]) -> None:
+    """Warn when a component reads ``L_ir`` and ``L_agn_bol`` and neither is published.
+
+    The optional-read fallback is 0.0, so a radio component with no dust
+    (energy-balance L_ir) and no AGN (L_agn_bol) in the chain silently emits
+    zero. The fallback is correct for the pipelines that legitimately omit both,
+    so this is an advisory at build time rather than an error.
+    """
+    import warnings
+
+    from tengri.config.exceptions import AdvisoryWarning
+    from tengri.forward.orchestrator import _optional_inputs, _outputs
+
+    pair = {"L_ir", "L_agn_bol"}
+    published = {key.name for c in components for key in _outputs(c)}
+    if pair & published:
+        return
+    for component in components:
+        read = {key.name for key in _optional_inputs(component)}
+        if pair <= read:
+            warnings.warn(
+                f"{type(component).__name__}: neither L_ir (dust) nor L_agn_bol (AGN) is "
+                "in this chain, so the radio output is zero (both fall back to 0.0). "
+                "Add a dust_attenuation/dust_emission block or an AGN block, or drop radio.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
 
 
 def chain_summary(components: Sequence[SEDComponent]) -> str:

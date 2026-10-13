@@ -92,6 +92,7 @@ jobs:
           retention-days: 14
 
       - name: Post artifact link to PR
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v9
         with:
           script: |

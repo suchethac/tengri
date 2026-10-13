@@ -272,3 +272,64 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
         "predict_lines": predict_lines,
         "line_wavelengths": line_wavelengths,
     }
+
+
+def shock_band_coefficients(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    wave: object,
+) -> object:
+    """Band of one unit-luminosity shock line through each filter, both frames.
+
+    The composable shock places its lines as delta functions (no line width
+    argument on its per-call path), and placement is linear in each line's
+    luminosity. The filter band of the shock SED is therefore the luminosity
+    vector contracted with these coefficients, exactly, at any shock velocity,
+    B-field, density and H-alpha normalization (#2324).
+
+    Parameters
+    ----------
+    filter_waves, filter_trans : list of array_like
+        Filter curves, one per band (the padded set the photometry path uses).
+    redshift : float
+        Source redshift for the observed frame. A single Fixed value.
+    wave : array_like, shape (n_wave,)
+        Rest-frame SED wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_lines, 2, n_filt) or None
+        Observed (index 0, at ``redshift``) and rest (index 1, at 0) band of a
+        unit-luminosity line [erg/s/Hz per erg/s]; ``n_lines`` follows the
+        MAPPINGS V line list the backend uses. None when the grid is absent,
+        since the backend then runs on a different line list.
+
+    Notes
+    -----
+    **JIT-compatible**: no, build-time only.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.components.nebular._shared import render_nebular_lines
+    from tengri.observation.photometry import lnu_filter_integral_batch
+
+    grids = _load_mappings_grids()
+    if grids is None or "mappings5" not in grids:
+        return None
+    line_waves = jnp.asarray(grids["mappings5"]["line_wavelengths_aa"])
+    wave = jnp.asarray(wave)
+    n_lines = int(line_waves.shape[0])
+
+    def _bands(sed, z):
+        # The same batch integral the per-call shock path uses, so the two agree.
+        return lnu_filter_integral_batch(sed, wave, filter_waves, filter_trans, z)
+
+    def _unit(lum_vec):
+        # Delta-function placement: the same call compute_shock_sed makes with
+        # its default line_sigma_aa=0 and line_sigma_kms=0.
+        sed = render_nebular_lines(line_waves, lum_vec, wave, 0.0, 0.0)
+        return jnp.stack([_bands(sed, float(redshift)), _bands(sed, 0.0)])
+
+    return jax.vmap(_unit)(jnp.eye(n_lines))

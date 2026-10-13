@@ -134,8 +134,8 @@ class TestLyaEscapeCancellation:
     @pytest.mark.parametrize("backend", ["cue", "cloudy"])
     @pytest.mark.parametrize("dust_kind", _DUST_KINDS)
     @pytest.mark.parametrize("fesc,fdust", _ESCAPE_DUST_CELLS)
-    def test_lya_hbeta_ratio_invariant_at_neb_fesc_lya_zero(self, backend, dust_kind, fesc, fdust):
-        """With neb_fesc_lya=0, Lyα/Hβ ratio must be invariant across escape/dust budgets.
+    def test_lya_hbeta_ratio_invariant_at_neb_fesc_lya_one(self, backend, dust_kind, fesc, fdust):
+        """With neb_fesc_lya=1.0, Lyα/Hβ ratio must be invariant across escape/dust budgets.
 
         This is the primary reproducer from #2531: the buggy code multiplies Lyα by
         (1 - neb_fesc_lya) / k_factor, canceling the general suppression (measured fail
@@ -157,7 +157,7 @@ class TestLyaEscapeCancellation:
         ref_lya, ref_hbeta = ref_fluxes
         ref_ratio = ref_lya / ref_hbeta
 
-        # At neb_fesc_lya=0, ratio must be INVARIANT (not match a fixed value).
+        # At neb_fesc_lya=1.0, ratio must be INVARIANT (not match a fixed value).
         lya_hbeta_ratio = lya / hbeta
         np.testing.assert_allclose(
             lya_hbeta_ratio,
@@ -182,7 +182,7 @@ class TestLyaEscapeCancellation:
     @pytest.mark.parametrize("backend", ["cue", "cloudy"])
     @pytest.mark.parametrize("dust_kind", _DUST_KINDS)
     @pytest.mark.parametrize("fesc,fdust", _ESCAPE_DUST_CELLS)
-    def test_halpha_hbeta_ratio_invariant_zero_fesc_lya(self, backend, dust_kind, fesc, fdust):
+    def test_halpha_hbeta_ratio_invariant_unity_fesc_lya(self, backend, dust_kind, fesc, fdust):
         """Hα/Hβ ratio invariant across escape/dust budgets (non-Lyα baseline)."""
         model = build_model(
             neb_backend=backend, neb_fesc=fesc, neb_fdust_frac=fdust, dust_kind=dust_kind
@@ -251,19 +251,19 @@ class TestLyaEscapeCancellation:
         """Unit test of the shared apply_lya_escape helper on synthetic lines.
 
         Verifies that the helper correctly identifies the Lyα row and applies
-        the (1 - neb_fesc_lya) factor without the division.
+        the neb_fesc_lya factor without the division.
         """
         # Synthetic line array: 5 lines at 912 (LyC edge), 1215.67 (Lyα), 4862 (Hβ),
         # 5007 (O III), 6564 (Hα) [Angstrom]
         wavelengths = jnp.array([912.0, 1215.67, 4862.68, 5006.84, 6563.77])
         line_lum = jnp.array([1.0, 23.3, 1.0, 2.5, 1.5])  # arbitrary units
 
-        neb_fesc_lya = 0.3
+        neb_fesc_lya = 0.7
 
         result = apply_lya_escape(line_lum, wavelengths, neb_fesc_lya)
 
-        # Lyα (index 1) should be multiplied by (1 - 0.3) = 0.7
-        expected = jnp.array([1.0, 23.3 * (1.0 - neb_fesc_lya), 1.0, 2.5, 1.5])
+        # Lyα (index 1) should be multiplied by neb_fesc_lya = 0.7
+        expected = jnp.array([1.0, 23.3 * neb_fesc_lya, 1.0, 2.5, 1.5])
 
         assert jnp.allclose(result, expected, rtol=1e-6)
 

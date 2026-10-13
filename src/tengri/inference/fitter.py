@@ -79,6 +79,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
+from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
@@ -929,8 +930,8 @@ def _warn_if_lut_bias_amplified(
 
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
-    mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed.
+    mismatches, exotic data layouts) is logged with its traceback at WARNING
+    level, and the fit proceeds exactly as it did before the advisory existed.
 
     Parameters
     ----------
@@ -1089,6 +1090,11 @@ def _warn_if_lut_bias_amplified(
                 snr=snr_at,
             )
     except Exception:
+        logger.warning(
+            "LUT-bias advisory skipped for %s; the fit proceeds without it.",
+            surface,
+            exc_info=True,
+        )
         return
 
 
@@ -1453,6 +1459,80 @@ def _neutralize_absent(data, noise, presence):
     return data, noise
 
 
+def _model_sed(model):
+    """The ``SEDModel`` under a ``ForwardModel``, or the model itself (#2620)."""
+    inner = getattr(model, "_inner_sed_for_delegation", None)
+    return inner() if callable(inner) else model
+
+
+def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> None:
+    """Refuse an unmasked band whose transmission runs past the model's axis (#2620).
+
+    A band beyond the model's observed-frame wavelength axis returns its covered
+    fraction, or zero, with no error, so the fit would treat a structural zero as
+    a measurement. The check runs at every redshift the model declares (see
+    :meth:`SEDModel.filter_coverage_redshifts`). A band over
+    :data:`~tengri.observation.photometry.FILTER_COVERAGE_TOLERANCE` is accepted
+    only when it carries zero weight in the data: presence 0, a non-finite flux, or
+    a non-finite or zero error. That is the same absence convention the catalog
+    path uses.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The model being fitted.
+    data, noise : array_like, shape (n_filters,) or (n_galaxies, n_filters)
+        Observed fluxes and uncertainties.
+    presence : array_like or None
+        Per-datum presence weights, same shape as ``data``; zero marks absent.
+    data_type : str or None
+        Only ``None`` or ``"photometry"`` is checked; other data kinds are skipped.
+
+    Raises
+    ------
+    ConfigError
+        If an unmasked band exceeds the tolerance at any declared redshift. The
+        message names the bands, their out-of-axis fractions, the axis range and
+        the redshift.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.observation.photometry import FILTER_COVERAGE_TOLERANCE
+
+    if data_type not in (None, "photometry"):
+        return
+    sed = _model_sed(model)
+    photometry_of = getattr(sed, "_photometry_or_none", None)
+    phot = photometry_of() if callable(photometry_of) else None
+    if phot is None:
+        return
+    d = np.asarray(data, dtype=float)
+    n = np.asarray(noise, dtype=float)
+    absent = ~np.isfinite(d) | ~np.isfinite(n) | (n == 0.0)
+    if presence is not None:
+        p = np.asarray(presence, dtype=float)
+        if p.shape == d.shape:
+            absent = absent | (p == 0.0)
+    # A band is refused if any galaxy (or the single object) has it unmasked.
+    unmasked = np.any(~absent, axis=0) if d.ndim == 2 else ~absent
+    if unmasked.shape != (len(phot.filters),):
+        return  # not a per-band data vector for this model
+    names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+    for z in sed.filter_coverage_redshifts():
+        frac = sed.filter_coverage_at(z)
+        bad = np.flatnonzero((frac > FILTER_COVERAGE_TOLERANCE) & unmasked)
+        if bad.size == 0:
+            continue
+        lo, hi = sed.observed_axis_range(z)
+        described = ", ".join(f"{names[k]!r} (fraction {frac[k]:.3g})" for k in bad)
+        raise ConfigError(
+            f"Band(s) {described} lie beyond the model's observed-frame wavelength axis "
+            f"[{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model is zero there, so the "
+            f"band would return its covered share or zero. Mask each band in the data "
+            f"(presence=0, or a NaN flux / zero error in a catalog), or give the model a "
+            f"grid or component that reaches it."
+        )
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -1628,7 +1708,7 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default). The fitter takes a
+    Fit a single galaxy with the default method, ``"mcmc_nuts_fast"``. The fitter takes a
     :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
     >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
@@ -1748,6 +1828,7 @@ class Fitter:
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
         _reject_non_finite_data(self.data, self.noise, presence)
+        _refuse_uncovered_bands(model, self.data, self.noise, presence, data_type)
         # An absent datum's value is never *used*, but IEEE still propagates
         # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
         # as an unmasked one does, and the guard above would be telling users
@@ -3572,7 +3653,14 @@ class Fitter:
             # prewarm=False: this throwaway run must not re-enter auto-prewarm
             # (run -> _auto_prewarm -> prewarm -> run would recurse).
             self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
-        except Exception:
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "warmup for method=%r did not complete (%s: %s); the fit continues "
+                "and will compile on first use",
+                method,
+                type(exc).__name__,
+                exc,
+            )
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
@@ -3692,7 +3780,7 @@ class Fitter:
         }
         p = _Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("wb") as f:
+        with atomic_path(p) as tmp, open(tmp, "wb") as f:
             pickle.dump(payload, f)
 
     def load_cache(self, path) -> None:
@@ -3726,6 +3814,17 @@ class Fitter:
         # and it runs after the payload has already been deserialized.
         with _Path(path).open("rb") as f:
             payload = pickle.load(f)  # nosec B301
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Adaptation cache at {path} is not a cache written by save_cache() "
+                f"(expected a dict payload, got {type(payload).__name__})."
+            )
+        missing = sorted({"spec_fingerprint", "adaptation"} - payload.keys())
+        if missing:
+            raise ValueError(
+                f"Adaptation cache at {path} is missing required key(s) {missing}; "
+                "it was not written by save_cache() of this version."
+            )
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
             raise ValueError(
                 f"Adaptation cache at {path} was written for a different model "
@@ -3784,7 +3883,7 @@ class Fitter:
         Parameters
         ----------
         method : str, optional
-            Inference method (case-sensitive). Default ``"vi"``.
+            Inference method (case-sensitive). Default ``"mcmc_nuts_fast"``.
 
             **Variational Inference (VI)**
 
@@ -3899,7 +3998,9 @@ class Fitter:
         -----
         **Method selection strategy:**
 
-        - **Default** (``"vi"``): geoVI is recommended for high-dimensional problems
+        - **Default** (``"mcmc_nuts_fast"``): four NUTS chains on the mass-profiled
+          posterior; the fast photometry recipe for single galaxies.
+        - **Variational** (``"vi"``): geoVI is recommended for high-dimensional problems
           (D>50) and population fitting. Captures non-Gaussian posterior geometry.
         - **Exact posterior** (``"mcmc_nuts"``): Use for D≤20 where exact sampling is
           feasible and posterior validation is critical.
@@ -4733,7 +4834,7 @@ class Fitter:
         batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
         method : str
-            Default "vi". Any method from run().
+            Default ``"mcmc_nuts_fast"``. Any method from run().
         key : PRNGKey, optional
             Random seed for sampling methods. Default: ``jax.random.PRNGKey(42)``.
         verbose : bool

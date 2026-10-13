@@ -46,6 +46,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.parameters.parameters import Parameters
+from tengri.utils.atomic_io import atomic_path
 
 
 def generate_sbi_training_data(
@@ -315,6 +316,12 @@ class SBIPosterior:
             state = pickle.load(f)  # nosec B301
 
         if isinstance(state, dict):
+            if "posterior" not in state:
+                raise ValueError(
+                    f"Pre-trained posterior at {path} is a dict without a 'posterior' "
+                    f"key (found keys {sorted(state)}); it was not written by "
+                    "SBIPosterior.save()."
+                )
             return cls(
                 posterior=state["posterior"],
                 param_names=state.get("param_names"),
@@ -339,7 +346,7 @@ class SBIPosterior:
             "param_names": self.param_names,
             "metadata": self.metadata,
         }
-        with open(filepath, "wb") as f:
+        with atomic_path(filepath) as tmp, open(tmp, "wb") as f:
             pickle.dump(state, f)
 
     def sample(

@@ -45,6 +45,7 @@ from tengri.components.agn.grahsp.bolometric import (
 )
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
+from tengri.components.agn.grahsp.normalization import bbb_side_unit_power
 from tengri.components.agn.grahsp.templates import (
     GRAHSPTemplates,
     load_grahsp_templates,
@@ -569,6 +570,11 @@ agn_grahsp_hot_fcov
         disc_mdot=disc_mdot,
     )
     sed_unit = evaluate_grahsp_agn(wave_nm, unit_params, templates)
+    # The unit bolometric is integrated per component on its own grid
+    # (grahsp/normalization.py), so the normalization does not depend on the
+    # caller's wavelength sampling.
+    if templates is None:
+        templates = load_grahsp_templates()
     # Total bolometric luminosity at l5100 = 1.
     if agn_grahsp_log_l5100 is not None:
         # Honor the explicit l5100 override (matches composable runner
@@ -580,7 +586,7 @@ agn_grahsp_hot_fcov
         # The accretion luminosity: everything but the torus above 91.2 nm (the paper's
         # lumBolBBB). The torus re-radiates absorbed accretion light, so adding it here
         # would count that light twice and make l5100 depend on fcov.
-        l_bol_unit = sed_unit.l_bol_bbb
+        l_bol_unit = bbb_side_unit_power(unit_params, templates)
         target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio
         l5100 = target_l_bol / l_bol_unit
 
