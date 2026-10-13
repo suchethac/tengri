@@ -7,6 +7,8 @@ call from naming a nonexistent kwarg (#2430). Verifies that:
 2. A broken listing is reported with its file and fence line, and the exit code is 1
 3. ``--list`` names every listing it finds and exits 0
 4. A listing marked ``<!-- raises: Name -->`` passes only by raising ``Name``
+5. ``--one PATH:LINE`` runs a single listing and prints its result line
+6. A listing that runs past ``--timeout`` is reported as a timeout failure
 """
 
 from __future__ import annotations
@@ -40,6 +42,16 @@ model = SEDModel.build(
     radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}, 'all_params': FREE},
     redshift=Fixed(0.1),
 )
+```
+"""
+
+SLOW_LISTING = """\
+A listing that does not finish within the timeout.
+
+```python
+import time
+time.sleep(3)
+model = SEDModel.build(ssp, observation=obs, redshift=0.1)
 ```
 """
 
@@ -79,6 +91,23 @@ def test_broken_listing_is_reported_with_its_fence_line(doc: Path):
     assert len(failure_lines) == 1, result.stdout
     assert failure_lines[0].startswith(f"{doc}:{broken_line}: ")
     assert "2 listings, 2 executed, 1 failed" in result.stdout
+
+
+def test_one_runs_a_single_listing_and_prints_ok(doc: Path):
+    result = _run("--one", f"{doc}:3")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert any(ln.startswith("ok ") for ln in result.stdout.splitlines()), result.stdout
+
+
+def test_listing_past_timeout_is_reported_as_timeout(tmp_path: Path):
+    path = tmp_path / "slow.md"
+    path.write_text(SLOW_LISTING, encoding="utf-8")
+
+    result = _run("--no-default", "--paths", str(path), "--timeout", "1")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"{path}:3: timeout after 1 s" in result.stdout, result.stdout
 
 
 def test_list_names_every_listing_and_exits_zero(doc: Path):

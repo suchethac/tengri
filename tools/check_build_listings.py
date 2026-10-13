@@ -15,6 +15,16 @@ This checker executes each listing against a committed fixture and
 checks that the model it builds predicts finite, positive photometry at
 a sampled parameter point.
 
+Why a subprocess per listing
+----------------------------
+Every listing used to run in one interpreter. Models, SSP grids and JAX
+compile caches accumulated across listings until the 7 GB CI runner
+terminated the process (SIGTERM, exit 143) about 90 s in, right after the
+first listing passed (run 38458472796). The driver now starts a fresh
+interpreter for each listing (``--one PATH:LINE``); the child exits, so its
+memory returns to the OS before the next listing starts. A listing that
+runs past ``--timeout`` seconds is killed and reported as a failure.
+
 What it checks
 --------------
 0. Execution stops before the first statement that calls ``.fit(...)`` or
@@ -50,6 +60,7 @@ Usage
     python tools/check_build_listings.py              # scan docs/
     python tools/check_build_listings.py --list       # print listings found
     python tools/check_build_listings.py --no-default --paths FILE [...]
+    python tools/check_build_listings.py --timeout 600 --jobs 1
 
 Exit status is 1 if any listing fails, 0 otherwise.
 """
@@ -60,10 +71,13 @@ import argparse
 import ast
 import contextlib
 import io
+import os
 import re
+import subprocess
 import sys
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -80,6 +94,8 @@ BAND_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 NO_EXEC_MARKER = "<!-- no-exec -->"
 RAISES_MARKER = re.compile(r"<!--\s*raises:\s*(\w+)\s*-->")
 BUILD_CALL = "SEDModel.build("
+DEFAULT_TIMEOUT = 300.0
+RESULT_PREFIXES = ("ok ", "fail ", "skipped")
 
 # Same pattern as PY_FENCE in tools/check_doc_examples.py; the tools do not import each other.
 PY_FENCE = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
@@ -306,16 +322,104 @@ def _first_line(exc: BaseException) -> str:
     return text.splitlines()[0] if text else ""
 
 
+def _listing_result(listing: Listing) -> str:
+    """Execute one listing in this interpreter and return its result line."""
+    if listing.no_exec:
+        return "skipped no-exec marker"
+    ssp_file = ssp_fixture_for(listing.code)
+    started = time.perf_counter()
+    try:
+        execute_listing(listing, base_namespace(ssp_file), ssp_file)
+    except Exception as exc:  # the driver reports this line, not a traceback
+        return f"fail {type(exc).__name__}: {_first_line(exc)}"
+    return f"ok {time.perf_counter() - started:.1f}"
+
+
+def run_one(spec: str) -> int:
+    """Execute the single listing named by ``PATH:LINE`` and print its result line.
+
+    This is the child mode the driver starts once per listing. Exit status is
+    0 for ``ok`` and ``skipped``, and 1 for ``fail``.
+    """
+    path_text, _, line_text = spec.rpartition(":")
+    path = Path(path_text)
+    if not path_text or not path.is_file():
+        print(f"fail FileNotFoundError: no file at {path_text!r}", flush=True)
+        return 1
+    matches = [
+        item
+        for item in scan_paths([path], include_default=False)
+        if str(item[1].line) == line_text
+    ]
+    if not matches:
+        print(f"fail LookupError: no listing at {spec}", flush=True)
+        return 1
+    result = _listing_result(matches[0][1])
+    print(result, flush=True)
+    return 1 if result.startswith("fail ") else 0
+
+
+def _result_line(stdout: str) -> str | None:
+    """Return the last result line a child printed, or None if it printed none."""
+    lines = [ln for ln in stdout.splitlines() if ln.startswith(RESULT_PREFIXES)]
+    return lines[-1] if lines else None
+
+
+def _run_child(path: Path, listing: Listing, timeout: float) -> tuple[bool, str]:
+    """Run one listing in a fresh interpreter; return ``(passed, message)``.
+
+    A timeout, or a child that exits without a result line (for example one
+    killed by the runner), is a failure with a message saying so.
+    """
+    command = [sys.executable, str(Path(__file__).resolve()), "--one", f"{path}:{listing.line}"]
+    env = {**os.environ, "JAX_PLATFORMS": os.environ.get("JAX_PLATFORMS", "cpu")}
+    try:
+        proc = subprocess.run(
+            command, timeout=timeout, capture_output=True, text=True, env=env, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"timeout after {timeout:g} s"
+    result = _result_line(proc.stdout)
+    if result is None:
+        return False, f"exit {proc.returncode}: child printed no result line"
+    if result.startswith("fail "):
+        return False, result.removeprefix("fail ")
+    return True, ""
+
+
+def _check_listing(path: Path, listing: Listing, timeout: float) -> tuple[bool, str, float]:
+    """Return ``(passed, message, elapsed_seconds)`` for one listing."""
+    started = time.perf_counter()
+    passed, message = _run_child(path, listing, timeout)
+    return passed, message, time.perf_counter() - started
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--list", action="store_true", help="print listings found and exit 0")
     parser.add_argument("--no-default", action="store_true", help="skip the docs/ scan")
     parser.add_argument("--paths", nargs="*", default=[], type=Path, help="extra files or dirs")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT,
+        metavar="SECONDS",
+        help=f"per-listing limit; a listing past it is a failure (default {DEFAULT_TIMEOUT:g})",
+    )
+    parser.add_argument(
+        "--jobs", type=int, default=1, metavar="N", help="listings run at once (default 1)"
+    )
+    parser.add_argument("--one", metavar="PATH:LINE", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.one:
+        return run_one(args.one)
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
     listings = scan_paths(args.paths, include_default=not args.no_default)
     if args.list:
         for path, listing in listings:
@@ -328,22 +432,15 @@ def main(argv: list[str] | None = None) -> int:
     to_run = [(path, item) for path, item in listings if not item.no_exec]
     skipped = len(listings) - len(to_run)
     failures: list[str] = []
-    bases: dict[str, dict] = {}
-    for path, item in to_run:
-        started = time.perf_counter()
-        ssp_file = ssp_fixture_for(item.code)
-        try:
-            if ssp_file not in bases:
-                bases[ssp_file] = base_namespace(ssp_file)
-            execute_listing(item, bases[ssp_file], ssp_file)
-            status = "ok"
-        except Exception as exc:  # report every listing, not just the first
-            status = "FAILED"
-            failure = f"{path}:{item.line}: {type(exc).__name__}: {_first_line(exc)}"
-            failures.append(failure)
-            print(failure, flush=True)
-        elapsed = time.perf_counter() - started
-        print(f"  {path}:{item.line} {status} ({elapsed:.1f} s)", file=sys.stderr, flush=True)
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        results = pool.map(lambda pair: _check_listing(pair[0], pair[1], args.timeout), to_run)
+        for (path, item), (passed, message, elapsed) in zip(to_run, results):
+            status = "ok" if passed else "FAILED"
+            if not passed:
+                failure = f"{path}:{item.line}: {message}"
+                failures.append(failure)
+                print(failure, flush=True)
+            print(f"  {path}:{item.line} {status} ({elapsed:.1f} s)", file=sys.stderr, flush=True)
     print(f"{len(listings)} listings, {len(to_run)} executed, {len(failures)} failed")
     if skipped:
         print(f"{skipped} skipped (no-exec)")
