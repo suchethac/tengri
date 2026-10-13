@@ -284,7 +284,11 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "
-        "emitters (radio, xray, and any new ones)"
+        "emitters (radio, xray, agn, and any new ones)"
+    ),
+    "_*_term_response_decline": exclude(
+        "the verdict that accompanies _*_term_response_cache: why the response was "
+        "refused, recorded for precompute_report. Read by no numerical path"
     ),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),
