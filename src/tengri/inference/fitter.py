@@ -2192,10 +2192,10 @@ class Fitter:
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
-        Photometry -> ``WavePrecomp``; spectroscopy and joint -> ``None`` (exact,
-        #1688); ``FeaturePrecomp`` is appended when emission lines are fit.
-        Returns ``None`` for data types with no LUT mapping (the fit then stays
-        exact).
+        Photometry -> ``WavePrecomp``; spectroscopy and joint -> no pixel LUT
+        (#1688). ``FeaturePrecomp`` is attached when emission lines are fit, on
+        its own for spectroscopy and joint fits. Returns ``None`` when nothing
+        applies (the fit then stays exact).
 
         "Emission lines are fit" means **any** line channel: the spectroscopy
         nuisance amplitudes (``_eline_marginalize`` / ``_eline_fitted``) *and*
@@ -2220,17 +2220,19 @@ class Fitter:
         if _has_free_agb_dust_weight(model):
             return None
 
-        # #1688: spectroscopy defaults to the exact path. SpectrumPrecomp samples
-        # the model at pixel centers, which moves a high-SNR spectroscopic
-        # posterior by about one sigma against the exact path. Until a sub-pixel
-        # LUT exists, the default is exact and an explicit SpectrumPrecomp() opts in.
-        # A joint fit goes exact as well: a joint observation promotes WavePrecomp
-        # onto the spectrum LUT too (SEDModel.__init__), so the photometry channel
-        # cannot take the LUT alone.
+        # #1688: spectroscopy and joint fits take no pixel LUT by default.
+        # SpectrumPrecomp samples the model at pixel centers, which moves a
+        # high-SNR spectroscopic posterior by about one sigma against the exact
+        # path, and an explicit SpectrumPrecomp() opts in. A joint fit cannot keep
+        # WavePrecomp for its photometry alone: a joint observation promotes it
+        # onto the spectrum LUT too (SEDModel.__init__). The emission-line
+        # FeaturePrecomp is a separate mechanism and is still attached below
+        # where the fit has a line channel, since FeaturePrecomp alone does not
+        # engage either pixel LUT.
         if self.data_type == "photometry":
             base = WavePrecomp()
         else:
-            return None
+            base = None
         # A line-flux channel earns the LUT, but an index/ratio channel on the
         # SAME fit vetoes it: those read the rest-frame SED / discrete catalog,
         # which the fast grid does not serve (#1665). Such a fit pays the
@@ -2253,6 +2255,8 @@ class Fitter:
             and not _has_line_adjacent_channel(model)
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
+        if base is None:
+            return FeaturePrecomp() if wants_lut else None
         return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(
