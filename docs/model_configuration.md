@@ -77,7 +77,7 @@ Optional physics blocks (dust_attenuation, neb, agn, etc.) support nesting via s
 ```python
 agn = {
     'type': 'composable',
-    'disc': {'type': 'analytic_disk'},
+    'disc': {'type': 'multicolor'},
     'torus': {'type': 'skirtor', 'all_params': FREE},
     'nlr': {'type': 'cue', 'logz': -0.3},
 }
@@ -113,10 +113,12 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 **The group declares no parameters at all** under the selected configuration (e.g. `radio` with every sub-model disabled):
 
+<!-- raises: ParameterError -->
 ```python
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}, 'all_params': FREE},
+    redshift=Fixed(0.1),
 )
 # Raises ParameterError:
 # "'all_params'/'other_params': FREE in group 'radio' covers no parameters --
@@ -129,26 +131,16 @@ model = SEDModel.build(
 #  parameter your chosen configuration actually declares)."
 ```
 
-**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them:
+**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them. The guard raises for this shape, and the message names the parameters it would have freed. The `met` table type is refused at build (#2425), so the shape is not reproduced here.
 
 ```python
-model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table', 'all_params': FREE})
-# Raises ParameterError:
-# "'all_params: FREE' freed 0 of 1 parameters in group 'met'. These have no
-#  declared prior, only Fixed defaults:
-#    met_alpha_fe
-#  FREE resolves to each parameter's registry default, and these default to
-#  Fixed; so the wildcard would leave every one of them pinned and the fit
-#  would silently not vary this physics.
-#  Pass explicit priors instead, e.g. met={'alpha_fe': Uniform(lo, hi)}."
-
 # The remedy depends on the parameter -- it is not always "add a prior".
 # met_alpha_fe is declared but not yet part of the released model, and no sweep
 # has freed it end to end, so its effect on the SED is unconfirmed. For this
 # parameter, drop the wildcard rather than free it: an explicit prior on an axis
 # nobody has confirmed does anything is the inert-parameter failure this guard
 # exists to catch.
-model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, met={'type': 'delta'}, redshift=Fixed(0.1))
 
 # CORRECT (general case): an explicit prior on a parameter you genuinely
 # mean to vary -- gas-phase metallicity, live in every photoionized
@@ -156,6 +148,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     neb={'type': 'cue', 'logZ_gas': Uniform(-1.0, 0.3)},
+    redshift=Fixed(0.1),
 )
 ```
 
@@ -163,20 +156,23 @@ A partial free (where some parameters have a declared range and some do not) war
 
 The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard. Naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example: the declared but not yet released alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
 
+<!-- raises: ParameterError -->
 ```python
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={...},
-    met={'type': 'table', 'alpha_fe': FREE}, redshift=Fixed(0.1),
+    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    met={'type': 'delta', 'alpha_fe': FREE}, redshift=Fixed(0.1),
 )
 # Raises ParameterError:
 # "'alpha_fe': FREE cannot be honored -- 'met_alpha_fe' has no declared
 #  free prior (its registry default is Fixed(0.0)). Pass an explicit
 #  prior instead, e.g. alpha_fe: Uniform(lo, hi)."
+```
 
+```python
 # CORRECT: an explicit prior for a parameter you genuinely mean to vary
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={...},
-    met={'type': 'table', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
+    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    met={'type': 'delta', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
 )
 ```
 
@@ -519,7 +515,7 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 ```python
 agn={
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
+    'disc': {'type': 'multicolor', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
     'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},
     'norm': 'cigale_joint',
@@ -584,6 +580,7 @@ A model's resolved configuration can be inspected and edited via serialization.
 ### Inspect the model config
 
 ```python
+config = recipes.star_forming_photometry()
 model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 
 # Get the resolved config as a nested dict
@@ -626,7 +623,7 @@ with open("config.yaml", "w") as f:
 
 ```python
 # Input
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, met={'type': 'table'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, met={'type': 'delta'}, redshift=Fixed(0.1))
 
 # Output of model.spec.to_groups()
 {
@@ -642,7 +639,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_p
 A sole-directive wildcard (no explicit per-parameter overrides) round-trips unchanged:
 
 ```python
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, met={'type': 'table'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, met={'type': 'delta'}, redshift=Fixed(0.1))
 model.spec.to_groups()['sfh']
 # {'type': 'dpl', 'all_params': FREE}
 ```
@@ -673,7 +670,7 @@ Exchange one sub-component:
 
 ```python
 config = recipes.agn_panchromatic()
-config['agn']['disc'] = {'type': 'bbflat'}  # swap the disk model
+config['agn']['disc'] = {'type': 'multicolor'}  # swap the disk model
 model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 ```
 
@@ -685,9 +682,8 @@ Free everything except a few things:
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'beta': Fixed(2.0), 'other_params': FREE},  # beta pinned, the rest free
-    dust_attenuation={'type': 'two_component', 'tau_bc': Uniform(0, 1), 'other_params': Fixed(DEFAULT)},  # only tau_bc free
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': Uniform(0, 1), 'other_params': Fixed(DEFAULT)},  # only tau_bc free
     redshift=Fixed(0.1),
-    ...
 )
 ```
 
@@ -696,13 +692,13 @@ model = SEDModel.build(
 ```python
 agn = {
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
+    'disc': {'type': 'multicolor', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},  # fixed at registry defaults
-    'blr': {'type': 'cue'},  # uses defaults
+    'nlr': {'type': 'analytic', 'all_params': Fixed(DEFAULT)},  # fixed at registry defaults
+    'blr': {'type': 'analytic'},  # uses defaults
     # feii and atten omitted (OFF)
 }
-model = SEDModel.build(ssp_data=ssp, observation=obs, agn=agn)
+model = SEDModel.build(ssp_data=ssp, observation=obs, agn=agn, redshift=Fixed(0.1))
 ```
 
 ---
@@ -764,10 +760,11 @@ sfh={'type': 'dpl', '*': FREE}
 
 ### No-op wildcard
 
+<!-- raises: ValueError -->
 ```python
 model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE}, redshift=Fixed(0.1))
-# ParameterError: Cannot set 'all_params': FREE on radio — it has no free parameters.
-# Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}
+# ValueError: radio legacy type form is retired. radio={'type': 'sfonly'} → use the
+# composable form: radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}
 ```
 
 ### IGM without redshift

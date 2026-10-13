@@ -52,7 +52,11 @@ this order.
    - slow tier green (the PR gate deselects it — run it): `.venv/bin/pytest tests/ -q -m slow`
    - docs build green (CI `build` job)
    - `python tools/check_param_ranges.py`, `check_test_markers.py`,
-     `check_numeric_guards.py`, `check_doc_examples.py` all exit 0
+     `check_numeric_guards.py`, `check_doc_examples.py`,
+     `check_build_listings.py` all exit 0
+   - `python tools/report_doc_rot.py` run once; its findings in `docs/dev/` fixed
+     (advisory, so it does not gate the tag, but a finding left open is the
+     rot it exists to catch)
    - CHANGELOG (or release notes) entry for the version, including any
      behavior changes flagged `breaking-change`
 
