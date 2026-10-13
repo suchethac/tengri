@@ -148,11 +148,14 @@ _LOG_LSUN = host_array(math.log10(_LSUN_ERG))
 _LOG_4PI = host_array(math.log10(4.0 * math.pi))
 _LOG_C = host_array(math.log10(_C_CGS))
 
-# Maximum SSP age contributing to nebular emission. Re-exported from
-# ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
-# and the downstream forward filter (here) share one source of truth.
+# 100 Myr, the cutoff ``lyc_max_age_yr=1e8`` selects. Kept importable from here; the
+# precompute lives in ionizing_spectrum, and the age mask below reads the same cutoff
+# from the backend, so the table and the forward filter cannot disagree.
 from tengri.components.nebular.ionizing_spectrum import (
-    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,
+    LYC_ALL_AGES,
+    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,  # noqa: F401  (re-exported for importers)
+    lyc_max_log_age,
+    validate_lyc_max_age_yr,
 )
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
@@ -1143,12 +1146,18 @@ class CueBackend:
         ssp_data=None,
         default_gas_logqion: float = 49.1,
         nitrogen: str = "absolute",
+        lyc_max_age_yr: str | float = LYC_ALL_AGES,
     ) -> None:
         if nitrogen not in CUE_NITROGEN_MODES:
             raise ValueError(
                 f"CueBackend nitrogen={nitrogen!r}: expected one of {CUE_NITROGEN_MODES}."
             )
         self.nitrogen = nitrogen
+        # Oldest stellar age whose ionizing photons are counted: 'all' or an age [yr].
+        # The table below is built under the same cutoff and the age mask in
+        # ``_compute_weighted_cue_params`` reads it, so the two cannot drift apart.
+        self.lyc_max_age_yr = validate_lyc_max_age_yr(lyc_max_age_yr)
+        self._lyc_max_log_age = lyc_max_log_age(self.lyc_max_age_yr)
         self.name = "cue"
         self.has_free_params = True
         self.has_continuum = True
@@ -1215,6 +1224,7 @@ class CueBackend:
             np.array(ssp_data.ssp_flux),
             np.array(ssp_data.ssp_lgmet),
             ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
+            max_log_age=self._lyc_max_log_age,
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
@@ -1591,9 +1601,9 @@ class CueBackend:
     ) -> dict:
         """Derive Cue parameters from SSP weights.
 
-        Computes total Q_H by summing mass-weighted per-Msun Q_H over
-        young age bins, and picks the ionizing spectrum shape from the
-        dominant (highest Q_H × weight) age bin.
+        Computes total Q_H by summing mass-weighted per-Msun Q_H over every
+        SSP age bin (or those up to ``lyc_max_age_yr``), and the ionizing-spectrum
+        shape as the luminosity-weighted combination of the same bins.
 
         Parameters
         ----------
@@ -1626,7 +1636,12 @@ class CueBackend:
 
         # Vectorized, JIT-safe computation over all age bins.
         # Use jnp.where masks instead of boolean fancy indexing.
-        young_mask = ssp_log_ages_yr <= _MAX_NEB_LOG_AGE  # (n_age,) bool
+        # Which age bins count: all of them by default, those up to ``lyc_max_age_yr``
+        # otherwise (1e8 yr is the former 100 Myr cut, the same comparison as before).
+        if self._lyc_max_log_age is None:
+            counted_mask = jnp.ones(ssp_log_ages_yr.shape, dtype=bool)  # (n_age,) bool
+        else:
+            counted_mask = ssp_log_ages_yr <= self._lyc_max_log_age
 
         # Vectorize interpolate_ionizing_params over all ages at once.
         # ionspec_table is (n_met, n_age, 7), logqion_table is (n_met, n_age).
@@ -1657,7 +1672,7 @@ class CueBackend:
         # #1001 defense: non-finite table rows are sanitized (replaced with 0.0 log)
         # so they don't poison the exponent (0*exp(nan) is still nan).
         finite_q = jnp.isfinite(logqion_all)  # (n_age,)
-        valid = young_mask & (ssp_weights > 0) & finite_q  # (n_age,) bool
+        valid = counted_mask & (ssp_weights > 0) & finite_q  # (n_age,) bool
         logq_safe = jnp.where(finite_q, logqion_all, 0.0)
         w_valid = jnp.where(valid, ssp_weights, 0.0)
         lse = logsumexp(LN10 * logq_safe, b=w_valid)  # ln( sum w*10**logqion )
@@ -1705,7 +1720,7 @@ class CueBackend:
         w_pos = ssp_weights > 0  # (n_age,)
         log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
         finite_seg = jnp.isfinite(log_seglum_all)  # (n_age,4)
-        seg_valid = young_mask[:, None] & w_pos[:, None] & finite_seg
+        seg_valid = counted_mask[:, None] & w_pos[:, None] & finite_seg
         log_seg_w = jnp.where(
             seg_valid, log_w[:, None] + jnp.where(finite_seg, log_seglum_all, 0.0), -jnp.inf
         )  # (n_age,4)
@@ -1723,8 +1738,9 @@ class CueBackend:
         logLratio_eff = jnp.diff(log_seg_tot)  # (3,)
         i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
 
-        # Degenerate (no valid ionizing bin): dominant-bin fallback, picked in LOG
-        # space so the index selection never materializes 10**logqion.
+        # Empty population (no counted bin with weight and a finite Q_H): dominant-bin
+        # fallback, picked in LOG space so the index selection never materializes
+        # 10**logqion.
         # total_logqion == -99 already zeros emission.
         log_terms = jnp.where(valid, logq_safe + log_w, -jnp.inf)  # (n_age,)
         i7 = jnp.where(any_valid, i7_weighted, ionspec_all[jnp.argmax(log_terms)])
@@ -2232,6 +2248,9 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "trained Speculator network weights define the emitted nebular lines + continuum"
     ),
     "default_gas_logqion": content("default ionizing-photon normalization"),
+    "nitrogen": content("meaning of gas_logno (absolute [N/O] or offset from a relation)"),
+    "lyc_max_age_yr": content("oldest stellar age whose ionizing photons are counted"),
+    "_lyc_max_log_age": exclude("log10 of lyc_max_age_yr, which is already content-keyed"),
     "_line_sort_idx": exclude("argsort of weights.nn_line_wav; weights is already content-keyed"),
     "_cont_sort_idx": exclude("argsort of weights.cont_wav; weights is already content-keyed"),
     "_ionspec_table": exclude(

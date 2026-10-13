@@ -1025,6 +1025,11 @@ class Parameters:
             raise ConfigError(
                 f"neb nitrogen={self.cue_nitrogen!r}: expected one of {NITROGEN_MODES}."
             )
+        # Oldest stellar age whose ionizing photons Cue counts: 'all' (default) or an age
+        # in years; 1e8 restores the former 100 Myr cut.
+        from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
+
+        self.cue_lyc_max_age_yr = validate_lyc_max_age_yr(kwargs.pop("cue_lyc_max_age_yr", "all"))
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -2937,6 +2942,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
     "cue_nitrogen": content(
         "CUE gas_logno meaning (relation offset or absolute) changes the forward"
+    ),
+    "cue_lyc_max_age_yr": content(
+        "oldest stellar age whose ionizing photons Cue counts changes Q_H and the shape"
     ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),

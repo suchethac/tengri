@@ -85,6 +85,10 @@ Cue uses the Speculator architecture (Alsing et al. 2020), with 14 sub-networks 
 
 Hydrogen recombination lines are predicted to $<1\%$ accuracy. Of lines contributing $>1\%$ of the total line flux, 93% have $<5\%$ error relative to CLOUDY. Three high-ionization lines (\Ne [iv\] $\lambda 4720$, \Ar [iv\] $\lambda 7331$, \S [iv\] $10.5\,\mu$m) have $\sim$20% errors due to their sensitivity to the hardest ionizing photons. The $\sim$5% typical accuracy is comparable to differences between CLOUDY versions (Li et al. 2025), and is well below typical spectroscopic calibration uncertainties.
 
+#### Which stellar ages are counted.
+
+In the high-level mode $Q_H$ and the ionizing-spectrum shape are combined over every age bin of the SSP, weighted by the population's mass: segment luminosities add linearly across ages and each slope is the luminosity-weighted mean of the bins'. Old bins (post-AGB and extreme horizontal-branch stars) therefore contribute, and a quiescent galaxy has nebular emission at about the case-B H$\alpha$ per ionizing photon. `neb={'type': 'cue', 'lyc_max_age_yr': 1e8}` limits the sum to ages below 100 Myr. Cue's forbidden-line ratios for old (post-AGB) ionizing shapes are not validated against CLOUDY.
+
 #### Two calling modes.
 
 tengri's Cue implementation supports two modes: (i) *high-level*, where ionizing spectrum parameters are derived automatically from the SSP composite spectrum and the 7 ionspec values are precomputed at `Model` initialization; and (ii) *low-level*, where all 12 parameters are specified directly by the caller. The low-level mode is used for AGN-ionized nebular emission ({ref}`app-agn-nebular`), where the ionizing spectrum comes from the accretion disc rather than from stellar populations.
