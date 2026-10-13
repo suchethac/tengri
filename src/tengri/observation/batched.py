@@ -699,6 +699,8 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
         z = float(g.z)
         if not np.isfinite(z):
             raise ValueError("redshift must be finite")
+        if not z >= 0.0:
+            raise ValueError(f"redshift must be >= 0, got {z}")
 
         n_max = n if quantum is None else -(-n // quantum) * quantum
         offsets, r_data, r_pp = _prepare_resolution(g, n, n_max)

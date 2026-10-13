@@ -2598,17 +2598,20 @@ class TestCIGALESKIRTOR:
         strict=True,
         raises=AssertionError,
         reason=(
-            "tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed "
-            "(torus-only NIR/V against a total-SED excess over stellar V), see #2480"
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 0.239 at 1.0-1.2 um (tengri total AGN "
+            "excess over the host V is about 4x weaker than CIGALE's), see #2480"
         ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
-        """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
+        """tengri SKIRTOR total-AGN excess vs pCIGALE SKIRTOR2016 excess, NIR over V.
 
-        Both use the same template library. Differences arise from: (a) how the
-        templates are interpolated in parameter space, (b) how the AGN fraction is
-        defined (bolometric vs IR), (c) host galaxy normalization. We compare the
-        NIR-to-V ratio rather than absolute luminosity to factor out host-galaxy offsets.
+        Both sides compare the same quantity: the AGN contribution (total with the
+        AGN minus the host alone for pCIGALE; the total SKIRTOR template for tengri)
+        in the NIR band, normalized to the host stellar V of the same 3 Gyr
+        constant-SFH population with Calzetti E(B-V)=0.1 on the stars. The AGN
+        bolometric luminosity follows CIGALE's fracAGN=0.30 convention,
+        L_AGN = fracAGN / (1 - fracAGN) * L_star. The pCIGALE reference only extends
+        to 1.2 um, so the NIR window is 1.0-1.2 um.
         """
         k_cig = "cigale_agn_skirtor_type1"
         k_cig_noagn = "cigale_agn_skirtor_type1_noagn"
@@ -2616,44 +2619,62 @@ class TestCIGALESKIRTOR:
             pytest.skip("cigale skirtor_type1 cases not in reference NPZ")
 
         try:
-            from tengri.components.agn.skirtor import skirtor_analytic
+            from tengri.components.agn.skirtor import create_skirtor_components_from_grid
         except ImportError:
             pytest.skip("tengri.components.agn.skirtor not importable")
 
-        nir_mask = (ref_wave > 10000.0) & (ref_wave < 30000.0)
+        grid_path = _DATA_DIR / "skirtor_templates_v3.h5"
+        if not grid_path.is_file():
+            pytest.skip("SKIRTOR v3 template grid not on disk")
+
+        nir_mask = (ref_wave > 10000.0) & (ref_wave < 12000.0)
         if not nir_mask.any():
-            pytest.skip("ref_wave does not cover 1–3 μm window (need extended grid)")
+            pytest.skip("ref_wave does not cover the 1.0-1.2 um NIR window")
 
-        # pCIGALE NIR/V ratio (AGN excess)
+        # pCIGALE: AGN excess (total with AGN minus host alone), NIR over host V.
+        excess_cig = ref[k_cig] - ref[k_cig_noagn]
         v_cig = _band_avg(ref_wave, ref[k_cig_noagn], 5500.0)
-        nir_cig = float(np.nanmean(ref[k_cig][nir_mask]))
-        ratio_cig = nir_cig / max(v_cig, 1e-40)
+        ratio_cig = float(np.nanmean(excess_cig[nir_mask])) / max(v_cig, 1e-40)
 
-        # tengri: compute skirtor SED and get NIR/V ratio
-        wave_aa = np.asarray(ssp_data.ssp_wave)
-        skirtor_result = skirtor_analytic(
-            wavelength=wave_aa,
-            agn_log_lbol=10.0,
-            agn_tau_skirtor=7.0,
+        # tengri: host stellar SED per Msun formed, attenuated like the pCIGALE host.
+        # Calzetti tau_V = A_V / 1.086 with A_V = 4.05 E(B-V), E(B-V) = 0.1.
+        wave_aa, sed_host, _ = _build_tengri_sed(
+            ssp_data,
+            onset_lookback_gyr=3.0,
+            cessation_lookback_gyr=0.0,
+            tau_diff=4.05 * 0.1 / 1.086,
+        )
+        from tengri.utils.physics_constants import L_SUN
+
+        nu_host = _C_AA / wave_aa
+        order = np.argsort(nu_host)
+        l_star_bol = float(np.trapezoid(sed_host[order], nu_host[order])) / L_SUN
+        v_host = _band_avg(wave_aa, sed_host, 5500.0)
+
+        # tengri: total SKIRTOR AGN with bolometric = fracAGN/(1-fracAGN) * L_star.
+        frac_agn = 0.30
+        l_agn_bol = frac_agn / (1.0 - frac_agn) * l_star_bol
+        components = create_skirtor_components_from_grid(str(grid_path))(
+            wave_aa,
+            agn_log_lbol=float(np.log10(l_agn_bol)),
+            frac_agn=1.0,
+            agn_tau_skirtor=3.0,  # CIGALE t=3, the optical depth at 9.7 um
             agn_p_skirtor=1.0,
             agn_q_skirtor=1.0,
             agn_oa_skirtor=40.0,
             agn_cos_inc=np.cos(np.radians(30.0)),
         )
-        # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
-        tengri_sed = np.asarray(skirtor_result)
-        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 30000.0)
-        v_t_mask = (wave_aa > 5400.0) & (wave_aa < 5600.0)
-        if not nir_t_mask.any() or not v_t_mask.any():
-            pytest.skip("tengri SSP grid does not cover NIR window")
-        nir_tengri = float(np.nanmean(tengri_sed[nir_t_mask]))
-        v_tengri = float(np.nanmean(tengri_sed[v_t_mask]))
-        ratio_tengri = nir_tengri / max(v_tengri, 1e-40)
+        agn_total = np.asarray(components.total)
+        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 12000.0)
+        if not nir_t_mask.any():
+            pytest.skip("tengri SSP grid does not cover the 1.0-1.2 um NIR window")
+        ratio_tengri = float(np.nanmean(agn_total[nir_t_mask])) / max(v_host, 1e-40)
 
         ratio = ratio_tengri / max(ratio_cig, 1e-40)
         assert 0.80 <= ratio <= 1.20, (
-            f"tengri/pCIGALE SKIRTOR NIR/V ratio = {ratio:.3f} (outside ±20%). "
-            "Both use SKIRTOR2016 templates; NIR shape should agree at this tolerance."
+            f"tengri/pCIGALE SKIRTOR AGN NIR/V ratio = {ratio:.3f} (outside ±20%). "
+            "Both use SKIRTOR2016 templates; the AGN excess in the NIR over the host V "
+            "should agree at this tolerance."
         )
 
 
