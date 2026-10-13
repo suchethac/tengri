@@ -288,10 +288,10 @@ EVERY = [
             EVERY,
         ),
         (
-            "push, docs only",
+            "push, docs only still runs the gallery (pushes are coalesced)",
             {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
-            "false",
+            "true",
             EVERY,
         ),
         (
@@ -514,3 +514,14 @@ def test_every_precision_and_parity_file_runs_in_exactly_one_shard():
             ):
                 continue  # ignored by the step itself (data-gated)
             assert len(owners) == 1, f"{test_file.name} is run by {owners}"
+
+
+def test_main_pushes_share_one_uncancelled_concurrency_group():
+    """Pushes coalesce: a fixed group, in-progress run finishes, one pending."""
+    import yaml
+
+    conc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))["concurrency"]
+    group, cancel = str(conc["group"]), str(conc["cancel-in-progress"])
+    assert "tests-main-push" in group
+    assert "run_id" not in group
+    assert "github.event_name != 'push'" in cancel

@@ -95,8 +95,15 @@ on:
 #
 # Concurrency by event:
 #
-#   push         a UNIQUE group (run_id): every commit on `main` gets its own
-#                full verdict to completion, never superseded.
+#   push         ONE fixed group (`tests-main-push`), never cancelled. Pushes
+#                to `main` are COALESCED: the run in progress always finishes,
+#                and GitHub keeps at most one pending run, replacing an older
+#                pending run with the newer. A burst of merges therefore costs
+#                at most two full runs (the one in flight and the newest
+#                commit) instead of one per merge. Every landed commit is still
+#                covered by the next completed verdict: a failing verdict
+#                covers the range since the last completed run, so bisect
+#                within that range to find the commit.
 #   the rest     keyed on `github.event_name`, so a newer event of the SAME kind
 #                supersedes the older one -- a PR synchronize cancels the prior
 #                PR run, which is where the real compute saving lives. Keying on
@@ -110,10 +117,9 @@ on:
 # set.
 concurrency:
   group: >-
-    tests-${{ github.ref }}-${{
-      github.event_name == 'push' && github.run_id
-      || github.event_name }}
-  cancel-in-progress: true
+    ${{ github.event_name == 'push' && 'tests-main-push'
+      || format('tests-{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Supply a version for the `dsps` build. The published dsps sdists use
 # setuptools-scm, which (in the fresh pip build-isolation env) raises
@@ -141,9 +147,10 @@ env:
 #                  ci_split_paths.py, pyproject.toml, any conftest.py). A draft
 #                  runs the gates only (scope none).
 #   push (main)    the FULL suite after the commit lands (scope all: all eleven
-#                  shards, plus the gallery when the pushed range touched a
-#                  gallery input). A failure in a shard the cheap tier skipped
-#                  is caught here, right after landing.
+#                  shards and the gallery). A failure in a shard the cheap
+#                  tier skipped is caught here, right after landing. Runs are
+#                  coalesced (see Concurrency), so a verdict covers every
+#                  commit since the last completed run.
 #   schedule       the whole suite nightly, plus coverage, slow and crossval.
 #
 # The test matrix is DYNAMIC: `gallery-changes` builds it from the scope, so a
@@ -617,10 +624,13 @@ jobs:
   # inputs that CAN change what an example does are enumerated below (`gallery_re`);
   # a diff touching none of them cannot change the gallery's verdict.
   #
-  # The filter applies to the events that run the full suite and have a diff: a
-  # `push` to `main` (the compare of the pushed range) and a pull request that
-  # owes scope `all`. A cheap-tier pull request never runs the gallery, and
-  # `schedule` / `workflow_dispatch` always do.
+  # The filter applies to a pull request that owes scope `all`. A cheap-tier
+  # pull request never runs the gallery, and `schedule`, `workflow_dispatch` and
+  # every `push` to `main` always do. A push cannot be filtered by its own diff:
+  # pushes are coalesced, so a run's previous commit is not the last commit a
+  # run tested, and a gallery input changed in a skipped intermediate commit
+  # would be missed. Running it costs ~25 runner-minutes against a suite of
+  # hours, and a skipped gallery that was needed ships a broken example.
   #
   # The same job decides the `test` scope, in a second output, so the answer is
   # computed once from one API call and one place:
@@ -719,8 +729,6 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BASE_CHANGED: ${{ github.event.changes.base != null }}
           LABELS_JSON: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
         run: |
           set -uo pipefail
 
@@ -842,31 +850,11 @@ jobs:
               files=$(tr '\t' '\n' <<<"$rows" | sed '/^$/d')
               ;;
             push)
-              # Every push to main runs the full suite, so only the gallery is
-              # decided here, from the range this push brought in. A new branch,
-              # a force-push that dropped the old tip, an unreadable compare, a
-              # compare at the 300-file page limit or an empty one all run it.
-              gallery=true
-              if [ -n "$BEFORE_SHA" ] && ! [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
-                if resp=$(gh api "repos/$REPO/compare/$BEFORE_SHA...$AFTER_SHA" \
-                      --jq '{n: (.files | length), names: [.files[] | .filename, (.previous_filename // empty)]}'); then
-                  n=$(jq -r '.n' <<<"$resp")
-                  if [ "$n" -gt 0 ] && [ "$n" -lt 300 ]; then
-                    files=$(jq -r '.names[]' <<<"$resp")
-                    echo "pushed files:"
-                    print_files
-                    gallery=false
-                    if grep -qE "$gallery_re" <<<"$files"; then gallery=true; fi
-                  else
-                    echo "compare listed $n files -> assuming the gallery is needed"
-                  fi
-                else
-                  echo "could not compare $BEFORE_SHA...$AFTER_SHA -> running the gallery"
-                fi
-              else
-                echo "no usable previous commit -> running the gallery"
-              fi
-              emit "$gallery" all
+              # Every push to main runs the full suite and the gallery: pushes
+              # are coalesced, so the diff of this push alone does not cover the
+              # commits an earlier, superseded run would have tested.
+              echo "push to main -> full suite and gallery"
+              emit true all
               exit 0
               ;;
             *)
