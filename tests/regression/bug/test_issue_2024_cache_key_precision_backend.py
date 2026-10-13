@@ -254,9 +254,10 @@ def test_schema_version_bumps_prevent_collisions():
     again with no request field changing); and 6→7 for the ``ssp_phot_nolyc_table``
     payload (the above-edge half of the Lyman-limit split, built from the same
     cumulative integral); 7→8 when the sub-band integrals moved off differences
-    of that running total onto node weights (#2769).
+    of that running total onto node weights (#2769); 8→9 when the fold moved to
+    the transposed, row-sliced template layout (#2769, reordering-level drift).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 8, (
+    assert pc._ZTABLE_CACHE_VERSION == 9, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 4, (
