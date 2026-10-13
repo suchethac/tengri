@@ -2504,11 +2504,15 @@ plt.show()
 # and neither is a normalization error. First, Cue's ionizing spectrum enters as a
 # shape fitted to the stellar population, and the fitted shape of this population is
 # soft: §8b prints how strongly Cue's [O III]/Hβ response to logU depends on it.
-# Second, the two codes define the ionization parameter differently: Cue's `neb_logU`
-# is the ionization parameter at the inner face of the cloud, CIGALE's Cloudy grids
-# use the ionization parameter at the Strömgren radius, and the two differ by about
-# 0.3 dex. The same `logU = −2` is therefore not the same nebula, and the
-# higher-ionization lines move the most.
+# Second, the two codes may not define the ionization parameter at the same radius.
+# Cue's `neb_logU` is $U = Q_{\rm H}/(4\pi R_{\rm inner}^2 n_{\rm H} c)$ at the inner face
+# of the cloud, with $R_{\rm inner}$ fixed at 10¹⁹ cm (Li et al. 2025, Eq. 1). CIGALE's
+# nebular module reads a precomputed Cloudy grid in logU, metallicity and density, and
+# its documentation does not state the radius at which logU is evaluated. Other
+# nebular grids fix it elsewhere: Gutkin et al. (2016) define it at the Strömgren
+# radius. The offset between such definitions depends on the cloud, so it is not
+# quantified here, and the same
+# `logU = −2` need not be the same nebula. The higher-ionization lines move the most.
 #
 # Each line is quantified with the **integrated** luminosity
 # (continuum-subtracted, width-independent), not a single-bin peak ratio,
@@ -4446,11 +4450,11 @@ save_fig("cigale_11_radio_synchrotron.png")
 #
 # **2. An analytic reference.** The optically thin free-free luminosity of a hydrogen
 # plasma at 10⁴ K per ionizing photon, in case B, is the thermal bremsstrahlung
-# emissivity of Rybicki & Lightman (1979, §5.2),
+# emissivity of Rybicki & Lightman (1979, §5.2, Eqs. 5.14a and 5.14b),
 # $\varepsilon_\nu = \frac{2^5 \pi e^6}{3 m_e c^3}\left(\frac{2\pi}{3 k m_e}\right)^{1/2}
 # T^{-1/2}\, n_e n_p\, e^{-h\nu/kT}\, \bar g_{\rm ff}$, divided by the recombination
 # rate $\alpha_B n_e n_p$ that sets Q_H. The cell evaluates the prefactor from CODATA
-# constants, 6.84e-38 in cgs against the 6.8e-38 Rybicki & Lightman quote. The Gaunt
+# constants, 6.84e-38 in cgs against the 6.8e-38 of their Eq. 5.14b. The Gaunt
 # factor is the fit of Draine (2011); the cell checks it against the Hummer (1988) values
 # tabulated by Dickinson, Davies & Davis (2003, Table 2) at 10⁴ K, and it agrees to 1.2 %
 # at 0.4 GHz, 0.9 % at 1.4 GHz and 0.5 % at 70 GHz. $\alpha_B$ is the Hui & Gnedin (1997)
@@ -4511,7 +4515,7 @@ _l_ff_t = np.asarray(s_stellar.derived["sed_nebular"])
 
 # Check 2. The optically thin free-free emission of a pure hydrogen H II region
 # per ionizing photon, case B, T_e = 1e4 K. The emissivity is the thermal
-# bremsstrahlung expression of Rybicki & Lightman (1979, §5.2),
+# bremsstrahlung expression of Rybicki & Lightman (1979, Eq. 5.14a),
 #   ε_ν = [2^5 π e^6 / (3 m_e c^3)] (2π / 3 k m_e)^(1/2) T^(-1/2) n_e n_p e^(-hν/kT) g_ff,
 # with the velocity-averaged Gaunt factor g_ff from the fit of Draine (2011).
 # Every recombination to n >= 2 in a gas that absorbs all of Q_H gives
@@ -4557,7 +4561,7 @@ def _ff_per_photon_analytic(wave_aa, t_e=1.0e4):
 
 
 print(
-    f"§11b analytic free-free: prefactor {_FF_PREFACTOR:.3e} (Rybicki & Lightman quote 6.8e-38), "
+    f"§11b analytic free-free: prefactor {_FF_PREFACTOR:.3e} (Rybicki & Lightman Eq. 5.14b quotes 6.8e-38), "
     f"α_B(1e4 K) = {_alpha_b_hydrogen():.3e} cm^3/s"
 )
 assert abs(_FF_PREFACTOR / 6.8e-38 - 1.0) < 0.01
@@ -5031,6 +5035,7 @@ plt.show()
 # * Dickinson, Davies & Davis 2003, MNRAS 341, 369: free-free Gaunt factors (Hummer 1988 values)
 # * Draine 2011, Physics of the Interstellar and Intergalactic Medium (Princeton University Press): free-free Gaunt-factor fit
 # * Fritz et al. 2006, MNRAS 366, 767: AGN torus
+# * Gutkin, Charlot & Bruzual 2016, MNRAS 462, 1757: nebular grid, ionization parameter at the Strömgren radius
 # * Hui & Gnedin 1997, MNRAS 292, 27: case B recombination coefficient fit
 # * Inoue et al. 2014, MNRAS 442, 1805: IGM transmission
 # * Li et al. 2025, ApJ, 986, 9 (Cue, arXiv:2405.04598): neural CLOUDY emulator
@@ -5038,7 +5043,7 @@ plt.show()
 # * Meiksin 2006, MNRAS 365, 807: updated IGM transmission
 # * Murphy et al. 2011, ApJ 737, 67: free-free radio SFR calibration
 # * Noll et al. 2009, A&A 507, 1793: modified Calzetti
-# * Rybicki & Lightman 1979, Radiative Processes in Astrophysics (Wiley), §5.2: thermal bremsstrahlung
+# * Rybicki & Lightman 1979, Radiative Processes in Astrophysics (Wiley), §5.2, Eqs. 5.14a-b: thermal bremsstrahlung
 # * Silva et al. 2004, MNRAS 355, 973: AGN torus
 # * Stalevski et al. 2016, MNRAS 458, 2288: SKIRTOR
 # * Yang et al. 2020, MNRAS 491, 740: X-ray CIGALE module
