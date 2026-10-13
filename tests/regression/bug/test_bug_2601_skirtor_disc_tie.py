@@ -629,28 +629,35 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the #2319/#2322 tree. Two changes move them, both intended: the SKIRTOR
-#: torus is renormalized to ``agn_power`` after resampling (#2319; agn_power rises by
-#: 1/0.996328 - 1 = 0.367 %), so the tie that scales the disc to ``agn_power x R`` moves the
-#: disc up with it; and ``R``'s shape is unit-normalized with the same log-log integral it is
-#: integrated with (a trapezoid there left ``R`` 0.39 % low at i = 0, 4.40727 against
-#: ``R_faceon`` 4.42464), a +6e-6 move on ``R``. Relative change against the previous pins,
-#: in (sum, first bin, middle bin, last bin) order: +2.1e-4 / +3.78e-3 / +6.2e-6 / +1.3e-5
-#: at 6; +4.1e-4 / +3.78e-3 / +2.6e-4 / +3.4e-5 at 8; +4.6e-4 / +3.78e-3 / +3.1e-4 /
-#: +3.2e-4 at 10. The first bin is disc-dominated and carries the full 0.378 % move.
+#: Re-captured on the merged tree (origin/main merged into this PR). Both causes are named:
+#: #2694 young-sliver SFH integral (main: the [0, age0] sliver is integrated from the SFH), and
+#: this PR's own cause, #2807 AGN energy ledger: SKIRTOR resampled-then-renormalized on its native
+#: grid (#2319) and the published L_* from the converged log-log integral (#2322). Relative to the
+#: pins this branch carried before the merge (sum / first bin / middle / last), mbh 6 / 8 / 10:
+#: sum -1.57e-7 / -2.33e-7 / -2.54e-7; first bin -1.52e-6 at all three; middle -6.96e-8 /
+#: -1.67e-7 / -1.85e-7; last -7.0e-9 / -1.56e-8 / -1.30e-7. Relative to origin/main's pins (this
+#: PR's SKIRTOR change, not yet in main): sum +2.12e-4 / +4.10e-4 / +4.63e-4; first bin +3.78e-3;
+#: middle +6.2e-6 / +2.6e-4 / +3.1e-4; last +1.3e-5 / +3.4e-5 / +3.2e-4. The merged-tree move
+#: from the pre-merge pins is attributed to the main commits merged in (#2694 among them; not
+#: isolated per commit).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5590146411586656e32, 81456333180922.34, 2.8901657433420926e28, 8.775409571423144e21),
+    6.0: (
+        1.559014396065268e32,
+        81456209342492.8,
+        2.8901655421875684e28,
+        8.775409509850808e21,
+    ),
     8.0: (
-        1.651083868465166e32,
-        2.2345920173419612e16,
-        3.097662493903965e28,
-        8.825497664879295e21,
+        1.6510834833985082e32,
+        2.234588620081671e16,
+        3.0976619772911983e28,
+        8.825497527157806e21,
     ),
     10.0: (
-        1.6777737806589375e32,
-        2.3412489655389012e16,
-        3.1406320010925746e28,
-        9.551744308606772e21,
+        1.677773355015486e32,
+        2.3412454061275736e16,
+        3.140631419153073e28,
+        9.551743066769245e21,
     ),
 }
 
