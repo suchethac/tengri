@@ -61,7 +61,7 @@ stages = {}
 # the tree-depth cap. The default cap (10) is 1023 gradient evaluations per
 # iteration, about 10k in all, which was ~95% of the wall time (#2914). The test
 # checks dtypes, not posterior quality, so a cap of 4 (15 evaluations per
-# iteration) exercises the same compiled NUTS kernel and dtype path.
+# iteration) exercises the same NUTS code path and dtype path.
 NUTS_MAX_DOUBLINGS = 4
 
 
