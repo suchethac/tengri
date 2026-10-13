@@ -333,6 +333,16 @@ class DeadFitWarning(UserWarning):
     """
 
 
+class SSPMassRemainingFallbackWarning(UserWarning):
+    """An SSP grid has no ``ssp_mass_remaining`` table; a generic fit is used instead (#2751).
+
+    The surviving-mass fraction then comes from the metallicity-independent
+    DSPS sigmoid rather than the library's own stellar mass loss, so
+    ``stellar_mass_surviving`` is only as accurate as that fit. The warning
+    names the grid file and the fallback used.
+    """
+
+
 class CorruptEnergyBalanceWarning(UserWarning):
     """The dust energy-balance integrand was non-finite (#1527).
 

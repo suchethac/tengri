@@ -189,7 +189,7 @@ class TestNebularFdustIntegration:
             neb_logU=-3.0,
             neb_logZ_gas=None,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
             neb_fdust_frac=0.0,
         )
 
@@ -201,7 +201,7 @@ class TestNebularFdustIntegration:
             neb_logU=-3.0,
             neb_logZ_gas=None,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
             neb_fdust_frac=0.1,
         )
 
@@ -252,7 +252,7 @@ class TestNebularFdustIntegration:
             neb_logU=-3.0,
             neb_logZ_gas=None,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
             neb_fdust_frac=0.0,
         )
 
@@ -264,7 +264,7 @@ class TestNebularFdustIntegration:
             neb_logU=-3.0,
             neb_logZ_gas=None,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
             neb_fdust_frac=0.1,
         )
 

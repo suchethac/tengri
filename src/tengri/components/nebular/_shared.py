@@ -637,11 +637,11 @@ def apply_lya_escape(
     channel (resonant scattering and destruction in neutral ISM). After all
     lines have been multiplied by the general escape/dust suppression factor
     `k_factor = lyc_dust_escape_factor(f_esc, f_dust)`, apply an
-    *additional* suppression to Lyα alone: multiply the Lyα luminosity by
-    `(1 - neb_fesc_lya)`.
+    *additional* scaling to Lyα alone: multiply the Lyα luminosity by
+    `neb_fesc_lya`, the Lyα escape fraction (1 = no extra scaling, 0 = Lyα removed).
 
     This helper exists to prevent code duplication across backends. The alternative
-    (multiplying by `(1 - neb_fesc_lya) / k_factor` inline) algebraically cancels
+    (multiplying by `neb_fesc_lya / k_factor` inline) algebraically cancels
     `k_factor` and decouples Lyα from the general escape/dust budget — a bug
     discovered in #2531.
 
@@ -654,14 +654,14 @@ def apply_lya_escape(
         Line rest-frame wavelengths [Angstrom]. Lyα is identified as the line
         nearest 1215.67 Angstrom.
     neb_fesc_lya : float
-        Lyα-specific resonant scattering escape fraction [dimensionless], in [0, 1].
-        At 0, Lyα gets no extra suppression beyond the general k_factor.
-        At 1, Lyα is completely removed.
+        Lyα-specific escape fraction [dimensionless], in [0, 1].
+        At 1, Lyα gets no extra scaling beyond the general k_factor.
+        At 0, Lyα is completely removed.
 
     Returns
     -------
     ndarray, shape (n_lines,)
-        Line luminosities with Lyα suppressed by `(1 - neb_fesc_lya)`.
+        Line luminosities with Lyα scaled by `neb_fesc_lya`.
         All other lines are unchanged.
 
     Notes
@@ -682,8 +682,8 @@ def apply_lya_escape(
     # Find the Lyα line (1215.67 Angstrom, the Lyman-alpha line of neutral hydrogen)
     lya_idx = jnp.argmin(jnp.abs(line_wavelengths - 1215.67))
 
-    # Apply (1 - neb_fesc_lya) suppression to Lyα only, after k_factor was already applied
-    lya_scale = 1.0 - neb_fesc_lya
+    # Scale Lyα only by neb_fesc_lya, after k_factor was already applied
+    lya_scale = neb_fesc_lya
     return line_lum.at[lya_idx].multiply(lya_scale)
 
 

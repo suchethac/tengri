@@ -254,17 +254,22 @@ class TestDerivedQuantities:
         assert abs(m_sfh - m_derived) / m_derived < 1e-6
 
     def test_bursty_gp_changes_mass(self, model, spec):
-        """A non-zero GP realization with large sigma should change M*."""
+        """Under the formed-mass convention (#2567, #2640), the field modulates
+        SFR history shape and surviving mass, but NOT the formed mass.
+
+        The declared log_total_mass stays fixed; the GP realization changes
+        the SFR history shape but not the formed mass."""
         n_grid = spec.n_grid
         key = jax.random.PRNGKey(42)
         xi = jax.random.normal(key, shape=(n_grid,))
+        declared_mass = 5.0e10
 
         params = {
             "sfh_field_xi": xi,
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_total_mass": np.log10(5.0e10),
+            "sfh_dpl_log_total_mass": np.log10(declared_mass),
             "sfh_field_psd_sigma": 2.0,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -274,12 +279,25 @@ class TestDerivedQuantities:
 
         # Compare to zero-xi version
         params_zero = {**params, "sfh_field_xi": jnp.zeros(n_grid)}
-        sfh_bursty = model.predict_sfh_quantities(params)
-        sfh_smooth = model.predict_sfh_quantities(params_zero)
+        st_bursty = model.predict_state(params)
+        st_smooth = model.predict_state(params_zero)
 
-        # With random xi and large sigma, masses should differ
-        ratio = float(sfh_bursty.stellar_mass) / float(sfh_smooth.stellar_mass)
-        assert ratio != 1.0, "Bursty GP should change stellar mass"
+        # Formed mass should be identical (declared mass is fixed)
+        formed_bursty = 10 ** float(st_bursty.derived["log_mstar_formed"])
+        formed_smooth = 10 ** float(st_smooth.derived["log_mstar_formed"])
+        np.testing.assert_allclose(
+            formed_bursty,
+            formed_smooth,
+            rtol=1e-12,
+            err_msg="Formed mass should not change with field (#2567, #2640)",
+        )
+
+        # But SFR history shape should differ
+        sfr_bursty = np.asarray(st_bursty.derived["sfr_history"])
+        sfr_smooth = np.asarray(st_smooth.derived["sfr_history"])
+        assert not np.allclose(sfr_bursty, sfr_smooth, atol=0), (
+            "Field should modulate SFR history shape"
+        )
 
     def test_smooth_gp_mass_close_to_zero_xi(self, model, spec):
         """With small sigma, mass should be close to zero-xi value."""

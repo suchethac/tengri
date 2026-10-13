@@ -5763,6 +5763,38 @@ class SEDModel:
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
+    def _publish_history(self, sfr, params, state=None, resample=None):
+        """Publish ``sfr`` as ``(t, sfr)`` bounded to ``[0, age(z)]`` with the formed mass (#2640).
+
+        Applies the component's own :func:`bounded_rescaled_history` after the
+        SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
+        the same history the stellar component does (no second normalization).
+        With ``resample`` (a callable ``(values, age_at_z_gyr) -> (t_gyr,
+        values_out)``) the rescaled history is resampled onto the output grid,
+        which ends at ``age(z)``; returns ``(t_gyr, values_out)``.
+        """
+        from tengri.components.stellar.component import (
+            bounded_rescaled_history,
+            history_rescale_factor,
+        )
+
+        if state is None:
+            state = self.predict_state(params)
+        t_obs_gyr = age_at_z(self._get_redshift(params))
+        if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
+            # The registry callable of a runtime table is a zero placeholder;
+            # the history lives in the component state.
+            t_pub = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+            sfr_pub = jnp.asarray(state.derived["sfr_history"])
+            if resample is None:
+                return t_pub, sfr_pub
+            return resample(sfr_pub, t_obs_gyr)
+        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+        if resample is None:
+            return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+        factor = history_rescale_factor(sfr, self.age_yr, t_obs_gyr, formed)
+        return resample(sfr * factor, t_obs_gyr)
+
     def _sfh_call_kwargs(self, p, redshift=None):
         """Keyword arguments for one call of the composed SFH function.
 
@@ -6162,18 +6194,24 @@ class SEDModel:
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
+        _state = self.predict_state(params)
 
         if grid == "native":
             return {
-                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
-                "sfr_mean": sfr_mean,
-                "sfr_full": sfr_full,
+                "t_gyr": self._publish_history(sfr_mean, params, _state)[0] / 1e9,
+                "sfr_mean": self._publish_history(sfr_mean, params, _state)[1],
+                "sfr_full": self._publish_history(sfr_full, params, _state)[1],
             }
 
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
+        def _resample(values, age_gyr):
+            return interpolate_to_linear_time(
+                self.log_age_grid, values, n_linear, age_at_z_gyr=age_gyr
+            )
+
+        t_gyr_mean, sfr_mean_lin = self._publish_history(
+            sfr_mean, params, _state, resample=_resample
         )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+        _, sfr_full_lin = self._publish_history(sfr_full, params, _state, resample=_resample)
 
         return {
             "t_gyr": t_gyr_mean,
@@ -9346,6 +9384,7 @@ class SEDModel:
         # values someone happened to test; the rest kept the divergent path. Now
         # there is no path to diverge.
         state_orch = self.predict_state(params)
+        _, sfr = self._publish_history(sfr, params, state_orch)
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -9467,7 +9506,8 @@ class SEDModel:
               (intrinsic SED). NaN if unavailable.
             - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``rest_uv_color`` : float. U-V AB color: top-hats 3200–3900 Å
+              minus 5000–5800 Å on rest-frame L_nu.
             - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
             - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted

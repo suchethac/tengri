@@ -355,3 +355,111 @@ def test_composite_sfh_mass_conserved_in_aggregate(
     assert ratio == pytest.approx(1.0, abs=1e-4), (
         f"composite ['{truncated}', '{untruncated}'] z={z}: pooled formed mass ratio {ratio} != 1"
     )
+
+
+@pytest.mark.parametrize(
+    "family,z,mult,age_kernel",
+    [
+        (fam, z, mult, kernel)
+        for fam in ("dpl", "delayed", "declining_exp", "periodic")
+        for z in (0.1, 2.0)
+        for mult in (0.5, 2.0)  # untruncated and truncated onsets
+        for kernel in AGE_KERNELS
+    ],
+)
+def test_sfr_history_integral_equals_formed_mass(family, z, mult, age_kernel, synthetic_ssp_wide):
+    """∫ sfr_history d(lookback) inside the support == 10**log_mstar_formed (#2640).
+
+    ``mult`` sweeps both the untruncated (0.5 x age(z), onset entirely within
+    the support) and truncated (2.0 x age(z), onset exceeds age(z): the
+    #2640 regression case) regimes, on both age kernels.
+
+    The published history ends at ``age(z)`` and carries one factor, so its
+    PLAIN trapezoid over the published grid equals the formed mass to float64
+    precision.
+    """
+    from tengri.utils.cosmology import age_at_z
+
+    age_gyr = float(age_at_z(z))
+    onset_name = ONSET_PARAMS_BY_FAMILY[family]
+    model = _build_model(synthetic_ssp_wide, family, onset_name, z, age_kernel=age_kernel)
+    params = {onset_name: mult * age_gyr}
+    if family == "delayed_bq":
+        params["sfh_delayed_bq_age_bq_gyr"] = min(0.3, 0.3 * mult * age_gyr)
+
+    st = model.predict_state(params)
+    lbt_yr = np.asarray(st.derived["sfh_grid_lbt_yr"])
+    sfr_history = np.asarray(st.derived["sfr_history"])
+    formed_mass = 10.0 ** float(st.derived["log_mstar_formed"])
+
+    trapz_support = np.trapezoid(sfr_history, lbt_yr)
+
+    np.testing.assert_allclose(
+        trapz_support,
+        formed_mass,
+        rtol=1e-8,
+        err_msg=(
+            f"{family} {age_kernel} z={z} mult={mult}: "
+            f"∫sfr_history (plain, published grid) = {trapz_support:.6e}, "
+            f"formed = {formed_mass:.6e}, ratio = {trapz_support / formed_mass:.8f}"
+        ),
+    )
+
+
+def test_sfr_history_integral_equals_formed_mass_composite_field(synthetic_ssp_wide):
+    """Same identity for the literal #2640 reproducer mechanism: dpl + field.
+
+    The GP field forces the "dsps" kernel and modulates the published history
+    multiplicatively AFTER the base shape's own normalization; both the
+    unmodulated (zero field) and a bursty (random field) realization must
+    satisfy the identity once rescaled.
+    """
+    import jax
+
+    from tengri import DEFAULT, SEDModel
+    from tengri.utils.cosmology import age_at_z
+
+    z = 0.1
+    age_gyr = float(age_at_z(z))
+    n_grid = 256
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        sfh={
+            "type": ["dpl", "field"],
+            "sfh_dpl_age_gyr": Fixed(2.0 * age_gyr),  # onset exceeds age(z): truncated
+            "sfh_dpl_log_total_mass": Fixed(LOG_TOTAL_MASS),
+            "sfh_dpl_alpha": Fixed(1.0),
+            "sfh_dpl_beta": Fixed(1.5),
+            "sfh_dpl_tau_gyr": Fixed(3.0),
+            "sfh_field_psd_sigma": Fixed(2.0),
+            "sfh_field_psd_tau_myr": Fixed(50.0),
+        },
+        met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        dust_emission={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+        n_grid=n_grid,
+    )
+
+    for label, xi in (
+        ("zero", np.zeros(n_grid)),
+        ("random", np.asarray(jax.random.normal(jax.random.PRNGKey(42), shape=(n_grid,)))),
+    ):
+        st = model.predict_state({"sfh_field_xi": xi})
+        lbt_yr = np.asarray(st.derived["sfh_grid_lbt_yr"])
+        sfr_history = np.asarray(st.derived["sfr_history"])
+        formed_mass = 10.0 ** float(st.derived["log_mstar_formed"])
+
+        trapz_support = np.trapezoid(sfr_history, lbt_yr)
+
+        np.testing.assert_allclose(
+            trapz_support,
+            formed_mass,
+            rtol=1e-6,
+            err_msg=(
+                f"dpl+field ({label} field): published "
+                f"∫sfr_history = {trapz_support:.6e}, formed = {formed_mass:.6e}, "
+                f"ratio = {trapz_support / formed_mass:.8f}"
+            ),
+        )

@@ -265,14 +265,14 @@ class TestMappingsPhotoStellarBackend:
         assert jnp.allclose(lum, 0.0, atol=1e-30)
 
     def test_lya_fesc_reduces_only_lya(self):
-        """neb_fesc_lya=1.0 should zero Lya but not other lines."""
+        """neb_fesc_lya=0.0 should zero Lya but not other lines."""
         ssp_weights = jnp.ones(4)
         ssp_log_ages = jnp.array([6.0, 6.5, 7.0, 7.5])
         _, lum_no_lya_fesc = self.backend.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages, log_z=-2.0, neb_fesc_lya=0.0
+            ssp_weights, ssp_log_ages, log_z=-2.0, neb_fesc_lya=1.0
         )
         _, lum_lya_zero = self.backend.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages, log_z=-2.0, neb_fesc_lya=1.0
+            ssp_weights, ssp_log_ages, log_z=-2.0, neb_fesc_lya=0.0
         )
         lya_idx = int(jnp.argmin(jnp.abs(self.backend.grid.line_wavelengths - 1215.67)))
         assert float(lum_lya_zero[lya_idx]) == pytest.approx(0.0, abs=1e-30)

@@ -316,7 +316,7 @@ class NebularSEDComponent(TemplateThreading):
             ),
             ParamDeclaration(
                 "neb_fesc_lya",
-                Fixed(0.0),
+                Fixed(1.0),
                 "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
@@ -572,7 +572,7 @@ class NebularSEDComponent(TemplateThreading):
             "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
-            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
+            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 1.0)),
             # #2436: the fraction of the NON-escaping budget dust absorbs, not
             # the retired absolute share -- backends convert via `lyc_shares`.
             "neb_fdust_frac": jnp.asarray(params.get("neb_fdust_frac", 0.0)),
