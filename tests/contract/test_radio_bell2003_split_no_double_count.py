@@ -2,7 +2,8 @@
 """Contract: ``bell2003_split`` never double-counts the thermal radio term (ruling R19).
 
 :func:`tengri.radio.radio_sfr_bell2003_split` already allocates 10% of the
-Bell (2003) TOTAL L(1.4 GHz) to a thermal component (Dale & Helou 2002;
+Bell (2003) TOTAL L(1.4 GHz), calibrated on L_IR over 8-1000 um (Bell 2003,
+Eq. 1; the component's default ``ir_window="tir"``), to a thermal component (Dale & Helou 2002;
 Condon 1992 slope). Before this fix, the pipeline unconditionally added a
 SECOND, independently-normalized :func:`tengri.radio.radio_freefree`
 (Murphy+2011) term on top whenever ``radio={'sf': {'type':
@@ -33,6 +34,7 @@ from tengri.config.exceptions import ConfigError
 from tengri.observation import Photometry
 from tengri.parameters.registry import registry
 from tengri.radio import radio_sfr_bell2003_split
+from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.contract
 
@@ -46,6 +48,32 @@ _Q_IR = registry().get("radio_q_ir").prior.value
 
 #: Declared default for radio_alpha_sf from the registry (typical 0.8).
 _ALPHA_SF = registry().get("radio_alpha_sf").prior.value
+
+
+def _tir_luminosity(state) -> float:
+    """L_IR over Bell (2003)'s 8-1000 um window [erg/s], integrated from the dust SED.
+
+    Independent of the component: L_nu is linear in nu between grid nodes, the two
+    window edges are interpolated, and the trapezoid rule runs over nu.
+    """
+    c_aa = 2.99792458e18
+    wave = np.asarray(state.wave, dtype=float)
+    sed = np.asarray(state.derived["sed_dust_ir"], dtype=float)
+    nu = c_aa / wave[::-1]
+    lnu = sed[::-1]
+    nu_lo, nu_hi = c_aa / 1.0e7, c_aa / 8.0e4
+    inside = (nu > nu_lo) & (nu < nu_hi)
+    nu_w = np.concatenate([[nu_lo], nu[inside], [nu_hi]])
+    lnu_w = np.interp(nu_w, nu, lnu)
+    return float(np.sum(0.5 * (lnu_w[1:] + lnu_w[:-1]) * np.diff(nu_w)))
+
+
+def _assert_window_is_tir(state, l_ir_tir: float) -> None:
+    """The component read the TIR band, which holds ~94 % of this SED's dust power."""
+    published = float(state.derived["radio_L_ir_input"]) * L_SUN
+    assert published == pytest.approx(l_ir_tir, rel=1e-4)
+    share = l_ir_tir / float(state.derived["L_ir"])
+    assert 0.90 < share < 0.97, f"TIR/total dust power {share:.4f}"
 
 
 def _build(ssp_data, sf_type: str):
@@ -91,7 +119,8 @@ def test_bell2003_split_component_equals_direct_function_no_extra_term(ssp_data_
     params = model.spec.sample(jax.random.PRNGKey(0))
     state = model.predict_state(params)
 
-    L_ir = float(state.derived["L_ir"])
+    L_ir = _tir_luminosity(state)
+    _assert_window_is_tir(state, L_ir)
     wave = np.asarray(state.wave)
     sed_radio = np.asarray(state.derived["sed_radio"])
     direct = np.asarray(radio_sfr_bell2003_split(wave, L_ir=L_ir, q_ir=_Q_IR))
@@ -112,7 +141,8 @@ def test_bell2003_still_adds_freefree(ssp_data_bc03):
     params = model.spec.sample(jax.random.PRNGKey(0))
     state = model.predict_state(params)
 
-    L_ir = float(state.derived["L_ir"])
+    L_ir = _tir_luminosity(state)
+    _assert_window_is_tir(state, L_ir)
     wave = np.asarray(state.wave)
     sed_radio = np.asarray(state.derived["sed_radio"])
 

@@ -137,22 +137,25 @@ class TestSKIRTORAnalytic:
         # 0%, and parity against CIGALE's linear interpolation improved from
         # 0.0399 to 0.0300 mean RMS dex.
         #
-        # Re-frozen for the SKIRTOR torus renormalization (f20ebb89f, #2319): the
-        # torus is now normalized by the log-log integral of the same interpolant
-        # the caller's grid is resampled with, not a trapezoid over the 136 native
-        # nodes. The old trapezoid under-counted the resampled torus by a uniform
-        # factor, so every sampled index moves by the same ratio:
+        # Re-frozen for #2606 (commit 712fab431: PCHIP replaces the triweight smoother in
+        # ``_interpolate_and_normalize``). The default point is an exact node in every
+        # coordinate (tau 7, p 1, q 1, oa 40, R 20, cos_inc = cos 30 deg). The new value
+        # equals the raw tabulated node to 1e-35 relative; the old triweight value was
+        # 3.0 % off that node, blending in the neighboring nodes:
         #
-        #   idx 166 (0.4606 um): 5.856270e24 -> 5.878033e24   +0.3717 %
-        #   idx 333 (21.71 um):  3.536528e29 -> 3.549671e29   +0.3717 %
-        #   idx 499 (1000 um):   3.634076e24 -> 3.647581e24   +0.3717 %
-        #   idx 0   (0.01 um, below template support):        0.0, unchanged
-        #
-        # Attribution, measured by swapping only skirtor.py between revisions on
-        # the branch head: the pre-f20ebb89f file reproduces the old golden to all
-        # printed digits, and the f20ebb89f file reproduces the new values exactly.
-        # The 0.37 % lower end matches the loss #2319 measured before the change.
-        golden_values = [0.0, 5.878033e24, 3.549671e29, 3.647581e24]
+        #   idx 0   (0.01 um, below template support):  0.0, unchanged
+        #   idx 166 (0.4606 um): 5.856270e24 -> 6.322513e24   +8.0 %
+        #   idx 333 (21.71 um):  3.536528e29 -> 3.562878e29   +0.75 %
+        #   idx 499 (1000 um):   3.634076e24 -> 3.407505e24   -6.2 %
+        # Re-captured on the merged tree (origin/main merged into this branch).
+        # Both causes named: #2807 SKIRTOR resample-then-renormalize on its native grid (main)
+        # combined with #2808 node-exact PCHIP torus lookups (this branch). Neither parent's
+        # golden carries the other's effect. Old -> new, relative, at all three non-zero
+        # indices, which move by the same factor:
+        #   idx 166 (0.4606 um): 6.322513e24 -> 6.346563e24   +3.80e-3
+        #   idx 333 (21.71 um):  3.562878e29 -> 3.576431e29   +3.80e-3
+        #   idx 499 (1000 um):   3.407505e24 -> 3.420466e24   +3.80e-3
+        golden_values = [0.0, 6.346562805452703e24, 3.5764310473880084e29, 3.4204661799764155e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
@@ -356,16 +359,22 @@ class TestSKIRTORGradients:
         return jnp.logspace(2, 7, 300)
 
     def test_gradient_tau(self, wave):
-        """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient."""
+        """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient.
+
+        Evaluated at tau = 6, between the tau nodes 5 and 7. Node-exact PCHIP is
+        C1 at a node but its second derivative jumps there, so a central
+        difference of step 0.1 straddling tau = 7 carries an O(step) error
+        (0.15 % at 7, 0.003 % at 6). AD matches FD off the node (#2606).
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(tau):
             return float(jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))
 
-        g = float(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(7.0))
+        g = float(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(6.0))
         np.testing.assert_allclose(
             g,
-            fd_grad(f, 7.0, eps=0.1),
+            fd_grad(f, 6.0, eps=0.1),
             rtol=1e-3,
             err_msg="skirtor_analytic: FD check ∂/∂tau_skirtor",
         )
@@ -401,16 +410,20 @@ class TestSKIRTORGradients:
         )
 
     def test_gradient_oa(self, wave):
-        """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient."""
+        """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient.
+
+        Evaluated at oa = 45, between the nodes 40 and 50, for the same reason as
+        :meth:`test_gradient_tau` (#2606).
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(oa):
             return float(jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))
 
-        g = float(jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(40.0))
+        g = float(jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(45.0))
         np.testing.assert_allclose(
             g,
-            fd_grad(f, 40.0, eps=0.1),
+            fd_grad(f, 45.0, eps=0.1),
             rtol=1e-3,
             err_msg="skirtor_analytic: FD check ∂/∂oa_skirtor",
         )
@@ -465,20 +478,20 @@ class TestSKIRTORGradients:
                 )
             )
 
-        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(7.0, 1.0, 1.0, 40.0, 0.45)
+        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(6.0, 1.0, 1.0, 45.0, 0.45)
         params = [
-            ("tau", 7.0, 0.1),
+            ("tau", 6.0, 0.1),
             ("p", 1.0, 1e-4),
             ("q", 1.0, 1e-4),
-            ("oa", 40.0, 0.1),
+            ("oa", 45.0, 0.1),
             ("cos_inc", 0.45, 1e-4),
         ]
         fs = [
-            lambda tau: float(loss(tau, 1.0, 1.0, 40.0, 0.45)),
-            lambda p: float(loss(7.0, p, 1.0, 40.0, 0.45)),
-            lambda q: float(loss(7.0, 1.0, q, 40.0, 0.45)),
-            lambda oa: float(loss(7.0, 1.0, 1.0, oa, 0.45)),
-            lambda ci: float(loss(7.0, 1.0, 1.0, 40.0, ci)),
+            lambda tau: float(loss(tau, 1.0, 1.0, 45.0, 0.45)),
+            lambda p: float(loss(6.0, p, 1.0, 45.0, 0.45)),
+            lambda q: float(loss(6.0, 1.0, q, 45.0, 0.45)),
+            lambda oa: float(loss(6.0, 1.0, 1.0, oa, 0.45)),
+            lambda ci: float(loss(6.0, 1.0, 1.0, 45.0, ci)),
         ]
         for i, (name, x0, eps) in enumerate(params):
             np.testing.assert_allclose(
