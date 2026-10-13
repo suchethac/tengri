@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- **The shock Halpha fallback reads its declared default (#2297).** The MAPPINGS shock branch of the nebular component fell back to a literal `40.0` for `shock_log_lhalpha` while the parameter is declared as `41.0` in `SHOCK_PARAMS`, so a call that omitted the key used a value the declaration does not own. The fallback now reads the declaration through `declared_default`; the declared value is unchanged. The literal-default guard now covers the nebular tree, with its 121 pre-existing sites baselined in `tools/literal_param_defaults_baseline.txt` so that new ones fail.
+
 - **The SKIRTOR NIR/V crossval compares the AGN excess on both sides (#2480).** `test_tengri_vs_cigale_skirtor_shape` set the pCIGALE total-with-AGN NIR over the host V against a torus-only tengri ratio, which cannot pass. Both sides now use the AGN excess over the host V: the total SKIRTOR template with bolometric `fracAGN / (1 - fracAGN) * L_star` against CIGALE's total minus host. The comparison stays a strict xfail: the measured tengri/pCIGALE ratio is 0.239 at 1.0-1.2 um.
 - **The docs preview comment is skipped on fork pull requests (#2906).** The "Post artifact link to PR" step of `docs-preview.yml` calls the issues API with the workflow token, which is read-only on a fork's pull request, so the comment call failed with a 403 after the build and upload had succeeded. The step now runs only when the head repository is this repository; the build and artifact upload still run on forks.
 
