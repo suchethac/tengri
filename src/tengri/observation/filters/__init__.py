@@ -73,6 +73,7 @@ usable anywhere a built-in one is; see
 """
 
 import json
+import warnings
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -1289,7 +1290,7 @@ def suggest(
     if not all_names:
         return []
 
-    # Load all filters; skip any that fail
+    # Load all filters; skip (and say so about) any whose curve is broken
     wavelengths_by_name = {}
     try:
         for name in all_names:
@@ -1299,10 +1300,20 @@ def suggest(
                 trans_np = np.asarray(fc.trans)
                 lam_eff = compute_effective_wavelength(wave_np, trans_np)
                 wavelengths_by_name[name] = lam_eff
-            except Exception:
-                # Skip filters that fail to load
-                continue
-    except Exception:
+            except (KeyError, ValueError, OSError) as exc:
+                warnings.warn(
+                    f"suggest(): skipping filter {name!r}, which failed to load "
+                    f"({type(exc).__name__}: {exc}).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+    except (KeyError, ValueError, OSError) as exc:
+        warnings.warn(
+            f"suggest(): filter discovery aborted ({type(exc).__name__}: {exc}); "
+            "returning no suggestions.",
+            UserWarning,
+            stacklevel=2,
+        )
         return []
 
     # Find filters within observed-frame span

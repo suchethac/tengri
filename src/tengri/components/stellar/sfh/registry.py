@@ -3281,6 +3281,14 @@ def resolve_sfh(
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
+            if fn_i is psb_continuity_flex and "age_universe_yr" not in kw:
+                # No silent 13.7 Gyr fallback on the registry route (#2645): the
+                # fixed old bins must end at age(z), which only the caller knows.
+                raise ValueError(
+                    "psb_continuity_flex (psb_flex, psb_suess2022) needs age_universe_yr: "
+                    "the age of the universe at the evaluation redshift [yr]; the "
+                    "registry route does not fall back to a constant 13.7 Gyr (#2645)"
+                )
             if fn_i in (psb_wild2020, psb_continuity_flex, dense_basis, dense_basis_pure) and (
                 "age_universe_yr" in kw
             ):

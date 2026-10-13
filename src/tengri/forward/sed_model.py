@@ -77,6 +77,7 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
+    FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
     TengriIOError,
@@ -91,7 +92,11 @@ from tengri.forward.sed_model_types import (
     SEDModelState,
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
-from tengri.observation.photometry import ab_mag_from_flux
+from tengri.observation.photometry import (
+    FILTER_COVERAGE_TOLERANCE,
+    ab_mag_from_flux,
+    filter_coverage_fraction,
+)
 from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -117,6 +122,23 @@ from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 #: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
+
+
+def _declared_input_names(component) -> frozenset[str]:
+    """Names of the optional inputs a component declares, in one spelling.
+
+    Dust-emission components keep ``optional_inputs`` as a dict (its keys are the
+    names); a :class:`SEDModelComponent` exposes a method returning ``DerivedKey``
+    tuples (each with a ``.name``). Both forms are normalized to plain strings so a
+    caller can test for one name regardless of which form the emitter uses (#2553).
+    """
+    declared = getattr(component, "optional_inputs", None)
+    if callable(declared):
+        declared = declared()
+    if declared is None:
+        return frozenset()
+    return frozenset(getattr(key, "name", key) for key in declared)
+
 
 #: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
 #: (#2520): a line is not a delta function in observed wavelength, so the
@@ -316,8 +338,50 @@ def _chain_implements_emission_terms(chain) -> list[str]:
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
 #: band response. Loose enough not to trip on fp re-association across a ~6000-node
-#: grid, ~7 orders tighter than any shape error worth exploiting.
-_RANK1_RTOL = 1e-9
+#: grid, and far tighter than any shape error worth exploiting.
+_RANK1_RTOL = 1e-10
+
+
+def _term_response_refusal(comp, chain, free, fixed) -> str | None:
+    """Why the term band response must stay dense for emitter ``comp``, or ``None``.
+
+    An emitter that declares ``term_response_refusal`` (the AGN) decides for itself
+    whether its shape is fixed; the galaxy dust screen on an AGN is checked here because
+    it lives on the dust component. Other emitters (radio, X-ray) are refused when any of
+    their own parameters is free, other than the amplitudes listed in ``AMPLITUDE_PARAMS``.
+
+    Parameters
+    ----------
+    comp : SEDComponent
+        The additive emitter.
+    chain : sequence
+        The component chain, for the dust-side ``agn_screen`` check.
+    free : set of str
+        Free parameter names of the model.
+    fixed : mapping
+        Build-time fixed values, keyed by parameter name.
+
+    Returns
+    -------
+    str or None
+        The reason, or ``None`` when the emitter passes the gate.
+    """
+    hook = getattr(comp, "term_response_refusal", None)
+    if hook is not None:
+        reason = hook(free, fixed)
+        if reason is None and any(
+            getattr(getattr(c, "config", None), "agn_screen", "none") != "none" for c in chain
+        ):
+            return "the galaxy dust screens the AGN (agn_screen): its photometry needs the dense"
+            " SED"
+        return reason
+    amplitudes = getattr(comp, "AMPLITUDE_PARAMS", frozenset())
+    prefix = f"{comp.name}_"
+    free_emitter = sorted(p for p in free if p.startswith(prefix) and p not in amplitudes)
+    if free_emitter:
+        return f"free {comp.name} parameters: {free_emitter}"
+    return None
+
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -3195,6 +3259,7 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
+        self._warn_filter_coverage()
 
         # ── The polar reference's integration range (R66) ─────────
         # Runs here and not beside the ``spec``-only guards in ``build``
@@ -4228,6 +4293,110 @@ class SEDModel:
                 )
                 return
 
+    def filter_coverage_redshifts(self) -> tuple[float, ...]:
+        """Redshifts at which the band-coverage check is made (#2620).
+
+        The fixed redshift, or the finite ends of a free redshift prior, together
+        with the ends of ``catalog_z_range`` when one is set. Duplicates are
+        dropped and the order is preserved.
+
+        Returns
+        -------
+        tuple of float
+            Redshifts [dimensionless], possibly empty when no redshift is declared.
+        """
+        zs: list[float] = []
+        try:
+            dist = self.spec.get_distribution("redshift")
+        except (KeyError, AttributeError, TypeError, ValueError, NotImplementedError):
+            dist = None
+        if dist is not None:
+            if dist.is_fixed:
+                zs.append(float(dist.bounds[0]))
+            else:
+                zs.extend(float(b) for b in dist.bounds if np.isfinite(b))
+        if self._catalog_z_range is not None:
+            zs.extend(float(z) for z in self._catalog_z_range)
+        return tuple(dict.fromkeys(zs))
+
+    def observed_axis_range(self, z: float) -> tuple[float, float]:
+        """Span of the model's observed-frame wavelength axis at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        tuple of float
+            ``(min, max)`` of ``wavelengths * (1 + z)`` [Angstrom].
+        """
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return float(axis.min()), float(axis.max())
+
+    def filter_coverage_at(self, z: float) -> np.ndarray | None:
+        """Per-band out-of-axis fraction at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        ndarray, shape (n_filters,) or None
+            Fraction of each band's weighted transmission beyond the observed axis
+            (see :func:`~tengri.observation.photometry.filter_coverage_fraction`);
+            ``None`` when the model has no photometry.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return None
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return filter_coverage_fraction(
+            phot.filter_waves, phot.filter_trans, axis, phot.convention
+        )
+
+    def _photometry_or_none(self):
+        """The configured photometry block, or ``None`` when there is none."""
+        obs = self.observation
+        if obs is None or not getattr(obs, "can_do_photometry", False):
+            return None
+        return obs.photometry
+
+    def _warn_filter_coverage(self) -> None:
+        """Warn once per checked redshift when a band reaches past the axis (#2620).
+
+        Runs at construction over the declared redshifts only, so nothing is traced
+        and nothing raises: a model with an uncovered band is still a valid model.
+        The fitters refuse such a band unless it is masked in the data.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return
+        names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+        for z in self.filter_coverage_redshifts():
+            frac = self.filter_coverage_at(z)
+            over = np.flatnonzero(frac > FILTER_COVERAGE_TOLERANCE)
+            if over.size == 0:
+                continue
+            lo, hi = self.observed_axis_range(z)
+            described = ", ".join(f"{names[k]} ({frac[k]:.3g})" for k in over)
+            warn_measured(
+                f"Photometric band(s) {described} extend beyond the model's observed-frame "
+                f"wavelength axis [{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model SED is "
+                f"zero outside that range, so the band's flux is the covered share only, "
+                f"or zero. Fitters refuse such a band unless it is masked in the data. "
+                f"Use an SSP grid or component that reaches the band, or drop the band.",
+                FilterCoverageWarning,
+                stacklevel=3,
+                redshift=z,
+                axis_min_aa=lo,
+                axis_max_aa=hi,
+                n_bands_beyond=int(over.size),
+            )
+
     def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
         """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).
 
@@ -5022,6 +5191,7 @@ class SEDModel:
             RADIO_WAVE_MAX,
             RADIO_WING_PTS_PER_DECADE,
             RADIO_WING_START,
+            SSP_EDGE_STEP_REL,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -5071,6 +5241,17 @@ class SEDModel:
                         endpoint=True,
                     )[1:]
                 )
+
+        # The stellar SED is zero beyond the SSP grid. Where the master grid runs past
+        # that edge, a node just above it carries the zero, so linear interpolation
+        # cannot ramp the edge node's flux down across the whole next cell (#2578).
+        master_max = max(
+            [ssp_max]
+            + [float(np.max(g)) for g in component_grids if np.size(g)]
+            + [float(np.max(w)) for w in extra_wings if np.size(w)]
+        )
+        if master_max > ssp_max:
+            extra_wings.append(np.array([ssp_max * (1.0 + SSP_EDGE_STEP_REL)]))
 
         if component_grids or extra_wings:
             self._rest_wavelength = make_union_grid(
@@ -10935,10 +11116,10 @@ class SEDModel:
                 )
             slot[component.name] = bundle
 
-        # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
-        # they get a response *per term* rather than the single L_ir * R that dust's
-        # one-term SED admits. Same exactness, same build-time integral.
-        for emitter in ("xray", "radio"):
+        # The other additive emitters (X-ray, radio, and the composable AGN, #1118) are
+        # sums of rank-1 terms, so they get a response *per term* rather than the single
+        # L_ir * R that dust's one-term SED admits. Same exactness, same build-time integral.
+        for emitter in ("xray", "radio", "agn"):
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
@@ -11515,7 +11696,8 @@ class SEDModel:
         the redshift the model is evaluated at (the filters sit at
         ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
         redshift range, uniform in ``ln(1+z)``, and returned as
-        ``{"ln1pz": (n_z,), "values": (n_z, n_filter)}`` so
+        ``{"ln1pz": (n_z,), "values": (n_z, n_filter), "rest_values": (n_filter,)}``
+        (``rest_values`` is the same probe at z = 0, #2559) so
         :meth:`DustSEDComponent.apply` replaces the per-call dense filter
         integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
         evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
@@ -11571,6 +11753,12 @@ class SEDModel:
                 nodes = single_node(fixed["redshift"], wave.dtype)
             zeros = jnp.zeros_like(wave)
 
+            # An emitter may read its budget through the log form ``log_L_ir`` (the
+            # float32-safe one). When it declares that input, the probe passes it
+            # alongside ``L_ir``; otherwise the probe would see the -inf default and
+            # return an all-zero SED (#2553).
+            accepts_log_l_ir = "log_L_ir" in _declared_input_names(emitter)
+
             def _template_at(z, luminosity):
                 # Slice with the component's OWN rule, the same one apply() uses. A
                 # precompute that slices differently silently builds R from default
@@ -11578,7 +11766,10 @@ class SEDModel:
                 # The redshift rides in ``p`` because a template may read it
                 # (the CMB temperature floor); it is the NODE redshift here.
                 p = emitter.slice_params({**fixed, "redshift": z})
-                sed, _ = emitter.predict(p, zeros, wave, L_ir=luminosity)
+                budget = {"L_ir": luminosity}
+                if accepts_log_l_ir:
+                    budget["log_L_ir"] = jnp.log10(luminosity)
+                sed, _ = emitter.predict(p, zeros, wave, **budget)
                 return sed
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
@@ -11593,13 +11784,36 @@ class SEDModel:
             # shapes (L-T relations) are common in IR SED models, so verify the
             # property rather than maintaining a list of which models have it:
             # probe at two luminosities and require the SED to scale.
-            def _homogeneous_at(z):
+            def _probe_is_live(sed):
+                return jnp.all(jnp.isfinite(sed)) & jnp.any(sed != 0.0)
+
+            def _probe_at(z):
+                """Return ``(live, ok)`` for the two probes at redshift ``z``.
+
+                ``live``: both probe SEDs are finite and not identically zero. A zero
+                SED satisfies ``allclose(0, k * 0)`` vacuously, so it must be caught
+                here, not by the homogeneity test. ``ok``: live, and the SED scales
+                linearly between the two luminosities.
+                """
                 lo = _template_at(z, 1.0)
                 hi = _template_at(z, _L_IR_PROBE)
-                return jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
+                live = _probe_is_live(lo) & _probe_is_live(hi)
+                return live, live & jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
 
+            zero_probe_reason = (
+                "the probe SED is identically zero or contains non-finite values; "
+                "the emitter did not reach its emission budget (e.g., a required "
+                "log-luminosity input was not provided)"
+            )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            if not bool(_homogeneous_at(z_first)):
+            live_first, ok_first = _probe_at(z_first)
+            if not bool(live_first):
+                # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
+                # was never activated, so decline and let the exact integral run.
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
+            if not bool(ok_first):
                 # Record WHY, or the refusal is invisible. Every gate a caller
                 # can re-check from outside is satisfied here, so
                 # precompute_engagement_report reported "unknown reason (gate
@@ -11646,9 +11860,11 @@ class SEDModel:
 
             def _node(z):
                 unit = _template_at(z, 1.0)
+                live, ok = _probe_at(z)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
-                    "ok": _homogeneous_at(z),
+                    "live": live,
+                    "ok": ok,
                     "log_window_fraction": {
                         name: log10_band_luminosity(unit, wave, lo, hi)
                         for name, (lo, hi) in windows.items()
@@ -11656,6 +11872,10 @@ class SEDModel:
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
+            if not bool(jnp.all(built["values"]["live"])):
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
             if not bool(jnp.all(built["values"]["ok"])):
                 self._dust_band_response_decline = (
                     "dust emission template is not homogeneous in L_ir at every "
@@ -11664,9 +11884,16 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
+            # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
+            # probe is integrated through the filters at z = 0 (#2559). The homogeneity
+            # check above already covers the template, so it is not repeated here.
+            rest_values = lnu_filter_integral_batch(
+                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
+            )
             response = {
                 "ln1pz": built["ln1pz"],
                 "values": built["values"]["R"],
+                "rest_values": rest_values,
                 "log_window_fraction": built["values"]["log_window_fraction"],
             }
 
@@ -11905,10 +12132,15 @@ class SEDModel:
         ft_pad = getattr(st, "phot_ft_padded", None)
 
         free = set(self.spec.free_params)
-        prefix = f"{name}_"
         # ``redshift`` is deliberately not part of this gate: the response is
         # tabulated over it. Only the emitter's own shape parameters gate.
-        gate_ok = not any(p.startswith(prefix) for p in free)
+        refusal = (
+            _term_response_refusal(comp, chain, free, self.spec.get_fixed_values())
+            if comp is not None
+            else "no such emitter in the component chain"
+        )
+        setattr(self, f"_{name}_term_response_decline", refusal)
+        gate_ok = refusal is None
 
         if (
             comp is not None
@@ -11920,6 +12152,13 @@ class SEDModel:
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
             response = self._build_term_response_table(comp, fw_pad, ft_pad)
+            if response is None:
+                setattr(
+                    self,
+                    f"_{name}_term_response_decline",
+                    "the rank-1 probe rejected a term: its spectral shape moves with its "
+                    "amplitude, or it is zero at some redshift node",
+                )
 
         setattr(self, cache_attr, response)
         return response
@@ -11949,22 +12188,24 @@ class SEDModel:
             nodes = single_node(fixed["redshift"], wave.dtype)
         z_mid = fixed["redshift"] if single else jnp.expm1(nodes[nodes.shape[0] // 2])
 
-        probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+        probes = tuple(comp.EMITTER_PROBE_INPUTS)
 
         def _terms(z, probe):
             return comp.emission_terms({**fixed, "redshift": z}, wave, **probe)
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probe_a).items()}
+        peaks = {
+            key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probes[0]).items()
+        }
         keys = tuple(peaks)
 
         def _node(z):
-            terms_a = _terms(z, probe_a)
-            terms_b = _terms(z, probe_b)
+            terms_all = [_terms(z, probe) for probe in probes]
+            terms_a = terms_all[0]
             rows, s_ref, ok = [], [], []
             for key in keys:
-                s_a, s_b, peak = terms_a[key], terms_b[key], peaks[key]
+                s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
                 live = jnp.abs(ref) > 0.0
                 # A term identically zero here is zero for a STRUCTURAL reason (a
@@ -11972,14 +12213,21 @@ class SEDModel:
                 # input is nonzero by construction. It must be zero everywhere
                 # on the grid, or its reference amplitude is 0/0 at some nodes.
                 zero_ok = live | (jnp.max(jnp.abs(s_a)) == 0.0)
-                # RANK-1 CHECK: the second draw must be proportional to the first.
-                scale = s_b[peak] / jnp.where(live, ref, 1.0)
-                rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                term_ok = zero_ok & jnp.all(jnp.isfinite(s_a))
+                # RANK-1 CHECK: every later draw must be proportional to the first. A
+                # draw that switches a live term off, or makes it non-finite, fails
+                # the check: an all-zero draw would otherwise pass as 0 * s_a.
+                for terms_b in terms_all[1:]:
+                    s_b = terms_b[key]
+                    scale = s_b[peak] / jnp.where(live, ref, 1.0)
+                    rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                    alive_ok = ~live | (jnp.all(jnp.isfinite(s_b)) & (jnp.max(jnp.abs(s_b)) > 0.0))
+                    term_ok = term_ok & rank1_ok & alive_ok
                 row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z)
                 rows.append(jnp.where(live, row, jnp.zeros_like(row)))
                 # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
                 s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
-                ok.append(zero_ok & rank1_ok)
+                ok.append(term_ok)
             return {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -12575,7 +12823,9 @@ class SEDModel:
                 ):
                     state = comp.precompute(
                         ssp_data=None,
-                        wave_grid=None,
+                        # The AGN state keeps its build-time torus index set (on the master
+                        # grid), so the augmented state must still see that grid.
+                        wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
                     )

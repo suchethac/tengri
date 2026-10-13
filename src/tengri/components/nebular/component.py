@@ -45,6 +45,7 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
     SEDComponentState,
+    declared_default,
 )
 from tengri.utils.scale import log10_magnitude
 
@@ -65,6 +66,18 @@ _BACKEND_KWARG_SINKS: tuple[str, ...] = (
     "predict_nebular_sed",
     "predict_nebular_line_luminosities",
 )
+
+
+def _shock_log_lhalpha(state, params) -> float:
+    """Return log10 shock Halpha luminosity [erg/s].
+
+    Prefers the ``state.derived`` publication, then the parameter, then the
+    declared ``SHOCK_PARAMS`` default.
+    """
+    from tengri.components.nebular._params import SHOCK_PARAMS
+
+    declared = declared_default(SHOCK_PARAMS, "shock_log_lhalpha")
+    return state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", declared))
 
 
 @cache
@@ -893,7 +906,7 @@ class NebularSEDComponent(TemplateThreading):
             # Source the Halpha luminosity normalization: prefer the
             # state.derived publication (e.g. from a future stellar
             # extension) over the param's Fixed default.
-            log_lha = state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", 40.0))
+            log_lha = _shock_log_lhalpha(state, params)
             l_shock_halpha = jnp.power(10.0, jnp.asarray(log_lha))
             nebular_sed = self.backend.predict_nebular_sed(
                 wavelength=state.wave,

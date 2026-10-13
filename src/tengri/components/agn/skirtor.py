@@ -497,7 +497,7 @@ def _interpolate_and_normalize(
     # ``_load_grid_arrays``), so the integral is positive without an explicit
     # ``argsort``. Don't re-add a sort here.
     integral_lam = loglog_integral(wave_grid, template)
-    integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
+    integral_safe = jnp.maximum(jnp.abs(integral_lam), representable_denominator(1e-100))
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
@@ -1591,12 +1591,17 @@ class SKIRTORDiscAttenGrid(NamedTuple):
         The SKIRTOR parameter axes.
     edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
+    norm : ndarray, shape ``(*axes_shape)``, or None
+        The per-record scale divided out of ``disk`` (no wavelength axis), so that
+        ``disk * norm`` is comparable between inclinations. ``None`` for a file that
+        carries no ``norm`` dataset.
     """
 
     disk: jnp.ndarray
     wave_grid: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     edges: tuple[jnp.ndarray, ...]
+    norm: jnp.ndarray | None = None
 
 
 def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
@@ -1608,6 +1613,7 @@ def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
             wave_grid=jnp.array(raw["wave"]),
             axes=axes,
             edges=tuple(edges_for_grid(ax) for ax in axes),
+            norm=jnp.array(raw["norm"]) if "norm" in raw else None,
         )
 
 

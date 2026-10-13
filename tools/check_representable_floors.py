@@ -95,7 +95,23 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # ``1e-300`` (two sites), ``nebular_grid_precompute.py``'s table log stack and
 # ``fesc_model.py``'s UV-slope regression floored at ``1e-300`` and ``1e-50``. All four
 # now use ``representable_floor``. Migrations, not deletions.
-_PINNED = 18
+# 18 -> 7: round 3 of the float32 floor pass (#1492, #2921). Eleven literal floors
+# migrated: ``xray.py`` (the wabs log floor, the L_2500 fallback and the Duras log
+# floor, ``representable_floor``); ``spectral_indices.py`` (the slope log floor,
+# ``representable_floor``); ``disc.py`` (the L_seed floor, ``representable_floor``,
+# and the two closed-form normalization divisors, ``representable_denominator``;
+# the #2572/#2601 deletions are not reintroduced); ``fracagn.py`` (the zero-luminosity
+# log and the total-luminosity divisor); ``qsogen.py`` (the Balmer normalization
+# divisor) and ``skirtor.py`` (the template normalization divisor), both
+# ``representable_denominator``; ``posterior.py`` (deleted, see the denominator pin).
+# Left pinned: ``adaf.py``'s K_0/K_1 small-argument clip (``xs / 2`` flushes to zero
+# in float32 below 2*tiny, so a tiny floor does not keep its log finite; the argument
+# is outside the stated x > 0 domain there), ``disc.py``'s target clip (a bracket
+# bound on a comparison), ``qsogen.py``'s non-negativity clamp on the continuum (a
+# multiplier, no log or divide), and three numpy or host-table sites (``agn_nebular.py``
+# Synthesizer loader x2, ``ionizing_spectrum.py`` scipy segment fit, ``grid_interp.py``
+# tolerance scale).
+_PINNED = 7
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -179,7 +195,19 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 3
+#: 3 -> 2 (round 3, #2921): ``inference/posterior.py``'s ``agn_fraction`` divided by
+#: ``jnp.maximum(total, 1e-300)`` inside a ``jnp.where(total > 0, ...)``. The floor
+#: was zero in float32 and the select already excluded the zero case, so it was dead:
+#: the divisor is now selected before the division (``jnp.where(total > 0, total,
+#: 1.0)``), which is the fix this check's message prescribes. A deletion, not a
+#: migration (``representable_floor`` would not be derivative-safe here).
+#: 3 -> 2 (round 3, #2921): ``inference/posterior.py``'s ``agn_fraction`` divided by
+#: ``jnp.maximum(total, 1e-300)`` inside a ``jnp.where(total > 0, ...)``. The floor is
+#: zero in float32 and the select already excludes the zero case, so it was dead; the
+#: divisor is now selected before the division, which is the fix this check's message
+#: prescribes. A deletion, not a migration: ``representable_floor`` is not
+#: derivative-safe for a divisor.
+_PINNED_DENOMINATORS = 2
 
 
 #: On the AGNfitter validation branch, two of the original 43 sub-subnormal

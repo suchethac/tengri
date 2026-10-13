@@ -2305,6 +2305,11 @@ class StellarSEDComponent:
       Falls back to ``log_mstar_formed`` when the SSP grid lacks a
       ``ssp_mass_remaining`` table.
     - ``log_mstar_formed`` (scalar, dex): log10(formed mass / Msun).
+    - ``age_weights_surviving`` (ndarray, shape ``(n_age,)``, Msun): the
+      surviving mass per SSP age bin, ``age_weights`` times each node's
+      mass-remaining fraction summed over metallicity. Sums to
+      ``10**log_mstar``; equals ``age_weights`` when the SSP has no
+      ``ssp_mass_remaining`` table.
     - ``sfr`` (scalar, Msun/yr); SFR at lookback ≈ 0 (i.e. the youngest
       grid point of ``sfr_history``).
     - ``sfr_10myr`` (scalar, Msun/yr): time-weighted SFR over the last
@@ -2435,6 +2440,13 @@ class StellarSEDComponent:
                 "only when a consumer requested boundaries",
             ),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
+            DerivedKey(
+                "age_weights_surviving",
+                "Msun",
+                "CSP surviving-mass weights per SSP age bin (age_weights times each node's "
+                "mass-remaining fraction); sums to 10**log_mstar. The mass weighting of the "
+                "Fragos+2013 LMXB age. Equals age_weights without a mass-remaining table",
+            ),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
             DerivedKey(
                 "log_nion",
@@ -3411,12 +3423,17 @@ class StellarSEDComponent:
         if ssp.ssp_mass_remaining is not None:
             # Surviving mass is the joint-weight contraction with each (age, Z) node
             # at its own remaining-mass fraction.
-            mstar_surv = jnp.sum(joint_weights * ssp.ssp_mass_remaining) * total_mass
+            mstar_surv_age = jnp.sum(joint_weights * ssp.ssp_mass_remaining, axis=0) * total_mass
+            mstar_surv = jnp.sum(mstar_surv_age)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
+            age_weights_surviving = mstar_surv_age
         else:
             log_mstar = log_mstar_formed
             log_mstar_surviving = jnp.asarray(jnp.nan)
+            # No mass-remaining table: the same fallback as ``log_mstar``, so the
+            # age weights and the mass they normalize stay one definition.
+            age_weights_surviving = age_weights
 
         # ── 9. SFR averages on the SFH grid ─────────────────────────────
         sfr_now = sfr_history[0]
@@ -3625,6 +3642,7 @@ class StellarSEDComponent:
             # entry points and derive Q_H + ionizing spectrum
             # from the SSP, matching legacy parity.
             age_weights=age_weights,
+            age_weights_surviving=age_weights_surviving,
             log_nion=log_nion,
             nion=nion,
             sfh_grid_lbt_yr=sfh_grid_pub,
