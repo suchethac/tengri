@@ -351,7 +351,7 @@ out-of-range final value representable. The rule these fixes converged on:
 
 - **An AGN component publishes an integrated luminosity as `log_L_agn_<piece>` in dex re erg/s
   AND as `L_agn_<piece>_lsun` in solar luminosities** (#2842): `log_L_agn_disc` and
-  `L_agn_disc_lsun`, likewise `torus`, `polar_dust`, `absorbed`, `bol`, `los`, `adaf_accretion`
+  `L_agn_disc_lsun`, likewise `torus`, `polar_dust`, `disc_unemitted`, `absorbed`, `bol`, `los`, `adaf_accretion`
   and the `_los` siblings of the anisotropic emitters. This is the first bullet of this section
   applied, not an exception to the second: an AGN power of 1e8 to 1e14 Lsun is representable in
   float32, so the `Lsun` value exists and is published; the second bullet (no same-named
@@ -363,21 +363,32 @@ out-of-range final value representable. The rule these fixes converged on:
   as an erg/s number that is then logged, and the `Lsun` sibling is formed from the log as
   `pow10(log - log10(L_sun))`, so the erg/s value is never written (an absent component, `-inf`
   dex, is exactly 0 Lsun). The one erg/s key kept is `L_agn_bol`, a float64 convenience beside
-  `log_L_agn_bol` that is `inf` in float32; the radio and X-ray components read the log there. `erg/s/Hz` keys (`L_2500_30deg`,
+  `log_L_agn_bol` that is `inf` in float32; the radio component reads it with the log as the
+  float32 fallback, and the X-ray component reads the log. `erg/s/Hz` keys (`L_2500_30deg`,
   `L_6um`, `L_12um`) are spectral densities and stay.
 - **An anisotropic emitter publishes the angle-integrated power under the plain name and the
   line-of-sight value under `_los`** (#2678, #2851): `log_L_agn_disc` is
   `(1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu`, `mu = cos i`, and does not depend
   on the inclination; `log_L_agn_disc_los` is the power of the SED emitted along `cos_inc`.
-  Kubota & Done 2018 and SKIRTOR (disc, torus, polar dust) follow it. SKIRTOR's sphere-mean
-  disc power is the luminosity parameter, `10**agn_log_lbol L_sun` times `agn_torus_frac`, and
-  the library's own flux ratio between inclinations is kept: the stored spectra are divided by
-  their record's dust integral (`spectra/norm`), which is multiplied back, and ONE scale
-  factor per parameter point normalizes the sphere mean. The torus dust and the line-of-sight
-  disc power then follow the radiative transfer. The polar dust absorbs the disc light emitted
-  into the polar cone (`int_{sin(oa)}^1 L(mu) dmu`), whatever the sightline, and re-emits it
-  isotropically, so `log_L_agn_polar_dust` and `log_L_agn_polar_dust_los` are equal and do not
-  depend on `cos_inc`.
+  Kubota & Done 2018 and SKIRTOR (disc, torus, polar dust, unemitted disc) follow it. For
+  SKIRTOR the luminosity parameter is the accretion power: the sphere mean of everything the
+  radiative transfer carries (the escaping disc over the template's whole native range of
+  10 A to 1e8 A, the torus dust and the polar dust) is `10**agn_log_lbol L_sun` times
+  `agn_torus_frac`, and the library's own flux ratio between inclinations is kept: the stored
+  spectra are divided by their record's dust integral (`spectra/norm`), which is multiplied
+  back, and ONE scale factor per parameter point normalizes the sphere mean. The torus dust
+  and the line-of-sight disc power then follow the radiative transfer. The polar dust power is
+  `int_0^1 w(mu) A(mu) dmu`, with `A(mu)` the power the polar dust absorbs from the disc light
+  emitted along `mu` and `w` the Type-1 weight of the SED (the logistic in `cos i` of width
+  0.025 about `sin(oa)`), whatever the sightline; it is re-emitted isotropically, so
+  `log_L_agn_polar_dust` and `log_L_agn_polar_dust_los` are equal and do not depend on
+  `cos_inc`. The escaping disc is published net of that power. The analytic disc the
+  component emits is zero below 80 A (the CIGALE `skirtor2016` piecewise disc starts at 8 nm),
+  so the template disc outside 80 A to 1e7 A is not in the SED; it is published as
+  `log_L_agn_disc_unemitted`, and the four sphere powers
+  `disc + torus + polar_dust + disc_unemitted` add up to the luminosity parameter to 1e-12.
+  Every published power of an emitted piece equals the integral of that piece of the SED
+  (#2745); the unemitted disc is the one published power that is not in the SED.
 
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one

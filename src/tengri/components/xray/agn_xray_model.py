@@ -15,8 +15,8 @@ Physical pipeline
 
 Cross-component contract
 ------------------------
-Inputs: L_agn_bol (AGN bolometric luminosity) from upstream AGN component
-        (with fallback to 0 if not present).
+Inputs: log_L_agn_bol (log10 AGN bolometric luminosity, dex re erg/s) from the upstream AGN
+        component (with fallback to an absent AGN, -inf, if not present).
 Outputs: sed_xray (X-ray luminosity on the pipeline wavelength grid).
 
 Notes

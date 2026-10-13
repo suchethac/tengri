@@ -6,8 +6,9 @@ The component publishes (all under ``state.derived``):
 
 - ``sed_grahsp``: :math:`L_\\nu` [erg/s/Hz] of the full GRAHSP AGN-side SED.
 - ``L_agn_bol`` [erg/s] and ``log_L_agn_bol`` [dex re erg/s]: bolometric BBB luminosity
-  (paper §2.1.4 ``lumBolBBB``). The erg/s key is the one the radio and X-ray components read;
-  it is ``inf`` in float32, where the log key is the value.
+  (paper §2.1.4 ``lumBolBBB``). The erg/s key is the one the radio component reads, and the
+  X-ray component reads ``log_L_agn_bol``; the erg/s key is ``inf`` in float32, where the
+  log key is the value.
 - ``log_L_agn_torus``: log10 torus bolometric luminosity (``lumBolTOR``) [dex re erg/s].
 - ``log_L_agn_absorbed``: log10 of the energy absorbed by the AGN bi-attenuation (the
   intrinsic-minus-attenuated integral over the AGN-side spectrum) [dex re erg/s]. Useful
@@ -482,9 +483,9 @@ class GRAHSPSEDComponent(PublishedLuminosities):
         ``l5100 = 10**log_l5100`` in float64 and at the reference ``1e10`` erg/s in float32,
         then restores the magnitude in log space: the SED through
         :func:`~tengri.utils.scale.apply_log10_scale` and the powers as ``log_*`` keys.
-        ``L_agn_bol`` is the one erg/s key kept, because the radio and X-ray components read
-        it; it is ``inf`` in float32 (read ``log_L_agn_bol`` there) and carries no gradient
-        in float32.
+        ``L_agn_bol`` is the one erg/s key kept, because the radio component reads it (the
+        X-ray component reads ``log_L_agn_bol``); it is ``inf`` in float32 (read
+        ``log_L_agn_bol`` there) and carries no gradient in float32.
         """
         if templates_state is None:
             templates_state = self.precompute()
