@@ -521,35 +521,39 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked).
-#: Every cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy
-#: ledger, #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed
-#: by T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
-#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
-#: rest_sed_sum +2.18e-4 / +4.83e-4 / +5.88e-4 (mbh 6/8/10); rest_sed_0 +3.86e-3 at all three;
-#: rest_sed_mid +7.90e-6 / +3.40e-4 / +4.45e-4; rest_sed_last +1.23e-5 / +3.98e-5 / +3.99e-4;
-#: photometry (r, W3, W4) at mbh 6 +8.7e-6 / +1.72e-3 / +2.11e-3.
+#: Re-captured on the merged tree (fix/float32-numerics = origin/main 4d16bd7f0 merged with
+#: fix/precompute-wired-and-checked 956edd2f1). Causes named: #2694 young-sliver SFH integral,
+#: #2807 AGN energy ledger, #2837 library-torus sightline (owner ruling 9), #2808 PCHIP torus
+#: lookups and feltre_nlr on all five axes, and "#2818 float32 numerics" (disc.py float32 intent
+#: re-applied on main's log-scale disc). Not isolated per commit. Old -> new, relative, against
+#: the pins this file carried before the re-capture (#2733-era values):
+#:   log M_BH 6: rest_sed_sum +1.17e-5, rest_sed_0 +4.39e-2, rest_sed_mid -1.16e-6,
+#:     rest_sed_last -3.46e-6, photometry (r, W3, W4) +2.9e-6, -6.3e-7, -1.6e-7
+#:   log M_BH 8: rest_sed_sum +1.01e-4, rest_sed_0 -7.24e-2, rest_sed_mid +2.07e-4,
+#:     rest_sed_last -5.16e-5, photometry +2.1e-4, -8.5e-6, -2.3e-6
+#:   log M_BH 10: rest_sed_sum -3.94e-3, rest_sed_0 -5.65e-1, rest_sed_mid -4.11e-3,
+#:     rest_sed_last -3.12e-4, photometry -4.3e-3, -7.1e-4, -3.8e-5
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593661510954203e32,
-        "rest_sed_0": 103282334882173.56,
-        "rest_sed_mid": 2.8914161655245853e28,
-        "rest_sed_last": 8.773459863561754e21,
-        "photometry": (1.0995021122259564e-27, 1.5613872671857697e-27, 1.770439323748374e-27),
+        "rest_sed_sum": 1.5593843975410476e32,
+        "rest_sed_0": 107819931932531.69,
+        "rest_sed_mid": 2.891412814811677e28,
+        "rest_sed_last": 8.773429501326086e21,
+        "photometry": (1.0995053322079293e-27, 1.5613862801437854e-27, 1.770439035766937e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.67623869210685e32,
-        "rest_sed_0": 2.8333448370125976e16,
-        "rest_sed_mid": 3.154774862097707e28,
-        "rest_sed_last": 8.836968924676161e21,
-        "photometry": (1.2059443168441798e-27, 1.5634843543602155e-27, 1.771046111587787e-27),
+        "rest_sed_sum": 1.6764087615329647e32,
+        "rest_sed_0": 2.6280923659312508e16,
+        "rest_sed_mid": 3.1554292154441393e28,
+        "rest_sed_last": 8.836513097035511e21,
+        "photometry": (1.2062026449580821e-27, 1.5634711019050015e-27, 1.7710420103722184e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7101559724880964e32,
-        "rest_sed_0": 2.9685802227832764e16,
-        "rest_sed_mid": 3.209449316439098e28,
-        "rest_sed_last": 9.75781137041628e21,
-        "photometry": (1.2209304672711665e-27, 1.5883494091231179e-27, 1.7788276449864145e-27),
+        "rest_sed_sum": 1.703425617122919e32,
+        "rest_sed_0": 1.2917978371688406e16,
+        "rest_sed_mid": 3.1962498151353243e28,
+        "rest_sed_last": 9.754766942342692e21,
+        "photometry": (1.2157011889186551e-27, 1.5872221286512619e-27, 1.77876016593289e-27),
     },
 }
 

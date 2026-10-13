@@ -687,24 +687,43 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked). Every
-#: cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy ledger,
-#: #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed by
-#: T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
-#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
-#: 6.0: sum +2.16e-4, rest_sed_0 +3.86e-3, mid +6.28e-6, last +1.23e-5;
-#: 8.0: sum +4.28e-4, rest_sed_0 +3.86e-3, mid +2.73e-4, last +3.40e-5;
-#: 10.0: sum +5.14e-4, rest_sed_0 +3.86e-3, mid +3.59e-4, last +3.24e-4.
+#: Re-captured on the merged tree (fix/float32-numerics = origin/main 4d16bd7f0 merged with
+#: fix/precompute-wired-and-checked 956edd2f1). Causes named: #2694 young-sliver SFH integral,
+#: #2807 AGN energy ledger, #2837 library-torus sightline (owner ruling 9: the disc behind a
+#: library torus is dimmed by T = R_n/eta, Fritz eta = 1), #2808 PCHIP torus lookups and
+#: feltre_nlr on all five axes, and "#2818 float32 numerics" (no hard-pinned float64, representable
+#: exponent ceilings, device_table for module constants in disc.py). Not isolated per commit.
+#: Old -> new, relative, against the #2808 pins this file carried before the re-capture
+#: (sum / first bin / middle bin / last bin):
+#:   log M_BH 6: 1.5586759060882227e32 -> 1.5586902495503188e32 (+9.2e-6); 8.1456e13 -> 8.5035e13
+#:     (+4.39e-2); 2.8901825691320397e28 -> 2.8901799287539962e28 (-9.1e-7);
+#:     8.77332638502807e21 -> 8.773302439087775e21 (-2.7e-6)
+#:   log M_BH 8: 1.6507617942542995e32 -> 1.6508958561152344e32 (+8.1e-5); 2.2345886203830524e16
+#:     -> 2.0727111001488856e16 (-7.2e-2); 3.0977105009651904e28 -> 3.098226134579877e28 (+1.7e-4);
+#:     8.823414402335067e21 -> 8.823054902409336e21 (-4.1e-5)
+#:   log M_BH 10: 1.6775034618643003e32 -> 1.6722001219825183e32 (-3.2e-3); 2.341245406443339e16
+#:     -> 1.018808832961018e16 (-5.7e-1); 3.140794236498581e28 -> 3.1303929653712365e28 (-3.3e-3);
+#:     9.54965994194651e21 -> 9.547258877226544e21 (-2.5e-4)
 #: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586759060882227e32, 81456209353478.88, 2.8901825691320397e28, 8.77332638502807e21),
-    8.0: (
-        1.6507617942542995e32,
-        2.2345886203830524e16,
-        3.0977105009651904e28,
-        8.823414402335067e21,
+    6.0: (
+        1.5586902495503188e32,
+        85034899317424.44,
+        2.8901799287539962e28,
+        8.773302439087775e21,
     ),
-    10.0: (1.6775034618643003e32, 2.341245406443339e16, 3.140794236498581e28, 9.54965994194651e21),
+    8.0: (
+        1.6508958561152344e32,
+        2.0727111001488856e16,
+        3.098226134579877e28,
+        8.823054902409336e21,
+    ),
+    10.0: (
+        1.6722001219825183e32,
+        1.018808832961018e16,
+        3.1303929653712365e28,
+        9.547258877226544e21,
+    ),
 }
 
 
