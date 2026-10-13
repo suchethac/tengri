@@ -5197,6 +5197,12 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
                     f"neb nitrogen={neb_dict['nitrogen']!r}: expected one of {NITROGEN_MODES}."
                 )
             result["cue_nitrogen"] = neb_dict["nitrogen"]
+        # 'all' (default) counts ionizing photons from every stellar age; a number of
+        # years is the oldest age counted (1e8 restores the former 100 Myr cut).
+        if "lyc_max_age_yr" in neb_dict:
+            from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
+
+            result["cue_lyc_max_age_yr"] = validate_lyc_max_age_yr(neb_dict["lyc_max_age_yr"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -5947,7 +5953,7 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
-    "cue": frozenset({"nitrogen"}),
+    "cue": frozenset({"nitrogen", "lyc_max_age_yr"}),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -6087,6 +6093,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
             "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
         ),
         _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
+        _Structural("lyc_max_age_yr", "cue_lyc_max_age_yr", "all", only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
@@ -6865,6 +6872,13 @@ def _validate_user_keys(
                     f"neb 'nitrogen' is only available for type 'cue' (got {neb_type!r}): "
                     "Cue takes [N/O] as an input, while the grid backends have no "
                     "absolute N/O knob (neb_dno is an offset from the grid's own relation)."
+                )
+
+            if "lyc_max_age_yr" in top_val and "lyc_max_age_yr" not in neb_type_specific_keys:
+                raise ConfigError(
+                    f"neb 'lyc_max_age_yr' is only available for type 'cue' (got {neb_type!r}): "
+                    "it sets the oldest stellar age whose ionizing photons Cue counts, and "
+                    "the other backends read a fixed age range from their own grids."
                 )
 
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
@@ -9358,8 +9372,16 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
         # Round-trip the absorb-all LyC toggle (only emit when non-default).
-        if str(getattr(spec, "dust_lyc_reprocessed_by", "young")) == "all":
-            group_output["lyc_reprocessed_by"] = "all"
+        # The default is 'all' under Cue and 'young' elsewhere: emit when it differs.
+        _lyc_default = (
+            "all"
+            if getattr(spec, "nebular_mode", None) == "cue"
+            and getattr(spec, "cue_lyc_max_age_yr", "all") == "all"
+            else "young"
+        )
+        _lyc_value = str(getattr(spec, "dust_lyc_reprocessed_by", _lyc_default))
+        if _lyc_value != _lyc_default:
+            group_output["lyc_reprocessed_by"] = _lyc_value
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
             group_output["lyc_in_energy_balance"] = True

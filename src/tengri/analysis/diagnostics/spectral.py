@@ -30,23 +30,12 @@ from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import representable_denominator, representable_floor
-from tengri.utils.sed_quantities import band_integral
+from tengri.utils.sed_quantities import CALZETTI94_WINDOWS_AA, band_integral
 
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
 
-# Calzetti et al. 1994 Table 2: ten spectral windows for UV slope measurement.
-CALZETTI94_WINDOWS_AA = (
-    (1268.0, 1284.0),
-    (1309.0, 1316.0),
-    (1342.0, 1371.0),
-    (1407.0, 1515.0),
-    (1562.0, 1583.0),
-    (1677.0, 1740.0),
-    (1760.0, 1833.0),
-    (1866.0, 1890.0),
-    (1930.0, 1950.0),
-    (2400.0, 2580.0),
-)
+# The ten Calzetti et al. 1994 windows (Table 2) live in utils.sed_quantities,
+# which the 1600 A UV luminosity also uses; re-exported here by name.
 
 
 def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:

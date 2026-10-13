@@ -78,10 +78,17 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # luminosity input).
 _L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 
-# Standard rest-frame wavelength grid covering radio (1 mm to 1 km) and
-# extending blueward enough that the suppression mask in radio.py
-# (lambda > _RADIO_WAVE_MIN_AA) is not pathological.
-_WAVE_REST = host_array(np.logspace(7, 13, 1024, dtype=np.float64))  # 0.1 um to 100 km
+# Standard rest-frame wavelength grid: 100 um (the synchrotron edge,
+# ``_RADIO_WAVE_MIN_AA`` in radio.py) to 1 km. The 1 mm-1 km nodes are the original
+# log-spaced 1024; the 100 um-1 mm nodes are prepended so those stay unchanged.
+_WAVE_REST = host_array(
+    np.concatenate(
+        [
+            np.logspace(6, 7, 172, dtype=np.float64)[:-1],
+            np.logspace(7, 13, 1024, dtype=np.float64),
+        ]
+    )
+)
 
 
 def _build_grid_synchrotron(

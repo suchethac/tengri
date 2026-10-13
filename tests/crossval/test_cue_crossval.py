@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import CLOUDY_LABEL_AIR_MAX_AA, catalog_air_to_vacuum
 
 pytestmark = pytest.mark.crossval
 
@@ -111,7 +111,9 @@ class TestCueVsTFReference:
         )
         lum_ref = reference[f"lines_{input_idx}"]
         # the upstream reference carries Cloudy AIR labels; tengri ingests vacuum
-        wav_ref = catalog_air_to_vacuum(reference["line_wavelengths"])
+        wav_ref = catalog_air_to_vacuum(
+            reference["line_wavelengths"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+        )
 
         wav_jax_np = np.asarray(wav_jax)
         lum_jax_np = np.asarray(lum_jax)  # already [Lsun], same as the TF ref
@@ -168,7 +170,9 @@ class TestCueVsTFReference:
         params = _TEST_PARAMS[0]
         wav_jax, _ = cue_backend.predict_nebular_line_luminosities(cloudyfsps_only=False, **params)
         # the upstream reference carries Cloudy AIR labels; tengri ingests vacuum
-        wav_ref = catalog_air_to_vacuum(reference["line_wavelengths"])
+        wav_ref = catalog_air_to_vacuum(
+            reference["line_wavelengths"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+        )
         wav_jax_np = np.sort(np.asarray(wav_jax))
 
         for w_ref in wav_ref:
