@@ -202,8 +202,10 @@ DUST_EMISSION_MODELS["graybody"] = graybody
 DUST_EMISSION_MODELS["modified_blackbody"] = modified_blackbody
 DUST_EMISSION_MODELS["casey2012"] = casey2012
 DUST_EMISSION_MODELS["pah_drude"] = pah_drude
-# Deprecated alias: draine2021_pah resolves to the canonical pah_drude (#693).
-DUST_EMISSION_MODELS["draine2021_pah"] = pah_drude
+# ``draine2021_pah`` is deliberately absent. The build grammar resolves it to
+# the tabulated Draine+2021 component (``forward/component_factory.py``
+# ``_EMISSION_TYPE_ALIASES``); a closure here would evaluate a different model
+# under the same name (#2765). ``pah_drude`` stays reachable under its own name.
 
 
 def draine_li2007(*args, **kwargs):
@@ -524,6 +526,9 @@ def _make_lazy_loader(
     return _lazy_wrapper
 
 
+_DL07_SLOTS = ("draine_li2007", "dl07_tabulated", "dl07")
+
+
 def _dl07_lazy_wrapper(*args, **kwargs):
     """Draine & Li (2007): auto-loads tabulated templates on first call."""
     if "draine_li2007" not in _resolved:
@@ -538,8 +543,13 @@ def _dl07_lazy_wrapper(*args, **kwargs):
             # aliases) shared by later models.
             with jax.ensure_compile_time_eval():
                 tabulated = create_dl07_from_grid(path)
-            DUST_EMISSION_MODELS["draine_li2007"] = tabulated
-            DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
+            # All three slots that name this model must be swapped together.
+            # Resolving through "dl07" (or "draine_li2007") would otherwise
+            # leave the other alias on this wrapper, a second callable for
+            # the same physics (the contract in
+            # tests/contract/test_registry_names_resolve_to_one_model.py).
+            for slot in _DL07_SLOTS:
+                DUST_EMISSION_MODELS[slot] = tabulated
             return tabulated(*args, **kwargs)
         else:
             raise FileNotFoundError(

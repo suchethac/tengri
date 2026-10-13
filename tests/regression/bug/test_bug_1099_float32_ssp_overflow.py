@@ -135,7 +135,8 @@ def test_upcast_preserves_stored_values(f32_any):
     rounded. That loss is baked into the file; the loader cannot undo it, and
     is not trying to.)
     """
-    ssp = load_ssp_data(f32_any)
+    # top_z="raw": the clip is tested in test_bug_2822; this checks the upcast only.
+    ssp = load_ssp_data(f32_any, top_z="raw")
     with h5py.File(f32_any, "r") as f:
         for name, loaded in (
             ("ssp_flux", ssp.ssp_flux),

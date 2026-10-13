@@ -16,7 +16,7 @@ Each SSP library is stored as a three-dimensional flux tensor $\mathbf{F} \in \m
 
 - **Wavelength grid** $\{\lambda_k\}_{k=1}^{n_\lambda}$ in Å (rest-frame), from ${\sim}100$ Å to ${\sim}2\,\mu$m (typically 1200--5000 points).
 
-Each file also carries a surviving mass fraction array $f_{\rm surv}(Z, t_{\rm age})$ of shape $(n_Z, n_{\rm age})$ and, optionally, a wavelength-integrated bolometric luminosity array for energy-balance dust emission. tengri supports templates from Bruzual and Charlot (2003) (BC03), BPASS (Eldridge et al. 2017), FSPS(Conroy et al. 2009; Conroy and Gunn 2010), and ProGeny (Bellstedt and Robotham 2024). The IMF is encoded entirely in the templates; switching from Chabrier (2003) to Kroupa or Salpeter requires loading a different SSP file with no code changes.
+Each file also carries a surviving mass fraction array $f_{\rm surv}(Z, t_{\rm age})$ of shape $(n_Z, n_{\rm age})$ and, optionally, a wavelength-integrated bolometric luminosity array for energy-balance dust emission. tengri supports templates from Bruzual and Charlot (2003) (BC03), BPASS (Eldridge et al. 2017; the shipped grid is ProSpect's repackaging of BPASS v2.2.1 binary populations with the `imf_chab300` IMF, and its surviving mass is not available from BPASS's own outputs, so it loads only with `mass_remaining="dsps_fit"`), FSPS(Conroy et al. 2009; Conroy and Gunn 2010), and ProGeny (Bellstedt and Robotham 2024). The IMF is encoded entirely in the templates; switching from Chabrier (2003) to Kroupa or Salpeter requires loading a different SSP file with no code changes.
 
 (app-sps-csp)=
 
