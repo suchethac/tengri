@@ -96,10 +96,12 @@ def test_dense_fsps_does_not_warn_and_weighted_shape_is_unclamped():
     ages = np.asarray(be._ssp_log_age_yr)
     w = jnp.asarray(np.where(ages <= 7.5, np.gradient(10.0**ages), 0.0))
     kw = dict(neb_logU=-2.0)
-    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7, **kw)
+    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7)
     out = be._compute_weighted_cue_params(w, jnp.asarray(ages), -1.7, **kw)
     for k in _TABLE_1:
         assert float(out[k]) == float(raw[k])
+    # neb_logU reaches Cue as gas_logu through the clamped wrapper
+    assert float(out["gas_logu"]) == kw["neb_logU"]
 
 
 def test_out_of_box_shape_warns_and_is_clamped():
