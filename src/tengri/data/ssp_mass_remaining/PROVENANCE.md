@@ -121,6 +121,16 @@ young top-Z SSPs contain no stars above about 12 Msun, in both the spectra (whic
 build) and the surviving mass. The flat 0.868 at young ages at top Z is that truncation together
 with the remnant term, which `add_remnants.f90` ties to the largest living mass.
 
+How the model treats this node is a loader policy, not a change to this table: the table
+keeps the build's own numbers at Z = 0.06, and `load_ssp_data(..., top_z=...)` clips the young
+part of that node (and its surviving mass) to the highest complete node, or to the MIST node of
+`src/tengri/data/ssp_top_z/` (see its `PROVENANCE.md`). The limit is registry data in
+`components/stellar/sps/top_z_validity.py` (`TOP_Z_REGISTRY`, keyed by the isochrone code of the
+registry above): node Z = 0.06, clip target Z = 0.04, last incomplete log age 7.15 (the last age
+at which `isoc_z0.0600.dat` still caps Mini at 12.01 Msun; at 7.20 the node is lifetime-limited,
+with a core He-burning tip of 11.33 Msun, and complete), taper 0.05 dex (one grid step: weight 0 at
+7.15, 1 at 7.20).
+
 The spectra comparison above was a one-off check against the hosted grid, made outside the
 repository with the same build; the test suite does not repeat it, since python-fsps is not in
 the shared environment.
@@ -130,14 +140,91 @@ PARSEC Kroupa and Salpeter use the same build; they have no hosted grid to compa
 ## PENDING grids
 
 Declared in the registry, refused without `mass_remaining="dsps_fit"`: BPASS
-(`bpss_stars_c3k_a_chabrier`). Geneva has no catalog grid.
+(`bpss_stars_c3k_a_chabrier`; the registry records its origin in `GRID_ORIGIN` and the reason in
+`PENDING_REASON`). Geneva has no catalog grid.
 
-**BPASS stays PENDING.** The BPASS v2.2 manual defines the `starmass` column as the mass of
-living stars only, per 10^6 Msun formed; its remnant column is flagged untested by the BPASS
-team and exists only for binary files. A single-star remnant recipe does not apply to a binary
-population, so no table is built. The converter `scripts/convert_bpass_to_h5.py` also globs the
-`imf135_300` files while its docstring says Chabrier (lines 11, 137); the shipped grid is
-`imf_chab300`. That converter is not changed here.
+**BPASS stays PENDING (#2800).** No table is shipped, because the one derivation that could
+give living stars plus remnants for a binary population fails its closure test.
+
+**The grid.** `bpss_stars_c3k_a_chabrier` is ProSpect's `BPASS_St_Ch300.fits` (sha256
+`2e02e4c85ac8a2e48901bce8d5ce40c864694ebcf324792cb05da0b08cb9a820`; Robotham et al. 2020,
+MNRAS 495, 905, doi:10.1093/mnras/staa1116): BPASS v2.2.1, binary populations (`bin`), IMF
+`imf_chab300` (Chabrier, 0.1-300 Msun), 13 metallicities (Z = 1e-5, 1e-4, 0.001 ... 0.04), 51 ages
+(log10 yr = 6.0 ... 11.0 at 0.1 dex), 1221 wavelengths, spectra in Lsun/Angstrom per Msun
+converted with `lambda^2 / 2.998e18`. The `c3k_a` token in the file name does not describe a
+BPASS library. `scripts/convert_bpass_to_h5.py --verify` rebuilds the grid from that FITS: axes
+agree with the shipped file to 1.19e-7 (one float32 ulp; one metallicity and five age nodes
+round differently), `ssp_flux` is identical in the median and differs by at most 2.4e-7
+relative over the 802,927 nodes above 1e-30. The older converter globbed `imf135_300` files
+and an 11-metallicity set and did not produce this grid; it is replaced.
+
+**What BPASS provides** (v2.2.1 manual, "Surviving Stellar Masses" and "Yields"): the
+`starmass-bin-imf_chab300.<z>.dat` columns are log10 age, living stars [Msun per 1e6 Msun
+formed], and a remnant column documented as "untested" (white dwarfs, neutron stars, black
+holes); the `yields-...` columns 2-4 (wind H, He, metals) and 7-9 (supernova H, He, metals) are
+output rates [Msun/yr per 1e6 Msun formed] in 51 log-age bins of width
+`10**(la+0.05) - 10**(la-0.05)` yr, "except for the first bin which is 10**6.05 years".
+ProSpect's `Zevo<i>` tables hold `starmass` columns 2 and 3 as `SMstar` and `SMrem` scaled by
+1e-6: for rows log10 age 6.0-10.9 they equal the BPASS files to 1.2e-16 relative (living) and
+7e-12 Msun (remnant) for all 13 Z; ProSpect's last row (log10 age 11.0) replaces the BPASS
+living-star value (0.95 M0 in the BPASS file, rising from 0.44 M0 at 10 Gyr) with 0.30-0.35 and
+keeps the BPASS remnant value.
+
+**Source of the numbers below.** `bpass_v2.2.1_imf_chab300.tar.gz` from the "BPASSv2.2.1_release-07-18-Tuatara" folder linked from
+<https://www.bpass.auckland.ac.nz/bpass-v2-2/>
+(<https://www.dropbox.com/scl/fo/mpuas1xh5owmdadu0vpev/h?rlkey=7vlk7ra6kvoztzmae8wr34kmz&dl=0>),
+565,182,505 bytes, sha256 `1f6490dda3a37cab28853012fc7e8ba8c1caa51b3d06f13f4e89ef2ffac808a7`
+(computed while streaming; the tarball was not stored). The 26 files
+`{starmass,yields}-bin-imf_chab300.{zem5,zem4,z001,z002,z003,z004,z006,z008,z010,z014,z020,z030,z040}.dat.gz`
+were extracted. A committed excerpt of the columns used is
+`tests/fixtures/bpass_chab300/mass_balance.csv`.
+
+**Closure test** (`scripts/check_bpass_mass_balance.py`, exit 1 on failure). Mass balance:
+`living(t) + remnants(t) = M0 - E(t)` with `M0 = 1e6 Msun` and `E` the integrated ejecta.
+Before the first supernovae (log10 age < 6.35) remnants are absent, so `living + E` must equal
+`M0`. At any age `living + E <= M0`. Evaluated for both readings of the first bin (0 to
+10**6.05 yr as the manual words it, and 10**6.0 to 10**6.05 yr) and three placements of `E`
+within a bin (through the upper edge, the lower edge, the midpoint):
+
+- (a) pre-supernova closure, worst metallicity, best of the six variants: 1.00e-2 of M0
+  (gate 1e-3); the six variants' worst-Z values range from 1.0e-2 to 2.5e-2. Even the lower
+  bound on `E` (previous bins only, first bin from 10**6.0 yr) leaves `living + E` above `M0`
+  by up to 8.1e-3 of M0 (Z = 0.003, log10 age 6.4), and `z001` has `living = 1.0e6` exactly
+  through log10 age 6.3 while the winds have ejected 1.45e-3 of M0.
+- (a') mass created: `living + E - M0` is positive somewhere below 10 Myr for every
+  metallicity and every variant, except the lower bound with the first bin from 10**6.0 yr at
+  the four highest Z (maximum 0, at log10 age 6.0). For the upper-edge rule the maxima run from
+  1.5e-2 to 3.5e-2 of M0.
+- (b) `|M0 - E - living - remnant column|` for log10 age <= 8: maxima between 3.2e-3 and 3.9e-2
+  of M0 over the 13 Z and six variants, i.e. the remnant column and the balance disagree by
+  as much as (a).
+- (c) at 10 Gyr, `M0 - E - living` is 0.082-0.190 of M0 over all Z and variants (0.176-0.179 at
+  Z = 1e-5, 0.142-0.145 at 1e-3, 0.097-0.111 at 0.014, 0.082-0.112 at 0.04), against 0.14-0.20
+  for a single-star Chabrier estimate (0.1-300 Msun; white dwarfs `0.109 Mi + 0.428` for
+  0.95-8 Msun, 1.4 Msun neutron stars to 25 Msun, black holes 0.1-0.5 Mi, turnoff 0.8-1.0 Msun;
+  `scripts/check_bpass_mass_balance.chabrier_remnant_fraction`). The remnant column gives
+  0.029-0.093, below the white-dwarf mass alone (about 0.1).
+- (d) `1 - E/M0` is non-increasing by construction (`E` accumulates non-negative rates), so it
+  tests nothing; the supernova columns of the yields files at log10 age 10.3-10.6 hold
+  30-300 Msun/yr (1e11-1e12 Msun per bin) and the row at 11.0 is not physical, so `E` is not
+  usable beyond log10 age 10.2.
+
+The two outputs do not conserve mass against each other: the closure residual is 1-3 per cent
+of the formed mass, ten to thirty times the 1e-3 gate, so a table built from them would carry
+an error of that size. Measured at
+10 Gyr (living; living + `M0 - E` with the manual's first bin and `E` through the upper edge /
+lower edge; living + remnant column): Z = 1e-5: 0.4367; 0.613 / 0.615; 0.529. Z = 0.014:
+0.4446; 0.542 / 0.546; 0.480. Z = 0.04: 0.4543; 0.537 / 0.547; 0.486. DSPS's fit gives 0.570.
+
+Reopening this needs a BPASS output that closes (a corrected `yields`/`starmass` pair, or the
+team's guidance on the remnant column) or a population-synthesis route independent of both.
+
+**Citations.** Stanway, E. R. & Eldridge, J. J. 2018, MNRAS, 479, 75, "Re-evaluating old stellar
+populations", doi:10.1093/mnras/sty1353. Eldridge, J. J. et al. 2017, PASA, 34, e058, "Binary
+Population and Spectral Synthesis Version 2.1: Construction, Observational Verification, and
+New Results", doi:10.1017/pasa.2017.51. Robotham, A. S. G. et al. 2020, MNRAS, 495, 905,
+"ProSpect: generating spectral energy distributions with complex star formation and
+metallicity histories", doi:10.1093/mnras/staa1116. DOIs checked against Crossref.
 
 ## ProGeny (MIST, C3K, Chabrier)
 

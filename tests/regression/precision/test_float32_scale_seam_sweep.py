@@ -521,33 +521,35 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured for #2606 (commit 712fab431): the SKIRTOR torus lookup is node-exact PCHIP
-#: instead of the triweight smoother. The default cos_inc = 30 deg is an exact node, where
-#: the triweight was 3.0 % off the raw grid. Old -> new, relative: rest_sed_sum -2.21e-04 /
-#: -2.12e-04 / -2.10e-04 (mbh 6/8/10); rest_sed_0 -8.73e-05 / -8.73e-05 / -8.73e-05;
-#: rest_sed_mid +5.69e-06 / -2.05e-06 / -3.50e-06; rest_sed_last -2.37e-04 / -2.36e-04 /
-#: -2.22e-04; photometry (largest band) 7.20e-03 / 7.19e-03 / 7.08e-03.
+#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked).
+#: Every cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy
+#: ledger, #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed
+#: by T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
+#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
+#: rest_sed_sum +2.18e-4 / +4.83e-4 / +5.88e-4 (mbh 6/8/10); rest_sed_0 +3.86e-3 at all three;
+#: rest_sed_mid +7.90e-6 / +3.40e-4 / +4.45e-4; rest_sed_last +1.23e-5 / +3.98e-5 / +3.99e-4;
+#: photometry (r, W3, W4) at mbh 6 +8.7e-6 / +1.72e-3 / +2.11e-3.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5590266729631311e32,
-        "rest_sed_0": 102884982074681.97,
-        "rest_sed_mid": 2.891393327059239e28,
-        "rest_sed_last": 8.773351723290287e21,
-        "photometry": (1.099492561635068e-27, 1.5587085371250205e-27, 1.76672004456097e-27),
+        "rest_sed_sum": 1.5593661510954203e32,
+        "rest_sed_0": 103282334882173.56,
+        "rest_sed_mid": 2.8914161655245853e28,
+        "rest_sed_last": 8.773459863561754e21,
+        "photometry": (1.0995021122259564e-27, 1.5613872671857697e-27, 1.770439323748374e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6754297232579487e32,
-        "rest_sed_0": 2.8224442553510464e16,
-        "rest_sed_mid": 3.153702192169499e28,
-        "rest_sed_last": 8.836617254319404e21,
-        "photometry": (1.2055090988624755e-27, 1.5607975828108644e-27, 1.7673245057189404e-27),
+        "rest_sed_sum": 1.67623869210685e32,
+        "rest_sed_0": 2.8333448370125976e16,
+        "rest_sed_mid": 3.154774862097707e28,
+        "rest_sed_last": 8.836968924676161e21,
+        "photometry": (1.2059443168441798e-27, 1.5634843543602155e-27, 1.771046111587787e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7091504789084488e32,
-        "rest_sed_0": 2.9571593569872748e16,
-        "rest_sed_mid": 3.2080204440130595e28,
-        "rest_sed_last": 9.753922858813523e21,
-        "photometry": (1.2203789176368785e-27, 1.585566866778008e-27, 1.7750761457472196e-27),
+        "rest_sed_sum": 1.7101559724880964e32,
+        "rest_sed_0": 2.9685802227832764e16,
+        "rest_sed_mid": 3.209449316439098e28,
+        "rest_sed_last": 9.75781137041628e21,
+        "photometry": (1.2209304672711665e-27, 1.5883494091231179e-27, 1.7788276449864145e-27),
     },
 }
 

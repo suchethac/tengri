@@ -77,14 +77,14 @@ _LEGACY_SFH_TYPE_ALIASES = {
     "double_powerlaw": "dpl",
 }
 
-# Reverse alias map: canonical name → short-form alias
-# Used for lookup when constructing internal parameter dicts.
+# Reverse alias map: canonical SFH/PSD name → short-form alias. Derived from the
+# forward table so the two cannot drift. Only ``sfh_*`` canonicals are reversed:
+# the AGN and dust renames are not short forms of a shared name, so they have
+# no reverse entry.
 _REVERSE_ALIASES = {
-    "sfh_dpl_alpha": "sfh_alpha",
-    "sfh_dpl_beta": "sfh_beta",
-    "sfh_dpl_tau_gyr": "sfh_tau_peak_gyr",
-    "sfh_field_psd_sigma": "psd_sigma",
-    "sfh_field_psd_tau_myr": "psd_tau_myr",
+    canonical: legacy
+    for legacy, canonical in _LEGACY_PARAM_ALIASES.items()
+    if canonical.startswith("sfh_")
 }
 
 

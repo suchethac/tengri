@@ -128,11 +128,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "neb_fesc_lya",
-        Fixed(0.0),
+        Fixed(1.0),
         "Ly-alpha escape fraction (resonant scattering)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        free_prior=Uniform(0.0, 1.0, "Ly-alpha escape fraction", default=0.0),
+        free_prior=Uniform(0.0, 1.0, "Ly-alpha escape fraction", default=1.0),
     ),
     ParamDeclaration(
         "neb_fdust_frac",

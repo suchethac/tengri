@@ -183,3 +183,37 @@ class TestRHatIsNotACount:
         health = galaxy_health(post)
         assert health.max_rhat_param in ("fine", "stuck")
         assert health.min_ess_param == "stuck"
+
+
+class TestNonFiniteDiagnosticsAreNotConverged:
+    """A NaN R-hat or ESS is a missing measurement, never a passing one.
+
+    Before the fix a parameter that was partly NaN had its R-hat dropped from
+    the maximum, so the galaxy could be counted converged on the other parameters.
+    """
+
+    def test_a_parameter_that_is_thirty_percent_nan_is_unconverged_and_named(self):
+        rng = np.random.default_rng(0)
+        a = rng.normal(size=400)
+        b = rng.normal(size=400)
+        b[rng.choice(400, size=120, replace=False)] = np.nan
+        health = galaxy_health(_posterior({"a": a, "b": b}))
+        assert health.verdict == "unconverged"
+        assert "b" in health.reason
+
+    def test_a_non_finite_ess_is_unconverged_and_named(self, monkeypatch):
+        from tengri.analysis.diagnostics import autocorrelation
+
+        real = autocorrelation.effective_sample_size
+
+        def _ess_with_nan_for_b(columns, *args, **kwargs):
+            out = dict(real(columns, *args, **kwargs))
+            out["b"] = {**out["b"], "ess": float("nan")}
+            return out
+
+        monkeypatch.setattr(autocorrelation, "effective_sample_size", _ess_with_nan_for_b)
+        rng = np.random.default_rng(1)
+        post = _posterior({"a": rng.normal(size=400), "b": rng.normal(size=400)})
+        health = galaxy_health(post)
+        assert health.verdict == "unconverged"
+        assert "b" in health.reason

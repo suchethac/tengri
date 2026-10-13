@@ -78,10 +78,15 @@ def _frozen_weighted_combine(logqion_all, log_seglum_all, ionspec_all, ssp_weigh
     return total_logqion, i7
 
 
-def test_f64_exactness_vs_frozen_arithmetic():
-    """New log-domain method must match frozen old arithmetic at rtol=1e-12 in f64."""
+@pytest.mark.parametrize("lyc_max_age_yr", [1.0e8, "all"], ids=["cut_100Myr", "all_ages"])
+def test_f64_exactness_vs_frozen_arithmetic(lyc_max_age_yr):
+    """New log-domain method must match frozen old arithmetic at rtol=1e-12 in f64.
+
+    The frozen arithmetic masks bins by age. ``lyc_max_age_yr=1e8`` is the former 100 Myr
+    mask; ``'all'`` (the default since every age is counted) is the all-True mask.
+    """
     ssp = _load_ssp()
-    be = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
+    be = CueBackend(_CUE_WEIGHTS, ssp_data=ssp, lyc_max_age_yr=lyc_max_age_yr)
 
     # Test across 3 metallicities and 2 SFH weightings
     metallicities = [-3.5, -2.0, -1.0]  # log10(Z) absolute
@@ -110,7 +115,11 @@ def test_f64_exactness_vs_frozen_arithmetic():
             ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
 
             # Get interpolated parameters for this population
-            young_mask = ssp_log_ages <= _MAX_NEB_LOG_AGE
+            young_mask = (
+                ssp_log_ages <= _MAX_NEB_LOG_AGE
+                if lyc_max_age_yr != "all"
+                else np.ones(n_age, dtype=bool)
+            )
             ionspec_all, logqion_all = jax.vmap(
                 lambda log_age_yr, met_abs=met_abs: interpolate_ionizing_params(
                     be._ionspec_table,
@@ -248,10 +257,23 @@ def test_pure_float32_correctness():
     )
 
 
-def test_degenerate_population():
-    """All-old or all-zero population must return gas_logqion=-99.0 with finite ionspec shape."""
+def test_all_old_population_counts_its_photons_by_default():
+    """With every age counted an all-old population has a finite Q_H, not the -99 of the cut."""
     ssp = _load_ssp()
     be = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
+    n_age = 20
+    ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
+    old = ssp_log_ages > _MAX_NEB_LOG_AGE
+    weights = jnp.where(old, 1.0 / jnp.sum(old), 0.0)
+    result = be._compute_weighted_cue_params(weights, ssp_log_ages, log_z=-2.0)
+    assert float(result["gas_logqion"]) > -99.0
+    assert all(np.isfinite(float(v)) for v in result.values())
+
+
+def test_degenerate_population():
+    """All-old (100 Myr cut) or all-zero population returns gas_logqion=-99.0, finite shape."""
+    ssp = _load_ssp()
+    be = CueBackend(_CUE_WEIGHTS, ssp_data=ssp, lyc_max_age_yr=1.0e8)
 
     n_age = 20
     ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))

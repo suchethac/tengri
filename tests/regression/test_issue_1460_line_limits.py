@@ -72,11 +72,30 @@ def _bind(forward, data):
     return captured
 
 
+def _tophat_obs_inside_axis():
+    """Five top-hat bands inside the toy SSP axis at z=0.1 (observed [3300, 11000] A).
+
+    ``synthetic_tophat_obs`` starts at 3500 A with a 16% half-width, reaching 2940 A,
+    which runs past the axis and is refused by the coverage check (#2620). The bands
+    here keep its shape and move the bluest center in to 4000 A.
+    """
+    from tengri import Observation, Photometry
+    from tengri.observation.photometry import FilterCurve
+
+    def _tophat(center, frac=0.16, n=40):
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    curves = tuple(_tophat(c) for c in (4000.0, 4800.0, 6200.0, 7600.0, 9000.0))
+    return Observation(photometry=Photometry(filters=curves))
+
+
 @pytest.fixture
-def forward_with_lines(synthetic_ssp, synthetic_tophat_obs):
+def forward_with_lines(synthetic_ssp):
     from tengri import DEFAULT, Fixed, ForwardModel, SEDModel
 
-    obs = _line_obs(synthetic_tophat_obs, declared_limit=False)
+    obs = _line_obs(_tophat_obs_inside_axis(), declared_limit=False)
     sed = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=obs,

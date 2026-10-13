@@ -1130,6 +1130,11 @@ class _CatalogFitterOriginal:
                     [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
                 )
             except Exception:
+                logging.getLogger(__name__).warning(
+                    "LUT-bias advisory skipped: galaxy flux/noise arrays could not be "
+                    "concatenated.",
+                    exc_info=True,
+                )
                 all_flux = all_noise = None
             if all_flux is not None:
                 _warn_if_lut_bias_amplified(
@@ -1595,6 +1600,9 @@ class _CatalogFitterOriginal:
         # but must have the same number of data points for vmap.
         all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        from tengri.inference.fitter import _reject_non_finite_data
+
+        _reject_non_finite_data(all_data_orig, all_noise_orig, None)
 
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
@@ -2026,6 +2034,12 @@ class _CatalogFitterOriginal:
                 jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
                 for g in self.galaxies
             ]
+        )
+        from tengri.inference.fitter import _refuse_uncovered_bands, _reject_non_finite_data
+
+        _reject_non_finite_data(all_data_orig, all_noise_orig, all_presence_orig)
+        _refuse_uncovered_bands(
+            self.model, all_data_orig, all_noise_orig, all_presence_orig, self.data_type
         )
         # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
         if per_galaxy_z:

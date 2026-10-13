@@ -67,7 +67,8 @@ from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
-    compute_qh,
+    compute_qh_log10,
+    log_qh_from_normalized,
     render_nebular_lines,
     sanitize_qh_table,
     ssp_log_age_yr_axis,
@@ -80,6 +81,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+from tengri.utils.scale import pow10
 
 # ── Ionizing spectrum warnings ────────────────────────────────────
 
@@ -309,9 +311,17 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
     )
 
 
-# ── Q_H computation (identical to cloudy_grid.py) ─────────────────
+# ── Q_H computation (log-domain sibling of cloudy_grid.py) ────────
 
-_compute_qh_grid = jax.vmap(jax.vmap(compute_qh, in_axes=(None, 0)), in_axes=(None, 0))
+#: log10 of the solar luminosity in erg/s, folded into the line term's log (#2853).
+_LOG10_LSUN_ERG = float(np.log10(_LSUN_ERG))
+
+#: Built in the log domain (#2853, #1568): the linear form overflows float32 on
+#: healthy input (Q_H ~ 1e47 photons/s against a 3.4e38 ceiling).
+_compute_log_qh_grid = jax.vmap(
+    jax.vmap(compute_qh_log10, in_axes=(None, 0)),
+    in_axes=(None, 0),
+)
 
 
 # ── Metallicity conversion helpers ────────────────────────────────
@@ -476,6 +486,10 @@ class MappingsPhotoStellarBackend:
     #: one backend that deviates.
     lsun_erg: float = _LSUN_ERG
 
+    #: log10 of the scalar ``_qh_table`` is normalized by (#2853). 0.0 means the
+    #: table already holds photons/s, the identity for a table set by hand.
+    _log_qh_scale: float = 0.0
+
     def __init__(
         self,
         grid_path: str | Path = _DEFAULT_GRID_PATH,
@@ -515,6 +529,7 @@ class MappingsPhotoStellarBackend:
             self._sfh_idx = self.sfh_idx_inst
 
         self._qh_table = None
+        self._log_qh_scale = 0.0
         self._qh_log_met = None
         self._qh_log_age = None
         self._young_idx = None
@@ -540,13 +555,26 @@ class MappingsPhotoStellarBackend:
         return self._line_names
 
     def _precompute_qh(self, ssp_data) -> None:
-        """Precompute Q_H(metallicity, age) table from SSP spectra."""
+        """Precompute the Q_H(metallicity, age) table from SSP spectra (#2853).
+
+        Built in the log domain and stored divided by its own peak, as the Cloudy
+        and CB19 backends do (#1568). Bilinear interpolation is linear, so
+        interpolating ``table / scale`` and multiplying back is exact in float64;
+        the scale is kept as the scalar ``_log_qh_scale`` rather than materialized.
+        """
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
-        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
+        finite = jnp.isfinite(log_qh_raw)
+        self._log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
+        if not np.isfinite(self._log_qh_scale):
+            # No usable ionizing flux anywhere: identity scale, Q_H comes out zero.
+            self._log_qh_scale = 0.0
         # Replace Inf/NaN with 0: old SSP files with empty far-UV bins
         # produce non-finite Q_H values that would poison the interpolator.
-        self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
+        self._qh_table = sanitize_qh_table(
+            pow10(log_qh_raw - self._log_qh_scale), backend_name="MappingsPhotoBackend"
+        )
         self._qh_log_met = ssp_data.ssp_lgmet
         self._qh_log_age = np.asarray(ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr))  # log(age/yr)
 
@@ -564,6 +592,10 @@ class MappingsPhotoStellarBackend:
             missing=0.0,
         )
 
+    def _get_log_qh_at(self, log_z: float, log_age_yr: float) -> float:
+        """``log10 Q_H`` at (logZ, logAge), with the table's scale added back (#2853)."""
+        return log_qh_from_normalized(self._get_qh_at(log_z, log_age_yr), self._log_qh_scale)
+
     def predict_nebular_line_luminosities(
         self,
         ssp_weights: jnp.ndarray,
@@ -573,7 +605,7 @@ class MappingsPhotoStellarBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute emission line luminosities from MAPPINGS V stellar grid.
@@ -643,6 +675,12 @@ class MappingsPhotoStellarBackend:
             young_ages = ssp_log_ages_yr[young_idx]
             young_weights = ssp_weights[young_idx]
 
+        # Q_H = qh_norm * 10**_log_qh_scale photons/s, and L [Lsun] = L [erg/s] / L_sun.
+        # The two factors are folded into one float64 scalar that is in range for
+        # float32 (cf. CB19Backend._lum_scale, #1568), so neither 1e47 nor 1e-46 is
+        # ever an array.
+        lum_scale = 10.0 ** (self._log_qh_scale - _LOG10_LSUN_ERG)
+
         def _contrib_one_age(log_age_i, weight_i):
             """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
@@ -666,15 +704,15 @@ class MappingsPhotoStellarBackend:
                 sfh_idx,
             )
 
-            # L_line = ratio × 10^{logHB_per_logq} × Q_H  [erg/s]
+            # L_line = ratio × 10^{logHB_per_logq} × Q_H / L_sun  [Lsun]
             l_hb_per_qh = 10.0**logHB_pq_i  # erg/photon
-            return weight_i * qh_i * l_hb_per_qh * ratios_i * (1.0 - neb_fesc)
+            return weight_i * qh_i * l_hb_per_qh * ratios_i * (1.0 - neb_fesc) * lum_scale
 
         all_contribs = jax.vmap(_contrib_one_age)(young_ages, young_weights)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
         # Apply differential Ly-alpha escape via the shared helper. This multiplies
-        # Lyα by (1 - neb_fesc_lya) after the general escape factor was already applied.
+        # Lyα by neb_fesc_lya after the general escape factor was already applied.
         total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
@@ -806,8 +844,9 @@ class MappingsPhotoStellarBackend:
         # and take log10 so the kernel's 10**log_lum × Q_H round-trips correctly. This
         # matches the CB19 contract (cf. cloudy_cb19.py:580-583).
         logHB_per_logq_expanded = logHB_per_logq_data[..., jnp.newaxis]  # (N_z, N_a, N_u, 1)
-        line_lum_lsun_per_q = line_ratios_data * (10.0**logHB_per_logq_expanded) / _LSUN_ERG
-        line_lum = jnp.log10(line_lum_lsun_per_q)
+        # Taken in the log domain: 10**logHB_per_logq / L_sun is ~1e-45, below float32's
+        # smallest subnormal, so the linear spelling flushed to zero in float32.
+        line_lum = jnp.log10(line_ratios_data) + logHB_per_logq_expanded - _LOG10_LSUN_ERG
 
         # 6. Apply caller-provided fixed dict (axes are CLOUDY-shape indices: 0,1,2).
         if fixed:
@@ -841,7 +880,7 @@ class MappingsPhotoStellarBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,
@@ -911,8 +950,13 @@ class MappingsPhotoStellarBackend:
             neb_fesc_lya=neb_fesc_lya,
         )
 
+        # The SED is in erg/s/Hz, so the Lsun line luminosities are converted here.
         return render_nebular_lines(
-            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa, line_sigma_kms
+            jnp.asarray(line_wave),
+            jnp.asarray(line_lum) * _LSUN_ERG,
+            ssp_wave,
+            line_sigma_aa,
+            line_sigma_kms,
         )
 
     def cache_key(self) -> tuple:
@@ -945,6 +989,7 @@ _MAPPINGS_STELLAR_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "Q_H precompute table, a deterministic function of ssp_data "
         "(content-keyed at the model level) and grid (content-keyed above)"
     ),
+    "_log_qh_scale": exclude("normalization of _qh_table, same derivation"),
     "_qh_log_met": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
     "_qh_log_age": exclude("stashed ssp_data age grid, already content-keyed at the model level"),
     "_young_idx": exclude("indices into the age grid above, same derivation"),
@@ -1132,7 +1177,7 @@ class MappingsPhotoAGNBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 3.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,

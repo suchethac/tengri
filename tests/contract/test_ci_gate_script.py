@@ -86,7 +86,6 @@ def _run_gate(
     draft: bool = False,
     action: str = "synchronize",
     base_changed: bool = False,
-    before: str = "a" * 40,
 ) -> dict[str, str]:
     """Run the extracted gate script and return what it wrote to GITHUB_OUTPUT."""
     fake = tmp_path / "bin"
@@ -118,8 +117,6 @@ def _run_gate(
         "BASE_REF": "main",
         "BASE_CHANGED": "true" if base_changed else "false",
         "LABELS_JSON": json.dumps(labels or []),
-        "BEFORE_SHA": before,
-        "AFTER_SHA": "b" * 40,
     }
     done = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=120, check=False
@@ -142,11 +139,20 @@ def _shards(result: dict[str, str]) -> list[str]:
 
 
 CHEAP = ["physics", "regression-c"]
-DOCS = ["contract", "components", "regression-a", "regression-d"]
+DOCS = [
+    "contract",
+    "components",
+    "regression-a1",
+    "regression-a2",
+    "regression-a3",
+    "regression-d",
+]
 EVERY = [
     "contract",
     "components",
-    "regression-a",
+    "regression-a1",
+    "regression-a2",
+    "regression-a3",
     "regression-b1",
     "regression-b2",
     "regression-b3",
@@ -279,10 +285,10 @@ EVERY = [
             EVERY,
         ),
         (
-            "push, docs only",
+            "push, docs only still runs the gallery (pushes are coalesced)",
             {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
-            "false",
+            "true",
             EVERY,
         ),
         (
@@ -294,7 +300,7 @@ EVERY = [
         ),
         (
             "push, new branch",
-            {"event": "push", "before": "0" * 40, "compare": {"files": [_f("docs/a.md")]}},
+            {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
             "true",
             EVERY,
@@ -316,7 +322,7 @@ EVERY = [
         ),
         ("files API fails", {}, "all", "true", EVERY),
         ("empty file list", {"files": []}, "all", "true", EVERY),
-        ("unrecognised event", {"event": "repository_dispatch"}, "all", "true", EVERY),
+        ("unrecognized event", {"event": "repository_dispatch"}, "all", "true", EVERY),
     ],
 )
 def test_the_gate_chooses_the_scope_the_event_owes(tmp_path, name, kwargs, scope, gallery, shards):
@@ -468,3 +474,51 @@ def test_the_label_context_is_empty_off_pull_requests():
     ci_ok_env = next(s for s in jobs["ci-ok"]["steps"] if s.get("run") == "python3 tools/ci_ok.py")
     labels = ci_ok_env["env"]["CI_OK_LABELS"]
     assert "github.event_name == 'pull_request'" in labels and "'[]'" in labels
+
+
+def _shard_table() -> list[dict]:
+    run = _gate_step()["run"]
+    body = re.search(r"table=\$\(cat <<'JSON'\n(.*?)\n\s*JSON\n", run, re.S)
+    assert body, "the shard table heredoc moved"
+    return json.loads(body.group(1))
+
+
+def _selects(paths: str, test_file: pathlib.Path) -> bool:
+    """Whether pytest, given ``paths`` (words as the step splits them), runs the file."""
+    words = paths.split()
+    ignored = [w.removeprefix("--ignore=") for w in words if w.startswith("--ignore=")]
+    named = [w for w in words if not w.startswith("--")]
+    rel = test_file.relative_to(_ROOT).as_posix()
+    if any(rel == i or rel.startswith(i.rstrip("/") + "/") for i in ignored):
+        return False
+    return any(rel == n or rel.startswith(n.rstrip("/") + "/") for n in named)
+
+
+def test_every_precision_and_parity_file_runs_in_exactly_one_shard():
+    """A new file under precision/ or synthesizer_parity/ cannot fall through the shards (#2908).
+
+    The regression-a shards list precision files explicitly; one of them is the
+    catch-all (the directory minus the others' files). This pins that every test
+    file is selected by exactly one shard.
+    """
+    table = _shard_table()
+    for tree in ("synthesizer_parity", "precision"):
+        for test_file in sorted((_ROOT / "tests" / "regression" / tree).glob("test_*.py")):
+            owners = [s["shard"] for s in table if _selects(s["paths"], test_file)]
+            if test_file.name in (
+                "test_nebular_continuum.py",
+                "test_nebular_fesc.py",
+            ):
+                continue  # ignored by the step itself (data-gated)
+            assert len(owners) == 1, f"{test_file.name} is run by {owners}"
+
+
+def test_main_pushes_share_one_uncancelled_concurrency_group():
+    """Pushes coalesce: a fixed group, in-progress run finishes, one pending."""
+    import yaml
+
+    conc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))["concurrency"]
+    group, cancel = str(conc["group"]), str(conc["cancel-in-progress"])
+    assert "tests-main-push" in group
+    assert "run_id" not in group
+    assert "github.event_name != 'push'" in cancel

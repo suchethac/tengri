@@ -161,13 +161,21 @@ def test_the_energy_target_reaches_the_tuner_and_moves_the_step_size(tiny_fitter
     Also covers the cache: both fits run against the same Model, so if
     ``desired_energy_var`` were missing from the adaptation cache key the second
     call would replay the first's step size and the two would be identical.
+
+    The warmup is 600 steps on purpose. At 200 steps the adaptation on this
+    model has not converged and its step size is not monotone in the target
+    (measured 0.93, 0.85, 0.97, 0.99 for targets 5e-3, 5e-4, 5e-5, 5e-6), so
+    the comparison there is decided by where the unconverged adaptation
+    happens to stop and any 1e-6 change to the model flips it. At 600 steps
+    it is monotone (1.50, 1.12, 0.94, 0.55 for the same targets), so a 1000x
+    tighter target buys a smaller step with a wide margin.
     """
     from tengri.inference.backends.mcmc.mclmc import run_mclmc
 
     loose = run_mclmc(
         tiny_fitter,
         key=jax.random.PRNGKey(0),
-        n_warmup=200,
+        n_warmup=600,
         n_samples=40,
         desired_energy_var=5e-3,
         verbose=False,
@@ -175,7 +183,7 @@ def test_the_energy_target_reaches_the_tuner_and_moves_the_step_size(tiny_fitter
     tight = run_mclmc(
         tiny_fitter,
         key=jax.random.PRNGKey(0),
-        n_warmup=200,
+        n_warmup=600,
         n_samples=40,
         desired_energy_var=5e-6,
         verbose=False,

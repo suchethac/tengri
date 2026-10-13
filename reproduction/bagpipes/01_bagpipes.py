@@ -236,7 +236,7 @@ RESULTS["Setup BAGPIPES sampling"] = ("band average, 2x vs 1x sampling", max(abs
 #
 # | Block | BAGPIPES `model_components` | tengri `SEDModel.build` |
 # |---|---|---|
-# | Stellar metallicity | `metallicity` $= Z/Z_{\odot,B}$, one value per SFH block | `met={"logzsol": log10(Z/Z_sun,B) - LOG10_ZSUN, "logzsol_scatter": 0.001}`; $Z_{\odot,B}$ and tengri's $Z_\odot$ are printed above, and the small scatter width selects the requested node alone (tengri's default width spreads each request over a log-Z distribution) |
+# | Stellar metallicity | `metallicity` $= Z/Z_{\odot,B}$, one value per SFH block | `met={"logzsol": log10(Z/Z_sun,B) - LOG10_ZSUN, "logzsol_scatter": 0.001}`; $Z_{\odot,B}$ and tengri's $Z_\odot$ are printed above, and the small scatter width selects the requested node alone (tengri's default width spreads each request over a log-Z distribution; between nodes BAGPIPES interpolates linearly in Z, see §5) |
 # | Delayed-$\tau$ | `delayed`: `age`, `tau`, `massformed` | `sfh={"type": "delayed", "age_gyr", "tau_gyr", "log_total_mass"}` |
 # | Constant | `constant`: `age_min`, `age_max`, `massformed` | `sfh={"type": "const", "start_gyr": age_max, "end_gyr": age_min, "log_total_mass"}` |
 # | Double power law | `dblplaw`: `alpha`, `beta`, `tau` (cosmic time) | `sfh={"type": "dpl", "alpha", "beta", "tau_gyr", "age_gyr"}` with `age_gyr` = BAGPIPES's age of the universe at $z = 0$ (`mg.sfh.age_of_universe`, printed in §2) |
@@ -244,7 +244,7 @@ RESULTS["Setup BAGPIPES sampling"] = ("band average, 2x vs 1x sampling", max(abs
 # | Continuity | `continuity`: `bin_edges` [Myr], `dsfr1 ... dsfrN` ordered oldest to youngest | `sfh={"type": "continuity", "ratio_0 ... ratio_N-1"}` ordered youngest to oldest: with six ratios `ratio_i` $=$ `dsfr`$_{6-i}$; the bin edges are passed as `bin_edges_gyr`, because tengri's default ladder is scaled to the source redshift |
 # | Attenuation | `dust`: `type`, `Av`, `eta`, `n` | `dust_attenuation={"type": "two_component", "law_bc", "law_diff", "tau_diff": Av ln10/2.5, "tau_bc": (eta - 1) tau_diff}`; BAGPIPES `Salim` is the law `salim_sbl18` |
 # | Birth cloud | `t_bc`: step at 0.01 Gyr | `t_birth_yr`: hard step at 10 Myr on the exact formed-mass share of each SSP node (§7) |
-# | Dust emission | `dust`: `qpah`, `umin`, `gamma` | `dust_emission={"type": "draine_li2007", "qpah", "umin", "gamma_dl"}` |
+# | Dust emission | `dust`: `qpah`, `umin`, `gamma`; a `dust` block present adds DL07 emission with $q_{\rm PAH} = 2$, $U_{\min} = 1$, $\gamma = 0.01$ unless set | `dust_emission={"type": "draine_li2007", "qpah": 2, "umin": 1, "gamma_dl": 0.01}` (or the values set in the block); without it tengri returns attenuated starlight only |
 # | Nebular | `nebular`: `logU`, `metallicity`, `fesc` | `neb={"type": "cue", "neb_logU": logU, "neb_logZ_gas": log10(metallicity), "neb_fesc": fesc}`; U is defined at the inner face of a cloud at $R = 10^{19}$ cm, $n_{\rm H} = 100$ cm$^{-3}$ in both codes; gas metallicity is on the shared Dopita et al. (2000) solar scale; [N/O] follows BAGPIPES's relation to the gas metallicity (`gas_logno`, §9); the escape fraction scales the lines differently (§9) |
 # | Velocity dispersion | `veldisp` [km/s]; BAGPIPES's lines have no width of their own | `velocity_broaden(sed, wave, sigma_kms)` applied to the SED with `neb_eline_sigma_kms = 0`; tengri's default adds a 100 km/s width to each nebular line before the broadening (§10) |
 # | Redshift, IGM | Inoue et al. (2014) table, always on; flat $\Lambda$CDM | `redshift=Fixed(z)` with the Inoue et al. (2014) transmission; default Planck-like cosmology with radiation, with no build-time override: the two $D_L(z)$ differ by the cosmology parameters printed above (§12) |
@@ -1124,28 +1124,22 @@ caveat(
 #
 # $Z/Z_{\odot,B} \in \{0.2, 0.5, 1, 1.5, 2.5\}$ on the fiducial history, stellar light only (the nebular response to
 # metallicity is in §9). The cases at 0.2, 1 and 2.5 request a BC03 grid node in both codes; 0.5
-# and 1.5 fall between nodes, where BAGPIPES interpolates linearly in $Z$ and tengri applies a
-# triweight kernel in $\log Z$ (width fixed at its smallest value).
+# and 1.5 fall between nodes, where BAGPIPES interpolates linearly in $Z$ between the two straddling nodes. tengri's
+# metallicity weights are a distribution in $\log Z$ integrated over the node bins; at the smallest width they select the nearest node
+# alone, so for the two between-node cases the two straddling tengri nodes are mixed with BAGPIPES's linear-in-$Z$ weights, and the
+# row compares the SSP and the history, not the interpolation rule. The weights of the two rules are printed after the table.
 
 # %%
-_Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
-# Convert BAGPIPES metallicity fractions to tengri's absolute Z pins.
-_logzsol_extended = [float(np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN) for z in _Z_EXTENDED]
-# Gas metallicity is matched as each code's solar-scaled value: Z_gas / Z_gas,sun = z.
-_loggas_extended = [float(np.log10(z)) for z in _Z_EXTENDED]
+import jax.numpy as jnp
+from tengri.components.stellar.component import _lgmet_weights
 
-cases_z = []
-for z, logz, loggas in zip(_Z_EXTENDED, _logzsol_extended, _loggas_extended):
-    w_b_z, L_b_z = B.attenuated_lnu(
-        dust_block={"type": "Calzetti", "Av": 0.0},
-        sfh_type="delayed",
-        massformed=LOG_MASS_FIDUCIAL,
-        metallicity=z,
-        age=AGE_GYR_FIDUCIAL,
-        tau=TAU_GYR_FIDUCIAL,
-    )
+_node_z_abs = 10.0 ** np.asarray(ssp.ssp_lgmet)  # absolute Z of the SSP nodes
 
-    m_z_neb = SEDModel.build(
+
+def _sed_at_z(z):
+    """Stellar tengri state at ``z`` Z_sun,B (scatter fixed at its smallest value)."""
+    logz = np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN
+    m = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(logz), **MET_NODE},
         sfh={
@@ -1164,8 +1158,46 @@ for z, logz, loggas in zip(_Z_EXTENDED, _logzsol_extended, _loggas_extended):
         },
         redshift=Fixed(0.0),
     )
-    s_z_neb = m_z_neb.predict_state({})
-    L_t_z = s_z_neb.sed_intrinsic
+    return m.predict_state({})
+
+
+def _bagpipes_z_weights(z_abs):
+    """BAGPIPES's linear-in-Z weights: (lower node index, weight on the upper node)."""
+    i = int(np.searchsorted(_node_z_abs, z_abs * (1.0 + 1e-9)) - 1)
+    i = min(max(i, 0), _node_z_abs.size - 2)
+    return i, float((z_abs - _node_z_abs[i]) / (_node_z_abs[i + 1] - _node_z_abs[i]))
+
+
+def _tengri_sed_at_z(z):
+    """tengri stellar SED at ``z`` Z_sun,B; between nodes, the two straddling nodes mixed as BAGPIPES does."""
+    z_abs = z * Z_SUN_BAGPIPES
+    on_node = bool(np.min(np.abs(np.log10(_node_z_abs) - np.log10(z_abs))) < 1e-6)
+    if on_node:
+        s = _sed_at_z(z)
+        return s, s.sed_intrinsic, 0.0
+    i, w_hi = _bagpipes_z_weights(z_abs)
+    s_lo = _sed_at_z(float(_node_z_abs[i] / Z_SUN_BAGPIPES))
+    s_hi = _sed_at_z(float(_node_z_abs[i + 1] / Z_SUN_BAGPIPES))
+    return s_lo, (1.0 - w_hi) * s_lo.sed_intrinsic + w_hi * s_hi.sed_intrinsic, w_hi
+
+_Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
+# Convert BAGPIPES metallicity fractions to tengri's absolute Z pins.
+_logzsol_extended = [float(np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN) for z in _Z_EXTENDED]
+# Gas metallicity is matched as each code's solar-scaled value: Z_gas / Z_gas,sun = z.
+_loggas_extended = [float(np.log10(z)) for z in _Z_EXTENDED]
+
+cases_z = []
+for z, logz, loggas in zip(_Z_EXTENDED, _logzsol_extended, _loggas_extended):
+    w_b_z, L_b_z = B.attenuated_lnu(
+        dust_block={"type": "Calzetti", "Av": 0.0},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=z,
+        age=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+    )
+
+    s_z_neb, L_t_z, w_hi_z = _tengri_sed_at_z(z)
     _assert_comparable(L_b_z, L_t_z, name=f"§5 Z={z:g}")
     cases_z.append((f"Z = {z:g} Z⊙", w_b_z, L_b_z, s_z_neb.wave, L_t_z))
 
@@ -1203,12 +1235,28 @@ _wz, _wr = max(
     ((z, r) for z in _Z_EXTENDED if z not in _NODE_ZS_PAGE for r in _Z_ROWS[z] if np.isfinite(r[4])),
     key=lambda t: abs(t[1][4] - 1.0),
 )
+print("§5 weight on the upper straddling node: BAGPIPES (linear in Z) / tengri at scatter 0.001 dex / tengri at 0.1 dex")
+_wtab = {}
+for _zb in (0.5, 1.5, 2.0):
+    _za = _zb * Z_SUN_BAGPIPES
+    _i, _wl = _bagpipes_z_weights(_za)
+    _row = [_wl]
+    for _sig in (0.001, 0.1):
+        _w = np.asarray(_lgmet_weights(jnp.asarray(np.log10(_za)), jnp.asarray(_sig), jnp.asarray(ssp.ssp_lgmet)))
+        _row.append(float(_w[_i + 1]))
+    _wtab[_zb] = _row
+    print(f"    Z = {_zb:g} Z_sun,B (nodes {_node_z_abs[_i] / Z_SUN_BAGPIPES:g} / {_node_z_abs[_i + 1] / Z_SUN_BAGPIPES:g}): "
+          f"{_row[0]:.3f} / {_row[1]:.3f} / {_row[2]:.3f}")
 caveat(
-    f"between SSP metallicity nodes the codes interpolate differently (BAGPIPES linearly in $Z$ between the "
-    f"two straddling nodes, tengri with a triweight kernel in $\\log Z$). At the node metallicities "
-    f"($Z/Z_{{\\odot,B}} = 0.2, 1, 2.5$) the worst band ratio deviates from 1 by {_dev_node:.3f}; between nodes "
-    f"($0.5, 1.5$) it deviates by {_dev_between:.3f} ({_wr[0]} at $Z/Z_{{\\odot,B}} = {_wz:g}$). A fit that places stars between "
-    f"BC03 metallicity nodes inherits the difference between the two interpolation schemes, mostly in the blue bands."
+    f"at the node metallicities ($Z/Z_{{\\odot,B}} = 0.2, 1, 2.5$) the worst band ratio deviates from 1 by {_dev_node:.3f}. "
+    f"Between nodes ($0.5, 1.5$) the comparison mixes the two straddling tengri nodes with BAGPIPES's linear-in-$Z$ weights "
+    f"({_wtab[0.5][0]:.3f} and {_wtab[1.5][0]:.3f} on the upper node), so it tests the SSP and the history and not the interpolation rule; "
+    f"the worst band deviates by {_dev_between:.3f} ({_wr[0]} at $Z/Z_{{\\odot,B}} = {_wz:g}$). The rule differs: tengri's weights are the "
+    f"metallicity distribution integrated over the node bins. At the smallest width (0.001 dex) the weight on the upper node is "
+    f"{_wtab[0.5][1]:.3f} and {_wtab[1.5][1]:.3f} at $0.5$ and $1.5$, i.e. the nearest node alone; at the default 0.1 dex it is "
+    f"{_wtab[0.5][2]:.3f} and {_wtab[1.5][2]:.3f}, against BAGPIPES's {_wtab[0.5][0]:.3f} and {_wtab[1.5][0]:.3f}. At $Z/Z_{{\\odot,B}} = 2$ "
+    f"the default width gives {_wtab[2.0][2]:.3f} against {_wtab[2.0][0]:.3f}. To match a BAGPIPES metallicity between nodes, keep the default "
+    f"scatter or mix the nodes as above."
 )
 # %% [markdown]
 # ## §6 Attenuation curves
@@ -1216,8 +1264,8 @@ caveat(
 # $A(\lambda)/A_V$ for Calzetti et al. (2000), Cardelli et al. (1989) and Salim et al. (2018) at
 # $\delta = 0$, each normalized at 5500 Å. BAGPIPES's `Salim` is tengri's `salim_sbl18`. Charlot & Fall
 # (2000) is a two-component prescription in BAGPIPES and is not a single-screen law, so it is not
-# compared here. BAGPIPES re-emits the absorbed light in the infrared whenever a `dust` block is present, so its
-# curve, read from a spectrum ratio, is shown to 1.2 μm; the infrared emission is compared in §8.
+# compared here. BAGPIPES's curve is read from a ratio of attenuated to unattenuated starlight with
+# its implicit dust emission removed (§7), and is shown to 1.2 μm.
 
 # %%
 from tengri.dust import list_laws
@@ -1337,7 +1385,20 @@ _burst_b = {
     "constant": {"metallicity": 1.0, "age_min": 0.0, "age_max": 0.03, "massformed": 8.0},
     "dust": {"type": "Calzetti", "Av": AV_FIDUCIAL, "eta": _ETA},
 }
-_wb_burst, _Lb_burst = B.to_lnu(B._build_model(_burst_b))
+with B._without_dust_emission():
+    _mg_burst = B._build_model(_burst_b)
+_wb_burst, _Lb_burst = B.to_lnu(_mg_burst)
+# Check at eta = 1: the emission-free spectrum is the no-dust spectrum times BAGPIPES's own transmission.
+_burst_eta1 = {**_burst_b, "dust": {**_burst_b["dust"], "eta": 1.0}}
+with B._without_dust_emission():
+    _mg_e1 = B._build_model(_burst_eta1)
+_, _L_e1 = B.to_lnu(_mg_e1)
+_mg_nd = B._build_model({k: v for k, v in _burst_b.items() if k != "dust"})
+_, _L_nd = B.to_lnu(_mg_nd)
+_T_own = 10.0 ** (-AV_FIDUCIAL * np.asarray(_mg_e1.dust_atten.A_cont) / 2.5)
+_ok = _L_nd > 0
+_emis_check = float(np.max(np.abs(_L_e1[_ok] / (_L_nd[_ok] * _T_own[_ok]) - 1.0)))
+print(f"§7 emission-removed burst at eta = 1 vs no-dust spectrum x own transmission, max |ratio - 1|: {_emis_check:.2e}")
 _m_burst = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
@@ -1377,6 +1438,7 @@ caveat(
     f"node younger than `t_birth_yr` ({_gate[0]:.3f}, {_gate[1]:.3f} and {_gate[2]:.3f} of the formed mass inside "
     f"the cloud for cells ending at 3, 10 and 30 Myr). For a 30 Myr constant-SFR burst the "
     f"tengri/BAGPIPES band ratios are {_burst['GALEX FUV']:.3f} in GALEX FUV, {_burst['GALEX NUV']:.3f} in NUV and {_burst['SDSS g']:.3f} in SDSS g. "
+    f"Both sides are attenuated starlight (BAGPIPES's implicit dust emission is removed), and the near-infrared ratios are {_burst['2MASS J']:.3f}, {_burst['2MASS H']:.3f} and {_burst['2MASS Ks']:.3f}; the UV excess is the Calzetti coefficient of §6. "
     f"For populations that are old compared with 30 Myr, or at $\\eta = 1$, the gate does not act and the "
     f"mapping in the table above is exact."
 )
@@ -1386,8 +1448,9 @@ caveat(
 # ### $A_V$, curve family and `eta`
 #
 # Calzetti $A_V \in \{0.3, 1, 3\}$, power-law slopes $n \in \{0.5, 0.7, 1\}$ (Charlot & Fall 2000, $\eta = 1$),
-# Salim $(\delta, B)$ pairs and Cardelli, with the nebular block on and the fiducial history, shown to 2.5 μm (the infrared emission BAGPIPES adds at longer
-# wavelengths is compared in §8).
+# Salim $(\delta, B)$ pairs and Cardelli, with the nebular block on and the fiducial history, shown to 2.5 μm. BAGPIPES adds DL07 dust emission to every model that carries a `dust` block (with
+# $q_{\rm PAH} = 2$, $U_{\min} = 1$, $\gamma = 0.01$ unless the block sets them); the BAGPIPES side of these sweeps has that emission
+# removed, so both codes show attenuated starlight (the emission is compared in §8).
 
 # %%
 # Figure 1: A_V and eta variations with Calzetti + CF00
@@ -1398,6 +1461,7 @@ for av in [0.3, 1.0, 3.0]:
     label = f"Calzetti A_V={av:g}"
     w_ref, L_ref = B.attenuated_lnu(
         dust_block={"type": "Calzetti", "Av": av},
+        include_dust_emission=False,
         nebular_block={"logU": -2.0, "metallicity": 1.0},
         sfh_type="delayed",
         massformed=LOG_MASS_FIDUCIAL,
@@ -1443,6 +1507,7 @@ for n in [0.5, 0.7, 1.0]:
     label = f"CF00 n={n:.1f}"
     w_ref, L_ref = B.attenuated_lnu(
         dust_block={"type": "CF00", "Av": 1.0, "n": n, "eta": 1.0},
+        include_dust_emission=False,
         nebular_block={"logU": -2.0, "metallicity": 1.0},
         sfh_type="delayed",
         massformed=LOG_MASS_FIDUCIAL,
@@ -1507,6 +1572,7 @@ for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
     label = f"Salim δ={delta:+.1f} B={b:.0f}"
     w_ref, L_ref = B.attenuated_lnu(
         dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b},
+        include_dust_emission=False,
         nebular_block={"logU": -2.0, "metallicity": 1.0},
         sfh_type="delayed",
         massformed=LOG_MASS_FIDUCIAL,
@@ -1576,6 +1642,7 @@ for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
 label = "Cardelli R_V=3.1"
 w_ref, L_ref = B.attenuated_lnu(
     dust_block={"type": "Cardelli", "Av": 1.0},
+    include_dust_emission=False,
     nebular_block={"logU": -2.0, "metallicity": 1.0},
     sfh_type="delayed",
     massformed=LOG_MASS_FIDUCIAL,
@@ -3152,9 +3219,9 @@ CLASSES = {
     "§2 SFH forms": "reference code",
     "§3 continuity SFH": "numerical",
     "§4 composite stellar SED": "reference code",
-    "§5 metallicity": "convention",
+    "§5 metallicity": "numerical",
     "§6 attenuation curves": "reference code",
-    "§7 birth-cloud gate (eta = 2, 30 Myr burst)": "convention",
+    "§7 birth-cloud gate (eta = 2, 30 Myr burst)": "reference code",
     "§7 attenuated SED": "reference code",
     "§8 dust emission": "open",
     "§8 energy balance (L_abs)": "convention",

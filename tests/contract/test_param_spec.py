@@ -177,6 +177,14 @@ class TestValidation:
         with pytest.raises(ValueError, match="outside bounds"):
             spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(5.0)})
 
+    def test_validate_nan_raises(self):
+        spec = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
+        )
+        with pytest.raises(ValueError, match="outside bounds"):
+            spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(jnp.nan)})
+
 
 class TestProperties:
     def test_free_params_list(self):
