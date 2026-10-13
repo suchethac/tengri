@@ -9,6 +9,7 @@ them here removes ~50 duplicated blocks across the backends.
 
 from __future__ import annotations
 
+import logging
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
@@ -20,6 +21,8 @@ import jax.numpy as jnp
 
 if TYPE_CHECKING:
     from jax import Array
+
+logger = logging.getLogger(__name__)
 
 _MAP_INIT_STEPS = 1000
 #: Number of vmap'd ADAM restarts for the MCMC MAP-init seed. The standardized
@@ -322,8 +325,8 @@ def _prewarm_forward(fitter: Any) -> None:
     ``Uniform.unstandardize`` keeps a traced array escaping into
     ``float()``. Calling ``predict_photometry`` once eagerly before
     JIT tracing materializes the relevant arrays and resolves the
-    leak. Best-effort: if the call fails for any other reason, swallow
-    silently and let the real path raise.
+    leak. Best-effort: if the call fails for any other reason, the failure is
+    logged at DEBUG level with its traceback and the real path raises.
     """
     try:
         sample_params = {}
@@ -343,4 +346,4 @@ def _prewarm_forward(fitter: Any) -> None:
     except Exception:
         # Pre-warm is a soft guarantee; the real path will surface
         # any genuine failure with a richer traceback.
-        pass
+        logger.debug("Forward pre-warm skipped", exc_info=True)

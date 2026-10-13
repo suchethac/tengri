@@ -270,7 +270,14 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 )
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_THETA_TORUS,
+)
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S, L_SUN as L_SUN_ERG
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
@@ -851,7 +858,7 @@ agn_torus_block, agn_attenuation_block : str
     # reddening factor ``skirtor_disc_dust_ratio`` takes is always the
     # identity now.
     _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", 0.0))
-    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
+    _cos_inc = jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC))
     _disc_R = None
     _disc_incl = None
     _disc_R_faceon = None
@@ -930,10 +937,10 @@ agn_torus_block, agn_attenuation_block : str
                 jnp.ones_like(_tie_wave),
                 incl_wave=wave,
                 _template=_library,
-                agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
+                agn_tau_skirtor=params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
                 agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
                 agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
-                agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
+                agn_oa_skirtor=params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
                 # R70: the grid's third geometry axis. Left out, the tie
                 # interpolated the SKIRTOR templates at the signature default
                 # R = 20 while the torus block honored the model's value, so
@@ -1306,7 +1313,7 @@ agn_torus_block, agn_attenuation_block : str
             _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
             _corona_screen = torus_screen_transmission(
                 wave,
-                cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+                cos_inc=params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
                 oa_deg=_corona_oa,
                 tau_v=_corona_tau_v,
             )
@@ -1381,7 +1388,7 @@ agn_torus_block, agn_attenuation_block : str
         _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
         _screen = torus_screen_transmission(
             wave,
-            cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+            cos_inc=params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
             oa_deg=_screen_oa,
             tau_v=_screen_tau_v,
         )
@@ -1391,8 +1398,8 @@ agn_torus_block, agn_attenuation_block : str
         # The generic tori read the same Type-1/2 weight, one width in cos i, as the dusty-
         # screen tori and the polar mask: Type 1 iff i < 90 - agn_theta_torus.
         _lines_mask = type1_weight(
-            params.get("agn_cos_inc", 0.86602540378443864),
-            params.get("agn_theta_torus", 30.0),
+            params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
+            params.get("agn_theta_torus", DEFAULT_AGN_THETA_TORUS),
         )
         _disc_mask = _lines_mask
     L_lambda_central = (

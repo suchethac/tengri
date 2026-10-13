@@ -136,21 +136,12 @@ class TestRegistryConsistency:
         containing a ``ParamDeclaration`` with the same name and
         description.
 
-        Legacy ``_NON_SFH_PARAMS`` records use a dict-of-4-tuples shape
-        and are checked separately by the consistency below.
         """
         import importlib
 
         # Sample 30 records; only consistency-check component _params.
         records = list(registry().items())[:30]
         for name, rec in records:
-            if rec.group == "_NON_SFH_PARAMS":
-                # Legacy bucket: dict[name, (description, ...)]
-                mod = importlib.import_module(rec.owner)
-                bucket = getattr(mod, rec.group)
-                assert name in bucket
-                assert bucket[name][0] == rec.description
-                continue
             mod = importlib.import_module(rec.owner)
             group = getattr(mod, rec.group)
             assert isinstance(group, tuple)
