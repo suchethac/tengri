@@ -190,6 +190,8 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Uniform(0.01, 6.0))
 ```
 
+An emission-line fit with a free redshift is a local optimization. Aliased redshifts, where a line is matched to a different transition at another redshift, are real minima, and the optimizer settles in whichever basin it starts from. Do not rely on a free-redshift line fit to find the right solution unaided. Either fix the redshift when it is known, or seed the fit near the true value: pass `init_from=` a `Posterior` whose redshift sits at a photometric or catalog estimate, for example a photometric-only fit, so the emission-line fit starts in the correct basin.
+
 ### Error handling and suggestions
 
 Unknown structural keys trigger a `ParameterError` with the list of valid keys and suggestions via `difflib`:

@@ -43,8 +43,8 @@ dataclasses -- no inheritance hierarchy:
 ```
 Observation (frozen dataclass)
 +-- Photometry          (optional) -- filters + metadata
-+-- SpectroscopyConfig  (optional) -- wave grid, resolution, LSF, calibration, elines
-+-- NoiseConfig         (optional) -- calibration floor, Student-t dof
++-- Spectroscopy  (optional) -- wave grid, resolution, LSF, calibration, elines
++-- NoiseModel         (optional) -- calibration floor, Student-t dof
 ```
 
 At least one of `photometry` or `spectroscopy` must be provided.
@@ -195,7 +195,7 @@ print(sorted(FILTER_REGISTRY.keys()))
 
 ## Spectroscopy Configuration
 
-The `SpectroscopyConfig` class declares the spectroscopic instrument setup.
+The `Spectroscopy` class declares the spectroscopic instrument setup.
 
 ### Basic construction
 
@@ -203,10 +203,10 @@ At minimum, provide the observed-frame wavelength grid:
 
 ```python
 import jax.numpy as jnp
-from tengri import SpectroscopyConfig
+from tengri import Spectroscopy
 
 wave_obs = jnp.linspace(6000, 25000, 1000)  # Angstrom
-spec_config = SpectroscopyConfig(wave_obs=wave_obs)
+spec_config = Spectroscopy(wave_obs=wave_obs)
 print(spec_config.n_pixels)  # 1000
 print(spec_config.has_lsf)   # False (no resolution set)
 ```
@@ -221,7 +221,7 @@ look up resolution curves:
 Variable resolution R ~ 30--330 across 0.6--5.3 microns (Jakobsen et al. 2022):
 
 ```python
-spec_config = SpectroscopyConfig.nirspec_prism(
+spec_config = Spectroscopy.nirspec_prism(
     wave_obs,                    # observed wavelength grid (Angstrom)
     calibration_order=3,         # optional: Chebyshev calibration
     eline_marginalize=True,      # optional: emission line marginalization
@@ -234,7 +234,7 @@ spec_config = SpectroscopyConfig.nirspec_prism(
 Roughly constant R ~ 1000:
 
 ```python
-spec_config = SpectroscopyConfig.nirspec_g140m(wave_obs)
+spec_config = Spectroscopy.nirspec_g140m(wave_obs)
 # resolution = 1000.0 (scalar)
 ```
 
@@ -243,7 +243,7 @@ spec_config = SpectroscopyConfig.nirspec_g140m(wave_obs)
 For any instrument with approximately constant spectral resolution:
 
 ```python
-spec_config = SpectroscopyConfig.constant_r(wave_obs, R=3000)
+spec_config = Spectroscopy.constant_r(wave_obs, R=3000)
 ```
 
 ### Custom resolution
@@ -258,7 +258,7 @@ import jax.numpy as jnp
 wave_obs = jnp.linspace(3500, 9500, 2000)
 R_array = 500 + 1000 * (wave_obs - 3500) / (9500 - 3500)  # R = 500 to 1500
 
-spec_config = SpectroscopyConfig(
+spec_config = Spectroscopy(
     wave_obs=wave_obs,
     resolution=R_array,           # per-pixel R(lambda)
     sigma_lib_kms=70.0,           # SSP library resolution (MILES default)
@@ -427,7 +427,7 @@ Typical orders: 2--5 for PRISM data, 1--3 for grating spectroscopy.
 `cal_cN`, each with a `Gaussian(0, 0.1)` prior:
 
 ```python
-spec_config = SpectroscopyConfig.nirspec_prism(
+spec_config = Spectroscopy.nirspec_prism(
     wave_obs,
     calibration_order=3,
 )
@@ -493,7 +493,7 @@ import jax.numpy as jnp
 
 custom_lines = jnp.array([4861.33, 5006.84, 6562.80])  # H-beta, [OIII], H-alpha
 
-spec_config = SpectroscopyConfig.nirspec_prism(
+spec_config = Spectroscopy.nirspec_prism(
     wave_obs,
     eline_marginalize=True,
     eline_wavelengths=custom_lines,
@@ -505,7 +505,7 @@ spec_config = SpectroscopyConfig.nirspec_prism(
 
 ## Noise Configuration
 
-The `NoiseConfig` class controls the noise model used during inference.
+The `NoiseModel` class controls the noise model used during inference.
 
 ### Fixed calibration floor
 
@@ -516,9 +516,9 @@ sigma_eff = sqrt(sigma_obs^2 + (f_cal * model)^2)
 ```
 
 ```python
-from tengri import NoiseConfig
+from tengri import NoiseModel
 
-noise = NoiseConfig(calibration_floor=0.02)  # fixed 2% floor
+noise = NoiseModel(calibration_floor=0.02)  # fixed 2% floor
 ```
 
 This creates a `Fixed(0.02)` parameter named `noise_frac_cal` in the model.
@@ -528,9 +528,9 @@ This creates a `Fixed(0.02)` parameter named `noise_frac_cal` in the model.
 Make the calibration floor a free parameter by passing a `Distribution`:
 
 ```python
-from tengri import NoiseConfig, Uniform
+from tengri import NoiseModel, Uniform
 
-noise = NoiseConfig(calibration_floor=Uniform(0.01, 0.15))
+noise = NoiseModel(calibration_floor=Uniform(0.01, 0.15))
 ```
 
 This creates a free parameter `noise_frac_cal ~ Uniform(0.01, 0.15)` that
@@ -541,7 +541,7 @@ the sampler explores during inference.
 For outlier-robust fitting, use a Student-t likelihood instead of Gaussian:
 
 ```python
-noise = NoiseConfig(
+noise = NoiseModel(
     calibration_floor=Uniform(0.01, 0.10),
     student_t_dof=5.0,   # degrees of freedom; lower = heavier tails
 )
@@ -552,11 +552,11 @@ This adds a `Fixed(5.0)` parameter named `noise_dof`. Setting
 
 ### Default noise
 
-`NoiseConfig()` with no arguments means: no calibration floor, Gaussian
+`NoiseModel()` with no arguments means: no calibration floor, Gaussian
 likelihood. No parameters are generated:
 
 ```python
-noise = NoiseConfig()
+noise = NoiseModel()
 print(noise.get_params())  # {}
 ```
 
@@ -569,18 +569,18 @@ print(noise.get_params())  # {}
 Provide both `photometry` and `spectroscopy`:
 
 ```python
-from tengri import Observation, Photometry, SpectroscopyConfig, NoiseConfig
+from tengri import Observation, Photometry, Spectroscopy, NoiseModel
 
 obs = Observation(
     photometry=Photometry.from_names([
         "jwst_f090w", "jwst_f150w", "jwst_f200w",
         "jwst_f277w", "jwst_f356w", "jwst_f444w",
     ]),
-    spectroscopy=SpectroscopyConfig.nirspec_prism(
+    spectroscopy=Spectroscopy.nirspec_prism(
         wave_obs,
         calibration_order=3,
     ),
-    noise=NoiseConfig(calibration_floor=0.02),
+    noise=NoiseModel(calibration_floor=0.02),
 )
 
 print(obs.is_joint)      # True
@@ -636,17 +636,17 @@ are automatically merged into `ParamSpec`.
 
 ### What gets auto-merged
 
-1. **Calibration coefficients** from `SpectroscopyConfig`:
+1. **Calibration coefficients** from `Spectroscopy`:
    `cal_c1`, `cal_c2`, ..., `cal_cN` (one per `calibration_order`)
-2. **Noise parameters** from `NoiseConfig`:
+2. **Noise parameters** from `NoiseModel`:
    `noise_frac_cal` (calibration floor), `noise_dof` (Student-t dof)
 
 ### How it works
 
 ```python
 obs = Observation(
-    spectroscopy=SpectroscopyConfig.nirspec_prism(wave_obs, calibration_order=3),
-    noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.15)),
+    spectroscopy=Spectroscopy.nirspec_prism(wave_obs, calibration_order=3),
+    noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
 )
 
 # obs.get_all_params() returns:
@@ -710,8 +710,8 @@ Every observation has a `.summary()` method following the same convention as
 ```python
 obs = Observation(
     photometry=Photometry.from_names(["jwst_f200w", "jwst_f356w", "jwst_f444w"]),
-    spectroscopy=SpectroscopyConfig.nirspec_prism(wave_obs, calibration_order=3),
-    noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.15)),
+    spectroscopy=Spectroscopy.nirspec_prism(wave_obs, calibration_order=3),
+    noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
 )
 
 print(obs.summary())
@@ -789,8 +789,8 @@ fitter = Fitter(model, spec_flux, spec_noise, data_type="spectroscopy")
 
 # NEW -- observation declares everything, auto-merge handles params
 obs = Observation(
-    spectroscopy=SpectroscopyConfig.nirspec_prism(wave_obs, calibration_order=2),
-    noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.15)),
+    spectroscopy=Spectroscopy.nirspec_prism(wave_obs, calibration_order=2),
+    noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
 )
 model = Model(spec, ssp, observation=obs)  # auto-precomputes, auto-merges
 fitter = Fitter(model, spec_flux, spec_noise)
@@ -854,19 +854,19 @@ print(posterior.summary_table())
 ```python
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, SpectroscopyConfig, NoiseConfig,
+    Model, ParamSpec, Fitter, Observation, Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
 
 obs = Observation(
-    spectroscopy=SpectroscopyConfig.nirspec_prism(
+    spectroscopy=Spectroscopy.nirspec_prism(
         wave_obs,                    # observed wavelength grid (Angstrom)
         calibration_order=3,         # 3rd-order Chebyshev calibration
         eline_marginalize=True,      # marginalize emission line amplitudes
     ),
-    noise=NoiseConfig(
+    noise=NoiseModel(
         calibration_floor=Uniform(0.01, 0.15),  # free calibration floor
     ),
 )
@@ -896,7 +896,7 @@ print(posterior.summary_table())
 import jax.numpy as jnp
 from tengri import (
     Model, ParamSpec, Fitter, Observation, Photometry,
-    SpectroscopyConfig, NoiseConfig,
+    Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -907,11 +907,11 @@ obs = Observation(
         "jwst_f090w", "jwst_f150w", "jwst_f200w",
         "jwst_f277w", "jwst_f356w", "jwst_f444w",
     ]),
-    spectroscopy=SpectroscopyConfig.nirspec_prism(
+    spectroscopy=Spectroscopy.nirspec_prism(
         wave_obs,
         calibration_order=3,
     ),
-    noise=NoiseConfig(calibration_floor=0.02),  # fixed 2% floor
+    noise=NoiseModel(calibration_floor=0.02),  # fixed 2% floor
 )
 
 spec = ParamSpec(
@@ -1013,7 +1013,7 @@ results = fitter.fit_batch(catalog_flux, catalog_noise)
 ```python
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, SpectroscopyConfig, NoiseConfig,
+    Model, ParamSpec, Fitter, Observation, Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -1022,7 +1022,7 @@ ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
 # Custom high-resolution spectrograph
 wave_obs = jnp.linspace(3800, 7000, 5000)  # optical range, Angstrom
 obs = Observation(
-    spectroscopy=SpectroscopyConfig.constant_r(
+    spectroscopy=Spectroscopy.constant_r(
         wave_obs,
         R=5000,
         sigma_lib_kms=70.0,      # MILES library resolution
@@ -1030,7 +1030,7 @@ obs = Observation(
         eline_marginalize=True,
         lsf_n_bins=32,            # more bins for high-R data
     ),
-    noise=NoiseConfig(
+    noise=NoiseModel(
         calibration_floor=Uniform(0.01, 0.10),
         student_t_dof=5.0,        # robust to outliers (cosmic rays, sky residuals)
     ),
@@ -1065,8 +1065,8 @@ Frozen dataclass. Composes photometric, spectroscopic, and noise configurations.
 | Parameter      | Type                          | Default | Description                                      |
 |---------------|-------------------------------|---------|--------------------------------------------------|
 | `photometry`  | `Photometry` or `None`        | `None`  | Photometric filter configuration                 |
-| `spectroscopy`| `SpectroscopyConfig` or `None`| `None`  | Spectroscopic instrument configuration           |
-| `noise`       | `NoiseConfig` or `None`       | `None`  | Noise model configuration                        |
+| `spectroscopy`| `Spectroscopy` or `None`| `None`  | Spectroscopic instrument configuration           |
+| `noise`       | `NoiseModel` or `None`       | `None`  | Noise model configuration                        |
 
 At least one of `photometry` or `spectroscopy` must be provided.
 
@@ -1125,7 +1125,7 @@ Frozen dataclass. Wraps filter transmission curves.
 
 ---
 
-### `SpectroscopyConfig`
+### `Spectroscopy`
 
 Frozen dataclass. Declares the spectroscopic instrument.
 
@@ -1152,9 +1152,9 @@ Frozen dataclass. Declares the spectroscopic instrument.
 
 | Method                                    | Description                                    |
 |------------------------------------------|------------------------------------------------|
-| `SpectroscopyConfig.nirspec_prism(wave_obs, **kw)` | JWST NIRSpec PRISM (variable R ~ 30--330)  |
-| `SpectroscopyConfig.nirspec_g140m(wave_obs, **kw)` | JWST NIRSpec G140M (R ~ 1000)              |
-| `SpectroscopyConfig.constant_r(wave_obs, R, **kw)` | Constant-R spectrograph                     |
+| `Spectroscopy.nirspec_prism(wave_obs, **kw)` | JWST NIRSpec PRISM (variable R ~ 30--330)  |
+| `Spectroscopy.nirspec_g140m(wave_obs, **kw)` | JWST NIRSpec G140M (R ~ 1000)              |
+| `Spectroscopy.constant_r(wave_obs, R, **kw)` | Constant-R spectrograph                     |
 
 All factory methods accept `sigma_lib_kms`, `calibration_order`,
 `eline_marginalize`, and additional `**kwargs` passed through to the constructor.
@@ -1168,7 +1168,7 @@ All factory methods accept `sigma_lib_kms`, `calibration_order`,
 
 ---
 
-### `NoiseConfig`
+### `NoiseModel`
 
 Frozen dataclass. Configures the noise model.
 

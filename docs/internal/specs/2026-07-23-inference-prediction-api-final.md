@@ -545,6 +545,12 @@ raises `KeyError` on a free-params-only dict that `fast=False` accepts happily. 
 catalog merges `spec.get_fixed_values()` so every channel sees a complete dict; a
 direct caller has to do it themselves, and nothing says so.
 
+**Reserved names (not implemented; do not reuse them for other meanings).** Three names are held for the two open issues in this section's scope:
+
+- `redshift_err_col`: a catalog column carrying each galaxy's photometric-redshift uncertainty, so that a per-galaxy redshift can be fitted with its own error rather than a shared prior ([#1314](https://github.com/suchethac/tengri/issues/1314)).
+- `redshift_pz`: a per-galaxy redshift prior, given as a probability distribution per row, the photo-z analog of `redshift_col` ([#1314](https://github.com/suchethac/tengri/issues/1314)).
+- `simulate(noise=..., key=...)`: a noisy mock prediction that draws observations with the same `sigma_eff` the likelihood uses, so the simulate and fit loop closes on one noise definition ([#1312](https://github.com/suchethac/tengri/issues/1312)). Until it ships, passing `noise=` raises rather than returning a noiseless mock.
+
 ---
 
 ## 9. Arrays, memory, and results

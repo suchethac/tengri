@@ -139,6 +139,8 @@ The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and
 
 (app-dust-emission-details)=
 
+**UV crossover.** The Leitherer et al. (2002) far-UV extension used by `leitherer02` joins the Calzetti curve at 1800 Å, and the two match closely there. Between 1500 and 1800 Å the SMC and LMC curves do not cross the Calzetti curve; they stay above it, at about 1.8 times its value at 1500 Å and 1.6 times at 1800 Å, with every curve normalized to $k(5500\,\text{\AA}) = 1$.
+
 ## Dust Emission Models
 
 Dust emission models span parametric (modified blackbody, Casey (2012)) and tabulated (Dale et al. (2014), Draine and Li (2007), Draine and Li (2014), Hensley and Draine (2023), Jones et al. (2017), da Cunha et al. (2008), Boquien and Salim (2021)) approaches. Tabulated models are loaded lazily from pre-computed template grids at first use; the templates are interpolated in the model parameters via JAX-compatible routines and are fully differentiable. All models are normalized by an energy-balance constraint.

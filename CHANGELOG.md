@@ -3926,6 +3926,9 @@
 - `sfh={'type': 'table'}` is zero outside its table instead of edge-clamped (a falling table normalized to 1 Msun formed 8.16 Msun at z = 0.5, now 0.9993 = its own integral); optional `sfh_table_age_gyr` (zero the table beyond that lookback, keeping its recent part) and `sfh_table_log_total_mass` rescale (#2621).
 - A zero SFH now raises a `ZeroSFHWarning` naming the cause; the default `delayed_bq` `age_bq_gyr` prior is bounded to 0.5 Gyr so quench-before-formation is not drawn (explicit priors unchanged) (#2644).
 
+- **The handbook states the assumptions a user needs.** The nebular reference states the Case B line assumption, the common escape factor, and the independence of `met` and `neb={'logZ_gas': ...}`; the dust reference gives the UV crossover of the attenuation curves; the observation reference says which equivalent-width convention to use; the configuration guide describes free-redshift emission-line fits as local optimizations; the known-limitations page lists the unshipped `cb19` grid, the BPASS surviving-mass source and the per-`Photometry` filter convention; the metallicity and parameter references say that `met_alpha_fe` acts only on a grid with an [alpha/Fe] axis, and the internal catalog spec reserves `redshift_err_col`, `redshift_pz` and `simulate(noise=..., key=...)`.
+- **The live handbook pages name only live API.** The inference, observation and naming pages teach the current method names, configuration classes and symbols, and the migration tables mark the removed names as removed.
+
 ## [0.1.0] - 2026-05-22
 
 First public preview release.

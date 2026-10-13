@@ -11,6 +11,14 @@ All nebular models require the hydrogen-ionizing photon production rate $Q_{\rm 
 $$ (eq-qh)
  where $L_\nu$ is the CSP luminosity density. This integral is evaluated per SSP age bin and metallicity, then cached as a precomputed table $Q_{\rm H}(Z, t_{\rm age})$ to avoid recomputation during inference.
 
+## Emission-Line Physics
+
+Line luminosities assume Case B recombination at $T_e = 10^4$ K, with $\alpha_B = 2.58\times10^{-19}\,\mathrm{m^3\,s^{-1}}$ (Ferland 1980). The Case B cascade sets every Balmer and Lyman line relative to the ionizing photon rate.
+
+The escape parameter `neb_fesc` multiplies the line and continuum amplitudes by one common factor, $k = (1 - f_{\rm esc} - f_{\rm dust})\,/\,[1 + 0.597\,(f_{\rm esc} + f_{\rm dust})]$, where $f_{\rm dust}$ is `neb_fdust_frac` $\times\,(1 - f_{\rm esc})$. Because the factor is shared, `neb_fesc` leaves line ratios unchanged. A Balmer decrement that is not Case B, as expected for density-bounded gas, therefore cannot be produced by `neb_fesc`; the data's decrement is absorbed by dust reddening. If you suspect density-bounded gas, treat `dust_tau_bc` as covariant with the nebular escape parameters when you interpret the fit.
+
+The stellar metallicity `met` and the gas-phase metallicity `neb={'logZ_gas': ...}` are independent. `met` selects the stellar templates; `logZ_gas` alone sets the metallicity of the emitting gas, so set both when they differ.
+
 ## BakedIn Backend
 
 When SSP templates already include nebular emission (e.g., FSPS "wNE" files with fixed $\log U$ and $\log Z_{\rm gas}$), the `BakedIn` backend is a no-op: it returns zero additional nebular contribution since the emission is already part of the SSP flux arrays. This is the default when no CLOUDY grid is specified.

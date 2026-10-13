@@ -85,6 +85,9 @@ Full detail: `docs/dev/notebook_orchestration_oom.md`.
 
 ## Physics caveats
 
+- **The `cb19` nebular grid is not shipped.** `data/cb19_templates.h5` is not in the repository, and `scripts/download_cb19_templates.py` cannot rebuild it because the 3MdB databases hold no `CB_19` reference (see `docs/internal/advanced/cb19_grid.md`). A build that reads the grid raises `FileNotFoundError`. Use `cloudy` or `cue` until the grid is restored. `tengri.list_nebular_backends()` still lists `cb19` with status `production`, so do not infer availability from that status.
+- **BPASS surviving mass is not metallicity-dependent.** No surviving-mass table exists for the BPASS grids (`src/tengri/data/ssp_mass_remaining/PROVENANCE.md`). A BPASS build refuses the default source. Pass `mass_remaining="dsps_fit"` to use DSPS's metallicity-independent fit, which does not track the metallicity dependence of the surviving mass.
+- **One filter convention per `Photometry`.** Every band in a `Photometry` object uses one convention: `"bessell"` (photon-counting, the default) or `"energy"` (CIGALE's energy-type bands such as 2MASS, MIPS, PACS and SPIRE). The two conventions differ by 5 to 40 mmag (about 0.5 to 4 %) depending on band and SED slope. Set the convention to match each detector, and expect that error on bolometer bands if they are measured under the photon-counting convention.
 - **AGN torus:** `agn/torus.py` toy models are not for science. Use
   `agn_model="skirtor"` (Stalevski et al. 2016).
 - **Dust IR emission templates** must be loaded from `data/`; analytic

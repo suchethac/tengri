@@ -5,7 +5,7 @@ between v0.x and v1.0. It is the **canonical source** consumed by:
 
 - `src/tengri/_deprecated.py` (provides the runtime `DeprecationWarning`
   shims).
-- `tests/unit/test_public_api_surface.py` (guards `tengri.__all__`).
+- `tests/contract/test_public_api_surface.py` (guards `tengri.__all__`).
 - CI checks (Phase 5+) that grep for `get_*` / `*_emission` / bare
   parameter names and fail builds.
 
@@ -74,7 +74,7 @@ The 10 names below were renamed to comply with NAMING_CONTRACT §4
 (`get_*` → `resolve_*` for build/select verbs; `*_emission` →
 `compute_*_sed` for SED-computing functions).
 
-| Old | New | Defining module |
+| Old (removed) | New | Defining module |
 |---|---|---|
 | `get_dust_law` | `resolve_dust_law` | `components.dust.attenuation` |
 | `get_agn_model` | `resolve_agn_model` | `components.agn.unified` |
@@ -108,12 +108,11 @@ actual binding does not exist at runtime.
 
 ## Phase 3 — Drop `_sfh` suffix inside `tengri.components.sfh`
 
-Inside the `sfh` namespace the suffix is redundant. Old names continue to
-work as deprecated aliases. **Registry string keys are unchanged** —
-`SFH_REGISTRY["exponential_sfh"]` still exists and YAML configs in
-`presets/` are unaffected.
+Inside the `sfh` namespace the suffix is redundant. The old names were removed
+in the commit that cleaned the internal aliases (`63b1d61f0`); the table is kept as
+a record of what each old name became. Use the new name.
 
-| Old | New | Defining module |
+| Old (removed) | New | Defining module |
 |---|---|---|
 | `constant_sfh` | `constant` | `components.sfh.mean_sfh` |
 | `exponential_sfh` | `exponential` | `components.sfh.mean_sfh` |
@@ -135,15 +134,7 @@ work as deprecated aliases. **Registry string keys are unchanged** —
 | `declining_exponential_sfh` | `declining_exponential` | `components.sfh.mean_sfh` |
 | `constant_then_exponential_sfh` | `constant_then_exponential` | `components.sfh.mean_sfh` |
 
-**Status (2026-05).** All 19 aliases are now `deprecated_alias`-wrapped
-in their defining modules and emit a one-shot `DeprecationWarning` on
-first call. The two real-def cases (`declining_exponential_sfh`,
-`constant_then_exponential_sfh`) had their function bodies renamed; the
-old names continue to resolve through the same `deprecated_alias`
-mechanism. The `SFH_REGISTRY` references the canonical short names
-internally, so registry-driven fits do **not** emit warnings — only
-direct user calls under the deprecated name do. Pinned by
-`tests/unit/test_sfh_deprecations.py`.
+**Status.** The 19 aliases listed above are removed. Use the New name.
 
 ## Phase 4 — AGN / dust sub-namespaces (REMOVED)
 
@@ -285,12 +276,12 @@ sub-namespace modules (`agn`, `dust`, `sfh`, …, `results`, `config`,
 including `search`, plus cache helpers, `doctor`, `register_component`);
 6 exceptions; 6 priors. The exact count drifts as new top-level verbs
 land — the canonical source is the frozen `EXPECTED_ALL` set in
-`tests/unit/test_public_surface.py`.
+`tests/contract/test_public_surface.py`.
 
-The slim is enforced by `tests/unit/test_public_api_surface.py`, which
+The slim is enforced by `tests/contract/test_public_api_surface.py`, which
 partitions names into `ALLOWED_TOP_LEVEL` (advertised) and
 `DEMOTED_BUT_IMPORTABLE` (still resolves; not advertised), plus
-`tests/unit/test_public_surface.py`, which parametrizes over the
+`tests/contract/test_public_surface.py`, which parametrizes over the
 relocation table to assert (a) every old name still resolves and warns,
 (b) every canonical path resolves cleanly. Adding a new top-level symbol
 or relocating an existing one requires editing this document, both
@@ -387,8 +378,8 @@ previously, so the move is purely additive — no shim is required.
 | `tengri.download_ssp`        | `tengri.utils.data_setup`    | Auto-fetch a missing SSP from the public catalog         |
 
 `ALLOWED_TOP_LEVEL` and `EXPECTED_ALL` in
-`tests/unit/test_public_api_surface.py` and
-`tests/unit/test_public_surface.py` were updated in the same commit.
+`tests/contract/test_public_api_surface.py` and
+`tests/contract/test_public_surface.py` were updated in the same commit.
 
 ---
 
