@@ -91,7 +91,10 @@ _FORWARDED: tuple[tuple[str, str, float, float], ...] = (
     # X-ray binaries
     ("xray_gamma_hmxb", "xray", 1.5, 2.5),
     ("xray_gamma_lmxb", "xray", 1.2, 2.0),
-    ("xray_E_cut", "xray", 100.0, 500.0),
+    # ``xray_E_cut`` is the AGN corona's cutoff only (the XRB cutoff is the fixed
+    # 100 keV of Yang+2020 Sect. 2.2.2, #2944), so it is probed on a model that has
+    # a corona: an AGN disc supplies the L_2500 that scales it.
+    ("xray_E_cut", "xray_corona", 100.0, 500.0),
     # Radio free-free
     ("radio_T_e", "radio", 5000.0, 20000.0),
     ("radio_alpha_ff", "radio", -0.3, 0.0),
@@ -105,6 +108,7 @@ _FORWARDED: tuple[tuple[str, str, float, float], ...] = (
 _CONTROLS: dict[str, tuple[str, float, float]] = {
     "agn": ("agn_log_lbol", 10.0, 13.0),
     "xray": ("sfh_const_log_total_mass", 9.0, 11.0),
+    "xray_corona": ("agn_log_lbol", 10.0, 13.0),
     "radio": ("radio_q_ir", 1.8, 3.0),
     "dust": ("dust_tau_diff", 0.05, 2.0),
 }
@@ -244,6 +248,31 @@ def _xray_model(ssp, obs):
     )
 
 
+def _xray_corona_model(ssp, obs):
+    """XRBs plus an AGN corona: the corona is scaled by the disc's L_2500.
+
+    The disc is ``multicolor``, which has no corona of its own: ``kubota_done`` is
+    refused by ``check_disc_xray_double_count`` (it would gain a second corona).
+
+    Without the AGN block the corona term is identically zero, so a parameter that
+    only the corona reads (``xray_E_cut``) would measure flat by construction.
+    """
+    return _build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "const", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti"},
+        agn={
+            "type": "composable",
+            "disc": {"type": "multicolor"},
+            "torus": {"type": "skirtor", "all_params": FREE},
+            "atten": {"type": "polar_dust", "all_params": FREE},
+            "all_params": FREE,
+        },
+        xray={"type": "yang20", "E_cut": Uniform(100.0, 500.0)},
+    )
+
+
 def _radio_model(ssp, obs):
     # Dust is not decoration here: the FIR-radio correlation normalizes against
     # L_ir, so without it sed_radio is identically zero and every radio
@@ -279,6 +308,7 @@ def _dust_model(ssp, obs):
 _BUILDERS = {
     "agn": _agn_model,
     "xray": _xray_model,
+    "xray_corona": _xray_corona_model,
     "radio": _radio_model,
     "dust": _dust_model,
 }
@@ -360,6 +390,26 @@ def test_parameter_reaches_the_physics(responses, param, family, lo, hi):
     )
 
 
+def test_xray_e_cut_moves_the_corona_spectrum_and_not_the_xrbs(synthetic_tophat_obs):
+    """``xray_E_cut`` is the AGN corona's cutoff (Yang+2020 Sect. 2.2.2, #2944).
+
+    With a corona it changes the published ``sed_xray``; without one (XRBs only,
+    whose cutoff is the fixed 100 keV) the same sweep changes nothing at all.
+    """
+    ssp = _synthetic_ssp()
+    with_corona = _xray_corona_model(ssp, synthetic_tophat_obs)
+    base = with_corona.spec.sample(jax.random.PRNGKey(0))
+    low = _published(with_corona.predict_state({**base, "xray_E_cut": jnp.array(100.0)}))
+    high = _published(with_corona.predict_state({**base, "xray_E_cut": jnp.array(500.0)}))
+    changed = {k for k in low.keys() & high.keys() if not np.array_equal(low[k], high[k])}
+    assert any("xray" in k for k in changed), sorted(changed)
+
+    xrb_only = _xray_model(ssp, synthetic_tophat_obs)
+    xrb_base = xrb_only.spec.sample(jax.random.PRNGKey(0))
+    rel, where = _response(xrb_only, xrb_base, "xray_E_cut", 100.0, 500.0)
+    assert rel == 0.0, f"XRB-only model responded to the corona cutoff on {where!r}"
+
+
 # ── Declaration, which is a different claim ───────────────────────
 @pytest.mark.parametrize("param", sorted({row[0] for row in _FORWARDED}))
 def test_parameter_is_declared_in_the_registry(param):
@@ -379,7 +429,7 @@ def test_parameter_is_declared_in_the_registry(param):
 @pytest.mark.parametrize(
     ("bucket", "param"),
     [("_AGN_PARAMS", row[0]) for row in _FORWARDED if row[1] == "agn"]
-    + [("_XRAY_PARAMS", row[0]) for row in _FORWARDED if row[1] == "xray"]
+    + [("_XRAY_PARAMS", row[0]) for row in _FORWARDED if row[1].startswith("xray")]
     + [("_RADIO_PARAMS", row[0]) for row in _FORWARDED if row[1] == "radio"]
     + [("shock", "shock_b_over_sqrt_n")],
 )
