@@ -401,6 +401,41 @@ def _build_param_map(
 # (find_short_param moved to _aliases.py: imported at top)
 
 
+def _apply_timing_frac(internal, params, param_map, spec):
+    """Resolve sampled ``*_frac`` timings to Gyr in ``internal`` (#2748).
+
+    Refuses a Fixed fraction away from its default first, then delegates to
+    :func:`~tengri.parameters.timing.resolve_timing_fracs` with the build
+    redshift from ``internal``.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.parameters.timing import TIMING_FRAC_PARAMS, resolve_timing_fracs
+
+    for frac_name, gyr_name in TIMING_FRAC_PARAMS.items():
+        if frac_name not in param_map:
+            continue
+        if frac_name not in params:
+            _refuse_fixed_frac(frac_name, spec)
+        elif gyr_name in params:
+            raise ConfigError(
+                f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
+            )
+    resolve_timing_fracs(internal, params, param_map, redshift=internal.get("redshift"))
+
+
+def _refuse_fixed_frac(frac_name, spec):
+    """Refuse a Fixed fraction away from its default; it is not supported yet (#2748)."""
+    from tengri.config.exceptions import ConfigError
+    from tengri.parameters.priors import Fixed
+
+    dist = spec.get_distribution(frac_name)
+    if isinstance(dist, Fixed) and float(dist.value) != 1.0:
+        raise ConfigError(
+            f"{frac_name!r} is Fixed({dist.value!r}); a Fixed fraction is not "
+            "supported yet, give a Uniform prior or set the absolute Gyr name"
+        )
+
+
 def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_params: bool = True):
     """Translate a public parameter dict to internal names with unit conversion.
 
@@ -527,6 +562,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         elif "psd_xi" in params:
             internal["xi"] = params["psd_xi"]
 
+    _apply_timing_frac(internal, params, param_map, spec)
     # Raise/warn about unrecognized keys (silent bugs when wrong names used)
     unrecognized = _unknown_param_keys(params, param_map)
     if unrecognized:

@@ -40,6 +40,7 @@ from tengri.components.stellar.age_boundary import (
 )
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
+from tengri.parameters.timing import resolve_timing_fracs
 from tengri.utils.host_array import device_table, host_array
 
 
@@ -2894,6 +2895,7 @@ class StellarSEDComponent:
         # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
         # past the Big Bang (#2645). Both routes use the same rule so they
         # cannot diverge (#982).
+        resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
         sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -4189,6 +4191,7 @@ class StellarSEDComponent:
         # Mirrors apply()'s injection (§2) so the two routes cannot diverge
         # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
         # of every ``_AGE_FAMILIES`` member to age(z).
+        resolve_timing_fracs(sfh_kwargs, params, sfh_spec.internal_param_map, redshift=z)
         sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 

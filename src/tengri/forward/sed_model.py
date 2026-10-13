@@ -5681,11 +5681,14 @@ class SEDModel:
             Complete parameter dict with all fixed values merged in.
         """
         from tengri.parameters.resolve import merge_fixed_params
+        from tengri.parameters.timing import route_timing_fracs
 
         merged = merge_fixed_params(self.spec, params)
         if fixed_values is not None:
             merged = {**merged, **fixed_values}
-        return merged
+        # A sampled ``*_frac`` timing replaces its Gyr twin; an unsampled one
+        # is dropped so the Gyr value stands (#2748).
+        return route_timing_fracs(merged, params)
 
     def _get_redshift(self, params, fixed_values=None):
         """Get redshift value from params or evaluation parameters.
@@ -10393,7 +10396,9 @@ class SEDModel:
             # ``catalog_z_range`` -- #1329). Neither half ever passed through a
             # raw user dict, so there is nothing here for
             # ``refuse_fixed_overrides`` to have caught or to re-check.
-            full_params = {**fixed_values, **params}
+            from tengri.parameters.timing import route_timing_fracs
+
+            full_params = route_timing_fracs({**fixed_values, **params}, params)
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their

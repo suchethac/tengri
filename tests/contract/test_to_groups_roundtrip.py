@@ -306,7 +306,9 @@ class TestToGroupsWildcardCollapse:
         # non-delta chemical-evolution mode (#311) emit a stellar block.
         # ``age_gyr`` (formation anchor, #514) joined the dpl param set; it
         # round-trips with its registry default even when left unspecified.
-        dpl_keys = {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
+        # ``age_frac`` (fraction of age(z), #2748) is declared beside ``age_gyr``
+        # and round-trips with its Fixed(1.0) default in the same way.
+        dpl_keys = {"alpha", "beta", "tau_gyr", "age_gyr", "age_frac", "log_total_mass"}
         # ``logzsol_scatter`` (lognormal MDF width, #506) is a delta-mode
         # metallicity param, so like ``logzsol``/``alpha_fe`` it round-trips in
         # the sfh group until a non-delta chemical-evolution mode is selected.

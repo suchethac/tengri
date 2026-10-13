@@ -96,6 +96,20 @@ from tengri.utils.cosmology import age_at_z0_host
 # override this with ``cosmology.age_at_z(z)`` at the source redshift.
 _AGE_UNIV_GYR = round(age_at_z0_host(), 3)
 
+#: Unrounded age of the universe at z=0 [Gyr]: the divisor of every ``*_frac``
+#: timing parameter (#2748). ``_AGE_UNIV_GYR`` is rounded, so it is not used.
+_AGE_UNIV_GYR_EXACT = float(age_at_z0_host())
+
+#: Free prior of ``sfh_dpl_age_frac``: the dpl onset prior ``Uniform(0.5,
+#: _AGE_UNIV_GYR)`` in units of age(z). The Gyr bounds map through
+#: ``gyr / age_at_z0_host()`` and are capped at 1, so a Gyr value of
+#: ``_AGE_UNIV_GYR`` maps to exactly 1.0.
+_DPL_AGE_FRAC_PRIOR = Uniform(
+    min(1.0, 0.5 / _AGE_UNIV_GYR_EXACT),
+    min(1.0, _AGE_UNIV_GYR / _AGE_UNIV_GYR_EXACT),
+    default=min(1.0, _AGE_UNIV_GYR / _AGE_UNIV_GYR_EXACT),
+)
+
 # ── Data structures ───────────────────────────────────────────────
 
 
@@ -687,6 +701,17 @@ _register(
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
                 z_capped_onset=True,
             ),
+            # Fraction of age(z) (#2748). Bounds are the Gyr prior divided by
+            # the unrounded age of the universe, capped at 1; a Gyr value of
+            # _AGE_UNIV_GYR maps to exactly 1. ``free_prior=None`` keeps
+            # ``all_params: FREE`` from freeing this beside the Gyr name; the
+            # fraction is freed by an explicit ``Uniform`` on it.
+            "sfh_dpl_age_frac": ParamDef(
+                "Cosmic time for SF as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+            ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
@@ -701,6 +726,7 @@ _register(
             "sfh_dpl_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dpl_age_gyr": ("age", 1e9, 0.0),
+            "sfh_dpl_age_frac": ("sfh_dpl_age_frac", 1.0, 0.0),
             "sfh_dpl_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
         composition_type="additive",
