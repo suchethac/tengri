@@ -2,7 +2,7 @@
 """Regression test for issue #2112: chains that move but never mix pass silently.
 
 A 4-chain fit whose chains each jitter by ~1e-3 of the posterior width around
-*different* centres, with zero divergences, returned normally. Every guard on
+*different* centers, with zero divergences, returned normally. Every guard on
 main was blind to it: the convergence check flags only an exact zero range,
 the dead-fit guard needs all-divergent draws or an exactly constant column,
 and ``refuse_dead_sampling`` needs a divergence fraction of 0.9.
@@ -51,10 +51,10 @@ def _posterior(samples):
 
 
 def _frozen_samples():
-    """Four chains, each jittering by 1e-3 around its own centre (unit-scale spread)."""
+    """Four chains, each jittering by 1e-3 around its own center (unit-scale spread)."""
     rng = np.random.default_rng(2112)
-    centres = np.array([-1.0, -0.3, 0.4, 1.2])
-    chains = [c + 1e-3 * rng.standard_normal(_N_PER_CHAIN) for c in centres]
+    centers = np.array([-1.0, -0.3, 0.4, 1.2])
+    chains = [c + 1e-3 * rng.standard_normal(_N_PER_CHAIN) for c in centers]
     return {"x": jnp.asarray(np.concatenate(chains))}
 
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Regression test for #2297: the shock Halpha fallback reads the declared default.
 
-The MAPPINGS shock branch of the nebular component normalised its Halpha
+The MAPPINGS shock branch of the nebular component normalized its Halpha
 luminosity with a fallback literal (``.get("shock_log_lhalpha", 40.0)``) while
 the parameter is declared with ``Fixed(41.0)`` in ``SHOCK_PARAMS``. A call
 that omits the parameter must therefore use the declared value, not a second

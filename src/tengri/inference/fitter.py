@@ -3814,6 +3814,17 @@ class Fitter:
         # and it runs after the payload has already been deserialized.
         with _Path(path).open("rb") as f:
             payload = pickle.load(f)  # nosec B301
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Adaptation cache at {path} is not a cache written by save_cache() "
+                f"(expected a dict payload, got {type(payload).__name__})."
+            )
+        missing = sorted({"spec_fingerprint", "adaptation"} - payload.keys())
+        if missing:
+            raise ValueError(
+                f"Adaptation cache at {path} is missing required key(s) {missing}; "
+                "it was not written by save_cache() of this version."
+            )
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
             raise ValueError(
                 f"Adaptation cache at {path} was written for a different model "

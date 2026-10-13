@@ -497,7 +497,7 @@ def _interpolate_and_normalize(
     # ``_load_grid_arrays``), so the integral is positive without an explicit
     # ``argsort``. Don't re-add a sort here.
     integral_lam = loglog_integral(wave_grid, template)
-    integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
+    integral_safe = jnp.maximum(jnp.abs(integral_lam), representable_denominator(1e-100))
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
