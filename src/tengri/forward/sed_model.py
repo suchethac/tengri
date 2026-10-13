@@ -2925,7 +2925,21 @@ class SEDModel:
         R-fallback). Shared by the single-object and composite paths (#610).
         """
         r_max = self._max_spectral_resolution(observation)
-        if r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
+            # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
+            # model takes the exact path and says so (#2958).
+            import warnings
+
+            warnings.warn(
+                "approx=SpectrumPrecomp() requested but the spectroscopy carries a banded "
+                "resolution matrix, which the per-pixel LUT cannot apply. The model falls "
+                "back to the exact path (no speed-up). Use approx=None to silence this.",
+                stacklevel=3,
+            )
+            self._approx = self._approx.replace(spectrum_precomp=False)
+            self._approx_config_spec = None
+        elif r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
             import warnings
 
             warnings.warn(
@@ -10805,9 +10819,27 @@ class SEDModel:
             # per-pixel continuum LUT; that is SpectrumPrecomp's documented
             # low-to-medium-R domain.)
             if spec_lut:
+                from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+                # The LUT applies the exact path's sigma_v and instrument stages on its
+                # pixel grid (#2958), so it resolves the same kinematic inputs.
+                spectroscopy = observation.spectroscopy
+                lut_sigma_lib_kms = resolve_sigma_lib_kms(
+                    spectroscopy.wave_obs,
+                    self._get_redshift(full),
+                    getattr(spectroscopy, "sigma_lib_kms", 0.0),
+                    self._sigma_lib_curve_for(ssp_data),
+                )
                 out: dict = {}
                 out.update(
-                    observation.predict_spectrum_via_precomp(state, full, observables_type=None)
+                    observation.predict_spectrum_via_precomp(
+                        state,
+                        full,
+                        observables_type=None,
+                        sigma_v_kms=self._get_sigma_v_kms(full),
+                        sigma_lib_kms=lut_sigma_lib_kms,
+                        lsf_scale=self._get_lsf_scale(full),
+                    )
                 )
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
