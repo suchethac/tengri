@@ -463,7 +463,7 @@ def clamp_ionspec_straight_through(i7):
     Returns
     -------
     jnp.ndarray, shape (7,)
-        The input moved onto the box ``_CLIP_RANGES`` (Li et al. 2025, Table 1).
+        The input moved onto the box ``_CLIP_RANGES`` (Cue's reference bounds; see the comment above ``_CLIP_RANGES`` for how they differ from Li et al. 2025, Table 1).
 
     Notes
     -----
