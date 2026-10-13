@@ -55,7 +55,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
@@ -67,6 +67,7 @@ from tengri.components.agn._lbol_reference import (
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
+from tengri.components._term_response import term_band_response
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
@@ -202,6 +203,164 @@ class AGNSEDComponent(TemplateThreading):
         names.
         """
         return list(_AGN_PARAMS)
+
+    #: Parameters that set a sub-block's amplitude and never its spectral shape. Freeing
+    #: one scales every term together, so the build-time band response stays valid (#1118).
+    AMPLITUDE_PARAMS: ClassVar[frozenset[str]] = frozenset({"agn_log_lbol", "agn_lum_ratio"})
+
+    #: Two distant luminosity draws for the rank-1 probe (#1107). They differ only in the
+    #: amplitude, so every sub-block must come back proportional between them.
+    EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
+        {"agn_log_lbol": 44.0},
+        {"agn_log_lbol": 47.0},
+    )
+
+    #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
+    _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
+
+    def term_response_refusal(self, free: set[str], fixed: Mapping[str, Any]) -> str | None:
+        """Why the rank-1 band response must not be built for this AGN, or ``None``.
+
+        Parameters
+        ----------
+        free : set of str
+            Free parameter names of the whole model.
+        fixed : mapping
+            Build-time fixed values, keyed by parameter name.
+
+        Returns
+        -------
+        str or None
+            A reason the dense per-call filter integral must stay, or ``None`` when every
+            sub-block is a fixed spectral shape times an amplitude.
+
+        Notes
+        -----
+        A monolithic AGN has no sub-blocks to decompose. An attenuation block reddens the
+        disc, and the galaxy dust screen on the AGN (checked by the caller) puts a runtime
+        transmission in front of it; both are declined rather than approximated. The
+        dust-coupled torus fraction (``agn_ir_frac > 0``) reads the absorbed power at run
+        time, which the term amplitudes do not carry.
+        """
+        if self.config.model != "composable":
+            return (
+                f"AGN model {self.config.model!r} is monolithic: it has no per-sub-block "
+                "decomposition to take a band response over"
+            )
+        shape = sorted(p for p in free if p.startswith("agn_") and p not in self.AMPLITUDE_PARAMS)
+        if shape:
+            return f"free agn parameters other than the luminosity and ratio: {shape}"
+        if self.config.agn_attenuation_block != "none":
+            return (
+                f"attenuation block {self.config.agn_attenuation_block!r} reddens the disc "
+                "and lines, a shape outside the band-response contract"
+            )
+        ir_frac = fixed.get("agn_ir_frac")
+        if ir_frac is not None and float(jnp.asarray(ir_frac)) != 0.0:
+            return (
+                "agn_ir_frac > 0 ties the torus amplitude to the dust-absorbed power at run "
+                "time, which the band response does not carry"
+            )
+        return None
+
+    def emission_terms(
+        self,
+        params: Mapping[str, Any],
+        wave: jnp.ndarray,
+        *,
+        agn_log_lbol: jnp.ndarray | None = None,
+        template_state: Mapping[str, Any] | None = None,
+    ) -> dict[str, jnp.ndarray]:
+        r"""The composable AGN sub-block SEDs, unsummed (#1118).
+
+        Each term is one sub-block of the composable runner: the disc, the torus, the
+        lines (NLR, BLR and FeII, masked as the runner masks them) and the polar dust
+        re-emission. Their sum is the AGN SED that :meth:`apply` integrates.
+
+        Parameters
+        ----------
+        params : mapping
+            Full parameter dict; reads the ``agn_*`` keys.
+        wave : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+        agn_log_lbol : array_like, scalar, optional
+            :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Defaults to ``params["agn_log_lbol"]``.
+        template_state : mapping, optional
+            Per-block template libraries, as :meth:`apply` threads them.
+
+        Returns
+        -------
+        dict of ndarray, each shape (n_wave,)
+            ``{"disc", "torus", "lines", "polar"}`` [erg/s/Hz], scaled by ``agn_lum_ratio``.
+
+        Notes
+        -----
+        **JIT/grad/vmap-safe.** Pure JAX; the block selectors are static config. A term is
+        rank-1 in its amplitude only when its shape is set by fixed parameters, which the
+        build-time probe verifies (see :meth:`term_response_refusal`).
+        """
+        from tengri.components.agn.blocks.runner import composable_agn_l_nu
+
+        lbol = params["agn_log_lbol"] if agn_log_lbol is None else agn_log_lbol
+        _, components = composable_agn_l_nu(
+            wave,
+            agn_log_lbol=lbol,
+            return_components=True,
+            template_state=template_state,
+            **self._composable_kwargs(params),
+        )
+        return {key: components[key] for key in self._TERM_KEYS}
+
+    def _composable_kwargs(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        """Keyword arguments the composable runner receives from :meth:`apply`.
+
+        Mirrors the ``agn_kwargs`` assembled in :meth:`apply` for the composable model, so
+        :meth:`emission_terms` and the dense path evaluate the same function.
+        """
+        kwargs = {
+            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
+            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
+            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
+            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
+            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
+            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
+            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
+            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+        }
+        for key, val in params.items():
+            if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:
+                kwargs[key] = jnp.asarray(val)
+        kwargs["agn_disc_block"] = self.config.agn_disc_block
+        kwargs["agn_nlr_block"] = self.config.agn_nlr_block
+        kwargs["agn_blr_block"] = self.config.agn_blr_block
+        kwargs["agn_feii_block"] = self.config.agn_feii_block
+        kwargs["agn_torus_block"] = self.config.agn_torus_block
+        kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
+        kwargs["agn_norm"] = self.config.agn_norm
+        kwargs["agn_polar_law"] = self.config.agn_polar_law
+        return kwargs
+
+    def _term_band_photometry(
+        self,
+        band: Mapping[str, Any],
+        params: Mapping[str, Any],
+        template_state: Mapping[str, Any] | None,
+    ) -> jnp.ndarray:
+        """Filter-integrated AGN :math:`L_\\nu` from the build-time term response.
+
+        The amplitude of each term is its value at the reference wavelength divided by the
+        shape there, so the photometry is ``sum_k A_k R_kf`` with no dense grid.
+        """
+        ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
+        amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
+        return amps @ band["R"]
 
     def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this AGN component publishes.
@@ -730,16 +889,22 @@ class AGNSEDComponent(TemplateThreading):
             # dimming. The new helper returns the bare filter-integrated
             # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
-            agn_phot_lnu_precomp = jnp.asarray(
-                [
-                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            band = term_band_response(template_data, "agn", params)
+            if band is not None:
+                # Rank-1 fast path (#1118): every sub-block is a fixed shape times its
+                # amplitude, so the filter integral is sum_k A_k R_kf with R_kf built once.
+                agn_phot_lnu_precomp = self._term_band_photometry(band, params, block_templates)
+            else:
+                agn_phot_lnu_precomp = jnp.asarray(
+                    [
+                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
             # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
             # z=0, so the filter sits in the REST frame and samples the rest SED at

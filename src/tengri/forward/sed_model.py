@@ -319,6 +319,46 @@ def _chain_implements_emission_terms(chain) -> list[str]:
 #: grid, ~7 orders tighter than any shape error worth exploiting.
 _RANK1_RTOL = 1e-9
 
+
+def _term_response_refusal(comp, chain, free, fixed) -> str | None:
+    """Why the term band response must stay dense for emitter ``comp``, or ``None``.
+
+    An emitter that declares ``term_response_refusal`` (the AGN) decides for itself
+    whether its shape is fixed; the galaxy dust screen on an AGN is checked here because
+    it lives on the dust component. Other emitters (radio, X-ray) are refused when any of
+    their own parameters is free, other than the amplitudes listed in ``AMPLITUDE_PARAMS``.
+
+    Parameters
+    ----------
+    comp : SEDComponent
+        The additive emitter.
+    chain : sequence
+        The component chain, for the dust-side ``agn_screen`` check.
+    free : set of str
+        Free parameter names of the model.
+    fixed : mapping
+        Build-time fixed values, keyed by parameter name.
+
+    Returns
+    -------
+    str or None
+        The reason, or ``None`` when the emitter passes the gate.
+    """
+    hook = getattr(comp, "term_response_refusal", None)
+    if hook is not None:
+        reason = hook(free, fixed)
+        if reason is None and any(
+            getattr(getattr(c, "config", None), "agn_screen", "none") != "none" for c in chain
+        ):
+            return "the galaxy dust screens the AGN (agn_screen): its photometry needs the dense SED"
+        return reason
+    amplitudes = getattr(comp, "AMPLITUDE_PARAMS", frozenset())
+    prefix = f"{comp.name}_"
+    free_emitter = sorted(p for p in free if p.startswith(prefix) and p not in amplitudes)
+    if free_emitter:
+        return f"free {comp.name} parameters: {free_emitter}"
+    return None
+
 # Re-export supporting types for backwards compatibility
 __all__ = [
     "MockData",
@@ -10930,10 +10970,10 @@ class SEDModel:
                 )
             slot[component.name] = bundle
 
-        # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
-        # they get a response *per term* rather than the single L_ir * R that dust's
-        # one-term SED admits. Same exactness, same build-time integral.
-        for emitter in ("xray", "radio"):
+        # The other additive emitters (X-ray, radio, and the composable AGN, #1118) are
+        # sums of rank-1 terms, so they get a response *per term* rather than the single
+        # L_ir * R that dust's one-term SED admits. Same exactness, same build-time integral.
+        for emitter in ("xray", "radio", "agn"):
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
@@ -11900,10 +11940,15 @@ class SEDModel:
         ft_pad = getattr(st, "phot_ft_padded", None)
 
         free = set(self.spec.free_params)
-        prefix = f"{name}_"
         # ``redshift`` is deliberately not part of this gate: the response is
         # tabulated over it. Only the emitter's own shape parameters gate.
-        gate_ok = not any(p.startswith(prefix) for p in free)
+        refusal = (
+            _term_response_refusal(comp, chain, free, self.spec.get_fixed_values())
+            if comp is not None
+            else "no such emitter in the component chain"
+        )
+        setattr(self, f"_{name}_term_response_decline", refusal)
+        gate_ok = refusal is None
 
         if (
             comp is not None
@@ -11915,6 +11960,13 @@ class SEDModel:
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
             response = self._build_term_response_table(comp, fw_pad, ft_pad)
+            if response is None:
+                setattr(
+                    self,
+                    f"_{name}_term_response_decline",
+                    "the rank-1 probe rejected a term: its spectral shape moves with its "
+                    "amplitude, or it is zero at some redshift node",
+                )
 
         setattr(self, cache_attr, response)
         return response
