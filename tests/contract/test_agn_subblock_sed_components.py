@@ -473,7 +473,11 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         assert np.isfinite(grad)
         if torus_block == "skirtor":
             # Re-pinned for #2606 (PCHIP lookup at cos_inc = 0.6), see the class docstring.
-            assert grad == pytest.approx(2.213808e33, rel=1e-5, abs=0.0), (
+            # Re-pinned on the merged tree (origin/main merged into this branch).
+            # Causes, both named: #2807 SKIRTOR resample-then-renormalize on its native grid (main)
+            # combined with #2808 node-exact PCHIP torus lookups (this branch). Old -> new:
+            # 2.213808e33 -> 2.214519871592393e33, +3.21e-4 relative.
+            assert grad == pytest.approx(2.214519871592393e33, rel=1e-5, abs=0.0), (
                 "the live E(B-V) gradient moved; the selection must only change the "
                 f"degenerate point, got {grad:.6e}"
             )

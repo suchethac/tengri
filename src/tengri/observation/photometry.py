@@ -24,6 +24,7 @@ from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
     FilterConvention,
     filter_weight as _filter_weight,
+    filter_weight_np,
     list_filter_conventions,
 )
 from tengri.utils.scale import representable_denominator
@@ -132,7 +133,7 @@ def _filter_integral_union(
     falls on a coarse region of the SED grid.
 
     Both node arrays must be ascending; padded filter rows must be made
-    ascending first (:func:`_ascending_padded_filter_wave`).
+    ascending first (:func:`_ascending_padded_filter`).
 
     The denominator floor is sized for the **derivative**, not the value
     (#1860). ``pad_filters_to_bucket`` pads the filter-count axis with all-zero
@@ -169,51 +170,158 @@ def _filter_integral_union(
         live Lyman-continuum mask ran (e.g. ``neb={'type': 'none'}``) and
         ``L_nu`` is smooth across the edge.
     """
+    # Quadrature confined to the filter's own support (#2817). The union grid is
+    # unchanged; both filter edges are nodes of it, so every trapezoid interval is
+    # wholly inside or wholly outside ``[filter_wave.min(), filter_wave.max()]``.
+    # Intervals outside are masked out, so the transmission's zero fill past the
+    # edge never ramps across a straddle segment (the ramp is what jumped as an SED
+    # node crossed the edge). Nothing is clamped, so the gradient is clean.
     grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
     if lyman_edge_obs_aa is None:
         L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
         trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
         weight = trans_on_grid * _filter_weight(grid, convention)
-        num = jnp.trapezoid(L_on_grid * weight, grid)
-        den = jnp.trapezoid(weight, grid)
+        x_q, L_q, w_q = grid, L_on_grid, weight
     else:
-        # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
-        # varies continuously across the bracket cell, so treating the whole
-        # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
-        # call on ``L_on_grid * weight`` would do -- silently averages that
-        # variation across the FULL bracket width instead of evaluating it AT
-        # the edge. The exact fix inserts the edge itself as a zero-width node
-        # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
-        # transmission/weight evaluation at the edge between the two copies) so
-        # an ORDINARY trapezoid integrates the step exactly, regardless of how
-        # many filter nodes subdivide the straddling panel.
+        # One Lyman edge (#2447): the edge is inserted as a zero-width node pair
+        # carrying the one-sided values, so an ordinary trapezoid integrates the
+        # step exactly (see edge_bracket_values).
         y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
         edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
         all_x = jnp.concatenate([grid, edge_pair])
         L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
         all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
         order = jnp.argsort(all_x, stable=True)
-        grid_e = all_x[order]
-        L_on_grid = all_y[order]
-        trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
-        weight = trans_on_grid * _filter_weight(grid_e, convention)
-        num = jnp.trapezoid(L_on_grid * weight, grid_e)
-        den = jnp.trapezoid(weight, grid_e)
+        x_q = all_x[order]
+        L_q = all_y[order]
+        trans_on_grid = jnp.interp(x_q, filter_wave, filter_trans, left=0.0, right=0.0)
+        w_q = trans_on_grid * _filter_weight(x_q, convention)
+    lo, hi = jnp.min(filter_wave), jnp.max(filter_wave)
+    num = _support_trapezoid(L_q * w_q, x_q, lo, hi)
+    den = _support_trapezoid(w_q, x_q, lo, hi)
 
     return num / jnp.maximum(den, representable_denominator(1e-30))
 
 
-def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
-    """Rewrite the zero-pad tail of a padded filter grid to ascend (#960).
+FILTER_COVERAGE_TOLERANCE: float = 1e-3
+"""Largest tolerated out-of-axis fraction of a band's weighted transmission (#2620)."""
+
+
+def filter_coverage_fraction(
+    filter_waves,
+    filter_trans,
+    wave_obs,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> np.ndarray:
+    r"""Fraction of each band's weighted transmission outside the model's observed axis.
+
+    For band :math:`k` with transmission :math:`T_k(\lambda)` and bandpass
+    weight :math:`w(\lambda)` of the given convention, the returned fraction is
+
+    .. math::
+
+        f_k = \frac{\int_{\lambda \notin [\lambda_{\min}, \lambda_{\max}]}
+              w(\lambda)\, T_k(\lambda)\, d\lambda}
+              {\int w(\lambda)\, T_k(\lambda)\, d\lambda}
+
+    where :math:`[\lambda_{\min}, \lambda_{\max}]` is the span of the model's
+    observed-frame wavelength axis. The model SED is zero-filled outside that
+    span, so :math:`f_k` is the share of the band's denominator that carries no
+    model flux. The integral is taken over the filter's own support, with the
+    axis edges inserted as quadrature nodes so each segment is wholly inside or
+    wholly outside the axis.
+
+    Parameters
+    ----------
+    filter_waves : sequence of array_like, each shape (n_wave_k,)
+        Observed-frame filter wavelengths per band [Angstrom]. Zero entries are
+        padding and are ignored.
+    filter_trans : sequence of array_like, each shape (n_wave_k,)
+        Dimensionless transmission per band, matching ``filter_waves``.
+    wave_obs : array_like, shape (n_wave,)
+        Model observed-frame wavelength axis at the redshift of interest [Angstrom].
+    convention : FilterConvention, optional
+        Bandpass weighting convention (default Bessell, ``w = 1/lambda``).
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        Out-of-axis fraction per band, in ``[0, 1]``. A band with no weight
+        returns 0.
+
+    Notes
+    -----
+    Pure NumPy, evaluated at build or fit setup, never inside a JIT. It does not
+    alter the photometry integral: a band over :data:`FILTER_COVERAGE_TOLERANCE`
+    is reported, not corrected.
+    """
+    axis = np.asarray(wave_obs, dtype=float)
+    lo, hi = float(np.min(axis)), float(np.max(axis))
+    fractions = np.zeros(len(filter_waves), dtype=float)
+    for k, (fw_raw, ft_raw) in enumerate(zip(filter_waves, filter_trans, strict=True)):
+        fw = np.asarray(fw_raw, dtype=float)
+        ft = np.asarray(ft_raw, dtype=float)
+        keep = fw > 0.0
+        order = np.argsort(fw[keep])
+        fw, ft = fw[keep][order], ft[keep][order]
+        if fw.size < 2:
+            continue
+        inner = np.unique(np.concatenate([fw, [lo, hi]]))
+        nodes = inner[(inner >= fw[0]) & (inner <= fw[-1])]
+        weighted = np.interp(nodes, fw, ft) * filter_weight_np(nodes, convention)
+        seg = 0.5 * (weighted[1:] + weighted[:-1]) * np.diff(nodes)
+        mid = 0.5 * (nodes[1:] + nodes[:-1])
+        beyond = (mid < lo) | (mid > hi)
+        total = float(seg.sum())
+        if total > 0.0:
+            fractions[k] = float(seg[beyond].sum()) / total
+    return fractions
+
+
+def _ascending_padded_filter(
+    fw_padded: jnp.ndarray, ft_padded: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Make a zero-padded filter row ascending with zero-width padding (#960, #2817).
 
     ``jnp.interp`` requires ascending nodes; zero-padding (:func:`pad_filters`)
-    breaks that. Pad entries (``wave == 0``) are moved above the last valid
-    wavelength at 1 Å spacing. Their transmission is zero, so they contribute
-    nothing to the integrals; all-zero (padded-out) filter rows become an
-    ascending dummy grid whose zero transmission yields flux 0.
+    breaks that. Each pad node (``wave == 0``) is clamped to the last tabulated
+    wavelength and given that node's transmission. The union-grid trapezoid
+    then sees only zero-width intervals at the table edge, which add exactly
+    nothing, so the padded row integrates the same as the unpadded table. (Pads
+    at ``max + 1 + i`` with transmission 0 added a 1 A ramp past the edge.)
+
+    A fully padded-out row (no tabulated node) becomes an ascending dummy grid
+    with zero transmission, so its flux is 0.
+
+    Returns
+    -------
+    fw_ascending : ndarray, shape (max_len,)
+        Ascending observed-frame filter wavelengths [Angstrom].
+    ft_ascending : ndarray, shape (max_len,)
+        Transmission matching ``fw_ascending`` (dimensionless).
     """
     pos = jnp.arange(fw_padded.shape[0], dtype=fw_padded.dtype)
-    return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
+    # Last tabulated node: waves ascend and pads are 0. A max over the matching
+    # nodes, not an argmax index, keeps this on plain reductions under vmap.
+    edge_wave = jnp.max(fw_padded)
+    edge_trans = jnp.max(jnp.where(fw_padded == edge_wave, ft_padded, 0.0))
+    has_edge = edge_wave > 0.0
+    valid = fw_padded > 0.0
+    fw_asc = jnp.where(valid, fw_padded, jnp.where(has_edge, edge_wave, 1.0 + pos))
+    ft_asc = jnp.where(valid, ft_padded, jnp.where(has_edge, edge_trans, 0.0))
+    return fw_asc, ft_asc
+
+
+def _support_trapezoid(y, x, lo, hi):
+    """Trapezoid of ``y`` over ``x``, counting only intervals inside ``[lo, hi]``.
+
+    An interval is inside when its midpoint is; the caller guarantees both edges
+    are nodes of ``x``, so an interval is never split by the support edge.
+    """
+    mid = 0.5 * (x[1:] + x[:-1])
+    inside = (mid >= lo) & (mid <= hi)
+    panels = 0.5 * (y[1:] + y[:-1]) * (x[1:] - x[:-1])
+    return jnp.sum(jnp.where(inside, panels, 0.0))
 
 
 @functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
@@ -355,7 +463,7 @@ def lnu_filter_integral_batch(
     at their edges (same assumption as :func:`_compute_flux_density_padded`).
 
     Each padded row is first rewritten to ascend
-    (:func:`_ascending_padded_filter_wave`): the union-grid quadrature
+    (:func:`_ascending_padded_filter`): the union-grid quadrature
     interpolates on the filter nodes, and ``jnp.interp`` on a raw zero-pad
     tail (…, 4130, 0, 0) is unsorted-input garbage that silently zeroed
     every shorter-table band for heterogeneous filter sets, same-length
@@ -363,8 +471,8 @@ def lnu_filter_integral_batch(
     """
 
     def _one(fw, ft):
-        fw_safe = _ascending_padded_filter_wave(fw)
-        return lnu_filter_integral(sed_rest, wave_rest, fw_safe, ft, redshift, convention)
+        fw_safe, ft_safe = _ascending_padded_filter(fw, ft)
+        return lnu_filter_integral(sed_rest, wave_rest, fw_safe, ft_safe, redshift, convention)
 
     return jax.vmap(_one)(fw_padded, ft_padded)
 
@@ -605,7 +713,7 @@ def _compute_flux_density_padded(
     Notes
     -----
     Zero-pad entries are rewritten to an ascending tail above the filter
-    (:func:`_ascending_padded_filter_wave`) so the union-grid interpolation
+    (:func:`_ascending_padded_filter`) so the union-grid interpolation
     (#960) stays valid; their transmission is zero, so they contribute
     nothing. Private helper for compute_flux_density_batch.
 
@@ -615,10 +723,10 @@ def _compute_flux_density_padded(
 
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
+    fw_safe, ft_safe = _ascending_padded_filter(filter_wave_padded, filter_trans_padded)
     lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     mean_lnu = _filter_integral_union(
-        sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyman_edge_obs_aa
+        sed_rest, wave_obs, fw_safe, ft_safe, convention, lyman_edge_obs_aa
     )
     # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
     # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is

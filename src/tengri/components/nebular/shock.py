@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -223,95 +224,98 @@ def _load_mappings_grids() -> dict | None:
     Returns the cached grid dict on subsequent calls.  Returns ``None`` and
     emits ``DeprecationWarning`` if the file is absent.
     """
-    from tengri._data_setup import find_data
+    # Built under ensure_compile_time_eval: this cache outlives any trace, so
+    # every jnp array it keeps must be concrete (same guard as fritz/skirtor).
+    with jax.ensure_compile_time_eval():
+        from tengri._data_setup import find_data
 
-    # Honors $TENGRI_DATA_DIR as well as the package root (#1431). The sentinel
-    # below wants a path to test, so fall back to a non-existent one.
-    h5_path = find_data("mappings_templates.h5") or Path("mappings_templates.h5")
+        # Honors $TENGRI_DATA_DIR as well as the package root (#1431). The sentinel
+        # below wants a path to test, so fall back to a non-existent one.
+        h5_path = find_data("mappings_templates.h5") or Path("mappings_templates.h5")
 
-    if not h5_path.exists():
-        warnings.warn(
-            "MAPPINGS grid file not found; using hardcoded Allen+2008 Table 5 "
-            "subset (solar, n=1 cm⁻³, 8 velocity points, 10 lines). "
-            "Run scripts/download_mappings_templates.py to enable the full grid.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return None
-
-    import h5py  # optional dependency: only needed when HDF5 exists
-
-    def _decode(arr: object) -> list[str]:
-        """Decode bytes array to string list, handling both bytes and str types."""
-        return [n.decode() if isinstance(n, bytes) else str(n) for n in arr]
-
-    grids: dict = {}
-    with h5py.File(h5_path, "r") as f:
-        if "mappings5" not in f:
-            return None
-        g = f["mappings5"]
-
-        def _load_ratios(arr: np.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-            """Load ratio array and compute population mask.
-
-            The MAPPINGS V grid is sparse: not all (abundance, density, B-field)
-            combinations have MAPPINGS V model outputs. Positions without models
-            are stored as NaN in the rectangular HDF5 array.
-
-            Returns: (zero-filled ratios, population mask)
-            where population mask is 1.0 for populated cells, 0.0 for unpopulated.
-            The mask is computed from raw data (before zero-filling) to distinguish
-            true zeros from unpopulated cells.
-            """
-            raw = np.asarray(arr[:], dtype=np.float32)
-            is_finite = np.isfinite(raw)
-            # Reduce over all dimensions except abundance, density, B to get population mask
-            # For 5D arrays (N_abund, N_n, N_v, N_B, N_lines): reduce over (2, 4)
-            # For 4D arrays (N_abund, N_n, N_v, N_B): reduce over (2,)
-            if raw.ndim == 5:
-                all_finite = np.all(is_finite, axis=(2, 4))  # (N_abund, N_n, N_B)
-            elif raw.ndim == 4:
-                all_finite = np.all(is_finite, axis=2)  # (N_abund, N_n, N_B)
-            else:
-                raise ValueError(f"Unexpected ratio array shape: {raw.shape}")
-            population_mask = np.where(all_finite, 1.0, 0.0).astype(np.float32)
-
-            # Zero-fill the ratios
-            filled = np.where(np.isnan(raw), 0.0, raw)
-            return (
-                jnp.array(filled, dtype=jnp.float32),
-                jnp.array(population_mask, dtype=jnp.float32),
+        if not h5_path.exists():
+            warnings.warn(
+                "MAPPINGS grid file not found; using hardcoded Allen+2008 Table 5 "
+                "subset (solar, n=1 cm⁻³, 8 velocity points, 10 lines). "
+                "Run scripts/download_mappings_templates.py to enable the full grid.",
+                DeprecationWarning,
+                stacklevel=3,
             )
+            return None
 
-        shock_ratios, shock_pop_mask = _load_ratios(g["shock_ratios"])
-        precursor_ratios, precursor_pop_mask = _load_ratios(g["precursor_ratios"])
-        combined_ratios, combined_pop_mask = _load_ratios(g["combined_ratios"])
-        hbeta_ratios, hbeta_pop_mask = _load_ratios(g["hbeta_log_lum_erg_s"])
+        import h5py  # optional dependency: only needed when HDF5 exists
 
-        grids["mappings5"] = {
-            "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
-            "b_axis": jnp.array(g["b_field_uG"][:], dtype=jnp.float32),
-            "log_density_cm3": jnp.array(g["log_density_cm3"][:], dtype=jnp.float32),
-            "abundance_names": _decode(g["abundance_names"][:]),
-            "line_names": _decode(g["line_names"][:]),
-            # 3MdB/MAPPINGS V line labels are PyNeb-style air labels (6563,
-            # 5007, ...); ingested once here, so every consumer sees vacuum.
-            "line_wavelengths_aa": jnp.array(
-                catalog_air_to_vacuum(g["line_wavelengths_aa"][:]), dtype=jnp.float32
-            ),
-            # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
-            "shock_ratios": shock_ratios,
-            "precursor_ratios": precursor_ratios,
-            "combined_ratios": combined_ratios,
-            "hbeta_log_lum_erg_s": hbeta_ratios,
-            # Population masks: shape (N_abund, N_n, N_B), 1.0 for populated, 0.0 for unpopulated
-            "shock_pop_mask": shock_pop_mask,
-            "precursor_pop_mask": precursor_pop_mask,
-            "combined_pop_mask": combined_pop_mask,
-            "hbeta_pop_mask": hbeta_pop_mask,
-        }
+        def _decode(arr: object) -> list[str]:
+            """Decode bytes array to string list, handling both bytes and str types."""
+            return [n.decode() if isinstance(n, bytes) else str(n) for n in arr]
 
-    return grids
+        grids: dict = {}
+        with h5py.File(h5_path, "r") as f:
+            if "mappings5" not in f:
+                return None
+            g = f["mappings5"]
+
+            def _load_ratios(arr: np.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+                """Load ratio array and compute population mask.
+
+                The MAPPINGS V grid is sparse: not all (abundance, density, B-field)
+                combinations have MAPPINGS V model outputs. Positions without models
+                are stored as NaN in the rectangular HDF5 array.
+
+                Returns: (zero-filled ratios, population mask)
+                where population mask is 1.0 for populated cells, 0.0 for unpopulated.
+                The mask is computed from raw data (before zero-filling) to distinguish
+                true zeros from unpopulated cells.
+                """
+                raw = np.asarray(arr[:], dtype=np.float32)
+                is_finite = np.isfinite(raw)
+                # Reduce over all dimensions except abundance, density, B to get population mask
+                # For 5D arrays (N_abund, N_n, N_v, N_B, N_lines): reduce over (2, 4)
+                # For 4D arrays (N_abund, N_n, N_v, N_B): reduce over (2,)
+                if raw.ndim == 5:
+                    all_finite = np.all(is_finite, axis=(2, 4))  # (N_abund, N_n, N_B)
+                elif raw.ndim == 4:
+                    all_finite = np.all(is_finite, axis=2)  # (N_abund, N_n, N_B)
+                else:
+                    raise ValueError(f"Unexpected ratio array shape: {raw.shape}")
+                population_mask = np.where(all_finite, 1.0, 0.0).astype(np.float32)
+
+                # Zero-fill the ratios
+                filled = np.where(np.isnan(raw), 0.0, raw)
+                return (
+                    jnp.array(filled, dtype=jnp.float32),
+                    jnp.array(population_mask, dtype=jnp.float32),
+                )
+
+            shock_ratios, shock_pop_mask = _load_ratios(g["shock_ratios"])
+            precursor_ratios, precursor_pop_mask = _load_ratios(g["precursor_ratios"])
+            combined_ratios, combined_pop_mask = _load_ratios(g["combined_ratios"])
+            hbeta_ratios, hbeta_pop_mask = _load_ratios(g["hbeta_log_lum_erg_s"])
+
+            grids["mappings5"] = {
+                "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
+                "b_axis": jnp.array(g["b_field_uG"][:], dtype=jnp.float32),
+                "log_density_cm3": jnp.array(g["log_density_cm3"][:], dtype=jnp.float32),
+                "abundance_names": _decode(g["abundance_names"][:]),
+                "line_names": _decode(g["line_names"][:]),
+                # 3MdB/MAPPINGS V line labels are PyNeb-style air labels (6563,
+                # 5007, ...); ingested once here, so every consumer sees vacuum.
+                "line_wavelengths_aa": jnp.array(
+                    catalog_air_to_vacuum(g["line_wavelengths_aa"][:]), dtype=jnp.float32
+                ),
+                # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
+                "shock_ratios": shock_ratios,
+                "precursor_ratios": precursor_ratios,
+                "combined_ratios": combined_ratios,
+                "hbeta_log_lum_erg_s": hbeta_ratios,
+                # Population masks: shape (N_abund, N_n, N_B), 1.0 populated, 0.0 not
+                "shock_pop_mask": shock_pop_mask,
+                "precursor_pop_mask": precursor_pop_mask,
+                "combined_pop_mask": combined_pop_mask,
+                "hbeta_pop_mask": hbeta_pop_mask,
+            }
+
+        return grids
 
 
 class ShockTemplateGrid(NamedTuple):
@@ -690,7 +694,9 @@ def _shock_line_arrays(
 
     # Halpha key in PyNeb format
     ha_key = "HA_6563A"
-    r_ha = ratios.get(ha_key, jnp.array(3.0))
+    if ha_key not in ratios:
+        raise KeyError(f"shock line ratios have no {ha_key!r}; available keys: {sorted(ratios)}")
+    r_ha = ratios[ha_key]
     # Guard against zero Hα (e.g. query in unmodeled sparse-grid region): when r_ha=0,
     # all other ratios are also 0, so dividing by 1.0 still gives zero luminosities.
     r_ha_safe = jnp.where(r_ha > 0.0, r_ha, jnp.ones_like(r_ha))

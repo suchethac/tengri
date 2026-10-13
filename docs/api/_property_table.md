@@ -54,7 +54,7 @@
 | `oiii_5007` | Lsun | lines | nebular | OIII 5007 line luminosity |
 | `q_ir` | — | radio | radio | Radio-infrared correlation parameter |
 | `r23` | dex | lines | nebular | R23 metallicity indicator: log10(([OII]+[OIII]4959+5007)/Hβ) |
-| `rest_uv_color` | AB mag | sed | stellar | Rest-frame UV color (FUV–NUV) |
+| `rest_uv_color` | AB mag | sed | stellar | Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å |
 | `sfr_100myr` | Msun/yr | sfh | stellar | Star formation rate averaged over past 100 Myr |
 | `sfr_10myr` | Msun/yr | sfh | stellar | Star formation rate averaged over past 10 Myr |
 | `sii_6717` | Lsun | lines | nebular | SII 6717 line luminosity |

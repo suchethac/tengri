@@ -97,6 +97,7 @@ _OPTIONAL_INPUT_VALUES = {
     "L_2500_30deg": jnp.array(1e30),  # erg/s/Hz
     "sfr": jnp.array(1.0),  # Msun/yr
     "age_weights": jnp.full(_N_AGE, 1e8),  # Msun per SSP age bin
+    "age_weights_surviving": jnp.full(_N_AGE, 1e8),  # surviving Msun per SSP age bin
     "ssp_ages_yr": jnp.logspace(6.0, 10.0, _N_AGE),  # yr
     "log_metallicity_history": jnp.full(_N_AGE, -1.848),  # log10(Z) absolute
 }

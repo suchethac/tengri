@@ -26,6 +26,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import warnings
+from collections.abc import Iterator
 from typing import NamedTuple
 
 from tengri.protocols.component import ParamDeclaration
@@ -205,10 +206,67 @@ def _register_model_registry_params(
             )
 
 
+def _declared_tuples(mod) -> Iterator[tuple[str, ParamDeclaration]]:
+    """Yield ``(attr_name, decl)`` for every ``ParamDeclaration`` tuple exported by ``mod``."""
+    for attr_name in dir(mod):
+        if attr_name.startswith("_"):
+            continue
+        attr = getattr(mod, attr_name)
+        if not isinstance(attr, tuple):
+            continue
+        if not all(isinstance(x, ParamDeclaration) for x in attr):
+            continue
+        for decl in attr:
+            yield attr_name, decl
+
+
+_CONFLICT_FIELDS: tuple[str, ...] = ("prior", "free_prior")
+
+
+def _add_declaration(
+    out: dict[str, ParameterRecord], decl: ParamDeclaration, *, owner: str, group: str
+) -> None:
+    """Record ``decl`` under its name. First-wins; a conflicting later duplicate warns.
+
+    A later declaration whose ``prior`` or ``free_prior`` differs from the kept one
+    is ignored, as ADR-0008 requires, but the disagreement is reported as a
+    ``RuntimeWarning`` naming both owners: two declarations of one name that
+    disagree mean one of them is dead, and silence would hide which.
+    """
+    kept = out.get(decl.name)
+    if kept is None:
+        out[decl.name] = ParameterRecord(
+            name=decl.name,
+            prior=decl.prior,
+            description=decl.description,
+            units=decl.units,
+            owner=owner,
+            group=group,
+            free_prior=decl.free_prior,
+        )
+        return
+    differing = [
+        field
+        for field in _CONFLICT_FIELDS
+        if repr(getattr(kept, field)) != repr(getattr(decl, field))
+    ]
+    if not differing:
+        return
+    warnings.warn(
+        f"tengri: parameter {decl.name!r} is declared twice with a conflicting "
+        f"{' and '.join(differing)}: {kept.owner}.{kept.group} and {owner}.{group}. "
+        f"The first declaration ({kept.owner}.{kept.group}) is kept; the other is "
+        "ignored. Reconcile the two declarations.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _walk_param_modules() -> dict[str, ParameterRecord]:
     """Walk every ``_params.py`` under components, observation, and parameters._shared.
 
-    First-wins on name collisions (deterministic via ``pkgutil.walk_packages`` order).
+    First-wins on name collisions (deterministic via ``pkgutil.walk_packages`` order),
+    with a ``RuntimeWarning`` when a later duplicate conflicts (see :func:`_add_declaration`).
     """
     import tengri.components as components_pkg
 
@@ -237,26 +295,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                 stacklevel=2,
             )
             continue
-        for attr_name in dir(mod):
-            if attr_name.startswith("_"):
-                continue
-            attr = getattr(mod, attr_name)
-            if not isinstance(attr, tuple):
-                continue
-            if not all(isinstance(x, ParamDeclaration) for x in attr):
-                continue
-            for decl in attr:
-                if decl.name in out:
-                    continue  # first-wins; matches legacy aggregator
-                out[decl.name] = ParameterRecord(
-                    name=decl.name,
-                    prior=decl.prior,
-                    description=decl.description,
-                    units=decl.units,
-                    owner=module_info.name,
-                    group=attr_name,
-                    free_prior=decl.free_prior,
-                )
+        for attr_name, decl in _declared_tuples(mod):
+            _add_declaration(out, decl, owner=module_info.name, group=attr_name)
 
     # Observation _params.py module (noise model parameters).
     # As of Step E, noise parameters are owned by the observation module,
@@ -266,52 +306,16 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # incomplete registry. Let it raise.
     from tengri.observation import _params as obs_params_module
 
-    for attr_name in dir(obs_params_module):
-        if attr_name.startswith("_"):
-            continue
-        attr = getattr(obs_params_module, attr_name)
-        if not isinstance(attr, tuple):
-            continue
-        if not all(isinstance(x, ParamDeclaration) for x in attr):
-            continue
-        for decl in attr:
-            if decl.name in out:
-                continue  # first-wins; matches legacy aggregator
-            out[decl.name] = ParameterRecord(
-                name=decl.name,
-                prior=decl.prior,
-                description=decl.description,
-                units=decl.units,
-                owner="tengri.observation._params",
-                group=attr_name,
-                free_prior=decl.free_prior,
-            )
+    for attr_name, decl in _declared_tuples(obs_params_module):
+        _add_declaration(out, decl, owner="tengri.observation._params", group=attr_name)
 
     # Shared parameters: redshift, met_logzsol, sigma_v_kms.
     # These are declared cleanly in tengri.parameters._shared.PARAMS
     # as of ADR-0005 follow-up #1. Import and walk like a component.
     from tengri.parameters import _shared as shared_module
 
-    for attr_name in dir(shared_module):
-        if attr_name.startswith("_"):
-            continue
-        attr = getattr(shared_module, attr_name)
-        if not isinstance(attr, tuple):
-            continue
-        if not all(isinstance(x, ParamDeclaration) for x in attr):
-            continue
-        for decl in attr:
-            if decl.name in out:
-                continue  # first-wins; matches legacy aggregator
-            out[decl.name] = ParameterRecord(
-                name=decl.name,
-                prior=decl.prior,
-                description=decl.description,
-                units=decl.units,
-                owner="tengri.parameters._shared",
-                group=attr_name,
-                free_prior=decl.free_prior,
-            )
+    for attr_name, decl in _declared_tuples(shared_module):
+        _add_declaration(out, decl, owner="tengri.parameters._shared", group=attr_name)
 
     # Star-formation-history and metallicity parameters.
     #
@@ -341,25 +345,6 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
         owner="tengri.components.stellar.sfh.met_registry",
         label="MET_REGISTRY",
     )
-
-    # Legacy ``_NON_SFH_PARAMS`` bucket: provides ``noise_frac_cal`` and
-    # ``noise_dof`` which aren't yet declared via the ParamDeclaration
-    # path. 4-tuple shape ``(description, bound_check, bound_error, prior)``.
-    from tengri.parameters._builders import _NON_SFH_PARAMS
-
-    if _NON_SFH_PARAMS:
-        for name, payload in _NON_SFH_PARAMS.items():
-            if name in out:
-                continue
-            description, _bcheck, _berr, prior = payload
-            out[name] = ParameterRecord(
-                name=name,
-                prior=prior,
-                description=description,
-                units="",
-                owner="tengri.parameters._builders",
-                group="_NON_SFH_PARAMS",
-            )
 
     return out
 

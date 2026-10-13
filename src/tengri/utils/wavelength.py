@@ -32,6 +32,12 @@ RADIO_WING_START: float = 1e8
 #: 2.03e9 - 2.25e9 A) spans log10(1.1) = 0.041 decades, so 100 per decade puts ~4 nodes in it
 #: wherever it lands; the former 20 per decade left one.
 RADIO_WING_PTS_PER_DECADE: int = 100
+#: Fractional offset of the node placed just above the SSP grid edge [A/A]. The stellar SED is
+#: finite at the edge node and zero above it; linear interpolation between the two would ramp
+#: it down across the whole first master-grid cell, so the zero node sits this close above the
+#: edge instead and the step is exact to this fraction of the edge wavelength (#2578). 1e-6 is
+#: 100 A at 1 cm, some twelve float32 ulps there, so the two nodes stay distinct in float32.
+SSP_EDGE_STEP_REL: float = 1e-6
 # 1 m (300 MHz): declared reach of a tabulated nebular continuum's free-free tail (#2346)
 NEBULAR_CONTINUUM_WAVE_MAX: float = 1e10
 

@@ -251,6 +251,13 @@ def _ssp_lgmet(fwd):
     return None if ssp is None else getattr(ssp, "ssp_lgmet", None)
 
 
+def _ssp_top_z(fwd):
+    """The SSP grid's top-metallicity validity record, or None."""
+    stellar = _stellar_component(fwd)
+    ssp = None if stellar is None else getattr(stellar, "ssp_data", None)
+    return None if ssp is None else getattr(ssp, "top_z", None)
+
+
 class Catalog:
     """Astronomer-facing catalog inference interface.
 
@@ -867,6 +874,7 @@ class Catalog:
             met_unit=met_unit,
             on_out_of_grid=on_out_of_grid,
             ssp_lgmet=_ssp_lgmet(fwd),
+            top_z=_ssp_top_z(fwd),
         )
 
         columns = {"sfh_t_gyr": hist.t_gyr, "sfh_sfr": hist.sfr}

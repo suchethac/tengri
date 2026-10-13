@@ -28,10 +28,9 @@ The grid kind decides which resolution path the forward model takes: a
 log-uniform grid admits a single-FFT constant-R convolution, a nonuniform one
 does not, and a banded operator is applied directly. The kind has to be
 decided from concrete NumPy arrays here, at batch construction. The existing
-``_is_log_uniform`` (``tengri.observation.spectrum``) returns ``True`` for any
-tracer because it has no values to inspect, so a grid passed through
-``jit`` as an argument would silently take the log-uniform path even when it
-is linear in wavelength.
+``_is_log_uniform`` (``tengri.observation.spectrum``) returns ``False`` for any
+tracer because it has no values to inspect, so a grid passed through ``jit``
+as an argument takes the general path, which is correct on a linear grid (#2847).
 
 JIT compatibility
 -----------------
@@ -700,6 +699,8 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
         z = float(g.z)
         if not np.isfinite(z):
             raise ValueError("redshift must be finite")
+        if not z >= 0.0:
+            raise ValueError(f"redshift must be >= 0, got {z}")
 
         n_max = n if quantum is None else -(-n // quantum) * quantum
         offsets, r_data, r_pp = _prepare_resolution(g, n, n_max)

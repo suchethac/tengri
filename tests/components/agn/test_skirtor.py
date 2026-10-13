@@ -147,7 +147,15 @@ class TestSKIRTORAnalytic:
         #   idx 166 (0.4606 um): 5.856270e24 -> 6.322513e24   +8.0 %
         #   idx 333 (21.71 um):  3.536528e29 -> 3.562878e29   +0.75 %
         #   idx 499 (1000 um):   3.634076e24 -> 3.407505e24   -6.2 %
-        golden_values = [0.0, 6.322512908e24, 3.562878389e29, 3.407504540e24]
+        # Re-captured on the merged tree (origin/main merged into this branch).
+        # Both causes named: #2807 SKIRTOR resample-then-renormalize on its native grid (main)
+        # combined with #2808 node-exact PCHIP torus lookups (this branch). Neither parent's
+        # golden carries the other's effect. Old -> new, relative, at all three non-zero
+        # indices, which move by the same factor:
+        #   idx 166 (0.4606 um): 6.322513e24 -> 6.346563e24   +3.80e-3
+        #   idx 333 (21.71 um):  3.562878e29 -> 3.576431e29   +3.80e-3
+        #   idx 499 (1000 um):   3.407505e24 -> 3.420466e24   +3.80e-3
+        golden_values = [0.0, 6.346562805452703e24, 3.5764310473880084e29, 3.4204661799764155e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),

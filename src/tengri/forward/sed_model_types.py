@@ -319,7 +319,6 @@ class SEDModelState:
     forward_dtype: object  # jnp.dtype
     met_interp: str
     met_mode: str
-    z_interp: str
     lgmet_scatter: float
     sfh_fn: object
     sfh_internal_names: object  # set[str]

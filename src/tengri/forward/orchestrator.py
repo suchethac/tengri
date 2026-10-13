@@ -200,6 +200,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lnu_age": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
+    "age_weights_surviving": "Msun",
     "log_stellar_mass_scale": "dex",
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",

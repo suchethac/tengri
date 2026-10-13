@@ -205,6 +205,7 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
 
     max_rhat = max_rhat_param = None
     rhat_failed = False
+    nonfinite_rhat: list = []
     try:
         rh = posterior.rhat()
     except Exception:
@@ -212,11 +213,13 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
         # That is a frozen-chain signature, not a missing measurement.
         rhat_failed = True
     else:
+        nonfinite_rhat = sorted((k for k, v in rh.items() if not np.isfinite(v)), key=str)
         finite = [(float(v), k) for k, v in rh.items() if np.isfinite(v)]
         if finite:
             max_rhat, max_rhat_param = max(finite)
 
     min_ess = min_ess_param = None
+    nonfinite_ess: list = []
     if columns and n_total >= 4:
         from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 
@@ -226,7 +229,9 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
             ess = {}
         for name, rec in ess.items():
             val = rec["ess"] if isinstance(rec, dict) else rec
-            if np.isfinite(val) and (min_ess is None or float(val) < min_ess):
+            if not np.isfinite(val):
+                nonfinite_ess.append(name)
+            elif min_ess is None or float(val) < min_ess:
                 min_ess, min_ess_param = float(val), name
 
     frozen_reasons = []
@@ -251,11 +256,20 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
             reason="; ".join(frozen_reasons),
         )
 
+    # A non-finite diagnostic is a missing measurement for that parameter, so it
+    # cannot be dropped from the maximum and let the others vouch for the galaxy.
+    unconverged_reasons = []
+    if nonfinite_rhat:
+        unconverged_reasons.append(f"R-hat non-finite for {', '.join(map(str, nonfinite_rhat))}")
+    if nonfinite_ess:
+        unconverged_reasons.append(f"ESS non-finite for {', '.join(map(str, nonfinite_ess))}")
+
     converged = (
         max_rhat is not None
         and max_rhat < CATALOG_MAX_RHAT
         and (div_rate is None or div_rate == 0.0)
         and (ess_floor is None or (min_ess is not None and min_ess >= ess_floor))
+        and not unconverged_reasons
     )
     return GalaxyHealth(
         index=index,
@@ -267,6 +281,7 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
         divergence_rate=div_rate,
         distinct_frac=distinct,
         n_draws=n_total,
+        reason="; ".join(unconverged_reasons) or None,
     )
 
 

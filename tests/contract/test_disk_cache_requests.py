@@ -246,8 +246,8 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_8():
-    """_ZTABLE_CACHE_VERSION is 8.
+def test_ztable_version_is_9():
+    """_ZTABLE_CACHE_VERSION is 9.
 
     4->5 for L3's one-Lyman-edge fix: the LyC table and (when lyc_gate) the
     sub-band tensors moved off the bare 912 Å literal onto LYMAN_LIMIT_AA and
@@ -255,31 +255,35 @@ def test_ztable_version_is_8():
     nodes at each band's Lyman-limit crossings. 6->7 for the
     ``ssp_phot_nolyc_table`` payload, the above-edge half of the Lyman-limit
     split. 7->8 for #2769: sub-band integrals read off node weights, without
-    the running-total cancellation. In every case no ZTableRequest field
-    changes, so only the version separates a warm cache from the new content.
+    the running-total cancellation. 8->9 for #2769's transposed-layout fold,
+    which reorders the sums (up to 3.7e-14 scaled on the moment table). In every
+    case no ZTableRequest field changes, so only the version separates a warm
+    cache from the new content.
     """
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 8
+    assert _ZTABLE_CACHE_VERSION == 9
 
 
 def test_subband_version_is_3():
-    """_CACHE_VERSION in _subband_cache is 3."""
+    """_CACHE_VERSION in _subband_cache is 4."""
     from tengri.components.igm._subband_cache import _CACHE_VERSION
 
-    assert _CACHE_VERSION == 3
+    assert _CACHE_VERSION == 4
 
 
-def test_ionspec_version_is_3():
-    """_IONSPEC_CACHE_VERSION is 3.
+def test_ionspec_version_is_4():
+    """_IONSPEC_CACHE_VERSION is 4.
 
-    Version 3 (#2849): ``gas_logqion`` integrates in the log domain, and the
-    version is part of the cache key, so a table written under version 2 is not
-    read back. Version 2 added the #537 partial-bin correction.
+    Version 4: old bins carry a Q_H and a shape, and the age axis and cutoff are in the
+    key, so the young-only tables of version 3 are never read back. Version 3 (#2849):
+    ``gas_logqion`` integrates in the log domain, and the version is part of the cache
+    key, so a table written under version 2 is not read back. Version 2 added the #537
+    partial-bin correction.
     """
     from tengri.components.nebular.ionizing_spectrum import _IONSPEC_CACHE_VERSION
 
-    assert _IONSPEC_CACHE_VERSION == 3
+    assert _IONSPEC_CACHE_VERSION == 4
 
 
 def test_ztable_request_has_cosmology_field():
