@@ -5078,24 +5078,15 @@ class SEDModel:
         # forward cannot be evaluated at build, raise -- do not fall back".
         from tengri.forward.result import SEDResult
 
-        # One jitted program, not an eager walk of the forward model (#2914):
-        # eagerly, every primitive compiled on its own (~1100 micro-compiles,
-        # ~32 s of a cold build, almost all below the persistent cache's floor).
-        # ``params_lo`` and ``params_hi`` share a structure, so the second call
-        # reuses the first compile. Warm the chain ``predict_state`` runs OUTSIDE
-        # the trace first, as ``predict_observables_jit`` does: each component's
-        # ``precompute()`` runs numpy-level build routines that cannot be traced.
-        self._full_state_chain()
-
-        @jax.jit
-        def _rest_sed(probe_params):
-            state = self.predict_state(probe_params, fixed_values=fixed_values)
-            return state.wave, state.sed_intrinsic
-
-        wave_lo, rest_lo = _rest_sed(params_lo)
-        wave_hi, rest_hi = _rest_sed(params_hi)
-        sed_lo = SEDResult(wavelength=wave_lo, sed=rest_lo)
-        sed_hi = SEDResult(wavelength=wave_hi, sed=rest_hi)
+        # Eager on purpose (#2914): with the probe parameters traced under
+        # ``jax.jit``, build-time paths that need concrete values (the stellar
+        # ``_cic_parcels`` boundary split, #2760's below-library index) fail.
+        # The cost is bounded instead by ``with_approx`` clones inheriting the
+        # verdict (``_AGN_LBOL_PROBE_PASSED``).
+        state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
+        state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
+        sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
+        sed_hi = SEDResult(wavelength=state_hi.wave, sed=state_hi.sed_intrinsic)
 
         # F1: Check for non-finite values (NaN, Inf). If either SED contains non-finite
         # values, the measurement cannot be made and the model must be fixed.
