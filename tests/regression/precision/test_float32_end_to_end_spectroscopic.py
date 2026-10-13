@@ -9,6 +9,11 @@ prints one ``RESULT`` JSON line recording, after each stage, the x64 flag, the
 dtypes, and whether the likelihood, its gradient and the posterior draws are
 finite. A failure therefore names the stage that flipped.
 
+NUTS runs 5 warmup + 5 sampling iterations with ``max_num_doublings=4``. The
+assertions are about dtypes and finiteness, not posterior quality, and with an
+untuned step size every iteration saturates the tree, so the default cap of 10
+spent about 300 s of a 310 s case on gradient evaluations (#2914).
+
 Every on-disk cache tengri uses is redirected into a per-test directory, so the
 result does not depend on what an earlier process left on the machine. The
 ionspec table cache key includes the computation dtype (#2849), so a float32
@@ -51,6 +56,13 @@ from tengri.inference.loss_functions import build_loglikelihood_fn
 from tengri.observation.banded import gaussian_resolution_bands
 
 stages = {}
+
+# Five warmup iterations leave the step size untuned, so every iteration runs to
+# the tree-depth cap. The default cap (10) is 1023 gradient evaluations per
+# iteration, about 10k in all, which was ~95% of the wall time (#2914). The test
+# checks dtypes, not posterior quality, so a cap of 4 (15 evaluations per
+# iteration) exercises the same compiled NUTS kernel and dtype path.
+NUTS_MAX_DOUBLINGS = 4
 
 
 def record(name, **dtypes):
@@ -162,7 +174,11 @@ try:
     record("jaxpr", f64_in_jaxpr=has_f64(jaxpr), f64_in_grad_jaxpr=has_f64(grad_jaxpr))
 
     posterior = fitter.run(
-        "mcmc_nuts", n_warmup=5, n_samples=5, key=jax.random.PRNGKey(1)
+        "mcmc_nuts",
+        n_warmup=5,
+        n_samples=5,
+        max_num_doublings=NUTS_MAX_DOUBLINGS,
+        key=jax.random.PRNGKey(1),
     )
     draws = dict(posterior.samples or {})
     record(
