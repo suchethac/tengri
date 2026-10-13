@@ -136,12 +136,33 @@ MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     "bc03_pdva_stelib_chabrier": _m("bc03pdva94", "chabrier"),
     # ProGeny (MIST, C3K, Chabrier): ProGeny's own SMstar, repackaged unaltered.
     "pgny_mist_c3k_chabrier": _m("pgny_mist", "chabrier"),
-    # BPASS: PENDING. The BPASS starmass column is living stars only (manual v2.2),
-    # and its remnant column is flagged untested by the BPASS team; no single-star
-    # remnant recipe applies to a binary population. Not built; see PROVENANCE.md.
+    # BPASS: PENDING (origin in GRID_ORIGIN, reason in PENDING_REASON). The starmass
+    # column is living stars only, its remnant column is flagged untested, and the
+    # mass-balance route from the yields files does not close; see PROVENANCE.md.
     "bpss_stars_c3k_a_chabrier": _p("bpss", "chabrier"),
     # Test placeholder grid (``synthetic`` attribute): hand-made table in the file.
     "fsps_prsc_bc03_chabrier": MassRemainingEntry("synthetic", "chabrier", EMBEDDED),
+}
+
+
+#: Where a registered grid's isochrones, IMF and populations come from, when the file
+#: name does not say. Keyed like ``MASS_REMAINING_REGISTRY``.
+GRID_ORIGIN: dict[str, str] = {
+    "bpss_stars_c3k_a_chabrier": (
+        "ProSpect BPASS_St_Ch300.fits (Robotham et al. 2020), a repackaging of BPASS v2.2.1 "
+        "binary populations, IMF imf_chab300 (Chabrier, 0.1-300 Msun), 13 Z, 51 ages"
+    ),
+}
+
+#: Why a PENDING grid has no table, in the words of the refusal. Keyed by the registry
+#: ``isoc`` code.
+PENDING_REASON: dict[str, str] = {
+    "bpss": (
+        "BPASS's starmass file holds living stars only (its remnant column is flagged "
+        "untested by the BPASS team), and the mass balance 1e6 - E(t) from its yields files "
+        "does not close against starmass to the 1e-3 needed (see scripts/"
+        "check_bpass_mass_balance.py and src/tengri/data/ssp_mass_remaining/PROVENANCE.md)"
+    ),
 }
 
 
@@ -432,8 +453,14 @@ def resolve_mass_remaining(
         if has_alpha_axis
         else "has no surviving-mass table shipped with this package"
     )
+    origin = GRID_ORIGIN.get(canonical_grid_name(stem))
+    reason = PENDING_REASON.get(entry.isoc)
+    detail = "".join(
+        f" {label}: {text}." for label, text in (("Grid", origin), ("Why", reason)) if text
+    )
     raise ValueError(
-        f"'{stem}' {why} (missing {missing}, isochrones {entry.isoc!r}, IMF {entry.imf!r}). "
+        f"'{stem}' {why} (missing {missing}, isochrones {entry.isoc!r}, "
+        f"IMF {entry.imf!r}).{detail} "
         "Its surviving mass would otherwise come from DSPS's metallicity-independent fit, "
         f"which ignores the grid's isochrones. Pass {optin} to accept the fit."
     )
@@ -457,7 +484,9 @@ def describe_source(stem: str) -> str:
     if entry is None:
         return "unregistered (DSPS fit with a warning)"
     if entry.source == PENDING:
-        return f"PENDING (needs mass_remaining={MODE_DSPS_FIT!r})"
+        origin = GRID_ORIGIN.get(canonical_grid_name(stem))
+        suffix = f"; grid is {origin}" if origin else ""
+        return f"PENDING (needs mass_remaining={MODE_DSPS_FIT!r}){suffix}"
     if entry.source == EMBEDDED:
         return EMBEDDED
     return f"companion:{entry.source}"

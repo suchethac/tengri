@@ -102,6 +102,173 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return y0 + (y1 - y0) * t
 
 
+def _trapezoid_node_weights(grid: np.ndarray) -> np.ndarray:
+    """Node weights of ``np.trapezoid(y, grid)``: ``y @ w``. Shapes: (m,) -> (m,)."""
+    half = 0.5 * np.diff(grid)
+    weights = np.zeros(grid.size, dtype=np.float64)
+    weights[:-1] += half
+    weights[1:] += half
+    return weights
+
+
+def _interp_operator(
+    xp_target: np.ndarray, xp_source: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Linear interpolation as two nonzeros per row, the arithmetic of ``_vectorized_interp``.
+
+    Returns ``(c1, w1, c2, w2)`` with
+    ``interp(y)[..., j] = w1[j] * y[..., c1[j]] + w2[j] * y[..., c2[j]]``.
+    Rows out of bounds have both weights zero, exactly as ``_vectorized_interp``
+    zeroes them.
+    """
+    n_source = len(xp_source)
+    idx = np.clip(np.searchsorted(xp_source, xp_target) - 1, 0, n_source - 2)
+    dx = xp_source[idx + 1] - xp_source[idx]
+    dx = np.where(dx > 0, dx, 1.0)
+    frac = (xp_target - xp_source[idx]) / dx
+    oob = (xp_target < xp_source[0]) | (xp_target > xp_source[-1])
+    w1 = np.where(oob, 0.0, 1.0 - frac)
+    w2 = np.where(oob, 0.0, frac)
+    return idx, w1, idx + 1, w2
+
+
+class _FoldedIntegrand:
+    """A template integrand ``tw * interp(src)`` kept as a linear map of ``src`` (#2769).
+
+    The interpolated, weighted integrand on ``grid`` is never materialized:
+    ``integrand @ W == src[..., lo:hi] @ (P^T diag(tw) W)[lo:hi]``, where ``P`` is the
+    interpolation operator. ``dot`` applies that restricted map, so the cost scales
+    with the SSP nodes the grid actually touches, not with the full template row.
+    """
+
+    def __init__(
+        self,
+        grid: np.ndarray,
+        tw_grid: np.ndarray,
+        src: np.ndarray,
+        c1: np.ndarray,
+        w1: np.ndarray,
+        c2: np.ndarray,
+        w2: np.ndarray,
+    ):
+        lo = int(min(c1.min(), c2.min()))
+        hi = int(max(c1.max(), c2.max())) + 1
+        self.grid = grid
+        self.tw = tw_grid
+        self.src = np.ascontiguousarray(src[..., lo:hi])
+        self._n = hi - lo
+        self._c1, self._c2 = c1 - lo, c2 - lo
+        self._w1, self._w2 = w1, w2
+
+    @property
+    def lead_shape(self) -> tuple[int, ...]:
+        """Leading (template) dimensions of the integrand."""
+        return self.src.shape[:-1]
+
+    def dot(self, weights: np.ndarray) -> np.ndarray:
+        """``integrand @ weights`` over the grid axis.
+
+        Shapes: (m,) or (m, q) -> (..., q) or (...).
+        """
+        w = np.asarray(weights, dtype=np.float64)
+        if w.ndim == 1:
+            return self.dot(w[:, None])[..., 0]
+        scaled = self.tw[:, None] * w
+        restricted = np.zeros((self._n, w.shape[1]), dtype=np.float64)
+        for q in range(w.shape[1]):
+            col = scaled[:, q]
+            restricted[:, q] = np.bincount(
+                self._c1, weights=self._w1 * col, minlength=self._n
+            ) + np.bincount(self._c2, weights=self._w2 * col, minlength=self._n)
+        return _rows_dot(self.src, restricted)
+
+    def trapezoid(self, factor: np.ndarray | None = None) -> np.ndarray:
+        """``np.trapezoid(integrand * factor, grid)`` (``factor`` a grid-only array, default 1)."""
+        weights = _trapezoid_node_weights(self.grid)
+        if factor is not None:
+            weights = weights * factor
+        return self.dot(weights)
+
+
+def _integrand_dot(integrand, weights: np.ndarray) -> np.ndarray:
+    """``integrand @ weights`` for an ndarray integrand or a :class:`_FoldedIntegrand`."""
+    if isinstance(integrand, _FoldedIntegrand):
+        return integrand.dot(weights)
+    return _rows_dot(integrand, weights)
+
+
+def fold_integrand(
+    grid: np.ndarray, tw_grid: np.ndarray, wave_src: np.ndarray, templates_src: np.ndarray
+) -> _FoldedIntegrand:
+    """Folded form of ``_vectorized_interp(grid, wave_src, templates_src) * tw_grid``.
+
+    Shapes: grid (m,), tw_grid (m,), wave_src (n_src,), templates_src (..., n_src).
+    """
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    return _FoldedIntegrand(grid, tw_grid, templates_src, c1, w1, c2, w2)
+
+
+def lyc_augment_fold(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    templates_src: np.ndarray,
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
+    """Folded sibling of :func:`lyc_augment_grid_for_step`.
+
+    Returns ``(grid_aug, folded, tw_grid_aug)`` where ``folded`` is the integrand
+    of :func:`lyc_augment_grid_for_step` as a :class:`_FoldedIntegrand` on
+    ``grid_aug``. The edge-aware resampling is still a linear map of each template
+    row: a bracket node reads one SSP node with weight one (the ionizing or the
+    non-ionizing bracket value), and the two zero-width edge nodes read those same
+    two nodes. Same node order, same ``tw_grid_aug`` as the dense function.
+    """
+    n_src = wave_src.shape[0]
+    n_ion = int(np.sum(wave_src < edge_aa))
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    if not (0 < n_ion < n_src):
+        folded = _FoldedIntegrand(grid, tw_grid, templates_src, c1, w1, c2, w2)
+        return grid, folded, tw_grid
+
+    idx_a = n_ion - 1
+    idx_b = n_ion
+    wave_a = float(wave_src[idx_a])
+    wave_b = float(wave_src[idx_b])
+    in_bracket = (grid >= wave_a) & (grid <= wave_b)
+    step = np.where(grid < edge_aa, idx_a, idx_b)
+    c1 = np.where(in_bracket, step, c1)
+    c2 = np.where(in_bracket, step, c2)
+    w1 = np.where(in_bracket, 1.0, w1)
+    w2 = np.where(in_bracket, 0.0, w2)
+
+    tw_edge = float(
+        np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
+        * _filter_weight_np(np.array([edge_aa]), convention)[0]
+    )
+    all_x = np.concatenate([grid, [edge_aa, edge_aa]])
+    all_tw = np.concatenate([tw_grid, [tw_edge, tw_edge]])
+    all_c1 = np.concatenate([c1, [idx_a, idx_b]])
+    all_c2 = np.concatenate([c2, [idx_a, idx_b]])
+    all_w1 = np.concatenate([w1, [1.0, 1.0]])
+    all_w2 = np.concatenate([w2, [0.0, 0.0]])
+    order = np.argsort(all_x, kind="stable")
+    tw_grid_aug = all_tw[order]
+    folded = _FoldedIntegrand(
+        all_x[order],
+        tw_grid_aug,
+        templates_src,
+        all_c1[order],
+        all_w1[order],
+        all_c2[order],
+        all_w2[order],
+    )
+    return all_x[order], folded, tw_grid_aug
+
+
 def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
     """Split a quadrature at a wavelength: the part below it and the part above it.
 
@@ -130,19 +297,27 @@ def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
     -----
     **JIT-compatible**: no; build-time numpy.
     """
-    lead = integrand.shape[:-1]
+    folded = isinstance(integrand, _FoldedIntegrand)
+    lead = integrand.lead_shape if folded else integrand.shape[:-1]
     if grid.size < 2:
         return np.zeros(lead), np.zeros(lead)
     if not np.any(grid < edge):
-        return np.zeros(lead), _np_trapezoid(integrand, grid, axis=-1)
+        return np.zeros(lead), _whole_band(integrand, grid)
     if int(np.searchsorted(grid, edge)) >= grid.size:
-        return _np_trapezoid(integrand, grid, axis=-1), np.zeros(lead)
+        return _whole_band(integrand, grid), np.zeros(lead)
     # The above-half weights are the whole-band minus the below-half weights on
     # the 1-D grid: identical floats on every segment wholly below the edge, so
     # those nodes weigh exactly zero and no row subtracts two integrals.
     cum_w = _cumtrapz_weights(grid, np.array([edge, grid[-1]]))
-    halves = _rows_dot(integrand, np.stack([cum_w[:, 0], cum_w[:, 1] - cum_w[:, 0]], axis=-1))
+    halves = _integrand_dot(integrand, np.stack([cum_w[:, 0], cum_w[:, 1] - cum_w[:, 0]], axis=-1))
     return halves[..., 0], halves[..., 1]
+
+
+def _whole_band(integrand, grid: np.ndarray) -> np.ndarray:
+    """Plain trapezoid over ``grid`` of an ndarray or folded integrand."""
+    if isinstance(integrand, _FoldedIntegrand):
+        return integrand.trapezoid()
+    return _np_trapezoid(integrand, grid, axis=-1)
 
 
 def subband_edges(
@@ -200,7 +375,7 @@ def subband_edges(
 def subband_quadrature(
     grid: np.ndarray,
     tw_grid: np.ndarray,
-    integrand: np.ndarray,
+    integrand: np.ndarray | _FoldedIntegrand,
     denom: float,
     n_subbands: int,
     eff_wave_obs: float,
@@ -232,8 +407,9 @@ def subband_quadrature(
         Union quadrature grid, observed frame [Angstrom].
     tw_grid : ndarray, shape (m,)
         Transmission x filter weight on ``grid`` [dimensionless].
-    integrand : ndarray, shape (..., m)
-        ``templates * tw_grid``; the thing whose band integral is wanted.
+    integrand : ndarray, shape (..., m), or _FoldedIntegrand
+        ``templates * tw_grid``; the thing whose band integral is wanted. A folded
+        integrand (#2769) is read through its own node weights, never materialized.
     denom : float
         ``int tw dlambda``, the filter normalization.
     n_subbands : int
@@ -290,7 +466,9 @@ def subband_quadrature(
     n_chunks = edges.size - 1
     chunk_w = np.diff(_cumtrapz_weights(grid, edges), axis=-1)
     total_w = _cumtrapz_weights(grid, grid[-1:])
-    sums = _rows_dot(integrand, np.concatenate([chunk_w, grid[:, None] * chunk_w, total_w], -1))
+    sums = _integrand_dot(
+        integrand, np.concatenate([chunk_w, grid[:, None] * chunk_w, total_w], -1)
+    )
     i_k = sums[..., :n_chunks]
     l_k = sums[..., n_chunks : 2 * n_chunks]
 
@@ -758,11 +936,11 @@ def preintegrate_grid(
 
         # Interpolate all templates onto the union grid
         # Shape: (n_grid_points, len(grid))
-        templates_on_grid = _vectorized_interp(grid, wave_obs, templates_flat)
+        # Folded (#2769): the interpolated template is never materialized; every
+        # consumer below reads ``templates_flat`` through the fold's node weights.
+        fold = fold_integrand(grid, tw_grid, wave_obs, templates_flat)
 
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
-        weight = tw_grid[None, :]
-        integrand = templates_on_grid * weight
 
         # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
         # nebular Lyman-continuum mask) -- a model without one never pays
@@ -778,29 +956,29 @@ def preintegrate_grid(
         # (see :func:`lyc_augment_grid_for_step`).
         lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + redshift)
         if lyc_gate:
-            grid_q, integrand_q, tw_grid_q = lyc_augment_grid_for_step(
+            grid_q, fold_q, tw_grid_q = lyc_augment_fold(
                 grid, tw_grid, wave_obs, templates_flat, fw_np, ft_np, lyc_wave_obs, convention
             )
             denom_q = _np_trapezoid(tw_grid_q, grid_q)
-            num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+            num = fold_q.trapezoid()
             # Both halves of the split from ONE cumulative integral on the
             # edge-augmented grid: the below half is the cumulative value at the
             # first copy of the zero-width edge pair (step-exact), the above half
             # is total - below, and a band wholly on one side has exactly zero in
             # the other half (no whole - other-half cancellation).
-            lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+            lyc_num, above_num = edge_split(fold_q, grid_q, lyc_wave_obs)
             norm = np.maximum(denom_q, representable_denominator(1e-30))
             lyc_phot_flat[:, f_idx] = lyc_num / norm
             nolyc_phot_flat[:, f_idx] = above_num / norm
         else:
-            grid_q, integrand_q, tw_grid_q, denom_q = grid, integrand, tw_grid, denom
-            num = _np_trapezoid(integrand, grid, axis=-1)
+            grid_q, fold_q, tw_grid_q, denom_q = grid, fold, tw_grid, denom
+            num = fold.trapezoid()
         phot_flat[:, f_idx] = num / np.maximum(denom_q, representable_denominator(1e-30))
 
         # Compute Taylor moment if requested
         if taylor:
-            dlam = grid[None, :] - eff_waves_obs[f_idx]
-            num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
+            dlam = grid - eff_waves_obs[f_idx]
+            num_moment = fold.trapezoid(dlam)
             moment_flat[:, f_idx] = num_moment / np.maximum(
                 denom, representable_denominator(1e-30)
             )
@@ -815,7 +993,7 @@ def preintegrate_grid(
             sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
                 grid_q,
                 tw_grid_q,
-                integrand_q,
+                fold_q,
                 denom_q,
                 K,
                 float(eff_waves_obs[f_idx]),

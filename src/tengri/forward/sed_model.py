@@ -3352,6 +3352,8 @@ class SEDModel:
                 )
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
+                self._cloudy_band_table_cache = None
+                self._shock_band_table_cache = None
                 self._xray_term_response_cache = None
                 self._radio_term_response_cache = None
 
@@ -3381,6 +3383,32 @@ class SEDModel:
                         stacklevel=2,
                     )
                     self._dust_band_response_cache = None
+
+                # The CLOUDY band table is built here, eagerly, as the dust response
+                # above is: a build inside a jit trace would see tracers.
+                try:
+                    self._cloudy_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp CLOUDY band-table precompute failed ({e!r}); "
+                        "falling back to the exact per-call filter integral (correct, "
+                        "but without the precomputed-table speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._cloudy_band_table_cache = None
+
+                try:
+                    self._shock_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp shock line-band precompute failed ({e!r}); falling "
+                        "back to the exact per-call filter integral (correct, but without "
+                        "the precomputed-coefficient speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._shock_band_table_cache = None
 
                 # Derive which emitters in the chain implement the emission_terms
                 # contract rather than hardcoding ("xray", "radio"). Any additive
@@ -5806,6 +5834,38 @@ class SEDModel:
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
+    def _publish_history(self, sfr, params, state=None, resample=None):
+        """Publish ``sfr`` as ``(t, sfr)`` bounded to ``[0, age(z)]`` with the formed mass (#2640).
+
+        Applies the component's own :func:`bounded_rescaled_history` after the
+        SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
+        the same history the stellar component does (no second normalization).
+        With ``resample`` (a callable ``(values, age_at_z_gyr) -> (t_gyr,
+        values_out)``) the rescaled history is resampled onto the output grid,
+        which ends at ``age(z)``; returns ``(t_gyr, values_out)``.
+        """
+        from tengri.components.stellar.component import (
+            bounded_rescaled_history,
+            history_rescale_factor,
+        )
+
+        if state is None:
+            state = self.predict_state(params)
+        t_obs_gyr = age_at_z(self._get_redshift(params))
+        if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
+            # The registry callable of a runtime table is a zero placeholder;
+            # the history lives in the component state.
+            t_pub = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+            sfr_pub = jnp.asarray(state.derived["sfr_history"])
+            if resample is None:
+                return t_pub, sfr_pub
+            return resample(sfr_pub, t_obs_gyr)
+        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+        if resample is None:
+            return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+        factor = history_rescale_factor(sfr, self.age_yr, t_obs_gyr, formed)
+        return resample(sfr * factor, t_obs_gyr)
+
     def _sfh_call_kwargs(self, p, redshift=None):
         """Keyword arguments for one call of the composed SFH function.
 
@@ -6205,18 +6265,24 @@ class SEDModel:
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
+        _state = self.predict_state(params)
 
         if grid == "native":
             return {
-                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
-                "sfr_mean": sfr_mean,
-                "sfr_full": sfr_full,
+                "t_gyr": self._publish_history(sfr_mean, params, _state)[0] / 1e9,
+                "sfr_mean": self._publish_history(sfr_mean, params, _state)[1],
+                "sfr_full": self._publish_history(sfr_full, params, _state)[1],
             }
 
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
+        def _resample(values, age_gyr):
+            return interpolate_to_linear_time(
+                self.log_age_grid, values, n_linear, age_at_z_gyr=age_gyr
+            )
+
+        t_gyr_mean, sfr_mean_lin = self._publish_history(
+            sfr_mean, params, _state, resample=_resample
         )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+        _, sfr_full_lin = self._publish_history(sfr_full, params, _state, resample=_resample)
 
         return {
             "t_gyr": t_gyr_mean,
@@ -9389,6 +9455,7 @@ class SEDModel:
         # values someone happened to test; the rest kept the divergent path. Now
         # there is no path to diverge.
         state_orch = self.predict_state(params)
+        _, sfr = self._publish_history(sfr, params, state_orch)
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -9510,7 +9577,8 @@ class SEDModel:
               (intrinsic SED). NaN if unavailable.
             - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``rest_uv_color`` : float. U-V AB color: top-hats 3200–3900 Å
+              minus 5000–5800 Å on rest-frame L_nu.
             - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
             - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
@@ -10756,6 +10824,19 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        # ── CLOUDY age-resolved band table (WavePrecomp, #2324) ──
+        # A sibling of ``nebular_grid``, not a slot of ``nebular``: the backend's
+        # grid lives under ``nebular`` and :meth:`NebularSEDComponent.apply` peels
+        # that slot, so the table is read from its own key.
+        cloudy_band = self._cloudy_band_table(cached)
+        if cloudy_band is not None:
+            result["nebular_band_table"] = cloudy_band
+
+        # ── Composable shock line-band coefficients (WavePrecomp, #2324) ──
+        shock_band = self._shock_band_table(cached)
+        if shock_band is not None:
+            result["shock_band_table"] = shock_band
+
         # ── Component template libraries, keyed [namespace][component name] ──
         #
         # A template-backed component that reads its library inside ``predict``
@@ -11548,6 +11629,135 @@ class SEDModel:
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
         return response
+
+    #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
+    #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
+    _CLOUDY_TABLE_FREE_OK = frozenset(
+        {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
+    )
+
+    def _cloudy_band_refusal(self, nebular) -> str | None:
+        """Why the CLOUDY band table must not engage, or None when it may.
+
+        The gate of #2324: every condition under which the table would differ
+        from the per-call path, or would not be built from the same inputs.
+        """
+        from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if (
+            nebular is None
+            or nebular.config.backend != "cloudy_grid"
+            or not isinstance(nebular.backend, CloudyGridBackend)
+        ):
+            return "the nebular backend is not the CLOUDY grid"
+        # The band table's contraction over (Z, U) is the bilinear scheme of the default
+        # linear path only (cloudy_band_table._bilinear_log). Any other interpolation of the
+        # grid, today triweight and from #2857 the pchip default, would make the table differ
+        # from the per-call path, so it is refused until the table is updated to match.
+        if nebular.backend._grid_interp != "linear":
+            return (
+                f"the CLOUDY backend interpolates with grid_interp="
+                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'linear'"
+            )
+        if _dig_may_be_active(self.spec):
+            return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band table is built at one redshift)"
+        if "neb_eline_sigma_kms" not in self.spec.fixed_params:
+            return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
+        bad = sorted(
+            p
+            for p in self.spec.free_params
+            if p.startswith(("neb_", "gas_", "ionspec_")) and p not in self._CLOUDY_TABLE_FREE_OK
+        )
+        if bad:
+            return f"free nebular parameters outside the table's axes: {bad}"
+        state = nebular._state
+        if state is None or state.filter_waves is None:
+            return "the nebular filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _cloudy_band_table(self, chain):
+        """Build-time CLOUDY band table through the precompute registry, memoized.
+
+        Records why it declined in ``_cloudy_band_table_decline``. Returns None
+        when the table does not engage.
+        """
+        cached = getattr(self, "_cloudy_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.forward.precompute.registry import resolve
+
+        nebular = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+        table = None
+        reason = self._cloudy_band_refusal(nebular)
+        if reason is None:
+            table = resolve("cloudy").precompute(
+                nebular._state.filter_waves,
+                nebular._state.filter_trans,
+                float(self.spec.fixed_value("redshift")),
+                parameters=self.spec,
+                backend=nebular.backend,
+                wave=self._rest_wavelength,
+                line_sigma_kms=float(self.spec.fixed_value("neb_eline_sigma_kms")),
+            )
+            if table is None:
+                reason = (
+                    "the table's (Z_gas, logU) axes do not contain the spec's priors "
+                    "for neb_logZ_gas and neb_logU"
+                )
+        self._cloudy_band_table_decline = reason
+        self._cloudy_band_table_cache = table
+        return table
+
+    def _shock_band_refusal(self, shock, stellar) -> str | None:
+        """Why the shock line-band coefficients must not engage, or None (#2324)."""
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if shock is None:
+            return "no composable shock component"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band coefficients are built at one redshift)"
+        st = getattr(stellar, "_state", None)
+        if st is None or getattr(st, "phot_fw_padded", None) is None:
+            return "the photometry filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _shock_band_table(self, chain):
+        """Build-time shock line-band coefficients through the registry, memoized.
+
+        Records why it declined in ``_shock_band_table_decline``. Returns None when
+        it does not engage.
+        """
+        cached = getattr(self, "_shock_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.shock_model import ShockNebular
+        from tengri.forward.precompute.registry import resolve
+
+        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        coeff = None
+        reason = self._shock_band_refusal(shock, stellar)
+        if reason is None:
+            st = stellar._state
+            coeff = resolve("mappings_shock").shock_band_coefficients(
+                st.phot_fw_padded,
+                st.phot_ft_padded,
+                float(self.spec.fixed_value("redshift")),
+                self._rest_wavelength,
+            )
+            if coeff is None:
+                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
+        self._shock_band_table_decline = reason
+        self._shock_band_table_cache = coeff
+        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
@@ -13147,7 +13357,7 @@ class SEDModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``.
         method : str
-            Inference method. Default ``"vi"`` (geoVI variational inference).
+            Inference method. Default ``"mcmc_nuts_fast"`` (four NUTS chains).
             Any canonical name accepted by ``Fitter.run()`` works here:
             ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
             ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.
