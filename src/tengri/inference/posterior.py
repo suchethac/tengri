@@ -29,6 +29,7 @@ import numpy as np
 
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri._mapping import ReadOnlyPropertyMapping
+from tengri.utils.atomic_io import atomic_path
 
 logger = logging.getLogger(__name__)
 
@@ -2379,7 +2380,7 @@ class Posterior:
         """
         import h5py
 
-        with h5py.File(path, "w") as f:
+        with atomic_path(path) as tmp, h5py.File(tmp, "w") as f:
             f.attrs["method"] = self.method
             f.attrs["wall_time_s"] = self.wall_time_s
             if self.log_evidence is not None:

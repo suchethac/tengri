@@ -36,6 +36,7 @@ from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
+from tengri.utils.scale import safe_ratio
 
 __all__ = ["Draine2021PAHIRConfig", "Draine2021PAHIRSEDComponent"]
 
@@ -412,7 +413,7 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
         norm_at_lgU = jnp.interp(dust_lgU_c, lgU_grid, norm_per_lgU)
 
         # Scale to match absorbed luminosity
-        scale = jnp.where(norm_at_lgU > 0, L_ir / norm_at_lgU, 0.0)
+        scale = safe_ratio(L_ir, norm_at_lgU)
         sed_emission = L_nu_shape * scale
 
         # Report the luminosity actually re-radiated, which is L_ir only when the

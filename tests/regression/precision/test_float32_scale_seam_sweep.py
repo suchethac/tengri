@@ -521,35 +521,38 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured for #2837's torus transmission T = R_n/eta (commits 266a1663c and
-#: c70f75e88: the disc behind a library torus is dimmed by the library's own line of
-#: sight; 8176402fc and 227e7a0a4 carry the X-ray column on that sightline). At mbh
-#: 8 / 10, rest_sed_sum moves 1.675785e+32 -> 1.675806e+32 (+1.27e-5) and
-#: 1.709509e+32 -> 1.709595e+32 (+5.07e-5), rest_sed_mid by +1.26e-5 / +5.75e-5,
-#: photometry (band 0) by +1.45e-5 / +6.19e-5. rest_sed_0 moves 1.3e-10 and the
-#: mbh 6 row 6e-11, which the rtol of 1e-6 absorbs, so mbh 6 is re-written at its
-#: recorded values.
+#: Re-captured on the merged tree (origin/main, which carries #2694 and #2807, merged into this
+#: PR). Causes, all named: #2694 young-sliver SFH integral and #2807 AGN energy ledger (both in
+#: origin/main's pins), and this PR's own cause, #2837 library-torus sightline (owner ruling 9: the
+#: disc behind a library torus is dimmed by T = R_n/eta, Fritz eta = 1). Against origin/main's pins
+#: this PR's move is rest_sed_sum +6.4e-11 / +1.27e-5 / +5.09e-5 (mbh 6 / 8 / 10), rest_sed_0
+#: +1.35e-10 at all three, rest_sed_mid 0 / +1.27e-5 / +5.76e-5, rest_sed_last 0 / 0 / 0,
+#: photometry (r, W3, W4) at mbh 8 +1.45e-5 / -2.2e-9 / +3.5e-8 and at mbh 10 +6.2e-5 / +1.6e-7 /
+#: +3.7e-8. Against the pins this branch carried before the merge (no #2694 or #2807): rest_sed_sum
+#: +2.14e-4 / +4.60e-4 / +5.26e-4; rest_sed_0 +3.77e-3 at all three; rest_sed_mid +7.7e-6 / +3.2e-4
+#: / +3.8e-4; rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4. The pre-merge move is the sum of #2694,
+#: #2807 and this PR; the two main commits are not isolated per commit.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593717102152515e32,
-        "rest_sed_0": 102893969334605.2,
-        "rest_sed_mid": 2.8913768894385195e28,
-        "rest_sed_last": 8.775429623072713e21,
-        "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
+        "rest_sed_sum": 1.5597046411500994e32,
+        "rest_sed_0": 103282334882173.36,
+        "rest_sed_mid": 2.891399138580114e28,
+        "rest_sed_last": 8.775542988384492e21,
+        "photometry": (1.099496622290831e-27, 1.572671356554845e-27, 1.7668451701130867e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6758061789587808e32,
-        "rest_sed_0": 2.822690803280568e16,
-        "rest_sed_mid": 3.1537484878080124e28,
-        "rest_sed_last": 8.838700680503838e21,
-        "photometry": (1.2055305555190998e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
+        "rest_sed_sum": 1.676577182161529e32,
+        "rest_sed_0": 2.8333448370125924e16,
+        "rest_sed_mid": 3.1547578351532353e28,
+        "rest_sed_last": 8.8390520494989e21,
+        "photometry": (1.2059388269090503e-27, 1.5747684437292912e-27, 1.767451957952492e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.709595368848167e32,
-        "rest_sed_0": 2.9574176726352624e16,
-        "rest_sed_mid": 3.2082159809319677e28,
-        "rest_sed_last": 9.756086413931552e21,
-        "photometry": (1.2204597532859522e-27, 1.596873331747033e-27, 1.7715814756737012e-27),
+        "rest_sed_sum": 1.7104944625427754e32,
+        "rest_sed_0": 2.9685802227832704e16,
+        "rest_sed_mid": 3.2094322894946265e28,
+        "rest_sed_last": 9.759894495239017e21,
+        "photometry": (1.2209249773360414e-27, 1.5996334984921749e-27, 1.7752334913510926e-27),
     },
 }
 

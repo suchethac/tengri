@@ -329,3 +329,6 @@ analysis/paper1/results/fits/.reinsert.lock
 
 # Package-data surviving-mass tables (repackaged BC03 column; tiny, shipped in the wheel)
 !src/tengri/data/ssp_mass_remaining/*.h5
+
+# Package-data MIST top-metallicity nodes (opt-in top_z='mist'; 3.4 MiB each, shipped in the wheel)
+!src/tengri/data/ssp_top_z/*.h5

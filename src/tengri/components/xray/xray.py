@@ -504,18 +504,19 @@ def _cutoff_powerlaw_band_norm(
     Returns
     -------
     jnp.ndarray
-        Band integral, floored at ``1e-60`` so it is safe as a divisor.
+        Band integral, floored at ``representable_floor(1e-60)`` so it is safe as a divisor.
 
     Notes
     -----
-    **JIT-compatible**: yes. The floor is the same ``jnp.maximum(..., 1e-60)``
+    **JIT-compatible**: yes. The floor is the same ``jnp.maximum(..., representable_floor(1e-60))``
     the inline sites used, so a degenerate spectrum still yields a finite
-    divisor rather than a division by zero.
+    divisor rather than a division by zero. ``1e-60`` is 0 in float32, hence
+    the dtype-aware floor.
     """
     E_fine = jnp.linspace(E_lo, E_hi, n_grid)  # keV
     nu_fine = E_fine * _KEV_TO_HZ
     spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
-    return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+    return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), representable_floor(1e-60))
 
 
 _LOG10_KEV_TO_HZ = float(np.log10(_KEV_TO_HZ))

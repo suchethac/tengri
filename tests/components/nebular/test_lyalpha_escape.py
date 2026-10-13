@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Lyman-alpha escape fraction in nebular emission.
 
-Synthesizer-inspired: synthesizer/tests/test_emissions.py verifies that
-fesc_ly_alpha selectively suppresses Ly-α without touching other lines.
-
-The escape fraction logic (cloudy_grid.py and cue.py):
-    lya_scale = (1 - neb_fesc_lya) / max(1 - neb_fesc, 1e-10)
-    lum_lya *= lya_scale
+``neb_fesc_lya`` is the Lyα escape fraction: the Lyα luminosity is multiplied
+by it (1 = no extra scaling, 0 = Lyα removed). The helper under test is the
+single shared implementation every photoionized backend calls
+(``apply_lya_escape`` in ``components/nebular/_shared.py``).
 
 Physical properties tested:
-- fesc_lya=0.5 reduces Ly-α relative to fesc_lya=0.0
-- Other lines (Hα, Hβ, [OIII]) are NOT affected by fesc_lya
-- fesc_lya=1.0 makes Ly-α zero
-- Gradient flows through fesc_lya
-- When fesc_lya == neb_fesc, scale = 1.0 (no extra suppression)
+- neb_fesc_lya = 1 leaves Ly-alpha unchanged
+- neb_fesc_lya = 0.2 gives 0.2 times the unattenuated Ly-alpha flux
+- Other lines (H-alpha, H-beta, [OIII]) are NOT affected by neb_fesc_lya
+- neb_fesc_lya = 0 removes Ly-alpha
+- Gradient flows through neb_fesc_lya
 """
 
 from __future__ import annotations
@@ -24,7 +22,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.nebular._shared import apply_lya_escape
+
 pytestmark = pytest.mark.bounds
+
+_LYA_WAVE = 1215.67  # Angstrom, vacuum Ly-alpha
+_HA_WAVE = 6564.61  # Angstrom, vacuum H-alpha
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -32,156 +35,90 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ── Pure-formula tests (no grid required) ─────────────────────────
-# These test the escape-fraction scaling formula isolated from the grid backend.
-
-_LYA_WAVE = 1215.67  # Å, vacuum Ly-α
-
-
-def _apply_lya_escape(
-    line_waves: jnp.ndarray,
-    line_lums: jnp.ndarray,
-    neb_fesc: float,
-    neb_fesc_lya: float,
-) -> jnp.ndarray:
-    """Apply Ly-α escape fraction scaling (mirrors cloudy_grid.py logic)."""
-    lya_idx = jnp.argmin(jnp.abs(line_waves - _LYA_WAVE))
-    lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
-    return line_lums.at[lya_idx].multiply(lya_scale)
-
-
 @pytest.fixture
 def toy_lines():
-    """Minimal line array: Ly-α + Hβ + [OIII]5007 + Hα."""
+    """Minimal line array: Ly-alpha + H-beta + [OIII]5007 + H-alpha."""
     waves = jnp.array([1215.67, 4862.68, 5008.24, 6564.61])
-    # Nominal luminosities in Lsun
-    lums = jnp.array([1.0, 1.0, 1.34, 2.86])
+    lums = jnp.array([1.0, 1.0, 1.34, 2.86])  # arbitrary units
     return waves, lums
 
 
-class TestLyaScaleFormula:
-    """Pure formula tests, independent of CLOUDY grid."""
+def _lya_index(waves) -> int:
+    return int(jnp.argmin(jnp.abs(waves - _LYA_WAVE)))
 
-    def test_fesc_lya_0_leaves_lya_unchanged(self, toy_lines):
-        """neb_fesc_lya=0 → no extra suppression on Ly-α."""
-        waves, lums = toy_lines
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=0.0)
-        np.testing.assert_allclose(np.array(lums_out), np.array(lums), rtol=1e-9)
 
-    def test_fesc_lya_half_reduces_lya(self, toy_lines):
-        """neb_fesc_lya=0.5 → Ly-α is halved (factor 0.5/(1.0) = 0.5)."""
-        waves, lums = toy_lines
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=0.5)
-        lya_idx = int(jnp.argmin(jnp.abs(waves - _LYA_WAVE)))
-        np.testing.assert_allclose(float(lums_out[lya_idx]), float(lums[lya_idx]) * 0.5, rtol=1e-6)
+class TestLyaEscapeScaling:
+    """The shared helper multiplies Ly-alpha by neb_fesc_lya and nothing else."""
 
-    def test_fesc_lya_1_zeroes_lya(self, toy_lines):
-        """neb_fesc_lya=1.0 → Ly-α luminosity = 0."""
+    def test_unity_leaves_lya_unchanged(self, toy_lines):
         waves, lums = toy_lines
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=1.0)
-        lya_idx = int(jnp.argmin(jnp.abs(waves - _LYA_WAVE)))
-        assert float(lums_out[lya_idx]) == pytest.approx(0.0, abs=1e-12)
+        out = apply_lya_escape(lums, waves, 1.0)
+        np.testing.assert_allclose(np.array(out), np.array(lums), rtol=1e-12)
+
+    def test_fesc_lya_02_gives_02_times_unattenuated_lya(self, toy_lines):
+        """At neb_fesc_lya = 0.2, Ly-alpha flux = 0.2 x the no-attenuation flux."""
+        waves, lums = toy_lines
+        lya_idx = _lya_index(waves)
+        out = apply_lya_escape(lums, waves, 0.2)
+        np.testing.assert_allclose(float(out[lya_idx]), 0.2 * float(lums[lya_idx]), rtol=1e-6)
+
+    def test_zero_removes_lya(self, toy_lines):
+        waves, lums = toy_lines
+        out = apply_lya_escape(lums, waves, 0.0)
+        assert float(out[_lya_index(waves)]) == pytest.approx(0.0, abs=1e-12)
 
     def test_other_lines_unchanged(self, toy_lines):
-        """Changing neb_fesc_lya must NOT affect Hβ, [OIII], Hα."""
+        """Changing neb_fesc_lya must NOT affect H-beta, [OIII] or H-alpha."""
         waves, lums = toy_lines
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=0.7)
-        # Check every non-Ly-α line
-        for i, (w, l_in, l_out) in enumerate(zip(waves, lums, lums_out)):
+        out = apply_lya_escape(lums, waves, 0.3)
+        for i, (w, l_in, l_out) in enumerate(zip(waves, lums, out)):
             if abs(float(w) - _LYA_WAVE) > 1.0:
                 np.testing.assert_allclose(
                     float(l_out),
                     float(l_in),
                     rtol=1e-9,
-                    err_msg=f"Line at {float(w):.1f}Å (index {i}) changed under fesc_lya",
+                    err_msg=f"Line at {float(w):.1f} A (index {i}) changed under neb_fesc_lya",
                 )
 
-    def test_fesc_lya_equal_fesc_gives_scale_1(self, toy_lines):
-        """When fesc_lya == neb_fesc, scale = 1 (Ly-α treated like other lines)."""
-        waves, lums = toy_lines
-        fesc = 0.3
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=fesc, neb_fesc_lya=fesc)
-        np.testing.assert_allclose(np.array(lums_out), np.array(lums), rtol=1e-9)
-
-    def test_fesc_lya_greater_than_fesc(self, toy_lines):
-        """neb_fesc_lya > neb_fesc → Ly-α more suppressed than other lines."""
-        waves, lums = toy_lines
-        lums_out = _apply_lya_escape(waves, lums, neb_fesc=0.1, neb_fesc_lya=0.8)
-        lya_idx = int(jnp.argmin(jnp.abs(waves - _LYA_WAVE)))
-        # Scale = (1-0.8)/(1-0.1) = 0.2/0.9 ≈ 0.222
-        expected_scale = (1.0 - 0.8) / (1.0 - 0.1)
-        np.testing.assert_allclose(
-            float(lums_out[lya_idx]),
-            float(lums[lya_idx]) * expected_scale,
-            rtol=1e-6,
-        )
-
-    def test_gradient_flows_through_fesc_lya(self, toy_lines):
+    def test_gradient_flows_through_neb_fesc_lya(self, toy_lines):
         """Gradient of total line luminosity w.r.t. neb_fesc_lya is finite and nonzero."""
         waves, lums = toy_lines
 
         def loss(fesc_lya):
-            out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
-            return jnp.sum(out)
+            return jnp.sum(apply_lya_escape(lums, waves, fesc_lya))
 
         grad_jax = float(jax.grad(loss)(0.3))
         grad_fd = fd_grad(loss, 0.3)
-        np.testing.assert_allclose(
-            grad_jax,
-            grad_fd,
-            rtol=1e-3,
-            atol=1e-12,
-            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
-        )
-        assert grad_jax != 0.0, "Gradient w.r.t. neb_fesc_lya should be nonzero"
-        assert np.all(np.isfinite(grad_jax)), (
-            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
-            "and a NaN satisfies a non-zero assertion (#2178)"
-        )
+        np.testing.assert_allclose(grad_jax, grad_fd, rtol=1e-3, atol=1e-12)
+        assert np.isfinite(grad_jax), "gradient is non-finite (#2178)"
+        assert grad_jax != 0.0
 
     def test_jit_compatible(self, toy_lines):
-        """The escape fraction scaling should be JIT-compilable."""
         waves, lums = toy_lines
 
         @jax.jit
         def run(fesc_lya):
-            return _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
+            return apply_lya_escape(lums, waves, fesc_lya)
 
         result = run(0.5)
         chex.assert_equal_shape([result, lums])
         chex.assert_tree_all_finite(result)
 
 
-class TestLyaEscapePhysicalDirection:
-    """Physical ordering: increasing fesc_lya monotonically reduces Ly-α."""
+class TestLyaEscapeMonotone:
+    """Increasing neb_fesc_lya monotonically raises Ly-alpha; Balmer lines stay fixed."""
 
-    def test_monotone_suppression(self, toy_lines):
-        """Ly-α luminosity decreases monotonically as fesc_lya increases."""
+    def test_monotone_in_fesc_lya(self, toy_lines):
         waves, lums = toy_lines
-        lya_idx = int(jnp.argmin(jnp.abs(waves - _LYA_WAVE)))
-        fesc_values = [0.0, 0.2, 0.5, 0.8, 0.99]
-        prev_lya = float("inf")
-        for fesc_lya in fesc_values:
-            out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
-            current_lya = float(out[lya_idx])
-            assert current_lya <= prev_lya + 1e-10, (
-                f"Ly-α not monotonically decreasing: fesc_lya={fesc_lya} gave {current_lya:.4f} "
-                f"> previous {prev_lya:.4f}"
-            )
-            prev_lya = current_lya
+        lya_idx = _lya_index(waves)
+        prev = -float("inf")
+        for fesc_lya in [0.0, 0.2, 0.5, 0.8, 1.0]:
+            current = float(apply_lya_escape(lums, waves, fesc_lya)[lya_idx])
+            assert current >= prev - 1e-10
+            prev = current
 
-    def test_balmer_lines_not_monotone_with_lya_fesc(self, toy_lines):
-        """Balmer line (Hα) luminosity must be CONSTANT as fesc_lya varies."""
+    def test_halpha_constant_in_fesc_lya(self, toy_lines):
         waves, lums = toy_lines
-        ha_idx = int(jnp.argmin(jnp.abs(waves - 6564.61)))
-        ha_values = []
-        for fesc_lya in [0.0, 0.3, 0.7, 1.0]:
-            out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
-            ha_values.append(float(out[ha_idx]))
-        # All Hα values should be equal
-        np.testing.assert_allclose(
-            ha_values,
-            [ha_values[0]] * 4,
-            rtol=1e-9,
-            err_msg="Hα should be unaffected by neb_fesc_lya",
-        )
+        ha_idx = int(jnp.argmin(jnp.abs(waves - _HA_WAVE)))
+        values = [float(apply_lya_escape(lums, waves, f)[ha_idx]) for f in [0.0, 0.3, 0.7, 1.0]]
+        np.testing.assert_allclose(values, [values[0]] * 4, rtol=1e-9)

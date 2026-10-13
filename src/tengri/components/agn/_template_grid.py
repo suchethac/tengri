@@ -31,6 +31,7 @@ from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 __all__ = [
+    "BUDGET_WAVE",
     "TorusTemplateGrid",
     "analytic_bolometric_nu",
     "native_bolometric_nu",
@@ -38,6 +39,11 @@ __all__ = [
     "scale_to_lbol_native",
     "torus_lnu_from_grid",
 ]
+
+#: Fixed wavelength grid [Angstrom] on which a published bolometric ``L_*`` is integrated.
+#: It spans every AGN disc, torus and graybody support (1000 log points per decade, the
+#: resolution the budgets are defined at) and never depends on the caller's wavelength array.
+BUDGET_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
 
 
 class TorusTemplateGrid(NamedTuple):
