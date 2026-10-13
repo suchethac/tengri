@@ -630,6 +630,29 @@ class NUTSTreeDepthWarning(UserWarning):
     """
 
 
+class FrozenMovingChainWarning(UserWarning):
+    """Chains that move but never mix: each stays in its own narrow region.
+
+    A fit can return normally with zero divergences while every chain jitters
+    by a sliver of the posterior width around a centre that differs from the
+    other chains' centres. R-hat can flag this, but the dead-fit guards cannot:
+    they need all-divergent draws or an exactly constant column, and the
+    divergence refusal needs a fraction of 0.9. The signature is a within-chain
+    spread that is tiny against both the between-chain disagreement and the
+    posterior width (#2112).
+
+    Raised as a warning, never an error: the samples are still a valid record of
+    where each chain went, and a caller may want to inspect them. The flag
+    ``posterior.diagnostics["frozen_moving_chains"]`` is ``True`` whenever this
+    fires, so a pipeline can check it without parsing the message. The remedy is
+    the same as for a dead fit: a longer warmup, a smaller step size, or a
+    mass-matrix choice that lets the chains find the posterior's scale.
+
+    Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit* that
+    already ran, not a model being constructed.
+    """
+
+
 class MetallicityUnitWarning(UserWarning):
     """A metallicity history looks like a metal mass fraction read as log10(Z/Zsun).
 
