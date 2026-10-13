@@ -81,7 +81,7 @@ NO_EXEC_MARKER = "<!-- no-exec -->"
 RAISES_MARKER = re.compile(r"<!--\s*raises:\s*(\w+)\s*-->")
 BUILD_CALL = "SEDModel.build("
 
-# Copied from tools/check_doc_examples.py (PY_FENCE); the tools do not import each other.
+# Same pattern as PY_FENCE in tools/check_doc_examples.py; the tools do not import each other.
 PY_FENCE = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
 LSTLISTING = re.compile(r"\\begin\{lstlisting\}(?:\[[^\]]*\])?(.*?)\\end\{lstlisting\}", re.DOTALL)
 MINTED = re.compile(r"\\begin\{minted\}(?:\[[^\]]*\])?\{python\}(.*?)\\end\{minted\}", re.DOTALL)

@@ -49,7 +49,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEV_DOCS = REPO_ROOT / "docs" / "dev"
 
-# Copied from tools/check_doc_examples.py (INLINE_CODE); the tools do not import each other.
+# Same pattern as INLINE_CODE in tools/check_doc_examples.py; the tools do not import each other.
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?$")
 
