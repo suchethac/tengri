@@ -11,9 +11,12 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.special import logsumexp
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
@@ -62,7 +65,9 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: 4: bins older than 100 Myr carry a Q_H and a shape (every age is counted by
 #: default); the age axis, the age cutoff and the old-bin thinning limit are part
 #: of the key, so the young-only tables written under version 3 are never served.
-_IONSPEC_CACHE_VERSION = 4
+#: 5: each segment's SLSQP answer is finished by a converged Newton solve, so the
+#: slopes and log ratios of every entry change at the SLSQP tolerance.
+_IONSPEC_CACHE_VERSION = 5
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
@@ -373,7 +378,8 @@ def _fit_segment(
         method="SLSQP",
         bounds=[(-40, 100), (-200, 100)],
     )
-    coeff = np.array(res.x)
+    converged = _polish_segment(seg_wave, log_flux, log_Q, np.asarray(res.x, dtype=np.float64))
+    coeff = np.array(converged)
     coeff[1] -= np.log10(norm)
     return coeff
 
@@ -554,7 +560,11 @@ def fit_ionizing_spectrum(
     Notes
     -----
     **Fitting strategy** (Li et al. 2025):
-        Each of the 4 segments is independently fit to a power law:
+        Each of the 4 segments is independently fit to a power law. SciPy SLSQP gives
+        the starting point, and the stationary point of each segment's objective is
+        then solved to round-off by a Newton iteration (the same solve the composite
+        fit uses), so the result is the converged minimum rather than SLSQP's
+        tolerance-limited stop:
 
         .. math::
 
@@ -1119,6 +1129,36 @@ def _cell_fraction(target, grid, idx):
     return jnp.where(finite, frac, jnp.where(target == left, 0.0, 1.0))
 
 
+def _bracket(target, grid):
+    """Clamp ``target`` into ``grid`` and locate its cell (shared by the Cue lookups).
+
+    Parameters
+    ----------
+    target : float or array_like, shape ()
+        Value to bracket, in the units of ``grid``.
+    grid : array_like, shape (n,)
+        Ascending node values, ``n >= 2``.
+
+    Returns
+    -------
+    target_c : array, shape ()
+        ``target`` clamped to ``[grid[0], grid[-1]]``.
+    cell : array, shape () of int
+        Lower node index of the bracketing cell, in ``[0, n - 2]``.
+    fraction : array, shape ()
+        Position of ``target_c`` inside that cell, from :func:`_cell_fraction`.
+
+    Notes
+    -----
+    Clamping makes out-of-range inputs land on the edge cell (the lookups never
+    extrapolate). JIT/grad/vmap safe; differentiable in ``target``.
+    """
+    grid = jnp.asarray(grid)
+    target_c = jnp.clip(target, grid[0], grid[-1])
+    cell = jnp.clip(jnp.searchsorted(grid, target_c) - 1, 0, grid.shape[0] - 2)
+    return target_c, cell, _cell_fraction(target_c, grid, cell)
+
+
 def interpolate_ionizing_params(
     ionspec_table: jnp.ndarray,
     logqion_table: jnp.ndarray,
@@ -1180,14 +1220,8 @@ def interpolate_ionizing_params(
     """
 
     # Bilinear interpolation
-    log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
-    log_age_c = jnp.clip(log_age_yr, ssp_log_age_yr[0], ssp_log_age_yr[-1])
-
-    iz = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-    ia = jnp.clip(jnp.searchsorted(ssp_log_age_yr, log_age_c) - 1, 0, len(ssp_log_age_yr) - 2)
-
-    fz = _cell_fraction(log_z_c, ssp_lgmet, iz)
-    fa = _cell_fraction(log_age_c, ssp_log_age_yr, ia)
+    _, iz, fz = _bracket(log_z, ssp_lgmet)
+    _, ia, fa = _bracket(log_age_yr, ssp_log_age_yr)
 
     # Bilinear for 7-vector
     t00 = ionspec_table[iz, ia]
@@ -1245,14 +1279,8 @@ def interpolate_ionizing_seglum(
     :func:`_cell_fraction` (#1001) and the same clip + searchsorted bracketing as
     :func:`interpolate_ionizing_params`, so the two always land on the same cell.
     """
-    log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
-    log_age_c = jnp.clip(log_age_yr, ssp_log_age_yr[0], ssp_log_age_yr[-1])
-
-    iz = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-    ia = jnp.clip(jnp.searchsorted(ssp_log_age_yr, log_age_c) - 1, 0, len(ssp_log_age_yr) - 2)
-
-    fz = _cell_fraction(log_z_c, ssp_lgmet, iz)
-    fa = _cell_fraction(log_age_c, ssp_log_age_yr, ia)
+    _, iz, fz = _bracket(log_z, ssp_lgmet)
+    _, ia, fa = _bracket(log_age_yr, ssp_log_age_yr)
 
     s00 = seglum_table[iz, ia]
     s01 = seglum_table[iz, ia + 1]
@@ -1260,3 +1288,563 @@ def interpolate_ionizing_seglum(
     s11 = seglum_table[iz + 1, ia + 1]
 
     return (1 - fz) * (1 - fa) * s00 + (1 - fz) * fa * s01 + fz * (1 - fa) * s10 + fz * fa * s11
+
+
+# ── Composite ionizing spectrum, fitted in JAX ────────────────────────────
+#
+# The reference recipe (:func:`fit_ionizing_spectrum`) fits four power laws to the
+# ionizing spectrum of a population. For a population with SSP weights ``w_a``
+# this is the composite ``sum_a w_a f_a(lambda)``, interpolated in metallicity.
+# The functions below reproduce that fit for a composite held in log space, and
+# differentiate it through the optimality condition of each segment's problem.
+
+#: Fixed Newton iteration count for each segment's ``(alpha, b)`` root. Each step is
+#: a 2x2 solve. The root is reached to round-off within this count for every
+#: metallicity, weighting and starting slope tested.
+NEWTON_ITERATIONS: int = 8
+
+#: Levenberg damping relative to the largest Hessian eigenvalue, applied only
+#: where the Hessian is not positive definite.
+_LEVENBERG_RELATIVE: float = 1e-6
+
+#: Below this |x| the second-order series ``1 + x/2 + x**2/6`` replaces expm1 (error x**3/24).
+_EXPM1_SERIES_CUTOFF: float = 1e-4
+
+#: log10 flux stored for zero or non-finite SSP flux. It lies far below the
+#: reference fit's floor, so a zero pixel adds nothing to a sum, and every
+#: logarithm stays finite.
+_LOG_FLUX_FLOOR: float = -300.0
+
+#: log10 of the reference fit's normalized-flux floor ``1e-70 * norm``.
+_FIT_LOG_FLUX_FLOOR: float = -70.0
+
+#: log10 of the reference fit's ``max(., 1e-99)`` floor, on log flux and on Q_seg.
+_FIT_LOG_TINY: float = -99.0
+
+
+class SegmentGeometry(NamedTuple):
+    """Static (wavelength-only) data of one ionizing segment, float64 NumPy.
+
+    Attributes
+    ----------
+    log_wave : ndarray, shape (n_seg,)
+        log10 of the segment wavelengths [log10(Angstrom)].
+    log_quad : ndarray, shape (n_seg,)
+        log10 of the trapezoid weight over frequency divided by ``h * nu``
+        [log10(s/erg)]. Adding a normalized log10 flux gives the log10 integrand
+        of the segment photon-rate integral.
+    log_xmax : float
+        log10 of the segment's last wavelength [log10(Angstrom)].
+    ell : float
+        ``ln(xmin / xmax)`` for the segment's first and last wavelength; negative.
+    """
+
+    log_wave: np.ndarray
+    log_quad: np.ndarray
+    log_xmax: float
+    ell: float
+
+
+class IonizingLayout(NamedTuple):
+    """Static pixel layout of the ionizing composite.
+
+    Attributes
+    ----------
+    ind_bin : ndarray, shape (5,), int
+        Pixel bounds, computed exactly as :func:`fit_ionizing_spectrum` computes
+        them: segment ``k`` is ``[ind_bin[k], ind_bin[k+1])``.
+    segments : tuple of SegmentGeometry, length 4
+        Per-segment geometry, see :class:`SegmentGeometry`.
+    """
+
+    ind_bin: np.ndarray
+    segments: tuple
+
+
+def ionizing_layout(wave: np.ndarray) -> IonizingLayout:
+    """Pixel bounds and per-segment geometry of the ionizing composite.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Ascending wavelength grid [Angstrom], covering the Lyman limit.
+
+    Returns
+    -------
+    IonizingLayout
+        ``ind_bin`` is the reference's pixel bounds, and ``segments`` holds the
+        geometry of the four segments those bounds define.
+
+    Raises
+    ------
+    ValueError
+        If the grid is not strictly increasing, or a segment has fewer than two
+        pixels (its power-law integral is then undefined).
+
+    Notes
+    -----
+    Built once per SSP grid in float64 NumPy, so the runtime fit sees only
+    constants. The trapezoid weights are those of the reference integral over
+    frequency, ``trapz(integrand[::-1], x=nu[::-1])``, with the same ordering.
+
+    JIT/grad/vmap: not applicable (NumPy, build time).
+    """
+    wave = np.asarray(wave, dtype=np.float64)
+    if np.any(np.diff(wave) <= 0):
+        raise ValueError("ionizing_layout requires a strictly increasing wavelength grid")
+    ind_bin = np.array([max(np.where(wave <= e)[0]) for e in SEGMENT_EDGES[1:]]) + 1
+    ind_bin = np.insert(ind_bin, 0, 0)
+    segments = []
+    for k in range(4):
+        w = wave[ind_bin[k] : ind_bin[k + 1]]
+        if w.size < 2:
+            raise ValueError(f"ionizing segment {k} has {w.size} pixel(s); need at least 2")
+        segments.append(_segment_geometry(w))
+    return IonizingLayout(ind_bin=ind_bin, segments=tuple(segments))
+
+
+def _segment_geometry(seg_wave: np.ndarray) -> SegmentGeometry:
+    """Static geometry of one segment from its ascending wavelengths.
+
+    Parameters
+    ----------
+    seg_wave : array_like, shape (n_seg,)
+        Segment wavelengths [Angstrom], ascending, at least two pixels.
+
+    Returns
+    -------
+    SegmentGeometry
+        Log wavelengths, log trapezoid-over-frequency weights and the endpoint terms.
+
+    Notes
+    -----
+    The trapezoid weights follow ``trapz(integrand[::-1], x=nu[::-1])`` in the
+    reference order. JIT/grad/vmap: not applicable (NumPy, build time).
+    """
+    w = np.asarray(seg_wave, dtype=np.float64)
+    nu = _C_AA / w
+    dx = np.diff(nu[::-1])
+    tw_rev = np.zeros_like(w)
+    tw_rev[:-1] += 0.5 * dx
+    tw_rev[1:] += 0.5 * dx
+    tw = tw_rev[::-1]
+    return SegmentGeometry(
+        log_wave=np.log10(w),
+        log_quad=np.log10(tw) - _LOG_H - np.log10(nu),
+        log_xmax=float(np.log10(w[-1])),
+        ell=float(np.log(w[0] / w[-1])),
+    )
+
+
+#: Jitted converged solves, keyed on the segment's wavelength grid. A grid fixes the
+#: geometry, so each segment of each SSP grid compiles once per process.
+_POLISH_CACHE: dict[tuple, object] = {}
+
+
+def _polish_segment(
+    seg_wave: np.ndarray,
+    log_flux: np.ndarray,
+    log_Q: float,
+    x0: np.ndarray,
+) -> np.ndarray:
+    """Converged ``(alpha, log_norm)`` of one segment, from a SciPy starting point.
+
+    Parameters
+    ----------
+    seg_wave : array, shape (n_seg,)
+        Segment wavelengths [Angstrom].
+    log_flux : array, shape (n_seg,)
+        Normalized log10 flux of the segment, floored at -99.
+    log_Q : float
+        log10 segment photon rate of the normalized flux.
+    x0 : array, shape (2,)
+        Starting ``[alpha, log_norm]`` in normalized units (the SLSQP answer).
+
+    Returns
+    -------
+    ndarray, shape (2,)
+        ``[alpha, log_norm]`` at the stationary point of the segment objective,
+        normalized units.
+
+    Notes
+    -----
+    Uses the same Newton root as the composite fit (:func:`_solve_segment`), so the
+    per-SSP table and the composite path converge to the same point. Not
+    differentiated: this is build-time work. JIT compiled once per segment grid.
+    """
+    key = (seg_wave.shape[0], seg_wave.tobytes())
+    fn = _POLISH_CACHE.get(key)
+    if fn is None:
+        geometry = _segment_geometry(seg_wave)
+        fn = jax.jit(lambda lf, lq, x: _solve_segment(lf, lq, geometry, x))
+        _POLISH_CACHE[key] = fn
+    solved = fn(jnp.asarray(log_flux), jnp.asarray(float(log_Q)), jnp.asarray(x0))
+    return np.asarray(solved, dtype=np.float64)
+
+
+def euv_log_flux_table(ssp_flux: np.ndarray, layout: IonizingLayout) -> np.ndarray:
+    """log10 SSP flux on the ionizing pixels of the layout, one row per SSP.
+
+    Parameters
+    ----------
+    ssp_flux : array_like, shape (..., n_wave)
+        SSP spectra on the wavelength grid of ``layout`` [erg/s/Hz/Msun] (any
+        leading axes, e.g. ``(n_met, n_age, n_wave)``).
+    layout : IonizingLayout
+        From :func:`ionizing_layout`.
+
+    Returns
+    -------
+    ndarray, shape (..., n_keep)
+        ``log10`` flux on pixels ``0 .. ind_bin[-1]`` inclusive, ``n_keep =
+        ind_bin[-1] + 1``. The inclusive end keeps the two pixels the reference
+        uses to normalize the fit. Zero and non-finite flux are stored as
+        ``-300``.
+
+    Notes
+    -----
+    Stored in log space so the composite can be formed without a linear
+    intermediate. JIT/grad/vmap: not applicable (NumPy, build time).
+    """
+    n_keep = int(layout.ind_bin[-1]) + 1
+    flux = np.asarray(ssp_flux, dtype=np.float64)[..., :n_keep]
+    positive = np.isfinite(flux) & (flux > 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_flux = np.log10(np.where(positive, flux, 1.0))
+    return np.where(positive, log_flux, _LOG_FLUX_FLOOR)
+
+
+def _expm1_ratio(x):
+    r"""``expm1(x) / x`` with the limit 1 at ``x = 0``.
+
+    Parameters
+    ----------
+    x : array_like
+        Argument, dimensionless.
+
+    Returns
+    -------
+    jnp.ndarray
+        ``expm1(x) / x``, positive for every real ``x``.
+
+    Notes
+    -----
+    Below ``_EXPM1_SERIES_CUTOFF`` the second-order series ``1 + x/2 + x**2/6``
+    is used. The unselected branch divides by a safe stand-in, so no NaN enters the
+    gradient. JIT/grad/vmap safe.
+    """
+    small = jnp.abs(x) < _EXPM1_SERIES_CUTOFF
+    x_safe = jnp.where(small, 1.0, x)
+    return jnp.where(small, 1.0 + x / 2.0 + x * x / 6.0, jnp.expm1(x_safe) / x_safe)
+
+
+def _segment_objective(p, lf, log_Q, seg: SegmentGeometry):
+    r"""Reference objective of one segment, in normalized log space.
+
+    Parameters
+    ----------
+    p : array, shape (2,)
+        ``[alpha, b]``: slope and log10 intercept of the normalized power law.
+    lf : array, shape (n_seg,)
+        Normalized log10 flux, floored at ``-99``.
+    log_Q : float
+        log10 of the segment photon rate of the normalized flux, floored at ``-99``.
+    seg : SegmentGeometry
+        Static geometry of the segment.
+
+    Returns
+    -------
+    jnp.ndarray, shape ()
+        The objective; see the Notes.
+
+    Notes
+    -----
+    .. math::
+
+       L(\alpha, b) = \tfrac{1}{2} \sum_i \left(\log f_i - b - \alpha \log \lambda_i
+       \right)^2 + \tfrac{1}{2} N \left(\log Q - \log Q_\mathrm{pred}(\alpha, b)
+       \right)^2
+
+    with :math:`\log Q_\mathrm{pred} = b - \log h + \log \left| (\lambda_\mathrm{max}^
+    \alpha - \lambda_\mathrm{min}^\alpha) / \alpha \right|`. The second term is
+    evaluated as :math:`\alpha \log \lambda_\mathrm{max} + \log(-\ell) +
+    \log(\mathrm{expm1}(\alpha \ell) / (\alpha \ell))`, with
+    :math:`\ell = \ln(\lambda_\mathrm{min}/\lambda_\mathrm{max}) < 0`, so the power
+    :math:`\lambda_\mathrm{max}^\alpha` is factored out and no term overflows in
+    float32. Symbols: :math:`f_i` normalized flux, :math:`\lambda_i` wavelength
+    [Angstrom], :math:`N` pixel count, :math:`h` Planck constant [erg s].
+
+    Implements the objective of Li et al. 2025 [1]_ (the Cue ionizing-spectrum
+    fit). Differentiable in ``p``, ``lf`` and ``log_Q``; JIT and vmap safe.
+
+    References
+    ----------
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
+       ApJ, 986, 9 (2025). arXiv:2405.04598.
+    """
+    alpha, b = p[0], p[1]
+    n = seg.log_wave.shape[0]
+    log_wave = jnp.asarray(seg.log_wave)
+    pred = b + alpha * log_wave
+    log_Q_pred = (
+        b
+        - _LOG_H
+        + alpha * seg.log_xmax
+        + np.log10(-seg.ell)
+        + jnp.log10(_expm1_ratio(alpha * seg.ell))
+    )
+    return 0.5 * jnp.sum((lf - pred) ** 2) + 0.5 * n * (log_Q - log_Q_pred) ** 2
+
+
+def _newton_root(residual, x0):
+    """Fixed-count damped Newton iteration for ``residual(x) = 0`` in two dimensions.
+
+    Parameters
+    ----------
+    residual : callable
+        Gradient of the segment objective, ``(2,) -> (2,)``.
+    x0 : array, shape (2,)
+        Starting point.
+
+    Returns
+    -------
+    jnp.ndarray, shape (2,)
+        The iterate after :data:`NEWTON_ITERATIONS` steps.
+
+    Notes
+    -----
+    The Hessian is the Jacobian of ``residual``. Where it is not positive definite,
+    a Levenberg term ``mu * I`` makes the step a descent step; ``mu`` is zero for a
+    positive-definite Hessian. Used only as the ``solve`` argument of
+    :func:`jax.lax.custom_root`, which differentiates the root, not this loop.
+    JIT/grad/vmap safe.
+    """
+    hessian = jax.jacfwd(residual)
+
+    def body(_, x):
+        g = residual(x)
+        H = hessian(x)
+        eig = jnp.linalg.eigvalsh(H)
+        scale = jnp.maximum(jnp.max(jnp.abs(eig)), 1.0)
+        mu = jnp.where(eig[0] > 0.0, 0.0, -eig[0] + _LEVENBERG_RELATIVE * scale)
+        return x - jnp.linalg.solve(H + mu * jnp.eye(2, dtype=H.dtype), g)
+
+    return jax.lax.fori_loop(0, NEWTON_ITERATIONS, body, x0)
+
+
+def _solve_segment(lf, log_Q, seg: SegmentGeometry, x0):
+    """Root of a segment's objective gradient, differentiated by the implicit rule.
+
+    Parameters
+    ----------
+    lf : array, shape (n_seg,)
+        Normalized log10 flux, floored at ``-99``.
+    log_Q : float
+        log10 segment photon rate of the normalized flux.
+    seg : SegmentGeometry
+        Static geometry of the segment.
+    x0 : array, shape (2,)
+        Starting point ``[alpha, b]``.
+
+    Returns
+    -------
+    jnp.ndarray, shape (2,)
+        ``[alpha, b]`` at the optimum, normalized units.
+
+    Notes
+    -----
+    :func:`jax.lax.custom_root` gives the derivative from the optimality condition
+    ``grad L(x*) = 0``: ``dx*/dtheta = -H^{-1} d(grad L)/dtheta``. The Newton loop
+    is not unrolled. JIT/grad/vmap safe.
+    """
+
+    def residual(p):
+        return jax.grad(_segment_objective)(p, lf, log_Q, seg)
+
+    def tangent_solve(g, y):
+        return jnp.linalg.solve(jax.jacfwd(g)(y), y)
+
+    return jax.lax.custom_root(residual, x0, _newton_root, tangent_solve)
+
+
+def _ionizing_seglum_log10(log_amp, alpha, lo: float, hi: float):
+    r"""log10 integrated luminosity of one segment, from its power-law coefficients.
+
+    Parameters
+    ----------
+    log_amp : array, shape ()
+        Denormalized log10 amplitude [log10(erg/s/Hz)].
+    alpha : array, shape ()
+        Power-law slope, dimensionless.
+    lo, hi : float
+        Segment edges [Angstrom], from :data:`SEGMENT_EDGES`.
+
+    Returns
+    -------
+    jnp.ndarray, shape ()
+        ``log10`` integrated luminosity [log10(erg/s)].
+
+    Notes
+    -----
+    .. math::
+
+       L = A\,c\,L_\odot \int_{\lambda_\mathrm{lo}}^{\lambda_\mathrm{hi}}
+       \lambda^{\alpha-2}\,\mathrm{d}\lambda
+       = A\,c\,L_\odot\,\frac{\lambda_\mathrm{hi}^{\alpha-1} -
+       \lambda_\mathrm{lo}^{\alpha-1}}{\alpha - 1}
+
+    with :math:`\alpha = 1` taken as :math:`\ln(\lambda_\mathrm{hi}/\lambda_\mathrm{lo})`.
+    Written as ``lambda_hi**(alpha-1) * (-ell) * expm1_ratio((alpha-1)*ell)`` with
+    ``ell = ln(lo/hi)``, so the power never overflows and the ``alpha = 1`` limit is
+    continuous. Same formula as :func:`_compute_segment_luminosities`.
+    JIT/grad/vmap safe.
+    """
+    p = alpha - 1.0
+    ell = float(np.log(lo / hi))
+    log10_g = p * np.log10(hi) + np.log10(-ell) + jnp.log10(_expm1_ratio(p * ell))
+    return log_amp + np.log10(_C_AA * _LSUN) + log10_g
+
+
+def fit_composite_ionizing_shape(
+    log_euv_flux: jnp.ndarray,
+    layout: IonizingLayout,
+    alpha_start: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    r"""Ionizing shape of a composite spectrum: the reference fit, in JAX.
+
+    Parameters
+    ----------
+    log_euv_flux : array_like, shape (n_keep,)
+        log10 composite flux on the layout's ionizing pixels [log10(erg/s/Hz)],
+        ``n_keep = layout.ind_bin[-1] + 1``. Zero flux is ``-300``.
+    layout : IonizingLayout
+        Static pixel layout, from :func:`ionizing_layout`.
+    alpha_start : array_like, shape (4,)
+        Starting slope of each segment [dimensionless]. The population's
+        luminosity-weighted mean slope is the intended start.
+
+    Returns
+    -------
+    i7 : jnp.ndarray, shape (7,)
+        ``[index1..4, logLratio1..3]``: the four slopes and the three differences of
+        the log10 segment luminosities. Unclipped; the trained-box clamp is the
+        caller's.
+    coeff : jnp.ndarray, shape (4, 2)
+        ``[slope, log10 amplitude]`` per segment, denormalized as the reference's
+        ``powerlaw_params``.
+    log_seglum : jnp.ndarray, shape (4,)
+        log10 integrated luminosity per segment [log10(erg/s)].
+
+    Notes
+    -----
+    Reproduces :func:`fit_ionizing_spectrum` on the composite:
+
+    1. Normalization ``norm = 1e-18 / median`` of the flux at the last two ionizing
+       pixels, in log space with the reference's ``1e-99`` floor.
+    2. Flux floored at ``1e-70 * norm``, then ``log10`` floored at ``1e-99``.
+    3. Per segment, the photon rate ``Q_seg`` is the trapezoid over frequency of
+       ``flux / (h nu)``, evaluated as a log-sum-exp.
+    4. Each segment's ``(alpha, b)`` minimizes :func:`_segment_objective`. The
+       minimizer is a Newton root (:func:`_solve_segment`), so its derivatives come
+       from the optimality condition.
+    5. Luminosities from ``(alpha, logA)``; the 7-vector is the slopes and the diffs
+       of ``log_seglum``.
+
+    The reference uses SciPy SLSQP, which stops at its own tolerance. This function
+    solves the stationarity condition to round-off, so its objective is at most the
+    reference's. Log space throughout, so float32 neither overflows nor underflows.
+    The starting point is ``alpha_start`` with the least-squares intercept for it.
+
+    Implements the Cue ionizing-spectrum fit of Li et al. 2025 [1]_. JIT, grad and
+    vmap safe, differentiable in ``log_euv_flux`` and ``alpha_start``.
+
+    References
+    ----------
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
+       ApJ, 986, 9 (2025). arXiv:2405.04598.
+    """
+    log_flux = jnp.asarray(log_euv_flux)
+    i_hi = int(layout.ind_bin[-1])
+    pair = jnp.stack([log_flux[i_hi - 1], log_flux[i_hi]])
+    log_ref = logsumexp(_LN10 * pair) / _LN10 - np.log10(2.0)
+    log_ref = jnp.maximum(log_ref, _FIT_LOG_TINY)
+    log_norm = -18.0 - log_ref
+    lnorm_all = jnp.maximum(log_flux, _FIT_LOG_FLUX_FLOOR) + log_norm
+
+    slopes, log_amps = [], []
+    for k, seg in enumerate(layout.segments):
+        lnorm = lnorm_all[int(layout.ind_bin[k]) : int(layout.ind_bin[k + 1])]
+        lf = jnp.maximum(lnorm, _FIT_LOG_TINY)
+        log_quad = jnp.asarray(seg.log_quad)
+        log_Q = jnp.maximum(logsumexp(_LN10 * (lnorm + log_quad)) / _LN10, _FIT_LOG_TINY)
+        a0 = alpha_start[k]
+        b0 = jnp.mean(lf - a0 * jnp.asarray(seg.log_wave))
+        p = _solve_segment(lf, log_Q, seg, jnp.stack([a0, b0]))
+        slopes.append(p[0])
+        log_amps.append(p[1] - log_norm)
+
+    slope_vec = jnp.stack(slopes)
+    coeff = jnp.stack([slope_vec, jnp.stack(log_amps)], axis=1)
+    log_seglum = jnp.stack(
+        [
+            _ionizing_seglum_log10(
+                log_amps[k], slopes[k], float(SEGMENT_EDGES[k]), float(SEGMENT_EDGES[k + 1])
+            )
+            for k in range(4)
+        ]
+    )
+    i7 = jnp.concatenate([slope_vec, jnp.diff(log_seglum)])
+    return i7, coeff, log_seglum
+
+
+def composite_log_ionizing_flux(
+    log_euv_table: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    log_z: jnp.ndarray,
+    weights: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""log10 composite ionizing flux of a weighted population.
+
+    Parameters
+    ----------
+    log_euv_table : array_like, shape (n_met, n_age, n_keep)
+        log10 SSP flux on the ionizing pixels, from :func:`euv_log_flux_table`
+        [log10(erg/s/Hz/Msun)].
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity grid, ``log10(Z)`` absolute.
+    log_z : float
+        Target stellar metallicity, ``log10(Z)`` absolute.
+    weights : array_like, shape (n_age,)
+        Mass weights per SSP age bin [Msun]. Zero excludes the bin.
+
+    Returns
+    -------
+    jnp.ndarray, shape (n_keep,)
+        ``log10`` of the composite flux [log10(erg/s/Hz)]. Zero flux is ``-300``.
+
+    Notes
+    -----
+    The flux is interpolated linearly in metallicity between the two bracketing
+    nodes, clamped at the ends, with :func:`_cell_fraction` as
+    :func:`interpolate_ionizing_params` uses. Both the interpolation and the age sum
+    are formed in log space with :func:`jax.scipy.special.logsumexp`. The weights
+    enter linearly, so a zero weight contributes exactly nothing. When every weight
+    is zero the result is the floor, and its gradient in the weights is zero.
+
+    JIT/grad/vmap safe; differentiable in ``log_z`` and ``weights``.
+    """
+    _, iz, fz = _bracket(log_z, ssp_lgmet)
+    tiny = jnp.finfo(log_euv_table.dtype).tiny
+    lw0 = jnp.log(jnp.maximum(1.0 - fz, tiny))
+    lw1 = jnp.log(jnp.maximum(fz, tiny))
+    l0 = log_euv_table[iz]
+    l1 = log_euv_table[iz + 1]
+    z_flux = jnp.logaddexp(lw0 + _LN10 * l0, lw1 + _LN10 * l1) / _LN10
+
+    weights = jnp.asarray(weights)
+    any_w = jnp.any(weights > 0)
+    w_safe = jnp.where(any_w, weights, 1.0)
+    total = logsumexp(_LN10 * z_flux, b=w_safe[:, None], axis=0) / _LN10
+    return jnp.where(any_w, total, _LOG_FLUX_FLOOR)
