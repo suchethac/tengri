@@ -4,16 +4,22 @@
 The AGN component builds its whole SED through the block runner on every call and integrates it
 through each filter; no WavePrecomp table existed for it. The registry adapter ``composable_agn``
 tabulates the band fluxes over the free ``agn_*`` parameters at build, and the component reads
-that table instead of integrating. Four things are pinned:
+that table instead of integrating. Five things are pinned:
 
 (a) the table is built through the registry and the predict does not integrate the filters;
-(b) the table agrees with the exact photometry at three draws inside the priors, within the
-    stated accuracy of its family, with finite gradients;
+(b) the table's AGN band fluxes agree with the exact model's AGN SED, integrated through the
+    same filters, at three draws inside the priors, with finite gradients;
 (c) ``agn['axis_grids']`` (``agn_axis_grids``) sets the table's axes (#2471);
-(d) exact mode is unchanged: no table, no registry call, the per-filter integrals run.
+(d) exact mode is unchanged: no table, no registry call, the per-filter integrals run;
+(e) the build measures its own table at the cell centers and declines one that misses
+    ``SEDModel._AGN_TABLE_RTOL``: the kubota_done disc over its whole luminosity prior (a jump
+    of the disc flux near agn_log_lbol 9.8) and SKIRTOR's inclination (the disc passing behind
+    the torus) are declined, with the measured error as the reason.
 
-A family whose table misses its stated accuracy is declined by the build gate or recorded in
-``UNWIRED``; a tolerance is never loosened to fit.
+Every comparison reads the AGN term alone. In this fixture the synthetic stellar population
+outshines the AGN by ~1e11 (doubling the table read moves the total photometry by <= 2e-11), so a
+total-photometry comparison passes whatever the table returns. A tolerance is never loosened to
+fit.
 """
 
 from __future__ import annotations
@@ -28,11 +34,15 @@ import pytest
 
 from tengri.components.agn.blocks.composable_precompute import UNWIRED_BLOCKS
 from tengri.config.exceptions import TengriIOError
+from tengri.forward.sed_model import SEDModel
 
 pytestmark = pytest.mark.contract
 
 #: Registry key of the adapter that builds the table.
 _KEY = "composable_agn"
+
+#: The bound the build holds every kept table to, at its cell centers.
+_AGN_RTOL = SEDModel._AGN_TABLE_RTOL
 
 
 def _ssp():
@@ -74,12 +84,12 @@ class Family:
     atten: dict | None = None
 
 
-def _free(*names):
+def _free(*names, lbol=(8.0, 14.0)):
     from tengri import Uniform
 
     # Units are the declared ones: agn_log_lbol is log10(L_bol / L_sun), declared Uniform(8, 14).
     priors = {
-        "agn_log_lbol": Uniform(8.0, 14.0),
+        "agn_log_lbol": Uniform(*lbol),
         "agn_cos_inc": Uniform(0.1, 0.9),
     }
     return {n: priors[n] for n in names}
@@ -91,33 +101,48 @@ def _atten_ebv():
     return {"law": "prevot_smc", "ebv": Uniform(0.0, 0.5)}
 
 
-# Accuracy: max relative error of the total photometry, table model against exact model, at
-# z = 0.1 over 24 seeded draws (seeds 0-23) of every free parameter, six bands from 3000 A to
-# 800 um, at the node counts of ``SEDModel._AGN_TABLE_NODES`` (33 nodes on one axis, 17 on two).
-# agn_log_lbol spans its declared prior (8, 14). Measured (kubota_done + skirtor unless noted):
-#   1 axis  (lbol)          5.37e-5 at 33, 66, 132 nodes
-#   1 axis  (powerlaw+simple) 5.30e-5 at 33, 66, 132 nodes
-#   2 axes  (lbol + ebv, prevot_smc) 5.37e-5 at 17, 34, 68 nodes
-#   2 axes  (lbol + cos_inc) 5.37e-5 at 17, 34, 68 nodes
-# The error is the same at every node count and for every AGN axis: it is the WavePrecomp
-# floor of the stellar and dust photometry, which the exact model does not use. The AGN
-# table alone, against the per-call WavePrecomp integral (no table), is 2e-16 (lbol), 6e-16
-# (lbol + ebv) and 8e-11 (lbol + cos_inc) at 33 / 17 nodes. Each rtol is that measurement
-# rounded up to the next power of ten.
+# Accuracy: the AGN band fluxes of the table against the exact model's AGN SED integrated
+# through the same filters, z = 0.1, six bands from 3000 A to 800 um. The build's cell-center
+# gate holds every table it keeps to ``SEDModel._AGN_TABLE_RTOL`` (1e-3), so that is each rtol.
+# Measured at the cell centers (the build's own probe): kubota_done over lbol (10.5, 14) passes
+# at the 65 one-axis nodes (1.13e-3 at 33 nodes); powerlaw+simple with the SMC E(B-V) axis
+# passes. powerlaw+simple over lbol alone is rank-1, so the exact term response serves it.
 FAMILIES: dict[str, Family] = {
-    "kubota_done+skirtor/lbol": Family("kubota_done", "skirtor", _free("agn_log_lbol"), rtol=1e-4),
-    "powerlaw+simple/lbol": Family("powerlaw", "simple", _free("agn_log_lbol"), rtol=1e-4),
-    "kubota_done+skirtor+smc_prevot/lbol+ebv": Family(
-        "kubota_done", "skirtor", _free("agn_log_lbol"), rtol=1e-4, atten=_atten_ebv()
+    "kubota_done+skirtor/lbol>10.5": Family(
+        "kubota_done", "skirtor", _free("agn_log_lbol", lbol=(10.5, 14.0)), rtol=1e-3
     ),
+    "powerlaw+simple/lbol": Family("powerlaw", "simple", _free("agn_log_lbol"), rtol=1e-3),
+    "powerlaw+simple+smc_prevot/lbol+ebv": Family(
+        "powerlaw", "simple", _free("agn_log_lbol"), rtol=1e-3, atten=_atten_ebv()
+    ),
+    "kubota_done+skirtor/lbol": Family("kubota_done", "skirtor", _free("agn_log_lbol"), rtol=1e-3),
     "kubota_done+skirtor/lbol+cos_inc": Family(
-        "kubota_done", "skirtor", _free("agn_log_lbol", "agn_cos_inc"), rtol=1e-4
+        "kubota_done", "skirtor", _free("agn_log_lbol", "agn_cos_inc"), rtol=1e-3
     ),
 }
 
-#: family -> why its table is not engaged (measured accuracy against the stated bound). Empty:
-#: every family above meets its rtol at the current node counts.
-UNWIRED: dict[str, str] = {}
+_MISSES = "the table misses its 0.001 accuracy"
+_RANK1 = "the rank-1 term band response serves this AGN exactly"
+
+#: family -> (the start of the build's decline reason, why).
+UNWIRED: dict[str, tuple[str, str]] = {
+    "kubota_done+skirtor/lbol": (
+        _MISSES,
+        "3.9e-1 at the cell centers of 33 nodes over lbol (8, 14): the kubota_done disc flux per "
+        "unit luminosity at 3000 A jumps ~4x between lbol 9.80 and 9.95 (mbh 1e8, lambda_Edd "
+        "~2e-3), where the corona and warm-zone radii reach their clips at 0.5 and 0.9 R_out",
+    ),
+    "kubota_done+skirtor/lbol+cos_inc": (
+        _MISSES,
+        "4.6e-2 at 17 x 17 nodes with lbol (10.5, 14), and 4.2e-1 with a powerlaw disc: SKIRTOR "
+        "hides the disc behind the torus at its opening angle, a step in agn_cos_inc (the error "
+        "halves per doubling of the cos_inc nodes, 5.1e-2 at 17 and 2.7e-2 at 33)",
+    ),
+    "powerlaw+simple/lbol": (
+        _RANK1,
+        "every sub-block is a fixed shape times its amplitude: the term response is exact",
+    ),
+}
 
 
 def _wired():
@@ -167,6 +192,29 @@ def _wavepre():
 def _band_table(model) -> dict | None:
     data = model._template_data_for_jit() or {}
     return data.get("agn", {}).get("band_table")
+
+
+# The comparisons below read the AGN band fluxes, never the total photometry. In this fixture
+# the synthetic stellar population outshines the AGN by ~1e11 (doubling the table read moves
+# the total by <= 2e-11), so a total-photometry comparison passes whatever the table returns.
+
+
+def _table_row(model, params) -> np.ndarray:
+    """Observed-band AGN L_nu [erg/s/Hz] read from the model's table."""
+    from tengri.components.agn.component import AGNSEDComponent
+
+    full = {**model.spec.get_fixed_values(), **params}
+    return np.asarray(AGNSEDComponent._band_table_phot(full, _band_table(model))[0])
+
+
+def _per_call_row(model, params) -> np.ndarray:
+    """Observed-band AGN L_nu [erg/s/Hz] the component integrates per call.
+
+    ``model`` must have no table (``_agn_band_table_cache = None``), so this is the per-call
+    WavePrecomp integral the table replaces, whichever chain the state runs.
+    """
+    assert _band_table(model) is None, "the per-call reference model still holds a table"
+    return np.asarray(model.predict_state(params).derived["agn_phot_lnu_precomp"])
 
 
 @pytest.fixture
@@ -242,15 +290,25 @@ def test_table_matches_exact_and_has_finite_gradients(key):
     assert _band_table(table_model) is not None, table_model._agn_band_table_decline
     for seed in (11, 12, 13):
         params = dict(exact_model.spec.sample(jax.random.PRNGKey(seed)))
-        got = np.asarray(table_model.predict_photometry(params))
-        want = np.asarray(exact_model.predict_photometry(params))
-        np.testing.assert_allclose(got, want, rtol=family.rtol, atol=0.0)
+        np.testing.assert_allclose(
+            _table_row(table_model, params),
+            _exact_agn_band(exact_model, params),
+            rtol=family.rtol,
+            atol=0.0,
+        )
+
+    from tengri.components.agn.component import AGNSEDComponent
 
     free = {k: v for k, v in params.items() if k in table_model.spec.free_params}
-    fixed = {k: v for k, v in params.items() if k not in free}
+    fixed = {
+        **table_model.spec.get_fixed_values(),
+        **{k: v for k, v in params.items() if k not in free},
+    }
+    table = _band_table(table_model)
 
     def loss(theta):
-        return jnp.sum(jnp.log(table_model.predict_photometry({**fixed, **theta})))
+        # The AGN term alone: through the total photometry the stellar light swamps it.
+        return jnp.sum(jnp.log(AGNSEDComponent._band_table_phot({**fixed, **theta}, table)[0]))
 
     grads = jax.grad(loss)(free)
     assert all(bool(jnp.isfinite(g)) for g in grads.values())
@@ -259,8 +317,8 @@ def test_table_matches_exact_and_has_finite_gradients(key):
 
 def test_agn_axis_grids_sets_the_table_axes():
     """The grids a user gives reach the table (#2471); a grid short of the prior is refused."""
-    family = FAMILIES[_wired()[0]]
-    nodes = np.linspace(8.0, 14.0, 9)
+    family = FAMILIES["kubota_done+skirtor/lbol>10.5"]
+    nodes = np.linspace(10.5, 14.0, 129)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         default = _model(family, _wavepre())
@@ -271,15 +329,15 @@ def test_agn_axis_grids_sets_the_table_axes():
     assert default_axis.size != nodes.size
 
     with pytest.warns(UserWarning, match="nodes span"):
-        short = _model(family, _wavepre(), axis_grids={"agn_log_lbol": np.linspace(8.5, 13.0, 9)})
+        short = _model(family, _wavepre(), axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 9)})
     assert _band_table(short) is None
     assert "nodes span" in short._agn_band_table_decline
 
 
 def test_agn_axis_grids_round_trips_through_the_groups():
     """The grammar carries the grids onto the spec and ``to_groups`` gives them back (#2471)."""
-    family = FAMILIES[_wired()[0]]
-    nodes = np.linspace(8.0, 14.0, 9)
+    family = FAMILIES["kubota_done+skirtor/lbol>10.5"]
+    nodes = np.linspace(10.5, 14.0, 129)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = _model(family, None, axis_grids={"agn_log_lbol": nodes})
@@ -291,12 +349,11 @@ def test_agn_axis_grids_round_trips_through_the_groups():
 
 @pytest.mark.parametrize("key", _wired())
 def test_table_matches_the_per_call_integral_path(key):
-    """The table reproduces the per-call WavePrecomp integral it replaces, at 1e-10.
+    """The table's AGN row reproduces the per-call WavePrecomp integral it replaces.
 
-    Both models read WavePrecomp, so the stellar and dust photometry are identical in each and
-    cancel. Exact mode is not compared here: WavePrecomp's own stellar and dust photometry
-    differ from exact by ~5e-5 relative (measured with the AGN switched off), so that comparison
-    is not a 1e-10 statement about the AGN table.
+    Away from the nodes the table carries its interpolation error, which the build holds to
+    ``_AGN_RTOL`` at the cell centers (measured at a random draw: 2.5e-7 for kubota_done over
+    lbol (10.5, 14), 1.2e-8 for powerlaw+simple with E(B-V)).
     """
     family = FAMILIES[key]
     with warnings.catch_warnings():
@@ -305,12 +362,9 @@ def test_table_matches_the_per_call_integral_path(key):
         per_call = _model(family, _wavepre())
     per_call._agn_band_table_cache = None
     assert _band_table(table) is not None, table._agn_band_table_decline
-    assert _band_table(per_call) is None
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     np.testing.assert_allclose(
-        np.asarray(table.predict_photometry(params)),
-        np.asarray(per_call.predict_photometry(params)),
-        rtol=1e-10,
+        _table_row(table, params), _per_call_row(per_call, params), rtol=_AGN_RTOL
     )
 
 
@@ -352,16 +406,19 @@ def test_unwired_keys_name_known_families():
 
 @pytest.mark.parametrize("key", sorted(FAMILIES))
 def test_family_is_engaged_unless_recorded_unwired(key):
-    """Every family is engaged, or it is recorded in UNWIRED and then declined with that reason.
+    """Every family is engaged, or it is recorded in UNWIRED and the build's own probe declines it.
 
-    Over the current FAMILIES (UNWIRED is empty) this asserts that all four engage the table, so
-    it is not vacuous: a family that starts failing its rtol shows up here as a declined table.
+    The UNWIRED families are the anti-vacuity arm of the cell-center gate: a kink (the kubota_done
+    disc over its whole luminosity prior) and a step (SKIRTOR's inclination) must be refused with
+    the measured error, and the smooth families beside them must be kept.
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = _model(FAMILIES[key], _wavepre())
     if key in UNWIRED:
-        assert _band_table(model) is None, f"{key} is recorded as unwired: {UNWIRED[key]}"
+        prefix, why = UNWIRED[key]
+        assert _band_table(model) is None, f"{key} is recorded as unwired: {why}"
+        assert model._agn_band_table_decline.startswith(prefix), model._agn_band_table_decline
     else:
         assert _band_table(model) is not None, model._agn_band_table_decline
 
@@ -401,8 +458,8 @@ def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
 
     The row is one evaluation of the recipe at the fixed agn_log_lbol, through the same
     registry adapter and filter integrals as the table. The whole-model photometry is not
-    compared with exact (WavePrecomp's stellar floor); the table is compared with the per-call
-    WavePrecomp path, which it reproduces at 1e-10.
+    compared with exact (WavePrecomp's stellar floor); the AGN row is compared with the per-call
+    WavePrecomp row, which it reproduces at 1e-10 because the fixed point is the table's node.
     """
     from tengri import Fixed
 
@@ -413,12 +470,13 @@ def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
         per_call = _fixed_model(_wavepre(), agn_extra=extra)
     per_call._agn_band_table_cache = None
     assert _band_table(table) is not None, table._agn_band_table_decline
-    assert _band_table(per_call) is None
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     before = len(integral_spy)
-    got = np.asarray(table.predict_photometry(params))
+    jax.block_until_ready(table.predict_photometry(params))
     assert len(integral_spy) == before, "predict integrated the AGN SED through the filters"
-    np.testing.assert_allclose(got, np.asarray(per_call.predict_photometry(params)), rtol=1e-10)
+    np.testing.assert_allclose(
+        _table_row(table, params), _per_call_row(per_call, params), rtol=1e-10
+    )
 
 
 def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
@@ -437,12 +495,42 @@ def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
     assert flops(table) < 0.1 * flops(per_call)
 
 
-#: Torus types the table is measured over (measured table vs per-call WavePrecomp, 24 draws,
-#: 33 nodes (1 axis) / 17 nodes per axis (2 axes): silva04 1.0e-15 (cos_inc 2.6e-16);
-#: nenkova 8.1e-16 (T_torus), 2.6e-16 (cos_inc); cat3d_wind 8.1e-16 (T_torus), 1.0e-9
-#: (cos_inc); simple T_torus is the only torus that declares it). fritz is not measured:
-#: its grid file in this checkout lacks the norm dataset.
-TORUS_TYPES = ("silva04", "nenkova", "cat3d_wind", "simple")
+def _exact_agn_band(model, params) -> np.ndarray:
+    """Filter integral of the exact model's own AGN SED, so no stellar term enters."""
+    from tengri.observation.photometry import lnu_filter_integral
+
+    state = model.predict_state(params)
+    sed = state.derived["sed_agn"]
+    return np.asarray(
+        [
+            lnu_filter_integral(sed, state.wave, f.wave, f.trans, redshift=jnp.asarray(0.1))
+            for f in (_tophat(c) for c in _BANDS_AA)
+        ]
+    )
+
+
+def _assert_kept_tables_match_exact(table, exact):
+    """A kept table matches the exact AGN SED integral within the gate's bound; a declined one
+    carries the gate's measured reason (the build never keeps a table it has not measured)."""
+
+    if _band_table(table) is None:
+        assert table._agn_band_table_decline.startswith((_MISSES, _RANK1)), (
+            table._agn_band_table_decline
+        )
+        return False
+    for seed in (0, 1, 2):
+        params = dict(table.spec.sample(jax.random.PRNGKey(seed)))
+        np.testing.assert_allclose(
+            _table_row(table, params),
+            _exact_agn_band(exact, params),
+            rtol=_AGN_RTOL,
+        )
+    return True
+
+
+#: Torus types the table is built over. Each is tested on its own declared shape axes, beside a
+#: powerlaw disc at a Fixed luminosity, so the only free axis is the torus's.
+TORUS_TYPES = ("silva04", "nenkova", "cat3d_wind", "simple", "fritz")
 
 #: Shape axes the torus table may be admitted over. Which of these a torus type reads is
 #: derived below, never listed by hand: a parameter a type does not declare is refused by
@@ -488,9 +576,8 @@ def _torus_model(torus: str, param: str, approx):
     agn = {
         "type": "composable",
         "all_params": Fixed(DEFAULT),
-        "disc": {"type": "kubota_done"},
+        "disc": {"type": "powerlaw"},
         "torus": tor,
-        "agn_log_lbol": Uniform(8.0, 14.0),
     }
     if param == "agn_T_torus":
         tor["agn_T_torus"] = Uniform(100.0, 1500.0)
@@ -520,32 +607,87 @@ def test_every_torus_type_declares_a_shape_axis():
     assert not empty, f"torus types with no declared shape axis: {empty}"
 
 
+#: Torus axes whose table the build keeps (measured verdicts; the rest are declined at the cell
+#: centers: cat3d_wind cos_inc 1.24e-3, fritz cos_inc 4.1e-3, simple T_torus 1.5e-2 at 65 nodes).
+#: Pinned so a regression that declines every table fails here rather than passing quietly.
+_KEPT_TORUS_AXES = {("silva04", "agn_cos_inc"), ("nenkova", "agn_cos_inc")}
+
+
 @pytest.mark.parametrize("torus,param", TORUS_AXIS_PAIRS)
-def test_torus_axis_table_matches_per_call_integral_path(torus, param):
-    """The torus free declared shape axis is tabulated and matches the per-call path at 1e-8."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table = _torus_model(torus, param, _wavepre())
-        per_call = _torus_model(torus, param, _wavepre())
-    per_call._agn_band_table_cache = None
-    assert _band_table(table) is not None, table._agn_band_table_decline
-    params = dict(table.spec.sample(jax.random.PRNGKey(0)))
-    np.testing.assert_allclose(
-        np.asarray(table.predict_photometry(params)),
-        np.asarray(per_call.predict_photometry(params)),
-        rtol=1e-8,
-    )
+def test_torus_axis_table_matches_exact_or_is_declined(torus, param):
+    """A torus shape axis is tabulated to the gate's bound against exact, or declined by it."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            table = _torus_model(torus, param, _wavepre())
+            exact = _torus_model(torus, param, None)
+    except (FileNotFoundError, TengriIOError) as exc:
+        pytest.skip(f"{torus}: model needs data absent from this checkout ({exc})")
+    kept = _assert_kept_tables_match_exact(table, exact)
+    if (torus, param) in _KEPT_TORUS_AXES:
+        assert kept, table._agn_band_table_decline
 
 
-def _unwired_block_model(key: str):
+#: Every disc, nlr, blr, feii, torus and attenuation block that loads a library or a grid,
+#: built beside the default disc with agn_log_lbol over (10.5, 14), where that disc is smooth.
+#: Each table is either kept and matched to exact, or declined with the gate's measurement.
+TEMPLATE_BLOCKS = (
+    "disc/grahsp_sbpl",
+    "nlr/grahsp",
+    "blr/grahsp",
+    "feii/grahsp",
+    "torus/grahsp",
+    "attenuation/grahsp_biatten",
+    "torus/fritz",
+    "nlr/cue",
+    "nlr/synthesizer",
+    "nlr/synthesizer_spectra",
+    "blr/synthesizer",
+    "blr/synthesizer_spectra",
+)
+
+
+#: Blocks whose table the build keeps (measured verdicts). Of the others, disc/grahsp_sbpl is
+#: rank-1 (served exactly by the term response) and torus/grahsp is declined (2.1e-3 at 65 nodes).
+_KEPT_BLOCKS = {
+    "nlr/grahsp",
+    "blr/grahsp",
+    "feii/grahsp",
+    "attenuation/grahsp_biatten",
+    "torus/fritz",
+    "nlr/cue",
+    "nlr/synthesizer",
+    "nlr/synthesizer_spectra",
+    "blr/synthesizer",
+    "blr/synthesizer_spectra",
+}
+
+
+def _block_model(key: str, approx):
     """A composable AGN with the block named by ``key`` (``"<category>/<name>"``), free lum."""
+    from tengri import Uniform
+
     category, name = key.split("/")
     slot = "atten" if category == "attenuation" else category
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return _fixed_model(
-            _wavepre(), agn_extra={slot: {"type": name}, "agn_log_lbol": _free_lbol()}
+            approx, agn_extra={slot: {"type": name}, "agn_log_lbol": Uniform(10.5, 14.0)}
         )
+
+
+@pytest.mark.parametrize("key", TEMPLATE_BLOCKS)
+def test_template_block_table_matches_exact_or_is_declined(key):
+    """Each template-backed block builds its table (no hand-kept exclusion list), and the table
+    the build keeps matches the exact AGN SED. Data absent from this checkout skips by name."""
+    try:
+        table = _block_model(key, _wavepre())
+        exact = _block_model(key, None)
+    except (FileNotFoundError, TengriIOError) as exc:
+        pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
+    kept = _assert_kept_tables_match_exact(table, exact)
+    if key in _KEPT_BLOCKS:
+        assert kept, table._agn_band_table_decline
 
 
 @pytest.mark.parametrize("key", sorted(UNWIRED_BLOCKS))
@@ -557,14 +699,8 @@ def test_unwired_block_is_declined_with_its_reason(key):
     entry is skipped by name; every other entry must build and be declined.
     """
     try:
-        model = _unwired_block_model(key)
+        model = _block_model(key, _wavepre())
     except (FileNotFoundError, TengriIOError) as exc:
         pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
     assert _band_table(model) is None
     assert model._agn_band_table_decline == f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
-
-
-def _free_lbol():
-    from tengri import Uniform
-
-    return Uniform(8.0, 14.0)

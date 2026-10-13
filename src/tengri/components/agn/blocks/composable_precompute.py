@@ -45,9 +45,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
-from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -72,33 +72,19 @@ __all__ = [
 #: Free parameters the table is not built over, with the measurement that excludes them. The
 #: table interpolates ``ln`` flux with PCHIP on uniform nodes; a parameter that moves the band
 #: fluxes through a feature narrower than the node spacing is not represented to a usable
-#: accuracy by any node count the build can afford. Empty: agn_log_lbol and agn_cos_inc are both
-#: admitted (kubota_done + skirtor; the AGN table against the per-call integral is 8e-11 at 17
-#: nodes per axis, see ``tests/contract/test_agn_precompute_table_wired.py``).
+#: accuracy by any node count the build can afford. Empty: whether an axis is represented depends
+#: on the recipe and the prior, so the build measures each table at its cell centers instead
+#: (``SEDModel._agn_table_cell_center_error``). It declines, for example, SKIRTOR's agn_cos_inc
+#: (the disc passes behind the torus: 4.2e-1 at 17 nodes) and the kubota_done disc over its whole
+#: agn_log_lbol prior (its flux jumps near lbol 9.8: 3.9e-1 at 33 nodes), see
+#: ``tests/contract/test_agn_precompute_table_wired.py``.
 UNWIRED_AXES: dict[str, str] = {}
 
-#: Blocks the table is not built over, keyed ``"<category>/<name>"`` (``category`` one of the
-#: composable stages). A block that is absent here is admitted: its table matches the per-call
-#: WavePrecomp integral to roundoff (measured 0 to 4e-16 at 33 nodes, agn_log_lbol over (8, 14),
-#: for every disc, nlr, blr, feii, torus and attenuation block that builds in this checkout, and
-#: 1e-9 at most for the torus T_torus and cos_inc axes). The entries here are the blocks whose
-#: table cannot be built in this checkout, so there is no measured number: the exact path is used.
-UNWIRED_BLOCKS: dict[str, str] = {
-    "disc/grahsp_sbpl": "the table build raises TypeError ('GRAHSPTemplates' is not callable)",
-    "nlr/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
-    "blr/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
-    "feii/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
-    "torus/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
-    "attenuation/grahsp_biatten": (
-        "the table build raises TypeError (custom_jvp argument is not a JAX value)"
-    ),
-    "nlr/cue": "its data file is not in this checkout (FileNotFoundError)",
-    "nlr/synthesizer": "the Synthesizer NLR grid is not in this checkout",
-    "nlr/synthesizer_spectra": "the Synthesizer NLR grid is not in this checkout",
-    "blr/synthesizer": "the Synthesizer BLR grid is not in this checkout",
-    "blr/synthesizer_spectra": "the Synthesizer BLR grid is not in this checkout",
-    "torus/fritz": "its Fritz grid lacks the fritz2006/norm dataset (TengriIOError)",
-}
+#: Blocks the table is never built over, keyed ``"<category>/<name>"`` (``category`` one of the
+#: composable stages), each with the reason. Empty: every block builds, and the build measures
+#: each table at its cell centers and declines one that misses ``SEDModel._AGN_TABLE_RTOL``, so a
+#: block needs an entry here only if its table cannot be built at all.
+UNWIRED_BLOCKS: dict[str, str] = {}
 
 #: Smallest band flux kept when the table is stored as ``ln`` [erg/s/Hz]. A band the recipe
 #: leaves empty (no emission there at a node) stores ``_LN_PHOT_FLOOR`` rather than ``-inf``.
@@ -141,20 +127,18 @@ AXIS_PARAMS: tuple[str, ...] = ()
 
 
 def _build_template_state(recipe: Recipe) -> dict[str, Any] | None:
-    """Load any templates the recipe's blocks need; return runner-state dict.
+    """Load the recipe's template libraries per stage, as the model build threads them.
 
-    Only the GRAHSP family currently has block-loaded templates; other
-    blocks either are analytic (powerlaw, SBPL, simple torus, SMC) or load
-    grids via dedicated precompute paths (SKIRTOR, Silva04, CAT3D). When the
-    recipe doesn't touch GRAHSP we return ``None`` (no hoist needed).
+    Keyed ``"<category>/<name>"`` (:func:`collect_block_templates`), so each stage reads its
+    own library. A flat ``{"grahsp": ...}`` bundle is handed by the runner to every stage, which
+    gives a non-GRAHSP block (the disc, the torus) the GRAHSP library as its own. ``None`` when
+    no block of the recipe declares a loader.
     """
-    selectors = recipe.as_selector_dict()
-    if any(
-        name == "grahsp" or name == "grahsp_sbpl" or name == "grahsp_biatten"
-        for name in selectors.values()
-    ):
-        return {"grahsp": load_grahsp_templates()}
-    return None
+    stages = {
+        key.removeprefix("agn_").removesuffix("_block"): name
+        for key, name in recipe.as_selector_dict().items()
+    }
+    return collect_block_templates(stages) or None
 
 
 def _evaluate_recipe_on_grid(

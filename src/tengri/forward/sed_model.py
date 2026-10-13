@@ -12001,7 +12001,7 @@ class SEDModel:
     #: Per-axis node count of the composable AGN band table, by the number of free axes. The
     #: build evaluates the recipe at every node of the cartesian product, so the count falls
     #: with the dimension and more than four free axes is refused.
-    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 33, 2: 17, 3: 11, 4: 7}
+    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 65, 2: 17, 3: 11, 4: 7}
 
     def _agn_band_table(self, chain):
         """Registry-adapter band fluxes of the composable AGN over its free parameters.
@@ -12088,6 +12088,11 @@ class SEDModel:
         ]
         if unbounded:
             return f"the priors of {unbounded} have no finite bounds to span with nodes"
+        if self._additive_term_band_response(chain, "agn") is not None:
+            # Every sub-block is a fixed shape times its amplitude, so the per-term band
+            # response (#1118) is exact at the same per-call cost; a table would only add
+            # interpolation error.
+            return "the rank-1 term band response serves this AGN exactly"
         return None
 
     def _build_agn_band_table(self, chain):
@@ -12137,25 +12142,69 @@ class SEDModel:
             lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
             axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
             fixed_values.pop("agn_log_lbol", None)
-        redshift = float(fixed["redshift"])
-        preint = module.precompute(
-            [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
-            [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
-            redshift,
-            None,
-            recipe=Recipe.from_parameters(
-                self.spec, axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names)
-            ),
-            axis_grids=axis_grids,
-            fixed_values=fixed_values,
-            wave_rest=np.asarray(self._rest_wavelength, dtype=np.float64),
-            extra_redshifts=(0.0,),
+        recipe = Recipe.from_parameters(
+            self.spec, axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names)
         )
-        table = module.table_arrays(preint, "composable_agn")
+
+        def _tabulate(grids):
+            return module.table_arrays(
+                module.precompute(
+                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
+                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
+                    float(fixed["redshift"]),
+                    None,
+                    recipe=recipe,
+                    axis_grids=grids,
+                    fixed_values=fixed_values,
+                    wave_rest=np.asarray(self._rest_wavelength, dtype=np.float64),
+                    extra_redshifts=(0.0,),
+                ),
+                "composable_agn",
+            )
+
+        table = _tabulate(axis_grids)
         if fixed_only:
             # One node per axis and no free axis: the table is the single row of band fluxes.
-            table = {"ln_phot": jnp.reshape(table["ln_phot"], (-1,)), "axes": {}}
+            return {"ln_phot": jnp.reshape(table["ln_phot"], (-1,)), "axes": {}}, None
+        worst = self._agn_table_cell_center_error(module, table, _tabulate, axis_grids)
+        if not worst <= self._AGN_TABLE_RTOL:
+            return None, (
+                f"the table misses its {self._AGN_TABLE_RTOL:g} accuracy: {worst:.2e} at the cell "
+                f"centers of its {dict((k, len(v)) for k, v in axis_grids.items())} nodes (a band "
+                "flux that is not smooth over the priors, e.g. a regime switch in the disc or the "
+                "disc passing behind the torus)"
+            )
         return table, None
+
+    #: Largest relative error of a band flux the AGN table may carry, measured at build.
+    _AGN_TABLE_RTOL: ClassVar[float] = 1e-3
+
+    @staticmethod
+    def _agn_table_cell_center_error(module, table, tabulate, axis_grids) -> float:
+        """Worst relative error of the AGN table at the centers of its cells.
+
+        The recipe is evaluated once more at every cell center (each axis at the midpoints of
+        its nodes), the point farthest from the nodes the table passes through, and compared
+        with the table read there. A band flux that is smooth over the axes is reproduced far
+        below the bound; a kink or a step between nodes is not, whatever its cause.
+        """
+        from tengri.components.agn.blocks.composable_precompute import _LN_PHOT_FLOOR
+
+        centers = {k: 0.5 * (v[1:] + v[:-1]) for k, v in axis_grids.items()}
+        probe = np.asarray(tabulate(centers)["ln_phot"])
+        names = sorted(centers)
+        mesh = np.meshgrid(*(centers[k] for k in names), indexing="ij")
+        points = np.stack([m.ravel() for m in mesh], axis=-1)
+        read = jax.vmap(lambda q: module.lookup_from_table(table, "composable_agn", 1.0, *q))(
+            jnp.asarray(points)
+        )
+        want = probe.reshape(points.shape[0], -1)
+        got = np.log(np.asarray(read))
+        # Bands the recipe leaves empty sit at the ln floor in both; they carry no flux to compare.
+        live = want > _LN_PHOT_FLOOR + 1.0
+        if not np.any(live):
+            return 0.0
+        return float(np.max(np.abs(np.expm1(got[live] - want[live]))))
 
     #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
     #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
