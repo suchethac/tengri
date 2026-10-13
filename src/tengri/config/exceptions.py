@@ -634,8 +634,8 @@ class FrozenMovingChainWarning(UserWarning):
     """Chains that move but never mix: each stays in its own narrow region.
 
     A fit can return normally with zero divergences while every chain jitters
-    by a sliver of the posterior width around a centre that differs from the
-    other chains' centres. R-hat can flag this, but the dead-fit guards cannot:
+    by a sliver of the posterior width around a center that differs from the
+    other chains' centers. R-hat can flag this, but the dead-fit guards cannot:
     they need all-divergent draws or an exactly constant column, and the
     divergence refusal needs a fraction of 0.9. The signature is a within-chain
     spread that is tiny against both the between-chain disagreement and the
