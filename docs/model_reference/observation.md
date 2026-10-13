@@ -29,6 +29,10 @@ Stellar velocity dispersion $\sigma_v$ is applied via FFT convolution in log-wav
 
 The effective LSF subtracts the SSP library resolution in quadrature: $$\sigma_{\rm eff}(\lambda) = \sqrt{\sigma_{\rm inst}(\lambda)^2 - \sigma_{\rm lib}^2},$$ where $\sigma_{\rm inst} = c/(2.355\, R(\lambda))$ in km s$^{-1}$. For constant $R$ (e.g., a grating), a single FFT convolution suffices. For wavelength-dependent $R$ (e.g., JWST NIRSpec PRISM, $R \approx 30$--$330$), a piecewise-constant approximation splits the wavelength range into $\mathord{\sim}16$ segments with smooth raised-cosine blending, yielding $\mathord{\sim}1\%$ accuracy.
 
+#### Order of the stages and the spectrum lookup table.
+
+The spectrum is built in three stages: (1) the stellar piece is broadened by $\sigma_v$ on the model wavelength grid; (2) the IGM transmission multiplies it; (3) the instrument kernel is applied on the pixel grid, with width $\sqrt{\sigma_{\rm inst}^2 s^2 - \sigma_{\rm lib}^2}$ for the stellar piece and $\sigma_{\rm inst}\, s$ for the nebular piece ($s$ is `lsf_scale`). `approx=SpectrumPrecomp()` runs the same three stages. Stage 1 stays on the model grid because point sampling at the pixels aliases sharp stellar features: broadening after sampling differs from the exact result by up to 40 % at the Ca II K core. For a fixed redshift and a fixed $\sigma_v$ the templates are broadened once at build; otherwise the stellar sum is broadened per draw. A banded resolution matrix is not carried by the table and falls back to the exact path.
+
 #### Chebyshev calibration polynomial.
 
 A multiplicative polynomial absorbs flux-calibration uncertainties (Johnson 2021): $$C(\lambda) = \sum_{k=0}^{K} c_k\, T_k(u), \quad

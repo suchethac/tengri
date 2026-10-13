@@ -757,7 +757,7 @@ class WavePrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
-    """Configuration for spectrum-grid LUT precomputation.
+    r"""Configuration for spectrum-grid LUT precomputation.
 
     Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
     LUT precomputation. The SSP × dust × IGM stack is precomputed at
@@ -770,6 +770,26 @@ class SpectrumPrecomp:
     grid ``wave_obs / (1 + z)`` can be interpolated at runtime; ``n_z`` /
     ``z_min`` / ``z_max`` tune that table (mirroring :class:`WavePrecomp`).
     When redshift is Fixed, these are ignored.
+
+    The LUT applies the same three stages, in the same order, as the exact
+    spectrum path: (1) the stellar velocity dispersion ``sigma_v_kms``, a
+    Gaussian in :math:`\ln\lambda` applied to the stellar family on the model
+    grid, before the pixels are sampled; (2) the IGM transmission; (3) the
+    instrument kernel on the pixel grid, :math:`\sigma_{\rm eff} =
+    \sqrt{\sigma_{\rm inst}^2\,s^2 - \sigma_{\rm lib}^2}` on the stellar
+    bucket (``s`` is ``lsf_scale``) and :math:`\sigma_{\rm inst}\,s` on the
+    dust-attenuated nebular bucket. Stage 1 acts on the model grid because point
+    sampling aliases sharp stellar features, so broadening after sampling is not
+    equivalent. With a fixed redshift **and** a fixed ``sigma_v_kms``, every SSP
+    template is broadened once at build and the per-draw cost is one weighted
+    sum over the pixel table. With a free ``sigma_v_kms`` or a free redshift,
+    the stellar weighted sum is formed on the full model grid, broadened with the
+    draw's dispersion and then sampled; the per-age family read by two-component
+    dust is broadened row by row, which dominates the cost (a gradient step with
+    free ``sigma_v_kms`` is roughly 15 times the exact path's on the line-rich
+    test fixture). A banded ``resolution_matrix`` cannot be carried by a
+    per-pixel table: the model warns and uses the exact path. The model is
+    differentiable in ``sigma_v_kms`` and ``lsf_scale``.
 
     Parameters
     ----------

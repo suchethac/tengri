@@ -18,8 +18,12 @@ gradients flow; no regressions):
   transmission (single + two-component — **no Taylor moment**, a pixel is
   one wavelength so `A(λ_pix)` is exact); `predict_spectrum_via_precomp`
   composes emitters × transmission × cosmology.
-- **High-R auto-fallback.** `SpectrumPrecomp()` on R > 3000 spectroscopy
-  warns and falls back to the exact path (`_SPECTRUM_PRECOMP_R_MAX`).
+- **Kernel stages.** The LUT applies the exact path's stages in order: the
+  stellar velocity dispersion on the model grid (a pre-broadened template
+  table for fixed z and fixed `sigma_v_kms`, a full-grid stellar sum otherwise),
+  the IGM, then the instrument kernel on the pixels. A banded
+  `resolution_matrix` warns and falls back to the exact path. There is no
+  resolution cap: the LUT matches the exact path to 8e-4 at R = 5000.
 - **Emission lines on the precomp path (W2, option A below).** The
   line-publishing-backend refusal is **lifted**: `_apply_spec_precomp` now
   preserves the component's published dict, so a nebular backend's

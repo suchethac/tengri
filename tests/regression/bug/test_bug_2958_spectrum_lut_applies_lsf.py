@@ -159,8 +159,8 @@ def test_c_lut_matches_exact_lines_at_halpha_hbeta(ssp_data_wne):
     s_exact, s_lut = _spectrum(exact, 300.0), _spectrum(lut, 300.0)
     mask = _mask(s_exact)
     assert _max_rel_dev(s_lut, s_exact, mask) <= 2e-3
-    for centre in (_HALPHA_OBS, _HBETA_OBS):
-        near = mask & (np.abs(_WAVE_OBS - centre) <= 5.0)
+    for center in (_HALPHA_OBS, _HBETA_OBS):
+        near = mask & (np.abs(_WAVE_OBS - center) <= 5.0)
         assert near.any()
         assert _max_rel_dev(s_lut, s_exact, near) <= 2e-3
 
