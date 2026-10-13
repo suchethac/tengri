@@ -304,20 +304,26 @@ class TestADAFPhysics:
         """Higher beta (gas fraction) -> weaker field -> lower synchrotron peak at fixed L_bol.
 
         Mahadevan (1997, ApJ 477, 585, arXiv:astro-ph/9609107): Eq. 1 defines
-        beta = P_gas / P_total, so the magnetic pressure is the fraction (1 - beta) and
-        B ~ (1 - beta)^(1/2) (Eq. 5, s1 ~ (1 - beta)^(1/2)); the synchrotron peak
-        frequency nu_p = s1 s2 m^(-1/2) mdot^(1/2) T_e^2 r_min^(-5/4) (Eq. 21) is
-        proportional to B. At fixed L_bol the energy balance Q_ie + delta Q+ (Eqs. 9, 13,
-        14) also moves T_e and mdot with beta, so the radio/optical ratio is not monotonic in
-        beta for every L_bol; the peak frequency and the radio luminosity are.
+        beta = P_gas / P_total, so the magnetic pressure is the fraction (1 - beta).
+
+        Only the s1 ratio s1(0.1) / s1(0.9) = 3 is paper-derived: s1 ~ (1 - beta)^(1/2)
+        at fixed alpha (Eq. 5).
+
+        REGRESSION PIN, not a physics requirement: the monotonic fall of the synchrotron
+        peak frequency nu_p and of the mean radio L_nu with beta at fixed L_bol, checked at
+        log L_bol = 8 and 10. At fixed L_bol, beta also moves T_e and mdot through the
+        energy balance (Eqs. 9, 13, 14), and the nu_p ~ B scaling of Eq. 21 holds only at
+        fixed T_e and mdot. The implementation's monotonic behavior is pinned here so a
+        change to it is noticed; it is not derived from the paper.
         """
         from tengri.components.agn.adaf import _adaf_s1, adaf_scalar_state, adaf_spectrum
 
-        # Eq. 5 at fixed alpha: the field scale is (1 - beta)^(1/2).
+        # Paper-derived: Eq. 5 at fixed alpha, the field scale is (1 - beta)^(1/2).
         assert float(_adaf_s1(0.3, 0.1) / _adaf_s1(0.3, 0.9)) == pytest.approx(3.0, rel=1e-12)
 
         radio_mask = (WAVE > 1e5) & (WAVE < 1e7)
         betas = (0.1, 0.3, 0.5, 0.7, 0.9)
+        # Regression pin of the implementation (see docstring): monotonic in beta at fixed L_bol.
         for log_lbol in (8.0, 10.0):
             nu_p = [
                 float(adaf_scalar_state(agn_log_lbol=log_lbol, agn_adaf_beta=b).nu_p)
