@@ -75,7 +75,7 @@ from tengri.components.agn.skirtor import (
 )
 from tengri.components.xray.xray import wabs_cross_section
 from tengri.config.exceptions import TengriIOError
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.grid_interp import library_lookup, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import HC_KEV_ANGSTROM
 from tengri.utils.scale import representable_floor
@@ -208,14 +208,14 @@ def _normalized_ratio(
     Node-exact PCHIP of the logarithms of the disc and of ``norm`` at the viewing record and
     at the face-on record; the ratio is the exponential of the difference, so no quotient by a
     near-zero face-on disc enters the reverse pass. ``extrapolate`` is the per-axis flag of
-    :func:`interp_nd_pchip`: the numerical gaps of the prior (see :data:`_LOOKUP_EXTRAPOLATE`)
+    :func:`library_lookup`: the numerical gaps of the prior (see :data:`_LOOKUP_EXTRAPOLATE`)
     continue the end cubic rather than clip to a zero gradient.
     """
     point = tuple(jnp.asarray(c) for c in point)
     point_face = tuple(jnp.asarray(c) for c in point_face)
-    log_i = interp_nd_pchip(log_disk, axes, point, extrapolate=extrapolate)
-    log_0 = interp_nd_pchip(log_disk, axes, point_face, extrapolate=extrapolate)
-    log_n = interp_nd_pchip(log_norm, axes, point, extrapolate=extrapolate) - interp_nd_pchip(
+    log_i = library_lookup(log_disk, axes, point, extrapolate=extrapolate)
+    log_0 = library_lookup(log_disk, axes, point_face, extrapolate=extrapolate)
+    log_n = library_lookup(log_norm, axes, point, extrapolate=extrapolate) - library_lookup(
         log_norm, axes, point_face, extrapolate=extrapolate
     )
     drift_native = log_i - log_0 + log_n
