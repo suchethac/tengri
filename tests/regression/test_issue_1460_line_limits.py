@@ -77,7 +77,7 @@ def _tophat_obs_inside_axis():
 
     ``synthetic_tophat_obs`` starts at 3500 A with a 16% half-width, reaching 2940 A,
     which runs past the axis and is refused by the coverage check (#2620). The bands
-    here keep its shape and move the bluest centre in to 4000 A.
+    here keep its shape and move the bluest center in to 4000 A.
     """
     from tengri import Observation, Photometry
     from tengri.observation.photometry import FilterCurve

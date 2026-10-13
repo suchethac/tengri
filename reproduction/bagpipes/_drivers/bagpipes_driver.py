@@ -16,6 +16,7 @@ References
 
 from __future__ import annotations
 
+import sys
 import tempfile
 import warnings
 from collections.abc import Iterator
@@ -313,6 +314,41 @@ def stellar_only_lnu(
     return to_lnu(mg)
 
 
+class _NoDustEmission:
+    """Stand-in for ``bagpipes`` ``dust_emission`` whose spectrum is identically zero.
+
+    ``model_galaxy`` adds ``dust_flux * dust_emission.spectrum(qpah, umin, gamma)`` to the
+    attenuated spectrum whenever a ``dust`` block is present; with a zero shape the
+    addition vanishes and the remainder is the attenuated starlight (plus nebular
+    emission) alone, with ``dust_flux`` untouched because it is never read.
+    """
+
+    def __init__(self, wavelengths: np.ndarray) -> None:
+        self._n = int(np.asarray(wavelengths).size)
+
+    def spectrum(self, *_args: Any, **_kwargs: Any) -> np.ndarray:
+        return np.zeros(self._n)
+
+
+@contextmanager
+def _without_dust_emission() -> Iterator[None]:
+    """Build ``model_galaxy`` objects without the implicit DL07 emission, then restore it.
+
+    BAGPIPES adds DL07 emission with ``(q_PAH, U_min, gamma) = (2, 1, 0.01)`` unless the
+    ``dust`` block sets them (``model_galaxy._calculate_full_spectrum``). The addition is
+    ``dust_flux * dust_emission.spectrum(...)``, so replacing the spectrum by zeros removes
+    exactly the term and nothing else.
+    """
+    _model_galaxy_class()
+    module = sys.modules["bagpipes.models.model_galaxy"]
+    original = module.dust_emission
+    module.dust_emission = _NoDustEmission
+    try:
+        yield
+    finally:
+        module.dust_emission = original
+
+
 def attenuated_lnu(
     *,
     dust_block: dict[str, Any],
@@ -322,12 +358,18 @@ def attenuated_lnu(
     metallicity: float = 1.0,
     age: float = 5.0,
     tau: float = 1.0,
+    include_dust_emission: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Apply a dust attenuation block (plus optional nebular) to a fiducial SFH.
 
     Mirrors the ``attenuation_curve`` semantics of the CIGALE driver but
     returns the full attenuated SED rather than just the A_λ curve, since
     bagpipes' dust modules are not separable from the SFH.
+
+    With ``include_dust_emission=False`` the DL07 emission that BAGPIPES adds to every
+    model carrying a ``dust`` block is removed, leaving attenuated starlight (plus
+    nebular emission) alone; this is the quantity a model without a dust-emission
+    component predicts.
     """
     comp: dict[str, Any] = {
         "redshift": 0.0,
@@ -351,8 +393,10 @@ def attenuated_lnu(
         raise ValueError(f"unknown sfh_type={sfh_type!r}")
     if nebular_block is not None:
         comp["nebular"] = deepcopy(nebular_block)
-    mg = _build_model(comp)
-    return to_lnu(mg)
+    if include_dust_emission:
+        return to_lnu(_build_model(comp))
+    with _without_dust_emission():
+        return to_lnu(_build_model(comp))
 
 
 def attenuation_curve(
@@ -381,7 +425,7 @@ def attenuation_curve(
         Attenuation magnitudes.
     """
     wave_int, L_int = attenuated_lnu(dust_block={"type": "Calzetti", "Av": 0.0})
-    wave_att, L_att = attenuated_lnu(dust_block=dust_block)
+    wave_att, L_att = attenuated_lnu(dust_block=dust_block, include_dust_emission=False)
     assert np.array_equal(wave_int, wave_att), "wave grid drifted"
     with np.errstate(divide="ignore", invalid="ignore"):
         A_lambda = -2.5 * np.log10(L_att / L_int)

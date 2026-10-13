@@ -1751,31 +1751,23 @@ class CueBackend:
         values and their gradients pass through bit-identically; out of range the
         value is the bound and the gradient is the identity (not zeroed).
 
-        Parameters and returns are those of :meth:`_weighted_cue_params_raw`.
+        ``neb_logU``, ``gas_logn``, ``gas_logno`` and ``gas_logco`` pass through to the
+        returned dict unchanged (``gas_logu`` is ``neb_logU``); the SSP-derived
+        quantities and the other parameters are those of :meth:`_weighted_cue_params_raw`.
         """
         out = self._weighted_cue_params_raw(
-            ssp_weights,
-            ssp_log_ages_yr,
-            log_z,
-            neb_logU=neb_logU,
-            neb_logZ_gas=neb_logZ_gas,
-            gas_logn=gas_logn,
-            gas_logno=gas_logno,
-            gas_logco=gas_logco,
+            ssp_weights, ssp_log_ages_yr, log_z, neb_logZ_gas=neb_logZ_gas
         )
+        gas = dict(gas_logu=neb_logU, gas_logn=gas_logn, gas_logno=gas_logno, gas_logco=gas_logco)
         i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
-        return {**out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
+        return {**gas, **out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
 
     def _weighted_cue_params_raw(
         self,
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
-        gas_logn: float = 2.0,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
     ) -> dict:
         """Derive Cue parameters from SSP weights.
 
@@ -1791,14 +1783,8 @@ class CueBackend:
             log10(age/yr) of SSP age bins.
         log_z : float
             Stellar metallicity log10(Z) (absolute).
-        neb_logU : float
-            Ionization parameter log10(U).
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        gas_logn, gas_logno, gas_logco : float
-            Cue gas properties (defaults match Cue paper). ``gas_logno`` is
-            Cue's absolute [N/O], or under a ``nitrogen`` relation the offset
-            from that relation at the gas metallicity (0 = the relation; #2693).
 
         Returns
         -------
@@ -1922,11 +1908,7 @@ class CueBackend:
         gas_logz_rel = gas_logz - _LOG10_ZSUN
 
         return dict(
-            gas_logu=neb_logU,
-            gas_logn=gas_logn,
             gas_logz=gas_logz_rel,
-            gas_logno=gas_logno,
-            gas_logco=gas_logco,
             gas_logqion=total_logqion,
             ionspec_index1=i7[0],
             ionspec_index2=i7[1],

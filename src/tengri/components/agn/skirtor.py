@@ -1591,12 +1591,17 @@ class SKIRTORDiscAttenGrid(NamedTuple):
         The SKIRTOR parameter axes.
     edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
+    norm : ndarray, shape ``(*axes_shape)``, or None
+        The per-record scale divided out of ``disk`` (no wavelength axis), so that
+        ``disk * norm`` is comparable between inclinations. ``None`` for a file that
+        carries no ``norm`` dataset.
     """
 
     disk: jnp.ndarray
     wave_grid: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     edges: tuple[jnp.ndarray, ...]
+    norm: jnp.ndarray | None = None
 
 
 def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
@@ -1608,6 +1613,7 @@ def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
             wave_grid=jnp.array(raw["wave"]),
             axes=axes,
             edges=tuple(edges_for_grid(ax) for ax in axes),
+            norm=jnp.array(raw["norm"]) if "norm" in raw else None,
         )
 
 
