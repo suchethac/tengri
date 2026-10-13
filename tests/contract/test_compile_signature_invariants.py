@@ -114,7 +114,6 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._lgmet_scatter = 0.1
             self._met_interp = "lin"
             self._met_mode = "table"
-            self._z_interp = "lin"
             self._sfh_fn = None
             self._sfh_internal_names = []
             self._sfh_public_names = []

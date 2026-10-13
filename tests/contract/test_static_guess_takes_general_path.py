@@ -122,6 +122,9 @@ ALLOWLIST: dict[str, str] = {
     "observation/spectrum.py::velocity_broaden": (
         "traced grid -> piecewise general path of broaden_velocity_only (#2847)"
     ),
+    "utils/interpolation.py::concrete_canonical_numpy": (
+        "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
+    ),
     # ---- recorded gaps: the unknown is not the general path; owner to decide ----
     "observation/spectrum.py::_lsf_sigma_bound_kms": (
         "GAP (documented #2832): a traced resolution or sigma counts as 2000 km/s, so a traced "

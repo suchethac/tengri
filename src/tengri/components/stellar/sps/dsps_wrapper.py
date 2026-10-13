@@ -90,6 +90,7 @@ def canonical_dsps_kwargs(**kwargs):
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
 from tengri.components.stellar.sps.mass_remaining_tables import resolve_mass_remaining
+from tengri.utils.interpolation import concrete_canonical_numpy
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 
@@ -1214,6 +1215,18 @@ def _synthesize_mass_remaining(
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
 
+def _csp_age_dt_trapz_numpy(a: np.ndarray) -> np.ndarray:
+    """Numpy twin of the linear-age trapz bin widths (IEEE-exact ops only)."""
+    half = a.dtype.type(0.5)
+    return np.concatenate(
+        [
+            np.array([half * (a[1] - a[0])], dtype=a.dtype),
+            half * (a[2:] - a[:-2]),
+            np.array([half * (a[-1] - a[-2])], dtype=a.dtype),
+        ]
+    )
+
+
 def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     """Compute CSP quadrature bin widths for a given integration method.
 
@@ -1263,6 +1276,10 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
 
     """
     if method == "trapz":
+        ages_np = concrete_canonical_numpy(ssp_ages_yr)
+        if ages_np is not None:
+            # Build-time path: IEEE-exact host arithmetic, no eager micro-compiles.
+            return jnp.asarray(_csp_age_dt_trapz_numpy(ages_np))
         return jnp.concatenate(
             [
                 jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
