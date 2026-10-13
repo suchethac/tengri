@@ -113,8 +113,16 @@ _DUST_FREE = {
 #: line ~0.01 A and so its sampled continuum/filter weight by 1e-8 relative (max 1.02e-8):
 #: [4.896033417598987e-16, 5.986139354661126e-16, 1.7280648661285269e-15,
 #: 5.40679142534215e-16] -> the values below.
+#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
+#: integrated from the SFH instead of held at SFR(age0); the ionizing stars sit in
+#: that sliver, so line fluxes move by up to 2e-5 relative (continuum <= 2e-6).
 _CUE_F64_REF = np.array(
-    [4.89603343881362e-16, 5.986139384506482e-16, 1.728064883784351e-15, 5.406791480717495e-16]
+    [
+        4.895990718894339e-16,
+        5.986027602596631e-16,
+        1.7280498380004032e-15,
+        5.406742978989404e-16,
+    ]
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
@@ -133,12 +141,20 @@ _CUE_F64_REF = np.array(
 # (-0.25 %), Halpha 1.3472e-15 -> 1.3444e-15 (-0.21 %), NII 6584 2.834e-18 ->
 # -3.364e-17 (a faint line at the continuum-subtraction noise level: the change is
 # 3.6e-17 absolute, so its relative change is not meaningful and the sign flips).
+# Re-captured on the merged tree (main @ 92fe5662e, #2694 young-sliver SFH integral,
+# closes #2635, plus this PR's #2802 hard windows). Old (#2802 pin) -> new, relative:
+# Hbeta 2.754158873744077e-16 -> 2.7541036805062576e-16 (-2.0e-5), OIII 5007
+# 4.0759938866970014e-16 -> 4.075921813562496e-16 (-1.8e-5), Halpha
+# 1.3443908408335518e-15 -> 1.3443733651475604e-15 (-1.3e-5), NII 6584
+# -3.363701233348562e-17 -> -3.3636346467589785e-17 (-2.0e-5 of a sign-flipped
+# noise-level line). The #2694 shift is the young-sliver integral; the #2802 shift
+# from the pre-merge main pin (-0.56 % Hbeta) is recorded above. CUE pins unchanged.
 _WNE_F64_REF = np.array(
     [
-        2.754158873744077e-16,
-        4.0759938866970014e-16,
-        1.3443908408335518e-15,
-        -3.363701233348562e-17,
+        2.7541036805062576e-16,
+        4.075921813562496e-16,
+        1.3443733651475604e-15,
+        -3.3636346467589785e-17,
     ]
 )
 

@@ -52,11 +52,10 @@ TOOLS_DIR = REPO_ROOT / "tools"
 # withholding them would save little and cost the early signal that is the
 # entire reason a stacked PR runs anything at all.
 #
-# `labeled` is no longer a pull-request trigger, so no job can stand down on one
-# any more. `guards_off_labeled` is kept and still enforced: it is now a
-# ratchet against reintroducing the guard, which would be inert while the
-# trigger is gone and would silently become load-bearing again the moment
-# anyone restored it.
+# `labeled` / `unlabeled` are pull-request triggers again (the `full-tests`
+# label starts the full run), so a guard standing down on one would publish
+# `skipped` over a required context. `guards_off_labeled` enforces that none of
+# these jobs carries it.
 ALL_PR_JOBS: dict[str, str] = {
     "tier": "narrates which tier this run got; blocks nothing, so it must run "
     "everywhere in order to be able to say when coverage was withheld",
@@ -76,7 +75,7 @@ ALL_PR_JOBS: dict[str, str] = {
 # when its code is actually proposed for `main`. Membership here is enforced --
 # see `guards_on_base_ref`.
 FULL_TIER_JOBS: dict[str, str] = {
-    "test": "eight shards, ~19 min wall; the dominant cost of a run",
+    "test": "up to eleven shards from a dynamic matrix, ~19 min wall; the dominant cost of a run",
     "gallery-changes": "gates `gallery`; withholding it cascades correctly",
 }
 

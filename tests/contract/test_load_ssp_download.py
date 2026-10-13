@@ -80,7 +80,9 @@ def test_download_true_fetches_on_miss(isolated_data_dir, monkeypatch):
     monkeypatch.setattr(dsps_wrapper, "load_ssp_data", fake_load)
 
     assert tengri.load_ssp("fsps_prsc_miles_chabrier", download=True) == "SSP"
-    assert loaded == [(str(fetched), {"mass_remaining": "table"})], f"got {loaded}"
+    assert loaded == [(str(fetched), {"mass_remaining": "table", "top_z": "clip"})], (
+        f"got {loaded}"
+    )
 
 
 def test_download_true_is_a_no_op_when_the_grid_is_present(isolated_data_dir, monkeypatch):

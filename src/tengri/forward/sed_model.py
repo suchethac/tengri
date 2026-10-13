@@ -1143,13 +1143,16 @@ def _validate_fracagn_requires_dust(spec) -> None:
     absorbed stellar luminosity is ~zero, so the torus (and under
     agn_norm='cigale_joint' the whole AGN) collapses silently.
 
-    This is a build-time safety gate: fracAGN is only safe when paired
-    with a dust component (dust_model != 'off').
+    This is a construction-time safety gate, run by :meth:`SEDModel.__init__`
+    so that both :meth:`SEDModel.build` and direct construction from a spec
+    refuse it: fracAGN is only safe when paired with a dust component
+    (dust_model != 'off'). A ``Fixed(0)`` coupling is inert and passes.
 
     Raises
     ------
     ConfigError
         If agn_ir_frac is nonzero (FREE or Fixed>0) and dust_model == 'off'.
+        A ``ConfigError`` is also a ``ValueError``.
 
     See Also
     --------
@@ -1183,8 +1186,8 @@ def _validate_fracagn_requires_dust(spec) -> None:
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
             "Fix: either (1) add a dust component "
             "(e.g. dust_attenuation={'type':'two_component'}), "
-            "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
-            "See issue #944."
+            "or (2) pin fracAGN to Fixed(0) (or drop it and use agn_torus_frac for "
+            "independent torus scaling). See issue #944."
         )
 
 
@@ -1617,6 +1620,40 @@ def _validate_firrc_requires_dust(spec) -> None:
             "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
             "See issue #2106."
         )
+
+
+def _free_lsf_param_missing(name: str) -> str:
+    """Error text for a declared-free LSF parameter absent from ``params`` (#2847)."""
+    return (
+        f"{name!r} is a free parameter of this model but is missing from params. "
+        f"Pass it explicitly; there is no neutral default for a free value."
+    )
+
+
+def redshift_is_runtime(redshift_dist, catalog_z_range) -> bool:
+    """Whether redshift is a runtime input (per-galaxy or sampled), not a build constant.
+
+    A ``Fixed`` redshift is still runtime in catalog mode, where each galaxy's z
+    arrives through ``params`` and the placeholder spec value must not be used.
+    An unknown (no distribution) is treated as runtime, so the general path runs.
+
+    Parameters
+    ----------
+    redshift_dist : Distribution or None
+        The spec's ``redshift`` distribution.
+    catalog_z_range : tuple of float or None
+        ``(z_lo, z_hi)`` when the model is a catalog model, else None.
+
+    Returns
+    -------
+    bool
+        True when redshift must be treated as runtime.
+    """
+    if catalog_z_range is not None:
+        return True
+    if redshift_dist is None:
+        return True
+    return not redshift_dist.is_fixed
 
 
 def _support_bounds(spec, name: str) -> tuple[float, float] | None:
@@ -2907,6 +2944,7 @@ class SEDModel:
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
+        _validate_fracagn_requires_dust(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -3134,6 +3172,7 @@ class SEDModel:
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
+        self._warn_young_top_metallicity(spec, ssp_data)
         self._validate_alpha_fe_identifiability(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
@@ -3318,6 +3357,8 @@ class SEDModel:
                 )
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
+                self._cloudy_band_table_cache = None
+                self._shock_band_table_cache = None
                 self._xray_term_response_cache = None
                 self._radio_term_response_cache = None
 
@@ -3347,6 +3388,32 @@ class SEDModel:
                         stacklevel=2,
                     )
                     self._dust_band_response_cache = None
+
+                # The CLOUDY band table is built here, eagerly, as the dust response
+                # above is: a build inside a jit trace would see tracers.
+                try:
+                    self._cloudy_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp CLOUDY band-table precompute failed ({e!r}); "
+                        "falling back to the exact per-call filter integral (correct, "
+                        "but without the precomputed-table speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._cloudy_band_table_cache = None
+
+                try:
+                    self._shock_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp shock line-band precompute failed ({e!r}); falling "
+                        "back to the exact per-call filter integral (correct, but without "
+                        "the precomputed-coefficient speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._shock_band_table_cache = None
 
                 # Derive which emitters in the chain implement the emission_terms
                 # contract rather than hardcoding ("xray", "radio"). Any additive
@@ -3475,14 +3542,14 @@ class SEDModel:
         """
         try:
             d = self.spec.get_distribution(name)
-        except Exception:
+        except KeyError:
             return 0.0
         if d is None:
             return 0.0
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
@@ -3491,14 +3558,14 @@ class SEDModel:
         """A single representative redshift (fixed value or prior midpoint)."""
         try:
             d = self.spec.get_distribution("redshift")
-        except Exception:
+        except KeyError:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if d is None:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         lo, hi = getattr(d, "lo", None), getattr(d, "hi", None)
         if lo is not None and hi is not None:
@@ -4126,6 +4193,47 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _warn_young_top_metallicity(self, spec, ssp_data):
+        """Warn once per build when the metallicity weights can reach the truncated top node.
+
+        The loader holds the metallicity at the highest complete node at young ages (or,
+        with ``top_z='raw'``, does not), see
+        :mod:`tengri.components.stellar.sps.top_z_validity`. The condition depends only on
+        the declared metallicity ranges and the grid's recorded bin edge, so it is decided
+        here, once, outside any trace. Ages below the limit cannot be excluded by a prior,
+        so the metallicity alone triggers it: the warning fires exactly when the prior's
+        upper bound plus the span of the scatter kernel (3 sigma at the scatter's upper
+        bound) exceeds the lower edge of the top node's metallicity bin, the first
+        metallicity at which the node's weight is nonzero.
+        """
+        validity = getattr(ssp_data, "top_z", None)
+        if validity is None:
+            return
+        from tengri.components.stellar.sps.top_z_validity import (
+            YoungTopMetallicityWarning,
+            reach_warning_text,
+        )
+
+        distributions = getattr(spec, "_distributions", {})
+        scatter = distributions.get("met_logzsol_scatter")
+        scatter_hi = 0.0
+        if scatter is not None:
+            scatter_hi = float(scatter.value) if scatter.is_fixed else float(scatter.hi)
+        for name in self._MET_LOGZSOL_PARAM_NAMES:
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+            hi = float(dist.value) if dist.is_fixed else float(dist.hi)
+            text = reach_warning_text(validity, hi + LOG10_ZSUN, name, scatter_hi)
+            if text is not None:
+                warn_measured(
+                    text,
+                    YoungTopMetallicityWarning,
+                    max_logzsol=hi,
+                    stacklevel=3,
+                )
+                return
 
     def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
         """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).
@@ -5263,7 +5371,13 @@ class SEDModel:
                 )
             else:
                 redshift_dist = spec.get_distribution("redshift")
-                z_for_check = float(redshift_dist.bounds[0]) if redshift_dist.is_fixed else None
+                # A runtime z (free, or Fixed placeholder in catalog mode) has no value
+                # to check the LSF against, so the warning is skipped, not guessed (#2847).
+                z_for_check = (
+                    None
+                    if redshift_is_runtime(redshift_dist, self._catalog_z_range)
+                    else float(redshift_dist.bounds[0])
+                )
                 # #2526: lsf_scale multiplies sigma_inst, so the deficit
                 # (sigma_inst < sigma_lib) is worst at lsf_scale's LOWER
                 # bound. get_distribution("lsf_scale").bounds[0] is that
@@ -5651,9 +5765,12 @@ class SEDModel:
         Returns a *traceable* value when ``sigma_v_kms`` is in the
         params dict (typical for spec fits with sigma_v as a free
         param) or the JAX/Python scalar from the spec's fixed
-        distribution otherwise. Falls back to 0.0 when the parameter
-        is absent. ``apply_lsf`` clamps via ``jnp.maximum`` so traced
-        values flow through without breaking JIT.
+        distribution otherwise. Returns 0.0 only when the parameter is
+        not declared at all. A declared free parameter missing from
+        ``params`` raises ``ValueError``: 0.0 is the no-broadening
+        answer, and a free sigma_v must never silently take it (#2847).
+        ``apply_lsf`` clamps via ``jnp.maximum`` so traced values flow
+        through without breaking JIT.
         """
         if "sigma_v_kms" in params:
             return params["sigma_v_kms"]
@@ -5663,7 +5780,7 @@ class SEDModel:
             return 0.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 0.0
+        raise ValueError(_free_lsf_param_missing("sigma_v_kms"))
 
     def _get_lsf_scale(self, params):
         """Get the instrument-LSF scale ``lsf_scale`` from params (#2526).
@@ -5681,7 +5798,7 @@ class SEDModel:
             return 1.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 1.0
+        raise ValueError(_free_lsf_param_missing("lsf_scale"))
 
     def _observation_predict_kwargs(self, params):
         """LSF/kinematics kwargs for ``Observation.predict``'s spectroscopy path.
@@ -5762,6 +5879,38 @@ class SEDModel:
         return max(0.0, float(lo)) if lo is not None else 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
+
+    def _publish_history(self, sfr, params, state=None, resample=None):
+        """Publish ``sfr`` as ``(t, sfr)`` bounded to ``[0, age(z)]`` with the formed mass (#2640).
+
+        Applies the component's own :func:`bounded_rescaled_history` after the
+        SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
+        the same history the stellar component does (no second normalization).
+        With ``resample`` (a callable ``(values, age_at_z_gyr) -> (t_gyr,
+        values_out)``) the rescaled history is resampled onto the output grid,
+        which ends at ``age(z)``; returns ``(t_gyr, values_out)``.
+        """
+        from tengri.components.stellar.component import (
+            bounded_rescaled_history,
+            history_rescale_factor,
+        )
+
+        if state is None:
+            state = self.predict_state(params)
+        t_obs_gyr = age_at_z(self._get_redshift(params))
+        if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
+            # The registry callable of a runtime table is a zero placeholder;
+            # the history lives in the component state.
+            t_pub = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+            sfr_pub = jnp.asarray(state.derived["sfr_history"])
+            if resample is None:
+                return t_pub, sfr_pub
+            return resample(sfr_pub, t_obs_gyr)
+        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+        if resample is None:
+            return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+        factor = history_rescale_factor(sfr, self.age_yr, t_obs_gyr, formed)
+        return resample(sfr * factor, t_obs_gyr)
 
     def _sfh_call_kwargs(self, p, redshift=None):
         """Keyword arguments for one call of the composed SFH function.
@@ -6162,18 +6311,24 @@ class SEDModel:
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
+        _state = self.predict_state(params)
 
         if grid == "native":
             return {
-                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
-                "sfr_mean": sfr_mean,
-                "sfr_full": sfr_full,
+                "t_gyr": self._publish_history(sfr_mean, params, _state)[0] / 1e9,
+                "sfr_mean": self._publish_history(sfr_mean, params, _state)[1],
+                "sfr_full": self._publish_history(sfr_full, params, _state)[1],
             }
 
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
+        def _resample(values, age_gyr):
+            return interpolate_to_linear_time(
+                self.log_age_grid, values, n_linear, age_at_z_gyr=age_gyr
+            )
+
+        t_gyr_mean, sfr_mean_lin = self._publish_history(
+            sfr_mean, params, _state, resample=_resample
         )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+        _, sfr_full_lin = self._publish_history(sfr_full, params, _state, resample=_resample)
 
         return {
             "t_gyr": t_gyr_mean,
@@ -9346,6 +9501,7 @@ class SEDModel:
         # values someone happened to test; the rest kept the divergent path. Now
         # there is no path to diverge.
         state_orch = self.predict_state(params)
+        _, sfr = self._publish_history(sfr, params, state_orch)
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -9467,7 +9623,8 @@ class SEDModel:
               (intrinsic SED). NaN if unavailable.
             - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``rest_uv_color`` : float. U-V AB color: top-hats 3200–3900 Å
+              minus 5000–5800 Å on rest-frame L_nu.
             - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
             - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
@@ -10713,6 +10870,19 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        # ── CLOUDY age-resolved band table (WavePrecomp, #2324) ──
+        # A sibling of ``nebular_grid``, not a slot of ``nebular``: the backend's
+        # grid lives under ``nebular`` and :meth:`NebularSEDComponent.apply` peels
+        # that slot, so the table is read from its own key.
+        cloudy_band = self._cloudy_band_table(cached)
+        if cloudy_band is not None:
+            result["nebular_band_table"] = cloudy_band
+
+        # ── Composable shock line-band coefficients (WavePrecomp, #2324) ──
+        shock_band = self._shock_band_table(cached)
+        if shock_band is not None:
+            result["shock_band_table"] = shock_band
+
         # ── Component template libraries, keyed [namespace][component name] ──
         #
         # A template-backed component that reads its library inside ``predict``
@@ -11506,6 +11676,135 @@ class SEDModel:
         self._dust_band_response_cache = response
         return response
 
+    #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
+    #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
+    _CLOUDY_TABLE_FREE_OK = frozenset(
+        {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
+    )
+
+    def _cloudy_band_refusal(self, nebular) -> str | None:
+        """Why the CLOUDY band table must not engage, or None when it may.
+
+        The gate of #2324: every condition under which the table would differ
+        from the per-call path, or would not be built from the same inputs.
+        """
+        from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if (
+            nebular is None
+            or nebular.config.backend != "cloudy_grid"
+            or not isinstance(nebular.backend, CloudyGridBackend)
+        ):
+            return "the nebular backend is not the CLOUDY grid"
+        # The band table's contraction over (Z, U) is the bilinear scheme of the default
+        # linear path only (cloudy_band_table._bilinear_log). Any other interpolation of the
+        # grid, today triweight and from #2857 the pchip default, would make the table differ
+        # from the per-call path, so it is refused until the table is updated to match.
+        if nebular.backend._grid_interp != "linear":
+            return (
+                f"the CLOUDY backend interpolates with grid_interp="
+                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'linear'"
+            )
+        if _dig_may_be_active(self.spec):
+            return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band table is built at one redshift)"
+        if "neb_eline_sigma_kms" not in self.spec.fixed_params:
+            return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
+        bad = sorted(
+            p
+            for p in self.spec.free_params
+            if p.startswith(("neb_", "gas_", "ionspec_")) and p not in self._CLOUDY_TABLE_FREE_OK
+        )
+        if bad:
+            return f"free nebular parameters outside the table's axes: {bad}"
+        state = nebular._state
+        if state is None or state.filter_waves is None:
+            return "the nebular filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _cloudy_band_table(self, chain):
+        """Build-time CLOUDY band table through the precompute registry, memoized.
+
+        Records why it declined in ``_cloudy_band_table_decline``. Returns None
+        when the table does not engage.
+        """
+        cached = getattr(self, "_cloudy_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.forward.precompute.registry import resolve
+
+        nebular = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+        table = None
+        reason = self._cloudy_band_refusal(nebular)
+        if reason is None:
+            table = resolve("cloudy").precompute(
+                nebular._state.filter_waves,
+                nebular._state.filter_trans,
+                float(self.spec.fixed_value("redshift")),
+                parameters=self.spec,
+                backend=nebular.backend,
+                wave=self._rest_wavelength,
+                line_sigma_kms=float(self.spec.fixed_value("neb_eline_sigma_kms")),
+            )
+            if table is None:
+                reason = (
+                    "the table's (Z_gas, logU) axes do not contain the spec's priors "
+                    "for neb_logZ_gas and neb_logU"
+                )
+        self._cloudy_band_table_decline = reason
+        self._cloudy_band_table_cache = table
+        return table
+
+    def _shock_band_refusal(self, shock, stellar) -> str | None:
+        """Why the shock line-band coefficients must not engage, or None (#2324)."""
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if shock is None:
+            return "no composable shock component"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band coefficients are built at one redshift)"
+        st = getattr(stellar, "_state", None)
+        if st is None or getattr(st, "phot_fw_padded", None) is None:
+            return "the photometry filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _shock_band_table(self, chain):
+        """Build-time shock line-band coefficients through the registry, memoized.
+
+        Records why it declined in ``_shock_band_table_decline``. Returns None when
+        it does not engage.
+        """
+        cached = getattr(self, "_shock_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.shock_model import ShockNebular
+        from tengri.forward.precompute.registry import resolve
+
+        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        coeff = None
+        reason = self._shock_band_refusal(shock, stellar)
+        if reason is None:
+            st = stellar._state
+            coeff = resolve("mappings_shock").shock_band_coefficients(
+                st.phot_fw_padded,
+                st.phot_ft_padded,
+                float(self.spec.fixed_value("redshift")),
+                self._rest_wavelength,
+            )
+            if coeff is None:
+                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
+        self._shock_band_table_decline = reason
+        self._shock_band_table_cache = coeff
+        return coeff
+
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
 
@@ -12158,18 +12457,18 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
-        redshift_spec = None
+        redshift_spec = None  # photometry z-table spec
+        spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
 
         if wave_precomp_enabled or spec_precomp_enabled:
             # Determine redshift spec (shared by both paths)
             try:
                 redshift_dist = self.spec.get_distribution("redshift")
-                is_fixed = redshift_dist.is_fixed
-                z_bounds = redshift_dist.bounds
             except (AttributeError, KeyError):
-                is_fixed = True
-                z_bounds = (0.0,)
+                redshift_dist = None  # unknown redshift: take the runtime (general) path
+            z_bounds = redshift_dist.bounds if redshift_dist is not None else None
+            runtime_z = redshift_is_runtime(redshift_dist, self._catalog_z_range)
 
             if wave_precomp_enabled:
                 # Build filter tuple
@@ -12182,7 +12481,7 @@ class SEDModel:
                 )
 
                 # Redshift spec for photometry
-                if is_fixed and self._catalog_z_range is None:
+                if not runtime_z:
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     cfg = self._approx_config or WavePrecomp()
@@ -12204,14 +12503,19 @@ class SEDModel:
 
             if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs
-                if not is_fixed:
+                # Built into its own variable: a catalog Fixed placeholder is runtime,
+                # and the photometry spec above must survive (#2858).
+                if runtime_z:
                     cfg = self._approx_config or SpectrumPrecomp()
-                    if z_bounds is None or len(z_bounds) < 2:
+                    if self._catalog_z_range is not None:
+                        z_lo, z_hi = self._catalog_z_range
+                        pad = 0.0
+                    elif z_bounds is None or len(z_bounds) < 2:
                         z_lo, z_hi, pad = 0.001, 3.0, 0.0
                     else:
                         z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
                         pad = 0.01 * (z_hi - z_lo)
-                    redshift_spec = {
+                    spec_redshift_spec = {
                         "mode": "free",
                         "z_min": (
                             cfg.z_min
@@ -12224,7 +12528,7 @@ class SEDModel:
                         "n_z": getattr(cfg, "n_z", 100),
                     }
                 else:
-                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                    spec_redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
 
         # MAIN PRECOMPUTATION LOOP: every component, one pass
         for idx, comp in enumerate(chain):
@@ -12329,7 +12633,7 @@ class SEDModel:
                         wave_grid=None,
                         approx=self._approx,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:
@@ -12344,7 +12648,7 @@ class SEDModel:
                     spec_igm = comp.precompute_spec_factors(
                         wave_rest=self.wavelengths,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
                     )
                     if state is not None:
                         state = replace(
@@ -12874,7 +13178,6 @@ class SEDModel:
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
-        _validate_fracagn_requires_dust(spec)
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
@@ -13099,7 +13402,7 @@ class SEDModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``.
         method : str
-            Inference method. Default ``"vi"`` (geoVI variational inference).
+            Inference method. Default ``"mcmc_nuts_fast"`` (four NUTS chains).
             Any canonical name accepted by ``Fitter.run()`` works here:
             ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
             ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.

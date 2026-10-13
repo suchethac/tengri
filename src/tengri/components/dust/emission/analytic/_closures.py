@@ -41,6 +41,7 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
 )
+from tengri.utils.scale import safe_ratio
 
 # x = h*nu/(k_B*T) ceiling.  A plain constant, not a dtype-dependent one: the
 # denominator below is ``-expm1(-x)`` in (0, 1], so nothing here can overflow
@@ -157,7 +158,7 @@ def modified_blackbody(
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
     result = norm * shape
 
@@ -277,7 +278,7 @@ def graybody(
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
     result = norm * shape
 
@@ -511,7 +512,7 @@ def casey2012(
     # Normalize so integral over frequency = L_absorbed on the supplied grid
     # nu is descending (wave ascending), negate for positive integral
     integral = -jnp.trapezoid(shape, nu)
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
     result = norm * shape
 
