@@ -38,25 +38,25 @@ _CUE_WEIGHTS = Path("data/cue_weights.npz")
 #: Quenched population: delayed SFH, tau = 0.3 Gyr, age 10 Gyr (the star formation ended long ago).
 _QUENCHED = (0.3, 10.0)
 
-#: ``Halpha`` and ``nion`` of the 100 Myr cut, measured on the unmodified tree (commit 71021d4eb)
-#: on the old-LyC grid above. {(tau_gyr, age_gyr): (L_Halpha [erg/s], Q_H [photons/s])}.
+#: ``Halpha`` and ``nion`` of the 100 Myr cut, composite-fit values, on the old-LyC grid above.
+#: {(tau_gyr, age_gyr): (L_Halpha [erg/s], Q_H [photons/s])}.
 _CUT_BASELINE = {
-    (0.3, 10.0): (9.56681297974834e29, 5.022708261307399e50),
-    (1.0, 10.0): (1.1611224273751623e39, 1.3372329010187178e51),
-    (3.0, 1.0): (4.544649942429051e42, 3.269331004026739e54),
-    (1.0, 5.0): (8.968849307789703e40, 6.499872e52),
+    (0.3, 10.0): (9.553289222181408e29, 5.022708261307399e50),
+    (1.0, 10.0): (1.1594896753823706e39, 1.3372329010187178e51),
+    (3.0, 1.0): (4.538281886380993e42, 3.269331004026739e54),
+    (1.0, 5.0): (8.95624029003486e40, 6.499871757883059e52),
 }
-#: Combine output of the cut at the last case above (tau = 1, age = 5): frozen from the tree
-#: before the change, float64 arithmetic.
+#: Combine output of the cut at the last case above (tau = 1, age = 5): composite-fit values,
+#: float64 arithmetic. A frozen regression value of the composite combine under the cut.
 _CUT_COMBINE = {
     "gas_logqion": 52.81579674083042,
-    "ionspec_index1": 22.010348216280047,
-    "ionspec_index2": 10.796958660763432,
-    "ionspec_index3": 6.447468707832534,
-    "ionspec_index4": 2.629120636340638,
-    "ionspec_logLratio1": 2.6227516560031034,
-    "ionspec_logLratio2": 0.41155866134053554,
-    "ionspec_logLratio3": 0.6628467330311736,
+    "ionspec_index1": 20.69276990021701,
+    "ionspec_index2": 9.878565754397446,
+    "ionspec_index3": 6.2995604970151335,
+    "ionspec_index4": 2.399102193850214,
+    "ionspec_logLratio1": 2.6387806005869905,
+    "ionspec_logLratio2": 0.41493054855614986,
+    "ionspec_logLratio3": 0.6645450047055377,
 }
 
 pytestmark = pytest.mark.skipif(
@@ -149,9 +149,9 @@ def test_default_is_all_ages_and_explicit_all_is_identical():
 @pytest.mark.regression_bug
 @pytest.mark.parametrize("case", list(_CUT_BASELINE), ids=lambda c: f"tau{c[0]}_age{c[1]}")
 def test_cut_option_reproduces_the_100_myr_result(case):
-    """``lyc_max_age_yr=1e8`` gives the pre-change Halpha and Q_H, to float noise.
+    """``lyc_max_age_yr=1e8`` gives the pinned 100 Myr-cut Halpha and Q_H, to float noise.
 
-    Pinned from the unmodified tree. The quenched case is ~zero Halpha by construction
+    Pinned to the composite-fit values. The quenched case is ~zero Halpha by construction
     (the cut leaves only the exponential tail of the star formation).
     """
     halpha, q_h = _halpha_and_qh(_model(1.0e8), *case)
@@ -161,8 +161,8 @@ def test_cut_option_reproduces_the_100_myr_result(case):
 
 
 @pytest.mark.regression_bug
-def test_cut_option_combine_is_bit_identical_to_the_old_arithmetic():
-    """The float64 Q_H and shape combine under the cut equal the frozen pre-change values."""
+def test_cut_option_combine_pins_the_composite_fit_under_the_cut():
+    """The float64 Q_H and shape combine under the cut equal the pinned composite-fit values."""
     model = _model(1.0e8)
     derived = model.predict_state(_params(1.0, 5.0)).derived
     got = model._nebular_backend._compute_weighted_cue_params(
@@ -184,15 +184,16 @@ def test_quenched_population_has_emission_by_default_and_none_under_the_cut():
     assert all_ages > 1e38
 
 
-#: Relative change of Halpha from the 100 Myr cut to all ages, measured on the old-LyC grid.
-#: {(tau_gyr, age_gyr): change}. The old-star share of Q_H is 5e-7 (tau 3, age 1 Gyr) to
-#: 0.12% (tau 3, age 5 Gyr); tau 1 Gyr at 5 Gyr is a mixed population (0.74%).
+#: Relative change of Halpha from the 100 Myr cut to all ages, composite-fit values, on the
+#: old-LyC grid. {(tau_gyr, age_gyr): change}. Young cases moved from ~5e-7 to ~1e-4: old
+#: post-AGB stars dominate the summed HeII segment even at a negligible Q_H share.
 _YOUNG_SF_CHANGE = {
-    (3.0, 1.0): 4.6171309242559744e-07,
-    (1.0, 1.0): 8.576091550249743e-07,
-    (3.0, 5.0): 0.0012259490058386113,
+    (3.0, 1.0): 1.1622055956128641e-04,
+    (1.0, 1.0): 1.290756708425267e-04,
+    (3.0, 5.0): 0.001033328816720136,
 }
-_MIXED_CHANGE = {(1.0, 5.0): 0.00742887834618533}
+#: tau 1 Gyr at 5 Gyr is a mixed population: its old stars carry the 0.72% change.
+_MIXED_CHANGE = {(1.0, 5.0): 0.0072323713992918925}
 
 
 def _change_from_the_cut(case):

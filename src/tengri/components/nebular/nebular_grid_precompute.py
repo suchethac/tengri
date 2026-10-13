@@ -508,7 +508,42 @@ def _snap_axis_to_nodes(lo, hi, n, nodes):
     keep = np.min(np.abs(uniform[:, None] - interior[None, :]), axis=1) > merge_within
     keep[0] = keep[-1] = True  # lo/hi are not nodes' to consume
     axis = np.sort(np.concatenate([uniform[keep], interior]))
-    return _cap_gaps(axis, (hi - lo) / max(n - 1, 1))
+    axis = _cap_gaps(axis, (hi - lo) / max(n - 1, 1))
+    return _cell_midpoints(axis, np.concatenate([interior, [lo, hi]]), tol)
+
+
+def _cell_midpoints(axis, marks, tol):
+    """Insert the midpoint of every cell whose two ends are both nodes or range bounds.
+
+    A cell between two metallicity nodes is where the interpolated quantity is most
+    curved, and a linear interpolant's error there is largest at the center. A knot-free
+    cell of that kind therefore gets its midpoint.
+
+    Parameters
+    ----------
+    axis : ndarray, shape (n,)
+        Strictly ascending grid.
+    marks : array_like, shape (m,)
+        Node and range-bound values [log10(Z/Zsun)].
+    tol : float
+        Two values closer than ``tol`` are the same point.
+
+    Returns
+    -------
+    ndarray, shape (>= n,)
+        Strictly ascending grid containing every point of ``axis``.
+    """
+    marks = np.asarray(marks, dtype=float)
+
+    def _is_mark(x):
+        return bool(np.min(np.abs(marks - x)) <= tol)
+
+    filled = [axis[0]]
+    for a, b in itertools.pairwise(axis):
+        if _is_mark(a) and _is_mark(b):
+            filled.append(0.5 * (a + b))
+        filled.append(b)
+    return np.asarray(filled, dtype=float)
 
 
 def _cap_gaps(axis, h):
