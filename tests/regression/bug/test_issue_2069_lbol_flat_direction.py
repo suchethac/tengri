@@ -404,3 +404,74 @@ def test_flat_direction_probe_runs_as_one_compiled_program(
         f"the #2069 probe evaluated predict_state eagerly ({probe_params_traced}); "
         "it must run under jax.jit so the build pays one compile, not one per primitive"
     )
+
+
+def test_with_approx_clone_inherits_the_probe_verdict(synthetic_ssp_wide, simple_filters):
+    """A ``with_approx`` clone does not re-run the #2069 probe its source passed (#2914).
+
+    The clone shares the source's ``spec``, ``ssp_data``, dtype and AGN config and
+    differs only in how the SED is projected, so it cannot change whether
+    ``agn_log_lbol`` moves the rest-frame SED; a source that failed the probe raised
+    and has no clone. ``Fitter(..., approx=...)`` clones through ``with_approx``, so
+    every approximate fit used to pay the probe's forward-model compile twice. A fresh
+    build of the same spec still probes: the inheritance is scoped to the clone.
+    """
+    spec = Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Fixed(1.5),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_log_total_mass=Fixed(10.5),
+        met_logzsol=Fixed(-0.5),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        dust_slope=Fixed(-0.7),
+        redshift=Fixed(0.3),
+        agn_model="composable",
+        agn_disc_block="multicolor",
+        agn_torus_block="skirtor",
+        agn_nlr_block="analytic",  # reads agn_log_lbol: the probe runs and passes
+        agn_blr_block="none",
+        agn_feii_block="none",
+        agn_log_lbol=Uniform(9.0, 12.0),
+        agn_tau_skirtor=Fixed(3.0),
+        agn_p_skirtor=Fixed(1.0),
+        agn_q_skirtor=Fixed(1.0),
+        agn_oa_skirtor=Fixed(40.0),
+        agn_cos_inc=Fixed(0.7),
+        agn_torus_frac=Fixed(0.5),
+        agn_alpha=Fixed(-1.0),
+        agn_polar_ebv=Fixed(0.0),
+        agn_polar_oa=Fixed(60.0),
+        agn_ir_frac=Fixed(0.2),
+    )
+    real_predict_state = SEDModel.predict_state
+    probe_calls = []
+
+    def _recording_predict_state(self, params, fixed_values=None, **kwargs):
+        if fixed_values is not None and "agn_log_lbol" in params:
+            probe_calls.append(id(self))
+        return real_predict_state(self, params, fixed_values=fixed_values, **kwargs)
+
+    with (
+        mock.patch.object(SEDModel, "predict_state", _recording_predict_state),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore")
+        model = SEDModel(spec, synthetic_ssp_wide, filters=simple_filters)
+        n_source = len(probe_calls)
+        clone = model.with_approx(None, observation=model.observation)
+        n_after_clone = len(probe_calls)
+        SEDModel(spec, synthetic_ssp_wide, filters=simple_filters)
+        n_after_fresh = len(probe_calls)
+
+    assert n_source >= 1, "the source build did not run the #2069 probe"
+    assert clone is not model, "with_approx(observation=...) must build a real clone"
+    assert n_after_clone == n_source, (
+        f"the with_approx clone re-ran the #2069 probe ({n_after_clone - n_source} "
+        "predict_state calls); it must inherit the verdict its source measured"
+    )
+    assert n_after_fresh > n_after_clone, (
+        "a fresh SEDModel of the same spec skipped the #2069 probe: the inherited "
+        "verdict leaked out of with_approx"
+    )
