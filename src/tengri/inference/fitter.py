@@ -155,8 +155,13 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     """
     if backend_name not in _MANY_EVAL_SAMPLERS:
         return
-    has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
-    if has_phot and not model.approx.wave_precomp:
+    observation = getattr(model, "observation", None)
+    has_phot = getattr(observation, "photometry", None) is not None
+    # A joint fit is exact under "auto" for its spectroscopy channel (#1688), and
+    # WavePrecomp would promote that channel onto the LUT, so the advice below
+    # does not apply to it.
+    has_spec = getattr(observation, "spectroscopy", None) is not None
+    if has_phot and not has_spec and not model.approx.wave_precomp:
         import warnings
 
         warnings.warn(
@@ -1133,11 +1138,10 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         The batch fit's model (or one built by its factory). Never mutated;
         ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
     approx : "auto" or None or precompute config
-        ``"auto"`` selects the LUT for the data type (photometry ->
-        ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
-        respects a model that already carries it; ``None`` returns the model
-        untouched (the exact path); anything else is handed to
-        ``with_approx`` verbatim.
+        ``"auto"`` selects ``WavePrecomp`` for photometry and keeps
+        spectroscopy and joint fits exact (#1688), and respects a model that
+        already carries a LUT; ``None`` returns the model untouched (the exact
+        path); anything else is handed to ``with_approx`` verbatim.
     data_type : str
         The fit's data type; selects the LUT under ``"auto"``.
 
@@ -1187,7 +1191,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                 "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
                 "or a tuple)."
             )
-        from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+        from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
 
         if _has_free_agb_dust_weight(model):
             return model
@@ -1261,18 +1265,11 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                     return _memoized_approx_clone(model, (*existing, *extra))
             if has_wave:
                 return model
-        elif data_type in ("spectroscopy", "joint"):
-            if state is not None and getattr(state, "spectrum_precomp", False):
-                return model
-            if _spectrum_lut_refused(model):
-                # Pixels wider than the model grid need the pixel integral,
-                # which the spectrum LUT cannot carry: stay exact (#2530).
-                if data_type == "spectroscopy":
-                    return model
-                cfg = WavePrecomp()
-            else:
-                cfg = SpectrumPrecomp()
         else:
+            # #1688: spectroscopy and joint fits stay exact under "auto". The
+            # spectrum LUT is opt-in (an explicit SpectrumPrecomp() still engages),
+            # and a joint fit cannot keep WavePrecomp for photometry alone, since
+            # a joint observation promotes it onto the spectrum LUT as well.
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         resolved = (*existing, cfg) if existing else cfg
@@ -1292,13 +1289,6 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             stacklevel=3,
         )
         return model
-
-
-def _spectrum_lut_refused(model) -> bool:
-    """Whether the model's pixels need the pixel integral the spectrum LUT cannot carry (#2530)."""
-    check = getattr(model, "_spectrum_lut_needs_pixel_integral", None)
-    observation = getattr(model, "observation", None)
-    return bool(check(observation)) if check is not None and observation is not None else False
 
 
 # Jitted predict wrappers, memoized per (model, method name).
@@ -2202,9 +2192,10 @@ class Fitter:
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
-        Photometry -> ``WavePrecomp``; spectroscopy/joint -> ``SpectrumPrecomp``;
-        ``FeaturePrecomp`` is appended when emission lines are fit. Returns
-        ``None`` for data types with no LUT mapping (the fit then stays exact).
+        Photometry -> ``WavePrecomp``; spectroscopy and joint -> ``None`` (exact,
+        #1688); ``FeaturePrecomp`` is appended when emission lines are fit.
+        Returns ``None`` for data types with no LUT mapping (the fit then stays
+        exact).
 
         "Emission lines are fit" means **any** line channel: the spectroscopy
         nuisance amplitudes (``_eline_marginalize`` / ``_eline_fitted``) *and*
@@ -2215,7 +2206,6 @@ class Fitter:
         """
         from tengri.forward.sed_model import (
             FeaturePrecomp,
-            SpectrumPrecomp,
             WavePrecomp,
         )
 
@@ -2230,16 +2220,14 @@ class Fitter:
         if _has_free_agb_dust_weight(model):
             return None
 
-        if self.data_type in ("spectroscopy", "joint"):
-            if _spectrum_lut_refused(model):
-                # The spectrum LUT cannot carry the pixel integral that
-                # pixels wider than the model grid need: exact spectrum (#2530).
-                if self.data_type == "spectroscopy":
-                    return None
-                base = WavePrecomp()
-            else:
-                base = SpectrumPrecomp()
-        elif self.data_type == "photometry":
+        # #1688: spectroscopy defaults to the exact path. SpectrumPrecomp samples
+        # the model at pixel centers, which moves a high-SNR spectroscopic
+        # posterior by about one sigma against the exact path. Until a sub-pixel
+        # LUT exists, the default is exact and an explicit SpectrumPrecomp() opts in.
+        # A joint fit goes exact as well: a joint observation promotes WavePrecomp
+        # onto the spectrum LUT too (SEDModel.__init__), so the photometry channel
+        # cannot take the LUT alone.
+        if self.data_type == "photometry":
             base = WavePrecomp()
         else:
             return None

@@ -511,13 +511,13 @@ class PopulationFitter:
         "photometry" or "spectroscopy".
     approx : "auto" or None or precompute config, optional
         Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
-        (default) routes every factory-built model through the LUT for the
-        data type (photometry -> ``WavePrecomp``, spectroscopy ->
-        ``SpectrumPrecomp``), a hierarchical sampler evaluates the forward
+        (default) routes every factory-built photometry model through the
+        ``WavePrecomp`` LUT, a hierarchical sampler evaluates the forward
         model thousands of times, and the exact path costs a measured ~2-6x
-        more per evaluation. ``None`` forces the exact wave-grid path; an
-        explicit config is used verbatim. A factory whose models already
-        carry the LUT is respected untouched.
+        more per evaluation. Spectroscopy and joint fits stay exact under
+        ``"auto"``, since the spectrum LUT is opt-in. ``None`` forces the exact
+        wave-grid path; an explicit config is used verbatim. A factory whose
+        models already carry the LUT is respected untouched.
 
     Notes
     -----
