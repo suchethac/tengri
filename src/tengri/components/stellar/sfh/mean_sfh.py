@@ -574,11 +574,11 @@ def lognormal(
     # correctly before.
     # A zero-width cell (duplicated grid node) has no partial-cell extent: it is
     # the point test ``T > 0``. The division is double-where guarded so its
-    # reverse pass never forms ``T / 0``. On main the dense integrand carries
+    # reverse pass never forms ``T / 0``. The dense integrand carries
     # repeated top nodes past the oldest template (the extension to the age of
-    # the universe at z), so the cotangent of ``T / 0`` was ``0 / 0`` and the
-    # photometry gradient wrt ``sfh_lnorm_age_gyr`` was NaN while its forward
-    # value was finite (#2934).
+    # the universe at z), where the cotangent of ``T / 0`` would be ``0 / 0`` and the
+    # photometry gradient wrt ``sfh_lnorm_age_gyr`` NaN while its forward
+    # value stays finite (#2934).
     spacing = jnp.abs(jnp.gradient(t_lookback))
     has_width = spacing > 0.0
     safe_spacing = jnp.where(has_width, spacing, 1.0)
