@@ -48,7 +48,6 @@ from tengri.components.nebular._shared import render_nebular_lines as _place_lin
 # Physical constants
 from tengri.utils.grid_interp import library_lookup as _library_lookup
 from tengri.utils.host_array import device_table, host_array
-from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
 # ── Legacy hardcoded fallback: Allen+2008 Table 5 (solar, n=1 cm⁻³)
 
@@ -312,12 +311,6 @@ def _load_mappings_grids() -> dict | None:
             "hbeta_pop_mask": hbeta_pop_mask,
         }
 
-    # Precompute bin edges for triweight interpolation (static, avoids rebuilding in JIT)
-    g5 = grids["mappings5"]
-    g5["v_edges"] = _edges_for_grid(g5["velocities_kms"])
-    g5["b_edges"] = _edges_for_grid(g5["b_axis"])
-    g5["n_edges"] = _edges_for_grid(g5["log_density_cm3"])
-
     return grids
 
 
@@ -558,9 +551,9 @@ def shock_line_ratios(
     8 velocity points) with a ``DeprecationWarning``. To avoid this,
     download the grid via ``scripts/download_mappings_templates.py``.
 
-    **Interpolation**: Triweight kernel (C²-continuous) jointly interpolates
-    velocity, density, and B-field across all three axes. Grid edges are
-    precomputed at load time to avoid rebuilding inside JIT traces.
+    **Interpolation**: masked PCHIP (node-exact, C¹) over the populated cells of
+    velocity, density, and B-field (:mod:`tengri.utils.masked_pchip`); the read is
+    jitted, so eager calls reuse one compiled kernel.
 
     Examples
     --------

@@ -26,6 +26,8 @@ part of the definition.
 
 from __future__ import annotations
 
+import functools
+
 import jax
 import jax.numpy as jnp
 
@@ -131,6 +133,40 @@ def _masked_axis_read(x, populated, y, q):
     return jnp.where(has, value, 0.0)
 
 
+@functools.partial(jax.jit, static_argnames=("extrapolate_axis0",))
+def _masked_pchip_core(grid, axes, point, population_mask, extrapolate_axis0):
+    """Compiled array-in, array-out read behind :func:`masked_pchip_lookup` (#2861).
+
+    Jitted so eager callers (the public shock path) hit one cached kernel per shape;
+    nested under an outer jit it simply inlines. Shapes are static, so no retrace
+    occurs across query values.
+    """
+    # Arithmetic in the library default float (float64 under jax_enable_x64), so a float32
+    # table is not read back in float32 and a downstream 1e40 scale does not overflow.
+    dtype = jnp.result_type(float)
+    grid = jnp.asarray(grid, dtype)
+    x_v, x_b, x_n = (jnp.asarray(a, dtype) for a in axes)
+    q_v, q_b, q_n = (jnp.asarray(p, dtype) for p in point)
+    population_mask = jnp.asarray(population_mask, dtype)
+    n_b, n_n = grid.shape[1], grid.shape[2]
+    populated = population_mask.T > 0.0  # (n_b, n_density)
+    row_valid = jnp.any(populated, axis=1)  # (n_b,)
+
+    # Zero unpopulated cells so every gathered value is finite.
+    grid_m = jnp.where(populated.reshape((1, n_b, n_n) + (1,) * (grid.ndim - 3)), grid, 0.0)
+
+    # Velocity: the unmasked PCHIP read at each (B, density) cell.
+    qv = _library_axis_query(x_v, q_v, extrapolate_axis0)
+    per_v = interp_nd_pchip(grid_m, (x_v,), (qv,), extrapolate=(True,))  # (n_b, n_n, *t)
+
+    # Density: within each B row, over that row's populated densities.
+    per_n = jax.vmap(lambda m, y: _masked_axis_read(x_n, m, y, q_n))(populated, per_v)
+
+    # B: across the rows that hold any data.
+    out = _masked_axis_read(x_b, row_valid, per_n, q_b)
+    return jnp.where(jnp.any(populated), out, jnp.nan)
+
+
 def masked_pchip_lookup(grid, axes, point, population_mask, extrapolate_axis0):
     """Masked PCHIP read of a three-axis grid over its populated cells (#2861, #2575).
 
@@ -183,26 +219,6 @@ def masked_pchip_lookup(grid, axes, point, population_mask, extrapolate_axis0):
             f"population_mask shape {population_mask.shape} must be (n_density, n_b) = "
             f"({n_n}, {n_b})"
         )
-    # Arithmetic in the library default float (float64 under jax_enable_x64), so a float32
-    # table is not read back in float32 and a downstream 1e40 scale does not overflow.
-    dtype = jnp.result_type(float)
-    grid = jnp.asarray(grid, dtype)
-    x_v, x_b, x_n = (jnp.asarray(a, dtype) for a in axes)
-    q_v, q_b, q_n = (jnp.asarray(p, dtype) for p in point)
-    population_mask = jnp.asarray(population_mask, dtype)
-    populated = population_mask.T > 0.0  # (n_b, n_density)
-    row_valid = jnp.any(populated, axis=1)  # (n_b,)
-
-    # Zero unpopulated cells so every gathered value is finite.
-    grid_m = jnp.where(populated.reshape((1, n_b, n_n) + (1,) * (grid.ndim - 3)), grid, 0.0)
-
-    # Velocity: the unmasked PCHIP read at each (B, density) cell.
-    qv = _library_axis_query(x_v, q_v, extrapolate_axis0)
-    per_v = interp_nd_pchip(grid_m, (x_v,), (qv,), extrapolate=(True,))  # (n_b, n_n, *t)
-
-    # Density: within each B row, over that row's populated densities.
-    per_n = jax.vmap(lambda m, y: _masked_axis_read(x_n, m, y, q_n))(populated, per_v)
-
-    # B: across the rows that hold any data.
-    out = _masked_axis_read(x_b, row_valid, per_n, q_b)
-    return jnp.where(jnp.any(populated), out, jnp.nan)
+    return _masked_pchip_core(
+        grid, tuple(axes), tuple(point), population_mask, bool(extrapolate_axis0)
+    )
