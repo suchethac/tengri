@@ -86,7 +86,6 @@ def _run_gate(
     draft: bool = False,
     action: str = "synchronize",
     base_changed: bool = False,
-    before: str = "a" * 40,
 ) -> dict[str, str]:
     """Run the extracted gate script and return what it wrote to GITHUB_OUTPUT."""
     fake = tmp_path / "bin"
@@ -118,8 +117,6 @@ def _run_gate(
         "BASE_REF": "main",
         "BASE_CHANGED": "true" if base_changed else "false",
         "LABELS_JSON": json.dumps(labels or []),
-        "BEFORE_SHA": before,
-        "AFTER_SHA": "b" * 40,
     }
     done = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=120, check=False
@@ -303,7 +300,7 @@ EVERY = [
         ),
         (
             "push, new branch",
-            {"event": "push", "before": "0" * 40, "compare": {"files": [_f("docs/a.md")]}},
+            {"event": "push", "compare": {"files": [_f("docs/a.md")]}},
             "all",
             "true",
             EVERY,

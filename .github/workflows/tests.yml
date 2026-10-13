@@ -72,22 +72,22 @@ on:
 
 # Supersede stale runs -- but never on `main`.
 #
-# **Every push to `main` runs the FULL suite, to completion.** `push` gets a
-# UNIQUE group (run_id) and so is never cancelled, which is the only reason a
-# red commit cannot slip through. That is not theory: on 2026-07-10 five red
-# commits landed on `main` invisibly, because every merge cancelled its
-# predecessor's suite and only the last one standing was ever judged (#1021,
-# #1051, #1071, #1076, and the cancelled run of the very PR that fixed the last
-# two). One group per push means N merges run N suites concurrently, each
-# reporting on its own commit.
+# **Every push to `main` runs the FULL suite, and no push run is cancelled.**
+# Pushes share one fixed group (`tests-main-push`), so a run in progress always
+# finishes and its verdict is real. Cancelling a predecessor is how red commits
+# used to land on `main` unjudged, which is why the push group never cancels.
+# Never cancelling has a cost, bounded by coalescing (see the block below): at
+# most one push run is pending at a time, and a newer push replaces an older
+# pending one.
 #
 # What makes that affordable is that pull requests run the cheap tier. The
 # full suite is ~360 runner-minutes per run against ~26 for the cheap tier, and
 # at ~34 merges/day a pull-request population that also ran the full suite on
 # every push saturated the 20-job ceiling and put queue latency at 7-14 h; a
 # verdict that arrives half a day after the commit is the red-commit failure
-# again. With the cheap tier on PRs the full suite runs once per landed commit
-# (and again for a PR that asks for it with `full-tests`).
+# again. With the cheap tier on PRs the full suite runs on pushes to `main`
+# only, and a burst of merges costs at most two of them (and again for a PR
+# that asks for it with `full-tests`).
 #
 # The nightly `schedule` run is the whole suite -- `test`, `coverage`, `slow`,
 # `crossval` -- on the tip of `main`, and `nightly-alarm` opens an issue when it
