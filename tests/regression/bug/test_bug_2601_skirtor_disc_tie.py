@@ -629,16 +629,35 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured for the young-sliver integral (#2635): the stellar continuum moves by
-#: at most 2e-6 relative here.
+#: Re-captured on the merged tree (origin/main merged into this PR). Both causes are named:
+#: #2694 young-sliver SFH integral (main: the [0, age0] sliver is integrated from the SFH), and
+#: this PR's own cause, #2807 AGN energy ledger: SKIRTOR resampled-then-renormalized on its native
+#: grid (#2319) and the published L_* from the converged log-log integral (#2322). Relative to the
+#: pins this branch carried before the merge (sum / first bin / middle / last), mbh 6 / 8 / 10:
+#: sum -1.57e-7 / -2.33e-7 / -2.54e-7; first bin -1.52e-6 at all three; middle -6.96e-8 /
+#: -1.67e-7 / -1.85e-7; last -7.0e-9 / -1.56e-8 / -1.30e-7. Relative to origin/main's pins (this
+#: PR's SKIRTOR change, not yet in main): sum +2.12e-4 / +4.10e-4 / +4.63e-4; first bin +3.78e-3;
+#: middle +6.2e-6 / +2.6e-4 / +3.1e-4; last +1.3e-5 / +3.4e-5 / +3.2e-4. The merged-tree move
+#: from the pre-merge pins is attributed to the main commits merged in (#2694 among them; not
+#: isolated per commit).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.558683789689726e32, 81149791730438.9, 2.8901476832907644e28, 8.77529657993752e21),
-    8.0: (1.650407636024945e32, 2.226182664115696e16, 3.096866084375964e28, 8.825196813793963e21),
+    6.0: (
+        1.559014396065268e32,
+        81456209342492.8,
+        2.8901655421875684e28,
+        8.775409509850808e21,
+    ),
+    8.0: (
+        1.6510834833985082e32,
+        2.234588620081671e16,
+        3.0976619772911983e28,
+        8.825497527157806e21,
+    ),
     10.0: (
-        1.6769966709957496e32,
-        2.3324382343678204e16,
-        3.1396728044848097e28,
-        9.54871503038833e21,
+        1.677773355015486e32,
+        2.3412454061275736e16,
+        3.140631419153073e28,
+        9.551743066769245e21,
     ),
 }
 

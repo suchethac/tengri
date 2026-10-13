@@ -135,13 +135,26 @@ _CUE_F64_REF = np.array(
 #: the values move by +7.2e-6, -3.2e-6, +1.1e-5 and -1.7e-3. The exact path
 #: (``approx=False``) on the same model is pinned against a numpy implementation of the
 #: integral definition in ``test_bug_2588_c94_beta_and_window_means.py``. 17 significant digits.
-#: Re-captured for the young-sliver integral (#2635): up to 6.3e-5 relative ([N II]).
+# Re-pinned for #2802: the line-flux windows are hard (exact over the band, as the
+# spectral indices are since #2637) instead of 1 A sigmoid edges. Old -> new:
+# Hbeta 2.7697e-16 -> 2.7542e-16 (-0.56 %), OIII 5007 4.0861e-16 -> 4.0760e-16
+# (-0.25 %), Halpha 1.3472e-15 -> 1.3444e-15 (-0.21 %), NII 6584 2.834e-18 ->
+# -3.364e-17 (a faint line at the continuum-subtraction noise level: the change is
+# 3.6e-17 absolute, so its relative change is not meaningful and the sign flips).
+# Re-captured on the merged tree (main @ 92fe5662e, #2694 young-sliver SFH integral,
+# closes #2635, plus this PR's #2802 hard windows). Old (#2802 pin) -> new, relative:
+# Hbeta 2.754158873744077e-16 -> 2.7541036805062576e-16 (-2.0e-5), OIII 5007
+# 4.0759938866970014e-16 -> 4.075921813562496e-16 (-1.8e-5), Halpha
+# 1.3443908408335518e-15 -> 1.3443733651475604e-15 (-1.3e-5), NII 6584
+# -3.363701233348562e-17 -> -3.3636346467589785e-17 (-2.0e-5 of a sign-flipped
+# noise-level line). The #2694 shift is the young-sliver integral; the #2802 shift
+# from the pre-merge main pin (-0.56 % Hbeta) is recorded above. CUE pins unchanged.
 _WNE_F64_REF = np.array(
     [
-        2.769615068651963e-16,
-        4.086015628418593e-16,
-        1.347176754973041e-15,
-        2.834270007857723e-18,
+        2.7541036805062576e-16,
+        4.075921813562496e-16,
+        1.3443733651475604e-15,
+        -3.3636346467589785e-17,
     ]
 )
 

@@ -40,6 +40,7 @@ import pytest
 from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.polar_dust import polar_cone_covering_fraction, polar_dust_extinction
+from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
@@ -554,7 +555,9 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
         ref_wave = tie.wave_native
         ref_disc = resample_template(ref_wave, wave, disc, left=0.0, right=0.0)
         idx = jnp.argsort(ref_wave)
-        shape_unit = ref_disc / jnp.trapezoid(ref_disc[idx], ref_wave[idx])
+        # Unit-normalized with the log-log integral the runner's R-tie uses (d78e04990, #2322);
+        # a trapezoid here left the shape 0.39 % off unity and moved the expectation 0.39 %.
+        shape_unit = ref_disc / loglog_integral(ref_wave[idx], ref_disc[idx])
         _att, absorbed_per_bin = polar_dust_extinction(
             shape_unit * float(r_faceon),
             ref_wave,

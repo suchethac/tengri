@@ -412,6 +412,7 @@ class Posterior:
 
         n_divergent = self.diagnostics.get("n_divergent", 0)
         n_chains = max(int(self.diagnostics.get("n_chains", 1)), 1)
+        self._check_frozen_moving_chains(n_chains)
         # ``n_samples`` is per chain; ``n_divergent`` is summed over every chain
         # (#2087). The fallback reads the length of a sample column, which is the
         # flattened ``(n_chains * n_samples,)`` axis and therefore already a
@@ -458,6 +459,30 @@ class Posterior:
                     f"or dense_mass_matrix=False (issue #1999)."
                 )
                 warnings.warn(msg, DeadFitWarning, stacklevel=3)
+
+    def _check_frozen_moving_chains(self, n_chains: int) -> None:
+        """Warn when chains move but never mix, and record the verdict (#2112).
+
+        Sets ``diagnostics["frozen_moving_chains"]`` to ``True`` or ``False`` on
+        every MCMC result, so a caller can read the verdict without parsing the
+        warning. The detector is in :mod:`tengri.inference.frozen_chains`.
+        """
+        from tengri.config.exceptions import FrozenMovingChainWarning
+        from tengri.inference.frozen_chains import frozen_moving_params
+
+        frozen = frozen_moving_params(self.samples, n_chains=n_chains)
+        self.diagnostics = {**self.diagnostics, "frozen_moving_chains": bool(frozen)}
+        if frozen:
+            frozen_list = ", ".join(f"'{p}'" for p in frozen)
+            msg = (
+                f"chains move but do not mix: parameter(s) {frozen_list} have a "
+                f"within-chain spread far below both the between-chain spread and the "
+                f"posterior width. Each chain is confined to its own narrow region, so "
+                f"R-hat and the dead-fit guards can miss it. Remedies: a longer warmup, "
+                f"a smaller step_size, or dense_mass_matrix=True, then compare the chain "
+                f"means before trusting the posterior."
+            )
+            warnings.warn(msg, FrozenMovingChainWarning, stacklevel=4)
 
     @property
     def free_names(self) -> tuple[str, ...] | None:

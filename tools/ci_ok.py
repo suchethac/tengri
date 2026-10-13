@@ -128,7 +128,9 @@ CHEAP_SHARDS = frozenset({"physics", "regression-c"})
 
 #: The shards whose tests read docs/, notebooks/, reproduction/ or top-level
 #: ``*.md``, and so run when the diff touches those trees.
-DOCS_SHARDS = frozenset({"contract", "components", "regression-a", "regression-d"})
+DOCS_SHARDS = frozenset(
+    {"contract", "components", "regression-a1", "regression-a2", "regression-a3", "regression-d"}
+)
 
 #: Which shards each scope owes. ``all`` is every shard the gate's table defines,
 #: so it is resolved against the ``all_shards`` list the gate publishes. This is

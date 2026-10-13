@@ -521,31 +521,40 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
-#: integrated from the SFH instead of held at SFR(age0), which moves these
-#: references by up to 1.6e-6 relative (``rest_sed_0``, the most ill-conditioned
-#: key) and photometry by up to 9e-7.
+#: Re-captured on the merged tree (origin/main merged into this PR). Both causes are named:
+#: #2694 young-sliver SFH integral (main: the [0, age0] sliver is integrated from the SFH), and
+#: this PR's own cause, #2807 AGN energy ledger: SKIRTOR resampled-then-renormalized on its native
+#: grid (#2319) and the published L_* from the converged log-log integral (#2322). Relative to the
+#: pins this branch carried before the merge, mbh 6 / 8 / 10: rest_sed_sum -1.58e-7 / -2.53e-7 /
+#: -2.78e-7; rest_sed_0 -1.52e-6 at all three; rest_sed_mid -7.0e-8 / -1.9e-7 / -2.1e-7;
+#: rest_sed_last -7.0e-9 / -1.8e-8 / -1.6e-7; photometry (r, W3, W4) within 8.5e-7. Relative to
+#: origin/main's pins (this PR's SKIRTOR change, not yet in main): rest_sed_sum +2.14e-4 /
+#: +4.60e-4 / +5.26e-4; rest_sed_0 +3.78e-3; rest_sed_mid +7.8e-6 / +3.2e-4 / +3.8e-4;
+#: rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4; photometry +8.6e-6 / +1.7e-3 / +2.1e-3 (mbh 6),
+#: +3.4e-4 / +1.7e-3 / +2.1e-3 (8), +3.8e-4 / +1.7e-3 / +2.1e-3 (10). The merged-tree move from
+#: the pre-merge pins is attributed to the main commits merged in (#2694 among them; not
+#: isolated per commit).
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593714645789999e32,
-        "rest_sed_0": 102893812904440.97,
-        "rest_sed_mid": 2.8913766864426845e28,
-        "rest_sed_last": 8.775429561469894e21,
-        "photometry": (1.0994872257150453e-27, 1.5700113158280183e-27, 1.76322315786068e-27),
+        "rest_sed_sum": 1.5597046410510244e32,
+        "rest_sed_0": 103282334868243.77,
+        "rest_sed_mid": 2.891399138580114e28,
+        "rest_sed_last": 8.775542988384492e21,
+        "photometry": (1.099496622290831e-27, 1.5726713600736845e-27, 1.766845109010841e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.675784505987193e32,
-        "rest_sed_0": 2.8226865115503544e16,
-        "rest_sed_mid": 3.1537080660626947e28,
-        "rest_sed_last": 8.838700522709745e21,
-        "photometry": (1.2055128625600212e-27, 1.5721005408209638e-27, 1.7638276709007876e-27),
+        "rest_sed_sum": 1.6765558516018808e32,
+        "rest_sed_0": 2.8333448366304616e16,
+        "rest_sed_mid": 3.154717864930627e28,
+        "rest_sed_last": 8.8390520494989e21,
+        "photometry": (1.2059213157140712e-27, 1.574768447215014e-27, 1.767451896944222e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7095081559595516e32,
-        "rest_sed_0": 2.957413176061014e16,
-        "rest_sed_mid": 3.208030980153603e28,
-        "rest_sed_last": 9.756084861431804e21,
-        "photometry": (1.2203839576415823e-27, 1.5968719507867082e-27, 1.771579976268286e-27),
+        "rest_sed_sum": 1.7104073961544314e32,
+        "rest_sed_0": 2.9685802223829012e16,
+        "rest_sed_mid": 3.209247277435523e28,
+        "rest_sed_last": 9.759894495239017e21,
+        "photometry": (1.2208491668455172e-27, 1.5996332488007023e-27, 1.7752334257946788e-27),
     },
 }
 

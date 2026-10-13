@@ -477,24 +477,13 @@ def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndar
     Published curves are imperfect: of the shipped SVO set,
     HST_ACS_WFC_F814W carries 177 duplicated wavelength rows and the
     Herschel SPIRE / Spitzer MIPS curves dip slightly negative
-    (instrumental ringing in the tabulation). Duplicates break the
-    ascending-grid assumption of every ``np.interp``/``searchsorted``
-    consumer downstream; negative transmission is unphysical in a
-    throughput integral. Duplicates are merged by averaging their
-    transmission values.
+    (instrumental ringing in the tabulation). One implementation serves
+    every intake path, ``_sanitize_filter_curve`` in ``filters/custom.py``,
+    which also refuses a non-finite or zero-peak curve.
     """
-    wave = np.asarray(wave, dtype=np.float64)
-    trans = np.asarray(trans, dtype=np.float64)
-    order = np.argsort(wave, kind="stable")
-    wave, trans = wave[order], trans[order]
-    if wave.size and (np.diff(wave) <= 0).any():
-        unique_wave, inverse = np.unique(wave, return_inverse=True)
-        summed = np.zeros_like(unique_wave)
-        counts = np.zeros_like(unique_wave)
-        np.add.at(summed, inverse, trans)
-        np.add.at(counts, inverse, 1.0)
-        wave, trans = unique_wave, summed / counts
-    return wave, np.maximum(trans, 0.0)
+    from tengri.observation.filters.custom import _sanitize_filter_curve as _sanitize
+
+    return _sanitize(wave, trans)
 
 
 def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:

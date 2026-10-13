@@ -2035,9 +2035,12 @@ class _CatalogFitterOriginal:
                 for g in self.galaxies
             ]
         )
-        from tengri.inference.fitter import _reject_non_finite_data
+        from tengri.inference.fitter import _refuse_uncovered_bands, _reject_non_finite_data
 
         _reject_non_finite_data(all_data_orig, all_noise_orig, all_presence_orig)
+        _refuse_uncovered_bands(
+            self.model, all_data_orig, all_noise_orig, all_presence_orig, self.data_type
+        )
         # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
         if per_galaxy_z:
             all_redshift_orig = jnp.stack(

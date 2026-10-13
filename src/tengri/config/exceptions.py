@@ -540,6 +540,30 @@ class DegenerateParameterPairWarning(AdvisoryWarning):
     """
 
 
+class FilterCoverageWarning(AdvisoryWarning):
+    """A photometric band reaches past the model's observed-frame wavelength axis.
+
+    The model SED is zero outside its own axis, but a band's denominator
+    integrates over the filter's whole support. A band partly or wholly beyond
+    the axis therefore returns its covered fraction, or zero, rather than a
+    flux (#2620). Nothing raises at build time because the model is not wrong,
+    only unable to say anything about that band, and whether a fit should refuse
+    it depends on whether the band is masked in the data.
+
+    Emitted once per redshift at which the band is checked: the fixed redshift,
+    the finite ends of a free redshift prior, and the ends of ``catalog_z_range``.
+    Widen the model's axis (a longer SSP grid, or a dust or radio component that
+    extends it) or drop the band to silence the warning.
+
+    See Also
+    --------
+    tengri.observation.photometry.filter_coverage_fraction
+        The per-band out-of-axis fraction this warning reports.
+    tengri.observation.photometry.FILTER_COVERAGE_TOLERANCE
+        The fraction above which a band is reported.
+    """
+
+
 class OutOfSSPGridWarning(UserWarning):
     """An ingested metallicity history reaches past the SSP's metallicity grid.
 
@@ -603,6 +627,29 @@ class NUTSTreeDepthWarning(UserWarning):
     Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit*
     that already ran, not a model being constructed, and must survive the
     introspection paths that silence advisories wholesale.
+    """
+
+
+class FrozenMovingChainWarning(UserWarning):
+    """Chains that move but never mix: each stays in its own narrow region.
+
+    A fit can return normally with zero divergences while every chain jitters
+    by a sliver of the posterior width around a centre that differs from the
+    other chains' centres. R-hat can flag this, but the dead-fit guards cannot:
+    they need all-divergent draws or an exactly constant column, and the
+    divergence refusal needs a fraction of 0.9. The signature is a within-chain
+    spread that is tiny against both the between-chain disagreement and the
+    posterior width (#2112).
+
+    Raised as a warning, never an error: the samples are still a valid record of
+    where each chain went, and a caller may want to inspect them. The flag
+    ``posterior.diagnostics["frozen_moving_chains"]`` is ``True`` whenever this
+    fires, so a pipeline can check it without parsing the message. The remedy is
+    the same as for a dead fit: a longer warmup, a smaller step size, or a
+    mass-matrix choice that lets the chains find the posterior's scale.
+
+    Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit* that
+    already ran, not a model being constructed.
     """
 
 
