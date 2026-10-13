@@ -184,38 +184,29 @@ def _spec_frees(spec, name):
         return False
 
 
-def _redshift_of(params, spec):
-    """The redshift a params dict is evaluated at, or None when it is free and absent."""
-    if "redshift" in params:
-        return params["redshift"]
-    try:
-        dist = spec.get_distribution("redshift")
-    except KeyError:
-        return None
-    return dist.bounds[0] if dist.is_fixed else None
-
-
 def _warn_gyr_alias_once(gyr_name, frac_name):
     """Emit the deprecation warning for a ``*_gyr`` params key, once per process (#2748)."""
     if gyr_name in _WARNED_GYR_ALIASES:
         return
     _WARNED_GYR_ALIASES.add(gyr_name)
     warnings.warn(
-        f"params key {gyr_name} is deprecated; pass {frac_name} = {gyr_name} / age_of_universe(z)",
+        f"params key {gyr_name} is deprecated: pass {frac_name}, a fraction of the age "
+        f"of the universe at z; {gyr_name} is read as absolute Gyr",
         DeprecationWarning,
         stacklevel=3,
     )
 
 
 def alias_gyr_timings(params, param_map, spec):
-    """Convert a params-dict ``*_gyr`` timing to its ``*_frac`` when the spec frees it (#2748).
+    """Mark a params-dict ``*_gyr`` timing as absolute Gyr where the spec frees ``X_frac`` (#2748).
 
     A params dict built before the fraction parametrization names the absolute
-    Gyr onset. Where the spec samples ``X_frac``, the Gyr value is converted to
-    ``X_frac = X_gyr / age(z)`` at the dict's redshift, with the traceable
-    :func:`tengri.cosmology.age_at_z`, so a gradient flows to the Gyr value. The
-    fraction is not clamped: a value above one reaches the existing refusals.
-    A Gyr key with a Fixed fraction is left alone and stays the absolute shim.
+    onset in Gyr. Where the spec samples ``X_frac``, the Gyr value is kept under
+    its own name and read as absolute Gyr at whatever redshift the evaluation
+    uses. It is never converted through a redshift here, so a catalog model
+    built at a placeholder redshift and evaluated at a runtime one keeps the
+    same Gyr value. :func:`check_missing_free_params` counts the free fraction as
+    supplied by that Gyr key, and :func:`resolve_timing_fracs` passes it through.
 
     Parameters
     ----------
@@ -228,44 +219,35 @@ def alias_gyr_timings(params, param_map, spec):
 
     Returns
     -------
-    dict or Mapping
-        ``params`` itself when no alias applies, else a new dict in which each
-        converted Gyr key is replaced by its fraction.
+    Mapping
+        ``params`` itself, unchanged.
 
     Raises
     ------
     ConfigError
-        If a timing pair is given with both keys, or a Gyr key must convert but
-        the redshift is neither in ``params`` nor Fixed in ``spec``.
+        If a timing pair is given with both keys.
 
     Notes
     -----
-    **JIT-compatible**: yes. The key tests are Python-level and static; the
-    conversion is a traced division by ``age_at_z``. The deprecation warning is
-    emitted at trace time, once per name per process.
+    **JIT-compatible**: yes. The key tests are Python-level and static; no value
+    is converted, so a gradient reaches the Gyr value unchanged.
     """
     from tengri.config.exceptions import ConfigError
-    from tengri.cosmology import age_at_z
 
-    out = None
     for frac_name, gyr_name in timing_frac_params().items():
         if gyr_name not in params or gyr_name not in param_map or frac_name not in param_map:
             continue
         if frac_name in params:
             raise ConfigError(f"give one of {gyr_name!r} or {frac_name!r}, not both")
-        if not _spec_frees(spec, frac_name):
-            continue
-        redshift = _redshift_of(params, spec)
-        if redshift is None:
-            raise ConfigError(
-                f"{gyr_name!r} needs the redshift to convert to {frac_name!r}, and "
-                "'redshift' is free and absent from the parameters"
-            )
-        if out is None:
-            out = dict(params)
-        out[frac_name] = out.pop(gyr_name) / age_at_z(redshift)
-        _warn_gyr_alias_once(gyr_name, frac_name)
-    return params if out is None else out
+        if _spec_frees(spec, frac_name):
+            _warn_gyr_alias_once(gyr_name, frac_name)
+    return params
+
+
+def gyr_supplies_fraction(frac_name, params):
+    """True when ``params`` gives the absolute Gyr twin of fraction ``frac_name`` (#2748)."""
+    gyr_name = timing_frac_params().get(frac_name)
+    return gyr_name is not None and gyr_name in params
 
 
 def _gyr_to_frac() -> dict[str, str]:

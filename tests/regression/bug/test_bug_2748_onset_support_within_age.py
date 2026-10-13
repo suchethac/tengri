@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import DEFAULT, FREE, ConfigError, Fixed, Uniform
+from tengri import DEFAULT, FREE, ConfigError, Fixed, Uniform, WavePrecomp
 from tengri.components.stellar.sfh.registry import (
     _AGE_FRAC_PRIORS,
     SFH_REGISTRY,
@@ -310,21 +310,33 @@ def _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z):
     )
 
 
-def test_params_gyr_key_converts_to_the_fraction_with_one_deprecation_warning(
+def _fixed_gyr_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z, age_gyr):
+    """A dpl model whose onset is the Fixed absolute-Gyr shim ``age_gyr`` (#2748)."""
+    return tengri.SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "age_gyr": Fixed(age_gyr)},
+        dust_attenuation={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+    )
+
+
+def test_params_gyr_key_is_absolute_gyr_with_one_deprecation_warning(
     synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
 ):
-    """A params dict naming an old Gyr timing predicts as its fraction, warning once (#2748).
+    """A params dict naming an old Gyr timing predicts as that absolute Gyr, warning once (#2748).
 
-    ``sfh_dpl_age_gyr = 5.0`` at z = 0.5 is ``sfh_dpl_age_frac = 5.0 / age(0.5)``,
-    so the two dicts must give the same photometry to round-off.
+    ``sfh_dpl_age_gyr = 5.0`` at z = 0.5 must equal a model whose Fixed Gyr shim
+    is 5.0, to round-off: the Gyr value is not converted through age(z).
     """
     from tengri.parameters import timing
 
     monkeypatch.setattr(timing, "_WARNED_GYR_ALIASES", set(), raising=False)
     z = 0.5
-    frac = 5.0 / float(age_at_z(z))
+    shim = _fixed_gyr_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z, 5.0)
+    ref = shim.predict_photometry({})
     model = _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z)
-    ref = model.predict_photometry({"sfh_dpl_age_frac": frac})
     with pytest.warns(DeprecationWarning) as record:
         alias = model.predict_photometry({"sfh_dpl_age_gyr": 5.0})
         model.predict_photometry({"sfh_dpl_age_gyr": 5.0})
@@ -336,6 +348,7 @@ def test_params_gyr_key_converts_to_the_fraction_with_one_deprecation_warning(
     ]
     assert len(messages) == 1
     assert "sfh_dpl_age_frac" in messages[0]
+    assert "absolute Gyr" in messages[0]
 
 
 def test_gradient_flows_to_the_deprecated_gyr_key(
@@ -356,6 +369,44 @@ def test_gradient_flows_to_the_deprecated_gyr_key(
     grad = float(jax.grad(total_flux)(5.0))
     assert np.isfinite(grad)
     assert grad != 0.0
+
+
+def test_catalog_model_at_runtime_z_reads_the_fraction_of_age_at_that_z(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """A catalog model built at a placeholder z gives the frac of age at the runtime z (#2748).
+
+    The model is built at ``Fixed(0.1)`` with ``catalog_z_range`` and evaluated
+    at a runtime z of 0.8 through ``fixed_values``. Its state must equal a plain
+    model built at 0.8 with the same fraction, and the published Gyr must be
+    ``frac * age(0.8)``, not ``frac * age(0.1)``.
+    """
+    z_runtime = 0.8
+    frac = 0.4
+    obs = synthetic_tophat_obs
+    catalog = tengri.SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "age_frac": FREE},
+        dust_attenuation={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(0.1),
+        approx=WavePrecomp(catalog_z_range=(0.01, 1.5), n_z=50),
+    )
+    plain = _free_frac_dpl_model(synthetic_ssp_wide, obs, z_runtime)
+    params = {"sfh_dpl_age_frac": frac}
+    plain_state = plain.predict_state(params)
+    catalog_fixed = {**dict(catalog.spec.get_fixed_values()), "redshift": z_runtime}
+    catalog_state = catalog.predict_state(params, fixed_values=catalog_fixed)
+
+    np.testing.assert_allclose(
+        np.asarray(catalog_state.sed_observed),
+        np.asarray(plain_state.sed_observed),
+        rtol=1e-10,
+        atol=0,
+    )
+    published = float(catalog_state.derived["sfh_timing_gyr"]["sfh_dpl_age_gyr"])
+    assert published == pytest.approx(frac * float(age_at_z(z_runtime)), rel=1e-10)
 
 
 def test_params_naming_both_timing_keys_is_a_config_error(

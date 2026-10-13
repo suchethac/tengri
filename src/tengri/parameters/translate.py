@@ -62,7 +62,7 @@ from tengri.parameters._aliases import (
     find_short_param,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
-from tengri.parameters.timing import alias_gyr_timings
+from tengri.parameters.timing import alias_gyr_timings, gyr_supplies_fraction
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -694,6 +694,8 @@ def check_missing_free_params(params, spec, param_map=None):
         if legacy_flat_spec and pub_name.startswith(("agn_", "radio_", "xray_", "igm_")):
             continue
         if pub_name == "sfh_field_xi" and "psd_xi" in params:
+            continue
+        if gyr_supplies_fraction(pub_name, params):
             continue
         if find_short_param(params, pub_name) is not None:
             continue

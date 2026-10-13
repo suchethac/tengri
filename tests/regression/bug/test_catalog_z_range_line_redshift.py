@@ -43,6 +43,7 @@ from tengri import (
     Uniform,
     WavePrecomp,
 )
+from tengri.components.stellar.sfh.registry import _AGE_FRAC_PRIORS
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.inference.context import InferenceContext
 from tengri.observation.line_flux_data import LineFluxData
@@ -877,6 +878,25 @@ def test_measure_line_fluxes_state_none_respects_fixed_values_redshift_override(
     )
 
 
+def _standardized_old_age_point(spec):
+    """The deliberately old point, standardized against ``spec``'s free priors (#2748).
+
+    The onset is sampled as a fraction of age(z), so the old-age point is the
+    oldest fraction the prior admits: its onset is then truncated by age(z) at
+    every redshift the shared priors cover, which keeps the redshift comparison
+    sensitive. Only the free names of ``spec`` are returned.
+    """
+    old_age_point = {
+        **{k: v for k, v in _OLD_AGE_PARAMS.items() if k != "sfh_dpl_age_gyr"},
+        "sfh_dpl_age_frac": _AGE_FRAC_PRIORS["sfh_dpl_age_frac"].bounds[1],
+    }
+    return {
+        name: spec.get_distribution(name).standardize(jnp.asarray(float(value)))
+        for name, value in old_age_point.items()
+        if name in spec.free_params
+    }
+
+
 def test_fitter_spectral_indices_with_runtime_redshift_matches_plain_model_loss():
     """A Fitter's runtime z override reaches the spectral-index channel's loss.
 
@@ -958,11 +978,7 @@ def test_fitter_spectral_indices_with_runtime_redshift_matches_plain_model_loss(
     # the SFH truncation genuinely differs between the compared redshifts
     # instead of a random draw that might land on an age too young to be
     # clipped by either.
-    p_u = {
-        name: catalog_model.spec.get_distribution(name).standardize(jnp.asarray(float(value)))
-        for name, value in _OLD_AGE_PARAMS.items()
-        if name in catalog_model.spec.free_params
-    }
+    p_u = _standardized_old_age_point(catalog_model.spec)
 
     loss_c_at_20 = float(ctx_c.neg_log_posterior_fn(p_u, ctx_c.data_args))
     loss_plain_20 = float(ctx_20.neg_log_posterior_fn(p_u, ctx_20.data_args))
