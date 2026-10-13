@@ -43,7 +43,8 @@ from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
     edge_split,
-    lyc_augment_grid_for_step,
+    fold_integrand,
+    lyc_augment_fold,
     preintegrate_grid,
     subband_quadrature,
 )
@@ -1147,8 +1148,10 @@ def _compute_photometry_ztable(
                 _np_trapezoid(tw_np * grid, grid) / max(denom, 1e-30) / (1.0 + z_val)
             )
 
-            ssp_on_grid = _vectorized_interp(grid, wave_obs, ssp_flux_np)
-            integrand = ssp_on_grid * tw_np[None, None, :]
+            # The SSP interpolation is folded into the quadrature weights (#2769):
+            # no (met, age, m) integrand is ever built, every consumer below reads
+            # the SSP row through ``fold`` instead.
+            fold = fold_integrand(grid, tw_np, wave_obs, ssp_flux_np)
 
             # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
             # nebular Lyman-continuum mask) -- a model without one never
@@ -1164,17 +1167,17 @@ def _compute_photometry_ztable(
             # one side has exactly zero in the other half.
             lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
             if lyc_gate:
-                grid_q, integrand_q, tw_q = lyc_augment_grid_for_step(
+                grid_q, fold_q, tw_q = lyc_augment_fold(
                     grid, tw_np, wave_obs, ssp_flux_np, fw_np, ft_np, lyc_wave_obs, convention
                 )
                 denom_q = _np_trapezoid(tw_q, grid_q)
-                num = _np_trapezoid(integrand_q, grid_q, axis=-1)
-                lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+                num = fold_q.trapezoid()
+                lyc_num, above_num = edge_split(fold_q, grid_q, lyc_wave_obs)
                 ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
                 ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom_q, 1e-30)
             else:
-                grid_q, integrand_q, tw_q, denom_q = grid, integrand, tw_np, denom
-                num = _np_trapezoid(integrand, grid, axis=-1)
+                grid_q, fold_q, tw_q, denom_q = grid, fold, tw_np, denom
+                num = fold.trapezoid()
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom_q, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
@@ -1183,10 +1186,7 @@ def _compute_photometry_ztable(
             if taylor_correction:
                 lambda_rest_per_obs = grid / (1.0 + z_val)
                 lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
-                moment_integrand = (
-                    ssp_on_grid * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
-                )
-                moment_num = _np_trapezoid(moment_integrand, grid, axis=-1)
+                moment_num = fold.trapezoid(lambda_minus_eff)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
 
             # Sub-band quadrature (#1122): same helper the fixed-z precompute
@@ -1200,7 +1200,7 @@ def _compute_photometry_ztable(
                 phi_k, nodes_obs = subband_quadrature(
                     grid_q,
                     tw_q,
-                    integrand_q,
+                    fold_q,
                     denom_q,
                     K,
                     float(eff_waves_obs[f_idx]),

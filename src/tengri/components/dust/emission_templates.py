@@ -54,6 +54,7 @@ from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
 )
+from tengri.utils.scale import safe_ratio
 
 # Upper bound of the U^-2 power-law radiation-field distribution used to
 # generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
@@ -279,7 +280,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
         # Renormalize so that integral(L_nu, d_nu) = L_absorbed
         # nu is descending (wavelength ascending), so negate
         integral = -jnp.trapezoid(sed_lnu, nu)
-        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        norm = safe_ratio(L_absorbed, integral)
 
         return norm * sed_lnu
 
@@ -504,7 +505,7 @@ def dl14_sed_from_grid(
     # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
     nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
     eval_integral = -jnp.trapezoid(sed, nu)
-    norm = jnp.where(eval_integral > 0.0, L_absorbed / eval_integral, 0.0)
+    norm = safe_ratio(L_absorbed, eval_integral)
 
     return norm * sed
 
@@ -727,7 +728,7 @@ def dale2014_emission_lnu(
     sed_sf = resample_template(wavelength_aa, wavelength_grid, template_sf, left=0.0, right=0.0)
     nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
     sf_integral = -jnp.trapezoid(sed_sf, nu)
-    norm = jnp.where(sf_integral > 0.0, 1.0 / sf_integral, 0.0)
+    norm = safe_ratio(1.0, sf_integral)
 
     if has_qso:
         f_agn = jnp.clip(dust_frac_agn, 0.0, 0.99)
@@ -1260,7 +1261,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
         wave_cm = wavelength_aa * _AA_TO_CM
         nu = _C_CGS / wave_cm
         integral = -jnp.trapezoid(mixed, nu)
-        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        norm = safe_ratio(L_absorbed, integral)
         return norm * mixed
 
     return schreiber2018_tabulated
@@ -1473,7 +1474,7 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
         # ascending wavelength, so negate for a positive integral).
         nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
         integral = -jnp.trapezoid(mixed, nu)
-        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        norm = safe_ratio(L_absorbed, integral)
         return norm * mixed
 
     return schreiber2016_tabulated
@@ -2114,7 +2115,7 @@ def create_astrodust_from_grid(
         # for consistency across different astrodust calling paths.
         nu_lnu = (_C_CGS / (wavelength_aa * _AA_TO_CM)) * sed
         t_integral = jnp.trapezoid(nu_lnu, jnp.log(wavelength_aa))
-        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
+        norm = safe_ratio(L_absorbed, t_integral)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -2417,7 +2418,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
             # ``model.predict()`` and ``model.predict_photometry()``) always
             # supplies ``log_L_ir`` (declared in ``optional_inputs``) and so
             # always takes the converted branch below.
-            norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
+            norm = safe_ratio(L_absorbed, t_integral)
             return norm * sed
 
         # log-domain rescale (#2272): equal to ``(L_absorbed / t_integral) * sed``
@@ -3378,7 +3379,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # integrates to L_absorbed regardless of the native template grid spacing.
         nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
         t_integral = -jnp.trapezoid(sed, nu)
-        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
+        norm = safe_ratio(L_absorbed, t_integral)
 
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
         # applied to the emitted SED.

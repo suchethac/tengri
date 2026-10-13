@@ -384,7 +384,7 @@ class Parameters:
     neb_logU                   Fixed(-3.0)       Ionization parameter log10(U)
     neb_logZ_gas               Fixed(-0.3)       Gas metallicity (None = tie to stellar)
     neb_fesc                   Fixed(0.0)        Ionizing photon escape fraction
-    neb_fesc_lya               Fixed(0.0)        Ly-alpha escape fraction
+    neb_fesc_lya               Fixed(1.0)        Ly-alpha escape fraction
     ========================== ================= =======================================
 
     **Dust emission** (``dust_emission != None``):
@@ -813,6 +813,23 @@ class Parameters:
         # --- Validate parameter names ---
         # Drop field params if field was removed (e.g., stochastic=False
         # with short-form psd_sigma/psd_tau_myr that are Fixed)
+        import warnings
+
+        dropped_field_priors = [
+            name
+            for name, val in resolved_kwargs.items()
+            if name not in self._valid_param_names
+            and name.startswith("sfh_field_")
+            and not isinstance(val, (Fixed, int, float))
+        ]
+        if dropped_field_priors:
+            warnings.warn(
+                f"Dropping free priors {dropped_field_priors}: the stochastic SFH field "
+                "is off, so these parameters have no effect. Set stochastic=True, or "
+                "pass Fixed values to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
         resolved_kwargs = {
             name: val
             for name, val in resolved_kwargs.items()
@@ -2618,7 +2635,7 @@ class Parameters:
                 continue
             val = float(params[name])
             lo, hi = dist.bounds
-            if not dist.is_fixed and (val < lo or val > hi):
+            if not dist.is_fixed and not (lo <= val <= hi):
                 raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
     def summary_str(self) -> str:

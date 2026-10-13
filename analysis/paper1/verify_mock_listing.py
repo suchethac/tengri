@@ -166,18 +166,8 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
         # most of this block is measurable: neb_logU scores 5e4 on the Delta
         # chi2 sweep, the largest of any parameter in the model.
         #
-        # ``fesc`` and ``fdust`` are two fractions of the SAME ionizing-photon
-        # budget. The CIGALE k-factor is
-        #     k = (1 - fesc - fdust) / (1 + 0.597 (fesc + fdust)),
-        # and ``lyc_dust_escape_factor`` clips the sum at 1.0, so ANY pair
-        # summing to >= 1 makes k exactly 0 and switches nebular emission off
-        # entirely -- lines and continuum. Nothing enforces that joint
-        # constraint (#2436), and the declared Uniform(0, 1) priors put 50% of
-        # their joint volume in that dead region, where the six parameters
-        # below have exactly zero gradient. An earlier truth for this mock drew
-        # 0.708 + 0.462 = 1.17 from those priors and produced a mock with no
-        # nebular emission at all. Capping each at 0.35 holds the sum under 0.7,
-        # so neither the truth nor the sampler can reach the plateau.
+        # ``fesc`` and ``fdust_frac`` are independent: the dust share applies to the
+        # non-escaping budget, so every pair in [0, 1]^2 is physical.
         neb={
             "type": "cue",
             "logU": FREE,
@@ -185,8 +175,8 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
             "eline_sigma_kms": FREE,
             "dig_frac": FREE,
             "dig_delta_logU": FREE,
-            "fesc": Uniform(0.0, 0.35),
-            "fdust": Uniform(0.0, 0.35),
+            "fesc": FREE,
+            "fdust_frac": FREE,
             # fesc_lya stays pinned: at z=1 Ly-alpha sits at 2432 A observed,
             # blueward of the spectrum and in the wing of GALEX NUV, so it
             # scores 5.6 -- weak, like the other parameters this mock pins.

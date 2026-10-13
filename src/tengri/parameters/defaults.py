@@ -27,6 +27,7 @@ Usage
 from __future__ import annotations
 
 import tomllib
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -69,9 +70,11 @@ _NULLABLE: dict[str, tuple[str, ...]] = {
     "dust": ("law_diff", "emission"),
 }
 
-# Hardcoded fallback in case the TOML file is missing or unreadable
+# Used only when tomllib cannot be imported or the packaged TOML cannot be
+# read. Must equal the packaged ``[from_config]`` values;
+# ``tests/contract/test_silent_fallbacks_surfaced.py`` pins that agreement.
 _FALLBACK_FROM_CONFIG: dict[str, Any] = {
-    "sfh": "tsnorm",
+    "sfh": "dense_basis",
     "dust_attenuation_law": "charlot_fall",
     "nebular": None,
     "agn": None,
@@ -80,6 +83,12 @@ _FALLBACK_FROM_CONFIG: dict[str, Any] = {
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+
+def _read_toml(path: Path) -> dict[str, Any]:
+    """Parse one TOML file into a nested dict."""
+    with open(path, "rb") as fh:
+        return tomllib.load(fh)
 
 
 def _active_path() -> Path:
@@ -126,8 +135,18 @@ def load_defaults() -> dict[str, Any]:
         )
 
     path = _active_path()
-    with open(path, "rb") as fh:
-        raw: dict[str, Any] = tomllib.load(fh)
+    try:
+        raw: dict[str, Any] = _read_toml(path)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        if path == _PACKAGE_DEFAULTS:
+            raise
+        warnings.warn(
+            f"Ignoring unreadable user defaults file {path}: {exc}. "
+            f"Using the packaged defaults at {_PACKAGE_DEFAULTS} instead.",
+            UserWarning,
+            stacklevel=2,
+        )
+        raw = _read_toml(_PACKAGE_DEFAULTS)
 
     return _resolve_nulls(raw)
 
@@ -135,7 +154,9 @@ def load_defaults() -> dict[str, Any]:
 def get_from_config_defaults() -> dict[str, Any]:
     """Return the ``[from_config]`` section with safe hardcoded fallbacks.
 
-    Never raises; falls back silently if the TOML file is unreadable.
+    Never raises. A malformed user file falls back to the packaged defaults
+    (see :func:`load_defaults`). If the packaged file itself cannot be read,
+    a ``UserWarning`` is emitted and the hardcoded copy is returned.
 
     Returns
     -------
@@ -143,11 +164,15 @@ def get_from_config_defaults() -> dict[str, Any]:
     """
     try:
         data = load_defaults()
-    except (ImportError, FileNotFoundError, OSError, tomllib.TOMLDecodeError):  # type: ignore[attr-defined]
-        # ImportError: tomllib unavailable
-        # FileNotFoundError: defaults.toml missing
-        # OSError: permission denied or other I/O failure
-        # TOMLDecodeError: malformed TOML syntax
+    except ImportError:
+        return dict(_FALLBACK_FROM_CONFIG)
+    except (OSError, tomllib.TOMLDecodeError) as exc:  # type: ignore[attr-defined]
+        warnings.warn(
+            f"Packaged defaults.toml is unreadable ({exc}); using the hardcoded "
+            "[from_config] fallback.",
+            UserWarning,
+            stacklevel=2,
+        )
         return dict(_FALLBACK_FROM_CONFIG)
     return {**_FALLBACK_FROM_CONFIG, **data.get("from_config", {})}
 
