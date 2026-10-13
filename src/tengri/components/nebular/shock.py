@@ -709,7 +709,9 @@ def _shock_line_arrays(
 
     # Halpha key in PyNeb format
     ha_key = "HA_6563A"
-    r_ha = ratios.get(ha_key, jnp.array(3.0))
+    if ha_key not in ratios:
+        raise KeyError(f"shock line ratios have no {ha_key!r}; available keys: {sorted(ratios)}")
+    r_ha = ratios[ha_key]
     # Guard against zero Hα (e.g. query in unmodeled sparse-grid region): when r_ha=0,
     # all other ratios are also 0, so dividing by 1.0 still gives zero luminosities.
     r_ha_safe = jnp.where(r_ha > 0.0, r_ha, jnp.ones_like(r_ha))
