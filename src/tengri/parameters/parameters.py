@@ -686,6 +686,9 @@ class Parameters:
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
+        # yang20 alpha_ox declaration: "delta" (offset) or "absolute" (#2661). Static
+        # structural setting, not a traced parameter.
+        self.xray_alpha_ox_mode = kwargs.pop("xray_alpha_ox_mode", "delta")
         self.shock = kwargs.pop("shock", False)
         # Composable MAPPINGS V shock config (#851). ``shock_norm`` selects the
         # relative (``"frac"``) vs absolute (``"lhalpha"``) Halpha
@@ -3156,6 +3159,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "shock_norm": content("shock normalization determines parameters"),
     "xray": content("X-ray component flag determines parameters"),
     "xray_model": content("X-ray model determines parameters"),
+    "xray_alpha_ox_mode": content("which alpha_ox declaration the corona reads"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
     "_parse_inputs": exclude(

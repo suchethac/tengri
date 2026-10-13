@@ -466,6 +466,7 @@ def build_components(
     radio_ir_window: str | None = None,
     radio_sf_nu_ref: float | None = None,
     xray_model: str = "yang20",
+    xray_alpha_ox_mode: str = "delta",
     use_xray: bool = False,
     use_igm: bool = False,
     igm_model: str = "inoue",
@@ -930,7 +931,9 @@ def build_components(
                 _resolve_registry_component(
                     "xray",
                     "xray",
-                    config=XRaySEDComponentConfig(model=xray_model),
+                    config=XRaySEDComponentConfig(
+                        model=xray_model, alpha_ox_mode=xray_alpha_ox_mode
+                    ),
                 )
             )
     if use_igm or use_dla:

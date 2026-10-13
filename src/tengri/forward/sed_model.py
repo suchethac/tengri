@@ -5172,6 +5172,7 @@ class SEDModel:
 
         self._uses_xray = getattr(spec, "xray", False)
         self._xray_model = getattr(spec, "xray_model", "yang20")
+        self._xray_alpha_ox_mode = getattr(spec, "xray_alpha_ox_mode", "delta")
 
         # ── Master rest-wavelength grid (issue #463) ─────────────────
         #
@@ -12606,6 +12607,7 @@ class SEDModel:
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
+            xray_alpha_ox_mode=getattr(self, "_xray_alpha_ox_mode", "delta"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
             igm_model=getattr(self, "_igm_model", "inoue"),
             igm_patchy=bool(getattr(self, "_igm_patchy", False)),

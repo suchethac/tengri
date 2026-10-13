@@ -219,6 +219,7 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),
     "_xray_model": content("WHICH X-ray model, not merely whether one is attached (#1462)"),
+    "_xray_alpha_ox_mode": content("which alpha_ox declaration the yang20 corona reads (#2661)"),
     "_uses_shock": content("whether shock nebular emission is attached"),
     "_shock_norm": content("shock normalization mode changes the emitted SED"),
     "_shock_abundance": content("shock abundance set changes the emitted SED"),

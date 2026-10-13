@@ -27,6 +27,7 @@ from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.special import gammainc, gammaincc, gammaln
 
 from tengri._deprecated import deprecated_alias
 from tengri.utils.host_array import device_table, host_array
@@ -49,6 +50,16 @@ from tengri.utils.scale import (
 #: populations (citing Zhang 1997 and Motta et al. 2009) and use the free ``E_cut``
 #: for the AGN corona only; the cutoff is not a fitted parameter.
 XRB_E_CUT_KEV = 100.0
+
+#: Band of the total AGN corona luminosity (``agn_total``): the wavelength grid that
+#: pcigale's yang20 module integrates, 1e-3 to 10**0.7 nm (about 0.25-1240 keV). The
+#: corona it integrates is the unabsorbed power law, so ``agn_total`` is too; tengri
+#: integrates ``L_nu`` against frequency over the same edges.
+CORONA_TOTAL_BAND_NM = (1.0e-3, 10.0**0.7)
+CORONA_TOTAL_BAND_KEV = (
+    _H_PLANCK * _C_AA / (CORONA_TOTAL_BAND_NM[1] * 10.0 * _KEV_TO_ERG),
+    _H_PLANCK * _C_AA / (CORONA_TOTAL_BAND_NM[0] * 10.0 * _KEV_TO_ERG),
+)
 
 # Yang+2020 reference inclination for the AGN corona. The α_ox(L_2500)
 # relations predict the L_2keV seen at 30°; ``xray_anisotropy`` satisfies
@@ -574,6 +585,8 @@ def _cutoff_powerlaw_band_norm(
     spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
     return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), representable_floor(1e-60))
 
+
+_LN2 = float(np.log(2.0))
 
 _LOG10_KEV_TO_HZ = float(np.log10(_KEV_TO_HZ))
 """log10 of the keV -> Hz conversion; python float so float32 never forms a large linear."""
@@ -2432,6 +2445,106 @@ def _xrb_hotgas_log_band_luminosities(
     }
 
 
+def _cutoff_power_integral_kev(E1, E2, gamma, E_cut) -> jnp.ndarray:
+    r"""Closed form of :math:`\int_{E_1}^{E_2} E^{1-\Gamma} e^{-E/E_{\rm cut}}\,dE`.
+
+    Returns the integral in keV^(2-Gamma).
+
+    With :math:`s = 2-\Gamma`, :math:`x = E/E_{\rm cut}` and
+    :math:`J(s) = \int_{x_1}^{x_2} x^{s-1} e^{-x}\,dx`, the integral is
+    :math:`E_{\rm cut}^{s} J(s)`. For :math:`s > 0`
+    :math:`J(s) = \Gamma(s)\,[P(s,x_2) - P(s,x_1)]` with the regularized lower
+    incomplete gamma :math:`P`; the upper complement :math:`Q` is used when
+    :math:`x_1 > s`, where the two :math:`P` values would cancel. For
+    :math:`s \le 0` (:math:`\Gamma \ge 2`) integration by parts gives
+    :math:`J(s) = \{[x^{s} e^{-x}]_{x_1}^{x_2} + J(s+1)\}/s` with :math:`s+1 \in (0, 1]`;
+    the removable point :math:`s = 0` is the mean of the one-sided limits at
+    :math:`\pm 10^{-6}`.
+
+    Parameters
+    ----------
+    E1, E2 : float
+        Integration limits [keV], ``0 < E1 < E2``.
+    gamma : array_like, scalar
+        Photon index :math:`\Gamma`, valid for ``1 < gamma < 3``. []
+    E_cut : array_like, scalar
+        Exponential cutoff energy [keV].
+
+    Returns
+    -------
+    ndarray, scalar
+        The integral [keV^(2-Gamma)].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**; float32-safe: the prefactors are formed as
+    ``exp(gammaln(.))`` of order-one arguments, and the large frequency factor is
+    applied by the caller. Replaces a 400-node quadrature, which resolved the integral
+    only to 4e-5 dex. Agrees with a 4000-node Simpson rule to 1e-11 relative
+    (``tests/components/xray/test_corona_band_closed_form.py``).
+    """
+    s = 2.0 - gamma
+    x1 = E1 / E_cut
+    x2 = E2 / E_cut
+
+    def _j_pos(sp):
+        # Gamma(sp) * [P(sp, x2) - P(sp, x1)], upper complements where x1 > sp.
+        use_q = x1 > sp
+        diff_p = gammainc(sp, x2) - gammainc(sp, x1)
+        diff_q = gammaincc(sp, x1) - gammaincc(sp, x2)
+        return jnp.exp(gammaln(sp)) * jnp.where(use_q, diff_q, diff_p)
+
+    def _j(sv):
+        # Valid for sv != 0; the s <= 0 branch divides by sv.
+        s_pos = jnp.where(sv > 0.0, sv, sv + 1.0)
+        boundary = x2**sv * jnp.exp(-x2) - x1**sv * jnp.exp(-x1)
+        j_nonpos = (boundary + _j_pos(sv + 1.0)) / sv
+        return jnp.where(sv > 0.0, _j_pos(s_pos), j_nonpos)
+
+    # J(s) is entire in s (the limits are positive), so at the removable point s = 0
+    # the mean of the two one-sided evaluations is exact to O(h^2) with h = 1e-6.
+    near_zero = jnp.abs(s) < 1e-6
+    s_plus = jnp.where(near_zero, 1e-6, s)
+    s_minus = jnp.where(near_zero, -1e-6, s)
+    j = jnp.where(near_zero, 0.5 * (_j(s_plus) + _j(s_minus)), _j(s))
+    return jnp.power(E_cut, s) * j
+
+
+def _intrinsic_corona_band_integral(
+    E_lo: float, E_hi: float, gamma: jnp.ndarray, E_cut: jnp.ndarray
+) -> jnp.ndarray:
+    r"""Frequency integral [Hz] of the unabsorbed corona shape over ``[E_lo, E_hi]`` keV.
+
+    The shape is :math:`(E/2)^{1-\Gamma} e^{-(E-2)/E_{\rm cut}}`, the corona of
+    :func:`xray_agn_corona` before absorption, scattering, reflection and anisotropy,
+    normalized to 1 at 2 keV. Its band integral is closed form (an incomplete gamma
+    difference, :func:`_cutoff_power_integral_kev`), so it costs a few dozen flops per
+    draw rather than a quadrature over the band.
+
+    Parameters
+    ----------
+    E_lo, E_hi : float
+        Band edges [keV].
+    gamma : array_like, scalar
+        Photon index :math:`\Gamma` [dimensionless].
+    E_cut : array_like, scalar
+        Exponential cutoff energy [keV].
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`\int \mathrm{shape}\,d\nu` over the band [Hz].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**; float32-safe: the integrand is O(1) and the frequency
+    factor is the only large number, at ~1e18 Hz.
+    """
+    # (E/2)^{1-Gamma} exp(-(E-2)/E_cut) = 2^{Gamma-1} e^{2/E_cut} E^{1-Gamma} e^{-E/E_cut}.
+    prefactor = jnp.exp((gamma - 1.0) * _LN2 + 2.0 / E_cut)
+    return _KEV_TO_HZ * prefactor * _cutoff_power_integral_kev(E_lo, E_hi, gamma, E_cut)
+
+
 def _corona_log_band_luminosity(
     emit,
     log_anchor: jnp.ndarray,
@@ -2520,8 +2633,10 @@ def xray_total_log_band_luminosities(
     Returns
     -------
     dict of ndarray, scalar
-        ``{"hmxb", "lmxb", "hotgas", "agn"}`` [dex re erg/s]; ``-inf`` for a
-        term whose driver is exactly zero.
+        ``{"hmxb", "lmxb", "hotgas", "agn", "agn_total", "lnu_2kev_30deg"}``
+        [dex re erg/s]; ``lnu_2kev_30deg`` is in [dex re erg/s/Hz]. ``agn`` is the
+        corona over 2-10 keV, ``agn_total`` over :data:`CORONA_TOTAL_BAND_KEV`.
+        ``-inf`` for a term whose driver is exactly zero.
 
     Notes
     -----
@@ -2554,7 +2669,24 @@ def xray_total_log_band_luminosities(
             pexrav_R=pexrav_R,
         )
 
-    return {**out, "agn": _corona_log_band_luminosity(emit, log_l_2kev, has_agn)}
+    return {
+        **out,
+        "agn": _corona_log_band_luminosity(emit, log_l_2kev, has_agn),
+        # The unabsorbed corona over the total band, as CIGALE's yang20 integrates it:
+        # L_nu(2 keV) x anisotropy x the shape's band integral.
+        "agn_total": jnp.where(
+            has_agn,
+            log_l_2kev
+            + jnp.log10(
+                xray_anisotropy(1.0, cos_inc, a1=a1, a2=a2)
+                * _intrinsic_corona_band_integral(*CORONA_TOTAL_BAND_KEV, gamma_agn, E_cut)
+            ),
+            -jnp.inf,
+        ),
+        # The 30-degree anchor: the intrinsic L_nu(2 keV) that alpha_ox sets, before
+        # absorption and before the anisotropy factor (which is 1 at 30 degrees).
+        "lnu_2kev_30deg": jnp.where(has_agn, log_l_2kev, -jnp.inf),
+    }
 
 
 def xray_total_lopez24_log_band_luminosities(
@@ -2621,7 +2753,25 @@ def xray_total_lopez24_log_band_luminosities(
             log_nh=log_nh,
         )
 
-    return {**out, "agn": _corona_log_band_luminosity(emit, log_amplitude, has_agn)}
+    return {
+        **out,
+        "agn": _corona_log_band_luminosity(emit, log_amplitude, has_agn),
+        # lopez24 sets the 2-10 keV intrinsic luminosity, L_X = nu L_nu(12 um) / 10**alpha_irx,
+        # and the unabsorbed shape carries it to the total band.
+        "agn_total": jnp.where(
+            has_agn,
+            safe_log_l_12um
+            - alpha_irx
+            + jnp.log10(
+                _intrinsic_corona_band_integral(*CORONA_TOTAL_BAND_KEV, gamma_agn, E_cut)
+                / _intrinsic_corona_band_integral(2.0, 10.0, gamma_agn, E_cut)
+            ),
+            -jnp.inf,
+        ),
+        # lopez24 anchors the corona at 12 um, not at L_2500: there is no alpha_ox
+        # 2 keV anchor to report, so the key is -inf under this corona.
+        "lnu_2kev_30deg": jnp.full_like(log_amplitude, -jnp.inf),
+    }
 
 
 # ── Deprecation shims ──

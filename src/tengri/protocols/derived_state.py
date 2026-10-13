@@ -696,6 +696,15 @@ class DerivedState:
     # properties.
     log_L_x_xrb_2_10: jnp.ndarray | None = None
     log_L_x_agn_2_10: jnp.ndarray | None = None
+    # Per-term luminosities (#2661) [dex re erg/s], band integrals of the emitted terms:
+    # HMXB and LMXB over 2-10 keV, hot gas over 0.5-2 keV, the corona over the
+    # 0.25-1240 keV yang20 grid. ``log_Lnu_2keV_30deg`` [dex re erg/s/Hz] is the
+    # intrinsic 2 keV anchor at 30 degrees.
+    log_L_x_hmxb_2_10: jnp.ndarray | None = None
+    log_L_x_lmxb_2_10: jnp.ndarray | None = None
+    log_L_x_hotgas_0p5_2: jnp.ndarray | None = None
+    log_L_x_agn_total: jnp.ndarray | None = None
+    log_Lnu_2keV_30deg: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
