@@ -1285,7 +1285,7 @@ def precompute_nebular_grid(
     # A timing fraction converts to Gyr at ref_z, so the reference onset would differ
     # between a catalog build (lower bound 0.01) and a plain one (0.1). Written in the
     # z = 0 frame, it is the same absolute onset at every reference redshift (#2748).
-    ref_params = reference_timing_fracs(ref_params, ref_z)
+    ref_params = reference_timing_fracs(spec, ref_params, ref_z)
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),

@@ -356,21 +356,25 @@ def _refuse_gyr_above_age(gyr_name, gyr, z):
         )
 
 
-def reference_timing_fracs(params, ref_z):
-    """Rescale the timing fractions of a reference SFH to the z = 0 frame (#2748).
+def reference_timing_fracs(spec, params, ref_z):
+    """Write the timing fractions of a reference SFH in the z = 0 frame (#2748).
 
     A fraction converts to Gyr at the redshift it is evaluated at, so one fraction
     gave a different absolute onset at each reference redshift: the catalog lower
     bound of 0.01 and a plain build at 0.1 differ by ``age(0.01) - age(0.1)``, about
     1.2 Gyr, and the per-Q_H grids they build disagreed. The reference SFH is a
     convention, not a prior draw, so it is written so that its conversion at
-    ``ref_z`` gives ``frac * age(0)``: each fraction is multiplied by
-    ``age(0) / age(ref_z)``.
+    ``ref_z`` gives ``frac * age(0)``: each timing fraction is multiplied by
+    ``age(0) / age(ref_z)``. A Fixed timing fraction that ``params`` does not carry
+    (``spec.sample`` returns free parameters only, #2296) is taken from the spec's
+    Fixed value, so it is rescaled too.
 
     Parameters
     ----------
+    spec : Parameters
+        The model's parameter spec, for its Fixed values.
     params : dict
-        Reference parameters, with the spec's Fixed values already merged in.
+        Reference parameters drawn from ``spec.sample``.
     ref_z : float
         Reference redshift the reference is built at [dimensionless].
 
@@ -385,12 +389,18 @@ def reference_timing_fracs(params, ref_z):
     **JIT-compatible**: no; build-time, eager.
     """
     from tengri.cosmology import age_at_z
+    from tengri.parameters.resolve import merge_fixed_params
 
     scale = float(age_at_z(0.0)) / float(age_at_z(ref_z))
     frac_names = timing_frac_params()
-    return {
-        name: (value * scale if name in frac_names else value) for name, value in params.items()
-    }
+    fixed = merge_fixed_params(spec, {})
+    out = dict(params)
+    for name in frac_names:
+        if name in params:
+            out[name] = params[name] * scale
+        elif name in fixed:
+            out[name] = fixed[name] * scale
+    return out
 
 
 def resolve_timing_fracs(internal, params, param_map, *, redshift):
