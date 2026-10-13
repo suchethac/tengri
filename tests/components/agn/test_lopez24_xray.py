@@ -215,7 +215,7 @@ class TestTotalLopez24:
             stellar_mass=1e10,
             log_l_12um_erg=-np.inf,
         )
-        xrb = xray_xrb(xray_wavelength, sfr=1.0, stellar_mass=1e10, E_cut=300.0)
+        xrb = xray_xrb(xray_wavelength, sfr=1.0, stellar_mass=1e10)
         hotgas = xray_hotgas(xray_wavelength, 1.0, gamma=1.0, E_cut=1.0)
         assert jnp.allclose(total, xrb + hotgas, atol=1e-50)
 

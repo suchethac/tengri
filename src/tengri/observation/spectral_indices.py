@@ -709,7 +709,7 @@ def _measure_slope(
     else:
         w = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
     log_wave = jnp.log(jnp.maximum(wave, 1.0))
-    log_fnu = jnp.log(jnp.maximum(flux, 1e-50))
+    log_fnu = jnp.log(jnp.maximum(flux, representable_floor(1e-50)))
 
     sw = jnp.sum(w)
     sx = jnp.sum(w * log_wave)

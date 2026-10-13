@@ -36,7 +36,7 @@ from tengri.observation.photometry import FilterCurve
 pytestmark = pytest.mark.regression_bug
 
 _Z = 0.05
-_RADIO_WAVE_MIN_AA = 1.0e7  # the radio module's own lower limit (1 mm)
+_RADIO_WAVE_MIN_AA = 1.0e6  # the radio module's own lower limit (100 um)
 
 
 def _tophat(lo_obs, hi_obs, name, n=60):

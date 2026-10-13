@@ -250,6 +250,29 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
     return min(float(value), float(ceiling))
 
 
+def safe_ratio(num, den):
+    """Return ``num / den`` where ``den > 0`` and 0 elsewhere, with a finite VJP.
+
+    The inner denominator is replaced by 1 where it is not positive, so the
+    unselected quotient never divides by zero and its reverse-mode term stays
+    finite.
+
+    Parameters
+    ----------
+    num : array_like
+        Numerator.
+    den : array_like
+        Denominator; entries that are not positive give 0.
+
+    Returns
+    -------
+    ndarray
+        ``num / den`` where ``den > 0``, else 0, broadcast over both inputs.
+    """
+    ok = den > 0.0
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
+
+
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 

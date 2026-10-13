@@ -135,7 +135,7 @@ All functions operate on flat arrays (not pytree dicts) for XLA efficiency.
 from tengri import Fitter
 
 # --- Native JIT (default, fully XLA-compiled) ---
-result = fitter.run("native_geovi", ...)   # DEFAULT: JIT geoVI with resample+update, nonlinear draws
+result = fitter.run("native_geovi", ...)   # JIT geoVI with resample+update, nonlinear draws
 result = fitter.run("native_mgvi", ...)    # JIT MGVI
 result = fitter.run("native_evi", ...)     # JIT EVI
 
@@ -153,12 +153,12 @@ result = fitter.run("geovi_nuts", ...)    # geoVI optimization + NUTS posterior 
 result = fitter.run("mgvi_nuts", ...)     # MGVI optimization + NUTS posterior draws
 
 # --- Batch fitting ---
-results = fitter.fit_batch(galaxies)      # Default method: native_geovi
+results = fitter.fit_batch(galaxies)      # Default method: mcmc_nuts_fast
 ```
 
 ### Architecture
 
-**`native_geovi` is the default going forward.** It uses a fully XLA-compiled loop
+**`native_geovi` is the recommended geoVI backend.** It uses a fully XLA-compiled loop
 (zero Python overhead) with the "geovi" sample mode: resample at iteration 0 and
 every 5th iteration, nonlinear_update between (via `jax.lax.cond`). Posterior draws
 are nonlinear (geoVI-curved), not linear CG.

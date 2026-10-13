@@ -53,7 +53,7 @@ model_cue = tengri.SEDModel.build(
         "neb_logU": tengri.Fixed(-2.5),
         "neb_logZ_gas": tengri.Fixed(-0.3),
         "neb_fesc": tengri.Fixed(0.0),
-        "neb_fesc_lya": tengri.Fixed(0.0),
+        "neb_fesc_lya": tengri.Fixed(1.0),
         "neb_dig_frac": tengri.Fixed(0.0),
     },
     redshift=tengri.Fixed(0.01),

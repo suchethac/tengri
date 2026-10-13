@@ -72,22 +72,22 @@ on:
 
 # Supersede stale runs -- but never on `main`.
 #
-# **Every push to `main` runs the FULL suite, to completion.** `push` gets a
-# UNIQUE group (run_id) and so is never cancelled, which is the only reason a
-# red commit cannot slip through. That is not theory: on 2026-07-10 five red
-# commits landed on `main` invisibly, because every merge cancelled its
-# predecessor's suite and only the last one standing was ever judged (#1021,
-# #1051, #1071, #1076, and the cancelled run of the very PR that fixed the last
-# two). One group per push means N merges run N suites concurrently, each
-# reporting on its own commit.
+# **Every push to `main` runs the FULL suite, and no push run is cancelled.**
+# Pushes share one fixed group (`tests-main-push`), so a run in progress always
+# finishes and its verdict is real. Cancelling a predecessor is how red commits
+# used to land on `main` unjudged, which is why the push group never cancels.
+# Never cancelling has a cost, bounded by coalescing (see the block below): at
+# most one push run is pending at a time, and a newer push replaces an older
+# pending one.
 #
 # What makes that affordable is that pull requests run the cheap tier. The
 # full suite is ~360 runner-minutes per run against ~26 for the cheap tier, and
 # at ~34 merges/day a pull-request population that also ran the full suite on
 # every push saturated the 20-job ceiling and put queue latency at 7-14 h; a
 # verdict that arrives half a day after the commit is the red-commit failure
-# again. With the cheap tier on PRs the full suite runs once per landed commit
-# (and again for a PR that asks for it with `full-tests`).
+# again. With the cheap tier on PRs the full suite runs on pushes to `main`
+# only, and a burst of merges costs at most two of them (and again for a PR
+# that asks for it with `full-tests`).
 #
 # The nightly `schedule` run is the whole suite -- `test`, `coverage`, `slow`,
 # `crossval` -- on the tip of `main`, and `nightly-alarm` opens an issue when it
@@ -95,8 +95,15 @@ on:
 #
 # Concurrency by event:
 #
-#   push         a UNIQUE group (run_id): every commit on `main` gets its own
-#                full verdict to completion, never superseded.
+#   push         ONE fixed group (`tests-main-push`), never cancelled. Pushes
+#                to `main` are COALESCED: the run in progress always finishes,
+#                and GitHub keeps at most one pending run, replacing an older
+#                pending run with the newer. A burst of merges therefore costs
+#                at most two full runs (the one in flight and the newest
+#                commit) instead of one per merge. Every landed commit is still
+#                covered by the next completed verdict: a failing verdict
+#                covers the range since the last completed run, so bisect
+#                within that range to find the commit.
 #   the rest     keyed on `github.event_name`, so a newer event of the SAME kind
 #                supersedes the older one -- a PR synchronize cancels the prior
 #                PR run, which is where the real compute saving lives. Keying on
@@ -110,10 +117,9 @@ on:
 # set.
 concurrency:
   group: >-
-    tests-${{ github.ref }}-${{
-      github.event_name == 'push' && github.run_id
-      || github.event_name }}
-  cancel-in-progress: true
+    ${{ github.event_name == 'push' && 'tests-main-push'
+      || format('tests-{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Supply a version for the `dsps` build. The published dsps sdists use
 # setuptools-scm, which (in the fresh pip build-isolation env) raises
@@ -132,18 +138,19 @@ env:
 # CI tiers, by event (`gallery-changes` computes the scope; `ci-ok` checks it):
 #
 #   pull_request   cheap by default: lint, security, smoke, `physics`,
-#                  `regression-c`, plus `contract`, `components`, `regression-a`,
-#                  `regression-d` when the diff touches docs/, notebooks/,
+#                  `regression-c`, plus `contract`, `components`, `regression-a1`,
+#                  `regression-a2`, `regression-a3`, `regression-d` when the diff touches docs/, notebooks/,
 #                  reproduction/ or a top-level *.md (scope cheap / cheap-docs).
-#                  A docs-only diff runs just those four (scope docs). The label
+#                  A docs-only diff runs just those six (scope docs). The label
 #                  `full-tests` runs the full suite (scope all), and so does a
 #                  diff touching the CI machinery (workflows, ci_ok.py,
 #                  ci_split_paths.py, pyproject.toml, any conftest.py). A draft
 #                  runs the gates only (scope none).
-#   push (main)    the FULL suite after the commit lands (scope all: all nine
-#                  shards, plus the gallery when the pushed range touched a
-#                  gallery input). A failure in a shard the cheap tier skipped
-#                  is caught here, right after landing.
+#   push (main)    the FULL suite after the commit lands (scope all: all eleven
+#                  shards and the gallery). A failure in a shard the cheap
+#                  tier skipped is caught here, right after landing. Runs are
+#                  coalesced (see Concurrency), so a verdict covers every
+#                  commit since the last completed run.
 #   schedule       the whole suite nightly, plus coverage, slow and crossval.
 #
 # The test matrix is DYNAMIC: `gallery-changes` builds it from the scope, so a
@@ -197,7 +204,7 @@ jobs:
             {
               echo "## Full CI tier (push to main)"
               echo
-              echo "**Ran:** lint, security, smoke, all nine \`test\` shards, and the gallery"
+              echo "**Ran:** lint, security, smoke, all eleven \`test\` shards, and the gallery"
               echo "when the pushed commits touched a gallery input."
               echo
               echo "Pull requests run the cheap tier, so this is where a failure in a shard"
@@ -617,10 +624,13 @@ jobs:
   # inputs that CAN change what an example does are enumerated below (`gallery_re`);
   # a diff touching none of them cannot change the gallery's verdict.
   #
-  # The filter applies to the events that run the full suite and have a diff: a
-  # `push` to `main` (the compare of the pushed range) and a pull request that
-  # owes scope `all`. A cheap-tier pull request never runs the gallery, and
-  # `schedule` / `workflow_dispatch` always do.
+  # The filter applies to a pull request that owes scope `all`. A cheap-tier
+  # pull request never runs the gallery, and `schedule`, `workflow_dispatch` and
+  # every `push` to `main` always do. A push cannot be filtered by its own diff:
+  # pushes are coalesced, so a run's previous commit is not the last commit a
+  # run tested, and a gallery input changed in a skipped intermediate commit
+  # would be missed. Running it costs ~25 runner-minutes against a suite of
+  # hours, and a skipped gallery that was needed ships a broken example.
   #
   # The same job decides the `test` scope, in a second output, so the answer is
   # computed once from one API call and one place:
@@ -634,8 +644,11 @@ jobs:
   #          The `contract` shard holds the render-hash, docs-sync,
   #          registry-string and reproduction-driver guards, `components` holds
   #          `tests/unit` and a parity test that reads reproduction/,
-  #          `regression-a` reads docs/dev and `regression-d` scans every *.md
-  #          (CLAUDE.md included). Those four shards run; the other five read
+  #          `regression-a1` (precision/test_geovi_metric_float32.py) reads docs/dev
+  #          and `regression-d` scans every *.md (CLAUDE.md included).
+  #          `regression-a2` and `regression-a3` read none of these trees but keep
+  #          the scope their predecessor had. Those six
+  #          shards run; the other five read
   #          none of these trees and are withheld. One exception is known:
   #          `tests/regression/bug/test_bug_vacuum_wavelengths_everywhere.py`
   #          scans `reproduction/**/*.py`, and a bug shard is withheld by this
@@ -716,8 +729,6 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BASE_CHANGED: ${{ github.event.changes.base != null }}
           LABELS_JSON: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
         run: |
           set -uo pipefail
 
@@ -730,7 +741,9 @@ jobs:
           [
             {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":120,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
             {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
-            {"shard":"regression-a","paths":"tests/regression/synthesizer_parity tests/regression/precision","bug_half":"","nproc":1,"timeout":85,"cache_gb":"1.0","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a2","paths":"tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":45,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a3","paths":"tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":70,"cache_gb":"0.7","scopes":["all"]},
             {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
             {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
@@ -837,31 +850,11 @@ jobs:
               files=$(tr '\t' '\n' <<<"$rows" | sed '/^$/d')
               ;;
             push)
-              # Every push to main runs the full suite, so only the gallery is
-              # decided here, from the range this push brought in. A new branch,
-              # a force-push that dropped the old tip, an unreadable compare, a
-              # compare at the 300-file page limit or an empty one all run it.
-              gallery=true
-              if [ -n "$BEFORE_SHA" ] && ! [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
-                if resp=$(gh api "repos/$REPO/compare/$BEFORE_SHA...$AFTER_SHA" \
-                      --jq '{n: (.files | length), names: [.files[] | .filename, (.previous_filename // empty)]}'); then
-                  n=$(jq -r '.n' <<<"$resp")
-                  if [ "$n" -gt 0 ] && [ "$n" -lt 300 ]; then
-                    files=$(jq -r '.names[]' <<<"$resp")
-                    echo "pushed files:"
-                    print_files
-                    gallery=false
-                    if grep -qE "$gallery_re" <<<"$files"; then gallery=true; fi
-                  else
-                    echo "compare listed $n files -> assuming the gallery is needed"
-                  fi
-                else
-                  echo "could not compare $BEFORE_SHA...$AFTER_SHA -> running the gallery"
-                fi
-              else
-                echo "no usable previous commit -> running the gallery"
-              fi
-              emit "$gallery" all
+              # Every push to main runs the full suite and the gallery: pushes
+              # are coalesced, so the diff of this push alone does not cover the
+              # commits an earlier, superseded run would have tested.
+              echo "push to main -> full suite and gallery"
+              emit true all
               exit 0
               ;;
             *)
@@ -1236,7 +1229,7 @@ jobs:
       #     test tree escapes the table again.
       #   * budgets are above measured wall clock under runner-pool congestion
       #     (+60%): contract 120 (re-measured 2026-10-06; one worker holding a
-      #     case marked `timeout(1800)` needs the room), regression-a 85,
+      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 45, regression-a3 70,
       #     regression-b1/b2/b3 70, the rest 50. The per-test `--timeout=600` below
       #     still catches a real hang, so a budget bounds total wall clock only.
       #     Re-measure from a completed run's job durations before changing one.
@@ -1282,9 +1275,16 @@ jobs:
         with:
           path: ~/.cache/tengri_jax_cache
           key: tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
+          # The regression-a1/a2/a3 shards (split from regression-a, #2908/#2909) fall
+          # back to the old shard's snapshot, which compiled the same tests, until
+          # the nightly saves under their own keys. `regression-a-` cannot prefix-
+          # match an `a1`/`a2`/`a3` key, and the empty line other shards get is
+          # dropped by actions/cache. A fallback restore is not an exact hit, so the
+          # nightly still saves each shard's own entry.
           restore-keys: |
             tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-
             tengri-jax-test-${{ matrix.shard }}-
+            ${{ startsWith(matrix.shard, 'regression-a') && 'tengri-jax-test-regression-a-' || '' }}
       # Fast PR feedback: NO coverage instrumentation (cov adds ~30-50% wall
       # clock) — coverage runs separately on push/nightly in the `coverage` job
       # below. tests/inference + integration are gated to the slow tier; crossval
@@ -1339,10 +1339,16 @@ jobs:
             RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
+      # `--durations` lists each shard's 60 slowest tests (>= 5 s) at the end of
+      # its log, so a shard's growth can be named from a completed run (#2908).
+      # `-v` (not `-q`) prints one line per test, and the Actions log stamps every
+      # line, so a shard that hits its step budget (and never prints `--durations`)
+      # can still be timed per test.
       - run: |
-          pytest ${{ steps.paths.outputs.value }} -q \
+          pytest ${{ steps.paths.outputs.value }} -v \
             -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=signal \
+            --durations=60 --durations-min=5 \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
@@ -1552,7 +1558,7 @@ jobs:
         #
         # coverage_budget is 1.5 × budget rounded up to the next 5, because
         # --cov adds 30-50% memory and wall-clock overhead (measured 2026-08-13:
-        # regression-a at 18m40s vs 40m00s with coverage on the same SHA).
+        # regression-a (before #2908's split) at 18m40s vs 40m00s with coverage on the same SHA).
         # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
           # 70, not 50, for the same reason as the test job's contract row
@@ -1605,10 +1611,20 @@ jobs:
           # the ACTUAL column; re-measure from a completed run's job durations
           # rather than from progress lines. This file's timing notes have now gone
           # stale three times — treat every number here as needing a date.
-          - shard: regression-a
-            paths: tests/regression/synthesizer_parity tests/regression/precision
+          - shard: regression-a1
+            paths: tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py
             nproc: 1
             budget: 50
+            coverage_budget: 105
+          - shard: regression-a2
+            paths: tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py
+            nproc: 1
+            budget: 45
+            coverage_budget: 105
+          - shard: regression-a3
+            paths: tests/regression/precision/test_float32_fitting_path_seams.py
+            nproc: 1
+            budget: 70
             coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
@@ -1698,8 +1714,9 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        # regression-a mirror: test job at 70 min, coverage at 1.5x = 105 min
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 105 || matrix.coverage_budget }}
+        # the three regression-a shards keep the 105 min coverage budget the
+        # combined regression-a shard had.
+        timeout-minutes: ${{ matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:

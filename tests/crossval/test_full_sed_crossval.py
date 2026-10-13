@@ -41,6 +41,25 @@ import pytest
 
 from tests._bounds import assert_non_negative
 
+
+def _table_cosmic_time_gyr(t_since_formation_gyr, age_gyr: float, redshift: float) -> np.ndarray:
+    """Cosmic time since the Big Bang [Gyr] for a table whose last node is the observation.
+
+    ``sfh_t_gyr`` is cosmic time measured from the Big Bang, and the stellar
+    component turns it into lookback time with the age of the universe at the
+    model redshift. A grid written in time since galaxy formation, ``0`` to
+    ``age_gyr``, therefore has to be shifted by ``age_at_z(z) - age_gyr`` so that
+    its last node sits at the observation epoch and star formation runs up to
+    the present; left unshifted it would end ``age_at_z(z) - age_gyr`` before
+    observation and the table would carry no young stars at all.
+    """
+    from tengri.utils.cosmology import age_at_z
+
+    return (float(age_at_z(redshift)) - float(age_gyr)) + np.asarray(
+        t_since_formation_gyr, dtype=float
+    )
+
+
 #: ``np.trapz`` was removed in numpy 2.0 in favor of ``np.trapezoid``, but
 #: pyproject allows ``numpy>=1.24``, where only ``trapz`` exists. Bind once
 #: rather than at the call site so this file runs across the supported range.
@@ -1162,7 +1181,9 @@ def _build_tengri_tau_sed_table(
 
     params = spec.sample(jax.random.PRNGKey(0))
     params = dict(params)
-    params["sfh_t_gyr"] = jnp.asarray(t_cosmic, dtype=jnp.float64)
+    params["sfh_t_gyr"] = jnp.asarray(
+        _table_cosmic_time_gyr(t_cosmic, age_gyr, 0.01), dtype=jnp.float64
+    )
     params["sfh_sfr"] = jnp.asarray(sfr_table, dtype=jnp.float64)
 
     result = model.predict_rest_sed(params)
@@ -1198,12 +1219,6 @@ class TestTauSFHCrossVal:
     4. Internal tests (tengri only) verify sign conventions and integration accuracy.
     """
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.505 vs tolerance 0.80–1.20 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau1gyr_uv_v_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """tau=1 Gyr, age=5 Gyr: tengri UV/V color (2800/5500) within 20% of FSPS.
 
@@ -1276,12 +1291,6 @@ class TestTauSFHCrossVal:
             "Large discrepancy suggests wrong time convention or integration error."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.334 vs tolerance 0.75–1.25 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau1gyr_uv_v_color_vs_bagpipes(self, ssp_data, ref, ref_wave):
         """tau=1 Gyr, age=5 Gyr: tengri UV/V color within 25% of bagpipes.
 
@@ -1388,12 +1397,6 @@ class TestTauSFHCrossVal:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.885 vs tolerance 0.70–1.30 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau0p5gyr_dusty_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """tau=0.5 Gyr + dust (tau_bc=1.5): tengri UV/V color within 30% of FSPS.
 
@@ -1405,7 +1408,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
+        wave, sed = _build_tengri_tau_sed_table(
+            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
+        )
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
         fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
@@ -1426,7 +1431,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
+        wave, sed = _build_tengri_tau_sed_table(
+            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
+        )
         l_tengri = _band_avg(wave, sed, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / max(l_fsps, 1e-40)
@@ -2598,17 +2605,20 @@ class TestCIGALESKIRTOR:
         strict=True,
         raises=AssertionError,
         reason=(
-            "tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed "
-            "(torus-only NIR/V against a total-SED excess over stellar V), see #2480"
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 0.239 at 1.0-1.2 um (tengri total AGN "
+            "excess over the host V is about 4x weaker than CIGALE's), see #2480"
         ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
-        """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
+        """tengri SKIRTOR total-AGN excess vs pCIGALE SKIRTOR2016 excess, NIR over V.
 
-        Both use the same template library. Differences arise from: (a) how the
-        templates are interpolated in parameter space, (b) how the AGN fraction is
-        defined (bolometric vs IR), (c) host galaxy normalization. We compare the
-        NIR-to-V ratio rather than absolute luminosity to factor out host-galaxy offsets.
+        Both sides compare the same quantity: the AGN contribution (total with the
+        AGN minus the host alone for pCIGALE; the total SKIRTOR template for tengri)
+        in the NIR band, normalized to the host stellar V of the same 3 Gyr
+        constant-SFH population with Calzetti E(B-V)=0.1 on the stars. The AGN
+        bolometric luminosity follows CIGALE's fracAGN=0.30 convention,
+        L_AGN = fracAGN / (1 - fracAGN) * L_star. The pCIGALE reference only extends
+        to 1.2 um, so the NIR window is 1.0-1.2 um.
         """
         k_cig = "cigale_agn_skirtor_type1"
         k_cig_noagn = "cigale_agn_skirtor_type1_noagn"
@@ -2616,44 +2626,62 @@ class TestCIGALESKIRTOR:
             pytest.skip("cigale skirtor_type1 cases not in reference NPZ")
 
         try:
-            from tengri.components.agn.skirtor import skirtor_analytic
+            from tengri.components.agn.skirtor import create_skirtor_components_from_grid
         except ImportError:
             pytest.skip("tengri.components.agn.skirtor not importable")
 
-        nir_mask = (ref_wave > 10000.0) & (ref_wave < 30000.0)
+        grid_path = _DATA_DIR / "skirtor_templates_v3.h5"
+        if not grid_path.is_file():
+            pytest.skip("SKIRTOR v3 template grid not on disk")
+
+        nir_mask = (ref_wave > 10000.0) & (ref_wave < 12000.0)
         if not nir_mask.any():
-            pytest.skip("ref_wave does not cover 1–3 μm window (need extended grid)")
+            pytest.skip("ref_wave does not cover the 1.0-1.2 um NIR window")
 
-        # pCIGALE NIR/V ratio (AGN excess)
+        # pCIGALE: AGN excess (total with AGN minus host alone), NIR over host V.
+        excess_cig = ref[k_cig] - ref[k_cig_noagn]
         v_cig = _band_avg(ref_wave, ref[k_cig_noagn], 5500.0)
-        nir_cig = float(np.nanmean(ref[k_cig][nir_mask]))
-        ratio_cig = nir_cig / max(v_cig, 1e-40)
+        ratio_cig = float(np.nanmean(excess_cig[nir_mask])) / max(v_cig, 1e-40)
 
-        # tengri: compute skirtor SED and get NIR/V ratio
-        wave_aa = np.asarray(ssp_data.ssp_wave)
-        skirtor_result = skirtor_analytic(
-            wavelength=wave_aa,
-            agn_log_lbol=10.0,
-            agn_tau_skirtor=7.0,
+        # tengri: host stellar SED per Msun formed, attenuated like the pCIGALE host.
+        # Calzetti tau_V = A_V / 1.086 with A_V = 4.05 E(B-V), E(B-V) = 0.1.
+        wave_aa, sed_host, _ = _build_tengri_sed(
+            ssp_data,
+            onset_lookback_gyr=3.0,
+            cessation_lookback_gyr=0.0,
+            tau_diff=4.05 * 0.1 / 1.086,
+        )
+        from tengri.utils.physics_constants import L_SUN
+
+        nu_host = _C_AA / wave_aa
+        order = np.argsort(nu_host)
+        l_star_bol = float(np.trapezoid(sed_host[order], nu_host[order])) / L_SUN
+        v_host = _band_avg(wave_aa, sed_host, 5500.0)
+
+        # tengri: total SKIRTOR AGN with bolometric = fracAGN/(1-fracAGN) * L_star.
+        frac_agn = 0.30
+        l_agn_bol = frac_agn / (1.0 - frac_agn) * l_star_bol
+        components = create_skirtor_components_from_grid(str(grid_path))(
+            wave_aa,
+            agn_log_lbol=float(np.log10(l_agn_bol)),
+            frac_agn=1.0,
+            agn_tau_skirtor=3.0,  # CIGALE t=3, the optical depth at 9.7 um
             agn_p_skirtor=1.0,
             agn_q_skirtor=1.0,
             agn_oa_skirtor=40.0,
             agn_cos_inc=np.cos(np.radians(30.0)),
         )
-        # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
-        tengri_sed = np.asarray(skirtor_result)
-        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 30000.0)
-        v_t_mask = (wave_aa > 5400.0) & (wave_aa < 5600.0)
-        if not nir_t_mask.any() or not v_t_mask.any():
-            pytest.skip("tengri SSP grid does not cover NIR window")
-        nir_tengri = float(np.nanmean(tengri_sed[nir_t_mask]))
-        v_tengri = float(np.nanmean(tengri_sed[v_t_mask]))
-        ratio_tengri = nir_tengri / max(v_tengri, 1e-40)
+        agn_total = np.asarray(components.total)
+        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 12000.0)
+        if not nir_t_mask.any():
+            pytest.skip("tengri SSP grid does not cover the 1.0-1.2 um NIR window")
+        ratio_tengri = float(np.nanmean(agn_total[nir_t_mask])) / max(v_host, 1e-40)
 
         ratio = ratio_tengri / max(ratio_cig, 1e-40)
         assert 0.80 <= ratio <= 1.20, (
-            f"tengri/pCIGALE SKIRTOR NIR/V ratio = {ratio:.3f} (outside ±20%). "
-            "Both use SKIRTOR2016 templates; NIR shape should agree at this tolerance."
+            f"tengri/pCIGALE SKIRTOR AGN NIR/V ratio = {ratio:.3f} (outside ±20%). "
+            "Both use SKIRTOR2016 templates; the AGN excess in the NIR over the host V "
+            "should agree at this tolerance."
         )
 
 
@@ -3674,7 +3702,9 @@ def _build_tengri_step_sed(
     )
     model = SEDModel(spec, ssp_data)
     params = dict(spec.sample(jax.random.PRNGKey(0)))
-    params["sfh_t_gyr"] = jnp.asarray(t_cosmic, dtype=jnp.float64)
+    params["sfh_t_gyr"] = jnp.asarray(
+        _table_cosmic_time_gyr(t_cosmic, age_gyr, 0.01), dtype=jnp.float64
+    )
     params["sfh_sfr"] = jnp.asarray(sfr_table, dtype=jnp.float64)
 
     result = model.predict_rest_sed(params)
@@ -3733,12 +3763,6 @@ class TestTabularSFHTengri:
             "Check time-axis conversion in _build_tengri_step_sed."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.511 vs tolerance 0.75–1.25 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_rising_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """Rising step-function SFH: tengri UV/V color within 25% of FSPS.
 
@@ -3773,12 +3797,6 @@ class TestTabularSFHTengri:
             f"tengri UV/V={tengri_color:.4f}, FSPS UV/V={fsps_color:.4f}."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.412 vs tolerance 0.50–2.00 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_delta_color_rising_vs_quenching_vs_fsps(self, ssp_data, ref, ref_wave):
         """Delta UV/V (rising − quenching) agrees in sign and magnitude vs FSPS.
 
@@ -3816,12 +3834,6 @@ class TestTabularSFHTengri:
             "Large discrepancy suggests bin-assignment or time-convention error."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~2.67x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_rising_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Rising SFH: V-band amplitude per Msun within factor 2 of FSPS.
 
@@ -3844,12 +3856,6 @@ class TestTabularSFHTengri:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~0.36x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_quenching_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Quenching SFH: V-band amplitude per Msun within factor 2 of FSPS."""
         key = "fsps_tabsfh_step_quenching"
@@ -3868,12 +3874,6 @@ class TestTabularSFHTengri:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.401 vs tolerance 0.70–1.30 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_bursty_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """Bursty step-function SFH ([Z/H]=-0.5): tengri UV/V color within 30% of FSPS.
 
@@ -3896,12 +3896,6 @@ class TestTabularSFHTengri:
             f"tengri UV/V={tengri_color:.4f}, FSPS UV/V={fsps_color:.4f}."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~4.21x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_bursty_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Bursty SFH: V-band amplitude per Msun within factor 2 of FSPS."""
         key = "fsps_tabsfh_step_bursty"

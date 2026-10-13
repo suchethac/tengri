@@ -74,7 +74,6 @@ from tengri.components.agn._phys import (
 from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
 from tengri.utils.host_array import device_table, host_array
-from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
     K_BOLTZ_KEV as _K_BOLTZ_KEV,
@@ -86,6 +85,7 @@ from tengri.utils.physics_constants import (
     SIGMA_T as _SIGMA_T,
 )
 from tengri.utils.scale import (
+    apply_log10_scale as _apply_log10_scale,
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
     representable_floor as _representable_floor,
@@ -150,6 +150,34 @@ _GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 
 #: Internal normalization band of ``powerlaw_disc`` [Angstrom] (descending = ascending nu).
 _PL_BAND_AA = np.geomspace(1.0e8, 10.0, 2049)
+
+
+def _powerlaw_shape_unit(nu, agn_alpha, agn_T_max, nu_ref):
+    """``powerlaw_disc`` shape with its reference power removed: ``(nu/nu_ref)**alpha exp(-x)``.
+
+    The shape is ``nu**alpha exp(-x)`` with ``x = h nu / k T`` clipped to [0, 500]; this returns
+    it divided by ``nu_ref**alpha``, so an O(1) reference keeps the values inside float32 range
+    where the raw ``nu**alpha`` would underflow.
+
+    Parameters
+    ----------
+    nu : array_like, shape (n,)
+        Frequency [Hz].
+    agn_alpha : float
+        Power-law index [dimensionless].
+    agn_T_max : float
+        Cutoff temperature [K].
+    nu_ref : float
+        Reference frequency [Hz], a positive scalar stop-gradient'd by the caller.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Shape divided by ``nu_ref**alpha`` [dimensionless].
+    """
+    x = _H_PLANCK * nu / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0))
+    x_clip = jnp.clip(x, 0.0, 500.0)
+    return (nu / nu_ref) ** agn_alpha * jnp.exp(-x_clip)
 
 
 def powerlaw_disc(
@@ -231,24 +259,32 @@ def powerlaw_disc(
         DeprecationWarning,
         stacklevel=2,
     )
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
+    # Each frequency reference is a pure factorization constant (stop_gradient), removed from the
+    # power and restored as alpha * log10(nu_ref) in the log-scale below.
+    nu_ref = jax.lax.stop_gradient(jnp.min(nu))
+    shape_unit = _powerlaw_shape_unit(nu, agn_alpha, agn_T_max, nu_ref)
 
-    # Unnormalized spectral shape
-    x = _H_PLANCK * nu / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0))
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    shape = nu**agn_alpha * jnp.exp(-x_clip)
-
-    # Normalize over the FIXED band [_PL_LAMBDA_HI, _PL_LAMBDA_LO] (log-spaced internal nodes), not
-    # over the caller's grid: the same SED must come out whichever grid it is evaluated on (#2572).
+    # Normalize over the FIXED band [_PL_BAND_AA] (log-spaced internal nodes), not over the
+    # caller's grid: the same SED must come out whichever grid it is evaluated on (#2572). The
+    # band integral is peak-factored the same way, and the 1e-100 floor is the one the linear
+    # form used.
     nu_int = _wavelength_to_nu(jnp.asarray(_PL_BAND_AA, dtype=nu.dtype))
-    x_int = jnp.clip(_H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
-    shape_int = nu_int**agn_alpha * jnp.exp(-x_int)
-    integral = jnp.trapezoid(shape_int, nu_int)
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    nu_int_ref = jax.lax.stop_gradient(jnp.min(nu_int))
+    shape_int_unit = _powerlaw_shape_unit(nu_int, agn_alpha, agn_T_max, nu_int_ref)
+    int_peak = jax.lax.stop_gradient(jnp.max(shape_int_unit))
+    integral_hat = jnp.trapezoid(shape_int_unit / int_peak, nu_int)
+    log_integral = jnp.maximum(
+        agn_alpha * jnp.log10(nu_int_ref) + jnp.log10(int_peak) + jnp.log10(integral_hat),
+        math.log10(_representable_denominator(1e-100)),
+    )
 
-    l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
-    return l_nu_erg
+    # L_nu = L_bol * ratio * shape / integral with L_bol = 10**agn_log_lbol * L_sun and
+    # shape = nu_ref**alpha * shape_unit. The luminosity scale enters last as a log10 offset
+    # (apply_log10_scale factors the O(1) peak of ``shape_unit``); ``10**agn_log_lbol * L_sun``
+    # is never formed as a linear intermediate.
+    log_scale = agn_log_lbol + _LOG10_LSUN_ERG - log_integral + agn_alpha * jnp.log10(nu_ref)
+    return agn_lum_ratio * _apply_log10_scale(shape_unit, log_scale)
 
 
 # ── Model 2: Multi-color disc (Shakura-Sunyaev thin disc) ─────────
@@ -507,7 +543,7 @@ def _l_seed_geometric(
     # L_seed = 2 * ∫ F_NT * (Θ/π) * 2πR dR
     integrand = f_nt * covering * 2.0 * jnp.pi * r  # [erg s^-1 cm^-1]
     l_seed = 2.0 * jnp.sum(integrand * dr)
-    return jnp.maximum(l_seed, 1e-100)
+    return jnp.maximum(l_seed, _representable_floor(1e-100))
 
 
 def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float = 0.1) -> float:
@@ -1168,7 +1204,7 @@ def _hot_corona_lnu(
     # Normalize on the fixed internal grid (grid-independent).
     shape_norm = _comp_shape(device_table(_CORONA_NU_GRID))
     integral = jnp.trapezoid(shape_norm, device_table(_CORONA_NU_GRID))
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = jnp.maximum(jnp.abs(integral), _representable_denominator(1e-100))
 
     return l_hot_erg * shape / integral_safe
 
@@ -2186,6 +2222,19 @@ def adaf_disc(
 # ── Model 5: RELAGN relativistic disc from precomputed grid ──────────────────
 
 
+def _host_edges(axis: np.ndarray) -> np.ndarray:
+    """Bin edges for a sorted 1-D axis, as host numpy (see ``edges_for_grid``).
+
+    Same construction as :func:`tengri.utils.interpolation.edges_for_grid`,
+    which is written with ``jnp`` and so cannot run on a cached host table.
+    """
+    if axis.size == 1:
+        return np.array([axis[0], axis[0]])
+    half_lo = (axis[1] - axis[0]) / 2.0
+    half_hi = (axis[-1] - axis[-2]) / 2.0
+    return np.concatenate([axis[:1] - half_lo, (axis[:-1] + axis[1:]) / 2.0, axis[-1:] + half_hi])
+
+
 @functools.cache
 def _load_relagn_disc_grid(grid_path: str) -> dict:
     """Load and cache the RELAGN outer-disc grid from HDF5.
@@ -2211,12 +2260,11 @@ def _load_relagn_disc_grid(grid_path: str) -> dict:
         astar = f["astar"][()]
         wave_grid = f["wavelength_aa"][()]
 
-    axes = (
-        jnp.array(log_mbh),
-        jnp.array(log_mdot),
-        jnp.array(astar),
-    )
-    edges = tuple(_edges_for_grid(ax) for ax in axes)
+    # Host numpy only. ``functools.cache`` keeps whatever this returns for the
+    # life of the process, so a jnp array built here would be a tracer when the
+    # first load runs under jit (#2827). Device copies are made at the call site.
+    axes = (host_array(log_mbh), host_array(log_mdot), host_array(astar))
+    edges = tuple(_host_edges(ax) for ax in axes)
 
     # For non-uniform astar, use max half-spacing: triweight has compact support
     # (zero beyond one bandwidth), so the bandwidth must cover the largest gap.
@@ -2229,11 +2277,11 @@ def _load_relagn_disc_grid(grid_path: str) -> dict:
     scatters = (scatter_lm, scatter_ld, scatter_as)
 
     return {
-        "grid_jax": jnp.array(grid_np),
+        "grid_jax": host_array(grid_np),
         "axes": axes,
         "edges": edges,
         "scatters": scatters,
-        "wave_grid": jnp.array(wave_grid),
+        "wave_grid": host_array(wave_grid),
     }
 
 
@@ -2322,6 +2370,16 @@ def load_relagn_default_grid() -> dict:
     return _load_relagn_disc_grid(_find_relagn_grid())
 
 
+def _as_device_table(table):
+    """Device copy of a host table; a jax Array or tracer passes through unchanged.
+
+    When the templates are threaded as jit arguments (``threaded_template_inputs``)
+    the grid arrives as a tracer, which ``np.asarray`` cannot convert. The cache
+    itself stays host-only, so only the host path goes through :func:`device_table`.
+    """
+    return table if isinstance(table, jax.Array) else device_table(table)
+
+
 def relagn_disc_from_grid(
     grid: dict,
     wavelength: jnp.ndarray,
@@ -2391,9 +2449,9 @@ def relagn_disc_from_grid(
     """
     point = (agn_log_mbh, agn_log_mdot, agn_astar)
     lnu_template = _interp_nd_triweight(
-        jnp.asarray(grid["grid_jax"]),
-        tuple(jnp.asarray(a) for a in grid["axes"]),
-        tuple(jnp.asarray(e) for e in grid["edges"]),
+        _as_device_table(grid["grid_jax"]),
+        tuple(_as_device_table(a) for a in grid["axes"]),
+        tuple(_as_device_table(e) for e in grid["edges"]),
         point,
         scatters=grid["scatters"],
         index_space_interp=True,
@@ -2401,7 +2459,7 @@ def relagn_disc_from_grid(
     # The grid holds the disc alone at the reference cos_inc = 0.5, where the line-of-sight
     # power is the angle-integrated power: the template is normalized AT the reference and the
     # inclination scaling 2 cos i is applied to the spectrum on top.
-    wave_native = jnp.asarray(grid["wave_grid"])
+    wave_native = _as_device_table(grid["wave_grid"])
     # Interpolate grid wavelength -> observation wavelength
     lnu_interp = resample_template(
         wavelength, wave_native, lnu_template * (2.0 * agn_cos_inc), left=0.0, right=0.0
