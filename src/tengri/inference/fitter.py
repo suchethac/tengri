@@ -1459,6 +1459,80 @@ def _neutralize_absent(data, noise, presence):
     return data, noise
 
 
+def _model_sed(model):
+    """The ``SEDModel`` under a ``ForwardModel``, or the model itself (#2620)."""
+    inner = getattr(model, "_inner_sed_for_delegation", None)
+    return inner() if callable(inner) else model
+
+
+def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> None:
+    """Refuse an unmasked band whose transmission runs past the model's axis (#2620).
+
+    A band beyond the model's observed-frame wavelength axis returns its covered
+    fraction, or zero, with no error, so the fit would treat a structural zero as
+    a measurement. The check runs at every redshift the model declares (see
+    :meth:`SEDModel.filter_coverage_redshifts`). A band over
+    :data:`~tengri.observation.photometry.FILTER_COVERAGE_TOLERANCE` is accepted
+    only when it carries zero weight in the data: presence 0, a non-finite flux, or
+    a non-finite or zero error. That is the same absence convention the catalog
+    path uses.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The model being fitted.
+    data, noise : array_like, shape (n_filters,) or (n_galaxies, n_filters)
+        Observed fluxes and uncertainties.
+    presence : array_like or None
+        Per-datum presence weights, same shape as ``data``; zero marks absent.
+    data_type : str or None
+        Only ``None`` or ``"photometry"`` is checked; other data kinds are skipped.
+
+    Raises
+    ------
+    ConfigError
+        If an unmasked band exceeds the tolerance at any declared redshift. The
+        message names the bands, their out-of-axis fractions, the axis range and
+        the redshift.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.observation.photometry import FILTER_COVERAGE_TOLERANCE
+
+    if data_type not in (None, "photometry"):
+        return
+    sed = _model_sed(model)
+    photometry_of = getattr(sed, "_photometry_or_none", None)
+    phot = photometry_of() if callable(photometry_of) else None
+    if phot is None:
+        return
+    d = np.asarray(data, dtype=float)
+    n = np.asarray(noise, dtype=float)
+    absent = ~np.isfinite(d) | ~np.isfinite(n) | (n == 0.0)
+    if presence is not None:
+        p = np.asarray(presence, dtype=float)
+        if p.shape == d.shape:
+            absent = absent | (p == 0.0)
+    # A band is refused if any galaxy (or the single object) has it unmasked.
+    unmasked = np.any(~absent, axis=0) if d.ndim == 2 else ~absent
+    if unmasked.shape != (len(phot.filters),):
+        return  # not a per-band data vector for this model
+    names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+    for z in sed.filter_coverage_redshifts():
+        frac = sed.filter_coverage_at(z)
+        bad = np.flatnonzero((frac > FILTER_COVERAGE_TOLERANCE) & unmasked)
+        if bad.size == 0:
+            continue
+        lo, hi = sed.observed_axis_range(z)
+        described = ", ".join(f"{names[k]!r} (fraction {frac[k]:.3g})" for k in bad)
+        raise ConfigError(
+            f"Band(s) {described} lie beyond the model's observed-frame wavelength axis "
+            f"[{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model is zero there, so the "
+            f"band would return its covered share or zero. Mask each band in the data "
+            f"(presence=0, or a NaN flux / zero error in a catalog), or give the model a "
+            f"grid or component that reaches it."
+        )
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -1754,6 +1828,7 @@ class Fitter:
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
         _reject_non_finite_data(self.data, self.noise, presence)
+        _refuse_uncovered_bands(model, self.data, self.noise, presence, data_type)
         # An absent datum's value is never *used*, but IEEE still propagates
         # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
         # as an unmasked one does, and the guard above would be telling users

@@ -304,3 +304,67 @@ def test_sample_sfh_prior_other_families_need_no_redshift():
     _, plain = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3)
     _, with_z = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3, redshift=_Z)
     np.testing.assert_array_equal(np.asarray(plain), np.asarray(with_z))
+
+
+def _support_end_gyr(t_gyr, sfr) -> float:
+    """Largest lookback [Gyr] whose SFR exceeds the relative floor of the peak.
+
+    ``psb`` carries a ~1e-19 truncated-exponential floor (see the note above
+    ``test_predict_sfh_vanishes_beyond_age_at_z``); a relative floor of
+    ``_BEYOND_AGE_FLOOR`` leaves it out of the support.
+    """
+    t = np.asarray(t_gyr, dtype=float)
+    s = np.asarray(sfr, dtype=float)
+    positive = s > _BEYOND_AGE_FLOOR * np.max(s)
+    assert positive.any(), "route returned no star formation"
+    return float(t[positive].max())
+
+
+def _spacing_at_gyr(t_gyr, x_gyr) -> float:
+    """Spacing of the sorted grid ``t_gyr`` in the cell that contains ``x_gyr``."""
+    t = np.sort(np.asarray(t_gyr, dtype=float))
+    i = int(np.clip(np.searchsorted(t, x_gyr), 1, t.size - 1))
+    return float(t[i] - t[i - 1])
+
+
+@pytest.mark.parametrize("family", _BUILDABLE)
+def test_model_routes_end_where_the_component_ends(family, synthetic_ssp_wide):
+    """Every model-level SFH route ends at the component support end, not past age(z).
+
+    The routes are the composed-function call of :meth:`SEDModel._compute_sfr`
+    (the site ``profiling/pipeline.py`` times), and both ``predict_sfh`` grids.
+    The component's own history is the reference. A route that lost the age
+    injection would evaluate the 13.7 Gyr fallback and run past age(z) at z = 2.
+    """
+    model = _build(synthetic_ssp_wide, family, Fixed(_Z))
+    state = model.predict_state({})
+    comp_t = np.asarray(state.derived["sfh_grid_lbt_yr"]) / 1e9
+    comp_end = _support_end_gyr(comp_t, state.derived["sfr_history"])
+    age_gyr = _age_yr(_Z) / 1e9
+
+    native = model.predict_sfh({}, grid="native")
+    linear = model.predict_sfh({})
+    routes = {
+        "_compute_sfr": (
+            np.asarray(model.age_yr) / 1e9,
+            model._compute_sfr(model._get_internal_params({})),
+        ),
+        "predict_sfh native": (np.asarray(native["t_gyr"]), native["sfr_mean"]),
+        "predict_sfh linear": (np.asarray(linear["t_gyr"]), linear["sfr_mean"]),
+    }
+    for name, (t_gyr, sfr) in routes.items():
+        end = _support_end_gyr(t_gyr, sfr)
+        assert end <= age_gyr + 1e-6, f"{family} {name}: support to {end:.4f} Gyr > age(z)"
+        cell = _spacing_at_gyr(t_gyr, comp_end)
+        assert abs(end - comp_end) <= cell, (
+            f"{family} {name}: support ends at {end:.4f} Gyr, component at {comp_end:.4f} Gyr"
+        )
+
+
+@pytest.mark.parametrize("family", [*_SUPPORT_ENDS_AT_AGE, "psb_suess2022", "psb_flex"])
+def test_prior_draws_end_within_age_at_z(family):
+    """Every prior draw of an age-anchored family ends at or before age(z), per draw (#2645)."""
+    age_yr, curves = sample_sfh_prior(family, jax.random.PRNGKey(5), n=6, redshift=_Z)
+    t_gyr = np.asarray(age_yr) / 1e9
+    for curve in np.asarray(curves):
+        assert _support_end_gyr(t_gyr, curve) <= _age_yr(_Z) / 1e9 + 1e-6

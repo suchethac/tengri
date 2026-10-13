@@ -27,9 +27,10 @@ whether the two numbers currently happen to match.
 
 Scope
 -----
-Four trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
-``.../radio/``, ``.../stellar/``, ``.../igm/``. A no-argument run makes one pass
-per tree and covers all four; the dust pass alone covers emission models,
+Five trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
+``.../radio/``, ``.../stellar/``, ``.../igm/``, ``.../nebular/`` (#2297). A
+no-argument run makes one pass per tree and covers all five; the dust pass
+alone covers emission models,
 attenuation laws, and their shared parameter table ``_params.py``, widened
 from the earlier ``dust/emission/``-only scope (#2265). That narrower scope
 addressed template closures (``dl07_tabulated``, ``dale2014_emission_lnu``,
@@ -73,10 +74,13 @@ Once the declared-name set is built, every occurrence in ``--scope`` of:
 * a ``<mapping>.get("<name>", <literal>)`` call where ``<name>`` is in the
   declared-name set and the second argument is a numeric literal,
 
-is a violation. No allowlist: the fix is to read the value through
-``declared_default(...)`` (``tengri.protocols.component``) or a shared named
-module constant instead of repeating the number -- the fix this guard exists
-to keep in place leaves zero sites. Every report line names the source
+is a violation. The fix is to read the value through ``declared_default(...)``
+(``tengri.protocols.component``) or a shared named module constant instead of
+repeating the number. The one exception is the baseline file
+``tools/literal_param_defaults_baseline.txt``: it lists the pre-existing
+nebular sites that predate this guard's widening to that tree (#2297). Those
+sites are reported but do not fail the run; any other site fails it, and a
+baselined site that no longer exists fails it as stale. Every report line names the source
 spelling beside the resolved declared name whenever a bare-to-prefixed
 fallback was needed to match them (e.g. ``f_cold`` resolving to
 ``dust_f_cold``), and a flagged ``.get(...)`` always prints the key exactly
@@ -117,7 +121,14 @@ DEFAULT_SCOPES: tuple[Path, ...] = (
     ROOT / "src" / "tengri" / "components" / "radio",
     ROOT / "src" / "tengri" / "components" / "stellar",
     ROOT / "src" / "tengri" / "components" / "igm",
+    ROOT / "src" / "tengri" / "components" / "nebular",
 )
+#: Existing literal-copy sites in the nebular tree that predate this guard's
+#: widening to it (#2297): one tab-separated ``<path>\t<description>`` per line,
+#: keyed without line numbers. A site listed here is reported but does not fail
+#: the run; a new site fails it, and a listed site that no longer exists fails
+#: it as stale so the list can only shrink.
+BASELINE_PATH = ROOT / "tools" / "literal_param_defaults_baseline.txt"
 _DUST_TREE = ROOT / "src" / "tengri" / "components" / "dust"
 
 #: The dust component's own shared table. Read explicitly regardless of
@@ -378,6 +389,20 @@ def _get_fallback_sites(tree: ast.Module, declared: set[str], prefix: str | None
         )
 
 
+def _load_baseline(path: Path = BASELINE_PATH) -> frozenset[str]:
+    """The baselined site keys, ``<path>\\t<description>``, comments and blanks skipped."""
+    keys = {
+        line.rstrip("\n")
+        for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    return frozenset(keys)
+
+
+def _site_key(rel: Path, desc: str) -> str:
+    return f"{rel.as_posix()}\t{desc}"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -452,7 +477,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             all_sites.append((rel, lineno, desc, is_literal))
 
     all_sites.sort(key=lambda item: (str(item[0]), item[1]))
-    violations = [site for site in all_sites if site[3]]
+    baseline = _load_baseline()
+    literal_sites = [site for site in all_sites if site[3]]
+    baselined = [site for site in literal_sites if _site_key(site[0], site[2]) in baseline]
+    violations = [site for site in literal_sites if site not in baselined]
+    seen_keys = {_site_key(rel, desc) for rel, _, desc, _ in literal_sites}
+    scope_rel = scope.relative_to(ROOT).as_posix()
+    stale = sorted(
+        key
+        for key in baseline
+        if key.split("\t", 1)[0].startswith(scope_rel) and key not in seen_keys
+    )
 
     if args.list:
         print(
@@ -462,16 +497,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not all_sites:
             print("  (no sites reference a declared name)")
         for rel, lineno, desc, is_literal in all_sites:
-            verdict = "FAIL" if is_literal else "OK"
+            if not is_literal:
+                verdict = "OK"
+            elif _site_key(rel, desc) in baseline:
+                verdict = "BASELINED"
+            else:
+                verdict = "FAIL"
             print(f"  [{verdict}] {rel}:{lineno}  {desc}")
         return 0
 
-    if not violations:
+    if not violations and not stale:
         print(
-            "check_literal_param_defaults: OK -- no bare numeral stands in for a declared default."
+            "check_literal_param_defaults: OK -- no bare numeral stands in for a declared default"
+            f" (baselined pre-existing sites: {len(baselined)})."
         )
         return 0
 
+    if stale:
+        print(f"check_literal_param_defaults: {len(stale)} stale baseline entr(y/ies)")
+        for key in stale:
+            print(f"  {BASELINE_PATH.relative_to(ROOT)}: {key.replace(chr(9), '  ')}")
+        print("\nThe site is gone or fixed: delete its line from the baseline file.\n")
+    if not violations:
+        return 1  # stale baseline entries only, already reported above
     print(f"check_literal_param_defaults: {len(violations)} literal-copy site(s)\n")
     for rel, lineno, desc, _ in violations:
         print(f"  {rel}:{lineno}  {desc}")
