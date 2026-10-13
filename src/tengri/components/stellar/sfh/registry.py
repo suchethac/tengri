@@ -100,15 +100,45 @@ _AGE_UNIV_GYR = round(age_at_z0_host(), 3)
 #: timing parameter (#2748). ``_AGE_UNIV_GYR`` is rounded, so it is not used.
 _AGE_UNIV_GYR_EXACT = float(age_at_z0_host())
 
-#: Free prior of ``sfh_dpl_age_frac``: the dpl onset prior ``Uniform(0.5,
-#: _AGE_UNIV_GYR)`` in units of age(z). The Gyr bounds map through
-#: ``gyr / age_at_z0_host()`` and are capped at 1, so a Gyr value of
-#: ``_AGE_UNIV_GYR`` maps to exactly 1.0.
-_DPL_AGE_FRAC_PRIOR = Uniform(
-    min(1.0, 0.5 / _AGE_UNIV_GYR_EXACT),
-    min(1.0, _AGE_UNIV_GYR / _AGE_UNIV_GYR_EXACT),
-    default=min(1.0, _AGE_UNIV_GYR / _AGE_UNIV_GYR_EXACT),
-)
+#: Lower bound of the delayed_bq main age [Gyr]; defined with its family below.
+_DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
+
+
+def _age_frac(gyr):
+    """Fraction of the age of the universe at z=0 for an absolute Gyr timing (#2748).
+
+    The value divides by the unrounded age and is capped at 1. ``_AGE_UNIV_GYR``
+    (the rounded age) and anything older map to exactly 1.0.
+    """
+    return 1.0 if gyr >= _AGE_UNIV_GYR else gyr / _AGE_UNIV_GYR_EXACT
+
+
+def _age_frac_prior(lo_gyr, hi_gyr, default_gyr=None):
+    """Uniform prior on a ``*_frac`` timing from the absolute Gyr bounds it replaces (#2748)."""
+    default = None if default_gyr is None else _age_frac(default_gyr)
+    return Uniform(_age_frac(lo_gyr), _age_frac(hi_gyr), default=default)
+
+
+#: Free priors of the ``*_frac`` timing parameters, keyed by public name. Each is
+#: the absolute-Gyr prior of its ``*_gyr`` twin divided by the unrounded age of
+#: the universe and capped at 1. ``all_params: FREE`` does not free these; a
+#: fraction is freed by an explicit Uniform on it.
+_AGE_FRAC_PRIORS = {
+    "sfh_dpl_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_dpl_lookback_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_lnorm_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_const_start_frac": _age_frac_prior(0.01, _AGE_UNIV_GYR),
+    "sfh_exp_start_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, 5.0),
+    "sfh_dexp_start_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, 5.0),
+    "sfh_declining_exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_trunc_exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_delayed_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_cexp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_sfh2exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_delayed_bq_age_main_frac": _age_frac_prior(_DELAYED_BQ_AGE_MAIN_FLOOR_GYR, 13.0, 5.0),
+    "sfh_periodic_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_psb_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+}
 
 # ── Data structures ───────────────────────────────────────────────
 
@@ -201,6 +231,12 @@ class ParamDef(NamedTuple):
         :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning` at
         build time, since the forward model itself only truncates and
         conserves mass there without raising or (under ``jax.jit``) warning.
+
+    gyr_twin : str, optional
+        For a fractional timing parameter (#2748), the absolute-Gyr parameter it
+        replaces: the fraction's value times the age of the universe at the
+        galaxy's redshift is then that Gyr value. Read by
+        :func:`~tengri.parameters.timing.timing_frac_params`. Default ``None``.
     """
 
     description: str
@@ -209,6 +245,7 @@ class ParamDef(NamedTuple):
     default: Distribution
     free_prior: Distribution | None = None
     z_capped_onset: bool = False
+    gyr_twin: str | None = None
 
 
 class SFHModelSpec(NamedTuple):
@@ -655,6 +692,13 @@ _lnorm_spec = SFHModelSpec(
             Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
             z_capped_onset=True,
         ),
+        "sfh_lnorm_age_frac": ParamDef(
+            "Onset as a fraction of age(z) (formation time)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_lnorm_age_gyr",
+        ),
     },
     settings={},
     internal_param_map={
@@ -662,6 +706,7 @@ _lnorm_spec = SFHModelSpec(
         "sfh_lnorm_peak_gyr": ("peak", 1e9, 0.0),
         "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
         "sfh_lnorm_age_gyr": ("age", 1e9, 0.0),
+        "sfh_lnorm_age_frac": ("sfh_lnorm_age_frac", 1.0, 0.0),
     },
     composition_type="additive",
 )
@@ -711,6 +756,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(1.0),
+                gyr_twin="sfh_dpl_age_gyr",
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -774,6 +820,13 @@ _register(
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
                 z_capped_onset=True,
             ),
+            "sfh_dpl_lookback_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_dpl_lookback_age_gyr",
+            ),
             "sfh_dpl_lookback_end_gyr": ParamDef(
                 "Younger truncation lookback time (Gyr) "
                 "(0 = star formation continues to the epoch of observation)",
@@ -800,6 +853,7 @@ _register(
             "sfh_dpl_lookback_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_lookback_peak_gyr": ("peak", 1e9, 0.0),
             "sfh_dpl_lookback_age_gyr": ("age", 1e9, 0.0),
+            "sfh_dpl_lookback_age_frac": ("sfh_dpl_lookback_age_frac", 1.0, 0.0),
             "sfh_dpl_lookback_end_gyr": ("end", 1e9, 0.0),
             "sfh_dpl_lookback_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
@@ -852,6 +906,13 @@ _register(
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
                 z_capped_onset=True,
             ),
+            "sfh_const_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_const_start_gyr",
+            ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
                 _lo_nonneg,
@@ -878,6 +939,7 @@ _register(
             # User's "start" (when SF began) = older lookback = internal "end"
             # User's "end" (when SF stopped) = younger lookback = internal "start"
             "sfh_const_start_gyr": ("end", 1e9, 0.0),
+            "sfh_const_start_frac": ("sfh_const_start_frac", 1.0, 0.0),
             "sfh_const_end_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
@@ -943,12 +1005,20 @@ _register(
                 Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_exp_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_exp_start_gyr",
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_exp_start_gyr": ("start", 1e9, 0.0),
+            "sfh_exp_start_frac": ("sfh_exp_start_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -984,12 +1054,20 @@ _register(
                 Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_dexp_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_dexp_start_gyr",
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_dexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_dexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
+            "sfh_dexp_start_frac": ("sfh_dexp_start_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1039,12 +1117,20 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_declining_exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_declining_exp_age_gyr",
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_declining_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_declining_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_declining_exp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_declining_exp_age_frac": ("sfh_declining_exp_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1089,6 +1175,13 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_trunc_exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_trunc_exp_age_gyr",
+            ),
             "sfh_trunc_exp_end_gyr": ParamDef(
                 "Lookback time at which SF ceases (Gyr) (0 = still forming stars)",
                 _lo_nonneg,
@@ -1105,6 +1198,7 @@ _register(
             "sfh_trunc_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_trunc_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_trunc_exp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_trunc_exp_age_frac": ("sfh_trunc_exp_age_frac", 1.0, 0.0),
             "sfh_trunc_exp_end_gyr": ("end", 1e9, 0.0),
         },
         composition_type="additive",
@@ -1142,12 +1236,20 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_delayed_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_delayed_age_gyr",
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+            "sfh_delayed_age_frac": ("sfh_delayed_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1186,6 +1288,13 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_cexp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_cexp_age_gyr",
+            ),
         },
         settings={},
         internal_param_map={
@@ -1193,6 +1302,7 @@ _register(
             "sfh_cexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_cexp_quench_gyr": ("quench_age", 1e9, 0.0),
             "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_cexp_age_frac": ("sfh_cexp_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1238,6 +1348,13 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_sfh2exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_sfh2exp_age_gyr",
+            ),
             "sfh_sfh2exp_burst_age_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
                 _lo_positive,
@@ -1252,6 +1369,7 @@ _register(
             "sfh_sfh2exp_tau_burst_gyr": ("tau_burst_yr", 1e9, 0.0),
             "sfh_sfh2exp_f_burst": ("f_burst", 1.0, 0.0),
             "sfh_sfh2exp_age_gyr": ("age_yr", 1e9, 0.0),
+            "sfh_sfh2exp_age_frac": ("sfh_sfh2exp_age_frac", 1.0, 0.0),
             "sfh_sfh2exp_burst_age_gyr": ("burst_age_yr", 1e9, 0.0),
         },
         composition_type="additive",
@@ -1269,7 +1387,6 @@ _register(
 #: (#2567): that narrows its CEILING to ``age_at_z(z_floor)``, never its
 #: floor, so this static peg stays valid at any redshift without its own
 #: z-aware narrowing. Same technique as ``_PSB_TFLEX_FLOOR_GYR`` above.
-_DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
 _DELAYED_BQ_AGE_BQ_CEIL_GYR = _DELAYED_BQ_AGE_MAIN_FLOOR_GYR
 
 # --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---
@@ -1297,6 +1414,13 @@ _register(
                 Uniform(_DELAYED_BQ_AGE_MAIN_FLOOR_GYR, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_delayed_bq_age_main_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_delayed_bq_age_main_gyr",
+            ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
                 "Lookback time of burst/quench onset (Gyr); prior ceiling equals "
                 "the age_main_gyr floor so quench-before-formation (#2644) is "
@@ -1317,6 +1441,7 @@ _register(
             "sfh_delayed_bq_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_bq_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_main_gyr": ("age_main_yr", 1e9, 0.0),
+            "sfh_delayed_bq_age_main_frac": ("sfh_delayed_bq_age_main_frac", 1.0, 0.0),
             "sfh_delayed_bq_age_bq_gyr": ("age_bq_yr", 1e9, 0.0),
             "sfh_delayed_bq_r_sfr": ("r_sfr", 1.0, 0.0),
         },
@@ -1369,6 +1494,13 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_periodic_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_periodic_age_gyr",
+            ),
         },
         settings={},
         internal_param_map={
@@ -1377,6 +1509,7 @@ _register(
             "sfh_periodic_tau_bursts_gyr": ("tau_bursts_yr", 1e9, 0.0),
             "sfh_periodic_burst_type": ("burst_type", 1.0, 0.0),
             "sfh_periodic_age_gyr": ("age_yr", 1e9, 0.0),
+            "sfh_periodic_age_frac": ("sfh_periodic_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1441,6 +1574,13 @@ _register(
                 Uniform(0.5, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
+            "sfh_psb_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(1.0),
+                gyr_twin="sfh_psb_age_gyr",
+            ),
             "sfh_psb_tau_gyr": ParamDef(
                 "Old-component e-folding timescale (Gyr)",
                 _lo_positive,
@@ -1476,6 +1616,7 @@ _register(
         internal_param_map={
             "sfh_psb_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_age_gyr": ("age", 1e9, 0.0),
+            "sfh_psb_age_frac": ("sfh_psb_age_frac", 1.0, 0.0),
             "sfh_psb_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_psb_burstage_gyr": ("burstage", 1e9, 0.0),
             "sfh_psb_alpha": ("alpha", 1.0, 0.0),

@@ -618,3 +618,41 @@ class TestWildcardSpellingConvention:
         result = builders.sfh.dpl(beta=Uniform(1, 3))
         assert result == {"type": "dpl", "beta": Uniform(1, 3), "other_params": Fixed(DEFAULT)}
         assert list(result.keys()) == ["type", "beta", "other_params"]
+
+
+#: Every onset family whose absolute-Gyr timing has a ``*_frac`` twin (#2748):
+#: (SFH type, short onset stem). The stem is the public name without its ``sfh_<type>_``.
+_ONSET_FRAC_FAMILIES = (
+    ("lnorm", "age"),
+    ("dpl_lookback", "age"),
+    ("const", "start"),
+    ("exp", "start"),
+    ("dexp", "start"),
+    ("declining_exp", "age"),
+    ("trunc_exp", "age"),
+    ("delayed", "age"),
+    ("const_exp", "age"),
+    ("sfh2exp", "age"),
+    ("delayed_bq", "age_main"),
+    ("periodic", "age"),
+    ("psb", "age"),
+)
+
+
+class TestOnsetFracRoundTrip:
+    """Each onset family's ``*_frac`` round-trips beside its ``*_gyr`` (#2748)."""
+
+    @pytest.mark.parametrize(("family", "stem"), _ONSET_FRAC_FAMILIES)
+    def test_frac_and_gyr_round_trip_with_their_defaults(self, family, stem):
+        original = parse_groups(
+            sfh={
+                "type": family,
+                f"{stem}_gyr": Fixed(5.0),
+                f"{stem}_frac": Fixed(1.0),
+            },
+            redshift=Fixed(0.1),
+        )
+        sfh_dict = original.to_groups()["sfh"]
+        assert f"{stem}_gyr" in sfh_dict
+        assert f"{stem}_frac" in sfh_dict
+        assert sfh_dict[f"{stem}_frac"] == Fixed(1.0)

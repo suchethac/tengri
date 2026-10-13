@@ -409,9 +409,9 @@ def _apply_timing_frac(internal, params, param_map, spec):
     redshift from ``internal``.
     """
     from tengri.config.exceptions import ConfigError
-    from tengri.parameters.timing import TIMING_FRAC_PARAMS, resolve_timing_fracs
+    from tengri.parameters.timing import resolve_timing_fracs, timing_frac_params
 
-    for frac_name, gyr_name in TIMING_FRAC_PARAMS.items():
+    for frac_name, gyr_name in timing_frac_params().items():
         if frac_name not in param_map:
             continue
         if frac_name not in params:

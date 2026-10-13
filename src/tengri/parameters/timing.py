@@ -10,13 +10,31 @@ kernels, which are unchanged.
 
 from __future__ import annotations
 
-#: Fractional timing parameter -> the absolute-Gyr parameter it replaces. The
-#: Gyr name keeps its ``internal_param_map`` entry and its role as the Fixed
-#: shim; the translate post-pass writes ``frac * age(z)`` under its internal
-#: name when the fraction is sampled.
-TIMING_FRAC_PARAMS: dict[str, str] = {
-    "sfh_dpl_age_frac": "sfh_dpl_age_gyr",
-}
+import functools
+
+
+@functools.cache
+def timing_frac_params() -> dict[str, str]:
+    """Fractional timing parameter -> the absolute-Gyr parameter it replaces (#2748).
+
+    Derived from the SFH registry: every ParamDef whose ``gyr_twin`` is set. The
+    Gyr name keeps its ``internal_param_map`` entry and its role as the Fixed
+    shim; the translate post-pass writes ``frac * age(z)`` under its internal
+    name when the fraction is sampled.
+
+    Returns
+    -------
+    dict of str to str
+        ``frac public name -> Gyr public name``.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    return {
+        name: pdef.gyr_twin
+        for spec in SFH_REGISTRY.values()
+        for name, pdef in spec.params.items()
+        if pdef.gyr_twin is not None
+    }
 
 
 def timing_gyr(*, frac=None, fixed_gyr=None, age_universe_gyr):
@@ -49,7 +67,7 @@ def timing_gyr(*, frac=None, fixed_gyr=None, age_universe_gyr):
 def resolve_timing_fracs(internal, params, param_map, *, redshift):
     """Replace sampled ``*_frac`` timings with Gyr values, in place (#2748).
 
-    For each :data:`TIMING_FRAC_PARAMS` entry present in ``param_map``, the
+    For each :func:`timing_frac_params` entry present in ``param_map``, the
     fraction's own internal entries are removed. If the fraction was sampled
     (present in ``params``), the Gyr internal name is written as
     ``frac * age(z)`` at ``redshift``, scaled by the Gyr entry's own scale.
@@ -81,7 +99,7 @@ def resolve_timing_fracs(internal, params, param_map, *, redshift):
     from tengri.config.exceptions import ConfigError
     from tengri.cosmology import age_at_z
 
-    for frac_name, gyr_name in TIMING_FRAC_PARAMS.items():
+    for frac_name, gyr_name in timing_frac_params().items():
         if frac_name not in param_map or gyr_name not in param_map:
             continue
         frac_int = param_map[frac_name][0]
@@ -133,7 +151,7 @@ def route_timing_fracs(full_params, sampled):
     from tengri.config.exceptions import ConfigError
 
     out = dict(full_params)
-    for frac_name, gyr_name in TIMING_FRAC_PARAMS.items():
+    for frac_name, gyr_name in timing_frac_params().items():
         if frac_name in sampled:
             if gyr_name in sampled:
                 raise ConfigError(
