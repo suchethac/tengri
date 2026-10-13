@@ -791,6 +791,15 @@ class SpectrumPrecomp:
     per-pixel table: the model warns and uses the exact path. The model is
     differentiable in ``sigma_v_kms`` and ``lsf_scale``.
 
+    Two routing rules follow from that cost. With a fixed ``sigma_v_kms`` and a
+    free redshift, the SSP cube is broadened once at build (the velocity kernel
+    does not depend on redshift) and each draw only interpolates it, so the cost
+    is the unbroadened LUT's; this holds unless a 4-D alpha grid or a free AGB
+    weight modifies the cube per draw, which keeps the full-grid sum. With a
+    free ``sigma_v_kms``, ``approx="auto"`` fits the spectrum on the exact path
+    (faster for it) and says so once; an explicit ``SpectrumPrecomp()`` stays on
+    the lookup table and warns once about the cost.
+
     Parameters
     ----------
     n_z : int, default 100
@@ -2961,7 +2970,17 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
-            if self._spectrum_lut_needs_pixel_integral(observation):
+            if self._fixed_sigma_v_kms() is None:
+                import warnings
+
+                warnings.warn(
+                    "approx=SpectrumPrecomp() with a free sigma_v_kms broadens the stellar "
+                    "spectrum on the full model grid every draw, which costs roughly 15 times "
+                    "the exact path per gradient step; fixing sigma_v_kms keeps the lookup "
+                    "table cheap, and approx=None is faster for a free one.",
+                    stacklevel=3,
+                )
+            if self._spectrum_pixel_integral_required(observation):
                 raise ValueError(
                     f"approx=SpectrumPrecomp() samples the model at the pixel "
                     f"centers, but resample="
@@ -2974,6 +2993,41 @@ class SEDModel:
                 )
 
     def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
+        """Whether ``approx="auto"`` must keep the spectrum channel on the exact path.
+
+        The fit-time ``"auto"`` policy asks this before it picks the spectrum LUT. It is
+        True when the pixel integral is required (:meth:`_spectrum_pixel_integral_required`)
+        or when ``sigma_v_kms`` is free: the LUT broadens the stellar piece per draw on
+        the full model grid, which is slower than the exact path, so a free dispersion
+        is fitted on the exact spectrum path. An explicit ``SpectrumPrecomp()`` is not
+        affected by the second reason.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if ``"auto"`` must not choose the LUT for this spectrum channel.
+        """
+        if self._spectrum_pixel_integral_required(observation):
+            return True
+        if self._fixed_sigma_v_kms() is None:
+            import warnings
+
+            warnings.warn(
+                "approx='auto' fits the spectrum on the exact path because sigma_v_kms is "
+                "free: a free sigma_v_kms is fitted on the exact spectrum path, which is "
+                "faster for it. Pass approx=SpectrumPrecomp() to use the lookup table "
+                "anyway.",
+                stacklevel=2,
+            )
+            return True
+        return False
+
+    def _spectrum_pixel_integral_required(self, observation) -> bool:
         """Whether the spectrum channel resolves to the pixel integral (#2530).
 
         The spectrum LUT evaluates every component (attenuation, nebular lines,
@@ -12933,6 +12987,7 @@ class SEDModel:
                             spec_sigma_v_fixed=spec_state.spec_sigma_v_fixed,
                             spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
                             spec_rest_window=spec_state.spec_rest_window,
+                            spec_ssp_broadened=spec_state.spec_ssp_broadened,
                         )
                     else:
                         state = spec_state

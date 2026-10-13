@@ -21,7 +21,11 @@ the real wNE SSP with baked-in nebular lines (lines), at R = 2000 and sigma_v fr
 (f) a banded resolution matrix falls back to the exact path with a warning and is
     bit-for-bit equal to it;
 (g) the fixed-sigma_v pre-broadened table equals the full-grid sum route;
-(h) the LUT matches the exact path at R = 5000 with no resolution cap.
+(h) the LUT matches the exact path at R = 5000 with no resolution cap;
+(i) free redshift with a fixed sigma_v uses a cube broadened once at build and equals the
+    per-draw sum route at two redshifts;
+(j) approx="auto" with a free sigma_v stays on the exact spectrum path; an explicit
+    SpectrumPrecomp() with a free sigma_v engages the LUT and warns once about the cost.
 """
 
 from __future__ import annotations
@@ -199,7 +203,7 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
     sv = Uniform(0.0, 2000.0)
     exact = _build(ssp_data_wne, None, spectro=_spec(5000.0), igm=_MADAU, sigma_v=sv)
     with warnings.catch_warnings():
-        warnings.filterwarnings("error", message=".*SpectrumPrecomp.*")
+        warnings.filterwarnings("error", message=".*falls back.*")
         lut = _build(
             ssp_data_wne, SpectrumPrecomp(), spectro=_spec(5000.0), igm=_MADAU, sigma_v=sv
         )
@@ -285,3 +289,72 @@ def test_f_resolution_matrix_falls_back_bit_exact(synthetic_ssp_wide):
             synthetic_ssp_wide, SpectrumPrecomp(), spectro=spectro, igm=_MADAU, sigma_v=sv
         )
     np.testing.assert_array_equal(_spectrum(lut, 150.0), _spectrum(exact, 150.0))
+
+
+# ── (i) free z + fixed sigma_v: the build-time broadened cube ──────────────────
+
+
+def _build_free_z(ssp, sigma_v):
+    obs = Observation(spectroscopy=_spec())
+    base = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        approx=SpectrumPrecomp(n_z=16, z_min=0.04, z_max=0.16),
+        redshift=Uniform(0.05, 0.15),
+        igm={"type": "none"},
+        sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+    )
+    spec = base.spec.merge_observation_params(sigma_v_kms=sigma_v)
+    return SEDModel(
+        spec, ssp, observation=obs, approx=SpectrumPrecomp(n_z=16, z_min=0.04, z_max=0.16)
+    )
+
+
+@pytest.mark.parametrize("z", [0.08, 0.12])
+def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cube = _build_free_z(ssp_data_wne, Fixed(300.0))
+        summed = _build_free_z(ssp_data_wne, Uniform(0.0, 2000.0))
+    chain = cube._cached_component_chain or cube._build_component_chain()
+    assert chain[0]._state.spec_ssp_broadened is not None
+    s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
+    s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
+    assert float(np.max(np.abs(s_cube - s_sum))) <= 1e-6 * float(np.median(np.abs(s_sum)))
+
+
+# ── (j) routing of a free sigma_v ──────────────────────────────────────────────
+
+
+def test_j_auto_with_free_sigma_v_stays_exact(ssp_data_wne):
+    from tengri.inference.fitter import _resolve_batch_fit_approx
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        exact = _build(
+            ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0.0, 2000.0)
+        )
+    with pytest.warns(UserWarning, match="faster for it"):
+        routed = _resolve_batch_fit_approx(exact, "auto", "spectroscopy")
+    assert not routed._approx.get("spectrum_precomp")
+    np.testing.assert_array_equal(_spectrum(routed, 150.0), _spectrum(exact, 150.0))
+
+
+def test_j_explicit_lut_with_free_sigma_v_engages_and_warns_once(ssp_data_wne):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("default")
+        lut = _build(
+            ssp_data_wne,
+            SpectrumPrecomp(),
+            spectro=_spec(),
+            igm=_MADAU,
+            sigma_v=Uniform(0.0, 2000.0),
+        )
+    assert lut._approx.get("spectrum_precomp")
+    assert sum("full model grid" in str(w.message) for w in caught) == 1
