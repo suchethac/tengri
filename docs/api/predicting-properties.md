@@ -337,10 +337,13 @@ def predict_photometry_batch(params_batch):
 mocks = predict_photometry_batch(params_prior)
 # mocks.photometry shape: (1000,), each element is the photometry dict
 
-# Extract and table: one properties pass per draw, both names at once
-props = jax.vmap(
-    lambda p: model.predict_properties(p, names=("stellar_mass", "sfr_100myr"))
-)(params_prior)
+# Extract and table: one properties pass per draw, both names at once.
+# Properties need a full forward state per draw, so map them sequentially
+# (lax.map); vmap would hold every draw's SED stack in memory at once.
+props = jax.lax.map(
+    lambda p: model.predict_properties(p, names=("stellar_mass", "sfr_100myr")),
+    params_prior,
+)
 stellar_masses = props["stellar_mass"]
 sfrs = props["sfr_100myr"]
 
