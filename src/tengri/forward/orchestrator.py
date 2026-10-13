@@ -209,6 +209,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lnu_age_ion": "erg/s/Hz/Msun",
     "ssp_wave_ion": "Angstrom",
     "sfh_grid_lbt_yr": "yr",
+    "sfh_timing_gyr": "Gyr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
     # Stellar, photometry LUT (only published when

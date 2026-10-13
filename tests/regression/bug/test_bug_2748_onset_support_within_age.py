@@ -243,3 +243,55 @@ def test_free_prior_on_gyr_alias_is_refused_with_fraction_replacement(sfh_spelli
     assert gyr_name in message
     if isinstance(prior, Uniform):
         assert "Uniform(0.07253, 0.7253)" in message
+
+
+def _timing_gyr_model(synthetic_ssp_wide, sfh_type, timing, z):
+    """A model whose one SFH timing is given as ``timing``, with every other parameter Fixed."""
+    return tengri.SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        sfh={"type": sfh_type, "all_params": Fixed(DEFAULT), **timing},
+        dust_attenuation={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+    )
+
+
+def test_published_gyr_of_a_fraction_is_the_fraction_of_age_at_z(synthetic_ssp_wide):
+    """``sfh_dpl_age_gyr`` is frac * age(z) in Gyr, read through predict_properties (#2748)."""
+    import jax
+
+    z = 0.5
+    model = _timing_gyr_model(synthetic_ssp_wide, "dpl", {"age_frac": Fixed(0.5)}, z)
+    params = model.spec.sample(jax.random.PRNGKey(0))
+    props = model.predict_properties(params, names=("sfh_dpl_age_gyr",))
+    assert float(props["sfh_dpl_age_gyr"]) == pytest.approx(
+        0.5 * float(age_at_z(z)), rel=0, abs=1e-10
+    )
+
+    jitted = jax.jit(
+        lambda p: model.predict_properties(p, names=("sfh_dpl_age_gyr",))["sfh_dpl_age_gyr"]
+    )
+    assert float(jitted(params)) == pytest.approx(0.5 * float(age_at_z(z)), rel=0, abs=1e-10)
+
+
+def test_published_gyr_of_a_fixed_gyr_shim_is_that_gyr(synthetic_ssp_wide):
+    """A Fixed ``sfh_dpl_age_gyr`` is published as itself, unchanged by the redshift (#2748)."""
+    import jax
+
+    z = 0.5
+    model = _timing_gyr_model(synthetic_ssp_wide, "dpl", {"age_gyr": Fixed(5.0)}, z)
+    props = model.predict_properties(
+        model.spec.sample(jax.random.PRNGKey(0)), names=("sfh_dpl_age_gyr",)
+    )
+    assert float(props["sfh_dpl_age_gyr"]) == pytest.approx(5.0, rel=0, abs=1e-10)
+
+
+def test_timing_gyr_property_is_nan_for_an_sfh_without_that_timing(synthetic_ssp_wide):
+    """A property named for another family's timing reads NaN, not a stale value (#2748)."""
+    import jax
+
+    model = _timing_gyr_model(synthetic_ssp_wide, "exp", {"start_frac": Fixed(0.5)}, 0.5)
+    props = model.predict_properties(
+        model.spec.sample(jax.random.PRNGKey(0)), names=("sfh_dpl_age_gyr",)
+    )
+    assert bool(jax.numpy.isnan(props["sfh_dpl_age_gyr"]))

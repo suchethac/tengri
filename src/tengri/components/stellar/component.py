@@ -40,7 +40,11 @@ from tengri.components.stellar.age_boundary import (
 )
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
-from tengri.parameters.timing import resolve_timing_fracs
+from tengri.parameters.timing import (
+    published_timing_gyr,
+    resolve_timing_fracs,
+    timing_frac_params,
+)
 from tengri.utils.host_array import device_table, host_array
 
 
@@ -2908,6 +2912,7 @@ class StellarSEDComponent:
         # past the Big Bang (#2645). Both routes use the same rule so they
         # cannot diverge (#982).
         resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
+        sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
         sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -3603,6 +3608,7 @@ class StellarSEDComponent:
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
         derived_overrides = dict(
+            sfh_timing_gyr=sfh_timing_gyr,
             log_mstar=log_mstar,
             log_mstar_formed=log_mstar_formed,
             log_mstar_surviving=log_mstar_surviving,
@@ -5089,14 +5095,44 @@ _IONIZING_PROPERTIES = {
     ),
 }
 
+
+def _timing_gyr_fn(gyr_name):
+    """Property function reading one resolved SFH timing in Gyr (#2748).
+
+    NaN when the active SFH has no timing of that name, so one catalog entry
+    per ``*_gyr`` name serves every SFH family.
+    """
+
+    def fn(state, params):
+        timings = state.derived.get("sfh_timing_gyr")
+        if timings is None or gyr_name not in timings:
+            return jnp.asarray(jnp.nan)
+        return jnp.asarray(timings[gyr_name])
+
+    return fn
+
+
+_SFH_TIMING_PROPERTIES = {
+    gyr_name: Property(
+        units="Gyr",
+        group="sfh",
+        doc=f"Resolved {gyr_name} of the active SFH: frac * age(z) when its fraction "
+        "is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing",
+        fn=_timing_gyr_fn(gyr_name),
+    )
+    for gyr_name in sorted(set(timing_frac_params().values()))
+}
+
 register_properties("stellar", _SFH_PROPERTIES)
 register_properties("stellar", _SED_PROPERTIES)
 register_properties("stellar", _IONIZING_PROPERTIES)
+register_properties("stellar", _SFH_TIMING_PROPERTIES)
 
 del (
     Property,
     register_properties,
     _SFH_PROPERTIES,
+    _SFH_TIMING_PROPERTIES,
     _SED_PROPERTIES,
     _IONIZING_PROPERTIES,
 )

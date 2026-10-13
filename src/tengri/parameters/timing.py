@@ -81,6 +81,37 @@ def timing_frac_defaults() -> dict[str, float]:
     }
 
 
+def published_timing_gyr(sfh_kwargs, internal_param_map):
+    """Resolved Gyr of each timing in an SFH call, keyed by its public ``*_gyr`` name (#2748).
+
+    Read after :func:`resolve_timing_fracs`, so a sampled fraction and a Fixed
+    Gyr shim are reported the same way: in Gyr, in the absolute unit the SFH
+    kernel received.
+
+    Parameters
+    ----------
+    sfh_kwargs : dict
+        Internal keyword arguments of the SFH call, after the timing fractions
+        have been resolved.
+    internal_param_map : dict
+        ``public_name -> (internal_name, scale, offset)`` of the active SFH.
+
+    Returns
+    -------
+    dict of str to array_like
+        ``public Gyr name -> Gyr value``, for every timing the SFH carries.
+        May be traced.
+    """
+    published = {}
+    for gyr_name in set(timing_frac_params().values()):
+        if gyr_name not in internal_param_map:
+            continue
+        gyr_int, gyr_scale, _ = internal_param_map[gyr_name]
+        if gyr_int in sfh_kwargs:
+            published[gyr_name] = sfh_kwargs[gyr_int] / gyr_scale
+    return published
+
+
 def settle_timing_pairs(resolved, provenance, *, redshift_fixed=None):
     """Keep exactly one of each ``*_frac`` / ``*_gyr`` timing pair (#2748).
 
