@@ -16,10 +16,10 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 Interpolation strategy
 ----------------------
 
-- velocity, B-field, log_density : ``interp_nd_triweight``, a C²-continuous
-  triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
-  all three continuous axes.  Bin edges are precomputed at grid load time via
-  ``edges_for_grid`` to avoid rebuilding inside JIT traces.
+- velocity, B-field, log_density : ``library_lookup``, node-exact monotone
+  cubic (PCHIP) over the populated cells of the MAPPINGS V grid (#2861). The
+  population mask (#2575) restricts each read to populated nodes; the masked
+  axes hold at their populated hull.
 - abundance, component, version : Python string → integer index (static)
 
 References
@@ -46,7 +46,7 @@ from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.grid_interp import library_lookup as _library_lookup
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
@@ -549,7 +549,7 @@ def shock_line_ratios(
     Notes
     -----
     **JIT-compatible**: yes, continuous parameters (velocity, density,
-    B-field) are interpolated via ``interp_nd_triweight``, safe under
+    B-field) are interpolated via ``library_lookup`` (masked PCHIP), safe under
     ``jax.jit``. Discrete parameters (abundance, component) are resolved
     at call time and not traced.
 
@@ -615,29 +615,21 @@ def shock_line_ratios(
         grid_abund = ratio_array[i_abund]  # (N_n, N_v, N_B, N_lines)
         grid_vbn = jnp.transpose(grid_abund, (1, 2, 0, 3))  # (N_v, N_B, N_n, N_lines)
 
-        # Get population mask for this abundance and apply it to the grid.
-        # The mask tells us which (density, B) pairs are populated.
-        # Unpopulated cells (mask=0) are already zero-filled, but we apply the mask
-        # explicitly so gradients correctly track only through populated cells.
+        # The population mask marks which (density, B) pairs are populated.
         # ``_COMPONENT_MASK_FIELD`` is the single component->mask-field mapping,
         # shared with :func:`population_envelope`'s build-time #2065 guard.
         mask_field_name = _COMPONENT_MASK_FIELD.get(shock_component, "combined_pop_mask")
         mask_abund = g[mask_field_name][i_abund]  # (N_n, N_B)
 
-        # Reshape mask to broadcast with grid_vbn: (1, N_B, N_n, 1)
-        # grid_vbn is (N_v, N_B, N_n, N_lines), mask needs to affect (B, n) dims
-        mask_expanded = jnp.expand_dims(mask_abund.T, (0, 3))  # (1, N_B, N_n, 1)
-        grid_vbn_masked = grid_vbn * mask_expanded
-
-        # --- C²-continuous triweight interpolation across all 3 continuous axes ---
+        # --- Masked PCHIP over the populated cells of the three continuous axes ---
+        # Queries are already clipped to the grid, so the masked axes hold at their
+        # populated hull (#2575) and the velocity axis reads its node hull.
         axes = (v_grid, b_grid, log_den_grid)
-        edges = (g["v_edges"], g["b_edges"], g["n_edges"])
-        ratios_vec = _interp_nd_triweight(
-            grid_vbn_masked,
+        ratios_vec = _library_lookup(
+            grid_vbn,
             axes,
-            edges,
             (v_q, b_q, n_q),
-            index_space_interp=True,
+            extrapolate=(False, False, False),
             population_mask=mask_abund,
         )
         # ratios_vec: shape (N_lines,)

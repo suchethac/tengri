@@ -1763,6 +1763,7 @@ def library_lookup(
     point: tuple,
     *,
     extrapolate: tuple[bool, ...] | None = None,
+    population_mask: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Evaluate a template library at ``point``: the one entry point for lookups (#2861).
 
@@ -1789,6 +1790,11 @@ def library_lookup(
         hull. Physical gaps are reported at build time by
         :data:`tengri.components.grid_support.GRID_SUPPORT`; this function does
         not read that registry.
+    population_mask : jnp.ndarray, optional, shape (grid_dims[2], grid_dims[1])
+        Three-axis grids only (velocity, B, density). 1.0 where the (density, B) cell
+        is populated, 0.0 where it is not (#2575). The read then uses populated nodes
+        only and holds at the populated hull on the masked axes; ``extrapolate`` must
+        be ``False`` for those axes. See :mod:`tengri.utils.masked_pchip`.
 
     Returns
     -------
@@ -1812,6 +1818,12 @@ def library_lookup(
         raise ValueError(
             f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
         )
+    if population_mask is not None:
+        if any(extrapolate[1:]):
+            raise ValueError("masked axes (B, density) hold at the populated hull; use False")
+        from tengri.utils.masked_pchip import masked_pchip_lookup  # lazy: module imports us
+
+        return masked_pchip_lookup(grid, axes, point, population_mask, bool(extrapolate[0]))
     queries = tuple(
         _library_axis_query(ax, p, bool(ext))
         for ax, p, ext in zip(axes, point, extrapolate, strict=True)

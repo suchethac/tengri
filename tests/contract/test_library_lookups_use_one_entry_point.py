@@ -30,11 +30,6 @@ _NAME = "interp_nd_triweight"
 ALLOWED: dict[str, str] = {
     "utils/__init__.py": "public re-export of the smoother kernel; not a lookup site",
     "forward/precompute/__init__.py": "public re-export of the smoother kernel; not a lookup site",
-    "components/nebular/shock.py": (
-        "population-masked lookup (#2575): the B and density axes carry a population mask, "
-        "and the masked triweight path is the only one that honors it. A masked PCHIP "
-        "needs an owner ruling (open, #2861); not an opt-in"
-    ),
 }
 
 
@@ -95,6 +90,7 @@ def test_switched_sites_no_longer_use_kernel():
         "components/dust/dust_emission_precompute.py",
         "forward/precompute/templates.py",
         "components/_collapsed_lookup.py",
+        "components/nebular/shock.py",
         "utils/grid_interp.py",
     )
     for rel in switched:
