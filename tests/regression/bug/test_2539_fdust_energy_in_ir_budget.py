@@ -170,6 +170,10 @@ def _build(
     neb_type: str = "cue",
 ) -> SEDModel:
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
+    if neb_type == "cue" and dust_type == "two_component" and lyc_reprocessed_by == "young":
+        # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7): every
+        # age with 'young' would double-count the old LyC and raises.
+        neb["lyc_max_age_yr"] = 1.0e7
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
         neb["neb_fdust_frac"] = FREE if free_fdust else Fixed(fdust)
@@ -209,7 +213,9 @@ ATTENUATORS = [
 ]
 
 
-def _build_nodust(ssp, *, fesc=0.0, fdust=0.0, neb_type: str = "cue") -> SEDModel:
+def _build_nodust(
+    ssp, *, fesc=0.0, fdust=0.0, neb_type: str = "cue", young_split_cut: bool = False
+) -> SEDModel:
     """A twin model with dust attenuation disabled entirely.
 
     ``state.sed_intrinsic`` is never reassigned by a dust component (every
@@ -225,6 +231,10 @@ def _build_nodust(ssp, *, fesc=0.0, fdust=0.0, neb_type: str = "cue") -> SEDMode
     so a ``tau=0`` wg00 build is not a screen-transparent proxy.
     """
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
+    if neb_type == "cue" and young_split_cut:
+        # The twin shares the dust model's Cue configuration: counting only the ages the
+        # 'young' split removes (<= t_birth_yr = 1e7).
+        neb["lyc_max_age_yr"] = 1.0e7
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
         neb["neb_fdust_frac"] = Fixed(fdust)
@@ -597,7 +607,10 @@ class TestDefaultsBitIdentical:
         # ``log_L_absorbed`` itself integrates).
         from tengri.forward.energy_balance import bolometric_absorbed_log10
 
-        m_nodust = _build_nodust(synthetic_ssp_wide)
+        m_nodust = _build_nodust(
+            synthetic_ssp_wide,
+            young_split_cut=dust_type == "two_component" and lyc_reprocessed_by == "young",
+        )
         sed_intrinsic = np.asarray(m_nodust.predict_state({}).sed_intrinsic)
         sed_attenuated = np.asarray(s.sed_intrinsic)
         wave = np.asarray(s.wave)
@@ -612,14 +625,18 @@ class TestDefaultsBitIdentical:
 
 
 def _fd_grad(f, x: float, h: float = 1e-6) -> float:
-    """Central finite difference, one-sided when ``x - h`` would go negative.
+    """Central finite difference, second-order one-sided when ``x - h`` would go negative.
 
     ``f_dust``/``neb_fdust_frac`` is bounded at 0, so the finite-difference
     estimate near that boundary (fdust=0, 1e-8) must not sample a negative
-    value.
+    value. There the three-point forward stencil
+    ``(-3 f(x) + 4 f(x + h) - f(x + 2h)) / (2 h)`` has an O(h^2) truncation error
+    like the central difference; the two-point forward difference it replaces has
+    O(h), which is ``h * ln(10) * g / 2`` relative for ``f = log10(A + x L)`` with
+    slope ``g`` and so exceeded the test's ``rtol=1e-4`` once ``g > 0.217``.
     """
     if x - h < 0.0:
-        return (f(x + h) - f(x)) / h
+        return (-3.0 * f(x) + 4.0 * f(x + h) - f(x + 2.0 * h)) / (2.0 * h)
     return (f(x + h) - f(x - h)) / (2.0 * h)
 
 
@@ -709,6 +726,9 @@ def _build_two_component_lut(
     item 1) and an explicit ``approx``.
     """
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
+    if neb_type == "cue" and lyc_reprocessed_by == "young":
+        # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7).
+        neb["lyc_max_age_yr"] = 1.0e7
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
         neb["neb_fdust_frac"] = Fixed(fdust)
