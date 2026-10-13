@@ -178,7 +178,7 @@ verb.
 Every derived physical quantity (stellar mass, SFR, ionization parameter, etc.) is declared by exactly ONE component via a `Property(units, group, doc, fn)` declaration in the protocol. Violations are architecture-level bugs.
 
 **Registry integrity:**
-- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_total`)
+- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_100myr`)
 - Name collisions are a **BUILD-TIME error** caught at `SEDModel.build()`
 - Accessing an absent property raises `KeyError` listing the available names (never silently returns None/NaN/0 — this is the `silent-failure` class)
 - Metadata (units, group, doc, provenance, component name) is queryable via `tengri.list_properties()`, `describe_property()`

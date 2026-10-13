@@ -139,7 +139,7 @@ The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and
 
 (app-dust-emission-details)=
 
-**UV crossover.** The Leitherer et al. (2002) far-UV extension used by `leitherer02` joins the Calzetti curve at 1800 Å, and the two match closely there. Between 1500 and 1800 Å the SMC and LMC curves do not cross the Calzetti curve; they stay above it, at about 1.8 times its value at 1500 Å and 1.6 times at 1800 Å, with every curve normalized to $k(5500\,\text{\AA}) = 1$.
+**UV crossover.** The Leitherer et al. (2002) far-UV extension, used by `leitherer02`, `noll09` and `salim_sbl18` below 1800 Å, joins the Calzetti curve at 1800 Å.
 
 ## Dust Emission Models
 

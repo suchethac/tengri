@@ -1580,7 +1580,7 @@ VIConfig(
 - `n_samples > 12` triggers a warning: high sample counts reduce stochastic
   regularization and cause Newton-CG overshooting. Use 3-6.
 - `n_iterations > 100` with `kl_rtol=0` triggers a warning: risk of divergence.
-- Never create `Model`/`ParamSpec` inside a JAX gradient tape.
+- Never create `SEDModel`/`Parameters` inside a JAX gradient tape.
 - The native backend compiles the entire loop atomically --- no intermediate diagnostics.
 - Ray Tracing step_size has a sharp cliff at ~0.06 for D~137.
 

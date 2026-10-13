@@ -1089,7 +1089,7 @@ form is retired.
 
 | old (removed)                                                | new                                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------- |
-| `dust={'type': 'single_component', 'law': 'calzetti', ...}`  | `dust_attenuation={'type': 'single_component', 'law': 'calzetti', ...}` |
+| `dust={'type': 'single_component', 'law': 'calzetti', ...}` (retired; raises with this translation) | `dust_attenuation={'type': 'single_component', 'law': 'calzetti', ...}` |
 | `dust={'type': 'two_component', 'law': 'calzetti', ..., 'emission': {'type': 'dale2014'}}` | `dust_attenuation={'type': 'two_component', 'law': 'calzetti', ...}, dust_emission={'type': 'dale2014'}` |
 | `dust={'emission': {'type': 'modified_blackbody'}}`          | `dust_emission={'type': 'modified_blackbody'}`               |
 | `dust={'emission': {'eta_balance': Fixed(1.0), ...}}`        | `dust_emission={'eta_balance': Fixed(1.0), ...}`             |
@@ -1343,13 +1343,13 @@ the parameter actually does: one law, applied to BOTH screens.
 
 | Old spelling                          | New spelling                                     | Status (v0.x)                                     |
 | -------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| `SEDModel.from_config(dust="calzetti")` | `SEDModel.from_config(dust_attenuation_law="calzetti")` | `dust=` still works: deprecated alias, warns, forwards |
+| `SEDModel.from_config(dust="calzetti")` | `SEDModel.from_config(dust_attenuation_law="calzetti")` | `dust=` is retired; use `dust_attenuation_law=` |
 
 `"charlot_fall"` (the default) is documented as an alias for `"power_law"`
 applied to both screens -- the classic Charlot & Fall (2000) model -- not a
-law-registry name. Passing both `dust=` and `dust_attenuation_law=` with
-disagreeing values raises `ValueError`; the deprecated alias is slated for
-removal in a later release.
+law-registry name. The `dust=` keyword is retired. The model-build grammar
+raises for a `dust={...}` block and prints the `dust_attenuation={...}` and
+`dust_emission={...}` translation, since dust is two peer groups.
 
 ---
 

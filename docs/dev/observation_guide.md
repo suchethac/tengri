@@ -17,22 +17,22 @@ bundles everything about *what you are observing* into a single object:
 It sits at the top of the tengri pipeline:
 
 ```
-Observation  -->  Model  -->  Fitter  -->  Posterior
+Observation  -->  SEDModel  -->  Fitter  -->  Posterior
   (config)       (physics)   (inference)   (results)
 ```
 
 **Why it exists.** Before `Observation`, filters were raw lists passed to
-`Model`, spectroscopy precomputation was a manual step (easy to forget, causing
+`SEDModel`, spectroscopy precomputation was a manual step (easy to forget, causing
 a 10--50x performance penalty), joint fitting required fragile manual array
 concatenation, and noise/calibration parameters had to be hand-wired into
-`ParamSpec`. The `Observation` class eliminates all of these pain points:
+`Parameters`. The `Observation` class eliminates all of these pain points:
 
 - Capability queries (`can_do_photometry`, `can_do_spectroscopy`) replace
   string-based `data_type` dispatch.
 - Instrument factories (`nirspec_prism`, `nirspec_g140m`, `constant_r`)
   encode instrument knowledge.
 - Observation-driven parameters (calibration coefficients, noise floor) are
-  auto-merged into `ParamSpec` by `Model`.
+  auto-merged into `Parameters` by `SEDModel`.
 - Spectroscopy precomputation triggers automatically when redshift is fixed.
 - `pack_data` / `unpack_prediction` provide validated data concatenation for
   joint fitting.
@@ -49,7 +49,7 @@ Observation (frozen dataclass)
 
 At least one of `photometry` or `spectroscopy` must be provided.
 
-The `Observation` never enters JAX-traced code. It configures what the `Model`
+The `Observation` never enters JAX-traced code. It configures what the `SEDModel`
 precomputes and what the `Fitter` dispatches.
 
 ---
@@ -80,7 +80,7 @@ Observation
 Full pipeline:
 
 ```python
-from tengri import Model, ParamSpec, Fitter, Observation, Photometry
+from tengri import SEDModel, Parameters, Fitter, Observation, Photometry
 from tengri import Uniform, Fixed, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -89,8 +89,8 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -100,9 +100,9 @@ spec = ParamSpec(
 )
 
 # observation= carries filters; data_type is inferred automatically
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise_obs)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 print(posterior.summary_table())
 ```
 
@@ -602,9 +602,9 @@ data = obs.pack_data(phot=phot_flux, spec=spec_flux)
 noise = obs.pack_data(phot=phot_noise, spec=spec_noise)
 
 # Fit
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 
 # Unpack model prediction for plotting
 pred = model.predict(posterior.median_params)
@@ -629,10 +629,10 @@ need to manually concatenate arrays when using the Observation API.
 
 ---
 
-## Auto-Merge: How Observation Params Enter ParamSpec
+## Auto-Merge: How Observation Params Enter Parameters
 
-When you create a `Model` with an `Observation`, observation-driven parameters
-are automatically merged into `ParamSpec`.
+When you create a `SEDModel` with an `Observation`, observation-driven parameters
+are automatically merged into `Parameters`.
 
 ### What gets auto-merged
 
@@ -657,32 +657,32 @@ obs = Observation(
 #     'noise_frac_cal': Uniform(0.01, 0.15),
 # }
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     met_logzsol=Uniform(-2.0, 0.2),
     redshift=Fixed(2.0),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 # model.spec now contains the physical params PLUS cal_c1..c3 + noise_frac_cal
 ```
 
 ### Precedence rules
 
 **User-defined parameters always win.** If you explicitly define a parameter
-in `ParamSpec` that the observation would also auto-generate, your definition
+in `Parameters` that the observation would also auto-generate, your definition
 takes precedence:
 
 ```python
 from tengri import Gaussian
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     cal_c1=Gaussian(0.0, 0.5),  # user override: wider prior than default 0.1
     redshift=Fixed(2.0),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 # model.spec's cal_c1 uses Gaussian(0, 0.5) -- user's definition wins
 # cal_c2, cal_c3 use Gaussian(0, 0.1) -- auto-merged defaults
 ```
@@ -690,10 +690,10 @@ model = Model(spec, ssp, observation=obs)
 ### Inspecting merged params
 
 ```python
-# Original ParamSpec -- only physical params
+# Original Parameters -- only physical params
 print(spec.summary())
 
-# Augmented ParamSpec on the model -- includes observation params
+# Augmented Parameters on the model -- includes observation params
 print(model.spec.summary())
 ```
 
@@ -761,29 +761,29 @@ The old `filters=` and `data_type=` arguments continue to work unchanged. The
 
 ```python
 # OLD
-from tengri import Model, Fitter, load_filter_set
+from tengri import SEDModel, Fitter, load_filter_set
 filters = load_filter_set(["sdss_r", "sdss_i", "sdss_z"])
-model = Model(spec, ssp, filters=filters)
+model = SEDModel(spec, ssp, filters=filters)
 fitter = Fitter(model, flux_obs, noise_obs, data_type="photometry")
 
 # NEW
-from tengri import Model, Fitter, Observation, Photometry
+from tengri import SEDModel, Fitter, Observation, Photometry
 obs = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i", "sdss_z"]))
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise_obs)  # data_type inferred
 ```
 
 **Spectroscopy with calibration:**
 
 ```python
-# OLD -- noise and calibration params scattered in ParamSpec
-spec = ParamSpec(
+# OLD -- noise and calibration params scattered in Parameters
+spec = Parameters(
     ...,
     cal_c1=Gaussian(0, 0.1),
     cal_c2=Gaussian(0, 0.1),
     noise_frac_cal=Uniform(0.01, 0.15),
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 # (old API: a manual spectroscopy-precompute step, easy to forget)
 fitter = Fitter(model, spec_flux, spec_noise, data_type="spectroscopy")
 
@@ -792,7 +792,7 @@ obs = Observation(
     spectroscopy=Spectroscopy.nirspec_prism(wave_obs, calibration_order=2),
     noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
 )
-model = Model(spec, ssp, observation=obs)  # auto-precomputes, auto-merges
+model = SEDModel(spec, ssp, observation=obs)  # auto-precomputes, auto-merges
 fitter = Fitter(model, spec_flux, spec_noise)
 ```
 
@@ -811,7 +811,7 @@ fitter = Fitter(model, data, noise)
 ```
 
 **Important:** You cannot specify both `filters=` and `observation=` when
-creating a `Model` -- this raises `ValueError`.
+creating a `SEDModel` -- this raises `ValueError`.
 
 ---
 
@@ -823,7 +823,7 @@ creating a `Model` -- this raises `ValueError`.
 import jax
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Photometry,
+    SEDModel, Parameters, Fitter, Observation, Photometry,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -833,8 +833,8 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -843,9 +843,9 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise_obs)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 print(posterior.summary_table())
 ```
 
@@ -854,7 +854,7 @@ print(posterior.summary_table())
 ```python
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Spectroscopy, NoiseModel,
+    SEDModel, Parameters, Fitter, Observation, Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -872,7 +872,7 @@ obs = Observation(
 )
 
 # Physical params only -- cal_c1..c3 and noise_frac_cal auto-merged
-spec = ParamSpec(
+spec = Parameters(
     sfh_field_psd_sigma=Uniform(0.1, 3.0),
     sfh_field_psd_tau_myr=Uniform(10, 5000),
     sfh_field_xi=Uniform(-3, 3),
@@ -882,9 +882,9 @@ spec = ParamSpec(
     redshift=Fixed(2.0),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, spec_flux, spec_noise)
-posterior = fitter.run("raytrace", n_steps=2000, step_size=0.05)
+posterior = fitter.run("mcmc_raytrace", n_steps=2000, step_size=0.05)
 
 # Posterior includes physical + observation params
 print(posterior.summary_table())
@@ -895,7 +895,7 @@ print(posterior.summary_table())
 ```python
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Photometry,
+    SEDModel, Parameters, Fitter, Observation, Photometry,
     Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
@@ -914,7 +914,7 @@ obs = Observation(
     noise=NoiseModel(calibration_floor=0.02),  # fixed 2% floor
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_field_psd_sigma=Uniform(0.1, 3.0),
     sfh_field_psd_tau_myr=Uniform(10, 5000),
     sfh_field_xi=Uniform(-3, 3),
@@ -924,14 +924,14 @@ spec = ParamSpec(
     redshift=Fixed(3.5),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # Validated packing -- canonical order: [photometry, spectroscopy]
 data = obs.pack_data(phot=phot_flux, spec=spec_flux)
 noise = obs.pack_data(phot=phot_noise, spec=spec_noise)
 
 fitter = Fitter(model, data, noise)  # data_type="joint" inferred
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 
 # Unpack prediction for plotting
 pred = model.predict(posterior.median_params)
@@ -945,7 +945,7 @@ spec_pred = result["spectroscopy"]  # shape (n_pixels,)
 ```python
 import jax
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Photometry,
+    SEDModel, Parameters, Fitter, Observation, Photometry,
     Uniform, Fixed, load_ssp_data, generate_mock,
 )
 
@@ -955,8 +955,8 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -964,7 +964,7 @@ spec = ParamSpec(
     redshift=Fixed(1.0),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # Generate mock data -- observation tells generate_mock what to produce
 key = jax.random.PRNGKey(42)
@@ -973,7 +973,7 @@ mock = generate_mock(key, model, snr=20.0)
 
 # Fit the mock
 fitter = Fitter(model, mock.flux_obs, mock.noise)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 print(posterior.summary_table())
 ```
 
@@ -981,7 +981,7 @@ print(posterior.summary_table())
 
 ```python
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Photometry,
+    SEDModel, Parameters, Fitter, Observation, Photometry,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -991,7 +991,7 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_field_psd_sigma=Uniform(0.1, 3.0),
     sfh_field_psd_tau_myr=Uniform(10, 5000),
     sfh_field_xi=Uniform(-3, 3),
@@ -1001,7 +1001,7 @@ spec = ParamSpec(
     redshift=Fixed(0.5),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # catalog_flux, catalog_noise: shape (n_galaxies, 5)
 fitter = Fitter(model, catalog_flux, catalog_noise)
@@ -1013,7 +1013,7 @@ results = fitter.fit_batch(catalog_flux, catalog_noise)
 ```python
 import jax.numpy as jnp
 from tengri import (
-    Model, ParamSpec, Fitter, Observation, Spectroscopy, NoiseModel,
+    SEDModel, Parameters, Fitter, Observation, Spectroscopy, NoiseModel,
     Uniform, Fixed, load_ssp_data,
 )
 
@@ -1036,8 +1036,8 @@ obs = Observation(
     ),
 )
 
-spec = ParamSpec(
-    sfh_tsnorm_log_total_mass=10.0, 3),
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -1046,9 +1046,9 @@ spec = ParamSpec(
     redshift=Fixed(0.05),
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, spec_flux, spec_noise)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 
 print(obs.summary())
 print(posterior.summary_table())
