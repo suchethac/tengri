@@ -13,7 +13,9 @@ Pinned here:
   2. that path is EXACT against the dense per-call integral (reference: the same model with
      one shape parameter freed, which the gate refuses, pinned back to its fixed value),
   3. a FREE shape parameter declines the path and says why,
-  4. a FREE luminosity (an amplitude) does not decline it.
+  4. a FREE luminosity (an amplitude) does not decline it,
+  5. a shape that moves across the declared ``agn_log_lbol`` prior (the adaf disc) is
+     declined and the reason names the shape change.
 """
 
 import jax
@@ -37,13 +39,13 @@ def _agn(**overrides):
         "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "norm": "cigale_joint",
-        "log_lbol": Fixed(45.5),
+        "log_lbol": Fixed(DEFAULT),
     }
     agn.update(overrides)
     return agn
 
 
-def _model(*, agn=None, approx=WavePrecomp()):
+def _model(*, agn=None, approx=None):
     return SEDModel.build(
         ssp_data=tengri.load_ssp(),
         observation=Observation(photometry=Photometry.from_names(BANDS)),
@@ -51,7 +53,7 @@ def _model(*, agn=None, approx=WavePrecomp()):
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={"type": "none"},
         agn=_agn() if agn is None else agn,
-        approx=approx,
+        approx=WavePrecomp() if approx is None else approx,
     )
 
 
@@ -74,15 +76,18 @@ def test_agn_with_fixed_shape_takes_the_rank1_path():
 
 
 def test_agn_band_response_is_exact_against_the_dense_filter_integral():
-    """The rank-1 photometry equals the dense per-call integral to 1e-6 relative.
+    """The rank-1 photometry equals the dense per-call integral to 1e-10 relative.
 
     The reference is the same model with ``agn_cos_inc`` freed: that makes the gate refuse
     the response, so the AGN integrates its full SED through the filters on every call.
     The freed value is pinned back to the fixed one, so the two are the same physics.
     """
     fast = _model()
-    dense = _model(agn=_agn(torus={"type": "skirtor", "all_params": Fixed(DEFAULT),
-                                   "cos_inc": Uniform(0.0, 1.0)}))
+    dense = _model(
+        agn=_agn(
+            torus={"type": "skirtor", "all_params": Fixed(DEFAULT), "cos_inc": Uniform(0.0, 1.0)}
+        )
+    )
     p_dense = _params(dense)
     p_dense["agn_cos_inc"] = jnp.asarray(float(fast.spec.get_fixed_values()["agn_cos_inc"]))
 
@@ -94,13 +99,16 @@ def test_agn_band_response_is_exact_against_the_dense_filter_integral():
     nz = f_dense != 0.0
     assert nz.any()
     rel = np.abs(f_fast[nz] / f_dense[nz] - 1.0).max()
-    assert rel <= 1e-6, f"AGN band response differs from the dense integral by {rel:.3e}"
+    assert rel <= 1e-10, f"AGN band response differs from the dense integral by {rel:.3e}"
 
 
 def test_a_free_shape_parameter_declines_the_agn_path_with_a_reason():
     """A free inclination changes the torus shape, so the response must be refused."""
-    m = _model(agn=_agn(torus={"type": "skirtor", "all_params": Fixed(DEFAULT),
-                               "cos_inc": Uniform(0.0, 1.0)}))
+    m = _model(
+        agn=_agn(
+            torus={"type": "skirtor", "all_params": Fixed(DEFAULT), "cos_inc": Uniform(0.0, 1.0)}
+        )
+    )
     m.predict_photometry(_params(m))
     state = _agn_state(m)
     assert state.state == "declined", state
@@ -109,6 +117,19 @@ def test_a_free_shape_parameter_declines_the_agn_path_with_a_reason():
 
 def test_a_free_luminosity_is_an_amplitude_and_keeps_the_agn_path():
     """``agn_log_lbol`` scales every term; freeing it must not decline the response."""
-    m = _model(agn=_agn(log_lbol=Uniform(44.0, 47.0)))
+    m = _model(agn=_agn(log_lbol=Uniform(8.0, 14.0, default=10.0)))
     m.predict_photometry(_params(m))
     assert _agn_state(m).state == "engaged"
+
+
+def test_a_disc_whose_shape_moves_with_the_luminosity_is_declined():
+    """The adaf disc's spectrum depends on ``agn_log_lbol`` (its Eddington ratio).
+
+    Its shape ratio varies by ~1e8 across the declared prior, so a per-term amplitude
+    cannot carry it. The probe must reject it, and the reason must say the shape moves.
+    """
+    m = _model(agn=_agn(disc={"type": "adaf", "all_params": Fixed(DEFAULT)}))
+    m.predict_photometry(_params(m))
+    state = _agn_state(m)
+    assert state.state == "declined", state
+    assert "shape" in (state.reason or ""), state

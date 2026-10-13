@@ -59,6 +59,7 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components._term_response import term_band_response
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
     reference_evaluation,
@@ -67,7 +68,6 @@ from tengri.components.agn._lbol_reference import (
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components._term_response import term_band_response
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
@@ -82,12 +82,37 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
     SEDComponentState,
+    declared_default,
 )
 
 __all__ = [
     "AGNSEDComponent",
     "AGNSEDComponentConfig",
 ]
+
+
+def _amplitude_probe_draws() -> tuple[dict[str, float], ...]:
+    """Probe draws for the rank-1 check, spread over the declared amplitude priors (#1118).
+
+    ``agn_log_lbol`` is probed at the low bound, midpoint and high bound of its prior, with
+    ``agn_lum_ratio`` at its default; ``agn_lum_ratio`` is probed at its midpoint and high
+    bound, with ``agn_log_lbol`` at its default. The ratio's low bound is zero, which
+    switches the whole AGN off, so it is not a probe point.
+    """
+    priors = {decl.name: decl.prior for decl in _AGN_PARAMS}
+    lbol, ratio = priors["agn_log_lbol"], priors["agn_lum_ratio"]
+    lbol_default = declared_default(_AGN_PARAMS, "agn_log_lbol")
+    ratio_default = declared_default(_AGN_PARAMS, "agn_lum_ratio")
+    lbol_mid = 0.5 * (lbol.lo + lbol.hi)
+    ratio_mid = 0.5 * (ratio.lo + ratio.hi)
+    lbol_draws = [
+        {"agn_log_lbol": value, "agn_lum_ratio": ratio_default}
+        for value in (lbol.lo, lbol_mid, lbol.hi)
+    ]
+    ratio_draws = [
+        {"agn_log_lbol": lbol_default, "agn_lum_ratio": value} for value in (ratio_mid, ratio.hi)
+    ]
+    return tuple(lbol_draws + ratio_draws)
 
 
 @dataclass(frozen=True)
@@ -208,12 +233,10 @@ class AGNSEDComponent(TemplateThreading):
     #: one scales every term together, so the build-time band response stays valid (#1118).
     AMPLITUDE_PARAMS: ClassVar[frozenset[str]] = frozenset({"agn_log_lbol", "agn_lum_ratio"})
 
-    #: Two distant luminosity draws for the rank-1 probe (#1107). They differ only in the
-    #: amplitude, so every sub-block must come back proportional between them.
-    EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
-        {"agn_log_lbol": 44.0},
-        {"agn_log_lbol": 47.0},
-    )
+    #: Probe draws for the rank-1 check (#1107, #1118), read from the declared priors. They
+    #: differ only in the amplitude, so every sub-block must come back proportional to the
+    #: first draw. Each draw sets both amplitudes, so the probe never reads a free value.
+    EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], ...]] = _amplitude_probe_draws()
 
     #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
     _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
@@ -269,6 +292,7 @@ class AGNSEDComponent(TemplateThreading):
         wave: jnp.ndarray,
         *,
         agn_log_lbol: jnp.ndarray | None = None,
+        agn_lum_ratio: jnp.ndarray | None = None,
         template_state: Mapping[str, Any] | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""The composable AGN sub-block SEDs, unsummed (#1118).
@@ -285,6 +309,8 @@ class AGNSEDComponent(TemplateThreading):
             Rest-frame wavelength grid [Angstrom].
         agn_log_lbol : array_like, scalar, optional
             :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Defaults to ``params["agn_log_lbol"]``.
+        agn_lum_ratio : array_like, scalar, optional
+            Overrides ``params["agn_lum_ratio"]`` (default 1) for the probe draws.
         template_state : mapping, optional
             Per-block template libraries, as :meth:`apply` threads them.
 
@@ -302,12 +328,15 @@ class AGNSEDComponent(TemplateThreading):
         from tengri.components.agn.blocks.runner import composable_agn_l_nu
 
         lbol = params["agn_log_lbol"] if agn_log_lbol is None else agn_log_lbol
+        kwargs = self._composable_kwargs(params)
+        if agn_lum_ratio is not None:
+            kwargs["agn_lum_ratio"] = jnp.asarray(agn_lum_ratio)
         _, components = composable_agn_l_nu(
             wave,
             agn_log_lbol=lbol,
             return_components=True,
             template_state=template_state,
-            **self._composable_kwargs(params),
+            **kwargs,
         )
         return {key: components[key] for key in self._TERM_KEYS}
 

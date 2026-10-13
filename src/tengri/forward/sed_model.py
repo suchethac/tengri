@@ -316,8 +316,8 @@ def _chain_implements_emission_terms(chain) -> list[str]:
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
 #: band response. Loose enough not to trip on fp re-association across a ~6000-node
-#: grid, ~7 orders tighter than any shape error worth exploiting.
-_RANK1_RTOL = 1e-9
+#: grid, and far tighter than any shape error worth exploiting.
+_RANK1_RTOL = 1e-10
 
 
 def _term_response_refusal(comp, chain, free, fixed) -> str | None:
@@ -350,7 +350,8 @@ def _term_response_refusal(comp, chain, free, fixed) -> str | None:
         if reason is None and any(
             getattr(getattr(c, "config", None), "agn_screen", "none") != "none" for c in chain
         ):
-            return "the galaxy dust screens the AGN (agn_screen): its photometry needs the dense SED"
+            return "the galaxy dust screens the AGN (agn_screen): its photometry needs the dense"
+            " SED"
         return reason
     amplitudes = getattr(comp, "AMPLITUDE_PARAMS", frozenset())
     prefix = f"{comp.name}_"
@@ -358,6 +359,7 @@ def _term_response_refusal(comp, chain, free, fixed) -> str | None:
     if free_emitter:
         return f"free {comp.name} parameters: {free_emitter}"
     return None
+
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -11996,22 +11998,24 @@ class SEDModel:
             nodes = single_node(fixed["redshift"], wave.dtype)
         z_mid = fixed["redshift"] if single else jnp.expm1(nodes[nodes.shape[0] // 2])
 
-        probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+        probes = tuple(comp.EMITTER_PROBE_INPUTS)
 
         def _terms(z, probe):
             return comp.emission_terms({**fixed, "redshift": z}, wave, **probe)
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probe_a).items()}
+        peaks = {
+            key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probes[0]).items()
+        }
         keys = tuple(peaks)
 
         def _node(z):
-            terms_a = _terms(z, probe_a)
-            terms_b = _terms(z, probe_b)
+            terms_all = [_terms(z, probe) for probe in probes]
+            terms_a = terms_all[0]
             rows, s_ref, ok = [], [], []
             for key in keys:
-                s_a, s_b, peak = terms_a[key], terms_b[key], peaks[key]
+                s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
                 live = jnp.abs(ref) > 0.0
                 # A term identically zero here is zero for a STRUCTURAL reason (a
@@ -12019,14 +12023,21 @@ class SEDModel:
                 # input is nonzero by construction. It must be zero everywhere
                 # on the grid, or its reference amplitude is 0/0 at some nodes.
                 zero_ok = live | (jnp.max(jnp.abs(s_a)) == 0.0)
-                # RANK-1 CHECK: the second draw must be proportional to the first.
-                scale = s_b[peak] / jnp.where(live, ref, 1.0)
-                rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                term_ok = zero_ok & jnp.all(jnp.isfinite(s_a))
+                # RANK-1 CHECK: every later draw must be proportional to the first. A
+                # draw that switches a live term off, or makes it non-finite, fails
+                # the check: an all-zero draw would otherwise pass as 0 * s_a.
+                for terms_b in terms_all[1:]:
+                    s_b = terms_b[key]
+                    scale = s_b[peak] / jnp.where(live, ref, 1.0)
+                    rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                    alive_ok = ~live | (jnp.all(jnp.isfinite(s_b)) & (jnp.max(jnp.abs(s_b)) > 0.0))
+                    term_ok = term_ok & rank1_ok & alive_ok
                 row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z)
                 rows.append(jnp.where(live, row, jnp.zeros_like(row)))
                 # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
                 s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
-                ok.append(zero_ok & rank1_ok)
+                ok.append(term_ok)
             return {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
