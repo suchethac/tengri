@@ -275,8 +275,14 @@ def check_models(ns: dict) -> None:
         seen.add(id(value))
         params = value.spec.sample(jax.random.PRNGKey(0))
         flux = np.asarray(value.predict_photometry(params))
-        if not (np.all(np.isfinite(flux)) and np.all(flux > 0)):
-            raise AssertionError(f"photometry not finite and positive: {flux.tolist()}")
+        # A band can be exactly zero for physical reasons (the Lyman break and
+        # the IGM empty a blue band at high redshift, which a recipe's free
+        # redshift prior samples), so the requirement is finite, non-negative,
+        # and some light somewhere.
+        if not (np.all(np.isfinite(flux)) and np.all(flux >= 0) and np.any(flux > 0)):
+            raise AssertionError(
+                f"photometry not finite, non-negative and non-empty: {flux.tolist()}"
+            )
 
 
 def _raised_name(exc: BaseException, expect: str) -> bool:

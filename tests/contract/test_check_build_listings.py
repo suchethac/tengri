@@ -3,7 +3,7 @@
 
 Covers the executed-listing gate that stops a documented ``SEDModel.build``
 call from naming a nonexistent kwarg (#2430). Verifies that:
-1. A valid listing executes and its sampled photometry is finite and positive
+1. A valid listing executes and its sampled photometry is finite, non-negative and non-empty
 2. A broken listing is reported with its file and fence line, and the exit code is 1
 3. ``--list`` names every listing it finds and exits 0
 4. A listing marked ``<!-- raises: Name -->`` passes only by raising ``Name``
