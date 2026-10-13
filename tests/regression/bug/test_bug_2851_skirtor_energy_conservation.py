@@ -9,12 +9,14 @@ therefore scales the records ONCE per parameter point so that
 .. math:: \\bar P_{\\rm disc} + \\bar P_{\\rm torus} = f\\,10^{\\log L_{\\rm bol}} L_\\odot,
           \\qquad \\bar P = \\int_0^1 P(\\mu)\\,d\\mu,\\quad \\mu = \\cos i,
 
-with :math:`f` = ``torus_frac`` (the AGN share, which multiplies every piece). The polar dust
-absorbs disc light emitted into the cone and re-emits it, so the escaping disc published beside
-it is net of what the polar dust took and the three published powers add up to the same budget:
+with :math:`f` = ``torus_frac`` (the AGN share, which multiplies every piece) and the disc
+counted over the template's whole native range (the part outside the support of the emitted
+disc is ``log_L_agn_disc_unemitted``). The polar dust absorbs disc light emitted into the cone
+and re-emits it, so the escaping disc published beside it is net of what the polar dust took and
+the four published powers add up to the same budget:
 
 .. math:: \\bar P_{\\rm disc}^{\\rm esc} + \\bar P_{\\rm torus} + P_{\\rm polar}
-          = f\\,10^{\\log L_{\\rm bol}} L_\\odot.
+          + \\bar P_{\\rm unemitted} = f\\,10^{\\log L_{\\rm bol}} L_\\odot.
 
 The references are independent of the component: ``RawSkirtor`` reads the file with ``h5py``,
 interpolates with SciPy's PCHIP and integrates the power laws in closed form; the sphere sums
@@ -77,8 +79,9 @@ def _published(comp, params, wave=PUB_COARSE):
 
 
 def _ledger(pub):
-    """Escaping disc, torus and polar re-emission [erg/s] from the published keys."""
-    return np.array([10.0 ** pub[f"log_L_agn_{k}"] for k in ("disc", "torus", "polar_dust")])
+    """Escaping disc, torus, polar re-emission and unemitted disc [erg/s] from the keys."""
+    keys = ("disc", "torus", "polar_dust", "disc_unemitted")
+    return np.array([10.0 ** pub[f"log_L_agn_{k}"] for k in keys])
 
 
 @pytest.mark.parametrize("polar_ebv", [0.0, 0.2])
@@ -88,7 +91,7 @@ def _ledger(pub):
 def test_published_sphere_powers_add_up_to_the_accretion_power(
     skirtor, frac, cos_inc, delta, polar_ebv
 ):
-    """Escaping disc + torus + polar dust = ``torus_frac 10**agn_log_lbol L_sun`` (1e-6)."""
+    """Disc + torus + polar + unemitted disc = ``torus_frac 10**agn_log_lbol L_sun`` (1e-6)."""
     comp, mid = skirtor
     pub = _published(
         comp,
@@ -118,15 +121,19 @@ def test_polar_dust_takes_its_power_from_the_disc(skirtor):
 
 @pytest.mark.parametrize("polar_ebv", [0.0, 0.2])
 @pytest.mark.parametrize("delta", [0.0, 0.6])
-def test_sphere_integral_of_the_emitted_sed_is_the_accretion_power(skirtor, delta, polar_ebv):
-    """The dense-grid power of the SED the component emits, summed over the sphere, is ``f L``.
+def test_sphere_integral_of_the_emitted_sed_is_the_accretion_power(
+    skirtor, raw_library, delta, polar_ebv
+):
+    """The dense-grid power of the SED the component emits, summed over the sphere, is ``f L``
+    less the unemitted disc.
 
     Independent of the published keys and of the template scale: ``predict`` is evaluated on a
     wide grid along Gauss-Legendre points of order 12 on every interval between the library's
     inclination nodes (the published rule is order 16) and each SED integrated with the ln(nu)
     trapezoid. The SED carries the attenuated disc, the torus dust and the isotropic polar
     re-emission, so the sphere sum closes only if the power the polar dust absorbs from the
-    cone is the power it re-emits (1e-6).
+    cone is the power it re-emits (1e-6). The disc below 80 A is not in the SED: its sphere mean
+    comes from the raw records (``RawSkirtor``) and is subtracted from ``f L``.
     """
     comp, mid = skirtor
     params = {
@@ -144,7 +151,11 @@ def test_sphere_integral_of_the_emitted_sed_is_the_accretion_power(skirtor, delt
             mu = 0.5 * (b - a) * xi + 0.5 * (a + b)
             sed = np.asarray(emitted({**params, "cos_inc": jnp.asarray(mu)}))
             total += 0.5 * (b - a) * wi * ln_nu_integral(sed, _WIDE)
-    expected = float(params["torus_frac"]) * 10.0 ** mid["log_lbol"] * L_SUN
+    point = tuple(mid[k] for k in _PARAM_KEYS)
+    unemitted = raw_library.scale(mid) * raw_library.sphere_mean(
+        lambda m: raw_library.unemitted_power(point, m)
+    )
+    expected = float(params["torus_frac"]) * 10.0 ** mid["log_lbol"] * L_SUN - unemitted
     assert abs(total / expected - 1.0) < _RTOL
 
 
@@ -161,8 +172,9 @@ def test_templates_at_inclination_nodes_are_the_raw_records_times_one_scale(
     The factor is the same at every wavelength, for the disc and the dust, and at every node:
     the interpolation is node-exact (PCHIP) and no inclination is rescaled on its own. Off the
     parameter nodes the reference interpolates the five parameter axes with SciPy's PCHIP in the
-    same order. The factor equals ``f L`` over the raw sphere mean of the escaping disc plus
-    the dust (order 48), so the library's energy is the accretion power.
+    same order. The factor equals ``f L`` over the raw sphere mean of the escaping disc (over the
+    template's native range) plus the dust (order 48), so the library's energy is the accretion
+    power.
     """
     comp, mid = skirtor
     nodes = np.asarray(comp.data.native_cos_inc)
@@ -191,7 +203,7 @@ def test_templates_at_inclination_nodes_are_the_raw_records_times_one_scale(
             scales.append(ratio)
     flat = np.concatenate(scales)
     assert np.max(np.abs(flat / flat[0] - 1.0)) < 1e-12
-    mean_total = raw_library.sphere_mean(lambda m: raw_library.total_power(point, m))
+    mean_total = raw_library.sphere_mean(lambda m: raw_library.native_total_power(point, m))
     expected = 10.0 ** params["log_lbol"] * L_SUN / mean_total
     assert abs(flat[0] / expected - 1.0) < 1e-10
 
@@ -236,7 +248,7 @@ def test_inclination_quadrature_is_converged(monkeypatch, extra):
 @pytest.mark.parametrize("disk_type", [1, 2])
 @pytest.mark.parametrize("polar_ebv", [0.0, 0.2])
 def test_other_disc_types_keep_the_energy_ledger(disk_type, polar_ebv):
-    """Schartmann (1) and ADAF (2) discs: escaping disc + torus + polar = ``f L`` (1e-12).
+    """Schartmann (1) and ADAF (2) discs: disc + torus + polar + unemitted = ``f L`` (1e-12).
 
     The re-tilt renormalizes the selected disc to the template disc's power inside the support
     of the analytic disc, and both selected discs vanish outside it, so no power leaks past the
