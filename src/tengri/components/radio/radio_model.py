@@ -191,6 +191,8 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
     optional_inputs: ClassVar[dict[str, str]] = {
         "L_ir": "erg/s",
         "L_agn_bol": "erg/s",
+        "log_L_ir": "dex",
+        "log_L_agn_bol": "dex",
         "log_mstar": "dex",
     }
     outputs: ClassVar[dict[str, str]] = {
@@ -238,6 +240,12 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         # Read cross-component inputs with fallbacks
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
+        # Float32: the linear ~1e44 erg/s values are ``inf``, so the kernels are handed the
+        # log companions (they form the representable radio luminosity by ``pow10``). In
+        # float64 the logs are withheld and the linear path is unchanged.
+        use_log = wave.dtype == jnp.float32
+        log_L_ir = inputs.get("log_L_ir") if use_log else None
+        log_L_agn_bol = inputs.get("log_L_agn_bol") if use_log else None
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
         redshift = jnp.asarray(require_redshift(p, "components.radio.radio_model.predict"))
 
@@ -246,6 +254,8 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
             wave,
             L_ir=L_ir,
             L_agn_bol=L_agn_bol,
+            log_L_ir=log_L_ir,
+            log_L_agn_bol=log_L_agn_bol,
             q_ir=jnp.asarray(p["q_ir"]),
             alpha_sf=jnp.asarray(p["alpha_sf"]),
             radio_loudness=jnp.asarray(p["loudness"]),

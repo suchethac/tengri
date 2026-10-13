@@ -89,7 +89,7 @@ class TestAGNXRayCoronaPort:
             )
 
     def test_has_no_required_inputs(self):
-        """AGN X-ray has no required inputs (L_agn_bol is optional with fallback)."""
+        """AGN X-ray has no required inputs (log_L_agn_bol is optional with fallback)."""
         comp = AGNXRayCoronaSEDComponent()
         inputs_tuple = comp.inputs()
         assert isinstance(inputs_tuple, tuple)
@@ -131,7 +131,11 @@ class TestAGNXRayCoronaPort:
         # With L_2500_intrinsic published, the corona matches the direct corona
         # at that L_2500 exactly (not the BC estimate).
         out, _ = comp.predict(
-            p, jnp.zeros_like(wave), wave, L_2500_intrinsic=l_2500, L_agn_bol=l_bol
+            p,
+            jnp.zeros_like(wave),
+            wave,
+            L_2500_intrinsic=l_2500,
+            log_L_agn_bol=jnp.log10(l_bol),
         )
         ref = xray_agn_corona(
             wave, l_2500_30deg_erg_hz=l_2500, gamma=1.8, E_cut=300.0, delta_alpha_ox=0.0
@@ -139,7 +143,7 @@ class TestAGNXRayCoronaPort:
         np.testing.assert_allclose(at_2kev(out), at_2kev(ref), rtol=1e-4)
 
         # The BC fallback (no disc L_2500 published) is measurably brighter.
-        out_bc, _ = comp.predict(p, jnp.zeros_like(wave), wave, L_agn_bol=l_bol)
+        out_bc, _ = comp.predict(p, jnp.zeros_like(wave), wave, log_L_agn_bol=jnp.log10(l_bol))
         assert at_2kev(out) < at_2kev(out_bc)
 
     def test_predict_returns_valid_output(self):
@@ -159,7 +163,7 @@ class TestAGNXRayCoronaPort:
         assert isinstance(published["sed_xray"], jnp.ndarray)
 
     def test_predict_with_agn_luminosity(self):
-        """predict() produces non-zero output with L_agn_bol input."""
+        """predict() produces non-zero output with log_L_agn_bol input."""
         comp = AGNXRayCoronaSEDComponent()
         wave = jnp.logspace(0, 2, 500)  # X-ray range
         sed_in = jnp.zeros_like(wave)
@@ -169,7 +173,7 @@ class TestAGNXRayCoronaPort:
             "E_cut": jnp.array(300.0),
         }
         # With AGN luminosity
-        sed_out_agn, _pub_agn = comp.predict(p, sed_in, wave, L_agn_bol=jnp.array(1e46))
+        sed_out_agn, _pub_agn = comp.predict(p, sed_in, wave, log_L_agn_bol=jnp.array(46.0))
         # Without AGN luminosity
         sed_out_no_agn, _pub_no_agn = comp.predict(p, sed_in, wave)
 

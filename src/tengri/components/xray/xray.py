@@ -541,6 +541,44 @@ def _band_wavelengths_and_frequencies(E_lo: float, E_hi: float, n_grid: int = 20
     return lam, _C_AA / lam
 
 
+#: Hopkins+2007 bolometric correction to 2500 A and the frequency of 2500 A [Hz].
+_BC_2500 = 5.15
+_NU_2500_HZ = 1.199e15
+_LOG10_BC_NU_2500 = float(np.log10(_BC_2500 * _NU_2500_HZ))
+
+
+def l_2500_from_bolometric(log_l_bol: Any) -> jnp.ndarray:
+    r"""Monochromatic :math:`L_\nu(2500\,\AA)` from the bolometric luminosity, in log space.
+
+    The last-resort anchor of the AGN corona when no disc :math:`L_{2500}` is published:
+    :math:`L_{2500} = L_{\rm bol} / (\mathrm{BC}_{2500}\,\nu_{2500})` with
+    :math:`\mathrm{BC}_{2500} = 5.15` (Hopkins et al. 2007 [1]_) and
+    :math:`\nu_{2500} = 1.199\times10^{15}` Hz. Formed as
+    ``pow10(log_l_bol - log10(BC * nu))``, so the ~1e44 erg/s bolometric luminosity is never
+    written (it is ``inf`` in float32); the result, ~1e28 erg/s/Hz, is representable.
+
+    Parameters
+    ----------
+    log_l_bol : array_like, scalar
+        :math:`\log_{10}(L_{\rm bol}/\mathrm{erg\,s^{-1}})` [dex]; ``-inf`` for no AGN.
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`L_\nu(2500\,\AA)` [erg/s/Hz]; exactly 0 for ``-inf``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    References
+    ----------
+    .. [1] P. F. Hopkins, G. T. Richards and L. Hernquist, "An Observational Determination of
+       the Bolometric Quasar Luminosity Function," ApJ, 654, 731 (2007). arXiv:astro-ph/0605678.
+    """
+    return _pow10(jnp.asarray(log_l_bol) - _LOG10_BC_NU_2500)
+
+
 def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     """Present-day absolute Z from a published ``log_metallicity_history``.
 
@@ -1514,9 +1552,7 @@ def _xray_agn_corona_bolometric(
     # Monochromatic luminosity density at 2500 A in erg/s/Hz.
     # L_bol = BC_2500 * nu_2500 * L_nu(2500) => L_nu = L_bol / (BC * nu)
     # BC_2500 ~ 5.15 (Hopkins+2007), nu_2500 = c / 2500 A = 1.199e15 Hz
-    _NU_2500 = 1.199e15  # Hz
-    _BC_2500 = 5.15  # Hopkins+2007 bolometric correction at 2500 A
-    L_2500 = L_agn_bol / (_BC_2500 * _NU_2500)  # erg/s/Hz
+    L_2500 = L_agn_bol / (_BC_2500 * _NU_2500_HZ)  # erg/s/Hz
 
     # alpha_ox = 0.3838 * log10(L_2keV / L_2500A)
     # => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)

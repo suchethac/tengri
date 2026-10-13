@@ -1416,6 +1416,44 @@ def _compute_zone_radii(
     return r_hot_cm, r_warm_cm, r_out_cm
 
 
+def _log_radial_grid(r_lo_cm, r_hi_cm, n_radii: int, float32: bool):
+    r"""Radii and annulus widths of a log-uniform radial grid between two radii.
+
+    Parameters
+    ----------
+    r_lo_cm, r_hi_cm : float
+        Inner and outer radius of the zone [cm].
+    n_radii : int
+        Number of rings.
+    float32 : bool
+        Whether the process runs in pure float32.
+
+    Returns
+    -------
+    r_cm : ndarray, shape (n_radii,)
+        Ring radii :math:`r_i` [cm].
+    dr_cm : ndarray, shape (n_radii,)
+        Ring widths :math:`r_i \ln 10\, \Delta\log_{10} r` [cm].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. In float64 the grid is ``linspace`` of ``log10 r`` and the
+    step is the difference of its first two nodes. In float32 a node near ``log10 r = 16.6``
+    has a spacing of 1.9e-6, so that difference carries a relative error of order 1e-3
+    when the zone spans a few decades over ~100 rings; the step is then formed from the radii
+    as :math:`\Delta = \log_{10}(r_{\rm hi}/r_{\rm lo})/(n-1)` and the radii as
+    :math:`r_i = r_{\rm lo} 10^{i\Delta}`, which never subtracts two nearby logarithms.
+    """
+    if float32:
+        dlog = jnp.log10(r_hi_cm / r_lo_cm) / (n_radii - 1)
+        r_cm = r_lo_cm * 10.0 ** (jnp.arange(n_radii) * dlog)
+    else:
+        log_r = jnp.linspace(jnp.log10(r_lo_cm), jnp.log10(r_hi_cm), n_radii)
+        r_cm = 10.0**log_r
+        dlog = log_r[1] - log_r[0]
+    return r_cm, r_cm * jnp.log(10.0) * dlog
+
+
 def _compute_zone_luminosities(
     nu: jnp.ndarray,
     r_isco_cm: float,
@@ -1512,17 +1550,11 @@ def _compute_zone_luminosities(
     .. [2] A. M. Beloborodov, ApJL, 510, L123 (1999).
     """
     # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
-    log_r_warm = jnp.log10(r_warm_cm)
-    log_r_out = jnp.log10(r_out_cm)
-    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
-    r_outer = 10.0**log_r_outer
+    r_outer, dr_outer = _log_radial_grid(r_warm_cm, r_out_cm, n_radii, float32)
 
     r_ratio_outer = r_outer / r_isco_cm
     rt_outer = jnp.maximum(_nt_rt(r_ratio_outer, agn_a_spin), 1e-30) ** 0.25
     t_outer = t_in * r_ratio_outer ** (-0.75) * rt_outer
-
-    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
-    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
 
     def _outer_ring(r_cm, t_ring, dr_ring):
         """Compute blackbody L_nu contribution from one outer-disk annulus."""
@@ -1539,16 +1571,11 @@ def _compute_zone_luminosities(
             "  python scripts/build_nthcomp_templates.py"
         )
 
-    log_r_hot = jnp.log10(r_hot_cm)
-    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
-    r_warm_grid = 10.0**log_r_warm_grid
+    r_warm_grid, dr_warm = _log_radial_grid(r_hot_cm, r_warm_cm, n_radii, float32)
 
     r_ratio_warm = r_warm_grid / r_isco_cm
     rt_warm = jnp.maximum(_nt_rt(r_ratio_warm, agn_a_spin), 1e-30) ** 0.25
     t_warm = t_in * r_ratio_warm ** (-0.75) * rt_warm
-
-    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
-    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
