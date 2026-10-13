@@ -1116,8 +1116,10 @@ class Posterior:
         comp = self.sed_components(wavelength=wavelength)
         agn = jnp.asarray(comp["sed_agn"])
         total = jnp.asarray(comp["sed_total"])
-        # Avoid divide-by-zero at wavelengths where total is exactly zero.
-        ratio = jnp.where(total > 0.0, agn / jnp.maximum(total, 1e-300), 0.0)
+        # Select the divisor before dividing, so no quotient is formed where total is zero.
+        positive = total > 0.0
+        safe_total = jnp.where(positive, total, 1.0)
+        ratio = jnp.where(positive, agn / safe_total, 0.0)
         if self.samples is None:
             return ratio
         return jnp.asarray(np.median(np.asarray(ratio), axis=0))

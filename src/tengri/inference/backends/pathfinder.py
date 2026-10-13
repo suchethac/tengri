@@ -16,6 +16,7 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 
@@ -181,6 +182,17 @@ def run_pathfinder(
     if verbose:
         print(f"  Pathfinder complete in {wall_time:.1f}s")
 
+    n_nonfinite_draws = int(jnp.sum(~jnp.isfinite(samples_flat).all(axis=-1)))
+    if n_nonfinite_draws:
+        warn_measured(
+            f"Pathfinder: {n_nonfinite_draws} of {n_samples} posterior draws were non-finite. "
+            "The L-BFGS inverse-Hessian estimate may be near-singular on this posterior.",
+            UserWarning,
+            stacklevel=2,
+            n_nonfinite_draws=n_nonfinite_draws,
+            n_samples=n_samples,
+        )
+
     diagnostics = {
         "n_samples": n_samples,
         "maxiter": maxiter,
@@ -191,7 +203,7 @@ def run_pathfinder(
         # be near-singular on a stiff posterior, and a Gaussian sampled from a
         # near-singular covariance returns finite-looking garbage or NaN without
         # any accept step to reject it, so the count is not optional.
-        "n_nonfinite_draws": int(jnp.sum(~jnp.isfinite(samples_flat).all(axis=-1))),
+        "n_nonfinite_draws": n_nonfinite_draws,
     }
     if precondition_diagnostics:
         diagnostics.update(precondition_diagnostics)

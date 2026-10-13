@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Detect parameters whose chains move but never mix (#2112).
 
-A chain that jitters by a sliver of the posterior width around its own centre,
-while the other chains sit around different centres, is not converged and not
+A chain that jitters by a sliver of the posterior width around its own center,
+while the other chains sit around different centers, is not converged and not
 dead: it moves, so the all-divergent and exactly-constant guards stay silent,
 and R-hat is the only instrument that could see it. This module measures the
 two ratios that make the regime visible, per parameter.

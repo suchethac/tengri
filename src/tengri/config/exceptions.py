@@ -507,6 +507,25 @@ class CloudyGridIsochroneMismatchWarning(AdvisoryWarning):
     """
 
 
+class CueIonizingShapeWarning(AdvisoryWarning):
+    """A young-population ionizing shape from the SSP lies outside Cue's training range.
+
+    Cue is queried with seven parameters that describe the shape of the
+    ionizing continuum (``ionspec_index1..4``, ``ionspec_logLratio1..3``),
+    fitted to the SSP. The emulator was trained inside a fixed box for each (the
+    Cue reference code's range; Li et al. 2025, arXiv:2405.04598, Table 1, with
+    two floors printed differently). When the shape fitted to the SSP leaves that
+    box (typically a very hard or very soft ionizing continuum, or a coarsely
+    sampled Lyman continuum) the network would be extrapolating, so tengri clamps
+    the parameter to the nearest bound before the
+    network (a straight-through clamp, gradients kept) and warns here.
+
+    The remedy is an SSP with a densely sampled Lyman continuum below 912 A
+    (for example ``fsps_mist_c3k_a_chabrier`` or ``fsps_prsc_miles_chabrier``),
+    or an explicit ``ionspec_*`` override.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 
@@ -634,8 +653,8 @@ class FrozenMovingChainWarning(UserWarning):
     """Chains that move but never mix: each stays in its own narrow region.
 
     A fit can return normally with zero divergences while every chain jitters
-    by a sliver of the posterior width around a centre that differs from the
-    other chains' centres. R-hat can flag this, but the dead-fit guards cannot:
+    by a sliver of the posterior width around a center that differs from the
+    other chains' centers. R-hat can flag this, but the dead-fit guards cannot:
     they need all-divergent draws or an exactly constant column, and the
     divergence refusal needs a fraction of 0.9. The signature is a within-chain
     spread that is tiny against both the between-chain disagreement and the

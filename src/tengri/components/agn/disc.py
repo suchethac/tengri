@@ -244,7 +244,7 @@ def powerlaw_disc(
     x_int = jnp.clip(_H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
     shape_int = nu_int**agn_alpha * jnp.exp(-x_int)
     integral = jnp.trapezoid(shape_int, nu_int)
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = jnp.maximum(jnp.abs(integral), _representable_denominator(1e-100))
 
     l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
     return l_nu_erg
@@ -506,7 +506,7 @@ def _l_seed_geometric(
     # L_seed = 2 * ∫ F_NT * (Θ/π) * 2πR dR
     integrand = f_nt * covering * 2.0 * jnp.pi * r  # [erg s^-1 cm^-1]
     l_seed = 2.0 * jnp.sum(integrand * dr)
-    return jnp.maximum(l_seed, 1e-100)
+    return jnp.maximum(l_seed, _representable_floor(1e-100))
 
 
 def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float = 0.1) -> float:
@@ -1167,7 +1167,7 @@ def _hot_corona_lnu(
     # Normalize on the fixed internal grid (grid-independent).
     shape_norm = _comp_shape(device_table(_CORONA_NU_GRID))
     integral = jnp.trapezoid(shape_norm, device_table(_CORONA_NU_GRID))
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = jnp.maximum(jnp.abs(integral), _representable_denominator(1e-100))
 
     return l_hot_erg * shape / integral_safe
 
