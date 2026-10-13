@@ -5426,6 +5426,26 @@ def _parse_radio_nu_ref(value: object) -> float:
     return float(value)
 
 
+def _parse_radio_agn_loudness_ref(value: object) -> str:
+    """Resolve ``radio['agn']['loudness_ref']`` against the menu (#2663).
+
+    ``"4400"`` (default) anchors the AGN radio loudness on the 4400 A disc luminosity;
+    ``"2500_30deg"`` anchors it on the 2500 A disc luminosity at 30 deg, CIGALE's
+    ``R_agn`` anchor. An unknown value raises with the menu.
+    """
+    from tengri.components.radio.component import AGN_LOUDNESS_REFS
+
+    if not isinstance(value, str):
+        raise TypeError(
+            f"radio['agn']['loudness_ref'] must be a string, got {type(value).__name__}"
+        )
+    if value not in AGN_LOUDNESS_REFS:
+        raise ValueError(
+            f"radio['agn']['loudness_ref'] must be one of {AGN_LOUDNESS_REFS}, got {value!r}"
+        )
+    return value
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -5542,6 +5562,10 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
                 raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
+            if "loudness_ref" in agn_dict:
+                result["radio_agn_loudness_ref"] = _parse_radio_agn_loudness_ref(
+                    agn_dict["loudness_ref"]
+                )
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -5901,7 +5925,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
     "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
-    "radio.agn": frozenset({"type", "*", "all_params"}),
+    "radio.agn": frozenset({"type", "*", "all_params", "loudness_ref"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
@@ -6127,6 +6151,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
     ),
+    "radio.agn": (_Structural("loudness_ref", "radio_agn_loudness_ref", "4400"),),
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
         _Structural("ir_window", "radio_ir_window", None),

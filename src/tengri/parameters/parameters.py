@@ -684,6 +684,7 @@ class Parameters:
         self.radio_include_freefree = kwargs.pop("radio_include_freefree", None)
         self.radio_ir_window = kwargs.pop("radio_ir_window", None)
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
+        self.radio_agn_loudness_ref = kwargs.pop("radio_agn_loudness_ref", "4400")
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
         self.shock = kwargs.pop("shock", False)
@@ -3149,6 +3150,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "radio_include_freefree": content("thermal free-free on/off changes the emitted radio SED"),
     "radio_ir_window": content("IR band L_IR is integrated over changes the radio normalization"),
     "radio_sf_nu_ref": content("synchrotron anchor frequency changes the emitted radio SED"),
+    "radio_agn_loudness_ref": content("AGN loudness anchor changes the emitted radio SED"),
     "radio_sfr_mode": content("radio SFR mode determines parameters"),
     "shock": content("shock component flag determines parameters"),
     "shock_abundance": content("shock abundance setting determines parameters"),
