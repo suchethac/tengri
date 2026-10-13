@@ -11649,7 +11649,8 @@ class SEDModel:
         the redshift the model is evaluated at (the filters sit at
         ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
         redshift range, uniform in ``ln(1+z)``, and returned as
-        ``{"ln1pz": (n_z,), "values": (n_z, n_filter)}`` so
+        ``{"ln1pz": (n_z,), "values": (n_z, n_filter), "rest_values": (n_filter,)}``
+        (``rest_values`` is the same probe at z = 0, #2559) so
         :meth:`DustSEDComponent.apply` replaces the per-call dense filter
         integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
         evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
@@ -11836,9 +11837,16 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
+            # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
+            # probe is integrated through the filters at z = 0 (#2559). The homogeneity
+            # check above already covers the template, so it is not repeated here.
+            rest_values = lnu_filter_integral_batch(
+                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
+            )
             response = {
                 "ln1pz": built["ln1pz"],
                 "values": built["values"]["R"],
+                "rest_values": rest_values,
                 "log_window_fraction": built["values"]["log_window_fraction"],
             }
 
