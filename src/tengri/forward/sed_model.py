@@ -4702,6 +4702,7 @@ class SEDModel:
                 spec.cue_weights_path,
                 ssp_data=ssp_data,
                 nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+                lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
             )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend

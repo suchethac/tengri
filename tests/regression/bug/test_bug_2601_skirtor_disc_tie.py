@@ -687,23 +687,13 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the merged tree (fix/float32-numerics = origin/main 4d16bd7f0 merged with
-#: fix/precompute-wired-and-checked 956edd2f1). Causes named: #2694 young-sliver SFH integral,
-#: #2807 AGN energy ledger, #2837 library-torus sightline (owner ruling 9: the disc behind a
-#: library torus is dimmed by T = R_n/eta, Fritz eta = 1), #2808 PCHIP torus lookups and
-#: feltre_nlr on all five axes, and "#2818 float32 numerics" (no hard-pinned float64, representable
-#: exponent ceilings, device_table for module constants in disc.py). Not isolated per commit.
-#: Old -> new, relative, against the #2808 pins this file carried before the re-capture
-#: (sum / first bin / middle bin / last bin):
-#:   log M_BH 6: 1.5586759060882227e32 -> 1.5586902495503188e32 (+9.2e-6); 8.1456e13 -> 8.5035e13
-#:     (+4.39e-2); 2.8901825691320397e28 -> 2.8901799287539962e28 (-9.1e-7);
-#:     8.77332638502807e21 -> 8.773302439087775e21 (-2.7e-6)
-#:   log M_BH 8: 1.6507617942542995e32 -> 1.6508958561152344e32 (+8.1e-5); 2.2345886203830524e16
-#:     -> 2.0727111001488856e16 (-7.2e-2); 3.0977105009651904e28 -> 3.098226134579877e28 (+1.7e-4);
-#:     8.823414402335067e21 -> 8.823054902409336e21 (-4.1e-5)
-#:   log M_BH 10: 1.6775034618643003e32 -> 1.6722001219825183e32 (-3.2e-3); 2.341245406443339e16
-#:     -> 1.018808832961018e16 (-5.7e-1); 3.140794236498581e28 -> 3.1303929653712365e28 (-3.3e-3);
-#:     9.54965994194651e21 -> 9.547258877226544e21 (-2.5e-4)
+#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de). Old -> new,
+#: relative, against the pins on origin/main (the file's prior values):
+#:   log M_BH 6: sum +9.20e-06, first +4.39e-02, middle -9.14e-07, last -2.73e-06
+#:   log M_BH 8: sum +8.12e-05, first -7.24e-02, middle +1.66e-04, last -4.07e-05
+#:   log M_BH 10: sum -3.16e-03, first -5.65e-01, middle -3.31e-03, last -2.51e-04
+#: Cause of the mbh 10 move: the #2733 kubota_done corona change on this branch (see the
+#: seam sweep block). #2818 and the #2808 merge are not separated from #2733 by a separate capture.
 #: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
