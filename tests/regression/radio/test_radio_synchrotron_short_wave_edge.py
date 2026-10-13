@@ -284,8 +284,9 @@ def test_bare_ssp_radio_block_is_continuous_through_1_mm(ssp_data_bc03, syntheti
     lo = int(np.nonzero(wave <= 1.0e7)[0][-1])
     nu_ratio = wave[lo + 1] / wave[lo]
     ratio = sed[lo + 1] / sed[lo]
-    # L ~ wave^alpha_eff, alpha_eff in [-0.1, 0.8]: ratio between the two pure power laws
-    assert nu_ratio**-0.1 <= ratio <= nu_ratio**0.8, (ratio, nu_ratio)
+    # L_nu ~ wave^alpha_eff with alpha_eff in [0.1, 0.8] (free-free nu^-0.1, synchrotron nu^-0.8):
+    # the ratio across the cell lies between the two pure power laws, so a drop to zero fails
+    assert nu_ratio**0.1 * (1 - 1e-9) <= ratio <= nu_ratio**0.8, (ratio, nu_ratio)
 
 
 def _build_bare(ssp, sf, neb=None):
