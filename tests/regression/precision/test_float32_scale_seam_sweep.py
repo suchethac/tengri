@@ -521,40 +521,38 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured on the merged tree (origin/main merged into this PR). Both causes are named:
-#: #2694 young-sliver SFH integral (main: the [0, age0] sliver is integrated from the SFH), and
-#: this PR's own cause, #2807 AGN energy ledger: SKIRTOR resampled-then-renormalized on its native
-#: grid (#2319) and the published L_* from the converged log-log integral (#2322). Relative to the
-#: pins this branch carried before the merge, mbh 6 / 8 / 10: rest_sed_sum -1.58e-7 / -2.53e-7 /
-#: -2.78e-7; rest_sed_0 -1.52e-6 at all three; rest_sed_mid -7.0e-8 / -1.9e-7 / -2.1e-7;
-#: rest_sed_last -7.0e-9 / -1.8e-8 / -1.6e-7; photometry (r, W3, W4) within 8.5e-7. Relative to
-#: origin/main's pins (this PR's SKIRTOR change, not yet in main): rest_sed_sum +2.14e-4 /
-#: +4.60e-4 / +5.26e-4; rest_sed_0 +3.78e-3; rest_sed_mid +7.8e-6 / +3.2e-4 / +3.8e-4;
-#: rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4; photometry +8.6e-6 / +1.7e-3 / +2.1e-3 (mbh 6),
-#: +3.4e-4 / +1.7e-3 / +2.1e-3 (8), +3.8e-4 / +1.7e-3 / +2.1e-3 (10). The merged-tree move from
-#: the pre-merge pins is attributed to the main commits merged in (#2694 among them; not
-#: isolated per commit).
+#: Re-captured on the merged tree (origin/main, which carries #2694 and #2807, merged into this
+#: PR). Causes, all named: #2694 young-sliver SFH integral and #2807 AGN energy ledger (both in
+#: origin/main's pins), and this PR's own cause, #2837 library-torus sightline (owner ruling 9: the
+#: disc behind a library torus is dimmed by T = R_n/eta, Fritz eta = 1). Against origin/main's pins
+#: this PR's move is rest_sed_sum +6.4e-11 / +1.27e-5 / +5.09e-5 (mbh 6 / 8 / 10), rest_sed_0
+#: +1.35e-10 at all three, rest_sed_mid 0 / +1.27e-5 / +5.76e-5, rest_sed_last 0 / 0 / 0,
+#: photometry (r, W3, W4) at mbh 8 +1.45e-5 / -2.2e-9 / +3.5e-8 and at mbh 10 +6.2e-5 / +1.6e-7 /
+#: +3.7e-8. Against the pins this branch carried before the merge (no #2694 or #2807): rest_sed_sum
+#: +2.14e-4 / +4.60e-4 / +5.26e-4; rest_sed_0 +3.77e-3 at all three; rest_sed_mid +7.7e-6 / +3.2e-4
+#: / +3.8e-4; rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4. The pre-merge move is the sum of #2694,
+#: #2807 and this PR; the two main commits are not isolated per commit.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5597046410510244e32,
-        "rest_sed_0": 103282334868243.77,
+        "rest_sed_sum": 1.5597046411500994e32,
+        "rest_sed_0": 103282334882173.36,
         "rest_sed_mid": 2.891399138580114e28,
         "rest_sed_last": 8.775542988384492e21,
-        "photometry": (1.099496622290831e-27, 1.5726713600736845e-27, 1.766845109010841e-27),
+        "photometry": (1.099496622290831e-27, 1.572671356554845e-27, 1.7668451701130867e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6765558516018808e32,
-        "rest_sed_0": 2.8333448366304616e16,
-        "rest_sed_mid": 3.154717864930627e28,
+        "rest_sed_sum": 1.676577182161529e32,
+        "rest_sed_0": 2.8333448370125924e16,
+        "rest_sed_mid": 3.1547578351532353e28,
         "rest_sed_last": 8.8390520494989e21,
-        "photometry": (1.2059213157140712e-27, 1.574768447215014e-27, 1.767451896944222e-27),
+        "photometry": (1.2059388269090503e-27, 1.5747684437292912e-27, 1.767451957952492e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7104073961544314e32,
-        "rest_sed_0": 2.9685802223829012e16,
-        "rest_sed_mid": 3.209247277435523e28,
+        "rest_sed_sum": 1.7104944625427754e32,
+        "rest_sed_0": 2.9685802227832704e16,
+        "rest_sed_mid": 3.2094322894946265e28,
         "rest_sed_last": 9.759894495239017e21,
-        "photometry": (1.2208491668455172e-27, 1.5996332488007023e-27, 1.7752334257946788e-27),
+        "photometry": (1.2209249773360414e-27, 1.5996334984921749e-27, 1.7752334913510926e-27),
     },
 }
 

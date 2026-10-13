@@ -265,6 +265,11 @@ def _infer_term_response_decline_reason(model: Any, emitter_name: str) -> str | 
     str | None
         Reason string, or None if unable to determine.
     """
+    # The verdict recorded at the decision is the explanation; re-deriving it is the fallback.
+    recorded = getattr(model, f"_{emitter_name}_term_response_decline", None)
+    if recorded:
+        return recorded
+
     free = set(model.spec.free_params)
     prefix = f"{emitter_name}_"
 

@@ -229,7 +229,12 @@ from collections.abc import Sequence
 #: selected before the division (``jnp.where(total > 0, total, 1.0)``), so the clamped
 #: denominator is gone rather than moved. A removal: the zero case was already excluded by
 #: the select, so no zero is newly exposed.
-EXPECTED_SITES = 80
+#:
+#: 80 -> 79 (#2944): ``components/xray/component.py``'s LMXB age divided by
+#: ``jnp.maximum(_w_sum, ...)``. The shared ``xray.lmxb_stellar_age_gyr`` helper now selects
+#: its denominator before the division (surviving weights, then formed, then 1 Gyr), so the
+#: clamped denominator is gone rather than moved.
+EXPECTED_SITES = 79
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

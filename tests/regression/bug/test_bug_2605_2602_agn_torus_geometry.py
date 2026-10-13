@@ -45,10 +45,13 @@ from tengri.components.agn.blocks.atten import (
     polar_dust_reemission_lnu,
 )
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.fritz import load_fritz_default_grid
 from tengri.components.agn.polar_dust import polar_dust_extinction
 from tengri.components.dust.attenuation import smc
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA
 from tests._data_skip import DATA_DIR
+from tests._torus_sightline_reference import fritz_transmission
 
 pytestmark = pytest.mark.regression_bug
 
@@ -122,26 +125,93 @@ def _skirtor(i_deg, oa, tau=7.0, **extra):
     )
 
 
-def _screen_weight(run, i_deg, tau_a, tau_b):
-    """Type-2 weight of the torus screen at ``i_deg`` as the runner applies it.
+def _normalized_ratio(table, norm, axes, point, face, node_wave):
+    """``R_n = disk_i norm_i / (disk_0 norm_0)`` at the library node nearest ``node_wave``.
 
-    The screen is ``exp(-tau_V k/k_V w)``, so two optical depths at one inclination give
-    ``ln(L_a/L_b) = -(tau_a - tau_b) w`` at V with the disc itself canceling; dividing by the
-    same ratio at ``i = 89`` deg (``w = 1`` there) removes the unit of ``tau_V`` and leaves ``w``.
+    Node-exact PCHIP of the logarithms of the stored disc and of its per-record ``norm``,
+    written here from the library arrays (the previous screen read the stored disc alone).
     """
+    log_t = np.log(np.maximum(np.asarray(table, dtype=float), 1e-35))
+    log_n = np.log(np.maximum(np.asarray(norm, dtype=float), 1e-35))
+    axes = tuple(jnp.asarray(a) for a in axes)
 
-    def ln_ratio(i):
-        return np.log(_at(run(i, tau_a)["disc"], _V) / _at(run(i, tau_b)["disc"], _V))
+    def at(p):
+        return np.asarray(interp_nd_pchip(jnp.asarray(log_t), axes, p)) + float(
+            interp_nd_pchip(jnp.asarray(log_n), axes, p)
+        )
 
-    return ln_ratio(i_deg) / ln_ratio(89.0)
-
-
-def _fritz_screen_weight(i_deg, half):
-    return _screen_weight(lambda i, tau: _fritz(i, half, tau), i_deg, 0.1, 0.3)
+    return np.exp(at(point) - at(face))
 
 
-def _skirtor_screen_weight(i_deg, oa):
-    return _screen_weight(lambda i, tau: _skirtor(i, oa, tau), i_deg, 3.0, 7.0)
+def _fritz_library_ratio_at_node(i_deg, half, tau):
+    """Fritz ``R_n`` (= the screen, eta = 1) at the library node nearest V, and that node [A]."""
+    grid = load_fritz_default_grid()
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    w = np.asarray(grid.wave_grid)
+    i_w = int(np.argmin(np.abs(w - _V)))
+    point = (60.0, tau, -0.5, 4.0, half, 90.0 - i_deg)  # r_ratio, beta, gamma: runner defaults
+    face = (*point[:5], float(axes[5][-1]))
+    ratio = _normalized_ratio(grid.disk, grid.norm, axes, point, face, w[i_w])
+    return float(w[i_w]), float(ratio[i_w])
+
+
+def _skirtor_library_t_at_node(i_deg, oa, tau):
+    """SKIRTOR ``R_n/eta`` at the library node nearest V, and that node [A]."""
+    from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
+
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    axes = tuple(jnp.asarray(a) for a in raw["axes"])
+    w = np.asarray(raw["wave"])
+    i_w = int(np.argmin(np.abs(w - _V)))
+    cos = _cos(i_deg)
+    geometry = (tau, 1.0, 1.0, oa, 20.0)
+    ratio = _normalized_ratio(
+        raw["disk"], raw["norm"], axes, (*geometry, cos), (*geometry, 1.0), w
+    )
+    eta = cos * (1.0 + 2.0 * cos) / 3.0
+    return float(w[i_w]), float(ratio[i_w] / eta)
+
+
+def _screen_at(run, i_deg, wave_aa):
+    """The composed schartmann disc at ``i_deg`` over its face-on value at one wavelength."""
+    w = jnp.asarray([wave_aa])
+    seen = float(_run(i_deg, wave=w, **run)["disc"][0])
+    face = float(_run(0.0, wave=w, **run)["disc"][0])
+    return seen / face
+
+
+def _fritz_screen(i_deg, half):
+    wave, expected = _fritz_library_ratio_at_node(i_deg, half, 0.3)
+    got = _screen_at(
+        dict(
+            agn_torus_block="fritz",
+            agn_fritz_oa=half,
+            agn_fritz_tau=0.3,
+            agn_torus_frac=0.3,
+            agn_attenuation_block="none",
+        ),
+        i_deg,
+        wave,
+    )
+    return got, expected
+
+
+def _skirtor_screen(i_deg, oa):
+    wave, expected = _skirtor_library_t_at_node(i_deg, oa, 7.0)
+    got = _screen_at(
+        dict(
+            agn_torus_block="skirtor",
+            agn_oa_skirtor=oa,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_torus_frac=0.3,
+            agn_attenuation_block="none",
+        ),
+        i_deg,
+        wave,
+    )
+    return got, expected
 
 
 _EBV = 0.3
@@ -190,18 +260,18 @@ def _skirtor_polar_weight(i_deg, oa, **extra):
 # 1. one inclination, one Type-1/2 boundary
 # ----------------------------------------------------------------------------------
 @pytest.mark.parametrize("half", _HALVES)
-def test_fritz_disc_screen_type1_limit_is_the_half_angle(half):
-    """Type 1 iff i < half: the screen weight is ``sigmoid((cos half - cos i)/0.025)``.
+def test_fritz_disc_screen_is_the_library_at_the_half_angle(half):
+    """The Fritz screen is the library's normalized ratio at ``psi = 90 - i`` and this half-angle.
 
-    The weight is 0.5 at i = half (it was at 90 - half: 70 / 50 / 30 deg for half 20 / 40 / 60).
+    Previously the screen was a Type-1/2 logistic about ``i = half`` raised to the library
+    ratio, and this test read the logistic's weight (0.5 at ``i = half``). The screen is now the
+    library ratio itself with no switch, so the half-angle enters only as the library's own
+    opening-angle axis; the screen is compared with ``R_n`` read from the library arrays.
     """
-    cos_half = _cos(half)
     for i in (half - 15.0, half - 5.0, half, half + 5.0, half + 15.0):
-        expected = _sigmoid((cos_half - _cos(i)) / _WIDTH)
-        got = _fritz_screen_weight(i, half)
+        got, expected = _fritz_screen(float(np.clip(i, 1.0, 85.0)), half)
         assert got == pytest.approx(expected, abs=2e-3), (
-            f"half={half}: Fritz screen Type-2 weight at i={i:g} deg is {got:.4f}, "
-            f"the Type-1 limit i = half gives {expected:.4f}"
+            f"half={half}: Fritz screen at i={i:g} deg is {got:.4f}, library R_n {expected:.4f}"
         )
 
 
@@ -232,14 +302,19 @@ def test_skirtor_polar_mask_follows_the_torus_angle(oa):
 
 
 @pytest.mark.parametrize("i_deg", (30.0, 45.0, 50.0, 55.0, 60.0, 70.0))
-def test_polar_and_torus_weights_are_complementary(i_deg):
-    """One angle, one width: polar Type-1 weight + screen Type-2 weight = 1 at every i."""
+def test_skirtor_screen_and_polar_cone_share_the_torus_angle(i_deg):
+    """One angle: the polar cone is Type 1 about ``90 - oa`` and the screen is the library's.
+
+    The screen was a logistic whose Type-2 weight plus the polar Type-1 weight summed to one.
+    The screen is now the library's ``R_n/eta`` at the same ``oa`` (no logistic), so the pair is
+    checked as two statements about the one angle: the polar weight is the logistic about
+    ``90 - oa``, and the screen is the library value at that ``oa``.
+    """
     oa = 40.0
-    w_polar = _skirtor_polar_weight(i_deg, oa)
-    w_screen = _skirtor_screen_weight(i_deg, oa)
-    assert w_polar + w_screen == pytest.approx(1.0, abs=2e-3), (
-        f"i={i_deg:g} deg: polar Type-1 {w_polar:.4f} + torus-screen Type-2 {w_screen:.4f}"
-    )
+    expected_polar = _sigmoid((_cos(i_deg) - np.sin(np.radians(oa))) / _WIDTH)
+    assert _skirtor_polar_weight(i_deg, oa) == pytest.approx(expected_polar, abs=2e-3)
+    got, expected = _skirtor_screen(i_deg, oa)
+    assert got == pytest.approx(expected, abs=2e-3)
 
 
 def test_explicit_polar_oa_overrides_the_torus_angle():
@@ -1144,7 +1219,6 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
     that against CIGALE.
     """
     from tengri.components.agn.blocks import _protocol as protocol
-    from tengri.components.agn.blocks.torus_screen import torus_screen_transmission
     from tengri.utils.physics_constants import L_SUN
 
     mbh = 8.0
@@ -1155,11 +1229,7 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
         _FRITZ_WAVE, _LOG_LBOL, agn_log_mbh=mbh
     )
     cos_inc = _cos_of_psy(psy)
-    screen = np.asarray(
-        torus_screen_transmission(
-            _FRITZ_WAVE, cos_inc=cos_inc, oa_deg=90.0 - _FRITZ_HALF, tau_v=_FRITZ_TIE_TAU
-        )
-    )
+    screen = fritz_transmission(wave, psy, oa=_FRITZ_HALF, tau=_FRITZ_TIE_TAU)
     tied = comps["disc"] * C_AA / wave**2  # L_lambda [erg/s/A]
     b = tied[below] / (np.asarray(h_lam)[below] * screen[below])
     np.testing.assert_allclose(b, b[0], rtol=1e-9)  # one scale: b H T
