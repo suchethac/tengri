@@ -46,6 +46,7 @@ __all__ = ["EmissionComponent"]
 #: Produced by ``_apply_photometry_precomp`` / ``_apply_spectrum_precomp``.
 _PRECOMP_UNITS: dict[str, str] = {
     "dust_emission_phot_lnu_precomp": "erg/s/Hz",
+    "dust_emission_restband_lnu_precomp": "erg/s/Hz",
     "dust_emission_spec_lnu_precomp": "erg/s/Hz",
 }
 
@@ -615,7 +616,8 @@ class EmissionComponent(SEDModelComponent):
         Returns
         -------
         mapping[str, ndarray]
-            Published dict with dust_emission_phot_lnu_precomp key.
+            Published dict with dust_emission_phot_lnu_precomp and
+            dust_emission_restband_lnu_precomp keys.
         """
         # ``sed_ir`` is the full-grid emission, computed ONCE by apply() and shared with
         # the spectrum branch and with sed_intrinsic. Recomputing it per branch was three
@@ -666,7 +668,47 @@ class EmissionComponent(SEDModelComponent):
                 # Fallback: effective wavelength sample (no padded curves)
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
 
-        return {"dust_emission_phot_lnu_precomp": phot_lnu}
+        restband_lnu = self._restband_phot_lnu(
+            sed_ir, state, band_response, L_ir, filter_eff_waves
+        )
+        return {
+            "dust_emission_phot_lnu_precomp": phot_lnu,
+            "dust_emission_restband_lnu_precomp": restband_lnu,
+        }
+
+    @staticmethod
+    def _restband_phot_lnu(
+        sed_ir: jnp.ndarray,
+        state: ForwardState,
+        band_response: Mapping[str, Any] | None,
+        L_ir: jnp.ndarray,
+        filter_eff_waves: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Dust IR emission integrated through the rest band (#2559).
+
+        ``phot_rest_fnu`` is the SED at z = 0, so the rest band is the unit-luminosity
+        integral at redshift 0, not the observed-band value. Three sources, in order:
+        the band-response table's ``rest_values``, the padded-filter integral at z = 0,
+        and an effective-wavelength sample at the rest-band pivots.
+
+        Returns
+        -------
+        ndarray, shape (n_filter,)
+            Rest-band luminosity [erg/s/Hz].
+        """
+        table = None if band_response is None else band_response.get("rest_values")
+        if table is not None:
+            return L_ir * table
+        fw_pad = state.derived.get("phot_filter_waves_padded")
+        ft_pad = state.derived.get("phot_filter_trans_padded")
+        if fw_pad is not None:
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
+            return lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, 0.0)
+        rest_eff = state.derived.get("filter_restband_eff_waves")
+        if rest_eff is None:
+            rest_eff = filter_eff_waves
+        return jnp.interp(rest_eff, state.wave, sed_ir)
 
     def _apply_spectrum_precomp(
         self,
