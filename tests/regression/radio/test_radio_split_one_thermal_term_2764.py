@@ -77,6 +77,22 @@ def _build(ssp, neb):
         )
 
 
+def _tir_luminosity(state) -> float:
+    """L_IR over 8-1000 um [erg/s], integrated from the dust SED independently of the component.
+
+    L_nu is linear in nu between grid nodes, the window edges are interpolated, and the
+    trapezoid rule runs over nu.
+    """
+    wave = np.asarray(state.wave, dtype=float)
+    nu = _C_AA / wave[::-1]
+    lnu = np.asarray(state.derived["sed_dust_ir"], dtype=float)[::-1]
+    nu_lo, nu_hi = _C_AA / 1.0e7, _C_AA / 8.0e4
+    inside = (nu > nu_lo) & (nu < nu_hi)
+    nu_w = np.concatenate([[nu_lo], nu[inside], [nu_hi]])
+    lnu_w = np.interp(nu_w, nu, lnu)
+    return float(np.sum(0.5 * (lnu_w[1:] + lnu_w[:-1]) * np.diff(nu_w)))
+
+
 def _node(wave, nu):
     """Index of the grid node nearest ``nu`` (compare at nodes: no interpolation error)."""
     return int(np.argmin(np.abs(np.log(wave) - np.log(_C_AA / nu))))
@@ -96,7 +112,8 @@ def test_one_thermal_term_in_the_built_model(ssp_data_bc03, backend):
     state = model.predict_state(model.spec.sample(jax.random.PRNGKey(0)))
     wave = np.asarray(state.wave)
     radio = np.asarray(state.derived["sed_radio"])
-    cal = float(state.derived["L_ir"]) / (3.75e12 * 10.0**_Q)
+    # Bell's L_IR is the 8-1000 um band (Eq. 1), the component's default window.
+    cal = _tir_luminosity(state) / (3.75e12 * 10.0**_Q)
 
     idx = [_node(wave, f) for f in (0.5e9, 1.4e9, 5e9)]
     nu = _C_AA / wave[idx]
