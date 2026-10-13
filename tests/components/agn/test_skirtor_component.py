@@ -115,7 +115,7 @@ class TestSKIRTORComponentBasics:
         """outputs() method returns the six CIGALE-faithful cross-component keys.
 
         Post-#329 (CIGALE-faithful BLR/NLR/X-ray/SKIRTOR), SKIRTORTorus publishes
-        a richer set: separate disc/torus/polar-dust bolometric luminosities (each as an
+        a richer set: separate disc/torus/polar-dust/unemitted-disc luminosities (each as an
         angle-integrated log10 power [dex] and its line-of-sight sibling, #2851), the
         AGN-only 2500 A monochromatic luminosity (used for α_OX), and the mid-IR
         diagnostics at 6 and 12 micron.
@@ -126,12 +126,16 @@ class TestSKIRTORComponentBasics:
         expected = {
             "log_L_agn_disc",
             "log_L_agn_disc_los",
+            "log_L_agn_disc_unemitted",
+            "log_L_agn_disc_unemitted_los",
             "log_L_agn_torus",
             "log_L_agn_torus_los",
             "log_L_agn_polar_dust",
             "log_L_agn_polar_dust_los",
             "L_agn_disc_lsun",
             "L_agn_disc_los_lsun",
+            "L_agn_disc_unemitted_lsun",
+            "L_agn_disc_unemitted_los_lsun",
             "L_agn_torus_lsun",
             "L_agn_torus_los_lsun",
             "L_agn_polar_dust_lsun",

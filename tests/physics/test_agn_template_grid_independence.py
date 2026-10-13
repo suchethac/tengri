@@ -764,14 +764,16 @@ _SKIRTOR_CALLER = np.geomspace(1.0e3, 1.0e7, 2000)
 
 @pytest.mark.parametrize("cos_inc", [1.0, float(np.cos(np.pi / 4.0)), 0.0])
 def test_skirtor_torus_integral_equals_its_target_on_caller_grid(cos_inc):
-    """The resampled torus integrates to its enforced bolometric power to 1e-4.
+    """The resampled torus integrates, on the caller grid, to the raw record's power (1e-4).
 
-    The target is ``10**log_lbol * L_sun * frac_agn``. The integral is taken on the
-    caller grid, the way a downstream consumer would integrate the SED.
+    The target is read from the file with ``h5py`` and SciPy (``RawSkirtor``): the dust power
+    of the record along ``cos_inc`` times the one scale that sets the sphere-mean native budget
+    to ``10**log_lbol * L_sun * frac_agn``. The integral is taken on the caller grid, the way a
+    downstream consumer would integrate the SED.
     """
     from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
     from tengri.components.agn.skirtor import create_skirtor_components_from_grid
-    from tengri.utils.physics_constants import L_SUN
+    from tests.physics._skirtor_reference import RawSkirtor
 
     grid = _DATA / "skirtor_templates_v3.h5"
     if not grid.is_file():
@@ -779,7 +781,11 @@ def test_skirtor_torus_integral_equals_its_target_on_caller_grid(cos_inc):
     components = create_skirtor_components_from_grid(str(grid))
     wave = jnp.asarray(_SKIRTOR_CALLER)
     out = components(wave, agn_log_lbol=10.0, agn_cos_inc=cos_inc, frac_agn=0.5)
-    target = 10.0**10.0 * L_SUN * 0.5
+    raw = RawSkirtor(str(grid))
+    point = (7.0, 1.0, 1.0, 40.0, 20.0)  # the defaults of the components function
+    keys = ("tau_skirtor", "p_skirtor", "q_skirtor", "oa_skirtor", "radius_ratio")
+    scale = raw.scale({**dict(zip(keys, point, strict=True)), "log_lbol": 10.0, "torus_frac": 0.5})
+    target = scale * raw.power("dust", point, cos_inc)
     nu = wavelength_to_nu(wave)
     # The disc is hot and extends below this grid's 1000 A start, so only the torus
     # dust, which the caller grid covers, is checked here.
