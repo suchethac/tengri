@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.scale import representable_denominator, representable_floor
+
 
 def fracagn_to_log_lbol(
     frac_agn: float,
@@ -79,7 +81,7 @@ def fracagn_to_log_lbol(
     # Avoid division by zero
     frac_safe = jnp.clip(frac_agn, 0.0, 0.9999)
     l_agn = l_dust * frac_safe / (1.0 - frac_safe)
-    log_lbol = jnp.log10(l_agn + 1e-100)
+    log_lbol = jnp.log10(l_agn + representable_floor(1e-100))
     return log_lbol
 
 
@@ -118,6 +120,6 @@ def log_lbol_to_fracagn(
     """
     l_agn = 10.0**log_lbol
     l_total = l_agn + l_dust
-    l_total_safe = jnp.maximum(l_total, 1e-100)
+    l_total_safe = jnp.maximum(l_total, representable_denominator(1e-100))
     frac_agn = l_agn / l_total_safe
     return jnp.clip(frac_agn, 0.0, 0.9999)

@@ -8,6 +8,7 @@ especially edge cases like negative defaults that parse as UnaryOp.
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 
@@ -97,3 +98,40 @@ val = p.get("x", -2.0)
     assert source_name == "x"
     assert is_literal is True, f"Negative literal in .get() was not detected: {repr_val}"
     assert repr_val == "-2.0"
+
+
+@pytest.mark.unit
+def test_nebular_tree_is_a_default_scope() -> None:
+    """The nebular tree is swept by the default run (#2297), not only by an explicit --scope."""
+    from tools.check_literal_param_defaults import DEFAULT_SCOPES, ROOT
+
+    assert ROOT / "src" / "tengri" / "components" / "nebular" in DEFAULT_SCOPES
+
+
+@pytest.mark.unit
+def test_nebular_tree_passes_with_its_baseline() -> None:
+    """Every nebular literal site is either fixed or baselined; the baseline has no stale entry."""
+    from tools.check_literal_param_defaults import ROOT, main
+
+    nebular = ROOT / "src" / "tengri" / "components" / "nebular"
+
+    assert main(["--scope", str(nebular)]) == 0
+
+
+@pytest.mark.unit
+def test_baseline_suppresses_only_listed_sites() -> None:
+    """A baseline key matches one exact site; an unlisted literal site is not suppressed."""
+    from tools.check_literal_param_defaults import _load_baseline, _site_key
+
+    baseline = _load_baseline()
+    shock_site = _site_key(
+        Path("src/tengri/components/nebular/shock.py"),
+        "compute_shock_sed(): shock_log_density = 0.0  (signature default)",
+    )
+    new_site = _site_key(
+        Path("src/tengri/components/nebular/shock.py"),
+        "compute_shock_sed(): shock_log_density = 0.5  (signature default)",
+    )
+
+    assert shock_site in baseline
+    assert new_site not in baseline
