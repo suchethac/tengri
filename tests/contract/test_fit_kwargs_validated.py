@@ -136,7 +136,7 @@ def test_runner_kwarg_still_passes_through(entry, method, sed_3band, fwd_3band, 
 
 
 # PopulationFitter takes a hierarchical SED model factory and a population of
-# galaxies; building one is out of scope for a contract lane. The validation
+# galaxies; building one is out of scope for a contract test. The validation
 # runs before any model state is read, so a bare instance exercises it exactly.
 _POP_METHODS = ("vi_nonlinear_fast", "vi_linear_fast", "mcmc_raytrace")
 
