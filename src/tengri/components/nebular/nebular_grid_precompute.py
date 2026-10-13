@@ -77,7 +77,7 @@ from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
-from tengri.utils.scale import apply_log10_scale, pow10
+from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -1569,7 +1569,8 @@ def precompute_nebular_grid(
 
     def _stack_log(arr) -> jnp.ndarray:
         # log space: nebular luminosities span decades across the ionization grid
-        return jnp.log10(jnp.maximum(arr, 1e-300)).reshape(*grid_shape, arr.shape[-1])
+        floor = representable_floor(1e-300)
+        return jnp.log10(jnp.maximum(arr, floor)).reshape(*grid_shape, arr.shape[-1])
 
     log_line = _stack_log(line_all)
     log_phot = None if phot_all is None else _stack_log(phot_all)

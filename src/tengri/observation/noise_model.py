@@ -9,8 +9,10 @@ manually adding noise_frac_cal / noise_dof to Parameters.
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key
 from tengri.parameters.priors import Distribution, Fixed
@@ -70,7 +72,21 @@ class NoiseModel:
     student_t_dof: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate that array calibration floors are not arrays of Distributions."""
+        """Validate the Student-t dof and numeric calibration floor, then the floor dtype.
+
+        Raises
+        ------
+        ValueError
+            If ``student_t_dof`` is not None and not positive and finite, or a numeric
+            ``calibration_floor`` holds a negative or non-finite value. NaN fails the
+            negated comparisons, so it is rejected as well.
+        TypeError
+            If an array ``calibration_floor`` holds Distributions.
+        """
+        dof = self.student_t_dof
+        if dof is not None and not (math.isfinite(float(dof)) and float(dof) > 0):
+            msg = f"student_t_dof must be None or positive and finite, got {dof}"
+            raise ValueError(msg)
         # Check if calibration_floor is an array with object dtype
         if (
             isinstance(self.calibration_floor, jnp.ndarray)
@@ -84,6 +100,14 @@ class NoiseModel:
                         "only scalar or array of numeric values are supported"
                     )
                     raise TypeError(msg)
+        if not isinstance(self.calibration_floor, Distribution):
+            floor_values = np.asarray(self.calibration_floor, dtype=float)
+            if not np.all(np.isfinite(floor_values) & (floor_values >= 0.0)):
+                msg = (
+                    "calibration_floor must be finite and non-negative, "
+                    f"got {self.calibration_floor}"
+                )
+                raise ValueError(msg)
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this noise model.

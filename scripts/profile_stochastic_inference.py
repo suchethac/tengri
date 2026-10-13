@@ -9,6 +9,7 @@ Measures:
 
 import time
 import tracemalloc
+import zlib
 from pathlib import Path
 
 import jax
@@ -147,7 +148,7 @@ def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwarg
     print(f"\nWarmup runs (n={n_warmup}, should be fast - no recompilation)...")
     runtimes = []
     for i in range(n_warmup):
-        key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
+        key_i = jax.random.fold_in(rng_key, zlib.crc32(f"warmup_{i}".encode()) % (2**31))
         t_start = time.perf_counter()
         _ = fitter.run(method, key=key_i, **kwargs)
         t_runtime = time.perf_counter() - t_start

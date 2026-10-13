@@ -90,7 +90,12 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # 23 -> 22: the cutoff power-law band norm (``xray.py``, ``_cutoff_powerlaw_band_norm``) floored
 # with a literal ``1e-60`` that is 0 in float32; it now uses ``representable_floor``. A
 # migration of one site.
-_PINNED = 22
+# 22 -> 18: the float32 floor pass on the magnitude, nebular-grid and fesc-slope seams
+# (#1492). ``magnitudes.py`` ``surface brightness`` conversions floored ``area_arcsec2`` at
+# ``1e-300`` (two sites), ``nebular_grid_precompute.py``'s table log stack and
+# ``fesc_model.py``'s UV-slope regression floored at ``1e-300`` and ``1e-50``. All four
+# now use ``representable_floor``. Migrations, not deletions.
+_PINNED = 18
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
