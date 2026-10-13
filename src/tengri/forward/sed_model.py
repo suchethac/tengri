@@ -5022,6 +5022,7 @@ class SEDModel:
             RADIO_WAVE_MAX,
             RADIO_WING_PTS_PER_DECADE,
             RADIO_WING_START,
+            SSP_EDGE_STEP_REL,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -5071,6 +5072,17 @@ class SEDModel:
                         endpoint=True,
                     )[1:]
                 )
+
+        # The stellar SED is zero beyond the SSP grid. Where the master grid runs past
+        # that edge, a node just above it carries the zero, so linear interpolation
+        # cannot ramp the edge node's flux down across the whole next cell (#2578).
+        master_max = max(
+            [ssp_max]
+            + [float(np.max(g)) for g in component_grids if np.size(g)]
+            + [float(np.max(w)) for w in extra_wings if np.size(w)]
+        )
+        if master_max > ssp_max:
+            extra_wings.append(np.array([ssp_max * (1.0 + SSP_EDGE_STEP_REL)]))
 
         if component_grids or extra_wings:
             self._rest_wavelength = make_union_grid(
