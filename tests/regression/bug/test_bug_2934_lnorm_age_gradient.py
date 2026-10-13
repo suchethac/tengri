@@ -86,4 +86,5 @@ def test_lnorm_age_gradient_matches_central_difference(models):
 
     fd = (at(age_gyr + h) - at(age_gyr - h)) / (2.0 * h)
     assert jnp.isfinite(ad)
+    assert ad != 0.0
     assert abs(float(ad) - float(fd)) <= 1e-4 * abs(float(fd))
