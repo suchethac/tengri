@@ -326,6 +326,8 @@ the forward model, and listed oldest first within each group.
   [doi:10.1051/0004-6361:20053936](https://doi.org/10.1051/0004-6361:20053936).
 - X-ray binary luminosity scalings with stellar mass and SFR. Lehmer et al.
   (2016), [arXiv:1604.06461](https://arxiv.org/abs/1604.06461).
+- HMXB metallicity and LMXB age luminosity scalings (Eqs. 3 and 4). Fragos et al.
+  (2013), [arXiv:1306.1405](https://arxiv.org/abs/1306.1405).
 - X-ray AGN corona, the X-CIGALE alpha-ox relation. Yang et al. (2020),
   [doi:10.1093/mnras/stz3001](https://doi.org/10.1093/mnras/stz3001).
 
