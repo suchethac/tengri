@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel, SSPData
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.components.xray.xray import (
     XRB_E_CUT_KEV,
@@ -120,6 +120,30 @@ _TAU_GYR = 1.0
 _AGE_GYR = 5.0
 
 
+@pytest.fixture(scope="module")
+def ssp_with_mass_remaining():
+    """Smooth synthetic SSP with a mass-remaining table, so the age tests run in CI.
+
+    120 log-spaced ages (1 Myr to 13.8 Gyr) keep the CIC age binning within the
+    test tolerance of a fine quadrature. The surviving fraction falls from 1 to
+    0.55 with log age and varies mildly with metallicity, like a real SSP.
+    """
+    n_age = 120
+    wave = jnp.logspace(2.0, 7.0, 200)
+    lg_age = jnp.linspace(-3.0, 1.14, n_age)
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    flux = (5000.0 / wave)[None, None, :] ** 2 * jnp.ones((3, n_age, 1)) + 1e-12
+    frac = 1.0 - 0.45 * (lg_age + 3.0) / 4.14
+    mass_remaining = frac[None, :] * (1.0 + 0.05 * (lgmet - lgmet.mean()))[:, None]
+    return SSPData(
+        ssp_wave=wave,
+        ssp_flux=flux,
+        ssp_lg_age_gyr=lg_age,
+        ssp_lgmet=lgmet,
+        ssp_mass_remaining=mass_remaining,
+    )
+
+
 def _model(ssp, logzsol):
     return SEDModel.build(
         ssp_data=ssp,
@@ -144,23 +168,22 @@ def _model(ssp, logzsol):
     )
 
 
-def test_lmxb_age_is_weighted_by_surviving_mass(ssp_data_bc03):
+def test_lmxb_age_is_weighted_by_surviving_mass(ssp_with_mass_remaining):
     r"""The LMXB age is :math:`\int t\,\mathrm{SFR}\,m\,dt / \int \mathrm{SFR}\,m\,dt`.
 
     ``m`` is the SSP surviving-mass fraction at the galaxy's metallicity, the same
     mass that multiplies the LMXB luminosity (Fragos+2013 Eq. 4, "mass-weighted
     mean stellar age of the population"). Independent reference: a 2e5-point
-    quadrature of a delayed-tau SFH against the SSP mass-remaining row, which
-    is 3.1247 Gyr here; the formed-mass weighting gives 3.1755 Gyr, 1.7% higher.
+    quadrature of a delayed-tau SFH against the SSP mass-remaining row. The
+    formed-mass weighting differs from it by more than 1%.
     """
-    ssp = ssp_data_bc03
-    node = len(np.asarray(ssp.ssp_lgmet)) // 2
+    ssp = ssp_with_mass_remaining
+    node = 1
     logzsol = float(np.asarray(ssp.ssp_lgmet)[node]) - LOG10_ZSUN
     state = _model(ssp, logzsol).predict_state({})
     age = float(XRaySEDComponent().emitter_inputs(state.derived)["stellar_age_gyr"])
 
     ages = 10.0 ** np.asarray(ssp.ssp_lg_age_gyr)
-    ages[0] = 0.0
     lookback = np.linspace(0.0, _AGE_GYR, 200001)
     sfr = (_AGE_GYR - lookback) * np.exp(-(_AGE_GYR - lookback) / _TAU_GYR)
     m_rem = np.interp(lookback, ages, np.asarray(ssp.ssp_mass_remaining)[node])
@@ -169,15 +192,13 @@ def test_lmxb_age_is_weighted_by_surviving_mass(ssp_data_bc03):
     )
     formed = np.trapezoid(lookback * sfr, lookback) / np.trapezoid(sfr, lookback)
 
-    assert abs(formed / surviving - 1.0) > 0.015  # the two definitions are distinguishable
+    assert abs(formed / surviving - 1.0) > 0.010  # the two definitions are distinguishable
     assert age == pytest.approx(surviving, rel=2e-3)
 
 
-def test_lmxb_age_and_mass_share_one_weighting(ssp_data_bc03):
+def test_lmxb_age_and_mass_share_one_weighting(ssp_with_mass_remaining):
     """The age weights sum to the surviving mass the LMXB luminosity multiplies."""
-    ssp = ssp_data_bc03
-    state = _model(ssp, 0.0).predict_state({})
+    state = _model(ssp_with_mass_remaining, -0.5).predict_state({})
     weights = np.asarray(state.derived["age_weights_surviving"])
-    assert weights.sum() == pytest.approx(
-        10.0 ** float(state.derived["log_mstar_surviving"]), rel=1e-9
-    )
+    surviving = 10.0 ** float(state.derived["log_mstar_surviving"])
+    assert weights.sum() == pytest.approx(surviving, rel=1e-9)

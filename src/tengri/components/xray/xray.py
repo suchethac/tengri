@@ -595,6 +595,65 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     return jnp.power(10.0, arr[0])
 
 
+def lmxb_stellar_age_gyr(
+    age_weights_surviving: Any,
+    age_weights: Any,
+    ssp_ages_yr: Any,
+) -> jnp.ndarray:
+    r"""Mass-weighted stellar age for the LMXB relation [Gyr].
+
+    The age in Fragos et al. 2013 (ApJL 776, L31, Eq. 4 [1]_) is the
+    "mass-weighted mean stellar age of the population", and the LMXB luminosity
+    multiplies the stellar mass the population holds now. Both therefore use the
+    surviving mass: the age is weighted by the surviving mass per SSP age bin
+    (``age_weights_surviving``), the quantity that sums to ``10**log_mstar``.
+    Every X-ray component reads the age through this one function so that the
+    age and the mass cannot drift apart again.
+
+    .. math::
+
+        t_\star = \frac{\sum_i w_i\, t_i}{\sum_i w_i}
+
+    with :math:`w_i` the surviving mass [Msun] in SSP age bin :math:`i` and
+    :math:`t_i` its age [Gyr].
+
+    Parameters
+    ----------
+    age_weights_surviving : array_like, shape (n_age,) or scalar
+        Surviving mass per SSP age bin [Msun]. A sum of zero means "not
+        published" (a declared-but-unpublished optional input arrives as a 0-d
+        zero), and the formed-mass weights stand in.
+    age_weights : array_like, shape (n_age,) or scalar
+        Formed mass per SSP age bin [Msun], the fallback.
+    ssp_ages_yr : array_like, shape (n_age,)
+        SSP age axis [yr].
+
+    Returns
+    -------
+    ndarray, scalar
+        Stellar age [Gyr]; 1.0 when neither set of weights sums above zero.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: the denominator is selected before the division, so
+    the reverse pass carries no ``0 * inf``.
+
+    References
+    ----------
+    .. [1] T. Fragos et al., "Energy Feedback from X-ray Binaries in the Early
+       Universe," ApJ, 776, L31 (2013). arXiv:1306.1405.
+       https://doi.org/10.1088/2041-8205/776/2/L31
+    """
+    w_surviving = jnp.asarray(age_weights_surviving)
+    w_formed = jnp.asarray(age_weights)
+    weights = jnp.where(jnp.sum(w_surviving) > 0.0, w_surviving, w_formed)
+    w_sum = jnp.sum(weights)
+    live = w_sum > 0.0
+    safe_sum = jnp.where(live, w_sum, 1.0)
+    age = jnp.sum(weights * jnp.asarray(ssp_ages_yr)) / safe_sum / 1.0e9
+    return jnp.where(live, age, 1.0)
+
+
 _LOG_L_HOTGAS_PER_SFR = float(np.log10(8.3e38))
 """log10 of the hot-gas 0.5-2 keV luminosity per unit SFR [dex re erg/s/(Msun/yr)].
 

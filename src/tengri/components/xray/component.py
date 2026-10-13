@@ -53,6 +53,7 @@ from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
+    lmxb_stellar_age_gyr,
     metallicity_from_history,
     xray_total_log_band_luminosities,
     xray_total_lopez24_log_band_luminosities,
@@ -67,7 +68,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.scale import log10_add, representable_denominator
+from tengri.utils.scale import log10_add
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -442,19 +443,12 @@ class XRaySEDComponent(TemplateThreading):
         # that is agreement, not the definition. Falls back to the formed-mass
         # weights when the stellar component publishes no surviving ones, and to
         # 1 Gyr only if there are no weights at all.
-        ssp_ages_yr = jnp.asarray(derived.get("ssp_ages_yr", 0.0))
         # A declared-but-unpublished optional input arrives as a 0-d zero, not as
-        # a missing key, so "absent" is "sums to zero".
-        w_surviving = jnp.asarray(derived.get("age_weights_surviving", 0.0))
-        w_formed = jnp.asarray(derived.get("age_weights", 0.0))
-        age_weights = jnp.where(jnp.sum(w_surviving) > 0.0, w_surviving, w_formed)
-        _w_sum = jnp.sum(age_weights)
-        stellar_age_gyr = jnp.where(
-            _w_sum > 0.0,
-            jnp.sum(age_weights * ssp_ages_yr)
-            / jnp.maximum(_w_sum, representable_denominator(1e-30))
-            / 1.0e9,
-            1.0,
+        # a missing key; the shared helper reads "absent" as "sums to zero".
+        stellar_age_gyr = lmxb_stellar_age_gyr(
+            derived.get("age_weights_surviving", 0.0),
+            derived.get("age_weights", 0.0),
+            derived.get("ssp_ages_yr", 0.0),
         )
 
         # The HMXB half of Fragos+2013 (Eq. 3) is a quartic in Z, and steeper than the
