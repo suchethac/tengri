@@ -158,6 +158,7 @@ from tengri.parameters.sentinels import (
     WILDCARD_KEY,
     _Sentinel,
 )
+from tengri.parameters.timing import check_free_gyr_alias
 
 __all__ = ["parameters_to_groups", "parse_groups"]
 
@@ -1303,6 +1304,7 @@ def parse_groups(**kwargs) -> Parameters:
                     # honored.
                     toplevel_registry_default = structural_params.get_distribution(param_name)
                     expanded = _expand_free(param_name, toplevel_registry_default)
+                    check_free_gyr_alias(param_name, FREE)
                     if expanded.is_fixed:
                         raise ParameterError(
                             f"{param_name!r}: FREE cannot be honored -- "
@@ -8313,6 +8315,7 @@ def _resolve_value(
             # message reads as "pass an explicit prior", never as "this is
             # broken".
             expanded = _expand_free(param_name, registry_default)
+            check_free_gyr_alias(param_name, FREE)
             if expanded.is_fixed:
                 raise ParameterError(
                     f"{short_name!r}: FREE cannot be honored -- {param_name!r} "

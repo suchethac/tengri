@@ -131,18 +131,66 @@ def settle_timing_pairs(resolved, provenance, *, redshift_fixed=None):
             continue
         gyr_dist = resolved[gyr_name]
         if not gyr_dist.is_fixed:
-            raise ConfigError(
-                f"{gyr_name!r} takes a free prior, but an absolute Gyr onset is no "
-                f"longer freed (#2748). Give the fraction of age(z) instead: "
-                f"{frac_name}=Uniform(lo, hi), with lo and hi the Gyr bounds divided "
-                "by the age of the universe at z = 0 (about 13.787 Gyr)."
-            )
+            check_free_gyr_alias(gyr_name, gyr_dist)
         if redshift_fixed is not None:
             _refuse_gyr_above_age(gyr_name, float(gyr_dist.value), redshift_fixed)
         resolved.pop(frac_name, None)
         provenance.pop(frac_name, None)
         dropped.add(frac_name)
     return frozenset(dropped)
+
+
+def _gyr_to_frac() -> dict[str, str]:
+    """Absolute-Gyr timing alias -> the fraction that replaces it (#2748)."""
+    return {gyr: frac for frac, gyr in timing_frac_params().items()}
+
+
+def check_free_gyr_alias(name, value):
+    """Refuse a free request on an old ``*_gyr`` timing alias (#2748).
+
+    The Gyr names are Fixed-only shims: a free onset is sampled as its
+    ``*_frac`` of age(z). ``name`` is checked against the ``gyr_twin`` table, so
+    a non-alias name passes through untouched.
+
+    Parameters
+    ----------
+    name : str
+        Public parameter name, flat or grouped spelling resolved to it.
+    value : object
+        The requested value: ``FREE``, a Distribution, or any other input.
+
+    Raises
+    ------
+    ConfigError
+        If ``name`` is a Gyr alias and ``value`` is ``FREE`` or a
+        non-Fixed Distribution. The message names the fraction and converts
+        the Gyr prior to fractions of the age of the universe at z = 0.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.parameters.priors import Distribution, Uniform
+    from tengri.parameters.sentinels import FREE
+
+    frac_name = _gyr_to_frac().get(name)
+    if frac_name is None:
+        return
+    is_free = value is FREE or (isinstance(value, Distribution) and not value.is_fixed)
+    if not is_free:
+        return
+    from tengri.components.stellar.sfh.registry import _AGE_FRAC_PRIORS, _age_frac
+
+    if isinstance(value, Uniform):
+        lo_gyr, hi_gyr = value.bounds
+        converted = (
+            f"Uniform({lo_gyr:g}, {hi_gyr:g}) Gyr at z = 0 is "
+            f"Uniform({_age_frac(lo_gyr):.4g}, {_age_frac(hi_gyr):.4g})"
+        )
+    else:
+        lo, hi = _AGE_FRAC_PRIORS[frac_name].bounds
+        converted = f"the free prior of {frac_name} is Uniform({lo:.4g}, {hi:.4g})"
+    raise ConfigError(
+        f"{name} is now a Fixed-only alias: free the fraction {frac_name} instead "
+        f"(age = frac * age_of_universe(z)); {converted} (#2748)."
+    )
 
 
 def timing_names_to_exclude(user_names, valid_names):

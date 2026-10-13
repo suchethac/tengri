@@ -856,8 +856,10 @@ class Parameters:
                 )
 
         # --- Resolve shorthands and store distributions ---
-        from tengri.parameters.timing import timing_names_to_exclude
+        from tengri.parameters.timing import check_free_gyr_alias, timing_names_to_exclude
 
+        for name, value in resolved_kwargs.items():
+            check_free_gyr_alias(name, value)
         if not timing_keep_all:
             self._valid_param_names = self._valid_param_names - timing_names_to_exclude(
                 resolved_kwargs, self._valid_param_names

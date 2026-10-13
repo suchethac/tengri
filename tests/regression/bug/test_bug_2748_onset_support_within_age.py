@@ -23,7 +23,7 @@ age(z), so the flexible zone never has negative width at any redshift.
 import pytest
 
 import tengri
-from tengri import DEFAULT, ConfigError, Fixed, Uniform
+from tengri import DEFAULT, FREE, ConfigError, Fixed, Uniform
 from tengri.components.stellar.sfh.registry import (
     _AGE_FRAC_PRIORS,
     SFH_REGISTRY,
@@ -207,3 +207,39 @@ def test_psb_fraction_crossing_is_refused_in_fraction_units(family):
             neb={"type": "none"},
             redshift=Uniform(0.5, 12.0, default=5.0),
         )
+
+
+@pytest.mark.parametrize(
+    "sfh_spelling",
+    ["grouped", "flat"],
+)
+@pytest.mark.parametrize(
+    "prior",
+    [Uniform(1, 10), FREE],
+    ids=["uniform", "free"],
+)
+def test_free_prior_on_gyr_alias_is_refused_with_fraction_replacement(sfh_spelling, prior):
+    """A free prior on an old ``*_gyr`` timing is a ConfigError naming its ``*_frac`` (#2748).
+
+    The grouped and flat spellings both refuse it before the generic FREE error.
+    The message converts the Gyr bounds to the fraction of age(z = 0) it replaces.
+    """
+    from tengri.parameters.parameters import Parameters
+
+    gyr_name = "sfh_dpl_age_gyr"
+    frac_name = "sfh_dpl_age_frac"
+    with pytest.raises(ConfigError, match=frac_name) as excinfo:
+        if sfh_spelling == "grouped":
+            tengri.parse_groups(
+                sfh={"type": "dpl", "age_gyr": prior},
+                dust_attenuation={"type": "none"},
+                neb={"type": "none"},
+                redshift=Fixed(0.0),
+            )
+        else:
+            Parameters(**{gyr_name: prior})
+    message = str(excinfo.value)
+    assert "Fixed-only alias" in message
+    assert gyr_name in message
+    if isinstance(prior, Uniform):
+        assert "Uniform(0.07253, 0.7253)" in message
