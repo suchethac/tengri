@@ -507,6 +507,24 @@ class CloudyGridIsochroneMismatchWarning(AdvisoryWarning):
     """
 
 
+class CueIonizingShapeWarning(AdvisoryWarning):
+    """A young-population ionizing shape from the SSP lies outside Cue's training range.
+
+    Cue is queried with seven parameters that describe the shape of the
+    ionizing continuum (``ionspec_index1..4``, ``ionspec_logLratio1..3``),
+    fitted to the SSP. Li et al. 2025 (arXiv:2405.04598), Table 1, trained the
+    emulator on a uniform draw inside a fixed box for each. When the shape fitted
+    to the SSP leaves that box (typically a very hard or very soft ionizing
+    continuum, or a coarsely sampled Lyman continuum) the network would be
+    extrapolating, so tengri clamps the parameter to the nearest bound before the
+    network (a straight-through clamp, gradients kept) and warns here.
+
+    The remedy is an SSP with a densely sampled Lyman continuum below 912 A
+    (for example ``fsps_mist_c3k_a_chabrier`` or ``fsps_prsc_miles_chabrier``),
+    or an explicit ``ionspec_*`` override.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 

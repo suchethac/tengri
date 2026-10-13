@@ -11,6 +11,7 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -58,7 +59,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: correction), not a hard ``wave <= HI_LIMIT`` mask.
 #: 3: ``gas_logqion`` integrates in the log domain (#2849), and the computation
 #: dtype is part of the key, so entries written under version 2 are not reused.
-_IONSPEC_CACHE_VERSION = 3
+_IONSPEC_CACHE_VERSION = 4
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
@@ -415,24 +416,58 @@ HI_LIMIT = LYMAN_LIMIT_AA
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
-# Cue-emulator TRAINING-GRID bounds, used to clip the auto-derived (SSP-fit)
-# ionspec coefficients so the Cue neural emulator is never evaluated outside the
-# grid it was trained on (extrapolation → garbage). These are DISTINCT from, and
-# deliberately NOT unified with, the user-facing prior bounds in
-# ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g. index1 clips to
-# [1, 42] here vs. the prior range [0, 50] there): the prior range is what a
-# user may sample, the clip range is what the emulator can faithfully evaluate.
-# Two different quantities; see #887 (which considered deriving one from the
-# other and confirmed they must stay separate).
+# Cue-emulator TRAINING range of the 7 ionizing-shape parameters, used to clip
+# the auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is
+# never evaluated outside the range it was trained on. Source: Li et al. 2025
+# (ApJ 986, 9, arXiv:2405.04598), Table 1, top seven rows ("the allowed range of
+# the parameters in the training set"): alpha_HeII [1, 42], alpha_OII [-0.3, 30],
+# alpha_HeI [-1.1, 14], alpha_HI [-1.7, 8], log F_OII/F_HeII [-0.1, 10.1],
+# log F_HeI/F_OII [-0.5, 1.9], log F_HI/F_HeI [-0.4, 2.2]. The paper draws the
+# training set uniformly inside this box, so the box is the trained support.
+# These are DISTINCT from, and deliberately NOT unified with, the user-facing
+# prior bounds in ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g.
+# index1 clips to [1, 42] here vs. the prior range [0, 50] there): the prior
+# range is what a user may sample, the clip range is what the emulator was
+# trained on. See #887 (which confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
     "ionspec_index2": (-0.3, 30.0),
-    "ionspec_index3": (-1.0, 14.0),
+    "ionspec_index3": (-1.1, 14.0),
     "ionspec_index4": (-1.7, 8.0),
-    "ionspec_logLratio1": (-1.0, 10.1),
+    "ionspec_logLratio1": (-0.1, 10.1),
     "ionspec_logLratio2": (-0.5, 1.9),
     "ionspec_logLratio3": (-0.4, 2.2),
 }
+
+#: Parameter names in the order of the 7-vector the Cue backend carries.
+IONSPEC_NAMES: tuple[str, ...] = tuple(_CLIP_RANGES)
+
+
+def clamp_ionspec_straight_through(i7):
+    """Clamp a 7-vector of ionizing-shape parameters to the Cue training box.
+
+    Parameters
+    ----------
+    i7 : array_like, shape (7,)
+        ``[ionspec_index1..4, ionspec_logLratio1..3]`` [dimensionless].
+
+    Returns
+    -------
+    jnp.ndarray, shape (7,)
+        The input moved onto the box ``_CLIP_RANGES`` (Li et al. 2025, Table 1).
+
+    Notes
+    -----
+    Straight-through: the forward value is ``clip(x)`` and the gradient is the
+    identity everywhere, so a fit driven past the box keeps a signal (a plain
+    clip would zero it). The forward value is ``clip(x)`` plus ``x - x`` (exactly
+    0.0, and carrying the identity gradient), so it equals the bound out of range
+    and the input bit-for-bit in range. JIT/grad/vmap safe.
+    """
+    x = jnp.asarray(i7)
+    lo = jnp.asarray([_CLIP_RANGES[k][0] for k in IONSPEC_NAMES], dtype=x.dtype)
+    hi = jnp.asarray([_CLIP_RANGES[k][1] for k in IONSPEC_NAMES], dtype=x.dtype)
+    return jax.lax.stop_gradient(jnp.clip(x, lo, hi)) + (x - jax.lax.stop_gradient(x))
 
 
 def fit_ionizing_spectrum(

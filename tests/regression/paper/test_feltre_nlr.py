@@ -372,8 +372,12 @@ def test_agn_ionspec_log_ratios_vary_with_slope() -> None:
     r2 = agn_ionspec_from_alpha_pl(-2.0)
     # Different slopes must give different ratios — a bug that returns a
     # slope-independent constant would pass the finite/range tests but fail here
-    assert float(r1["ionspec_logLratio1"]) != pytest.approx(
-        float(r2["ionspec_logLratio1"]), abs=0.01
+    # logLratio1 floors at Cue's trained -0.1 (Li et al. 2025, Table 1) for
+    # alpha_pl >= -2, so its slope dependence is checked on the steeper pair.
+    s1 = agn_ionspec_from_alpha_pl(-3.0)
+    s2 = agn_ionspec_from_alpha_pl(-4.0)
+    assert float(s1["ionspec_logLratio1"]) != pytest.approx(
+        float(s2["ionspec_logLratio1"]), abs=0.01
     ), "logLratio1 must depend on alpha_pl"
     assert float(r1["ionspec_logLratio3"]) != pytest.approx(
         float(r2["ionspec_logLratio3"]), abs=0.01
