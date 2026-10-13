@@ -305,8 +305,10 @@ CENSUS: dict[str, str] = {
     "components/agn/disc_precompute.py": "fitted-ok by construction (axes over prior)",
     "components/agn/disc.py": "fitted-physical-registered (GRID_SUPPORT relagn, gap 6.3 spacings)",
     "components/agn/torus.py": "fitted-ok (agn_tau hull = prior)",
-    "components/agn/torus_library_transmission.py": (
-        "open:_normalized_ratio cos_inc, tracked #2860 (file on #2837, absent here)"
+    "components/agn/blocks/torus_library_transmission.py": (
+        "fitted-fixed (skirtor cos_inc and fritz psy extrapolate: numerical gaps; skirtor "
+        "tau/p/q/oa/radius priors equal the stored axes; fritz r_ratio/tau/beta/gamma/oa are "
+        "Fixed at nodes)"
     ),
     "components/agn/blocks/composable_precompute.py": "fitted-ok by construction",
     "components/agn/agn_nebular.py": "unknown (6-D grid file not identified)",
@@ -353,7 +355,7 @@ def test_gradient_is_finite_and_nonzero_across_prior(lookup: FittedLookup) -> No
     assert np.all(np.isfinite(grads)), f"{lookup.lookup_id}: non-finite gradient"
     assert np.any(grads != 0.0), f"{lookup.lookup_id}: gradient identically zero"
     zeros = np.flatnonzero(grads == 0.0)
-    assert zeros.size == 0, (
+    assert np.all(grads != 0.0), (
         f"{lookup.lookup_id}: exactly-zero gradient at "
         f"{_sweep(lo, hi)[zeros[:5]]} (prior {lookup.prior}, hull {lookup.hull})"
     )
