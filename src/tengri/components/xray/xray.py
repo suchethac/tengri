@@ -35,6 +35,7 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     KEV_TO_ERG as _KEV_TO_ERG,
     KEV_TO_HZ as _KEV_TO_HZ,
+    L_SUN as _L_SUN,
     Z_SUN as _Z_SUN,
 )
 from tengri.utils.scale import (
@@ -237,6 +238,50 @@ def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
 
 
+def _wabs_sigma_1e22(E_keV: jnp.ndarray) -> jnp.ndarray:
+    r"""Morrison & McCammon (1983) photoelectric cross section in units of 1e-22 cm^2.
+
+    Same polynomial as :func:`wabs_transmission`, returned as the optical depth per
+    unit N_H, ``sigma(E) / (1e-22 cm^2)``, so that ``tau = sigma_1e22 * N_H / 1e22``
+    with no exponential. The exponential underflows in float32 for tau above ~90,
+    which the optical-depth form avoids.
+
+    Parameters
+    ----------
+    E_keV : array_like, shape (n,)
+        Photon energy. [keV]
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Cross section ``sigma(E) / (1e-22 cm^2)``, zero below 0.030 keV. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible** and gradient-safe: the polynomial is evaluated at
+    ``max(E, 0.03)`` so the unselected branch is finite. Valid for 0.030 <= E keV;
+    above 10 keV the last-bin polynomial is extrapolated (as in
+    :func:`wabs_transmission`).
+
+    References
+    ----------
+    .. [1] R. Morrison and D. McCammon, "Interstellar photoelectric absorption
+       cross-sections, 0.03–10 keV," ApJ, 270, 119 (1983), Table 2.
+       https://doi.org/10.1086/161102
+    """
+    E = jnp.asarray(E_keV)
+    in_range = E >= 0.030
+    E_safe = jnp.maximum(E, 0.030)
+    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E_safe, side="right") - 1, 0, 13)
+    c0 = jnp.take(device_table(_MM83_C0), idx)
+    c1 = jnp.take(device_table(_MM83_C1), idx)
+    c2 = jnp.take(device_table(_MM83_C2), idx)
+    sigma_e3 = c0 + c1 * E_safe + c2 * E_safe**2  # 1e-24 cm^2 keV^3
+    # 1e-24 cm^2 / (1e-22 cm^2) = 1e-2.
+    sigma_1e22 = sigma_e3 / E_safe**3 * 1e-2
+    return jnp.where(in_range, sigma_1e22, 0.0)
+
+
 # Deprecated alias for backward compatibility
 def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     r"""Deprecated alias for :func:`wabs_transmission`.
@@ -265,6 +310,9 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
 # as exp(−σ_T·N_H), an energy-independent attenuation that captures
 # Compton down-scattering of photons out of the line of sight.
 _SIGMA_THOMSON_CM2 = 6.6524587e-25
+# Thomson cross section in units of 1e-22 cm^2 (the pexrav branching unit, see
+# ``pexrav_reflection``): 6.6524587e-25 cm^2 / 1e-22 cm^2.
+_SIGMA_THOMSON_UNITS_1E22 = 6.6524587e-3
 
 
 def compton_scattering_transmission(log_nh: float) -> float:
@@ -446,12 +494,14 @@ def pexrav_reflection(
     # column. Use log_nh = 22 (N_H = 1e22 cm⁻²): low enough that the
     # transmission stays well above float underflow, high enough that
     # −ln T is a faithful sample of σ over the full X-ray band.
-    _LOG_NH_PROBE = 22.0
-    sigma_phabs = (
-        -jnp.log(jnp.maximum(wabs_transmission(E_keV, _LOG_NH_PROBE), representable_floor(1e-300)))
-        / 10.0**_LOG_NH_PROBE
-    )
-    g_branching = _SIGMA_THOMSON_CM2 / (_SIGMA_THOMSON_CM2 + sigma_phabs)
+    # Cross sections are carried in units of 1e-22 cm^2, so the branching sum is
+    # O(1e-3..1e-2). In cm^2 the sum is ~1e-22 and its square (reverse-mode
+    # backward pass) is ~1e-44, below the float32 range: the wavelength gradient
+    # was NaN. The optical-depth form (no exp, no floor) also keeps the float32
+    # forward value within round-off of float64 at E ~ 0.1-0.3 keV, where tau
+    # reaches ~200 and exp(-tau) underflows.
+    sigma_phabs_units = _wabs_sigma_1e22(E_keV)
+    g_branching = _SIGMA_THOMSON_UNITS_1E22 / (_SIGMA_THOMSON_UNITS_1E22 + sigma_phabs_units)
 
     # Klein-Nishina rolloff for Compton single-scattering off cold
     # electrons. Taylor-expanded σ_KN/σ_T valid for x ≲ 1; hard cutoff
@@ -1953,9 +2003,8 @@ def xray_total(
 def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
     r"""X-ray bolometric correction k_X (Duras et al. 2020, Eq. 2).
 
-    Returns the ratio k_X = L_bol / L_X(2-10 keV). For low-luminosity
-    AGN (L_bol < 10^43 erg/s), the correction approaches a constant
-    k_X ≈ 9.65 (Lopez et al. 2024 Eq. 6).
+    Returns the bolometric correction k_X = L_bol / L_X(2-10 keV) of the
+    general (type 1 + type 2) relation, Eq. 2 of Duras et al. (2020).
 
     Parameters
     ----------
@@ -1969,37 +2018,43 @@ def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives. Differentiable in float32:
+    the power is applied to the clamped argument, so the unselected branch is
+    never a NaN.
 
-    The general form from Duras et al. (2020) is:
-
-    .. math::
-
-        k_X(L_{\rm bol}) = a \left[1 + \left(\frac{\log_{10}(L_{\rm bol})}{b}\right)^c\right]
-
-    with best-fit coefficients a = 15.33, b = 11.48, c = 16.20
-    (Duras et al. 2020, Table 2, X-ray correction).
-
-    For the low-luminosity regime (L_bol ~ 10^38–10^43 erg/s),
-    Lopez et al. (2024, Eq. 6) find a linear fit:
+    The fit, Eq. 2 of Duras et al. (2020) with the "General" row of their Table 1,
+    is written in the solar-luminosity log:
 
     .. math::
 
-        L_{\rm bol} = (9.65 \pm 1.004) \times L_X
+        k_X(L_{\rm bol}) = a \left[1 + \left(
+            \frac{\log_{10}(L_{\rm bol}/L_\odot)}{b}\right)^c\right]
+
+    with a = 10.96 +/- 0.06, b = 11.93 +/- 0.01, c = 17.79 +/- 0.10 and an
+    intrinsic spread of 0.27 dex. Here L_bol is in erg/s and L_odot = 3.828e33 erg/s
+    (``utils.physics_constants.L_SUN``).
+
+    **Approximation (clamp).** The argument is clamped at
+    log10(L_bol/L_odot) = 7.5, the lower edge of the calibrated range. The paper
+    reports a constant correction for 7.5 < log10(L_bol/L_odot) < 11, so the
+    clamp is the paper's own plateau extended flat below 7.5. Without it the base
+    is negative for L_bol < L_odot and the power c = 17.79 is undefined. Validity:
+    the fit is calibrated over 7.5 <~ log10(L_bol/L_odot) <~ 14 (the paper's sample;
+    it rises by about an order of magnitude toward log10 ~ 14.5). Below 7.5 the
+    clamp value is an extrapolation, not a measurement; above the sample the fit
+    is an extrapolation of Eq. 2.
 
     References
     ----------
     .. [1] K. Duras et al., "Universal bolometric corrections for active
        galactic nuclei over seven luminosity decades," A&A, 636, A73 (2020).
-       https://doi.org/10.1051/0004-6361/201936817
-    .. [2] I. E. Lopez et al., "IRX-CIGALE: a tailored module for
-       Low-Luminosity AGN," A&A, 692, A209 (2024). arXiv:2404.16938.
-       https://doi.org/10.1051/0004-6361/202449801
+       arXiv:2001.09984. https://doi.org/10.1051/0004-6361/201936817
     """
-    a, b, c = 15.33, 11.48, 16.20
-    log_l = jnp.log10(jnp.maximum(l_bol_erg, representable_floor(1e-100)))
-    k_x = a * (1.0 + (log_l / b) ** c)
-    return jnp.maximum(k_x, 1.0)
+    a, b, c = 10.96, 11.93, 17.79
+    log_lsun_min = 7.5
+    log_l_lsun = jnp.log10(jnp.maximum(l_bol_erg, representable_floor(1e-100)) / _L_SUN)
+    log_l_clamped = jnp.maximum(log_l_lsun, log_lsun_min)
+    return a * (1.0 + (log_l_clamped / b) ** c)
 
 
 def xray_agn_corona_lopez24(
