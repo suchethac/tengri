@@ -61,7 +61,9 @@ __all__ = [
 
 #: Bump when the stored table's meaning changes (transmission formula, node
 #: layout, dtype convention). Entries keyed with an older version are ignored.
-_CACHE_VERSION = 3
+#: 3 -> 4: the sub-band node table is evaluated in one jitted program over z
+#: (#2769); values move by up to ~4e-14 relative from the eager per-z loop.
+_CACHE_VERSION = 4
 
 #: Version of the exact-fold ratio table (:class:`ExactFoldRequest`), separate
 #: from :data:`_CACHE_VERSION` because the two tables change for different

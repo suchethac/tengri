@@ -264,10 +264,10 @@ def test_ztable_version_is_8():
 
 
 def test_subband_version_is_3():
-    """_CACHE_VERSION in _subband_cache is 3."""
+    """_CACHE_VERSION in _subband_cache is 4."""
     from tengri.components.igm._subband_cache import _CACHE_VERSION
 
-    assert _CACHE_VERSION == 3
+    assert _CACHE_VERSION == 4
 
 
 def test_ionspec_version_is_3():

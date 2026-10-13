@@ -39,7 +39,7 @@ from typing import Any, ClassVar
 import jax
 import jax.numpy as jnp
 
-from tengri.components.nebular.shock import compute_shock_sed
+from tengri.components.nebular.shock import _shock_line_arrays, compute_shock_sed
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import SEDComponentConfig
 from tengri.utils.physics_constants import C_AA
@@ -174,57 +174,37 @@ class ShockNebular(SEDModelComponent):
 
         return load_shock_template_grid()
 
-    def predict(
-        self,
-        p: dict[str, Any],
-        sed_in: jnp.ndarray,
-        wave: jnp.ndarray,
-        templates: Any | None = None,
-    ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        r"""Add MAPPINGS V shock emission to the running SED.
+    def _band_table_bands(self, p, sed_in, wave, coeff, templates):
+        """Observed and rest shock bands from the per-line band coefficients.
 
-        Parameters
-        ----------
-        p : dict[str, ndarray]
-            Shock parameters, ``shock_`` prefix stripped: ``frac``,
-            ``log_lhalpha``, ``velocity`` [km/s], ``log_density`` [dex cm^-3],
-            ``b_over_sqrt_n`` [μG].
-        sed_in : ndarray, shape (n_wave,)
-            SED accumulated so far [erg/s/Hz]. Used for the ``norm="frac"``
-            Hα normalization only.
-        wave : ndarray, shape (n_wave,)
-            Rest-frame wavelength grid [Angstrom].
-        templates : ShockTemplateGrid, optional
-            MAPPINGS V ratio cubes, supplied by :meth:`apply` from the threaded
-            ``template_data`` so they arrive as a JIT argument rather than a
-            baked constant (#1694). ``None`` falls back to the module-level
-            cache: correct, but 3.73 MB per compile.
+        Uses the same H-alpha anchor and the same line luminosities as
+        :meth:`predict` (both come from :meth:`_halpha_anchor` and
+        :func:`_shock_line_arrays`), so the result equals the per-call filter
+        integral of the shock SED. Under float32 the bands carry the same
+        reference-scale offset as the SED.
+        """
+        l_shock_halpha, _f32 = self._halpha_anchor(p, sed_in, wave)
+        _, lums = _shock_line_arrays(
+            p["velocity"],
+            l_shock_halpha,
+            shock_log_density=p["log_density"],
+            shock_b_over_sqrt_n=p["b_over_sqrt_n"],
+            shock_abundance=self.config.abundance,
+            shock_component=self.config.component,
+            templates=templates,
+        )
+        band = jnp.einsum("i,icf->cf", lums, jnp.asarray(coeff))
+        if _f32:
+            band = apply_log10_scale(band, _SHOCK_LHA_LOG_REF)
+        return {"shock_phot_lnu_precomp": band[0], "shock_restband_lnu_precomp": band[1]}
 
-        Returns
-        -------
-        sed_out : ndarray, shape (n_wave,)
-            ``sed_in`` plus the shock contribution [erg/s/Hz].
-        published : dict
-            ``{"sed_shock": ndarray}``: the shock contribution [erg/s/Hz].
-            Its total luminosity is recoverable as :math:`-\int S_\nu\,d\nu`.
+    def _halpha_anchor(self, p: dict[str, Any], sed_in: jnp.ndarray, wave: jnp.ndarray):
+        """Shock H-alpha luminosity anchor, and whether the float32 path is active.
 
-        Notes
-        -----
-        .. math::
-
-            L_{\mathrm{H}\alpha}^{\mathrm{shock}} =
-            \begin{cases}
-              f_{\rm shock}\,\max(10^{-3} L_{\rm bol},\ \epsilon)
-                & \text{norm=frac}\\
-              10^{\,\log L_{\mathrm{H}\alpha}} & \text{norm=lhalpha}
-            \end{cases}
-
-        with :math:`L_{\rm bol} = -\int S_\nu\,d\nu` over ``sed_in`` [erg/s]
-        and :math:`\epsilon = 10^{-30}` guarding the log. The shock template is
-        then scaled to this Hα anchor by
-        :func:`tengri.components.nebular.shock.compute_shock_sed`. The ``frac``
-        branch reproduces
-        :func:`tengri.forward.emission_helpers.shock_emission` exactly.
+        Returns ``(l_shock_halpha, _f32)``. The anchor is the one :meth:`predict`
+        scales the shock template by; the photometry band table reuses it so the
+        two paths share one normalization. Under float32 the anchor is carried at
+        the reference ``_SHOCK_LHA_LOG_REF`` (see the notes in the body).
         """
         nu = C_AA / wave
 
@@ -289,6 +269,61 @@ class ShockNebular(SEDModelComponent):
                 l_shock_halpha = p["frac"] * l_halpha_approx
                 _log_l_shock_halpha = None
 
+        return l_shock_halpha, _f32
+
+    def predict(
+        self,
+        p: dict[str, Any],
+        sed_in: jnp.ndarray,
+        wave: jnp.ndarray,
+        templates: Any | None = None,
+    ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+        r"""Add MAPPINGS V shock emission to the running SED.
+
+        Parameters
+        ----------
+        p : dict[str, ndarray]
+            Shock parameters, ``shock_`` prefix stripped: ``frac``,
+            ``log_lhalpha``, ``velocity`` [km/s], ``log_density`` [dex cm^-3],
+            ``b_over_sqrt_n`` [μG].
+        sed_in : ndarray, shape (n_wave,)
+            SED accumulated so far [erg/s/Hz]. Used for the ``norm="frac"``
+            Hα normalization only.
+        wave : ndarray, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+        templates : ShockTemplateGrid, optional
+            MAPPINGS V ratio cubes, supplied by :meth:`apply` from the threaded
+            ``template_data`` so they arrive as a JIT argument rather than a
+            baked constant (#1694). ``None`` falls back to the module-level
+            cache: correct, but 3.73 MB per compile.
+
+        Returns
+        -------
+        sed_out : ndarray, shape (n_wave,)
+            ``sed_in`` plus the shock contribution [erg/s/Hz].
+        published : dict
+            ``{"sed_shock": ndarray}``: the shock contribution [erg/s/Hz].
+            Its total luminosity is recoverable as :math:`-\int S_\nu\,d\nu`.
+
+        Notes
+        -----
+        .. math::
+
+            L_{\mathrm{H}\alpha}^{\mathrm{shock}} =
+            \begin{cases}
+              f_{\rm shock}\,\max(10^{-3} L_{\rm bol},\ \epsilon)
+                & \text{norm=frac}\\
+              10^{\,\log L_{\mathrm{H}\alpha}} & \text{norm=lhalpha}
+            \end{cases}
+
+        with :math:`L_{\rm bol} = -\int S_\nu\,d\nu` over ``sed_in`` [erg/s]
+        and :math:`\epsilon = 10^{-30}` guarding the log. The shock template is
+        then scaled to this Hα anchor by
+        :func:`tengri.components.nebular.shock.compute_shock_sed`. The ``frac``
+        branch reproduces
+        :func:`tengri.forward.emission_helpers.shock_emission` exactly.
+        """
+        l_shock_halpha, _f32 = self._halpha_anchor(p, sed_in, wave)
         shock_sed = compute_shock_sed(
             wave,
             p["velocity"],
@@ -409,19 +444,33 @@ class ShockNebular(SEDModelComponent):
             # and no effective-wavelength fallback, so it has no cascade to share
             # -- only this branch. Going through the helper would mean passing two
             # placeholder arguments to reach the call below.
-            from tengri.observation.photometry import lnu_filter_integral_batch
+            band_coeff = (
+                template_data.get("shock_band_table") if isinstance(template_data, dict) else None
+            )
+            if band_coeff is not None:
+                # Line-band table (#2324): the lines are placed linearly, so the band is
+                # the line luminosities contracted with fixed per-line band coefficients.
+                # The per-call filter integrals below are skipped.
+                published = {
+                    **published,
+                    **self._band_table_bands(
+                        p, sed_in, state.wave, band_coeff, self.threaded_templates(template_data)
+                    ),
+                }
+            else:
+                from tengri.observation.photometry import lnu_filter_integral_batch
 
-            z = jnp.asarray(p["redshift"])
-            shock_sed = published["sed_shock"]
-            published = {
-                **published,
-                "shock_phot_lnu_precomp": lnu_filter_integral_batch(
-                    shock_sed, state.wave, fw, ft, z
-                ),
-                "shock_restband_lnu_precomp": lnu_filter_integral_batch(
-                    shock_sed, state.wave, fw, ft, 0.0
-                ),
-            }
+                z = jnp.asarray(p["redshift"])
+                shock_sed = published["sed_shock"]
+                published = {
+                    **published,
+                    "shock_phot_lnu_precomp": lnu_filter_integral_batch(
+                        shock_sed, state.wave, fw, ft, z
+                    ),
+                    "shock_restband_lnu_precomp": lnu_filter_integral_batch(
+                        shock_sed, state.wave, fw, ft, 0.0
+                    ),
+                }
 
         new_derived = self._merge_published(state.derived, published)
         return state.with_(sed_intrinsic=sed_out, derived=new_derived)
