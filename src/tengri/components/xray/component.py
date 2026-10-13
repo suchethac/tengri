@@ -54,11 +54,8 @@ from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
-<<<<<<< HEAD
-    lmxb_stellar_age_gyr,
-=======
     l_2500_from_bolometric,
->>>>>>> origin/fix/2842-2851-agn-published-luminosities
+    lmxb_stellar_age_gyr,
     metallicity_from_history,
     xray_total_log_band_luminosities,
     xray_total_lopez24_log_band_luminosities,

@@ -363,8 +363,9 @@ out-of-range final value representable. The rule these fixes converged on:
   as an erg/s number that is then logged, and the `Lsun` sibling is formed from the log as
   `pow10(log - log10(L_sun))`, so the erg/s value is never written (an absent component, `-inf`
   dex, is exactly 0 Lsun). The one erg/s key kept is `L_agn_bol`, a float64 convenience beside
-  `log_L_agn_bol` that is `inf` in float32; the radio component reads it with the log as the
-  float32 fallback, and the X-ray component reads the log. `erg/s/Hz` keys (`L_2500_30deg`,
+  `log_L_agn_bol` that is `inf` in float32; the radio component reads `log_L_agn_bol` (and
+  `log_L_ir`) in float32 and uses the linear key only in float64, and the X-ray component reads
+  the log. `erg/s/Hz` keys (`L_2500_30deg`,
   `L_6um`, `L_12um`) are spectral densities and stay.
 - **An anisotropic emitter publishes the angle-integrated power under the plain name and the
   line-of-sight value under `_los`** (#2678, #2851): `log_L_agn_disc` is
