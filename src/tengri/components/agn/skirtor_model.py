@@ -335,14 +335,25 @@ class SKIRTORTorus(SEDModelComponent):
         :math:`\tfrac12\int_0^\pi L(\theta)\sin\theta\,d\theta = \int_0^1 L(\mu)\,d\mu`
         with :math:`\mu = \cos i`, taken by Gauss-Legendre on each interval between the
         template's own inclination nodes. Independent of ``cos_inc``. The disc is net of the
-        power the polar dust takes from the cone (``log_L_agn_polar_dust``). SKIRTOR conserves
-        energy, so the three sphere powers add up to the accretion power,
+        power the polar dust takes from the cone (``log_L_agn_polar_dust``) and is the part
+        inside the support of the emitted disc (8 nm to 1e6 nm). SKIRTOR conserves energy over
+        the template's whole native range (10 A to 1e8 A), so the four sphere powers add up to
+        the accretion power,
 
         .. math::
 
-            P_{\rm disc} + P_{\rm torus} + P_{\rm polar} = 10^{\log L_{\rm bol}}\,L_\odot\,f,
+            P_{\rm disc} + P_{\rm torus} + P_{\rm polar} + P_{\rm unemitted}
+            = 10^{\log L_{\rm bol}}\,L_\odot\,f,
 
         with :math:`f` = ``torus_frac`` the AGN share that multiplies every piece.
+    log_L_agn_disc_unemitted : dex
+        log10 of the sphere-mean power of the escaping template disc outside the support of
+        the emitted disc [dex re erg/s]: the part below 8 nm (the CIGALE ``skirtor2016`` disc
+        that the component emits starts there) and above 1e6 nm. It is part of the accretion
+        power the library carries and so of the ledger above, but it is **not in the emitted
+        SED**: the model has no template of that light, which the torus absorbs when it is
+        obscured. Independent of ``cos_inc``, ``delta`` and the polar dust.
+        ``log_L_agn_disc_unemitted_los`` is the same along the sightline ``cos_inc``.
     log_L_agn_polar_dust : dex
         log10 of the power the polar dust absorbs from the disc light emitted into the polar
         cone and re-emits as a graybody [dex re erg/s]:
@@ -514,6 +525,8 @@ class SKIRTORTorus(SEDModelComponent):
         {
             "log_L_agn_disc": "dex",
             "log_L_agn_disc_los": "dex",
+            "log_L_agn_disc_unemitted": "dex",
+            "log_L_agn_disc_unemitted_los": "dex",
             "log_L_agn_torus": "dex",
             "log_L_agn_torus_los": "dex",
             "log_L_agn_polar_dust": "dex",
@@ -646,6 +659,8 @@ class SKIRTORTorus(SEDModelComponent):
             zero_dict = {
                 "log_L_agn_disc": absent,
                 "log_L_agn_disc_los": absent,
+                "log_L_agn_disc_unemitted": absent,
+                "log_L_agn_disc_unemitted_los": absent,
                 "log_L_agn_torus": absent,
                 "log_L_agn_torus_los": absent,
                 "log_L_agn_polar_dust": absent,
@@ -761,12 +776,18 @@ class SKIRTORTorus(SEDModelComponent):
             return raw_pub, comp_pub.dust, disc_renorm
 
         def _powers(cos_inc):
-            """Disc and torus power emitted along ``cos_inc`` [evaluation scale, unit fraction]."""
+            """Emitted disc, torus dust and unemitted disc power along ``cos_inc``.
+
+            Evaluation scale, unit fraction. The unemitted disc is the template disc outside
+            the support of the analytic disc (below 8 nm and above 1e6 nm): it escapes along
+            this sightline but is not part of the emitted SED.
+            """
             raw_pub, dust_pub, disc_renorm = _disc_along(cos_inc)
             return jnp.stack(
                 [
                     disc_renorm * _bolometric_tilted(raw_pub, wave_pub),
                     native_bolometric_nu(dust_pub, wave_pub, floor=0.0),
+                    native_bolometric_nu(raw_pub * (1.0 - support_pub), wave_pub, floor=0.0),
                 ]
             )
 
@@ -807,19 +828,21 @@ class SKIRTORTorus(SEDModelComponent):
             ),
             axes=1,
         )
-        l_abs_unit = unit_mean[2]
+        l_abs_unit = unit_mean[3]
         l_abs = frac * l_abs_unit
 
-        # Energy ledger. The templates carry the escaping disc and the torus dust, which add up
-        # to the accretion power on the sphere (the normalization of the components). The polar
+        # Energy ledger. The templates carry the escaping disc (over their whole native range)
+        # and the torus dust, which add up to the accretion power on the sphere (the
+        # normalization of the components). The part of the escaping disc outside the support of
+        # the analytic disc is not emitted: it is published as the unemitted disc. The polar
         # dust takes the power it re-emits OUT of the disc light emitted into the cone, so the
         # escaping disc published beside it is net of that power, and
-        #   disc + torus + polar = frac * 10**agn_log_lbol * L_sun
+        #   disc + torus + polar + unemitted = frac * 10**agn_log_lbol * L_sun
         # on the sphere. Along a sightline the disc loses what the Type-1 mask lets the polar
         # dust attenuate there, exactly the power the attenuated SED loses.
         disc_los = unit_los[0] - _masked_absorbed(p["cos_inc"])
-        powers_los = frac * jnp.stack([disc_los, unit_los[1]])
-        powers_mean = frac * jnp.stack([unit_mean[0] - l_abs_unit, unit_mean[1]])
+        powers_los = frac * jnp.stack([disc_los, unit_los[1], unit_los[2]])
+        powers_mean = frac * jnp.stack([unit_mean[0] - l_abs_unit, unit_mean[1], unit_mean[2]])
 
         # Caller-grid SED: the same pointwise functions, at unit fraction, times the fraction.
         polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
@@ -845,6 +868,8 @@ class SKIRTORTorus(SEDModelComponent):
         published = {
             "log_L_agn_disc": log_mean[0],
             "log_L_agn_disc_los": log_los[0],
+            "log_L_agn_disc_unemitted": log_mean[2],
+            "log_L_agn_disc_unemitted_los": log_los[2],
             "log_L_agn_torus": log_mean[1],
             "log_L_agn_torus_los": log_los[1],
             "log_L_agn_polar_dust": log_polar,

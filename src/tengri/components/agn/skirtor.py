@@ -773,57 +773,6 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     return skirtor_grid
 
 
-def _disc_support_edge_aa() -> float:
-    """Lower edge of the support of the emitted SKIRTOR disc [Angstrom]."""
-    from tengri.components.agn.disc_cigale import skirtor_disk_limits
-
-    with jax.ensure_compile_time_eval():
-        return float(np.asarray(skirtor_disk_limits())[0]) * 10.0
-
-
-def _disc_power_native(lnu_native, wave_native):
-    r"""Power of a tabulated SKIRTOR disc inside the support of the emitted disc.
-
-    The frequency integral of the template's log-log interpolant over the support of
-    :func:`~tengri.components.agn.disc_cigale.skirtor_disk_spectrum` (8 nm to 1e6 nm), the
-    disc the model emits. The lower edge is a step of the emitted disc, so it is bracketed by a
-    node pair a few ulp either side and no segment of the closed-form integral straddles it.
-
-    Parameters
-    ----------
-    lnu_native : array_like, shape (n_native,)
-        Disc :math:`L_\nu` on ``wave_native`` [arbitrary units per Hz].
-    wave_native : array_like, shape (n_native,)
-        The template's wavelength nodes [Angstrom], ascending.
-
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int L_\nu\,d\nu` over the support, in the units of ``lnu_native`` times Hz.
-
-    Notes
-    -----
-    **JIT/grad/vmap-safe**: yes.
-    """
-    from tengri.components.agn._template_grid import native_bolometric_nu
-    from tengri.components.agn.disc_cigale import skirtor_disk_spectrum
-
-    lnu = jnp.asarray(lnu_native)
-    # The working precision is the process's, not that of a template buffer cached in float64:
-    # a node pair 1e-9 apart collapses onto the edge in float32 and leaves a chord across the
-    # preceding template segment (6e-4 of the disc power).
-    default = jnp.asarray(0.0).dtype
-    dtype = lnu.dtype if lnu.dtype.itemsize < default.itemsize else default
-    wave = jnp.asarray(wave_native, dtype=dtype)
-    gap = 1.0e-13 if jnp.dtype(dtype).itemsize >= 8 else 4.0e-7
-    edge = _disc_support_edge_aa()
-    extra = jnp.asarray([edge * (1.0 - gap), edge, edge * (1.0 + gap)], dtype=dtype)
-    wave_e = jnp.sort(jnp.concatenate([wave, extra]))
-    lnu_e = resample_template(wave_e, wave, lnu.astype(dtype), left=0.0, right=0.0)
-    support = (skirtor_disk_spectrum(wave_e / 10.0, delta=0.0) > 0.0).astype(dtype)
-    return native_bolometric_nu(lnu_e * support, wave_e, floor=0.0)
-
-
 def _physical_cubes(raw: dict) -> tuple[dict, bool]:
     """The tabulated cubes on SKIRTOR's own relative scale across inclination.
 
@@ -911,24 +860,35 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         \bar P_X = \int_0^1 P_X(\mu)\,d\mu, \qquad \mu = \cos i,
 
     the sphere mean of the power :math:`P_X(\mu) = \int L_\nu\,d\nu` that the template
-    carries along inclination :math:`\mu`: the escaping disc (direct plus scattered, inside
-    the support of the emitted disc) and the dust re-emission. SKIRTOR's radiative transfer
-    conserves energy, so these two add up to the intrinsic power of the central source,
-    which is the accretion power :math:`10^{\log L_{\rm bol}} L_\odot` (the parameter, #2678).
-    By symmetry about the equator :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta =
-    \int_0^1 P(\mu)\,d\mu`. The sphere-mean disc plus dust is then :math:`L_{\rm scale}`,
-    and every inclination keeps SKIRTOR's own flux relative to the others: the same :math:`s`
-    multiplies the disc and the torus dust, so their power ratio at each inclination is the
-    radiative-transfer one. The integral over :math:`\mu` is Gauss-Legendre of order
-    ``INCLINATION_GL_ORDER`` on each interval between the library's inclination nodes (each
-    panel is one cubic of the interpolant; the power is a smooth function of that cubic).
-    ``total`` is ``disk + dust``.
+    carries along inclination :math:`\mu`, over the template's own wavelength range (10 A to
+    1e8 A): the escaping disc (direct plus scattered) and the dust re-emission. SKIRTOR's
+    radiative transfer conserves energy, so these two add up to the intrinsic power of the
+    central source, which is the accretion power :math:`10^{\log L_{\rm bol}} L_\odot` (the
+    parameter, #2678). The disc is counted over its whole native range, including the part
+    below 8 nm where the analytic disc that the component emits is zero: the template disc
+    carries a further 9 to 58 % (median 14 %, sphere mean per cell) of its in-support power
+    outside the support of the emitted disc, power which the torus absorbs and re-emits as
+    dust when it is obscured and which leaves with the escaping rays otherwise.
+    Counting only the part above 8 nm drops that power from the budget and trends the
+    absolute scale with the opening angle (-4 % to +9 %). By symmetry about the equator
+    :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta = \int_0^1 P(\mu)\,d\mu`.
+    The sphere-mean disc plus dust is then :math:`L_{\rm scale}`, and every inclination keeps
+    SKIRTOR's own flux relative to the others: the same :math:`s` multiplies the disc and the
+    torus dust, so their power ratio at each inclination is the radiative-transfer one. The
+    integral over :math:`\mu` is Gauss-Legendre of order ``INCLINATION_GL_ORDER`` on each
+    interval between the library's inclination nodes (each panel is one cubic of the
+    interpolant; the power is a smooth function of that cubic). ``disk`` is the template disc
+    over its whole native range (the emitting component cuts it at 8 nm), and ``total`` is
+    ``disk + dust``.
 
-    Measured on the v3 library, the records conserve energy to 5.4 % rms over the 1920
-    parameter cells (the sphere-mean disc plus dust differs from cell to cell by -25 % to
-    +17 %, trending with the opening angle and flat in tau, p, q, R): the ten inclination
-    nodes cannot resolve the step of the disc at the edge of the torus, so the per-point
-    scale absorbs that sampling error and nothing else.
+    Measured on the v3 library, the records conserve energy to 2.5 % rms over the 1920
+    parameter cells (the sphere-mean disc plus dust differs from cell to cell by -21 % to
+    +11 %, with no trend in the opening angle or tau, correlations +0.11 and -0.10; counting
+    the disc only above 8 nm gave 5.1 % rms and a correlation of +0.88 with the opening
+    angle). Most of the
+    remainder is the sampling of the disc's step at the edge of the torus by the ten
+    inclination nodes: resolving the polar cone leaves 1.6 % rms, the library's own residual.
+    The per-point scale absorbs that residual and nothing else.
 
     A grid without ``spectra/norm`` is normalized the same way from the stored records, each
     on its own scale, so its power carries no inclination dependence.
@@ -1069,7 +1029,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             rows = {
                 k: _at_inclination(v, mu) * wave_grid**2 / _C_AA_PER_S for k, v in by_inc.items()
             }
-            return _disc_power_native(rows["disk"], wave_grid) + native_bolometric_nu(
+            return native_bolometric_nu(rows["disk"], wave_grid, floor=0.0) + native_bolometric_nu(
                 rows["dust"], wave_grid, floor=0.0
             )
 

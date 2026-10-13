@@ -220,10 +220,17 @@ def test_inclination_quadrature_is_converged(monkeypatch, extra):
         return _published(comp, {**mid, **extra})
 
     shipped, reference = run(_publication.INCLINATION_GL_ORDER), run(64)
+    checked = 0
     for key in shipped:
-        if key.startswith("log_L_agn") and not key.endswith("_Lsun"):
+        if key.startswith("log_L_agn"):
             err = abs(10.0 ** (shipped[key] - reference[key]) - 1.0)
-            assert err < 1e-10, f"{key}: shipped order vs order 64 off by {err:.2e}"
+        elif key.endswith("_lsun"):
+            err = abs(shipped[key] / reference[key] - 1.0)
+        else:
+            continue
+        checked += 1
+        assert err < 1e-10, f"{key}: shipped order vs order 64 off by {err:.2e}"
+    assert checked >= 16, f"only {checked} published sphere powers were compared"
 
 
 @pytest.mark.parametrize("disk_type", [1, 2])

@@ -544,7 +544,7 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
 
 
 def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
-    """Emitted SKIRTOR disc, dust and polar-reemission SEDs, from the component's own functions.
+    """Emitted SKIRTOR disc, dust and polar-reemission SEDs, rebuilt from the raw library.
 
     The disc and dust are those along ``cos_inc``, the disc after the polar dust's Type-1
     attenuation, as the component emits it. The polar re-emission is the graybody that carries
@@ -553,11 +553,13 @@ def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
     (``_skirtor_reference``), so it does not depend on ``cos_inc``.
     """
     from tengri.components.agn.polar_dust import polar_dust_emission
-    from tests.physics._skirtor_reference import cone_absorbed, emitted_pieces
+    from tests.physics._skirtor_reference import RawSkirtor, cone_absorbed, emitted_pieces
 
-    los = emitted_pieces(comp, params, wave, disk_type)
+    raw = RawSkirtor(comp.config.grid_path)
+    los = emitted_pieces(raw, params, wave, disk_type)
     ebv = float(params["polar_ebv"])
-    cone = cone_absorbed(comp, params, wave, disk_type, order=16) if ebv > 0.0 else 0.0
+    cone = cone_absorbed(raw, params, wave, disk_type, order=16) if ebv > 0.0 else 0.0
+    # The graybody normalization of the polar re-emission is the implementation's own function.
     polar = polar_dust_emission(
         cone,
         jnp.asarray(wave),

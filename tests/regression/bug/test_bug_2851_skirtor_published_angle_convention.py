@@ -34,6 +34,7 @@ Gauss-Legendre of order 20 of the dense-grid line-of-sight pieces.
 
 from __future__ import annotations
 
+import functools
 import itertools
 
 import jax
@@ -84,6 +85,15 @@ def skirtor():
     return comp, mid
 
 
+@functools.cache
+def _raw():
+    """The library read from the file (shared by the reference pieces)."""
+    path = find_data("skirtor_templates_v3.h5")
+    if path is None:
+        pytest.skip("SKIRTOR v3 templates unavailable")
+    return RawSkirtor(str(path))
+
+
 def _published(comp, params, wave=PUB_COARSE):
     w = jnp.asarray(wave)
     _, pub = comp.predict(
@@ -94,11 +104,7 @@ def _published(comp, params, wave=PUB_COARSE):
 
 def _los_powers_from_templates(comp, params, mu):
     """Powers [erg/s] along ``mu``: the disc before and after the polar attenuation, the dust."""
-    pieces = emitted_pieces(
-        comp,
-        {k: jnp.asarray(v, dtype=jnp.float64) for k, v in {**params, "cos_inc": mu}.items()},
-        _WIDE,
-    )
+    pieces = emitted_pieces(_raw(), {**params, "cos_inc": mu}, _WIDE)
     return np.array(
         [
             ln_nu_integral(pieces["disc"], _WIDE),
@@ -114,7 +120,7 @@ def _sphere_mean_reference(comp, params):
     The published disc is the sphere mean of the escaping disc less the power the polar dust
     absorbs from the cone, so that the three add up to the accretion power.
     """
-    nodes = np.asarray(comp.data.native_cos_inc)
+    nodes = _raw().axes[-1]
     edges = np.concatenate([[0.0], nodes[1:]])
     x, w = np.polynomial.legendre.leggauss(_GL_ORDER)
     mean = np.zeros(3)
@@ -126,11 +132,8 @@ def _sphere_mean_reference(comp, params):
                 * wi
                 * _los_powers_from_templates(comp, params, 0.5 * (b - a) * xi + 0.5 * (a + b))
             )
-    wide_params = {k: jnp.asarray(v, dtype=jnp.float64) for k, v in params.items()}
     polar = (
-        cone_absorbed(comp, wide_params, _WIDE, order=_GL_ORDER)
-        if params["polar_ebv"] > 0
-        else 0.0
+        cone_absorbed(_raw(), params, _WIDE, order=_GL_ORDER) if params["polar_ebv"] > 0 else 0.0
     )
     return np.array([mean[0] - polar, mean[2], polar])
 
@@ -193,9 +196,7 @@ def test_polar_reemission_does_not_depend_on_the_sightline(skirtor):
     los = [r["log_L_agn_polar_dust_los"] for r in runs]
     assert max(plain) - min(plain) < 1e-12, plain
     assert los == plain
-    cone = cone_absorbed(
-        comp, {k: jnp.asarray(v, dtype=jnp.float64) for k, v in base.items()}, _WIDE, order=16
-    )
+    cone = cone_absorbed(_raw(), base, _WIDE, order=16)
     assert abs(10.0 ** plain[0] / cone - 1.0) < _RTOL
 
 
