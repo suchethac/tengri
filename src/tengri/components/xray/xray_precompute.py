@@ -333,11 +333,13 @@ def build_lookup(preint: dict, *, model: str = "xray_corona"):
 
 #: Shape parameters each X-ray term's table depends on, per term and registry key. The term's own
 #: axis is one of them; any other listed parameter that is free declines the table. The hot-gas
-#: term has no shape parameter: its photon index and cutoff are fixed inside the component.
+#: term has no shape parameter: its photon index and cutoff are fixed inside the component. The
+#: XRB terms carry no ``xray_E_cut``: the component never passes the corona's cutoff to them
+#: (Yang+2020 fixes the XRB cutoff at 100 keV, ``xray.XRB_E_CUT_KEV``, #2944).
 TERM_SHAPE_PARAMS: dict[str, dict[str, tuple[str, ...]]] = {
     "xray_xrb": {
-        "hmxb": ("xray_gamma_hmxb", "xray_E_cut"),
-        "lmxb": ("xray_gamma_lmxb", "xray_E_cut"),
+        "hmxb": ("xray_gamma_hmxb",),
+        "lmxb": ("xray_gamma_lmxb",),
         "hotgas": (),
     },
     "xray_corona": {"agn": ("xray_gamma_agn", "xray_E_cut", "xray_log_nh")},
@@ -373,13 +375,15 @@ def _term_shape_fn(term: str, model: str, fixed: Mapping[str, float], wave: Any)
         held_default = float(np.mean(_DEFAULT_GRIDS["xray_xrb"][1 if term == "hmxb" else 0]))
         held_value = float(fixed[held_param]) if held_param in fixed else held_default
 
+        # No ``E_cut``: the component's XRB terms take the model's own fixed cutoff, so the table
+        # must too. Passing the corona's ``xray_E_cut`` here built a 300 keV table against a 100
+        # keV exact path (4.4% at 2-20 A, #2944).
         def _xrb(values):
             gammas = {free_slot: float(values[0]), held_slot: held_value}
             return _xray_xrb_terms(
                 wave,
                 sfr=1.0,
                 stellar_mass=1.0e10,
-                E_cut=float(fixed["xray_E_cut"]),
                 **gammas,
             )[term]
 

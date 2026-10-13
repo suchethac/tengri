@@ -683,9 +683,14 @@ class EmissionComponent(SEDModelComponent):
                 # Fallback: effective wavelength sample (no padded curves)
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
 
-        restband_lnu = self._restband_phot_lnu(
-            sed_ir, state, band_response, L_ir, filter_eff_waves
-        )
+        if band_response is None and shape_table is not None and self.precompute_key is not None:
+            # Free shape: the rest band is read from the same adapter table at z = 0, so no
+            # per-call filter integral remains (#2559 publishes it beside the photometry).
+            restband_lnu = self._shape_table_phot(p, shape_table, L_ir, rest=True)
+        else:
+            restband_lnu = self._restband_phot_lnu(
+                sed_ir, state, band_response, L_ir, filter_eff_waves
+            )
         return {
             "dust_emission_phot_lnu_precomp": phot_lnu,
             "dust_emission_restband_lnu_precomp": restband_lnu,
@@ -745,7 +750,12 @@ class EmissionComponent(SEDModelComponent):
         return jnp.asarray(1.0)
 
     def _shape_table_phot(
-        self, p: Mapping[str, jnp.ndarray], table: Mapping[str, Any], L_ir: jnp.ndarray
+        self,
+        p: Mapping[str, jnp.ndarray],
+        table: Mapping[str, Any],
+        L_ir: jnp.ndarray,
+        *,
+        rest: bool = False,
     ) -> jnp.ndarray:
         """Band fluxes from the registry adapter's table at the current shape parameters.
 
@@ -757,6 +767,8 @@ class EmissionComponent(SEDModelComponent):
             The adapter's table arrays (``dust_ir["emission_shape_table"]``).
         L_ir : ndarray
             Amplitude the exact band-response branch multiplies [erg/s, or 1 when factored].
+        rest : bool, optional
+            Read the z = 0 rest-band table (``rest_ln_phot``) instead of the observed-frame one.
 
         Returns
         -------
@@ -769,8 +781,9 @@ class EmissionComponent(SEDModelComponent):
         prefix_len = len(self.parameter_prefix)
         names = [n for n in module.AXIS_PARAMS[self.precompute_key] if n in table["axes"]]
         values = [p[n[prefix_len:]] for n in names]
+        band = {**table, "ln_phot": table["rest_ln_phot"]} if rest else table
         return module.lookup_from_table(
-            table, self.precompute_key, L_ir * self.lookup_amplitude(p), *values
+            band, self.precompute_key, L_ir * self.lookup_amplitude(p), *values
         )
 
     def _apply_spectrum_precomp(
