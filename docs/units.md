@@ -56,11 +56,11 @@ raises `ValueError` listing the accepted names. The entries are
 `Spectroscopy.desi_like` factories. `Spectroscopy.from_fits` is not among them:
 its `wave_unit_aa` is a scale factor read from the file header.
 
-The array is converted to Angstrom once, at ingestion. Everything downstream,
-and everything stored, is Angstrom. Stating `wave_unit="nm"` and passing
-`wave * 10` as Angstrom give bit-identical arrays.
+The array is converted to Å once, at ingestion. Everything downstream,
+and everything stored, is in Å. Stating `wave_unit="nm"` and passing
+`wave * 10` as Å give bit-identical arrays.
 
-The conversion is followed by a plausibility check on the Angstrom range:
+The conversion is followed by a plausibility check on the Å range:
 
 - **Refused** when the range lies wholly below 0.01 Å or wholly above 1e9 Å
   (10 cm). The floor is the shortest shipped filter, 0.157 Å (`nustar_full`),
@@ -72,8 +72,8 @@ The conversion is followed by a plausibility check on the Angstrom range:
   exists. Such a range is most likely nanometers. Stating `wave_unit="nm"`
   removes the warning.
 
-A micron-looking optical curve (0.3-1.0) is not refused. Those values are a
-real NuSTAR band in Angstrom, so the range alone cannot settle the unit: state
+A μm-looking optical curve (0.3–1.0) is not refused. Those values are a
+real NuSTAR band in Å, so the range alone cannot settle the unit: state
 `wave_unit="um"`.
 
 ## Timescale parameters
