@@ -341,6 +341,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
+    "spec_sigma_v_kms": "km/s",
     "stellar_spec_lnu_precomp": "erg/s/Hz",
     "nebular_spec_lnu_precomp": "erg/s/Hz",
     "dust_spec_lnu_precomp": "erg/s/Hz",

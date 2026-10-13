@@ -443,6 +443,10 @@ class DerivedState:
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
     # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
     spec_eff_waves: jnp.ndarray | None = None
+    # Stellar velocity dispersion [km/s] of the draw, seeded by the model before the chain
+    # runs when ``approx=SpectrumPrecomp()`` is active. The stellar component broadens its
+    # spectrum LUT family with it on the model grid; scalar.
+    spec_sigma_v_kms: jnp.ndarray | None = None
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None

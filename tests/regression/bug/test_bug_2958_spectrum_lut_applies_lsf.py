@@ -5,19 +5,23 @@ Before the fix the per-pixel families were point samples of the un-convolved res
 SED: ``predict_spectrum`` under ``approx=SpectrumPrecomp()`` ignored the instrument
 resolution and the galaxy velocity dispersion, so ``d spectrum / d sigma_v`` was
 exactly zero and unresolved lines stayed unbroadened below R = 3000. The exact path
-(``project_spectrum_kernel_split``) applies both; the LUT now runs the same stages on
-its pixel grid. The tests pin, on the synthetic wide SSP (continuum) and on the real
-wNE SSP with baked-in nebular lines (lines), at R = 2000 and sigma_v free:
+(``project_spectrum_kernel_split``) applies both; the LUT now runs the same stages in
+the same order: sigma_v on the model grid inside the stellar family (a pre-broadened
+template table for fixed sigma_v, a full-grid stellar sum otherwise), then IGM, then the
+instrument kernel on the pixels. The tests pin, on the synthetic wide SSP (continuum) and on
+the real wNE SSP with baked-in nebular lines (lines), at R = 2000 and sigma_v free:
 
-(a) the gradient of the summed spectrum w.r.t. ``sigma_v_kms`` is finite, non-zero,
-    of the exact path's sign, and within 10 % of it on the line-rich fixture;
+(a) the gradient of a chi-square against the sigma_v = 100 spectrum w.r.t.
+    ``sigma_v_kms`` is within 1e-3 (relative) of the exact path's at 50 and 300 km/s;
 (b) the LUT spectrum at sigma_v = 300 km/s differs from sigma_v = 0;
-(c) the LUT matches the exact path at sigma_v = 300 km/s to 2e-3 at every pixel, and
-    within 5 Angstrom of H-alpha and H-beta;
+(c) the LUT matches the exact path at sigma_v = 300 km/s to 2e-3 at every pixel,
+    including the Ca II K core, and within 5 Angstrom of H-alpha and H-beta;
 (d) with no instrument (``resolution=None``) the LUT is bit-for-bit the pre-fix LUT;
 (e) the exact path is bit-for-bit the pre-extraction exact path;
 (f) a banded resolution matrix falls back to the exact path with a warning and is
-    bit-for-bit equal to it.
+    bit-for-bit equal to it;
+(g) the fixed-sigma_v pre-broadened table equals the full-grid sum route;
+(h) the LUT matches the exact path at R = 5000 with no resolution cap.
 """
 
 from __future__ import annotations
@@ -56,10 +60,16 @@ def _build(ssp, approx, *, spectro, igm=None, sigma_v=None):
         redshift=Fixed(_Z),
         igm=igm if igm is not None else {"type": "none"},
         sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
     )
-    spec = base.spec if sigma_v is None else base.spec.merge_observation_params(sigma_v_kms=sigma_v)
+    spec = (
+        base.spec if sigma_v is None else base.spec.merge_observation_params(sigma_v_kms=sigma_v)
+    )
     return SEDModel(spec, ssp, observation=obs, approx=approx)
 
 
@@ -84,34 +94,48 @@ def _mask(s_exact):
 # ── (a) gradient w.r.t. sigma_v matches the exact path ─────────────────────────
 
 
+def _chi2_grad(model, ref, sigma_v):
+    """d chi2 / d sigma_v of the spectrum against ``ref`` with 5 % errors."""
+
+    def chi2(s):
+        spec = model.predict_spectrum({"sigma_v_kms": s})
+        return jnp.sum(((spec - ref) / (0.05 * ref)) ** 2)
+
+    return float(jax.grad(chi2)(jnp.asarray(sigma_v, dtype=jnp.float64)))
+
+
+@pytest.mark.parametrize("sigma_v", [50.0, 300.0])
+def test_a_chi2_gradient_matches_exact(ssp_data_wne, sigma_v):
+    sv = Uniform(0.0, 2000.0)
+    exact = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    ref = jnp.asarray(_spectrum(exact, 100.0))
+    g_exact = _chi2_grad(exact, ref, sigma_v)
+    g_lut = _chi2_grad(lut, ref, sigma_v)
+    assert np.isfinite(g_lut)
+    assert g_lut != 0.0
+    assert abs(g_lut - g_exact) <= 1e-3 * abs(g_exact), f"LUT {g_lut} vs exact {g_exact}"
+
+
 def test_a_gradient_live_on_continuum_fixture(synthetic_ssp_wide):
     sv = Uniform(0.0, 2000.0)
     exact = _build(synthetic_ssp_wide, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
     lut = _build(synthetic_ssp_wide, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
-    g_lut = float(_grad(lut, 150.0))
-    g_exact = float(_grad(exact, 150.0))
+    ref = jnp.asarray(_spectrum(exact, 100.0))
+    g_lut = _chi2_grad(lut, ref, 300.0)
+    g_exact = _chi2_grad(exact, ref, 300.0)
     assert np.isfinite(g_lut)
     assert g_lut != 0.0
     assert np.sign(g_lut) == np.sign(g_exact)
-
-
-def test_a_gradient_matches_exact_on_line_fixture(ssp_data_wne):
-    sv = Uniform(0.0, 2000.0)
-    exact = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
-    lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
-    g_lut = float(_grad(lut, 150.0))
-    g_exact = float(_grad(exact, 150.0))
-    assert np.isfinite(g_lut)
-    assert g_lut != 0.0
-    rel = abs(g_lut - g_exact) / abs(g_exact)
-    assert rel <= 0.10, f"LUT grad {g_lut} vs exact {g_exact} (rel {rel:.3g})"
 
 
 # ── (b) sigma_v changes the spectrum ───────────────────────────────────────────
 
 
 def test_b_spectrum_depends_on_sigma_v(ssp_data_wne):
-    lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0, 2000))
+    lut = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0, 2000)
+    )
     s0 = _spectrum(lut, 0.0)
     s300 = _spectrum(lut, 300.0)
     assert float(np.max(np.abs(s300 - s0))) > 1e-6 * float(np.max(np.abs(s0)))
@@ -141,25 +165,73 @@ def test_c_lut_matches_exact_lines_at_halpha_hbeta(ssp_data_wne):
         assert _max_rel_dev(s_lut, s_exact, near) <= 2e-3
 
 
+def test_c_fixed_sigma_v_table_matches_exact(ssp_data_wne):
+    exact = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=Fixed(300.0))
+    lut = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Fixed(300.0)
+    )
+    s_exact = np.asarray(exact.predict_spectrum({}))
+    s_lut = np.asarray(lut.predict_spectrum({}))
+    assert _max_rel_dev(s_lut, s_exact, _mask(s_exact)) <= 2e-3
+
+
+# ── (g) fixed-sigma_v pre-broadened table equals the full-grid sum route ──────
+
+
+def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
+    table = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Fixed(300.0)
+    )
+    summed = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0.0, 2000.0)
+    )
+    s_table = np.asarray(table.predict_spectrum({}))
+    s_sum = _spectrum(summed, 300.0)
+    # Same operation in two orders of linear ops: relative to the median flux so FFT
+    # roundoff in the deepest absorption pixels does not dominate.
+    assert float(np.max(np.abs(s_table - s_sum))) <= 1e-6 * float(np.median(np.abs(s_sum)))
+
+
+# ── (h) no resolution cap: the LUT holds at R = 5000 ──────────────────────────
+
+
+def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
+    sv = Uniform(0.0, 2000.0)
+    exact = _build(ssp_data_wne, None, spectro=_spec(5000.0), igm=_MADAU, sigma_v=sv)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=".*SpectrumPrecomp.*")
+        lut = _build(
+            ssp_data_wne, SpectrumPrecomp(), spectro=_spec(5000.0), igm=_MADAU, sigma_v=sv
+        )
+    assert lut._approx.get("spectrum_precomp")
+    s_exact, s_lut = _spectrum(exact, 300.0), _spectrum(lut, 300.0)
+    assert _max_rel_dev(s_lut, s_exact, _mask(s_exact)) <= 2e-3
+
+
 # ── (d) no instrument: the LUT is bit-for-bit the pre-fix LUT ─────────────────
 
 # Pre-fix LUT values (resolution=None, sigma_v=0, madau IGM), at _IDX, captured from the
-# conftest fixtures on origin/main before the kernel was applied. With no resolution there is no kernel to
-# apply, so the fixed LUT must reproduce them exactly.
+# conftest fixtures on origin/main before the kernel was applied. With no resolution there
+# is no kernel to apply, so the fixed LUT must reproduce them exactly.
 _PREFIX_LUT_WNE_RNONE = [
-        7.585321879860206e-29,
-        2.7566442699605755e-28,
-        4.476516855282938e-28,
-        6.528615494672773e-28,
-        7.666995745049181e-28,
-        1.0511964695858449e-27,
-        1.2729797128126482e-27,
-    ]
+    7.585321879860206e-29,
+    2.7566442699605755e-28,
+    4.476516855282938e-28,
+    6.528615494672773e-28,
+    7.666995745049181e-28,
+    1.0511964695858449e-27,
+    1.2729797128126482e-27,
+]
 
 
 def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
-    lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(resolution=None), igm=_MADAU,
-                 sigma_v=Fixed(0.0))
+    lut = _build(
+        ssp_data_wne,
+        SpectrumPrecomp(),
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Fixed(0.0),
+    )
     s = np.asarray(lut.predict_spectrum({}))
     np.testing.assert_array_equal(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE))
 
@@ -209,6 +281,7 @@ def test_f_resolution_matrix_falls_back_bit_exact(synthetic_ssp_wide):
     sv = Uniform(0.0, 2000.0)
     exact = _build(synthetic_ssp_wide, None, spectro=spectro, igm=_MADAU, sigma_v=sv)
     with pytest.warns(UserWarning, match="resolution matrix"):
-        lut = _build(synthetic_ssp_wide, SpectrumPrecomp(), spectro=spectro, igm=_MADAU,
-                     sigma_v=sv)
+        lut = _build(
+            synthetic_ssp_wide, SpectrumPrecomp(), spectro=spectro, igm=_MADAU, sigma_v=sv
+        )
     np.testing.assert_array_equal(_spectrum(lut, 150.0), _spectrum(exact, 150.0))

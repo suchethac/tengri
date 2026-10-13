@@ -2424,16 +2424,16 @@ class Observation:
         log10_cos,
         igm_factor,
         *,
-        sigma_v_kms,
         sigma_lib_kms,
         lsf_scale,
     ):
-        """Observed F_nu on the pixel grid with the exact path's sigma_v and instrument stages.
+        """Observed F_nu on the pixel grid after IGM and the exact path's instrument stage.
 
-        The LUT's per-pixel families are point samples of the rest SED, so the kernel
-        runs on the pixel grid rather than the model grid (#2958). The two buckets follow
-        the exact path's assignment: the instrument-only bucket is the dust-attenuated
-        nebular emission and the stellar bucket is the remainder of the sum.
+        Stage 3 of the exact path. The velocity dispersion (stage 1) is already in the
+        stellar family, which the stellar component broadens on the model grid before
+        sampling. The two buckets follow the exact path's assignment: the
+        instrument-only bucket is the dust-attenuated nebular emission and the stellar
+        bucket is the remainder of the sum.
 
         Parameters
         ----------
@@ -2445,8 +2445,6 @@ class Observation:
             log10 of the cosmology factor ``(1 + z) / (4 pi d_L^2)``.
         igm_factor : ndarray, shape (n_pix,), or None
             Observed-frame IGM transmission at the pixels; ``None`` when no IGM is set.
-        sigma_v_kms : float or traced scalar
-            Stellar velocity dispersion [km/s].
         sigma_lib_kms : float or ndarray, shape (n_pix,)
             SSP library resolution [km/s].
         lsf_scale : float or traced scalar
@@ -2467,12 +2465,10 @@ class Observation:
         -----
         **JIT-compatible**: yes; the branch on ``resolution_matrix`` is structural.
 
-        The LUT convolves the stellar bucket with :math:`\sigma_v` after point sampling
-        and the exact path convolves the model grid before sampling. This is the one
-        documented difference between the two paths; its size is measured in the
-        regression tests for #2958.
+        The stage order :math:`\\sigma_v \to` IGM :math:`\to` instrument holds on the LUT
+        as on the exact path.
         """
-        from tengri.observation.spectrum import broaden_velocity_only, instrument_stage_on_pixels
+        from tengri.observation.spectrum import instrument_stage_on_pixels
 
         spectro = self.spectroscopy
         if spectro.resolution_matrix is not None:
@@ -2480,10 +2476,7 @@ class Observation:
                 "the spectrum LUT cannot apply a banded resolution_matrix; "
                 "build with approx=None for this observation (#2958)."
             )
-        stellar_lnu = broaden_velocity_only(
-            total_lnu - nebular_lnu, spectro.wave_obs, sigma_v_kms
-        )
-        stellar_fnu = apply_log10_scale(stellar_lnu, log10_cos)
+        stellar_fnu = apply_log10_scale(total_lnu - nebular_lnu, log10_cos)
         nebular_fnu = apply_log10_scale(nebular_lnu, log10_cos)
         if igm_factor is not None:
             stellar_fnu = stellar_fnu * igm_factor
@@ -2503,7 +2496,6 @@ class Observation:
         params,
         *,
         observables_type=None,
-        sigma_v_kms=0.0,
         sigma_lib_kms=0.0,
         lsf_scale=1.0,
     ):
@@ -2511,7 +2503,12 @@ class Observation:
 
         Opt-in fast path for ``approx=SpectrumPrecomp()``. Sums all ``*_spec_lnu_precomp``
         keys present in ``state.derived`` and applies the cosmology factor
-        ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+        ``(1+z)/(4π·dl²)`` to convert to observed F_ν. It runs the exact path's three
+        stages in the same order: the stellar velocity dispersion is already in the
+        stellar family (broadened on the model grid by the stellar component), the IGM
+        factor multiplies next, and the instrument stage runs on the pixel grid via
+        :func:`~tengri.observation.spectrum.instrument_stage_on_pixels`. With
+        ``resolution=None`` there is no instrument stage.
 
         Parameters
         ----------
@@ -2524,9 +2521,6 @@ class Observation:
             Per-model :class:`Observables` NamedTuple class (from
             :meth:`SEDModel.Observables`). When provided, returns an
             instance; when ``None``, returns a dict.
-        sigma_v_kms : float or traced scalar, default 0.0
-            Stellar velocity dispersion [km/s], applied to the stellar bucket on the
-            pixel grid when ``resolution`` is set (#2958).
         sigma_lib_kms : float or ndarray, shape (n_pix,), default 0.0
             SSP library resolution [km/s] subtracted from the stellar bucket.
         lsf_scale : float or traced scalar, default 1.0
@@ -2639,8 +2633,8 @@ class Observation:
             # not a function of redshift alone and cannot be tabulated.
             igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         # Without a resolution there is no instrument kernel: the un-convolved sample,
-        # bit-for-bit as before #2958. With one, the exact path's sigma_v and instrument
-        # stages run on the pixel grid (see ``_lut_lsf_fnu``).
+        # bit-for-bit as before #2958. With one, the exact path's instrument stage runs on
+        # the pixel grid (see ``_lut_lsf_fnu``); sigma_v is already in the stellar family.
         if spectro.resolution is None:
             spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
             if igm_factor is not None:
@@ -2651,7 +2645,6 @@ class Observation:
                 nebular_dust,
                 log10_cos,
                 igm_factor,
-                sigma_v_kms=sigma_v_kms,
                 sigma_lib_kms=sigma_lib_kms,
                 lsf_scale=lsf_scale,
             )
