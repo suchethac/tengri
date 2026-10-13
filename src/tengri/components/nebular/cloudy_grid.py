@@ -195,15 +195,84 @@ class CloudyGridData(NamedTuple):
     cont_log_U: jnp.ndarray  # (n_logU,) shared with lines
 
 
+#: Solar metallicity Z_sun [dimensionless mass fraction] that each isochrone family's
+#: FSPS CLOUDY grid is relative to, keyed by the family tag (``isoc_type`` attribute,
+#: ``cloudy_grid_<tag>.h5``). ``scripts/convert_fsps_cloudy_grid.py`` imports this
+#: table, so the converter and the loader cannot disagree.
+#:
+#: - ``mist``: 0.0142, Asplund et al. (2009) protosolar, as adopted by MIST
+#:   (Choi et al. 2016, ApJS 223, 7; Dotter 2016, ApJS 222, 8).
+#: - ``prsc``: 0.01524, the PARSEC value FSPS uses (Bressan et al. 2012, MNRAS 427,
+#:   127). The PARSEC paper's own nominal value is 0.0152; the repo's converter and
+#:   this table use FSPS's 0.01524, the convention the shipped grid was built with.
+#: - ``pdva``: 0.019, Padova (Girardi et al. 2000, A&AS 141, 371; Marigo et al. 2008,
+#:   A&A 482, 883).
+#: - ``bpss``: 0.020, BPASS (Eldridge et al. 2017, PASA 34, e058; Stanway & Eldridge
+#:   2018, MNRAS 479, 75).
+CLOUDY_ZSUN_BY_ISOC: dict[str, float] = {
+    "mist": 0.0142,
+    "prsc": 0.01524,
+    "pdva": 0.019,
+    "bpss": 0.020,
+}
+_ZSUN_FALLBACK: float = CLOUDY_ZSUN_BY_ISOC["mist"]  # unknown family: read as MIST
+_ZSUN_WARNED: set[str] = set()  # files already warned about, so each warns once
+_CLOUDY_FILE_PREFIX = "cloudy_grid_"
+
+
+def _isochrone_family(f: h5py.File, filepath: str) -> str | None:
+    """Return the isochrone family tag of a grid file, or None if it cannot be told.
+
+    The ``isoc_type`` root attribute is read first; failing that, the family is the
+    token in the filename (``cloudy_grid_<tag>[_wd].h5``).
+    """
+    tag = f.attrs.get("isoc_type")
+    if tag is not None:
+        return tag.decode() if isinstance(tag, bytes) else str(tag)
+    stem = os.path.splitext(os.path.basename(filepath))[0]
+    if not stem.startswith(_CLOUDY_FILE_PREFIX):
+        return None
+    return stem[len(_CLOUDY_FILE_PREFIX) :].removesuffix("_wd")
+
+
+def _log10_zsun(f: h5py.File, filepath: str) -> float:
+    """Return log10 of the Z_sun that a grid file's ``log_met`` axes are relative to.
+
+    Precedence: the root ``zsun`` attribute (written by the converter), then the
+    family table :data:`CLOUDY_ZSUN_BY_ISOC`. Only a file whose family is unknown
+    falls back to the MIST value, with a warning naming the file, emitted once per file.
+    """
+    if "zsun" in f.attrs:
+        return float(np.log10(float(f.attrs["zsun"])))
+    family = _isochrone_family(f, filepath)
+    if family in CLOUDY_ZSUN_BY_ISOC:
+        return float(np.log10(CLOUDY_ZSUN_BY_ISOC[family]))
+    if filepath not in _ZSUN_WARNED:
+        _ZSUN_WARNED.add(filepath)
+        warnings.warn(
+            f"{filepath}: no 'zsun' attribute and unknown isochrone family {family!r}; "
+            f"assuming Z_sun = {_ZSUN_FALLBACK} (MIST). Add the family to "
+            "CLOUDY_ZSUN_BY_ISOC or regenerate the grid with "
+            "scripts/convert_fsps_cloudy_grid.py.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return _LOG10_ZSUN
+
+
 def load_cloudy_grid(filepath: str) -> CloudyGridData:
     """Load a tengri-format CLOUDY grid HDF5 file.
 
     Following FSPS convention, stores luminosities in log10 space
     for interpolation accuracy. A floor of 10^{-95} prevents log(0).
 
-    Metallicity axes are converted from log10(Z/Zsun) (FSPS convention
+    Metallicity axes are converted from log10(Z/Z_sun) (FSPS convention
     in the HDF5 file) to absolute log10(Z) at load time, matching the
-    SSP metallicity grid convention used by DSPS.
+    SSP metallicity grid convention used by DSPS. The Z_sun is the root
+    ``zsun`` attribute written by ``scripts/convert_fsps_cloudy_grid.py``
+    when present; otherwise the isochrone family's entry in
+    :data:`CLOUDY_ZSUN_BY_ISOC`. Only a file of unknown family is read
+    with Z_sun = 0.0142 and a one-time warning naming the file.
 
     Parameters
     ----------
@@ -232,8 +301,9 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
         cont_lum_log = np.log10(cont_lum_raw + _LOG_FLOOR)
 
         # Convert metallicity from log10(Z/Zsun) → absolute log10(Z)
-        line_log_met_abs = np.array(f["lines/axes/log_met"][:]) + _LOG10_ZSUN
-        cont_log_met_abs = np.array(f["continuum/axes/log_met"][:]) + _LOG10_ZSUN
+        log10_zsun = _log10_zsun(f, filepath)
+        line_log_met_abs = np.array(f["lines/axes/log_met"][:]) + log10_zsun
+        cont_log_met_abs = np.array(f["continuum/axes/log_met"][:]) + log10_zsun
 
         return CloudyGridData(
             line_wavelengths=jnp.array(f["lines/wavelength"][:]),
@@ -751,7 +821,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
@@ -772,7 +842,7 @@ class CloudyGridBackend:
         absolute (f_esc, f_dust) shares derived from (neb_fesc,
         neb_fdust_frac) via lyc_shares (#2436).
         Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
-        its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
+        its luminosity is additionally multiplied by neb_fesc_lya to
         account for resonant scattering that suppresses Ly-alpha escape
         independently of the general ionizing photon and dust budget.
 
@@ -867,7 +937,7 @@ class CloudyGridBackend:
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
         # Apply differential Ly-alpha escape fraction via the shared helper.
-        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        # This multiplies Lyα by neb_fesc_lya after k_factor was already applied.
         total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
@@ -991,7 +1061,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
@@ -1088,7 +1158,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,

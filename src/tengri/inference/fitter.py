@@ -1628,7 +1628,7 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default). The fitter takes a
+    Fit a single galaxy with the default method, ``"mcmc_nuts_fast"``. The fitter takes a
     :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
     >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
@@ -3784,7 +3784,7 @@ class Fitter:
         Parameters
         ----------
         method : str, optional
-            Inference method (case-sensitive). Default ``"vi"``.
+            Inference method (case-sensitive). Default ``"mcmc_nuts_fast"``.
 
             **Variational Inference (VI)**
 
@@ -3899,7 +3899,9 @@ class Fitter:
         -----
         **Method selection strategy:**
 
-        - **Default** (``"vi"``): geoVI is recommended for high-dimensional problems
+        - **Default** (``"mcmc_nuts_fast"``): four NUTS chains on the mass-profiled
+          posterior; the fast photometry recipe for single galaxies.
+        - **Variational** (``"vi"``): geoVI is recommended for high-dimensional problems
           (D>50) and population fitting. Captures non-Gaussian posterior geometry.
         - **Exact posterior** (``"mcmc_nuts"``): Use for D≤20 where exact sampling is
           feasible and posterior validation is critical.
@@ -4733,7 +4735,7 @@ class Fitter:
         batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
         method : str
-            Default "vi". Any method from run().
+            Default ``"mcmc_nuts_fast"``. Any method from run().
         key : PRNGKey, optional
             Random seed for sampling methods. Default: ``jax.random.PRNGKey(42)``.
         verbose : bool

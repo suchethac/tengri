@@ -384,7 +384,7 @@ class Parameters:
     neb_logU                   Fixed(-3.0)       Ionization parameter log10(U)
     neb_logZ_gas               Fixed(-0.3)       Gas metallicity (None = tie to stellar)
     neb_fesc                   Fixed(0.0)        Ionizing photon escape fraction
-    neb_fesc_lya               Fixed(0.0)        Ly-alpha escape fraction
+    neb_fesc_lya               Fixed(1.0)        Ly-alpha escape fraction
     ========================== ================= =======================================
 
     **Dust emission** (``dust_emission != None``):
