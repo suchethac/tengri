@@ -232,6 +232,7 @@ def test_gradients_are_finite_with_old_populations_counted():
     grads = jax.grad(halpha)(params)
     for name, g in grads.items():
         assert np.isfinite(float(g)), name
+    assert any(float(g) != 0.0 for g in grads.values()), "identically zero Halpha gradient"
     assert float(grads["sfh_delayed_log_total_mass"]) == pytest.approx(
         np.log(10.0) * float(halpha(params)), rel=1e-4
     )
@@ -255,6 +256,7 @@ def test_combine_gradient_wrt_weights_is_finite_with_zero_weight_bins():
     for fn in (gas_qion, shape_index):
         g = np.asarray(jax.grad(fn)(weights))
         assert np.all(np.isfinite(g))
+        assert np.any(g != 0.0), f"{fn.__name__}: identically zero gradient wrt the weights"
     assert (np.asarray(weights) == 0.0).any(), "fixture lost its zero-weight bins"
 
 
@@ -303,4 +305,6 @@ def test_empty_population_gets_no_emission_and_a_finite_gradient():
     assert float(out["gas_logqion"]) == -99.0
     assert all(np.isfinite(float(v)) for v in out.values())
     g = jax.grad(lambda w: combine(w)["gas_logqion"])(zeros)
+    # grad-assert: finite-only — an empty population has the constant gas_logqion = -99
+    # (no photons), so its gradient wrt the weights is exactly zero.
     assert np.all(np.isfinite(np.asarray(g)))

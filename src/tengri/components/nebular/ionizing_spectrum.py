@@ -846,7 +846,12 @@ def _exact_log_qion(
             )
         )
         q = np.ldexp(q_scaled.astype(np.float64), exponent)
-        out[start : start + chunk] = np.log10(np.maximum(q, 1e-99))
+        # log10 of the positive rates only; a bin with none keeps the -99 'no photons' value.
+        positive = q > 0.0
+        log_q = np.log10(np.where(positive, q, 1.0))
+        out[start : start + chunk] = np.where(
+            positive, np.maximum(log_q, _NO_IONIZING_LOG_Q), _NO_IONIZING_LOG_Q
+        )
     return out
 
 
