@@ -10748,8 +10748,9 @@ class SEDModel:
         -------
         dict[str, Any] | None
             Nested dict with namespace keys (``"nebular"``, ``"dust_ir"``,
-            ``"agn"``) carrying the threaded template data for that
-            subsystem. Returns ``None`` if no components need threading.
+            ``"agn"``, ``"stellar"``) carrying the threaded template data for that
+            subsystem. ``"stellar"`` holds the fixed-z stellar LUT array fields
+            (#2812). Returns ``None`` if no components need threading.
         """
         # Build the chain if it is not cached yet, rather than bailing out.
         #
@@ -10792,6 +10793,22 @@ class SEDModel:
                     result["nebular"] = template
                     break
             break
+
+        # ── Fixed-z stellar LUTs (#2812) ──
+        # The per-redshift SSP x filter (and SSP x pixel) tables. Read off the closure
+        # they were 8.8 of the fit kernel's 8.9 MB of StableHLO and the only
+        # constants that differ between two fixed redshifts, so every distinct z
+        # compiled from scratch.
+        # Threaded, two fixed-z models lower to the same HLO and share one compile
+        # through the persistent cache.
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        for component in cached:
+            if isinstance(component, StellarSEDComponent):
+                stellar_luts = component.fixed_z_luts_for_threading()
+                if stellar_luts:
+                    result["stellar"] = stellar_luts
+                break
 
         # ── Fast-nebular grid: the continuum z-table ──
         # ``n_z x n_filter`` floats per grid node (tens of MB for a three-axis
