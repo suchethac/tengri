@@ -225,8 +225,36 @@ class PublishedLuminosities:
 
     Holds the methods that publish ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed``. It
     reads ``self.config``, ``self._disc_raw``, ``self._torus_at``, ``self._feii_template`` and
-    ``self._attenuation`` of the component and defines no state of its own.
+    ``self._attenuation`` of the component and defines no state of its own. The four hooks are
+    declared below as stubs so the contract is visible on the mixin; the component overrides
+    each of them.
     """
+
+    def _feii_template(self, templates_state: GRAHSPSEDComponentState) -> tuple[Array, Array]:
+        """Selected FeII template: wave [nm], L_lambda per unit amplitude (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _feii_template")
+
+    def _disc_raw(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> Array:
+        """Big blue bump L_lambda [erg/s/nm] before the X-ray floor (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _disc_raw")
+
+    def _torus_at(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array]:
+        """Torus and Si feature L_lambda [erg/s/nm] before the clip (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _torus_at")
+
+    def _attenuation(self, wave_nm: Array, params: Mapping[str, Array]) -> Array | None:
+        """AGN-side attenuation factor [dimensionless], or None (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _attenuation")
 
     def _published_luminosities(
         self,
