@@ -130,6 +130,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
     tabulated_metallicity_on_ssp_grid,
     two_step_metallicity,
 )
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
@@ -171,6 +172,12 @@ DEFAULT_AGE_KERNEL = "cic"
 
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
+
+#: Declared default PSB burst onset lookback time [Gyr], read from the ``psb``
+#: SFH declaration so the metallicity fallback cannot drift from it.
+_PSB_BURSTAGE_DEFAULT_GYR: float = (
+    SFH_REGISTRY["psb"].params["sfh_psb_burstage_gyr"].default.default
+)
 
 #: SFH families whose time axis is anchored to the age of the universe at the
 #: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
@@ -3041,7 +3048,9 @@ class StellarSEDComponent:
             # ``met_logzsol_burst``.
             log_z_old_abs = jnp.asarray(params["met_logzsol_old"]) + LOG10_ZSUN
             log_z_burst_abs = jnp.asarray(params["met_logzsol_burst"]) + LOG10_ZSUN
-            burstage_gyr = jnp.asarray(params.get("sfh_psb_burstage_gyr", 1.0))
+            burstage_gyr = jnp.asarray(
+                params.get("sfh_psb_burstage_gyr", _PSB_BURSTAGE_DEFAULT_GYR)
+            )
             lgmet_on_ssp_ages = psb_two_step_metallicity(
                 ssp.ssp_lg_age_gyr, log_z_old_abs, log_z_burst_abs, burstage_gyr
             )

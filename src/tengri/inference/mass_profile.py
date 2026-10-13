@@ -101,6 +101,7 @@ import math
 import os
 import re
 import warnings
+import zlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -116,6 +117,11 @@ if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
     from tengri.inference.posterior import Posterior
     from tengri.parameters.priors import Distribution
+
+#: PRNG salt for the profiled-mass draw. A fixed crc32, not ``hash(str)``: string
+#: hashing is salted per process (``PYTHONHASHSEED``), so the same key drew
+#: different masses in different runs.
+_PROFILE_MASS_SALT = zlib.crc32(b"tengri.profile_mass") & 0x7FFFFFFF
 
 __all__ = [
     "build_profiled_loglikelihood_fn",
@@ -2124,7 +2130,7 @@ def reinsert_profiled_mass(
     if posterior.samples is not None:
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
         n_draws = next(iter(samples_no_mass.values())).shape[0]
-        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
+        mass_key = jax.random.fold_in(key, _PROFILE_MASS_SALT)
         draw_keys = jax.random.split(mass_key, n_draws)
         with _reinsertion_lock():
             ell_samples = _reinsert_mass_fn(fitter)(
