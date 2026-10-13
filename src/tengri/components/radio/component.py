@@ -215,7 +215,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     freefree_wave_min : float or None
         Rest wavelength [Angstrom] below which the thermal free-free term is
         zero; the term is on at and above it. ``None`` (default) leaves the term on its own lower
-        limit (1 mm). The factory sets it to the SSP grid edge when the SSP
+        limit (100 um). The factory sets it to the SSP grid edge when the SSP
         is flagged nebular-included (``ssp_data.nebular == "included"``: its
         flux already holds the nebular continuum) and ``include_freefree``
         was left unset, so the SSP serves the thermal continuum up to its

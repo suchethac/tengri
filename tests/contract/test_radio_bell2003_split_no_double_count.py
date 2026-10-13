@@ -36,12 +36,10 @@ from tengri.radio import radio_sfr_bell2003_split
 
 pytestmark = pytest.mark.contract
 
-#: Matches ``tengri.components.radio.radio._RADIO_WAVE_MIN_AA`` (1 mm): the
-#: SED is zero shortward of this by construction, so any comparison must be
-#: restricted to the radio band or a false "extra term" would show up as a
-#: mismatch in the non-radio wavelength range where BOTH sides are already
-#: (correctly) zero for an unrelated reason.
-_RADIO_WAVE_MIN_AA = 1.0e7
+#: The radio block edge, ``radio._RADIO_WAVE_MIN_AA`` (100 um): the SED is zero shortward of
+#: it, so any comparison must be restricted to the radio band or a false "extra term"
+#: would show up as a mismatch in the range where BOTH sides are already zero.
+_RADIO_WAVE_MIN_AA = 1.0e6
 
 #: Declared default for radio_q_ir from the registry (Bell 2003: 2.64).
 _Q_IR = registry().get("radio_q_ir").prior.value
