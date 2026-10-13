@@ -75,6 +75,7 @@ from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
+    AdvisoryWarning,
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
     FilterCoverageWarning,
@@ -7691,6 +7692,105 @@ class SEDModel:
         norm = jnp.trapezoid(profile, offsets)
         weighted = jnp.trapezoid(T_grid * profile[None, :], offsets, axis=1)
         return weighted / norm
+
+    def line_model_sigma_frac(
+        self,
+        target_wavelengths,
+        *,
+        tolerance_aa: float = 5.0,
+    ) -> np.ndarray:
+        """Fractional 1-sigma model error of the predicted line fluxes, per target.
+
+        Host-side NumPy, never traced: the result is data for the likelihood, not
+        a function of the parameters. Each target is matched to the nearest line
+        the nebular backend publishes, within ``tolerance_aa``, and the matched
+        catalog entry's fractional sigma is returned. The same ``cloudyfsps_only``
+        flag as :meth:`predict_line_fluxes` selects the catalog, so the errors
+        align with the lines the model predicts.
+
+        Parameters
+        ----------
+        target_wavelengths : array_like, shape (n_lines,)
+            Rest-frame vacuum wavelengths of the observed lines [Angstrom].
+        tolerance_aa : float, optional
+            Maximum allowed distance from a target to its matched catalog line
+            [Angstrom]. ``None`` disables the check. Default 5.0, as in
+            :meth:`predict_line_fluxes`.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            Fractional 1-sigma model error per target [dimensionless]. Zero where
+            the backend publishes no error, so the likelihood reduces to the
+            observation-only error.
+
+        Raises
+        ------
+        ValueError
+            If a target has no catalog line within ``tolerance_aa``, or the hook
+            returns an array misaligned with ``published_line_wavelengths``.
+
+        Notes
+        -----
+        **Generic hook, not a Cue special case.** A backend may provide
+        ``published_line_model_sigma(*, cloudyfsps_only)`` returning a fractional
+        sigma aligned element-for-element with
+        ``published_line_wavelengths(cloudyfsps_only=...)`` (vacuum Angstrom), or
+        ``None`` when the weights carry no errors. A backend without the hook has
+        no model sigma and yields zeros. If the hook exists but returns ``None``,
+        an :class:`~tengri.config.exceptions.AdvisoryWarning` says the weights need
+        refreshing.
+
+        Only line fluxes take a model sigma. Line ratios and spectral indices do
+        not: the per-line errors are correlated within a sub-network (for example
+        [O III] 4959/5007 is fixed by atomic physics), and upstream publishes no
+        covariance, so propagating them in quadrature would invent errors.
+        """
+        targets = np.asarray(target_wavelengths, dtype=np.float64).reshape(-1)
+        zeros = np.zeros(targets.shape[0], dtype=np.float64)
+        backend = self._nebular_backend
+        hook = getattr(backend, "published_line_model_sigma", None)
+        if hook is None or targets.size == 0:
+            return zeros
+        cloudyfsps_only = not bool(
+            getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+        )
+        sigma = hook(cloudyfsps_only=cloudyfsps_only)
+        if sigma is None:
+            warnings.warn(
+                f"The {type(backend).__name__!r} nebular weights carry no per-line emulator "
+                "errors, so line-flux fits treat the model as exact. Refresh the weights file "
+                "to include the published model sigma.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
+            return zeros
+        catalog_waves = np.asarray(
+            backend.published_line_wavelengths(cloudyfsps_only=cloudyfsps_only),
+            dtype=np.float64,
+        )
+        sigma = np.asarray(sigma, dtype=np.float64)
+        if sigma.shape != catalog_waves.shape:
+            raise ValueError(
+                f"published_line_model_sigma returned shape {sigma.shape}, not the "
+                f"catalog shape {catalog_waves.shape} of published_line_wavelengths."
+            )
+        deltas = np.abs(catalog_waves[None, :] - targets[:, None])
+        indices = np.argmin(deltas, axis=1)
+        min_deltas = deltas[np.arange(targets.shape[0]), indices]
+        if tolerance_aa is not None:
+            bad = min_deltas > float(tolerance_aa)
+            if bad.any():
+                misses = "\n".join(
+                    f"  target={targets[i]:.3f} Aa  closest={catalog_waves[indices[i]]:.3f} Aa"
+                    f"  delta={min_deltas[i]:.3f} Aa"
+                    for i in np.where(bad)[0]
+                )
+                raise ValueError(
+                    f"line_model_sigma_frac: {int(bad.sum())} target line(s) have no match "
+                    f"within tolerance_aa={tolerance_aa} Aa.\n{misses}"
+                )
+        return sigma[indices].astype(np.float64)
 
     def predict_line_fluxes(
         self,

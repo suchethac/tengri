@@ -1660,6 +1660,17 @@ class Fitter:
         passed as ``Fitter(model, data, noise, extra_log_prior=extra)``. (The
         derived-key names above are illustrative; verify them against the
         specific model's published ``state.derived`` keys.)
+    line_model_sigma : bool, optional
+        Score measured line fluxes with the nebular model's own per-line
+        error (``sigma_eff = hypot(sigma_obs, f_cal |F_model|, s_line |F_model|)``,
+        the ``ln sigma_eff`` term kept). Active only when the backend publishes
+        ``published_line_model_sigma`` and it is nonzero for the fitted lines.
+        ``False`` scores against the observation error alone, as before this
+        option existed. Applies to line fluxes only: line ratios and spectral
+        indices are not given a model error, because the per-line errors are
+        correlated within a sub-network (for example [O III] 4959/5007 is fixed
+        by atomic physics) and upstream publishes no covariance, so quadrature
+        propagation would invent errors. Default ``True``.
 
     Returns
     -------
@@ -1757,6 +1768,7 @@ class Fitter:
         params_override=None,
         profile_mass: bool | str = "auto",
         extra_log_prior: Callable | None = None,
+        line_model_sigma: bool = True,
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -1810,6 +1822,11 @@ class Fitter:
         # orchestrator bridge yet, so combining ``use_components=True``
         # with non-photometric data_type is rejected at construction.
         self.use_components = bool(use_components)
+
+        # Opt-in model error on measured line fluxes (see the class docstring);
+        # read by _resolved_line_model_sigma, which mass_profile also consults
+        # before _data_args exists.
+        self.line_model_sigma = bool(line_model_sigma)
 
         # ── Compile cache (ADR-deepen Step C, 2026-05) ──────────────
         # Optional per-Fitter CompileCache instance. When None, fall back
@@ -2185,6 +2202,35 @@ class Fitter:
         then be handed a censored mask (#1599).
         """
         return self._line_fluxes_for(self.model)
+
+    def _resolved_line_model_sigma(self):
+        """Fractional model sigma on the measured line fluxes, or ``None``.
+
+        ``None`` when ``line_model_sigma`` is off, no line-flux channel is
+        configured, or the model's sigma is zero for every fitted line. Otherwise
+        the ``(n_lines,)`` array that :meth:`_build_data_args` packs as
+        ``line_flux_model_sigma_frac``.
+
+        Notes
+        -----
+        Called from the profile_mass guards (``mass_profile._check_guards``), which run
+        before ``_data_args`` exists, so it recomputes from the model rather than
+        reading ``_data_args``. The model call is host-side and cheap.
+        """
+        import numpy as np
+
+        if not self.line_model_sigma:
+            return None
+        line_flux_cfg = self._resolved_line_fluxes()
+        if line_flux_cfg is None:
+            return None
+        hook = getattr(self.model, "line_model_sigma_frac", None)
+        if hook is None:
+            return None
+        sigma = np.asarray(hook(line_flux_cfg.wavelengths), dtype=np.float64)
+        if not np.any(sigma > 0.0):
+            return None
+        return sigma
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized.
@@ -2644,6 +2690,9 @@ class Fitter:
                 limit_mask = getattr(line_flux_cfg, "limit_mask", None)
                 if limit_mask is not None:
                     args["line_flux_limit_mask"] = limit_mask
+                model_sigma = self._resolved_line_model_sigma()
+                if model_sigma is not None:
+                    args["line_flux_model_sigma_frac"] = jnp.asarray(model_sigma)
 
             line_ratio_cfg = getattr(obs, "line_ratios", None)
             if line_ratio_cfg is not None:
