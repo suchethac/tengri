@@ -170,16 +170,17 @@ def _cb19_grid_support() -> dict[str, tuple[float, float]]:
     ``jnp.clip(val, grid[0], grid[-1])``), so it shares the #1586 mechanism
     and belongs in this registry.
 
-    ``neb_logZ_gas`` is registered through the backend's own abundance
-    mapping, inverted at the axis end nodes: the lookup forms
-    ``log_OH_total = neb_logZ_gas + _LOG_OH_OFFSET`` (``cloudy_cb19.py``), an
-    affine, strictly increasing map, so the support in ``neb_logZ_gas`` units
-    is ``(log_OH_total - _LOG_OH_OFFSET)`` at the two ends of the axis.
+    ``neb_logZ_gas`` is the public log10(Z/Zsun). ``component.py`` adds
+    ``LOG10_ZSUN`` to reach the backend's absolute log10(Z), and
+    ``cloudy_cb19.py`` adds ``_LOG_OH_OFFSET = _LOG_OH_SOLAR - LOG10_ZSUN``, so
+    the lookup's ``log_OH_total`` is the public value plus ``_LOG_OH_SOLAR``
+    (-3.07). The support in public units is therefore the two ends of the
+    ``log_OH_total`` axis minus ``_LOG_OH_SOLAR``, about [-1.99, 0.49] (#2969).
     """
     import h5py
 
     from tengri._data_setup import package_or_env_data_path
-    from tengri.components.nebular._constants import _LOG_OH_OFFSET
+    from tengri.components.nebular._constants import _LOG_OH_SOLAR
 
     grid_path = package_or_env_data_path("cb19_templates.h5")
     if not grid_path.exists():
@@ -194,8 +195,8 @@ def _cb19_grid_support() -> dict[str, tuple[float, float]]:
     return {
         "neb_logU": (float(log_U.min()), float(log_U.max())),
         "neb_logZ_gas": (
-            float(log_OH.min()) - _LOG_OH_OFFSET,
-            float(log_OH.max()) - _LOG_OH_OFFSET,
+            float(log_OH.min()) - _LOG_OH_SOLAR,
+            float(log_OH.max()) - _LOG_OH_SOLAR,
         ),
     }
 
