@@ -18,8 +18,9 @@ The four properties pinned here:
 (d) ``grid_interp`` defaults to ``"pchip"``.
 
 The log U prior reaches two node spacings past the hull. That is a support
-mismatch, so the lookup clamps there and the build-time ``GRID_SUPPORT`` check
-warns (see :func:`test_log_u_prior_beyond_hull_warns_at_build`).
+mismatch, so the build-time ``GRID_SUPPORT`` check refuses it with
+``ParameterError`` rather than clamping onto an edge node (see
+:func:`test_log_u_prior_beyond_hull_refused_at_build`, #2970).
 
 References
 ----------
@@ -29,7 +30,6 @@ References
 """
 
 import inspect
-import warnings
 
 import jax
 import jax.numpy as jnp
@@ -42,7 +42,7 @@ from tengri._data_setup import find_data_str
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
-from tengri.config.exceptions import GridSupportWarning
+from tengri.config.exceptions import ParameterError
 
 pytestmark = pytest.mark.regression_bug
 
@@ -226,19 +226,20 @@ def _synthetic_ssp() -> SSPData:
 
 
 @_needs_mist
-def test_log_u_prior_beyond_hull_warns_at_build():
-    """A CLOUDY build with the declared Uniform(-5, 0) logU prior emits GridSupportWarning.
+def test_log_u_prior_beyond_hull_refused_at_build():
+    """A CLOUDY build with the explicit Uniform(-5, 0) logU prior raises ParameterError.
 
-    The existing check is ``GRID_SUPPORT`` (``components/grid_support.py``,
-    registered as ``("neb", "cloudy")``, #1586 / #2460). A free prior is
-    narrowed to the axis ``[-4, -1]``; a prior the build cannot narrow away
-    from the dead region warns with the grid extent named. The fixed-outside
-    case is pinned in ``test_2460_neb_logu_prior_within_grid_axis.py``.
+    The check is ``GRID_SUPPORT`` (``components/grid_support.py``, registered
+    as ``("neb", "cloudy")``, #1586 / #2460). Since #2970, an explicit user
+    prior reaching past the grid support is refused at build and names the
+    extent, instead of warning and clamping onto an edge node. (A declared
+    FREE prior is narrowed to the axis ``[-4, -1]`` rather than refused.)
+    The fixed-outside case is pinned in
+    ``test_2460_neb_logu_prior_within_grid_axis.py``.
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g"]))
     neb = {"type": "cloudy", "grid": _MIST, "logU": Uniform(-5.0, 0.0)}
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    with pytest.raises(ParameterError) as excinfo:
         tengri.SEDModel.build(
             ssp_data=_synthetic_ssp(),
             observation=obs,
@@ -247,8 +248,6 @@ def test_log_u_prior_beyond_hull_warns_at_build():
             neb=neb,
             redshift=Fixed(0.0),
         )
-    grid_warnings = [w for w in caught if issubclass(w.category, GridSupportWarning)]
-    assert grid_warnings, [str(w.message) for w in caught]
-    msg = " ".join(str(w.message) for w in grid_warnings)
+    msg = str(excinfo.value)
     assert "neb_logU" in msg
     assert "-4" in msg and "-1" in msg  # the grid extent

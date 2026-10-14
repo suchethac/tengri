@@ -416,14 +416,74 @@ def radio_sfr_bell2003_split(
        (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
     """
     nu = _C_AA / wavelength
-    if log_L_ir is None:
-        L_tot_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
-    else:
-        # float32-safe (#1206): see radio_sfr_bell2003 for the same pattern.
-        L_tot_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+    L_tot_ref = _bell2003_total_at_nu_ref(L_ir, q_ir, log_L_ir)
     thermal = f_thermal * (nu / nu_ref) ** (-alpha_thermal) if include_thermal else 0.0
     L_nu = L_tot_ref * ((1.0 - f_thermal) * (nu / nu_ref) ** (-alpha_nonthermal) + thermal)
     return jnp.where(wavelength >= _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+
+
+def radio_sfr_bell2003_split_thermal(
+    wavelength: jnp.ndarray,
+    L_ir: float,
+    q_ir: float = 2.64,
+    f_thermal: float = _F_THERMAL_AGNFITTER,
+    alpha_thermal: float = _ALPHA_THERMAL_AGNFITTER,
+    nu_ref: float = _NU_REF_BELL2003_HZ,
+    *,
+    log_L_ir: float | None = None,
+) -> jnp.ndarray:
+    r"""The thermal power law of :func:`radio_sfr_bell2003_split`, on its own.
+
+    The same Bell (2003) total and the same cut as the split, with only its
+    ``f_thermal`` power law kept. The radio block windows this term at the SSP grid
+    edge when the SSP already holds the thermal continuum (#2962), so it is exposed
+    apart from the synchrotron share.
+
+    .. math::
+
+        L_\nu^{\rm th} = f_{\rm th}\, L_{1.4\,{\rm GHz}}^{\rm tot}
+        \left(\frac{\nu}{\nu_{\rm ref}}\right)^{-\alpha_{\rm th}}
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    L_ir : float
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
+    q_ir : float
+        FIR-radio correlation parameter for the total. Default 2.64 (Bell 2003, z=0).
+    f_thermal : float
+        Thermal fraction of the total L(1.4 GHz). Default 0.10 (AGNFITTER-RX).
+    alpha_thermal : float
+        Thermal spectral index. Default 0.10 (Dale & Helou 2002; Condon 1992).
+    nu_ref : float
+        Reference frequency [Hz]. Default 1.4 GHz.
+    log_L_ir : float, optional
+        ``log10(L_ir / [erg/s])``, the float32-safe companion of ``L_ir`` (#1206).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Thermal spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure JAX function. Adding it to
+    :func:`radio_sfr_bell2003_split` with ``include_thermal=False`` reproduces the
+    split with its thermal law, to round-off.
+    """
+    nu = _C_AA / wavelength
+    L_tot_ref = _bell2003_total_at_nu_ref(L_ir, q_ir, log_L_ir)
+    thermal = f_thermal * (nu / nu_ref) ** (-alpha_thermal)
+    return jnp.where(wavelength >= _RADIO_WAVE_MIN_AA, L_tot_ref * thermal, 0.0)
+
+
+def _bell2003_total_at_nu_ref(L_ir: float, q_ir: float, log_L_ir: float | None) -> jnp.ndarray:
+    """Bell (2003) total L(1.4 GHz) [erg/s/Hz] for the split's FIR-radio relation."""
+    if log_L_ir is None:
+        return L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
+    # float32-safe (#1206): see radio_sfr_bell2003 for the same pattern.
+    return _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
 
 
 def sfr_from_lir(
@@ -1486,6 +1546,8 @@ def radio_total(
     q_is_total: bool | None = None,
     sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     split_thermal: bool = True,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1550,6 +1612,10 @@ def radio_total(
     log_nu_cut : float
         log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
         (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
+    log_L_ir, log_L_agn_bol : float or None
+        ``log10`` of ``L_ir`` and ``L_agn_bol`` [dex re erg/s]. When given, the kernels form the
+        representable ~1e28 erg/s/Hz radio luminosity from them by ``pow10`` and the linear
+        erg/s values (~1e44, ``inf`` in float32) are not used. ``None`` keeps the linear path.
 
     Returns
     -------
@@ -1583,6 +1649,8 @@ def radio_total(
         q_is_total=q_is_total,
         sf_nu_ref=sf_nu_ref,
         split_thermal=split_thermal,
+        log_L_ir=log_L_ir,
+        log_L_agn_bol=log_L_agn_bol,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1783,6 +1851,8 @@ def radio_total_dpl(
     q_is_total: bool | None = None,
     sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     split_thermal: bool = True,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission: star-forming + optional free-free + AGN double power-law.
@@ -1846,6 +1916,8 @@ def radio_total_dpl(
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn_dpl instead of deriving from
         L_agn_bol bolometric correction. Default 0.0 (uses L_bol correction).
+    log_L_ir, log_L_agn_bol : float or None
+        ``log10`` of ``L_ir`` and ``L_agn_bol`` [dex re erg/s]; see :func:`radio_total`.
 
     Returns
     -------
@@ -1881,6 +1953,8 @@ def radio_total_dpl(
         q_is_total=q_is_total,
         sf_nu_ref=sf_nu_ref,
         split_thermal=split_thermal,
+        log_L_ir=log_L_ir,
+        log_L_agn_bol=log_L_agn_bol,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
