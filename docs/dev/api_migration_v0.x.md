@@ -1537,3 +1537,48 @@ pre-existing, and repointing either is a physics change with a moved number.
 4. Add a bullet to `CHANGELOG.md` under `[Unreleased]`.
 5. CI (added in Phase 5) verifies that every entry in `_deprecated.py`
    has a row here, and vice-versa.
+
+---
+
+## AGN component luminosities become `log_L_agn_*` [dex]; SKIRTOR's follow the angle-integrated convention; GRAHSP's standalone `l5100` becomes log-native (2026-10-12, #2842, #2851)
+
+**Breaking.** The standalone AGN components published integrated luminosities in erg/s
+(1e43 to 1e47), which are `inf` or NaN in float32. They are published as `log10` [dex re
+erg/s]; each is also published in solar luminosities as `L_agn_<piece>_lsun` (1e8 to 1e14
+Lsun is representable in float32; `NAMING_CONTRACT.md` section 4c). The erg/s keys are retired
+with no alias, and no code in `src/` read them. `L_agn_bol` (erg/s) is unchanged for the
+float64 convenience, and `log_L_agn_bol` is its float32-safe companion: the X-ray component
+and the radio SED-model variants read the log in float32 (`L_agn_bol` is `inf` there).
+
+| Old key (erg/s) | New key (dex re erg/s) | Published by |
+| --- | --- | --- |
+| `L_agn_torus` | `log_L_agn_torus` | Silva04, CAT3D, SKIRTOR-AGNfitter, GRAHSP |
+| `L_agn_disc` | `log_L_agn_disc` | K&D 2018 disc (angle-integrated), power-law disc |
+| `L_agn_disc_los` | `log_L_agn_disc_los` | K&D 2018 disc |
+| `L_agn_absorbed` | `log_L_agn_absorbed` | GRAHSP |
+| `L_agn_disc`, `L_agn_torus`, `L_agn_polar_dust` (line of sight) | `log_L_agn_disc_los`, `log_L_agn_torus_los`, `log_L_agn_polar_dust_los` | SKIRTOR |
+| (new) | `log_L_agn_disc`, `log_L_agn_torus`: the mean over the sphere of the line-of-sight power; `log_L_agn_polar_dust`: the power absorbed from the disc light emitted into the polar cone | SKIRTOR |
+
+Consumer-side translation: `L_agn_torus = 10**log_L_agn_torus` (float64 only), or read
+`L_agn_torus_lsun * L_sun` in float64. The SKIRTOR angle-integrated power is
+`int_0^1 L(mu) dmu` with `mu = cos i`, independent of `cos_inc`.
+
+**SKIRTOR's emitted SED changes (breaking).** The library stores each record divided by its
+dust integral (`spectra/norm` holds the divisor), and the component used to rescale the disc
+and the dust at every inclination to the same power, which erased SKIRTOR's own flux ratio
+between inclinations. The component now multiplies `norm` back, interpolates, and scales by one
+factor per parameter point so that the sphere-mean disc power is `10**agn_log_lbol L_sun *
+agn_torus_frac`. At the default point the line-of-sight disc power is 0.0016, 0.031 and 4.07
+times `10**agn_log_lbol L_sun` at `cos_inc` = 0.05, 0.5 and 0.9 (it was 0.99, 0.91 and 0.88),
+and the torus dust power 0.55, 0.78 and 1.53 times (it was 0.99). The polar re-emission is the
+disc light emitted into the cone, independent of `cos_inc` (it was a function of the
+line-of-sight disc).
+
+| Old spelling | New spelling | Status (v0.x) |
+| --- | --- | --- |
+| `agn_grahsp_l5100` on the standalone `GRAHSPSEDComponent` — `LogUniform(1e38, 1e50)` [erg/s] | `agn_grahsp_log_l5100` — `Uniform(38.0, 50.0)` [dex] | Deprecated alias: `DeprecationWarning`, translated as `log10(agn_grahsp_l5100)`; removed in v1.0 |
+
+New derived outputs of the composable AGN with the `adaf` disc: `agn_adaf_mdot` (`mdot`,
+Mahadevan 1997 Eq. 4) and `log_L_agn_adaf_accretion` (`log10(mdot L_Edd) = log10(eta_eff Mdot
+c^2)` [dex re erg/s], `eta_eff = 0.1`), the power the paper compares `L_ADAF` against; the
+rest-mass rate `Mdot c^2` is 10 times larger.

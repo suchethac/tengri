@@ -15,8 +15,8 @@ Physical pipeline
 
 Cross-component contract
 ------------------------
-Inputs: L_agn_bol (AGN bolometric luminosity) from upstream AGN component
-        (with fallback to 0 if not present).
+Inputs: log_L_agn_bol (log10 AGN bolometric luminosity, dex re erg/s) from the upstream AGN
+        component (with fallback to an absent AGN, -inf, if not present).
 Outputs: sed_xray (X-ray luminosity on the pipeline wavelength grid).
 
 Notes
@@ -45,7 +45,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
-from tengri.components.xray.xray import xray_agn_corona
+from tengri.components.xray.xray import l_2500_from_bolometric, xray_agn_corona
 from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
@@ -147,7 +147,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     optional_inputs: ClassVar[dict[str, str]] = {
         "L_2500_intrinsic": "erg/s/Hz",
         "L_2500_30deg": "erg/s/Hz",
-        "L_agn_bol": "erg/s",
+        "log_L_agn_bol": "dex",
     }
     # ``sed_xray`` and nothing else, matching XRayAirdSEDComponent. This
     # previously declared ``L_xray_agn``, which is not a DerivedState field, so
@@ -201,14 +201,15 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         #    L_ν(2500 Å), published for *every* disc type (qsogen, richards2006,
         #    …), so the α_ox corona is anchored to the real disc luminosity.
         # 2. ``L_2500_30deg``; SKIRTOR's 30° reference value.
-        # 3. ``L_agn_bol`` → L_2500 via the Hopkins+2007 BC_2500 as a last
+        # 3. ``log_L_agn_bol`` → L_2500 via the Hopkins+2007 BC_2500 as a last
         #    resort (only when no disc L_2500 is published).
         # Reading only ``L_2500_30deg`` (SKIRTOR-only) made this ~1.6× too bright
         # for non-SKIRTOR discs, since the BC fallback over-estimates L_2500.
         L_2500_intrinsic = jnp.asarray(inputs.get("L_2500_intrinsic", 0.0))
         L_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
-        L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
-        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)  # erg/s/Hz
+        # Read in log space: the erg/s luminosity (~1e44) is ``inf`` in pure float32.
+        log_l_agn_bol = jnp.asarray(inputs.get("log_L_agn_bol", -jnp.inf))
+        L_2500_fallback = l_2500_from_bolometric(log_l_agn_bol)  # erg/s/Hz
         L_2500 = jnp.where(
             L_2500_intrinsic > 0.0,
             L_2500_intrinsic,
