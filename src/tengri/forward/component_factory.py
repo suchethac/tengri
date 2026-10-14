@@ -57,7 +57,7 @@ from tengri.components.dust.wg00_model import (
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
-from tengri.components.nebular._models import nebular_backend_carries_freefree
+from tengri.components.nebular._models import nebular_carries_freefree
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
@@ -848,17 +848,18 @@ def build_components(
         # (#2574).
         include_freefree = radio_include_freefree
         freefree_wave_min = None
+        # One predicate for both radio thermal gates (#2962): the declared backend
+        # name, or a backend object whose analytic tier supplies the free-free.
+        nebular_carries_ff = nebular_carries_freefree(nebular_backend, nebular_backend_instance)
         if include_freefree is None:
-            if nebular_backend_carries_freefree(nebular_backend):
+            if nebular_carries_ff:
                 include_freefree = False
-            elif (
-                getattr(ssp_data, "nebular", "unknown") == "included"
-                and radio_sfr_mode != "bell2003_split"
-            ):
+            elif getattr(ssp_data, "nebular", "unknown") == "included":
                 # A nebular-included SSP holds the nebular continuum inside its
                 # flux up to the SSP grid edge, so the radio thermal term starts
                 # at the edge: one thermal term below it, and the radio term
-                # alone beyond, where the SSP has no flux (#2574).
+                # alone beyond, where the SSP has no flux (#2574). The
+                # bell2003_split thermal law takes the same window (#2962).
                 # The ``nebular`` stamp is the declaration Cue and CloudyGrid
                 # read (#1014); the declared backend name cannot tell, because
                 # ``neb={'type': 'none'}`` also builds a baked-in backend. An
@@ -885,10 +886,7 @@ def build_components(
             ir_window=radio_ir_window,
             # One owner of the thermal emission: the split's own 10 % law
             # gives way to a nebular continuum that carries free-free (#2764).
-            split_thermal=not (
-                radio_sfr_mode == "bell2003_split"
-                and nebular_backend_carries_freefree(nebular_backend)
-            ),
+            split_thermal=not (radio_sfr_mode == "bell2003_split" and nebular_carries_ff),
             **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
             agn_loudness_ref=radio_agn_loudness_ref,
         )

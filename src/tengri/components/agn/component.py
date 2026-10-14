@@ -266,6 +266,11 @@ class AGNSEDComponent(TemplateThreading):
     #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
     _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
 
+    #: The term band response carries each term's amplitude at its reference wavelength when
+    #: no amplitude parameter is free (#2987), so the photometry does not re-evaluate the AGN
+    #: on every call. Read by the term-response builder in ``tengri.SEDModel``.
+    FIXED_TERM_AMPLITUDES: ClassVar[bool] = True
+
     def term_response_refusal(self, free: set[str], fixed: Mapping[str, Any]) -> str | None:
         """Why the rank-1 band response must not be built for this AGN, or ``None``.
 
@@ -422,9 +427,14 @@ class AGNSEDComponent(TemplateThreading):
         mir_logs : tuple of ndarray, scalar
             ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
         """
-        ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
-        amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
-        keys = list(ref)
+        if "amp" in band:
+            # Every amplitude parameter is fixed, so the build evaluated these at the fixed
+            # values: the same numbers this branch would compute (#2987).
+            amps = band["amp"]
+        else:
+            ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
+            amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
+        keys = list(self._TERM_KEYS)
         rows = jnp.asarray([keys.index(k) for k in ("disc", "torus", "polar")])
         mir_lnu = jnp.sum(amps[rows][:, None] * band["S_diag"][rows], axis=0)
         diag = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=mir_lnu.dtype)
