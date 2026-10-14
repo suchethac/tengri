@@ -12164,14 +12164,14 @@ class SEDModel:
             or not isinstance(nebular.backend, CloudyGridBackend)
         ):
             return "the nebular backend is not the CLOUDY grid"
-        # The band table's contraction over (Z, U) is the bilinear scheme of the default
-        # linear path only (cloudy_band_table._bilinear_log). Any other interpolation of the
-        # grid, today triweight and from #2857 the pchip default, would make the table differ
-        # from the per-call path, so it is refused until the table is updated to match.
-        if nebular.backend._grid_interp != "linear":
+        # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
+        # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
+        # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
+        if nebular.backend._grid_interp not in ("pchip", "linear"):
             return (
                 f"the CLOUDY backend interpolates with grid_interp="
-                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'linear'"
+                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
+                f"and 'linear'"
             )
         if _dig_may_be_active(self.spec):
             return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
