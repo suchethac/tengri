@@ -68,6 +68,10 @@ _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 #: Speed of light [Angstrom / s], for the L_nu integrations below.
 _C_AA = 2.99792458e18
 
+#: pCIGALE skirtor2016 lumin_disk / agn_power (disc bolometric over torus+polar dust
+#: bolometric) for inclination 30 deg, oa=40, t=3, as printed by the pCIGALE module.
+_CIGALE_DISC_TO_DUST_RATIO = 2.6045
+
 pytestmark = pytest.mark.crossval
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -2605,20 +2609,28 @@ class TestCIGALESKIRTOR:
         strict=True,
         raises=AssertionError,
         reason=(
-            "tengri/pCIGALE SKIRTOR NIR/V ratio = 0.239 at 1.0-1.2 um (tengri total AGN "
-            "excess over the host V is about 4x weaker than CIGALE's), see #2480"
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 0.745 at 1.0-1.2 um with the CIGALE "
+            "fracAGN normalization (tengri's host V is 0.58x pCIGALE's, from the "
+            "attenuation split and the SSP library, not yet isolated), see #2480"
         ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
         """tengri SKIRTOR total-AGN excess vs pCIGALE SKIRTOR2016 excess, NIR over V.
 
-        Both sides compare the same quantity: the AGN contribution (total with the
-        AGN minus the host alone for pCIGALE; the total SKIRTOR template for tengri)
-        in the NIR band, normalized to the host stellar V of the same 3 Gyr
-        constant-SFH population with Calzetti E(B-V)=0.1 on the stars. The AGN
-        bolometric luminosity follows CIGALE's fracAGN=0.30 convention,
-        L_AGN = fracAGN / (1 - fracAGN) * L_star. The pCIGALE reference only extends
-        to 1.2 um, so the NIR window is 1.0-1.2 um.
+        Both sides compare the AGN excess (total with the AGN minus the host alone
+        for pCIGALE; the total SKIRTOR template for tengri) in the 1.0-1.2 um band,
+        normalized to the host stellar V of the same 3 Gyr constant-SFH population.
+
+        CIGALE convention (skirtor2016, lambda_fracAGN=0/0): the AGN torus plus polar
+        dust luminosity is agn_power = fracAGN / (1 - fracAGN) * dust.luminosity,
+        where dust.luminosity is the stellar energy absorbed by the attenuation
+        (intrinsic minus attenuated stellar bolometric). The disc is then
+        lumin_disk = R * agn_power with R = 2.6045 (i=30, oa=40, t=3), so the total
+        AGN bolometric is (1 + R) * agn_power. This test sets tengri's SKIRTOR total
+        to that bolometric. The host attenuation is a single E(B-V)=0.1 Calzetti screen
+        on all stars; pCIGALE uses E(B-V)=0.1 for stars younger than 10 Myr and 0.044
+        for older stars. The pCIGALE reference only extends to 1.2 um, so the NIR
+        window is 1.0-1.2 um.
         """
         k_cig = "cigale_agn_skirtor_type1"
         k_cig_noagn = "cigale_agn_skirtor_type1_noagn"
@@ -2643,24 +2655,42 @@ class TestCIGALESKIRTOR:
         v_cig = _band_avg(ref_wave, ref[k_cig_noagn], 5500.0)
         ratio_cig = float(np.nanmean(excess_cig[nir_mask])) / max(v_cig, 1e-40)
 
-        # tengri: host stellar SED per Msun formed, attenuated like the pCIGALE host.
-        # Calzetti tau_V = A_V / 1.086 with A_V = 4.05 E(B-V), E(B-V) = 0.1.
+        # tengri: host stellar SED per Msun formed, attenuated by a Calzetti screen,
+        # tau_V = A_V / 1.086 with A_V = 4.05 E(B-V), E(B-V) = 0.1, and unattenuated.
+        tau_v_host = 4.05 * 0.1 / 1.086
         wave_aa, sed_host, _ = _build_tengri_sed(
             ssp_data,
             onset_lookback_gyr=3.0,
             cessation_lookback_gyr=0.0,
-            tau_diff=4.05 * 0.1 / 1.086,
+            tau_diff=tau_v_host,
+        )
+        _, sed_host_intrinsic, _ = _build_tengri_sed(
+            ssp_data,
+            onset_lookback_gyr=3.0,
+            cessation_lookback_gyr=0.0,
+            tau_diff=0.0,
         )
         from tengri.utils.physics_constants import L_SUN
 
         nu_host = _C_AA / wave_aa
         order = np.argsort(nu_host)
-        l_star_bol = float(np.trapezoid(sed_host[order], nu_host[order])) / L_SUN
+
+        def _bolometric_lsun(sed: np.ndarray) -> float:
+            return float(np.trapezoid(sed[order], nu_host[order])) / L_SUN
+
         v_host = _band_avg(wave_aa, sed_host, 5500.0)
 
-        # tengri: total SKIRTOR AGN with bolometric = fracAGN/(1-fracAGN) * L_star.
+        # pCIGALE dust.luminosity: energy absorbed by the attenuation of the stars,
+        # intrinsic minus attenuated bolometric.
+        l_dust_host = _bolometric_lsun(sed_host_intrinsic) - _bolometric_lsun(sed_host)
+
+        # pCIGALE agn_power (torus + polar dust IR) = fracAGN/(1-fracAGN) * dust.luminosity.
+        # The total AGN is agn_power * (1 + R), R = lumin_disk / agn_power.
         frac_agn = 0.30
-        l_agn_bol = frac_agn / (1.0 - frac_agn) * l_star_bol
+        agn_power = frac_agn / (1.0 - frac_agn) * l_dust_host
+        l_agn_bol = (1.0 + _CIGALE_DISC_TO_DUST_RATIO) * agn_power
+
+        # tengri: total SKIRTOR AGN with bolometric = (1 + R) * fracAGN/(1-fracAGN) * L_dust.
         components = create_skirtor_components_from_grid(str(grid_path))(
             wave_aa,
             agn_log_lbol=float(np.log10(l_agn_bol)),
