@@ -759,7 +759,7 @@ class WavePrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
-    """Configuration for spectrum-grid LUT precomputation.
+    r"""Configuration for spectrum-grid LUT precomputation.
 
     Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
     LUT precomputation. The SSP × dust × IGM stack is precomputed at
@@ -772,6 +772,36 @@ class SpectrumPrecomp:
     grid ``wave_obs / (1 + z)`` can be interpolated at runtime; ``n_z`` /
     ``z_min`` / ``z_max`` tune that table (mirroring :class:`WavePrecomp`).
     When redshift is Fixed, these are ignored.
+
+    The LUT applies the same three stages, in the same order, as the exact
+    spectrum path: (1) the stellar velocity dispersion ``sigma_v_kms``, a
+    Gaussian in :math:`\ln\lambda` applied to the stellar family on the model
+    grid, before the pixels are sampled; (2) the IGM transmission; (3) the
+    instrument kernel on the pixel grid, :math:`\sigma_{\rm eff} =
+    \sqrt{\sigma_{\rm inst}^2\,s^2 - \sigma_{\rm lib}^2}` on the stellar
+    bucket (``s`` is ``lsf_scale``) and :math:`\sigma_{\rm inst}\,s` on the
+    dust-attenuated nebular bucket. Stage 1 acts on the model grid because point
+    sampling aliases sharp stellar features, so broadening after sampling is not
+    equivalent. With a fixed redshift **and** a fixed ``sigma_v_kms``, every SSP
+    template is broadened once at build and the per-draw cost is one weighted
+    sum over the pixel table. With a free ``sigma_v_kms`` or a free redshift,
+    the stellar weighted sum is formed on the full model grid, broadened with the
+    draw's dispersion and then sampled; the per-age family read by two-component
+    dust is broadened row by row, which dominates the cost (a gradient step with
+    free ``sigma_v_kms`` is roughly 15 times the exact path's on the line-rich
+    test fixture). A banded ``resolution_matrix`` cannot be carried by a
+    per-pixel table: the model warns and uses the exact path. The model is
+    differentiable in ``sigma_v_kms`` and ``lsf_scale``.
+
+    Two routing rules follow from that cost. With a fixed ``sigma_v_kms`` and a
+    free redshift, the SSP cube is broadened once at build (the velocity kernel
+    does not depend on redshift) and each draw only interpolates it, so the cost
+    is the unbroadened LUT's; this holds unless a 4-D alpha grid or a free AGB
+    weight modifies the cube per draw, which keeps the full-grid sum. With a
+    free ``sigma_v_kms``, an explicit ``SpectrumPrecomp()`` stays on the lookup
+    table and warns once about the cost, and a joint observation's photometry
+    ``WavePrecomp()`` is not promoted onto the spectrum channel, which stays exact
+    and says so once (``approx="auto"`` keeps spectroscopy exact regardless).
 
     Parameters
     ----------
@@ -2888,25 +2918,25 @@ class SEDModel:
     # ``tests/regression/bug/test_band_integration_is_explicit.py``.
     _DEFAULT_APPROX: ClassVar[ApproxPolicy] = ApproxPolicy()
 
-    #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
-    #: per-pixel effective-wavelength LUT is trusted. Above this the model
-    #: falls back to the exact wave-grid path with a warning.
-    _SPECTRUM_PRECOMP_R_MAX: ClassVar[float] = 3000.0
+    def _spectrum_lut_active(self) -> bool:
+        """Whether the spectrum LUT families are in use for this model."""
+        return bool(
+            self._approx.get("spectrum_precomp")
+            and self.observation is not None
+            and self.observation.can_do_spectroscopy
+        )
 
-    @staticmethod
-    def _max_spectral_resolution(observation) -> float | None:
-        """Return the maximum spectral resolution R across the spectrum, or None.
+    def _fixed_sigma_v_kms(self) -> float | None:
+        """The Fixed stellar velocity dispersion [km/s], ``None`` when it is free.
 
-        Reads ``observation.spectroscopy.resolution`` (scalar or per-pixel
-        array). Returns ``None`` when no spectroscopy / resolution is set.
+        An undeclared ``sigma_v_kms`` is 0.0, as in :meth:`_get_sigma_v_kms`. The
+        spectrum LUT bakes a fixed value into its template table at build.
         """
-        if observation is None or not getattr(observation, "can_do_spectroscopy", False):
-            return None
-        spectroscopy = getattr(observation, "spectroscopy", None)
-        resolution = getattr(spectroscopy, "resolution", None) if spectroscopy else None
-        if resolution is None:
-            return None
-        return float(jnp.max(jnp.asarray(resolution)))
+        try:
+            dist = self.spec.get_distribution("sigma_v_kms")
+        except KeyError:
+            return 0.0
+        return float(dist.bounds[0]) if dist.is_fixed else None
 
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
@@ -2930,27 +2960,25 @@ class SEDModel:
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
         """Activate the per-pixel spectrum LUT for one ``SpectrumPrecomp`` config.
 
-        Valid for low-to-medium R, where the continuum is smooth across the pixel
-        kernel. At high R the kernel is narrower than the spectral features the
-        approximation assumes are flat, so fall back to the exact wave-grid path
-        (with a clear warning) rather than silently returning a biased spectrum.
+        The LUT applies the exact path's three stages (stellar velocity dispersion on
+        the model grid, IGM, instrument kernel on the pixels), so it holds at any
+        scalar or per-pixel resolution; a banded resolution matrix is the one case it
+        cannot carry and falls back to the exact path with a warning.
         Line-publishing nebular backends (Cue, CloudyGrid, …) are supported: their
         discrete ``line_waves``/``line_lums`` are grid-independent and survive the
         LUT path. Sets :attr:`_approx_config_spec` to the config (or ``None`` on the
-        R-fallback). Shared by the single-object and composite paths (#610).
+        resolution-matrix fallback). Shared by the single-object and composite paths (#610).
         """
-        r_max = self._max_spectral_resolution(observation)
-        if r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
+            # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
+            # model takes the exact path and says so (#2958).
             import warnings
 
             warnings.warn(
-                f"approx=SpectrumPrecomp() requested but the spectrum "
-                f"resolution R≈{r_max:g} exceeds the SpectrumPrecomp limit "
-                f"of {self._SPECTRUM_PRECOMP_R_MAX}. The per-pixel "
-                f"effective-wavelength LUT is inaccurate near spectral "
-                f"features at this resolution, so the model falls back to "
-                f"the exact wave-grid path (no speed-up). Use approx=None "
-                f"to silence this, or down-bin the spectrum.",
+                "approx=SpectrumPrecomp() requested but the spectroscopy carries a banded "
+                "resolution matrix, which the per-pixel LUT cannot apply. The model falls "
+                "back to the exact path (no speed-up). Use approx=None to silence this.",
                 stacklevel=3,
             )
             self._approx = self._approx.replace(spectrum_precomp=False)
@@ -2958,6 +2986,16 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
+            if self._fixed_sigma_v_kms() is None:
+                import warnings
+
+                warnings.warn(
+                    "approx=SpectrumPrecomp() with a free sigma_v_kms broadens the stellar "
+                    "spectrum on the full model grid every draw, which costs roughly 15 times "
+                    "the exact path per gradient step; fixing sigma_v_kms keeps the lookup "
+                    "table cheap, and approx=None is faster for a free one.",
+                    stacklevel=3,
+                )
             if self._spectrum_lut_needs_pixel_integral(observation):
                 raise ValueError(
                     f"approx=SpectrumPrecomp() samples the model at the pixel "
@@ -2969,6 +3007,46 @@ class SEDModel:
                     f"spectrum, or Spectroscopy(resample='point') to accept point "
                     f"sampling."
                 )
+
+    def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:
+        """Whether a joint observation keeps its spectrum channel on the exact path.
+
+        A joint observation promotes a photometry ``WavePrecomp`` onto the spectrum
+        LUT as well (the components publish both LUT families in one pass). The
+        promotion is skipped when the pixel integral is required
+        (:meth:`_spectrum_lut_needs_pixel_integral`, #2530) or when ``sigma_v_kms``
+        is free: the LUT would then broaden the stellar sum per draw on the full
+        model grid, which is slower than the exact path, so the spectrum channel
+        stays exact and says so once. An explicit ``SpectrumPrecomp()`` is never
+        asked here; it is resolved earlier, stays on the table and warns about the
+        cost there.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the spectrum channel must not be promoted onto the LUT.
+        """
+        if self._spectrum_lut_needs_pixel_integral(observation):
+            return True
+        if self._fixed_sigma_v_kms() is None:
+            import warnings
+
+            warnings.warn(
+                "The spectrum channel of this joint observation stays on the exact path "
+                "because sigma_v_kms is free: the lookup table would broaden the stellar "
+                "spectrum on the full model grid every draw, which is slower than the "
+                "exact path. Photometry keeps WavePrecomp. Pass "
+                "approx=(WavePrecomp(), SpectrumPrecomp()) to put the spectrum on the "
+                "lookup table anyway.",
+                stacklevel=4,
+            )
+            return True
+        return False
 
     def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
         """Whether the spectrum channel resolves to the pixel integral (#2530).
@@ -3204,9 +3282,12 @@ class SEDModel:
         ):
             self._approx = self._approx.replace(wave_precomp=True)
             # The spectrum channel is promoted onto its LUT only when that LUT
-            # can serve it: pixels wider than the model grid stay on the exact
-            # path (#2530).
-            if not self._spectrum_lut_needs_pixel_integral(observation):
+            # can serve it: pixels wider than the model grid (#2530) or a free
+            # ``sigma_v_kms`` keep it on the exact path. An explicit
+            # ``SpectrumPrecomp()`` has already resolved above and is not asked.
+            if not self._approx.get(
+                "spectrum_precomp"
+            ) and not self._joint_spectrum_lut_promotion_blocked(observation):
                 self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
@@ -10640,6 +10721,15 @@ class SEDModel:
 
             full_params = route_timing_fracs({**fixed_values, **params}, params)
 
+        if self._spectrum_lut_active():
+            # The stellar component broadens its spectrum family on the model grid with
+            # this draw's velocity dispersion; it cannot read the observation-level
+            # parameter through its prefix-sliced params, so the model seeds it.
+            state0 = state0.with_(
+                derived=state0.derived.with_(
+                    spec_sigma_v_kms=jnp.asarray(self._get_sigma_v_kms(full_params))
+                )
+            )
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
         # closure-captured copies (self.ssp_data / internal templates / z-tables).
@@ -10868,13 +10958,30 @@ class SEDModel:
             # projected inside the fused kernel. Each projector sums its own
             # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
             # dicts and build the per-model Observables once so phot_fnu and
-            # spec_fnu coexist. (Velocity dispersion / LSF are not applied on the
-            # per-pixel continuum LUT; that is SpectrumPrecomp's documented
-            # low-to-medium-R domain.)
+            # spec_fnu coexist. The stellar family carries the velocity dispersion
+            # (model grid, in the stellar component); the instrument stage runs on the
+            # pixels in ``predict_spectrum_via_precomp`` (#2958).
             if spec_lut:
+                from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+                # The instrument stage runs on the pixel grid with the exact path's
+                # library resolution (#2958), so it resolves the same inputs.
+                spectroscopy = observation.spectroscopy
+                lut_sigma_lib_kms = resolve_sigma_lib_kms(
+                    spectroscopy.wave_obs,
+                    self._get_redshift(full),
+                    getattr(spectroscopy, "sigma_lib_kms", 0.0),
+                    self._sigma_lib_curve_for(ssp_data),
+                )
                 out: dict = {}
                 out.update(
-                    observation.predict_spectrum_via_precomp(state, full, observables_type=None)
+                    observation.predict_spectrum_via_precomp(
+                        state,
+                        full,
+                        observables_type=None,
+                        sigma_lib_kms=lut_sigma_lib_kms,
+                        lsf_scale=self._get_lsf_scale(full),
+                    )
                 )
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
@@ -13113,6 +13220,8 @@ class SEDModel:
                         approx=self._approx,
                         spec_wave_obs=spec_wave_obs,
                         redshift_spec=spec_redshift_spec,
+                        spec_sigma_v_fixed=self._fixed_sigma_v_kms(),
+                        spec_lsf_n_bins=self._lsf_n_bins,
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:
@@ -13120,6 +13229,10 @@ class SEDModel:
                             state,
                             ssp_spec_lut=spec_state.ssp_spec_lut,
                             ssp_spec_ztable=spec_state.ssp_spec_ztable,
+                            spec_sigma_v_fixed=spec_state.spec_sigma_v_fixed,
+                            spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
+                            spec_rest_window=spec_state.spec_rest_window,
+                            spec_ssp_broadened=spec_state.spec_ssp_broadened,
                         )
                     else:
                         state = spec_state

@@ -41,14 +41,14 @@ parameters that could produce similar-looking data --- that is the **posterior**
 
 tengri provides five families of inference methods to explore this posterior:
 
-| Family | Canonical method | Old names (deprecated) | Posterior type | Best for |
+| Family | Canonical method | Former names (removed) | Posterior type | Best for |
 |--------|-----------------|----------------------|---------------|----------|
 | **MAP** | `map` | — | Point estimate | Initialization, quick look |
-| **Variational (linear)** | `vi_linear` | `mgvi`, `native_mgvi`, `fast_mgvi`, `nifty_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
-| **Variational (nonlinear)** | `vi` | `native_geovi`, `geovi`, `fast_geovi`, `native_evi`, `evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
-| **Hybrid** | `vi` → `.refine("mcmc_nuts")` | `geovi_nuts`, `mgvi_nuts` | VI optimization + MCMC samples | Best of both worlds |
-| **MCMC (high-D)** | `mcmc_raytrace` | `raytrace` | Exact posterior | Validation, high-D |
-| **MCMC (low-D)** | `mcmc_nuts` | `nuts` | Exact posterior | Gold standard, D ≤ 30 |
+| **Variational (linear)** | `vi_linear` | `vi_linear_fast` (no logging); `mgvi`, `native_mgvi`, `fast_mgvi`, `nifty_mgvi` removed | Approximate Gaussian | Very high D (>10^5), speed |
+| **Variational (nonlinear)** | `vi` | `vi_nonlinear_fast` (no logging); `native_geovi`, `geovi`, `fast_geovi`, `native_evi`, `evi`, `nifty_geovi` removed | Non-Gaussian VI | Most problems |
+| **Hybrid** | `vi` → `.refine("mcmc_nuts")` | `geovi_nuts`, `mgvi_nuts` removed | VI optimization + MCMC samples | Best of both worlds |
+| **MCMC (high-D)** | `mcmc_raytrace` | `raytrace` removed | Exact posterior | Validation, high-D |
+| **MCMC (low-D)** | `mcmc_nuts` | `mcmc_nuts_fast` (photometry recipe); `nuts` removed | Exact posterior | Gold standard, D ≤ 30 |
 
 NIFTy is the computational library implementing geoVI; the `vi` method uses its fast path by default.
 
@@ -617,7 +617,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 - **Good posterior quality** (nonlinear curving captures banana shapes)
 
 The refresh interval of 5 is the default (`_RESAMPLE_EVERY = 5` in `fitter.py`). It can
-is fixed at 5 inside `backends/vi/nifty.py`; it is not a user parameter (`OptimizationSchedule` was deleted as dead code, #1293).
+is fixed at 5 inside `backends/vi/nifty.py`; it is not a user parameter.
 
 ---
 
@@ -628,25 +628,22 @@ off between diagnostic richness and raw speed.
 
 ### Internal Dispatch
 
-| Internal method | Canonical name | Old names (deprecated) |
+| Runner function | Method name | Former names (removed) |
 |----------------|---------------|----------------------|
-| `_run_vi` | `vi` (default) | `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` |
-| `_run_vi_linear` | `vi_linear` | `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` |
-| `_run_nifty_fast_vi` | `vi_nifty_fast` | — |
-| `_run_nifty_fast_vi_linear` | `vi_nifty_fast_linear` | — |
-| `_run_vi_native` | `vi_native` | `native_geovi` |
-| `_run_vi_native_linear` | `vi_native_linear` | `native_mgvi`, `native_evi` |
-| `_run_map` | `map` | — |
-| `_run_nuts` | `mcmc_nuts` | `nuts` |
-| `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
-| `_run_nss` | `nss` | `evidence` |
+| `run_nifty_vi` | `vi` (nonlinear sampling), `vi_linear` (linear sampling) | `geovi`, `vi_nifty`, `nifty_geovi`, `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi` |
+| `run_nifty_fast_vi` | `vi_nonlinear_fast` (nonlinear), `vi_linear_fast` (linear) | `fast_geovi`, `fast_mgvi`, `vi_nifty_fast`, `vi_nifty_fast_linear` |
+| `run_native_vi` | `native_vi_nonlinear`, `native_vi_linear` | `native_geovi`, `native_mgvi`, `native_evi` |
+| `run_map` | `map` | — |
+| `run_nuts` | `mcmc_nuts`, `mcmc_nuts_fast` | `nuts` |
+| `run_raytrace` | `mcmc_raytrace` | `raytrace` |
+| `run_nss` | `nss` | `evidence` |
 
 **Removed names**: `fit_catalog` → `fit_batch`.
 Hybrid `geovi_nuts`/`mgvi_nuts` replaced by chaining: `result.refine("mcmc_nuts")`.
 
 ### 6.1 vi (Default)
 
-Uses NIFTy's `optimize_kl` for geoVI. Old names (`geovi`, `vi_nifty`) still work but emit a `DeprecationWarning`.
+Uses NIFTy's `optimize_kl` for geoVI. The former names (`geovi`, `vi_nifty`) were removed; calling them raises `ParameterError`.
 
 ```python
 result = fitter.run("vi", n_iterations=15)
@@ -685,7 +682,7 @@ in Hamiltonian trigger a multimodality warning.
 
 ### 6.2 vi_linear
 
-Formerly `native_mgvi` / `native_evi`. Old names still work but emit a `DeprecationWarning`.
+Former names `native_mgvi` / `native_evi` were removed; calling them raises `ParameterError`.
 
 ```python
 result = fitter.run("vi_linear", n_iterations=15)
@@ -694,12 +691,12 @@ result = fitter.run("vi_linear", n_iterations=15)
 Same JIT-compiled backend as `vi` but uses linear resampling throughout. Faster per
 iteration; use when geoVI nonlinear resampling is too expensive or for very large N.
 
-### 6.3 vi_nifty
+### 6.3 vi_nonlinear_fast
 
-Formerly `nifty_geovi` / `fast_geovi` / `geovi`. Old names still work but emit a `DeprecationWarning`.
+Former names `nifty_geovi` / `fast_geovi` / `geovi` were removed; calling them raises `ParameterError`.
 
 ```python
-result = fitter.run("vi_nifty", n_iterations=15)
+result = fitter.run("vi_nonlinear_fast", n_iterations=15)
 ```
 
 **Backend**: NIFTy's `OptimizeVI.update` in a tight Python loop.
@@ -720,15 +717,15 @@ via the JIT engine. This captures non-Gaussian shapes that linear CG samples mis
 
 **Speed**: ~12s/galaxy for smooth SFH (D~7), ~30s for stochastic SFH (D~137).
 
-### 6.4 vi_nifty_linear
+### 6.4 vi_linear_fast
 
-Formerly `nifty_mgvi` / `fast_mgvi` / `mgvi`. Old names still work but emit a `DeprecationWarning`.
+Former names `nifty_mgvi` / `fast_mgvi` / `mgvi` were removed; calling them raises `ParameterError`.
 
 ```python
-result = fitter.run("vi_nifty_linear", n_iterations=15)
+result = fitter.run("vi_linear_fast", n_iterations=15)
 ```
 
-Same as `vi_nifty` but uses `linear_resample` every iteration. Faster per iteration
+Same as `vi_nonlinear_fast` but uses `linear_resample` every iteration. Faster per iteration
 (no Newton-CG curving), but the Gaussian approximation misses nonlinear degeneracies.
 
 Posterior samples are linear CG draws (Gaussian).
@@ -744,10 +741,10 @@ correction becomes valuable.
 
 The transition point is controlled by `VIConfig.evi_linear_fraction` (default 0.5).
 
-### 6.6 vi_nifty (full logging)
+### 6.6 vi (full logging)
 
 ```python
-result = fitter.run("vi_nifty", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 ```
 
 **Backend**: Full `jft.optimize_kl` with all NIFTy diagnostics, logging, and minisanity
@@ -758,7 +755,7 @@ need detailed per-iteration diagnostics that the fast backend strips.
 
 **Speed**: ~18s/galaxy (roughly 35% slower than the fast backend due to Python overhead).
 
-### 6.7 VI → MCMC chaining (formerly geovi_nuts)
+### 6.7 VI → MCMC chaining
 
 ```python
 result = fitter.run("vi", n_iterations=10)
@@ -778,7 +775,7 @@ or geoVI-curved approximation.
 
 ### 6.8 mcmc_raytrace
 
-Formerly `raytrace`. Old name still works but emits a `DeprecationWarning`.
+Former name `raytrace` was removed; use `mcmc_raytrace`.
 
 ```python
 result = fitter.run("mcmc_raytrace", n_burnin=100, n_steps=500, n_leapfrog_steps=10)
@@ -803,7 +800,7 @@ stochastic gradients.
 
 ### 6.9 mcmc_nuts
 
-Formerly `nuts`. Old name still works but emits a `DeprecationWarning`.
+Former name `nuts` was removed; use `mcmc_nuts`.
 
 ```python
 result = fitter.run("mcmc_nuts", n_warmup=500, n_samples=1000)
@@ -1139,7 +1136,7 @@ discover disconnected modes).
 
 ### 9.3 NUTS Posterior Samples
 
-Available via `geovi_nuts` and `mgvi_nuts`. After VI optimization, runs BlackJAX NUTS
+Available after any VI fit as `result.refine("mcmc_nuts")`. It runs BlackJAX NUTS
 with 200 warmup steps starting from the converged position.
 
 **Pros**: Exact MCMC samples, not limited by any VI approximation. Can discover features
@@ -1365,7 +1362,6 @@ Block Gibbs cycling updates parameter blocks in rotation, holding others fixed:
 
 - **Updated**: `psd_sigma_u`, `psd_tau_u` (2 parameters)
 - **Frozen** (`constants`): all per-galaxy physical params + all per-galaxy xi
-- **Point estimates** (`point_estimates`): per-galaxy params (zero residuals for speed)
 - **Sample mode**: `nonlinear_resample` (PSD response is nonlinear)
 - **n_samples**: 6 (more samples for precise population constraint)
 - **Why first**: PSD parameters set the prior for every galaxy's SFH. Getting them
@@ -1373,8 +1369,8 @@ Block Gibbs cycling updates parameter blocks in rotation, holding others fixed:
 
 #### Block 2: Per-Galaxy Physical Parameters (medium priority)
 
-- **Updated**: all `gal_phys` across all galaxies (N_gal x ~7 params)
-- **Frozen** (`constants`): `psd_sigma_u`, `psd_tau_u`, all `gal_xi`
+- **Updated**: all per-galaxy physical parameters across all galaxies (N_gal x ~7 params)
+- **Frozen** (`constants`): `psd_sigma_u`, `psd_tau_u`, all per-galaxy SFH field parameters
 - **Sample mode**: `nonlinear_resample` (age-dust degeneracy needs geoVI)
 - **n_samples**: 3
 - **Why second**: Physical params interpret each galaxy's data given the current SFH
@@ -1382,8 +1378,8 @@ Block Gibbs cycling updates parameter blocks in rotation, holding others fixed:
 
 #### Block 3: Per-Galaxy SFH Fields (lowest priority)
 
-- **Updated**: all `gal_xi` across all galaxies (N_gal x n_grid params)
-- **Frozen** (`constants`): `psd_sigma_u`, `psd_tau_u`, all `gal_phys`
+- **Updated**: all per-galaxy SFH field parameters across all galaxies (N_gal x n_grid params)
+- **Frozen** (`constants`): `psd_sigma_u`, `psd_tau_u`, all per-galaxy physical parameters
 - **Sample mode**: `linear_resample` (MGVI --- GP response is nearly linear)
 - **n_samples**: 2 (cheap, high-D)
 - **Why last**: SFH fields are the "leaf" of the hierarchy. Nearly Gaussian conditioned
@@ -1398,24 +1394,17 @@ The hierarchical flat array has this layout:
  <--- shared --->  <-------------- per-galaxy (N_gal repeats) ------------------>
 ```
 
-### 11.4 Constants vs Point Estimates
+### 11.4 Constants
 
-Both mechanisms freeze parameters during KL minimization (their gradient is zeroed),
-but they differ in sampling:
+Frozen parameters have their gradient zeroed during KL minimization, and their residuals are kept:
 
 | Mechanism | Gradient | Residual | Speed | Uncertainty propagation |
 |-----------|----------|----------|-------|------------------------|
 | `constants` | Zeroed | Kept (sampled) | Normal | Yes (uncertainty of frozen params propagates) |
-| `point_estimates` | Zeroed | Zeroed | Faster | No (treats frozen params as known exactly) |
 
 **Use `constants`** for parameters whose uncertainty matters for the block being updated.
 Example: when updating per-galaxy physical params, the shared PSD params are frozen as
 `constants` so their uncertainty propagates into the per-galaxy posteriors.
-
-**Use `point_estimates`** for parameters whose uncertainty is less relevant for the block
-being updated, and speed matters. Example: when updating the 2D shared PSD params, the
-per-galaxy params (13,700D) are frozen as `point_estimates` because their individual
-uncertainties barely affect the population-level PSD constraint.
 
 ### 11.5 Resample+Update Within Blocks
 
@@ -1438,10 +1427,10 @@ hfitter = HierarchicalFitter(
 )
 
 # Default: native_geovi with CorrelatedFieldMaker
-result = hfitter.run("native_geovi", n_iterations=25)
+result = hfitter.run("vi", n_iterations=25)
 
 # EVI (MGVI first, then geoVI)
-result = hfitter.run("native_evi", n_iterations=30)
+result = hfitter.run("vi", n_iterations=30)
 ```
 
 ### 11.7 Expected Performance (Hierarchical)
@@ -1467,7 +1456,7 @@ Compile time: ~60s (one-time, cached to XLA disk cache).
 The most basic diagnostic. After fitting:
 
 ```python
-result = fitter.run("native_geovi", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 print(result.diagnostics["chi2_dof"])
 ```
 
@@ -1496,7 +1485,7 @@ This often indicates that the data prefers values outside the prior range.
 Generate model predictions from posterior samples and verify they bracket the data:
 
 ```python
-result = fitter.run("native_geovi", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 
 for i in range(10):
     sample = {k: v[i] for k, v in result.samples.items()}
@@ -1549,16 +1538,16 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ```
 Need a point estimate?          --> fitter.run("map")
-Need speed, D < 50?             --> fitter.run("native_geovi")
-Need speed, D > 1000?           --> fitter.run("native_mgvi")
-Need accuracy, D < 20?          --> fitter.run("nuts")
-Need accuracy, D > 20?          --> fitter.run("raytrace")
-Need speed + accuracy?          --> fitter.run("native_geovi")   (nonlinear draws)
-Need exact samples + speed?     --> fitter.run("geovi_nuts")
+Need speed, D < 50?             --> fitter.run("vi")
+Need speed, D > 1000?           --> fitter.run("vi_linear")
+Need accuracy, D < 20?          --> fitter.run("mcmc_nuts")
+Need accuracy, D > 20?          --> fitter.run("mcmc_raytrace")
+Need speed + accuracy?          --> fitter.run("vi")   (nonlinear draws)
+Need exact samples + speed?     --> fitter.run("vi").refine("mcmc_nuts")
 Catalog of 100+ galaxies?       --> fitter.compile(); fitter.fit_batch(galaxies)
-Hierarchical (shared PSD)?      --> hfitter.run("native_geovi")
-NIFTy-exact math needed?        --> fitter.run("geovi")          (NIFTy tight loop)
-Debugging NIFTy behavior?       --> fitter.run("nifty_geovi")    (full logging)
+Hierarchical (shared PSD)?      --> hfitter.run("vi")
+NIFTy-exact math needed?        --> fitter.run("vi")          (NIFTy tight loop)
+Debugging NIFTy behavior?       --> fitter.run("vi")    (full logging)
 ```
 
 ### VIConfig Defaults (Philipp Frank's Recommendations)
@@ -1591,7 +1580,7 @@ VIConfig(
 - `n_samples > 12` triggers a warning: high sample counts reduce stochastic
   regularization and cause Newton-CG overshooting. Use 3-6.
 - `n_iterations > 100` with `kl_rtol=0` triggers a warning: risk of divergence.
-- Never create `Model`/`ParamSpec` inside a JAX gradient tape.
+- Never create `SEDModel`/`Parameters` inside a JAX gradient tape.
 - The native backend compiles the entire loop atomically --- no intermediate diagnostics.
 - Ray Tracing step_size has a sharp cliff at ~0.06 for D~137.
 

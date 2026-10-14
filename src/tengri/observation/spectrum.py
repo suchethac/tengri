@@ -1293,6 +1293,89 @@ def project_spectrum(
     return flux
 
 
+def instrument_stage_on_pixels(
+    stellar_pix: jnp.ndarray,
+    nebular_pix: jnp.ndarray,
+    *,
+    wave_obs: jnp.ndarray,
+    resolution: jnp.ndarray | float,
+    sigma_lib_kms: jnp.ndarray | float,
+    lsf_scale: jnp.ndarray | float = 1.0,
+    n_bins: int = 16,
+    lsf_pad_pixels: int | None = None,
+) -> jnp.ndarray:
+    r"""Apply the instrument stage of the kernel split to resampled pixel fluxes (#2958).
+
+    Stage 3 of :func:`~tengri.observation.observation.project_spectrum_kernel_split`,
+    factored out so the exact path and the spectrum LUT share one implementation.
+    The stellar piece is convolved with
+
+    .. math::
+
+        \sigma_{\rm eff}(\lambda) = \sqrt{\sigma_{\rm inst}(\lambda)^2\,
+        s^2 - \sigma_{\rm lib}(\lambda)^2}, \qquad s = {\rm lsf\_scale},
+
+    and the nebular/shock/AGN-line piece with :math:`\sigma_{\rm inst}\,s` alone.
+    The galaxy's velocity dispersion is not added here: it was applied on the model
+    grid before the IGM (stage 1), so the stellar piece must not receive it twice.
+
+    Parameters
+    ----------
+    stellar_pix : ndarray, shape (n_pix,)
+        Stellar-kernel piece, already resampled to ``wave_obs`` and multiplied by the
+        IGM transmission [erg/s/cm^2/Hz].
+    nebular_pix : ndarray, shape (n_pix,)
+        Instrument-only piece, resampled to ``wave_obs`` and multiplied by the IGM
+        transmission [erg/s/cm^2/Hz].
+    wave_obs : ndarray, shape (n_pix,)
+        Observed-frame pixel wavelength grid [Angstrom].
+    resolution : float or ndarray, shape (n_pix,)
+        Spectral resolution :math:`R(\lambda)` (the instrument, before ``lsf_scale``).
+    sigma_lib_kms : float or ndarray, shape (n_pix,)
+        SSP library resolution [km/s] subtracted from the stellar piece only.
+    lsf_scale : float or traced scalar, default 1.0
+        Multiplicative scale on :math:`\sigma_{\rm inst}` (#2526).
+    n_bins : int, default 16
+        Piecewise-constant LSF bin count.
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] for the observed-grid LSF (see
+        :func:`apply_lsf`); ``None`` derives it from the grid.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Observed spectral flux density [erg/s/cm^2/Hz], before calibration.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the Gaussian LSF is an FFT convolution with a
+    static pad, and ``lsf_scale`` may be traced.
+
+    Approximation of the instrument response as a Gaussian of width
+    :math:`\sigma_{\rm inst}(\lambda)` in velocity, as in :func:`apply_lsf`.
+    """
+    resolution_scaled = resolution / lsf_scale
+    flux_stellar = apply_lsf(
+        stellar_pix,
+        wave_obs,
+        resolution_scaled,
+        sigma_lib_kms=sigma_lib_kms,
+        n_bins=n_bins,
+        sigma_v_kms=0.0,
+        pad_pixels=lsf_pad_pixels,
+    )
+    flux_instrument_only = apply_lsf(
+        nebular_pix,
+        wave_obs,
+        resolution_scaled,
+        sigma_lib_kms=0.0,
+        n_bins=n_bins,
+        sigma_v_kms=0.0,
+        pad_pixels=lsf_pad_pixels,
+    )
+    return flux_stellar + flux_instrument_only
+
+
 @partial(jax.jit, static_argnames=("has_lyc_edge",))
 def compute_spectrum(
     sed_rest: jnp.ndarray,
