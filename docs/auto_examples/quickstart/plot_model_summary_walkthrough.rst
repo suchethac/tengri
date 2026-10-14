@@ -21,7 +21,7 @@
 Understanding model structure through parameter provenance tags
 ===============================================================
 
-.. GENERATED FROM PYTHON SOURCE LINES 5-102
+.. GENERATED FROM PYTHON SOURCE LINES 5-104
 
 
 
@@ -35,7 +35,7 @@ Understanding model structure through parameter provenance tags
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:13777: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -43,15 +43,29 @@ Understanding model structure through parameter provenance tags
       met={'logzsol': Uniform(-2, 0.2)}
 
     Issue #1796
-      spec = parse_groups(**groups)
+      spec = parse_groups(ssp_data=ssp_data, **groups)
+    /tengri/src/tengri/forward/sed_model.py:13777: WildcardPartialFreeWarning: 'all_params: FREE' freed 5 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      sfh_tsnorm_peak_lbt_gyr
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'tsnorm_peak_lbt_gyr': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(ssp_data=ssp_data, **groups)
     /tengri/examples/quickstart/plot_model_summary_walkthrough.py:31: DefaultFixedParametersWarning: Group 'neb' states no 'all_params' disposition, so its remaining 8 parameters were fixed at declared defaults:
-      neb_dig_delta_logU=-1, neb_dig_frac=0, neb_eline_sigma_kms=100, neb_fdust=0, neb_fesc=0, neb_fesc_lya=0, neb_logU=-3, neb_logZ_gas=-0.3
+      neb_dig_delta_logU=-1, neb_dig_frac=0, neb_eline_sigma_kms=100, neb_fdust_frac=0, neb_fesc=0, neb_fesc_lya=1, neb_logU=-3, neb_logZ_gas=-0.3
 
     To fit them, pass 'all_params': FREE:
       neb={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
       neb={'all_params': Fixed(DEFAULT), ...}
       model = tengri.SEDModel.build(
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.090 Gyr old at redshift 0.05. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.090 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:350: RuntimeWarning: invalid value encountered in scalar divide
+      log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:362: RuntimeWarning: invalid value encountered in scalar divide
+      term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:364: RuntimeWarning: divide by zero encountered in scalar divide
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:364: RuntimeWarning: invalid value encountered in scalar subtract
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
 
 
 
@@ -111,9 +125,11 @@ Understanding model structure through parameter provenance tags
     # Create a sample parameter dict for the SED prediction
     key = jax.random.PRNGKey(0)
     params = dict(model.spec.sample(key))
-    # Override a few to show variability
+    # Override a few to show variability. The peak is sampled as a fraction of the age of
+    # the universe at the model redshift, so a peak 3 Gyr ago is 3 / age(z) of it.
+    age_z = float(tengri.cosmology.age_at_z(0.05))  # Gyr
     params["sfh_tsnorm_log_total_mass"] = jnp.float64(11.5)
-    params["sfh_tsnorm_peak_lbt_gyr"] = jnp.float64(3.0)
+    params["sfh_tsnorm_peak_lbt_frac"] = jnp.float64(3.0 / age_z)
     params["sfh_tsnorm_skew"] = jnp.float64(-0.2)
 
     # Predict rest-frame SED
@@ -163,7 +179,7 @@ Understanding model structure through parameter provenance tags
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.879 seconds)
+   **Total running time of the script:** (0 minutes 48.859 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_model_summary_walkthrough.py:
