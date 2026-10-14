@@ -275,19 +275,7 @@ def _model_with_logzgas_free(neb: dict):
     [
         pytest.param("cloudy", id="cloudy"),
         pytest.param("cue", id="cue"),
-        pytest.param(
-            "cb19",
-            id="cb19",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "#2969: d(photometry)/d(neb_logZ_gas) is exactly zero at an interior "
-                    "point of the CB19 grid (cloudy_cb19.py log_OH_total lookup carries no "
-                    "gradient); the knob is dead there. Strict, so this flips to a failure "
-                    "once #2969 is fixed."
-                ),
-            ),
-        ),
+        pytest.param("cb19", id="cb19"),
     ],
 )
 def test_logzgas_gradient_is_live_at_interior_point(name, tmp_path):

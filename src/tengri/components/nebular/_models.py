@@ -101,6 +101,43 @@ def nebular_backend_carries_freefree(name: str | None) -> bool:
     return name in NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM
 
 
+def nebular_carries_freefree(name: str | None, instance: object | None = None) -> bool:
+    """Check whether the nebular side of a model publishes thermal free-free (#2962).
+
+    The one predicate both radio free-free gates read: the factory's
+    ``include_freefree`` resolution and the ``bell2003_split`` thermal law. It extends
+    :func:`nebular_backend_carries_freefree` with the backend object, because a
+    ``NebularContinuumFallback`` wraps a
+    line-only backend under the declared name (``"cb19"``, ``"mappings"``) and its
+    analytic tier supplies the free-free and two-photon continuum over the whole SSP
+    grid.
+
+    Parameters
+    ----------
+    name : str or None
+        Declared nebular backend name, as for :func:`nebular_backend_carries_freefree`.
+    instance : object or None
+        The pre-constructed backend object, when one was passed.
+
+    Returns
+    -------
+    bool
+        ``True`` if the declared name or the backend object carries a free-free
+        continuum.
+
+    Notes
+    -----
+    **JIT-compatible**: no, configuration read.
+    """
+    from tengri.components.nebular._shared import NebularContinuumFallback
+
+    if nebular_backend_carries_freefree(name):
+        return True
+    # The wrapper always carries free-free: its Tier 1 is a continuum-capable backend
+    # and its Tier 2 is the analytic free-free plus two-photon continuum.
+    return isinstance(instance, NebularContinuumFallback)
+
+
 def register_nebular_model(
     name: str,
     *,

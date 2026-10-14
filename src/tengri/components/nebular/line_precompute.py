@@ -178,13 +178,20 @@ def precompute_line_per_qh(
     # the prior's or ``catalog_z_range``'s lower bound), not a prior draw: the
     # table is per-Q_H and independent of it. A caller-supplied one is honored.
     from tengri.components.nebular.nebular_grid_precompute import reference_redshift
+    from tengri.parameters.resolve import merge_fixed_params
     from tengri.parameters.timing import reference_timing_fracs
 
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
+    # The redshift the flux is evaluated at: the reference when it is written into the
+    # dict, else the model's own Fixed value. A catalog build's reference is the lower
+    # bound, which need not be where a Fixed redshift evaluates (#2982).
+    flux_z = ref_z
     if "redshift" in set(model.spec.free_params) or caller_z is not None:
+        ref_params["redshift"] = ref_z
+    else:
         # A Fixed redshift stays out of the dict: ``spec.sample`` is free-only and a
         # resolved Fixed key would be refused as a call-time override (#2296).
-        ref_params["redshift"] = ref_z
+        flux_z = float(merge_fixed_params(model.spec, {})["redshift"])
 
     # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
@@ -199,9 +206,9 @@ def precompute_line_per_qh(
     }
 
     # Recover distance-independent LUMINOSITY: predict_line_fluxes returns
-    # observed flux L / (4 pi d_L(z_ref)^2); multiply by the reference divisor
+    # observed flux L / (4 pi d_L(flux_z)^2); multiply by that divisor
     # so the stored table carries L_line / nion, valid at any evaluation z.
-    log10_ref_divisor = _log10_four_pi_dl2(ref_z)
+    log10_ref_divisor = _log10_four_pi_dl2(flux_z)
 
     met_grid = jnp.linspace(met_lo, met_hi, n_met)
     rows = []
