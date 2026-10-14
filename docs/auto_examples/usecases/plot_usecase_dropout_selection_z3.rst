@@ -31,7 +31,7 @@ References
 
 Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-201
+.. GENERATED FROM PYTHON SOURCE LINES 15-210
 
 
 
@@ -48,6 +48,12 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
 
     import os
+
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    _PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+        SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+    )
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
@@ -76,13 +82,16 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
     def build_model(z: float) -> tengri.SEDModel:
         """Build a model at a given redshift."""
+        # The peak is sampled as a fraction of the age of the universe at z: 0.5-6 Gyr
+        # lookback, clipped to the declared fraction range.
+        age = float(tengri.cosmology.age_at_z(z))  # Gyr
         return tengri.SEDModel.build(
             ssp,
             observation=obs,
             sfh={
                 "type": "tsnorm",
                 "log_total_mass": 10.0,
-                "peak_lbt_gyr": tengri.Uniform(0.5, 6.0),
+                "peak_lbt_frac": tengri.Uniform(0.5 / age, min(6.0 / age, _PEAK_FRAC_HI)),
                 "width_gyr": tengri.Uniform(0.8, 3.0),
                 "skew": tengri.Uniform(-0.5, 1.0),
                 "trunc": tengri.Uniform(2.0, 8.0),
@@ -236,7 +245,7 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.885 seconds)
+   **Total running time of the script:** (0 minutes 12.235 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

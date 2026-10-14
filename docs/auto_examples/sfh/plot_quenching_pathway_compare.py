@@ -38,10 +38,11 @@ scenarios = [
             "type": "const",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.64,
-            # start_gyr is lookback time to SF onset (larger number);
+            # start_frac is the lookback time to SF onset as a fraction of the age of
+            # the universe at z = 0.05; 1.0 is formation at the Big Bang (13.09 Gyr ago).
             # end_gyr is lookback time to SF cessation (smaller number).
-            # Star formation from 13.8 Gyr ago until 0.1 Gyr ago.
-            "start_gyr": 13.8,
+            # Star formation from the Big Bang until 0.1 Gyr ago.
+            "start_frac": tengri.Fixed(1.0),
             "end_gyr": 0.1,
         },
         "color": "#1f77b4",

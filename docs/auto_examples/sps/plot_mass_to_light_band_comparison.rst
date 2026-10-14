@@ -44,7 +44,7 @@ References
 .. [2] Conroy, C. 2013, ARA&A, 51, 393
    "Modeling the Panchromatic Spectral Energy Distributions of Galaxies"
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-127
+.. GENERATED FROM PYTHON SOURCE LINES 28-135
 
 
 
@@ -58,8 +58,8 @@ References
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.643 Gyr old at redshift 0.01. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.643 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
 
@@ -72,6 +72,12 @@ References
 
 
     import os
+
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    _PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+        SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+    )
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
@@ -103,7 +109,8 @@ References
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(BANDS)))
 
     # Build model with narrow-burst SFH parametrized by lookback time.
-    # Free parameter: peak_lbt_gyr (age of burst). Everything else fixed.
+    # Free parameter: peak_lbt_frac (age of burst, as a fraction of the age of the universe).
+    # Everything else fixed.
     obs = tengri.Observation(photometry=tengri.Photometry.from_names([b for b, _ in BANDS]))
     nu_eff = 2.998e18 / np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
@@ -113,7 +120,7 @@ References
         sfh={
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "peak_lbt_gyr": tengri.Uniform(0.05, 13.0),
+            "peak_lbt_frac": tengri.Uniform(_PEAK_FRAC_LO, _PEAK_FRAC_HI),
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
@@ -136,9 +143,10 @@ References
     # M/L growth (age-sensitive), while J/K are flat (age-insensitive).
     ages = np.logspace(-1, -0.05, 12)  # 0.1 to ~0.89 Gyr
     ml = np.empty((len(BANDS), ages.size))
+    AGE_Z = float(tengri.cosmology.age_at_z(0.01))  # Gyr
 
     for j, age in enumerate(ages):
-        p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
+        p = {**baseline, "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z)}
         sfh = model.predict_sfh(p)
         # Integrate SFH to get total stellar mass (M_sun).
         m_star = float(np.trapezoid(np.asarray(sfh["sfr_mean"]), np.asarray(sfh["t_gyr"]) * 1e9))
@@ -169,6 +177,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_mass_to_light_band_comparison.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 21.757 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_mass_to_light_band_comparison.py:

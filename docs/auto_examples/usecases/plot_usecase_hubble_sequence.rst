@@ -37,7 +37,7 @@ References:
 - Coleman, Wu & Weedman 1980, ApJS, 43, 393
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-103
+.. GENERATED FROM PYTHON SOURCE LINES 22-110
 
 
 
@@ -47,13 +47,30 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.787 Gyr old at redshift 0. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.787 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
 
     import os
+
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    _PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+        SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+    )
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
@@ -80,12 +97,13 @@ References:
     ]
 
     ssp = tengri.load_ssp()
+    AGE_Z0 = float(tengri.cosmology.age_at_z0())  # Gyr, the age of the universe at z = 0
     model = tengri.SEDModel.build(
         ssp,
         sfh={
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
+            "peak_lbt_frac": tengri.Uniform(_PEAK_FRAC_LO, _PEAK_FRAC_HI),
             "width_gyr": tengri.Uniform(0.1, 5.0),
             "log_total_mass": 10.0,
             "skew": 0.0,
@@ -108,7 +126,7 @@ References:
     for label, peak, width, tau, color in ATLAS:
         params = {
             **baseline,
-            "sfh_tsnorm_peak_lbt_gyr": jnp.float64(peak),
+            "sfh_tsnorm_peak_lbt_frac": jnp.float64(peak / AGE_Z0),
             "sfh_tsnorm_width_gyr": jnp.float64(width),
             "dust_tau_diff": jnp.float64(tau),
         }
