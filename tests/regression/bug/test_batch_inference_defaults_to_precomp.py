@@ -20,7 +20,7 @@ import warnings
 
 import pytest
 
-from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
+from tengri.forward.sed_model import WavePrecomp
 from tengri.inference.hierarchical import PopulationFitter
 
 pytestmark = pytest.mark.regression_bug
@@ -114,13 +114,11 @@ def test_a_model_already_carrying_the_lut_is_not_rewrapped():
     assert not model.via_with_approx
 
 
-def test_spectroscopy_resolves_to_the_spectrum_lut():
-    """``data_type="spectroscopy"`` -> SpectrumPrecomp, mirroring Fitter's auto map."""
+def test_spectroscopy_defaults_to_the_exact_path():
+    """``data_type="spectroscopy"`` stays exact under "auto" (#1688), mirroring Fitter."""
     fitter = _fitter(lambda **kw: _StubModel(), data_type="spectroscopy")
     model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
-    assert model.via_with_approx
-    cfgs = model.received_cfg if isinstance(model.received_cfg, tuple) else (model.received_cfg,)
-    assert any(isinstance(c, SpectrumPrecomp) for c in cfgs)
+    assert not model.via_with_approx
 
 
 def test_the_spec_template_stays_raw():

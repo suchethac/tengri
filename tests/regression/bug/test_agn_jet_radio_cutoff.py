@@ -13,8 +13,12 @@ was a bare power law truncated at 300 GHz rather than AGNfitter-rX's
 
 The fix drops the hard floor from the two AGN-jet functions and lets the
 exponential aging cutoff govern the high-frequency rolloff (and adds the
-missing cutoff to the SPL). The star-formation radio keeps its 1 mm floor —
-it is tied to the dust FIR and must not double-count there.
+missing cutoff to the SPL). The star-formation radio kept a 1 mm floor then,
+on the grounds that it is tied to the dust FIR and must not double-count there.
+That floor moved to 100 um (pcigale's radio-module edge) with the synchrotron fix:
+the dust-emission SED holds no synchrotron, so adding the power law below 1 mm
+double-counts nothing, and every ``L_ir`` window is integrated from the dust SED
+alone. The thermal free-free shares the 100 um edge.
 
 References
 ----------
@@ -79,12 +83,21 @@ def test_agn_jet_rolls_over_smoothly(fn, kw):
     assert lum[-1] < 0.1 * lum[0], "exp aging cutoff should govern the high-nu rolloff"
 
 
-def test_sf_radio_keeps_its_floor():
-    """The star-formation radio is tied to the dust FIR — its 1 mm floor stays."""
-    below = float(radio_sfr_bell2003(_wave(100.0), 1.0e45)[0])  # 3 mm — in support
-    above = float(radio_sfr_bell2003(_wave(1000.0), 1.0e45)[0])  # 0.3 mm — floored
-    assert below > 0.0, "SF radio must emit within its support"
-    assert above == 0.0, "SF radio must stay floored above the 1 mm dust boundary"
+def test_sf_radio_edge_is_100_um():
+    """The SF synchrotron reaches 100 um (pcigale's radio edge) and is zero shortward.
+
+    Dust emission carries no synchrotron, so the power law adds to it without
+    double-counting; the 1 mm floor of #1071 is superseded (see module docstring).
+    """
+    l_ir = 1.0e45
+    ref = float(radio_sfr_bell2003(_wave(100.0), l_ir)[0])  # 3 mm, in support
+    sub_mm = float(radio_sfr_bell2003(_wave(1000.0), l_ir)[0])  # 0.3 mm
+    edge = float(radio_sfr_bell2003(jnp.asarray([1.0e6]), l_ir)[0])  # 100 um
+    shortward = float(radio_sfr_bell2003(jnp.asarray([9.9e5]), l_ir)[0])  # 99 um
+    assert ref > 0.0, "SF radio must emit within its support"
+    assert sub_mm == pytest.approx(ref * (1000.0 / 100.0) ** -0.8, rel=1e-12)
+    assert edge > 0.0
+    assert shortward == 0.0, "SF radio must stay zero shortward of 100 um"
 
 
 def test_agn_jet_gradient_flows():

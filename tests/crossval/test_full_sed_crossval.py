@@ -41,6 +41,25 @@ import pytest
 
 from tests._bounds import assert_non_negative
 
+
+def _table_cosmic_time_gyr(t_since_formation_gyr, age_gyr: float, redshift: float) -> np.ndarray:
+    """Cosmic time since the Big Bang [Gyr] for a table whose last node is the observation.
+
+    ``sfh_t_gyr`` is cosmic time measured from the Big Bang, and the stellar
+    component turns it into lookback time with the age of the universe at the
+    model redshift. A grid written in time since galaxy formation, ``0`` to
+    ``age_gyr``, therefore has to be shifted by ``age_at_z(z) - age_gyr`` so that
+    its last node sits at the observation epoch and star formation runs up to
+    the present; left unshifted it would end ``age_at_z(z) - age_gyr`` before
+    observation and the table would carry no young stars at all.
+    """
+    from tengri.utils.cosmology import age_at_z
+
+    return (float(age_at_z(redshift)) - float(age_gyr)) + np.asarray(
+        t_since_formation_gyr, dtype=float
+    )
+
+
 #: ``np.trapz`` was removed in numpy 2.0 in favor of ``np.trapezoid``, but
 #: pyproject allows ``numpy>=1.24``, where only ``trapz`` exists. Bind once
 #: rather than at the call site so this file runs across the supported range.
@@ -1162,7 +1181,9 @@ def _build_tengri_tau_sed_table(
 
     params = spec.sample(jax.random.PRNGKey(0))
     params = dict(params)
-    params["sfh_t_gyr"] = jnp.asarray(t_cosmic, dtype=jnp.float64)
+    params["sfh_t_gyr"] = jnp.asarray(
+        _table_cosmic_time_gyr(t_cosmic, age_gyr, 0.01), dtype=jnp.float64
+    )
     params["sfh_sfr"] = jnp.asarray(sfr_table, dtype=jnp.float64)
 
     result = model.predict_rest_sed(params)
@@ -1198,12 +1219,6 @@ class TestTauSFHCrossVal:
     4. Internal tests (tengri only) verify sign conventions and integration accuracy.
     """
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.505 vs tolerance 0.80–1.20 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau1gyr_uv_v_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """tau=1 Gyr, age=5 Gyr: tengri UV/V color (2800/5500) within 20% of FSPS.
 
@@ -1276,12 +1291,6 @@ class TestTauSFHCrossVal:
             "Large discrepancy suggests wrong time convention or integration error."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.334 vs tolerance 0.75–1.25 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau1gyr_uv_v_color_vs_bagpipes(self, ssp_data, ref, ref_wave):
         """tau=1 Gyr, age=5 Gyr: tengri UV/V color within 25% of bagpipes.
 
@@ -1388,12 +1397,6 @@ class TestTauSFHCrossVal:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 1.885 vs tolerance 0.70–1.30 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tau0p5gyr_dusty_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """tau=0.5 Gyr + dust (tau_bc=1.5): tengri UV/V color within 30% of FSPS.
 
@@ -1405,7 +1408,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
+        wave, sed = _build_tengri_tau_sed_table(
+            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
+        )
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
         fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
@@ -1426,7 +1431,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
+        wave, sed = _build_tengri_tau_sed_table(
+            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
+        )
         l_tengri = _band_avg(wave, sed, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / max(l_fsps, 1e-40)
@@ -3695,7 +3702,9 @@ def _build_tengri_step_sed(
     )
     model = SEDModel(spec, ssp_data)
     params = dict(spec.sample(jax.random.PRNGKey(0)))
-    params["sfh_t_gyr"] = jnp.asarray(t_cosmic, dtype=jnp.float64)
+    params["sfh_t_gyr"] = jnp.asarray(
+        _table_cosmic_time_gyr(t_cosmic, age_gyr, 0.01), dtype=jnp.float64
+    )
     params["sfh_sfr"] = jnp.asarray(sfr_table, dtype=jnp.float64)
 
     result = model.predict_rest_sed(params)
@@ -3754,12 +3763,6 @@ class TestTabularSFHTengri:
             "Check time-axis conversion in _build_tengri_step_sed."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.511 vs tolerance 0.75–1.25 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_rising_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """Rising step-function SFH: tengri UV/V color within 25% of FSPS.
 
@@ -3794,12 +3797,6 @@ class TestTabularSFHTengri:
             f"tengri UV/V={tengri_color:.4f}, FSPS UV/V={fsps_color:.4f}."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.412 vs tolerance 0.50–2.00 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_delta_color_rising_vs_quenching_vs_fsps(self, ssp_data, ref, ref_wave):
         """Delta UV/V (rising − quenching) agrees in sign and magnitude vs FSPS.
 
@@ -3837,12 +3834,6 @@ class TestTabularSFHTengri:
             "Large discrepancy suggests bin-assignment or time-convention error."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~2.67x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_rising_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Rising SFH: V-band amplitude per Msun within factor 2 of FSPS.
 
@@ -3865,12 +3856,6 @@ class TestTabularSFHTengri:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~0.36x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_quenching_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Quenching SFH: V-band amplitude per Msun within factor 2 of FSPS."""
         key = "fsps_tabsfh_step_quenching"
@@ -3889,12 +3874,6 @@ class TestTabularSFHTengri:
             f"tengri={l_tengri:.3e}, FSPS={l_fsps:.3e} erg/s/Hz/Msun."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="#1728 category B: tengri 0.401 vs tolerance 0.70–1.30 — awaiting physics "
-        "adjudication",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_bursty_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """Bursty step-function SFH ([Z/H]=-0.5): tengri UV/V color within 30% of FSPS.
 
@@ -3917,12 +3896,6 @@ class TestTabularSFHTengri:
             f"tengri UV/V={tengri_color:.4f}, FSPS UV/V={fsps_color:.4f}."
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="tengri table-mode SED is ~4.21x bright per Msun vs FSPS sfh=3 after reference "
-        "normalization — physics diagnosis tracked in #1728",
-    )
-    @pytest.mark.owner_blocked
     def test_tengri_table_bursty_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
         """Bursty SFH: V-band amplitude per Msun within factor 2 of FSPS."""
         key = "fsps_tabsfh_step_bursty"

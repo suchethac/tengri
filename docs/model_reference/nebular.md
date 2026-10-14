@@ -30,7 +30,7 @@ A model with `Cue` nebular emission and no radio block declares wavelength nodes
 For a given CSP with mass weights $w_j$ at SSP ages $t_j$: $$\begin{aligned}
 L_{\rm line} = {} & (1 - f_{\rm esc}) \sum_{j} w_j \, Q_{\rm H}(Z, t_j) \nonumber \\
   & \times \ell_{\rm grid}(\log Z_{\rm gas}, \log t_j, \log U),
-\end{aligned}$$ where $\ell_{\rm grid}$ is the trilinearly interpolated grid luminosity per $Q_{\rm H}$, and $f_{\rm esc}$ is the ionizing photon escape fraction. Only young SSP bins ($\log_{10}(t_{\rm age}/{\rm yr}) < 8.0$) contribute, reducing the sum from $\mathord{\sim}90$ to $\mathord{\sim}10$ terms.
+\end{aligned}$$ where $\ell_{\rm grid}$ is the grid luminosity per $Q_{\rm H}$ interpolated at $(\log Z_{\rm gas}, \log t_j, \log U)$, and $f_{\rm esc}$ is the ionizing photon escape fraction. The default interpolant is the node-exact, shape-preserving monotone cubic (PCHIP, Fritsch and Carlson 1980) applied to $\log_{10}\ell_{\rm grid}$ over the three log axes, the same interpolant the library-template lookups use (owner ruling 2026-10-11). It returns the tabulated value at every node and never overshoots between nodes. The lookup clamps to the tabulated hull on every axis; the declared prior $\log U \in [-5, 0]$ reaches two node spacings past the grid's $[-4, -1]$, a support mismatch that the build-time grid-support check narrows or warns on, and the metallicity prior lies inside the hull. `grid_interp="linear"` selects the earlier trilinear lookup and `grid_interp="triweight"` the smoothing kernel; both remain available. Only young SSP bins ($\log_{10}(t_{\rm age}/{\rm yr}) < 8.0$) contribute, reducing the sum from $\mathord{\sim}90$ to $\mathord{\sim}10$ terms.
 
 Ly-$\alpha$ ($\lambda = 1215.67$ Å) receives a separate escape fraction $f_{\rm esc,Ly\alpha}$ to account for resonant scattering: $$L_{\rm Ly\alpha} \to L_{\rm Ly\alpha} \cdot \frac{1 - f_{\rm esc,Ly\alpha}}{1 - f_{\rm esc}}.$$
 
@@ -84,6 +84,12 @@ Cue uses the Speculator architecture (Alsing et al. 2020), with 14 sub-networks 
 #### Accuracy.
 
 Hydrogen recombination lines are predicted to $<1\%$ accuracy. Of lines contributing $>1\%$ of the total line flux, 93% have $<5\%$ error relative to CLOUDY. Three high-ionization lines (\Ne [iv\] $\lambda 4720$, \Ar [iv\] $\lambda 7331$, \S [iv\] $10.5\,\mu$m) have $\sim$20% errors due to their sensitivity to the hardest ionizing photons. The $\sim$5% typical accuracy is comparable to differences between CLOUDY versions (Li et al. 2025), and is well below typical spectroscopic calibration uncertainties.
+
+#### Which stellar ages are counted.
+
+In the high-level mode $Q_H$ and the ionizing-spectrum shape are combined over every age bin of the SSP, weighted by the population's mass: segment luminosities add linearly across ages and each slope is the luminosity-weighted mean of the bins'. Old bins (post-AGB and extreme horizontal-branch stars) therefore contribute, and a quiescent galaxy has nebular emission at about the case-B H$\alpha$ per ionizing photon. `neb={'type': 'cue', 'lyc_max_age_yr': 1e8}` limits the sum to ages below 100 Myr. Cue's forbidden-line ratios for old (post-AGB) ionizing shapes are not validated against CLOUDY.
+
+The stellar SED must give up the LyC of every age Cue re-emits, so with Cue counting every age the dust key `lyc_reprocessed_by` defaults to `'all'` (it defaults to `'young'` for the other backends, and for Cue with a finite `lyc_max_age_yr`, where the stellar SED keeps the LyC of the ages Cue does not count). `'young'` removes only the LyC of ages below `t_birth_yr` from the stellar SED, so pairing it with Cue counting older ages would create the older ages' energy twice (94-96% of the old LyC energy of a quiescent galaxy, about 0.2% of its bolometric luminosity); that pairing raises an error. Set `lyc_max_age_yr` <= `t_birth_yr` to use `'young'` with Cue. `'all'` with a finite `lyc_max_age_yr` is refused: it would remove the LyC of the uncounted ages from the SED and re-emit none of it. The former 100 Myr cut with `'young'` leaves a small gap (ages between `t_birth_yr` and 100 Myr keep their LyC in the SED while Cue re-emits it) and warns once.
 
 #### Two calling modes.
 
