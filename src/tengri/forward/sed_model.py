@@ -12396,7 +12396,12 @@ class SEDModel:
             and hasattr(comp, "emission_terms")
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
-            response = self._build_term_response_table(comp, fw_pad, ft_pad)
+            amplitudes_fixed = bool(getattr(comp, "FIXED_TERM_AMPLITUDES", False)) and not any(
+                p in getattr(comp, "AMPLITUDE_PARAMS", ()) for p in free
+            )
+            response = self._build_term_response_table(
+                comp, fw_pad, ft_pad, amplitudes=amplitudes_fixed
+            )
             if response is None:
                 setattr(
                     self,
@@ -12408,7 +12413,7 @@ class SEDModel:
         setattr(self, cache_attr, response)
         return response
 
-    def _build_term_response_table(self, comp, fw_pad, ft_pad):
+    def _build_term_response_table(self, comp, fw_pad, ft_pad, *, amplitudes=False):
         """Tabulate an additive emitter's per-term response over redshift.
 
         Each node evaluates the emitter's terms with ``redshift`` set to the
@@ -12418,6 +12423,10 @@ class SEDModel:
         model-range midpoint node), ``S_ref(z)`` the shape at that wavelength on
         every node, so ``A_k = term_k(lam_ref) / S_ref_k(z)`` stays the amplitude
         at every redshift.
+
+        With ``amplitudes=True`` (every amplitude parameter fixed) the table also
+        carries ``amp`` = ``A_k`` at the fixed values, so the emitter need not
+        re-evaluate its terms at ``lam_ref`` on every call (#2987).
 
         Returns ``None`` (dense path) when a term is not rank-1 at any node, or is
         zero at some nodes only (its reference amplitude would be 0/0 there).
@@ -12458,6 +12467,8 @@ class SEDModel:
         # luminosities). Each term is its amplitude times a fixed shape, so the shape there is
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
+        # The reference wavelengths as one array, evaluated exactly as the per-call path does.
+        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
@@ -12468,6 +12479,7 @@ class SEDModel:
                 if diag_wave.shape[0]
                 else None
             )
+            at_ref = comp.emission_terms({**fixed, "redshift": z}, lam_ref) if amplitudes else None
             for key in keys:
                 s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
@@ -12499,6 +12511,10 @@ class SEDModel:
             out = {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
             if diag_terms is not None:
                 out["S_diag"] = jnp.stack(s_diag)
+            if at_ref is not None:
+                # A_k = term_k(lam_ref) / S_ref_k, the per-call amplitude at the fixed values.
+                at_lam = jnp.stack([at_ref[key][i] for i, key in enumerate(keys)])
+                out["amp"] = at_lam / jnp.stack(s_ref)
             return out
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -12509,10 +12525,11 @@ class SEDModel:
             "ln1pz": built["ln1pz"],
             "R": values["R"],
             "S_ref": values["S_ref"],
-            "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
+            "lam_ref": lam_ref,
         }
-        if "S_diag" in values:
-            table["S_diag"] = values["S_diag"]
+        for key in ("S_diag", "amp"):
+            if key in values:
+                table[key] = values[key]
         return table
 
     def _additive_term_shape_table(self, chain, name):
