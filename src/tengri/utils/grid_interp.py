@@ -2014,7 +2014,8 @@ def _axis_stencil(ax: jnp.ndarray, p, kind: str, extrapolate: bool) -> _AxisSten
     elif extrapolate:
         xq = p
     else:
-        xq = jnp.clip(p, ax[0], ax[-1])
+        # ``where``, not ``jnp.clip``: a clip halves the derivative on the boundary.
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
     pos = jnp.searchsorted(ax, xq) - 1
     i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
     start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
