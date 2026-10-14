@@ -132,11 +132,11 @@ def schartmann2005_disk_limits() -> jnp.ndarray:
     return jnp.array([8.0, 50.0, 125.0, 10000.0, 1e6])
 
 
-def _adaf_limits(delta_c) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """ADAF and thin-disc breakpoints [nm] at a blend weight already clipped to [0, 1]."""
+def _adaf_limits(delta) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """ADAF and thin-disc breakpoints [nm] at blend weight ``delta``."""
     limits_adaf = jnp.array([8.0, 75.0, 300.0, 1100.0, 2700.0, 20000.0, 100000.0, 1e6])
     limits_disc = jnp.array(
-        [8.0, 50.0, 2000.0 - (delta_c * 1875.0), 5000.0 - (delta_c * 2000.0), 10000.0, 1e6]
+        [8.0, 50.0, 2000.0 - (delta * 1875.0), 5000.0 - (delta * 2000.0), 10000.0, 1e6]
     )
     return limits_adaf, limits_disc
 
@@ -144,9 +144,9 @@ def _adaf_limits(delta_c) -> tuple[jnp.ndarray, jnp.ndarray]:
 def adaf_disk_limits(delta: float = 0.0) -> jnp.ndarray:
     """All breakpoints of :func:`adaf_disk_spectrum` [nm], shape (14,).
 
-    The thin-disc limits move with the (clipped) blend weight ``delta``.
+    The thin-disc limits move with the blend weight ``delta``.
     """
-    adaf, disc = _adaf_limits(jnp.clip(delta, 0.0, 1.0))
+    adaf, disc = _adaf_limits(delta)
     return jnp.concatenate([adaf, disc])
 
 
@@ -253,7 +253,7 @@ def adaf_disk_parts(
     wavelength : array_like, shape (n_wave,)
         Wavelength grid in nanometer (CIGALE convention).
     delta : float
-        Blend weight [dimensionless], clipped to [0, 1].
+        Blend weight [dimensionless]. Range: [0, 1]; outside it the blend is extrapolated.
 
     Returns
     -------
@@ -265,28 +265,25 @@ def adaf_disk_parts(
     -----
     **JIT-compatible**: yes.
     """
-    # ADAF delta is the ADAF->thin-disc blend weight, defined on [0, 1] (CIGALE
-    # skirtor2016 disk_type=2). Clip it before it enters the disc breakpoints so
-    # an out-of-range value (the shared ``agn_delta`` prior spans [-1, 1]) cannot
-    # produce a negative/non-monotonic limit and a non-finite spectrum.
-    delta_c = jnp.clip(delta, 0.0, 1.0)
+    # The ADAF->thin-disc blend weight enters unclipped, as in pcigale. Its declared
+    # range [0, 1] is enforced where the parameter is declared, not by a clamp here (#2662).
 
     # ADAF spectrum
-    limits_adaf, limits_disc = _adaf_limits(delta_c)
+    limits_adaf, limits_disc = _adaf_limits(delta)
     coefs_adaf = jnp.array([0.5, 0.15, 0.45, -0.05, -0.55, -1.5, -4.0])
 
     # Thin disc spectrum (delta-modulated)
     coefs_disc = jnp.array(
         [
-            9.0 - (8.0 * delta_c),
-            4.2 - (4.4 * delta_c),
-            0.7 - (2.2 * delta_c),
-            -6.5 + (5.0 * delta_c),
+            9.0 - (8.0 * delta),
+            4.2 - (4.4 * delta),
+            0.7 - (2.2 * delta),
+            -6.5 + (5.0 * delta),
             -4.0,
         ]
     )
 
-    blend_weight = delta_c
+    blend_weight = delta
     spec_adaf = piecewise_powerlaw_disk(wavelength, limits_adaf, coefs_adaf)
     spec_disc = piecewise_powerlaw_disk(wavelength, limits_disc, coefs_disc)
     return (1.0 - blend_weight) * spec_adaf, blend_weight * spec_disc

@@ -58,7 +58,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "adaf"): frozenset(
         {"agn_log_mbh", "agn_adaf_alpha", "agn_adaf_beta", "agn_adaf_delta"}
     ),
-    ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_disk_delta"}),
+    ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_adaf_delta"}),
     ("disc", "grahsp_sbpl"): frozenset(
         {
             "agn_grahsp_cutoff_nm",

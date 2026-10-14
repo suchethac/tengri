@@ -44,11 +44,16 @@ def test_adaf_blend_is_live_across_the_range() -> None:
         for db in values[i + 1 :]:
             assert _rel_diff(spectra[da], spectra[db]) > 1e-3, (da, db)
 
-    # delta=0 is the pure ADAF part, delta=1 the pure thin-disc part, of the block's own split.
-    adaf_part, disc_part = (np.asarray(x) for x in adaf_disk_parts(_WAVE_AA, 0.0))
-    np.testing.assert_allclose(spectra[0.0], adaf_part, rtol=1e-6, atol=0.0)
-    adaf_part, disc_part = (np.asarray(x) for x in adaf_disk_parts(_WAVE_AA, 1.0))
-    np.testing.assert_allclose(spectra[1.0], disc_part, rtol=1e-6, atol=0.0)
+    # The block is the block's own nm-grid spectrum times a constant (L_bol / 10). delta=0 must
+    # then be the pure ADAF part and delta=1 the pure thin-disc part of the block's split.
+    wave_nm = _WAVE_AA / 10.0
+    adaf_part, _ = adaf_disk_parts(wave_nm, 0.0)
+    _, disc_part = adaf_disk_parts(wave_nm, 1.0)
+    for delta, part in ((0.0, adaf_part), (1.0, disc_part)):
+        part = np.asarray(part, dtype=float)
+        live = part > 0.0
+        ratio = spectra[delta][live] / part[live]
+        assert np.ptp(ratio) / np.mean(ratio) < 1e-5, delta
 
 
 @pytest.mark.xfail(
@@ -107,11 +112,15 @@ def test_adaf_blend_weight_has_a_nonzero_gradient() -> None:
 
 
 def test_block_extrapolates_beyond_unit_blend_weight() -> None:
-    """(f) The block does not clamp the weight: delta=1.2 differs from delta=1.0.
+    """(f) The block does not clamp the weight: delta=1.005 differs from delta=1.0.
 
     This is the mutant-sensitive test: re-inserting ``jnp.clip(delta, 0.0, 1.0)`` in
-    ``adaf_disk_parts`` makes delta=1.2 collapse onto delta=1.0 and this test fails.
+    ``adaf_disk_parts`` makes delta=1.005 collapse onto delta=1.0 and this test fails.
+    The probe sits inside the range where the thin-disc breakpoint 2000 - 1875 delta
+    stays positive. Past delta of about 1.0133 that breakpoint is negative, its log is
+    NaN, and the spectrum is NaN (see the #2662 report); that edge is not pinned here.
     """
     at_one = np.asarray(adaf_disk_spectrum(_WAVE_AA, 1.0))
-    beyond = np.asarray(adaf_disk_spectrum(_WAVE_AA, 1.2))
+    beyond = np.asarray(adaf_disk_spectrum(_WAVE_AA, 1.005))
+    assert np.all(np.isfinite(beyond))
     assert _rel_diff(at_one, beyond) > 1e-3
