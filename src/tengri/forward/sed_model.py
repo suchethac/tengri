@@ -1272,7 +1272,7 @@ def _validate_fracagn_requires_dust(spec) -> None:
         return  # fracAGN is not active, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
-    dust_model = getattr(spec, "dust_model", "off")
+    dust_model = spec.dust_model
 
     # A model with dust_model='off' (dust_attenuation={'type': 'none'} or no dust) is unsafe
     if dust_model == "off":
@@ -1769,7 +1769,7 @@ def _validate_firrc_requires_dust(spec) -> None:
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
-    dust_model = getattr(spec, "dust_model", "off")
+    dust_model = spec.dust_model
 
     # A model with dust_model='off' is unsafe
     if dust_model == "off":
@@ -3283,20 +3283,35 @@ class SEDModel:
         ssp_data,
         filters=None,
         observation=None,
-        precompute=True,
+        precompute=UNSET,
         forward_dtype="float64",
         approx=None,
         csp_integration="trapz",
         wave_chunk_size=None,
         agn_config=None,
-        strategy=None,
+        strategy=UNSET,
         compile=None,
     ):
-        # ``strategy`` is accepted for backwards-compat signature but ignored;
-        # the kernel-selection strategy machinery was removed in 2026-05
-        # (kernel adapters deleted). ``predict_observables_jit`` is the only
-        # forward path now.
-        del strategy
+        # Retired kwargs. Both are still accepted so old call sites keep
+        # running, but neither changes the model: warn when a caller passes one.
+        if precompute is not UNSET:
+            warnings.warn(
+                f"SEDModel(precompute={precompute!r}) has no effect and is "
+                "deprecated: the model is identical either way. For the fast "
+                "photometry path pass approx=WavePrecomp(); for spectroscopy "
+                "pass approx=SpectrumPrecomp(). Omit the argument.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if strategy is not UNSET:
+            warnings.warn(
+                f"SEDModel(strategy={strategy!r}) has no effect and is "
+                "deprecated: the kernel-selection strategy machinery was removed "
+                "in 2026-05, and predict_observables_jit is the only forward path. "
+                "Omit the argument.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
@@ -3584,10 +3599,8 @@ class SEDModel:
 
         # ── Warm HDF5 grid caches BEFORE any JIT compilation ──────
         # (tracer-leak prevention; formerly the side-effect at the top of the
-        # retired ``_build_precomputed_data``, #620). ``precompute`` is now an
-        # accepted-but-ignored legacy kwarg, the fast path is opt-in via
-        # ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``.
-        del precompute
+        # retired ``_build_precomputed_data``, #620). The fast path is opt-in
+        # via ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``.
         self._warm_grid_caches()
 
         # ── Frozen runtime bundle for kernel layer (built BEFORE kernels) ──
@@ -4213,7 +4226,7 @@ class SEDModel:
 
     def _init_ssp(self, spec, ssp_data, csp_integration):
         """Set up SSP grid, CSP integration, and log-age grid."""
-        self._met_interp = getattr(spec, "met_interp", "linear")
+        self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
@@ -4318,7 +4331,7 @@ class SEDModel:
         # Return the base param_map delta (built param_map + dust-model selection)
         return _build_param_map(
             spec.mean_sfh_type,
-            dust_model=getattr(spec, "dust_model", "two_component"),
+            dust_model=spec.dust_model,
             dust_screens=getattr(spec, "dust_screens", ()),
             dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
             dust_law_neb=getattr(spec, "dust_law_neb", None),
@@ -4337,7 +4350,7 @@ class SEDModel:
         NotImplementedError
             If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
-        self._met_mode = getattr(spec, "met_mode", "delta")
+        self._met_mode = spec.met_mode
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
 
         from tengri.components.stellar.sfh.met_registry import resolve_met
@@ -4351,7 +4364,7 @@ class SEDModel:
         else:
             delta.update(met_param_map)
 
-        self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
+        self._alpha_fe_evolving = spec.alpha_fe_evolving
         if self._alpha_fe_evolving:
             # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
             # through the stellar component's SED production pipeline. Currently the
@@ -4758,7 +4771,7 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for dust components.
         """
-        self._dust_model = getattr(spec, "dust_model", "two_component")
+        self._dust_model = spec.dust_model
         self._dust_scheme = getattr(spec, "dust_approx", "fast")
 
         # WG00 (dust_type=3) structural selectors, static strings threaded into
@@ -5338,9 +5351,12 @@ class SEDModel:
 
         # Check if SEDs are identical to within machine precision (1e-10 relative).
         # The direction is flat when all SED differences are within this tolerance.
-        norm = jnp.max(jnp.abs(sed_lo.sed)) + 1e-300
-        rel_diff = jnp.max(jnp.abs(sed_hi.sed - sed_lo.sed)) / norm
-        is_flat = rel_diff < 1e-10
+        # Compared without a division: a float32 ``+ 1e-300`` is 0, so two
+        # all-zero SEDs gave 0/0 = NaN and the refusal never fired. Zero against
+        # zero counts as flat.
+        diff_max = jnp.max(jnp.abs(sed_hi.sed - sed_lo.sed))
+        sed_scale = jnp.max(jnp.abs(sed_lo.sed))
+        is_flat = bool(diff_max <= 1e-10 * sed_scale)
 
         if is_flat:
             # Same measurement, two readings of it. R55: a value the user
@@ -5361,7 +5377,8 @@ class SEDModel:
             raise ConfigError(
                 f"{kind}: measured: the predicted SED is identical to within "
                 f"1e-10 relative at agn_log_lbol={lo} and {hi} with "
-                f"agn_ir_frac={frac_mid} (rel_diff={rel_diff:.3e}). With "
+                f"agn_ir_frac={frac_mid} (max abs difference {float(diff_max):.3e} "
+                f"on an SED scale of {float(sed_scale):.3e}). With "
                 f"agn_ir_frac the AGN power is derived from the dust-absorbed "
                 f"stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE "
                 f"skirtor2016 coupling), so {consequence}. Drop one: omit "
@@ -11779,6 +11796,7 @@ class SEDModel:
         if cached != "unset":
             return cached
 
+        from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
         from tengri.components.dust.attenuation import resolve_bc_diff_law_params
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.energy_balance_precompute import (
@@ -11962,7 +11980,9 @@ class SEDModel:
                     params_at_z=_two_params,
                     law_bc=law_bc,
                     law_diff=law_diff,
-                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    f_obscuration=float(
+                        fixed.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+                    ),
                     lyman_cutoff_aa=getattr(dust.config, "lyman_cutoff_aa", 0.0),
                     lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
@@ -11978,7 +11998,9 @@ class SEDModel:
                     jnp.asarray(self.ssp_data.ssp_wave),
                     law_bc=law_bc,
                     law_diff=law_diff,
-                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    f_obscuration=float(
+                        fixed.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+                    ),
                     bc_params={k: float(v) for k, v in bc_params.items()},
                     diff_params={k: float(v) for k, v in diff_params.items()},
                     lyman_cutoff_aa=(
@@ -13185,10 +13207,9 @@ class SEDModel:
         for law in names:
             if law is None:
                 continue
-            try:
-                reads |= set(_law_shape_params(law))
-            except Exception:  # pragma: no cover - law not registered
-                continue
+            # An unregistered law already yields an empty set inside
+            # ``_law_shape_params``, so nothing here needs to be caught.
+            reads |= set(_law_shape_params(law))
 
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
