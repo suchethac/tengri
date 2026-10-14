@@ -31,7 +31,7 @@
 | `log_l_x_lmxb_2_10` | dex | xray | xray | log10 2-10 keV luminosity of the LMXB term [dex re erg/s] |
 | `log_l_x_total` | dex | xray | xray | log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; float32-safe form of `l_x_total` |
 | `log_l_x_xrb` | dex | xray | xray | log10 X-ray luminosity from X-ray binaries [dex re erg/s]; float32-safe form of `l_x_xrb` |
-| `log_lnu_2kev_30deg` | dex | xray | xray | log10 intrinsic 2 keV monochromatic L_nu at cos i = 30 deg, the alpha_ox anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24 |
+| `log_lnu_2kev_30deg` | dex | xray | xray | log10 intrinsic 2 keV monochromatic L_nu at an inclination of 30 deg (cos i = 0.866), the alpha_ox anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24 |
 | `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya`. `log_lya = log10(lya) + log10(L_sun)`. |
 | `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548`. `log_nii_6548 = log10(nii_6548) + log10(L_sun)`. |
 | `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584`. `log_nii_6584 = log10(nii_6584) + log10(L_sun)`. |

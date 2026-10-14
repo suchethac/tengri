@@ -206,7 +206,7 @@ class XRaySEDComponent(TemplateThreading):
             DerivedKey(
                 "log_Lnu_2keV_30deg",
                 "dex",
-                "log10 of the intrinsic 2 keV monochromatic L_nu at cos i = 30 deg, the "
+                "log10 of the intrinsic 2 keV monochromatic L_nu at an inclination of 30 deg (cos i = 0.866), the "
                 "alpha_ox anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24; "
                 "read by the log_lnu_2kev_30deg property",
             ),
@@ -863,7 +863,7 @@ def _log_l_x_agn_total_fn(state, params):
 
 
 def _log_lnu_2kev_30deg_fn(state, params):
-    """log10 intrinsic L_nu(2 keV) at cos i = 30 deg [dex re erg/s/Hz]."""
+    """log10 intrinsic L_nu(2 keV) at an inclination of 30 deg (cos i = 0.866) [dex re erg/s/Hz]."""
     return jnp.asarray(state.derived["log_Lnu_2keV_30deg"])
 
 
@@ -957,7 +957,7 @@ _XRAY_PROPERTIES = {
     "log_lnu_2kev_30deg": Property(
         units="dex",
         group="xray",
-        doc="log10 intrinsic 2 keV monochromatic L_nu at cos i = 30 deg, the alpha_ox "
+        doc="log10 intrinsic 2 keV monochromatic L_nu at an inclination of 30 deg (cos i = 0.866), the alpha_ox "
         "anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24",
         fn=_log_lnu_2kev_30deg_fn,
     ),
