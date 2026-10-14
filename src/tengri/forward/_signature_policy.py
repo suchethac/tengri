@@ -215,6 +215,11 @@ SIGNATURE_POLICY: KeyPolicy = {
         "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
         "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"
     ),
+    "_radio_agn_loudness_ref": content(
+        "AGN radio-loudness anchor (4400 A or 2500 A at 30 deg) changes the emitted radio SED; "
+        "set by the grammar's radio.agn.loudness_ref key and routed to "
+        "RadioSEDComponentConfig.agn_loudness_ref"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),
