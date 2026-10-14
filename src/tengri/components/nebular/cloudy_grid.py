@@ -126,6 +126,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
 
@@ -337,7 +338,24 @@ _compute_log_qh_grid = jax.vmap(
 )
 
 
-# ── Grid interpolation (trilinear in logZ, logAge, logU) ──────────
+# ── Grid interpolation (PCHIP default; trilinear and triweight opt-in) ──
+
+#: Per-axis ``extrapolate`` flags for the PCHIP lookup over (log Z, log age,
+#: log U), in that axis order. Set from the declared free-parameter priors
+#: against each grid's node hull (owner ruling 2026-10-11):
+#:
+#: * log Z_gas: prior [-1.30, 0.20] log10(Z/Zsun) sits inside every shipped
+#:   hull (lines [-1.30, 0.30]; continuum [-1.98, 0.20] or [-1.30, 0.30]),
+#:   so no extrapolation.
+#: * log age: no declared prior. The ages are the SSP bins, and the young
+#:   bins past the grid top (log age 7.30) clip as they always have.
+#: * log U: prior [-5, 0] reaches two node spacings past the hull [-4, -1].
+#:   That is a support mismatch, not a numerical gap, so the lookup clamps to
+#:   the edge node there (zero gradient beyond it). The build-time
+#:   ``GRID_SUPPORT`` check narrows or warns on it; extrapolating the end
+#:   cubic across it would fabricate the SED. Extrapolation is reserved for
+#:   gaps under half a node spacing (#2808).
+_PCHIP_EXTRAPOLATE: tuple[bool, bool, bool] = (False, False, False)
 
 
 def _trilinear_interp(
@@ -471,10 +489,20 @@ class CloudyGridBackend:
         Path to tengri-format CLOUDY HDF5 grid.
     ssp_data : SSPData
         SSP templates (for Q_H computation).
-    grid_interp : {"linear", "triweight"}
+    grid_interp : {"pchip", "linear", "triweight"}
         Interpolation mode for the CLOUDY grid axes (logZ_gas, log_age, logU).
+        The lookup interpolates ``log10`` luminosity over those log axes.
 
-        ``"linear"`` (default): piecewise-linear trilinear interpolation.
+        ``"pchip"`` (default): node-exact, shape-preserving monotone cubic
+        (Fritsch and Carlson 1980), the same interpolant the library-template
+        lookups use (:func:`tengri.utils.grid_interp.interp_nd_pchip`, owner
+        ruling 2026-10-11). Exact at every node, C1 in the query, and it
+        never overshoots between nodes. The lookup clamps to the grid hull on
+        every axis (``_PCHIP_EXTRAPOLATE`` is all False): a query outside the
+        hull reads the edge node with zero gradient, and the build-time
+        ``GRID_SUPPORT`` check narrows or warns on such a prior.
+
+        ``"linear"``: piecewise-linear trilinear interpolation (opt-in).
         Fast; exact at grid nodes; kinks in the gradient at node boundaries.
 
         ``"triweight"``: smooth triweight-kernel interpolation (Hearin et al.
@@ -497,12 +525,14 @@ class CloudyGridBackend:
         self,
         grid_path: str,
         ssp_data=None,
-        grid_interp: str = "linear",
+        grid_interp: str = "pchip",
         grid_scatter: float = 0.2,
         ionizing_source_warning: str = "warn",
     ) -> None:
-        if grid_interp not in ("linear", "triweight"):
-            raise ValueError(f"grid_interp must be 'linear' or 'triweight', got {grid_interp!r}")
+        if grid_interp not in ("pchip", "linear", "triweight"):
+            raise ValueError(
+                f"grid_interp must be 'pchip', 'linear' or 'triweight', got {grid_interp!r}"
+            )
         if ionizing_source_warning not in ("raise", "warn", "suppress"):
             raise ValueError(
                 "ionizing_source_warning must be 'raise', 'warn', or 'suppress', "
@@ -792,7 +822,18 @@ class CloudyGridBackend:
         edges_u: jnp.ndarray | None = None,
     ):
         """Build an interpolation closure for the configured grid_interp mode."""
-        if self._grid_interp == "triweight":
+        if self._grid_interp == "pchip":
+
+            def _interp(z, a, u):
+                """Interpolate grid data via node-exact PCHIP (default)."""
+                return interp_nd_pchip(
+                    data,
+                    (grid_z, grid_age, grid_u),
+                    (z, a, u),
+                    extrapolate=_PCHIP_EXTRAPOLATE,
+                )
+
+        elif self._grid_interp == "triweight":
             s = self._grid_scatter
 
             def _interp(z, a, u):

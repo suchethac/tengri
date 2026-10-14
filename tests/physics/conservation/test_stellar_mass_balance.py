@@ -34,7 +34,7 @@ def stellar_only_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),

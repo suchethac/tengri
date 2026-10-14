@@ -142,7 +142,7 @@ def _mass_model(ssp_real, mass_prior):
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": mass_prior,
-            "peak_lbt_gyr": Uniform(1.0, 6.0),
+            "peak_lbt_frac": Uniform(0.0725327, 0.435196),
             "width_gyr": Uniform(1.0, 3.0),
             "skew": 0.3,
             "trunc": 3.0,

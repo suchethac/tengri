@@ -119,7 +119,7 @@ def test_d_formed_mass_is_the_declared_mass(ssp, obs, kernel):
 
 
 def _flux_and_grad(ssp, obs, kernel):
-    sfh = {**_delayed(5.0), "age_gyr": Uniform(1.0, 10.0)}
+    sfh = {**_delayed(5.0), "age_frac": Uniform(0.0725327, 0.725327)}
     m = _build(ssp, obs, kernel, **sfh)
 
     def r_flux(x):

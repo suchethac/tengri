@@ -1669,7 +1669,13 @@ def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool =
     n = x.shape[0]
     slopes = _pchip_slopes(x, y)
 
-    xq_c = xq if extrapolate else jnp.clip(xq, x[0], x[-1])
+    # ``jnp.clip`` splits its tie gradient 1/2 at each bound, which halves the
+    # derivative at a boundary node. Clamping with ``where`` keeps the full
+    # one-sided slope there and still returns zero outside the table.
+    if extrapolate:
+        xq_c = xq
+    else:
+        xq_c = jnp.where(xq < x[0], x[0], jnp.where(xq > x[-1], x[-1], xq))
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     xi = x[i]
     h = x[i + 1] - xi

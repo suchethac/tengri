@@ -61,7 +61,7 @@ def _model(ssp, observation, width):
             "log_total_mass": Fixed(10.0),
             "peak_gyr": Fixed(5.0),
             "width_gyr": Fixed(width),
-            "age_gyr": Uniform(0.5, 3.0),
+            "age_frac": Uniform(0.0362663, 0.217598),
         },
         redshift=Fixed(1.0),
         approx=None,

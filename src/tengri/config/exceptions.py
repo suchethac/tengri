@@ -466,10 +466,6 @@ class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
     parameter(s) an explicit, tighter ceiling, to silence the condition
     itself rather than just the warning.
 
-    See Also
-    --------
-    tengri.parameters.groups._narrow_free_priors_to_z
-        The z_floor-based cap this warning reports the blind spot of.
     """
 
 

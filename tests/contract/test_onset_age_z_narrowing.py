@@ -1,186 +1,77 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Redshift-aware onset-age priors: the parse-time z-narrowing pass.
+"""Redshift and the SF-onset timing parameters, under the fraction contract (#2748).
 
-``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` each
-declare a static ``free_prior`` ceiling of today's cosmic age
-(``_AGE_UNIV_GYR``, z=0) in ``components/stellar/sfh/registry.py`` -- the
-widest value that is ever correct, mirroring the ``default=_AGE_UNIV_GYR``
-convention already used on ``sfh_dpl_age_gyr`` and friends. That declaration
-alone is not enough: a bound generous enough for z~0 admits SF-onset draws
-at z=2 where star formation never happens (a zero-mass galaxy, zero flux,
-zero gradient). ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
-closes that gap by narrowing the declared range to ``age_at_z(z)`` at parse
-time, whenever the build's redshift floor is knowable.
+A free onset is its fraction of age(z), so its support cannot exceed the age of
+the universe at any redshift and needs no parse-time narrowing. An absolute Gyr
+onset is a shim: a ``Fixed`` value is kept as an absolute time and is checked
+against age(z) at a fixed redshift (refused) or a free redshift (warned); a free
+prior on the Gyr name is refused and points at its fraction.
 
-Every expectation here is computed via ``tengri.utils.cosmology.age_at_z``,
-never hardcoded -- these are pinned to the *mechanism*, not to today's
-cosmological constants.
+Every expectation is computed via ``tengri.utils.cosmology.age_at_z``.
 """
 
 from __future__ import annotations
 
 import pytest
 
-import tengri
-from tengri import DEFAULT, FREE, Fixed, Uniform
-from tengri.utils.cosmology import age_at_z, age_at_z0
-
 pytestmark = pytest.mark.contract
 
-
-def _build_dexp(**overrides):
-    """Parse a bare dexp SFH with 'all_params': FREE, no dust/nebular noise."""
-    kwargs = {
-        "sfh": {"type": "dexp", "all_params": FREE},
-        "dust_attenuation": {"type": "none"},
-        "neb": {"type": "none"},
-    }
-    kwargs.update(overrides)
-    return tengri.parse_groups(**kwargs)
+import tengri
+from tengri import FREE, Fixed, Uniform
+from tengri.config.exceptions import ConfigError, FreeRedshiftOnsetCeilingWarning
+from tengri.utils.cosmology import age_at_z
 
 
-# ── (a) the wildcard frees the onset, capped at age_at_z(z) ────────────────
-
-
-def test_dexp_onset_freed_with_z_aware_ceiling():
-    """'all_params': FREE frees sfh_dexp_start_gyr, capped at age_at_z(0.5)."""
-    spec = _build_dexp(redshift=Fixed(0.5))
-
-    assert "sfh_dexp_start_gyr" in spec.free_params
-    lo, hi = spec.get_distribution("sfh_dexp_start_gyr").bounds
-    # The floor excludes 0 (#2521): a [0, 0] onset window is zero-width and
-    # forms no mass at any lookback time, so the registry declares a
-    # positive floor rather than 0.0 -- narrowing only ever moves the
-    # ceiling, never this floor.
-    assert lo == pytest.approx(0.5)
-    assert hi == pytest.approx(float(age_at_z(0.5)), rel=1e-9)
-
-
-# ── (b) monotonicity: a lower redshift leaves more cosmic time available ───
-
-
-def test_cap_is_monotonic_in_redshift():
-    hi_z05 = _build_dexp(redshift=Fixed(0.5)).get_distribution("sfh_dexp_start_gyr").bounds[1]
-    hi_z005 = _build_dexp(redshift=Fixed(0.05)).get_distribution("sfh_dexp_start_gyr").bounds[1]
-
-    assert hi_z005 > hi_z05
-    assert hi_z005 == pytest.approx(float(age_at_z(0.05)), rel=1e-9)
-    assert hi_z05 == pytest.approx(float(age_at_z(0.5)), rel=1e-9)
-
-
-# ── (c) a free redshift narrows against its own FLOOR ───────────────────────
-
-
-def test_free_redshift_caps_at_its_own_floor():
-    """Uniform(0, 20) redshift narrows against z=0 -- i.e. at most a
-    sub-permille narrowing, from the registry's rounded declared ceiling
-    down to today's raw (unrounded) cosmic age.
-
-    The floor of the redshift prior is what a build can guarantee about every
-    galaxy this model will ever be asked to fit: at least as young as z=0.
-    ``sfh_dexp_start_gyr``'s static declared ceiling is
-    ``_AGE_UNIV_GYR = round(age_at_z0(), 3)`` (registry.py) -- a value
-    rounded UP or DOWN to the nearest 0.001 Gyr, while the dynamic cap here
-    is the raw (unrounded) ``age_at_z(0.0)``. Whenever rounding happens to
-    round up, the declared ceiling sits fractionally above the raw cap and
-    the z-narrowing pass correctly clips it back down -- this is not a
-    narrowing bug, it is the rounding direction of the specific cosmology
-    in use, so the test measures the narrowed bound against `age_at_z0()`
-    directly rather than assuming either provenance outcome.
-    """
-    spec = _build_dexp(redshift=Uniform(0.0, 20.0))
-
-    hi = spec.get_distribution("sfh_dexp_start_gyr").bounds[1]
-    raw_cap = float(age_at_z0())
-    declared_ceiling = round(raw_cap, 3)  # matches _AGE_UNIV_GYR's own rounding
-    expected_hi = min(declared_ceiling, raw_cap)
-    assert hi == pytest.approx(expected_hi, rel=1e-9)
-    # Sub-permille narrowing (registry rounding vs raw age) still tags
-    # "_zcap"; only an exact match would stay "wildcard_free".
-    expected_provenance = (
-        "wildcard_free" if expected_hi == declared_ceiling else "wildcard_free_zcap"
-    )
-    assert spec._group_provenance["sfh_dexp_start_gyr"] == expected_provenance
-
-
-# ── (d) a user's own explicit prior is never touched ────────────────────────
-
-
-def test_explicit_user_prior_is_never_narrowed():
-    spec = _build_dexp(
-        sfh={"type": "dexp", "start_gyr": Uniform(0.1, 5.0), "all_params": Fixed(DEFAULT)},
-        redshift=Fixed(0.5),
-    )
-
-    lo, hi = spec.get_distribution("sfh_dexp_start_gyr").bounds
-    assert (lo, hi) == (0.1, 5.0)
-    assert spec._group_provenance["sfh_dexp_start_gyr"] == "user_prior"
-
-
-# ── (e) round-trip: a z-narrowed spec still reads as 'all_params': FREE ────
-
-
-def test_zcap_provenance_collapses_like_grid_provenance():
-    """``_base_provenance`` treats '_zcap' exactly like '_grid': stripped.
-
-    Isolated at the resolver level (mirrors how test_wildcard_frees_something.py
-    tests ``_check_wildcard_freed_something`` directly) so this does not
-    depend on the unrelated met_* collapsing limitation documented on
-    ``parameters_to_groups`` (a bare 'sfh' wildcard never collapses cleanly
-    because of it, independent of z-narrowing).
-    """
-    from tengri.parameters.groups import _analyze_wildcard_intent, _base_provenance
-
-    assert _base_provenance("wildcard_free_zcap") == "wildcard_free"
-    assert _base_provenance("user_free_zcap") == "user_free"
-
-    provenance = {
-        "sfh_dexp_log_total_mass": "wildcard_free",
-        "sfh_dexp_start_gyr": "wildcard_free_zcap",
-    }
-    intent = _analyze_wildcard_intent(list(provenance), spec=None, provenance=provenance)
-    assert intent is FREE
-
-
-def test_z_narrowed_spec_round_trips_as_all_params_free():
-    """End-to-end round-trip, with met split into its own group (met_mode != 'delta')
-
-    so the pre-existing met_* mixing (see ``parameters_to_groups``'s docstring
-    example) cannot confound the assertion: this isolates the z-narrowing
-    suffix as the only thing that could prevent collapsing.
-    """
-    spec = _build_dexp(
-        met={"type": "ramp", "all_params": Fixed(DEFAULT)},
-        redshift=Fixed(0.5),
-    )
-    assert spec._group_provenance["sfh_dexp_start_gyr"] == "wildcard_free_zcap"
-
-    groups = spec.to_groups()
-    sfh_group = groups["sfh"]
-    assert sfh_group == {"type": "dexp", "all_params": FREE}
-
-    roundtripped = tengri.parse_groups(**groups)
-    assert roundtripped.free_params == spec.free_params
-    lo, hi = roundtripped.get_distribution("sfh_dexp_start_gyr").bounds
-    assert (lo, hi) == spec.get_distribution("sfh_dexp_start_gyr").bounds
-
-
-# ── (f) const: positive floor (ordering constraint) + z-aware ceiling ──────
-
-
-def test_const_onset_frees_with_positive_floor_and_cap():
-    spec = tengri.parse_groups(
-        sfh={"type": "const", "all_params": FREE},
+def _dexp(sfh_extra, redshift):
+    return tengri.parse_groups(
+        sfh={"type": "dexp", **sfh_extra},
         dust_attenuation={"type": "none"},
         neb={"type": "none"},
-        redshift=Fixed(0.5),
+        redshift=redshift,
     )
 
-    lo, hi = spec.get_distribution("sfh_const_start_gyr").bounds
-    assert lo == pytest.approx(0.01)
-    assert hi == pytest.approx(float(age_at_z(0.5)), rel=1e-9)
 
-    # Ordering constraint vs sfh_const_end_gyr (Fixed(0.0)) still holds --
-    # Parameters.__init__'s _validate_orderings would have raised otherwise.
-    end_lo = spec.get_distribution("sfh_const_end_gyr").bounds[0]
-    assert lo > end_lo
+def test_free_onset_fraction_is_bounded_by_the_age_of_the_universe():
+    """A freed fraction of age(z) has its upper bound at 1, at every redshift."""
+    spec = _dexp({"all_params": FREE}, Uniform(0.5, 12.0, default=5.0))
+    frac = spec.get_distribution("sfh_dexp_start_frac")
+    assert frac.hi <= 1.0 + 1e-12
+    assert "sfh_dexp_start_gyr" not in spec.free_params
+
+
+def test_free_onset_fraction_gives_the_same_bound_at_every_redshift():
+    """The fraction maps to Gyr through age(z): hi * age(z) never exceeds age(z)."""
+    spec = _dexp({"all_params": FREE}, Uniform(0.5, 12.0, default=5.0))
+    hi = spec.get_distribution("sfh_dexp_start_frac").hi
+    for z in (0.5, 2.0, 10.0):
+        assert hi * float(age_at_z(z)) <= float(age_at_z(z)) + 1e-12
+
+
+def test_free_prior_on_the_gyr_name_is_refused_and_names_the_fraction():
+    with pytest.raises(ConfigError, match="sfh_dexp_start_frac"):
+        _dexp({"start_gyr": Uniform(0.5, 13.0)}, Fixed(0.5))
+
+
+def test_fixed_gyr_above_the_age_at_a_fixed_redshift_is_refused():
+    age = float(age_at_z(2.0))
+    with pytest.raises(ConfigError, match="later than the age of the universe"):
+        _dexp({"start_gyr": Fixed(age + 1.0)}, Fixed(2.0))
+
+
+def test_fixed_gyr_within_the_age_at_a_fixed_redshift_is_accepted():
+    age = float(age_at_z(2.0))
+    spec = _dexp({"start_gyr": Fixed(0.5 * age)}, Fixed(2.0))
+    assert float(spec.get_distribution("sfh_dexp_start_gyr").value) == pytest.approx(0.5 * age)
+
+
+def test_fixed_gyr_above_the_age_at_a_free_redshift_warns():
+    with pytest.warns(FreeRedshiftOnsetCeilingWarning, match="sfh_dexp_start_gyr"):
+        _dexp({"start_gyr": Fixed(13.5)}, Uniform(0.5, 12.0, default=5.0))
+
+
+def test_fixed_gyr_shim_is_kept_as_an_absolute_time_not_a_fraction():
+    """The shim holds the absolute value; its fraction is not in the spec."""
+    spec = _dexp({"start_gyr": Fixed(3.0)}, Fixed(0.5))
+    assert "sfh_dexp_start_gyr" in spec.fixed_params
+    assert "sfh_dexp_start_frac" not in spec.fixed_params
+    assert "sfh_dexp_start_frac" not in spec.free_params

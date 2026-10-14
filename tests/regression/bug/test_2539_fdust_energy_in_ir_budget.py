@@ -625,14 +625,18 @@ class TestDefaultsBitIdentical:
 
 
 def _fd_grad(f, x: float, h: float = 1e-6) -> float:
-    """Central finite difference, one-sided when ``x - h`` would go negative.
+    """Central finite difference, second-order one-sided when ``x - h`` would go negative.
 
     ``f_dust``/``neb_fdust_frac`` is bounded at 0, so the finite-difference
     estimate near that boundary (fdust=0, 1e-8) must not sample a negative
-    value.
+    value. There the three-point forward stencil
+    ``(-3 f(x) + 4 f(x + h) - f(x + 2h)) / (2 h)`` has an O(h^2) truncation error
+    like the central difference; the two-point forward difference it replaces has
+    O(h), which is ``h * ln(10) * g / 2`` relative for ``f = log10(A + x L)`` with
+    slope ``g`` and so exceeded the test's ``rtol=1e-4`` once ``g > 0.217``.
     """
     if x - h < 0.0:
-        return (f(x + h) - f(x)) / h
+        return (-3.0 * f(x) + 4.0 * f(x + h) - f(x + 2.0 * h)) / (2.0 * h)
     return (f(x + h) - f(x - h)) / (2.0 * h)
 
 
