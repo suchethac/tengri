@@ -34,7 +34,7 @@ def stellar_only_model(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -56,7 +56,7 @@ def stellar_only_free_z_model(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -170,7 +170,7 @@ def test_lut_publishes_for_metallicity_mode(
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -228,7 +228,7 @@ def stellar_only_taylor_model(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -312,7 +312,7 @@ def test_taylor_moment_published_in_free_z(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -349,7 +349,7 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(ssp, synthetic_tophat
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -390,7 +390,7 @@ def test_predict_via_precomp_with_dust_matches_predict(ssp, synthetic_tophat_obs
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -422,7 +422,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp, synthetic_tophat_obs)
     spec_no_dust = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -445,7 +445,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp, synthetic_tophat_obs)
     spec_dust = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -484,7 +484,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp, synthetic_t
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -521,7 +521,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, synthetic_top
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -563,7 +563,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -604,7 +604,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(ssp, synthetic_tophat_obs):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -644,7 +644,7 @@ def test_predict_via_precomp_matches_default_predict_observables(ssp, synthetic_
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -678,7 +678,7 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp, synthetic_tophat_o
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -708,7 +708,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp, synthetic_tophat_obs):
     spec_lo = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -726,7 +726,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp, synthetic_tophat_obs):
     spec_hi = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),

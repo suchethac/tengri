@@ -120,6 +120,7 @@ stochastic-SFH prior), wrap them in a ``PopulationSEDModel`` and pass it
 to ``ForwardModel.build(population=...)``:
 
 ```python
+import numpy as np
 from tengri import ForwardModel, PopulationSEDModel, SEDModel, recipes
 
 # The template needs a stochastic (field) SFH — that is where the shared
@@ -129,7 +130,7 @@ template = SEDModel.build(ssp_data=ssp, observation=obs,
 
 pop = PopulationSEDModel(
     sed=template,
-    galaxies=[{'flux_obs': ..., 'noise': ...}, ...],   # N galaxies
+    galaxies=[{'flux_obs': np.ones(5), 'noise': np.ones(5)} for _ in range(3)],  # three galaxies
     # shared= and priors= default to PSD; override for other hierarchies
 )
 
