@@ -11,6 +11,12 @@ import time
 import jax
 import jax.random as jr
 
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+_PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+    SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+)
+
 jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
@@ -54,7 +60,7 @@ def time_workflow(prior_name, spec_kwargs, n_galaxies=3):
         # Randomize parameters within priors
         params = {
             "sfh_tsnorm_skew": float(jr.uniform(subkey, minval=-0.3, maxval=0.3)),
-            "sfh_tsnorm_peak_lbt_gyr": float(jr.uniform(subkey, minval=1.0, maxval=8.0)),
+            "sfh_tsnorm_peak_lbt_frac": float(jr.uniform(subkey, minval=0.17, maxval=0.87)),
             "sfh_tsnorm_width_gyr": float(jr.uniform(subkey, minval=0.5, maxval=2.0)),
             "sfh_tsnorm_trunc": float(jr.uniform(subkey, minval=0.1, maxval=0.8)),
             "sfh_tsnorm_log_total_mass": float(jr.uniform(subkey, minval=8.0, maxval=12.0)),
@@ -147,7 +153,7 @@ def main():
         "Uniform": {
             "mean_sfh_type": "tsnorm",
             "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+            "sfh_tsnorm_peak_lbt_frac": Uniform(0.0855, _PEAK_FRAC_HI),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
             "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
@@ -160,7 +166,7 @@ def main():
         "Gaussian": {
             "mean_sfh_type": "tsnorm",
             "sfh_tsnorm_skew": Gaussian(0.0, 0.2, -0.5, 0.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+            "sfh_tsnorm_peak_lbt_frac": Uniform(0.0855, _PEAK_FRAC_HI),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
             "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
@@ -173,7 +179,7 @@ def main():
         "LogUniform": {
             "mean_sfh_type": "tsnorm",
             "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+            "sfh_tsnorm_peak_lbt_frac": Uniform(0.0855, _PEAK_FRAC_HI),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
             "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),

@@ -27,7 +27,7 @@
 | `Backend` | Swappable computation engine | `CloudyGridBackend`, `CueBackend` |
 | `Fitter` / `-er` | Active orchestrator | `Fitter`, `PopulationFitter` |
 | `Posterior` | Inference result (samples + diagnostics) | `Posterior`, `PopulationPosterior` |
-| `List` | Registry / catalog | `LineList`, `FilterList` |
+| `List` | Registry / catalog | `LineList` |
 | `Error` | Exception classes (see §8) | `TengriError`, `ParameterError` |
 
 **Forbidden suffixes:**
@@ -39,18 +39,18 @@
 
 ## 2. Canonical Class Names
 
-These are the **canonical** names. Old names are deprecated aliases that emit `DeprecationWarning` and will be removed in v1.0.
+These are the **canonical** names. The old names were removed; the alias tables below record what each one became.
 
-| Canonical name | Deprecated alias(es) | Defining module |
+| Canonical name | Removed alias(es) | Defining module |
 |---------------|---------------------|-----------------|
-| `SEDModel` | `Model` | `core/model.py` |
-| `Parameters` | `ParamSpec` | `core/parameters.py` |
-| `Spectroscopy` | `SpectroscopyConfig` | `models/observation/spectroscopy.py` |
-| `NoiseModel` | `NoiseConfig` | `models/observation/noise_model.py` |
-| `LineList` | `LineCatalog` | `models/observation/line_list.py` |
-| `PopulationFitter` | `HierarchicalFitter` | `inference/hierarchical.py` |
-| `PopulationPosterior` | `HierarchicalResult` | `inference/hierarchical.py` |
-| `SEDModelConfig` | `ModelConfig` | `config/settings.py` |
+| `SEDModel` | `Model` (removed) | `core/model.py` |
+| `Parameters` | `ParamSpec` (removed) | `core/parameters.py` |
+| `Spectroscopy` | `SpectroscopyConfig` (removed) | `models/observation/spectroscopy.py` |
+| `NoiseModel` | `NoiseConfig` (removed) | `models/observation/noise_model.py` |
+| `LineList` | `LineCatalog` (removed) | `models/observation/line_list.py` |
+| `PopulationFitter` | `HierarchicalFitter` (removed) | `inference/hierarchical.py` |
+| `PopulationPosterior` | `HierarchicalResult` (removed) | `inference/hierarchical.py` |
+| `SEDModelConfig` | `ModelConfig` (removed) | `config/settings.py` |
 
 **File path stability rule:** Module filenames must match the canonical class name in `snake_case`. If a class is renamed, the file is renamed in the same commit. The table above is the ground truth; if it conflicts with the filesystem, the filesystem is wrong.
 
@@ -77,7 +77,7 @@ These are the **canonical** names. Old names are deprecated aliases that emit `D
 | Chemistry | `chem_` | *(reserved; populate when chemical evolution module is added)* |
 | Dust | `dust_` | `dust_tau_bc`, `dust_tau_diff`, `dust_slope` |
 | Nebular | `neb_` | `neb_logU`, `neb_logZ_gas`, `neb_fesc` |
-| AGN | `agn_` | `agn_log_lbol`, `agn_tau_skirtor`, `agn_disc_log_mbh` |
+| AGN | `agn_` | `agn_log_lbol`, `agn_tau_skirtor`, `agn_log_mbh` |
 | Emission lines | `eline_` | `eline_sigma_kms`, `eline_broad` |
 | Noise | `noise_` | `noise_f_cal`, `noise_dof` |
 | Radio | `radio_` | `radio_q_ir` |
@@ -121,9 +121,9 @@ All unit translations are implemented in `core/parameters.py :: translate_to_int
 | `resolve_*` | Registry lookup by string key | `resolve_dust_law()`, `resolve_sfh()` |
 | bare name | SFH shape functions registered as **registry keys** in `SFH_REGISTRY` ONLY (see §6) | `tsnorm`, `dpl` |
 
-### Current violations to fix
+### Renames applied
 
-| Current | Should be | File |
+| Former (removed) | Now | File |
 |---------|-----------|------|
 | `blr_emission()` | `compute_blr_sed()` | `models/agn/blr.py` |
 | `nlr_emission()` | `compute_nlr_sed()` | `models/agn/nlr.py` |
@@ -178,7 +178,7 @@ verb.
 Every derived physical quantity (stellar mass, SFR, ionization parameter, etc.) is declared by exactly ONE component via a `Property(units, group, doc, fn)` declaration in the protocol. Violations are architecture-level bugs.
 
 **Registry integrity:**
-- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_total`)
+- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_100myr`)
 - Name collisions are a **BUILD-TIME error** caught at `SEDModel.build()`
 - Accessing an absent property raises `KeyError` listing the available names (never silently returns None/NaN/0 — this is the `silent-failure` class)
 - Metadata (units, group, doc, provenance, component name) is queryable via `tengri.list_properties()`, `describe_property()`
@@ -349,8 +349,53 @@ out-of-range final value representable. The rule these fixes converged on:
   kernel; a linear prior over a range spanning float32's ceiling is unfittable in float32 by
   construction, regardless of the unit it is denominated in.
 
+- **An AGN component publishes an integrated luminosity as `log_L_agn_<piece>` in dex re erg/s
+  AND as `L_agn_<piece>_lsun` in solar luminosities** (#2842): `log_L_agn_disc` and
+  `L_agn_disc_lsun`, likewise `torus`, `polar_dust`, `disc_unemitted`, `absorbed`, `bol`, `los`, `adaf_accretion`
+  and the `_los` siblings of the anisotropic emitters. This is the first bullet of this section
+  applied, not an exception to the second: an AGN power of 1e8 to 1e14 Lsun is representable in
+  float32, so the `Lsun` value exists and is published; the second bullet (no same-named
+  companion) is for quantities such as `q_h` whose every physical value overflows in any unit.
+  The sibling carries the unit in its name (`_lsun`) because the bare `L_agn_<piece>` was the
+  retired erg/s spelling: reusing it with a different unit would silently change what a stale
+  caller reads. A component's value is formed in log space (a peak-factored integral plus the
+  peak's `log10`, or a reference evaluation plus a log offset through `utils/scale.py`), never
+  as an erg/s number that is then logged, and the `Lsun` sibling is formed from the log as
+  `pow10(log - log10(L_sun))`, so the erg/s value is never written (an absent component, `-inf`
+  dex, is exactly 0 Lsun). The one erg/s key kept is `L_agn_bol`, a float64 convenience beside
+  `log_L_agn_bol` that is `inf` in float32; the radio component reads `log_L_agn_bol` (and
+  `log_L_ir`) in float32 and uses the linear key only in float64, and the X-ray component reads
+  the log. `erg/s/Hz` keys (`L_2500_30deg`,
+  `L_6um`, `L_12um`) are spectral densities and stay.
+- **An anisotropic emitter publishes the angle-integrated power under the plain name and the
+  line-of-sight value under `_los`** (#2678, #2851): `log_L_agn_disc` is
+  `(1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu`, `mu = cos i`, and does not depend
+  on the inclination; `log_L_agn_disc_los` is the power of the SED emitted along `cos_inc`.
+  Kubota & Done 2018 and SKIRTOR (disc, torus, polar dust, unemitted disc) follow it. For
+  SKIRTOR the luminosity parameter is the accretion power: the sphere mean of everything the
+  radiative transfer carries (the escaping disc over the template's whole native range of
+  10 A to 1e8 A, the torus dust and the polar dust) is `10**agn_log_lbol L_sun` times
+  `agn_torus_frac`, and the library's own flux ratio between inclinations is kept: the stored
+  spectra are divided by their record's dust integral (`spectra/norm`), which is multiplied
+  back, and ONE scale factor per parameter point normalizes the sphere mean. The torus dust
+  and the line-of-sight disc power then follow the radiative transfer. The polar dust power is
+  `int_0^1 w(mu) A(mu) dmu`, with `A(mu)` the power the polar dust absorbs from the disc light
+  emitted along `mu` and `w` the Type-1 weight of the SED (the logistic in `cos i` of width
+  0.025 about `sin(oa)`), whatever the sightline; it is re-emitted isotropically, so
+  `log_L_agn_polar_dust` and `log_L_agn_polar_dust_los` are equal and do not depend on
+  `cos_inc`. The escaping disc is published net of that power. The analytic disc the
+  component emits is zero below 80 A (the CIGALE `skirtor2016` piecewise disc starts at 8 nm),
+  so the template disc outside 80 A to 1e7 A is not in the SED; it is published as
+  `log_L_agn_disc_unemitted`, and the four sphere powers
+  `disc + torus + polar_dust + disc_unemitted` add up to the luminosity parameter to 1e-12.
+  Every published power of an emitted piece equals the integral of that piece of the SED
+  (#2745); the unemitted disc is the one published power that is not in the SED.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
-and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one.
+and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
+exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a
+`DeprecationWarning` alias through v0.x because the component accepted it as a plain mapping
+key that could not be intercepted at the call site.
 
 ---
 
@@ -385,9 +430,9 @@ Auto:
 
 **Dimensionality D:** For the purpose of `"auto"` selection and `"mcmc"` auto-dispatch, D is the number of **free (sampled) parameters**, excluding deterministic transforms and derived quantities. For IFT/correlated-field models, D counts the latent excitation field DOF, not the pixel-space dimension.
 
-### Deprecated aliases (emit DeprecationWarning, removed v1.0)
+### Removed aliases
 
-| Old name | Maps to | Note |
+| Old name (removed) | Maps to | Note |
 |----------|---------|------|
 | `vi_nifty` | `vi` | |
 | `vi_nifty_linear` | `vi_linear` | |
@@ -414,10 +459,10 @@ Internal-only (not public API; renamed without alias):
 
 | Canonical (Python function name) | Registry key (short alias) | Description |
 |----------------------------------|---------------------------|-------------|
-| `truncated_skewnormal_sfh` | `tsnorm` | Truncated skew-normal |
-| `skewnormal_sfh` | `snorm` | Skew-normal |
-| `lognormal_sfh` | `lnorm` | Log-normal |
-| `gaussian_sfh` | `norm` | Normal (Gaussian) |
+| `truncated_skewnormal` | `tsnorm` | Truncated skew-normal |
+| `skewnormal` | `snorm` | Skew-normal |
+| `lognormal` | `lnorm` | Log-normal |
+| `gaussian` | `norm` | Normal (Gaussian) |
 | `double_powerlaw` | `dpl` | Double power-law |
 
 **Clarification:** The canonical names are the actual Python function names. The short aliases are string keys in `SFH_REGISTRY`, retained for backward compatibility and config-file brevity. `resolve_sfh("tsnorm")` and `resolve_sfh("truncated_skewnormal_sfh")` both resolve to the same function. New code and documentation should use the canonical names; the registry resolves both.
@@ -529,7 +574,7 @@ These were **hard-renamed** (no alias) under the pre-v1.0 policy of §0 — old
 British spellings are gone, not deprecated. Per §2's file-path stability rule the
 `marginalised.py` module was renamed in the same change.
 
-| Old | Canonical | Module |
+| Old (removed) | Canonical | Module |
 |-----|-----------|--------|
 | `cue_full_catalogue` / builder key `full_catalogue` | `cue_full_catalog` / `full_catalog` | `parameters/`, `forward/`, `components/nebular/` |
 | `rest_frame_colour()` | `rest_frame_color()` | `analysis/diagnostics/spectral.py` |
@@ -568,8 +613,8 @@ in `EXCLUDE_FILES`.
 | Optical depth | `τ_diff`, `τ_bc`, `τ_V` | `tau_diff`, `tau_bc`, `tau_V` |
 | Redshift, exact | `z = 3` (spaced) | — |
 | Redshift, approximate | `z ≈ 3` (spaced); never `z~3` | — |
-| Balmer alpha | `Hα` | `H_alpha` |
-| Gelman-Rubin | `R̂` | `r_hat` |
+| Balmer alpha | `Hα` | `Halpha` |
+| Gelman-Rubin | `R̂` | `rhat` |
 | Multiplier | `1.46×` | — |
 | Signal-to-noise | `S/N` | `snr` |
 | Numeric range | en-dash: `16–84%` | — |

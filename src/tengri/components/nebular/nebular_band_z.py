@@ -30,6 +30,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._z_response import z_bracket as _hull_z_bracket
 from tengri.utils.filter_convention import FilterConvention, filter_weight, filter_weight_np
 from tengri.utils.grid_interp import filter_support_slice
 from tengri.utils.physics_constants import C_AA
@@ -297,25 +298,30 @@ def continuum_z_slab(log_table, lnz_grid, redshift):
     lower : int or ndarray, shape ()
         Index of the first row of ``slab`` in the table (0 for a one-node table).
     weight : float or ndarray, shape ()
-        Weight of the upper row, linear in :math:`\ln(1+z)`, clipped to [0, 1]
-        (the table is not extrapolated).
+        Weight of the upper row, linear in :math:`\ln(1+z)`. Extrapolated past
+        the table ends (the edge cell's line continues), so a redshift prior that
+        reaches past the table keeps a nonzero derivative.
     """
     n_dims = log_table.ndim - 2
-    i, w = z_bracket(lnz_grid, redshift)
+    i, w = z_bracket(lnz_grid, redshift, extrapolate=True)
     if lnz_grid.shape[0] == 1:
         return jax.lax.slice_in_dim(log_table, 0, 1, axis=n_dims), 0, 0.0
     return jax.lax.dynamic_slice_in_dim(log_table, i, 2, axis=n_dims), i, w
 
 
-def z_bracket(lnz_grid, redshift):
+def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     """Lower node index and upper-node weight of ``ln(1+z)`` on the grid.
 
     Weight linear in :math:`\\ln(1+z)` and clipped to [0, 1]: the table is not
-    extrapolated. A one-node grid returns ``(0, 0.0)``.
+    extrapolated. With ``extrapolate=True`` the edge cell's line continues past
+    the table ends (the shared ``z_bracket`` of the z-response module). A
+    one-node grid returns ``(0, 0.0)``.
     """
     n_z = lnz_grid.shape[0]
     if n_z == 1:
         return 0, 0.0
+    if extrapolate:
+        return _hull_z_bracket(lnz_grid, redshift, extrapolate=True)
     lnz = jnp.log1p(jnp.asarray(redshift))
     i = jnp.clip(jnp.searchsorted(lnz_grid, lnz, side="right") - 1, 0, n_z - 2)
     span = lnz_grid[i + 1] - lnz_grid[i]

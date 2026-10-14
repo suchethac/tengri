@@ -328,10 +328,9 @@ def test_agn_axis_grids_sets_the_table_axes():
     np.testing.assert_array_equal(gridded_axis, nodes)
     assert default_axis.size != nodes.size
 
-    with pytest.warns(UserWarning, match="nodes span"):
-        short = _model(family, _wavepre(), axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 9)})
-    assert _band_table(short) is None
-    assert "nodes span" in short._agn_band_table_decline
+    # A user grid short of the prior is a configuration error, refused at build (#2973).
+    with pytest.raises(ValueError, match="nodes span"):
+        _model(family, _wavepre(), axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 9)})
 
 
 def test_agn_axis_grids_round_trips_through_the_groups():

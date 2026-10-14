@@ -27,6 +27,8 @@ float32 factoring (the multicolor disc's L_bol-dependent shape is a separate,
 documented float32 limitation — see ``test_agn_lbol_shape_dependence``).
 """
 
+from typing import ClassVar
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -172,3 +174,73 @@ def test_neg_log_posterior_gradient_finite_with_radio_in_float32(ssp_bare):
         "grad(nlp) is identically ZERO in pure float32 with radio — finite is not enough, "
         "a radio kernel that has underflowed to zero is as unusable as a NaN one (#2100)"
     )
+
+
+def _radio_params(dtype):
+    return {
+        "redshift": jnp.asarray(0.0, dtype=dtype),
+        "radio_q_ir": jnp.asarray(2.64, dtype=dtype),
+        "radio_alpha_sf": jnp.asarray(0.8, dtype=dtype),
+        "radio_loudness": jnp.asarray(1.0, dtype=dtype),
+        "radio_alpha_agn": jnp.asarray(0.7, dtype=dtype),
+        "radio_log_nu_cut": jnp.asarray(13.0, dtype=dtype),
+        "radio_T_e": jnp.asarray(1e4, dtype=dtype),
+        "radio_alpha_ff": jnp.asarray(-0.1, dtype=dtype),
+    }
+
+
+@pytest.mark.parametrize("x64", [False, True], ids=["float32", "float64"])
+def test_absent_luminosity_inputs_are_zero_power(x64):
+    """A radio component with no upstream ``L_ir`` / ``L_agn_bol`` emits exactly nothing.
+
+    ``optional_inputs`` falls back to a missing value, and a missing ``log_L_*`` is a log10
+    power: ``0.0`` there is 1 erg/s, which the float32 kernels (they form
+    ``pow10(log_L_ir - log10(3.75e12) - q_ir)``) carry as a nonzero radio luminosity, while
+    float64 uses the linear ``L_ir = 0`` and emits zero. The fallback is ``-inf`` (zero
+    power), so both precisions emit zero, finite, with a finite gradient.
+    """
+    from tengri.components.radio.radio_model import RadioPowerLawSEDComponent
+    from tengri.protocols.component import ForwardState
+
+    with jax.enable_x64(x64):
+        dtype = jnp.float64 if x64 else jnp.float32
+        comp = RadioPowerLawSEDComponent()
+        wave = jnp.geomspace(1e6, 1e9, 64, dtype=dtype)
+        state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
+        params = _radio_params(dtype)
+        sed = np.asarray(comp.apply(state, params).derived["sed_radio"])
+        assert sed.dtype == (np.float64 if x64 else np.float32)
+        assert np.all(np.isfinite(sed))
+        assert np.all(sed == 0.0), f"absent sources emit {np.abs(sed).max():.3e} erg/s/Hz"
+
+        def total(q_ir):
+            out = comp.apply(state, {**params, "radio_q_ir": q_ir}).derived["sed_radio"]
+            return jnp.sum(out)
+
+        grad = jax.grad(total)(params["radio_q_ir"])
+        # grad-assert: finite-only — an absent source has zero power, so zero is the correct slope
+        assert np.isfinite(float(grad))
+
+
+def test_missing_log_luminosity_defaults_to_negative_infinity():
+    """A missing ``log_L_*`` reaches ``predict`` as ``-inf``; any other optional input as 0.0."""
+    from tengri.components.sed_model_component import SEDModelComponent
+    from tengri.protocols.component import ForwardState
+
+    seen = {}
+
+    class _Recorder(SEDModelComponent):
+        name = "log_luminosity_fallback_recorder"
+        parameter_prefix = "rec_"
+        requires_template_data = False
+        optional_inputs: ClassVar[dict] = {"log_L_probe": "dex", "plain_probe": "erg/s"}
+        outputs: ClassVar[dict] = {"rec_out": ""}
+
+        def predict(self, p, sed_in, wave, **inputs):
+            seen.update({k: float(v) for k, v in inputs.items()})
+            return sed_in, {"rec_out": jnp.asarray(0.0)}
+
+    wave = jnp.geomspace(1e3, 1e4, 8)
+    _Recorder().apply(ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave)), {})
+    assert seen["log_L_probe"] == -np.inf
+    assert seen["plain_probe"] == 0.0

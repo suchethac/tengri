@@ -64,6 +64,7 @@ from tengri.components._term_response import (
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import (
     radio_freefree,
+    radio_sfr_bell2003_split_thermal,
     radio_total_dpl_terms,
     radio_total_terms,
 )
@@ -93,6 +94,11 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # lands, the kernel names and their two free parameters (radio_alpha_inj,
 # radio_log_nu_break) get added together in the same PR.
 AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
+#: Luminosity the AGN radio loudness is referenced to (#2663). ``"4400"`` is the
+#: B-band disc luminosity of AGNfitter-rX (the default); ``"2500_30deg"`` is the
+#: disc 2500 A luminosity at a 30 deg line of sight, the anchor of CIGALE's
+#: ``R_agn``. Only a composable AGN publishes the 2500 A value.
+AGN_LOUDNESS_REFS: tuple[str, ...] = ("4400", "2500_30deg")
 
 # Mode strings for the star-formation radio sub-model, the sibling axis to
 # :data:`AGN_RADIO_MODELS`. Named here rather than spelled inline at each
@@ -209,12 +215,20 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Frequency [Hz] at which ``radio_q_ir`` anchors the ``"bell2003"`` synchrotron.
         Default 1.4 GHz, where Bell (2003) defines q. CIGALE anchors at 21 cm
         (1.42758 GHz); ``radio.sf.nu_ref = "21cm"`` selects that point (#2762).
+    agn_loudness_ref : str
+        Luminosity the AGN radio loudness is referenced to. One of
+        :data:`AGN_LOUDNESS_REFS`: ``"4400"`` (default) is the 4400 A disc
+        luminosity, ``radio_loudness = log10(L_5GHz / L_4400)`` (AGNfitter-rX);
+        ``"2500_30deg"`` is the disc 2500 A luminosity at 30 deg, CIGALE's
+        anchor, ``radio_loudness = log10(L_5GHz / L_2500)``. CIGALE's linear
+        ``R_agn`` is ``10 ** radio_loudness`` for either anchor.
     split_thermal : bool
         ``"bell2003_split"`` only. ``True`` (default) keeps the split's own 10 %
         thermal power law. ``False`` drops it because the nebular continuum
         already carries the free-free; the synchrotron stays 90 % of the Bell
         total, so one component owns the thermal emission (#2764). The build sets
-        it ``False`` beside a ``"cue"`` or ``"cloudy_grid"`` nebular backend.
+        it ``False`` beside a nebular backend that carries free-free (``"cue"``,
+        ``"cloudy_grid"``, or a ``NebularContinuumFallback`` object; #2962).
     freefree_wave_min : float or None
         Rest wavelength [Angstrom] below which the thermal free-free term is
         zero; the term is on at and above it. ``None`` (default) leaves the term on its own lower
@@ -222,8 +236,9 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         is flagged nebular-included (``ssp_data.nebular == "included"``: its
         flux already holds the nebular continuum) and ``include_freefree``
         was left unset, so the SSP serves the thermal continuum up to its
-        edge and this term serves it beyond (#2574). Requires the term to
-        be on.
+        edge and this term serves it beyond (#2574). For ``"bell2003_split"`` the
+        window applies to the split's own thermal law, which is then the term
+        (#2962). Requires the term to be on.
 
     Notes
     -----
@@ -249,6 +264,18 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     ir_window: str | None = None
     sf_nu_ref: float = 1.4e9
     split_thermal: bool = True
+    agn_loudness_ref: str = "4400"
+
+    @property
+    def _thermal_term_on(self) -> bool:
+        """Whether this block carries a thermal term at all (#2962).
+
+        The Murphy+2011 free-free term when ``include_freefree`` is on, or the
+        ``bell2003_split`` construction's own thermal law when ``split_thermal`` is on.
+        """
+        return bool(self.include_freefree) or (
+            self.sfr_mode == "bell2003_split" and self.split_thermal
+        )
 
     @property
     def resolved_ir_window(self) -> str:
@@ -324,6 +351,11 @@ class RadioSEDComponentConfig(SEDComponentConfig):
                 f"sfr_mode='bell2003' only, got {self.sfr_mode!r}; the other star-formation "
                 "relations are anchored at the frequency their calibration was published at."
             )
+        if self.agn_loudness_ref not in AGN_LOUDNESS_REFS:
+            raise ValueError(
+                f"Unknown agn_loudness_ref {self.agn_loudness_ref!r}. "
+                f"Choose one of {AGN_LOUDNESS_REFS}."
+            )
         # Validate freefree_wave_min
         if self.freefree_wave_min is not None:
             if isinstance(self.freefree_wave_min, bool) or not isinstance(
@@ -338,7 +370,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
                     "freefree_wave_min must be finite and positive [Angstrom], "
                     f"got {self.freefree_wave_min!r}"
                 )
-            if not self.include_freefree:
+            if not self._thermal_term_on:
                 from tengri.config.exceptions import ConfigError
 
                 raise ConfigError(
@@ -436,6 +468,12 @@ class RadioSEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "Read from AGN if present; drives radio loudness normalization",
             ),
+            DerivedKey(
+                "L_2500_intrinsic",
+                "erg/s/Hz",
+                "Read from a composable AGN if present; the 2500 A loudness anchor when "
+                "agn_loudness_ref='2500_30deg' (#2663)",
+            ),
             DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
@@ -458,12 +496,14 @@ class RadioSEDComponent(TemplateThreading):
             "L_ir": 1.0e44,
             "L_agn_bol": 1.0e45,
             "L_4400_intrinsic": 1.0e28,
+            "L_2500_intrinsic": 8.0e27,
             "log_mstar": 10.0,
         },
         {
             "L_ir": 8.0e45,
             "L_agn_bol": 6.0e46,
             "L_4400_intrinsic": 5.0e30,
+            "L_2500_intrinsic": 4.0e30,
             "log_mstar": 11.5,
         },
     )
@@ -505,6 +545,7 @@ class RadioSEDComponent(TemplateThreading):
             "L_ir": jnp.asarray(derived.get("L_ir", 0.0)),
             "L_agn_bol": jnp.asarray(derived.get("L_agn_bol", 0.0)),
             "L_4400_intrinsic": jnp.asarray(derived.get("L_4400_intrinsic", 0.0)),
+            "L_2500_intrinsic": jnp.asarray(derived.get("L_2500_intrinsic", 0.0)),
             "log_mstar": jnp.asarray(derived.get("log_mstar", 10.0)),
         }
         log_L_ir = derived.get("log_L_ir")
@@ -615,10 +656,30 @@ class RadioSEDComponent(TemplateThreading):
             log_lsun = jnp.log10(l_lsun)  # -inf for no dust power
         return {"radio_L_ir_input": l_lsun, "radio_log_L_ir_input": log_lsun}
 
+    @property
+    def _split_thermal_windowed(self) -> bool:
+        """Whether the split's thermal law is windowed as the free-free term (#2962).
+
+        A ``bell2003_split`` block on a nebular-included SSP keeps its thermal law from
+        the SSP edge up, and the SSP holds it below: the law is then a thermal term
+        like the free-free one, and takes the same window.
+        """
+        return (
+            self.config.sfr_mode == "bell2003_split"
+            and self.config.split_thermal
+            and self.config.freefree_wave_min is not None
+        )
+
     def _window_freefree(
-        self, terms: dict[str, jnp.ndarray], wave: jnp.ndarray
+        self,
+        terms: dict[str, jnp.ndarray],
+        wave: jnp.ndarray,
+        thermal: jnp.ndarray | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Zero the thermal term below ``config.freefree_wave_min`` [Angstrom] (#2574).
+
+        ``thermal`` is a windowed-thermal share that is added to the ``"ff"`` term
+        before the window, when :attr:`_split_thermal_windowed` (#2962).
 
         The term is kept at the limit itself: the grid node at the SSP edge must
         carry it so that the term is complete across the first grid cell above
@@ -626,10 +687,11 @@ class RadioSEDComponent(TemplateThreading):
         so this adds no traced branch; key order is preserved because the
         band-response path indexes terms by position.
         """
+        ff = terms["ff"] if thermal is None else terms["ff"] + thermal
         wave_min = self.config.freefree_wave_min
         if wave_min is None:
-            return terms
-        return {**terms, "ff": jnp.where(wave >= wave_min, terms["ff"], 0.0)}
+            return {**terms, "ff": ff}
+        return {**terms, "ff": jnp.where(wave >= wave_min, ff, 0.0)}
 
     def emission_terms(
         self,
@@ -642,6 +704,7 @@ class RadioSEDComponent(TemplateThreading):
         log_mstar: jnp.ndarray,
         log_L_ir: jnp.ndarray | None = None,
         log_L_agn_bol: jnp.ndarray | None = None,
+        L_2500_intrinsic: jnp.ndarray | float = 0.0,
     ) -> dict[str, jnp.ndarray]:
         r"""The additive terms of the radio SED, unsummed.
 
@@ -665,6 +728,10 @@ class RadioSEDComponent(TemplateThreading):
             AGN bolometric luminosity [erg/s].
         L_4400_intrinsic : array_like, scalar
             Un-reddened AGN B-band luminosity [erg/s/Hz], the radio-loudness reference.
+        L_2500_intrinsic : array_like, scalar
+            Un-reddened AGN 2500 A luminosity at 30 deg [erg/s/Hz]; the loudness
+            reference when ``agn_loudness_ref='2500_30deg'`` (#2663). Zero for a
+            monolithic AGN, which the build refuses with that option.
         log_mstar : array_like, scalar
             log10 stellar mass [dex Msun]; used by the mass-evolving FIRRC modes.
 
@@ -691,6 +758,11 @@ class RadioSEDComponent(TemplateThreading):
         """
         model = self.config.agn_radio_model
         z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
+        # The AGN loudness anchor (#2663): the 4400 A disc luminosity by default, or the
+        # 2500 A one at 30 deg (CIGALE). Static config selects the branch under JIT.
+        l_anchor = (
+            L_2500_intrinsic if self.config.agn_loudness_ref == "2500_30deg" else L_4400_intrinsic
+        )
 
         # Float32 routing (#1206): only when the forward grid is float32 do we
         # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46), which
@@ -708,6 +780,17 @@ class RadioSEDComponent(TemplateThreading):
         # triplet is consumed; bell2003 / none ignore them (pass None → the
         # SF functions fall through to their literature defaults / zeros).
         firrc_q0, firrc_mass_slope, firrc_z_slope = self._firrc_overrides(params)
+
+        # #2962: a windowed split thermal law leaves the split's synchrotron in "sf" and
+        # travels with the free-free term, so the SSP owns it below the edge.
+        split_thermal = self.config.split_thermal and not self._split_thermal_windowed
+        thermal = (
+            radio_sfr_bell2003_split_thermal(
+                wave, L_ir, jnp.asarray(params["radio_q_ir"]), log_L_ir=_log_L_ir
+            )
+            if self._split_thermal_windowed
+            else None
+        )
 
         if model == "none":
             from tengri.components.radio.radio import _dispatch_sfr
@@ -727,7 +810,7 @@ class RadioSEDComponent(TemplateThreading):
                 log_L_ir=_log_L_ir,
                 q_is_total=self.config.q_is_total,
                 sf_nu_ref=self.config.sf_nu_ref,
-                split_thermal=self.config.split_thermal,
+                split_thermal=split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
@@ -742,7 +825,9 @@ class RadioSEDComponent(TemplateThreading):
                 if self.config.include_freefree
                 else jnp.zeros_like(wave)
             )
-            return self._window_freefree({"sf": sf, "ff": ff, "agn": jnp.zeros_like(wave)}, wave)
+            return self._window_freefree(
+                {"sf": sf, "ff": ff, "agn": jnp.zeros_like(wave)}, wave, thermal
+            )
 
         if model == "powerlaw":
             return self._window_freefree(
@@ -763,15 +848,16 @@ class RadioSEDComponent(TemplateThreading):
                     include_freefree=self.config.include_freefree,
                     q_is_total=self.config.q_is_total,
                     sf_nu_ref=self.config.sf_nu_ref,
-                    split_thermal=self.config.split_thermal,
+                    split_thermal=split_thermal,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                    l_bband=L_4400_intrinsic,
+                    l_bband=l_anchor,
                     log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                     log_L_ir=_log_L_ir,
                     log_L_agn_bol=_log_L_agn,
                 ),
                 wave,
+                thermal,
             )
 
         # model == "dpl"
@@ -796,14 +882,15 @@ class RadioSEDComponent(TemplateThreading):
                 include_freefree=self.config.include_freefree,
                 q_is_total=self.config.q_is_total,
                 sf_nu_ref=self.config.sf_nu_ref,
-                split_thermal=self.config.split_thermal,
+                split_thermal=split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                l_bband=L_4400_intrinsic,
+                l_bband=l_anchor,
                 log_L_ir=_log_L_ir,
                 log_L_agn_bol=_log_L_agn,
             ),
             wave,
+            thermal,
         )
 
     #: Term order of :meth:`emission_terms`, the order the shape-only tables are read in.

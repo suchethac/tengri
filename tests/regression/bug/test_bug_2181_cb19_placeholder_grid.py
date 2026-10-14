@@ -46,7 +46,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.components.nebular import CB19DegenerateGridError
 from tests._cb19_grid import write_flat_cb19_grid, write_synthetic_cb19_grid
 
@@ -64,14 +64,17 @@ _SSP_FILE = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 #: "the axis does something" from "the axis is noise" without pinning physics.
 _LIVE_FLOOR = 1e-3
 
-#: Every CB_19 parameter that indexes a grid axis, with its full declared
-#: prior. All five read exactly 0.0 on the placeholder.
+#: Every CB_19 parameter that indexes a grid axis. All five read exactly 0.0 on
+#: the placeholder. The sweep bounds are read from the built spec: ``neb_logU``
+#: and ``neb_logZ_gas`` are declared FREE below and resolve to the grid's own
+#: extent (grid-support policy), while an explicit prior past the grid would be
+#: refused at build.
 _AXIS_SWEEPS = (
-    ("neb_logU", -4.0, -1.0),
-    ("neb_logZ_gas", -2.0, 0.5),
-    ("neb_log_nH", 1.0, 4.0),
-    ("neb_co", -1.0, 0.15),
-    ("neb_dno", -0.25, 0.25),
+    "neb_logU",
+    "neb_logZ_gas",
+    "neb_log_nH",
+    "neb_co",
+    "neb_dno",
 )
 
 #: The in-model control. ``neb_fesc`` scales the ionizing budget through the
@@ -124,8 +127,8 @@ def _build(ssp_data, obs, grid_path, monkeypatch):
         },
         neb={
             "type": "cb19",
-            "logU": Uniform(-4.0, -1.0),
-            "logZ_gas": Uniform(-2.0, 0.5),
+            "logU": FREE,
+            "logZ_gas": FREE,
             "log_nH": Uniform(1.0, 4.0),
             "co": Uniform(-1.0, 0.15),
             "dno": Uniform(-0.25, 0.25),
@@ -241,8 +244,9 @@ def test_every_grid_axis_parameter_moves_the_photometry(ssp, observation, tmp_pa
     )
 
     inert = {}
-    for name, lo, hi in _AXIS_SWEEPS:
+    for name in _AXIS_SWEEPS:
         assert name in free, f"{name} is not free in this build; the sweep is vacuous"
+        lo, hi = model.spec.get_distribution(name).bounds
         moved = _sweep(model, params, name, lo, hi)
         if moved <= _LIVE_FLOOR:
             inert[name] = moved

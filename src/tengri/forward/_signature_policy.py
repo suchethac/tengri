@@ -186,6 +186,7 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_agn_feii_block": content("AGN FeII block selector (#1462)"),
     "_agn_attenuation_block": content("AGN attenuation block selector (#1462)"),
     "_agn_polar_law": content("AGN polar-dust extinction law changes the emitted SED"),
+    "_agn_ir_frac_window": content("AGN CIGALE lambda_fracAGN window changes the AGN dust power"),
     "_agn_norm": content("AGN cross-block normalization policy changes the emitted SED"),
     "_agn_config": content("frozen AGNConfig, keyed field by field"),
     "_agn_ir_frac_dist": content("AGN IR-fraction Distribution, keyed via jit_cache_key"),
@@ -215,10 +216,16 @@ SIGNATURE_POLICY: KeyPolicy = {
         "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
         "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"
     ),
+    "_radio_agn_loudness_ref": content(
+        "AGN radio-loudness anchor (4400 A or 2500 A at 30 deg) changes the emitted radio SED; "
+        "set by the grammar's radio.agn.loudness_ref key and routed to "
+        "RadioSEDComponentConfig.agn_loudness_ref"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),
     "_xray_model": content("WHICH X-ray model, not merely whether one is attached (#1462)"),
+    "_xray_alpha_ox_mode": content("which alpha_ox declaration the yang20 corona reads (#2661)"),
     "_uses_shock": content("whether shock nebular emission is attached"),
     "_shock_norm": content("shock normalization mode changes the emitted SED"),
     "_shock_abundance": content("shock abundance set changes the emitted SED"),

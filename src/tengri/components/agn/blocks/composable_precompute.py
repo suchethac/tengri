@@ -54,9 +54,7 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
-    edges_for_grid,
-    interp_nd_pchip,
-    interp_nd_triweight,
+    library_lookup,
 )
 
 __all__ = [
@@ -566,7 +564,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes) if axes else ()
 
     @jax.jit
     def _lookup_collapsed(scale, *free_axis_values):
@@ -576,7 +573,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         mapped = tuple(
             _query_transform(name, v) for name, v in zip(surviving_names, free_axis_values)
         )
-        normed = interp_nd_triweight(grid_phot, axes, edges, mapped)
+        normed = library_lookup(grid_phot, axes, mapped)
         return scale * normed
 
     return ComposableLookup(_lookup_collapsed, axis_names=surviving_names)
@@ -628,9 +625,10 @@ def table_arrays(preint: dict, model: str = "composable_agn") -> dict:
 def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
     """Band fluxes [erg/s/Hz] from :func:`table_arrays` data; traceable under ``jax.jit``.
 
-    Interpolates ``ln`` flux with monotone cubic Hermite (PCHIP) on the node axes, so the
-    lookup passes through every node and keeps C1 gradients. A query outside the nodes is
-    clamped to the edge node (value held, gradient zero).
+    Interpolates ``ln`` flux through :func:`~tengri.utils.grid_interp.library_lookup`
+    (node-exact PCHIP), so the lookup passes through every node and keeps C1 gradients; the
+    nodes span the priors, and a query past the outermost node follows that function's
+    edge rule.
 
     Parameters
     ----------
@@ -654,5 +652,5 @@ def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
         # A constant table (a fully Fixed recipe): one row of band fluxes, no interpolation.
         return amplitude * jnp.exp(ln_phot)
     axes = tuple(table["axes"][name] for name in sorted(table["axes"]))
-    normed = jnp.exp(interp_nd_pchip(ln_phot, axes, tuple(axis_values)))
+    normed = jnp.exp(library_lookup(ln_phot, axes, tuple(axis_values)))
     return amplitude * normed

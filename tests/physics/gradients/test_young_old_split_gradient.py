@@ -26,7 +26,7 @@ def _model(ssp, obs, width):
         sfh={
             "type": "delayed",
             "tau_gyr": Uniform(0.005, 0.05),
-            "age_gyr": Uniform(0.006, 0.02),
+            "age_frac": Uniform(0.000435196, 0.00145065),
             "log_total_mass": Fixed(10.0),
             "all_params": Fixed(DEFAULT),
         },

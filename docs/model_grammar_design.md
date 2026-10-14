@@ -8,6 +8,7 @@ The nested-dict grammar for building an SEDModel is built on three core principl
 
 The grammar organizes the model as a flat collection of independent physics blocks, each with the same structure:
 
+<!-- no-exec -->
 ```python
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
@@ -151,6 +152,7 @@ A per-parameter entry can be any of the four. The wildcard cannot: it applies to
 
 The grammar does **not** support shorthands like `'all_params': {'sfh': FREE, 'neb': Fixed(DEFAULT)}`. Every group is its own dict:
 
+<!-- no-exec -->
 ```python
 # NOT supported:
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, neb={'type': 'cue', 'all_params': Fixed(DEFAULT)})
@@ -186,6 +188,7 @@ These omissions are **intentional**. They keep the grammar simple and predictabl
 
 Explicitness costs verbosity. A recipe like `star_forming_photometry()` hides the boilerplate:
 
+<!-- no-exec -->
 ```python
 # With the recipe
 model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.star_forming_photometry())

@@ -92,7 +92,7 @@ obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"
 spec = Parameters(
     # SFH shape (truncated skew-normal, Bellstedt+2020)
     sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),      # log10(M*/Msun)
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),        # peak lookback time
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),        # peak lookback time
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),             # Gaussian width
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),                 # skewness
     sfh_tsnorm_trunc=Uniform(1.0, 10.0),                # truncation sharpness

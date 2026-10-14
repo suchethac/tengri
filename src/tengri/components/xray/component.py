@@ -21,8 +21,9 @@ X-ray depends on quantities owned by other components:
   Read from ``state.derived["log_mstar"]`` with a fallback to 10.0
   (i.e. 10¹⁰ M_⊙). X-ray's ``xray_total`` consumes the linear stellar
   mass in M_⊙, so the adapter exponentiates: ``M_* = 10**log_mstar``.
-- ``L_agn_bol`` (erg/s): produced by the AGN component. Read from
-  ``state.derived["L_agn_bol"]`` with a fallback to 0.0 (no AGN).
+- ``log_L_agn_bol`` (dex re erg/s): produced by the AGN component. Read from
+  ``state.derived["log_L_agn_bol"]``; absent means no AGN. The erg/s ``L_agn_bol`` is not read:
+  ~1e44 erg/s is ``inf`` in float32.
 - ``log_L_12um`` (dex re erg/s): νL_ν at 12 µm of the AGN disc, torus and polar
   dust, produced by the AGN component; anchors the ``lopez24`` corona. Absent
   means no AGN, and the corona is exactly zero.
@@ -56,6 +57,8 @@ from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
+    alpha_ox_from_l2500,
+    l_2500_from_bolometric,
     lmxb_stellar_age_gyr,
     metallicity_from_history,
     xray_total_log_band_luminosities,
@@ -88,10 +91,23 @@ class XRaySEDComponentConfig(SEDComponentConfig):
         X-ray corona prescription. ``"yang20"``/``"simple"`` (default) ties the
         corona to the disc ``L_2500`` via the α_ox relation; ``"lopez24"`` ties
         it to the AGN 12 µm luminosity via the α_IRX relation (Lopez+2024).
+    alpha_ox_mode : str
+        How the yang20 corona's α_ox is declared. ``"delta"`` (default) reads the
+        offset ``xray_delta_alpha_ox`` from the Just+2007 relation; ``"absolute"``
+        reads ``xray_alpha_ox`` and forms the offset per draw as
+        ``xray_alpha_ox - relation(L_2500)``. Set by the grammar from which of the
+        two keys the ``xray`` group names. Ignored by ``"lopez24"``.
     """
 
     name: str = "xray"
     model: str = "yang20"
+    alpha_ox_mode: str = "delta"
+
+    def __post_init__(self) -> None:
+        if self.alpha_ox_mode not in ("delta", "absolute"):
+            raise ValueError(
+                f"alpha_ox_mode must be 'delta' or 'absolute', got {self.alpha_ox_mode!r}"
+            )
 
 
 @dataclass(frozen=True)
@@ -167,6 +183,39 @@ class XRaySEDComponent(TemplateThreading):
                 "log10 of the 2-10 keV luminosity of the emitted AGN corona "
                 "[dex re erg/s]; -inf without an AGN; read by the log_l_x_agn property",
             ),
+            DerivedKey(
+                "log_L_x_hmxb_2_10",
+                "dex",
+                "log10 of the 2-10 keV luminosity of the emitted HMXB term "
+                "[dex re erg/s]; read by the log_l_x_hmxb_2_10 property",
+            ),
+            DerivedKey(
+                "log_L_x_lmxb_2_10",
+                "dex",
+                "log10 of the 2-10 keV luminosity of the emitted LMXB term "
+                "[dex re erg/s]; read by the log_l_x_lmxb_2_10 property",
+            ),
+            DerivedKey(
+                "log_L_x_hotgas_0p5_2",
+                "dex",
+                "log10 of the 0.5-2 keV luminosity of the emitted hot-gas term "
+                "[dex re erg/s]; read by the log_l_x_hotgas_0p5_2 property",
+            ),
+            DerivedKey(
+                "log_L_x_agn_total",
+                "dex",
+                "log10 of the unabsorbed AGN corona integrated over 0.25-1240 keV, the "
+                "pcigale yang20 grid [dex re erg/s]; -inf without an AGN; read by the "
+                "log_l_x_agn_total property",
+            ),
+            DerivedKey(
+                "log_Lnu_2keV_30deg",
+                "dex",
+                "log10 of the intrinsic 2 keV monochromatic L_nu at an inclination of 30 "
+                "deg (cos i = 0.866), the "
+                "alpha_ox anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24; "
+                "read by the log_lnu_2kev_30deg property",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -197,9 +246,9 @@ class XRaySEDComponent(TemplateThreading):
                 "Read from stellar if present; falls back to 10.0",
             ),
             DerivedKey(
-                "L_agn_bol",
-                "erg/s",
-                "Read from AGN if present; falls back to 0.0",
+                "log_L_agn_bol",
+                "dex",
+                "Read from AGN if present; absent means no AGN",
             ),
             DerivedKey(
                 "L_2500_intrinsic",
@@ -328,6 +377,11 @@ class XRaySEDComponent(TemplateThreading):
             "sed_xray": L_xray,
             "log_L_x_xrb_2_10": log10_add(band_logs["hmxb"], band_logs["lmxb"]),
             "log_L_x_agn_2_10": band_logs["agn"],
+            "log_L_x_hmxb_2_10": band_logs["hmxb"],
+            "log_L_x_lmxb_2_10": band_logs["lmxb"],
+            "log_L_x_hotgas_0p5_2": band_logs["hotgas"],
+            "log_L_x_agn_total": band_logs["agn_total"],
+            "log_Lnu_2keV_30deg": band_logs["lnu_2kev_30deg"],
         }
 
         # Precompute LUT families (#624): X-ray is additive and unattenuated.
@@ -464,7 +518,10 @@ class XRaySEDComponent(TemplateThreading):
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+        _log_l_bol_pub = derived.get("log_L_agn_bol")
+        log_l_agn_bol = (
+            jnp.asarray(-jnp.inf) if _log_l_bol_pub is None else jnp.asarray(_log_l_bol_pub)
+        )
 
         # The LMXB scaling is a steep polynomial in the stellar-population age
         # (Fragos+2013, Eq. 4: L_X/M_star against the "mass-weighted mean stellar
@@ -513,7 +570,7 @@ class XRaySEDComponent(TemplateThreading):
         L_2500 = jnp.asarray(derived.get("L_2500_intrinsic", 0.0))
         L_2500_skirtor = jnp.asarray(derived.get("L_2500_30deg", 0.0))
         # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
-        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
+        L_2500_fallback = l_2500_from_bolometric(log_l_agn_bol)
         l_2500 = jnp.where(
             L_2500 > 0.0,
             L_2500,
@@ -649,8 +706,10 @@ class XRaySEDComponent(TemplateThreading):
             gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
             gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
             E_cut=jnp.asarray(params["xray_E_cut"]),
-            delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+            delta_alpha_ox=self._delta_alpha_ox(params, l_2500),
             cos_inc=cos_inc,
+            a1=jnp.asarray(params["xray_a1"]),
+            a2=jnp.asarray(params["xray_a2"]),
             log_nh=jnp.asarray(params["xray_log_nh"]),
             # Fragos+2013 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
             # accepted these all along; the component simply never passed them,
@@ -720,11 +779,43 @@ class XRaySEDComponent(TemplateThreading):
             l_2500_30deg=l_2500,
             gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
             E_cut=jnp.asarray(params["xray_E_cut"]),
-            delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+            delta_alpha_ox=self._delta_alpha_ox(params, l_2500),
             cos_inc=cos_inc,
+            a1=jnp.asarray(params["xray_a1"]),
+            a2=jnp.asarray(params["xray_a2"]),
             log_nh=jnp.asarray(params["xray_log_nh"]),
             **offsets,
         )
+
+    def _delta_alpha_ox(self, params: Mapping[str, jnp.ndarray], l_2500: jnp.ndarray):
+        r"""The α_ox offset from the Just+2007 relation the yang20 corona uses [dex].
+
+        ``delta`` mode reads ``xray_delta_alpha_ox``. ``absolute`` mode reads
+        ``xray_alpha_ox`` and forms ``alpha_ox - alpha_ox_from_l2500(L_2500)`` per draw,
+        so the corona then sees ``alpha_ox`` exactly. The relation is clamped to its
+        calibrated L_2500 range (#861), and the same clamp is applied inside the
+        corona, so the two cannot disagree.
+
+        Parameters
+        ----------
+        params : mapping
+            Full parameter dict; reads ``xray_delta_alpha_ox`` or ``xray_alpha_ox``.
+        l_2500 : array_like, scalar
+            Disc L_nu at rest-frame 2500 A [erg/s/Hz]; 0 without an AGN.
+
+        Returns
+        -------
+        ndarray, scalar
+            Offset ``delta`` [dex] added to the Just+2007 alpha_ox.
+
+        Notes
+        -----
+        **JIT/grad/vmap-safe**: the mode is a static config read; ``L_2500`` is a
+        log-clamped scalar and never forms an erg/s linear intermediate.
+        """
+        if self.config.alpha_ox_mode == "absolute":
+            return jnp.asarray(params["xray_alpha_ox"]) - alpha_ox_from_l2500(l_2500)
+        return jnp.asarray(params["xray_delta_alpha_ox"])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -796,6 +887,32 @@ def _log_l_x_agn_fn(state, params):
     return jnp.asarray(state.derived["log_L_x_agn_2_10"])
 
 
+def _log_l_x_hmxb_fn(state, params):
+    """log10 2-10 keV luminosity of the emitted HMXB term [dex re erg/s]."""
+    return jnp.asarray(state.derived["log_L_x_hmxb_2_10"])
+
+
+def _log_l_x_lmxb_fn(state, params):
+    """log10 2-10 keV luminosity of the emitted LMXB term [dex re erg/s]."""
+    return jnp.asarray(state.derived["log_L_x_lmxb_2_10"])
+
+
+def _log_l_x_hotgas_fn(state, params):
+    """log10 0.5-2 keV luminosity of the emitted hot-gas term [dex re erg/s]."""
+    return jnp.asarray(state.derived["log_L_x_hotgas_0p5_2"])
+
+
+def _log_l_x_agn_total_fn(state, params):
+    """log10 luminosity of the emitted AGN corona over 0.25-1240 keV [dex re erg/s]."""
+    return jnp.asarray(state.derived["log_L_x_agn_total"])
+
+
+def _log_lnu_2kev_30deg_fn(state, params):
+    """log10 intrinsic L_nu(2 keV) at an inclination of 30 deg (cos i = 0.866) [dex re "
+    "erg/s/Hz]."""
+    return jnp.asarray(state.derived["log_Lnu_2keV_30deg"])
+
+
 def _log_l_x_total_fn(state, params):
     """log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]."""
     from jax.scipy.special import logsumexp
@@ -856,6 +973,40 @@ _XRAY_PROPERTIES = {
         doc="log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; "
         "float32-safe form of `l_x_total`",
         fn=_log_l_x_total_fn,
+    ),
+    # Per-term luminosities (#2661): the emitted terms, each integrated over its band.
+    "log_l_x_hmxb_2_10": Property(
+        units="dex",
+        group="xray",
+        doc="log10 2-10 keV luminosity of the HMXB term [dex re erg/s]",
+        fn=_log_l_x_hmxb_fn,
+    ),
+    "log_l_x_lmxb_2_10": Property(
+        units="dex",
+        group="xray",
+        doc="log10 2-10 keV luminosity of the LMXB term [dex re erg/s]",
+        fn=_log_l_x_lmxb_fn,
+    ),
+    "log_l_x_hotgas_0p5_2": Property(
+        units="dex",
+        group="xray",
+        doc="log10 0.5-2 keV luminosity of the hot-gas term [dex re erg/s]",
+        fn=_log_l_x_hotgas_fn,
+    ),
+    "log_l_x_agn_total": Property(
+        units="dex",
+        group="xray",
+        doc="log10 luminosity of the unabsorbed AGN corona integrated over 0.25-1240 keV, "
+        "the pcigale yang20 grid [dex re erg/s]; -inf without an AGN",
+        fn=_log_l_x_agn_total_fn,
+    ),
+    "log_lnu_2kev_30deg": Property(
+        units="dex",
+        group="xray",
+        doc="log10 intrinsic 2 keV monochromatic L_nu at an inclination of 30 deg (cos i = "
+        "0.866), the alpha_ox "
+        "anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24",
+        fn=_log_lnu_2kev_30deg_fn,
     ),
 }
 
