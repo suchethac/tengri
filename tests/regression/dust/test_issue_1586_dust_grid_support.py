@@ -44,7 +44,7 @@ from tengri.components.grid_support import (
     describe_clipping,
     grid_support,
 )
-from tengri.config.exceptions import AdvisoryWarning, GridSupportWarning
+from tengri.config.exceptions import AdvisoryWarning, GridSupportWarning, ParameterError
 from tengri.parameters import FREE, parse_groups
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -265,11 +265,12 @@ def test_a_narrowed_prior_no_longer_warns():
     )
 
 
-def test_an_explicit_user_prior_is_warned_about_not_overridden():
-    """The caller wrote the range by hand; substituting another is not our call.
+def test_an_explicit_user_prior_past_the_grid_is_refused():
+    """The caller wrote the range by hand; an overhang past the grid is refused.
 
-    This is the line between the two behaviors: ``FREE`` delegates the range to
-    the declaration (narrow it), a hand-written ``Uniform`` states intent (warn).
+    Owner ruling 2026-10-14 (#2626): a hand-written ``Uniform`` that extends
+    beyond the grid raises at build, naming the extent. ``FREE`` delegates the
+    range to the declaration and resolves to the grid instead.
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
@@ -278,16 +279,17 @@ def test_an_explicit_user_prior_is_warned_about_not_overridden():
         "type": "two_component",
     }
     dust_emission_group = {"type": "astrodust", "lgU": Uniform(0.0, 7.0)}
-    spec = _spec(dust_attenuation=dust_attenuation_group, dust_emission=dust_emission_group)
-    assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 7.0))
-
-    messages = _grid_warnings(
-        dust_attenuation=dust_attenuation_group, dust_emission=dust_emission_group
-    )
-    assert len(messages) == 1, messages
-    assert "dust_lgU" in messages[0]
-    assert "[-3, 6]" in messages[0]  # the extent to narrow to
-    assert "14%" in messages[0]  # (7 - 6) / 7
+    with pytest.raises(ParameterError) as info:
+        parse_groups(
+            sfh={"type": "dpl"},
+            redshift=0.1,
+            dust_attenuation=dust_attenuation_group,
+            dust_emission=dust_emission_group,
+        )
+    message = str(info.value)
+    assert "dust_lgU" in message
+    assert "[-3, 6]" in message  # the extent the prior overhangs
+    assert "14%" in message  # (7 - 6) / 7
 
 
 def test_a_narrowed_prior_still_round_trips_through_to_groups():
@@ -401,23 +403,23 @@ def test_a_prior_inside_the_grid_is_silent():
     )
 
 
-def test_the_same_prior_warns_on_a_narrower_backend():
+def test_the_same_prior_is_refused_on_a_narrower_backend():
     """Identical prior, different backend: dl07 caps at 25 where dl14 caps at 50.
 
     Paired with the control above this isolates the backend as the only
-    difference, so the warning cannot be an artifact of the prior itself.
+    difference, so the refusal cannot be an artifact of the prior itself.
+    Owner ruling 2026-10-14 (#2626): an explicit overhang raises, not warns.
     """
     if not grid_support("dust.emission", "dl07"):
         pytest.skip("dl07 grid not installed")
-    messages = _grid_warnings(
-        dust_attenuation={
-            "law": "power_law",
-            "type": "two_component",
-        },
-        dust_emission={"type": "dl07", "umin": Uniform(0.1, 50.0)},
-    )
-    assert len(messages) == 1, messages
-    assert "[0.1, 25]" in messages[0]
+    with pytest.raises(ParameterError) as info:
+        parse_groups(
+            sfh={"type": "dpl"},
+            redshift=0.1,
+            dust_attenuation={"law": "power_law", "type": "two_component"},
+            dust_emission={"type": "dl07", "umin": Uniform(0.1, 50.0)},
+        )
+    assert "[0.1, 25]" in str(info.value)
 
 
 # --------------------------------------------------------------------------

@@ -99,6 +99,10 @@ __all__ = [
 _ADAF_DEFAULTS: tuple[float, float, float] = (0.3, 0.5, 0.1)
 
 
+#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
+_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
+
+
 def _amplitude_probe_draws() -> tuple[dict[str, float], ...]:
     """Probe draws for the rank-1 check, spread over the declared amplitude priors (#1118).
 
@@ -255,6 +259,10 @@ class AGNSEDComponent(TemplateThreading):
     #: first draw. Each draw sets both amplitudes, so the probe never reads a free value.
     EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], ...]] = _amplitude_probe_draws()
 
+    #: Wavelengths [Angstrom] at which the AGN publishes point diagnostics (6 and 12 um); the
+    #: term response carries each term's shape there (``S_diag``).
+    EMITTER_DIAGNOSTIC_NODES: ClassVar[tuple[float, ...]] = _MIR_DIAGNOSTIC_AA
+
     #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
     _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
 
@@ -398,15 +406,29 @@ class AGNSEDComponent(TemplateThreading):
         band: Mapping[str, Any],
         params: Mapping[str, Any],
         template_state: Mapping[str, Any] | None,
-    ) -> jnp.ndarray:
-        """Filter-integrated AGN :math:`L_\\nu` from the build-time term response.
+    ) -> tuple[jnp.ndarray, tuple[jnp.ndarray, jnp.ndarray]]:
+        """Filter-integrated AGN :math:`L_\\nu` and the 6 and 12 um logs from the term response.
 
         The amplitude of each term is its value at the reference wavelength divided by the
-        shape there, so the photometry is ``sum_k A_k R_kf`` with no dense grid.
+        shape there, so the photometry is ``sum_k A_k R_kf`` with no dense grid. The same
+        amplitudes times the build-time term shapes at the two mid-infrared diagnostic nodes
+        (``S_diag``) give the 6 and 12 um luminosities, so a model that reads ``log_L_12um``
+        (the ``lopez24`` corona) does not keep a dense AGN evaluation alive for it.
+
+        Returns
+        -------
+        phot : ndarray, shape (n_filters,)
+            Filter-integrated rest-frame :math:`L_\\nu` [erg/s/Hz].
+        mir_logs : tuple of ndarray, scalar
+            ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
         """
         ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
         amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
-        return amps @ band["R"]
+        keys = list(ref)
+        rows = jnp.asarray([keys.index(k) for k in ("disc", "torus", "polar")])
+        mir_lnu = jnp.sum(amps[rows][:, None] * band["S_diag"][rows], axis=0)
+        diag = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=mir_lnu.dtype)
+        return amps @ band["R"], _mir_logs(diag, mir_lnu, 0.0)
 
     def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this AGN component publishes.
@@ -916,10 +938,25 @@ class AGNSEDComponent(TemplateThreading):
             # SED, measured on the reference-scale spectrum with the true scale
             # added in log space.
 
+        # The rank-1 band response, when the build made one: its evaluation at the reference
+        # wavelengths also yields the 6 and 12 um diagnostics (see ``_term_band_photometry``).
+        term_phot = None
+        if (
+            self.config.model == "composable"
+            and self._state is not None
+            and self._state.filter_waves is not None
+            and self._state.filter_trans is not None
+        ):
+            band = term_band_response(template_data, "agn", params)
+            if band is not None:
+                term_phot = self._term_band_photometry(band, params, block_templates)
+
         # Point diagnostics: the emitted 6 and 12 um values, from a second evaluation of the
         # same chain at exactly those wavelengths. The chain's normalization does not depend
         # on the wave, so these are the emitted values, not an interpolation of the caller's grid.
         if self.config.model == "composable":
+            if term_phot is not None:
+                mir_logs = term_phot[1]
             log_L_6um, log_L_12um = mir_logs
         else:
             log_L_6um, log_L_12um = _mir_point_logs(
@@ -1015,11 +1052,10 @@ class AGNSEDComponent(TemplateThreading):
             # dimming. The new helper returns the bare filter-integrated
             # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
-            band = term_band_response(template_data, "agn", params)
-            if band is not None:
+            if term_phot is not None:
                 # Rank-1 fast path (#1118): every sub-block is a fixed shape times its
                 # amplitude, so the filter integral is sum_k A_k R_kf with R_kf built once.
-                agn_phot_lnu_precomp = self._term_band_photometry(band, params, block_templates)
+                agn_phot_lnu_precomp = term_phot[0]
             else:
                 agn_phot_lnu_precomp = jnp.asarray(
                     [
@@ -1072,9 +1108,6 @@ class AGNSEDComponent(TemplateThreading):
 # top-level dispatch is a single registered component, exactly like the other
 # composite domain (nebular).
 from tengri.components.sed_model_component import _REGISTRY
-
-#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
-_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
 
 
 def _with_diagnostic_nodes(wave):

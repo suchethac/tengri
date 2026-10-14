@@ -8,7 +8,8 @@ to 65 % (#2606). The lookup is now the node-exact PCHIP interpolant, so at every
 node the normalized template equals the stored node to floating-point precision.
 
 The expected value is independent of the code under test: the stored node is
-normalized by its own trapezoid integral over the template grid and converted
+normalized by its own log-log integral over the template grid (production's
+helper, :func:`~tengri.utils.grid_interp.loglog_integral`, #2319) and converted
 with lambda^2 / c, the same convention the lookup applies to its result.
 """
 
@@ -22,6 +23,7 @@ pytestmark = pytest.mark.regression_bug
 jax = pytest.importorskip("jax")
 import jax.numpy as jnp
 
+from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import C_AA
 
 RTOL = 1e-6
@@ -45,8 +47,14 @@ FRITZ_NODES = (
 
 
 def _expected_lambda_norm(wave: np.ndarray, node: np.ndarray) -> np.ndarray:
-    """SKIRTOR: unit wavelength integral of the node, then L_nu = L_lam lam^2 / c."""
-    return node / np.trapezoid(node, wave) * wave**2 / C_AA
+    """SKIRTOR: unit log-log wavelength integral of the node, then L_nu = L_lam lam^2 / c.
+
+    The integral is production's own helper (the rule ``_interpolate_and_normalize``
+    applies), not a re-implementation: a trapezoid here drifts from it by 0.3-0.7 %
+    per node, which is the whole of the failure this test used to report.
+    """
+    integral = float(loglog_integral(jnp.asarray(wave), jnp.asarray(node)))
+    return node / integral * wave**2 / C_AA
 
 
 def _expected_nu_norm(wave: np.ndarray, node: np.ndarray) -> np.ndarray:

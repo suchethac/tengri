@@ -33,6 +33,7 @@ import numpy as np
 from jax import Array
 
 from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
+from tengri.utils.host_array import device_table
 
 __all__ = [
     "BASE_PER_DECADE",
@@ -112,7 +113,7 @@ def window_edges(center_nm: Array, sigma_nm: Array) -> Array:
     """
     center = jnp.atleast_1d(jnp.asarray(center_nm))
     sigma = jnp.broadcast_to(jnp.asarray(sigma_nm), center.shape)
-    offsets = jnp.asarray(_WINDOW_OFFSETS)
+    offsets = device_table(_WINDOW_OFFSETS)
     return (center[:, None] + offsets[None, :] * sigma[:, None]).ravel()
 
 
