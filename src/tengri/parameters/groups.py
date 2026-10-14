@@ -4546,6 +4546,14 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # line existed -- the actual defect: not (only) component_factory.py
         # forgetting to forward it, but this function never producing
         # 'dust_lyc_in_energy_balance' for wg00 in the first place.
+        # wg00 has no young/old split, so 'lyc_reprocessed_by' does not change
+        # its SED; it is parsed here only so an explicit value is stored and
+        # round-trips like the other dust types. The age-split and geometry keys
+        # stay refused earlier in this function.
+        if "lyc_reprocessed_by" in dust_atten_dict:
+            result["dust_lyc_reprocessed_by"] = _validate_lyc_reprocessed_by(
+                dust_atten_dict["lyc_reprocessed_by"]
+            )
         if "lyc_in_energy_balance" in dust_atten_dict:
             result["dust_lyc_in_energy_balance"] = _validate_lyc_in_energy_balance(
                 dust_atten_dict["lyc_in_energy_balance"]

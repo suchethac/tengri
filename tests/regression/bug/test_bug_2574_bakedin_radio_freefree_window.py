@@ -136,9 +136,10 @@ def test_factory_sets_the_window_from_the_ssp_nebular_stamp(ssp_data_wne, ssp_da
     cfg = _radio_config(_build(ssp_data_wne, freefree=False))
     assert (cfg.include_freefree, cfg.freefree_wave_min) == (False, None)
 
-    # bell2003_split carries its own thermal share and turns the term off.
+    # bell2003_split carries its own thermal share and turns the Murphy term off; its
+    # split thermal law takes the same window from the SSP edge (#2962).
     cfg = _radio_config(_build(ssp_data_wne, sf_type="bell2003_split"))
-    assert (cfg.include_freefree, cfg.freefree_wave_min) == (False, None)
+    assert (cfg.include_freefree, cfg.freefree_wave_min) == (False, edge)
 
     # The same flux arrays stamped bare, or left unstamped: the SSP is not known
     # to hold a nebular continuum, so the term keeps its whole range.
