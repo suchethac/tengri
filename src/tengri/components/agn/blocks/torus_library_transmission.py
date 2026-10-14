@@ -166,8 +166,11 @@ def below_library_index(wavelength, torus_block: str) -> BelowLibraryIndex | Non
     below[idx] = True
     sigma = np.zeros(n_wave)
     if idx.size:
-        energy = HC_KEV_ANGSTROM / jnp.asarray(wavelength)[idx]
-        sigma[idx] = np.asarray(wabs_cross_section(energy))
+        # Host indexing, one traced program for the cross section (#2914): evaluated
+        # eagerly, ``wabs_cross_section``'s branches dispatched ~25 XLA compiles per
+        # build, each below the persistent cache's floor.
+        energy = HC_KEV_ANGSTROM / np.asarray(wavelength, dtype=np.float64)[idx]
+        sigma[idx] = np.asarray(jax.jit(wabs_cross_section)(jnp.asarray(energy)))
     return BelowLibraryIndex(below=below, sigma=sigma, n_wave=n_wave)
 
 
