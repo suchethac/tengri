@@ -839,9 +839,21 @@ def test_line_debit_is_lines_over_the_closed_form_disc_power(disc):
     assert _debit_fraction(disc) == pytest.approx(_line_power(disc) / _L_ACC, rel=1e-12)
 
 
-@pytest.mark.parametrize(("disc", "bound"), [("kubota_done", 8.7e-6), ("multicolor", 3.3e-5)])
+@pytest.mark.parametrize(
+    ("disc", "bound"),
+    [
+        # kubota_done re-measured on the #2919 tree (see the docstring); multicolor unchanged.
+        ("kubota_done", -6.739948e-7),
+        ("multicolor", 3.3e-5),
+    ],
+)
 def test_closed_form_power_differs_from_the_grid_integral_by_the_measured_amount(disc, bound):
-    """Budget-grid integral of the disc: 1 - 8.7e-6 (kubota_done), 1 - 3.3e-5 (multicolor).
+    """Budget-grid integral of the disc: 1 - 3.3e-5 (multicolor), 1 + 6.7e-7 (kubota_done).
+
+    kubota_done was 1 - 8.704e-6 on origin/main (668348ae7) and is 1 + 6.740e-7 on the #2919
+    tree: the corona normalization moved from a trapezoid on 2000 nodes to the log-log integral
+    on 8000 nodes (#2919, disc.py ``_hot_corona_lnu``), so the ledger-grid trapezoid no longer
+    sits below the counted power. multicolor is unchanged (3.335e-5 on both trees).
 
     That is how far the debit moves from the grid evaluation: the lines' share of the disc
     rises by that fraction. kubota_done's is the grid's quadrature residual now that the

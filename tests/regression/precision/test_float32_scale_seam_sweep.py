@@ -453,47 +453,40 @@ _AGN_MBH_DUST = {
     "tau_bc": 0.0,
 }
 
-#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de, which carries
-#: #2808 and #2694/#2807/#2837). Old -> new, relative, against the pins on origin/main (the file's
-#: prior values):
-#:
-#:     log M_BH 6: rest_sed_sum +1.17e-05, rest_sed_0 +4.39e-02,
-#:       rest_sed_mid -1.16e-06, rest_sed_last -3.46e-06
-#:     photometry (r, W3, W4) +2.93e-06, -6.32e-07, -1.63e-07
-#:
-#:     log M_BH 8: rest_sed_sum +1.01e-04, rest_sed_0 -7.24e-02,
-#:       rest_sed_mid +2.07e-04, rest_sed_last -5.16e-05
-#:     photometry (r, W3, W4) +2.14e-04, -8.48e-06, -2.32e-06
-#:
-#:     log M_BH 10: rest_sed_sum -3.94e-03, rest_sed_0 -5.65e-01,
-#:       rest_sed_mid -4.11e-03, rest_sed_last -3.12e-04
-#:     photometry (r, W3, W4) -4.28e-03, -7.10e-04, -3.79e-05
-#: Cause of the largest move (mbh 10, rest_sed_0 -5.65e-1, rest_sed_sum -3.9e-3): the #2733
-#: kubota_done corona change on this branch (243acb9a3, b24c8bc5d, b4e2cb526), the same move the
-#: #2733 re-pin recorded against its own pre-#2733 parent. Branch contribution measured as the
-#: merged tree minus origin/main bc4c183de (the table above is that difference). #2818 (float32
-#: intent in disc.py) is not separated from #2733 by a separate capture.
+#: Re-captured on the merged tree (#2919 branch with origin/main 668348ae7; capture by
+#: ``_F64_REFERENCE_CHILD`` per mass). Old -> new, relative, against the pins in this file before
+#: the capture (captured on origin/main, which carries #2972's SKIRTOR native budget; #2972
+#: moves nothing here):
+#:   log M_BH 6: rest_sed_sum +6.0e-09, rest_sed_0 +1.43e-05, rest_sed_mid +5.8e-09,
+#:               rest_sed_last +2.0e-10; photometry (r, W3, W4) +6.5e-09, +3.8e-11, +9.6e-12
+#:   log M_BH 8: rest_sed_sum +2.22e-07, rest_sed_0 +1.43e-05, rest_sed_mid +2.63e-07,
+#:               rest_sed_last +2.07e-08; photometry +2.79e-07, +3.87e-09, +9.87e-10
+#:   log M_BH 10: rest_sed_sum +2.02e-07, rest_sed_0 +1.43e-05, rest_sed_mid +2.24e-07,
+#:               rest_sed_last +1.91e-07; photometry +2.26e-07, +3.72e-08, +9.09e-09
+#: Cause: #2919 runner tie numerator log-log rule (blocks/runner.py ``_disc_integral``). The
+#: trapezoid sat 1.43e-5 low on the disc-dominated first (0.01 A) bin; the other bins move by the
+#: quadrature rule alone. The #2972 SKIRTOR native budget is already in the pins (from main).
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593843975410476e32,
-        "rest_sed_0": 107819931932531.69,
-        "rest_sed_mid": 2.891412814811677e28,
-        "rest_sed_last": 8.773429501326086e21,
-        "photometry": (1.0995053322079293e-27, 1.5613862801437854e-27, 1.770439035766937e-27),
+        "rest_sed_sum": 1.5593844069605887e32,
+        "rest_sed_0": 107821475354953.55,
+        "rest_sed_mid": 2.8914128315785582e28,
+        "rest_sed_last": 8.773429503059575e21,
+        "photometry": (1.099505339296764e-27, 1.5613862802036946e-27, 1.7704390357838687e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6764087615329647e32,
-        "rest_sed_0": 2.6280923659312508e16,
-        "rest_sed_mid": 3.1554292154441393e28,
-        "rest_sed_last": 8.836513097035511e21,
-        "photometry": (1.2062026449580821e-27, 1.5634711019050015e-27, 1.7710420103722184e-27),
+        "rest_sed_sum": 1.6764091339884786e32,
+        "rest_sed_0": 2.6281298837209836e16,
+        "rest_sed_mid": 3.155430043907016e28,
+        "rest_sed_last": 8.836513279836989e21,
+        "photometry": (1.2062029810387692e-27, 1.5634711079489683e-27, 1.77104201211986e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.703425617122919e32,
-        "rest_sed_0": 1.2917978371688406e16,
-        "rest_sed_mid": 3.1962498151353243e28,
-        "rest_sed_last": 9.754766942342692e21,
-        "photometry": (1.2157011889186551e-27, 1.5872221286512619e-27, 1.77876016593289e-27),
+        "rest_sed_sum": 1.7034259604001512e32,
+        "rest_sed_0": 1.2918162596663004e16,
+        "rest_sed_mid": 3.196250530436555e28,
+        "rest_sed_last": 9.75476880189074e21,
+        "photometry": (1.215701463900898e-27, 1.5872221876216888e-27, 1.778760182100698e-27),
     },
 }
 
