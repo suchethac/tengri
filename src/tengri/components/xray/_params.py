@@ -76,7 +76,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     # The two X-ray-binary photon indices deliberately get NO free_prior. They
     # are not per-galaxy quantities: Gamma = 2.0 (HMXB) and 1.56 (LMXB) are the
-    # fixed spectral assumptions of the Lehmer+2016-style population scalings
+    # fixed spectral assumptions of the Fragos+2013 population scalings
     # these components implement, and each description states a single value
     # rather than a range because there is no per-object range to state. The
     # freedom a caller actually wants here -- how far this galaxy's XRB
@@ -147,7 +147,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         ),
         "Deviation from expected HMXB log L_X (Yang+2020 [1]_). "
         "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-        "around the Lehmer+2016 SFR relation.",
+        "around the Fragos+2013 L_X/SFR relation (Eq. 3).",
         units="dex",
     ),
     ParamDeclaration(
@@ -159,7 +159,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         ),
         "Deviation from expected LMXB log L_X (Yang+2020 [1]_). "
         "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-        "around the Lehmer+2016 age/mass relation.",
+        "around the Fragos+2013 L_X/M* age relation (Eq. 4).",
         units="dex",
     ),
 )

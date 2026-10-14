@@ -13569,8 +13569,8 @@ class SEDModel:
             ``'sf'`` and ``'agn'`` sub-blocks, ``'all_params'``, parameters.
             Default: off. Menu: :func:`tengri.list_radio_models`.
         xray : dict, optional
-            X-ray emission. Keys: ``'type'`` (required; ``'yang22'``, ``'lehmer'``,
-            ``'none'``), ``'all_params'``, parameters. Default: off.
+            X-ray emission. Keys: ``'type'`` (required; ``'simple'``, ``'yang20'``,
+            ``'lopez24'``, ``'none'``), ``'all_params'``, parameters. Default: off.
             Menu: :func:`tengri.list_xray_models`.
         foreground : dict, optional
             Milky Way foreground reddening. Keys: ``'ebmv_mw'`` (E(B-V) in mag),
