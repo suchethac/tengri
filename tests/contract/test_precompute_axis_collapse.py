@@ -448,7 +448,7 @@ _UNCOVERED: dict[str, str] = {
         "diff pinned exactly at a grid node"
     ),
     "cloudy_precompute": "3 axes; needs the untracked CLOUDY MIST grid",
-    "feltre_precompute": "4 axes; no collapse test written",
+    "feltre_precompute": "5 axes; no collapse test written",
     "mappings_photo_precompute": "4 axes; no collapse test written",
     "mappings_shock_precompute": "3 axes; no collapse test written",
     "dust_emission_precompute": "8 models with axes; no collapse test written",

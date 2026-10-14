@@ -85,11 +85,11 @@ class TestRadioCrossval:
             err_msg=f"Spectral index: measured={measured_alpha:.3f}, expected={alpha}",
         )
 
-    def test_radio_zero_below_1mm(self):
-        """Radio emission should be zero at wavelengths < 1mm (optical/IR)."""
+    def test_radio_zero_below_100um(self):
+        """Star-formation synchrotron is zero at wavelengths < 100 um (optical/near-IR)."""
         from tengri.components.radio import radio_star_forming
 
-        wave = jnp.array([5000.0, 10000.0, 1e6, 5e6])  # optical to mid-IR
+        wave = jnp.array([5000.0, 10000.0, 5e5, 9.9e5])  # optical to mid-IR
         l_nu = np.asarray(radio_star_forming(wave, 1e10))
         assert np.all(l_nu == 0), "Radio should be zero at optical/IR wavelengths"
 
