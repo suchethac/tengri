@@ -17,7 +17,6 @@ is to floating-point reassociation, so the tolerance is 1e-12 relative in float6
 
 from __future__ import annotations
 
-import hashlib
 import warnings
 
 import jax
@@ -26,29 +25,34 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.conservation
 
 RTOL = 1e-12
+
+#: Age of the universe [Gyr] at the test redshift 0.05: the delayed onset is a
+#: fraction of it (#2748), so the absolute ages below are written as Gyr / _AGE_Z.
+_AGE_Z = float(age_at_z(0.05))
 
 # Young (y ~ 1 on the populated nodes), mixed (the boundary cell carries the mass),
 # and old (y ~ 0) delayed SFHs: the extreme young fractions plus the interior.
 _SYNTH_POINTS = (
     {
         "sfh_delayed_tau_gyr": 0.004,
-        "sfh_delayed_age_gyr": 0.006,
+        "sfh_delayed_age_frac": 0.006 / _AGE_Z,
         "dust_tau_bc": 1.4,
         "dust_tau_diff": 0.6,
     },
     {
         "sfh_delayed_tau_gyr": 0.02,
-        "sfh_delayed_age_gyr": 0.012,
+        "sfh_delayed_age_frac": 0.012 / _AGE_Z,
         "dust_tau_bc": 0.7,
         "dust_tau_diff": 0.3,
     },
     {
         "sfh_delayed_tau_gyr": 3.0,
-        "sfh_delayed_age_gyr": 10.0,
+        "sfh_delayed_age_frac": 10.0 / _AGE_Z,
         "dust_tau_bc": 1.9,
         "dust_tau_diff": 1.2,
     },
@@ -73,7 +77,7 @@ def _synthetic_model(ssp, obs, width, age_mixture):
         sfh={
             "type": "delayed",
             "tau_gyr": Uniform(0.001, 5.0),
-            "age_gyr": Uniform(0.005, 12.0),
+            "age_frac": Uniform(0.005 / _AGE_Z, 12.0 / _AGE_Z),
             "log_total_mass": Fixed(10.0),
             "all_params": Fixed(DEFAULT),
         },
@@ -104,6 +108,13 @@ def _assert_agree(per_node, grouped, label):
         assert abs(float(a) - float(b)) <= RTOL * scale, (
             f"{label}: d/d{k} {float(a)!r} vs {float(b)!r}"
         )
+    # A gradient identically zero in both modes would agree trivially and test nothing.
+    assert any(np.any(np.asarray(g0[k]) != 0.0) for k in g0), (
+        f"{label}: per_node gradient is all zero"
+    )
+    assert any(np.any(np.asarray(g1[k]) != 0.0) for k in g1), (
+        f"{label}: grouped gradient is all zero"
+    )
 
 
 def test_interval_helpers_regroup_the_node_mixture():
@@ -174,7 +185,10 @@ def test_grouped_matches_per_node_under_vmap(synthetic_ssp_wide, synthetic_topha
     """
     m0 = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "per_node")
     m1 = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "grouped")
-    pts = [*_SYNTH_POINTS, dict(_SYNTH_POINTS[1], sfh_delayed_age_gyr=0.03, dust_tau_bc=0.2)]
+    pts = [
+        *_SYNTH_POINTS,
+        dict(_SYNTH_POINTS[1], sfh_delayed_age_frac=0.03 / _AGE_Z, dust_tau_bc=0.2),
+    ]
     batch = {k: jnp.asarray([p[k] for p in pts], jnp.float64) for k in pts[0]}
 
     def batched(model):
@@ -338,26 +352,6 @@ def _cue_objective(model, p):
     return jnp.sum(jnp.log10(o.phot_fnu)) + jnp.sum(w * o.spec_fnu) / jnp.sum(o.spec_fnu)
 
 
-def prediction_hash(model, p) -> str:
-    """sha256 of the float64 photometry + spectrum at ``p`` (bit-level fingerprint)."""
-    o = model.predict_observables({k: jnp.asarray(v) for k, v in p.items()})
-    h = hashlib.sha256()
-    for a in (o.phot_fnu, o.spec_fnu):
-        h.update(np.ascontiguousarray(np.asarray(a, np.float64)).tobytes())
-    return h.hexdigest()
-
-
-#: ``prediction_hash`` of the per_node (default) model at its first prior draw, recorded
-#: at upstream 068ef54a1 (before ``age_mixture`` existed) on XLA CPU (macOS arm64),
-#: float64, jax 0.11.2. Bit-level, so only checked where it was recorded: another XLA
-#: backend or version may legitimately reorder a sum.
-_PER_NODE_HASH_AT_BASE = {
-    False: "a1559e6ca28b7c8242d38a2e8b939cce32883f9ca3ccf37b8eb428169f309b6b",
-    True: "0b0bd3b86f81cb802a04b025c0dfd0f4bc2f9b9fbdd5ca573bcaccebc17ce66a",
-}
-_HASH_PLATFORM = ("cpu", "0.11.2")
-
-
 @pytest.mark.parametrize("lyc_fesc", [False, True])
 def test_grouped_matches_per_node_cue_joint(ssp_data_fsps, lyc_fesc):
     """Joint phot+spec objective and gradient agree to 1e-12 (Cue, soft boundary, LyC branch)."""
@@ -373,14 +367,3 @@ def test_grouped_matches_per_node_cue_joint(ssp_data_fsps, lyc_fesc):
             _value_and_grad(m1, _cue_objective, p),
             f"cue fesc={lyc_fesc} point {i}",
         )
-
-
-@pytest.mark.regression_bug
-@pytest.mark.parametrize("lyc_fesc", [False, True])
-def test_per_node_prediction_unchanged_from_base(ssp_data_fsps, lyc_fesc):
-    """The default path is the pre-switch code: same bits as upstream 068ef54a1 (CPU, float64)."""
-    if (jax.default_backend(), jax.__version__) != _HASH_PLATFORM:
-        pytest.skip(f"base fingerprint recorded on XLA {_HASH_PLATFORM} only")
-    m = _cue_model(ssp_data_fsps, None, lyc_fesc)
-    got = prediction_hash(m, m.spec.sample(jax.random.PRNGKey(10)))
-    assert got == _PER_NODE_HASH_AT_BASE[lyc_fesc]
