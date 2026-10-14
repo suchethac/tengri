@@ -51,7 +51,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
-from tengri.utils.scale import pow10 as _pow10
+from tengri.utils.scale import pow10 as _pow10, representable_exponent
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -96,7 +96,7 @@ def _bessel_k0e_k1e(x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
     unused branch of the ``jnp.where`` never overflows or produces a non-finite
     value that could poison the gradient.
     """
-    x = jnp.asarray(x, dtype=jnp.float64)
+    x = jnp.asarray(x)
 
     # Small-argument branch (0 < x <= 2): A&S 9.8.5 / 9.8.7. Clip so the
     # discarded branch stays finite for large x (i0/i1 grow ~ e^x).
@@ -198,7 +198,7 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
     -----
     **JIT/grad-safe**: yes.
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     x = 1.0 / theta  # = 1/theta_e
     # g = (2 + 2 theta + 1/theta) e^{-x} / K_2(x) = numerator / (K_2(x) e^x).
     return (2.0 + 2.0 * theta + 1.0 / theta) / _bessel_k2e(x)
@@ -290,7 +290,7 @@ def _adaf_amplification(t_e: jnp.ndarray) -> jnp.ndarray:
 
     :math:`A = 1 + 4\theta_e + 16\theta_e^2`, with :math:`\theta_e = kT_e/m_ec^2`.
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     return 1.0 + 4.0 * theta + 16.0 * theta**2
 
 
@@ -364,7 +364,7 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
     """
     n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
     r_cm = _R_MIN * _R_SCHW_PER_M * m
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     x_arg = 1.0 / theta
     # ln of the bracket 2.49e-10 * 4 pi n_e R / (B theta^3 K_2(1/theta)), summed term by term.
     # The bracket itself (~4e39 at the T_e floor, mdot at its clip) overflows float32 (max
@@ -911,7 +911,7 @@ def _adaf_F_theta(t_e: jnp.ndarray) -> jnp.ndarray:
     ndarray
         ``F(theta_e)`` [dimensionless].
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     # Clip each branch's argument so the discarded jnp.where branch stays finite.
     th_lo = jnp.clip(theta, 1e-8, 1.0)
     f_lo = 4.0 * (2.0 * th_lo / jnp.pi**3) ** 0.5 * (
@@ -1332,7 +1332,13 @@ def _adaf_log_synch_compton(nu_, s):
     # float32 subnormal that the backend flushes to zero, which dropped the T_e derivative of
     # the Comptonization ceiling (1% of d(sum L_nu)/dT_e, #2825).
     low_cut = jnp.exp(jnp.log(s.nu_min) - log_nu)
-    ceiling = jnp.clip(jnp.exp(log_nu - s.log_nu_max_c), 0.0, 500.0)
+    ceiling = jnp.clip(
+        jnp.exp(
+            jnp.minimum(log_nu - s.log_nu_max_c, representable_exponent(500.0, base=float(np.e)))
+        ),
+        0.0,
+        500.0,
+    )
     log_shape = log_shape - low_cut - ceiling
     return s.log_l_nu_p + log_shape
 

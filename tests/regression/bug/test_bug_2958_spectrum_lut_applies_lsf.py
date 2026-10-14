@@ -24,8 +24,11 @@ the real wNE SSP with baked-in nebular lines (lines), at R = 2000 and sigma_v fr
 (h) the LUT matches the exact path at R = 5000 with no resolution cap;
 (i) free redshift with a fixed sigma_v uses a cube broadened once at build and equals the
     per-draw sum route at two redshifts;
-(j) approx="auto" with a free sigma_v stays on the exact spectrum path; an explicit
-    SpectrumPrecomp() with a free sigma_v engages the LUT and warns once about the cost.
+(j) a joint observation with approx=WavePrecomp() promotes the spectrum channel onto the
+    LUT for a fixed sigma_v and keeps it exact, saying so once, for a free one (approx="auto"
+    keeps spectroscopy exact in any case); an explicit SpectrumPrecomp() with a free sigma_v
+    engages the LUT and warns once about the cost, on a spectroscopy-only and on a joint
+    observation alike.
 """
 
 from __future__ import annotations
@@ -37,7 +40,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, SEDModel, SpectrumPrecomp, Uniform
+from tengri import (
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    SpectrumPrecomp,
+    Uniform,
+    WavePrecomp,
+)
 from tengri.observation.banded import gaussian_resolution_bands
 from tengri.observation.spectroscopy import Spectroscopy
 
@@ -55,8 +67,8 @@ def _spec(resolution=2000.0):
     return Spectroscopy(resample="point", wave_obs=_WAVE_OBS, resolution=resolution)
 
 
-def _build(ssp, approx, *, spectro, igm=None, sigma_v=None):
-    obs = Observation(spectroscopy=spectro)
+def _build(ssp, approx, *, spectro, igm=None, sigma_v=None, photometry=None):
+    obs = Observation(photometry=photometry, spectroscopy=spectro)
     base = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -332,18 +344,45 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
 # ── (j) routing of a free sigma_v ──────────────────────────────────────────────
 
 
-def test_j_auto_with_free_sigma_v_stays_exact(ssp_data_wne):
-    from tengri.inference.fitter import _resolve_batch_fit_approx
+def _joint(ssp, approx, *, sigma_v):
+    return _build(
+        ssp,
+        approx,
+        spectro=_spec(),
+        igm=_MADAU,
+        sigma_v=sigma_v,
+        photometry=Photometry.from_names(["des_g"]),
+    )
 
+
+def test_j_joint_wave_precomp_keeps_free_sigma_v_spectrum_exact(ssp_data_wne):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        exact = _build(
-            ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0.0, 2000.0)
-        )
-    with pytest.warns(UserWarning, match="faster for it"):
-        routed = _resolve_batch_fit_approx(exact, "auto", "spectroscopy")
-    assert not routed._approx.get("spectrum_precomp")
-    np.testing.assert_array_equal(_spectrum(routed, 150.0), _spectrum(exact, 150.0))
+        exact = _joint(ssp_data_wne, None, sigma_v=Uniform(0.0, 2000.0))
+    with pytest.warns(UserWarning, match="sigma_v_kms is free"):
+        joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Uniform(0.0, 2000.0))
+    assert joint._approx.get("wave_precomp")
+    assert not joint._approx.get("spectrum_precomp")
+    np.testing.assert_array_equal(_spectrum(joint, 150.0), _spectrum(exact, 150.0))
+
+
+def test_j_joint_wave_precomp_promotes_fixed_sigma_v_spectrum(ssp_data_wne):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("default")
+        joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Fixed(150.0))
+    assert joint._approx.get("wave_precomp")
+    assert joint._approx.get("spectrum_precomp")
+    assert not any("sigma_v_kms is free" in str(w.message) for w in caught)
+
+
+def test_j_joint_explicit_lut_with_free_sigma_v_warns_once_about_cost(ssp_data_wne):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("default")
+        joint = _joint(ssp_data_wne, SpectrumPrecomp(), sigma_v=Uniform(0.0, 2000.0))
+    assert joint._approx.get("wave_precomp")
+    assert joint._approx.get("spectrum_precomp")
+    assert sum("full model grid" in str(w.message) for w in caught) == 1
+    assert not any("sigma_v_kms is free" in str(w.message) for w in caught)
 
 
 def test_j_explicit_lut_with_free_sigma_v_engages_and_warns_once(ssp_data_wne):
