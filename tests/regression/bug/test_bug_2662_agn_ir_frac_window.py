@@ -185,6 +185,32 @@ def test_e_refuses_window_beyond_rest_grid(ssp):
         _build(ssp, window=(5.0, 1.0e6), frac=Fixed(0.3))
 
 
+def test_e_refuses_window_on_a_non_composable_model(ssp):
+    """(e) A window on a monolithic AGN model is refused at build, naming 'composable'."""
+    with pytest.raises(ParameterError, match="composable"):
+        SEDModel.build(
+            ssp_data=ssp,
+            sfh=_SFH,
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.5),
+                "tau_diff": Fixed(0.3),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            redshift=Fixed(0.0),
+            agn={
+                "type": "skirtor",
+                "all_params": Fixed(DEFAULT),
+                "agn_ir_frac": Fixed(0.3),
+                "ir_frac_window": (5.0, 20.0),
+            },
+            observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
+        )
+
+
 def test_e_cigale_string_equals_tuple():
     """(e) CIGALE's '5/20' is the same option as (5.0, 20.0)."""
     assert _parse_ir_frac_window("5/20") == (5.0, 20.0)

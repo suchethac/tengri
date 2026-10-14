@@ -7867,6 +7867,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # this point on, ahead of the R37 validator and the R42 'none' branch
     # below.
     top_type = _normalize_off_switch(agn_dict.get("type"))
+    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time
+    # tuple. Parsed before the type branches so a monolithic model carries it too and the
+    # build refuses it there, instead of accepting and dropping the key.
+    if "ir_frac_window" in agn_dict:
+        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
+
     if top_type is not None and top_type != "composable":
         # R37: validate the name HERE, before anything else reads it. It used
         # to be forwarded to ``agn_model`` unchecked, "validated lazily by
@@ -8161,10 +8167,6 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
-
-    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time tuple.
-    if "ir_frac_window" in agn_dict:
-        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
 
 
 def _parse_ir_frac_window(value: object) -> tuple[float, float]:

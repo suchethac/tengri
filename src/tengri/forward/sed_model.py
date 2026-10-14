@@ -1322,11 +1322,12 @@ def _param_is_user_provided(spec, name: str) -> bool:
 
 
 def _validate_ir_frac_window_has_fraction(spec) -> None:
-    """Refuse a CIGALE ``ir_frac_window`` with no active ``agn_ir_frac`` (#2662).
+    """Refuse a CIGALE ``ir_frac_window`` that cannot act (#2662).
 
-    The window only changes how ``agn_ir_frac`` is scaled (pcigale's ``scale``). With the
-    fraction absent or ``Fixed(0)`` there is nothing to scale, so the window would be
-    silently inert.
+    The window only changes how ``agn_ir_frac`` is scaled (pcigale's ``scale``), and the
+    scale needs the composable AGN's disc/torus/polar split. With a monolithic model, or
+    with the fraction absent or ``Fixed(0)``, there is nothing to scale, so the window would
+    be silently inert; both are refused at build rather than at trace time.
 
     Raises
     ------
@@ -1339,6 +1340,13 @@ def _validate_ir_frac_window_has_fraction(spec) -> None:
     window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
     if window == (0.0, 0.0):
         return
+    model = getattr(spec, "agn_model", None)
+    if model != "composable":
+        raise ParameterError(
+            f"agn['ir_frac_window']={window} needs the composable AGN "
+            f"(agn={{'type': 'composable', ...}}): model {model!r} has no disc/torus/polar "
+            "split to take the dust luminosity from."
+        )
     free = set(spec.free_params)
     fixed = spec.get_fixed_values()
     if "agn_ir_frac" in free or float(fixed.get("agn_ir_frac", 0.0)) > 0.0:
