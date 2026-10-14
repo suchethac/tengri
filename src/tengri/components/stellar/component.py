@@ -2258,6 +2258,20 @@ class StellarSEDComponentState(SEDComponentState):
     # is a :class:`SpectroscopicZTable` (free-z).
     ssp_spec_lut: Any | None = None
     ssp_spec_ztable: Any | None = None
+    #: Fixed stellar velocity dispersion [km/s] the spectrum LUT was built for, or ``None``
+    #: when it is a free parameter. ``0.0`` also covers "not declared".
+    spec_sigma_v_fixed: float | None = None
+    #: Piecewise segment count of the model-grid velocity broadening, the exact path's.
+    spec_lsf_n_bins: int = 16
+    #: ``(lo, hi)`` rest-grid pixel range the fixed-redshift spectrum pixels read, from
+    #: :func:`~tengri.observation.spectrum.rest_grid_observed_window`, or ``None`` (free
+    #: redshift): only that range of the stellar sum needs to be broadened.
+    spec_rest_window: tuple[int, int] | None = None
+    #: Full-grid SSP cube ``(n_met, n_age, n_wave)`` broadened once at build by the fixed
+    #: ``spec_sigma_v_fixed``, or ``None``. Built only for a free-redshift table whose cube
+    #: nothing modifies per draw (no 4-D alpha collapse, no free AGB weight). The velocity
+    #: kernel is frame-invariant, so one cube serves every redshift.
+    spec_ssp_broadened: Any | None = None
     # Zero-padded observed-frame filter curves (n_filters, max_len), carried so
     # ``apply`` can publish them to ``state.derived`` for the additive-emitter
     # exact-projection path (dust IR / radio / X-ray / AGN). Static; the same
@@ -2476,6 +2490,8 @@ class StellarSEDComponent:
         redshift_spec: dict[str, Any] | None = None,
         spec_wave_obs: jnp.ndarray | None = None,
         lyc_gate: bool = False,
+        spec_sigma_v_fixed: float | None = None,
+        spec_lsf_n_bins: int = 16,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -2566,11 +2582,17 @@ class StellarSEDComponent:
         # carries BOTH families in one state. ``_precompute_spectrum`` populates
         # ``ssp_spec_lut`` (fixed-z) or ``ssp_spec_ztable`` (free-z).
         if approx.get("spectrum_precomp") and spec_wave_obs is not None:
-            spec_state = self._precompute_spectrum(spec_wave_obs, redshift_spec)
+            spec_state = self._precompute_spectrum(
+                spec_wave_obs, redshift_spec, spec_sigma_v_fixed, spec_lsf_n_bins
+            )
             state = _replace_state(
                 state,
                 ssp_spec_lut=spec_state.ssp_spec_lut,
                 ssp_spec_ztable=spec_state.ssp_spec_ztable,
+                spec_sigma_v_fixed=spec_state.spec_sigma_v_fixed,
+                spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
+                spec_rest_window=spec_state.spec_rest_window,
+                spec_ssp_broadened=spec_state.spec_ssp_broadened,
             )
 
         # WavePrecomp: photometry SSP×filter LUT. Requires filters + SSP grid.
@@ -2663,6 +2685,8 @@ class StellarSEDComponent:
         self,
         spec_wave_obs: jnp.ndarray | None,
         redshift_spec: dict[str, Any] | None,
+        spec_sigma_v_fixed: float | None = None,
+        spec_lsf_n_bins: int = 16,
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
@@ -2675,6 +2699,11 @@ class StellarSEDComponent:
         Fixed-z builds a single :class:`SpectroscopicPrecomputation`; free-z
         builds a :class:`SpectroscopicZTable` so the rest-frame pixel grid
         ``wave_obs / (1 + z)`` can be interpolated at runtime.
+
+        With a fixed redshift and a fixed ``spec_sigma_v_fixed`` the templates are
+        broadened by that dispersion on the native rest grid before they are sampled
+        (the exact path's stage 1), so the per-draw cost stays one weighted sum. With
+        a free dispersion or redshift the broadening happens per draw in :meth:`apply`.
         """
         if spec_wave_obs is None or self.ssp_data is None:
             # No grid or no SSP: fall back to the full-grid path.
@@ -2691,8 +2720,22 @@ class StellarSEDComponent:
                 wave_obs_pixels=spec_wave_obs,
                 redshift=z_source,
                 dl_cm=1.0,  # placeholder; cosmology applied at projection time
+                sigma_v_kms=spec_sigma_v_fixed,
+                n_bins=spec_lsf_n_bins,
             )
-            return StellarSEDComponentState(name=self.name, ssp_spec_lut=lut)
+            import numpy as np
+
+            from tengri.observation.spectrum import rest_grid_observed_window
+
+            return StellarSEDComponentState(
+                name=self.name,
+                ssp_spec_lut=lut,
+                spec_sigma_v_fixed=spec_sigma_v_fixed,
+                spec_lsf_n_bins=spec_lsf_n_bins,
+                spec_rest_window=rest_grid_observed_window(
+                    np.asarray(self.ssp_data.ssp_wave), np.asarray(spec_wave_obs), z_source
+                ),
+            )
 
         # mode == "free": build the redshift table.
         from tengri.components.stellar.sps.precompute import precompute_spectroscopy_ztable
@@ -2704,7 +2747,25 @@ class StellarSEDComponent:
             z_max=redshift_spec.get("z_max", 3.0),
             n_z=redshift_spec.get("n_z", 100),
         )
-        return StellarSEDComponentState(name=self.name, ssp_spec_ztable=ztable)
+        broadened = None
+        if (
+            spec_sigma_v_fixed is not None
+            and spec_sigma_v_fixed > 0.0
+            and not has_alpha_grid(self.ssp_data)
+            and self.agb_dust_ratio is None
+        ):
+            from tengri.components.stellar.sps.precompute import broaden_template_cube
+
+            broadened = broaden_template_cube(
+                self.ssp_data.ssp_flux, self.ssp_data.ssp_wave, spec_sigma_v_fixed, spec_lsf_n_bins
+            )
+        return StellarSEDComponentState(
+            name=self.name,
+            ssp_spec_ztable=ztable,
+            spec_sigma_v_fixed=spec_sigma_v_fixed,
+            spec_lsf_n_bins=spec_lsf_n_bins,
+            spec_ssp_broadened=broadened,
+        )
 
     def apply(
         self,
@@ -3960,61 +4021,185 @@ class StellarSEDComponent:
                 )
 
         # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
-        # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
-        # centers in the galaxy rest frame. Publishes:
+        # The continuum at the spectrum pixel centers in the galaxy rest frame.
+        # Stellar velocity dispersion is stage 1 of the exact path: it acts on the
+        # model grid, BEFORE the pixels are sampled (point sampling aliases sharp
+        # stellar features, so broadening after sampling is not equivalent). Two routes:
+        #   - table pre-broadened at build (fixed z and fixed sigma_v): a weighted sum
+        #     of already-broadened, already-sampled templates;
+        #   - otherwise the weighted sum on the full grid, broadened by the draw's
+        #     sigma_v, then sampled (see ``_spectrum_lut_families``).
+        # Publishes:
         #   - ``stellar_spec_lnu_precomp`` (n_pix,): rest-frame Lν [erg/s/Hz]
+        #   - ``stellar_spec_lnu_per_age_precomp`` (n_age, n_pix): the per-age split
         #   - ``spec_eff_waves`` (n_pix,): rest-frame pixel wavelengths [Å]
         # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
         # nebular continuum) through their spectrum-LUT branch, mirroring how
         # ``filter_eff_waves`` drives the photometry LUT path.
-        if self._state is not None and self._state.ssp_spec_lut is not None:
-            ssp_on_pixels = self._state.ssp_spec_lut.ssp_on_pixels  # (n_met, n_age, n_pix)
-            stellar_spec_lnu = _mass_scale_lnu(
-                jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels), total_mass
+        if self._state is not None and (
+            self._state.ssp_spec_lut is not None or self._state.ssp_spec_ztable is not None
+        ):
+            derived_overrides.update(
+                self._spectrum_lut_families(
+                    params,
+                    state,
+                    wave=wave,
+                    ssp_flux_for_csp=ssp_flux_for_csp,
+                    joint_weights=joint_weights,
+                    total_mass=total_mass,
+                    cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
+                )
             )
-            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
-            # Age-resolved per-pixel LUT for two-component (Charlot & Fall)
-            # dust attenuation at the pixel grid (sum over age == marginalized).
-            stellar_spec_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels), total_mass
-            )
-            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
-            derived_overrides["spec_eff_waves"] = jnp.asarray(
-                self._state.ssp_spec_lut.wave_rest_pixels
-            )
-
-        elif self._state is not None and self._state.ssp_spec_ztable is not None:
-            # Free-z: interpolate the SSP cube to the rest-frame pixel grid
-            # ``wave_obs / (1 + z)`` at runtime. Exact (no z-grid interpolation
-            # of absorption features) and differentiable in z. ``wave`` is
-            # ``ssp.ssp_wave`` and ``ssp_flux_for_csp`` is the (n_met, n_age,
-            # n_wave) cube already used for the full-grid CSP einsum above.
-            from jax import vmap
-
-            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
-            wave_obs_pix = jnp.asarray(self._state.ssp_spec_ztable.wave_obs_pixels)
-            wave_rest = wave_obs_pix / (1.0 + z)
-            n_met_s, n_age_s = ssp_flux_for_csp.shape[0], ssp_flux_for_csp.shape[1]
-            flat = ssp_flux_for_csp.reshape(n_met_s * n_age_s, -1)
-            interp_flat = vmap(lambda row: jnp.interp(wave_rest, wave, row, left=0.0, right=0.0))(
-                flat
-            )
-            ssp_on_pixels_at_z = interp_flat.reshape(n_met_s, n_age_s, -1)
-            stellar_spec_lnu = _mass_scale_lnu(
-                jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels_at_z), total_mass
-            )
-            stellar_spec_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels_at_z), total_mass
-            )
-            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
-            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
-            derived_overrides["spec_eff_waves"] = wave_rest
 
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(
             sed_intrinsic=sed_intrinsic,
             derived=state.derived.with_(**derived_overrides),
         )
+
+    def _spectrum_lut_families(
+        self,
+        params,
+        state,
+        *,
+        wave,
+        ssp_flux_for_csp,
+        joint_weights,
+        total_mass,
+        cube_modified=False,
+    ):
+        r"""Stellar spectrum LUT families at the pixels, with the velocity dispersion applied.
+
+        Stage 1 of the exact spectrum path is a Gaussian :math:`\sigma_v` convolution of
+        the stellar piece in :math:`\ln\lambda` on the model grid. This applies it the
+        same way, with :func:`~tengri.observation.spectrum.broaden_velocity_only`,
+        before the pixels are sampled. The sum over templates is linear, so
+        :math:`\mathrm{sample}(\mathrm{broaden}(\sum_i w_i f_i))` equals the weighted
+        sum of the broadened, sampled templates the pre-broadened table holds.
+
+        Parameters
+        ----------
+        params : mapping
+            Prefix-sliced parameters; ``redshift`` is read for a free-redshift table.
+        state : ForwardState
+            Carries ``derived.spec_sigma_v_kms``, the draw's dispersion seeded by the
+            model, used when the dispersion is free.
+        wave : ndarray, shape (n_wave,)
+            Model rest wavelength grid [Angstrom].
+        ssp_flux_for_csp : ndarray, shape (n_met, n_age, n_wave)
+            The SSP cube the per-draw sum uses (alpha-collapsed, AGB-weighted).
+        joint_weights : ndarray, shape (n_met, n_age)
+            Metallicity-by-age weights.
+        total_mass : float or traced scalar
+            Total formed mass the families are scaled to.
+        cube_modified : bool, default False
+            True when ``ssp_flux_for_csp`` differs from the library cube for this draw
+            (alpha collapse, free AGB weight); the build-time broadened cube is then
+            not valid and the per-draw broadening is used.
+
+        Returns
+        -------
+        dict
+            ``stellar_spec_lnu_precomp``, ``stellar_spec_lnu_per_age_precomp`` and
+            ``spec_eff_waves``.
+
+        Raises
+        ------
+        ValueError
+            If the model seeded no dispersion for a free sigma_v, or a concrete draw
+            dispersion differs from the one the pre-broadened table was built with.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. **Gradient-safe**: yes, in ``sigma_v``, redshift and the
+        weights. The pre-broadened route costs one weighted sum over the pixel cube; the
+        full-grid route adds one broadening of the summed spectrum plus one per age row
+        for the per-age family.
+        """
+        from tengri.observation.spectrum import (
+            broaden_velocity_only,
+            broaden_velocity_only_window,
+        )
+
+        spec_state = self._state
+        lut = spec_state.ssp_spec_lut
+        seeded = state.derived.get("spec_sigma_v_kms")
+        if lut is not None and lut.sigma_v_kms is not None:
+            if (
+                seeded is not None
+                and not isinstance(seeded, jax.core.Tracer)
+                and abs(float(seeded) - lut.sigma_v_kms) > 1e-6 * max(1.0, abs(lut.sigma_v_kms))
+            ):
+                raise ValueError(
+                    f"the spectrum LUT was built with sigma_v_kms={lut.sigma_v_kms} but "
+                    f"the draw has {float(seeded)}; rebuild the model."
+                )
+            on_pix = lut.ssp_on_pixels  # (n_met, n_age, n_pix), broadened at build
+            return {
+                "stellar_spec_lnu_precomp": _mass_scale_lnu(
+                    jnp.einsum("ma,map->p", joint_weights, on_pix), total_mass
+                ),
+                "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
+                    jnp.einsum("ma,map->ap", joint_weights, on_pix), total_mass
+                ),
+                "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
+            }
+
+        if lut is not None:
+            spec_eff = jnp.asarray(lut.wave_rest_pixels)
+        else:
+            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
+            spec_eff = jnp.asarray(spec_state.ssp_spec_ztable.wave_obs_pixels) / (1.0 + z)
+
+        def _at_pixels_of(row):
+            return jnp.interp(spec_eff, wave, row, left=0.0, right=0.0)
+
+        _at_pixels = _at_pixels_of
+        sigma_v = spec_state.spec_sigma_v_fixed
+        if spec_state.spec_ssp_broadened is not None and not cube_modified:
+            # Free redshift, fixed sigma_v: the cube was broadened once at build, so the
+            # per-draw work is the weighted sum and the interpolation, as before sigma_v
+            # was applied.
+            cube = spec_state.spec_ssp_broadened
+            tot_b = jnp.einsum("ma,maw->w", joint_weights, cube)
+            age_b = jnp.einsum("ma,maw->aw", joint_weights, cube)
+            return {
+                "stellar_spec_lnu_precomp": _mass_scale_lnu(_at_pixels_of(tot_b), total_mass),
+                "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
+                    jax.vmap(_at_pixels_of)(age_b), total_mass
+                ),
+                "spec_eff_waves": spec_eff,
+            }
+        if sigma_v is None:
+            if seeded is None:
+                raise ValueError(
+                    "free sigma_v_kms with approx=SpectrumPrecomp(): the model did not "
+                    "seed derived.spec_sigma_v_kms."
+                )
+            sigma_v = seeded
+        n_bins = spec_state.spec_lsf_n_bins
+
+        # At a fixed redshift only the rest window the pixels read has to be exact, as in
+        # the exact path (None -> the full grid: free redshift or a traced grid).
+        window = spec_state.spec_rest_window
+
+        def _broaden(row):
+            if window is None:
+                return broaden_velocity_only(row, wave, sigma_v, n_bins)
+            return broaden_velocity_only_window(row, wave, sigma_v, n_bins, *window)
+
+        def _broadened_at_pixels(row):
+            return _at_pixels(_broaden(row))
+
+        total = jnp.einsum("ma,maw->w", joint_weights, ssp_flux_for_csp)
+        per_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
+        return {
+            "stellar_spec_lnu_precomp": _mass_scale_lnu(_broadened_at_pixels(total), total_mass),
+            "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
+                jax.vmap(_broadened_at_pixels)(per_age), total_mass
+            ),
+            "spec_eff_waves": spec_eff,
+        }
 
     def _boundary_fraction_cic(self, fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr):
         """Per-node younger-than-boundary mass fraction, cloud-in-cell kernel."""

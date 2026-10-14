@@ -34,6 +34,12 @@ Timescales
 Bounds are checked once at build, on the declared distribution bounds of
 every parameter whose name ends in ``_myr``, ``_gyr`` or ``_yr``. The
 checks run in ``Parameters.__init__``, never per draw and never inside JIT.
+The check is a unit diagnosis, so two kinds of value are outside its reach:
+an exact zero, which is the same number in every unit and is the declared
+"ongoing" value of the cessation lookbacks (``sfh_const_end_gyr`` and its
+kin, ``0 = star formation continues``), and a log-scale name such as
+``sfh_burst_log_tpeak_myr`` (units ``log10(Myr)``), whose value is not in
+the suffix's unit at all. Negative values are refused with their own message.
 """
 
 from __future__ import annotations
@@ -226,18 +232,27 @@ def check_timescale(value: float | None, name: str) -> None:
     Raises
     ------
     ParameterError
-        If *value* lies outside the plausible range for the suffix (see
-        :data:`TIMESCALE_BOUNDS`). The message names the parameter, value and unit.
+        If *value* is negative, or positive and outside the plausible range for
+        the suffix (see :data:`TIMESCALE_BOUNDS`). The message names the
+        parameter, value and unit. An exact zero always passes: it is the same
+        number in every unit, so it cannot be a unit mistake, and it is the
+        declared "ongoing" value of the cessation lookbacks. A log-scale name
+        (a ``log`` or ``log10`` token before the suffix) is not checked.
     """
     unit = _timescale_unit(name)
     if unit is None or value is None:
         return
     val = float(value)
-    if not math.isfinite(val):
+    if not math.isfinite(val) or val == 0.0:
         return
+    label = unit.lstrip("_")
+    if val < 0.0:
+        raise ParameterError(
+            f"Parameter {name!r} = {val:g} {label} is negative; a timescale is "
+            f"non-negative (0 means 'ongoing' where the parameter allows it)."
+        )
     lo, hi = TIMESCALE_BOUNDS[unit]
     if not lo <= val <= hi:
-        label = unit.lstrip("_")
         raise ParameterError(
             f"Parameter {name!r} = {val:g} {label} is outside the plausible range "
             f"[{lo:g}, {hi:g}] {label}. Check the unit of the value: the suffix "
@@ -269,8 +284,20 @@ def check_timescales(distributions: Mapping[str, object]) -> None:
             check_timescale(bound, name)
 
 
+#: Name tokens that mark a log-scale value (``sfh_burst_log_tpeak_myr`` is
+#: ``log10(Myr)``): the suffix names the unit inside the logarithm, so a linear
+#: plausibility range does not apply.
+_LOG_SCALE_TOKENS: frozenset[str] = frozenset({"log", "log10"})
+
+
 def _timescale_unit(name: str) -> str | None:
-    """Return the timescale suffix of *name*, or ``None`` if it has none."""
+    """Return the timescale suffix of *name*, or ``None`` if it has none.
+
+    A log-scale name (one of :data:`_LOG_SCALE_TOKENS` among its ``_``-separated
+    tokens) has no linear unit and returns ``None``.
+    """
+    if _LOG_SCALE_TOKENS.intersection(name.split("_")):
+        return None
     for unit in TIMESCALE_BOUNDS:
         if name.endswith(unit):
             return unit
