@@ -61,7 +61,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._term_response import term_band_response
-from tengri.components.agn._ir_frac_window import log10_agn_power_from_window
+from tengri.components.agn._ir_frac_window import (
+    PROVISIONAL_TORUS_FRAC,
+    log10_torus_frac_from_window,
+)
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
     reference_evaluation,
@@ -888,29 +891,28 @@ class AGNSEDComponent(TemplateThreading):
             _host = (
                 state.sed_intrinsic if state.sed_intrinsic is not None else jnp.zeros_like(wave)
             )
-            # The build-time below-library index belongs to the extended master grid, not to
-            # the caller's ``wave``; the provisional pass takes the dense path instead.
-            _prov_kwargs = {k: v for k, v in agn_kwargs.items() if k != "torus_below_index"}
-            _L_prov, _, _, _comps_prov = agn_fn(
-                wave,
+            # Same grid and kwargs as the final evaluation (extended master grid, build-time
+            # below-library index), so the provisional D/W carries the final pass's numerics.
+            _wave_ext, _to_caller, _ = _with_diagnostic_nodes(wave)
+            _prov_kwargs = {**agn_kwargs, "agn_torus_frac": PROVISIONAL_TORUS_FRAC}
+            _L_ext, _, _, _ = agn_fn(
+                _wave_ext,
                 agn_log_lbol=agn_log_lbol,
                 return_l2500=True,
                 return_components=True,
                 **_prov_kwargs,
             )
-            _log_power = log10_agn_power_from_window(
+            _L_prov = jnp.take(_L_ext, _to_caller, axis=-1)
+            _log_torus_frac = log10_torus_frac_from_window(
                 wave,
                 _host,
                 _L_prov,
-                _comps_prov["torus"] + _comps_prov["polar"],
                 agn_ir_frac,
                 ir_frac_window[0] * 1.0e4,
                 ir_frac_window[1] * 1.0e4,
             )
             agn_torus_frac_effective = jnp.where(
-                agn_ir_frac > 0.0,
-                _pow10(_log_power - agn_log_lbol - _LOG10_L_SUN),
-                agn_torus_frac_user,
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
             )
         else:
             # log10(agn_power / L_agn_bol)
