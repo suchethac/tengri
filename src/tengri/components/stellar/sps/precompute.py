@@ -43,9 +43,12 @@ from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
     edge_split,
-    lyc_augment_grid_for_step,
+    filter_support_slice,
+    fold_integrand_T,
+    lyc_augment_fold_T,
     preintegrate_grid,
     subband_quadrature,
+    transpose_templates,
 )
 from tengri.utils.physics_constants import LYMAN_LIMIT_AA, TEN_PC_CM
 from tengri.utils.scale import (
@@ -212,7 +215,8 @@ class SpectroscopicPrecomputation(NamedTuple):
     ----------
     ssp_on_pixels : array, shape (n_met, n_age, n_pix)
         SSP flux interpolated to observed spectral pixel wavelengths
-        in rest frame [erg/s/Hz/Msun].
+        in rest frame [erg/s/Hz/Msun], broadened by ``sigma_v_kms`` on the native
+        rest grid first when that is set.
     wave_rest_pixels : array, shape (n_pix,)
         Rest-frame wavelengths of spectral pixels [Angstrom].
     wave_obs_pixels : array, shape (n_pix,)
@@ -223,6 +227,9 @@ class SpectroscopicPrecomputation(NamedTuple):
         :class:`PhotometricPrecomputation` (#1859).
     redshift : float
         Source redshift [dimensionless].
+    sigma_v_kms : float or None
+        Velocity dispersion [km/s] baked into ``ssp_on_pixels``; ``None`` when the
+        table is un-broadened.
 
     Notes
     -----
@@ -237,6 +244,10 @@ class SpectroscopicPrecomputation(NamedTuple):
     wave_obs_pixels: jnp.ndarray
     log10_flux_scale: float
     redshift: float
+    #: Velocity dispersion [km/s] the templates were broadened with on the native rest
+    #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
+    #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
+    sigma_v_kms: "float | None" = None
 
 
 def precompute_photometry(
@@ -467,8 +478,57 @@ def precompute_restband_photometry(
     )
 
 
+def broaden_template_cube(ssp_flux, wave_ssp, sigma_v_kms, n_bins=16):
+    r"""Broaden every SSP template with one velocity dispersion on its native grid.
+
+    Applies :func:`~tengri.observation.spectrum.broaden_velocity_only`, the operation
+    the exact spectrum path applies to the stellar piece, to each ``(metallicity, age)``
+    template on the model wavelength grid. The convolution is linear, so a weighted sum
+    of the broadened templates equals the broadened weighted sum.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (..., n_wave)
+        Template cube [erg/s/Hz/Msun]; every leading axis is mapped over.
+    wave_ssp : array, shape (n_wave,)
+        Native rest-frame wavelength grid [Angstrom].
+    sigma_v_kms : float
+        Velocity dispersion [km/s]. A concrete non-positive value returns the cube
+        unchanged.
+    n_bins : int, default 16
+        Piecewise-constant segment count, as in the exact path.
+
+    Returns
+    -------
+    ndarray, shape (..., n_wave)
+        Broadened cube, float, same shape as ``ssp_flux``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; templates are mapped in batches with ``jax.lax.map`` so
+    peak memory stays bounded. **Gradient-safe**: yes, though it is a build-time
+    routine and is not differentiated in practice.
+    """
+    from tengri.observation.spectrum import broaden_velocity_only
+
+    flux = jnp.asarray(ssp_flux)
+    if not isinstance(sigma_v_kms, jax.Array) and float(sigma_v_kms) <= 0.0:
+        return flux
+    wave = jnp.asarray(wave_ssp)
+    flat = flux.reshape(-1, flux.shape[-1])
+    out = jax.lax.map(
+        lambda row: broaden_velocity_only(row, wave, sigma_v_kms, n_bins),
+        flat,
+        batch_size=_TEMPLATE_BROADEN_BATCH,
+    )
+    return out.reshape(flux.shape)
+
+
+_TEMPLATE_BROADEN_BATCH = 32  # templates per lax.map step: bounds the FFT working set
+
+
 def precompute_spectroscopy(
-    ssp_data, wave_obs_pixels, redshift, dl_cm
+    ssp_data, wave_obs_pixels, redshift, dl_cm, *, sigma_v_kms=None, n_bins=16
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -485,11 +545,19 @@ def precompute_spectroscopy(
         Source redshift (dimensionless).
     dl_cm : float
         Luminosity distance [cm].
+    sigma_v_kms : float, optional
+        Fixed stellar velocity dispersion [km/s]. When given, every template is
+        broadened by it on the native rest grid BEFORE it is sampled at the pixels,
+        as the exact path does (see :func:`broaden_template_cube`); sampling first
+        would alias sharp stellar features. ``None`` leaves the table un-broadened.
+    n_bins : int, default 16
+        Piecewise segment count of the broadening.
 
     Returns
     -------
     SpectroscopicPrecomputation
-        Pre-rebinned SSP data for :func:`fast_spectrum`.
+        Pre-rebinned SSP data for :func:`fast_spectrum`. ``sigma_v_kms`` records the
+        dispersion baked in.
 
     Notes
     -----
@@ -506,6 +574,10 @@ def precompute_spectroscopy(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
+    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0:
+        ssp_flux_np = np.asarray(
+            broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
+        )
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
@@ -532,6 +604,7 @@ def precompute_spectroscopy(
         wave_obs_pixels=wave_obs_pixels,
         log10_flux_scale=log10_flux_scale_out,
         redshift=redshift_out,
+        sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),
     )
 
 
@@ -760,7 +833,16 @@ class ZTableRequest:
 # as differences of one running total, removing a cancellation error of up to
 # 2.5e-7 relative in faint (Lyman-side) sub-bands of ``ssp_subband_phot_table``.
 # No hashed field changes.
-_ZTABLE_CACHE_VERSION = 8
+#
+# 8 -> 9 (#2769): the SSP fold reads the templates through a transposed,
+# row-sliced layout (``transpose_templates`` / ``fold_integrand_T``) and the bare
+# and folded templates are stacked by one concatenate, not by a per-filter copy.
+# That reorders the BLAS sums, so stored values move at reordering level: up to
+# 6e-15 relative on ``ssp_phot_table`` / ``ssp_phot_nolyc_table`` and 3.7e-14 of
+# the term scale on ``ssp_phot_moment_table`` (lyc_gate). The interpolation fold
+# that preceded it (#2769) changed the same tables the same way, so a version-8
+# entry is not mixed with new output.
+_ZTABLE_CACHE_VERSION = 9
 
 
 def _ztable_cache_dir():
@@ -1082,6 +1164,10 @@ def _compute_photometry_ztable(
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
+    # The SSP grid in the transposed layout, built once: every (z, filter) fold reads
+    # its rows as a view (#2769).
+    ssp_flux_T = transpose_templates(ssp_flux_np)
+    ssp_lead = ssp_flux_np.shape[:-1]
 
     # Filter effective wavelengths (z-independent pivot for the IGM lookup)
     # under the bandpass weight w(λ) (ADR-0017): λ_eff = ∫ λ T w dλ / ∫ T w dλ,
@@ -1127,15 +1213,10 @@ def _compute_photometry_ztable(
         # the LUT and exact paths agree.
         for f_idx, (fw_np, ft_np) in enumerate(filter_np):
             grid = np.sort(np.concatenate([wave_obs, fw_np]))
-            # Transmission is identically zero outside the filter table's
-            # support (left=0/right=0 below), so union-grid segments with
-            # both endpoints beyond an edge integrate to exactly zero.
-            # Keep one node past each edge (the straddle segments) and drop
-            # the rest: the SSP grid spans 91 Å–100 µm while a band
-            # transmits over a narrow window, so this cuts the quadrature
-            # ~10–50× at identical integral values.
-            lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
-            hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+            # Integrate over the filter's support only (#2817, the exact path's
+            # rule). The SSP grid spans 91 Å–100 µm while a band transmits over a
+            # narrow window, so this also cuts the quadrature ~10–50×.
+            lo, hi = filter_support_slice(grid, fw_np)
             grid = grid[lo:hi]
             trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
             tw_np = trans_on_grid * _filter_weight_np(grid, convention)
@@ -1147,8 +1228,10 @@ def _compute_photometry_ztable(
                 _np_trapezoid(tw_np * grid, grid) / max(denom, 1e-30) / (1.0 + z_val)
             )
 
-            ssp_on_grid = _vectorized_interp(grid, wave_obs, ssp_flux_np)
-            integrand = ssp_on_grid * tw_np[None, None, :]
+            # The SSP interpolation is folded into the quadrature weights (#2769):
+            # no (met, age, m) integrand is ever built, every consumer below reads
+            # the SSP row through ``fold`` instead.
+            fold = fold_integrand_T(grid, tw_np, wave_obs, ssp_flux_T, ssp_lead)
 
             # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
             # nebular Lyman-continuum mask) -- a model without one never
@@ -1164,17 +1247,25 @@ def _compute_photometry_ztable(
             # one side has exactly zero in the other half.
             lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
             if lyc_gate:
-                grid_q, integrand_q, tw_q = lyc_augment_grid_for_step(
-                    grid, tw_np, wave_obs, ssp_flux_np, fw_np, ft_np, lyc_wave_obs, convention
+                grid_q, fold_q, tw_q = lyc_augment_fold_T(
+                    grid,
+                    tw_np,
+                    wave_obs,
+                    ssp_flux_T,
+                    ssp_lead,
+                    fw_np,
+                    ft_np,
+                    lyc_wave_obs,
+                    convention,
                 )
                 denom_q = _np_trapezoid(tw_q, grid_q)
-                num = _np_trapezoid(integrand_q, grid_q, axis=-1)
-                lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+                num = fold_q.trapezoid()
+                lyc_num, above_num = edge_split(fold_q, grid_q, lyc_wave_obs)
                 ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
                 ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom_q, 1e-30)
             else:
-                grid_q, integrand_q, tw_q, denom_q = grid, integrand, tw_np, denom
-                num = _np_trapezoid(integrand, grid, axis=-1)
+                grid_q, fold_q, tw_q, denom_q = grid, fold, tw_np, denom
+                num = fold.trapezoid()
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom_q, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
@@ -1183,10 +1274,7 @@ def _compute_photometry_ztable(
             if taylor_correction:
                 lambda_rest_per_obs = grid / (1.0 + z_val)
                 lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
-                moment_integrand = (
-                    ssp_on_grid * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
-                )
-                moment_num = _np_trapezoid(moment_integrand, grid, axis=-1)
+                moment_num = fold.trapezoid(lambda_minus_eff)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
 
             # Sub-band quadrature (#1122): same helper the fixed-z precompute
@@ -1200,7 +1288,7 @@ def _compute_photometry_ztable(
                 phi_k, nodes_obs = subband_quadrature(
                     grid_q,
                     tw_q,
-                    integrand_q,
+                    fold_q,
                     denom_q,
                     K,
                     float(eff_waves_obs[f_idx]),

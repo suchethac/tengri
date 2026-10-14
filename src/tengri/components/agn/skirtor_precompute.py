@@ -22,12 +22,11 @@ from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._phys import C_LIGHT as _C_CGS
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    library_lookup,
     loglog_integral,
     preintegrate_grid,
     slice_fixed_axes,
 )
-from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
@@ -231,7 +230,6 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     if grid_arrays_traced is not None:
         # Runtime-passed arrays (JIT-traced): no closure capture
@@ -251,7 +249,6 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
 
             Returns filter-integrated L_nu [erg/s/Hz] at runtime.
             """
-            edges_traced = tuple(edges_for_grid(ax) for ax in axes_traced)
             l_bol_lsun = 10.0**agn_log_lbol
             point = (
                 agn_tau_skirtor,
@@ -263,9 +260,7 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
             # ``index_space_interp=True`` to match the runtime spectral path
             # (#1911); leaving it off here would make precompute and runtime
             # disagree on the non-uniform cos_inclination axis.
-            phot_per_lsun = interp_nd_triweight(
-                grid_phot_traced, axes_traced, edges_traced, point, index_space_interp=True
-            )
+            phot_per_lsun = library_lookup(grid_phot_traced, axes_traced, point)
             return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
         # Return wrapper that inserts traced arrays
@@ -318,7 +313,7 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
             agn_cos_inc,
         )
         # Matches the traced branch above and the runtime spectral path (#1911).
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point, index_space_interp=True)
+        phot_per_lsun = library_lookup(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot
@@ -436,7 +431,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: lookup takes (scale, *remaining_axis_values, torus_frac)
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def skirtor_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
@@ -446,9 +440,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """
         # Same unit convention as build_skirtor_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
+        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot_collapsed

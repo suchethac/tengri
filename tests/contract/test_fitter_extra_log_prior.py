@@ -50,7 +50,9 @@ def _tophat(center, frac=0.16, n=40):
     return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
 
 
-_PHOT = Photometry(filters=tuple(_tophat(c) for c in (3500.0, 4800.0, 6200.0)))
+# Centers sit inside the toy SSP axis at z=0.5 (observed [4500, 15000] A), so no band
+# trips the #2620 coverage refusal; the bluest band reaches 5040 A at its short edge.
+_PHOT = Photometry(filters=tuple(_tophat(c) for c in (6000.0, 7000.0, 8000.0)))
 
 
 def _build_model(ssp):

@@ -130,7 +130,12 @@ def _load(model):
 
 
 def _published_erg(comp, overrides):
-    """Published erg/s luminosities of ``comp`` at its defaults with ``overrides`` applied."""
+    """Published luminosities [Lsun] of ``comp`` at its defaults with ``overrides`` applied.
+
+    The float32-safe published powers are the ``L_agn_<piece>_lsun`` siblings of the
+    ``log_L_agn_<piece>`` keys (NAMING_CONTRACT 4c). They are read in Lsun, since the dex keys
+    carry ~4e-6 dex of float32 rounding, more than the 1e-6 tolerance.
+    """
     prefix = comp.parameter_prefix
     wave = jnp.asarray(_CALLER_WAVE)
     p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
@@ -140,7 +145,7 @@ def _published_erg(comp, overrides):
     return {
         k: float(np.asarray(v))
         for k, v in published.items()
-        if k.startswith("L_") and k not in _MONOCHROMATIC
+        if k.startswith("L_agn_") and k.endswith("_lsun") and k not in _MONOCHROMATIC
     }
 
 

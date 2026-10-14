@@ -32,11 +32,15 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
+from tengri.utils.host_array import device_table
+
 __all__ = [
     "BASE_PER_DECADE",
     "GL_ORDER",
     "PUBLICATION_HI_NM",
     "WINDOW_SIGMA",
+    "bolometric_unit_nm",
     "gauss_legendre_segments",
     "linewidth_sigma_nm",
     "publication_breakpoints",
@@ -60,8 +64,8 @@ The SMC-broken BBB falls as lambda**(alpha_2 - 1) beyond its cutoff, so a shallo
 corners of the declared prior (plslope -2.7 to -1.0, bend 50-150 nm, width 0.1-10, cutoff
 10 um), is at most 1.44e-4 past 1e8 nm and **1.9e-10 past 1e14 nm** (measured, with the
 integral taken to 1e40 nm); the worst corner is plslope = -1 with bend width 10. The grid
-therefore runs to 1e14 nm and the published ``L_agn_bol`` and ``L_agn_absorbed`` and the disc
-block normalization are low by at most that fraction.
+therefore runs to 1e14 nm and the published ``log_L_agn_bol`` and ``log_L_agn_absorbed`` and
+the disc block normalization are low by at most that fraction.
 """
 
 _WINDOW_OFFSETS: np.ndarray = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
@@ -109,7 +113,7 @@ def window_edges(center_nm: Array, sigma_nm: Array) -> Array:
     """
     center = jnp.atleast_1d(jnp.asarray(center_nm))
     sigma = jnp.broadcast_to(jnp.asarray(sigma_nm), center.shape)
-    offsets = jnp.asarray(_WINDOW_OFFSETS)
+    offsets = device_table(_WINDOW_OFFSETS)
     return (center[:, None] + offsets[None, :] * sigma[:, None]).ravel()
 
 
@@ -171,3 +175,28 @@ def gauss_legendre_segments(breaks_nm: Array) -> tuple[Array, Array]:
     lam = jnp.exp(log_lam)
     weight = half * w[None, :] * lam
     return lam.ravel(), weight.ravel()
+
+
+def bolometric_unit_nm(unit_fn, node_arrays=()) -> Array:
+    r"""Bolometric integral above the Lyman limit of a unit-l5100 disc spectrum.
+
+    The one converged normalization integral of the GRAHSP disc. Integrated on the
+    component's own publication grid (segmented Gauss-Legendre in ln lambda between
+    the template nodes in ``node_arrays``), never on the caller's wavelength array,
+    so the normalization does not depend on how the caller samples wavelength.
+
+    Parameters
+    ----------
+    unit_fn : callable
+        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
+    node_arrays : sequence of array_like, optional
+        Template wavelength nodes [nm] that the spectrum is interpolated on.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int_{91.2\,\mathrm{nm}}^{\infty} L_\lambda\,\mathrm{d}\lambda` [erg/s].
+    """
+    breaks = publication_breakpoints(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, (), node_arrays)
+    lam_nm, weight_nm = gauss_legendre_segments(breaks)
+    return jnp.sum(weight_nm * unit_fn(lam_nm))

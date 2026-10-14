@@ -193,9 +193,11 @@ class TestSpectrumLUTAccuracy:
 
 
 class TestSpectrumLUTGuards:
-    """High-R auto-fallback and gradient flow."""
+    """High-R behavior and gradient flow."""
 
-    def test_high_r_auto_fallback_warns(self):
+    def test_high_r_stays_on_the_lut(self):
+        # Re-pinned: the LUT applies the instrument kernel and matches the exact path at
+        # R = 5000 (8e-4), so the old R > 3000 fallback no longer exists.
         ssp_path = _ssp_path()
         if ssp_path is None:
             pytest.skip("No SSP grid available under data/.")
@@ -223,8 +225,8 @@ class TestSpectrumLUTGuards:
                 redshift=Fixed(0.05),
                 approx=SpectrumPrecomp(),
             )
-        assert m._approx.get("spectrum_precomp") is False
-        assert any("falls back" in str(w.message) for w in caught)
+        assert m._approx.get("spectrum_precomp") is True
+        assert not any("falls back" in str(w.message) for w in caught)
 
     def test_gradient_flows_through_lut(self):
         ssp_path = _ssp_path()

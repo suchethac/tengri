@@ -560,6 +560,8 @@ def project_spectrum_kernel_split(
     from tengri.observation.spectrum import (
         broaden_velocity_only,
         broaden_velocity_only_window,
+        compute_spectrum,
+        instrument_stage_on_pixels,
         project_spectrum,
         rest_grid_observed_window,
     )
@@ -738,6 +740,28 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+            )
+        elif not conserving:
+            # Point-sampled pixels: resample each piece and apply the shared instrument
+            # stage on the pixel grid (#2958; the LUT runs the same function).
+            flux = instrument_stage_on_pixels(
+                compute_spectrum(
+                    sed_stellar, wave_rest, wave_obs, redshift, dl_cm, has_lyc_edge=has_lyc_edge
+                ),
+                compute_spectrum(
+                    sed_instrument_only,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    has_lyc_edge=has_lyc_edge,
+                ),
+                wave_obs=wave_obs,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                lsf_scale=lsf_scale,
+                n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
             )
         else:
             resolution_scaled = resolution / lsf_scale
@@ -2393,18 +2417,98 @@ class Observation:
             return observables_type(phot_fnu, phot_rest_fnu)
         return out
 
+    def _lut_lsf_fnu(
+        self,
+        total_lnu,
+        nebular_lnu,
+        log10_cos,
+        igm_factor,
+        *,
+        sigma_lib_kms,
+        lsf_scale,
+    ):
+        """Observed F_nu on the pixel grid after IGM and the exact path's instrument stage.
+
+        Stage 3 of the exact path. The velocity dispersion (stage 1) is already in the
+        stellar family, which the stellar component broadens on the model grid before
+        sampling. The two buckets follow the exact path's assignment: the
+        instrument-only bucket is the dust-attenuated nebular emission and the stellar
+        bucket is the remainder of the sum.
+
+        Parameters
+        ----------
+        total_lnu : ndarray, shape (n_pix,)
+            Sum of every dust-attenuated per-pixel family [erg/s/Hz].
+        nebular_lnu : ndarray, shape (n_pix,)
+            Dust-attenuated nebular family, the instrument-only bucket [erg/s/Hz].
+        log10_cos : float or traced scalar
+            log10 of the cosmology factor ``(1 + z) / (4 pi d_L^2)``.
+        igm_factor : ndarray, shape (n_pix,), or None
+            Observed-frame IGM transmission at the pixels; ``None`` when no IGM is set.
+        sigma_lib_kms : float or ndarray, shape (n_pix,)
+            SSP library resolution [km/s].
+        lsf_scale : float or traced scalar
+            Multiplicative scale on the instrument width.
+
+        Returns
+        -------
+        ndarray, shape (n_pix,)
+            Observed F_nu [erg/s/cm^2/Hz] before calibration.
+
+        Raises
+        ------
+        ValueError
+            If the observation carries a banded resolution matrix. The LUT cannot carry
+            a banded operator; ``SEDModel`` falls back to the exact path at build time.
+
+        Notes
+        -----
+        **JIT-compatible**: yes; the branch on ``resolution_matrix`` is structural.
+
+        The stage order :math:`\\sigma_v \to` IGM :math:`\to` instrument holds on the LUT
+        as on the exact path.
+        """
+        from tengri.observation.spectrum import instrument_stage_on_pixels
+
+        spectro = self.spectroscopy
+        if spectro.resolution_matrix is not None:
+            raise ValueError(
+                "the spectrum LUT cannot apply a banded resolution_matrix; "
+                "build with approx=None for this observation (#2958)."
+            )
+        stellar_fnu = apply_log10_scale(total_lnu - nebular_lnu, log10_cos)
+        nebular_fnu = apply_log10_scale(nebular_lnu, log10_cos)
+        if igm_factor is not None:
+            stellar_fnu = stellar_fnu * igm_factor
+            nebular_fnu = nebular_fnu * igm_factor
+        return instrument_stage_on_pixels(
+            stellar_fnu,
+            nebular_fnu,
+            wave_obs=spectro.wave_obs,
+            resolution=spectro.resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            lsf_scale=lsf_scale,
+        )
+
     def predict_spectrum_via_precomp(
         self,
         state,
         params,
         *,
         observables_type=None,
+        sigma_lib_kms=0.0,
+        lsf_scale=1.0,
     ):
         """Project spectrum observables via the spectrum LUT.
 
         Opt-in fast path for ``approx=SpectrumPrecomp()``. Sums all ``*_spec_lnu_precomp``
         keys present in ``state.derived`` and applies the cosmology factor
-        ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+        ``(1+z)/(4π·dl²)`` to convert to observed F_ν. It runs the exact path's three
+        stages in the same order: the stellar velocity dispersion is already in the
+        stellar family (broadened on the model grid by the stellar component), the IGM
+        factor multiplies next, and the instrument stage runs on the pixel grid via
+        :func:`~tengri.observation.spectrum.instrument_stage_on_pixels`. With
+        ``resolution=None`` there is no instrument stage.
 
         Parameters
         ----------
@@ -2417,6 +2521,10 @@ class Observation:
             Per-model :class:`Observables` NamedTuple class (from
             :meth:`SEDModel.Observables`). When provided, returns an
             instance; when ``None``, returns a dict.
+        sigma_lib_kms : float or ndarray, shape (n_pix,), default 0.0
+            SSP library resolution [km/s] subtracted from the stellar bucket.
+        lsf_scale : float or traced scalar, default 1.0
+            Multiplicative scale on the instrument width (#2526).
 
         Returns
         -------
@@ -2467,6 +2575,9 @@ class Observation:
         t_diff = state.derived.get("dust_spec_diff_transmission_precomp")
         t_single = state.derived.get("dust_spec_transmission_precomp")
         per_age = state.derived.get("stellar_spec_lnu_per_age_precomp")
+        # The instrument-only bucket (nebular emission after dust), mirroring the exact
+        # path's ``sed_nebular`` group; the stellar bucket is the remainder.
+        nebular_dust = nebular_phi
 
         if t_bc is not None and t_diff is not None and per_age is not None:
             # Two-component (Charlot & Fall): each node mixes the young population
@@ -2481,10 +2592,12 @@ class Observation:
             # publishes its screen at the pixels, the interval mixture weighted by
             # each interval's share of the ionizing luminosity.
             nebular_attenuated = state.derived["dust_spec_neb_transmission_precomp"] * nebular_phi
+            nebular_dust = nebular_attenuated
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
+            nebular_dust = nebular_phi * t_single
         # else: no dust LUT published, leave total_spec_lnu unattenuated.
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
@@ -2493,7 +2606,7 @@ class Observation:
         )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         log10_cos = log10_flux_scale(z, dl_cm)
-        spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
+        spectro = self.spectroscopy
 
         # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
         from tengri.utils.physics_constants import TEN_PC_CM
@@ -2519,8 +2632,22 @@ class Observation:
             # Fallback: patchy / DLA read free parameters, so the transmission is
             # not a function of redshift alone and cannot be tabulated.
             igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
-        if igm_factor is not None:
-            spec_fnu = spec_fnu * igm_factor
+        # Without a resolution there is no instrument kernel: the un-convolved sample,
+        # bit-for-bit as before #2958. With one, the exact path's instrument stage runs on
+        # the pixel grid (see ``_lut_lsf_fnu``); sigma_v is already in the stellar family.
+        if spectro.resolution is None:
+            spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
+            if igm_factor is not None:
+                spec_fnu = spec_fnu * igm_factor
+        else:
+            spec_fnu = self._lut_lsf_fnu(
+                total_spec_lnu,
+                nebular_dust,
+                log10_cos,
+                igm_factor,
+                sigma_lib_kms=sigma_lib_kms,
+                lsf_scale=lsf_scale,
+            )
 
         # Flux calibration, the same Chebyshev polynomial the exact path applies
         # inside ``project_spectrum`` (#1046). The LUT path must apply it itself:

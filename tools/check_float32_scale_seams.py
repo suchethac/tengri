@@ -179,7 +179,7 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "(``utils.scale.apply_log10_scale``, #1388).",
         (
             "tengri.components.agn._template_grid:torus_lnu_from_grid",
-            "tengri.components.agn.adaf:adaf_scalar_state",
+            "tengri.components.agn.adaf:_adaf_mdot_of_log_lbol",
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
             "tengri.components.agn.blocks.nlr:nlr_analytic_block",
@@ -190,7 +190,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.disc:_compute_bh_params",
             "tengri.components.agn.disc:kubota_done_disc",
             "tengri.components.agn.disc:multicolor_disc",
-            "tengri.components.agn.disc:powerlaw_disc",
             "tengri.components.agn.disc:relagn_disc_from_grid",
             "tengri.components.agn.fritz:create_fritz_components_from_grid.fritz_components",
             "tengri.components.agn.fritz:create_fritz_from_grid.fritz_grid",

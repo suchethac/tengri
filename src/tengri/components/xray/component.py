@@ -11,8 +11,9 @@ Cross-component reads
 X-ray depends on quantities owned by other components:
 
 - ``sfr_100myr`` (M_⊙/yr): the SFR averaged over the last 100 Myr, produced
-  by the stellar component. The HMXB and hot-gas relations (Lehmer et al.
-  2016) are calibrated on it (Yang et al. 2022, Sect. 3.3). Read from
+  by the stellar component. The HMXB and hot-gas relations are
+  calibrated on it (Lehmer et al. 2019, 2021, as adopted by Yang et al. 2022,
+  Sect. 3.3). Read from
   ``state.derived["sfr_100myr"]``; only when the SFH publishes no 100 Myr
   average does the instantaneous ``state.derived["sfr"]`` stand in, and
   failing that 1.0.
@@ -20,13 +21,14 @@ X-ray depends on quantities owned by other components:
   Read from ``state.derived["log_mstar"]`` with a fallback to 10.0
   (i.e. 10¹⁰ M_⊙). X-ray's ``xray_total`` consumes the linear stellar
   mass in M_⊙, so the adapter exponentiates: ``M_* = 10**log_mstar``.
-- ``L_agn_bol`` (erg/s): produced by the AGN component. Read from
-  ``state.derived["L_agn_bol"]`` with a fallback to 0.0 (no AGN).
+- ``log_L_agn_bol`` (dex re erg/s): produced by the AGN component. Read from
+  ``state.derived["log_L_agn_bol"]``; absent means no AGN. The erg/s ``L_agn_bol`` is not read:
+  ~1e44 erg/s is ``inf`` in float32.
 - ``log_L_12um`` (dex re erg/s): νL_ν at 12 µm of the AGN disc, torus and polar
   dust, produced by the AGN component; anchors the ``lopez24`` corona. Absent
   means no AGN, and the corona is exactly zero.
 - ``log_metallicity_history`` (dex, absolute log10(Z)): produced by the
-  stellar component. Its present-day bin drives the Lehmer+2016 HMXB
+  stellar component. Its present-day bin drives the Fragos+2013 HMXB
   metallicity term; falls back to :data:`~tengri.utils.physics_constants.Z_SUN`
   when no stellar component is present (#1755).
 - ``redshift``: bare parameter from :data:`BARE_NAME_ALLOWLIST`,
@@ -47,11 +49,16 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components._term_response import term_band_response as _term_band_response
+from tengri.components._term_response import (
+    term_band_response as _term_band_response,
+    term_shape_response as _term_shape_response,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
+    l_2500_from_bolometric,
+    lmxb_stellar_age_gyr,
     metallicity_from_history,
     xray_total_log_band_luminosities,
     xray_total_lopez24_log_band_luminosities,
@@ -66,7 +73,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.scale import log10_add, representable_denominator
+from tengri.utils.scale import log10_add
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -109,7 +116,7 @@ class XRaySEDComponent(TemplateThreading):
     The physics covers two channels combined inside :func:`xray_total`:
 
     - X-ray binaries (HMXB + LMXB) scaling with SFR and M_*
-      (Lehmer et al. 2010, 2016).
+      (Fragos et al. 2013, as adopted by Yang et al. 2020, 2022).
     - AGN corona via the alpha_ox–L_2500 relation (Lusso & Risaliti 2016).
 
     Both default to small (or zero) contributions when the cross-component
@@ -178,7 +185,7 @@ class XRaySEDComponent(TemplateThreading):
                 "sfr_100myr",
                 "Msun/yr",
                 "SFR averaged over the last 100 Myr (stellar); scales the HMXB and "
-                "hot-gas terms (Lehmer+2016; Yang+2022 Sect. 3.3)",
+                "hot-gas terms (Lehmer+2019, 2021; Yang+2022 Sect. 3.3)",
             ),
             DerivedKey(
                 "sfr",
@@ -192,9 +199,9 @@ class XRaySEDComponent(TemplateThreading):
                 "Read from stellar if present; falls back to 10.0",
             ),
             DerivedKey(
-                "L_agn_bol",
-                "erg/s",
-                "Read from AGN if present; falls back to 0.0",
+                "log_L_agn_bol",
+                "dex",
+                "Read from AGN if present; absent means no AGN",
             ),
             DerivedKey(
                 "L_2500_intrinsic",
@@ -219,9 +226,16 @@ class XRaySEDComponent(TemplateThreading):
                 "falls back to the Yang+2020 30-degree anchor (#980)",
             ),
             DerivedKey(
+                "age_weights_surviving",
+                "Msun",
+                "SSP surviving-mass weights (stellar): the mass-weighted age that drives "
+                "the LMXB scaling",
+            ),
+            DerivedKey(
                 "age_weights",
                 "Msun",
-                "SSP mass weights (stellar): mass-weighted age drives the LMXB scaling",
+                "SSP formed-mass weights (stellar): the fallback when no surviving "
+                "weights are published",
             ),
             DerivedKey(
                 "ssp_ages_yr",
@@ -232,7 +246,7 @@ class XRaySEDComponent(TemplateThreading):
                 "log_metallicity_history",
                 "dex",
                 "log10(Z) per SFH bin (stellar); its present-day bin drives the "
-                "Lehmer+2016 HMXB metallicity term",
+                "Fragos+2013 HMXB metallicity term",
             ),
         )
 
@@ -246,6 +260,33 @@ class XRaySEDComponent(TemplateThreading):
         r"""No-op precompute. X-ray is a closed-form function of (λ, params)."""
         del ssp_data, wave_grid, filters
         return XRaySEDComponentState(name=self.name)
+
+    #: Term order of :meth:`emission_terms`, the order the shape-only tables are read in.
+    TERM_NAMES: ClassVar[tuple[str, ...]] = ("hmxb", "lmxb", "hotgas", "agn")
+
+    def term_shape_keys(self) -> dict[str, str]:
+        """Registry key of each term whose shape-only band table this emitter can use.
+
+        The XRB terms (HMXB, LMXB, hot gas) share the ``xray_xrb`` adapter; the AGN corona
+        uses ``xray_corona`` (Yang+20 alpha_ox) or ``xray_corona_lopez24`` (alpha_IRX), by
+        ``config.model``. Every term has an adapter, so the emitter gets all four or none.
+
+        Returns
+        -------
+        dict of str to str
+            ``{term: registry key}`` in :attr:`TERM_NAMES` order.
+
+        Notes
+        -----
+        **JIT-compatible**: no, configuration read.
+        """
+        agn_key = "xray_corona_lopez24" if self.config.model == "lopez24" else "xray_corona"
+        return {
+            "hmxb": "xray_xrb",
+            "lmxb": "xray_xrb",
+            "hotgas": "xray_xrb",
+            "agn": agn_key,
+        }
 
     def apply(
         self,
@@ -304,6 +345,15 @@ class XRaySEDComponent(TemplateThreading):
 
             # Compute precomputed photometry if band response is available.
             precomputed = None
+            shape = None
+            if band is None:
+                # A shape parameter is free: each term's band flux comes from its shape-only
+                # table at the current shape, times the term at its own reference wavelength.
+                shape = _term_shape_response(template_data, "xray", params, self.TERM_NAMES)
+            if shape is not None:
+                ref = self.emission_terms(params, shape["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())])
+                precomputed = amps @ shape["R"]
             if band is not None:
                 # Exact fast path. X-ray is a sum of rank-1 terms; HMXB, LMXB, hot
                 # gas, corona: each a scalar amplitude times a spectral shape fixed
@@ -405,7 +455,7 @@ class XRaySEDComponent(TemplateThreading):
             ``metallicity_z`` [mass fraction], ``l_2500`` [erg/s/Hz],
             ``cos_inc`` [dimensionless], ``log_l_12um`` [dex re erg/s].
         """
-        # Lehmer+2016 calibrate the HMXB and hot-gas relations on the SFR
+        # Lehmer+2019, 2021 characterize the HMXB and hot-gas relations on the SFR
         # averaged over the last 100 Myr, and X-CIGALE >= 2022 reads
         # ``sfh.sfr100Myrs`` for them (Yang+2022, Sect. 3.3): HMXB emission
         # varies on ~10 Myr timescales, so the instantaneous SFR is not the
@@ -416,27 +466,36 @@ class XRaySEDComponent(TemplateThreading):
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-
-        # LMXB scaling (Lehmer+2016) is a steep polynomial in the stellar-
-        # population age, so it must see the galaxy's actual age: not the
-        # 1 Gyr default. Compute the SSP mass-weighted age from the stellar
-        # component's published age weights (matches CIGALE's
-        # ``stellar.age_m_star``). Without this the LMXB, which dominates the
-        # galaxy X-ray: over-predicts by ~3x for an evolved (~3 Gyr)
-        # population. Falls back to 1 Gyr only if the weights are absent.
-        age_weights = jnp.asarray(derived.get("age_weights", 0.0))
-        ssp_ages_yr = jnp.asarray(derived.get("ssp_ages_yr", 0.0))
-        _w_sum = jnp.sum(age_weights)
-        stellar_age_gyr = jnp.where(
-            _w_sum > 0.0,
-            jnp.sum(age_weights * ssp_ages_yr)
-            / jnp.maximum(_w_sum, representable_denominator(1e-30))
-            / 1.0e9,
-            1.0,
+        _log_l_bol_pub = derived.get("log_L_agn_bol")
+        log_l_agn_bol = (
+            jnp.asarray(-jnp.inf) if _log_l_bol_pub is None else jnp.asarray(_log_l_bol_pub)
         )
 
-        # The HMXB half of Lehmer+2016 is a quartic in Z, and steeper than the
+        # The LMXB scaling is a steep polynomial in the stellar-population age
+        # (Fragos+2013, Eq. 4: L_X/M_star against the "mass-weighted mean stellar
+        # age of the population"), so it must see the galaxy's actual age, not
+        # the 1 Gyr default; without it the LMXB, which dominates the galaxy
+        # X-ray, over-predicts by ~3x for an evolved (~3 Gyr) population.
+        #
+        # The age is weighted by the SURVIVING mass per SSP age bin, the same
+        # stellar mass (``log_mstar``) the LMXB luminosity multiplies, so the
+        # relation's age and mass describe one population. Weighting by the
+        # formed mass (``age_weights``) overstated the age by 1.7% on a delayed
+        # tau = 1 Gyr, 5 Gyr SFH (3.1755 against 3.1247 Gyr) and so understated
+        # the LMXB by about 2%. CIGALE's ``stellar.age_m_star`` is also
+        # surviving-mass weighted (``bc03.py``: weights ``m_star * sfh``), but
+        # that is agreement, not the definition. Falls back to the formed-mass
+        # weights when the stellar component publishes no surviving ones, and to
+        # 1 Gyr only if there are no weights at all.
+        # A declared-but-unpublished optional input arrives as a 0-d zero, not as
+        # a missing key; the shared helper reads "absent" as "sums to zero".
+        stellar_age_gyr = lmxb_stellar_age_gyr(
+            derived.get("age_weights_surviving", 0.0),
+            derived.get("age_weights", 0.0),
+            derived.get("ssp_ages_yr", 0.0),
+        )
+
+        # The HMXB half of Fragos+2013 (Eq. 3) is a quartic in Z, and steeper than the
         # LMXB age term above: an 18x spread across met_logzsol in [-1, +0.3].
         # HMXBs trace the instantaneous SFR, so the metallicity that matters is
         # the one the *young* population was born with, the present-day bin of
@@ -459,7 +518,7 @@ class XRaySEDComponent(TemplateThreading):
         L_2500 = jnp.asarray(derived.get("L_2500_intrinsic", 0.0))
         L_2500_skirtor = jnp.asarray(derived.get("L_2500_30deg", 0.0))
         # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
-        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
+        L_2500_fallback = l_2500_from_bolometric(log_l_agn_bol)
         l_2500 = jnp.where(
             L_2500 > 0.0,
             L_2500,
@@ -520,14 +579,14 @@ class XRaySEDComponent(TemplateThreading):
         wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
         sfr : array_like, scalar
-            SFR averaged over the last 100 Myr [Msun/yr] (Lehmer et al. 2016;
+            SFR averaged over the last 100 Myr [Msun/yr] (Lehmer et al. 2019, 2021;
             Yang et al. 2022, Sect. 3.3): sets the HMXB and hot-gas amplitudes.
         stellar_mass : array_like, scalar
             Stellar mass [Msun]: sets the LMXB amplitude.
         stellar_age_gyr : array_like, scalar
-            Mass-weighted stellar age [Gyr]: Lehmer+2016 LMXB age term.
+            Surviving-mass-weighted stellar age [Gyr]: Fragos+2013 Eq. 4 LMXB age term.
         metallicity_z : array_like, scalar
-            Present-day metallicity [mass fraction, absolute Z]: Lehmer+2016
+            Present-day metallicity [mass fraction, absolute Z]: Fragos+2013
             HMXB metallicity term. []
         l_2500 : array_like, scalar
             Disc L_nu at rest-frame 2500 A seen at 30 deg [erg/s/Hz]; drives the
@@ -549,7 +608,8 @@ class XRaySEDComponent(TemplateThreading):
         **JIT/grad/vmap-safe.** Pure ``jnp``; the model branch is a static config read.
 
         Each term is *rank-1* in wavelength, a scalar amplitude times a spectral shape
-        set only by the shape parameters (photon indices, ``E_cut``, ``log_nh``). The
+        set only by the shape parameters (photon indices, the corona's ``E_cut``, ``log_nh``;
+        the XRB cutoff is the fixed 100 keV of Yang+2020). The
         amplitudes need not be *linear* in their inputs, and are not: ``alpha_ox``
         depends on ``log10(l_2500)``, so the corona amplitude is a power law in it. That
         is irrelevant: it is still a scalar, and a scalar is all the factorization needs.
@@ -560,7 +620,7 @@ class XRaySEDComponent(TemplateThreading):
         """
         if self.config.model == "lopez24":
             # α_IRX corona (Lopez+2024): L_X(2-10 keV) = νLν(12µm) / 10^α_IRX,
-            # shared Lehmer+2016 XRBs (age-aware LMXB, #854) + hot gas.
+            # shared Fragos+2013 XRBs (age-aware LMXB, #854) + hot gas.
             return xray_total_lopez24_terms(
                 wave,
                 sfr=sfr,
@@ -597,7 +657,7 @@ class XRaySEDComponent(TemplateThreading):
             delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
             cos_inc=cos_inc,
             log_nh=jnp.asarray(params["xray_log_nh"]),
-            # Lehmer+2016 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
+            # Fragos+2013 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
             # accepted these all along; the component simply never passed them,
             # so both were free parameters that nothing read.
             log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),

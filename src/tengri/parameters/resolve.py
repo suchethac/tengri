@@ -197,7 +197,13 @@ def merge_fixed_params(spec, params):
         if value is None or isinstance(value, (str, bool)):
             continue
         merged[name] = jnp.asarray(value)
-    return spec.resolve_mirrors(merged)
+    from tengri.parameters.timing import route_timing_fracs
+
+    # A Fixed ``*_frac`` is present here at its default of 1, so presence alone
+    # does not show that it was sampled. Routing here keeps the Gyr value of an
+    # unsampled timing and keeps a sampled fraction for the component to convert
+    # (#2748).
+    return route_timing_fracs(spec.resolve_mirrors(merged), params)
 
 
 def resolve_fixed_params(model, params):

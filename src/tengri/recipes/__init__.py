@@ -217,7 +217,7 @@ def high_z() -> dict:
         sfh={
             "type": "tsnorm",
             "log_total_mass": Uniform(8.0, 12.0),
-            "peak_lbt_gyr": Uniform(0.1, 1.5),
+            "peak_lbt_frac": Uniform(0.00725327, 0.108799),
             "width_gyr": Uniform(0.05, 1.0),
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
@@ -266,6 +266,13 @@ def photoz() -> dict:
 
     Notes
     -----
+    The metallicity prior (with the default scatter) reaches the Z = 0.06 node of a PARSEC
+    grid, which is incomplete at young ages (no stars above ~12 Msun for log age <= 7.15).
+    By default the loader holds young populations at the highest complete node (Z = 0.04),
+    and building this recipe on a PARSEC grid warns accordingly
+    (``YoungTopMetallicityWarning``). Load the grid with
+    ``top_z='mist'`` to opt into a MIST [Z/H] = +0.5 node at young ages instead.
+
     Rescued from the pre-grammar ``presets.photoz()`` factory (2026-07);
     prior ranges are unchanged. Deliberately **no** ``approx=WavePrecomp()``:
     the default ztable does not cover z up to 12 and the LUT's dust

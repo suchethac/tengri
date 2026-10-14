@@ -8,14 +8,16 @@ rebuilds the same model in float64 and compares.
 
 The ionizing-spectrum fit must not form the ~1e46 photon rate in linear float32 (the
 table then holds ``inf`` and the Cue build raises ``CueWNESSPError``), and must stay
-bit-identical in float64 (#2849). The mappings backend still refuses a float32 build
-with ``QHTableOverflowError``, tracked in #2853.
+bit-identical in float64 (#2849). Before #2853 the mappings backend refused a float32
+build with ``QHTableOverflowError``; its float32 build is checked in
+``test_mappings_qh_float32.py``.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -89,6 +91,7 @@ out = {
     "x64": bool(jax.config.jax_enable_x64),
     "logq_young_max": float(np.max(table["logqion_table"][:, :])),
     "logq_table": np.asarray(table["logqion_table"], dtype=np.float64).tolist(),
+    "log_age_yr": (np.asarray(ssp.ssp_lg_age_gyr, dtype=np.float64) + 9.0).tolist(),
     "phot": phot.tolist(),
     "rest_sed_finite": bool(np.all(np.isfinite(rest))),
 }
@@ -146,6 +149,8 @@ _CUE_SSPS = (
 #: (fsps_mist_c3k_a, a wNE grid this test does not load). The bar is 5e-6, about
 #: 2.7 times the largest of the four.
 _CUE_QH_BAR = 5e-6
+#: The same bar over bins older than 100 Myr, about 3.7 times the measured 1.36e-5 dex.
+_CUE_QH_OLD_BAR = 5e-5
 
 
 @pytest.mark.parametrize("ssp_path", _CUE_SSPS)
@@ -164,10 +169,21 @@ def test_cue_float32_build_matches_float64(ssp_path, tmp_path):
     q64 = np.asarray(f64["logq_table"], dtype=np.float64)
     assert np.all(np.isfinite(q32)), "float32 log Q_H table holds non-finite entries"
     assert np.any(q32 != 0.0), "float32 log Q_H table is identically zero"
-    young = q64 > -90.0
+    log_age = np.asarray(f64["log_age_yr"], dtype=np.float64)
+    ionizing = q64 > -90.0
+    young = ionizing & (log_age <= 8.0)[None, :]
     assert young.any(), "no ionizing bins in the float64 reference"
     dev = float(np.max(np.abs(q32 - q64)[young]))
     assert dev <= _CUE_QH_BAR, f"float32 log Q_H differs from float64 by {dev:.3e} dex"
+    # Bins older than 100 Myr are counted too. Those down to 1e24 photons/s/Msun have
+    # integrand terms in float32's subnormal range; measured max deviation 1.36e-5 dex
+    # (fsps_prsc_miles), on bins carrying under 1e-7 of a population's photon rate.
+    old = ionizing & ~young
+    if old.any():
+        dev_old = float(np.max(np.abs(q32 - q64)[old]))
+        assert dev_old <= _CUE_QH_OLD_BAR, (
+            f"float32 old-bin log Q_H differs from float64 by {dev_old:.3e} dex"
+        )
 
     p32 = np.asarray(f32["phot"], dtype=np.float64)
     p64 = np.asarray(f64["phot"], dtype=np.float64)
@@ -343,18 +359,26 @@ import tengri  # noqa: F401
 from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5")
+ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5", top_z="raw")
 res = {"x64": np.asarray(bool(jax.config.jax_enable_x64))}
 wave = np.asarray(ssp.ssp_wave)
 flux = np.asarray(ssp.ssp_flux)
 lgmet = np.asarray(ssp.ssp_lgmet)
 log_age = np.asarray(ssp.ssp_lg_age_gyr) + 9.0
-tab = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=log_age)
+tab = precompute_ionizing_params_table(
+    wave, flux, lgmet, ssp_log_age_yr=log_age, max_log_age=8.0
+)
 for key in ("ionspec_table", "logqion_table", "seglum_table"):
     res["ion_" + key] = np.asarray(tab[key])
 np.savez(OUT, **res)
 print("WROTE", OUT, sorted(res))
 """
+
+
+#: Off the reference platform, last-bit differences in ``log10`` and in the LAPACK
+#: least-squares slopes are expected; 1e-10 relative is far below any physical
+#: effect and far above that rounding.
+_OFF_PLATFORM_RTOL = 1e-10
 
 
 def test_float64_tables_bit_identical_to_reference(tmp_path):
@@ -365,12 +389,20 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     because the power-of-two scale is exact and the log is taken in NumPy, as
     before. Only the three tables this change touches are pinned, so unrelated
     changes to the model's spectrum do not move the reference.
+
+    Exactness is asserted on the platform that wrote the reference (its
+    ``_platform`` entry). Elsewhere ``log10`` and the LAPACK least-squares
+    slopes in the ionspec table round differently in the last bits, so the
+    tables are held to ``_OFF_PLATFORM_RTOL`` and the failure reports the
+    largest relative and ulp difference.
     """
     _require_data(_SSP)
     with open(
         Path(__file__).resolve().parent / "fixtures" / "nebular_qh_float64_unfixed.json"
     ) as fh:
-        ref = {k: np.asarray(v) for k, v in json.load(fh).items() if not k.startswith("_")}
+        raw = json.load(fh)
+    ref = {k: np.asarray(v) for k, v in raw.items() if not k.startswith("_")}
+    same_platform = raw.get("_platform") == f"{platform.system()}-{platform.machine()}"
     out = tmp_path / "new.npz"
     env = dict(os.environ)
     env["JAX_ENABLE_X64"] = "1"
@@ -391,6 +423,21 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     for key in ref:
         if key == "x64":
             continue
-        assert np.array_equal(new[key], ref[key]), (
-            f"{key} differs from the reference float64 build"
+        if same_platform:
+            assert np.array_equal(new[key], ref[key]), (
+                f"{key} differs from the reference float64 build"
+            )
+            continue
+        a, b = np.asarray(new[key], dtype=np.float64), np.asarray(ref[key], dtype=np.float64)
+        assert a.shape == b.shape, f"{key} shape {a.shape} != reference {b.shape}"
+        # grad-assert: finite-only — these are tables, not gradients, and their
+        # zero entries are real (flushed old-age rows); the values are compared below.
+        assert np.array_equal(np.isfinite(a), np.isfinite(b)), f"{key} finiteness pattern differs"
+        fin = np.isfinite(b)
+        scale = np.maximum(np.abs(b[fin]), np.finfo(np.float64).tiny)
+        rel = float(np.max(np.abs(a[fin] - b[fin]) / scale)) if fin.any() else 0.0
+        ulp = float(np.max(np.abs(a[fin] - b[fin]) / np.spacing(scale))) if fin.any() else 0.0
+        assert rel <= _OFF_PLATFORM_RTOL, (
+            f"{key} differs from the {raw.get('_platform')} reference by {rel:.3e} relative "
+            f"({ulp:.0f} ulp), above {_OFF_PLATFORM_RTOL:g}"
         )

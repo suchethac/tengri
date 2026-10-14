@@ -50,7 +50,7 @@ from tengri.components.agn._phys import L_SUN as _L_SUN
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 from tengri.utils.scale import representable_denominator
@@ -126,10 +126,16 @@ def _load_grid_arrays(grid_path: str):
     return result
 
 
-#: The library's ``psy`` axis extent [deg]: the grid stops at these values, and
-#: the exact endpoints 0 and 90 extrapolate.
+#: The library's ``psy`` axis extent [deg]. The grid stops at these values. The
+#: prior's endpoints ``cos i = 0`` and ``cos i = 1`` map to psi = 0 and 90 deg,
+#: which lie 0.001 and 0.01 deg past the end nodes: a numerical gap, so the psy
+#: lookup extends its end cubic across it (see :data:`_PSY_EXTRAPOLATE`).
 FRITZ_PSY_MIN = 0.001
 FRITZ_PSY_MAX = 89.99
+#: Margin [deg] within which an off-grid psy is the numerical end gap, not a refusal.
+FRITZ_PSY_EDGE_MARGIN = 0.02
+#: Per-axis extrapolation for the six-axis library: only psy (the last axis).
+_PSY_EXTRAPOLATE = (False, False, False, False, False, True)
 
 #: Largest :math:`\cos i` handed to ``arccos``: :math:`1 - 10^{-6}`, 0.08 degrees
 #: from the pole. At :math:`\cos i = 1` the slope of ``arccos`` is infinite and
@@ -151,8 +157,8 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
     -------
     ndarray, scalar
         :math:`\psi = 90^\circ - i`, the elevation above the equatorial plane
-        that keys the library, held to the grid's extent
-        [:data:`FRITZ_PSY_MIN`, :data:`FRITZ_PSY_MAX`]. [deg]
+        that keys the library [deg]. Not clipped to the library's psy axis: the
+        psy lookup extends its end cubic across the numerical gap at 0 and 90.
 
     Notes
     -----
@@ -160,25 +166,34 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
     :math:`\psi > 90^\circ - \theta_c` (:math:`i < \theta_c`), where
     :math:`\theta_c` is ``agn_fritz_oa`` [1]_.
 
-    **JIT-compatible**: yes. **Gradient-safe**: yes; the gradient is zero
-    beyond the grid extent, where the library is constant.
+    **JIT-compatible**: yes. **Gradient-safe**: yes; finite and nonzero on the
+    whole cos i prior. The face-on cap (cos i above ``1 - 1e-6``) continues
+    linearly from the cap rather than freezing psi there.
 
     References
     ----------
     .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, MNRAS, 366, 767
        (2006). arXiv:astro-ph/0511428.
     """
-    c = jnp.minimum(jnp.asarray(cos_inc), _COS_INC_FACE_ON_CAP)
-    psy = 90.0 - jnp.degrees(jnp.arccos(c))
-    return jnp.clip(psy, FRITZ_PSY_MIN, FRITZ_PSY_MAX)
+    c = jnp.asarray(cos_inc)
+    cap = _COS_INC_FACE_ON_CAP
+    # psi = arcsin(cos i) in degrees, exact on [0, cap]. Past the cap (the arcsin
+    # slope is infinite at 1) the line tangent to the cap continues, so the
+    # derivative is finite and nonzero on the whole prior rather than frozen.
+    psi_cap = jnp.degrees(jnp.arcsin(cap))
+    slope_cap = jnp.degrees(1.0 / jnp.sqrt(1.0 - cap * cap))
+    inside = jnp.degrees(jnp.arcsin(jnp.where(c <= cap, c, cap)))
+    beyond = psi_cap + slope_cap * (c - cap)
+    return jnp.where(c <= cap, inside, beyond)
 
 
-def _refuse_off_grid(name: str, value, axis) -> None:
-    """Raise if a concrete ``value`` lies outside the grid ``axis``.
+def _refuse_off_grid(name: str, value, axis, margin: float = 0.0) -> None:
+    """Raise if a concrete ``value`` lies outside the grid ``axis`` by more than ``margin``.
 
     Traced values, and a grid threaded through ``jit`` as an argument, cannot be
     checked here (the builder's declared bounds refuse them at build time);
-    concrete ones would otherwise be clamped to the edge template without a word.
+    concrete ones beyond the margin would otherwise be extrapolated past the table
+    without a word.
     """
     if isinstance(value, jax.core.Tracer):
         return
@@ -186,7 +201,7 @@ def _refuse_off_grid(name: str, value, axis) -> None:
         axis_np = np.asarray(axis)
     except jax.errors.TracerArrayConversionError:
         return
-    lo, hi = float(axis_np[0]), float(axis_np[-1])
+    lo, hi = float(axis_np[0]) - margin, float(axis_np[-1]) + margin
     v = float(value)
     if not lo <= v <= hi:
         raise ValueError(
@@ -199,7 +214,6 @@ def _interpolate_and_normalize(
     grid_jax: jnp.ndarray,
     wave_grid: jnp.ndarray,
     axes: tuple,
-    edges: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
     l_scale: float,
@@ -231,8 +245,6 @@ def _interpolate_and_normalize(
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
         Grid axis values (r_ratio, tau, beta, gamma, oa, psy).
-    edges : tuple of ndarray
-        Precomputed bin edges for triweight interpolation.
     wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
     point : tuple
@@ -269,11 +281,11 @@ def _interpolate_and_normalize(
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
-    # Use index-space interpolation for correct gradients throughout the range.
+    # The torus library is a tabulated radiative-transfer result, so the lookup is a
+    # node-exact PCHIP interpolant rather than the triweight smoother (#2606).
     _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
-    _refuse_off_grid("agn_fritz_psy", point[5], axes[5])
-    template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
+    _refuse_off_grid("agn_fritz_psy", point[5], axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
+    template = interp_nd_pchip(grid_jax, axes, point, extrapolate=_PSY_EXTRAPOLATE)
     # Normalize on the template's native grid, before resampling, so the
     # result does not depend on the caller's wavelength sampling or range.
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
@@ -415,7 +427,6 @@ def fritz_sed_from_grid(
         jnp.asarray(grid.dust),
         jnp.asarray(grid.wave_grid),
         tuple(jnp.asarray(a) for a in grid.axes),
-        tuple(jnp.asarray(e) for e in grid.edges),
         wavelength,
         point,
         l_scale,
@@ -466,7 +477,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
        https://doi.org/10.1111/j.1365-2966.2006.09866.x
     """
     grid = load_fritz_grid(grid_path)
-    dust_jax, wave_grid, axes, edges = grid.dust, grid.wave_grid, grid.axes, grid.edges
+    dust_jax, wave_grid, axes = grid.dust, grid.wave_grid, grid.axes
 
     def fritz_grid(
         wavelength: jnp.ndarray,
@@ -525,9 +536,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        return _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
+        return _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
 
     return fritz_grid
 
@@ -574,7 +583,6 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
         dust_jax = jnp.array(raw["dust"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def fritz_components(
         wavelength: jnp.ndarray,
@@ -617,12 +625,8 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        disk = _interpolate_and_normalize(
-            disk_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        dust = _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
+        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
+        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
         return FritzComponents(disk=disk, dust=dust)
 
     return fritz_components
@@ -800,7 +804,12 @@ def fritz_disc_dust_ratio(
         # Node-exact PCHIP, not the triweight smoother the torus block uses: the smoother
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
-        return interp_nd_pchip(jnp.asarray(table), axes, tuple(jnp.asarray(c) for c in point))
+        return interp_nd_pchip(
+            jnp.asarray(table),
+            axes,
+            tuple(jnp.asarray(c) for c in point),
+            extrapolate=_PSY_EXTRAPOLATE,
+        )
 
     disk_i_n = _interp(grid.disk, agn_fritz_psy)
     dust_i_n = _interp(grid.dust, agn_fritz_psy)

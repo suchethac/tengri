@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -102,6 +103,239 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return y0 + (y1 - y0) * t
 
 
+def _trapezoid_node_weights(grid: np.ndarray) -> np.ndarray:
+    """Node weights of ``np.trapezoid(y, grid)``: ``y @ w``. Shapes: (m,) -> (m,)."""
+    half = 0.5 * np.diff(grid)
+    weights = np.zeros(grid.size, dtype=np.float64)
+    weights[:-1] += half
+    weights[1:] += half
+    return weights
+
+
+def _interp_operator(
+    xp_target: np.ndarray, xp_source: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Linear interpolation as two nonzeros per row, the arithmetic of ``_vectorized_interp``.
+
+    Returns ``(c1, w1, c2, w2)`` with
+    ``interp(y)[..., j] = w1[j] * y[..., c1[j]] + w2[j] * y[..., c2[j]]``.
+    Rows out of bounds have both weights zero, exactly as ``_vectorized_interp``
+    zeroes them.
+    """
+    n_source = len(xp_source)
+    idx = np.clip(np.searchsorted(xp_source, xp_target) - 1, 0, n_source - 2)
+    dx = xp_source[idx + 1] - xp_source[idx]
+    dx = np.where(dx > 0, dx, 1.0)
+    frac = (xp_target - xp_source[idx]) / dx
+    oob = (xp_target < xp_source[0]) | (xp_target > xp_source[-1])
+    w1 = np.where(oob, 0.0, 1.0 - frac)
+    w2 = np.where(oob, 0.0, frac)
+    return idx, w1, idx + 1, w2
+
+
+def transpose_templates(templates: np.ndarray) -> np.ndarray:
+    """Templates ``(..., n_wave)`` as one C-contiguous ``(n_wave, n_templates)`` array.
+
+    Built once per table so every folded integrand reads contiguous SSP rows
+    (#2769): a row slice ``[lo:hi]`` is a view, never a copy.
+    """
+    return np.ascontiguousarray(templates.reshape(-1, templates.shape[-1]).T)
+
+
+class _FoldedIntegrand:
+    """A template integrand ``tw * interp(src)`` kept as a linear map of ``src`` (#2769).
+
+    The interpolated, weighted integrand on ``grid`` is never materialized:
+    ``integrand @ W == src[lo:hi].T @ (P^T diag(tw) W)[lo:hi]``, where ``P`` is the
+    interpolation operator. ``dot`` applies that restricted map, so the cost scales
+    with the SSP nodes the grid actually touches, not with the full template row.
+
+    ``src_T`` is the transposed template layout ``(n_src, n_templates)`` (see
+    :func:`transpose_templates`), holding SSP nodes ``origin`` onward. Only the rows
+    the grid reads are kept, as a view.
+    """
+
+    def __init__(
+        self,
+        grid: np.ndarray,
+        tw_grid: np.ndarray,
+        src_T: np.ndarray,
+        lead_shape: tuple[int, ...],
+        c1: np.ndarray,
+        w1: np.ndarray,
+        c2: np.ndarray,
+        w2: np.ndarray,
+        origin: int = 0,
+    ):
+        lo = int(min(c1.min(), c2.min()))
+        hi = int(max(c1.max(), c2.max())) + 1
+        self.grid = grid
+        self.tw = tw_grid
+        self.src_T = src_T[lo - origin : hi - origin]
+        self._lead = tuple(lead_shape)
+        self._n = hi - lo
+        self._c1, self._c2 = c1 - lo, c2 - lo
+        self._w1, self._w2 = w1, w2
+
+    @property
+    def lead_shape(self) -> tuple[int, ...]:
+        """Leading (template) dimensions of the integrand."""
+        return self._lead
+
+    def dot(self, weights: np.ndarray) -> np.ndarray:
+        """``integrand @ weights`` over the grid axis.
+
+        Shapes: (m,) or (m, q) -> (..., q) or (...).
+        """
+        w = np.asarray(weights, dtype=np.float64)
+        if w.ndim == 1:
+            return self.dot(w[:, None])[..., 0]
+        scaled = self.tw[:, None] * w
+        restricted = np.zeros((self._n, w.shape[1]), dtype=np.float64)
+        for q in range(w.shape[1]):
+            col = scaled[:, q]
+            restricted[:, q] = np.bincount(
+                self._c1, weights=self._w1 * col, minlength=self._n
+            ) + np.bincount(self._c2, weights=self._w2 * col, minlength=self._n)
+        return (self.src_T.T @ restricted).reshape(*self._lead, w.shape[1])
+
+    def trapezoid(self, factor: np.ndarray | None = None) -> np.ndarray:
+        """``np.trapezoid(integrand * factor, grid)`` (``factor`` a grid-only array, default 1)."""
+        weights = _trapezoid_node_weights(self.grid)
+        if factor is not None:
+            weights = weights * factor
+        return self.dot(weights)
+
+
+def _integrand_dot(integrand, weights: np.ndarray) -> np.ndarray:
+    """``integrand @ weights`` for an ndarray integrand or a :class:`_FoldedIntegrand`."""
+    if isinstance(integrand, _FoldedIntegrand):
+        return integrand.dot(weights)
+    return _rows_dot(integrand, weights)
+
+
+def _fold_restricted(grid, tw_grid, templates_src, c1, w1, c2, w2) -> _FoldedIntegrand:
+    """Fold over ``templates_src (..., n_src)``: copies only the rows the grid reads."""
+    lo = int(min(c1.min(), c2.min()))
+    hi = int(max(c1.max(), c2.max())) + 1
+    src_T = transpose_templates(templates_src[..., lo:hi])
+    return _FoldedIntegrand(
+        grid, tw_grid, src_T, templates_src.shape[:-1], c1, w1, c2, w2, origin=lo
+    )
+
+
+def fold_integrand(
+    grid: np.ndarray, tw_grid: np.ndarray, wave_src: np.ndarray, templates_src: np.ndarray
+) -> _FoldedIntegrand:
+    """Folded form of ``_vectorized_interp(grid, wave_src, templates_src) * tw_grid``.
+
+    Shapes: grid (m,), tw_grid (m,), wave_src (n_src,), templates_src (..., n_src).
+    """
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    return _fold_restricted(grid, tw_grid, templates_src, c1, w1, c2, w2)
+
+
+def fold_integrand_T(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    src_T: np.ndarray,
+    lead_shape: tuple[int, ...],
+) -> _FoldedIntegrand:
+    """:func:`fold_integrand` on a pre-transposed layout (see :func:`transpose_templates`).
+
+    ``src_T`` is the whole ``(n_src, n_templates)`` table, built once by the caller and
+    read here by row view: no per-call copy.
+    """
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    return _FoldedIntegrand(grid, tw_grid, src_T, lead_shape, c1, w1, c2, w2)
+
+
+def _lyc_augmented_operator(
+    grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+):
+    """Edge-augmented grid, weights and interpolation operator of :func:`lyc_augment_fold`."""
+    n_src = wave_src.shape[0]
+    n_ion = int(np.sum(wave_src < edge_aa))
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    if not (0 < n_ion < n_src):
+        return grid, tw_grid, c1, w1, c2, w2
+
+    idx_a = n_ion - 1
+    idx_b = n_ion
+    wave_a = float(wave_src[idx_a])
+    wave_b = float(wave_src[idx_b])
+    in_bracket = (grid >= wave_a) & (grid <= wave_b)
+    step = np.where(grid < edge_aa, idx_a, idx_b)
+    c1 = np.where(in_bracket, step, c1)
+    c2 = np.where(in_bracket, step, c2)
+    w1 = np.where(in_bracket, 1.0, w1)
+    w2 = np.where(in_bracket, 0.0, w2)
+
+    tw_edge = float(
+        np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
+        * _filter_weight_np(np.array([edge_aa]), convention)[0]
+    )
+    all_x = np.concatenate([grid, [edge_aa, edge_aa]])
+    all_tw = np.concatenate([tw_grid, [tw_edge, tw_edge]])
+    all_c1 = np.concatenate([c1, [idx_a, idx_b]])
+    all_c2 = np.concatenate([c2, [idx_a, idx_b]])
+    all_w1 = np.concatenate([w1, [1.0, 1.0]])
+    all_w2 = np.concatenate([w2, [0.0, 0.0]])
+    order = np.argsort(all_x, kind="stable")
+    return (
+        all_x[order],
+        all_tw[order],
+        all_c1[order],
+        all_w1[order],
+        all_c2[order],
+        all_w2[order],
+    )
+
+
+def lyc_augment_fold(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    templates_src: np.ndarray,
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
+    """Folded sibling of :func:`lyc_augment_grid_for_step`.
+
+    Returns ``(grid_aug, folded, tw_grid_aug)`` where ``folded`` is the integrand
+    of :func:`lyc_augment_grid_for_step` as a :class:`_FoldedIntegrand` on
+    ``grid_aug``. The edge-aware resampling is still a linear map of each template
+    row: a bracket node reads one SSP node with weight one (the ionizing or the
+    non-ionizing bracket value), and the two zero-width edge nodes read those same
+    two nodes. Same node order, same ``tw_grid_aug`` as the dense function.
+    """
+    g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
+        grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+    )
+    return g, _fold_restricted(g, tw, templates_src, c1, w1, c2, w2), tw
+
+
+def lyc_augment_fold_T(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    src_T: np.ndarray,
+    lead_shape: tuple[int, ...],
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
+    """:func:`lyc_augment_fold` on a pre-transposed template layout (no per-call copy)."""
+    g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
+        grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+    )
+    return g, _FoldedIntegrand(g, tw, src_T, lead_shape, c1, w1, c2, w2), tw
+
+
 def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
     """Split a quadrature at a wavelength: the part below it and the part above it.
 
@@ -130,19 +364,27 @@ def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
     -----
     **JIT-compatible**: no; build-time numpy.
     """
-    lead = integrand.shape[:-1]
+    folded = isinstance(integrand, _FoldedIntegrand)
+    lead = integrand.lead_shape if folded else integrand.shape[:-1]
     if grid.size < 2:
         return np.zeros(lead), np.zeros(lead)
     if not np.any(grid < edge):
-        return np.zeros(lead), _np_trapezoid(integrand, grid, axis=-1)
+        return np.zeros(lead), _whole_band(integrand, grid)
     if int(np.searchsorted(grid, edge)) >= grid.size:
-        return _np_trapezoid(integrand, grid, axis=-1), np.zeros(lead)
+        return _whole_band(integrand, grid), np.zeros(lead)
     # The above-half weights are the whole-band minus the below-half weights on
     # the 1-D grid: identical floats on every segment wholly below the edge, so
     # those nodes weigh exactly zero and no row subtracts two integrals.
     cum_w = _cumtrapz_weights(grid, np.array([edge, grid[-1]]))
-    halves = _rows_dot(integrand, np.stack([cum_w[:, 0], cum_w[:, 1] - cum_w[:, 0]], axis=-1))
+    halves = _integrand_dot(integrand, np.stack([cum_w[:, 0], cum_w[:, 1] - cum_w[:, 0]], axis=-1))
     return halves[..., 0], halves[..., 1]
+
+
+def _whole_band(integrand, grid: np.ndarray) -> np.ndarray:
+    """Plain trapezoid over ``grid`` of an ndarray or folded integrand."""
+    if isinstance(integrand, _FoldedIntegrand):
+        return integrand.trapezoid()
+    return _np_trapezoid(integrand, grid, axis=-1)
 
 
 def subband_edges(
@@ -200,7 +442,7 @@ def subband_edges(
 def subband_quadrature(
     grid: np.ndarray,
     tw_grid: np.ndarray,
-    integrand: np.ndarray,
+    integrand: np.ndarray | _FoldedIntegrand,
     denom: float,
     n_subbands: int,
     eff_wave_obs: float,
@@ -232,8 +474,9 @@ def subband_quadrature(
         Union quadrature grid, observed frame [Angstrom].
     tw_grid : ndarray, shape (m,)
         Transmission x filter weight on ``grid`` [dimensionless].
-    integrand : ndarray, shape (..., m)
-        ``templates * tw_grid``; the thing whose band integral is wanted.
+    integrand : ndarray, shape (..., m), or _FoldedIntegrand
+        ``templates * tw_grid``; the thing whose band integral is wanted. A folded
+        integrand (#2769) is read through its own node weights, never materialized.
     denom : float
         ``int tw dlambda``, the filter normalization.
     n_subbands : int
@@ -290,7 +533,9 @@ def subband_quadrature(
     n_chunks = edges.size - 1
     chunk_w = np.diff(_cumtrapz_weights(grid, edges), axis=-1)
     total_w = _cumtrapz_weights(grid, grid[-1:])
-    sums = _rows_dot(integrand, np.concatenate([chunk_w, grid[:, None] * chunk_w, total_w], -1))
+    sums = _integrand_dot(
+        integrand, np.concatenate([chunk_w, grid[:, None] * chunk_w, total_w], -1)
+    )
     i_k = sums[..., :n_chunks]
     l_k = sums[..., n_chunks : 2 * n_chunks]
 
@@ -572,6 +817,39 @@ def _vectorized_interp(
     return result
 
 
+def filter_support_slice(grid: np.ndarray, filter_wave: np.ndarray) -> tuple[int, int]:
+    """Index range of the union-grid nodes inside a filter's support (#2817).
+
+    The one support rule every NumPy precompute band integral uses, matching the
+    exact path ``lnu_filter_integral`` (which masks intervals whose midpoint lies
+    outside ``[filter_wave[0], filter_wave[-1]]``). Both filter edges are nodes of
+    ``grid``, so keeping exactly those nodes keeps exactly the intervals inside the
+    support. A node kept past an edge would add the straddle ramp to the zero-filled
+    transmission, which the exact path does not integrate.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (n_union,)
+        Ascending union of SED nodes and filter nodes [Angstrom].
+    filter_wave : ndarray, shape (n_filter,)
+        Ascending filter nodes [Angstrom]; its ends define the support.
+
+    Returns
+    -------
+    lo, hi : int
+        ``grid[lo:hi]`` spans ``[filter_wave[0], filter_wave[-1]]``.
+
+    Notes
+    -----
+    **JIT-compatible**: no (NumPy, build-time). The JAX exact path applies the same
+    rule as a midpoint mask in ``tengri.observation.photometry._support_trapezoid``.
+    """
+    fw = np.asarray(filter_wave, dtype=np.float64)
+    lo = int(np.searchsorted(grid, fw[0]))
+    hi = int(np.searchsorted(grid, fw[-1], side="right"))
+    return lo, hi
+
+
 def preintegrate_grid(
     templates: np.ndarray,
     wave_rest: np.ndarray,
@@ -696,7 +974,6 @@ def preintegrate_grid(
 
     # Extract grid shape (everything except the trailing wavelength dimension)
     *grid_dims, n_wave = templates.shape
-    n_filters = len(filter_waves)
 
     # Flatten grid dimensions for vectorized processing
     # Shape: (n_grid_points, n_wave) where n_grid_points = prod(grid_dims)
@@ -716,6 +993,48 @@ def preintegrate_grid(
             bol_lum[i] = _np_trapezoid(templates_flat[i][sort_idx], nu_sorted)
         bol_lum = np.where(bol_lum > 0, bol_lum, 1.0)
         templates_flat = templates_flat / bol_lum[:, None]
+
+    return preintegrate_transposed(
+        transpose_templates(templates_flat),
+        tuple(grid_dims),
+        wave_rest,
+        filter_waves,
+        filter_trans,
+        redshift,
+        dl_cm,
+        axes=axes,
+        taylor=taylor,
+        n_subbands=n_subbands,
+        convention=convention,
+        lyc_gate=lyc_gate,
+    )
+
+
+def preintegrate_transposed(
+    src_T: np.ndarray,
+    grid_dims: tuple[int, ...],
+    wave_rest: np.ndarray,
+    filter_waves: list[np.ndarray],
+    filter_trans: list[np.ndarray],
+    redshift: float,
+    dl_cm: float,
+    axes: tuple[np.ndarray, ...] = (),
+    taylor: bool = False,
+    n_subbands: int = 0,
+    convention: FilterConvention = FilterConvention.BESSELL,
+    lyc_gate: bool = False,
+) -> PreintegratedGrid:
+    """:func:`preintegrate_grid` on templates already in the transposed layout (#2769).
+
+    ``src_T`` is ``(n_wave, n_grid_points)`` C-contiguous, the flattened grid
+    ``templates.reshape(n_grid_points, n_wave).T`` (see :func:`transpose_templates`),
+    with ``wave_rest`` its ``n_wave`` rest-frame nodes. ``grid_dims`` gives the leading
+    shape of the result. Every other argument and the output are as
+    :func:`preintegrate_grid`; the two agree to floating-point roundoff.
+    """
+    n_filters = len(filter_waves)
+    n_grid_points = src_T.shape[1]
+    wave_rest = np.asarray(wave_rest)
 
     # Redshift wavelengths to observed frame
     wave_obs = wave_rest * (1.0 + redshift)
@@ -741,13 +1060,12 @@ def preintegrate_grid(
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
         grid = np.sort(np.concatenate([wave_obs, fw_np]))
-        # Transmission is identically zero outside the filter table's
-        # support (left=0/right=0 below), so union-grid segments with both
-        # endpoints beyond an edge integrate to exactly zero. Keep one node
-        # past each edge (the straddle segments) and drop the rest: same
-        # clip as precompute_photometry_ztable.
-        lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
-        hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+        # The filter integral runs over the filter's own support, [fw[0], fw[-1]],
+        # and nothing outside it (#2817: no ramp across the straddle segment to the
+        # zero-filled transmission). Both edges are nodes of the union grid, so
+        # keeping exactly the nodes inside the support gives the same intervals
+        # as ``lnu_filter_integral``; a node kept past an edge would add that ramp.
+        lo, hi = filter_support_slice(grid, fw_np)
         grid = grid[lo:hi]
         trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
@@ -758,11 +1076,11 @@ def preintegrate_grid(
 
         # Interpolate all templates onto the union grid
         # Shape: (n_grid_points, len(grid))
-        templates_on_grid = _vectorized_interp(grid, wave_obs, templates_flat)
+        # Folded (#2769): the interpolated template is never materialized; every
+        # consumer below reads ``src_T`` through the fold's node weights.
+        fold = fold_integrand_T(grid, tw_grid, wave_obs, src_T, (n_grid_points,))
 
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
-        weight = tw_grid[None, :]
-        integrand = templates_on_grid * weight
 
         # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
         # nebular Lyman-continuum mask) -- a model without one never pays
@@ -778,29 +1096,37 @@ def preintegrate_grid(
         # (see :func:`lyc_augment_grid_for_step`).
         lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + redshift)
         if lyc_gate:
-            grid_q, integrand_q, tw_grid_q = lyc_augment_grid_for_step(
-                grid, tw_grid, wave_obs, templates_flat, fw_np, ft_np, lyc_wave_obs, convention
+            grid_q, fold_q, tw_grid_q = lyc_augment_fold_T(
+                grid,
+                tw_grid,
+                wave_obs,
+                src_T,
+                (n_grid_points,),
+                fw_np,
+                ft_np,
+                lyc_wave_obs,
+                convention,
             )
             denom_q = _np_trapezoid(tw_grid_q, grid_q)
-            num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+            num = fold_q.trapezoid()
             # Both halves of the split from ONE cumulative integral on the
             # edge-augmented grid: the below half is the cumulative value at the
             # first copy of the zero-width edge pair (step-exact), the above half
             # is total - below, and a band wholly on one side has exactly zero in
             # the other half (no whole - other-half cancellation).
-            lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+            lyc_num, above_num = edge_split(fold_q, grid_q, lyc_wave_obs)
             norm = np.maximum(denom_q, representable_denominator(1e-30))
             lyc_phot_flat[:, f_idx] = lyc_num / norm
             nolyc_phot_flat[:, f_idx] = above_num / norm
         else:
-            grid_q, integrand_q, tw_grid_q, denom_q = grid, integrand, tw_grid, denom
-            num = _np_trapezoid(integrand, grid, axis=-1)
+            grid_q, fold_q, tw_grid_q, denom_q = grid, fold, tw_grid, denom
+            num = fold.trapezoid()
         phot_flat[:, f_idx] = num / np.maximum(denom_q, representable_denominator(1e-30))
 
         # Compute Taylor moment if requested
         if taylor:
-            dlam = grid[None, :] - eff_waves_obs[f_idx]
-            num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
+            dlam = grid - eff_waves_obs[f_idx]
+            num_moment = fold.trapezoid(dlam)
             moment_flat[:, f_idx] = num_moment / np.maximum(
                 denom, representable_denominator(1e-30)
             )
@@ -815,7 +1141,7 @@ def preintegrate_grid(
             sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
                 grid_q,
                 tw_grid_q,
-                integrand_q,
+                fold_q,
                 denom_q,
                 K,
                 float(eff_waves_obs[f_idx]),
@@ -952,7 +1278,6 @@ def preintegrate_lines(
 def _tensor_contract(
     grid: jnp.ndarray,
     weights_per_axis: list[jnp.ndarray],
-    population_mask: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Contract grid along leading axes with weight vectors.
 
@@ -960,25 +1285,12 @@ def _tensor_contract(
     After each contraction, the next weight contracts along axis 0 of
     the reduced tensor.
 
-    With ``population_mask``, the contraction is *normalized* over the
-    populated cells -- the mask is contracted with the same weights and
-    divides the result (#2435). Zeroing unpopulated cells without this
-    division does not exclude them: the weights still sum to one over the
-    whole axis, so the result is scaled by the fraction of kernel weight
-    that landed on populated cells.
-
     Parameters
     ----------
     grid : jnp.ndarray
         Shape (*grid_dims, n_trailing). Grid to contract.
     weights_per_axis : list[jnp.ndarray]
         One weight vector per grid dimension. w[i] has shape (grid_dims[i],).
-    population_mask : jnp.ndarray, optional
-        Shape (n_density, n_b), 1.0 populated / 0.0 unpopulated, for a grid
-        whose leading dims are (n_v, n_b, n_density). When given, the result
-        is the mask-weighted mean over populated cells, and is NaN wherever
-        no populated cell falls inside the kernel. ``None`` contracts exactly
-        as before, bit-for-bit.
 
     Returns
     -------
@@ -987,49 +1299,139 @@ def _tensor_contract(
 
     Notes
     -----
-    JIT/grad/vmap safe. The ``W == 0`` branch uses the double-``where``
-    pattern so the dead branch never evaluates ``num / 0`` -- a single
-    ``where`` around the quotient still poisons the reverse-mode gradient
-    with NaN.
+    JIT/grad/vmap safe.
     """
-    if population_mask is None:
-        result = grid
-        for _i, w in enumerate(weights_per_axis):
-            result = jnp.tensordot(w, result, axes=([0], [0]))
-        return result
+    result = grid
+    for w in weights_per_axis:
+        result = jnp.tensordot(w, result, axes=([0], [0]))
+    return result
 
+
+def _bracket_weights(x: jnp.ndarray, nodes: jnp.ndarray, populated: jnp.ndarray) -> jnp.ndarray:
+    """Linear weights of ``x`` on the populated nodes that bracket it (#2575).
+
+    Between a populated node below ``x`` and one above, the weights are the linear
+    interpolant. With populated nodes on one side only, the nearest one is held
+    (weight 1). With no populated node, every weight is zero.
+
+    Parameters
+    ----------
+    x : jnp.ndarray, shape ()
+        Query coordinate on this axis.
+    nodes : jnp.ndarray, shape (n,)
+        Strictly ascending node coordinates.
+    populated : jnp.ndarray, shape (n,)
+        Boolean, True where the node holds data.
+
+    Returns
+    -------
+    jnp.ndarray, shape (n,)
+        Weights summing to one when any node is populated, zero otherwise.
+
+    Notes
+    -----
+    JIT/grad/vmap safe. Both divisions are guarded so the unselected branch never
+    produces a NaN in the backward pass.
+    """
+    below = populated & (nodes <= x)
+    above = populated & (nodes > x)
+    has_lo = jnp.any(below)
+    has_hi = jnp.any(above)
+    lo = jnp.where(has_lo, jnp.max(jnp.where(below, nodes, -jnp.inf)), 0.0)
+    hi = jnp.where(has_hi, jnp.min(jnp.where(above, nodes, jnp.inf)), 0.0)
+    both = has_lo & has_hi
+    span = jnp.where(both, hi - lo, 1.0)
+    t = jnp.where(both, (x - lo) / span, jnp.where(has_hi, 1.0, 0.0))
+    is_lo = (below & (nodes == lo)).astype(nodes.dtype)
+    is_hi = (above & (nodes == hi)).astype(nodes.dtype)
+    return (1.0 - t) * is_lo + t * is_hi
+
+
+def _kernel_or_bracket(
+    weights: jnp.ndarray, nodes: jnp.ndarray, x: jnp.ndarray, populated: jnp.ndarray
+) -> jnp.ndarray:
+    """Kernel weights where their support is populated, bracket weights otherwise.
+
+    The kernel's own weights are used when every node with a nonzero kernel weight is
+    populated. Otherwise the query is interpolated between the populated brackets.
+    ``populated`` may carry leading batch dimensions; the decision is per row.
+    """
+    covered = jnp.all(populated | (weights == 0.0), axis=-1, keepdims=True)
+    bracket = jax.vmap(lambda row: _bracket_weights(x, nodes, row))(
+        populated.reshape(-1, populated.shape[-1])
+    ).reshape(populated.shape)
+    return jnp.where(covered, weights, bracket)
+
+
+def _masked_contract(
+    grid: jnp.ndarray,
+    weights_per_axis: list[jnp.ndarray],
+    population_mask: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+) -> jnp.ndarray:
+    """Contract a 3-D grid over populated cells, interpolating across masked gaps (#2575).
+
+    The velocity axis is unmasked, so its kernel weights apply directly. On the B and
+    density axes the query is resolved per row: where the kernel stencil reaches only
+    populated nodes the kernel weights are used, and where it reaches a masked node the
+    query is interpolated linearly between the populated brackets (edge-held when one
+    side has none). A row with no populated cell carries no weight. Shape-only NaN is
+    returned only when the mask holds no populated cell at all.
+
+    Parameters
+    ----------
+    grid : jnp.ndarray
+        Shape (n_v, n_b, n_density, n_trailing). Unpopulated cells may hold any value;
+        they are excluded before contraction.
+    weights_per_axis : list[jnp.ndarray]
+        Kernel weights per axis, shapes (n_v,), (n_b,), (n_density,).
+    population_mask : jnp.ndarray
+        Shape (n_density, n_b), 1.0 populated / 0.0 unpopulated.
+    axes : tuple[jnp.ndarray, ...]
+        Node coordinates per axis (velocity, B, density).
+    point : tuple
+        Query coordinates (velocity, B, density).
+
+    Returns
+    -------
+    jnp.ndarray
+        Shape (n_trailing,). NaN when no cell is populated.
+
+    Notes
+    -----
+    JIT/grad/vmap safe. The brackets use the physical node coordinates, so non-uniform
+    axes are handled. Owner ruling 2026-10-09 (#2575): bracket interpolation supersedes
+    the #2435 mask semantics.
+    """
     n_axes = len(weights_per_axis)
-    leading = grid.shape[:n_axes]
-    n_trailing = grid.ndim - n_axes
     if n_axes != 3:
         raise ValueError(
             "population_mask expects a 3-D interpolation grid with leading dims "
             f"(n_v, n_b, n_density); got {n_axes} interpolation axes."
         )
-    n_density, n_b = population_mask.shape
-    if (leading[1], leading[2]) != (n_b, n_density):
+    _, n_b, n_n = grid.shape[:3]
+    n_density, n_b_mask = population_mask.shape
+    if (n_b_mask, n_density) != (n_b, n_n):
         raise ValueError(
             f"population_mask shape {population_mask.shape} = (n_density, n_b) is "
-            f"inconsistent with grid leading dims {leading} = (n_v, n_b, n_density): "
-            f"expected (n_b, n_density) = ({leading[1]}, {leading[2]})."
+            f"inconsistent with grid leading dims {grid.shape[:3]} = (n_v, n_b, n_density): "
+            f"expected (n_b, n_density) = ({n_b}, {n_n})."
         )
+    w_v, w_b, w_n = weights_per_axis
+    populated = population_mask.T > 0.0  # (n_b, n_density)
+    row_valid = jnp.any(populated, axis=1)  # (n_b,)
 
-    # (n_density, n_b) -> (1, n_b, n_density), broadcasting over velocity.
-    mask_vbn = population_mask.T[jnp.newaxis, :, :]
-    mask_full = jnp.broadcast_to(mask_vbn, leading)
+    # Density weights per B row: a (n_b, n_density).
+    a = _kernel_or_bracket(jnp.broadcast_to(w_n, populated.shape), axes[2], point[2], populated)
+    # B weights over rows that hold any data at this density.
+    b_w = _kernel_or_bracket(w_b, axes[1], point[1], row_valid)
 
-    def _contract(arr: jnp.ndarray) -> jnp.ndarray:
-        out = arr
-        for w in weights_per_axis:
-            out = jnp.tensordot(w, out, axes=([0], [0]))
-        return out
-
-    numerator = _contract(grid * mask_full.reshape(leading + (1,) * n_trailing))
-    weight_sum = _contract(mask_full)
-
-    populated = weight_sum > 0.0
-    safe_weight_sum = jnp.where(populated, weight_sum, 1.0)
-    return jnp.where(populated, numerator / safe_weight_sum, jnp.nan)
+    grid_m = jnp.where(populated.reshape((1, n_b, n_n) + (1,) * (grid.ndim - 3)), grid, 0.0)
+    x_b = jnp.einsum("vbn...,bn->vb...", grid_m, a)
+    y = jnp.tensordot(b_w, x_b, axes=([0], [1]))
+    out = jnp.tensordot(w_v, y, axes=([0], [0]))
+    return jnp.where(jnp.any(populated), out, jnp.nan)
 
 
 @functools.partial(jax.jit, static_argnames=("index_space_interp",))
@@ -1079,13 +1481,13 @@ def interp_nd_triweight(
         Optional 2D population mask shape (n_density, n_b) with 1.0 for
         populated cells and 0.0 for unpopulated. Only for 3-D grids whose
         leading dims are (velocity, B-field, density); an inconsistent shape
-        raises ``ValueError``. The interpolation is then *normalized* over
-        the populated cells -- the mask is contracted with the same kernel
-        weights and divides the result -- so a field that is constant on the
-        populated cells interpolates back to that constant, and a query with
-        no populated cell in range returns NaN rather than zero (#2435).
-        Default None (no masking; the contraction is bit-identical to a
-        build without this argument).
+        raises ``ValueError``. Along the B and density axes a query whose
+        kernel stencil reaches a masked cell is interpolated linearly between
+        the populated nodes that bracket it, and a query with populated cells
+        on one side only holds the nearest populated node (#2575). NaN is
+        returned only when the mask holds no populated cell at all. Default
+        None (no masking; the contraction is bit-identical to a build without
+        this argument).
 
     Returns
     -------
@@ -1105,25 +1507,19 @@ def interp_nd_triweight(
     and produces smooth gradients throughout the grid range. The interpolant is
     C2 within intervals and C0 at nodes where adjacent spacings differ.
 
-    **Population masking (#2066, #2435)**: Pass ``population_mask`` to restrict
-    the kernel to populated cells of a zero-filled sparse grid. The contraction
-    becomes a normalized convolution,
-
-    .. math::
-
-       f(x) = \\frac{\\sum_i w_i(x)\\, m_i\\, g_i}{\\sum_i w_i(x)\\, m_i}
-
-    where :math:`w_i` are the triweight weights, :math:`m_i \\in \\{0, 1\\}` the
-    mask and :math:`g_i` the grid values. The denominator is what makes this
-    correct: zeroing unpopulated cells *without* it leaves weights that still
+    **Population masking (#2066, #2435, #2575)**: Pass ``population_mask`` to
+    interpolate a zero-filled sparse grid over its populated cells. Zeroing
+    unpopulated cells without renormalizing leaves kernel weights that still
     sum to one over the whole axis, so every value is scaled by the populated
-    weight fraction. That was #2435 -- Hb-normalized MAPPINGS line ratios came
-    back 12-89% low, with ``Hb_4861A`` reading 0.7135 instead of 1.0.
-
-    A query whose kernel reaches no populated cell returns NaN, unconditionally
-    and regardless of ``on_out_of_grid`` (which governs *axis bounds*, a
-    different question from whether the grid holds data there). Returning zeros
-    would be a silent wrong answer.
+    weight fraction; that was #2435 (Hb-normalized MAPPINGS line ratios read
+    0.7135 instead of 1.0). The masked path therefore never mixes an unpopulated
+    cell into the result. Where the kernel stencil on the B or density axis
+    reaches only populated nodes, the kernel weights apply. Where it reaches a
+    masked node, the query is interpolated between the populated brackets
+    (#2575), so a query between two populated nodes across a gap returns their
+    linear interpolant, and a query with populated cells on one side holds the
+    nearest one. NaN is returned only when no cell is populated. The velocity
+    axis is unmasked and always uses its kernel weights.
     """
     n_dims = len(axes)
 
@@ -1148,8 +1544,9 @@ def interp_nd_triweight(
         )
         weights_per_axis.append(w)
 
-    # Contract grid with weights, applying population mask if provided
-    return _tensor_contract(grid, weights_per_axis, population_mask=population_mask)
+    if population_mask is None:
+        return _tensor_contract(grid, weights_per_axis)
+    return _masked_contract(grid, weights_per_axis, population_mask, axes, point)
 
 
 def _bcast_axis0(vec: jnp.ndarray, ndim: int) -> jnp.ndarray:
@@ -1194,6 +1591,9 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     """
     h = jnp.diff(x)  # (n-1,)
     delta = jnp.diff(y, axis=0) / _bcast_axis0(h, y.ndim)  # (n-1, *rest)
+    if x.shape[0] == 2:
+        # Two nodes: the only monotone cubic is the secant line.
+        return jnp.broadcast_to(delta, y.shape)
 
     h_prev = h[:-1]  # (n-2,)
     h_next = h[1:]  # (n-2,)
@@ -1226,6 +1626,38 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.concatenate([first[None], interior, last[None]], axis=0)
 
 
+def extrapolation_band(x):
+    """Outer bound of the numerical-gap band past a table: half an end spacing out.
+
+    ``extrapolate=True`` continues an edge cell only across this band. A query
+    past it is held at the band edge, so an overhang that is not a numerical gap
+    (more than half a node spacing) is never extrapolated into.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 2``.
+
+    Returns
+    -------
+    lo, hi : float
+        ``x[0] - (x[1] - x[0]) / 2`` and ``x[-1] + (x[-1] - x[-2]) / 2``.
+    """
+    return x[0] - 0.5 * (x[1] - x[0]), x[-1] + 0.5 * (x[-1] - x[-2])
+
+
+def _clamp_to_hull(xq, lo, hi):
+    """Hold ``xq`` at the node hull ``[lo, hi]`` with a derivative of 1 on the closed hull.
+
+    Outside the hull the value is held at the edge node (derivative 0), exactly
+    as ``jnp.clip`` does. Unlike ``jnp.clip``, the derivative is NOT halved on
+    the boundary itself: ``jnp.clip`` splits the tie at ``xq == lo`` or
+    ``xq == hi`` between the clamp and the identity, so a parameter sitting
+    exactly on an outermost node lost half its gradient there.
+    """
+    return jnp.where(xq < lo, lo, jnp.where(xq > hi, hi, xq))
+
+
 def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool = False):
     """Evaluate the monotone-cubic interpolant at ``xq`` over axis 0.
 
@@ -1237,7 +1669,13 @@ def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool =
     n = x.shape[0]
     slopes = _pchip_slopes(x, y)
 
-    xq_c = xq if extrapolate else jnp.clip(xq, x[0], x[-1])
+    # ``jnp.clip`` splits its tie gradient 1/2 at each bound, which halves the
+    # derivative at a boundary node. Clamping with ``where`` keeps the full
+    # one-sided slope there and still returns zero outside the table.
+    if extrapolate:
+        xq_c = xq
+    else:
+        xq_c = jnp.where(xq < x[0], x[0], jnp.where(xq > x[-1], x[-1], xq))
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     xi = x[i]
     h = x[i + 1] - xi
@@ -1262,7 +1700,7 @@ def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
     corner and degrades to O(h); linear interpolation has no slope to get wrong.
     """
     n = x.shape[0]
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    xq_c = _clamp_to_hull(xq, x[0], x[-1])
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     h = x[i + 1] - x[i]
     t = (xq_c - x[i]) / jnp.where(h > 0.0, h, 1.0)  # guard a degenerate cell
@@ -1342,12 +1780,14 @@ def pchip_interp_1d(
     return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
 
 
-def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray:
+def pchip_interp_local(
+    x: jnp.ndarray, table, xq, *, reduce=None, extrapolate: bool = False
+) -> jnp.ndarray:
     """Monotone cubic (PCHIP) read of one query off a table's leading axis, 4-node stencil.
 
     Gives the same value as :func:`pchip_interp_1d` applied column by column
-    (clamped outside ``[x[0], x[-1]]``) while touching only the four rows that
-    bracket ``xq``: the tangents of the two bracketing nodes depend only on
+    (clamped outside ``[x[0], x[-1]]`` unless ``extrapolate``) while touching only
+    the four rows that bracket ``xq``: the tangents of the two bracketing nodes depend only on
     their neighbors, so the table is never contracted or differentiated
     whole. That keeps the cost of a read independent of the node count, which
     is what a free-redshift z-table of 250+ nodes needs.
@@ -1369,6 +1809,13 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
         the contracted quantity actually consumed and costs nothing per
         contracted element. The interpolant is then the cubic of the reduced
         node values.
+    extrapolate : bool, optional
+        If ``False`` (default), ``xq`` is clamped to ``[x[0], x[-1]]`` and the
+        value is held at the boundary node. If ``True``, the edge cubic continues
+        past the end nodes, but only across the numerical-gap band of half an end
+        spacing (:func:`extrapolation_band`); past that band the value is held at
+        the band edge. Use it when the query's prior overhangs the table by a
+        numerical gap. Nodes and interior values are identical either way.
 
     Returns
     -------
@@ -1390,7 +1837,10 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
     n = x.shape[0]
     if n < 4:
         raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    if extrapolate:
+        xq_c = _clamp_to_hull(xq, *extrapolation_band(x))
+    else:
+        xq_c = _clamp_to_hull(xq, x[0], x[-1])
     # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
     # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
     pos = jnp.searchsorted(x, xq_c) - 1
@@ -1429,6 +1879,7 @@ def interp_nd_pchip(
     axes: tuple[jnp.ndarray, ...],
     point: tuple,
     kinds: tuple[str, ...] | None = None,
+    extrapolate: tuple[bool, ...] | None = None,
 ) -> jnp.ndarray:
     """N-dimensional node-exact monotone-cubic (PCHIP) interpolation.
 
@@ -1455,6 +1906,10 @@ def interp_nd_pchip(
         ``axes[i]`` has shape ``(grid_dims[i],)``.
     point : tuple
         Query coordinates, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis: continue the end cubic past the first and last node instead
+        of clipping the query to them. Only valid for ``'pchip'`` axes.
+        Default: clip on every axis.
     kinds : tuple of {'pchip', 'linear'}, optional
         Interpolation kind per axis, in the same order as ``axes``. Defaults to
         PCHIP on every axis. Select ``'linear'`` for an axis whose tabulated
@@ -1483,8 +1938,19 @@ def interp_nd_pchip(
     **Gradient-safe**: yes, C¹ in the query coordinates; guarded divisions in
     the slope computation keep the VJP finite at flat segments.
 
+    **Cost**: each axis contributes a window of at most four nodes around its
+    cell (its bracketing nodes and their tangent neighbors), so the read costs
+    ``prod(4 per axis) * trailing`` and does not grow with the node count. The
+    tangents are the full-axis Fritsch-Carlson tangents, not an approximation.
+
     Queries are clipped to the grid extent (no extrapolation beyond the
-    boundary nodes).
+    boundary nodes) unless ``extrapolate`` is set for that axis. An
+    extrapolated PCHIP axis continues its end cubic past the boundary node,
+    so a query a hair outside the table (a parameter prior that reaches
+    ``cos(90 deg)`` against a stored node of ``6e-17``) keeps a nonzero
+    derivative instead of the zero that clipping returns there. The end cubic
+    is the same one that interpolates the table, so nodes and the interior are
+    unchanged.
 
     References
     ----------
@@ -1499,11 +1965,203 @@ def interp_nd_pchip(
     unknown = set(kinds) - set(_EVAL_AXIS0)
     if unknown:
         raise ValueError(f"unknown interpolation kind(s) {sorted(unknown)}; expected pchip/linear")
+    if extrapolate is None:
+        extrapolate = (False,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    if any(e and k == "linear" for e, k in zip(extrapolate, kinds, strict=True)):
+        raise ValueError("extrapolate is only defined for pchip axes")
 
-    reduced = grid
-    for ax, p, kind in zip(axes, point, kinds, strict=True):
-        reduced = _EVAL_AXIS0[kind](ax, reduced, p)
+    stencils = [
+        _axis_stencil(ax, p, kind, bool(ext))
+        for ax, p, kind, ext in zip(axes, point, kinds, extrapolate, strict=True)
+    ]
+    return _evaluate_stencils(grid, stencils, kinds)
+
+
+#: Nodes per axis that the local PCHIP read gathers: the two bracketing nodes
+#: plus one neighbor on each side, which is all their tangents read.
+_STENCIL_NODES = 4
+
+
+class _AxisStencil(NamedTuple):
+    """One axis's local read: a window of nodes and the query inside it."""
+
+    xs: jnp.ndarray  # window node coordinates, shape (m,)
+    start: jnp.ndarray  # index of the window's first node on the full axis
+    cell: jnp.ndarray  # lower node of the bracketing cell, relative to the window
+    xq: jnp.ndarray  # query coordinate after this axis's clamp or extrapolation rule
+    m: int  # window length, min(_STENCIL_NODES, n)
+
+
+def _axis_stencil(ax: jnp.ndarray, p, kind: str, extrapolate: bool) -> _AxisStencil:
+    """Locate the cell and the 4-node window of one axis for a query.
+
+    The cell and clamp follow :func:`_pchip_eval_axis0` (``extrapolate=False``
+    clips the query to the node hull; ``True`` leaves it to the end cubic).
+    ``kind='linear'`` clamps with :func:`_clamp_to_hull`, as
+    :func:`_linear_eval_axis0` does. The window starts one node below the cell
+    and is shifted to stay inside the axis, so for ``n >= 4`` it always holds
+    the two cell nodes and their tangent neighbors. For ``n < 4`` the window is
+    the whole axis.
+    """
+    n = ax.shape[0]
+    m = min(_STENCIL_NODES, n)
+    if kind == "linear":
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
+    elif extrapolate:
+        xq = p
+    else:
+        # ``where``, not ``jnp.clip``: a clip halves the derivative on the boundary.
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
+    pos = jnp.searchsorted(ax, xq) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
+    return _AxisStencil(
+        xs=jax.lax.dynamic_slice_in_dim(ax, start, m, axis=0),
+        start=start,
+        cell=i - start,
+        xq=xq,
+        m=m,
+    )
+
+
+def _evaluate_stencils(grid: jnp.ndarray, stencils, kinds) -> jnp.ndarray:
+    """Gather the ``prod(m)`` hypercube of windows, then reduce it axis by axis.
+
+    Each reduction is the one-axis Hermite (or linear) read of
+    :func:`_pchip_eval_axis0`, but its tangents come from the window, not from
+    the whole axis. A node's tangent reads only its neighbors, so the window
+    gives the full-axis tangents at the two cell nodes. Each slice of the other
+    axes is reduced the same way, so this is the same tensor-product read at a
+    cost that does not grow with the node count.
+    """
+    sub = grid
+    for axis, st in enumerate(stencils):
+        sub = jax.lax.dynamic_slice_in_dim(sub, st.start, st.m, axis=axis)
+    reduced = sub
+    for st, kind in zip(stencils, kinds, strict=True):
+        reduced = _window_eval_axis0(st, reduced, kind)
     return reduced
+
+
+def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndarray:
+    """Evaluate one window along axis 0 of ``ys`` at the stencil's query."""
+    x0 = st.xs[st.cell]
+    x1 = st.xs[st.cell + 1]
+    h = x1 - x0
+    y0 = jax.lax.dynamic_index_in_dim(ys, st.cell, axis=0, keepdims=False)
+    y1 = jax.lax.dynamic_index_in_dim(ys, st.cell + 1, axis=0, keepdims=False)
+    if kind == "linear":
+        t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
+        return (1.0 - t) * y0 + t * y1
+    slopes = _pchip_slopes(st.xs, ys)
+    m0 = jax.lax.dynamic_index_in_dim(slopes, st.cell, axis=0, keepdims=False)
+    m1 = jax.lax.dynamic_index_in_dim(slopes, st.cell + 1, axis=0, keepdims=False)
+    t = (st.xq - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * y0
+        + (t3 - 2.0 * t2 + t) * h * m0
+        + (-2.0 * t3 + 3.0 * t2) * y1
+        + (t3 - t2) * h * m1
+    )
+
+
+def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):
+    """Map one query coordinate onto the table for :func:`library_lookup`.
+
+    The coordinate is clamped, not the value, so the lookup stays continuous.
+    With ``extrapolate`` the coordinate is held at the outer edge of the
+    numerical band ``[x[0] - h_lo/2, x[-1] + h_hi/2]``, and the end cubic is
+    evaluated there: a query inside the band is extrapolated, and one beyond it
+    takes the band-edge value. Without it the coordinate is held at the node hull
+    ``[x[0], x[-1]]``. Both are ``where`` selections, never ``jnp.clip``, so no
+    derivative is halved on a boundary.
+    """
+    if extrapolate:
+        lo, hi = extrapolation_band(ax)
+    else:
+        lo, hi = ax[0], ax[-1]
+    return jnp.where(p < lo, lo, jnp.where(p > hi, hi, p))
+
+
+def library_lookup(
+    grid: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+    *,
+    extrapolate: tuple[bool, ...] | None = None,
+    population_mask: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    """Evaluate a template library at ``point``: the one entry point for lookups (#2861).
+
+    Every fitted-parameter template-library lookup goes through here. It is
+    node-exact monotone-cubic (PCHIP, :func:`interp_nd_pchip`): the value at a
+    stored node is the stored value, and the interpolant is shape-preserving.
+    The triweight smoother is deliberately not used here, because it averages
+    across neighboring nodes and so does not reproduce the table.
+
+    Parameters
+    ----------
+    grid : jnp.ndarray, shape (*grid_dims, *trailing)
+        Tabulated values. The leading ``len(axes)`` dimensions are the axes.
+    axes : tuple of jnp.ndarray
+        One strictly ascending node vector per axis; ``axes[i]`` has shape
+        ``(grid_dims[i],)``.
+    point : tuple
+        Query coordinate, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis. ``True`` (the default on every axis) extrapolates the end cubic
+        across a numerical gap (a prior within half an end spacing of the node
+        hull) and holds the coordinate at the band edge beyond it, so the value is
+        continuous at the band edge. ``False`` holds the coordinate at the node
+        hull. Physical gaps are reported at build time by
+        :data:`tengri.components.grid_support.GRID_SUPPORT`; this function does
+        not read that registry.
+    population_mask : jnp.ndarray, optional, shape (grid_dims[2], grid_dims[1])
+        Three-axis grids only (velocity, B, density). 1.0 where the (density, B) cell
+        is populated, 0.0 where it is not (#2575). The read then uses populated nodes
+        only and holds at the populated hull on the masked axes; ``extrapolate`` must
+        be ``False`` for those axes. See :mod:`tengri.utils.masked_pchip`.
+
+    Returns
+    -------
+    jnp.ndarray, shape (*trailing,)
+        Interpolated values.
+
+    Raises
+    ------
+    ValueError
+        If ``extrapolate`` does not have one entry per axis.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The value is continuous
+    everywhere. The derivative is nonzero inside the numerical band and zero beyond
+    its outer edge, and it is one-sided (not halved) on the outermost node.
+    """
+    if extrapolate is None:
+        extrapolate = (True,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    if population_mask is not None:
+        if any(extrapolate[1:]):
+            raise ValueError("masked axes (B, density) hold at the populated hull; use False")
+        from tengri.utils.masked_pchip import masked_pchip_lookup  # lazy: module imports us
+
+        return masked_pchip_lookup(grid, axes, point, population_mask, bool(extrapolate[0]))
+    queries = tuple(
+        _library_axis_query(ax, p, bool(ext))
+        for ax, p, ext in zip(axes, point, extrapolate, strict=True)
+    )
+    # The queries are already held to their band, so the end cubic is read as is.
+    return interp_nd_pchip(grid, axes, queries, extrapolate=(True,) * len(axes))
 
 
 def resample_template(
@@ -1660,12 +2318,26 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.sum(jnp.where(positive, power_law, trapezoid))
 
 
+def _pchip_slice(ax: jnp.ndarray, table: jnp.ndarray, axis_idx: int, value) -> jnp.ndarray:
+    """Evaluate the PCHIP lookup of ``table`` at ``value`` along ``axis_idx``.
+
+    PCHIP is nonlinear in the node values (its slopes are limited by the data),
+    so the collapse evaluates the interpolant on the data itself rather than
+    contracting with a fixed weight vector. The query goes through the same
+    coordinate mapping as :func:`library_lookup`, so a collapsed axis and a
+    lookup along it agree.
+    """
+    query = _library_axis_query(ax, value, True)
+    moved = jnp.moveaxis(table, axis_idx, 0)
+    return _pchip_eval_axis0(ax, moved, query, extrapolate=True)
+
+
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
     index_space_interp: bool | None = None,
 ) -> PreintegratedGrid | PreintegratedLines:
-    """Collapse fixed axes in a preintegrated grid via triweight interpolation.
+    """Collapse fixed axes in a preintegrated grid via the node-exact PCHIP lookup (#2861).
 
     When a grid parameter is fixed (not free during inference), its axis
     can be collapsed at init time.  This reduces the grid dimensionality
@@ -1722,35 +2394,24 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
 
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
-
-            # Contract phot along this axis using einsum-style contraction.
-            # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
-            # preserving the order of all other axes.
-            phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
+            # Evaluate along this axis; the axis is removed and the others keep
+            # their order, as the old contraction did.
+            phot = _pchip_slice(ax, phot, axis_idx, value)
 
             if moment is not None:
-                moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
+                moment = _pchip_slice(ax, moment, axis_idx, value)
 
             if lyc_phot is not None:
-                lyc_phot = jnp.tensordot(w, lyc_phot, axes=([0], [axis_idx]))
+                lyc_phot = _pchip_slice(ax, lyc_phot, axis_idx, value)
 
             if nolyc_phot is not None:
-                nolyc_phot = jnp.tensordot(w, nolyc_phot, axes=([0], [axis_idx]))
+                nolyc_phot = _pchip_slice(ax, nolyc_phot, axis_idx, value)
 
             if sub_phot is not None:
-                sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
-                sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
-                sub_num_rest = jnp.tensordot(w, sub_num_rest, axes=([0], [axis_idx]))
+                sub_phot = _pchip_slice(ax, sub_phot, axis_idx, value)
+                sub_num = _pchip_slice(ax, sub_num, axis_idx, value)
+                sub_num_rest = _pchip_slice(ax, sub_num_rest, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)
@@ -1794,21 +2455,11 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
-
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
 
             # Contract line_filter_weights along this axis.
             # Shape (*grid_dims, n_lines, n_filters) → (*reduced_grid_dims, n_lines, n_filters)
             # Note: axis_idx indexes the grid dimensions (not n_lines or n_filters)
-            line_filter_weights = jnp.tensordot(w, line_filter_weights, axes=([0], [axis_idx]))
+            line_filter_weights = _pchip_slice(ax, line_filter_weights, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)

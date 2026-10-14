@@ -79,6 +79,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
+from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
@@ -154,8 +155,13 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     """
     if backend_name not in _MANY_EVAL_SAMPLERS:
         return
-    has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
-    if has_phot and not model.approx.wave_precomp:
+    observation = getattr(model, "observation", None)
+    has_phot = getattr(observation, "photometry", None) is not None
+    # A joint fit is exact under "auto" for its spectroscopy channel (#1688), and
+    # WavePrecomp would promote that channel onto the LUT, so the advice below
+    # does not apply to it.
+    has_spec = getattr(observation, "spectroscopy", None) is not None
+    if has_phot and not has_spec and not model.approx.wave_precomp:
         import warnings
 
         warnings.warn(
@@ -929,8 +935,8 @@ def _warn_if_lut_bias_amplified(
 
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
-    mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed.
+    mismatches, exotic data layouts) is logged with its traceback at WARNING
+    level, and the fit proceeds exactly as it did before the advisory existed.
 
     Parameters
     ----------
@@ -1089,6 +1095,11 @@ def _warn_if_lut_bias_amplified(
                 snr=snr_at,
             )
     except Exception:
+        logger.warning(
+            "LUT-bias advisory skipped for %s; the fit proceeds without it.",
+            surface,
+            exc_info=True,
+        )
         return
 
 
@@ -1127,11 +1138,10 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         The batch fit's model (or one built by its factory). Never mutated;
         ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
     approx : "auto" or None or precompute config
-        ``"auto"`` selects the LUT for the data type (photometry ->
-        ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
-        respects a model that already carries it; ``None`` returns the model
-        untouched (the exact path); anything else is handed to
-        ``with_approx`` verbatim.
+        ``"auto"`` selects ``WavePrecomp`` for photometry and keeps
+        spectroscopy and joint fits exact (#1688), and respects a model that
+        already carries a LUT; ``None`` returns the model untouched (the exact
+        path); anything else is handed to ``with_approx`` verbatim.
     data_type : str
         The fit's data type; selects the LUT under ``"auto"``.
 
@@ -1181,7 +1191,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                 "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
                 "or a tuple)."
             )
-        from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+        from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
 
         if _has_free_agb_dust_weight(model):
             return model
@@ -1255,18 +1265,11 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                     return _memoized_approx_clone(model, (*existing, *extra))
             if has_wave:
                 return model
-        elif data_type in ("spectroscopy", "joint"):
-            if state is not None and getattr(state, "spectrum_precomp", False):
-                return model
-            if _spectrum_lut_refused(model):
-                # Pixels wider than the model grid need the pixel integral,
-                # which the spectrum LUT cannot carry: stay exact (#2530).
-                if data_type == "spectroscopy":
-                    return model
-                cfg = WavePrecomp()
-            else:
-                cfg = SpectrumPrecomp()
         else:
+            # #1688: spectroscopy and joint fits stay exact under "auto". The
+            # spectrum LUT is opt-in (an explicit SpectrumPrecomp() still engages),
+            # and a joint fit cannot keep WavePrecomp for photometry alone, since
+            # a joint observation promotes it onto the spectrum LUT as well.
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         resolved = (*existing, cfg) if existing else cfg
@@ -1286,13 +1289,6 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             stacklevel=3,
         )
         return model
-
-
-def _spectrum_lut_refused(model) -> bool:
-    """Whether the model's pixels need the pixel integral the spectrum LUT cannot carry (#2530)."""
-    check = getattr(model, "_spectrum_lut_needs_pixel_integral", None)
-    observation = getattr(model, "observation", None)
-    return bool(check(observation)) if check is not None and observation is not None else False
 
 
 # Jitted predict wrappers, memoized per (model, method name).
@@ -1451,6 +1447,80 @@ def _neutralize_absent(data, noise, presence):
     data = jnp.where(absent & ~jnp.isfinite(data), 0.0, data)
     noise = jnp.where(absent & ~jnp.isfinite(noise), 1.0, noise)
     return data, noise
+
+
+def _model_sed(model):
+    """The ``SEDModel`` under a ``ForwardModel``, or the model itself (#2620)."""
+    inner = getattr(model, "_inner_sed_for_delegation", None)
+    return inner() if callable(inner) else model
+
+
+def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> None:
+    """Refuse an unmasked band whose transmission runs past the model's axis (#2620).
+
+    A band beyond the model's observed-frame wavelength axis returns its covered
+    fraction, or zero, with no error, so the fit would treat a structural zero as
+    a measurement. The check runs at every redshift the model declares (see
+    :meth:`SEDModel.filter_coverage_redshifts`). A band over
+    :data:`~tengri.observation.photometry.FILTER_COVERAGE_TOLERANCE` is accepted
+    only when it carries zero weight in the data: presence 0, a non-finite flux, or
+    a non-finite or zero error. That is the same absence convention the catalog
+    path uses.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The model being fitted.
+    data, noise : array_like, shape (n_filters,) or (n_galaxies, n_filters)
+        Observed fluxes and uncertainties.
+    presence : array_like or None
+        Per-datum presence weights, same shape as ``data``; zero marks absent.
+    data_type : str or None
+        Only ``None`` or ``"photometry"`` is checked; other data kinds are skipped.
+
+    Raises
+    ------
+    ConfigError
+        If an unmasked band exceeds the tolerance at any declared redshift. The
+        message names the bands, their out-of-axis fractions, the axis range and
+        the redshift.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.observation.photometry import FILTER_COVERAGE_TOLERANCE
+
+    if data_type not in (None, "photometry"):
+        return
+    sed = _model_sed(model)
+    photometry_of = getattr(sed, "_photometry_or_none", None)
+    phot = photometry_of() if callable(photometry_of) else None
+    if phot is None:
+        return
+    d = np.asarray(data, dtype=float)
+    n = np.asarray(noise, dtype=float)
+    absent = ~np.isfinite(d) | ~np.isfinite(n) | (n == 0.0)
+    if presence is not None:
+        p = np.asarray(presence, dtype=float)
+        if p.shape == d.shape:
+            absent = absent | (p == 0.0)
+    # A band is refused if any galaxy (or the single object) has it unmasked.
+    unmasked = np.any(~absent, axis=0) if d.ndim == 2 else ~absent
+    if unmasked.shape != (len(phot.filters),):
+        return  # not a per-band data vector for this model
+    names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+    for z in sed.filter_coverage_redshifts():
+        frac = sed.filter_coverage_at(z)
+        bad = np.flatnonzero((frac > FILTER_COVERAGE_TOLERANCE) & unmasked)
+        if bad.size == 0:
+            continue
+        lo, hi = sed.observed_axis_range(z)
+        described = ", ".join(f"{names[k]!r} (fraction {frac[k]:.3g})" for k in bad)
+        raise ConfigError(
+            f"Band(s) {described} lie beyond the model's observed-frame wavelength axis "
+            f"[{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model is zero there, so the "
+            f"band would return its covered share or zero. Mask each band in the data "
+            f"(presence=0, or a NaN flux / zero error in a catalog), or give the model a "
+            f"grid or component that reaches it."
+        )
 
 
 class Fitter:
@@ -1628,7 +1698,7 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default). The fitter takes a
+    Fit a single galaxy with the default method, ``"mcmc_nuts_fast"``. The fitter takes a
     :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
     >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
@@ -1748,6 +1818,7 @@ class Fitter:
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
         _reject_non_finite_data(self.data, self.noise, presence)
+        _refuse_uncovered_bands(model, self.data, self.noise, presence, data_type)
         # An absent datum's value is never *used*, but IEEE still propagates
         # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
         # as an unmasked one does, and the guard above would be telling users
@@ -2121,9 +2192,10 @@ class Fitter:
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
-        Photometry -> ``WavePrecomp``; spectroscopy/joint -> ``SpectrumPrecomp``;
-        ``FeaturePrecomp`` is appended when emission lines are fit. Returns
-        ``None`` for data types with no LUT mapping (the fit then stays exact).
+        Photometry -> ``WavePrecomp``; spectroscopy and joint -> no pixel LUT
+        (#1688). ``FeaturePrecomp`` is attached when emission lines are fit, on
+        its own for spectroscopy and joint fits. Returns ``None`` when nothing
+        applies (the fit then stays exact).
 
         "Emission lines are fit" means **any** line channel: the spectroscopy
         nuisance amplitudes (``_eline_marginalize`` / ``_eline_fitted``) *and*
@@ -2134,7 +2206,6 @@ class Fitter:
         """
         from tengri.forward.sed_model import (
             FeaturePrecomp,
-            SpectrumPrecomp,
             WavePrecomp,
         )
 
@@ -2149,19 +2220,19 @@ class Fitter:
         if _has_free_agb_dust_weight(model):
             return None
 
-        if self.data_type in ("spectroscopy", "joint"):
-            if _spectrum_lut_refused(model):
-                # The spectrum LUT cannot carry the pixel integral that
-                # pixels wider than the model grid need: exact spectrum (#2530).
-                if self.data_type == "spectroscopy":
-                    return None
-                base = WavePrecomp()
-            else:
-                base = SpectrumPrecomp()
-        elif self.data_type == "photometry":
+        # #1688: spectroscopy and joint fits take no pixel LUT by default.
+        # SpectrumPrecomp samples the model at pixel centers, which moves a
+        # high-SNR spectroscopic posterior by about one sigma against the exact
+        # path, and an explicit SpectrumPrecomp() opts in. A joint fit cannot keep
+        # WavePrecomp for its photometry alone: a joint observation promotes it
+        # onto the spectrum LUT too (SEDModel.__init__). The emission-line
+        # FeaturePrecomp is a separate mechanism and is still attached below
+        # where the fit has a line channel, since FeaturePrecomp alone does not
+        # engage either pixel LUT.
+        if self.data_type == "photometry":
             base = WavePrecomp()
         else:
-            return None
+            base = None
         # A line-flux channel earns the LUT, but an index/ratio channel on the
         # SAME fit vetoes it: those read the rest-frame SED / discrete catalog,
         # which the fast grid does not serve (#1665). Such a fit pays the
@@ -2184,6 +2255,8 @@ class Fitter:
             and not _has_line_adjacent_channel(model)
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
+        if base is None:
+            return FeaturePrecomp() if wants_lut else None
         return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(
@@ -3572,7 +3645,14 @@ class Fitter:
             # prewarm=False: this throwaway run must not re-enter auto-prewarm
             # (run -> _auto_prewarm -> prewarm -> run would recurse).
             self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
-        except Exception:
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "warmup for method=%r did not complete (%s: %s); the fit continues "
+                "and will compile on first use",
+                method,
+                type(exc).__name__,
+                exc,
+            )
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
@@ -3692,7 +3772,7 @@ class Fitter:
         }
         p = _Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("wb") as f:
+        with atomic_path(p) as tmp, open(tmp, "wb") as f:
             pickle.dump(payload, f)
 
     def load_cache(self, path) -> None:
@@ -3726,6 +3806,17 @@ class Fitter:
         # and it runs after the payload has already been deserialized.
         with _Path(path).open("rb") as f:
             payload = pickle.load(f)  # nosec B301
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Adaptation cache at {path} is not a cache written by save_cache() "
+                f"(expected a dict payload, got {type(payload).__name__})."
+            )
+        missing = sorted({"spec_fingerprint", "adaptation"} - payload.keys())
+        if missing:
+            raise ValueError(
+                f"Adaptation cache at {path} is missing required key(s) {missing}; "
+                "it was not written by save_cache() of this version."
+            )
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
             raise ValueError(
                 f"Adaptation cache at {path} was written for a different model "
@@ -3784,7 +3875,7 @@ class Fitter:
         Parameters
         ----------
         method : str, optional
-            Inference method (case-sensitive). Default ``"vi"``.
+            Inference method (case-sensitive). Default ``"mcmc_nuts_fast"``.
 
             **Variational Inference (VI)**
 
@@ -3899,7 +3990,9 @@ class Fitter:
         -----
         **Method selection strategy:**
 
-        - **Default** (``"vi"``): geoVI is recommended for high-dimensional problems
+        - **Default** (``"mcmc_nuts_fast"``): four NUTS chains on the mass-profiled
+          posterior; the fast photometry recipe for single galaxies.
+        - **Variational** (``"vi"``): geoVI is recommended for high-dimensional problems
           (D>50) and population fitting. Captures non-Gaussian posterior geometry.
         - **Exact posterior** (``"mcmc_nuts"``): Use for D≤20 where exact sampling is
           feasible and posterior validation is critical.
@@ -4733,7 +4826,7 @@ class Fitter:
         batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
         method : str
-            Default "vi". Any method from run().
+            Default ``"mcmc_nuts_fast"``. Any method from run().
         key : PRNGKey, optional
             Random seed for sampling methods. Default: ``jax.random.PRNGKey(42)``.
         verbose : bool

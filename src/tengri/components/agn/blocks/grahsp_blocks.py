@@ -33,13 +33,8 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
-from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
-from tengri.components.agn.grahsp.publication import (
-    PUBLICATION_HI_NM,
-    gauss_legendre_segments,
-    publication_breakpoints,
-)
+from tengri.components.agn.grahsp.publication import bolometric_unit_nm
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import (
     si_feature,
@@ -59,31 +54,6 @@ _LOG10_LSUN_ERG: float = _math.log10(LSUN_ERG)
 # ──────────────────────────────────────────────────────────────────────
 # Shared disc normalization helper
 # ──────────────────────────────────────────────────────────────────────
-
-
-def _bolometric_unit_nm(unit_fn, node_arrays=()) -> Array:
-    r"""Bolometric integral above the Lyman limit of a unit-l5100 disc spectrum.
-
-    Integrated on the component's own publication grid (segmented Gauss-Legendre in
-    ln lambda between the template nodes in ``node_arrays``), never on the caller's
-    wavelength array, so the normalization does not depend on how the caller samples
-    wavelength.
-
-    Parameters
-    ----------
-    unit_fn : callable
-        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
-    node_arrays : sequence of array_like, optional
-        Template wavelength nodes [nm] that the spectrum is interpolated on.
-
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int_{91.2\,\mathrm{nm}}^{\infty} L_\lambda\,\mathrm{d}\lambda` [erg/s].
-    """
-    breaks = publication_breakpoints(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, (), node_arrays)
-    lam_nm, weight_nm = gauss_legendre_segments(breaks)
-    return jnp.sum(weight_nm * unit_fn(lam_nm))
 
 
 def _disc_log_l5100(
@@ -119,7 +89,7 @@ def _disc_log_l5100(
     """
     if agn_grahsp_log_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
-        l_bol_unit = _bolometric_unit_nm(unit_fn, node_arrays)
+        l_bol_unit = bolometric_unit_nm(unit_fn, node_arrays)
         # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
         # log10(target) - log10(l_bol_unit). Never materializes the linear
         # target (~1e42-1e47, #1206 §D).

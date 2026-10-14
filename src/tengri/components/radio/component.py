@@ -57,7 +57,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._term_response import term_band_response as _term_band_response
+from tengri.components._term_response import (
+    term_band_response as _term_band_response,
+    term_shape_response as _term_shape_response,
+)
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import (
     radio_freefree,
@@ -90,6 +93,11 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # lands, the kernel names and their two free parameters (radio_alpha_inj,
 # radio_log_nu_break) get added together in the same PR.
 AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
+#: Luminosity the AGN radio loudness is referenced to (#2663). ``"4400"`` is the
+#: B-band disc luminosity of AGNfitter-rX (the default); ``"2500_30deg"`` is the
+#: disc 2500 A luminosity at a 30 deg line of sight, the anchor of CIGALE's
+#: ``R_agn``. Only a composable AGN publishes the 2500 A value.
+AGN_LOUDNESS_REFS: tuple[str, ...] = ("4400", "2500_30deg")
 
 # Mode strings for the star-formation radio sub-model, the sibling axis to
 # :data:`AGN_RADIO_MODELS`. Named here rather than spelled inline at each
@@ -206,6 +214,13 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Frequency [Hz] at which ``radio_q_ir`` anchors the ``"bell2003"`` synchrotron.
         Default 1.4 GHz, where Bell (2003) defines q. CIGALE anchors at 21 cm
         (1.42758 GHz); ``radio.sf.nu_ref = "21cm"`` selects that point (#2762).
+    agn_loudness_ref : str
+        Luminosity the AGN radio loudness is referenced to. One of
+        :data:`AGN_LOUDNESS_REFS`: ``"4400"`` (default) is the 4400 A disc
+        luminosity, ``radio_loudness = log10(L_5GHz / L_4400)`` (AGNfitter-rX);
+        ``"2500_30deg"`` is the disc 2500 A luminosity at 30 deg, CIGALE's
+        anchor, ``radio_loudness = log10(L_5GHz / L_2500)``. CIGALE's linear
+        ``R_agn`` is ``10 ** radio_loudness`` for either anchor.
     split_thermal : bool
         ``"bell2003_split"`` only. ``True`` (default) keeps the split's own 10 %
         thermal power law. ``False`` drops it because the nebular continuum
@@ -215,7 +230,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     freefree_wave_min : float or None
         Rest wavelength [Angstrom] below which the thermal free-free term is
         zero; the term is on at and above it. ``None`` (default) leaves the term on its own lower
-        limit (1 mm). The factory sets it to the SSP grid edge when the SSP
+        limit (100 um). The factory sets it to the SSP grid edge when the SSP
         is flagged nebular-included (``ssp_data.nebular == "included"``: its
         flux already holds the nebular continuum) and ``include_freefree``
         was left unset, so the SSP serves the thermal continuum up to its
@@ -246,6 +261,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     ir_window: str | None = None
     sf_nu_ref: float = 1.4e9
     split_thermal: bool = True
+    agn_loudness_ref: str = "4400"
 
     @property
     def resolved_ir_window(self) -> str:
@@ -320,6 +336,11 @@ class RadioSEDComponentConfig(SEDComponentConfig):
                 f"radio: a reference frequency (sf_nu_ref={self.sf_nu_ref!r} Hz) applies to "
                 f"sfr_mode='bell2003' only, got {self.sfr_mode!r}; the other star-formation "
                 "relations are anchored at the frequency their calibration was published at."
+            )
+        if self.agn_loudness_ref not in AGN_LOUDNESS_REFS:
+            raise ValueError(
+                f"Unknown agn_loudness_ref {self.agn_loudness_ref!r}. "
+                f"Choose one of {AGN_LOUDNESS_REFS}."
             )
         # Validate freefree_wave_min
         if self.freefree_wave_min is not None:
@@ -433,6 +454,12 @@ class RadioSEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "Read from AGN if present; drives radio loudness normalization",
             ),
+            DerivedKey(
+                "L_2500_intrinsic",
+                "erg/s/Hz",
+                "Read from a composable AGN if present; the 2500 A loudness anchor when "
+                "agn_loudness_ref='2500_30deg' (#2663)",
+            ),
             DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
@@ -455,12 +482,14 @@ class RadioSEDComponent(TemplateThreading):
             "L_ir": 1.0e44,
             "L_agn_bol": 1.0e45,
             "L_4400_intrinsic": 1.0e28,
+            "L_2500_intrinsic": 8.0e27,
             "log_mstar": 10.0,
         },
         {
             "L_ir": 8.0e45,
             "L_agn_bol": 6.0e46,
             "L_4400_intrinsic": 5.0e30,
+            "L_2500_intrinsic": 4.0e30,
             "log_mstar": 11.5,
         },
     )
@@ -502,6 +531,7 @@ class RadioSEDComponent(TemplateThreading):
             "L_ir": jnp.asarray(derived.get("L_ir", 0.0)),
             "L_agn_bol": jnp.asarray(derived.get("L_agn_bol", 0.0)),
             "L_4400_intrinsic": jnp.asarray(derived.get("L_4400_intrinsic", 0.0)),
+            "L_2500_intrinsic": jnp.asarray(derived.get("L_2500_intrinsic", 0.0)),
             "log_mstar": jnp.asarray(derived.get("log_mstar", 10.0)),
         }
         log_L_ir = derived.get("log_L_ir")
@@ -639,6 +669,7 @@ class RadioSEDComponent(TemplateThreading):
         log_mstar: jnp.ndarray,
         log_L_ir: jnp.ndarray | None = None,
         log_L_agn_bol: jnp.ndarray | None = None,
+        L_2500_intrinsic: jnp.ndarray | float = 0.0,
     ) -> dict[str, jnp.ndarray]:
         r"""The additive terms of the radio SED, unsummed.
 
@@ -662,6 +693,10 @@ class RadioSEDComponent(TemplateThreading):
             AGN bolometric luminosity [erg/s].
         L_4400_intrinsic : array_like, scalar
             Un-reddened AGN B-band luminosity [erg/s/Hz], the radio-loudness reference.
+        L_2500_intrinsic : array_like, scalar
+            Un-reddened AGN 2500 A luminosity at 30 deg [erg/s/Hz]; the loudness
+            reference when ``agn_loudness_ref='2500_30deg'`` (#2663). Zero for a
+            monolithic AGN, which the build refuses with that option.
         log_mstar : array_like, scalar
             log10 stellar mass [dex Msun]; used by the mass-evolving FIRRC modes.
 
@@ -688,6 +723,11 @@ class RadioSEDComponent(TemplateThreading):
         """
         model = self.config.agn_radio_model
         z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
+        # The AGN loudness anchor (#2663): the 4400 A disc luminosity by default, or the
+        # 2500 A one at 30 deg (CIGALE). Static config selects the branch under JIT.
+        l_anchor = (
+            L_2500_intrinsic if self.config.agn_loudness_ref == "2500_30deg" else L_4400_intrinsic
+        )
 
         # Float32 routing (#1206): only when the forward grid is float32 do we
         # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46), which
@@ -763,7 +803,7 @@ class RadioSEDComponent(TemplateThreading):
                     split_thermal=self.config.split_thermal,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                    l_bband=L_4400_intrinsic,
+                    l_bband=l_anchor,
                     log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                     log_L_ir=_log_L_ir,
                     log_L_agn_bol=_log_L_agn,
@@ -796,12 +836,42 @@ class RadioSEDComponent(TemplateThreading):
                 split_thermal=self.config.split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                l_bband=L_4400_intrinsic,
+                l_bband=l_anchor,
                 log_L_ir=_log_L_ir,
                 log_L_agn_bol=_log_L_agn,
             ),
             wave,
         )
+
+    #: Term order of :meth:`emission_terms`, the order the shape-only tables are read in.
+    TERM_NAMES: ClassVar[tuple[str, ...]] = ("sf", "ff", "agn")
+
+    def term_shape_keys(self) -> dict[str, str]:
+        """Registry key of each term whose shape-only band table this emitter can use.
+
+        Empty when the emitter has no such table: the ``sfr_mode`` shape is not the
+        bell2003 one the adapter tabulates, the free-free window is set (the adapter's
+        shape carries no window), or the AGN model is the double power law. A model with
+        an empty map keeps the dense per-call filter integral.
+
+        Returns
+        -------
+        dict of str to str
+            ``{term: registry key}`` in :attr:`TERM_NAMES` order.
+
+        Notes
+        -----
+        **JIT-compatible**: no, configuration read.
+        """
+        if self.config.sfr_mode != "bell2003" or self.config.freefree_wave_min is not None:
+            return {}
+        if self.config.agn_radio_model not in ("powerlaw", "none"):
+            return {}
+        return {
+            "sf": "radio_synchrotron",
+            "ff": "radio_freefree",
+            "agn": "radio_agn_jet",
+        }
 
     def precompute(
         self,
@@ -913,6 +983,16 @@ class RadioSEDComponent(TemplateThreading):
 
             # Compute precomputed photometry if band response is available.
             precomputed = None
+            shape = None
+            if band is None:
+                # A shape parameter is free: the exact response has no constant to hold, so
+                # each term's band flux comes from its shape-only table at the current shape,
+                # times the term evaluated at its own reference wavelength (the amplitude).
+                shape = _term_shape_response(template_data, "radio", params, self.TERM_NAMES)
+            if shape is not None:
+                ref = self.emission_terms(params, shape["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())])
+                precomputed = amps @ shape["R"]
             if band is not None:
                 # Exact fast path. Radio is a sum of rank-1 terms; SF synchrotron,
                 # free-free, AGN jet: each a scalar amplitude times a spectral shape

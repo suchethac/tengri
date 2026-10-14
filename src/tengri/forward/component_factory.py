@@ -465,6 +465,7 @@ def build_components(
     radio_include_freefree: bool | None = None,
     radio_ir_window: str | None = None,
     radio_sf_nu_ref: float | None = None,
+    radio_agn_loudness_ref: str = "4400",
     xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
@@ -561,6 +562,10 @@ def build_components(
         Frequency [Hz] at which ``radio_q_ir`` anchors the ``bell2003`` synchrotron
         (grammar key ``radio.sf.nu_ref``). ``None`` keeps Bell (2003)'s 1.4 GHz;
         ``"21cm"`` in the grammar gives CIGALE's 1.42758 GHz (#2762).
+    radio_agn_loudness_ref : str
+        AGN radio-loudness reference (grammar key ``radio.agn.loudness_ref``): ``"4400"``
+        (default, the 4400 A disc luminosity) or ``"2500_30deg"`` (CIGALE's 2500 A at
+        30 deg). The latter needs ``agn_model="composable"`` (#2663).
     radio_include_freefree : bool or None
         Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
         ``False`` when the declared nebular backend carries a free-free continuum
@@ -860,6 +865,15 @@ def build_components(
                 # unstamped grid keeps the term over its whole range.
                 freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
+        if radio_agn_loudness_ref != "4400" and agn_model != "composable":
+            from tengri.config.exceptions import ConfigError
+
+            raise ConfigError(
+                f"radio: loudness_ref={radio_agn_loudness_ref!r} reads the composable AGN's "
+                "2500 A disc luminosity, which a monolithic AGN does not publish (it would "
+                "fall back silently to the L_bol correction). Use agn={'type': 'composable', ...} "
+                "or leave loudness_ref at its '4400' default."
+            )
         radio_config = RadioSEDComponentConfig(
             sfr_mode=radio_sfr_mode,
             agn_radio_model=radio_agn_model,
@@ -876,6 +890,7 @@ def build_components(
                 and nebular_backend_carries_freefree(nebular_backend)
             ),
             **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
+            agn_loudness_ref=radio_agn_loudness_ref,
         )
         if (
             radio_ir_window is None
@@ -966,8 +981,38 @@ def build_components(
     # dead code (the sort guarantees publisher-before-consumer);
     # the remaining checks are duplicate-publish and units mismatch.
     validate_pipeline(components)
+    _warn_unfed_optional_pair(components)
 
     return components
+
+
+def _warn_unfed_optional_pair(components: Sequence[SEDComponent]) -> None:
+    """Warn when a component reads ``L_ir`` and ``L_agn_bol`` and neither is published.
+
+    The optional-read fallback is 0.0, so a radio component with no dust
+    (energy-balance L_ir) and no AGN (L_agn_bol) in the chain silently emits
+    zero. The fallback is correct for the pipelines that legitimately omit both,
+    so this is an advisory at build time rather than an error.
+    """
+    import warnings
+
+    from tengri.config.exceptions import AdvisoryWarning
+    from tengri.forward.orchestrator import _optional_inputs, _outputs
+
+    pair = {"L_ir", "L_agn_bol"}
+    published = {key.name for c in components for key in _outputs(c)}
+    if pair & published:
+        return
+    for component in components:
+        read = {key.name for key in _optional_inputs(component)}
+        if pair <= read:
+            warnings.warn(
+                f"{type(component).__name__}: neither L_ir (dust) nor L_agn_bol (AGN) is "
+                "in this chain, so the radio output is zero (both fall back to 0.0). "
+                "Add a dust_attenuation/dust_emission block or an AGN block, or drop radio.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
 
 
 def chain_summary(components: Sequence[SEDComponent]) -> str:

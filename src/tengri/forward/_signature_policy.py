@@ -108,7 +108,6 @@ SIGNATURE_POLICY: KeyPolicy = {
     ),
     "_met_interp": content("metallicity interpolation mode changes the SSP lookup"),
     "_met_mode": content("metallicity model selection determines parameters and graph shape"),
-    "_z_interp": content("redshift interpolation mode changes the ztable lookup"),
     # ── SFH ────────────────────────────────────────────────────────────
     "_sfh_fn": content("SFH function, kept by qualified name"),
     "_sfh_internal_names": content("internal SFH parameter names determine the param map"),
@@ -216,6 +215,11 @@ SIGNATURE_POLICY: KeyPolicy = {
         "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
         "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"
     ),
+    "_radio_agn_loudness_ref": content(
+        "AGN radio-loudness anchor (4400 A or 2500 A at 30 deg) changes the emitted radio SED; "
+        "set by the grammar's radio.agn.loudness_ref key and routed to "
+        "RadioSEDComponentConfig.agn_loudness_ref"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),
@@ -261,15 +265,44 @@ SIGNATURE_POLICY: KeyPolicy = {
         "memo of the built chain; the chain's configs are keyed through _component_configs instead"
     ),
     "_dust_band_response_cache": exclude("memo cache computed from keyed structure"),
+    "_cloudy_band_table_cache": exclude(
+        "memo of the CLOUDY band table, built from the keyed nebular backend, the "
+        "filters, the fixed redshift and line width, and the spec's priors"
+    ),
+    "_shock_band_table_cache": exclude(
+        "memo of the shock line-band coefficients, built from the keyed shock component, "
+        "the filters, the fixed redshift and the rest grid"
+    ),
+    "_shock_band_table_decline": exclude(
+        "the verdict that accompanies _shock_band_table_cache: why the coefficients were "
+        "refused, recorded for precompute_report. Read by no numerical path"
+    ),
+    "_cloudy_band_table_decline": exclude(
+        "the verdict that accompanies _cloudy_band_table_cache: why the table was "
+        "refused, recorded for precompute_report. Read by no numerical path"
+    ),
     "_dust_band_response_decline": exclude(
         "the verdict that accompanies _dust_band_response_cache: why the response "
         "was refused, recorded for precompute_report. Derived from the same keyed "
         "structure as the cache, and read by no numerical path"
     ),
+    "_dust_shape_table_cache": exclude("memo cache computed from keyed structure"),
+    "_dust_shape_table_decline": exclude(
+        "the verdict that accompanies _dust_shape_table_cache; derived from the same keyed "
+        "structure and read by no numerical path"
+    ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "
-        "emitters (radio, xray, and any new ones)"
+        "emitters (radio, xray, agn, and any new ones)"
+    ),
+    "_*_term_response_decline": exclude(
+        "the verdict that accompanies _*_term_response_cache: why the response was "
+        "refused, recorded for precompute_report. Read by no numerical path"
+    ),
+    "_*_term_shape_cache": exclude(
+        "memo cache computed from keyed structure; pattern matches the shape-only term "
+        "table of every additive emitter (radio, xray, and any new ones)"
     ),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),

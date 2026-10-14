@@ -49,7 +49,7 @@ def stellar_only_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -248,7 +248,7 @@ def stellar_field_model(ssp):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=_FIELD_N_GRID,
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -560,7 +560,7 @@ def stellar_chem_evol_model(ssp):
         mean_sfh_type=["tsnorm"],
         met_mode="chem_evol",
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -634,7 +634,7 @@ def stellar_ramp_model(ssp):
         mean_sfh_type=["tsnorm"],
         met_mode="ramp",
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -977,7 +977,7 @@ def test_orchestrator_psb_close_to_legacy(ssp):
     """``psb`` (post-starburst, Wild+ 2020) — orchestrator vs legacy."""
     priors = {
         "sfh_psb_log_total_mass": Uniform(8.0, 12.0),
-        "sfh_psb_age_gyr": Uniform(0.5, 13.0),
+        "sfh_psb_age_frac": Uniform(0.0362663, 0.942925),
         "sfh_psb_tau_gyr": Uniform(0.1, 10.0),
         "sfh_psb_burstage_gyr": Uniform(0.01, 5.0),
         "sfh_psb_alpha": Uniform(0.5, 5.0),
@@ -1004,7 +1004,7 @@ def test_orchestrator_delayed_bq_close_to_legacy(ssp):
     priors = {
         "sfh_delayed_bq_log_total_mass": Uniform(8.0, 12.0),
         "sfh_delayed_bq_tau_main_gyr": Uniform(0.1, 10.0),
-        "sfh_delayed_bq_age_main_gyr": Uniform(0.5, 13.0),
+        "sfh_delayed_bq_age_main_frac": Uniform(0.0362663, 0.942925),
         "sfh_delayed_bq_age_bq_gyr": Uniform(0.01, 5.0),
         "sfh_delayed_bq_r_sfr": Uniform(0.01, 10.0),
     }
@@ -1082,7 +1082,7 @@ def test_orchestrator_periodic_close_to_legacy(ssp):
         "sfh_periodic_log_total_mass": Uniform(8.0, 12.0),
         "sfh_periodic_delta_bursts_gyr": Uniform(0.01, 1.0),
         "sfh_periodic_tau_bursts_gyr": Uniform(0.001, 0.5),
-        "sfh_periodic_age_gyr": Uniform(0.5, 13.0),
+        "sfh_periodic_age_frac": Uniform(0.0362663, 0.942925),
     }
     sfh_params = {
         "sfh_periodic_log_total_mass": 10.0,

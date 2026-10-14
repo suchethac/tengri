@@ -403,7 +403,7 @@ def test_threading_does_not_change_the_number_on_either_surface(
     )
 
 
-def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp, simple_observation):
+def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp):
     """A hierarchical forward must NOT get ``_jit_inputs``.
 
     The threaded forward is written for a single-population SED forward; on a
@@ -420,6 +420,11 @@ def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp, simple
     from tengri import DEFAULT, Fixed, SEDModel, Uniform
     from tengri.forward.population_sed_model import PopulationSEDModel
 
+    # Bands inside the synthetic SSP axis at z=0.5 (observed [4500, 15000] A), so the
+    # coverage refusal (#2620) does not fire; the exclusion under test is unaffected.
+    simple_observation = Observation(
+        photometry=Photometry(filters=tuple(_tophat(c) for c in (6000.0, 7000.0, 8000.0)))
+    )
     template = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=simple_observation,

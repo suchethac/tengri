@@ -178,6 +178,7 @@ Table {ref}`2 <tab-agn-backends>` lists the available backends at each node. Ea
 |  | `qsosed` | 3 | qsosed (Quera-Bofarull) | Simplified K&D 3-zone; geometry hardwired |
 |  | `relagn` | 10 | RELAGN (Hagen and Done 2023) | Full K&D with GR corrections |
 |  | `adaf` | 6 | --- | ADAF + truncated disc for LLAGN |
+|  | `adaf_lopez2024` | 1 | CIGALE `skirtor2016` `disk_type = 2` (López et al. 2024) | ADAF-to-thin-disc blend; weight `agn_cigale_adaf_delta` in [0, 1] (0 = ADAF, default), not clipped |
 |  | `qsogen` | 9 | Temple et al. (2021) | Empirical quasar SED with emission lines |
 | Torus | `skirtor_grid` | 7 | Stalevski et al. (2016) | Full RT clumpy torus templates (default) |
 |  | `cat3d_wind` | 3 | AGNfitter-rx | Clumpy disc + polar wind; subsumes polar dust |

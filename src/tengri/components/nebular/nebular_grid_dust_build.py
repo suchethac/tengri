@@ -104,10 +104,14 @@ def _nebular_subband_channels(
     for f_idx, (fw, ft) in enumerate(filters):
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
-        grid = np.sort(np.concatenate([wave_obs, fw_np]))
-        # Same clip as preintegrate_grid: keep one node past each filter edge.
-        lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
-        hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+        # Same support rule as the whole-band filter integral (#2817): SED nodes
+        # are clipped into the filter's own support, so the sub-band chunks sum to
+        # the whole band exactly. A node past an edge would otherwise carry a
+        # transmission ramp from the edge value to zero across the straddle segment.
+        f_lo, f_hi = float(fw_np.min()), float(fw_np.max())
+        grid = np.sort(np.concatenate([np.clip(wave_obs, f_lo, f_hi), fw_np]))
+        lo = np.searchsorted(grid, f_lo, side="left")
+        hi = np.searchsorted(grid, f_hi, side="right")
         grid = grid[lo:hi]
         trans = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans * filter_weight_np(grid, FilterConvention.BESSELL)

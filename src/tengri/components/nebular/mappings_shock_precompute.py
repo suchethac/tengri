@@ -40,7 +40,7 @@ from tengri.components.nebular.shock import (
     _resolve_abundance,
 )
 from tengri.utils.grid_interp import (
-    interp_nd_triweight,
+    library_lookup,
 )
 from tengri.utils.interpolation import edges_for_grid
 
@@ -214,7 +214,6 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     line_wavelengths = preint["line_wavelengths"]
     line_ratios_grid = preint["line_ratios_grid"]
     grid_axes = preint["grid_axes"]
-    edges = preint["_preint_edges"]
     collapsed_axes = preint.get("_collapsed_axes", {})
 
     @jax.jit
@@ -248,14 +247,8 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
                 full_point.append(free_axis_vals[free_idx])
                 free_idx += 1
 
-        # Clip to grid bounds
-        full_point = tuple(
-            jnp.clip(full_point[i], grid_axes[i][0], grid_axes[i][-1])
-            for i in range(len(full_point))
-        )
-
-        # Triweight interpolation: all 3 axes jointly
-        ratios_interp = interp_nd_triweight(line_ratios_grid, grid_axes, edges, full_point)
+        # PCHIP lookup over all axes jointly (#2861); clamps to the grid per axis.
+        ratios_interp = library_lookup(line_ratios_grid, grid_axes, full_point)
         # ratios_interp: shape (n_lines,)
 
         # Normalize to unity Hα ratio: Hα is typically the last line
@@ -272,3 +265,64 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
         "predict_lines": predict_lines,
         "line_wavelengths": line_wavelengths,
     }
+
+
+def shock_band_coefficients(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    wave: object,
+) -> object:
+    """Band of one unit-luminosity shock line through each filter, both frames.
+
+    The composable shock places its lines as delta functions (no line width
+    argument on its per-call path), and placement is linear in each line's
+    luminosity. The filter band of the shock SED is therefore the luminosity
+    vector contracted with these coefficients, exactly, at any shock velocity,
+    B-field, density and H-alpha normalization (#2324).
+
+    Parameters
+    ----------
+    filter_waves, filter_trans : list of array_like
+        Filter curves, one per band (the padded set the photometry path uses).
+    redshift : float
+        Source redshift for the observed frame. A single Fixed value.
+    wave : array_like, shape (n_wave,)
+        Rest-frame SED wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_lines, 2, n_filt) or None
+        Observed (index 0, at ``redshift``) and rest (index 1, at 0) band of a
+        unit-luminosity line [erg/s/Hz per erg/s]; ``n_lines`` follows the
+        MAPPINGS V line list the backend uses. None when the grid is absent,
+        since the backend then runs on a different line list.
+
+    Notes
+    -----
+    **JIT-compatible**: no, build-time only.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.components.nebular._shared import render_nebular_lines
+    from tengri.observation.photometry import lnu_filter_integral_batch
+
+    grids = _load_mappings_grids()
+    if grids is None or "mappings5" not in grids:
+        return None
+    line_waves = jnp.asarray(grids["mappings5"]["line_wavelengths_aa"])
+    wave = jnp.asarray(wave)
+    n_lines = int(line_waves.shape[0])
+
+    def _bands(sed, z):
+        # The same batch integral the per-call shock path uses, so the two agree.
+        return lnu_filter_integral_batch(sed, wave, filter_waves, filter_trans, z)
+
+    def _unit(lum_vec):
+        # Delta-function placement: the same call compute_shock_sed makes with
+        # its default line_sigma_aa=0 and line_sigma_kms=0.
+        sed = render_nebular_lines(line_waves, lum_vec, wave, 0.0, 0.0)
+        return jnp.stack([_bands(sed, float(redshift)), _bands(sed, 0.0)])
+
+    return jax.vmap(_unit)(jnp.eye(n_lines))

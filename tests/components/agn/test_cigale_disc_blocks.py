@@ -122,8 +122,8 @@ def test_adaf_blend_endpoints_differ() -> None:
     """ADAF-Lopez2024 must produce distinct spectra at delta=0 and delta=1."""
     block = resolve_agn_block("disc", "adaf_lopez2024")
     wave_aa = jnp.geomspace(100.0, 1.0e7, 300)
-    L_adaf = block(wave_aa, 10.0, agn_cigale_disk_delta=0.0)
-    L_disc = block(wave_aa, 10.0, agn_cigale_disk_delta=1.0)
+    L_adaf = block(wave_aa, 10.0, agn_cigale_adaf_delta=0.0)
+    L_disc = block(wave_aa, 10.0, agn_cigale_adaf_delta=1.0)
     rel_diff = float(jnp.mean(jnp.abs(L_adaf - L_disc)) / jnp.mean(L_adaf))
     assert rel_diff > 0.1  # the two extremes are far apart
 

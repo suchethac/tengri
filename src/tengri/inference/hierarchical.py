@@ -90,6 +90,76 @@ def chain_is_degenerate(chain, accept_rate: float) -> bool:
     return n_unique <= 1 or float(accept_rate) < _DEGENERATE_ACCEPT_RATE
 
 
+_LINEAR_DRAW_ERRORS = (TypeError, ValueError, AttributeError, KeyError, RuntimeError)
+
+
+def _quiet_optimize_kl(jft, *args, **kwargs):
+    """Run NIFTy's ``optimize_kl`` with its warnings and stdout suppressed.
+
+    Scoped to the call: the caller's warning filters and ``sys.stdout`` are
+    restored on every exit path, including an exception from NIFTy.
+    """
+    import contextlib
+    import io
+
+    with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
+        warnings.simplefilter("ignore")
+        return jft.optimize_kl(*args, **kwargs)
+
+
+def _collect_linear_draws(jft, likelihood, converged_pos, draw_key, n_posterior_samples):
+    """Draw linear-residual posterior samples until one fails.
+
+    Returns the combined draws collected before the first failure, and that
+    failure (``None`` when all ``n_posterior_samples`` succeeded). The caller
+    reports a shortfall through :func:`_warn_short_draws`.
+    """
+    draws = []
+    failure = None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for _j in range(n_posterior_samples):
+            draw_key, sub_key = jax.random.split(draw_key)
+            try:
+                residual, _ = jft.draw_linear_residual(
+                    likelihood,
+                    converged_pos,
+                    sub_key,
+                    cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
+                )
+                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
+                pos_tree = (
+                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
+                )
+                draws.append({k: pos_tree[k] + sample_tree[k] for k in pos_tree})
+            except _LINEAR_DRAW_ERRORS as exc:
+                # TypeError: NIFTy API mismatch or dict() conversion failed
+                # ValueError: invalid cg_kwargs configuration
+                # AttributeError: missing .tree attribute
+                # KeyError: position/sample tree key mismatch
+                # RuntimeError: linear solver failed to converge
+                failure = exc
+                break
+    return draws, failure
+
+
+def _warn_short_draws(*, requested, collected, failure):
+    """Warn when fewer posterior draws than requested were collected."""
+    if collected >= requested:
+        return
+    from tengri.config.exceptions import warn_measured
+
+    reason = f" (stopped by {type(failure).__name__}: {failure})" if failure is not None else ""
+    warn_measured(
+        f"NIFTy VI: requested {requested} posterior draws but collected {collected}{reason}. "
+        "The returned posterior has fewer draws than asked for.",
+        UserWarning,
+        stacklevel=2,
+        requested=requested,
+        collected=collected,
+    )
+
+
 @dataclass
 class PopulationPosterior:
     """Results from hierarchical PSD inference.
@@ -441,13 +511,13 @@ class PopulationFitter:
         "photometry" or "spectroscopy".
     approx : "auto" or None or precompute config, optional
         Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
-        (default) routes every factory-built model through the LUT for the
-        data type (photometry -> ``WavePrecomp``, spectroscopy ->
-        ``SpectrumPrecomp``), a hierarchical sampler evaluates the forward
+        (default) routes every factory-built photometry model through the
+        ``WavePrecomp`` LUT, a hierarchical sampler evaluates the forward
         model thousands of times, and the exact path costs a measured ~2-6x
-        more per evaluation. ``None`` forces the exact wave-grid path; an
-        explicit config is used verbatim. A factory whose models already
-        carry the LUT is respected untouched.
+        more per evaluation. Spectroscopy and joint fits stay exact under
+        ``"auto"``, since the spectrum LUT is opt-in. ``None`` forces the exact
+        wave-grid path; an explicit config is used verbatim. A factory whose
+        models already carry the LUT is respected untouched.
 
     Notes
     -----
@@ -843,6 +913,7 @@ class PopulationFitter:
             raise ValueError(self._unknown_method_message(method, _method_map))
 
         cfm_method, sample_mode = _method_map[method]
+        self._refuse_unknown_kwargs(method, cfm_method, kwargs)
         if cfm_method == "geovi":
             extra = {"sample_mode": sample_mode} if sample_mode is not None else {}
             return self._run_geovi(key=key, **extra, **kwargs)
@@ -854,6 +925,49 @@ class PopulationFitter:
             return self._run_native_vi_nonlinear(key=key, **kwargs)
         else:
             raise ValueError(f"Unmapped method: {method!r}")
+
+    def _refuse_unknown_kwargs(self, method: str, cfm_method: str, kwargs: dict) -> None:
+        """Refuse a ``**kwargs`` name the hierarchical engine about to run does not take.
+
+        These engines receive ``kwargs`` as explicit keywords, so an unknown name
+        surfaced as ``TypeError: PopulationFitter._run_geovi() got an unexpected
+        keyword argument 'lines'``: an internal function the caller never chose
+        (#1469). Validates against the engine's own signature through the same
+        validator the registry dispatch uses. The flat-sampler branch is not
+        covered here; ``run_flat_sampler`` validates its own accepted set.
+
+        Parameters
+        ----------
+        method : str
+            The resolved method name, as returned by ``resolve_method``.
+        cfm_method : str
+            The engine tag from the dispatch table: ``"geovi"``, ``"raytrace"``,
+            ``"native_vi_linear"`` or ``"native_vi_nonlinear"``.
+        kwargs : dict
+            The ``**kwargs`` the caller passed to :meth:`run`.
+
+        Raises
+        ------
+        TypeError
+            If ``kwargs`` carries a name the engine cannot accept.
+        """
+        import dataclasses
+        import inspect
+
+        from tengri.inference._backend_registry import check_unknown_kwargs, get_backend
+        from tengri.inference.fitter import fit_surface_ctor_names
+
+        engines = {
+            "geovi": type(self)._run_geovi,
+            "raytrace": type(self)._run_raytrace,
+            "native_vi_linear": type(self)._run_native_vi_linear,
+            "native_vi_nonlinear": type(self)._run_native_vi_nonlinear,
+        }
+        entry = dataclasses.replace(get_backend(method), runner=engines[cfm_method])
+        # Names ``run`` consumes itself never reach kwargs; listing them only
+        # sharpens the suggestion for a near-miss.
+        run_names = frozenset(inspect.signature(self.run).parameters)
+        check_unknown_kwargs(entry, kwargs, also_accepted=run_names | fit_surface_ctor_names())
 
     def _run_native_vi_nonlinear(
         self,
@@ -1854,12 +1968,8 @@ class PopulationFitter:
             print(f"  Total parameters: {n_total}")
 
         # ── Run optimize_kl ───────────────────────────────────
-        import io
         import logging
-        import sys
-        import warnings
 
-        warnings.filterwarnings("ignore")
         logging.getLogger("nifty8").setLevel(logging.ERROR)
 
         if verbose:
@@ -1873,11 +1983,9 @@ class PopulationFitter:
         else:
             resolved_mode = sample_mode
 
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-
         key_opt = keys[-1]
-        samples, _state = jft.optimize_kl(
+        samples, _state = _quiet_optimize_kl(
+            jft,
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
@@ -1891,8 +1999,6 @@ class PopulationFitter:
             odir=None,
         )
 
-        sys.stdout = old_stdout
-
         # ── Draw posterior samples ────────────────────────────
         if verbose:
             print(f"  Drawing {n_posterior_samples} posterior samples...")
@@ -1905,28 +2011,13 @@ class PopulationFitter:
             sd = s.tree if hasattr(s, "tree") else dict(s)
             all_sample_dicts.append(sd)
 
-        for _j in range(n_posterior_samples):
-            key_draw, sub_key = jax.random.split(key_draw)
-            try:
-                residual, _ = jft.draw_linear_residual(
-                    likelihood,
-                    converged_pos,
-                    sub_key,
-                    cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
-                )
-                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
-                pos_tree = (
-                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
-                )
-                combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
-                all_sample_dicts.append(combined)
-            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
-                # TypeError: NIFTy API mismatch or dict() conversion failed
-                # ValueError: invalid cg_kwargs configuration
-                # AttributeError: missing .tree attribute
-                # KeyError: position/sample tree key mismatch
-                # RuntimeError: linear solver failed to converge
-                break
+        draws, draw_failure = _collect_linear_draws(
+            jft, likelihood, converged_pos, key_draw, n_posterior_samples
+        )
+        all_sample_dicts.extend(draws)
+        _warn_short_draws(
+            requested=n_posterior_samples, collected=len(draws), failure=draw_failure
+        )
 
         wall_time = time.time() - t0
         n_post = len(all_sample_dicts)
@@ -2143,12 +2234,8 @@ class PopulationFitter:
         # ── Run optimize_kl ───────────────────────────────────
         key, opt_key = jax.random.split(keys[-1])
 
-        import io
         import logging
-        import sys
-        import warnings
 
-        warnings.filterwarnings("ignore")
         logging.getLogger("nifty8").setLevel(logging.ERROR)
 
         if verbose:
@@ -2160,10 +2247,8 @@ class PopulationFitter:
         else:
             resolved_mode = sample_mode
 
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-
-        samples, _state = jft.optimize_kl(
+        samples, _state = _quiet_optimize_kl(
+            jft,
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
@@ -2176,8 +2261,6 @@ class PopulationFitter:
             kl_kwargs=cfg.kl_kwargs,
             odir=None,
         )
-
-        sys.stdout = old_stdout
 
         # ── Draw posterior samples ────────────────────────────
         if verbose:
@@ -2194,28 +2277,13 @@ class PopulationFitter:
             all_sample_dicts.append(sd)
 
         # Draw additional linear residual samples
-        for _j in range(n_posterior_samples):
-            draw_key, sub_key = jax.random.split(draw_key)
-            try:
-                residual, _ = jft.draw_linear_residual(
-                    likelihood,
-                    converged_pos,
-                    sub_key,
-                    cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
-                )
-                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
-                pos_tree = (
-                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
-                )
-                combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
-                all_sample_dicts.append(combined)
-            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
-                # TypeError: NIFTy API mismatch or dict() conversion failed
-                # ValueError: invalid cg_kwargs configuration
-                # AttributeError: missing .tree attribute
-                # KeyError: position/sample tree key mismatch
-                # RuntimeError: linear solver failed to converge
-                break
+        draws, draw_failure = _collect_linear_draws(
+            jft, likelihood, converged_pos, draw_key, n_posterior_samples
+        )
+        all_sample_dicts.extend(draws)
+        _warn_short_draws(
+            requested=n_posterior_samples, collected=len(draws), failure=draw_failure
+        )
 
         wall_time = time.time() - t0
         n_post = len(all_sample_dicts)

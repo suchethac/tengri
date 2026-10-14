@@ -43,6 +43,54 @@ Unit translations happen at three places, with the unit fixed everywhere else:
    F_ν cgs to Jy, AB mag, maggies, etc., for plotting or comparison
    with catalog data.
 
+## Stating the wavelength unit
+
+Every public entry that takes a raw wavelength array takes one keyword,
+`wave_unit=`, with one spelling set: `"AA"` or `"angstrom"` (the default),
+`"nm"`, `"um"` or `"micron"`. Matching is case-insensitive, and an unknown name
+raises `ValueError` listing the accepted names. The entries are
+`register_filter`, `register_filter_from_file`,
+`load_filter_from_dsps_transmission_curve`, `load_filter_from_dsps_file`,
+`Spectroscopy(...)`, and the `Spectroscopy.nirspec_prism`,
+`Spectroscopy.nirspec_g140m`, `Spectroscopy.constant_r` and
+`Spectroscopy.desi_like` factories. `Spectroscopy.from_fits` is not among them:
+its `wave_unit_aa` is a scale factor read from the file header.
+
+The array is converted to Å once, at ingestion. Everything downstream,
+and everything stored, is in Å. Stating `wave_unit="nm"` and passing
+`wave * 10` as Å give bit-identical arrays.
+
+The conversion is followed by a plausibility check on the Å range:
+
+- **Refused** when the range lies wholly below 0.01 Å or wholly above 1e9 Å
+  (10 cm). The floor is the shortest shipped filter, 0.157 Å (`nustar_full`),
+  divided by ten and rounded down. The ceiling covers the longest shipped
+  filter, 1.31e8 Å (`planck_lfi_030`, about 1.3 cm), with room to spare. The
+  message names the object, the measured range, the likely unit and the fix.
+- **Warned** when the array is in Å and the range lies wholly inside
+  100–1340 Å, the extreme-UV gap where the ISM is opaque and no bandpass
+  exists. Such a range is most likely nanometers. Stating `wave_unit="nm"`
+  removes the warning.
+
+A μm-looking optical curve (0.3–1.0) is not refused. Those values are a
+real NuSTAR band in Å, so the range alone cannot settle the unit: state
+`wave_unit="um"`.
+
+## Timescale parameters
+
+Timescale parameters carry their unit in the name: `*_myr`, `*_gyr` and `*_yr`.
+When a `Parameters` is built, each `Fixed` value and each prior bound of such a
+parameter is checked against a plausible range for its suffix: `*_myr` in
+[1e-3, 2e4], `*_gyr` in [1e-6, 20], `*_yr` in [1, 2e10]. An out-of-range value
+raises `ParameterError` naming the parameter, the value and the unit. An exact
+zero always passes: it is the same number in every unit, and it is the declared
+"ongoing" value of the cessation lookbacks (`sfh_const_end_gyr = 0` means star
+formation continues to the epoch of observation). A log-scale name such as
+`sfh_burst_log_tpeak_myr` (units `log10(Myr)`) is not checked, since its value
+is not in the suffix's unit. A negative timescale is refused with its own
+message. The check runs once at build, never per draw and never inside a jitted
+function.
+
 ## Conversion helpers
 
 All in `tengri.units` and JAX-native (JIT/grad/vmap-safe):

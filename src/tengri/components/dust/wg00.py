@@ -4,7 +4,7 @@
 Loads the WG00 Monte-Carlo attenuation tables (vendored from FSPS into
 ``data/wg00_attenuation_grid.h5`` by ``scripts/build_wg00_grid.py``) and
 interpolates the effective attenuation optical depth :math:`A(\\lambda; \\tau_V)`
-with a pure-JAX triweight kernel in :math:`\\tau_V`, so ``τ_V`` is a fully
+with a pure-JAX node-exact PCHIP lookup in :math:`\\tau_V`, so ``τ_V`` is a fully
 differentiable, JIT/vmap-safe *fitted* parameter: matching the SKIRTOR /
 Nenkova / Silva+04 paths.
 
@@ -26,8 +26,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.grid_interp import interp_nd_triweight
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.grid_interp import library_lookup
 
 __all__ = [
     "WG00_DUST_CURVES",
@@ -123,8 +122,8 @@ def create_wg00_from_grid(
     -------
     callable
         ``fn(wavelength, tau_v) -> A(λ)``: the effective attenuation optical
-        depth (apply as ``exp(-A)``), interpolated in ``τ_V`` with a triweight
-        kernel and onto the requested wavelength grid.
+        depth (apply as ``exp(-A)``), interpolated in ``τ_V`` with node-exact PCHIP
+        and onto the requested wavelength grid.
 
     Raises
     ------
@@ -136,10 +135,10 @@ def create_wg00_from_grid(
     Notes
     -----
     **JIT-compatible**: yes, the returned closure uses only ``jnp`` and a
-    triweight interpolation kernel; the structural selectors are resolved to
+    triweight PCHIP lookup; the structural selectors are resolved to
     static indices at closure-build time.
 
-    **Gradient-safe**: yes, the triweight kernel is C²-continuous in ``τ_V``.
+    **Gradient-safe**: yes, the PCHIP lookup is C¹-continuous in ``τ_V``.
 
     **Wavelength range**: the WG00 tables span 1000–30001 Å. Below 1000 Å the
     FUV value ``A(1000 Å)`` is held (a conservative extrapolation; those photons
@@ -155,7 +154,6 @@ def create_wg00_from_grid(
         table = jnp.asarray(raw["a_lambda"][is_, id_, ig_])
         wave_grid = jnp.asarray(raw["wavelength"])
         tau_axis = jnp.asarray(raw["tau_v_axis"])
-        edges = (edges_for_grid(tau_axis),)
 
     def wg00_curve(wavelength: jnp.ndarray, tau_v: float) -> jnp.ndarray:
         r"""Effective attenuation optical depth A(λ) at a single τ_V.
@@ -166,14 +164,15 @@ def create_wg00_from_grid(
             Rest-frame wavelength grid. [Å]
         tau_v : float
             V-band optical depth. Interpolated over the tabulated range
-            [0.25, 10.0]; clamped at the edges. [dimensionless]
+            [0.25, 10.0]; node-exact PCHIP (#2861), extrapolated by half an end
+            spacing and held beyond. [dimensionless]
 
         Returns
         -------
         ndarray, shape (n_wave,)
             Effective attenuation optical depth A(λ) (apply as ``exp(-A)``).
         """
-        a_at_tau = interp_nd_triweight(table, (tau_axis,), edges, (tau_v,))
+        a_at_tau = library_lookup(table, (tau_axis,), (tau_v,))
         return jnp.interp(wavelength, wave_grid, a_at_tau, left=a_at_tau[0], right=0.0)
 
     return wg00_curve
@@ -210,7 +209,7 @@ def wg00_attenuation(
     r"""Witt & Gordon (2000) effective attenuation A(λ; τ_V) from vendored tables.
 
     Interpolates the WG00 Monte-Carlo radiative-transfer attenuation grid
-    (FSPS ``dust_type=3``) in ``τ_V`` with a pure-JAX triweight kernel.
+    (FSPS ``dust_type=3``) in ``τ_V`` with a pure-JAX PCHIP lookup.
 
     Parameters
     ----------

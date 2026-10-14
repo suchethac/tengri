@@ -157,9 +157,9 @@ def test_guard_boundary_is_the_bluest_real_filter():
     Pinning the value keeps the next person from 'tidying' it to 1000 or 1500.
     Either would reopen a silent-miss window.
     """
-    from tengri.observation.filters.custom import _EUV_GAP_RED_EDGE_AA
+    from tengri.utils.wave_unit import EUV_GAP_RED_EDGE_AA
 
-    assert _EUV_GAP_RED_EDGE_AA == 1340.0
+    assert EUV_GAP_RED_EDGE_AA == 1340.0
 
 
 # ── Stated units ─────────────────────────────────────────────────────
@@ -204,4 +204,4 @@ def test_unknown_wave_unit_raises():
     from tengri.observation.filters.custom import register_filter
 
     with pytest.raises(ValueError, match="Unknown wave_unit"):
-        register_filter("unit_bad", np.linspace(1.0, 2.0, 10), np.ones(10), wave_unit="micron")
+        register_filter("unit_bad", np.linspace(1.0, 2.0, 10), np.ones(10), wave_unit="parsec")

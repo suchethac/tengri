@@ -20,7 +20,7 @@ from tengri.protocols.component import ForwardState
 
 def _default_params():
     return {
-        "agn_grahsp_l5100": jnp.array(1.0e44),
+        "agn_grahsp_log_l5100": jnp.array(44.0),
         "agn_grahsp_uvslope": jnp.array(0.0),
         "agn_grahsp_plslope": jnp.array(-1.7),
         "agn_grahsp_plbendloc_nm": jnp.array(100.0),
@@ -48,9 +48,10 @@ def test_apply_runs_end_to_end():
     chex.assert_equal_shape([out.sed_intrinsic, state.wave])
     chex.assert_tree_all_finite(out.sed_intrinsic)
     assert "L_agn_bol" in out.derived
-    assert "L_agn_torus" in out.derived
+    assert "log_L_agn_torus" in out.derived
     assert out.derived["L_agn_bol"] > 0
-    assert out.derived["L_agn_torus"] > 0
+    # log10 of a torus power of ~1e44 erg/s (the luminosities are dex; #2842).
+    assert 40.0 < float(out.derived["log_L_agn_torus"]) < 46.0
 
 
 def test_compose_disable_torus():
@@ -96,7 +97,7 @@ def test_compose_only_bbb():
     # torus-on case, so just check positive and finite.
     chex.assert_tree_all_finite(out.sed_intrinsic)
     assert float(out.sed_intrinsic.max()) > 0
-    assert out.derived["L_agn_torus"] == 0.0
+    assert float(out.derived["log_L_agn_torus"]) == -float("inf")
 
 
 def test_additive_to_existing_sed():
@@ -116,7 +117,7 @@ def test_parameter_prefix_invariant():
 
 
 def test_publishes_l_agn_absorbed():
-    """L_agn_absorbed must be non-negative and zero when attenuation is off."""
+    """log_L_agn_absorbed is finite when attenuation absorbs, -inf (zero power) when it is off."""
     component_atten = GRAHSPSEDComponent(config=GRAHSPSEDComponentConfig(apply_attenuation=True))
     component_no_atten = GRAHSPSEDComponent(
         config=GRAHSPSEDComponentConfig(apply_attenuation=False)
@@ -124,10 +125,10 @@ def test_publishes_l_agn_absorbed():
     state = ForwardState(wave=jnp.logspace(3, 6, 200))
     out_atten = component_atten.apply(state, _default_params())
     out_no_atten = component_no_atten.apply(state, _default_params())
-    # Attenuated: positive absorption; unattenuated: exactly zero.
-    assert "L_agn_absorbed" in out_atten.derived
-    assert float(out_atten.derived["L_agn_absorbed"]) > 0
-    assert float(out_no_atten.derived["L_agn_absorbed"]) == 0.0
+    # Attenuated: positive absorption; unattenuated: exactly zero (-inf dex).
+    assert "log_L_agn_absorbed" in out_atten.derived
+    assert float(out_atten.derived["log_L_agn_absorbed"]) > 0
+    assert float(out_no_atten.derived["log_L_agn_absorbed"]) == -float("inf")
 
 
 def test_jit_apply():

@@ -16,8 +16,8 @@ for dust). Only the middle step is shared.
 
 Notes
 -----
-The ``if not axes`` guard is an optimization, not a correctness guard. Both
-:func:`interp_nd_triweight` and :func:`interp_nd_pchip` already return
+The ``if not axes`` guard is an optimization, not a correctness guard.
+:func:`interp_nd_pchip` already returns
 ``grid_phot`` unchanged for an empty axis tuple -- measured, which is what makes
 it safe to give all nine the same treatment when only four had the guard. It is
 kept because skipping the call is cheaper to trace than proving the kernel is a
@@ -26,16 +26,17 @@ no-op.
 
 from __future__ import annotations
 
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_pchip
 
 __all__ = ["interp_collapsed"]
 
 #: Interpolation kernels a pre-integrated photometry grid may be read with.
-#: ``triweight`` needs bin edges; ``pchip`` works from the axis values alone.
-KERNELS = ("triweight", "pchip")
+#: Only the node-exact PCHIP lookup remains (#2861); the triweight smoother does
+#: not reproduce stored nodes.
+KERNELS = ("pchip",)
 
 
-def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel, edges=None):
+def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel):
     """Read a pre-integrated photometry grid at the surviving axes' values.
 
     Parameters
@@ -47,11 +48,9 @@ def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel, edges=None):
         fixed, in which case ``grid_phot`` is already the answer.
     free_axis_values : tuple
         Runtime value for each surviving axis, in ``axes`` order.
-    kernel : {'triweight', 'pchip'}
+    kernel : {'pchip'}
         Interpolation kernel. Keyword-only and required -- defaulting it would
         let a caller silently change the interpolation their component uses.
-    edges : tuple of array_like, optional
-        Bin edges per axis. Required by ``triweight``, unused by ``pchip``.
 
     Returns
     -------
@@ -62,9 +61,8 @@ def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel, edges=None):
     Raises
     ------
     ValueError
-        If ``kernel`` is unknown, or ``triweight`` is asked for without
-        ``edges``. Both would otherwise fail far from the cause -- a bad kernel
-        by silently using the other one, a missing ``edges`` inside the kernel.
+        If ``kernel`` is unknown. A bad kernel would otherwise be silently
+        replaced by another one.
 
     Notes
     -----
@@ -77,8 +75,4 @@ def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel, edges=None):
         )
     if not axes:
         return grid_phot
-    if kernel == "pchip":
-        return interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))
-    if edges is None:
-        raise ValueError("the 'triweight' kernel needs bin edges; got edges=None")
-    return interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+    return interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))

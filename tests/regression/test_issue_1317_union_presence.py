@@ -330,7 +330,9 @@ class TestIssue1317UnionPresence:
         from tengri.inference.fitter import Fitter
         from tengri.observation.photometry import FilterCurve
 
-        wave = jnp.linspace(3000.0, 10000.0, 60)
+        # The toy axis spans rest [1000, 12000] A, so the observed-frame axis covers
+        # the bands below at both ends of the redshift prior (#2620 coverage refusal).
+        wave = jnp.linspace(1000.0, 12000.0, 60)
         ssp = SSPData(
             ssp_wave=wave,
             ssp_flux=jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5,

@@ -200,6 +200,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lnu_age": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
+    "age_weights_surviving": "Msun",
     "log_stellar_mass_scale": "dex",
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
@@ -208,6 +209,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lnu_age_ion": "erg/s/Hz/Msun",
     "ssp_wave_ion": "Angstrom",
     "sfh_grid_lbt_yr": "yr",
+    "sfh_timing_gyr": "Gyr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
     # Stellar, photometry LUT (only published when
@@ -273,8 +275,27 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_ir_emission": "erg/s",
     # AGN outputs
     "L_agn_bol": "erg/s",
-    "L_agn_torus": "erg/s",
-    "L_agn_absorbed": "erg/s",
+    # Standalone AGN components publish their luminosities as log10 [dex re erg/s]: the erg/s
+    # values (~1e44) are ``inf`` in float32 (NAMING_CONTRACT 4c).
+    "log_L_agn_disc": "dex",
+    "log_L_agn_disc_los": "dex",
+    "log_L_agn_torus": "dex",
+    "log_L_agn_torus_los": "dex",
+    "log_L_agn_polar_dust": "dex",
+    "log_L_agn_polar_dust_los": "dex",
+    "log_L_agn_absorbed": "dex",
+    "agn_adaf_mdot": "",
+    "log_L_agn_adaf_accretion": "dex",
+    "L_agn_bol_lsun": "Lsun",
+    "L_agn_los_lsun": "Lsun",
+    "L_agn_disc_lsun": "Lsun",
+    "L_agn_disc_los_lsun": "Lsun",
+    "L_agn_torus_lsun": "Lsun",
+    "L_agn_torus_los_lsun": "Lsun",
+    "L_agn_polar_dust_lsun": "Lsun",
+    "L_agn_polar_dust_los_lsun": "Lsun",
+    "L_agn_absorbed_lsun": "Lsun",
+    "L_agn_adaf_accretion_lsun": "Lsun",
     "L_2500_intrinsic": "erg/s/Hz",
     "L_4400_intrinsic": "erg/s/Hz",
     "log_L_12um": "dex",
@@ -340,6 +361,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
+    "spec_sigma_v_kms": "km/s",
     "stellar_spec_lnu_precomp": "erg/s/Hz",
     "nebular_spec_lnu_precomp": "erg/s/Hz",
     "dust_spec_lnu_precomp": "erg/s/Hz",

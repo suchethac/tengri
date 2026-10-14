@@ -176,6 +176,7 @@ from tengri.components.nebular._shared import (
     apply_lya_escape,
     compute_qh,
     compute_qh_log10,
+    log_qh_from_normalized,
     render_nebular_lines,
     sanitize_qh_table,
     ssp_log_age_yr_axis,
@@ -188,7 +189,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
-from tengri.utils.scale import pow10
+from tengri.utils.scale import pow10, safe_ratio
 
 # ── Physical and grid constants ───────────────────────────────────
 
@@ -664,7 +665,7 @@ def _frac_idx(val: float, grid: jnp.ndarray) -> jnp.ndarray:
     idx = jnp.searchsorted(grid, val_clipped, side="right") - 1
     idx = jnp.clip(idx, 0, n - 2)
     dx = grid[idx + 1] - grid[idx]
-    frac = jnp.where(dx > 0, (val_clipped - grid[idx]) / dx, 0.0)
+    frac = safe_ratio(val_clipped - grid[idx], dx)
     # Keep the coordinate in float64 throughout. Casting it to float32 made the
     # ~1e-46 _lum_scale cotangent underflow to exactly 0.0 in the backward pass,
     # silencing every grid-axis gradient on a bare backend (#2306; #1568 pattern).
@@ -1105,6 +1106,10 @@ class CB19Backend:
             missing=1.0,
         )
 
+    def _get_log_qh_at(self, log_z: float, log_age_yr: float) -> float:
+        """``log10 Q_H`` at (logZ, logAge), with the table's scale added back (#2853)."""
+        return log_qh_from_normalized(self._get_qh_at(log_z, log_age_yr), self._log_qh_scale)
+
     def predict_nebular_line_luminosities(
         self,
         ssp_weights: jnp.ndarray,
@@ -1113,7 +1118,7 @@ class CB19Backend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
@@ -1285,7 +1290,7 @@ class CB19Backend:
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
         # Apply differential Ly-alpha escape via the shared helper.
-        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        # This multiplies Lyα by neb_fesc_lya after k_factor was already applied.
         total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
@@ -1343,7 +1348,7 @@ class CB19Backend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
