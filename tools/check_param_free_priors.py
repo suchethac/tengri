@@ -41,11 +41,10 @@ grounds for refusing, and the distinction matters when revisiting them:
     and must be freed against the caller's own target. SF-onset lookbacks used
     to sit here too -- capped by the age of the universe at the source
     redshift (8.6 Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for
-    z~0 admits zero-star-formation draws at z=2 -- until a parse-time
-    ``age_at_z(z)`` narrowing pass (``parameters/groups.py``'s
-    ``_narrow_free_priors_to_z``) made a static declaration usable: see
-    ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr``
-    in the SFH registry, now declared rather than refused.
+    z~0 admits zero-star-formation draws at z=2 -- until #2748 made every SFH
+    timing a fraction of the age of the universe at z (``*_frac``), whose
+    support is age(z) by construction; the ``*_gyr`` names are Fixed-only
+    aliases (``TIMING_GYR_ALIASES``).
 ``explicit-only``
     A genuine per-object freedom with a genuine range, withheld from the
     wildcard because the data a default fit has cannot constrain it. Freeing it
@@ -72,6 +71,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from tengri.parameters._dust_keys import per_screen_keys, short_to_full
 from tengri.parameters.priors import Fixed
 from tengri.parameters.registry import registry
+from tengri.parameters.timing import timing_frac_params
 
 #: Parameters that declare a ``free_prior`` (so they are not ``REFUSED``
 #: material) but are still never reached by ``all_params: FREE`` -- only by
@@ -84,6 +84,12 @@ from tengri.parameters.registry import registry
 #: same per-screen vocabulary ``parse_groups`` itself resolves against, so
 #: this cannot drift into a second, hand-typed copy of the grammar's rule.
 NAMED_ONLY_FREE: frozenset[str] = frozenset(short_to_full(k) for k in per_screen_keys())
+
+#: The SFH timing ``*_gyr`` names that #2748 made Fixed-only aliases: each is freed
+#: through its ``*_frac`` twin (a fraction of the age of the universe at z), so a
+#: wildcard leaving the Gyr name pinned is the design, not an omission. Derived from
+#: the registry's own pair table, so a new timing pair cannot drift out of it.
+TIMING_GYR_ALIASES: frozenset[str] = frozenset(timing_frac_params().values())
 
 #: name -> (ground, reason). See the module docstring for the six grounds.
 REFUSED: dict[str, tuple[str, str]] = {
@@ -122,14 +128,11 @@ REFUSED: dict[str, tuple[str, str]] = {
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
     # ── target-dependent: the bound is set by the source, not by physics ──
-    # The three SF-onset lookbacks that used to sit here --
-    # sfh_exp_start_gyr / sfh_dexp_start_gyr / sfh_const_start_gyr -- are
-    # declared now: a static Uniform(lo, _AGE_UNIV_GYR) ceiling in the SFH
-    # registry, narrowed at parse time to age_at_z(z) by
-    # parameters/groups.py's _narrow_free_priors_to_z whenever the build's
-    # redshift is known. Scoping the ceiling to the actual source redshift is
-    # what made them declarable, which is the general remedy this ground was
-    # pointing at (same shape as the "inert" scoping fix noted above).
+    # The SF-onset lookbacks that used to sit here are freed as fractions of
+    # the age of the universe at z (#2748, *_frac); their *_gyr names are
+    # Fixed-only aliases, exempted through TIMING_GYR_ALIASES. Scoping the
+    # support to the source redshift is what made them declarable, which is
+    # the general remedy this ground was pointing at.
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
     "dust_log_L_ir": (
         "target-dependent",
@@ -198,7 +201,7 @@ def main() -> int:
         for name in reg
         if getattr(reg.get(name), "free_prior", None) is None
         and isinstance(getattr(reg.get(name), "prior", None), Fixed)
-    }
+    } - TIMING_GYR_ALIASES
 
     bad_ground = {n: g for n, (g, _) in REFUSED.items() if g not in VALID_GROUNDS}
     unlisted = sorted(pinned - set(REFUSED))
@@ -241,6 +244,9 @@ def main() -> int:
             f"{len(named_only)} more declare a free_prior reachable only by naming them "
             f"(FREE or a prior on the key), never by 'all_params: FREE': " + ", ".join(named_only)
         )
+    print(
+        f"{len(TIMING_GYR_ALIASES)} SFH timing *_gyr aliases are freed through their *_frac twin."
+    )
     print(
         f"{len(REFUSED)} deliberately pinned: "
         + ", ".join(f"{g} {c}" for g, c in sorted(by_ground.items()))
