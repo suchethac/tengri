@@ -881,8 +881,8 @@ V.print_window_table(
 # | quantity | tengri / CIGALE |
 # |---|---|
 # | 912–1200 Å | 1.063× |
-# | 1200–3000 Å | 1.028× |
-# | 0.3–1 μm | 1.005× |
+# | 1200–3000 Å | 1.030× |
+# | 0.3–1 μm | 1.006× |
 # | stellar L_bol | 1.016× |
 # | Q_H (λ < 911.76 Å) | 1.150× |
 #
@@ -893,7 +893,7 @@ V.print_window_table(
 #
 # Three later sections are this table and nothing else. §6's dust IR is
 # normalized to `L_absorbed`, which inherits the L_bol offset weighted toward
-# the UV, and lands at 1.010× CIGALE's `dust.luminosity`. §11's synchrotron is
+# the UV, and lands at 1.011× CIGALE's `dust.luminosity`. §11's synchrotron is
 # anchored on the same luminosity, so that factor appears there as a flat
 # offset. §8's line luminosities scale with Q_H. None of those is a separate
 # discrepancy.
@@ -1040,14 +1040,15 @@ assert abs(_q_shift_3 / _n_ly_c3 - 1.0) < 0.01, "a 0.5 Myr aging should reproduc
 #
 # Stellar SED dependence on the delayed SFH's shape parameters: τ ∈
 # {0.3, 1, 3} Gyr at age = 1 and 10 Gyr, plus the τ = 1 Gyr, age = 5 Gyr
-# fiducial (7 cases). One tengri build with `sfh_delayed_tau_gyr` and
-# `sfh_delayed_age_gyr` free, evaluated per case via `predict_rest_sed`;
+# fiducial (7 cases). One tengri build per case with `sfh_delayed_tau_gyr` and
+# `sfh_delayed_age_gyr` fixed (a free age is expressed as a fraction of the age of the
+# universe, so absolute ages are fixed per build), evaluated via `predict_rest_sed`;
 # one CIGALE `sfhdelayed` + `bc03` chain per case. Table over the
 # GALEX-through-2MASS bands (`UV_TO_NIR`), since this comparison carries
 # no dust IR. The worst band ratio in the printed table is τ = 0.3 Gyr, age = 10 Gyr
-# (0.836×, with 2 of 10 bands outside 5 %). The τ = 1 and 3 Gyr cases at age 1 Gyr
+# (1.044×, no band outside 5 %). The τ = 1 and 3 Gyr cases at age 1 Gyr
 # have one band each outside 5 % (worst 1.052× and 1.055×), where the youngest
-# stars carry the §3 convention; the remaining four cases have none.
+# stars carry the §3 convention; the remaining five cases have none.
 
 # %%
 _tau_age_cases_grid = [
@@ -1060,27 +1061,29 @@ _tau_age_cases_grid = [
     (1.0, 5.0),
 ]
 
-m_3b = SEDModel.build(
-    ssp_data=ssp,
-    met=MET_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Uniform(0.1, 10.0, default=1.0),
-        "age_gyr": Uniform(0.5, 13.0, default=5.0),
-        "log_total_mass": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
-    dust_attenuation={
-        "law": "power_law",
-        "type": "two_component",
-        "tau_bc": Fixed(0.0),
-        "tau_diff": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
-    neb=NEB_FIDUCIAL_TENGRI,
-    redshift=Fixed(0.0),
-)
-_p_3b = dict(m_3b.spec.sample(jax.random.PRNGKey(0)))
+def _build_3b(tau_gyr, age_gyr):
+    """One fixed-timing tengri build per (tau, age) case."""
+    return SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(tau_gyr),
+            "age_gyr": Fixed(age_gyr),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
+    )
+
 
 _cases_3b = []
 for _tau, _age in _tau_age_cases_grid:
@@ -1104,13 +1107,8 @@ for _tau, _age in _tau_age_cases_grid:
         ]
     )
     _w_c3b, _L_c3b = C.to_lnu(_sed_c3b)
-    _o_3b = m_3b.predict_rest_sed(
-        {
-            **_p_3b,
-            "sfh_delayed_tau_gyr": jnp.float64(_tau),
-            "sfh_delayed_age_gyr": jnp.float64(_age),
-        }
-    )
+    _m_3b = _build_3b(_tau, _age)
+    _o_3b = _m_3b.predict_rest_sed(dict(_m_3b.spec.sample(jax.random.PRNGKey(0))))
     _cases_3b.append(
         (
             f"τ={_tau:g}, age={_age:g} Gyr",
@@ -1643,7 +1641,7 @@ V.print_window_table(
 # floating point: the residual is annotated on the right panel and printed
 # below, and it is exactly zero.
 #
-# **The energy anchor.** tengri's `L_absorbed` sits 1.0 % above CIGALE's
+# **The energy anchor.** tengri's `L_absorbed` sits 1.1 % above CIGALE's
 # `dust.luminosity` (printed below). That is §3's age convention arriving here:
 # the absorbed luminosity is an integral over the attenuated far-UV and optical,
 # weighted toward the wavelengths where CIGALE's 0.5 Myr older stars emit less
@@ -1778,7 +1776,7 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # attenuation block, a single screen (`tau_bc = 0`, matching
 # `dustatt_modified_starburst`, which has no Charlot & Fall birth cloud;
 # A_V = R_V × E(B−V)_cont = 4.05 × 0.132 = 0.535 mag) carrying the
-# Leitherer-extended Calzetti curve with the 912 Å clip. So the 1.0 % anchor
+# Leitherer-extended Calzetti curve with the 912 Å clip. So the 1.1 % anchor
 # offset of §3/§6 enters every ratio printed here, and what the panels add is
 # whatever the *templates* do on top of it.
 #
@@ -2019,21 +2017,21 @@ plt.show()
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
 # the 8–1000 μm L_ν ratio locate each family's shape. Both implementations are normalized
 # on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 μm L_ν ratios printed
-# below lie between 1.0095× and 1.0127× across the sweep. The filter-by-filter tables show
+# below lie between 1.0109× and 1.0141× across the sweep. The filter-by-filter tables show
 # where shapes differ: no row has a band outside 5 % (`f_pah` matches CIGALE's 0.05
 # default). `dl2014` is compared as dust emission alone: at α = 1 the dust is only
 # part of the total beyond 250 μm, and the rest is the nebular free-free continuum, so
 # a total-SED ratio there measures the nebular continuum and not the dust. Each code's
 # twin without dust emission, at the same attenuation, is subtracted from its total;
-# the dust-only 8–1000 μm medians are 1.0105×, 1.0102× and 1.0102× for α = 1, 2 and 3,
-# with worst filter ratios 1.011×, 0.984× and 0.973×.
+# the dust-only 8–1000 μm medians are 1.0119×, 1.0116× and 1.0116× for α = 1, 2 and 3,
+# with worst filter ratios 1.012×, 0.985× and 0.975×.
 # `schreiber2016` is the tabulated Schreiber et al. (2018) library as
 # CIGALE packages it: per unit dust mass, a dust-continuum and a PAH template at
 # each temperature (the library tabulates 15–99 K; pcigale accepts 15–60 K), mixed
 # by the PAH mass fraction `f_pah` as pcigale does and normalized to the absorbed
 # energy. At T = 25, 35 and 50 K
-# its 8–1000 μm ratio is 1.010× each time, and its filter-by-filter median is 1.009×,
-# 1.009× and 1.010× with worst cases of 1.016×, 1.016× and 1.032×.
+# its 8–1000 μm ratio is 1.0115× each time, and its filter-by-filter median is 1.011×
+# each time, with worst cases of 1.020×, 1.020× and 1.037×.
 
 # %%
 _peaks_6c = []
@@ -2048,9 +2046,9 @@ ax_rr.sharey(ax_lr)
 print("§6c dl2007 grid (tengri / CIGALE, median in 8-1000 µm band):")
 m_dl07 = _knob_model(
     "draine_li2007",
-    qpah=Uniform(0.1, 10.0, default=2.5),
-    umin=Uniform(0.1, 25.0, default=1.0),
-    gamma_dl=Uniform(0.0, 1.0, default=0.1),
+    qpah=Uniform(0.47, 4.58, default=2.5),
+    umin=Uniform(0.1, 10.0, default=1.0),
+    gamma_dl=Uniform(0.01, 0.5, default=0.1),
 )
 p_dl07 = dict(m_dl07.spec.sample(jax.random.PRNGKey(0)))
 _dl07_cases = []
@@ -2704,8 +2702,8 @@ for _c, _name in [(6564.61, "Hα"), (5008.24, "[O III]"), (4862.68, "Hβ")]:
 # **Z_gas = 0.041 is degenerate in CIGALE and is not a comparison.** CIGALE's
 # metallicity axis is a staircase: neighbouring Z nodes repeat the same model (the
 # printed library table shows Z = 0.016, 0.019, 0.02 and 0.022 identical), and
-# toward the high-Z end the library collapses: [O III]/Hβ is 0.006 and [O II]/Hβ
-# 0.009 at Z = 0.041 and smaller beyond. The ratio-of-ratios is therefore
+# toward the high-Z end the library collapses: [O III]/Hβ is 0.0061 and [O II]/Hβ
+# 0.0095 at Z = 0.041 and smaller beyond. The ratio-of-ratios is therefore
 # reported at the six stable cases, with the 0.041 case printed beside it. The
 # absolute Hβ per ionizing photon is flat to 3 % across every case in both codes, so
 # the collapse is in the metal lines.
@@ -3186,8 +3184,8 @@ save_fig("cigale_09_agn_skirtor.png")
 # energy-weighted tengri / CIGALE ratios in three bands (1500–3000 Å, 5–30 μm and
 # 100 μm) and then component by component as integrated luminosities. A band
 # ratio locates a residual in wavelength but cannot say which component carries
-# it: the 1500–3000 Å band is mostly host starlight (full SED 1.026×, host alone
-# 1.059×, disc alone 1.007×), and at 100 μm all three AGN components overlap with
+# it: the 1500–3000 Å band is mostly host starlight (full SED 1.027×, host alone
+# 1.061×, disc alone 1.009×), and at 100 μm all three AGN components overlap with
 # the host. The component ladder separates them. Both codes publish disc, torus
 # and polar dust separately. The printed ladder gives the three luminosity
 # ratios (about 1 % each), the emergent disc shape deviation and each code's
@@ -3665,8 +3663,8 @@ print(
 #
 # SKIRTOR: τ_9.7 ∈ {3, 7, 11}, oa ∈ {20°, 40°, 60°}, i ∈ {0°, 30°, 70°}, each
 # varied one at a time from §9's fiducial (7, 40°, 30°). The printed IR-band
-# table gives a median ratio of 1.010–1.013× in every case, with no band outside
-# 5 % and a worst band of at most 1.035×: optical depth, opening angle and
+# table gives a median ratio of 1.011–1.012× in every case, with no band outside
+# 5 % and a worst band of at most 1.013×: optical depth, opening angle and
 # inclination all agree.
 #
 # Fritz 2006: (τ, opening angle, ψ) ∈ {(1, 60°, 0.001°), (1, 100°, 40.1°),
@@ -3679,8 +3677,8 @@ print(
 # disc-slope parameter δ whose default is −0.36; the cell passes `delta=0.0`, which
 # is the Schartmann disc of §9 and of the SKIRTOR runs, so the disc under the torus is
 # the same on both sides. The printed table gives band medians of
-# ‹PENDING:fritz_band_medians›, worst bands of ‹PENDING:fritz_worst_bands› and
-# ‹PENDING:fritz_bands_outside_5pct› of 12 IR bands outside 5 % in the three cases.
+# 1.009–1.010×, worst bands of 0.973–0.975× and
+# none of 12 IR bands outside 5 % in the three cases.
 
 # %%
 _AGN_SFH_9E = {
@@ -4204,11 +4202,11 @@ save_fig("cigale_10b_xray_inclination.png")
 # removed from Bell's total, that smaller TIR input and the 1.4 against
 # 1.4276 GHz anchor. The remaining numbers share one base, Bell's TIR total at
 # exactly 1.4 GHz: the synchrotron is 0.9033 of it and the nebular continuum
-# ‹PENDING:neb_continuum_fraction_14ghz›, so (synchrotron + nebular continuum) / Bell
-# total is ‹PENDING:synchrotron_plus_neb_over_bell›. It falls below 1 because the
+# 0.0583, so (synchrotron + nebular continuum) / Bell
+# total is 0.9616. It falls below 1 because the
 # thermal share removed from the total, which is the Murphy et al. (2011) term at
 # the TIR input (0.0967), exceeds the nebular continuum by
-# ‹PENDING:neb_continuum_shortfall›.
+# 0.0384.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
@@ -4443,7 +4441,7 @@ save_fig("cigale_11_radio_synchrotron.png")
 #
 # **1. Per ionizing photon, Cue against Cloudy.** Each code's free-free continuum divided
 # by its own Q_H, at 3 cm, 1 cm, 3 mm and 1 mm. Cue's continuum per photon over CIGALE's
-# is ‹PENDING:ff_cue_over_cloudy›, asserted to lie in 0.95–1.12×. The nebular continuum
+# is 1.04–1.08× (1.044× at 3 cm, 1.077× at 1 cm, 1.075× at 3 mm and 1 mm), asserted to lie in 0.95–1.12×. The nebular continuum
 # ratio of the full SED is this ratio times §3's Q_H ratio, 1.150×: the excess there is
 # the age convention and the emitter, and not a normalization error in either code, since
 # lines and continuum share one Q_H.
@@ -4460,7 +4458,7 @@ save_fig("cigale_11_radio_synchrotron.png")
 # at 0.4 GHz, 0.9 % at 1.4 GHz and 0.5 % at 70 GHz. $\alpha_B$ is the Hui & Gnedin (1997)
 # fit to the Ferland et al. (1992) case B coefficient, 2.592e-13 cm³ s⁻¹ at 10⁴ K.
 # CIGALE's continuum per photon is 0.78–0.80× this reference and Cue's is
-# ‹PENDING:ff_cue_over_analytic›; both are asserted to lie in 0.70–1.00×. The
+# 0.83–0.86×; both are asserted to lie in 0.70–1.00×. The
 # reference is hydrogen at one temperature, so a gas at another temperature or with a
 # different ionization structure sits off it; the cell does not separate those.
 # CIGALE's library adds a trend that a hydrogen plasma does not have: its continuum per
@@ -4470,10 +4468,10 @@ save_fig("cigale_11_radio_synchrotron.png")
 #
 # **3. The radio block's free-free.** The term the radio block adds with
 # `freefree: True` (Murphy et al. 2011), against Cue's nebular free-free at the same
-# Q_H. A steady star-forming history (τ = 30 Gyr, age 1 Gyr) makes Q_H proportional to the
+# Q_H. A steady star-forming history (τ = 20 Gyr, age 1 Gyr) makes Q_H proportional to the
 # star formation rate over the last 10 Myr, so one SFR gives one Q_H; the radio block is
 # evaluated at the L_IR that Murphy et al.'s Eq. 4 assigns to that SFR. The ratio of the
-# two per unit Q_H is ‹PENDING:ff_radio_vs_cue›, asserted to lie in 0.8–1.25× at every
+# two per unit Q_H is 0.985–1.119× (0.985× at 3 and 1 cm, 1.043× at 3 mm, 1.119× at 1 mm), asserted to lie in 0.8–1.25× at every
 # wavelength the radio block reaches.
 #
 # **4. Continuity through 1 mm.** The radio SED with `freefree: True` has no step
@@ -4481,7 +4479,7 @@ save_fig("cigale_11_radio_synchrotron.png")
 # |d ln L_ν / d ln λ| between neighbouring points over 0.1–3 mm stays below 1.5, and the
 # flux at 0.95 mm is within 0.9–1.2× that at 1.05 mm. The test runs only where the radio
 # block carries emission shortward of 1 mm, which the cell reads from the data; it
-# prints that it was skipped otherwise. Result: ‹PENDING:radio_continuity›.
+# prints that it was skipped otherwise. Result: the check ran, because the radio block carries emission below 1 mm, and passed. The largest |d ln L_ν / d ln λ| over 0.1–3 mm is 0.326 and the flux ratio is 0.9775.
 
 # %%
 import scipy.constants as _sc
@@ -4609,7 +4607,7 @@ assert all(a[1] > b[1] for a, b in zip(_cont_z, _cont_z[1:]))
 # %%
 # Check 3. The free-free term the radio block adds with `freefree: True`
 # (Murphy et al. 2011) against the nebular free-free it stands in for, at the same
-# Q_H. A steady star-forming history (τ = 30 Gyr, age 1 Gyr) makes Q_H
+# Q_H. A steady star-forming history (τ = 20 Gyr, age 1 Gyr) makes Q_H
 # proportional to the star formation rate over the last 10 Myr, so one SFR gives
 # one Q_H. The radio block is evaluated at the L_IR that Murphy et al.'s Eq. 4,
 # SFR = 3.88e-44 L_IR [erg/s], assigns to that SFR; the nebular term is Cue's, with
@@ -4620,7 +4618,7 @@ _m_ss = SEDModel.build(
     met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
-        "tau_gyr": Fixed(30.0),
+        "tau_gyr": Fixed(20.0),
         "age_gyr": Fixed(1.0),
         "log_total_mass": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
@@ -4993,19 +4991,19 @@ plt.show()
 # |---|---|---|
 # | 1 | SSP | median residual 2.0–2.2e-8 at every age (float32 round-trip) |
 # | 2 | SFH | `delayed` median 1.00002×; `sfh2exp` median 1.00015×, 2 of 1969 points beyond 1 % (burst step); §2c median 1.000× except periodic exponential 0.999× and rectangular 0.993× |
-# | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.028×, 0.3–1 μm 1.005×, L_bol 1.016×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 0.998–1.018×, worst band 0.836× |
+# | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.030×, 0.3–1 μm 1.006×, L_bol 1.016×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 1.001–1.018×, worst band 1.055× |
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
-# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0153× intrinsic, 0.9923× attenuated (912–1200 Å 1.0630×, 1.0571×; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.997–1.000× |
-# | 6 | dust IR | 10–100 μm energy-weighted 1.010×; `L_absorbed` 1.0098× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0095–1.0127×, worst filter 1.039× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0105×, 1.0102×, 1.0102× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.010× |
-# | 7 | panchromatic | energy-weighted 1.0615× (912–1200 Å), 1.0603× (1250–3000 Å), 1.0115× (0.3–1 μm), 1.0074× (3–8 μm), 1.0098× (10–100 μm), 1.0102× (100–1000 μm) |
+# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0165× intrinsic, 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×; maxima 14.5 % at 915 Å in 912–1200 Å, 942 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.997–1.000× |
+# | 6 | dust IR | 10–100 μm energy-weighted 1.012×; `L_absorbed` 1.0112× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0109–1.0141×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0119×, 1.0116×, 1.0116× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
+# | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0122× (0.3–1 μm), 1.0081× (3–8 μm), 1.0125× (10–100 μm), 1.0116× (100–1000 μm) |
 # | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
-# | 9 | AGN, SKIRTOR | disc 1.0085×, torus 1.0097×, polar dust 1.0104× (§9); 1.0062×, 1.0133×, 0.9982× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.026×, of which host 1.059× and disc 1.007×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.010–1.013×, worst band 1.035× |
-# | 9 | AGN, Fritz | §9e band medians ‹PENDING:fritz_band_medians›, worst bands ‹PENDING:fritz_worst_bands›, ‹PENDING:fritz_bands_outside_5pct› of 12 bands outside 5 % |
+# | 9 | AGN, SKIRTOR | disc 1.0099×, torus 1.0111×, polar dust 1.0118× (§9); 1.0076×, 1.0147×, 0.9996× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
+# | 9 | AGN, Fritz | §9e band medians 1.009–1.010×, worst bands 0.973–0.975×, none of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
-# | 11 | radio | synchrotron 1.0098× across 0.1–100 GHz against ×1.0098 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
-# | 11b | free-free | per ionizing photon Cue / CIGALE ‹PENDING:ff_cue_over_cloudy›; against the analytic reference CIGALE 0.78–0.80× and Cue ‹PENDING:ff_cue_over_analytic›; radio block / Cue ‹PENDING:ff_radio_vs_cue›; continuity through 1 mm ‹PENDING:radio_continuity› |
+# | 11 | radio | synchrotron 1.0112× across 0.1–100 GHz against ×1.0112 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
+# | 11b | free-free | per ionizing photon Cue / CIGALE 1.04–1.08× (1.044× at 3 cm, 1.077× at 1 cm, 1.075× at 3 mm and 1 mm); against the analytic reference CIGALE 0.78–0.80× and Cue 0.83–0.86×; radio block / Cue 0.985–1.119× (0.985× at 3 and 1 cm, 1.043× at 3 mm, 1.119× at 1 mm); continuity through 1 mm: the check ran and passed, with a largest slope of 0.326 and a flux ratio of 0.9775 |
 # | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is 0.003283 for tengri and 0.000909 for CIGALE against Meiksin's Table 2 0.003277; redward of Lyβ the max \|ΔT\| is ≤ 2.8e-16 |
-# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.99× (1 keV), 0.99× (5 keV); radio 1.02× (1.4 GHz), 1.02× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm ‹PENDING:mm_ratios› |
+# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.99× (1 keV), 0.99× (5 keV); radio 1.02× (1.4 GHz), 1.02× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.02× / 1.09× / 1.07× / 1.04× |
 #
 # Four conventions account for most of the residuals and are stated where they are
 # measured. The age convention (§3) is exact in tengri and a 1 Myr discrete sum, equivalent
