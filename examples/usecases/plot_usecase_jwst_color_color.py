@@ -21,6 +21,13 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp()
 
+
+def _peak_frac(lo_gyr, hi_gyr, z):
+    """Uniform prior on the peak as a fraction of age(z), from a lookback range in Gyr."""
+    age = float(tengri.cosmology.age_at_z(z))  # Gyr
+    return tengri.Uniform(max(lo_gyr / age, 0.0363), min(hi_gyr / age, 0.8704))
+
+
 # Build JWST filter observation.
 #
 # There is deliberately no fallback. This used to catch and set ``obs = None``,
@@ -47,7 +54,7 @@ for _i in range(50):
         sfh={
             "type": "tsnorm",
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
+            "peak_lbt_frac": _peak_frac(0.2, 2.0, z),
             "width_gyr": tengri.Uniform(0.5, 3.0),
             "skew": tengri.Uniform(-1.0, 1.0),
             "trunc": tengri.Uniform(1.5, 5.0),
@@ -81,7 +88,10 @@ for _i in range(50):
         sfh={
             "type": "tsnorm",
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
+            # Passive galaxies at z = 1-3 are at most 5.9 Gyr old, so an absolute
+            # 7-11 Gyr lookback range lies beyond the Big Bang; the peak is a fraction
+            # of the age of the universe instead.
+            "peak_lbt_frac": tengri.Uniform(0.5, 0.8704),
             "width_gyr": tengri.Uniform(0.5, 1.5),
             "skew": tengri.Uniform(-1.5, 0.0),
             "trunc": tengri.Uniform(1.5, 3.0),
@@ -116,7 +126,7 @@ for _i in range(50):
         sfh={
             "type": "tsnorm",
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(0.5, 3.0),
+            "peak_lbt_frac": _peak_frac(0.5, 3.0, z),
             "width_gyr": tengri.Uniform(1.0, 4.0),
             "skew": tengri.Uniform(-0.5, 1.0),
             "trunc": tengri.Uniform(2.0, 6.0),

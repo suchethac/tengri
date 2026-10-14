@@ -53,6 +53,8 @@ WAVE_REST_NPIX = 2400  # Dense sampling for stacking
 # Age range: red sequence Uniform(6, 11) Gyr (Thomas+2005)
 AGE_GYR_MIN = 6.0
 AGE_GYR_MAX = 11.0
+# The timing is sampled as a fraction of the age of the universe at REDSHIFT.
+AGE_Z = float(tengri.cosmology.age_at_z(REDSHIFT))  # Gyr
 
 # --- Load SSP ---
 ssp = tengri.load_ssp()
@@ -73,7 +75,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.Uniform(AGE_GYR_MIN, AGE_GYR_MAX),
+        "peak_lbt_frac": tengri.Uniform(AGE_GYR_MIN / AGE_Z, min(AGE_GYR_MAX / AGE_Z, 0.8704)),
         "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
         "skew": 0.0,
         "trunc": 13.5,
@@ -102,7 +104,7 @@ def predict_single_spectrum(age_gyr):
     """Predict spectrum for a single age (rest-frame)."""
     params = {
         **baseline_params,
-        "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age_gyr),  # Override age
+        "sfh_tsnorm_peak_lbt_frac": jnp.float64(age_gyr / AGE_Z),  # Override age
     }
     # Predict spectrum at rest-frame wavelengths
     flux_out = model.predict_spectrum(params, wave_obs=wave_rest)

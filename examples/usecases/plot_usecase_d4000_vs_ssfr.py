@@ -46,7 +46,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+        "peak_lbt_frac": tengri.Uniform(0.0363, 0.8704),
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -62,13 +62,14 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+AGE_Z = float(tengri.cosmology.age_at_z(0.05))  # Gyr
 
 ages = np.geomspace(0.03, 11.0, 28)
 d4000 = np.empty_like(ages)
 ssfr = np.empty_like(ages)
 
 for i, age in enumerate(ages):
-    p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
+    p = {**baseline, "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z)}
     out = model.predict(p)
     wave = np.asarray(model.wavelengths)
     l_nu = np.asarray(out.rest_sed())

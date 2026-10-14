@@ -58,7 +58,8 @@ BANDS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(BANDS)))
 
 # Build model with narrow-burst SFH parametrized by lookback time.
-# Free parameter: peak_lbt_gyr (age of burst). Everything else fixed.
+# Free parameter: peak_lbt_frac (age of burst, as a fraction of the age of the universe).
+# Everything else fixed.
 obs = tengri.Observation(photometry=tengri.Photometry.from_names([b for b, _ in BANDS]))
 nu_eff = 2.998e18 / np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
@@ -68,7 +69,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.Uniform(0.05, 13.0),
+        "peak_lbt_frac": tengri.Uniform(0.0363, 0.8704),
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -91,9 +92,10 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 # M/L growth (age-sensitive), while J/K are flat (age-insensitive).
 ages = np.logspace(-1, -0.05, 12)  # 0.1 to ~0.89 Gyr
 ml = np.empty((len(BANDS), ages.size))
+AGE_Z = float(tengri.cosmology.age_at_z(0.01))  # Gyr
 
 for j, age in enumerate(ages):
-    p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
+    p = {**baseline, "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z)}
     sfh = model.predict_sfh(p)
     # Integrate SFH to get total stellar mass (M_sun).
     m_star = float(np.trapezoid(np.asarray(sfh["sfr_mean"]), np.asarray(sfh["t_gyr"]) * 1e9))

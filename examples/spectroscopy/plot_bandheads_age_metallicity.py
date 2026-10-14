@@ -147,7 +147,7 @@ model_solar = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+        "peak_lbt_frac": tengri.Uniform(0.0363, 0.8704),
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -164,10 +164,11 @@ model_solar = tengri.SEDModel.build(
     observation=obs,
 )
 baseline_solar = dict(model_solar.spec.sample(jax.random.PRNGKey(0)))
+AGE_Z = float(tengri.cosmology.age_at_z(REDSHIFT))  # Gyr
 
 # Predict spectra across ages
 for i, age in enumerate(ages_gyr):
-    params = {**baseline_solar, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
+    params = {**baseline_solar, "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z)}
 
     pred = model_solar.predict(params)
     wave_rest = np.asarray(model_solar.wavelengths)

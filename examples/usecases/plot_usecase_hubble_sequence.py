@@ -47,12 +47,13 @@ ATLAS = [
 ]
 
 ssp = tengri.load_ssp()
+AGE_Z0 = float(tengri.cosmology.age_at_z0())  # Gyr, the age of the universe at z = 0
 model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
+        "peak_lbt_frac": tengri.Uniform(0.0363, 0.8704),
         "width_gyr": tengri.Uniform(0.1, 5.0),
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -75,7 +76,7 @@ fig, ax = plt.subplots(figsize=(7.2, 4.8))
 for label, peak, width, tau, color in ATLAS:
     params = {
         **baseline,
-        "sfh_tsnorm_peak_lbt_gyr": jnp.float64(peak),
+        "sfh_tsnorm_peak_lbt_frac": jnp.float64(peak / AGE_Z0),
         "sfh_tsnorm_width_gyr": jnp.float64(width),
         "dust_tau_diff": jnp.float64(tau),
     }

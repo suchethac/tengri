@@ -42,13 +42,16 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
 def build_model(z: float) -> tengri.SEDModel:
     """Build a model at a given redshift."""
+    # The peak is sampled as a fraction of the age of the universe at z: 0.5-6 Gyr
+    # lookback, clipped to the declared fraction range.
+    age = float(tengri.cosmology.age_at_z(z))  # Gyr
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
         sfh={
             "type": "tsnorm",
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(0.5, 6.0),
+            "peak_lbt_frac": tengri.Uniform(0.5 / age, min(6.0 / age, 0.8704)),
             "width_gyr": tengri.Uniform(0.8, 3.0),
             "skew": tengri.Uniform(-0.5, 1.0),
             "trunc": tengri.Uniform(2.0, 8.0),

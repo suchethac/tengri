@@ -51,7 +51,7 @@ FILTERS = [
 def make_spec() -> Parameters:
     return Parameters(
         sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0402, 0.8704),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
