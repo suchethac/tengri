@@ -5,7 +5,10 @@ Both paths set the unit-l5100 disc to the requested bolometric power with the
 same integral (:func:`~tengri.components.agn.grahsp.publication.bolometric_unit_nm`,
 segmented Gauss-Legendre in ln lambda on the component's own publication grid).
 These tests pin that: the composable block and the monolithic unit power must
-agree to 1e-6, and both must agree with a dense reference integral.
+agree to 1e-6, and both must agree with a dense reference integral. The dense integral
+starts at upstream's lumBolBBB cut, 91.1753 nm (owner ruling 16, 2026-10-13); it was the
+91.2 nm Lyman limit before, which moved the SBPL unit power by +1.2e-4 and the Netzer by
++2.7e-4 (3.92530 -> 3.92578 and 5.69994 -> 5.70148, tengri units).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from tengri.components.agn.blocks.grahsp_blocks import (
     grahsp_sbpl_disc_block,
 )
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.model import GRAHSPParams
 from tengri.components.agn.grahsp.normalization import disc_unit_power
@@ -79,7 +83,7 @@ def _composable_disc_unit_power(block) -> float:
 
 
 def _dense_sbpl_unit_power(params: GRAHSPParams) -> float:
-    grid = np.geomspace(91.2, 1.0e10, 400_000)
+    grid = np.geomspace(BBB_BOL_CUT_NM, 1.0e10, 400_000)
     spec = floor_disc_xray(
         grid,
         np.asarray(
@@ -106,7 +110,7 @@ def _dense_netzer_unit_power(params: GRAHSPParams, templates) -> float:
         a=params.disc_a,
         mdot=params.disc_mdot,
     )
-    grid = np.geomspace(91.2, float(np.max(templates.disc_wave_nm)), 400_000)
+    grid = np.geomspace(BBB_BOL_CUT_NM, float(np.max(templates.disc_wave_nm)), 400_000)
     spec = np.asarray(
         netzer_disc(
             wave_nm=grid,

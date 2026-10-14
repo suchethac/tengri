@@ -63,9 +63,15 @@ __all__ = [
     "narrow_line_unit_power",
 ]
 
-BALMER_NORM_GRID_NM: np.ndarray = np.geomspace(BBB_BOL_CUT_NM, 1.0e6, 2048)
+BALMER_NORM_GRID_NM: np.ndarray = np.geomspace(BBB_BOL_CUT_NM, 1.0e6, 8192)
 """Balmer continuum grid [nm] from the lumBolBBB cut to the 1e6 nm clip in
-:func:`~tengri.components.agn.grahsp.balmer.balmer_continuum`."""
+:func:`~tengri.components.agn.grahsp.balmer.balmer_continuum`.
+
+8192 points: the continuum's edge at 364.6 nm, broadened by the line width, is under-resolved
+on 2048 points. The log-trapezoid error of the unit power was -1.05e-5 on 2048 points,
+-5.2e-6 on 4096 and -2.0e-6 on 8192, against a 1.6e6-point reference (measured 2026-10-13,
+after the cut moved to 91.1753 nm).
+"""
 
 
 def _log_trapezoid_weights(grid_nm: np.ndarray) -> np.ndarray:

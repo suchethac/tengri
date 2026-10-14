@@ -275,7 +275,7 @@ class PublishedLuminosities:
 
         .. math::
 
-           L_{\rm bol}^{\rm BBB} = \int_{91.2\,\mathrm{nm}}^{\infty}
+           L_{\rm bol}^{\rm BBB} = \int_{91.1753\,\mathrm{nm}}^{\infty}
                L_\lambda^{\rm BBB+lines+FeII+Balmer}\,\mathrm{d}\lambda, \qquad
            L_{\rm bol}^{\rm TOR} = \int_0^\infty L_\lambda^{\rm TOR}\,\mathrm{d}\lambda, \qquad
            L_{\rm abs} = \int \left(L_\lambda^{\rm int} - L_\lambda^{\rm att}\right)

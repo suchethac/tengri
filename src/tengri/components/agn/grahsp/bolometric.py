@@ -81,15 +81,15 @@ def bolometric_luminosity_bbb(
     Returns
     -------
     L_bol_BBB : float
-        Integrated luminosity [erg/s] above 91.2 nm.
+        Integrated luminosity [erg/s] above upstream's cut, 91.1753 nm.
 
     Notes
     -----
-    JIT-compatible. The far-UV/X-ray contribution below 91.2 nm is
-    deliberately excluded; see paper §2.1.4: that band is rarely observed
-    and a model-dependent correction is left to the user.
+    JIT-compatible. The far-UV/X-ray contribution below the cut is deliberately excluded;
+    see paper §2.1.4: that band is rarely observed and a model-dependent correction is left
+    to the user. The BBB power below the cut is published as ``log_L_agn_bol_ionizing``.
     """
-    return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total), LYMAN_LIMIT_NM)
+    return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total), BBB_BOL_CUT_NM)
 
 
 def bolometric_luminosity_torus(
