@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Published ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed`` of the GRAHSP component.
+r"""Bolometric, torus and absorbed powers of the GRAHSP component (``log_L_agn_*`` keys).
 
-Every published luminosity is :math:`\int L_\lambda\,\mathrm{d}\lambda` [erg/s] of the emitted
+The component publishes ``log_L_agn_bol``, ``log_L_agn_torus`` and ``log_L_agn_absorbed``
+[dex re erg/s] and their ``L_agn_*_lsun`` [Lsun] siblings. They are formed from the three
+linear powers this module returns, which are internal values at the evaluation scale of the
+component (keys ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` of an internal dict, erg/s,
+never published as such).
+
+Every such power is :math:`\int L_\lambda\,\mathrm{d}\lambda` [erg/s] of the emitted
 AGN-side spectrum, with :math:`\lambda` in nm, computed on a grid the component owns and never
 on the caller's wavelength array. Each piece of the spectrum has its own rule, chosen by the
 piece and not by the other options of the configuration, so swapping the torus model, the disc
@@ -10,7 +16,7 @@ or the FeII template changes only the rule of the piece that was swapped:
 1. **Unit-area Gaussian** (lines, Si feature). For :math:`G(\lambda;c,s)=
    (\sqrt{2\pi}\,s)^{-1}\exp[-(\lambda-c)^2/(2s^2)]`, :math:`\int G\,\mathrm{d}\lambda = 1` and
    :math:`\int_a^\infty G\,\mathrm{d}\lambda = \tfrac12\,\mathrm{erfc}[(a-c)/(\sqrt2\,s)]`, which
-   is the Lyman-limit cut of the lines in ``L_agn_bol``. With a weight :math:`h`,
+   is the Lyman-limit cut of the lines in the bolometric power. With a weight :math:`h`,
    :math:`\int G h\,\mathrm{d}\lambda = \mathbb{E}_{\lambda\sim N(c,s^2)}[h]`. The Si features,
    far from the kink of :math:`h`, use Gauss-Hermite quadrature with nodes
    :math:`c+\sqrt2\,s\,x_i`; the lines, some of which sit within a few sigma of the 1100 nm
@@ -223,7 +229,8 @@ def _sign_change_roots(fn, lo: Array, hi: Array, iterations: int = 4) -> Array:
 class PublishedLuminosities:
     r"""Mixin of :class:`~tengri.components.agn.grahsp.component.GRAHSPSEDComponent`.
 
-    Holds the methods that publish ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed``. It
+    Holds the methods that compute the bolometric, torus and absorbed powers the component
+    publishes as ``log_L_agn_bol``, ``log_L_agn_torus`` and ``log_L_agn_absorbed``. It
     reads ``self.config``, ``self._disc_raw``, ``self._torus_at``, ``self._feii_template`` and
     ``self._attenuation`` of the component and defines no state of its own. The four hooks are
     declared below as stubs so the contract is visible on the mixin; the component overrides
@@ -261,7 +268,7 @@ class PublishedLuminosities:
         params: Mapping[str, Array],
         templates_state: GRAHSPSEDComponentState,
     ) -> dict[str, Array]:
-        r"""Published ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s].
+        r"""Bolometric, torus and absorbed powers, internal dict ``L_agn_bol`` etc. [erg/s].
 
         Each is the integral of the emitted AGN-side SED under its documented definition, on
         the component's own grid, so it does not depend on the caller's wavelength array:
@@ -288,7 +295,12 @@ class PublishedLuminosities:
         Returns
         -------
         dict
-            ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars.
+            Internal keys ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars,
+            at the scale ``params["agn_grahsp_l5100"]`` carries.
+            ``GRAHSPSEDComponent.apply`` calls this with the evaluation-scale ``l5100`` (the
+            true value in float64, the reference 1e10 erg/s in float32) and publishes the
+            ``log10`` of each, plus the offset, as ``log_L_agn_bol`` / ``log_L_agn_torus`` /
+            ``log_L_agn_absorbed``: every value here is linear in ``l5100``.
 
         Notes
         -----
