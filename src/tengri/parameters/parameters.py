@@ -1469,6 +1469,21 @@ class Parameters:
                     f"double-counts its escaping photons. 'lyc_escape_geometry' only "
                     f"composes with dust_lyc_reprocessed_by='young'{_why}."
                 )
+        # Evaluation order of the two-component age mixture: 'per_node'
+        # (default) or 'grouped' (the exact interval-sum regrouping). Same
+        # validation as the grammar layer, repeated for the flat surface.
+        from tengri.components.dust.two_component import AGE_MIXTURES
+
+        self.dust_age_mixture = str(kwargs.pop("dust_age_mixture", "per_node"))
+        if self.dust_age_mixture not in AGE_MIXTURES:
+            raise ValueError(
+                f"dust_age_mixture={self.dust_age_mixture!r} must be one of {AGE_MIXTURES}."
+            )
+        if self.dust_age_mixture != "per_node" and self.dust_model != "two_component":
+            raise ValueError(
+                f"dust_age_mixture={self.dust_age_mixture!r} is a two_component setting "
+                f"(got dust_model={self.dust_model!r})."
+            )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
@@ -3190,6 +3205,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
         "costs a compile slot for two otherwise-identical specs (as _nebular_explicit)."
     ),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
+    "dust_age_mixture": content("two-component age-mixture evaluation order changes the graph"),
     "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
     "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
