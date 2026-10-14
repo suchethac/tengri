@@ -37,7 +37,8 @@ from tests.contract.test_radio_freefree_switch import _synthetic_ssp
 
 pytestmark = pytest.mark.contract
 
-_RADIO_WAVE_MIN_AA = 1.0e7
+#: Radio block edge (``radio._RADIO_WAVE_MIN_AA``, 100 um): above it the whole block is on.
+_RADIO_WAVE_MIN_AA = 1.0e6
 
 
 @pytest.fixture(scope="module")

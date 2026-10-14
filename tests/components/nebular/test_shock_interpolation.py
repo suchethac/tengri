@@ -196,9 +196,11 @@ class TestInterpolationSmoothness:
         Capped at ``log_density = 1.5``. Measured at the in-domain B-field, the
         response falls smoothly from 80.8 at -2 to 3.79 at 1.33, then 0.0048 at
         1.89, then **exactly zero** at 2.44 and at 3.0 -- so the upper third of
-        the range the docstring calls valid (``[0, 3]``) is empty, and returns
-        no error saying so. Tracked in #2065; pinned by
-        ``test_upper_density_range_is_empty`` below.
+        the range the docstring calls valid (``[0, 3]``) returned an empty
+        spectrum with no error saying so (#2065). Under the #2575 ruling the
+        query holds the nearest populated density node instead; the missing
+        warning is still #2065 and is pinned by
+        ``test_upper_density_range_holds_nearest_populated_node`` below.
         """
         v_mid, b_in, _n = _base_point()
 
@@ -207,23 +209,32 @@ class TestInterpolationSmoothness:
             chex.assert_tree_all_finite(ratios)
             assert sum(ratios.values()) > 0.0, f"all-zero spectrum at log_density={n:.4g}"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "#2065: shock_line_ratios documents shock_log_density as valid on [0, 3] "
-            "and refuses only outside [-2, 3], but returns an identically-zero "
-            "spectrum above ~2.2 with no error and no warning."
-        ),
-    )
-    def test_upper_density_range_is_empty(self):
-        """The documented ceiling should either carry data or refuse."""
+    def test_upper_density_range_holds_nearest_populated_node(self):
+        """Above the populated density the query holds the nearest populated node.
+
+        owner ruling 2026-10-09 (#2575): a query with populated cells on one side
+        only holds the nearest populated node. At the base B-field the highest
+        populated density is log_density = 0, so log_density = 3 returns that
+        node's spectrum exactly. It is no longer identically zero. Whether a
+        query outside the populated range should warn or refuse is still open
+        under #2065.
+        """
         v_mid, b_in, _n = _base_point()
 
         top = shock_line_ratios(v_mid, shock_log_density=3.0, shock_b_over_sqrt_n=b_in)
-        assert sum(top.values()) > 0.0
+        highest = shock_line_ratios(v_mid, shock_log_density=0.0, shock_b_over_sqrt_n=b_in)
+        chex.assert_tree_all_finite(top)
+        for name, value in top.items():
+            assert float(value) == pytest.approx(float(highest[name]), rel=1e-6), name
 
 
 # ── Gradient tests — the core motivation for this change ──────────
+
+#: B-field at which the density gradient is probed. The quarter-point base row holds
+#: data only up to log_density = 0, so above that node the density is held and flat.
+#: Owner ruling 2026-10-09 (#2575): that is the intended edge hold, and not a density
+#: signal the probe can use. B = 1 uG is populated across the whole density axis.
+_DENSITY_PROBE_B = 1.0
 
 #: (axis id, how to vary it from the base point, FD step).
 #: The step is in the axis's own units: km/s, μG, dex.
@@ -298,6 +309,8 @@ class TestGradients:
         non-vacuity was being supplied by the defect it could not see.
         """
         base = list(_base_point())
+        if axis == "log_density":
+            base[1] = _DENSITY_PROBE_B
 
         def observable(ratios):
             if axis == "log_density":

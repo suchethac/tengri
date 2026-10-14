@@ -31,7 +31,7 @@ Shorthand tsnorm equivalent::
     spec = Parameters(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_total_mass = Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac = Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
         sfh_tsnorm_trunc = Uniform(1, 10),
@@ -90,6 +90,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
+from tengri.utils.wave_unit import check_timescales
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
 
@@ -164,6 +165,22 @@ def _stable_param_seed(name: str) -> int:
 
 
 # ── Parameters class ───────────────────────────────────────────────────
+
+
+_CUE_YOUNG_GAP_WARNED: bool = False
+
+#: The pairings of Cue's ``lyc_max_age_yr`` with the dust ``lyc_reprocessed_by`` that close
+#: the Lyman-continuum energy budget, quoted by both errors of ``_check_cue_lyc_coupling``.
+_CUE_LYC_SUPPORTED: str = (
+    "Supported pairings with a birth-cloud dust type (two_component, age_binned): "
+    "lyc_max_age_yr='all' with lyc_reprocessed_by='all' (the default); "
+    "lyc_max_age_yr <= t_birth_yr ({t:g}) with 'young'; "
+    "t_birth_yr < lyc_max_age_yr <= 1e8 with 'young' (warns about the 10-100 Myr gap). "
+    "A finite lyc_max_age_yr above 1e8 has no supported pairing: 'young' leaves the LyC of "
+    "the ages between t_birth_yr and the cutoff in the SED while Cue re-emits it (energy "
+    "created), and 'all' removes the LyC of the ages beyond the cutoff without re-emitting "
+    "it (energy lost)."
+)
 
 
 class Parameters:
@@ -556,6 +573,12 @@ class Parameters:
 
         # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        # Timing names the build dropped: each ``*_frac`` / ``*_gyr`` pair keeps
+        # exactly one name in the spec (#2748); see parameters/timing.py.
+        timing_excluded = frozenset(kwargs.pop("_timing_excluded", ()))
+        # ``_timing_keep_all`` is the structural spec ``parse_groups`` validates
+        # keys against: both names of a pair must stay declared there.
+        timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
@@ -610,6 +633,9 @@ class Parameters:
         # Polar-dust extinction curve: static string like agn_norm, validated here
         # so a flat-kwarg caller gets the same refusal as the grammar.
         self.agn_polar_law = kwargs.pop("agn_polar_law", "smc")
+        # CIGALE lambda_fracAGN window for agn_ir_frac (#2662): (lambda_min_um, lambda_max_um),
+        # a build-time config value; (0, 0) is the total-dust case.
+        self.agn_ir_frac_window = tuple(kwargs.pop("agn_ir_frac_window", (0.0, 0.0)))
         from tengri.components.agn.polar_dust import POLAR_LAWS
 
         if self.agn_polar_law not in POLAR_LAWS:
@@ -668,8 +694,12 @@ class Parameters:
         self.radio_include_freefree = kwargs.pop("radio_include_freefree", None)
         self.radio_ir_window = kwargs.pop("radio_ir_window", None)
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
+        self.radio_agn_loudness_ref = kwargs.pop("radio_agn_loudness_ref", "4400")
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
+        # yang20 alpha_ox declaration: "delta" (offset) or "absolute" (#2661). Static
+        # structural setting, not a traced parameter.
+        self.xray_alpha_ox_mode = kwargs.pop("xray_alpha_ox_mode", "delta")
         self.shock = kwargs.pop("shock", False)
         # Composable MAPPINGS V shock config (#851). ``shock_norm`` selects the
         # relative (``"frac"``) vs absolute (``"lhalpha"``) Halpha
@@ -793,7 +823,7 @@ class Parameters:
                     f"(current mode: '{self.nebular_mode}')."
                 )
 
-        self._valid_param_names = frozenset(self._param_registry.keys())
+        self._valid_param_names = frozenset(self._param_registry.keys()) - timing_excluded
 
         # --- Extract mirror specifications (string values → param tying) ---
         # Must run before validation so mirrored params (which may reference
@@ -850,6 +880,14 @@ class Parameters:
                 )
 
         # --- Resolve shorthands and store distributions ---
+        from tengri.parameters.timing import check_free_gyr_alias, timing_names_to_exclude
+
+        for name, value in resolved_kwargs.items():
+            check_free_gyr_alias(name, value)
+        if not timing_keep_all:
+            self._valid_param_names = self._valid_param_names - timing_names_to_exclude(
+                resolved_kwargs, self._valid_param_names
+            )
         self._distributions: dict[str, Distribution] = {}
         self._user_provided: frozenset[str] = frozenset()
         user_names = set()
@@ -860,6 +898,8 @@ class Parameters:
             else:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
+        # Timescale bounds are checked once, here, on the declared bounds (#2162).
+        check_timescales(self._distributions)
 
         # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
         # sees ``parse_groups``'s richer ``_group_provenance`` map: that
@@ -919,7 +959,7 @@ class Parameters:
                 continue
             param_support[_name] = (float(_lo), float(_hi))
 
-        self._warn_on_grid_overhang(param_support)
+        self._warn_on_grid_overhang(param_support, grammar_validated=grammar_validated)
 
         if self.agn_model == "composable":
             from tengri.components.agn.blocks import validate_block_recipe
@@ -1025,6 +1065,11 @@ class Parameters:
             raise ConfigError(
                 f"neb nitrogen={self.cue_nitrogen!r}: expected one of {NITROGEN_MODES}."
             )
+        # Oldest stellar age whose ionizing photons Cue counts: 'all' (default) or an age
+        # in years; 1e8 restores the former 100 Myr cut.
+        from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
+
+        self.cue_lyc_max_age_yr = validate_lyc_max_age_yr(kwargs.pop("cue_lyc_max_age_yr", "all"))
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -1356,7 +1401,14 @@ class Parameters:
                 f"True -> 'all'. Pass "
                 f"dust_lyc_reprocessed_by={'all' if _old_value else 'young'!r} instead."
             )
-        self.dust_lyc_reprocessed_by = str(kwargs.pop("dust_lyc_reprocessed_by", "young"))
+        # Default: 'all' under Cue, 'young' elsewhere (owner ruling 2026-10-13). Cue counts
+        # the ionizing photons of every stellar age and re-emits them as nebular light, so
+        # the stellar SED must give up the LyC of every age too; under 'young' the old
+        # population's LyC would stay in the SED and be created a second time as lines.
+        self.dust_lyc_reprocessed_by_explicit = "dust_lyc_reprocessed_by" in kwargs
+        self.dust_lyc_reprocessed_by = str(
+            kwargs.pop("dust_lyc_reprocessed_by", self._lyc_reprocessed_by_default())
+        )
         # Include the LyC (λ < 912 Å) in the dust energy-balance integral
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
@@ -1382,6 +1434,7 @@ class Parameters:
                 f"dust_transition_width_dex must be finite and >= 0, got "
                 f"{self.dust_transition_width_dex!r}"
             )
+        self._check_cue_lyc_coupling()
         # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
         # the birth-cloud screen through a hole. Same validation the grammar
         # layer (groups.py's _translate_dust_attenuation) runs, repeated here
@@ -1401,12 +1454,20 @@ class Parameters:
                     f"Supported: {sorted(DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}."
                 )
             if self.dust_lyc_reprocessed_by == "all":
+                _why = (
+                    ""
+                    if self.dust_lyc_reprocessed_by_explicit
+                    else (
+                        " ('all' is the default under Cue: it counts every stellar age, so "
+                        "'young' also needs neb lyc_max_age_yr <= dust t_birth_yr)"
+                    )
+                )
                 raise ValueError(
                     f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} with "
                     f"dust_lyc_reprocessed_by='all' is refused: both drive their reduction "
                     f"from the SAME neb_fesc for the young population, and composing them "
                     f"double-counts its escaping photons. 'lyc_escape_geometry' only "
-                    f"composes with dust_lyc_reprocessed_by='young' (the default)."
+                    f"composes with dust_lyc_reprocessed_by='young'{_why}."
                 )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
@@ -1424,6 +1485,98 @@ class Parameters:
         # parameters; forwarded to component_factory. See #1093.
         self.astrodust_spinning_dust = bool(kwargs.pop("astrodust_spinning_dust", False))
         self.astrodust_f_cnm = float(kwargs.pop("astrodust_f_cnm", 0.28))
+
+    def _lyc_reprocessed_by_default(self) -> str:
+        """The default ``dust_lyc_reprocessed_by``.
+
+        ``'young'`` for every nebular backend except Cue. Under Cue, ``'all'`` when Cue
+        counts every stellar age, so the stellar SED gives up the LyC of every age Cue
+        re-emits; ``'young'`` when ``lyc_max_age_yr`` is finite, the former cut: the
+        stellar SED then keeps the LyC of the ages Cue does not count, as it did before
+        every age was counted (``'all'`` would remove it and re-emit none of it).
+        """
+        from tengri.components.nebular.ionizing_spectrum import LYC_ALL_AGES
+
+        if getattr(self, "nebular_mode", None) != "cue":
+            return "young"
+        return "all" if self.cue_lyc_max_age_yr == LYC_ALL_AGES else "young"
+
+    def _check_cue_lyc_coupling(self) -> None:
+        """Refuse the Cue/young pairing that creates the old population's LyC twice.
+
+        Cue re-emits the ionizing photons of every stellar age it counts
+        (``neb lyc_max_age_yr``). ``dust_lyc_reprocessed_by='young'`` removes from the
+        stellar SED, and credits to the dust, only the LyC of ages below ``t_birth_yr``.
+        Older ages counted by Cue then stay in the SED below 912 A AND appear again as
+        nebular light: 94-96% of their energy created from nothing for a quiescent
+        galaxy. Only a birth-cloud screen reads the split, so only those dust types are
+        checked.
+
+        Raises
+        ------
+        ConfigError
+            If ``'young'`` is combined with Cue counting ages above both the young split
+            and the 100 Myr cut, or ``'all'`` with a finite ``lyc_max_age_yr`` (the LyC of
+            the ages Cue does not count would be removed and never re-emitted).
+
+        Warns
+        -----
+        UserWarning
+            Once per process for ``'young'`` with a cutoff between the split and 100 Myr
+            (the 10-100 Myr version of the same gap under the former cut).
+        """
+        if (
+            getattr(self, "nebular_mode", None) != "cue"
+            or self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
+        ):
+            return
+        from tengri.components.nebular.ionizing_spectrum import (
+            LYC_ALL_AGES,
+            MAX_NEB_LOG_AGE,
+        )
+
+        cutoff = self.cue_lyc_max_age_yr
+        if self.dust_lyc_reprocessed_by == "all":
+            if cutoff != LYC_ALL_AGES:
+                raise ConfigError(
+                    "dust_attenuation lyc_reprocessed_by='all' with neb type 'cue' and "
+                    f"lyc_max_age_yr={cutoff:g} loses energy: 'all' removes the LyC of every "
+                    "stellar age from the SED, but Cue re-emits only the ages up to "
+                    "lyc_max_age_yr, so the older ages' LyC is neither re-emitted nor "
+                    "credited to the dust. " + _CUE_LYC_SUPPORTED.format(t=self.dust_t_birth_yr)
+                )
+            return
+        if self.dust_lyc_reprocessed_by != "young":
+            return
+        former_cut_yr = 10.0**MAX_NEB_LOG_AGE
+        if cutoff != LYC_ALL_AGES and cutoff <= self.dust_t_birth_yr:
+            return
+        if cutoff == LYC_ALL_AGES or cutoff > former_cut_yr:
+            raise ConfigError(
+                "dust_attenuation lyc_reprocessed_by='young' with neb type 'cue' counting "
+                f"stellar ages up to lyc_max_age_yr={cutoff!r} double-counts the old "
+                "population's Lyman continuum: only ages below t_birth_yr="
+                f"{self.dust_t_birth_yr:g} yr have their LyC removed from the stellar SED "
+                "(and credited to the dust), but Cue re-emits the LyC of every counted age "
+                "as nebular light, so the older ages' energy is created a second time "
+                "(94-96% of it for a quiescent galaxy). "
+                + _CUE_LYC_SUPPORTED.format(t=self.dust_t_birth_yr)
+            )
+        global _CUE_YOUNG_GAP_WARNED
+        if not _CUE_YOUNG_GAP_WARNED:
+            _CUE_YOUNG_GAP_WARNED = True
+            import warnings
+
+            warnings.warn(
+                "dust_attenuation lyc_reprocessed_by='young' with neb type 'cue' and "
+                f"lyc_max_age_yr={cutoff:g}: ages between t_birth_yr="
+                f"{self.dust_t_birth_yr:g} and lyc_max_age_yr keep their LyC in the stellar "
+                "SED while Cue also re-emits it (the 10-100 Myr energy gap of the former "
+                "100 Myr cut). Use lyc_reprocessed_by='all' to close it, or set "
+                "lyc_max_age_yr <= t_birth_yr.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def _init_metallicity_config(self, kwargs):
         """Resolve metallicity evolution mode from kwargs.
@@ -1692,15 +1845,66 @@ class Parameters:
         neb = getattr(self, "neb", None)
         if isinstance(neb, str):
             selected.append(("neb", neb))
+        # WG00 attenuation is a template-backed screen (#2862): its tau_v axis is
+        # clipped onto the stored grid, so a prior past it warns here.
+        if getattr(self, "dust_model", None) == "wg00":
+            selected.append(("dust.attenuation", "wg00"))
         return selected
 
-    def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
-        """Warn when a reachable range overhangs the grid that consumes it.
+    def _provenance_label(
+        self, name: str, provenance: dict[str, str], tags: dict[str, str]
+    ) -> str:
+        """The Source column text for one parameter in :meth:`summary`.
+
+        A parameter resolved to a backend's grid support reads
+        ``[resolved to <backend> grid: lo..hi]`` (#2626), so the printed prior
+        shows the range the backend evaluates, not the declaration it replaced.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name.
+        provenance : dict of str to str
+            Resolution tag per parameter.
+        tags : dict of str to str
+            Tag text per resolution tag.
+
+        Returns
+        -------
+        str
+            The label for the Source column.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- display only.
+        """
+        resolution = (getattr(self, "_grid_resolution", None) or {}).get(name)
+        if resolution is not None:
+            return f"[resolved to {resolution}]"
+        return tags.get(provenance.get(name, "registry_default"), "")
+
+    def _warn_on_grid_overhang(
+        self, param_support: dict[str, tuple[float, float]], *, grammar_validated: bool = False
+    ) -> None:
+        """Refuse or warn about a reachable range that overhangs the grid consuming it.
 
         Parameters
         ----------
         param_support : dict of str to (float, float)
             ``{param_name: (lo, hi)}`` each parameter can actually take.
+        grammar_validated : bool, optional
+            ``True`` when :func:`~tengri.parameters.groups.parse_groups` built
+            this spec. It has already resolved declaration-sourced free priors
+            and refused explicit overhang with the provenance it holds, so this
+            method only warns. A direct flat ``Parameters(...)`` build has no
+            such pass, so an explicit ``Fixed`` or ``Uniform`` that overhangs is
+            refused here, from ``_flat_provenance``.
+
+        Raises
+        ------
+        ParameterError
+            For a direct flat build whose explicit value or prior lies outside a
+            non-extrapolating component's grid (#2626).
 
         Notes
         -----
@@ -1714,13 +1918,23 @@ class Parameters:
         from tengri.components.grid_support import (
             EXTRAPOLATING_SUPPORT,
             check_grid_support,
+            grid_refusal_message,
             support_shift,
         )
-        from tengri.config.exceptions import GridSupportWarning
+        from tengri.config.exceptions import GridSupportWarning, ParameterError
 
         settings = {"cue_nitrogen": self.cue_nitrogen}
         findings = check_grid_support(self._selected_grid_components(), param_support, settings)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
+            explicit = self._flat_provenance.get(pname) in ("user_fixed", "user_prior")
+            if (
+                not grammar_validated
+                and explicit
+                and (selector, name) not in EXTRAPOLATING_SUPPORT
+            ):
+                raise ParameterError(
+                    grid_refusal_message(selector, name, pname, detail, (g_lo, g_hi))
+                )
             if (selector, name) in EXTRAPOLATING_SUPPORT:
                 # No jnp.clip here (a smooth emulator, not a grid): the SED is
                 # NOT bit-identical and the gradient is NOT exactly zero past
@@ -1805,7 +2019,7 @@ class Parameters:
         zero too, giving a gradient sampler an absorbing basin with no way out
         (#1277). Free priors are rejected when their supports *overlap*, since an
         overlap means the sampler can reach the dead region: measured at 21.8 % of
-        prior draws for ``start_gyr=Uniform(0.5, 10)``, ``end_gyr=Uniform(0, 5)``.
+        prior draws for ``start_frac=Uniform(0.0362663, 0.725327)``, ``end_gyr=Uniform(0, 5)``.
         """
         for greater, lesser, reason in self._ORDERED_PAIRS:
             if greater not in self._distributions or lesser not in self._distributions:
@@ -2766,6 +2980,19 @@ class Parameters:
             modules.append(f"met={met_mode}")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
+        if dust_mdl in ("single_component", "wg00"):
+            lines.append("  LyC reprocessed by: n/a (no young/old split)")
+        elif self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+            _origin = (
+                "[user]"
+                if getattr(self, "dust_lyc_reprocessed_by_explicit", False)
+                else (
+                    "[default: 'all' for cue]"
+                    if self.dust_lyc_reprocessed_by == "all"
+                    else "[default: 'young' for cue with a finite lyc_max_age_yr]"
+                )
+            )
+            lines.append(f"  LyC reprocessed by: {self.dust_lyc_reprocessed_by!r} {_origin}")
         lines.append("")
 
         # Provenance tagging (only present when built via parse_groups)
@@ -2788,12 +3015,6 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
-            # The "_zcap" suffix marks a declared free prior (an SF-onset
-            # lookback) that was capped at the age of the universe at the
-            # build's own source redshift. Same shown-never-silent principle
-            # as "_grid" above, see _narrow_free_priors_to_z.
-            "user_free_zcap": "[user FREE -> z cap]",
-            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it
@@ -2816,7 +3037,7 @@ class Parameters:
             prior_str = repr(dist)
             bounds_str = f"[{lo:.4g}, {hi:.4g}]"
             if provenance:
-                tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                tag = self._provenance_label(name, provenance, _TAGS)
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str:<22s} {tag}")
             else:
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
@@ -2829,7 +3050,7 @@ class Parameters:
                 dist = self._distributions[name]
                 val = dist.bounds[0]
                 if provenance:
-                    tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                    tag = self._provenance_label(name, provenance, _TAGS)
                     val_str = f"{val:.4g}"
                     if name == "agn_polar_oa" and val == 0.0:
                         from tengri.components.agn.blocks.torus_screen import (
@@ -2925,6 +3146,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "agn_nlr_block": content("AGN NLR type determines parameters"),
     "agn_norm": content("AGN normalization mode determines parameters"),
     "agn_polar_law": content("polar-dust extinction law changes the emitted SED"),
+    "agn_ir_frac_window": content("CIGALE lambda_fracAGN window changes the AGN dust power"),
     "agn_torus_block": content("AGN torus type determines parameters"),
     "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
     "apply_igm": content("IGM application affects forward model"),
@@ -2937,6 +3159,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
     "cue_nitrogen": content(
         "CUE gas_logno meaning (relation offset or absolute) changes the forward"
+    ),
+    "cue_lyc_max_age_yr": content(
+        "oldest stellar age whose ionizing photons Cue counts changes Q_H and the shape"
     ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),
@@ -2957,6 +3182,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by_explicit": content(
+        "build-time flag: True when the caller stated lyc_reprocessed_by. It selects "
+        "whether an incoherent Cue pairing raises or the backend default applies, and "
+        "drives spec.summary() provenance and to_groups() emission; the resolved "
+        "dust_lyc_reprocessed_by is keyed above. It reaches no kernel, so content only "
+        "costs a compile slot for two otherwise-identical specs (as _nebular_explicit)."
+    ),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
     "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
     "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
@@ -3006,6 +3238,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "radio_include_freefree": content("thermal free-free on/off changes the emitted radio SED"),
     "radio_ir_window": content("IR band L_IR is integrated over changes the radio normalization"),
     "radio_sf_nu_ref": content("synchrotron anchor frequency changes the emitted radio SED"),
+    "radio_agn_loudness_ref": content("AGN loudness anchor changes the emitted radio SED"),
     "radio_sfr_mode": content("radio SFR mode determines parameters"),
     "shock": content("shock component flag determines parameters"),
     "shock_abundance": content("shock abundance setting determines parameters"),
@@ -3013,6 +3246,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "shock_norm": content("shock normalization determines parameters"),
     "xray": content("X-ray component flag determines parameters"),
     "xray_model": content("X-ray model determines parameters"),
+    "xray_alpha_ox_mode": content("which alpha_ox declaration the corona reads"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
     "_parse_inputs": exclude(

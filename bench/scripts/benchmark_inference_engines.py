@@ -23,6 +23,12 @@ import tracemalloc
 import jax
 import jax.random as jr
 
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+_PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+    SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+)
+
 jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
@@ -169,7 +175,7 @@ def main():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.0855, _PEAK_FRAC_HI),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
@@ -181,7 +187,7 @@ def main():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 0.5127,
                 "sfh_tsnorm_width_gyr": 1.2,
                 "sfh_tsnorm_trunc": 0.3,
                 "sfh_tsnorm_log_total_mass": 11.0,
@@ -375,7 +381,7 @@ def main():
     model_shared = a1_fitter.model
     different_params = {
         "sfh_tsnorm_skew": -0.3,
-        "sfh_tsnorm_peak_lbt_gyr": 7.0,
+        "sfh_tsnorm_peak_lbt_frac": 0.8,
         "sfh_tsnorm_width_gyr": 0.5,
         "sfh_tsnorm_trunc": 0.8,
         "sfh_tsnorm_log_total_mass": 10.2,

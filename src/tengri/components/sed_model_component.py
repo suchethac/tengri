@@ -568,7 +568,8 @@ class SEDModelComponent(TemplateThreading):
             Derived keys this component reads *opportunistically*: if an
             upstream component publishes the key, its value is passed to
             :meth:`predict` as a keyword argument; if not, the framework
-            substitutes ``jnp.asarray(0.0)``. This is how a downstream
+            substitutes ``jnp.asarray(0.0)`` (``-inf`` for a ``log_L_*`` key, a log10
+            power, so that an absent source is zero power). This is how a downstream
             component like radio can read ``L_ir`` from dust if dust is
             in the chain but still produce a sensible output if not.
 
@@ -755,13 +756,18 @@ class SEDModelComponent(TemplateThreading):
                     f"Available derived keys: {list(state.derived.keys())}"
                 )
 
-        # Look up optional inputs from derived: fallback to 0.0 when missing.
-        # This is the "documented-fallback" cross-component read pattern
-        # used by radio (L_ir / L_agn_bol / log_mstar) and X-ray.
+        # Look up optional inputs from derived: fallback to 0.0 when missing, and to -inf for a
+        # log10 luminosity (``log_L_*``, a power of 10 in erg/s): an absent source is zero
+        # power, and 0.0 there would be 1 erg/s, which float32 kernels that form
+        # ``pow10(log_L - c)`` would carry as a nonzero luminosity. This is the
+        # "documented-fallback" cross-component read pattern used by radio
+        # (L_ir / L_agn_bol / log_mstar) and X-ray.
         for opt_key in self.optional_inputs():
             key_name = opt_key.name
             if key_name in state.derived:
                 input_kwargs[key_name] = state.derived[key_name]
+            elif key_name.startswith("log_L_"):
+                input_kwargs[key_name] = jnp.asarray(-jnp.inf)
             else:
                 input_kwargs[key_name] = jnp.asarray(0.0)
 

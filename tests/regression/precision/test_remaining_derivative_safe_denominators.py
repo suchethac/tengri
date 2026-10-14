@@ -991,21 +991,23 @@ def test_wavelength_union_grid_floor_is_not_reachable():
 
 
 # ════════════════════════════════════════════════════════════════════════
-# Left pinned (not fixed): inference/posterior.py's 3 sites
+# Left pinned (not fixed): inference/posterior.py's bpt_nii_oiii sites
 # ════════════════════════════════════════════════════════════════════════
 
 
 def test_posterior_sites_remain_pinned_and_unfixed():
-    """``inference/posterior.py:736,741,1020`` are deliberately left as-is.
+    """``Posterior.bpt_nii_oiii``'s two ``jnp.maximum(ha, 1e-30)`` floors are left as-is.
 
-    ``bpt_nii_oiii`` (736, 741) and ``agn_fraction`` (1020) are post-hoc
-    diagnostics computed from an already-completed fit's stored posterior
-    draws (``self.samples`` / ``self.eline_fluxes``), read for
+    ``bpt_nii_oiii`` is a post-hoc diagnostic computed from an already-completed
+    fit's stored posterior draws (``self.eline_fluxes``), read for
     reporting/plotting after ``model.fit`` returns -- see the ``Posterior``
-    class docstring. Nothing differentiates a ``Posterior`` method, so
-    #1860's failure mode cannot occur there; this is not a backlog item.
-    Pins the source shape so a future accidental "fix" here is deliberate,
-    not automatic.
+    class docstring. Nothing differentiates a ``Posterior`` method, so #1860's
+    failure mode cannot occur there; this is not a backlog item. Pins the source
+    shape so a future accidental "fix" here is deliberate, not automatic.
+
+    ``agn_fraction``'s ``jnp.maximum(total, 1e-300)`` floor was removed (#2937):
+    the divisor is now selected before the division, so no quotient is formed
+    where ``total`` is zero. That form is pinned instead.
     """
     import inspect
 
@@ -1013,7 +1015,8 @@ def test_posterior_sites_remain_pinned_and_unfixed():
 
     src = inspect.getsource(Posterior)
     assert "jnp.maximum(ha, 1e-30)" in src
-    assert "jnp.maximum(total, 1e-300)" in src
+    assert "jnp.maximum(total, 1e-300)" not in src
+    assert "jnp.where(positive, total, 1.0)" in src
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1022,7 +1025,7 @@ def test_posterior_sites_remain_pinned_and_unfixed():
 
 
 def test_census_pinned_count_matches_the_three_left():
-    """The tree-wide census (tools/check_representable_floors.py) agrees: 3 left."""
+    """The tree-wide census (tools/check_representable_floors.py) agrees with its pins."""
     import subprocess
     import sys
     from pathlib import Path

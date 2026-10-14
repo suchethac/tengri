@@ -217,7 +217,7 @@ def high_z() -> dict:
         sfh={
             "type": "tsnorm",
             "log_total_mass": Uniform(8.0, 12.0),
-            "peak_lbt_gyr": Uniform(0.1, 1.5),
+            "peak_lbt_frac": Uniform(0.00725327, 0.108799),
             "width_gyr": Uniform(0.05, 1.0),
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),

@@ -589,7 +589,9 @@ def test_psb_flex_adds_only_the_flex_ratios_to_the_psb_suess2022_parameter_set()
     assert list(SFH_REGISTRY["psb_suess2022"].params) == [
         "sfh_psb2022_log_total_mass",
         "sfh_psb2022_tlast_gyr",
+        "sfh_psb2022_tlast_frac",
         "sfh_psb2022_tflex_gyr",
+        "sfh_psb2022_tflex_frac",
         "sfh_psb2022_ratio_young",
         "sfh_psb2022_ratio_old_0",
         "sfh_psb2022_ratio_old_1",

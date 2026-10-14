@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -1277,7 +1278,6 @@ def preintegrate_lines(
 def _tensor_contract(
     grid: jnp.ndarray,
     weights_per_axis: list[jnp.ndarray],
-    population_mask: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Contract grid along leading axes with weight vectors.
 
@@ -1285,25 +1285,12 @@ def _tensor_contract(
     After each contraction, the next weight contracts along axis 0 of
     the reduced tensor.
 
-    With ``population_mask``, the contraction is *normalized* over the
-    populated cells -- the mask is contracted with the same weights and
-    divides the result (#2435). Zeroing unpopulated cells without this
-    division does not exclude them: the weights still sum to one over the
-    whole axis, so the result is scaled by the fraction of kernel weight
-    that landed on populated cells.
-
     Parameters
     ----------
     grid : jnp.ndarray
         Shape (*grid_dims, n_trailing). Grid to contract.
     weights_per_axis : list[jnp.ndarray]
         One weight vector per grid dimension. w[i] has shape (grid_dims[i],).
-    population_mask : jnp.ndarray, optional
-        Shape (n_density, n_b), 1.0 populated / 0.0 unpopulated, for a grid
-        whose leading dims are (n_v, n_b, n_density). When given, the result
-        is the mask-weighted mean over populated cells, and is NaN wherever
-        no populated cell falls inside the kernel. ``None`` contracts exactly
-        as before, bit-for-bit.
 
     Returns
     -------
@@ -1312,49 +1299,139 @@ def _tensor_contract(
 
     Notes
     -----
-    JIT/grad/vmap safe. The ``W == 0`` branch uses the double-``where``
-    pattern so the dead branch never evaluates ``num / 0`` -- a single
-    ``where`` around the quotient still poisons the reverse-mode gradient
-    with NaN.
+    JIT/grad/vmap safe.
     """
-    if population_mask is None:
-        result = grid
-        for _i, w in enumerate(weights_per_axis):
-            result = jnp.tensordot(w, result, axes=([0], [0]))
-        return result
+    result = grid
+    for w in weights_per_axis:
+        result = jnp.tensordot(w, result, axes=([0], [0]))
+    return result
 
+
+def _bracket_weights(x: jnp.ndarray, nodes: jnp.ndarray, populated: jnp.ndarray) -> jnp.ndarray:
+    """Linear weights of ``x`` on the populated nodes that bracket it (#2575).
+
+    Between a populated node below ``x`` and one above, the weights are the linear
+    interpolant. With populated nodes on one side only, the nearest one is held
+    (weight 1). With no populated node, every weight is zero.
+
+    Parameters
+    ----------
+    x : jnp.ndarray, shape ()
+        Query coordinate on this axis.
+    nodes : jnp.ndarray, shape (n,)
+        Strictly ascending node coordinates.
+    populated : jnp.ndarray, shape (n,)
+        Boolean, True where the node holds data.
+
+    Returns
+    -------
+    jnp.ndarray, shape (n,)
+        Weights summing to one when any node is populated, zero otherwise.
+
+    Notes
+    -----
+    JIT/grad/vmap safe. Both divisions are guarded so the unselected branch never
+    produces a NaN in the backward pass.
+    """
+    below = populated & (nodes <= x)
+    above = populated & (nodes > x)
+    has_lo = jnp.any(below)
+    has_hi = jnp.any(above)
+    lo = jnp.where(has_lo, jnp.max(jnp.where(below, nodes, -jnp.inf)), 0.0)
+    hi = jnp.where(has_hi, jnp.min(jnp.where(above, nodes, jnp.inf)), 0.0)
+    both = has_lo & has_hi
+    span = jnp.where(both, hi - lo, 1.0)
+    t = jnp.where(both, (x - lo) / span, jnp.where(has_hi, 1.0, 0.0))
+    is_lo = (below & (nodes == lo)).astype(nodes.dtype)
+    is_hi = (above & (nodes == hi)).astype(nodes.dtype)
+    return (1.0 - t) * is_lo + t * is_hi
+
+
+def _kernel_or_bracket(
+    weights: jnp.ndarray, nodes: jnp.ndarray, x: jnp.ndarray, populated: jnp.ndarray
+) -> jnp.ndarray:
+    """Kernel weights where their support is populated, bracket weights otherwise.
+
+    The kernel's own weights are used when every node with a nonzero kernel weight is
+    populated. Otherwise the query is interpolated between the populated brackets.
+    ``populated`` may carry leading batch dimensions; the decision is per row.
+    """
+    covered = jnp.all(populated | (weights == 0.0), axis=-1, keepdims=True)
+    bracket = jax.vmap(lambda row: _bracket_weights(x, nodes, row))(
+        populated.reshape(-1, populated.shape[-1])
+    ).reshape(populated.shape)
+    return jnp.where(covered, weights, bracket)
+
+
+def _masked_contract(
+    grid: jnp.ndarray,
+    weights_per_axis: list[jnp.ndarray],
+    population_mask: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+) -> jnp.ndarray:
+    """Contract a 3-D grid over populated cells, interpolating across masked gaps (#2575).
+
+    The velocity axis is unmasked, so its kernel weights apply directly. On the B and
+    density axes the query is resolved per row: where the kernel stencil reaches only
+    populated nodes the kernel weights are used, and where it reaches a masked node the
+    query is interpolated linearly between the populated brackets (edge-held when one
+    side has none). A row with no populated cell carries no weight. Shape-only NaN is
+    returned only when the mask holds no populated cell at all.
+
+    Parameters
+    ----------
+    grid : jnp.ndarray
+        Shape (n_v, n_b, n_density, n_trailing). Unpopulated cells may hold any value;
+        they are excluded before contraction.
+    weights_per_axis : list[jnp.ndarray]
+        Kernel weights per axis, shapes (n_v,), (n_b,), (n_density,).
+    population_mask : jnp.ndarray
+        Shape (n_density, n_b), 1.0 populated / 0.0 unpopulated.
+    axes : tuple[jnp.ndarray, ...]
+        Node coordinates per axis (velocity, B, density).
+    point : tuple
+        Query coordinates (velocity, B, density).
+
+    Returns
+    -------
+    jnp.ndarray
+        Shape (n_trailing,). NaN when no cell is populated.
+
+    Notes
+    -----
+    JIT/grad/vmap safe. The brackets use the physical node coordinates, so non-uniform
+    axes are handled. Owner ruling 2026-10-09 (#2575): bracket interpolation supersedes
+    the #2435 mask semantics.
+    """
     n_axes = len(weights_per_axis)
-    leading = grid.shape[:n_axes]
-    n_trailing = grid.ndim - n_axes
     if n_axes != 3:
         raise ValueError(
             "population_mask expects a 3-D interpolation grid with leading dims "
             f"(n_v, n_b, n_density); got {n_axes} interpolation axes."
         )
-    n_density, n_b = population_mask.shape
-    if (leading[1], leading[2]) != (n_b, n_density):
+    _, n_b, n_n = grid.shape[:3]
+    n_density, n_b_mask = population_mask.shape
+    if (n_b_mask, n_density) != (n_b, n_n):
         raise ValueError(
             f"population_mask shape {population_mask.shape} = (n_density, n_b) is "
-            f"inconsistent with grid leading dims {leading} = (n_v, n_b, n_density): "
-            f"expected (n_b, n_density) = ({leading[1]}, {leading[2]})."
+            f"inconsistent with grid leading dims {grid.shape[:3]} = (n_v, n_b, n_density): "
+            f"expected (n_b, n_density) = ({n_b}, {n_n})."
         )
+    w_v, w_b, w_n = weights_per_axis
+    populated = population_mask.T > 0.0  # (n_b, n_density)
+    row_valid = jnp.any(populated, axis=1)  # (n_b,)
 
-    # (n_density, n_b) -> (1, n_b, n_density), broadcasting over velocity.
-    mask_vbn = population_mask.T[jnp.newaxis, :, :]
-    mask_full = jnp.broadcast_to(mask_vbn, leading)
+    # Density weights per B row: a (n_b, n_density).
+    a = _kernel_or_bracket(jnp.broadcast_to(w_n, populated.shape), axes[2], point[2], populated)
+    # B weights over rows that hold any data at this density.
+    b_w = _kernel_or_bracket(w_b, axes[1], point[1], row_valid)
 
-    def _contract(arr: jnp.ndarray) -> jnp.ndarray:
-        out = arr
-        for w in weights_per_axis:
-            out = jnp.tensordot(w, out, axes=([0], [0]))
-        return out
-
-    numerator = _contract(grid * mask_full.reshape(leading + (1,) * n_trailing))
-    weight_sum = _contract(mask_full)
-
-    populated = weight_sum > 0.0
-    safe_weight_sum = jnp.where(populated, weight_sum, 1.0)
-    return jnp.where(populated, numerator / safe_weight_sum, jnp.nan)
+    grid_m = jnp.where(populated.reshape((1, n_b, n_n) + (1,) * (grid.ndim - 3)), grid, 0.0)
+    x_b = jnp.einsum("vbn...,bn->vb...", grid_m, a)
+    y = jnp.tensordot(b_w, x_b, axes=([0], [1]))
+    out = jnp.tensordot(w_v, y, axes=([0], [0]))
+    return jnp.where(jnp.any(populated), out, jnp.nan)
 
 
 @functools.partial(jax.jit, static_argnames=("index_space_interp",))
@@ -1404,13 +1481,13 @@ def interp_nd_triweight(
         Optional 2D population mask shape (n_density, n_b) with 1.0 for
         populated cells and 0.0 for unpopulated. Only for 3-D grids whose
         leading dims are (velocity, B-field, density); an inconsistent shape
-        raises ``ValueError``. The interpolation is then *normalized* over
-        the populated cells -- the mask is contracted with the same kernel
-        weights and divides the result -- so a field that is constant on the
-        populated cells interpolates back to that constant, and a query with
-        no populated cell in range returns NaN rather than zero (#2435).
-        Default None (no masking; the contraction is bit-identical to a
-        build without this argument).
+        raises ``ValueError``. Along the B and density axes a query whose
+        kernel stencil reaches a masked cell is interpolated linearly between
+        the populated nodes that bracket it, and a query with populated cells
+        on one side only holds the nearest populated node (#2575). NaN is
+        returned only when the mask holds no populated cell at all. Default
+        None (no masking; the contraction is bit-identical to a build without
+        this argument).
 
     Returns
     -------
@@ -1430,25 +1507,19 @@ def interp_nd_triweight(
     and produces smooth gradients throughout the grid range. The interpolant is
     C2 within intervals and C0 at nodes where adjacent spacings differ.
 
-    **Population masking (#2066, #2435)**: Pass ``population_mask`` to restrict
-    the kernel to populated cells of a zero-filled sparse grid. The contraction
-    becomes a normalized convolution,
-
-    .. math::
-
-       f(x) = \\frac{\\sum_i w_i(x)\\, m_i\\, g_i}{\\sum_i w_i(x)\\, m_i}
-
-    where :math:`w_i` are the triweight weights, :math:`m_i \\in \\{0, 1\\}` the
-    mask and :math:`g_i` the grid values. The denominator is what makes this
-    correct: zeroing unpopulated cells *without* it leaves weights that still
+    **Population masking (#2066, #2435, #2575)**: Pass ``population_mask`` to
+    interpolate a zero-filled sparse grid over its populated cells. Zeroing
+    unpopulated cells without renormalizing leaves kernel weights that still
     sum to one over the whole axis, so every value is scaled by the populated
-    weight fraction. That was #2435 -- Hb-normalized MAPPINGS line ratios came
-    back 12-89% low, with ``Hb_4861A`` reading 0.7135 instead of 1.0.
-
-    A query whose kernel reaches no populated cell returns NaN, unconditionally
-    and regardless of ``on_out_of_grid`` (which governs *axis bounds*, a
-    different question from whether the grid holds data there). Returning zeros
-    would be a silent wrong answer.
+    weight fraction; that was #2435 (Hb-normalized MAPPINGS line ratios read
+    0.7135 instead of 1.0). The masked path therefore never mixes an unpopulated
+    cell into the result. Where the kernel stencil on the B or density axis
+    reaches only populated nodes, the kernel weights apply. Where it reaches a
+    masked node, the query is interpolated between the populated brackets
+    (#2575), so a query between two populated nodes across a gap returns their
+    linear interpolant, and a query with populated cells on one side holds the
+    nearest one. NaN is returned only when no cell is populated. The velocity
+    axis is unmasked and always uses its kernel weights.
     """
     n_dims = len(axes)
 
@@ -1473,8 +1544,9 @@ def interp_nd_triweight(
         )
         weights_per_axis.append(w)
 
-    # Contract grid with weights, applying population mask if provided
-    return _tensor_contract(grid, weights_per_axis, population_mask=population_mask)
+    if population_mask is None:
+        return _tensor_contract(grid, weights_per_axis)
+    return _masked_contract(grid, weights_per_axis, population_mask, axes, point)
 
 
 def _bcast_axis0(vec: jnp.ndarray, ndim: int) -> jnp.ndarray:
@@ -1519,6 +1591,9 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     """
     h = jnp.diff(x)  # (n-1,)
     delta = jnp.diff(y, axis=0) / _bcast_axis0(h, y.ndim)  # (n-1, *rest)
+    if x.shape[0] == 2:
+        # Two nodes: the only monotone cubic is the secant line.
+        return jnp.broadcast_to(delta, y.shape)
 
     h_prev = h[:-1]  # (n-2,)
     h_next = h[1:]  # (n-2,)
@@ -1551,6 +1626,38 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.concatenate([first[None], interior, last[None]], axis=0)
 
 
+def extrapolation_band(x):
+    """Outer bound of the numerical-gap band past a table: half an end spacing out.
+
+    ``extrapolate=True`` continues an edge cell only across this band. A query
+    past it is held at the band edge, so an overhang that is not a numerical gap
+    (more than half a node spacing) is never extrapolated into.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 2``.
+
+    Returns
+    -------
+    lo, hi : float
+        ``x[0] - (x[1] - x[0]) / 2`` and ``x[-1] + (x[-1] - x[-2]) / 2``.
+    """
+    return x[0] - 0.5 * (x[1] - x[0]), x[-1] + 0.5 * (x[-1] - x[-2])
+
+
+def _clamp_to_hull(xq, lo, hi):
+    """Hold ``xq`` at the node hull ``[lo, hi]`` with a derivative of 1 on the closed hull.
+
+    Outside the hull the value is held at the edge node (derivative 0), exactly
+    as ``jnp.clip`` does. Unlike ``jnp.clip``, the derivative is NOT halved on
+    the boundary itself: ``jnp.clip`` splits the tie at ``xq == lo`` or
+    ``xq == hi`` between the clamp and the identity, so a parameter sitting
+    exactly on an outermost node lost half its gradient there.
+    """
+    return jnp.where(xq < lo, lo, jnp.where(xq > hi, hi, xq))
+
+
 def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool = False):
     """Evaluate the monotone-cubic interpolant at ``xq`` over axis 0.
 
@@ -1562,7 +1669,13 @@ def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool =
     n = x.shape[0]
     slopes = _pchip_slopes(x, y)
 
-    xq_c = xq if extrapolate else jnp.clip(xq, x[0], x[-1])
+    # ``jnp.clip`` splits its tie gradient 1/2 at each bound, which halves the
+    # derivative at a boundary node. Clamping with ``where`` keeps the full
+    # one-sided slope there and still returns zero outside the table.
+    if extrapolate:
+        xq_c = xq
+    else:
+        xq_c = jnp.where(xq < x[0], x[0], jnp.where(xq > x[-1], x[-1], xq))
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     xi = x[i]
     h = x[i + 1] - xi
@@ -1587,7 +1700,7 @@ def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
     corner and degrades to O(h); linear interpolation has no slope to get wrong.
     """
     n = x.shape[0]
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    xq_c = _clamp_to_hull(xq, x[0], x[-1])
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     h = x[i + 1] - x[i]
     t = (xq_c - x[i]) / jnp.where(h > 0.0, h, 1.0)  # guard a degenerate cell
@@ -1667,12 +1780,14 @@ def pchip_interp_1d(
     return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
 
 
-def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray:
+def pchip_interp_local(
+    x: jnp.ndarray, table, xq, *, reduce=None, extrapolate: bool = False
+) -> jnp.ndarray:
     """Monotone cubic (PCHIP) read of one query off a table's leading axis, 4-node stencil.
 
     Gives the same value as :func:`pchip_interp_1d` applied column by column
-    (clamped outside ``[x[0], x[-1]]``) while touching only the four rows that
-    bracket ``xq``: the tangents of the two bracketing nodes depend only on
+    (clamped outside ``[x[0], x[-1]]`` unless ``extrapolate``) while touching only
+    the four rows that bracket ``xq``: the tangents of the two bracketing nodes depend only on
     their neighbors, so the table is never contracted or differentiated
     whole. That keeps the cost of a read independent of the node count, which
     is what a free-redshift z-table of 250+ nodes needs.
@@ -1694,6 +1809,13 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
         the contracted quantity actually consumed and costs nothing per
         contracted element. The interpolant is then the cubic of the reduced
         node values.
+    extrapolate : bool, optional
+        If ``False`` (default), ``xq`` is clamped to ``[x[0], x[-1]]`` and the
+        value is held at the boundary node. If ``True``, the edge cubic continues
+        past the end nodes, but only across the numerical-gap band of half an end
+        spacing (:func:`extrapolation_band`); past that band the value is held at
+        the band edge. Use it when the query's prior overhangs the table by a
+        numerical gap. Nodes and interior values are identical either way.
 
     Returns
     -------
@@ -1715,7 +1837,10 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
     n = x.shape[0]
     if n < 4:
         raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    if extrapolate:
+        xq_c = _clamp_to_hull(xq, *extrapolation_band(x))
+    else:
+        xq_c = _clamp_to_hull(xq, x[0], x[-1])
     # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
     # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
     pos = jnp.searchsorted(x, xq_c) - 1
@@ -1754,6 +1879,7 @@ def interp_nd_pchip(
     axes: tuple[jnp.ndarray, ...],
     point: tuple,
     kinds: tuple[str, ...] | None = None,
+    extrapolate: tuple[bool, ...] | None = None,
 ) -> jnp.ndarray:
     """N-dimensional node-exact monotone-cubic (PCHIP) interpolation.
 
@@ -1780,6 +1906,10 @@ def interp_nd_pchip(
         ``axes[i]`` has shape ``(grid_dims[i],)``.
     point : tuple
         Query coordinates, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis: continue the end cubic past the first and last node instead
+        of clipping the query to them. Only valid for ``'pchip'`` axes.
+        Default: clip on every axis.
     kinds : tuple of {'pchip', 'linear'}, optional
         Interpolation kind per axis, in the same order as ``axes``. Defaults to
         PCHIP on every axis. Select ``'linear'`` for an axis whose tabulated
@@ -1808,8 +1938,19 @@ def interp_nd_pchip(
     **Gradient-safe**: yes, C¹ in the query coordinates; guarded divisions in
     the slope computation keep the VJP finite at flat segments.
 
+    **Cost**: each axis contributes a window of at most four nodes around its
+    cell (its bracketing nodes and their tangent neighbors), so the read costs
+    ``prod(4 per axis) * trailing`` and does not grow with the node count. The
+    tangents are the full-axis Fritsch-Carlson tangents, not an approximation.
+
     Queries are clipped to the grid extent (no extrapolation beyond the
-    boundary nodes).
+    boundary nodes) unless ``extrapolate`` is set for that axis. An
+    extrapolated PCHIP axis continues its end cubic past the boundary node,
+    so a query a hair outside the table (a parameter prior that reaches
+    ``cos(90 deg)`` against a stored node of ``6e-17``) keeps a nonzero
+    derivative instead of the zero that clipping returns there. The end cubic
+    is the same one that interpolates the table, so nodes and the interior are
+    unchanged.
 
     References
     ----------
@@ -1824,11 +1965,203 @@ def interp_nd_pchip(
     unknown = set(kinds) - set(_EVAL_AXIS0)
     if unknown:
         raise ValueError(f"unknown interpolation kind(s) {sorted(unknown)}; expected pchip/linear")
+    if extrapolate is None:
+        extrapolate = (False,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    if any(e and k == "linear" for e, k in zip(extrapolate, kinds, strict=True)):
+        raise ValueError("extrapolate is only defined for pchip axes")
 
-    reduced = grid
-    for ax, p, kind in zip(axes, point, kinds, strict=True):
-        reduced = _EVAL_AXIS0[kind](ax, reduced, p)
+    stencils = [
+        _axis_stencil(ax, p, kind, bool(ext))
+        for ax, p, kind, ext in zip(axes, point, kinds, extrapolate, strict=True)
+    ]
+    return _evaluate_stencils(grid, stencils, kinds)
+
+
+#: Nodes per axis that the local PCHIP read gathers: the two bracketing nodes
+#: plus one neighbor on each side, which is all their tangents read.
+_STENCIL_NODES = 4
+
+
+class _AxisStencil(NamedTuple):
+    """One axis's local read: a window of nodes and the query inside it."""
+
+    xs: jnp.ndarray  # window node coordinates, shape (m,)
+    start: jnp.ndarray  # index of the window's first node on the full axis
+    cell: jnp.ndarray  # lower node of the bracketing cell, relative to the window
+    xq: jnp.ndarray  # query coordinate after this axis's clamp or extrapolation rule
+    m: int  # window length, min(_STENCIL_NODES, n)
+
+
+def _axis_stencil(ax: jnp.ndarray, p, kind: str, extrapolate: bool) -> _AxisStencil:
+    """Locate the cell and the 4-node window of one axis for a query.
+
+    The cell and clamp follow :func:`_pchip_eval_axis0` (``extrapolate=False``
+    clips the query to the node hull; ``True`` leaves it to the end cubic).
+    ``kind='linear'`` clamps with :func:`_clamp_to_hull`, as
+    :func:`_linear_eval_axis0` does. The window starts one node below the cell
+    and is shifted to stay inside the axis, so for ``n >= 4`` it always holds
+    the two cell nodes and their tangent neighbors. For ``n < 4`` the window is
+    the whole axis.
+    """
+    n = ax.shape[0]
+    m = min(_STENCIL_NODES, n)
+    if kind == "linear":
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
+    elif extrapolate:
+        xq = p
+    else:
+        # ``where``, not ``jnp.clip``: a clip halves the derivative on the boundary.
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
+    pos = jnp.searchsorted(ax, xq) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
+    return _AxisStencil(
+        xs=jax.lax.dynamic_slice_in_dim(ax, start, m, axis=0),
+        start=start,
+        cell=i - start,
+        xq=xq,
+        m=m,
+    )
+
+
+def _evaluate_stencils(grid: jnp.ndarray, stencils, kinds) -> jnp.ndarray:
+    """Gather the ``prod(m)`` hypercube of windows, then reduce it axis by axis.
+
+    Each reduction is the one-axis Hermite (or linear) read of
+    :func:`_pchip_eval_axis0`, but its tangents come from the window, not from
+    the whole axis. A node's tangent reads only its neighbors, so the window
+    gives the full-axis tangents at the two cell nodes. Each slice of the other
+    axes is reduced the same way, so this is the same tensor-product read at a
+    cost that does not grow with the node count.
+    """
+    sub = grid
+    for axis, st in enumerate(stencils):
+        sub = jax.lax.dynamic_slice_in_dim(sub, st.start, st.m, axis=axis)
+    reduced = sub
+    for st, kind in zip(stencils, kinds, strict=True):
+        reduced = _window_eval_axis0(st, reduced, kind)
     return reduced
+
+
+def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndarray:
+    """Evaluate one window along axis 0 of ``ys`` at the stencil's query."""
+    x0 = st.xs[st.cell]
+    x1 = st.xs[st.cell + 1]
+    h = x1 - x0
+    y0 = jax.lax.dynamic_index_in_dim(ys, st.cell, axis=0, keepdims=False)
+    y1 = jax.lax.dynamic_index_in_dim(ys, st.cell + 1, axis=0, keepdims=False)
+    if kind == "linear":
+        t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
+        return (1.0 - t) * y0 + t * y1
+    slopes = _pchip_slopes(st.xs, ys)
+    m0 = jax.lax.dynamic_index_in_dim(slopes, st.cell, axis=0, keepdims=False)
+    m1 = jax.lax.dynamic_index_in_dim(slopes, st.cell + 1, axis=0, keepdims=False)
+    t = (st.xq - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * y0
+        + (t3 - 2.0 * t2 + t) * h * m0
+        + (-2.0 * t3 + 3.0 * t2) * y1
+        + (t3 - t2) * h * m1
+    )
+
+
+def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):
+    """Map one query coordinate onto the table for :func:`library_lookup`.
+
+    The coordinate is clamped, not the value, so the lookup stays continuous.
+    With ``extrapolate`` the coordinate is held at the outer edge of the
+    numerical band ``[x[0] - h_lo/2, x[-1] + h_hi/2]``, and the end cubic is
+    evaluated there: a query inside the band is extrapolated, and one beyond it
+    takes the band-edge value. Without it the coordinate is held at the node hull
+    ``[x[0], x[-1]]``. Both are ``where`` selections, never ``jnp.clip``, so no
+    derivative is halved on a boundary.
+    """
+    if extrapolate:
+        lo, hi = extrapolation_band(ax)
+    else:
+        lo, hi = ax[0], ax[-1]
+    return jnp.where(p < lo, lo, jnp.where(p > hi, hi, p))
+
+
+def library_lookup(
+    grid: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+    *,
+    extrapolate: tuple[bool, ...] | None = None,
+    population_mask: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    """Evaluate a template library at ``point``: the one entry point for lookups (#2861).
+
+    Every fitted-parameter template-library lookup goes through here. It is
+    node-exact monotone-cubic (PCHIP, :func:`interp_nd_pchip`): the value at a
+    stored node is the stored value, and the interpolant is shape-preserving.
+    The triweight smoother is deliberately not used here, because it averages
+    across neighboring nodes and so does not reproduce the table.
+
+    Parameters
+    ----------
+    grid : jnp.ndarray, shape (*grid_dims, *trailing)
+        Tabulated values. The leading ``len(axes)`` dimensions are the axes.
+    axes : tuple of jnp.ndarray
+        One strictly ascending node vector per axis; ``axes[i]`` has shape
+        ``(grid_dims[i],)``.
+    point : tuple
+        Query coordinate, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis. ``True`` (the default on every axis) extrapolates the end cubic
+        across a numerical gap (a prior within half an end spacing of the node
+        hull) and holds the coordinate at the band edge beyond it, so the value is
+        continuous at the band edge. ``False`` holds the coordinate at the node
+        hull. Physical gaps are reported at build time by
+        :data:`tengri.components.grid_support.GRID_SUPPORT`; this function does
+        not read that registry.
+    population_mask : jnp.ndarray, optional, shape (grid_dims[2], grid_dims[1])
+        Three-axis grids only (velocity, B, density). 1.0 where the (density, B) cell
+        is populated, 0.0 where it is not (#2575). The read then uses populated nodes
+        only and holds at the populated hull on the masked axes; ``extrapolate`` must
+        be ``False`` for those axes. See :mod:`tengri.utils.masked_pchip`.
+
+    Returns
+    -------
+    jnp.ndarray, shape (*trailing,)
+        Interpolated values.
+
+    Raises
+    ------
+    ValueError
+        If ``extrapolate`` does not have one entry per axis.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The value is continuous
+    everywhere. The derivative is nonzero inside the numerical band and zero beyond
+    its outer edge, and it is one-sided (not halved) on the outermost node.
+    """
+    if extrapolate is None:
+        extrapolate = (True,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    if population_mask is not None:
+        if any(extrapolate[1:]):
+            raise ValueError("masked axes (B, density) hold at the populated hull; use False")
+        from tengri.utils.masked_pchip import masked_pchip_lookup  # lazy: module imports us
+
+        return masked_pchip_lookup(grid, axes, point, population_mask, bool(extrapolate[0]))
+    queries = tuple(
+        _library_axis_query(ax, p, bool(ext))
+        for ax, p, ext in zip(axes, point, extrapolate, strict=True)
+    )
+    # The queries are already held to their band, so the end cubic is read as is.
+    return interp_nd_pchip(grid, axes, queries, extrapolate=(True,) * len(axes))
 
 
 def resample_template(
@@ -1985,12 +2318,26 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.sum(jnp.where(positive, power_law, trapezoid))
 
 
+def _pchip_slice(ax: jnp.ndarray, table: jnp.ndarray, axis_idx: int, value) -> jnp.ndarray:
+    """Evaluate the PCHIP lookup of ``table`` at ``value`` along ``axis_idx``.
+
+    PCHIP is nonlinear in the node values (its slopes are limited by the data),
+    so the collapse evaluates the interpolant on the data itself rather than
+    contracting with a fixed weight vector. The query goes through the same
+    coordinate mapping as :func:`library_lookup`, so a collapsed axis and a
+    lookup along it agree.
+    """
+    query = _library_axis_query(ax, value, True)
+    moved = jnp.moveaxis(table, axis_idx, 0)
+    return _pchip_eval_axis0(ax, moved, query, extrapolate=True)
+
+
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
     index_space_interp: bool | None = None,
 ) -> PreintegratedGrid | PreintegratedLines:
-    """Collapse fixed axes in a preintegrated grid via triweight interpolation.
+    """Collapse fixed axes in a preintegrated grid via the node-exact PCHIP lookup (#2861).
 
     When a grid parameter is fixed (not free during inference), its axis
     can be collapsed at init time.  This reduces the grid dimensionality
@@ -2047,35 +2394,24 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
 
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
-
-            # Contract phot along this axis using einsum-style contraction.
-            # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
-            # preserving the order of all other axes.
-            phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
+            # Evaluate along this axis; the axis is removed and the others keep
+            # their order, as the old contraction did.
+            phot = _pchip_slice(ax, phot, axis_idx, value)
 
             if moment is not None:
-                moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
+                moment = _pchip_slice(ax, moment, axis_idx, value)
 
             if lyc_phot is not None:
-                lyc_phot = jnp.tensordot(w, lyc_phot, axes=([0], [axis_idx]))
+                lyc_phot = _pchip_slice(ax, lyc_phot, axis_idx, value)
 
             if nolyc_phot is not None:
-                nolyc_phot = jnp.tensordot(w, nolyc_phot, axes=([0], [axis_idx]))
+                nolyc_phot = _pchip_slice(ax, nolyc_phot, axis_idx, value)
 
             if sub_phot is not None:
-                sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
-                sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
-                sub_num_rest = jnp.tensordot(w, sub_num_rest, axes=([0], [axis_idx]))
+                sub_phot = _pchip_slice(ax, sub_phot, axis_idx, value)
+                sub_num = _pchip_slice(ax, sub_num, axis_idx, value)
+                sub_num_rest = _pchip_slice(ax, sub_num_rest, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)
@@ -2119,21 +2455,11 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
-
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
 
             # Contract line_filter_weights along this axis.
             # Shape (*grid_dims, n_lines, n_filters) → (*reduced_grid_dims, n_lines, n_filters)
             # Note: axis_idx indexes the grid dimensions (not n_lines or n_filters)
-            line_filter_weights = jnp.tensordot(w, line_filter_weights, axes=([0], [axis_idx]))
+            line_filter_weights = _pchip_slice(ax, line_filter_weights, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)

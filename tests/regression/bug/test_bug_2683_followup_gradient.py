@@ -121,7 +121,7 @@ def test_b_onset_gradient_matches_converged(
     monkeypatch, ssp, obs, family, key, sfh, z, points, bound
 ):
     """Onset gradient between SSP nodes: was 1-5 % off in every band; now within 2.1 %."""
-    full = {**sfh, "age_gyr": Uniform(1.0, 10.0)}
+    full = {**sfh, "age_frac": Uniform(0.0725327, 0.725327)}
     model = _model(ssp, obs, "dsps", z, full)
     worst = 0.0
     for x in points:
@@ -138,7 +138,7 @@ def test_c_onset_flux_has_no_row_staircase(ssp, obs):
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
         "log_total_mass": Fixed(10.0),
-        "age_gyr": Uniform(1.0, 10.0),
+        "age_frac": Uniform(0.0725327, 0.725327),
     }
     models = {k: _model(ssp, obs, k, 0.0, full) for k in ("cic", "dsps")}
     xs = np.linspace(5.0, 5.04, 81)

@@ -58,6 +58,9 @@ class Dale2014IRSEDComponent(EmissionComponent):
     cmb_supported: ClassVar[bool] = True
     name: str = "dale2014"
 
+    #: Registry key of the free-shape table (dust_emission_precompute), read when alpha is free.
+    precompute_key: ClassVar[str | None] = "dale2014"
+
     # Free parameters (user-facing names, prefix-stripped)
     alpha_dale = Fixed(DEFAULT_DUST_ALPHA_DALE)
 
