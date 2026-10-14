@@ -31,7 +31,7 @@ Shorthand tsnorm equivalent::
     spec = Parameters(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_total_mass = Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac = Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
         sfh_tsnorm_trunc = Uniform(1, 10),
@@ -573,6 +573,12 @@ class Parameters:
 
         # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        # Timing names the build dropped: each ``*_frac`` / ``*_gyr`` pair keeps
+        # exactly one name in the spec (#2748); see parameters/timing.py.
+        timing_excluded = frozenset(kwargs.pop("_timing_excluded", ()))
+        # ``_timing_keep_all`` is the structural spec ``parse_groups`` validates
+        # keys against: both names of a pair must stay declared there.
+        timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
@@ -811,7 +817,7 @@ class Parameters:
                     f"(current mode: '{self.nebular_mode}')."
                 )
 
-        self._valid_param_names = frozenset(self._param_registry.keys())
+        self._valid_param_names = frozenset(self._param_registry.keys()) - timing_excluded
 
         # --- Extract mirror specifications (string values → param tying) ---
         # Must run before validation so mirrored params (which may reference
@@ -868,6 +874,14 @@ class Parameters:
                 )
 
         # --- Resolve shorthands and store distributions ---
+        from tengri.parameters.timing import check_free_gyr_alias, timing_names_to_exclude
+
+        for name, value in resolved_kwargs.items():
+            check_free_gyr_alias(name, value)
+        if not timing_keep_all:
+            self._valid_param_names = self._valid_param_names - timing_names_to_exclude(
+                resolved_kwargs, self._valid_param_names
+            )
         self._distributions: dict[str, Distribution] = {}
         self._user_provided: frozenset[str] = frozenset()
         user_names = set()
@@ -1995,7 +2009,7 @@ class Parameters:
         zero too, giving a gradient sampler an absorbing basin with no way out
         (#1277). Free priors are rejected when their supports *overlap*, since an
         overlap means the sampler can reach the dead region: measured at 21.8 % of
-        prior draws for ``start_gyr=Uniform(0.5, 10)``, ``end_gyr=Uniform(0, 5)``.
+        prior draws for ``start_frac=Uniform(0.0362663, 0.725327)``, ``end_gyr=Uniform(0, 5)``.
         """
         for greater, lesser, reason in self._ORDERED_PAIRS:
             if greater not in self._distributions or lesser not in self._distributions:
@@ -2989,12 +3003,6 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
-            # The "_zcap" suffix marks a declared free prior (an SF-onset
-            # lookback) that was capped at the age of the universe at the
-            # build's own source redshift. Same shown-never-silent principle
-            # as "_grid" above, see _narrow_free_priors_to_z.
-            "user_free_zcap": "[user FREE -> z cap]",
-            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it
@@ -3161,6 +3169,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by_explicit": content(
+        "build-time flag: True when the caller stated lyc_reprocessed_by. It selects "
+        "whether an incoherent Cue pairing raises or the backend default applies, and "
+        "drives spec.summary() provenance and to_groups() emission; the resolved "
+        "dust_lyc_reprocessed_by is keyed above. It reaches no kernel, so content only "
+        "costs a compile slot for two otherwise-identical specs (as _nebular_explicit)."
+    ),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
     "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
     "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),

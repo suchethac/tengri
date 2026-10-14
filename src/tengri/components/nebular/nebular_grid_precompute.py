@@ -74,6 +74,7 @@ from tengri.components.nebular.nebular_grid_dust_build import (
 )
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
@@ -1281,6 +1282,10 @@ def precompute_nebular_grid(
     # tabulated over redshift.
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
     ref_params["redshift"] = ref_z
+    # A timing fraction converts to Gyr at ref_z, so the reference onset would differ
+    # between a catalog build (lower bound 0.01) and a plain one (0.1). Written in the
+    # z = 0 frame, it is the same absolute onset at every reference redshift (#2748).
+    ref_params = reference_timing_fracs(spec, ref_params, ref_z)
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),

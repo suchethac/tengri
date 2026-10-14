@@ -24,6 +24,7 @@ import numpy as np
 
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 from tengri.parameters.priors import Distribution
+from tengri.parameters.timing import resolve_timing_fracs
 from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN, DEFAULT_N_GRID
 from tengri.utils.host_array import host_array
 
@@ -53,8 +54,13 @@ def _draw_internal_kwargs(
     key: jax.Array,
     n: int,
     overrides: dict[str, Distribution],
+    *,
+    redshift: float | None = None,
 ) -> tuple[list[str], dict[str, jnp.ndarray]]:
     """Draw `n` samples for every fittable param of `family`, return internal kwargs.
+
+    A ``*_frac`` timing that is overridden is converted to its Gyr twin at
+    ``redshift``; an unoverridden one is dropped so the Gyr default stands (#2748).
 
     Returns
     -------
@@ -74,6 +80,8 @@ def _draw_internal_kwargs(
         )
 
     internal_kwargs: dict[str, jnp.ndarray] = {}
+    param_map: dict[str, tuple[str, float, float]] = {}
+    sampled_fracs: dict[str, jnp.ndarray] = {}
 
     for fname in family_list:
         spec = _spec_for(fname)
@@ -82,9 +90,16 @@ def _draw_internal_kwargs(
             keys = jax.random.split(key, n + 1)
             key = keys[0]
             draws = jnp.stack([dist.sample(k) for k in keys[1:]])
-            internal_name, scale, offset = spec.internal_param_map[public_name]
+            param_map[public_name] = spec.internal_param_map[public_name]
+            internal_name, scale, offset = param_map[public_name]
             internal_kwargs[internal_name] = draws * scale + offset
+            if paramdef.gyr_twin is not None and paramdef.gyr_twin not in overrides:
+                sampled_fracs[public_name] = draws
 
+    # Without a redshift the fractions convert at z = 0: the shape-only callers
+    # of a family that is not age-anchored never reach an age(z) (#2748).
+    conversion_z = 0.0 if redshift is None else redshift
+    resolve_timing_fracs(internal_kwargs, sampled_fracs, param_map, redshift=conversion_z)
     return family_list, internal_kwargs
 
 
@@ -187,7 +202,9 @@ def sample_sfh_prior(
 
     composed_fn, _, _, settings = resolve_sfh(family)
 
-    family_list, internal_kwargs = _draw_internal_kwargs(family, key, n, prior_overrides)
+    family_list, internal_kwargs = _draw_internal_kwargs(
+        family, key, n, prior_overrides, redshift=redshift
+    )
     # `settings` carries non-fittable knobs (e.g. sfh_field_ngrid). For the
     # families we currently support, it is empty and can be ignored.
     del family_list, settings

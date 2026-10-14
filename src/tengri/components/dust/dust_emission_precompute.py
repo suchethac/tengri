@@ -47,9 +47,9 @@ from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CG
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "draine_li2007": ("dust_qpah", "dust_umin"),
     "dl07": ("dust_qpah", "dust_umin"),  # alias
-    "dale2014": ("dust_alpha",),
+    "dale2014": ("dust_alpha_dale",),
     "draine_li2014": ("dust_qpah", "dust_umin", "dust_alpha_dl14"),
-    "astrodust": ("dust_qpah", "dust_umin"),
+    "astrodust": ("dust_lgU",),
     "themis": ("dust_qhac", "dust_umin"),
     "bosa": ("dust_log_ssfr",),  # log_ltir is derived from L_absorbed at runtime
     "draine2021_pah": ("dust_lgU",),

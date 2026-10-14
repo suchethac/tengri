@@ -51,7 +51,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     # Not a required check, so a draft can skip it outright: nothing waits on a
     # `skipped` context here. The per-PR concurrency group above cancels the
     # superseded build when a newer commit lands.
@@ -72,6 +72,13 @@ jobs:
         run: |
           pip install -e .
           pip install -r docs/requirements.txt
+
+      # Every SEDModel.build(...) listing under docs/ is executed against the
+      # committed SSP fixture before the pages are rendered, so a listing a
+      # reader would copy cannot reach a preview broken (#2430). Each listing
+      # cold-builds a model (30-60 s), which is why the job timeout below is
+      # 30 minutes rather than 15; the same step runs in docs.yml on main.
+      - run: python tools/check_build_listings.py
 
       - name: Build documentation
         # CI=true triggers plot_gallery=False inside docs/conf.py — the

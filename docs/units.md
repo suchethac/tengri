@@ -82,8 +82,14 @@ Timescale parameters carry their unit in the name: `*_myr`, `*_gyr` and `*_yr`.
 When a `Parameters` is built, each `Fixed` value and each prior bound of such a
 parameter is checked against a plausible range for its suffix: `*_myr` in
 [1e-3, 2e4], `*_gyr` in [1e-6, 20], `*_yr` in [1, 2e10]. An out-of-range value
-raises `ParameterError` naming the parameter, the value and the unit. The check
-runs once at build, never per draw and never inside a jitted function.
+raises `ParameterError` naming the parameter, the value and the unit. An exact
+zero always passes: it is the same number in every unit, and it is the declared
+"ongoing" value of the cessation lookbacks (`sfh_const_end_gyr = 0` means star
+formation continues to the epoch of observation). A log-scale name such as
+`sfh_burst_log_tpeak_myr` (units `log10(Myr)`) is not checked, since its value
+is not in the suffix's unit. A negative timescale is refused with its own
+message. The check runs once at build, never per draw and never inside a jitted
+function.
 
 ## Conversion helpers
 

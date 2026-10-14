@@ -20,7 +20,7 @@ Usage::
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -99,6 +99,7 @@ from tengri.observation.photometry import (
     filter_coverage_fraction,
 )
 from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
+from tengri.parameters.timing import alias_gyr_timings
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -3520,6 +3521,7 @@ class SEDModel:
                 )
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
+                self._dust_shape_table_cache = None
                 self._cloudy_band_table_cache = None
                 self._shock_band_table_cache = None
                 self._xray_term_response_cache = None
@@ -3552,6 +3554,17 @@ class SEDModel:
                     )
                     self._dust_band_response_cache = None
 
+                try:
+                    self._dust_emission_shape_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp dust-emission shape-table precompute failed "
+                        f"({e!r}); falling back to the exact per-call filter integral "
+                        "(correct, but without the precomputed-table speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._dust_shape_table_cache = None
                 # The CLOUDY band table is built here, eagerly, as the dust response
                 # above is: a build inside a jit trace would see tracers.
                 try:
@@ -3594,6 +3607,18 @@ class SEDModel:
                             stacklevel=2,
                         )
                         setattr(self, f"_{_emitter}_term_response_cache", None)
+
+                    try:
+                        self._additive_term_shape_table(chain, _emitter)
+                    except Exception as e:
+                        warnings.warn(
+                            f"WavePrecomp {_emitter} term shape-table precompute failed "
+                            f"({e!r}); falling back to the exact per-call filter integral "
+                            "(correct, but without the precomputed-table speedup).",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        setattr(self, f"_{_emitter}_term_shape_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -5969,11 +5994,14 @@ class SEDModel:
             Complete parameter dict with all fixed values merged in.
         """
         from tengri.parameters.resolve import merge_fixed_params
+        from tengri.parameters.timing import route_timing_fracs
 
         merged = merge_fixed_params(self.spec, params)
         if fixed_values is not None:
             merged = {**merged, **fixed_values}
-        return merged
+        # A sampled ``*_frac`` timing replaces its Gyr twin; an unsampled one
+        # is dropped so the Gyr value stands (#2748).
+        return route_timing_fracs(merged, params)
 
     def _get_redshift(self, params, fixed_values=None):
         """Get redshift value from params or evaluation parameters.
@@ -7000,6 +7028,7 @@ class SEDModel:
         # missing free parameter raises a helpful error here instead of a bare
         # KeyError deferred to the first accessor of the lazy Prediction. Both
         # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
@@ -10604,6 +10633,7 @@ class SEDModel:
         # ``predict_observables_jit`` already guards at line ~4242
         # (#314). Skip in JIT-runtime threading mode where the JIT
         # entry point has already validated the caller's dict.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         if fixed_values is None:
             check_unknown_params(params, self._param_map)
             # ...and the converse: a free param with no value would survive
@@ -10687,7 +10717,9 @@ class SEDModel:
             # ``catalog_z_range`` -- #1329). Neither half ever passed through a
             # raw user dict, so there is nothing here for
             # ``refuse_fixed_overrides`` to have caught or to re-check.
-            full_params = {**fixed_values, **params}
+            from tengri.parameters.timing import route_timing_fracs
+
+            full_params = route_timing_fracs({**fixed_values, **params}, params)
 
         if self._spectrum_lut_active():
             # The stellar component broadens its spectrum family on the model grid with
@@ -10832,6 +10864,9 @@ class SEDModel:
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
+        # A params dict naming a deprecated Gyr timing is converted to its
+        # fraction first, so the checks below see the key the spec frees (#2748).
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         # Validate param keys before entering JIT, silent drops of unknown
         # override keys produce plausible-looking but wrong physics (issue #314).
         check_unknown_params(params, self._param_map)
@@ -11183,6 +11218,9 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        shape_table = self._dust_emission_shape_table(cached)
+        if shape_table is not None:
+            result.setdefault("dust_ir", {})["emission_shape_table"] = shape_table
         # ── CLOUDY age-resolved band table (WavePrecomp, #2324) ──
         # A sibling of ``nebular_grid``, not a slot of ``nebular``: the backend's
         # grid lives under ``nebular`` and :meth:`NebularSEDComponent.apply` peels
@@ -11250,13 +11288,16 @@ class SEDModel:
                 )
             slot[component.name] = bundle
 
-        # The other additive emitters (X-ray, radio, and the composable AGN, #1118) are
-        # sums of rank-1 terms, so they get a response *per term* rather than the single
-        # L_ir * R that dust's one-term SED admits. Same exactness, same build-time integral.
-        for emitter in ("xray", "radio", "agn"):
+        # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
+        # they get a response *per term* rather than the single L_ir * R that dust's
+        # one-term SED admits. Same exactness, same build-time integral.
+        for emitter in _chain_implements_emission_terms(cached):
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
+            term_shape = self._additive_term_shape_table(cached, emitter)
+            if term_shape is not None:
+                result.setdefault(emitter, {})["term_shape_table"] = term_shape
 
         return result if result else None
 
@@ -12035,6 +12076,71 @@ class SEDModel:
         self._dust_band_response_cache = response
         return response
 
+    def _dust_emission_shape_table(self, chain):
+        """Registry-adapter band fluxes of the dust emission over its free shape axes.
+
+        :meth:`_dust_emission_band_response` is exact but needs every shape parameter fixed.
+        With ``dust_T``, ``dust_beta_ir``, ``dust_alpha_mir`` or ``dust_lambda_0_um`` free
+        the band flux depends on them, and the component would integrate the filters on every
+        call. The registry adapter for the emitter's ``precompute_key`` tabulates the band
+        fluxes over those axes at build, spanning the priors, and the component reads the table
+        at the current shape parameters (``EmissionComponent._shape_table_phot``).
+
+        The adapter is built at one redshift, so the table is built only for a single ``Fixed``
+        redshift. Returns the adapter's ``table_arrays`` dict (its band array and ``"axes"``)
+        with a ``"rest"`` entry holding the same arrays for the adapter at z = 0, the rest band
+        the photometry publishes beside the observed one (#2559), so a free-shape predict
+        integrates no filter. Arrays only, so it threads through ``jit``; ``None`` with the
+        reason in ``_dust_shape_table_decline`` otherwise.
+        """
+        cached = getattr(self, "_dust_shape_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        reason = None
+        emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
+        key = getattr(emitter, "precompute_key", None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        free_dust = {p for p in self.spec.free_params if p.startswith("dust_")}
+
+        if emitter is None or key is None or not self._approx.get("wave_precomp"):
+            reason = "no registry adapter for this dust emission model"
+        elif getattr(st, "phot_fw_padded", None) is None:
+            reason = "no padded filter curves"
+        elif getattr(emitter, "fast_emission", False) or self._dust_ir_diffuse_screen:
+            reason = "fast_emission or diffuse_screen is set"
+        elif not (free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK):
+            reason = "the emission shape is fixed; the exact band response applies"
+        elif self._response_z_nodes() is not None:
+            reason = "the registry adapter is built at one redshift and the redshift is not Fixed"
+        else:
+            from tengri.forward.precompute import registry
+
+            module = registry.resolve(key)
+            axes = set(module.AXIS_PARAMS[key])
+            amplitude = set(getattr(emitter, "lookup_amplitude_params", ()))
+            unknown = free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK - axes - amplitude
+            if unknown:
+                reason = f"free parameters {sorted(unknown)} are not axes of the {key} table"
+            else:
+                redshift = float(self.spec.get_fixed_values()["redshift"])
+                filter_args = (
+                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
+                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
+                )
+                preint = module.precompute(*filter_args, redshift, self.spec, model=key)
+                rest_preint = module.precompute(*filter_args, 0.0, self.spec, model=key)
+                table = {
+                    **module.table_arrays(preint, key),
+                    "rest": module.table_arrays(rest_preint, key),
+                }
+
+        self._dust_shape_table_decline = reason
+        self._dust_shape_table_cache = table
+        return table
+
     #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
     #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
     _CLOUDY_TABLE_FREE_OK = frozenset(
@@ -12402,6 +12508,74 @@ class SEDModel:
         }
         if "S_diag" in values:
             table["S_diag"] = values["S_diag"]
+        return table
+
+    def _additive_term_shape_table(self, chain, name):
+        r"""Shape-only band tables of an additive emitter, built through its registry adapters.
+
+        :meth:`_additive_term_band_response` needs every emitter parameter fixed. With a shape
+        parameter free the component integrates the filters on every call. Each term of the
+        emitter that has a registry adapter (``TERM_SHAPE_KEYS`` of the component, via
+        ``term_shape_keys()``) gets a table of its shape-only band flux over that shape, built by
+        the adapter at build time (see ``tengri.components._term_shape_table``). The amplitude
+        is not tabulated: the component multiplies each table by the term at its own reference
+        wavelength, so FIRRC, redshift evolution and suppression stay exact.
+
+        Returns ``{term: table}`` for every term, or ``None`` when the emitter declares no such
+        table, no parameter of it is free, the all-fixed exact response applies, the redshift is
+        not ``Fixed``, or any term's adapter declines. The reason is not recorded: the caller falls
+        back to the dense per-call integral.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time; the returned arrays are threaded into the JIT.
+        """
+        cache_attr = f"_{name}_term_shape_cache"
+        cached = getattr(self, cache_attr, "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        comp = next((c for c in chain if getattr(c, "name", "") == name), None)
+        keys = comp.term_shape_keys() if hasattr(comp, "term_shape_keys") else {}
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+        free = set(self.spec.free_params)
+        prefix = f"{name}_"
+
+        if (
+            keys
+            and any(p.startswith(prefix) for p in free)
+            and self._approx.get("wave_precomp")
+            and fw_pad is not None
+            and ft_pad is not None
+            and self._response_z_nodes() is None
+            and self._additive_term_band_response(chain, name) is None
+        ):
+            from tengri.forward.precompute import registry
+
+            redshift = float(self.spec.get_fixed_values()["redshift"])
+            tables = {}
+            for term, key in keys.items():
+                module = registry.resolve(key)
+                term_table = module.term_shape_table(
+                    wave=self._rest_wavelength,
+                    filter_waves_padded=fw_pad,
+                    filter_trans_padded=ft_pad,
+                    redshift=redshift,
+                    parameters=self.spec,
+                    model=key,
+                    term=term,
+                )
+                if term_table is None:
+                    tables = None
+                    break
+                tables[term] = term_table
+            table = tables
+
+        setattr(self, cache_attr, table)
         return table
 
     #: Provenance tags that mean a caller asked for this parameter's value.

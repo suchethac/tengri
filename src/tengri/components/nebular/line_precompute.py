@@ -178,6 +178,7 @@ def precompute_line_per_qh(
     # the prior's or ``catalog_z_range``'s lower bound), not a prior draw: the
     # table is per-Q_H and independent of it. A caller-supplied one is honored.
     from tengri.components.nebular.nebular_grid_precompute import reference_redshift
+    from tengri.parameters.timing import reference_timing_fracs
 
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
     if "redshift" in set(model.spec.free_params) or caller_z is not None:
@@ -189,6 +190,9 @@ def precompute_line_per_qh(
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
     # to stand in for, and for the reason this module already states below:
     # the table is per-Q_H, a property of the gas, not of the reference SFH.
+    # The reference SFH timing is written in the z = 0 frame, as the grid builder's is,
+    # so the per-Q_H table is the same at every reference redshift (#2748).
+    ref_params = reference_timing_fracs(model.spec, ref_params, ref_z)
     ref_params = {
         **reference_history_params(model, redshift=ref_z),
         **ref_params,

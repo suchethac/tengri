@@ -27,7 +27,7 @@
 | `Backend` | Swappable computation engine | `CloudyGridBackend`, `CueBackend` |
 | `Fitter` / `-er` | Active orchestrator | `Fitter`, `PopulationFitter` |
 | `Posterior` | Inference result (samples + diagnostics) | `Posterior`, `PopulationPosterior` |
-| `List` | Registry / catalog | `LineList`, `FilterList` |
+| `List` | Registry / catalog | `LineList` |
 | `Error` | Exception classes (see §8) | `TengriError`, `ParameterError` |
 
 **Forbidden suffixes:**
@@ -39,18 +39,18 @@
 
 ## 2. Canonical Class Names
 
-These are the **canonical** names. Old names are deprecated aliases that emit `DeprecationWarning` and will be removed in v1.0.
+These are the **canonical** names. The old names were removed; the alias tables below record what each one became.
 
-| Canonical name | Deprecated alias(es) | Defining module |
+| Canonical name | Removed alias(es) | Defining module |
 |---------------|---------------------|-----------------|
-| `SEDModel` | `Model` | `core/model.py` |
-| `Parameters` | `ParamSpec` | `core/parameters.py` |
-| `Spectroscopy` | `SpectroscopyConfig` | `models/observation/spectroscopy.py` |
-| `NoiseModel` | `NoiseConfig` | `models/observation/noise_model.py` |
-| `LineList` | `LineCatalog` | `models/observation/line_list.py` |
-| `PopulationFitter` | `HierarchicalFitter` | `inference/hierarchical.py` |
-| `PopulationPosterior` | `HierarchicalResult` | `inference/hierarchical.py` |
-| `SEDModelConfig` | `ModelConfig` | `config/settings.py` |
+| `SEDModel` | `Model` (removed) | `core/model.py` |
+| `Parameters` | `ParamSpec` (removed) | `core/parameters.py` |
+| `Spectroscopy` | `SpectroscopyConfig` (removed) | `models/observation/spectroscopy.py` |
+| `NoiseModel` | `NoiseConfig` (removed) | `models/observation/noise_model.py` |
+| `LineList` | `LineCatalog` (removed) | `models/observation/line_list.py` |
+| `PopulationFitter` | `HierarchicalFitter` (removed) | `inference/hierarchical.py` |
+| `PopulationPosterior` | `HierarchicalResult` (removed) | `inference/hierarchical.py` |
+| `SEDModelConfig` | `ModelConfig` (removed) | `config/settings.py` |
 
 **File path stability rule:** Module filenames must match the canonical class name in `snake_case`. If a class is renamed, the file is renamed in the same commit. The table above is the ground truth; if it conflicts with the filesystem, the filesystem is wrong.
 
@@ -77,7 +77,7 @@ These are the **canonical** names. Old names are deprecated aliases that emit `D
 | Chemistry | `chem_` | *(reserved; populate when chemical evolution module is added)* |
 | Dust | `dust_` | `dust_tau_bc`, `dust_tau_diff`, `dust_slope` |
 | Nebular | `neb_` | `neb_logU`, `neb_logZ_gas`, `neb_fesc` |
-| AGN | `agn_` | `agn_log_lbol`, `agn_tau_skirtor`, `agn_disc_log_mbh` |
+| AGN | `agn_` | `agn_log_lbol`, `agn_tau_skirtor`, `agn_log_mbh` |
 | Emission lines | `eline_` | `eline_sigma_kms`, `eline_broad` |
 | Noise | `noise_` | `noise_f_cal`, `noise_dof` |
 | Radio | `radio_` | `radio_q_ir` |
@@ -121,9 +121,9 @@ All unit translations are implemented in `core/parameters.py :: translate_to_int
 | `resolve_*` | Registry lookup by string key | `resolve_dust_law()`, `resolve_sfh()` |
 | bare name | SFH shape functions registered as **registry keys** in `SFH_REGISTRY` ONLY (see §6) | `tsnorm`, `dpl` |
 
-### Current violations to fix
+### Renames applied
 
-| Current | Should be | File |
+| Former (removed) | Now | File |
 |---------|-----------|------|
 | `blr_emission()` | `compute_blr_sed()` | `models/agn/blr.py` |
 | `nlr_emission()` | `compute_nlr_sed()` | `models/agn/nlr.py` |
@@ -178,7 +178,7 @@ verb.
 Every derived physical quantity (stellar mass, SFR, ionization parameter, etc.) is declared by exactly ONE component via a `Property(units, group, doc, fn)` declaration in the protocol. Violations are architecture-level bugs.
 
 **Registry integrity:**
-- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_total`)
+- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_100myr`)
 - Name collisions are a **BUILD-TIME error** caught at `SEDModel.build()`
 - Accessing an absent property raises `KeyError` listing the available names (never silently returns None/NaN/0 — this is the `silent-failure` class)
 - Metadata (units, group, doc, provenance, component name) is queryable via `tengri.list_properties()`, `describe_property()`
@@ -385,9 +385,9 @@ Auto:
 
 **Dimensionality D:** For the purpose of `"auto"` selection and `"mcmc"` auto-dispatch, D is the number of **free (sampled) parameters**, excluding deterministic transforms and derived quantities. For IFT/correlated-field models, D counts the latent excitation field DOF, not the pixel-space dimension.
 
-### Deprecated aliases (emit DeprecationWarning, removed v1.0)
+### Removed aliases
 
-| Old name | Maps to | Note |
+| Old name (removed) | Maps to | Note |
 |----------|---------|------|
 | `vi_nifty` | `vi` | |
 | `vi_nifty_linear` | `vi_linear` | |
@@ -414,10 +414,10 @@ Internal-only (not public API; renamed without alias):
 
 | Canonical (Python function name) | Registry key (short alias) | Description |
 |----------------------------------|---------------------------|-------------|
-| `truncated_skewnormal_sfh` | `tsnorm` | Truncated skew-normal |
-| `skewnormal_sfh` | `snorm` | Skew-normal |
-| `lognormal_sfh` | `lnorm` | Log-normal |
-| `gaussian_sfh` | `norm` | Normal (Gaussian) |
+| `truncated_skewnormal` | `tsnorm` | Truncated skew-normal |
+| `skewnormal` | `snorm` | Skew-normal |
+| `lognormal` | `lnorm` | Log-normal |
+| `gaussian` | `norm` | Normal (Gaussian) |
 | `double_powerlaw` | `dpl` | Double power-law |
 
 **Clarification:** The canonical names are the actual Python function names. The short aliases are string keys in `SFH_REGISTRY`, retained for backward compatibility and config-file brevity. `resolve_sfh("tsnorm")` and `resolve_sfh("truncated_skewnormal_sfh")` both resolve to the same function. New code and documentation should use the canonical names; the registry resolves both.
@@ -529,7 +529,7 @@ These were **hard-renamed** (no alias) under the pre-v1.0 policy of §0 — old
 British spellings are gone, not deprecated. Per §2's file-path stability rule the
 `marginalised.py` module was renamed in the same change.
 
-| Old | Canonical | Module |
+| Old (removed) | Canonical | Module |
 |-----|-----------|--------|
 | `cue_full_catalogue` / builder key `full_catalogue` | `cue_full_catalog` / `full_catalog` | `parameters/`, `forward/`, `components/nebular/` |
 | `rest_frame_colour()` | `rest_frame_color()` | `analysis/diagnostics/spectral.py` |
@@ -568,8 +568,8 @@ in `EXCLUDE_FILES`.
 | Optical depth | `τ_diff`, `τ_bc`, `τ_V` | `tau_diff`, `tau_bc`, `tau_V` |
 | Redshift, exact | `z = 3` (spaced) | — |
 | Redshift, approximate | `z ≈ 3` (spaced); never `z~3` | — |
-| Balmer alpha | `Hα` | `H_alpha` |
-| Gelman-Rubin | `R̂` | `r_hat` |
+| Balmer alpha | `Hα` | `Halpha` |
+| Gelman-Rubin | `R̂` | `rhat` |
 | Multiplier | `1.46×` | — |
 | Signal-to-noise | `S/N` | `snr` |
 | Numeric range | en-dash: `16–84%` | — |

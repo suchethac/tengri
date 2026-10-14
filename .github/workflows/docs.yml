@@ -41,6 +41,15 @@ jobs:
       # Verify every registered component appears in the published reference.
       # This guard needs the docs extra (sphinx-gallery) to execute docs/conf.py.
       - run: python tools/check_component_page.py
+      # A documented listing is the first code a reader copies, and nothing ran
+      # them: one carried eight defects (names that do not exist, an inverted
+      # Observation/Data split) that every check missed (#2430). This executes
+      # every SEDModel.build(...) listing under docs/ against the committed SSP
+      # fixture and checks that the model it builds predicts finite, positive
+      # photometry. Each listing cold-builds a model (30-60 s), so the gate is
+      # minutes, not seconds: it lives with the docs build rather than in the
+      # per-PR smoke job, and runs whenever the docs do.
+      - run: python tools/check_build_listings.py
 
       # Warnings are errors. The docs are the API reference (docs/api/*.rst are
       # autodoc stubs, so docstrings ARE the published pages), and a Sphinx

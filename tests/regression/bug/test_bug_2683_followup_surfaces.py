@@ -196,7 +196,7 @@ FLUX_SCALE = 1e12
 
 
 def _tflex_flux(ssp, obs, kernel):
-    model = _model(ssp, obs, kernel, {**PSB, "tflex_gyr": Uniform(0.5, 5.0)}, z=0.0)
+    model = _model(ssp, obs, kernel, {**PSB, "tflex_frac": Uniform(0.0362663, 0.362663)}, z=0.0)
     return lambda x: FLUX_SCALE * model.predict_photometry({"sfh_psb_flex_tflex_gyr": x})[2]
 
 
