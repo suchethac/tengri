@@ -44,6 +44,7 @@ from tengri.components.agn.grahsp.lines import (
     AGN_TYPE_LINER,
 )
 from tengri.components.agn.grahsp.publication import bolometric_unit_nm
+from tengri.utils.host_array import device_table
 
 if TYPE_CHECKING:  # pragma: no cover
     from tengri.components.agn.grahsp.model import GRAHSPParams
@@ -207,12 +208,12 @@ def balmer_unit_power(params: GRAHSPParams) -> Array:
     if params.agn_type != AGN_TYPE_BL:
         return jnp.asarray(0.0)
     sed = balmer_continuum(
-        wave_nm=jnp.asarray(BALMER_NORM_GRID_NM),
+        wave_nm=device_table(BALMER_NORM_GRID_NM),
         l5100=1.0,
         a_bc=params.a_bc,
         linewidth_kms=params.linewidth_kms,
     )
-    return jnp.sum(jnp.asarray(_W_BALMER) * sed)
+    return jnp.sum(device_table(_W_BALMER) * sed)
 
 
 def bbb_side_unit_power(params: GRAHSPParams, templates: GRAHSPTemplates) -> Array:

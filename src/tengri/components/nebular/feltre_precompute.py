@@ -3,9 +3,9 @@
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the Feltre, Charlot & Gutkin (2016) CLOUDY c13.03 AGN NLR photoionization grid,
-exposing a 4D preintegrated line-luminosity grid:
+exposing a 5D preintegrated line-luminosity grid:
 
-    (neb_logZ_gas, agn_nlr_alpha_pl, neb_logU, agn_nlr_xi_d)
+    (agn_nlr_alpha_pl, agn_nlr_logU, agn_nlr_logn, agn_nlr_logZ, agn_nlr_xi_d)
 
 with 20 emission lines (O II, Hβ, O III, O I, N II, Hα, S II, NV, CIV, HeII,
 and optical UV lines).
@@ -17,23 +17,9 @@ lookup at runtime.
 
 .. warning::
 
-    **This adapter has never run, and does not work as written** (measured at
-    b2a2a4d33 and unchanged by R41). Two independent reasons:
-
-    1. Nothing schedules it. ``forward/precompute/registry.py`` maps
-       ``"feltre_nlr"`` here, but ``registry.resolve`` has no caller anywhere
-       in ``src/`` -- the live precompute adapters are reached by direct
-       import instead. That is true of every entry in that registry, not only
-       this one, so the registry is currently a catalog rather than a
-       dispatch seam.
-    2. The axes do not match the grid. :data:`AXIS_PARAMS` and the ``axes``
-       tuple built in :func:`precompute` are four entries in the order
-       ``(logZ, alpha, logU, xi_d)``, while ``logHB_per_logq`` / ``line_ratios``
-       are five-dimensional in the order ``(alpha, logU, logn, logZ, xi_d)``:
-       ``logn`` is missing and the rest are permuted. Calling the callable
-       :func:`build_lookup` returns raises
-       ``TypeError: dot_general requires contracting dimensions to have the
-       same shape, got (16,) and (4,)``.
+    **This adapter is not called by the build.** ``forward/precompute/registry.py``
+    maps ``"feltre_nlr"`` here, but ``registry.resolve`` has no caller anywhere
+    in ``src/``, so nothing builds this table. The table matches the exact lines.
 
     The runtime path -- :class:`~tengri.components.nebular.agn_nebular.FeltreNLRBackend`,
     reached through ``agn={'nlr': {'type': 'feltre'}}`` -- is the one that
@@ -70,9 +56,11 @@ from tengri.utils.grid_interp import (
 )
 from tengri.utils.interpolation import edges_for_grid
 
-# Axis parameters: ordered tuple matching the Feltre grid axes.
-# neb_logZ_gas: absolute log10(Z), neb_logU: ionization parameter,
-# agn_nlr_xi_d: dust-to-metal ratio, agn_nlr_alpha_pl: UV power-law slope.
+# Axis parameters: the five grid axes in the grid's stored order
+# (alpha, logUs, logn, logZ, xi_d), the same order as ``feltre_grid.h5`` and
+# as ``FeltreNLRBackend``. agn_nlr_alpha_pl: UV power-law slope,
+# agn_nlr_logU: ionization parameter, agn_nlr_logn: gas density,
+# agn_nlr_logZ: absolute log10(Z), agn_nlr_xi_d: dust-to-metal ratio.
 #
 # R41 (#2214): the dust-to-metal axis was named ``neb_xid`` here and
 # ``agn_nlr_xi_d`` in the block that reads the same grid. One axis, one name:
@@ -84,9 +72,10 @@ from tengri.utils.interpolation import edges_for_grid
 # grid. One axis, one name: ``agn_nlr_alpha_pl``, also declared in
 # ``components/agn/_params.py`` and owned by ``agn.nlr``.
 AXIS_PARAMS: tuple[str, ...] = (
-    "neb_logZ_gas",
     "agn_nlr_alpha_pl",
-    "neb_logU",
+    "agn_nlr_logU",
+    "agn_nlr_logn",
+    "agn_nlr_logZ",
     "agn_nlr_xi_d",
 )
 
@@ -179,14 +168,15 @@ def precompute(
     # Now build the continuum photometry grid (though Feltre has no continuum)
     # We still follow the protocol by returning a dummy continuum (zeros)
     axes_np = (
-        np.asarray(grid.logZ_axis),
         np.asarray(grid.alpha_axis),
         np.asarray(grid.logUs_axis),
+        np.asarray(grid.logn_axis),
+        np.asarray(grid.logZ_axis),
         np.asarray(grid.xi_d_axis),
     )
 
-    # Feltre has no continuum; use a dummy zero grid
-    continuum_grid = np.zeros((*[ax.shape[0] for ax in axes_np[:-1]], n_filt), dtype=np.float64)
+    # Feltre has no continuum; use a dummy zero grid over all five axes
+    continuum_grid = np.zeros((*[ax.shape[0] for ax in axes_np], n_filt), dtype=np.float64)
 
     preint = PreintegratedGrid(
         phot=continuum_grid,  # Dummy continuum (zeros)
