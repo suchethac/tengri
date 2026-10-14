@@ -28,7 +28,7 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-156
+.. GENERATED FROM PYTHON SOURCE LINES 12-157
 
 
 
@@ -38,8 +38,23 @@ how quenching timescale imprints on observable photometry and spectroscopy.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.090 Gyr old at redshift 0.05. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.090 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.090 Gyr old at redshift 0.05. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.090 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.090 Gyr old at redshift 0.05. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.090 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -72,10 +87,11 @@ how quenching timescale imprints on observable photometry and spectroscopy.
                 "type": "const",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": 10.64,
-                # start_gyr is lookback time to SF onset (larger number);
+                # start_frac is the lookback time to SF onset as a fraction of the age of
+                # the universe at z = 0.05; 1.0 is formation at the Big Bang (13.09 Gyr ago).
                 # end_gyr is lookback time to SF cessation (smaller number).
-                # Star formation from 13.8 Gyr ago until 0.1 Gyr ago.
-                "start_gyr": 13.8,
+                # Star formation from the Big Bang until 0.1 Gyr ago.
+                "start_frac": tengri.Fixed(1.0),
                 "end_gyr": 0.1,
             },
             "color": "#1f77b4",
@@ -187,6 +203,11 @@ how quenching timescale imprints on observable photometry and spectroscopy.
 
     fig.tight_layout()
     plt.savefig("plot_quenching_pathway_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.092 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_quenching_pathway_compare.py:
