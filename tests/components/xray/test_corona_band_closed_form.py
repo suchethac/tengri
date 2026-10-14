@@ -17,7 +17,7 @@ from scipy.integrate import simpson
 
 from tengri.components.xray import xray as X
 
-pytestmark = pytest.mark.physics
+pytestmark = pytest.mark.contract
 
 #: (Gamma, E_cut [keV]) points: the lopez24 and yang20 defaults (both 1.8, 300 keV),
 #: a hard corona past Gamma = 2 (the s <= 0 branch), and a soft, strongly cut-off one.
