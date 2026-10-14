@@ -340,6 +340,7 @@ CENSUS: dict[str, str] = {
     "forward/precompute/templates.py": "unknown (callers not traced)",
     "utils/grid_interp.py": "mechanism (defines the lookups)",
     "utils/interpolation.py": "mechanism (defines compute_grid_weights clamp)",
+    "components/_term_shape_table.py": "fitted-ok by construction (table axes over the declared prior, #2819)",
     "utils/masked_pchip.py": (
         "fitted-ok (query held to the populated hull or numerical band by "
         "_library_axis_query before the read, #2575)"
