@@ -46,7 +46,7 @@ Real galaxies do not have solar-scaled abundance patterns. Alpha elements (O, Mg
 
 ## The 4D SSP Grid
 
-tengri supports $\alpha$-enhanced stellar population synthesis through a four-dimensional SSP grid with axes $(\mathrm{[Fe/H]},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$. This replaces the effective-metallicity approximation with bilinear interpolation across pre-computed $\alpha$-enhanced templates from sMILES (Knowles et al. 2023), BPASS v2.3 (Byrne et al. 2022), or the $\alpha$-MC library (Park et al. 2024). All three libraries provide SSPs at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex, with self-consistent treatment of $\alpha$-enhancement at both the isochrone and stellar atmosphere levels. The interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$ space, four multiplications per wavelength pixel, fully JIT-compiled and differentiable with respect to both $[\mathrm{M/H}]$ and $[\alpha/\mathrm{Fe}]$.
+A four-dimensional SSP grid with axes $(\mathrm{[Fe/H]},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$ gives $\alpha$-enhanced stellar population synthesis. `met_alpha_fe` acts only on a grid that has an $[\alpha/\mathrm{Fe}]$ axis. No grid that ships with tengri has one (`tengri.list_known_ssps()` lists the shipped grids), so on every shipped grid `met_alpha_fe` has no effect. The intended sources of $\alpha$-enhanced templates are sMILES (Knowles et al. 2023), BPASS v2.3 (Byrne et al. 2022), and the $\alpha$-MC library (Park et al. 2024), which provide SSPs at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex. On such a grid the interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$, four multiplications per wavelength pixel, and differentiable with respect to both $[\mathrm{M/H}]$ and $[\alpha/\mathrm{Fe}]$.
 
 #### Metallicity convention.
 
@@ -66,17 +66,17 @@ In the simplest mode, a single $[\alpha/\mathrm{Fe}]$ is applied uniformly to al
 \times \frac{t_{\rm lb}}{t_{\rm universe}},
 
 $$ (eq-alpha-evolving)
- adding one free parameter ($[\alpha/\mathrm{Fe}]_{\rm old}$, with $[\alpha/\mathrm{Fe}]_{\rm young}$ typically fixed at 0.0). Each age bin receives its own bilinear interpolation in the 4D grid.
+ adding one free parameter ($[\alpha/\mathrm{Fe}]_{\rm old}$, with $[\alpha/\mathrm{Fe}]_{\rm young}$ typically fixed at 0.0). On a grid with an $[\alpha/\mathrm{Fe}]$ axis, each age bin receives its own bilinear interpolation; on a grid without one the parameters have no effect (see the next section).
 
 (app-sps-alpha-fallback)=
 
 ## Effective-Metallicity Fallback
 
-When 4D $\alpha$-enhanced grids are not available, tengri*optionally* applies the effective-metallicity approximation of Thomas et al. (2003; Vazdekis et al. 2015): $$[\mathrm{Z/H}]_{\rm eff} = [\mathrm{Fe/H}] + 0.75 \times
+When no $\alpha$-enhanced grid is available, tengri *optionally* applies the effective-metallicity approximation of Thomas et al. (2003; Vazdekis et al. 2015): $$[\mathrm{Z/H}]_{\rm eff} = [\mathrm{Fe/H}] + 0.75 \times
 [\alpha/\mathrm{Fe}],
 
 $$ (eq-alpha-correction)
- which shifts the total metallicity used for standard 3D SSP interpolation. This correction is *opt-in*: it is only applied when `met_alpha_fe` is explicitly declared as a free parameter in `Parameters` (i.e. not `Fixed`). When $[\alpha/\mathrm{Fe}]$ is fixed at zero (the default), tengri uses plain metallicity interpolation on the 3D grid with no correction, avoiding any implicit coupling between the metallicity and $\alpha$-element abundances. The approximation is adequate for broadband photometry but breaks down for spectroscopic fitting, where the spectral signatures of $\alpha$-enhancement (e.g., Mg $b$ at 5177 Å, Ca triplet at 8498--8662 Å, UV iron-line blanketing at 1500--1900 Å) are qualitatively different from a simple metallicity shift.
+ which shifts the total metallicity used for standard 3D SSP interpolation. On a grid without an $[\alpha/\mathrm{Fe}]$ axis, `met_alpha_fe` reaches the SED only through the effective-metallicity shift of the `delta` metallicity mode. Under any other metallicity mode a free `met_alpha_fe` is never read, and the build raises `DeadGradientParameterWarning`. Under `delta`, a free `met_alpha_fe` together with a free `met_logzsol` is an exact degenerate ridge, and the build raises `DegenerateParameterPairWarning`. Leave `met_alpha_fe` at its default, `Fixed(0.0)`, on a 3D grid. The default builds silently and applies no correction. The approximation is adequate for broadband photometry but breaks down for spectroscopic fitting, where the spectral signatures of $\alpha$-enhancement (e.g., Mg $b$ at 5177 Å, Ca triplet at 8498--8662 Å, UV iron-line blanketing at 1500--1900 Å) are qualitatively different from a simple metallicity shift.
 
 ## References
 

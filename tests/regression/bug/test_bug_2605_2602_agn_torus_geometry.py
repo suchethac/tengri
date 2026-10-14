@@ -332,9 +332,13 @@ def test_fritz_psy_is_derived_from_the_inclination():
 
     for i in (5.0, 20.0, 45.0, 60.0, 80.0):
         assert float(fritz_psy_from_cos_inc(_cos(i))) == pytest.approx(90.0 - i, abs=1e-6)
-    assert float(fritz_psy_from_cos_inc(0.0)) == pytest.approx(0.001)
-    # Face-on is capped 0.08 deg short of the pole (float32-safe arccos slope), inside the
-    # last node interval of the library axis.
+    # cos i = 0 is psi = 0, past the library's first psy node (0.001 deg). The value
+    # is no longer clipped to that node: the psy lookup extends its end cubic across
+    # the 0.001 deg numerical gap, so the gradient there is nonzero
+    # (zero-gradient census, PR #2862).
+    assert float(fritz_psy_from_cos_inc(0.0)) == pytest.approx(0.0, abs=1e-9)
+    # Face-on: the arcsin slope is infinite at 1, so past the 1e-6 cap the derivative
+    # continues linearly from the cap (psi is 89.958 here, inside the 89.99 extent).
     assert 89.9 < float(fritz_psy_from_cos_inc(1.0)) <= 89.99
 
 

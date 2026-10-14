@@ -55,6 +55,29 @@
 | `q_ir` | — | radio | radio | Radio-infrared correlation parameter |
 | `r23` | dex | lines | nebular | R23 metallicity indicator: log10(([OII]+[OIII]4959+5007)/Hβ) |
 | `rest_uv_color` | AB mag | sed | stellar | Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å |
+| `sfh_cexp_age_gyr` | Gyr | sfh | stellar | Resolved sfh_cexp_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_const_start_gyr` | Gyr | sfh | stellar | Resolved sfh_const_start_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_declining_exp_age_gyr` | Gyr | sfh | stellar | Resolved sfh_declining_exp_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_delayed_age_gyr` | Gyr | sfh | stellar | Resolved sfh_delayed_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_delayed_bq_age_main_gyr` | Gyr | sfh | stellar | Resolved sfh_delayed_bq_age_main_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_dexp_start_gyr` | Gyr | sfh | stellar | Resolved sfh_dexp_start_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_dpl_age_gyr` | Gyr | sfh | stellar | Resolved sfh_dpl_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_dpl_lookback_age_gyr` | Gyr | sfh | stellar | Resolved sfh_dpl_lookback_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_exp_start_gyr` | Gyr | sfh | stellar | Resolved sfh_exp_start_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_lnorm_age_gyr` | Gyr | sfh | stellar | Resolved sfh_lnorm_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_norm_peak_lbt_gyr` | Gyr | sfh | stellar | Resolved sfh_norm_peak_lbt_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_periodic_age_gyr` | Gyr | sfh | stellar | Resolved sfh_periodic_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_psb2022_tflex_gyr` | Gyr | sfh | stellar | Resolved sfh_psb2022_tflex_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_psb2022_tlast_gyr` | Gyr | sfh | stellar | Resolved sfh_psb2022_tlast_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_psb_age_gyr` | Gyr | sfh | stellar | Resolved sfh_psb_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_psb_flex_tflex_gyr` | Gyr | sfh | stellar | Resolved sfh_psb_flex_tflex_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_psb_flex_tlast_gyr` | Gyr | sfh | stellar | Resolved sfh_psb_flex_tlast_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_sfh2exp_age_gyr` | Gyr | sfh | stellar | Resolved sfh_sfh2exp_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_snorm_burst_peak_lbt_gyr` | Gyr | sfh | stellar | Resolved sfh_snorm_burst_peak_lbt_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_snorm_peak_lbt_gyr` | Gyr | sfh | stellar | Resolved sfh_snorm_peak_lbt_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_trunc_exp_age_gyr` | Gyr | sfh | stellar | Resolved sfh_trunc_exp_age_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_tsnorm_burst_peak_lbt_gyr` | Gyr | sfh | stellar | Resolved sfh_tsnorm_burst_peak_lbt_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
+| `sfh_tsnorm_peak_lbt_gyr` | Gyr | sfh | stellar | Resolved sfh_tsnorm_peak_lbt_gyr of the active SFH: frac * age(z) when its fraction is sampled, the Fixed Gyr otherwise; NaN when the SFH has no such timing |
 | `sfr_100myr` | Msun/yr | sfh | stellar | Star formation rate averaged over past 100 Myr |
 | `sfr_10myr` | Msun/yr | sfh | stellar | Star formation rate averaged over past 10 Myr |
 | `sii_6717` | Lsun | lines | nebular | SII 6717 line luminosity |

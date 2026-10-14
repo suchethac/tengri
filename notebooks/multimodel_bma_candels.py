@@ -308,7 +308,7 @@ def build_configs(z, obs):
             "all_params": Fixed(DEFAULT),
             "met_logzsol": Uniform(-2.0, 0.3),
             "log_total_mass": Uniform(8.0, 12.0),
-            "peak_lbt_gyr": Uniform(0.5, 12.0),
+            "peak_lbt_frac": Uniform(0.0362663, 0.870392),
             "width_gyr": Uniform(0.2, 5.0),
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),

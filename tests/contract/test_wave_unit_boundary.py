@@ -29,8 +29,10 @@ from tengri.observation.filters.custom import (
     unregister_filter,
 )
 from tengri.observation.spectroscopy import Spectroscopy
-from tengri.parameters.priors import Fixed
+from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.registry import registry
 from tengri.utils.wave_unit import (
+    TIMESCALE_BOUNDS,
     WAVE_CEILING_AA,
     WAVE_FLOOR_AA,
     check_timescale,
@@ -291,10 +293,59 @@ def test_check_timescale_ignores_other_suffixes():
     check_timescale(1.0e12, "redshift")
 
 
-def test_declared_defaults_pass_timescale_bounds():
-    spec = Parameters()
-    assert "sfh_field_psd_tau_myr" in spec._distributions
-    assert spec._distributions["sfh_field_psd_tau_myr"].bounds[0] >= 1.0e-3
+def _registry_timescale_names():
+    return sorted(
+        name
+        for name in registry()
+        if isinstance(name, str) and name.endswith(tuple(TIMESCALE_BOUNDS))
+    )
+
+
+@pytest.mark.parametrize("name", _registry_timescale_names())
+def test_every_declared_timescale_bound_passes(name):
+    """Every registry default and free prior of a timescale parameter builds.
+
+    The registry declares ``0`` for the cessation lookbacks (``0 = ongoing``) and
+    ``log10(Myr)`` priors for the burst times; a linear floor on the suffix refused
+    both and broke every constant SFH at its declared default.
+    """
+    record = registry()[name]
+    for dist in (record.prior, record.free_prior):
+        for bound in getattr(dist, "bounds", ()) or ():
+            if bound is not None:
+                check_timescale(bound, name)
+
+
+@pytest.mark.parametrize("suffix", sorted(TIMESCALE_BOUNDS))
+def test_check_timescale_accepts_an_exact_zero_for_every_suffix(suffix):
+    check_timescale(0.0, f"sfh_end{suffix}")
+
+
+def test_check_timescale_skips_log_scale_names():
+    check_timescale(-1.0, "sfh_burst_log_tpeak_myr")
+    check_timescale(0.0, "sfh_burst_log_tmax_myr")
+
+
+def test_check_timescale_still_refuses_a_positive_value_below_the_floor():
+    with pytest.raises(ParameterError, match="plausible range"):
+        check_timescale(1.0e-9, "sfh_dpl_age_gyr")
+
+
+def test_check_timescale_refuses_a_negative_value_without_blaming_the_unit():
+    with pytest.raises(ParameterError, match="negative") as info:
+        check_timescale(-1.0, "sfh_dpl_age_gyr")
+    assert "unit" not in str(info.value)
+
+
+@pytest.mark.parametrize("value", [0.0, 0, Fixed(0.0)])
+def test_parameters_accepts_the_declared_ongoing_cessation_lookback(value):
+    spec = Parameters(sfh_const_end_gyr=value)
+    assert spec._distributions["sfh_const_end_gyr"].bounds == (0.0, 0.0)
+
+
+def test_parameters_accepts_a_zero_lower_prior_bound_on_a_timescale():
+    spec = Parameters(mean_sfh_type="top_hat", sfh_top_hat_t_end_gyr=Uniform(0.0, 12.0))
+    assert spec._distributions["sfh_top_hat_t_end_gyr"].bounds[0] == 0.0
 
 
 def test_micron_looking_optical_range_is_accepted_as_angstrom_not_refused(filter_name):

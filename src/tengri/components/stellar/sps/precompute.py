@@ -215,7 +215,8 @@ class SpectroscopicPrecomputation(NamedTuple):
     ----------
     ssp_on_pixels : array, shape (n_met, n_age, n_pix)
         SSP flux interpolated to observed spectral pixel wavelengths
-        in rest frame [erg/s/Hz/Msun].
+        in rest frame [erg/s/Hz/Msun], broadened by ``sigma_v_kms`` on the native
+        rest grid first when that is set.
     wave_rest_pixels : array, shape (n_pix,)
         Rest-frame wavelengths of spectral pixels [Angstrom].
     wave_obs_pixels : array, shape (n_pix,)
@@ -226,6 +227,9 @@ class SpectroscopicPrecomputation(NamedTuple):
         :class:`PhotometricPrecomputation` (#1859).
     redshift : float
         Source redshift [dimensionless].
+    sigma_v_kms : float or None
+        Velocity dispersion [km/s] baked into ``ssp_on_pixels``; ``None`` when the
+        table is un-broadened.
 
     Notes
     -----
@@ -240,6 +244,10 @@ class SpectroscopicPrecomputation(NamedTuple):
     wave_obs_pixels: jnp.ndarray
     log10_flux_scale: float
     redshift: float
+    #: Velocity dispersion [km/s] the templates were broadened with on the native rest
+    #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
+    #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
+    sigma_v_kms: "float | None" = None
 
 
 def precompute_photometry(
@@ -470,8 +478,57 @@ def precompute_restband_photometry(
     )
 
 
+def broaden_template_cube(ssp_flux, wave_ssp, sigma_v_kms, n_bins=16):
+    r"""Broaden every SSP template with one velocity dispersion on its native grid.
+
+    Applies :func:`~tengri.observation.spectrum.broaden_velocity_only`, the operation
+    the exact spectrum path applies to the stellar piece, to each ``(metallicity, age)``
+    template on the model wavelength grid. The convolution is linear, so a weighted sum
+    of the broadened templates equals the broadened weighted sum.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (..., n_wave)
+        Template cube [erg/s/Hz/Msun]; every leading axis is mapped over.
+    wave_ssp : array, shape (n_wave,)
+        Native rest-frame wavelength grid [Angstrom].
+    sigma_v_kms : float
+        Velocity dispersion [km/s]. A concrete non-positive value returns the cube
+        unchanged.
+    n_bins : int, default 16
+        Piecewise-constant segment count, as in the exact path.
+
+    Returns
+    -------
+    ndarray, shape (..., n_wave)
+        Broadened cube, float, same shape as ``ssp_flux``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; templates are mapped in batches with ``jax.lax.map`` so
+    peak memory stays bounded. **Gradient-safe**: yes, though it is a build-time
+    routine and is not differentiated in practice.
+    """
+    from tengri.observation.spectrum import broaden_velocity_only
+
+    flux = jnp.asarray(ssp_flux)
+    if not isinstance(sigma_v_kms, jax.Array) and float(sigma_v_kms) <= 0.0:
+        return flux
+    wave = jnp.asarray(wave_ssp)
+    flat = flux.reshape(-1, flux.shape[-1])
+    out = jax.lax.map(
+        lambda row: broaden_velocity_only(row, wave, sigma_v_kms, n_bins),
+        flat,
+        batch_size=_TEMPLATE_BROADEN_BATCH,
+    )
+    return out.reshape(flux.shape)
+
+
+_TEMPLATE_BROADEN_BATCH = 32  # templates per lax.map step: bounds the FFT working set
+
+
 def precompute_spectroscopy(
-    ssp_data, wave_obs_pixels, redshift, dl_cm
+    ssp_data, wave_obs_pixels, redshift, dl_cm, *, sigma_v_kms=None, n_bins=16
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -488,11 +545,19 @@ def precompute_spectroscopy(
         Source redshift (dimensionless).
     dl_cm : float
         Luminosity distance [cm].
+    sigma_v_kms : float, optional
+        Fixed stellar velocity dispersion [km/s]. When given, every template is
+        broadened by it on the native rest grid BEFORE it is sampled at the pixels,
+        as the exact path does (see :func:`broaden_template_cube`); sampling first
+        would alias sharp stellar features. ``None`` leaves the table un-broadened.
+    n_bins : int, default 16
+        Piecewise segment count of the broadening.
 
     Returns
     -------
     SpectroscopicPrecomputation
-        Pre-rebinned SSP data for :func:`fast_spectrum`.
+        Pre-rebinned SSP data for :func:`fast_spectrum`. ``sigma_v_kms`` records the
+        dispersion baked in.
 
     Notes
     -----
@@ -509,6 +574,10 @@ def precompute_spectroscopy(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
+    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0:
+        ssp_flux_np = np.asarray(
+            broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
+        )
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
@@ -535,6 +604,7 @@ def precompute_spectroscopy(
         wave_obs_pixels=wave_obs_pixels,
         log10_flux_scale=log10_flux_scale_out,
         redshift=redshift_out,
+        sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),
     )
 
 

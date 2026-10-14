@@ -153,6 +153,10 @@ class DerivedState:
 
     # Stellar: SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None
+    # Resolved SFH timings in Gyr, keyed by the public ``*_gyr`` name (#2748):
+    # frac * age(z) when the fraction is sampled, the Fixed Gyr otherwise. Only
+    # the active SFH's timings are present. Read by the ``sfh_*_gyr`` properties.
+    sfh_timing_gyr: dict[str, Any] | None = None
     sfr_history: jnp.ndarray | None = None
     log_metallicity_history: jnp.ndarray | None = None
 
@@ -443,6 +447,10 @@ class DerivedState:
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
     # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
     spec_eff_waves: jnp.ndarray | None = None
+    # Stellar velocity dispersion [km/s] of the draw, seeded by the model before the chain
+    # runs when ``approx=SpectrumPrecomp()`` is active. The stellar component broadens its
+    # spectrum LUT family with it on the model grid; scalar.
+    spec_sigma_v_kms: jnp.ndarray | None = None
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
