@@ -116,7 +116,23 @@ _DUST_FREE = {
 #: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
 #: integrated from the SFH instead of held at SFR(age0); the ionizing stars sit in
 #: that sliver, so line fluxes move by up to 2e-5 relative (continuum <= 2e-6).
+#: Re-captured for all-ages LyC: Cue counts ionizing photons from every stellar
+#: age by default, so the SSP bins older than 100 Myr in this SFH add their small
+#: share of Q_H and the line fluxes move by up to 4.4e-7 relative. The previous
+#: values are kept as ``_CUE_F64_REF_100MYR_CUT`` and are reproduced exactly with
+#: ``neb={'lyc_max_age_yr': 1e8}``.
 _CUE_F64_REF = np.array(
+    [
+        4.895990747024662e-16,
+        5.986024961156531e-16,
+        1.7280498511462056e-15,
+        5.406742570472271e-16,
+    ]
+)
+
+#: The 100 Myr-cut reference: ``_CUE_F64_REF`` as captured before Cue counted every
+#: stellar age. ``lyc_max_age_yr=1e8`` must reproduce it exactly.
+_CUE_F64_REF_100MYR_CUT = np.array(
     [
         4.895990718894339e-16,
         5.986027602596631e-16,
@@ -198,14 +214,14 @@ def _truth(sed):
     }
 
 
-def _cue_model(ssp_bare):
+def _cue_model(ssp_bare, **neb_extra):
     return SEDModel.build(
         ssp_data=ssp_bare,
         observation=Observation(photometry=Photometry.from_names(_PHOT2)),
         approx=None,
         **_base(Fixed(0.1)),
         dust_attenuation=_DUST_FREE,
-        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", **neb_extra, "all_params": Fixed(DEFAULT)},
     )
 
 
@@ -278,6 +294,20 @@ def test_predict_line_fluxes_cue_float32_tracks_float64(ssp_bare):
             "float64 predict_line_fluxes (Cue) moved vs the origin/main reference "
             "captured before the #1206 line-channel fix"
         ),
+    )
+    with jax.enable_x64(True):
+        sed_cut = _cue_model(ssp_bare, lyc_max_age_yr=1e8)
+        f_cut = np.asarray(
+            sed_cut.predict_line_fluxes(
+                _truth(sed_cut), target_wavelengths=jnp.asarray(_LINE_WAVES)
+            ),
+            dtype=np.float64,
+        )
+    np.testing.assert_allclose(
+        f_cut,
+        _CUE_F64_REF_100MYR_CUT,
+        rtol=1e-9,
+        err_msg="lyc_max_age_yr=1e8 no longer reproduces the 100 Myr-cut Cue line fluxes",
     )
 
     with jax.enable_x64(False):
