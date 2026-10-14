@@ -3005,6 +3005,37 @@ class SEDModel:
             return 0.0
         return float(dist.bounds[0]) if dist.is_fixed else None
 
+    def _spectrum_lut_serves_exactly(self, observation) -> bool:
+        """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
+
+        The single source of truth for the ``approx="auto"`` routing of a
+        spectroscopy or joint fit and for the joint promotion gate. The LUT serves
+        the channel exactly when all three hold:
+
+        - the pixel integral is not required (point-sampled pixels, or pixels no
+          wider than the model grid, #2530);
+        - ``sigma_v_kms`` is Fixed (a free one broadens the stellar sum on the full
+          model grid every draw, which is slower than the exact path);
+        - no banded resolution matrix is attached (the LUT applies only a per-pixel
+          instrument kernel).
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the spectrum channel may be served by :class:`SpectrumPrecomp`.
+        """
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None or getattr(spectro, "resolution_matrix", None) is not None:
+            return False
+        if self._spectrum_lut_needs_pixel_integral(observation):
+            return False
+        return self._fixed_sigma_v_kms() is not None
+
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
 
@@ -3081,10 +3112,11 @@ class SEDModel:
         A joint observation promotes a photometry ``WavePrecomp`` onto the spectrum
         LUT as well (the components publish both LUT families in one pass). The
         promotion is skipped when the pixel integral is required
-        (:meth:`_spectrum_lut_needs_pixel_integral`, #2530) or when ``sigma_v_kms``
-        is free: the LUT would then broaden the stellar sum per draw on the full
-        model grid, which is slower than the exact path, so the spectrum channel
-        stays exact and says so once. An explicit ``SpectrumPrecomp()`` is never
+        (:meth:`_spectrum_lut_needs_pixel_integral`, #2530), when ``sigma_v_kms``
+        is free, or when a banded resolution matrix is attached. The free-sigma_v
+        case is slower on the LUT (the stellar sum is broadened on the full model
+        grid per draw), so the spectrum channel stays exact and says so once. The
+        decision is :meth:`_spectrum_lut_serves_exactly`, shared with ``approx="auto"``. An explicit ``SpectrumPrecomp()`` is never
         asked here; it is resolved earlier, stays on the table and warns about the
         cost there.
 
@@ -3098,9 +3130,11 @@ class SEDModel:
         bool
             True if the spectrum channel must not be promoted onto the LUT.
         """
-        if self._spectrum_lut_needs_pixel_integral(observation):
-            return True
-        if self._fixed_sigma_v_kms() is None:
+        if self._spectrum_lut_serves_exactly(observation):
+            return False
+        if self._fixed_sigma_v_kms() is None and not self._spectrum_lut_needs_pixel_integral(
+            observation
+        ):
             import warnings
 
             warnings.warn(
@@ -3112,8 +3146,7 @@ class SEDModel:
                 "lookup table anyway.",
                 stacklevel=4,
             )
-            return True
-        return False
+        return True
 
     def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
         """Whether the spectrum channel resolves to the pixel integral (#2530).
