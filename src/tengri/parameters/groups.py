@@ -1526,7 +1526,8 @@ def parse_groups(**kwargs) -> Parameters:
 
     # ── Construct final Parameters ────────────────────────────────────
 
-    _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
     _catalog_z_range = getattr(_approx, "catalog_z_range", None)
     _catalog_z_lo = float(_catalog_z_range[0]) if _catalog_z_range is not None else None
@@ -1540,6 +1541,7 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+    object.__setattr__(final_params, "_grid_resolution", grid_labels)
     object.__setattr__(final_params, "_parse_inputs", parse_inputs)
 
     # Raised HERE, after the groups have been translated and validated, not at
@@ -1590,7 +1592,7 @@ def parse_groups(**kwargs) -> Parameters:
     return final_params
 
 
-#: Marks a provenance tag whose prior was intersected with a component's grid.
+#: Marks a provenance tag whose prior was resolved to a component's grid support.
 _GRID_NARROWED_SUFFIX = "_grid"
 
 #: Marks a wildcard-FREE that found no declared prior and left the parameter
@@ -1604,20 +1606,12 @@ _WILDCARD_PINNED_SUFFIX = "_pinned"
 #: a component grid, hence its own suffix distinct from ``_GRID_NARROWED_SUFFIX``.
 _Z_NARROWED_SUFFIX = "_zcap"
 
-#: Least fraction of a declared range that may survive an automatic narrowing.
-#:
-#: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
-#: 0.04 dex is not; it pins the parameter in all but name, and doing that
-#: silently is worse than the dead tail it removes. Below this, the narrowing
-#: is declined and the overhang is reported instead.
-_MIN_RETAINED_FRACTION = 0.10
-
 
 def _base_provenance(tag: str) -> str:
     """Strip outcome markers, leaving how the value was *chosen*.
 
     ``wildcard_free_grid`` still means "this came from ``all_params: FREE``";
-    the suffix only records that the declared range was then intersected with
+    the suffix only records that the declared range was then resolved to
     the selected component's grid. Round-tripping through
     :func:`parameters_to_groups` has to see the base tag, or a narrowed
     parameter loses its wildcard intent and gets emitted as an explicit
@@ -1701,92 +1695,173 @@ def _selected_component(selector: str, structural) -> str | None:
     return None
 
 
+#: Provenance tags of an explicit value or prior the user wrote by hand.
+_EXPLICIT_TAGS = frozenset({"user_fixed", "user_prior"})
+
+
+def _selected_grid_supports(structural) -> list[tuple[str, str, dict]]:
+    """``(selector, name, support)`` for each selected component with a registered support.
+
+    Parameters
+    ----------
+    structural : Parameters
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    list of tuple
+        One entry per selected component whose grid support is installed. A
+        component whose grid is absent contributes nothing, so the declaration
+        stands for it.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+    """
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+
+    selected: list[tuple[str, str, dict]] = []
+    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
+        name = _selected_component(selector, structural)
+        if name is None:
+            continue
+        support = grid_support(selector, name)
+        if support:
+            selected.append((selector, name, support))
+    return selected
+
+
+def _physically_admissible(pname: str, lo: float, hi: float) -> bool:
+    """Whether every registry bound check for ``pname`` accepts ``(lo, hi)``.
+
+    A widened grid support can cross a physical limit the declaration respects:
+    ``dust_lgU``'s support reaches ``lgU = -3`` while the registry holds it to
+    ``[0, 7]``. Those checks live on the component declarations, so each
+    declaration bucket is consulted for the name.
+
+    Parameters
+    ----------
+    pname : str
+        Canonical parameter name.
+    lo, hi : float
+        Candidate bounds.
+
+    Returns
+    -------
+    bool
+        ``True`` when no declaration that names ``pname`` rejects the bounds.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+    """
+    from tengri.parameters import _builders
+
+    for bucket in _builders._LAZY_DECL_SOURCES:
+        entry = _builders._resolve_lazy_bucket(bucket).get(pname)
+        if entry is not None and not entry[1](lo, hi):
+            return False
+    return True
+
+
+def _reach_of(resolved: dict) -> dict[str, tuple[float, float]]:
+    """``{param: (lo, hi)}`` of every resolved distribution that has bounds."""
+    return {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+
+
 def _narrow_free_priors_to_grid(
-    resolved: dict, provenance: dict[str, str], structural: dict
-) -> None:
-    """Intersect a declaration-supplied free prior with its component's grid.
+    resolved: dict, provenance: dict[str, str], structural
+) -> dict[str, str]:
+    """Resolve a declaration-supplied free prior to its component's grid support.
 
     A template-backed component clips its parameters onto the grid axes it
     interpolates over, where ``jnp.clip`` is flat: the SED is bit-identical and
-    the gradient is exactly zero (#1586). ``astrodust`` ships the live case:
-    ``dust_lgU`` declares ``free_prior=Uniform(0, 7)`` against a grid of
-    ``[-3, 6]``, so ``all_params: FREE`` handed a sampler a range whose top
-    14.3% could not move. Intersecting removes the dead region instead of only
-    warning about it.
+    the gradient is exactly zero (#1586). A ``FREE`` parameter is a request to
+    sample it, so its range is the one the selected backend can actually
+    evaluate. Owner ruling 2026-10-14 (#2626, #2244): the free prior resolves to
+    the selected backend's **full** support, even where that is wider than the
+    registry declaration -- ``neb_logZ_gas`` on Cue spans its trained range, and
+    a declaration that overhangs the grid is replaced rather than intersected.
+    The declaration stays the prior only for a component with no registered
+    support.
 
-    Mutates ``resolved`` in place and retags ``provenance`` so
-    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the narrowing
-    rather than silently reporting a range the caller never wrote.
+    Mutates ``resolved`` in place and retags ``provenance`` with the ``_grid``
+    suffix. The returned labels feed ``Parameters.summary()``, which shows
+    ``[resolved to <backend> grid: lo..hi]`` so the printed range is never the
+    declared one silently.
 
     Parameters
     ----------
     resolved : dict
         Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
     provenance : dict of str to str
-        Resolution tag per parameter.
+        Resolution tag per parameter, mutated in place.
     structural : Parameters
-        Structural-only spec carrying the component selections, e.g. its
-        ``dust_emission`` attribute.
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    labels : dict of str to str
+        ``{param_name: "<backend> grid: lo..hi"}`` for each resolved parameter.
+
+    Raises
+    ------
+    ParameterError
+        If two selected components resolve the same parameter to disjoint
+        supports, so no value is evaluable by both.
 
     Notes
     -----
     **JIT-compatible**: not applicable; composition-time only.
 
-    Deliberately narrow in scope:
-
-    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed. Intersecting
-      a Normal or LogUniform with a box is not a truncation of the same family,
-      so those keep their prior and fall through to the warning.
-    - The **declaration is never touched**. ``dust_lgU`` is shared with
-      ``draine2021_pah_ir``, whose grid need not match ``astrodust``'s, and
-      ``dust_umin``'s cap is 20 / 50 / 80 depending only on which backend is
-      selected. That is why the constraint lives per ``(component, parameter)``;
-      see :mod:`tengri.components.grid_support`.
-    - Narrowing only ever shrinks. The grid may extend *below* a declared
-      bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
-      widening there would assert physics the declaration deliberately excluded.
+    - Only :class:`~tengri.parameters.priors.Uniform` declarations are resolved.
+      A non-Uniform declaration keeps its prior and falls through to the
+      warning in ``Parameters._warn_on_grid_overhang``.
+    - The **declaration is never edited** in the registry. ``dust_lgU`` is
+      shared with ``draine2021_pah_ir``, whose grid need not match
+      ``astrodust``'s; that is why the constraint lives per
+      ``(component, parameter)``; see :mod:`tengri.components.grid_support`.
+    - An explicit user prior is never resolved here; see
+      :func:`_refuse_explicit_grid_overhang`.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
+    from tengri.components.grid_support import support_shift
+    from tengri.config.exceptions import ParameterError
     from tengri.parameters.priors import Uniform
 
-    # Drive off the registry itself, so registering a component is the only
-    # step needed for it to be narrowed as well as reported.
-    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
-        name = _selected_component(selector, structural)
-        if name is None:
-            continue
-        for pname, (g_lo, g_hi) in grid_support(selector, name).items():
+    labels: dict[str, str] = {}
+    cue_nitrogen = getattr(structural, "cue_nitrogen", "absolute")
+    for selector, name, support in _selected_grid_supports(structural):
+        for pname, (g_lo, g_hi) in support.items():
             if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
                 continue
             dist = resolved.get(pname)
             if not isinstance(dist, Uniform):
                 continue
-            lo, hi = dist.bounds
-            # An offset parameter (gas_logno, #2693) is bounded through its shift:
-            # the offset keeps the absolute quantity inside the support for every
-            # reachable value of the parameters the shift depends on.
-            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            # An offset parameter (gas_logno, #2693) is bounded through its shift.
             s_lo, s_hi = support_shift(
-                selector,
-                name,
-                pname,
-                reach,
-                {"cue_nitrogen": getattr(structural, "cue_nitrogen", "absolute")},
+                selector, name, pname, _reach_of(resolved), {"cue_nitrogen": cue_nitrogen}
             )
-            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
-            if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
-                # Disjoint (nothing sensible to narrow to; let the warning
-                # say so) or already contained.
-                continue
-            if (new_hi - new_lo) < _MIN_RETAINED_FRACTION * (hi - lo):
-                # The declaration and the grid barely overlap, so "narrowing"
-                # would replace a physical range with a sliver; effectively
-                # pinning the parameter without saying so. agn_log_ledd is the
-                # case: Uniform(-2, 0.5) against a grid ending at -1.9586
-                # retains 1.7%, a 0.04 dex prior. A disagreement that large is
-                # a modeling decision, not a tidy-up: leave it and let the
-                # warning report it.
-                continue
+            new_lo, new_hi = g_lo - s_lo, g_hi - s_hi
+            if not _physically_admissible(pname, new_lo, new_hi):
+                # The widened support crosses a physical limit the registry
+                # enforces (dust_lgU: [0, 7]). Keep as much of the declared
+                # range as is both admissible and inside the support.
+                dlo, dhi = dist.bounds
+                new_lo, new_hi = max(new_lo, dlo), min(new_hi, dhi)
+                if new_lo >= new_hi or not _physically_admissible(pname, new_lo, new_hi):
+                    continue
+            if pname in labels:
+                # A second selected component registers the same parameter: the
+                # value must be evaluable by both, so intersect the supports.
+                cur_lo, cur_hi = resolved[pname].bounds
+                new_lo, new_hi = max(new_lo, cur_lo), min(new_hi, cur_hi)
+                if new_lo >= new_hi:
+                    raise ParameterError(
+                        f"{pname!r}: the selected components have disjoint grid supports "
+                        f"(the last is {selector}={name!r}, [{g_lo:g}, {g_hi:g}]), so no "
+                        f"value of {pname} is evaluable by both. Select components that "
+                        f"share a support for {pname}."
+                    )
             default = dist.default
             if default is not None:
                 default = min(max(default, new_lo), new_hi)
@@ -1797,7 +1872,63 @@ def _narrow_free_priors_to_grid(
                 units=dist.units,
                 default=default,
             )
-            provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
+            provenance[pname] = _base_provenance(provenance[pname]) + _GRID_NARROWED_SUFFIX
+            labels[pname] = f"{name} grid: {new_lo:g}..{new_hi:g}"
+    return labels
+
+
+def _refuse_explicit_grid_overhang(resolved: dict, provenance: dict[str, str], structural) -> None:
+    """Refuse an explicit value or prior that reaches past a component's grid (#2626).
+
+    A ``Fixed`` value or an explicit user prior outside the selected backend's
+    support would be clipped onto an edge node, bit-identical and with a zero
+    gradient. The user stated it, so the build refuses it rather than warning.
+    Components in :data:`~tengri.components.grid_support.EXTRAPOLATING_SUPPORT`
+    (Cue, a neural emulator) are exempt and keep their warning.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs.
+    provenance : dict of str to str
+        Resolution tag per parameter.
+    structural : Parameters
+        Structural-only spec carrying the component selections.
+
+    Raises
+    ------
+    ParameterError
+        Naming the parameter, the component, the value or range, and the extent.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+    """
+    from tengri.components.grid_support import (
+        EXTRAPOLATING_SUPPORT,
+        describe_clipping,
+        grid_refusal_message,
+        support_shift,
+    )
+    from tengri.config.exceptions import ParameterError
+
+    cue_nitrogen = getattr(structural, "cue_nitrogen", "absolute")
+    for selector, name, support in _selected_grid_supports(structural):
+        if (selector, name) in EXTRAPOLATING_SUPPORT:
+            continue
+        for pname, extent in support.items():
+            if _base_provenance(provenance.get(pname, "")) not in _EXPLICIT_TAGS:
+                continue
+            dist = resolved.get(pname)
+            if dist is None or dist.bounds[0] is None or dist.bounds[1] is None:
+                continue
+            s_lo, s_hi = support_shift(
+                selector, name, pname, _reach_of(resolved), {"cue_nitrogen": cue_nitrogen}
+            )
+            active = (dist.bounds[0] + s_lo, dist.bounds[1] + s_hi)
+            detail = describe_clipping(active, extent)
+            if detail is not None:
+                raise ParameterError(grid_refusal_message(selector, name, pname, detail, extent))
 
 
 @lru_cache(maxsize=8)
@@ -5426,6 +5557,26 @@ def _parse_radio_nu_ref(value: object) -> float:
     return float(value)
 
 
+def _parse_radio_agn_loudness_ref(value: object) -> str:
+    """Resolve ``radio['agn']['loudness_ref']`` against the menu (#2663).
+
+    ``"4400"`` (default) anchors the AGN radio loudness on the 4400 A disc luminosity;
+    ``"2500_30deg"`` anchors it on the 2500 A disc luminosity at 30 deg, CIGALE's
+    ``R_agn`` anchor. An unknown value raises with the menu.
+    """
+    from tengri.components.radio.component import AGN_LOUDNESS_REFS
+
+    if not isinstance(value, str):
+        raise TypeError(
+            f"radio['agn']['loudness_ref'] must be a string, got {type(value).__name__}"
+        )
+    if value not in AGN_LOUDNESS_REFS:
+        raise ValueError(
+            f"radio['agn']['loudness_ref'] must be one of {AGN_LOUDNESS_REFS}, got {value!r}"
+        )
+    return value
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -5542,6 +5693,10 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
                 raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
+            if "loudness_ref" in agn_dict:
+                result["radio_agn_loudness_ref"] = _parse_radio_agn_loudness_ref(
+                    agn_dict["loudness_ref"]
+                )
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -5901,7 +6056,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
     "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
-    "radio.agn": frozenset({"type", "*", "all_params"}),
+    "radio.agn": frozenset({"type", "*", "all_params", "loudness_ref"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
@@ -6127,6 +6282,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
     ),
+    "radio.agn": (_Structural("loudness_ref", "radio_agn_loudness_ref", "4400"),),
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
         _Structural("ir_window", "radio_ir_window", None),

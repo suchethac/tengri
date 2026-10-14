@@ -49,6 +49,12 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/blocks/runner.py::compose_l_nu": (
         "traced fracAGN goes through jax.lax.cond over both polar branches"
     ),
+    "components/agn/blocks/torus_library_transmission.py::_below_library_index": (
+        "tracer → None; the caller (library sightline) then evaluates the X-ray absorption on "
+        "the whole grid with a where-select below the library's first node — the original dense, "
+        "exact general path; the static index set is only an optimization for a concrete build "
+        "grid."
+    ),
     "components/agn/blr.py::_fe2_is_concrete_narrow": (
         "traced FWHM takes the band-limited path, valid for FWHM >= 500 km/s only; a traced "
         "narrower width returns NaN by design (#2768, pinned by its regression test), and the "
@@ -91,6 +97,11 @@ ALLOWLIST: dict[str, str] = {
     "forward/sed_model.py::SEDModel._response_z_nodes": (
         "z-table nodes built unless Fixed and not catalog"
     ),
+    "forward/sed_model.py::SEDModel.filter_coverage_redshifts": (
+        "fixed redshift → checks band coverage at that z; free (or catalog_z_range) → checks at "
+        "every finite prior/catalog end, never a single guessed z. Coverage is monotone in z "
+        "because the observed axis shifts as (1+z), so both ends bound the whole range."
+    ),
     "forward/sed_model.py::SEDModel.predict_line_fluxes": (
         "traced min_deltas skips only the eager line-matching loud check; the structural match "
         "is static and the eager call on the same model runs the check"
@@ -124,6 +135,10 @@ ALLOWLIST: dict[str, str] = {
     ),
     "utils/interpolation.py::concrete_canonical_numpy": (
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
+    ),
+    "utils/sed_quantities.py::_uv_anchor_plan": (
+        "tracer → 'traced': in-grid interpolation with NaN wherever the grid does not span 1600 Å "
+        "(loud), never the extrapolate/edge plans, which need a concrete grid."
     ),
     # ---- recorded gaps: the unknown is not the general path; owner to decide ----
     "observation/spectrum.py::_lsf_sigma_bound_kms": (
