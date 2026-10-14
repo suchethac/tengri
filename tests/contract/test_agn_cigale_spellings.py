@@ -30,14 +30,18 @@ def test_delta_on_fritz_torus_is_refused():
 
 def test_key_read_by_another_torus_type_is_named_in_the_refusal():
     """A torus key a different torus type reads: the refusal names that type."""
-    agn = _composable(torus={"type": "fritz", "tau_skirtor": Fixed(0.5), "all_params": Fixed(DEFAULT)})
+    agn = _composable(
+        torus={"type": "fritz", "tau_skirtor": Fixed(0.5), "all_params": Fixed(DEFAULT)}
+    )
     with pytest.raises(ParameterError, match=r"'tau_skirtor' is read by 'skirtor'"):
         parse_groups(agn=agn)
 
 
 def test_delta_on_disc_hints_both_disc_delta_keys():
-    agn = _composable(disc={"type": "schartmann2005", "delta": Fixed(0.3), "all_params": Fixed(DEFAULT)})
-    with pytest.raises(ParameterError) as info:
+    agn = _composable(
+        disc={"type": "schartmann2005", "delta": Fixed(0.3), "all_params": Fixed(DEFAULT)}
+    )
+    with pytest.raises(ValueError) as info:
         parse_groups(agn=agn)
     msg = str(info.value)
     assert "CIGALE's delta" in msg
@@ -46,8 +50,10 @@ def test_delta_on_disc_hints_both_disc_delta_keys():
 
 
 def test_disk_type_on_disc_hints_the_type_names():
-    agn = _composable(disc={"type": "schartmann2005", "disk_type": Fixed(1), "all_params": Fixed(DEFAULT)})
-    with pytest.raises(ParameterError) as info:
+    agn = _composable(
+        disc={"type": "schartmann2005", "disk_type": Fixed(1), "all_params": Fixed(DEFAULT)}
+    )
+    with pytest.raises(ValueError) as info:
         parse_groups(agn=agn)
     msg = str(info.value)
     assert "CIGALE's disk_type" in msg
@@ -56,8 +62,10 @@ def test_disk_type_on_disc_hints_the_type_names():
 
 
 def test_lambda_frac_agn_hints_agn_ir_frac():
-    agn = _composable(torus={"type": "skirtor", "lambda_fracAGN": "5/20", "all_params": Fixed(DEFAULT)})
-    with pytest.raises(ParameterError) as info:
+    agn = _composable(
+        torus={"type": "skirtor", "lambda_fracAGN": "5/20", "all_params": Fixed(DEFAULT)}
+    )
+    with pytest.raises(ValueError) as info:
         parse_groups(agn=agn)
     msg = str(info.value)
     assert "CIGALE's lambda_fracAGN" in msg

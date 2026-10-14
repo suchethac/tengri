@@ -197,6 +197,21 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc_': 0.5}
 # Raises: "Unknown key 'tau_bc_' in dust_attenuation. Did you mean: tau_bc?"
 ```
 
+A key that a sub-block's selected type does not read is refused too, so it is never accepted and then dropped. The AGN sub-blocks refuse a key the selected type does not read, and name the types that do read it.
+
+#### CIGALE spellings
+
+The refusal for a key that CIGALE's AGN modules use, but tengri spells differently, names the tengri key to use:
+
+| CIGALE key | tengri key |
+|---|---|
+| `disk_type` | `agn={'disc': {'type': ...}}`: 0 is `'skirtor'`, 1 is `'schartmann2005'`, 2 is `'adaf_lopez2024'` |
+| `delta` | on `agn.disc`, `agn_cigale_disk_delta` for disc types `'skirtor'` and `'schartmann2005'`, and `agn_cigale_adaf_delta` for `'adaf_lopez2024'` (the ADAF blend weight) |
+| `lambda_fracAGN` | `agn_ir_frac`, the `"0/0"` case (total dust luminosity); the wavelength window is not available yet |
+| `fracAGN` | `agn_ir_frac` |
+
+The torus parameter `agn_delta` is a different quantity, and no composable torus block reads it.
+
 ---
 
 ## II. Per-domain configuration
