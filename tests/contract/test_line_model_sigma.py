@@ -213,7 +213,13 @@ class TestGradient:
             )
 
         grad = assert_grad_matches_fd(energy, jnp.asarray(M))
-        assert np.all(np.isfinite(np.asarray(grad)))
+        assert np.all(np.isfinite(np.asarray(grad))), (
+            "gradient of the model-error likelihood wrt model flux is non-finite"
+        )
+        assert np.any(np.asarray(grad) != 0.0), (
+            "gradient of the model-error likelihood wrt model flux is identically "
+            "zero; the censored likelihood must respond to the model flux"
+        )
 
     def test_gradient_of_detection_energy_is_exact(self):
         """Analytic check of d/dm of the detected energy, one line."""
