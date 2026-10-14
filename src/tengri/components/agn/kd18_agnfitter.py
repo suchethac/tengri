@@ -269,8 +269,8 @@ def kd18_agnfitter_sed_from_grid(
     wave_grid = jnp.asarray(grid.wave_grid)
     mbh_ax = jnp.asarray(grid.log_mbh)
     edd_ax = jnp.asarray(grid.log_edd)
-    m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
-    e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])
+    m = _hold_at_axis(agn_log_mbh, mbh_ax)
+    e = _hold_at_axis(agn_log_ledd, edd_ax)
     i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
     j = jnp.clip(jnp.searchsorted(edd_ax, e) - 1, 0, edd_ax.shape[0] - 2)
     fm = (m - mbh_ax[i]) / (mbh_ax[i + 1] - mbh_ax[i])
@@ -290,14 +290,27 @@ def _load_default() -> Callable:
     return create_kd18_agnfitter_from_grid(_find_grid())
 
 
+def _hold_at_axis(x, axis):
+    """Hold ``x`` at the axis hull with derivative 1 on the closed hull.
+
+    Same semantics as ``jnp.clip`` except at the boundary itself, where
+    ``jnp.clip`` halves the derivative. Outside the hull the value is the edge
+    node and the derivative is zero.
+    """
+    lo, hi = axis[0], axis[-1]
+    return jnp.where(x < lo, lo, jnp.where(x > hi, hi, x))
+
+
 @functools.cache
 def kd18_agnfitter_grid_support() -> dict[str, tuple[float, float]]:
     r"""Parameter support of the shipped KD18-agnfitter grid, read from its own axes.
 
     Mirrors :func:`tengri.components.agn.slone_netzer.slone_netzer_grid_support`
-    (#1586): the closure built by :func:`create_kd18_agnfitter_from_grid` clips
-    both parameters onto these axes, so a value outside them collapses onto the
-    edge node.
+    (#1586): the closure built by :func:`create_kd18_agnfitter_from_grid` holds
+    both parameters at these axes, so a value outside them collapses onto the
+    edge node. ``agn_log_ledd`` overhangs its axis by 0.5 dex (a physical gap, not
+    a numerical one), so it is not extrapolated; this registry entry is what
+    reports it.
 
     Returns
     -------
@@ -499,9 +512,9 @@ def kd18_agnfitter_warmindex_sed_from_grid(
     edd_ax = jnp.asarray(grid.log_edd)
     warm_ax = jnp.asarray(grid.gamma_warm)
 
-    m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
-    e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])
-    w = jnp.clip(agn_gamma_warm, warm_ax[0], warm_ax[-1])
+    m = _hold_at_axis(agn_log_mbh, mbh_ax)
+    e = _hold_at_axis(agn_log_ledd, edd_ax)
+    w = _hold_at_axis(agn_gamma_warm, warm_ax)
     i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
     j = jnp.clip(jnp.searchsorted(edd_ax, e) - 1, 0, edd_ax.shape[0] - 2)
     k = jnp.clip(jnp.searchsorted(warm_ax, w) - 1, 0, warm_ax.shape[0] - 2)

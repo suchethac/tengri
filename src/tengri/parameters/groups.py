@@ -1682,6 +1682,10 @@ def _selected_component(selector: str, structural) -> str | None:
     and they are untouched because they carry no grid.
     """
     base = selector.replace(".", "_")
+    # The WG00 screen is selected by dust_model, not a dust_attenuation attribute
+    # (#2862). It is the one selector whose attribute name is not derived.
+    if selector == "dust.attenuation":
+        base = "dust_model"
     for attr in (base, f"{base}_block"):
         value = getattr(structural, attr, None)
         if isinstance(value, str):
