@@ -211,6 +211,9 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_band_table_decline = None
             # Literal policy entry from #2974 (radio AGN loudness anchor): the mock must carry it.
             self._radio_agn_loudness_ref = None
+            # Literal policy entries for the AGN ir_frac_window and the X-ray alpha_ox mode.
+            self._agn_ir_frac_window = None
+            self._xray_alpha_ox_mode = None
             self._cloudy_band_table_cache = None
             self._cloudy_band_table_decline = None
             self._shock_band_table_cache = None
