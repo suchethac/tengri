@@ -15,6 +15,12 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
 import os
 
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+_PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+    SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+)
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
@@ -51,7 +57,7 @@ def build_model(z: float) -> tengri.SEDModel:
         sfh={
             "type": "tsnorm",
             "log_total_mass": 10.0,
-            "peak_lbt_frac": tengri.Uniform(0.5 / age, min(6.0 / age, 0.8704)),
+            "peak_lbt_frac": tengri.Uniform(0.5 / age, min(6.0 / age, _PEAK_FRAC_HI)),
             "width_gyr": tengri.Uniform(0.8, 3.0),
             "skew": tengri.Uniform(-0.5, 1.0),
             "trunc": tengri.Uniform(2.0, 8.0),

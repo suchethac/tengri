@@ -5,6 +5,12 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
 
 import os
 
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+_PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+    SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+)
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
@@ -25,7 +31,7 @@ ssp = tengri.load_ssp()
 def _peak_frac(lo_gyr, hi_gyr, z):
     """Uniform prior on the peak as a fraction of age(z), from a lookback range in Gyr."""
     age = float(tengri.cosmology.age_at_z(z))  # Gyr
-    return tengri.Uniform(max(lo_gyr / age, 0.0363), min(hi_gyr / age, 0.8704))
+    return tengri.Uniform(max(lo_gyr / age, _PEAK_FRAC_LO), min(hi_gyr / age, _PEAK_FRAC_HI))
 
 
 # Build JWST filter observation.
@@ -91,7 +97,7 @@ for _i in range(50):
             # Passive galaxies at z = 1-3 are at most 5.9 Gyr old, so an absolute
             # 7-11 Gyr lookback range lies beyond the Big Bang; the peak is a fraction
             # of the age of the universe instead.
-            "peak_lbt_frac": tengri.Uniform(0.5, 0.8704),
+            "peak_lbt_frac": tengri.Uniform(0.5, _PEAK_FRAC_HI),
             "width_gyr": tengri.Uniform(0.5, 1.5),
             "skew": tengri.Uniform(-1.5, 0.0),
             "trunc": tengri.Uniform(1.5, 3.0),

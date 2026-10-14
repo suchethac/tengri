@@ -22,6 +22,12 @@ References:
 
 import os
 
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+_PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+    SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+)
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
@@ -53,7 +59,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_frac": tengri.Uniform(0.0363, 0.8704),
+        "peak_lbt_frac": tengri.Uniform(_PEAK_FRAC_LO, _PEAK_FRAC_HI),
         "width_gyr": tengri.Uniform(0.1, 5.0),
         "log_total_mass": 10.0,
         "skew": 0.0,
