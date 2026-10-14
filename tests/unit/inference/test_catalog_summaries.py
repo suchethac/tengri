@@ -41,7 +41,8 @@ def _fwd_free_z():
     )
     curves = tuple(
         FilterCurve(wave=jnp.linspace(lo, hi, 30), trans=jnp.ones(30) * 0.5, name=f"b{i}")
-        for i, (lo, hi) in enumerate([(3500.0, 4500.0), (5000.0, 6500.0), (7500.0, 9000.0)])
+        # Inside the observed axis at both declared redshifts (z=0.1 and z=1.0, #2620).
+        for i, (lo, hi) in enumerate([(6200.0, 6800.0), (7500.0, 8500.0), (9000.0, 10000.0)])
     )
     obs = Observation(photometry=Photometry(filters=curves))
     sed = SEDModel.build(
