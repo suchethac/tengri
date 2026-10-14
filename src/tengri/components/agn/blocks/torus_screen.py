@@ -42,14 +42,39 @@ References
 
 from __future__ import annotations
 
+import math
+
 import jax.numpy as jnp
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_OA_NENKOVA,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_THETA_TORUS,
+)
+from tengri.components.agn.blocks.torus_library_transmission import NH_PER_AV
 from tengri.components.agn.polar_dust import (
     _type1_mask,
     calzetti2000_extinction_curve,
     smc_extinction_curve,
 )
+from tengri.components.xray.xray import wabs_cross_section
+from tengri.utils.physics_constants import HC_KEV_ANGSTROM
 from tengri.utils.scale import representable_denominator
+
+#: Shortest wavelength [Angstrom] of the packaged torus libraries (1.24 keV). Below it the
+#: X-rays are photoelectrically absorbed (owner ruling 10), not reddened by the dust curve.
+#: Equals the first node of the SKIRTOR and Fritz grids; pinned against them by a test.
+XRAY_LIBRARY_EDGE_AA = 10.0
+
+#: V-band extinction per unit optical depth, 2.5 log10(e) [mag].
+_MAG_PER_TAU = 2.5 * math.log10(math.e)
+
+#: Declared fallback angle [deg] per opening-angle parameter (ADR-0011).
+_OPENING_ANGLE_DEFAULT: dict[str, float] = {
+    "agn_oa_skirtor": DEFAULT_AGN_OA_SKIRTOR,
+    "agn_oa_nenkova": DEFAULT_AGN_OA_NENKOVA,
+}
 
 #: Torus blocks that represent a genuine dusty torus with an equatorial optical
 #: depth and an opening angle, mapped to the (opening-angle, equatorial
@@ -121,8 +146,8 @@ def polar_follow_opening_angle(torus_block: str, params: dict) -> float:
         return torus_screen_geometry("fritz", params)[0]
     key = _TORUS_OPENING_ANGLE_PARAM.get(torus_block)
     if key is None:
-        return params.get("agn_theta_torus", 30.0)
-    return params.get(key, 40.0)
+        return params.get("agn_theta_torus", DEFAULT_AGN_THETA_TORUS)
+    return params.get(key, _OPENING_ANGLE_DEFAULT[key])
 
 
 def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float, str]:
@@ -155,7 +180,11 @@ def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float,
         cone_half = params.get("agn_fritz_oa", 60.0)
         return 90.0 - cone_half, params.get("agn_fritz_tau", 1.0), "fritz"
     if torus_block == "skirtor":
-        return params.get("agn_oa_skirtor", 40.0), params.get("agn_tau_skirtor", 7.0), "skirtor"
+        return (
+            params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
+            params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
+            "skirtor",
+        )
     raise ValueError(f"torus_screen_geometry: no screen for torus block {torus_block!r}")
 
 
@@ -213,12 +242,18 @@ def torus_screen_transmission(
     # complement of the polar mask's Type-1 weight, at the same width.
     type2 = 1.0 - _type1_mask(cos_inc, oa_deg)
 
-    tau_lambda = (
-        jnp.maximum(tau_v, 0.0)
-        * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
-        * type2
-    )
-    return jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
+    tau_v_eff = jnp.maximum(tau_v, 0.0) * type2
+    tau_lambda = tau_v_eff * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
+    t_optical = jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
+
+    # Below the library edge the X-rays are photoelectrically absorbed, exp(-sigma N_H), with
+    # the column of this screen's own V-band extinction, A_V = 2.5 log10(e) tau_V (k_V = 1).
+    # The same MM83 column the library sightline takes (owner ruling 10).
+    below = wave < XRAY_LIBRARY_EDGE_AA
+    energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
+    a_v = _MAG_PER_TAU * tau_v_eff
+    t_xray = jnp.exp(-wabs_cross_section(energy) * NH_PER_AV * a_v)
+    return jnp.where(below, t_xray, t_optical)
 
 
 def jax_sigmoid(x: jnp.ndarray) -> jnp.ndarray:

@@ -77,7 +77,7 @@ Optional physics blocks (dust_attenuation, neb, agn, etc.) support nesting via s
 ```python
 agn = {
     'type': 'composable',
-    'disc': {'type': 'analytic_disk'},
+    'disc': {'type': 'multicolor'},
     'torus': {'type': 'skirtor', 'all_params': FREE},
     'nlr': {'type': 'cue', 'logz': -0.3},
 }
@@ -113,10 +113,12 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 **The group declares no parameters at all** under the selected configuration (e.g. `radio` with every sub-model disabled):
 
+<!-- raises: ParameterError -->
 ```python
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}, 'all_params': FREE},
+    redshift=Fixed(0.1),
 )
 # Raises ParameterError:
 # "'all_params'/'other_params': FREE in group 'radio' covers no parameters --
@@ -129,26 +131,16 @@ model = SEDModel.build(
 #  parameter your chosen configuration actually declares)."
 ```
 
-**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them:
+**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them. The guard raises for this shape, and the message names the parameters it would have freed. The `met` table type is refused at build (#2425), so the shape is not reproduced here.
 
 ```python
-model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table', 'all_params': FREE})
-# Raises ParameterError:
-# "'all_params: FREE' freed 0 of 1 parameters in group 'met'. These have no
-#  declared prior, only Fixed defaults:
-#    met_alpha_fe
-#  FREE resolves to each parameter's registry default, and these default to
-#  Fixed; so the wildcard would leave every one of them pinned and the fit
-#  would silently not vary this physics.
-#  Pass explicit priors instead, e.g. met={'alpha_fe': Uniform(lo, hi)}."
-
 # The remedy depends on the parameter -- it is not always "add a prior".
 # met_alpha_fe is declared but not yet part of the released model, and no sweep
 # has freed it end to end, so its effect on the SED is unconfirmed. For this
 # parameter, drop the wildcard rather than free it: an explicit prior on an axis
 # nobody has confirmed does anything is the inert-parameter failure this guard
 # exists to catch.
-model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, met={'type': 'delta'}, redshift=Fixed(0.1))
 
 # CORRECT (general case): an explicit prior on a parameter you genuinely
 # mean to vary -- gas-phase metallicity, live in every photoionized
@@ -156,6 +148,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     neb={'type': 'cue', 'logZ_gas': Uniform(-1.0, 0.3)},
+    redshift=Fixed(0.1),
 )
 ```
 
@@ -163,20 +156,23 @@ A partial free (where some parameters have a declared range and some do not) war
 
 The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard. Naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example: the declared but not yet released alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
 
+<!-- raises: ParameterError -->
 ```python
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={...},
-    met={'type': 'table', 'alpha_fe': FREE}, redshift=Fixed(0.1),
+    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    met={'type': 'delta', 'alpha_fe': FREE}, redshift=Fixed(0.1),
 )
 # Raises ParameterError:
 # "'alpha_fe': FREE cannot be honored -- 'met_alpha_fe' has no declared
 #  free prior (its registry default is Fixed(0.0)). Pass an explicit
 #  prior instead, e.g. alpha_fe: Uniform(lo, hi)."
+```
 
+```python
 # CORRECT: an explicit prior for a parameter you genuinely mean to vary
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={...},
-    met={'type': 'table', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
+    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    met={'type': 'delta', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
 )
 ```
 
@@ -190,6 +186,8 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Uniform(0.01, 6.0))
 ```
 
+An emission-line fit with a free redshift is a local optimization. Aliased redshifts, where a line is matched to a different transition at another redshift, are real minima, and the optimizer settles in whichever basin it starts from. Do not rely on a free-redshift line fit to find the right solution unaided. Either fix the redshift when it is known, or seed the fit near the true value: pass `init_from=` a `Posterior` whose redshift sits at a photometric or catalog estimate, for example a photometric-only fit, so the emission-line fit starts in the correct basin.
+
 ### Error handling and suggestions
 
 Unknown structural keys trigger a `ParameterError` with the list of valid keys and suggestions via `difflib`:
@@ -198,6 +196,21 @@ Unknown structural keys trigger a `ParameterError` with the list of valid keys a
 dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc_': 0.5}
 # Raises: "Unknown key 'tau_bc_' in dust_attenuation. Did you mean: tau_bc?"
 ```
+
+An AGN sub-block refuses a key that its selected type does not read, so the key is never accepted and then dropped; the message names the types that do read it.
+
+#### CIGALE spellings
+
+The refusal for a key that CIGALE's AGN modules use, but tengri spells differently, names the tengri key to use:
+
+| CIGALE key | tengri key |
+|---|---|
+| `disk_type` | `agn={'disc': {'type': ...}}`: 0 is `'skirtor'`, 1 is `'schartmann2005'`, 2 is `'adaf_lopez2024'` |
+| `delta` | on `agn.disc`, `agn_cigale_disk_delta` for disc types `'skirtor'` and `'schartmann2005'`, and `agn_cigale_adaf_delta` for `'adaf_lopez2024'` (the ADAF blend weight) |
+| `lambda_fracAGN` | `agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}` (or the string `'5/20'`) together with `agn_ir_frac`; `(0, 0)` is the total-dust case |
+| `fracAGN` | `agn_ir_frac` |
+
+The torus parameter `agn_delta` is a different quantity, and no composable torus block reads it.
 
 ---
 
@@ -216,7 +229,7 @@ Generated per-domain parameter references are shown above. For per-type paramete
 **Structural keys:**
 - `'type'`: SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'age_kernel'`: Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
+- `'age_kernel'`: `'cic'` (default, cloud-in-cell) or `'dsps'`, which names the same integration (#2683).
 - `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
 
@@ -226,8 +239,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 ```
 
 **Gotchas:**
-- `'age_kernel': 'dsps'` is **not** a performance knob. It is 13% slower than the default. Use `'cic'` unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
-- A field SFH accepts both kernels (#2684): the draw is the linear interpolation of its own lookback nodes, integrated by `'cic'` with the nodes as knots and by `'dsps'` on a table refined 8-fold between SSP nodes. Without an explicit `age_kernel` a field SFH uses `'cic'`, the accurate kernel for field and rough histories; `'dsps'` differs there by up to 16 % in the FUV and 9 % in r-band flux.
+- `'age_kernel': 'dsps'` gives the same weights as `'cic'` (identical to round-off, #2683). DSPS's own histogram assigns each parcel wholly to one SSP node, which mis-places structure narrower than the node spacing (a 30 Myr burst at z = 2.5: 14-19 % in the FUV) and cannot see an onset or step edge between table rows (a zero `psb_flex` `tflex` gradient); first-order sharing of the exact integrand is the exact answer, so the zeroth-order definition is not offered. It is not a speed knob.
+- A field SFH accepts both names (#2684): the draw is the linear interpolation of its own lookback nodes, integrated with the nodes as knots. Without an explicit `age_kernel` a field SFH uses `'cic'`.
 - Default `age_kernel` is `'cic'` for every SFH type.
 
 
@@ -300,7 +313,7 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
 - `'lyman_cutoff'`: Zero attenuation below 912 Å (Lyman limit). Two-component only.
 - `'t_birth_yr'`: Birth-cloud lifetime [yr] (`type='two_component'` only; default `1e7`). Stars younger than this sit behind the birth-cloud screen, stars older behind the diffuse screen alone. The split is exact: each SSP age node's share of mass formed younger than `t_birth_yr` is taken through the SFH kernel, so a node straddling the boundary is partly young and the result does not depend on where the SSP nodes fall. The default is a hard step, as in pcigale (`separation_age`) and FSPS (`dust_tesc`).
 - `'transition_width_dex'`: Dispersal width [dex] of every age edge (`two_component`, `age_binned`). The default `0` is the hard step; a positive value replaces it with a logistic dispersal of that width in `log10(age)`.
-- `'lyc_reprocessed_by'`: Which stellar population's ionizing photons are absorbed by `neb_fesc`: `'young'` (default, birth-cloud only) or `'all'` (FSPS/CIGALE style). Two-component only.
+- `'lyc_reprocessed_by'`: Which stellar population's ionizing photons are absorbed by `neb_fesc`: `'young'` (birth-cloud only; the default for every nebular backend except Cue) or `'all'` (FSPS/CIGALE style; the default when `neb` is `'cue'` and counts every age). Two-component only. Cue counts the ionizing photons of every stellar age (`neb` `'lyc_max_age_yr'`), so the stellar SED must give up the LyC of every age too; with `'young'` the older ages' LyC would stay in the SED and be re-emitted by Cue as well. With a finite `neb` `'lyc_max_age_yr'` the default is `'young'`. `'young'` with Cue counting ages above `t_birth_yr` is an error (`ConfigError`): use `'all'` with every age counted, or set `lyc_max_age_yr` <= `t_birth_yr`. `'all'` with a finite `lyc_max_age_yr` is also an error: it would remove the LyC of the ages Cue does not count from the SED and re-emit none of it. The one exception is the former 100 Myr cut (`lyc_max_age_yr=1e8`) with `'young'`: it is accepted with a one-time warning, because ages between `t_birth_yr` and 100 Myr then keep their LyC in the SED while Cue re-emits it (a small energy gap, 10-100 Myr stars only). `model.spec.summary()` prints the resolved value as `[default: 'all' for cue]`, `[default: 'young' for cue with a finite lyc_max_age_yr]` or `[user]`.
 - `'lyc_in_energy_balance'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
 - `'screens'`: `type='age_binned'` only (#2528). A list of `{'law': <law name>, 'window_log_yr': (lo, hi)}` dicts, one per screen; `lo`/`hi` are `log10(age/yr)` edges, either or both `None` for unbounded. N independent screens generalize the birth-cloud/diffuse pair to any N; windows need not partition the age axis. Optical depths add over every screen whose window contains a star's age: nested windows (each `(None, hi_i)` with increasing `hi_i`, the last unbounded) cascade as the birth cloud and diffuse medium do in `'two_component'`, and `tau_i` is the depth screen `i` adds; windows that tile the age axis give each age a single screen, and `tau_i` is the total depth of that age bin. Per-screen parameters are indexed from the screen count: `'tau_0'`, `'tau_1'`, ... (full name `dust_tau_i`), plus one `'<lawparam>_i'` for every shape parameter that screen's own law declares (e.g. `'slope_0'`, `'Rv_2'`), defaulting to that law's own published value. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `'two_component'` bit-identically. Not supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (raises at construction; a fit's `approx="auto"` resolves to the exact path instead). Nebular continuum and the line catalog are attenuated only by screens whose window is unbounded below (the `t -> 0` limit, the same convention `'two_component'` applies to lines); a finite lower edge must sit at least five transition widths above the loaded SSP grid's youngest node or the build raises `ConfigError`, naming the screen, the edge, the grid's youngest node, and the two fixes.
@@ -381,6 +394,7 @@ dust_attenuation={
 - `'eta_balance'`: Energy-balance coupling: `Fixed(1.0)` (default, strict balance where `L_IR = eta * L_absorbed`). `FREE` selects the default free prior, `Gaussian(1.0, 0.2)` truncated at 0. Pass an explicit `Uniform(...)` or any other prior to override it. The `all_params` wildcard reaches it on **every** emission engine, since it scales the budget every template normalizes to, so it remains live regardless of the selected engine (#2286).
 - `'log_L_ir'`: Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright. Leaving it undeclared keeps energy balance. Because it renders `eta_balance` inert, declaring both (with `eta_balance` free or fixed not equal to 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard. An explicit `FREE` on it is refused; declare a real prior instead.
 - `'diffuse_screen'`: Opt-in single-pass attenuation of the re-emitted IR dust emission by the diffuse dust screen's transmission `T(λ)` (the `dust_diff_transmission` derived key, published by every `dust_attenuation` type). The escaping SED is `sed_dust_ir * T`: the IR energy absorbed on the way out is REMOVED, not re-emitted or iterated back into the budget (unlike FSPS, which iterates the IR to convergence; CIGALE never attenuates its re-emitted IR at all — this is a deliberate single pass). `log_L_ir_emergent` reports the escaping (post-screen) IR luminosity; `L_ir`/`L_absorbed` (and radio's FIRRC amplitudes, which read `L_ir`) keep the pre-screen absorbed budget unchanged. For single-screen attenuators (`dust_attenuation={'type': 'single_component', ...}`) and for `type='wg00'`, "diffuse" means the *single* screen — there is no separate birth-cloud/diffuse split to choose between. Default false (off, bit-identical to a build without this key). Requires an active, non-`'none'` `dust_attenuation` and a real `dust_emission` type; raises a clear `ValueError` at parse time otherwise.
+- `'cmb'`: Opt-in CMB heating and contrast of a tabulated emission model (da Cunha et al. 2013, Eqs. 12 and 18). `True` applies the contrast factor `1 - B_nu(T_CMB(z))/B_nu(T_d(z))` to every tabulated type (`schreiber2016`, `schreiber2018`, `draine_li2007`, `draine_li2014`, `dale2014`, `themis`, `astrodust`, `dh02_ce01`, `bosa`) and, for the single-temperature `schreiber2016` / `schreiber2018` libraries, also heats the dust temperature (Eq. 12) and scales the luminosity by the heated-to-intrinsic temperature ratio to the power 4 + beta, beta = 1.8. The radiation-field libraries get the contrast only, at a dust temperature read off the template (an approximation, see the dust reference). Default false (off, bit-identical to a build without the key). Reads the model's redshift. Raises a `ValueError` for `modified_blackbody`, `graybody` and `casey2012`, which always apply both effects, and without a `dust_emission` type.
 
 **Minimal example:**
 ```python
@@ -400,6 +414,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'`: `cue` only: bool, default `True` (#2239). Publishes the full ~138-line Cue-trained catalog. Set to `False` to narrow to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
 - `'nitrogen'`: `cue` only: `'absolute'` (default) or a relation name (`'nicholls17'`) (#2693). Selects the meaning of `gas_logno`; see the nebular notes below. Raises on other backends.
+- `'lyc_max_age_yr'`: `cue` only: `'all'` (default) or the oldest stellar age [yr] whose ionizing photons Cue counts. By default Q_H and the ionizing-spectrum shape come from every age bin of the SSP, so a quiescent galaxy has the Hα luminosity its old (post-AGB) Lyman continuum implies. `1e8` gives the former 100 Myr cut: Q_H, the shape and the nebular lines and continuum are bit-identical to it, and with a finite value `dust_attenuation['lyc_reprocessed_by']` defaults to `'young'`, so the stellar SED below 912 Å keeps the LyC of the ages Cue does not count, as before. `'all'` together with a finite value raises (see `lyc_reprocessed_by`). With a birth-cloud dust type (`two_component`, `age_binned`) the supported pairings are: `lyc_max_age_yr='all'` with `lyc_reprocessed_by='all'` (the default); `lyc_max_age_yr` <= `t_birth_yr` with `'young'`; and `t_birth_yr` < `lyc_max_age_yr` <= `1e8` with `'young'` (one warning about the 10-100 Myr gap). A finite value above `1e8` has no supported pairing and raises, because energy is created under `'young'` (LyC of ages between `t_birth_yr` and the cutoff stays in the SED while Cue re-emits it) and lost under `'all'` (LyC of ages beyond the cutoff is removed and never re-emitted). `single_component` and `wg00` have no young/old split, so this pairing check does not apply to them. Raises on other backends.
 - `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
 - `'model'`: MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
 - `'density'`: MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
@@ -415,6 +430,8 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 - Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
+- **Cue's response to `neb_logU` depends on the ionizing spectrum it is fed.** `neb_logU` reaches the network unchanged as Cue's `gas_logu` (the inner-face U at R = 10^19 cm, trained over log U -4 to -1, Li et al. 2025, arXiv:2405.04598, Table 1; values outside that range are passed unclipped). Cue is *not* a fixed-spectrum CLOUDY grid: its 7 ionizing-shape inputs are derived from the SSP, and the fitted shape sets how far O++ can grow with U. At Cue's own default (hard) young-starburst shape, [O III]/H-beta rises from 3.4 to 6.1 between log U = -3 and -1.5. For the soft shape fitted to a delayed-tau population (tau = 300 Myr, age 100 Myr, FSPS MIST+MILES, Z = 0.02), [O III]/H-beta saturates at 0.60, 0.67, 0.65 for log U = -3, -2, -1.5; the saturated level depends on the population's age weights. A flat [O III]/H-beta against `neb_logU` therefore reflects the ionizing shape, not a wiring error, and a difference from a CLOUDY grid computed at a fixed spectrum is a difference of model and spectrum. Use `ionspec_*` overrides to probe other shapes.
+- **Cue counts ionizing photons from every stellar age.** For a population whose star formation ended long ago the nebular emission is then set by the old-star Lyman continuum (post-AGB and extreme horizontal-branch stars; Binette et al. 1994, A&A 292, 13), at about the case-B Hα per ionizing photon (L(Hα) = 1.37e-12 erg x Q_H, Osterbrock & Ferland 2006). Hα equivalent widths of order 1 Å follow. The photon rate of these ages depends on the SSP library: the FSPS/MIST grids carry about 3e40-1e41 photons/s/Msun at ages above 1 Gyr, the FSPS/Padova grid essentially none. For a star-forming history the change from the 100 Myr cut is below 0.5%. Because the stellar SED gives up the LyC of every age under the Cue default `dust_attenuation['lyc_reprocessed_by']='all'`, the energy closes: measured on a grid with 5e40 photons/s/Msun above 1 Gyr, the nebular light is 94% (tau 0.3 Gyr at 10 Gyr) to 97% (tau 1 Gyr at 10 Gyr) of the LyC energy removed, the rest not being re-emitted within the SED grid. With a finite cutoff the default is `'young'`, which leaves the LyC of the ages beyond the cut in the stellar SED. Cue's forbidden-line ratios for old (post-AGB) ionizing shapes are not validated against CLOUDY. `neb={'type': 'cue', 'lyc_max_age_yr': 1e8}` restores the cut. The `cloudy`, `cb19` and `mappings` backends keep their own age range, set by the ages their grids cover.
 - Cue's `gas_logno` is its absolute [N/O] input by default; `neb={'type': 'cue', 'nitrogen': 'nicholls17'}` makes it the offset from the Nicholls+2017 N/O--O/H relation at `neb_logZ_gas`, the convention of `neb_dno` in the grid backends (which embody their own, unrecorded, relation; the two agree at the N/[O II] level, Cue/grid 0.78-0.99 over `neb_logZ_gas` -1 to 0). The [N/O] Cue is actually fed is the `log_no` property in both modes (#2693).
 
 
@@ -465,7 +482,7 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 **Structural keys:**
 - `'type'`: Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize.
+- `'sf'`: Star-formation radio sub-block: `{'type': ..., 'nu_ref': ..., 'freefree': bool, 'ir_window': 'total' | 'tir' | 'fir'}` to customize. For `bell2003`, `'nu_ref'` sets where the q calibration anchors the synchrotron: `'1.4GHz'` (default, Bell 2003), `'21cm'` (1.42758 GHz, CIGALE's convention) or a frequency in Hz; `'freefree'` (`True`/`False`) overrides whether the radio block carries the Murphy et al. (2011) free-free term. `'ir_window'` selects the infrared band of the dust-emission SED that `L_IR` is integrated over for the q relations: `'tir'` is 8-1000 um (Bell 2003; Delvecchio et al. 2021; McCheyne et al. 2022), `'fir'` is 42.5-122.5 um (Helou et al. 1985, nominal IRAS band) and `'total'` is the dust power as published (CIGALE's convention). Unset, each model takes its own paper's window: `'tir'` for `bell2003`, `bell2003_split`, `delvecchio2021` and `mccheyne2022`. See the radio model reference.
 - `'agn'`: AGN radio sub-block: `{'type': ...}` to customize.
 
 **Minimal example:**
@@ -517,7 +534,7 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 ```python
 agn={
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
+    'disc': {'type': 'multicolor', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
     'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},
     'norm': 'cigale_joint',
@@ -582,6 +599,7 @@ A model's resolved configuration can be inspected and edited via serialization.
 ### Inspect the model config
 
 ```python
+config = recipes.star_forming_photometry()
 model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 
 # Get the resolved config as a nested dict
@@ -589,7 +607,7 @@ config = model.spec.to_groups()
 # config is a plain dict ready for re-parse or export
 
 # Print a formatted summary with provenance
-model.spec.summary()  # Tags show [user], [default], [all_params FREE], etc.
+model.spec.summary()  # Tags show [user], [default], [all_params FREE], [resolved to cloudy grid: lo..hi], etc.
 
 # Access the raw spec (lower-level; rarely needed)
 model.spec  # the Parameters object
@@ -624,7 +642,7 @@ with open("config.yaml", "w") as f:
 
 ```python
 # Input
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, met={'type': 'table'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, met={'type': 'delta'}, redshift=Fixed(0.1))
 
 # Output of model.spec.to_groups()
 {
@@ -640,7 +658,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_p
 A sole-directive wildcard (no explicit per-parameter overrides) round-trips unchanged:
 
 ```python
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, met={'type': 'table'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, met={'type': 'delta'}, redshift=Fixed(0.1))
 model.spec.to_groups()['sfh']
 # {'type': 'dpl', 'all_params': FREE}
 ```
@@ -671,7 +689,7 @@ Exchange one sub-component:
 
 ```python
 config = recipes.agn_panchromatic()
-config['agn']['disc'] = {'type': 'bbflat'}  # swap the disk model
+config['agn']['disc'] = {'type': 'multicolor'}  # swap the disk model
 model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 ```
 
@@ -683,9 +701,8 @@ Free everything except a few things:
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'beta': Fixed(2.0), 'other_params': FREE},  # beta pinned, the rest free
-    dust_attenuation={'type': 'two_component', 'tau_bc': Uniform(0, 1), 'other_params': Fixed(DEFAULT)},  # only tau_bc free
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': Uniform(0, 1), 'other_params': Fixed(DEFAULT)},  # only tau_bc free
     redshift=Fixed(0.1),
-    ...
 )
 ```
 
@@ -694,13 +711,13 @@ model = SEDModel.build(
 ```python
 agn = {
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
+    'disc': {'type': 'multicolor', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},  # fixed at registry defaults
-    'blr': {'type': 'cue'},  # uses defaults
+    'nlr': {'type': 'analytic', 'all_params': Fixed(DEFAULT)},  # fixed at registry defaults
+    'blr': {'type': 'analytic'},  # uses defaults
     # feii and atten omitted (OFF)
 }
-model = SEDModel.build(ssp_data=ssp, observation=obs, agn=agn)
+model = SEDModel.build(ssp_data=ssp, observation=obs, agn=agn, redshift=Fixed(0.1))
 ```
 
 ---
@@ -762,10 +779,11 @@ sfh={'type': 'dpl', '*': FREE}
 
 ### No-op wildcard
 
+<!-- raises: ValueError -->
 ```python
 model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE}, redshift=Fixed(0.1))
-# ParameterError: Cannot set 'all_params': FREE on radio — it has no free parameters.
-# Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}
+# ValueError: radio legacy type form is retired. radio={'type': 'sfonly'} → use the
+# composable form: radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}
 ```
 
 ### IGM without redshift

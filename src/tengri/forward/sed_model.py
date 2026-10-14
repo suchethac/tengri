@@ -20,7 +20,7 @@ Usage::
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -56,6 +56,7 @@ marker lines to jump. In order:
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import dataclasses
 import functools
 import inspect
@@ -71,11 +72,13 @@ import numpy as np
 
 from tengri._cache_keys import frozen_dataclass_key
 from tengri._deprecated import UNSET, resolve_renamed_flag
+from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
+    FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
     TengriIOError,
@@ -90,8 +93,13 @@ from tengri.forward.sed_model_types import (
     SEDModelState,
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
-from tengri.observation.photometry import ab_mag_from_flux
+from tengri.observation.photometry import (
+    FILTER_COVERAGE_TOLERANCE,
+    ab_mag_from_flux,
+    filter_coverage_fraction,
+)
 from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
+from tengri.parameters.timing import alias_gyr_timings
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -116,6 +124,23 @@ from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 #: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
+
+
+def _declared_input_names(component) -> frozenset[str]:
+    """Names of the optional inputs a component declares, in one spelling.
+
+    Dust-emission components keep ``optional_inputs`` as a dict (its keys are the
+    names); a :class:`SEDModelComponent` exposes a method returning ``DerivedKey``
+    tuples (each with a ``.name``). Both forms are normalized to plain strings so a
+    caller can test for one name regardless of which form the emitter uses (#2553).
+    """
+    declared = getattr(component, "optional_inputs", None)
+    if callable(declared):
+        declared = declared()
+    if declared is None:
+        return frozenset()
+    return frozenset(getattr(key, "name", key) for key in declared)
+
 
 #: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
 #: (#2520): a line is not a delta function in observed wavelength, so the
@@ -315,8 +340,50 @@ def _chain_implements_emission_terms(chain) -> list[str]:
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
 #: band response. Loose enough not to trip on fp re-association across a ~6000-node
-#: grid, ~7 orders tighter than any shape error worth exploiting.
-_RANK1_RTOL = 1e-9
+#: grid, and far tighter than any shape error worth exploiting.
+_RANK1_RTOL = 1e-10
+
+
+def _term_response_refusal(comp, chain, free, fixed) -> str | None:
+    """Why the term band response must stay dense for emitter ``comp``, or ``None``.
+
+    An emitter that declares ``term_response_refusal`` (the AGN) decides for itself
+    whether its shape is fixed; the galaxy dust screen on an AGN is checked here because
+    it lives on the dust component. Other emitters (radio, X-ray) are refused when any of
+    their own parameters is free, other than the amplitudes listed in ``AMPLITUDE_PARAMS``.
+
+    Parameters
+    ----------
+    comp : SEDComponent
+        The additive emitter.
+    chain : sequence
+        The component chain, for the dust-side ``agn_screen`` check.
+    free : set of str
+        Free parameter names of the model.
+    fixed : mapping
+        Build-time fixed values, keyed by parameter name.
+
+    Returns
+    -------
+    str or None
+        The reason, or ``None`` when the emitter passes the gate.
+    """
+    hook = getattr(comp, "term_response_refusal", None)
+    if hook is not None:
+        reason = hook(free, fixed)
+        if reason is None and any(
+            getattr(getattr(c, "config", None), "agn_screen", "none") != "none" for c in chain
+        ):
+            return "the galaxy dust screens the AGN (agn_screen): its photometry needs the dense"
+            " SED"
+        return reason
+    amplitudes = getattr(comp, "AMPLITUDE_PARAMS", frozenset())
+    prefix = f"{comp.name}_"
+    free_emitter = sorted(p for p in free if p.startswith(prefix) and p not in amplitudes)
+    if free_emitter:
+        return f"free {comp.name} parameters: {free_emitter}"
+    return None
+
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -692,7 +759,7 @@ class WavePrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
-    """Configuration for spectrum-grid LUT precomputation.
+    r"""Configuration for spectrum-grid LUT precomputation.
 
     Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
     LUT precomputation. The SSP × dust × IGM stack is precomputed at
@@ -705,6 +772,36 @@ class SpectrumPrecomp:
     grid ``wave_obs / (1 + z)`` can be interpolated at runtime; ``n_z`` /
     ``z_min`` / ``z_max`` tune that table (mirroring :class:`WavePrecomp`).
     When redshift is Fixed, these are ignored.
+
+    The LUT applies the same three stages, in the same order, as the exact
+    spectrum path: (1) the stellar velocity dispersion ``sigma_v_kms``, a
+    Gaussian in :math:`\ln\lambda` applied to the stellar family on the model
+    grid, before the pixels are sampled; (2) the IGM transmission; (3) the
+    instrument kernel on the pixel grid, :math:`\sigma_{\rm eff} =
+    \sqrt{\sigma_{\rm inst}^2\,s^2 - \sigma_{\rm lib}^2}` on the stellar
+    bucket (``s`` is ``lsf_scale``) and :math:`\sigma_{\rm inst}\,s` on the
+    dust-attenuated nebular bucket. Stage 1 acts on the model grid because point
+    sampling aliases sharp stellar features, so broadening after sampling is not
+    equivalent. With a fixed redshift **and** a fixed ``sigma_v_kms``, every SSP
+    template is broadened once at build and the per-draw cost is one weighted
+    sum over the pixel table. With a free ``sigma_v_kms`` or a free redshift,
+    the stellar weighted sum is formed on the full model grid, broadened with the
+    draw's dispersion and then sampled; the per-age family read by two-component
+    dust is broadened row by row, which dominates the cost (a gradient step with
+    free ``sigma_v_kms`` is roughly 15 times the exact path's on the line-rich
+    test fixture). A banded ``resolution_matrix`` cannot be carried by a
+    per-pixel table: the model warns and uses the exact path. The model is
+    differentiable in ``sigma_v_kms`` and ``lsf_scale``.
+
+    Two routing rules follow from that cost. With a fixed ``sigma_v_kms`` and a
+    free redshift, the SSP cube is broadened once at build (the velocity kernel
+    does not depend on redshift) and each draw only interpolates it, so the cost
+    is the unbroadened LUT's; this holds unless a 4-D alpha grid or a free AGB
+    weight modifies the cube per draw, which keeps the full-grid sum. With a
+    free ``sigma_v_kms``, an explicit ``SpectrumPrecomp()`` stays on the lookup
+    table and warns once about the cost, and a joint observation's photometry
+    ``WavePrecomp()`` is not promoted onto the spectrum channel, which stays exact
+    and says so once (``approx="auto"`` keeps spectroscopy exact regardless).
 
     Parameters
     ----------
@@ -1142,13 +1239,16 @@ def _validate_fracagn_requires_dust(spec) -> None:
     absorbed stellar luminosity is ~zero, so the torus (and under
     agn_norm='cigale_joint' the whole AGN) collapses silently.
 
-    This is a build-time safety gate: fracAGN is only safe when paired
-    with a dust component (dust_model != 'off').
+    This is a construction-time safety gate, run by :meth:`SEDModel.__init__`
+    so that both :meth:`SEDModel.build` and direct construction from a spec
+    refuse it: fracAGN is only safe when paired with a dust component
+    (dust_model != 'off'). A ``Fixed(0)`` coupling is inert and passes.
 
     Raises
     ------
     ConfigError
         If agn_ir_frac is nonzero (FREE or Fixed>0) and dust_model == 'off'.
+        A ``ConfigError`` is also a ``ValueError``.
 
     See Also
     --------
@@ -1182,8 +1282,8 @@ def _validate_fracagn_requires_dust(spec) -> None:
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
             "Fix: either (1) add a dust component "
             "(e.g. dust_attenuation={'type':'two_component'}), "
-            "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
-            "See issue #944."
+            "or (2) pin fracAGN to Fixed(0) (or drop it and use agn_torus_frac for "
+            "independent torus scaling). See issue #944."
         )
 
 
@@ -1219,6 +1319,73 @@ def _param_is_user_provided(spec, name: str) -> bool:
     """
     provenance = getattr(spec, "_group_provenance", None) or {}
     return provenance.get(name) in _USER_PROVIDED_PROVENANCE
+
+
+def _validate_ir_frac_window_has_fraction(spec) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` that cannot act (#2662).
+
+    The window only changes how ``agn_ir_frac`` is scaled (pcigale's ``scale``), and the
+    scale needs the composable AGN's disc/torus/polar split. With a monolithic model, or
+    with the fraction absent or ``Fixed(0)``, there is nothing to scale, so the window would
+    be silently inert; both are refused at build rather than at trace time.
+
+    Raises
+    ------
+    ParameterError
+        If the window is not ``(0, 0)`` and ``agn_ir_frac`` is neither FREE nor a positive
+        ``Fixed`` value.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
+    if window == (0.0, 0.0):
+        return
+    model = getattr(spec, "agn_model", None)
+    if model != "composable":
+        raise ParameterError(
+            f"agn['ir_frac_window']={window} needs the composable AGN "
+            f"(agn={{'type': 'composable', ...}}): model {model!r} has no disc/torus/polar "
+            "split to take the dust luminosity from."
+        )
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    if "agn_ir_frac" in free or float(fixed.get("agn_ir_frac", 0.0)) > 0.0:
+        return
+    raise ParameterError(
+        f"agn['ir_frac_window']={window} scales the AGN dust power by the window fraction, "
+        "but agn_ir_frac is absent or Fixed(0): there is no fraction to scale. Give "
+        "agn_ir_frac a positive value or FREE, or drop ir_frac_window."
+    )
+
+
+def _check_ir_frac_window_grid(rest_wavelength, window) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` edge outside the rest wavelength grid (#2662).
+
+    Parameters
+    ----------
+    rest_wavelength : array_like, shape (n_wave,)
+        The model's rest wavelength grid [Angstrom], ascending.
+    window : tuple of float
+        ``(lambda_min_um, lambda_max_um)``; ``(0, 0)`` is the total-dust case and passes.
+
+    Raises
+    ------
+    ParameterError
+        If an edge (or the monochromatic wavelength) lies outside the grid.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    lo_um, hi_um = (float(v) for v in window)
+    if (lo_um, hi_um) == (0.0, 0.0):
+        return
+    grid = np.asarray(rest_wavelength, dtype=float)
+    lo_aa, hi_aa = lo_um * 1.0e4, hi_um * 1.0e4
+    if lo_aa < grid[0] or hi_aa > grid[-1]:
+        raise ParameterError(
+            f"agn['ir_frac_window']=({lo_um}, {hi_um}) um lies outside the model's rest "
+            f"wavelength grid [{grid[0] / 1.0e4:.4g}, {grid[-1] / 1.0e4:.4g}] um. Choose a "
+            "window inside the grid."
+        )
 
 
 def _validate_torus_frac_fracagn_conflict(spec) -> None:
@@ -1618,60 +1785,258 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
-def _upper_support(spec, name: str) -> float | None:
-    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
-    dists = getattr(spec, "_distributions", {})
-    dist = dists.get(name)
+def _free_lsf_param_missing(name: str) -> str:
+    """Error text for a declared-free LSF parameter absent from ``params`` (#2847)."""
+    return (
+        f"{name!r} is a free parameter of this model but is missing from params. "
+        f"Pass it explicitly; there is no neutral default for a free value."
+    )
+
+
+def redshift_is_runtime(redshift_dist, catalog_z_range) -> bool:
+    """Whether redshift is a runtime input (per-galaxy or sampled), not a build constant.
+
+    A ``Fixed`` redshift is still runtime in catalog mode, where each galaxy's z
+    arrives through ``params`` and the placeholder spec value must not be used.
+    An unknown (no distribution) is treated as runtime, so the general path runs.
+
+    Parameters
+    ----------
+    redshift_dist : Distribution or None
+        The spec's ``redshift`` distribution.
+    catalog_z_range : tuple of float or None
+        ``(z_lo, z_hi)`` when the model is a catalog model, else None.
+
+    Returns
+    -------
+    bool
+        True when redshift must be treated as runtime.
+    """
+    if catalog_z_range is not None:
+        return True
+    if redshift_dist is None:
+        return True
+    return not redshift_dist.is_fixed
+
+
+def _support_bounds(spec, name: str) -> tuple[float, float] | None:
+    """``(lo, hi)`` support of ``name`` in ``spec`` (Fixed value or prior bounds)."""
+    dist = getattr(spec, "_distributions", {}).get(name)
     if dist is None:
         return None
     if dist.is_fixed:
         value = dist.value
-        return float(value) if isinstance(value, (int, float)) else None
-    return float(dist.bounds[1])
+        return (float(value), float(value)) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[0]), float(dist.bounds[1])
+
+
+#: Total-calibrated SF radio modes: the q parameter, its mass and redshift slopes, and the
+#: domain, pivot and sign of the relation
+#: (:data:`~tengri.components.radio.radio.FIRRC_TOTAL_Q_DOMAIN`).
+#: ``bell2003`` has no mass or redshift term; its q is a constant.
+_TOTAL_Q_MODES = {
+    "bell2003": {"q0": "radio_q_ir", "nu_ref": 1.4e9},
+    "delvecchio2021": {
+        "q0": "radio_delv_q0",
+        "mass_slope": "radio_delv_mass_slope",
+        "z_slope": "radio_delv_z_slope",
+    },
+    "mccheyne2022": {
+        "q0": "radio_mcch_q0",
+        "mass_slope": "radio_mcch_mass_slope",
+        "z_slope": "radio_mcch_z_slope",
+    },
+}
+
+
+def _radio_mass_floor(spec) -> tuple[float, float]:
+    """Lowest and highest ``log M*`` the radio block can read from the declared supports.
+
+    The radio component reads ``log_mstar``, the *surviving* stellar mass when the SSP
+    carries a mass-remaining table, else the formed mass. The formed mass is
+    ``10**log_total_mass`` of the SFH (the maximum over the SFH components' lower bounds
+    bounds the sum from below). The surviving mass is at least ``min(ssp_mass_remaining)``
+    times the formed mass, so the lowest reachable ``log M*`` is that floor plus
+    ``log10(min ssp_mass_remaining)``, a conservative bound. The upper bound is the
+    formed-mass upper bound, since the surviving fraction is at most one. With no SFH mass
+    parameter the radio component's own fallback, ``log M* = 10``, applies.
+    """
+    mass_bounds = [
+        b
+        for name in getattr(spec, "_distributions", {})
+        if name.startswith("sfh_") and name.endswith("_log_total_mass")
+        for b in [_support_bounds(spec, name)]
+        if b is not None
+    ]
+    if not mass_bounds:
+        return 10.0, 10.0
+    lo = max(b[0] for b in mass_bounds)
+    hi = max(b[1] for b in mass_bounds)
+    ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
+    remaining = getattr(ssp, "ssp_mass_remaining", None)
+    offset = 0.0
+    if remaining is not None:
+        frac_min = float(np.min(np.asarray(remaining)))
+        if frac_min > 0.0:
+            offset = float(np.log10(frac_min))
+    return lo + offset, hi
+
+
+def _radio_q_worst_corner(spec, mode: str) -> tuple[float, dict[str, float]]:
+    """Largest ``q`` over the declared box, evaluated with the shared domain-held relation.
+
+    The box is q0, the mass slope, ``z_slope``, the redshift and the mass the radio block
+    reads (:func:`_radio_mass_floor`). ``q`` is monotone in each argument over the box: q0
+    enters with a positive coefficient, ``(1+z)^zs`` is monotone in ``z`` and ``zs``, and the
+    mass term is linear in ``log M*``. The domain hold (``jnp.clip`` inside
+    :func:`~tengri.components.radio.radio.firrc_total_q`) is monotone too, so the maximum is
+    at a corner of the box. The corners use the same function as the forward model.
+    """
+    import itertools
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, firrc_total_q
+
+    mode_def = _TOTAL_Q_MODES[mode]
+    q0_b = _support_bounds(spec, mode_def["q0"])
+    if q0_b is None:
+        return float("nan"), {}
+    m_b = _support_bounds(spec, mode_def["mass_slope"]) or (0.0, 0.0)
+    zs_b = _support_bounds(spec, mode_def["z_slope"]) or (0.0, 0.0)
+    z_b = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    worst = (-np.inf, {})
+    for q0, m, zs, z, logm in itertools.product(
+        sorted(set(q0_b)),
+        sorted(set(m_b)),
+        sorted(set(zs_b)),
+        sorted(set(z_b)),
+        sorted({mass_lo, mass_hi}),
+    ):
+        q = float(firrc_total_q(mode, q0, m, zs, logm, z))
+        if q > worst[0]:
+            # Report the arguments the relation actually uses, after the domain hold.
+            dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+            lo, hi = dom["mass"]
+            logm_eff = max(logm, lo) if hi is None else min(max(logm, lo), hi)
+            z_eff = min(max(z, dom["z"][0]), dom["z"][1])
+            worst = (q, {"q0": q0, "logm": logm_eff, "z": z_eff, "m": m, "zs": zs})
+    return worst
 
 
 def _validate_radio_q_total_support(spec) -> None:
-    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+    """Refuse a declared box whose worst corner makes the total-calibrated synchrotron negative.
 
-    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
-    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
-    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
-    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
-    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
-    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
-    non-thermal term) or to the other star-formation radio modes.
+    The Bell (2003) modes calibrate the total at 1.4 GHz with ``radio_q_ir``. The
+    Delvecchio+2021 and McCheyne+2022 modes calibrate the total at their own reference
+    frequencies (1.4 GHz and 150 MHz) with ``q(M*, z)``, held at the calibrated domain
+    edges. The synchrotron term is the total minus the Murphy+2011 free-free luminosity at
+    that frequency, which is negative once q exceeds
+    :func:`~tengri.components.radio.radio.radio_q_total_limit` (3.5145 at 1.4 GHz, 1e4 K,
+    alpha_ff = -0.1). The check takes the worst q over every declared support that feeds
+    it, through the same relation the forward model evaluates. The limit is the smallest
+    over the ``radio_T_e`` and ``radio_alpha_ff`` supports. It does not apply to
+    ``freefree: False``, which calibrates the non-thermal term alone.
 
     Raises
     ------
     ConfigError
-        If the support of ``radio_q_ir`` reaches the limit at the support of the
-        electron temperature.
+        If the worst corner of the declared box exceeds the limit. The message names the
+        corner (q0, log M*, z) and q*.
     """
     if not getattr(spec, "radio", False):
         return
-    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in _TOTAL_Q_MODES:
         return
     if getattr(spec, "radio_include_freefree", None) is False:
         return
-    q_hi = _upper_support(spec, "radio_q_ir")
-    t_hi = _upper_support(spec, "radio_T_e")
-    a_hi = _upper_support(spec, "radio_alpha_ff")
-    if q_hi is None or t_hi is None or a_hi is None:
-        return
-    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, radio_q_total_limit
     from tengri.config.exceptions import ConfigError
 
-    q_star = radio_q_total_limit(t_hi, a_hi)
-    if q_hi > q_star:
+    mode_def = _TOTAL_Q_MODES[mode]
+    nu_ref = mode_def["nu_ref"] if mode == "bell2003" else FIRRC_TOTAL_Q_DOMAIN[mode]["nu_ref"]
+    t_bounds = _support_bounds(spec, "radio_T_e")
+    a_bounds = _support_bounds(spec, "radio_alpha_ff")
+    if t_bounds is None or a_bounds is None:
+        return
+    q_star = min(radio_q_total_limit(t, a, nu_ref) for t in t_bounds for a in a_bounds)
+    if mode == "bell2003":
+        q_hi = _support_bounds(spec, mode_def["q0"])
+        if q_hi is None or q_hi[1] <= q_star:
+            return
+        q_worst, corner = q_hi[1], {"q0": q_hi[1], "logm": None, "z": None}
+    else:
+        q_worst, corner = _radio_q_worst_corner(spec, mode)
+        if not np.isfinite(q_worst) or q_worst <= q_star:
+            return
+    if q_worst > q_star:
+        where = (
+            f"{mode_def['q0']}={corner['q0']:g}"
+            if corner.get("logm") is None
+            else (
+                f"{mode_def['q0']}={corner['q0']:g}, log M* = {corner['logm']:.3f} "
+                f"(after the domain hold), z = {corner['z']:g}"
+            )
+        )
+        hint = (
+            f"Use radio_q_ir <= {q_star:.4f} (or a lower radio_T_e upper bound)"
+            if mode == "bell2003"
+            else "Narrow the q0, mass or redshift support to put the worst corner below q_*"
+        )
         raise ConfigError(
-            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
-            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
-            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
-            "total minus the Murphy+2011 free-free luminosity, "
-            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
-            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
-            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
-            "term alone."
+            f"radio sf={mode!r}: the worst corner of the declared support gives "
+            f"q = {q_worst:.4f} at {where}, above q_* = {q_star:.4f} at "
+            f"{nu_ref / 1e9:g} GHz (smallest over the radio_T_e and radio_alpha_ff "
+            "supports), so the total-calibrated synchrotron would be negative there. "
+            f"{hint}, or pass freefree=False to calibrate the non-thermal term alone."
+        )
+
+
+def _validate_radio_firrc_domain(spec) -> None:
+    """Warn when the realized mass or redshift support leaves a calibrated domain (not an error).
+
+    Outside its calibrated domain a total-q relation is held at the nearest edge, not
+    extrapolated (:func:`~tengri.components.radio.radio.firrc_total_q`). This warning names
+    the range the declared support reaches beyond the calibration sample, so the held value
+    is not silent.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in ("delvecchio2021", "mccheyne2022"):
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    import warnings
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN
+
+    dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+    name = {
+        "delvecchio2021": "Delvecchio+2021 (Sect. 2)",
+        "mccheyne2022": "McCheyne+2022 (Sect. 5.2)",
+    }[mode]
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    z_lo, z_hi = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    lo, hi = dom["mass"]
+    reasons = []
+    if mass_lo < lo:
+        reasons.append(f"log M* down to {mass_lo:.2f} (calibrated from {lo:g})")
+    if hi is not None and mass_hi > hi:
+        reasons.append(f"log M* up to {mass_hi:.2f} (calibrated to {hi:g})")
+    zlo, zhi = dom["z"]
+    if z_lo < zlo:
+        reasons.append(f"z down to {z_lo:g} (calibrated from {zlo:g})")
+    if z_hi > zhi:
+        reasons.append(f"z up to {z_hi:g} (calibrated to {zhi:g})")
+    if reasons:
+        warnings.warn(
+            f"radio sf={mode!r}: the declared support reaches "
+            + "; ".join(reasons)
+            + f". The {name} relation is held at the sample edge there and is not "
+            "extrapolated, so q is constant beyond that edge.",
+            UserWarning,
+            stacklevel=2,
         )
 
 
@@ -2259,11 +2624,12 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     Parameters
     ----------
     model : SEDModel
-        The model :meth:`~SEDModel.enable_fast_nebular` is configuring. Used
-        for ONE eager reference forward pass to read the true catalog
-        (``state.derived["line_waves"]``), built the same way
-        :func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`
-        builds its own reference point.
+        The model :meth:`~SEDModel.enable_fast_nebular` is configuring. Its
+        nebular backend's catalog is read through
+        ``tengri.forward.properties._published_line_wavelengths_static``,
+        the array the nebular component publishes as
+        ``state.derived["line_waves"]``, bit-for-bit (#2239), with no forward
+        pass (#2914).
     target_wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom], as given by
         the caller.
@@ -2279,29 +2645,41 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
 
     Notes
     -----
-    **JIT-compatible**: no; eager, build-time only, like the grid build it
-    feeds. The one extra reference forward pass is negligible next to the
-    ``n_grid ** n_free_axes`` evaluations :func:`precompute_nebular_grid`
-    performs immediately afterward.
+    **JIT-compatible**: no; build-time only, like the grid build it feeds. The
+    catalog is a fixed property of the backend, so no forward pass runs, and the
+    snap is the same IEEE-exact subtraction, ``abs``, ``argmin`` and ``where``
+    in numpy at JAX's canonical float dtype, so no XLA program compiles.
     """
-    from tengri.components.stellar.reference_history import reference_history_params
+    from tengri.forward.properties import _published_line_wavelengths_static
 
-    ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    # A Fixed redshift is legitimately absent from the sampled params; the accessor
-    # returns the fixed value and never a silent 0.0 (10 pc) default.
-    ref_z = model._get_redshift(ref_params)
-    ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
-    catalog_waves = model.predict_state(ref_params).derived.get("line_waves")
-    if catalog_waves is None:
-        return jnp.asarray(target_wavelengths)
+    dtype = jnp.result_type(float)
+    target = np.asarray(target_wavelengths, dtype=dtype)
+    catalog = _published_line_wavelengths_static(model, model._nebular_backend)
+    if catalog is None:
+        return jnp.asarray(target)
 
-    target_wavelengths = jnp.asarray(target_wavelengths)
-    catalog_waves = jnp.asarray(catalog_waves)
-    diffs = jnp.abs(target_wavelengths[:, None] - catalog_waves[None, :])
-    nearest_idx = jnp.argmin(diffs, axis=1)
-    nearest_val = catalog_waves[nearest_idx]
-    nearest_dist = jnp.min(diffs, axis=1)
-    return jnp.where(nearest_dist <= tol_aa, nearest_val, target_wavelengths)
+    catalog = np.asarray(catalog, dtype=dtype)
+    diffs = np.abs(target[:, None] - catalog[None, :])
+    nearest_val = catalog[np.argmin(diffs, axis=1)]
+    nearest_dist = np.min(diffs, axis=1)
+    return jnp.asarray(np.where(nearest_dist <= tol_aa, nearest_val, target))
+
+
+#: The ``(spec, ssp_data)`` pair whose #2069 ``agn_log_lbol`` probe already passed,
+#: set by :meth:`SEDModel.with_approx` for the duration of its clone's construction
+#: only (#2914). The clone shares the source's physics and differs only in how the
+#: SED is projected, so it inherits the verdict instead of compiling the forward model
+#: again. Matched by identity: any other build -- nested, or a fresh one of the same
+#: spec -- still probes.
+_AGN_LBOL_PROBE_PASSED: contextvars.ContextVar = contextvars.ContextVar(
+    "_AGN_LBOL_PROBE_PASSED", default=None
+)
+
+
+def _agn_lbol_probe_inherited(spec, ssp_data) -> bool:
+    """Whether this build is a ``with_approx`` clone of a model that passed the probe."""
+    passed = _AGN_LBOL_PROBE_PASSED.get()
+    return passed is not None and passed[0] is spec and passed[1] is ssp_data
 
 
 @functools.cache
@@ -2505,10 +2883,10 @@ class SEDModel:
            sample. Derived quantities are now computed from the SED's own age
            weights, so every value agrees to machine precision.
 
-           To change how the CSP is integrated, use the knob that does reach it:
-           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964). ``tengri.list_age_kernels()``
-           is the live menu. Unlike this argument, that one measurably moves the
-           SED, 0.19% across SDSS *ugriz* for a double-power-law history.
+           The age-weight kernel that does reach the CSP is
+           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964); since #2683 both names
+           select the same integration, so it moves no output either.
+           ``tengri.list_age_kernels()`` is the live menu.
 
     Attributes
     ----------
@@ -2607,25 +2985,25 @@ class SEDModel:
     # ``tests/regression/bug/test_band_integration_is_explicit.py``.
     _DEFAULT_APPROX: ClassVar[ApproxPolicy] = ApproxPolicy()
 
-    #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
-    #: per-pixel effective-wavelength LUT is trusted. Above this the model
-    #: falls back to the exact wave-grid path with a warning.
-    _SPECTRUM_PRECOMP_R_MAX: ClassVar[float] = 3000.0
+    def _spectrum_lut_active(self) -> bool:
+        """Whether the spectrum LUT families are in use for this model."""
+        return bool(
+            self._approx.get("spectrum_precomp")
+            and self.observation is not None
+            and self.observation.can_do_spectroscopy
+        )
 
-    @staticmethod
-    def _max_spectral_resolution(observation) -> float | None:
-        """Return the maximum spectral resolution R across the spectrum, or None.
+    def _fixed_sigma_v_kms(self) -> float | None:
+        """The Fixed stellar velocity dispersion [km/s], ``None`` when it is free.
 
-        Reads ``observation.spectroscopy.resolution`` (scalar or per-pixel
-        array). Returns ``None`` when no spectroscopy / resolution is set.
+        An undeclared ``sigma_v_kms`` is 0.0, as in :meth:`_get_sigma_v_kms`. The
+        spectrum LUT bakes a fixed value into its template table at build.
         """
-        if observation is None or not getattr(observation, "can_do_spectroscopy", False):
-            return None
-        spectroscopy = getattr(observation, "spectroscopy", None)
-        resolution = getattr(spectroscopy, "resolution", None) if spectroscopy else None
-        if resolution is None:
-            return None
-        return float(jnp.max(jnp.asarray(resolution)))
+        try:
+            dist = self.spec.get_distribution("sigma_v_kms")
+        except KeyError:
+            return 0.0
+        return float(dist.bounds[0]) if dist.is_fixed else None
 
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
@@ -2649,27 +3027,25 @@ class SEDModel:
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
         """Activate the per-pixel spectrum LUT for one ``SpectrumPrecomp`` config.
 
-        Valid for low-to-medium R, where the continuum is smooth across the pixel
-        kernel. At high R the kernel is narrower than the spectral features the
-        approximation assumes are flat, so fall back to the exact wave-grid path
-        (with a clear warning) rather than silently returning a biased spectrum.
+        The LUT applies the exact path's three stages (stellar velocity dispersion on
+        the model grid, IGM, instrument kernel on the pixels), so it holds at any
+        scalar or per-pixel resolution; a banded resolution matrix is the one case it
+        cannot carry and falls back to the exact path with a warning.
         Line-publishing nebular backends (Cue, CloudyGrid, …) are supported: their
         discrete ``line_waves``/``line_lums`` are grid-independent and survive the
         LUT path. Sets :attr:`_approx_config_spec` to the config (or ``None`` on the
-        R-fallback). Shared by the single-object and composite paths (#610).
+        resolution-matrix fallback). Shared by the single-object and composite paths (#610).
         """
-        r_max = self._max_spectral_resolution(observation)
-        if r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
+            # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
+            # model takes the exact path and says so (#2958).
             import warnings
 
             warnings.warn(
-                f"approx=SpectrumPrecomp() requested but the spectrum "
-                f"resolution R≈{r_max:g} exceeds the SpectrumPrecomp limit "
-                f"of {self._SPECTRUM_PRECOMP_R_MAX}. The per-pixel "
-                f"effective-wavelength LUT is inaccurate near spectral "
-                f"features at this resolution, so the model falls back to "
-                f"the exact wave-grid path (no speed-up). Use approx=None "
-                f"to silence this, or down-bin the spectrum.",
+                "approx=SpectrumPrecomp() requested but the spectroscopy carries a banded "
+                "resolution matrix, which the per-pixel LUT cannot apply. The model falls "
+                "back to the exact path (no speed-up). Use approx=None to silence this.",
                 stacklevel=3,
             )
             self._approx = self._approx.replace(spectrum_precomp=False)
@@ -2677,6 +3053,16 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
+            if self._fixed_sigma_v_kms() is None:
+                import warnings
+
+                warnings.warn(
+                    "approx=SpectrumPrecomp() with a free sigma_v_kms broadens the stellar "
+                    "spectrum on the full model grid every draw, which costs roughly 15 times "
+                    "the exact path per gradient step; fixing sigma_v_kms keeps the lookup "
+                    "table cheap, and approx=None is faster for a free one.",
+                    stacklevel=3,
+                )
             if self._spectrum_lut_needs_pixel_integral(observation):
                 raise ValueError(
                     f"approx=SpectrumPrecomp() samples the model at the pixel "
@@ -2688,6 +3074,46 @@ class SEDModel:
                     f"spectrum, or Spectroscopy(resample='point') to accept point "
                     f"sampling."
                 )
+
+    def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:
+        """Whether a joint observation keeps its spectrum channel on the exact path.
+
+        A joint observation promotes a photometry ``WavePrecomp`` onto the spectrum
+        LUT as well (the components publish both LUT families in one pass). The
+        promotion is skipped when the pixel integral is required
+        (:meth:`_spectrum_lut_needs_pixel_integral`, #2530) or when ``sigma_v_kms``
+        is free: the LUT would then broaden the stellar sum per draw on the full
+        model grid, which is slower than the exact path, so the spectrum channel
+        stays exact and says so once. An explicit ``SpectrumPrecomp()`` is never
+        asked here; it is resolved earlier, stays on the table and warns about the
+        cost there.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the spectrum channel must not be promoted onto the LUT.
+        """
+        if self._spectrum_lut_needs_pixel_integral(observation):
+            return True
+        if self._fixed_sigma_v_kms() is None:
+            import warnings
+
+            warnings.warn(
+                "The spectrum channel of this joint observation stays on the exact path "
+                "because sigma_v_kms is free: the lookup table would broaden the stellar "
+                "spectrum on the full model grid every draw, which is slower than the "
+                "exact path. Photometry keeps WavePrecomp. Pass "
+                "approx=(WavePrecomp(), SpectrumPrecomp()) to put the spectrum on the "
+                "lookup table anyway.",
+                stacklevel=4,
+            )
+            return True
+        return False
 
     def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
         """Whether the spectrum channel resolves to the pixel integral (#2530).
@@ -2740,8 +3166,13 @@ class SEDModel:
         # forward path now.
         del strategy
         self._agn_config = agn_config
+        # Read against the arguments as passed: ``_init_observation`` may return
+        # a new ``spec`` object, which would never match the clone's source.
+        agn_lbol_probe_inherited = _agn_lbol_probe_inherited(spec, ssp_data)
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
+        _validate_fracagn_requires_dust(spec)
+        _validate_ir_frac_window_has_fraction(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -2919,9 +3350,12 @@ class SEDModel:
         ):
             self._approx = self._approx.replace(wave_precomp=True)
             # The spectrum channel is promoted onto its LUT only when that LUT
-            # can serve it: pixels wider than the model grid stay on the exact
-            # path (#2530).
-            if not self._spectrum_lut_needs_pixel_integral(observation):
+            # can serve it: pixels wider than the model grid (#2530) or a free
+            # ``sigma_v_kms`` keep it on the exact path. An explicit
+            # ``SpectrumPrecomp()`` has already resolved above and is not asked.
+            if not self._approx.get(
+                "spectrum_precomp"
+            ) and not self._joint_spectrum_lut_promotion_blocked(observation):
                 self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
@@ -2969,7 +3403,9 @@ class SEDModel:
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
+        self._warn_young_top_metallicity(spec, ssp_data)
         self._validate_alpha_fe_identifiability(spec, ssp_data)
+        self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
         param_map_deltas.append(self._init_agb_dust_param_map(spec))
@@ -2990,6 +3426,7 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
+        self._warn_filter_coverage()
 
         # ── The polar reference's integration range (R66) ─────────
         # Runs here and not beside the ``spec``-only guards in ``build``
@@ -3043,7 +3480,6 @@ class SEDModel:
             forward_dtype=self._forward_dtype,
             met_interp=self._met_interp,
             met_mode=self._met_mode,
-            z_interp=self._z_interp,
             lgmet_scatter=self._lgmet_scatter,
             sfh_fn=self._sfh_fn,
             sfh_internal_names=self._sfh_internal_names,
@@ -3065,6 +3501,9 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
+            radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
+            radio_agn_loudness_ref=getattr(self, "_radio_agn_loudness_ref", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
             param_map=self._param_map,
@@ -3123,79 +3562,28 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
-            # These precomputes are independent and fail independently. A single
-            # try around all of them meant one failure disabled the rest, and
-            # reported itself under the first one's warning, blaming the wrong
-            # subsystem.
-            #
-            # They do share one prerequisite -- the component chain -- and it has
-            # to be built outside them. Left inside the energy-balance try, a
-            # chain failure was announced as an energy-balance failure and then
-            # surfaced three more times as an AttributeError on the cache the
-            # failed build never set, so one root cause produced four warnings
-            # naming three subsystems that had not run. An error that names a
-            # missing attribute instead of the reason it is missing sends the
-            # reader to the wrong place.
-            chain = None
-            try:
-                chain = self._cached_component_chain = self._build_component_chain()
-            except Exception as e:
-                warnings.warn(
-                    f"WavePrecomp precompute is unavailable: the component chain "
-                    f"could not be built ({e!r}). Every LUT below needs it, so all "
-                    "of them fall back to the exact per-call path (correct, but "
-                    "without the precomputed speedup).",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                self._energy_balance_lut_cache = None
-                self._dust_band_response_cache = None
-                self._xray_term_response_cache = None
-                self._radio_term_response_cache = None
+            # These precomputes are independent, but they share one prerequisite:
+            # the component chain, built first. A failing builder is a defect in
+            # the table it was asked for, not an optional absence, so it raises
+            # here. Falling back to the exact per-call path would produce correct
+            # numbers while hiding the defect (#2826 was a KeyError swallowed
+            # this way).
+            chain = self._cached_component_chain = self._build_component_chain()
+            self._energy_balance_lut(chain)
+            self._dust_emission_band_response(chain)
+            self._dust_emission_shape_table(chain)
+            # The CLOUDY band table is built here, eagerly, as the dust response
+            # above is: a build inside a jit trace would see tracers.
+            self._cloudy_band_table(chain)
+            self._shock_band_table(chain)
 
-            if chain is not None:
-                try:
-                    self._energy_balance_lut(chain)
-                except Exception as e:
-                    # The exact full-wave energy-balance path is the correct fallback,
-                    # but it forfeits the speedup the astronomer opted into, so say so.
-                    warnings.warn(
-                        f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
-                        "falling back to the exact energy-balance path (correct, "
-                        "but without the precomputed-LUT speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._energy_balance_lut_cache = None
-
-                try:
-                    self._dust_emission_band_response(chain)
-                except Exception as e:
-                    warnings.warn(
-                        f"WavePrecomp dust-emission band-response precompute failed "
-                        f"({e!r}); falling back to the exact per-call filter integral "
-                        "(correct, but without the precomputed-response speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._dust_band_response_cache = None
-
-                # Derive which emitters in the chain implement the emission_terms
-                # contract rather than hardcoding ("xray", "radio"). Any additive
-                # emitter added in future automatically inherits the band-response
-                # optimization without silent performance regression.
-                for _emitter in _chain_implements_emission_terms(chain):
-                    try:
-                        self._additive_term_band_response(chain, _emitter)
-                    except Exception as e:
-                        warnings.warn(
-                            f"WavePrecomp {_emitter} term band-response precompute failed "
-                            f"({e!r}); falling back to the exact per-call filter integral "
-                            "(correct, but without the precomputed-response speedup).",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                        setattr(self, f"_{_emitter}_term_response_cache", None)
+            # Derive which emitters in the chain implement the emission_terms
+            # contract rather than hardcoding ("xray", "radio"). Any additive
+            # emitter added in future automatically inherits the band-response
+            # optimization without silent performance regression.
+            for _emitter in _chain_implements_emission_terms(chain):
+                self._additive_term_band_response(chain, _emitter)
+                self._additive_term_shape_table(chain, _emitter)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -3211,7 +3599,8 @@ class SEDModel:
         # This check was deferred from _init_agn until after the model is fully
         # constructed and predict_photometry is available. Run it before feature
         # precomp so errors are reported at the top of the build flow.
-        if self._needs_agn_lbol_flat_check:
+        # A ``with_approx`` clone inherits its source's verdict (#2914).
+        if self._needs_agn_lbol_flat_check and not agn_lbol_probe_inherited:
             self._check_agn_lbol_flat_direction(self.spec)
 
         # The emission-line precompute, if the astronomer asked for one. Last,
@@ -3307,14 +3696,14 @@ class SEDModel:
         """
         try:
             d = self.spec.get_distribution(name)
-        except Exception:
+        except KeyError:
             return 0.0
         if d is None:
             return 0.0
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
@@ -3323,14 +3712,14 @@ class SEDModel:
         """A single representative redshift (fixed value or prior midpoint)."""
         try:
             d = self.spec.get_distribution("redshift")
-        except Exception:
+        except KeyError:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if d is None:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         lo, hi = getattr(d, "lo", None), getattr(d, "hi", None)
         if lo is not None and hi is not None:
@@ -3678,12 +4067,6 @@ class SEDModel:
         """Set up SSP grid, CSP integration, and log-age grid."""
         self._met_interp = getattr(spec, "met_interp", "linear")
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
-        # Redshift-table interpolation mode for free-z inference.
-        # "linear" → piecewise-linear (C^0 gradient, kinks at grid nodes).
-        # "smooth" → triweight kernel (C^2 gradient), recommended for NUTS/HMC
-        # when redshift is a free parameter. See `interpolate_ztable_smooth`
-        # in components/sps/precompute.py.
-        self._z_interp = getattr(spec, "z_interp", "linear")
 
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
@@ -3959,6 +4342,187 @@ class SEDModel:
                         stacklevel=3,
                     )
 
+    def _warn_young_top_metallicity(self, spec, ssp_data):
+        """Warn once per build when the metallicity weights can reach the truncated top node.
+
+        The loader holds the metallicity at the highest complete node at young ages (or,
+        with ``top_z='raw'``, does not), see
+        :mod:`tengri.components.stellar.sps.top_z_validity`. The condition depends only on
+        the declared metallicity ranges and the grid's recorded bin edge, so it is decided
+        here, once, outside any trace. Ages below the limit cannot be excluded by a prior,
+        so the metallicity alone triggers it: the warning fires exactly when the prior's
+        upper bound plus the span of the scatter kernel (3 sigma at the scatter's upper
+        bound) exceeds the lower edge of the top node's metallicity bin, the first
+        metallicity at which the node's weight is nonzero.
+        """
+        validity = getattr(ssp_data, "top_z", None)
+        if validity is None:
+            return
+        from tengri.components.stellar.sps.top_z_validity import (
+            YoungTopMetallicityWarning,
+            reach_warning_text,
+        )
+
+        distributions = getattr(spec, "_distributions", {})
+        scatter = distributions.get("met_logzsol_scatter")
+        scatter_hi = 0.0
+        if scatter is not None:
+            scatter_hi = float(scatter.value) if scatter.is_fixed else float(scatter.hi)
+        for name in self._MET_LOGZSOL_PARAM_NAMES:
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+            hi = float(dist.value) if dist.is_fixed else float(dist.hi)
+            text = reach_warning_text(validity, hi + LOG10_ZSUN, name, scatter_hi)
+            if text is not None:
+                warn_measured(
+                    text,
+                    YoungTopMetallicityWarning,
+                    max_logzsol=hi,
+                    stacklevel=3,
+                )
+                return
+
+    def filter_coverage_redshifts(self) -> tuple[float, ...]:
+        """Redshifts at which the band-coverage check is made (#2620).
+
+        The fixed redshift, or the finite ends of a free redshift prior, together
+        with the ends of ``catalog_z_range`` when one is set. Duplicates are
+        dropped and the order is preserved.
+
+        Returns
+        -------
+        tuple of float
+            Redshifts [dimensionless], possibly empty when no redshift is declared.
+        """
+        zs: list[float] = []
+        try:
+            dist = self.spec.get_distribution("redshift")
+        except (KeyError, AttributeError, TypeError, ValueError, NotImplementedError):
+            dist = None
+        if dist is not None:
+            if dist.is_fixed:
+                zs.append(float(dist.bounds[0]))
+            else:
+                zs.extend(float(b) for b in dist.bounds if np.isfinite(b))
+        if self._catalog_z_range is not None:
+            zs.extend(float(z) for z in self._catalog_z_range)
+        return tuple(dict.fromkeys(zs))
+
+    def observed_axis_range(self, z: float) -> tuple[float, float]:
+        """Span of the model's observed-frame wavelength axis at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        tuple of float
+            ``(min, max)`` of ``wavelengths * (1 + z)`` [Angstrom].
+        """
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return float(axis.min()), float(axis.max())
+
+    def filter_coverage_at(self, z: float) -> np.ndarray | None:
+        """Per-band out-of-axis fraction at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        ndarray, shape (n_filters,) or None
+            Fraction of each band's weighted transmission beyond the observed axis
+            (see :func:`~tengri.observation.photometry.filter_coverage_fraction`);
+            ``None`` when the model has no photometry.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return None
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return filter_coverage_fraction(
+            phot.filter_waves, phot.filter_trans, axis, phot.convention
+        )
+
+    def _photometry_or_none(self):
+        """The configured photometry block, or ``None`` when there is none."""
+        obs = self.observation
+        if obs is None or not getattr(obs, "can_do_photometry", False):
+            return None
+        return obs.photometry
+
+    def _warn_filter_coverage(self) -> None:
+        """Warn once per checked redshift when a band reaches past the axis (#2620).
+
+        Runs at construction over the declared redshifts only, so nothing is traced
+        and nothing raises: a model with an uncovered band is still a valid model.
+        The fitters refuse such a band unless it is masked in the data.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return
+        names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+        for z in self.filter_coverage_redshifts():
+            frac = self.filter_coverage_at(z)
+            over = np.flatnonzero(frac > FILTER_COVERAGE_TOLERANCE)
+            if over.size == 0:
+                continue
+            lo, hi = self.observed_axis_range(z)
+            described = ", ".join(f"{names[k]} ({frac[k]:.3g})" for k in over)
+            warn_measured(
+                f"Photometric band(s) {described} extend beyond the model's observed-frame "
+                f"wavelength axis [{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model SED is "
+                f"zero outside that range, so the band's flux is the covered share only, "
+                f"or zero. Fitters refuse such a band unless it is masked in the data. "
+                f"Use an SSP grid or component that reaches the band, or drop the band.",
+                FilterCoverageWarning,
+                stacklevel=3,
+                redshift=z,
+                axis_min_aa=lo,
+                axis_max_aa=hi,
+                n_bands_beyond=int(over.size),
+            )
+
+    def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
+        """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).
+
+        A star formed before the grid's oldest template is assigned to that
+        template by both age kernels (mass is conserved, colors are those of the
+        oldest template). The condition depends only on the declared redshift
+        range and the grid, so it is decided here, once, from
+        ``age_at_z(z_min) > oldest template age``; nothing runs per call and
+        nothing is traced, so it is silent under ``jax.jit``.
+        """
+        if ssp_data is None:
+            return
+        try:
+            redshift_dist = spec.get_distribution("redshift")
+            z_min = float(redshift_dist.bounds[0])
+        except (KeyError, AttributeError, TypeError, ValueError, NotImplementedError):
+            return  # no concrete redshift range declared (per-galaxy redshift column)
+        lg_ages = np.asarray(ssp_data.ssp_lg_age_gyr)
+        oldest_gyr = float(10.0 ** lg_ages[np.isfinite(lg_ages)].max())
+        age_gyr = float(age_at_z(z_min))
+        if age_gyr <= oldest_gyr:
+            return
+        warn_measured(
+            f"The SSP grid's oldest template is {oldest_gyr:.3f} Gyr but the universe is "
+            f"{age_gyr:.3f} Gyr old at redshift {z_min:g}. Stars formed in that gap are "
+            f"older than every template, so both age kernels assign them to the oldest "
+            f"one: the formed mass is conserved, and those stars carry the colors of a "
+            f"{oldest_gyr:.3f} Gyr population. Use a grid whose oldest template reaches "
+            f"{age_gyr:.3f} Gyr (e.g. MIST) to remove the approximation.",
+            SFHBeyondOldestTemplateWarning,
+            stacklevel=3,
+            oldest_template_gyr=oldest_gyr,
+            age_at_z_gyr=age_gyr,
+            z_min=z_min,
+        )
+
     def _validate_alpha_fe_identifiability(self, spec, ssp_data):
         """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
 
@@ -4101,6 +4665,8 @@ class SEDModel:
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
         self._dust_ir_diffuse_screen = bool(getattr(spec, "dust_ir_diffuse_screen", False))
+        # Opt-in CMB heating / contrast of a tabulated IR model (#2766).
+        self._dust_ir_cmb = bool(getattr(spec, "dust_ir_cmb", False))
 
         # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
         # attenuation law; 'off' means no dust at all). Both store placeholder
@@ -4229,6 +4795,7 @@ class SEDModel:
                 spec.cue_weights_path,
                 ssp_data=ssp_data,
                 nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+                lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
             )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
@@ -4376,6 +4943,7 @@ class SEDModel:
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_norm = getattr(spec, "agn_norm", "cigale_joint")
         self._agn_polar_law = getattr(spec, "agn_polar_law", "smc")
+        self._agn_ir_frac_window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
         self._agn_luminosity_mode = False
 
         delta = {}
@@ -4436,11 +5004,13 @@ class SEDModel:
                 # Calling _load_skirtor_fn() lazily inside jit.trace causes a
                 # tracer leak because create_skirtor_from_grid allocates jnp.array
                 # objects that get captured as DynamicJaxprTracers.
+                # Only a missing grid file is skipped here: the lazy load that
+                # follows reports it at the point of use.
                 try:
                     from tengri.components.agn.unified import _load_skirtor_fn
 
                     _load_skirtor_fn()
-                except Exception:
+                except FileNotFoundError:
                     pass
 
             # Pre-warm the Synthesizer CLOUDY line-region grid singletons for
@@ -4587,6 +5157,11 @@ class SEDModel:
         # forward cannot be evaluated at build, raise -- do not fall back".
         from tengri.forward.result import SEDResult
 
+        # Eager on purpose (#2914): with the probe parameters traced under
+        # ``jax.jit``, build-time paths that need concrete values (the stellar
+        # ``_cic_parcels`` boundary split, #2760's below-library index) fail.
+        # The cost is bounded instead by ``with_approx`` clones inheriting the
+        # verdict (``_AGN_LBOL_PROBE_PASSED``).
         state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
         state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
         sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
@@ -4669,6 +5244,9 @@ class SEDModel:
         -----
         **JIT-compatible**: not applicable -- construction-time only.
         """
+        _check_ir_frac_window_grid(
+            self._rest_wavelength, getattr(self, "_agn_ir_frac_window", (0.0, 0.0))
+        )
         _check_polar_reference_grid_extent(
             self._rest_wavelength,
             attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
@@ -4693,9 +5271,13 @@ class SEDModel:
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
+            self._radio_ir_window = getattr(spec, "radio_ir_window", None)
+            self._radio_sf_nu_ref = getattr(spec, "radio_sf_nu_ref", None)
+            self._radio_agn_loudness_ref = getattr(spec, "radio_agn_loudness_ref", "4400")
 
         self._uses_xray = getattr(spec, "xray", False)
         self._xray_model = getattr(spec, "xray_model", "yang20")
+        self._xray_alpha_ox_mode = getattr(spec, "xray_alpha_ox_mode", "delta")
 
         # ── Master rest-wavelength grid (issue #463) ─────────────────
         #
@@ -4716,6 +5298,7 @@ class SEDModel:
             RADIO_WAVE_MAX,
             RADIO_WING_PTS_PER_DECADE,
             RADIO_WING_START,
+            SSP_EDGE_STEP_REL,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -4726,6 +5309,7 @@ class SEDModel:
             agn_model=getattr(self, "_agn_model", None),
             agn_torus_block=getattr(self, "_agn_torus_block", None),
             agn_disc_block=getattr(self, "_agn_disc_block", None),
+            agn_feii_block=getattr(self, "_agn_feii_block", None),
         )
 
         # Analytic radio/X-ray wings: only used when those components are
@@ -4764,6 +5348,17 @@ class SEDModel:
                         endpoint=True,
                     )[1:]
                 )
+
+        # The stellar SED is zero beyond the SSP grid. Where the master grid runs past
+        # that edge, a node just above it carries the zero, so linear interpolation
+        # cannot ramp the edge node's flux down across the whole next cell (#2578).
+        master_max = max(
+            [ssp_max]
+            + [float(np.max(g)) for g in component_grids if np.size(g)]
+            + [float(np.max(w)) for w in extra_wings if np.size(w)]
+        )
+        if master_max > ssp_max:
+            extra_wings.append(np.array([ssp_max * (1.0 + SSP_EDGE_STEP_REL)]))
 
         if component_grids or extra_wings:
             self._rest_wavelength = make_union_grid(
@@ -5057,7 +5652,13 @@ class SEDModel:
                 )
             else:
                 redshift_dist = spec.get_distribution("redshift")
-                z_for_check = float(redshift_dist.bounds[0]) if redshift_dist.is_fixed else None
+                # A runtime z (free, or Fixed placeholder in catalog mode) has no value
+                # to check the LSF against, so the warning is skipped, not guessed (#2847).
+                z_for_check = (
+                    None
+                    if redshift_is_runtime(redshift_dist, self._catalog_z_range)
+                    else float(redshift_dist.bounds[0])
+                )
                 # #2526: lsf_scale multiplies sigma_inst, so the deficit
                 # (sigma_inst < sigma_lib) is worst at lsf_scale's LOWER
                 # bound. get_distribution("lsf_scale").bounds[0] is that
@@ -5368,11 +5969,14 @@ class SEDModel:
             Complete parameter dict with all fixed values merged in.
         """
         from tengri.parameters.resolve import merge_fixed_params
+        from tengri.parameters.timing import route_timing_fracs
 
         merged = merge_fixed_params(self.spec, params)
         if fixed_values is not None:
             merged = {**merged, **fixed_values}
-        return merged
+        # A sampled ``*_frac`` timing replaces its Gyr twin; an unsampled one
+        # is dropped so the Gyr value stands (#2748).
+        return route_timing_fracs(merged, params)
 
     def _get_redshift(self, params, fixed_values=None):
         """Get redshift value from params or evaluation parameters.
@@ -5445,9 +6049,12 @@ class SEDModel:
         Returns a *traceable* value when ``sigma_v_kms`` is in the
         params dict (typical for spec fits with sigma_v as a free
         param) or the JAX/Python scalar from the spec's fixed
-        distribution otherwise. Falls back to 0.0 when the parameter
-        is absent. ``apply_lsf`` clamps via ``jnp.maximum`` so traced
-        values flow through without breaking JIT.
+        distribution otherwise. Returns 0.0 only when the parameter is
+        not declared at all. A declared free parameter missing from
+        ``params`` raises ``ValueError``: 0.0 is the no-broadening
+        answer, and a free sigma_v must never silently take it (#2847).
+        ``apply_lsf`` clamps via ``jnp.maximum`` so traced values flow
+        through without breaking JIT.
         """
         if "sigma_v_kms" in params:
             return params["sigma_v_kms"]
@@ -5457,7 +6064,7 @@ class SEDModel:
             return 0.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 0.0
+        raise ValueError(_free_lsf_param_missing("sigma_v_kms"))
 
     def _get_lsf_scale(self, params):
         """Get the instrument-LSF scale ``lsf_scale`` from params (#2526).
@@ -5475,7 +6082,7 @@ class SEDModel:
             return 1.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 1.0
+        raise ValueError(_free_lsf_param_missing("lsf_scale"))
 
     def _observation_predict_kwargs(self, params):
         """LSF/kinematics kwargs for ``Observation.predict``'s spectroscopy path.
@@ -5556,6 +6163,38 @@ class SEDModel:
         return max(0.0, float(lo)) if lo is not None else 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
+
+    def _publish_history(self, sfr, params, state=None, resample=None):
+        """Publish ``sfr`` as ``(t, sfr)`` bounded to ``[0, age(z)]`` with the formed mass (#2640).
+
+        Applies the component's own :func:`bounded_rescaled_history` after the
+        SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
+        the same history the stellar component does (no second normalization).
+        With ``resample`` (a callable ``(values, age_at_z_gyr) -> (t_gyr,
+        values_out)``) the rescaled history is resampled onto the output grid,
+        which ends at ``age(z)``; returns ``(t_gyr, values_out)``.
+        """
+        from tengri.components.stellar.component import (
+            bounded_rescaled_history,
+            history_rescale_factor,
+        )
+
+        if state is None:
+            state = self.predict_state(params)
+        t_obs_gyr = age_at_z(self._get_redshift(params))
+        if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
+            # The registry callable of a runtime table is a zero placeholder;
+            # the history lives in the component state.
+            t_pub = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+            sfr_pub = jnp.asarray(state.derived["sfr_history"])
+            if resample is None:
+                return t_pub, sfr_pub
+            return resample(sfr_pub, t_obs_gyr)
+        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+        if resample is None:
+            return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+        factor = history_rescale_factor(sfr, self.age_yr, t_obs_gyr, formed)
+        return resample(sfr * factor, t_obs_gyr)
 
     def _sfh_call_kwargs(self, p, redshift=None):
         """Keyword arguments for one call of the composed SFH function.
@@ -5789,17 +6428,23 @@ class SEDModel:
         """
         if approx is None and observation is None and not self._has_modern_approx():
             return self
-        return SEDModel(
-            self.spec,
-            self.ssp_data,
-            observation=self.observation if observation is None else observation,
-            forward_dtype=str(self._forward_dtype),
-            csp_integration=str(self._csp_integration),
-            wave_chunk_size=self._wave_chunk_size,
-            agn_config=self._agn_config,
-            compile=str(self._compile_mode),
-            approx=approx,
-        )
+        # This model exists, so it passed (or never needed) the #2069 probe; the
+        # clone's physics is the same, so it inherits the verdict (#2914).
+        token = _AGN_LBOL_PROBE_PASSED.set((self.spec, self.ssp_data))
+        try:
+            return SEDModel(
+                self.spec,
+                self.ssp_data,
+                observation=self.observation if observation is None else observation,
+                forward_dtype=str(self._forward_dtype),
+                csp_integration=str(self._csp_integration),
+                wave_chunk_size=self._wave_chunk_size,
+                agn_config=self._agn_config,
+                compile=str(self._compile_mode),
+                approx=approx,
+            )
+        finally:
+            _AGN_LBOL_PROBE_PASSED.reset(token)
 
     def with_fixed_redshift(self, redshift):
         """Return a copy of this model built at a different Fixed redshift.
@@ -5956,18 +6601,24 @@ class SEDModel:
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
+        _state = self.predict_state(params)
 
         if grid == "native":
             return {
-                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
-                "sfr_mean": sfr_mean,
-                "sfr_full": sfr_full,
+                "t_gyr": self._publish_history(sfr_mean, params, _state)[0] / 1e9,
+                "sfr_mean": self._publish_history(sfr_mean, params, _state)[1],
+                "sfr_full": self._publish_history(sfr_full, params, _state)[1],
             }
 
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
+        def _resample(values, age_gyr):
+            return interpolate_to_linear_time(
+                self.log_age_grid, values, n_linear, age_at_z_gyr=age_gyr
+            )
+
+        t_gyr_mean, sfr_mean_lin = self._publish_history(
+            sfr_mean, params, _state, resample=_resample
         )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+        _, sfr_full_lin = self._publish_history(sfr_full, params, _state, resample=_resample)
 
         return {
             "t_gyr": t_gyr_mean,
@@ -6352,6 +7003,7 @@ class SEDModel:
         # missing free parameter raises a helpful error here instead of a bare
         # KeyError deferred to the first accessor of the lazy Prediction. Both
         # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
@@ -6785,9 +7437,6 @@ class SEDModel:
         two places, cannot disagree.
         """
         del wave_chunk_size  # see Parameters note
-        from tengri.cosmology import luminosity_distance
-        from tengri.observation.observation import project_spectrum_kernel_split
-        from tengri.observation.spectrum import resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
@@ -6797,11 +7446,75 @@ class SEDModel:
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
         refuse_fixed_overrides(self.spec, params)
-        state = self.predict_state(params)
-        z = self._get_redshift(params)
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        wave_rest = state.wave
-        igm_trans = state.derived.get("igm_transmission", None)
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool that selects the compiled
+        # kernel, not a branch on the sampled redshift.
+        conserving = (
+            bool(spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref()))
+            if spectroscopy is not None
+            else False
+        )
+        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        args = (
+            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
+            if traced_grid
+            else (params, self.spec.get_fixed_values())
+        )
+        return kernel(*args, *self._resolve_threaded_data(None, None, None))
+
+    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving, wave_obs):
+        """Return (and cache) the JIT'd observed-frame spectrum projector for ``wave_obs``.
+
+        Mirrors :meth:`_get_or_build_predict_observables_jit`: the compiled function
+        is stored in the structural kernel cache keyed on :meth:`compile_signature`,
+        with the static resample flag and the content of ``wave_obs`` appended to the
+        key. The SSP grid, template and z-table arrays enter as runtime arguments,
+        so they are not baked into the HLO. A concrete ``wave_obs`` is a compile-time
+        constant of the kernel: the LSF selection (``_is_log_uniform``) must see the
+        real grid, since a traced grid is assumed log-uniform and would take the
+        constant-R FFT path on a linear grid.
+
+        Parameters
+        ----------
+        conserving : bool
+            Static flux-conserving resample flag, from
+            :meth:`~tengri.observation.spectroscopy.Spectroscopy.resolve_conserving`.
+        wave_obs : array-like
+            Observed-frame grid, shape (n_pix,). If it is a tracer (the caller is
+            jitting over the grid) the kernel takes it as a runtime argument.
+
+        Returns
+        -------
+        callable
+            ``fn(params, fixed_values, ssp_data, template_data, ztable_data)`` for a
+            concrete grid, or ``fn(params, fixed_values, wave_obs, ssp_data,
+            template_data, ztable_data)`` for a traced one; returns ndarray,
+            shape (n_pix,).
+
+        Notes
+        -----
+        **JIT-compatible**: the returned function is ``jax.jit``-wrapped and
+        differentiable in ``params``.
+        """
+        from tengri._cache_keys import stable_digest
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        if traced_grid:
+            w_np = None
+            key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        else:
+            w_np = np.asarray(wave_obs, dtype=np.float64)
+            digest = stable_digest(w_np.tobytes())
+            key = ("predict_spectrum_on_grid_jit", bool(conserving), w_np.shape, digest)
+        fn = cache.get(key)
+        if fn is not None:
+            return fn
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6812,42 +7525,72 @@ class SEDModel:
         sigma_lib_flat = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
-        # Per-wavelength SSP library LSF curve (#2518), same source
-        # (self.ssp_data) and same structural (pre-trace) None-check as
-        # _init_instrument / _get_or_build_predict_observables_jit.
-        sigma_lib_curve = self._sigma_lib_curve_for(self.ssp_data)
-        sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
-        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
-        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
-        # Static (pre-trace) resolution of the resample mode (#1166): the model
-        # grid is fixed, so this is a Python bool baked into the trace, not a
-        # branch on the sampled redshift.
-        conserving = (
-            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
-            if spectroscopy is not None
-            else False
-        )
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_scale_getter = self._get_lsf_scale
 
-        return project_spectrum_kernel_split(
-            state,
-            state.sed_intrinsic,
-            igm_trans,
-            wave_rest,
-            wave_obs,
-            z,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=self._get_sigma_v_kms(params),
-            lsf_scale=self._get_lsf_scale(params),
-            cal_coeffs=cal_coeffs,
-            cal_wave_range=cal_wave_range,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
+        # Warm the component-chain cache OUTSIDE the JIT trace (see
+        # _get_or_build_predict_observables_jit): precompute() runs numpy-level
+        # routines that cannot be traced.
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+
+        def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
+            from tengri.cosmology import luminosity_distance
+            from tengri.observation.observation import project_spectrum_kernel_split
+            from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+            # Merged view, as in predict_observables_jit: a Fixed value enters
+            # through the runtime fixed_values input, never a closure constant.
+            full = {**fixed_values, **params}
+            state = self.predict_state(
+                params,
+                fixed_values=fixed_values,
+                ssp_data=ssp_data,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+            z = self._get_redshift(full)
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+            wave_rest = state.wave
+            igm_trans = state.derived.get("igm_transmission", None)
+            sigma_lib_curve = self._sigma_lib_curve_for(ssp_data)
+            sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
+            cal_coeffs = (
+                spectroscopy.calibration_coeffs(full) if spectroscopy is not None else None
+            )
+            return project_spectrum_kernel_split(
+                state,
+                state.sed_intrinsic,
+                igm_trans,
+                wave_rest,
+                wave_obs,
+                z,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_getter(full),
+                lsf_scale=lsf_scale_getter(full),
+                cal_coeffs=cal_coeffs,
+                cal_wave_range=cal_wave_range,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+
+        if traced_grid:
+            jit_fn = jax.jit(_impl)
+        else:
+            w_const = jnp.asarray(w_np)
+
+            def _impl_const(params, fixed_values, ssp_data, template_data, ztable_data):
+                return _impl(params, fixed_values, w_const, ssp_data, template_data, ztable_data)
+
+            jit_fn = jax.jit(_impl_const)
+        cache[key] = jit_fn
+        return jit_fn
 
     def predict_magnitudes(self, params):
         """Deprecated. Use ``model.predict(params).magnitudes()``.
@@ -9049,6 +9792,7 @@ class SEDModel:
         # values someone happened to test; the rest kept the divergent path. Now
         # there is no path to diverge.
         state_orch = self.predict_state(params)
+        _, sfr = self._publish_history(sfr, params, state_orch)
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -9170,7 +9914,8 @@ class SEDModel:
               (intrinsic SED). NaN if unavailable.
             - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``rest_uv_color`` : float. U-V AB color: top-hats 3200–3900 Å
+              minus 5000–5800 Å on rest-frame L_nu.
             - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
             - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
@@ -9863,6 +10608,7 @@ class SEDModel:
         # ``predict_observables_jit`` already guards at line ~4242
         # (#314). Skip in JIT-runtime threading mode where the JIT
         # entry point has already validated the caller's dict.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         if fixed_values is None:
             check_unknown_params(params, self._param_map)
             # ...and the converse: a free param with no value would survive
@@ -9946,8 +10692,19 @@ class SEDModel:
             # ``catalog_z_range`` -- #1329). Neither half ever passed through a
             # raw user dict, so there is nothing here for
             # ``refuse_fixed_overrides`` to have caught or to re-check.
-            full_params = {**fixed_values, **params}
+            from tengri.parameters.timing import route_timing_fracs
 
+            full_params = route_timing_fracs({**fixed_values, **params}, params)
+
+        if self._spectrum_lut_active():
+            # The stellar component broadens its spectrum family on the model grid with
+            # this draw's velocity dispersion; it cannot read the observation-level
+            # parameter through its prefix-sliced params, so the model seeds it.
+            state0 = state0.with_(
+                derived=state0.derived.with_(
+                    spec_sigma_v_kms=jnp.asarray(self._get_sigma_v_kms(full_params))
+                )
+            )
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
         # closure-captured copies (self.ssp_data / internal templates / z-tables).
@@ -10082,6 +10839,9 @@ class SEDModel:
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
+        # A params dict naming a deprecated Gyr timing is converted to its
+        # fraction first, so the checks below see the key the spec frees (#2748).
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         # Validate param keys before entering JIT, silent drops of unknown
         # override keys produce plausible-looking but wrong physics (issue #314).
         check_unknown_params(params, self._param_map)
@@ -10120,6 +10880,9 @@ class SEDModel:
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
         resample_z_ref = self._resample_z_ref()
+        # Concrete redshift for the rest-grid window (#2832): the fixed value only.
+        # A free or catalog redshift has no single value, so it stays None.
+        window_z = None if self.z_fixed is None else float(self.z_fixed)
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -10170,13 +10933,30 @@ class SEDModel:
             # projected inside the fused kernel. Each projector sums its own
             # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
             # dicts and build the per-model Observables once so phot_fnu and
-            # spec_fnu coexist. (Velocity dispersion / LSF are not applied on the
-            # per-pixel continuum LUT; that is SpectrumPrecomp's documented
-            # low-to-medium-R domain.)
+            # spec_fnu coexist. The stellar family carries the velocity dispersion
+            # (model grid, in the stellar component); the instrument stage runs on the
+            # pixels in ``predict_spectrum_via_precomp`` (#2958).
             if spec_lut:
+                from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+                # The instrument stage runs on the pixel grid with the exact path's
+                # library resolution (#2958), so it resolves the same inputs.
+                spectroscopy = observation.spectroscopy
+                lut_sigma_lib_kms = resolve_sigma_lib_kms(
+                    spectroscopy.wave_obs,
+                    self._get_redshift(full),
+                    getattr(spectroscopy, "sigma_lib_kms", 0.0),
+                    self._sigma_lib_curve_for(ssp_data),
+                )
                 out: dict = {}
                 out.update(
-                    observation.predict_spectrum_via_precomp(state, full, observables_type=None)
+                    observation.predict_spectrum_via_precomp(
+                        state,
+                        full,
+                        observables_type=None,
+                        sigma_lib_kms=lut_sigma_lib_kms,
+                        lsf_scale=self._get_lsf_scale(full),
+                    )
                 )
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
@@ -10207,6 +10987,7 @@ class SEDModel:
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
+                    window_z=window_z,
                     observables_type=observables_type,
                 )
             if use_lut:
@@ -10222,6 +11003,19 @@ class SEDModel:
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
         return jit_fn
+
+    def threaded_template_inputs(self):
+        """Return ``(ssp_data, template_data, ztable_data)`` for a traced per-galaxy forward.
+
+        Builds and caches the component chain first, so the call is made outside
+        any JAX trace: a caller that threads these grids into its own ``jit`` or
+        ``vmap`` must not build the chain inside the trace. Used by the batched
+        spectroscopic stack (#2845) through :class:`ForwardModel`, which delegates
+        this method to its inner SED.
+        """
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+        return self._resolve_threaded_data(None, None, None)
 
     def _resolve_threaded_data(self, ssp_data, template_data, ztable_data=None):
         """Resolve the JIT-threading channel: caller's arrays, else this model's own.
@@ -10365,7 +11159,7 @@ class SEDModel:
                     from tengri.components.agn.skirtor import _load_skirtor_default_grid
 
                     skirtor = _load_skirtor_default_grid()
-                except Exception:
+                except FileNotFoundError:
                     skirtor = None
             if skirtor is not None:
                 agn_templates["skirtor"] = skirtor
@@ -10398,6 +11192,22 @@ class SEDModel:
         band_response = self._dust_emission_band_response(cached)
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
+
+        shape_table = self._dust_emission_shape_table(cached)
+        if shape_table is not None:
+            result.setdefault("dust_ir", {})["emission_shape_table"] = shape_table
+        # ── CLOUDY age-resolved band table (WavePrecomp, #2324) ──
+        # A sibling of ``nebular_grid``, not a slot of ``nebular``: the backend's
+        # grid lives under ``nebular`` and :meth:`NebularSEDComponent.apply` peels
+        # that slot, so the table is read from its own key.
+        cloudy_band = self._cloudy_band_table(cached)
+        if cloudy_band is not None:
+            result["nebular_band_table"] = cloudy_band
+
+        # ── Composable shock line-band coefficients (WavePrecomp, #2324) ──
+        shock_band = self._shock_band_table(cached)
+        if shock_band is not None:
+            result["shock_band_table"] = shock_band
 
         # ── Component template libraries, keyed [namespace][component name] ──
         #
@@ -10456,10 +11266,13 @@ class SEDModel:
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's
         # one-term SED admits. Same exactness, same build-time integral.
-        for emitter in ("xray", "radio"):
+        for emitter in _chain_implements_emission_terms(cached):
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
+            term_shape = self._additive_term_shape_table(cached, emitter)
+            if term_shape is not None:
+                result.setdefault(emitter, {})["term_shape_table"] = term_shape
 
         return result if result else None
 
@@ -11020,7 +11833,12 @@ class SEDModel:
             pad = 0.01 * (z_hi - z_lo)
         z_min = cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)
         z_max = cfg.z_max if cfg.z_max is not None else z_hi + pad
-        return ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        nodes = ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        if bounds is not None and len(bounds) >= 2 and self._catalog_z_range is None:
+            from tengri.components._z_response import warn_if_z_table_narrower_than_prior
+
+            warn_if_z_table_narrower_than_prior(nodes, (float(bounds[0]), float(bounds[1])))
+        return nodes
 
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
@@ -11033,7 +11851,8 @@ class SEDModel:
         the redshift the model is evaluated at (the filters sit at
         ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
         redshift range, uniform in ``ln(1+z)``, and returned as
-        ``{"ln1pz": (n_z,), "values": (n_z, n_filter)}`` so
+        ``{"ln1pz": (n_z,), "values": (n_z, n_filter), "rest_values": (n_filter,)}``
+        (``rest_values`` is the same probe at z = 0, #2559) so
         :meth:`DustSEDComponent.apply` replaces the per-call dense filter
         integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
         evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
@@ -11089,6 +11908,12 @@ class SEDModel:
                 nodes = single_node(fixed["redshift"], wave.dtype)
             zeros = jnp.zeros_like(wave)
 
+            # An emitter may read its budget through the log form ``log_L_ir`` (the
+            # float32-safe one). When it declares that input, the probe passes it
+            # alongside ``L_ir``; otherwise the probe would see the -inf default and
+            # return an all-zero SED (#2553).
+            accepts_log_l_ir = "log_L_ir" in _declared_input_names(emitter)
+
             def _template_at(z, luminosity):
                 # Slice with the component's OWN rule, the same one apply() uses. A
                 # precompute that slices differently silently builds R from default
@@ -11096,7 +11921,10 @@ class SEDModel:
                 # The redshift rides in ``p`` because a template may read it
                 # (the CMB temperature floor); it is the NODE redshift here.
                 p = emitter.slice_params({**fixed, "redshift": z})
-                sed, _ = emitter.predict(p, zeros, wave, L_ir=luminosity)
+                budget = {"L_ir": luminosity}
+                if accepts_log_l_ir:
+                    budget["log_L_ir"] = jnp.log10(luminosity)
+                sed, _ = emitter.predict(p, zeros, wave, **budget)
                 return sed
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
@@ -11111,13 +11939,36 @@ class SEDModel:
             # shapes (L-T relations) are common in IR SED models, so verify the
             # property rather than maintaining a list of which models have it:
             # probe at two luminosities and require the SED to scale.
-            def _homogeneous_at(z):
+            def _probe_is_live(sed):
+                return jnp.all(jnp.isfinite(sed)) & jnp.any(sed != 0.0)
+
+            def _probe_at(z):
+                """Return ``(live, ok)`` for the two probes at redshift ``z``.
+
+                ``live``: both probe SEDs are finite and not identically zero. A zero
+                SED satisfies ``allclose(0, k * 0)`` vacuously, so it must be caught
+                here, not by the homogeneity test. ``ok``: live, and the SED scales
+                linearly between the two luminosities.
+                """
                 lo = _template_at(z, 1.0)
                 hi = _template_at(z, _L_IR_PROBE)
-                return jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
+                live = _probe_is_live(lo) & _probe_is_live(hi)
+                return live, live & jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
 
+            zero_probe_reason = (
+                "the probe SED is identically zero or contains non-finite values; "
+                "the emitter did not reach its emission budget (e.g., a required "
+                "log-luminosity input was not provided)"
+            )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            if not bool(_homogeneous_at(z_first)):
+            live_first, ok_first = _probe_at(z_first)
+            if not bool(live_first):
+                # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
+                # was never activated, so decline and let the exact integral run.
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
+            if not bool(ok_first):
                 # Record WHY, or the refusal is invisible. Every gate a caller
                 # can re-check from outside is satisfied here, so
                 # precompute_engagement_report reported "unknown reason (gate
@@ -11144,14 +11995,42 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # The radio block normalizes on the luminosity inside an IR window
+            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
+            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
+            # an O(1) constant of the fixed shape, tabulated here in log space. The
+            # radio block then reads a scalar, as it reads ``L_ir``, instead of
+            # integrating the dust SED on the full grid on every call. A window the
+            # rest grid does not span is left out, so the radio block's own check
+            # raises at evaluation.
+            from tengri.components.radio.component import IR_WINDOWS_AA
+            from tengri.utils.sed_quantities import log10_band_luminosity
+
+            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
+            windows = {
+                name: edges
+                for name, edges in IR_WINDOWS_AA.items()
+                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
+            }
+
             def _node(z):
                 unit = _template_at(z, 1.0)
+                live, ok = _probe_at(z)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
-                    "ok": _homogeneous_at(z),
+                    "live": live,
+                    "ok": ok,
+                    "log_window_fraction": {
+                        name: log10_band_luminosity(unit, wave, lo, hi)
+                        for name, (lo, hi) in windows.items()
+                    },
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
+            if not bool(jnp.all(built["values"]["live"])):
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
             if not bool(jnp.all(built["values"]["ok"])):
                 self._dust_band_response_decline = (
                     "dust emission template is not homogeneous in L_ir at every "
@@ -11160,11 +12039,216 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
-            response = {"ln1pz": built["ln1pz"], "values": built["values"]["R"]}
+            # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
+            # probe is integrated through the filters at z = 0 (#2559). The homogeneity
+            # check above already covers the template, so it is not repeated here.
+            rest_values = lnu_filter_integral_batch(
+                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
+            )
+            response = {
+                "ln1pz": built["ln1pz"],
+                "values": built["values"]["R"],
+                "rest_values": rest_values,
+                "log_window_fraction": built["values"]["log_window_fraction"],
+            }
 
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
         return response
+
+    def _dust_emission_shape_table(self, chain):
+        """Registry-adapter band fluxes of the dust emission over its free shape axes.
+
+        :meth:`_dust_emission_band_response` is exact but needs every shape parameter fixed.
+        With ``dust_T``, ``dust_beta_ir``, ``dust_alpha_mir`` or ``dust_lambda_0_um`` free
+        the band flux depends on them, and the component would integrate the filters on every
+        call. The registry adapter for the emitter's ``precompute_key`` tabulates the band
+        fluxes over those axes at build, spanning the priors, and the component reads the table
+        at the current shape parameters (``EmissionComponent._shape_table_phot``).
+
+        The adapter is built at one redshift, so the table is built only for a single ``Fixed``
+        redshift. Returns the adapter's ``table_arrays`` dict (its band array and ``"axes"``)
+        with a ``"rest"`` entry holding the same arrays for the adapter at z = 0, the rest band
+        the photometry publishes beside the observed one (#2559), so a free-shape predict
+        integrates no filter. Arrays only, so it threads through ``jit``; ``None`` with the
+        reason in ``_dust_shape_table_decline`` otherwise.
+        """
+        cached = getattr(self, "_dust_shape_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        reason = None
+        emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
+        key = getattr(emitter, "precompute_key", None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        free_dust = {p for p in self.spec.free_params if p.startswith("dust_")}
+
+        if emitter is None or key is None or not self._approx.get("wave_precomp"):
+            reason = "no registry adapter for this dust emission model"
+        elif getattr(st, "phot_fw_padded", None) is None:
+            reason = "no padded filter curves"
+        elif getattr(emitter, "fast_emission", False) or self._dust_ir_diffuse_screen:
+            reason = "fast_emission or diffuse_screen is set"
+        elif not (free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK):
+            reason = "the emission shape is fixed; the exact band response applies"
+        elif self._response_z_nodes() is not None:
+            reason = "the registry adapter is built at one redshift and the redshift is not Fixed"
+        else:
+            from tengri.forward.precompute import registry
+
+            module = registry.resolve(key)
+            axes = set(module.AXIS_PARAMS[key])
+            amplitude = set(getattr(emitter, "lookup_amplitude_params", ()))
+            unknown = free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK - axes - amplitude
+            if unknown:
+                reason = f"free parameters {sorted(unknown)} are not axes of the {key} table"
+            else:
+                redshift = float(self.spec.get_fixed_values()["redshift"])
+                filter_args = (
+                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
+                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
+                )
+                preint = module.precompute(*filter_args, redshift, self.spec, model=key)
+                rest_preint = module.precompute(*filter_args, 0.0, self.spec, model=key)
+                table = {
+                    **module.table_arrays(preint, key),
+                    "rest": module.table_arrays(rest_preint, key),
+                }
+
+        self._dust_shape_table_decline = reason
+        self._dust_shape_table_cache = table
+        return table
+
+    #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
+    #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
+    _CLOUDY_TABLE_FREE_OK = frozenset(
+        {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
+    )
+
+    def _cloudy_band_refusal(self, nebular) -> str | None:
+        """Why the CLOUDY band table must not engage, or None when it may.
+
+        The gate of #2324: every condition under which the table would differ
+        from the per-call path, or would not be built from the same inputs.
+        """
+        from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if (
+            nebular is None
+            or nebular.config.backend != "cloudy_grid"
+            or not isinstance(nebular.backend, CloudyGridBackend)
+        ):
+            return "the nebular backend is not the CLOUDY grid"
+        # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
+        # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
+        # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
+        if nebular.backend._grid_interp not in ("pchip", "linear"):
+            return (
+                f"the CLOUDY backend interpolates with grid_interp="
+                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
+                f"and 'linear'"
+            )
+        if _dig_may_be_active(self.spec):
+            return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band table is built at one redshift)"
+        if "neb_eline_sigma_kms" not in self.spec.fixed_params:
+            return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
+        bad = sorted(
+            p
+            for p in self.spec.free_params
+            if p.startswith(("neb_", "gas_", "ionspec_")) and p not in self._CLOUDY_TABLE_FREE_OK
+        )
+        if bad:
+            return f"free nebular parameters outside the table's axes: {bad}"
+        state = nebular._state
+        if state is None or state.filter_waves is None:
+            return "the nebular filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _cloudy_band_table(self, chain):
+        """Build-time CLOUDY band table through the precompute registry, memoized.
+
+        Records why it declined in ``_cloudy_band_table_decline``. Returns None
+        when the table does not engage.
+        """
+        cached = getattr(self, "_cloudy_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.forward.precompute.registry import resolve
+
+        nebular = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+        table = None
+        reason = self._cloudy_band_refusal(nebular)
+        if reason is None:
+            table = resolve("cloudy").precompute(
+                nebular._state.filter_waves,
+                nebular._state.filter_trans,
+                float(self.spec.fixed_value("redshift")),
+                parameters=self.spec,
+                backend=nebular.backend,
+                wave=self._rest_wavelength,
+                line_sigma_kms=float(self.spec.fixed_value("neb_eline_sigma_kms")),
+            )
+            if table is None:
+                reason = (
+                    "the table's (Z_gas, logU) axes do not contain the spec's priors "
+                    "for neb_logZ_gas and neb_logU"
+                )
+        self._cloudy_band_table_decline = reason
+        self._cloudy_band_table_cache = table
+        return table
+
+    def _shock_band_refusal(self, shock, stellar) -> str | None:
+        """Why the shock line-band coefficients must not engage, or None (#2324)."""
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if shock is None:
+            return "no composable shock component"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band coefficients are built at one redshift)"
+        st = getattr(stellar, "_state", None)
+        if st is None or getattr(st, "phot_fw_padded", None) is None:
+            return "the photometry filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _shock_band_table(self, chain):
+        """Build-time shock line-band coefficients through the registry, memoized.
+
+        Records why it declined in ``_shock_band_table_decline``. Returns None when
+        it does not engage.
+        """
+        cached = getattr(self, "_shock_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.shock_model import ShockNebular
+        from tengri.forward.precompute.registry import resolve
+
+        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        coeff = None
+        reason = self._shock_band_refusal(shock, stellar)
+        if reason is None:
+            st = stellar._state
+            coeff = resolve("mappings_shock").shock_band_coefficients(
+                st.phot_fw_padded,
+                st.phot_ft_padded,
+                float(self.spec.fixed_value("redshift")),
+                self._rest_wavelength,
+            )
+            if coeff is None:
+                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
+        self._shock_band_table_decline = reason
+        self._shock_band_table_cache = coeff
+        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
@@ -11268,10 +12352,15 @@ class SEDModel:
         ft_pad = getattr(st, "phot_ft_padded", None)
 
         free = set(self.spec.free_params)
-        prefix = f"{name}_"
         # ``redshift`` is deliberately not part of this gate: the response is
         # tabulated over it. Only the emitter's own shape parameters gate.
-        gate_ok = not any(p.startswith(prefix) for p in free)
+        refusal = (
+            _term_response_refusal(comp, chain, free, self.spec.get_fixed_values())
+            if comp is not None
+            else "no such emitter in the component chain"
+        )
+        setattr(self, f"_{name}_term_response_decline", refusal)
+        gate_ok = refusal is None
 
         if (
             comp is not None
@@ -11282,12 +12371,24 @@ class SEDModel:
             and hasattr(comp, "emission_terms")
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
-            response = self._build_term_response_table(comp, fw_pad, ft_pad)
+            amplitudes_fixed = bool(getattr(comp, "FIXED_TERM_AMPLITUDES", False)) and not any(
+                p in getattr(comp, "AMPLITUDE_PARAMS", ()) for p in free
+            )
+            response = self._build_term_response_table(
+                comp, fw_pad, ft_pad, amplitudes=amplitudes_fixed
+            )
+            if response is None:
+                setattr(
+                    self,
+                    f"_{name}_term_response_decline",
+                    "the rank-1 probe rejected a term: its spectral shape moves with its "
+                    "amplitude, or it is zero at some redshift node",
+                )
 
         setattr(self, cache_attr, response)
         return response
 
-    def _build_term_response_table(self, comp, fw_pad, ft_pad):
+    def _build_term_response_table(self, comp, fw_pad, ft_pad, *, amplitudes=False):
         """Tabulate an additive emitter's per-term response over redshift.
 
         Each node evaluates the emitter's terms with ``redshift`` set to the
@@ -11297,6 +12398,10 @@ class SEDModel:
         model-range midpoint node), ``S_ref(z)`` the shape at that wavelength on
         every node, so ``A_k = term_k(lam_ref) / S_ref_k(z)`` stays the amplitude
         at every redshift.
+
+        With ``amplitudes=True`` (every amplitude parameter fixed) the table also
+        carries ``amp`` = ``A_k`` at the fixed values, so the emitter need not
+        re-evaluate its terms at ``lam_ref`` on every call (#2987).
 
         Returns ``None`` (dense path) when a term is not rank-1 at any node, or is
         zero at some nodes only (its reference amplitude would be 0/0 there).
@@ -11312,22 +12417,46 @@ class SEDModel:
             nodes = single_node(fixed["redshift"], wave.dtype)
         z_mid = fixed["redshift"] if single else jnp.expm1(nodes[nodes.shape[0] // 2])
 
-        probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+        probes = tuple(comp.EMITTER_PROBE_INPUTS)
 
         def _terms(z, probe):
             return comp.emission_terms({**fixed, "redshift": z}, wave, **probe)
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probe_a).items()}
+        mid_terms = _terms(z_mid, probes[0])
+        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in mid_terms.items()}
+        # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
+        # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
+        # the emitter is then evaluated there on every call. Its amplitude is 0 at any
+        # wavelength, so reference it at a live term's peak: the same evaluation point the
+        # live term already pays for, and one the emitter supports.
+        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(jnp.max(jnp.abs(s_a))) > 0]
+        if live_peaks:
+            peaks = {
+                k: (peaks[k] if float(jnp.max(jnp.abs(mid_terms[k]))) > 0 else live_peaks[0])
+                for k in peaks
+            }
         keys = tuple(peaks)
+        # Wavelengths at which the emitter publishes point diagnostics (the AGN's 6 and 12 um
+        # luminosities). Each term is its amplitude times a fixed shape, so the shape there is
+        # one more build-time constant and no per-call evaluation is needed for it.
+        diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
+        # The reference wavelengths as one array, evaluated exactly as the per-call path does.
+        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
 
         def _node(z):
-            terms_a = _terms(z, probe_a)
-            terms_b = _terms(z, probe_b)
-            rows, s_ref, ok = [], [], []
+            terms_all = [_terms(z, probe) for probe in probes]
+            terms_a = terms_all[0]
+            rows, s_ref, ok, s_diag = [], [], [], []
+            diag_terms = (
+                comp.emission_terms({**fixed, "redshift": z}, diag_wave, **probes[0])
+                if diag_wave.shape[0]
+                else None
+            )
+            at_ref = comp.emission_terms({**fixed, "redshift": z}, lam_ref) if amplitudes else None
             for key in keys:
-                s_a, s_b, peak = terms_a[key], terms_b[key], peaks[key]
+                s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
                 live = jnp.abs(ref) > 0.0
                 # A term identically zero here is zero for a STRUCTURAL reason (a
@@ -11335,26 +12464,116 @@ class SEDModel:
                 # input is nonzero by construction. It must be zero everywhere
                 # on the grid, or its reference amplitude is 0/0 at some nodes.
                 zero_ok = live | (jnp.max(jnp.abs(s_a)) == 0.0)
-                # RANK-1 CHECK: the second draw must be proportional to the first.
-                scale = s_b[peak] / jnp.where(live, ref, 1.0)
-                rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                term_ok = zero_ok & jnp.all(jnp.isfinite(s_a))
+                # RANK-1 CHECK: every later draw must be proportional to the first. A
+                # draw that switches a live term off, or makes it non-finite, fails
+                # the check: an all-zero draw would otherwise pass as 0 * s_a.
+                for terms_b in terms_all[1:]:
+                    s_b = terms_b[key]
+                    scale = s_b[peak] / jnp.where(live, ref, 1.0)
+                    rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                    alive_ok = ~live | (jnp.all(jnp.isfinite(s_b)) & (jnp.max(jnp.abs(s_b)) > 0.0))
+                    term_ok = term_ok & rank1_ok & alive_ok
                 row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z)
                 rows.append(jnp.where(live, row, jnp.zeros_like(row)))
                 # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
                 s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
-                ok.append(zero_ok & rank1_ok)
-            return {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
+                ok.append(term_ok)
+                if diag_terms is not None:
+                    s_diag.append(
+                        jnp.where(live, diag_terms[key], jnp.zeros_like(diag_terms[key]))
+                    )
+            out = {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
+            if diag_terms is not None:
+                out["S_diag"] = jnp.stack(s_diag)
+            if at_ref is not None:
+                # A_k = term_k(lam_ref) / S_ref_k, the per-call amplitude at the fixed values.
+                at_lam = jnp.stack([at_ref[key][i] for i, key in enumerate(keys)])
+                out["amp"] = at_lam / jnp.stack(s_ref)
+            return out
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
         values = built["values"]
         if not bool(jnp.all(values["ok"])):
             return None
-        return {
+        table = {
             "ln1pz": built["ln1pz"],
             "R": values["R"],
             "S_ref": values["S_ref"],
-            "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
+            "lam_ref": lam_ref,
         }
+        for key in ("S_diag", "amp"):
+            if key in values:
+                table[key] = values[key]
+        return table
+
+    def _additive_term_shape_table(self, chain, name):
+        r"""Shape-only band tables of an additive emitter, built through its registry adapters.
+
+        :meth:`_additive_term_band_response` needs every emitter parameter fixed. With a shape
+        parameter free the component integrates the filters on every call. Each term of the
+        emitter that has a registry adapter (``TERM_SHAPE_KEYS`` of the component, via
+        ``term_shape_keys()``) gets a table of its shape-only band flux over that shape, built by
+        the adapter at build time (see ``tengri.components._term_shape_table``). The amplitude
+        is not tabulated: the component multiplies each table by the term at its own reference
+        wavelength, so FIRRC, redshift evolution and suppression stay exact.
+
+        Returns ``{term: table}`` for every term, or ``None`` when the emitter declares no such
+        table, no parameter of it is free, the all-fixed exact response applies, the redshift is
+        not ``Fixed``, or any term's adapter declines. The reason is not recorded: the caller falls
+        back to the dense per-call integral.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time; the returned arrays are threaded into the JIT.
+        """
+        cache_attr = f"_{name}_term_shape_cache"
+        cached = getattr(self, cache_attr, "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        comp = next((c for c in chain if getattr(c, "name", "") == name), None)
+        keys = comp.term_shape_keys() if hasattr(comp, "term_shape_keys") else {}
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+        free = set(self.spec.free_params)
+        prefix = f"{name}_"
+
+        if (
+            keys
+            and any(p.startswith(prefix) for p in free)
+            and self._approx.get("wave_precomp")
+            and fw_pad is not None
+            and ft_pad is not None
+            and self._response_z_nodes() is None
+            and self._additive_term_band_response(chain, name) is None
+        ):
+            from tengri.forward.precompute import registry
+
+            redshift = float(self.spec.get_fixed_values()["redshift"])
+            tables = {}
+            for term, key in keys.items():
+                module = registry.resolve(key)
+                term_table = module.term_shape_table(
+                    wave=self._rest_wavelength,
+                    filter_waves_padded=fw_pad,
+                    filter_trans_padded=ft_pad,
+                    redshift=redshift,
+                    parameters=self.spec,
+                    model=key,
+                    term=term,
+                )
+                if term_table is None:
+                    tables = None
+                    break
+                tables[term] = term_table
+            table = tables
+
+        setattr(self, cache_attr, table)
+        return table
 
     #: Provenance tags that mean a caller asked for this parameter's value.
     #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent:
@@ -11691,6 +12910,7 @@ class SEDModel:
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
             agn_polar_law=getattr(self, "_agn_polar_law", "smc"),
+            agn_ir_frac_window=getattr(self, "_agn_ir_frac_window", (0.0, 0.0)),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
@@ -11707,6 +12927,7 @@ class SEDModel:
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
+            dust_ir_cmb=getattr(self, "_dust_ir_cmb", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_fdust_credit_active=self._fdust_credit_active(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
@@ -11721,8 +12942,12 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
+            radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
+            radio_agn_loudness_ref=getattr(self, "_radio_agn_loudness_ref", "4400"),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
+            xray_alpha_ox_mode=getattr(self, "_xray_alpha_ox_mode", "delta"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
             igm_model=getattr(self, "_igm_model", "inoue"),
             igm_patchy=bool(getattr(self, "_igm_patchy", False)),
@@ -11816,18 +13041,18 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
-        redshift_spec = None
+        redshift_spec = None  # photometry z-table spec
+        spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
 
         if wave_precomp_enabled or spec_precomp_enabled:
             # Determine redshift spec (shared by both paths)
             try:
                 redshift_dist = self.spec.get_distribution("redshift")
-                is_fixed = redshift_dist.is_fixed
-                z_bounds = redshift_dist.bounds
             except (AttributeError, KeyError):
-                is_fixed = True
-                z_bounds = (0.0,)
+                redshift_dist = None  # unknown redshift: take the runtime (general) path
+            z_bounds = redshift_dist.bounds if redshift_dist is not None else None
+            runtime_z = redshift_is_runtime(redshift_dist, self._catalog_z_range)
 
             if wave_precomp_enabled:
                 # Build filter tuple
@@ -11840,7 +13065,7 @@ class SEDModel:
                 )
 
                 # Redshift spec for photometry
-                if is_fixed and self._catalog_z_range is None:
+                if not runtime_z:
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     cfg = self._approx_config or WavePrecomp()
@@ -11859,17 +13084,32 @@ class SEDModel:
                         "z_max": cfg.z_max if cfg.z_max is not None else z_hi + pad,
                         "n_z": cfg.n_z,
                     }
+                    if self._catalog_z_range is None and z_bounds is not None:
+                        from tengri.components._z_response import (
+                            ln1pz_nodes,
+                            warn_if_z_table_narrower_than_prior,
+                        )
+
+                        warn_if_z_table_narrower_than_prior(
+                            ln1pz_nodes(redshift_spec["z_min"], redshift_spec["z_max"], cfg.n_z),
+                            (float(z_bounds[0]), float(z_bounds[1])),
+                        )
 
             if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs
-                if not is_fixed:
+                # Built into its own variable: a catalog Fixed placeholder is runtime,
+                # and the photometry spec above must survive (#2858).
+                if runtime_z:
                     cfg = self._approx_config or SpectrumPrecomp()
-                    if z_bounds is None or len(z_bounds) < 2:
+                    if self._catalog_z_range is not None:
+                        z_lo, z_hi = self._catalog_z_range
+                        pad = 0.0
+                    elif z_bounds is None or len(z_bounds) < 2:
                         z_lo, z_hi, pad = 0.001, 3.0, 0.0
                     else:
                         z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
                         pad = 0.01 * (z_hi - z_lo)
-                    redshift_spec = {
+                    spec_redshift_spec = {
                         "mode": "free",
                         "z_min": (
                             cfg.z_min
@@ -11882,7 +13122,7 @@ class SEDModel:
                         "n_z": getattr(cfg, "n_z", 100),
                     }
                 else:
-                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                    spec_redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
 
         # MAIN PRECOMPUTATION LOOP: every component, one pass
         for idx, comp in enumerate(chain):
@@ -11931,7 +13171,9 @@ class SEDModel:
                 ):
                     state = comp.precompute(
                         ssp_data=None,
-                        wave_grid=None,
+                        # The AGN state keeps its build-time torus index set (on the master
+                        # grid), so the augmented state must still see that grid.
+                        wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
                     )
@@ -11987,7 +13229,9 @@ class SEDModel:
                         wave_grid=None,
                         approx=self._approx,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
+                        spec_sigma_v_fixed=self._fixed_sigma_v_kms(),
+                        spec_lsf_n_bins=self._lsf_n_bins,
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:
@@ -11995,6 +13239,10 @@ class SEDModel:
                             state,
                             ssp_spec_lut=spec_state.ssp_spec_lut,
                             ssp_spec_ztable=spec_state.ssp_spec_ztable,
+                            spec_sigma_v_fixed=spec_state.spec_sigma_v_fixed,
+                            spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
+                            spec_rest_window=spec_state.spec_rest_window,
+                            spec_ssp_broadened=spec_state.spec_ssp_broadened,
                         )
                     else:
                         state = spec_state
@@ -12002,7 +13250,7 @@ class SEDModel:
                     spec_igm = comp.precompute_spec_factors(
                         wave_rest=self.wavelengths,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
                     )
                     if state is not None:
                         state = replace(
@@ -12532,11 +13780,11 @@ class SEDModel:
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
-        _validate_fracagn_requires_dust(spec)
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
+        _validate_radio_firrc_domain(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
@@ -12756,7 +14004,7 @@ class SEDModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``.
         method : str
-            Inference method. Default ``"vi"`` (geoVI variational inference).
+            Inference method. Default ``"mcmc_nuts_fast"`` (four NUTS chains).
             Any canonical name accepted by ``Fitter.run()`` works here:
             ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
             ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.

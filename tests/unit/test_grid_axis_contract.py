@@ -234,3 +234,64 @@ class TestEdgesForGridAgainstInterpetation:
         # Interior edges (index 1 and 2)
         expected_interior = jnp.array([(grid[0] + grid[1]) / 2.0, (grid[1] + grid[2]) / 2.0])
         np.testing.assert_allclose(edges[1:3], expected_interior, rtol=1e-10)
+
+
+# ── Numpy build-time path: bit-identical to the jnp formula ───────────
+
+
+def _edges_reference_jnp(grid):
+    """The original jnp formula (n >= 2), used as the bit-exact reference."""
+    half_lo = (grid[1] - grid[0]) / 2.0
+    half_hi = (grid[-1] - grid[-2]) / 2.0
+    return jnp.concatenate([grid[:1] - half_lo, (grid[:-1] + grid[1:]) / 2.0, grid[-1:] + half_hi])
+
+
+def _random_ascending(rng, n, dtype):
+    steps = rng.uniform(0.01, 3.0, size=n - 1)
+    start = rng.uniform(-5.0, 5.0)
+    return (start + np.concatenate([[0.0], np.cumsum(steps)])).astype(dtype)
+
+
+class TestEdgesForGridNumpyPathExact:
+    """Concrete axes take the numpy path; output must equal the jnp formula bit for bit."""
+
+    @pytest.mark.parametrize("dtype", [np.float64, np.float32])
+    @pytest.mark.parametrize("n", [2, 3, 50])
+    def test_matches_jnp_formula_exactly(self, dtype, n):
+        rng = np.random.default_rng(1000 + n)
+        grid_np = _random_ascending(rng, n, dtype)
+        expected = _edges_reference_jnp(jnp.asarray(grid_np))
+        got = edges_for_grid(grid_np)
+        np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+        assert got.dtype == expected.dtype
+
+    @pytest.mark.parametrize("n", [2, 3, 50])
+    def test_jax_array_input_matches_jnp_formula(self, n):
+        rng = np.random.default_rng(2000 + n)
+        grid = jnp.asarray(_random_ascending(rng, n, np.float64))
+        expected = _edges_reference_jnp(grid)
+        got = edges_for_grid(grid)
+        np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+        assert got.dtype == expected.dtype
+
+    def test_float64_input_canonicalized_to_jax_default_dtype(self):
+        grid_np = _random_ascending(np.random.default_rng(7), 9, np.float64)
+        with jax.enable_x64(False):
+            expected = _edges_reference_jnp(jnp.asarray(grid_np))
+            got = edges_for_grid(grid_np)
+            np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+            assert got.dtype == expected.dtype
+
+    @pytest.mark.parametrize("n", [2, 3, 50])
+    def test_traced_path_under_jit_matches(self, n):
+        rng = np.random.default_rng(3000 + n)
+        grid_np = _random_ascending(rng, n, np.float64)
+        expected = _edges_reference_jnp(jnp.asarray(grid_np))
+        got = jax.jit(edges_for_grid)(jnp.asarray(grid_np))
+        np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+
+    def test_single_node_concrete_matches_old_behavior(self):
+        grid_np = np.array([2.5], dtype=np.float64)
+        got = edges_for_grid(grid_np)
+        np.testing.assert_array_equal(np.asarray(got), np.array([2.5, 2.5]))
+        assert got.dtype == jnp.asarray(grid_np).dtype

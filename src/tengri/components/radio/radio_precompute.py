@@ -41,6 +41,7 @@ References
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import jax.numpy as jnp
@@ -51,6 +52,7 @@ from tengri.components.radio.radio import (
     radio_freefree as _radio_freefree,
     radio_sfr_bell2003 as _radio_synchrotron,
 )
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -76,10 +78,17 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # luminosity input).
 _L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 
-# Standard rest-frame wavelength grid covering radio (1 mm to 1 km) and
-# extending blueward enough that the suppression mask in radio.py
-# (lambda > _RADIO_WAVE_MIN_AA) is not pathological.
-_WAVE_REST = host_array(np.logspace(7, 13, 1024, dtype=np.float64))  # 0.1 um to 100 km
+# Standard rest-frame wavelength grid: 100 um (the synchrotron edge,
+# ``_RADIO_WAVE_MIN_AA`` in radio.py) to 1 km. The 1 mm-1 km nodes are the original
+# log-spaced 1024; the 100 um-1 mm nodes are prepended so those stay unchanged.
+_WAVE_REST = host_array(
+    np.concatenate(
+        [
+            np.logspace(6, 7, 172, dtype=np.float64)[:-1],
+            np.logspace(7, 13, 1024, dtype=np.float64),
+        ]
+    )
+)
 
 
 def _build_grid_synchrotron(
@@ -172,6 +181,27 @@ _BUILDERS = {
 }
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -214,13 +244,12 @@ def precompute(
     if model not in _BUILDERS:
         raise ValueError(f"Unknown radio model: {model!r}. Expected one of {sorted(_BUILDERS)}.")
 
-    if alpha_grid is None:
-        defaults = {
-            "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
-            "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
-            "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
-        }
-        alpha_grid = defaults[model]
+    literal_grids = {
+        "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
+        "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
+        "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
+    }
+    alpha_grid = _axis(AXIS_PARAMS[model][0], alpha_grid, literal_grids[model], parameters)
 
     preint = _BUILDERS[model](filter_waves, filter_trans, redshift, alpha_grid)
     result = {
@@ -266,3 +295,94 @@ def build_lookup(preint: dict, *, model: str = "radio_synchrotron"):
     if model not in AXIS_PARAMS:
         raise ValueError(f"Unknown radio model: {model!r}")
     return build_template_photometry_lookup(preint["_preint"])
+
+
+#: Shape parameters each radio term's table depends on, per registry key. A free one outside
+#: the table's own axis declines the table: its shape would move under a fixed table.
+TERM_SHAPE_PARAMS: dict[str, tuple[str, ...]] = {
+    "radio_synchrotron": ("radio_alpha_sf",),
+    "radio_freefree": ("radio_alpha_ff", "radio_T_e"),
+    "radio_agn_jet": ("radio_alpha_agn", "radio_log_nu_cut"),
+}
+
+
+def _term_shape_fn(model: str, fixed: Mapping[str, float], wave: Any):
+    """Unit-amplitude shape of one term as a function of its axis value(s).
+
+    The amplitude-carrying inputs are set to 1: the table is normalized at ``lam_ref``, so
+    any scale cancels. Shape parameters outside the axis are read from ``fixed``.
+    """
+    if model == "radio_synchrotron":
+        return lambda values: _radio_synchrotron(wave, L_ir=1.0, alpha_sf=float(values[0]))
+    if model == "radio_freefree":
+        return lambda values: _radio_freefree(
+            wave, 1.0, T_e=float(fixed["radio_T_e"]), alpha_ff=float(values[0])
+        )
+    return lambda values: _radio_agn(
+        wave,
+        1.0,
+        radio_loudness=0.0,
+        alpha_agn=float(values[0]),
+        log_nu_cut=float(fixed["radio_log_nu_cut"]),
+    )
+
+
+def term_shape_table(
+    *,
+    wave: Any,
+    filter_waves_padded: Any,
+    filter_trans_padded: Any,
+    redshift: float,
+    parameters: Any,
+    model: str,
+    term: str | None = None,
+) -> dict | None:
+    """Shape-only band table of one radio term, built through the shared normalizer.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom] the term is evaluated on at predict.
+    filter_waves_padded, filter_trans_padded : ndarray, shape (n_filters, max_len)
+        Padded observed-frame filter curves.
+    redshift : float
+        The single ``Fixed`` redshift [dimensionless].
+    parameters : Parameters
+        Model spec; supplies the free set and the fixed values of the non-axis shape parameters.
+    model : str
+        Registry key: ``"radio_synchrotron"``, ``"radio_freefree"`` or ``"radio_agn_jet"``.
+    term : str, optional
+        The emitter term the table serves. Accepted for the call shared with the X-ray
+        adapter; each radio key carries exactly one term, so it is not read.
+
+    Returns
+    -------
+    dict or None
+        ``tengri.components._term_shape_table.build_term_shape_table`` output, or ``None``
+        when a shape parameter other than the axis is free (the table would be wrong).
+
+    Notes
+    -----
+    **JIT-compatible**: no, build-time NumPy and JAX integrals.
+    """
+    from tengri.components._term_shape_table import build_term_shape_table
+
+    axis = AXIS_PARAMS[model][0]
+    free = set(parameters.free_params)
+    if free & (set(TERM_SHAPE_PARAMS[model]) - {axis}):
+        return None
+    fixed = parameters.get_fixed_values()
+    literal = {
+        "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
+        "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
+        "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
+    }[model]
+    nodes = _axis(axis, None, literal, parameters)
+    return build_term_shape_table(
+        _term_shape_fn(model, fixed, jnp.asarray(wave)),
+        {axis: nodes},
+        wave,
+        filter_waves_padded,
+        filter_trans_padded,
+        redshift,
+    )

@@ -340,22 +340,26 @@ class IGMSEDComponent(TemplateThreading):
                 **rest,
             )
 
-        rows = []
-        for z in zgrid:
+        igm_model = self.config.igm_model
+        convention = photometry.convention
+
+        def _band_row(z, wave, fw_p, ft_p):
             trans = igm_absorption(
-                wave_rest * (1.0 + z),
+                wave * (1.0 + z),
                 z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
-            rows.append(
-                lnu_filter_integral_batch(
-                    trans, wave_rest, fw_pad, ft_pad, z, convention=photometry.convention
-                )[:n_filters]
-            )
+            return lnu_filter_integral_batch(trans, wave, fw_p, ft_p, z, convention=convention)[
+                :n_filters
+            ]
 
-        band_table = jnp.stack(rows)
+        # One jitted program over the whole z grid: the eager per-z loop paid
+        # hundreds of op-by-op dispatches per redshift (#2769).
+        band_table = jax.jit(jax.vmap(_band_row, in_axes=(0, None, None, None)))(
+            jnp.asarray(zgrid), wave_rest, fw_pad, ft_pad
+        )
         _subband_cache.memo_put(key, np.asarray(band_table))
         _subband_cache.store(key, np.asarray(band_table))
         return IGMSEDComponentState(
@@ -412,19 +416,19 @@ class IGMSEDComponent(TemplateThreading):
         if table is None:
             table = _subband_cache.load(key, prefix="igm_rest")
         if table is None or table.shape != (zs.size, n_blue):
-            table = np.stack(
-                [
-                    np.asarray(
-                        igm_absorption(
-                            jnp.asarray(blue * (1.0 + z)),
-                            float(z),
-                            igm_patchy=False,
-                            igm_model=self.config.igm_model,
-                            use_dla=False,
-                        )
-                    )
-                    for z in zs
-                ]
+            igm_model = self.config.igm_model
+
+            def _blue_row(z, blue_waves):
+                return igm_absorption(
+                    blue_waves * (1.0 + z),
+                    z,
+                    igm_patchy=False,
+                    igm_model=igm_model,
+                    use_dla=False,
+                )
+
+            table = np.asarray(
+                jax.jit(jax.vmap(_blue_row, in_axes=(0, None)))(jnp.asarray(zs), jnp.asarray(blue))
             )
             _subband_cache.store(key, table, prefix="igm_rest")
         _subband_cache.memo_put(key, table)
@@ -499,23 +503,29 @@ class IGMSEDComponent(TemplateThreading):
 
         wave_rest = jnp.asarray(wave_rest)
         wave_obs = jnp.asarray(spec_wave_obs)
-        rows = []
-        for z in zgrid:
+        igm_model = self.config.igm_model
+
+        def _spec_row(z, wave_rest, wave_obs):
             trans = igm_absorption(
                 wave_rest * (1.0 + z),
                 z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
             # Exactly what predict_spectrum_via_precomp did at runtime: sample the
             # rest-grid curve at each pixel's rest effective wavelength.
-            rows.append(jnp.interp(wave_obs / (1.0 + z), wave_rest, trans))
+            return jnp.interp(wave_obs / (1.0 + z), wave_rest, trans)
 
+        # One jitted program over the whole z grid, not one eager call per z
+        # (#2769), as in precompute_band_factors.
+        spec_table = jax.jit(jax.vmap(_spec_row, in_axes=(0, None, None)))(
+            jnp.asarray(zgrid), wave_rest, wave_obs
+        )
         return IGMSEDComponentState(
             name=self.name,
             spec_zgrid=jnp.asarray(zgrid),
-            spec_table=jnp.stack(rows),
+            spec_table=spec_table,
         )
 
     def subband_node_transmission(
@@ -630,18 +640,22 @@ class IGMSEDComponent(TemplateThreading):
         if cached is not None and cached.shape == waves.shape:
             return jnp.asarray(cached)
 
-        rows = []
-        for i, z in enumerate(zs):
-            nodes = waves[i]
+        igm_model = self.config.igm_model
+
+        def _node_row(nodes, z):
+            # Per-redshift slice of the z-table: `nodes` is one (n_met, n_age,
+            # n_filters, n_subbands) block, `z` its redshift.
             trans = igm_absorption(
-                jnp.asarray(nodes.reshape(-1) * (1.0 + float(z))),
-                float(z),
+                nodes.reshape(-1) * (1.0 + z),
+                z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
-            rows.append(np.asarray(trans).reshape(nodes.shape))
-        table = np.stack(rows)
+            return trans.reshape(nodes.shape)
+
+        # One jitted program over the whole z-table, not one eager call per z (#2769).
+        table = np.asarray(jax.jit(jax.vmap(_node_row))(jnp.asarray(waves), jnp.asarray(zs)))
         _subband_cache.memo_put(key, table)
         _subband_cache.store(key, table)
         return jnp.asarray(table)

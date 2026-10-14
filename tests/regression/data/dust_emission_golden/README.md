@@ -63,3 +63,15 @@ component goldens `astrodust.npy` (0.99%) and `draine2021_pah_ir.npy`
 ## Removed 2026-10-06 (schreiber2016 is the tabulated library)
 
 `schreiber2016.npy` captured the analytic modified-blackbody plus Drude stand-in, which no longer exists: `schreiber2016` is the tabulated Schreiber et al. (2018) library, whose expected values are mixed in the tests from the template arrays instead of frozen from the model's own output.
+
+## Regenerated 2026-10-11 (schreiber2018, guarded)
+
+`schreiber2018.npy` is re-frozen from the current component and is read by
+`TestSchreiber2018GridPort` in `test_dust_emission_grid_components.py`. The dust
+normalization is the evaluation-grid integral (owner ruling 2026-10-11), so the
+change from the previous file is the template data alone:
+`data/schreiber2018_templates.h5` changed after this golden was frozen (#2291,
+2026-09-12). Against the previous file the new values differ by at most
+6.0e-4 of the peak (up to 1.35 % at individual nodes), and the node-by-node
+ratio is not a constant (0.987 to 1.014), so no normalization constant is
+involved.

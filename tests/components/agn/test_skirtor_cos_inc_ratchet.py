@@ -146,31 +146,35 @@ def test_every_skirtor_grid_consumer_sees_ascending_axes():
 
 
 @requires_skirtor
-def test_skirtor_cos_inc_is_wired_to_index_space_interpolation():
-    """The production call must pass ``index_space_interp=True``.
+def test_skirtor_cos_inc_is_wired_to_node_exact_pchip():
+    """The production SED call goes through the node-exact PCHIP interpolant (#2606).
 
-    This is the ratchet proper.  The two sweep tests above would still pass on
-    a reversed-but-physical-space path (it also gives 40/40 distinct), so
-    without this test the weaker half of the fix could be dropped unnoticed --
-    and reversal alone measures *worse* against CIGALE than the pre-fix code.
+    This is the ratchet proper.  The two sweep tests above would pass on any
+    interpolant that is distinct at each sweep point, so without this test the
+    lookup could silently fall back to the triweight smoother (which moves
+    values at exact nodes by up to 65 %, #2606).  The cos_inclination axis is
+    the last one, and it must extrapolate: the prior reaches ``cos = 0`` while
+    the stored axis starts at ``cos(90 deg)``, and clipping there returns an
+    exactly-zero gradient (#1911).
     """
     from tengri.components.agn import skirtor as sk
 
     seen = []
-    real = sk.interp_nd_triweight
+    real = sk.interp_nd_pchip
 
-    def spy(grid, axes, edges, point, *args, **kwargs):
-        seen.append(kwargs.get("index_space_interp"))
-        return real(grid, axes, edges, point, *args, **kwargs)
+    def spy(grid, axes, point, *args, **kwargs):
+        seen.append(kwargs.get("extrapolate"))
+        return real(grid, axes, point, *args, **kwargs)
 
-    sk.interp_nd_triweight = spy
+    sk.interp_nd_pchip = spy
     try:
         _sum_sed(0.42)
     finally:
-        sk.interp_nd_triweight = real
+        sk.interp_nd_pchip = real
 
-    assert seen, "the production SED path made no triweight call"
-    assert all(flag is True for flag in seen), (
-        f"skirtor_sed reached interp_nd_triweight with index_space_interp={seen}; "
-        "the non-uniform cos_inclination axis needs index-space interpolation (#1911)."
-    )
+    assert seen, "the production SED path made no interp_nd_pchip call"
+    for flags in seen:
+        assert flags is not None and tuple(flags)[-1] is True and not any(tuple(flags)[:-1]), (
+            f"skirtor_sed reached interp_nd_pchip with extrapolate={flags}; only the "
+            "cos_inclination axis (last) may extrapolate (#1911, #2606)."
+        )

@@ -60,7 +60,6 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.agn import fritz as FR
-from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._grad_parity import assert_grad_matches_fd
 
@@ -215,7 +214,6 @@ def _loader_on_one_template(raw, wave_grid, axes, wave_out):
             grid,
             jnp.asarray(wave_grid),
             sub_axes,
-            tuple(edges_for_grid(ax) for ax in sub_axes),
             jnp.asarray(wave_out),
             point,
             1.0,
@@ -441,49 +439,35 @@ def test_model_torus_power_unchanged(node, _torus_states):
 #: largest departure of a band holding >= 10 % of the power, and the recorded
 #: departure of the median power wavelength (both relative).
 _LOOKUP_POINTS = (
-    ((60.0, 1.0, -0.75, 4.0, 40.0, 50.1), 0.276, 0.183),
-    ((60.0, 0.1, -0.5, 4.0, 40.0, 50.1), 0.273, -0.043),
+    ((60.0, 1.0, -0.75, 4.0, 40.0, 50.1), 0.0, 0.0),
+    ((60.0, 0.1, -0.5, 4.0, 40.0, 50.1), 0.0, 0.0),
 )
 _LOOKUP_IDS = ("beta-0.75", "tau0.1")
 
 
 def _lookup_expected_lnu(point, wave_aa):
-    """lambda^2 / c times the triweight-weighted sum of the raw tables, unit power."""
-    from tengri.utils.interpolation import compute_grid_weights
+    """lambda^2 / c times the node-exact PCHIP lookup of the raw tables, unit power."""
+    from tengri.utils.grid_interp import interp_nd_pchip
 
     names = ("r_ratio", "tau", "beta", "gamma", "opening_angle", "psy")
     with h5py.File(_GRID, "r") as f:
         g = f["fritz2006"]
-        axes = [np.asarray(g[f"{n}_axis"][:]) for n in names]
-        template = np.asarray(g["dust"][:], dtype=float)
+        axes = tuple(jnp.asarray(np.asarray(g[f"{n}_axis"][:])) for n in names)
+        dust = jnp.asarray(np.asarray(g["dust"][:], dtype=float))
         wave_grid = np.asarray(g["wavelength_aa"][:])
-    for ax, v in zip(axes, point, strict=True):
-        template = np.tensordot(
-            np.asarray(
-                compute_grid_weights(
-                    v,
-                    jnp.asarray(ax),
-                    scatter=0.5 * (ax[1] - ax[0]),
-                    edges=edges_for_grid(jnp.asarray(ax)),
-                    index_space_interp=True,
-                )
-            ),
-            template,
-            axes=([0], [0]),
-        )
+    template = np.asarray(interp_nd_pchip(dust, axes, tuple(point)))
     return _expected_lnu(template, wave_grid, wave_aa)
 
 
 @pytest.mark.parametrize(("point", "band_dev", "median_dev"), _LOOKUP_POINTS, ids=_LOOKUP_IDS)
 def test_lookup_residual_is_the_triweight_weighting(point, band_dev, median_dev):
-    """The public path is the triweight-weighted raw tables; the recorded departure
-    from the library's own node table is the lookup residual.
+    """The public path is the node-exact PCHIP lookup of the raw tables.
 
     The first assertion is the definition of the lookup (1e-6). The second and
     third record how far that lookup sits from the library table at the node
     itself (largest band holding >= 10 % of the power, and the median power
-    wavelength, each +-2 percentage points). They are the residual tracked in
-    #2606 and are removed when that issue closes.
+    wavelength, each +-2 percentage points). Under the PCHIP lookup (#2606) the
+    residual is measured at these off-node points.
     """
     _require_grid()
     r, tau, beta, gamma, half, psy = point

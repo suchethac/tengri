@@ -22,73 +22,104 @@ on:
   # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
   # comes back.
   pull_request:
-    # No `labeled`. It cannot coexist with a single aggregate required context.
+    # Pull requests run a CHEAP tier by default: lint, security, smoke and the
+    # `physics` and `regression-c` shards, plus the four docs-scope shards
+    # when the diff touches docs/, notebooks/, reproduction/ or a top-level
+    # *.md. The label `full-tests` runs the whole suite instead, and so does a
+    # diff that touches the CI machinery itself (see `gallery-changes`).
     #
-    # On a `labeled` event the heavy tiers stand down by design, so the `ci-ok`
-    # job below would publish either a success claiming tests passed when they
-    # never ran, or a failure reddening a pull request for the crime of being
-    # labelled. Neither is acceptable when that one context is the only thing
-    # branch protection consults.
+    # THE TRADE-OFF, STATED PLAINLY: a green cheap-tier pull request has not run
+    # the shards it withheld. A failure in one of them is caught on `main`
+    # right after the commit lands, because every push to `main` runs the full
+    # suite; it is not caught before the merge unless the author adds
+    # `full-tests`. (GitHub's merge queue would have closed that gap and is not
+    # available on this repository.)
     #
-    # #1865 made label runs safe by a different route — it removed the `labeled`
-    # guard from the four always-run gates so they publish real successes rather
-    # than shadowing `skipped`. That works because a skipped MATRIX job publishes
-    # the bare name `test` and never the eight expanded shard contexts, so the
-    # shard results survive in their own suite. A plain job has no such cover:
-    # its name IS its context, and it publishes on every event. Removing the
-    # trigger removes the whole class instead of mitigating it, and saves the
-    # ~8 runner-minutes per labelling that #1865 accepted as its cost — which
-    # matters now that queue capacity, not correctness, is the binding
-    # constraint (53% of open PR jobs are spent on PRs that touch no code).
+    # The scope is computed from the PR's CURRENT label set, which is why
+    # `labeled` and `unlabeled` are triggers:
     #
-    # `slow` is unaffected: its `if:` reads
-    # `github.event.pull_request.labels.*.name`, the pull request's CURRENT
-    # label set, on ANY pull-request event. So labelling and then pushing still
-    # opts in, and `workflow_dispatch` covers labelling without pushing.
-    types: [opened, synchronize, reopened]
+    #   * adding `full-tests` starts the full run it asks for;
+    #   * removing it returns the PR to the cheap tier;
+    #   * any OTHER label event re-computes the same scope the PR already had
+    #     and re-runs it (the label burst CLAUDE.md mandates collapses to one
+    #     run through the concurrency group below). It never escalates to the
+    #     full suite, and `slow` / `crossval` stand down on a label event that
+    #     is not their own label (see their `if:`).
+    #
+    # Why every label event runs a real verdict rather than a no-op: the newest
+    # check suite wins when branch protection resolves a required context
+    # (#1856), so a label-event run that skipped its jobs would publish
+    # `skipped` over the real result and block the merge, and one that passed
+    # them without running would publish an approval nothing earned. Re-running
+    # the same scope costs a few minutes and publishes the true answer.
+    #
+    # `ready_for_review` is here because a draft pull request withholds the
+    # test matrix (see `gallery-changes`): marking it ready must start the run
+    # that was withheld.
+    #
+    # `edited` is here for base retargeting: the scope and the stand-down of a
+    # stacked PR both depend on `github.base_ref`, so changing the base from
+    # another branch to `main` (or back) must re-run the gate. GitHub fires
+    # `edited` for a title or body change too. Such an event leaves the scope
+    # exactly as it was (the gate recomputes it from the same diff and labels)
+    # and re-runs it for real, for the same newest-suite reason as a label
+    # event; the gate logs whether the base changed.
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
     - cron: "0 4 * * *"
   workflow_dispatch:
 
-# Supersede stale runs — but NEVER on `main`.
+# Supersede stale runs -- but never on `main`.
 #
-# **`push` runs get a UNIQUE group (run_id), so every commit on `main` is tested
-# to completion.** They used to share one group and cancel each other, which
-# meant that during any busy merge window `main` was effectively never tested:
-# each merge aborted its predecessor's suite, and the last one standing was the
-# only commit anyone ever saw a verdict for. On 2026-07-10 that let FIVE red
-# commits land on `main` invisibly (#1021, #1051, #1071, #1076, and the
-# cancelled run of the very PR that fixed the last two). Each was discovered
-# days later or when it broke somebody else's unrelated PR — the most expensive
-# possible way to find out.
+# **Every push to `main` runs the FULL suite, and no push run is cancelled.**
+# Pushes share one fixed group (`tests-main-push`), so a run in progress always
+# finishes and its verdict is real. Cancelling a predecessor is how red commits
+# used to land on `main` unjudged, which is why the push group never cancels.
+# Never cancelling has a cost, bounded by coalescing (see the block below): at
+# most one push run is pending at a time, and a newer push replaces an older
+# pending one.
 #
-# Note the failure mode this does NOT use: keeping one shared group and setting
-# `cancel-in-progress: false` would serialise main's runs into a queue instead.
-# At ~12 merges/day against a ~21 min suite, the backlog just relocates the
-# delay — you would still learn about red long after the fact. A unique group
-# per push means N merges run N suites concurrently, each reporting on its own
-# commit. That costs runner minutes; a `main` whose green means nothing costs
-# more.
+# What makes that affordable is that pull requests run the cheap tier. The
+# full suite is ~360 runner-minutes per run against ~26 for the cheap tier, and
+# at ~34 merges/day a pull-request population that also ran the full suite on
+# every push saturated the 20-job ceiling and put queue latency at 7-14 h; a
+# verdict that arrives half a day after the commit is the red-commit failure
+# again. With the cheap tier on PRs the full suite runs on pushes to `main`
+# only, and a burst of merges costs at most two of them (and again for a PR
+# that asks for it with `full-tests`).
 #
-# `labeled` PR events used to need their own group here, because labelling a PR
-# with four labels fires four webhooks. They no longer trigger this workflow at
-# all (see the `types:` note above), so there is nothing left to group — and the
-# four runs per labelling are not merely collapsed but never started.
+# The nightly `schedule` run is the whole suite -- `test`, `coverage`, `slow`,
+# `crossval` -- on the tip of `main`, and `nightly-alarm` opens an issue when it
+# is red.
 #
-# Everything else (PR opened/synchronize/reopened, schedule, workflow_dispatch)
-# keys on `github.event_name`, so a newer event of the SAME kind supersedes the
-# older one — a PR synchronize cancels the prior PR run, which is where the real
-# compute saving lives, since PR runs get superseded constantly. Keying on the
-# event name also keeps a nightly `schedule` run and a `push` run from sharing a
-# group on `main` (both resolve to the same `github.ref`) and cancelling each
-# other mid-suite.
+# Concurrency by event:
+#
+#   push         ONE fixed group (`tests-main-push`), never cancelled. Pushes
+#                to `main` are COALESCED: the run in progress always finishes,
+#                and GitHub keeps at most one pending run, replacing an older
+#                pending run with the newer. A burst of merges therefore costs
+#                at most two full runs (the one in flight and the newest
+#                commit) instead of one per merge. Every landed commit is still
+#                covered by the next completed verdict: a failing verdict
+#                covers the range since the last completed run, so bisect
+#                within that range to find the commit.
+#   the rest     keyed on `github.event_name`, so a newer event of the SAME kind
+#                supersedes the older one -- a PR synchronize cancels the prior
+#                PR run, which is where the real compute saving lives. Keying on
+#                the event name also keeps a nightly `schedule` run and a `push`
+#                run from sharing a group on `main` (both resolve to the same
+#                `github.ref`) and cancelling each other mid-suite.
+#
+# A `labeled` / `unlabeled` / `edited` PR event shares the PR group with
+# `synchronize`, so the burst of events one labelling produces collapses to a
+# single run, and the surviving run re-derives its scope from the final label
+# set.
 concurrency:
   group: >-
-    tests-${{ github.ref }}-${{
-      github.event_name == 'push' && github.run_id
-      || github.event_name }}
-  cancel-in-progress: true
+    ${{ github.event_name == 'push' && 'tests-main-push'
+      || format('tests-{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Supply a version for the `dsps` build. The published dsps sdists use
 # setuptools-scm, which (in the fresh pip build-isolation env) raises
@@ -104,43 +135,42 @@ env:
   # arming it workflow-wide is safe for the data-gated jobs.
   TENGRI_GUARD_FULLY_SKIP: "1"
 
-# Skip the HEAVY jobs on bare `labeled` PR events. GitHub fires one `labeled`
-# webhook PER label added, so labelling a PR with N labels used to spawn N
-# duplicate workflow runs that immediately cancelled each other under
-# `cancel-in-progress` (and occasionally killed the surviving run mid-suite).
-# The shared label concurrency group above is what fixes that now; the per-job
-# `if:` below keeps the expensive tiers from running N times regardless.
+# CI tiers, by event (`gallery-changes` computes the scope; `ci-ok` checks it):
 #
-# THE FOUR ALWAYS-RUN GATES DO NOT CARRY THAT GUARD, and must not.
+#   pull_request   cheap by default: lint, security, smoke, `physics`,
+#                  `regression-c`, plus `contract`, `components`, `regression-a1`,
+#                  `regression-a2`, `regression-a3`, `regression-d` when the diff touches docs/, notebooks/,
+#                  reproduction/ or a top-level *.md (scope cheap / cheap-docs).
+#                  A docs-only diff runs just those six (scope docs). The label
+#                  `full-tests` runs the full suite (scope all), and so does a
+#                  diff touching the CI machinery (workflows, ci_ok.py,
+#                  ci_split_paths.py, pyproject.toml, any conftest.py). A draft
+#                  runs the gates only (scope none).
+#   push (main)    the FULL suite after the commit lands (scope all: all eleven
+#                  shards and the gallery). A failure in a shard the cheap
+#                  tier skipped is caught here, right after landing. Runs are
+#                  coalesced (see Concurrency), so a verdict covers every
+#                  commit since the last completed run.
+#   schedule       the whole suite nightly, plus coverage, slow and crossval.
+#
+# The test matrix is DYNAMIC: `gallery-changes` builds it from the scope, so a
+# shard the scope withholds never takes a runner. `ci-ok` compares the shards
+# that ran against the set the scope requires.
+#
+# THE FOUR ALWAYS-RUN GATES MUST NOT STAND DOWN ON A `labeled` EVENT.
 #
 # `tier`, `lint`, `security` and `smoke` are `ALL_PR_JOBS` in
 # `tools/check_ci_pr_coverage.py`: "jobs that run for EVERY pull request,
-# whatever its base". They used to carry the `labeled` guard anyway, which
-# contradicted that bucket and — once `main` got branch protection on
-# 2026-08-16 — silently made every labelled PR unmergeable.
-#
-# The mechanism, measured on PR #1856 against PR #1852 as the control (same
-# four labels, both fully green, one CLEAN and one BLOCKED):
-#
-#   1. CLAUDE.md mandates labelling every PR, so label events are guaranteed.
-#   2. A `labeled` run whose jobs are skipped by `if:` still PUBLISHES a check
-#      run per job — with conclusion `skipped`.
-#   3. Those runs live in a check suite created AFTER the real one, and branch
-#      protection resolves a required context to the newest suite that carries
-#      that name.
-#   4. A `skipped` run does not satisfy a required context. Result:
-#      `mergeStateStatus: BLOCKED` with `statusCheckRollup: SUCCESS` — green
-#      to every human-facing view, permanently unmergeable, forever, because
-#      nothing further will ever run on that SHA.
-#
-# #1852 escaped only by accident: it was pushed again hours after being
-# labelled, so its real suite happened to be the newest one.
-#
-# Letting these four run on a label event costs ~8 runner-minutes per PR
-# (collapsed to one run by the shared group) and makes the newest suite carry
-# a real success for every required context. `check_ci_pr_coverage.py` asserts
-# the guard stays off them, because reintroducing it is invisible until a
-# merge is attempted, and by then the SHA is unfixable without a dummy push.
+# whatever its base". A `labeled` run whose jobs are skipped by `if:` still
+# PUBLISHES a check run per job, with conclusion `skipped`; those runs live in a
+# check suite created AFTER the real one, and branch protection resolves a
+# required context to the newest suite that carries that name. A `skipped` run
+# does not satisfy a required context, so the result is `mergeStateStatus:
+# BLOCKED` with `statusCheckRollup: SUCCESS` -- green to every human-facing
+# view, permanently unmergeable (measured on PR #1856 against PR #1852 as the
+# control). `check_ci_pr_coverage.py` asserts the guard stays off them, because
+# reintroducing it is invisible until a merge is attempted. The same reasoning
+# is why `gallery-changes` and `test` run on label events too (see `types:`).
 jobs:
   # Announces what this run does NOT cover. The #1806/#1810 failure was not that
   # a stacked PR ran less — it was that a green tick on a stacked PR looked
@@ -170,11 +200,41 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" = "main" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
+            {
+              echo "## Full CI tier (push to main)"
+              echo
+              echo "**Ran:** lint, security, smoke, all eleven \`test\` shards, and the gallery"
+              echo "when the pushed commits touched a gallery input."
+              echo
+              echo "Pull requests run the cheap tier, so this is where a failure in a shard"
+              echo "the cheap tier skipped is caught: right after the commit landed."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" != "pull_request" ]; then
             {
               echo "## Full CI tier"
               echo
-              echo "Everything this workflow gates on is running."
+              echo "The nightly and manual runs execute every test shard, the gallery,"
+              echo "coverage, the slow tier and crossval."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$BASE_REF" = "main" ]; then
+            {
+              echo "## Pull request CI tier"
+              echo
+              echo "An unlabeled pull request runs the cheap tier: lint, security, smoke,"
+              echo "\`physics\`, \`regression-c\`, plus the docs-scope shards when the diff"
+              echo "touches docs, notebooks, reproduction or a top-level markdown file. A"
+              echo "pull request labeled \`full-tests\`, or one that touches the CI machinery,"
+              echo "runs every shard. A draft runs the gates only. The \`gallery-changes\` job"
+              echo "prints the scope it chose."
+              echo
+              echo "A green cheap-tier pull request is not a full verdict. A failure in a"
+              echo "shard it skipped is caught on \`main\` right after the commit lands, or"
+              echo "before the merge if you add the label \`full-tests\`."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -185,11 +245,11 @@ jobs:
             echo
             echo "**Ran:** lint, security, smoke."
             echo
-            echo "**Did NOT run:** the eight \`test\` shards (including"
-            echo "\`contract\`, which holds the precompute drift guard) or the gallery."
+            echo "**Did NOT run:** the \`test\` shards (including \`contract\`, which"
+            echo "holds the precompute drift guard) or the gallery."
             echo
-            echo "A green result here is therefore **not** a full verdict. The full"
-            echo "suite runs when this PR is retargeted to \`main\`."
+            echo "A green result here is therefore **not** a full verdict. The suite"
+            echo "runs when this PR is retargeted to \`main\`."
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice title=Partial CI tier::Base is $BASE_REF, not main. The test shards and gallery did not run; a green result here is not a full verdict."
 
@@ -412,6 +472,9 @@ jobs:
       # risk floors and clip-then-power patterns in src/tengri. Ledger regenerated
       # with each new site; new sites (live count > ledger count) fail the check.
       - run: python tools/check_numeric_guards.py
+      # No dtype-free jnp.asarray on a module-level numpy constant (#2774): the
+      # cached buffer's dtype follows the x64 state of the first call.
+      - run: python tools/check_jnp_asarray_module_constants.py
       # Ensure figure placement in published notebooks is correct.
       - run: python tools/check_figure_placement.py
       # Verify that all published notebooks have every code cell executed.
@@ -554,74 +617,180 @@ jobs:
         run: pip-audit --skip-editable
         continue-on-error: true
 
-  # Decide whether the gallery below has to run for this change.
+  # Decide how much of the expensive work this run owes: whether the gallery
+  # below has to run, and which `test` shards.
   #
   # The gallery is four shards of ~8-10 min each, and it used to run on every
   # pull request: its only `if:` was the `labeled` no-op guard, which is not a
   # path filter. A prose-only pull request therefore spent ~35 minutes of runner
   # time re-executing 264 examples that nothing in the diff could reach. The
-  # inputs that CAN change what an example does are enumerated below; a diff
-  # touching none of them cannot change the gallery's verdict.
+  # inputs that CAN change what an example does are enumerated below (`gallery_re`);
+  # a diff touching none of them cannot change the gallery's verdict.
+  #
+  # The filter applies to a pull request that owes scope `all`. A cheap-tier
+  # pull request never runs the gallery, and `schedule`, `workflow_dispatch` and
+  # every `push` to `main` always do. A push cannot be filtered by its own diff:
+  # pushes are coalesced, so a run's previous commit is not the last commit a
+  # run tested, and a gallery input changed in a skipped intermediate commit
+  # would be missed. Running it costs ~25 runner-minutes against a suite of
+  # hours, and a skipped gallery that was needed ships a broken example.
+  #
+  # The same job decides the `test` scope, in a second output, so the answer is
+  # computed once from one API call and one place:
+  #
+  #   all    every shard: `push` to main, the nightly and manual runs, a pull
+  #          request labeled `full-tests`, and a pull request whose diff touches
+  #          the CI machinery (`force_re`) or is too long to list completely.
+  #   docs   the diff is confined to docs/, notebooks/, reproduction/ or a
+  #          top-level *.md. Nothing under src/, data/ or tests/ moved, so the
+  #          numerical shards cannot change; but those trees are NOT test-free.
+  #          The `contract` shard holds the render-hash, docs-sync,
+  #          registry-string and reproduction-driver guards, `components` holds
+  #          `tests/unit` and a parity test that reads reproduction/,
+  #          `regression-a1` (precision/test_geovi_metric_float32.py) reads docs/dev
+  #          and `regression-d` scans every *.md (CLAUDE.md included).
+  #          `regression-a2` and `regression-a3` read none of these trees but keep
+  #          the scope their predecessor had. Those six
+  #          shards run; the other five read
+  #          none of these trees and are withheld. One exception is known:
+  #          `tests/regression/bug/test_bug_vacuum_wavelengths_everywhere.py`
+  #          scans `reproduction/**/*.py`, and a bug shard is withheld by this
+  #          scope, so a refractive-index formula added under reproduction/ is
+  #          caught on `main`, not on the PR. Markdown under src/, data/ or
+  #          tests/ is NOT docs (src/tengri/data/agn_fe2/PROVENANCE.md is read
+  #          by tests/regression/agn/test_feii_template_units.py), which is why
+  #          only a TOP-LEVEL *.md counts.
+  #   cheap  `physics` and `regression-c` only: a pull request without the
+  #          `full-tests` label whose diff touches no documentation tree.
+  #   cheap-docs  the cheap shards plus the four `docs` shards: a pull request
+  #          without the label whose diff touches code AND documentation.
+  #   none   a draft pull request. No shard; `ready_for_review` starts the run.
+  #
+  # The label set is read from the event payload, so it is the CURRENT set on
+  # every pull-request event, including `labeled` / `unlabeled`.
+  #
+  # THE SHARD TABLE LIVES HERE AND NOWHERE ELSE. This step holds the one
+  # definition of each shard (name, paths, worker count, step budget, JAX cache
+  # cap, and the scopes that owe it) and emits the matrix the `test` job runs
+  # (`shards`), the shard names the scope requires (`expected`) and every shard
+  # name (`all_shards`). A shard the scope withholds is simply absent from the
+  # matrix and never takes a runner. `ci-ok` lists the jobs that ran and
+  # compares them with `expected`, so a shard that was owed and never ran is
+  # red; it also holds its own copy of which shards each scope owes
+  # (`tools/ci_ok.py: SCOPE_SHARDS`), pinned to this table by
+  # `tests/contract/test_ci_gate_script.py`.
+  #
+  # NOTE FOR BRANCH PROTECTION: the `test (<shard>)` contexts exist only on runs
+  # whose scope owes that shard. Require `ci-ok`, `lint`, `security` and `smoke`
+  # and not the `test (...)` names.
   #
   # This job costs seconds: it asks the API for the changed paths and never
   # checks the repository out. Resolving the diff locally would need
   # `fetch-depth: 0`, and a full-history clone of this repository is a large
   # part of the saving it is trying to book.
   #
-  # It fails TOWARD running. Any error listing the diff, and any event that is
-  # not a pull request, runs the gallery. The two mistakes are not symmetric: a
-  # gallery that runs when it did not need to wastes runner minutes, while a
-  # gallery that is skipped when it was needed ships a broken example. That is
-  # not hypothetical -- the gallery exists because five examples were "migrated"
-  # to `model.predict(p, wave=...)`, a kwarg that does not exist, and shipped
-  # green past py_compile, ruff, and a docs build that never executed them
-  # (#1146). A skip must never be able to hide that.
+  # It fails TOWARD running. Any error listing the diff runs the gallery and
+  # every shard, and so does a list that may be truncated: the pull-request
+  # files API returns at most 3000 entries and the compare API at most 300 per
+  # page, so a list at or above that length is taken to be incomplete. The two
+  # mistakes are not symmetric: a gallery that runs when it did not need to
+  # wastes runner minutes, while a gallery that is skipped when it was needed
+  # ships a broken example. That is not hypothetical -- the gallery exists
+  # because five examples were "migrated" to `model.predict(p, wave=...)`, a
+  # kwarg that does not exist, and shipped green past py_compile, ruff, and a
+  # docs build that never executed them (#1146). A skip must never be able to
+  # hide that.
+  #
+  # Every classification below is a `grep` on a here-string, never a pipe into
+  # `grep -q`: with `set -o pipefail`, `grep -q` exits at its first match, the
+  # writer takes SIGPIPE on a list longer than the pipe buffer (~64 KB), and the
+  # pipeline reports failure for a file list that DOES match. Measured: a code
+  # file first in a 3000-entry docs list went undetected 20 times in 20.
   gallery-changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # `gallery` needs this job's output, so gating here cascades to it.
-    if: >-
-      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
-      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
+    # `gallery` and `test` need this job's outputs, so gating here cascades.
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
     permissions:
       contents: read
       pull-requests: read
     outputs:
       needed: ${{ steps.decide.outputs.needed }}
+      scope: ${{ steps.decide.outputs.scope }}
+      shards: ${{ steps.decide.outputs.shards }}
+      expected: ${{ steps.decide.outputs.expected }}
+      all_shards: ${{ steps.decide.outputs.all_shards }}
     steps:
       - id: decide
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
           PR: ${{ github.event.pull_request.number }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_CHANGED: ${{ github.event.changes.base != null }}
+          LABELS_JSON: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
         run: |
           set -uo pipefail
 
-          # push:[main], schedule and workflow_dispatch always run it. Those are
-          # the runs whose green anyone actually relies on, and the nightly is
-          # the backstop that catches drift a per-PR filter cannot see.
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "event=${{ github.event_name }} -> running the gallery"
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # The shard table: the single definition. Per shard: `paths` for
+          # pytest, `bug_half` (non-empty for the three bug/ shards, split at
+          # runtime), `nproc` (xdist workers), `timeout` (step budget, minutes),
+          # `cache_gb` (JAX compile cache cap) and `scopes` (the scopes that
+          # owe it). `scopes` is stripped before the matrix is emitted.
+          table=$(cat <<'JSON'
+          [
+            {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":120,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
+            {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a2","paths":"tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":45,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a3","paths":"tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":70,"cache_gb":"0.7","scopes":["all"]},
+            {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
+            {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
+            {"shard":"regression-c","paths":"tests/regression/paper tests/regression/agn","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.05","scopes":["cheap","cheap-docs","all"]},
+            {"shard":"regression-d","paths":"tests/regression --ignore=tests/regression/synthesizer_parity --ignore=tests/regression/precision --ignore=tests/regression/bug --ignore=tests/regression/agn --ignore=tests/regression/paper","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.65","scopes":["docs","cheap-docs","all"]},
+            {"shard":"physics","paths":"tests/physics","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.28","scopes":["cheap","cheap-docs","all"]}
+          ]
+          JSON
+          )
 
-          if ! files=$(gh api --paginate \
-                 "repos/$REPO/pulls/$PR/files" --jq '.[].filename'); then
-            echo "could not list changed files -> running the gallery"
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ -z "$files" ]; then
-            echo "empty file list -> running the gallery"
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # emit <gallery needed: true|false> <test scope: all|docs|cheap|cheap-docs|none>
+          emit() {
+            local needed=$1 scope=$2 selector matrix
+            case "$scope" in
+              all)  selector='.' ;;
+              none) selector='[]' ;;
+              *)    selector="map(select(.scopes | index(\"$scope\")))" ;;
+            esac
+            if ! matrix=$(jq -c "{include: ($selector | map(del(.scopes)))}" <<<"$table"); then
+              echo "::error::could not build the shard matrix for scope $scope"
+              exit 1
+            fi
+            {
+              echo "needed=$needed"
+              echo "scope=$scope"
+              echo "shards=$matrix"
+              echo "expected=$(jq -c '[.include[].shard]' <<<"$matrix")"
+              echo "all_shards=$(jq -c 'map(.shard)' <<<"$table")"
+            } >> "$GITHUB_OUTPUT"
+            echo "event=$EVENT -> gallery needed=$needed, test scope=$scope, shards=$(jq -c '[.include[].shard]' <<<"$matrix")"
+          }
 
-          echo "changed files:"
-          echo "$files" | sed 's/^/  /'
+          # Print the changed filenames inside a stop-commands region under a
+          # random token, so a filename such as `::warning::x` is printed as text
+          # and cannot inject a workflow command.
+          print_files() {
+            local token
+            token=$(openssl rand -hex 16 2>/dev/null) || token="$RANDOM$RANDOM$(date +%s%N)"
+            echo "::stop-commands::$token"
+            sed 's/^/  /' <<<"$files"
+            echo "::$token::"
+          }
 
-          # What an example's behaviour actually depends on:
+          # The gallery's inputs. What an example's behaviour actually depends on:
           #   examples/                     the example sources themselves
           #   src/tengri/                   the library they exercise (the #1146 case)
           #   data/                         the grids they load at run time
@@ -631,13 +800,121 @@ jobs:
           # docs/, notebooks/ and the spine generator are deliberately absent:
           # sphinx-gallery reads `examples/`, so no edit under docs/ can change
           # what an example does. `docs/auto_examples/` is generated OUTPUT.
-          if echo "$files" | grep -qE '^(examples/|src/tengri/|data/|tools/run_gallery_examples\.py$|pyproject\.toml$|\.github/workflows/tests\.yml$)'; then
-            echo "-> gallery inputs touched, running it"
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "-> no gallery input touched, skipping it"
-            echo "needed=false" >> "$GITHUB_OUTPUT"
+          gallery_re='^(examples/|src/tengri/|data/|tools/run_gallery_examples\.py$|pyproject\.toml$|\.github/workflows/tests\.yml$)'
+
+          # Documentation trees: top-level markdown and docs/, notebooks/ and
+          # reproduction/. Markdown under src/, data/ or tests/ is data some test
+          # reads, so it is not docs.
+          docs_re='^(docs/|notebooks/|reproduction/)|^[^/]+\.md$'
+
+          # A change to the CI machinery runs everything: the cheap tier is
+          # computed by this very machinery, so a PR that edits it cannot be
+          # trusted to have been routed by the old rules.
+          # tools/ci_bug_durations.json is the ledger that splits regression/bug
+          # across the three b-shards: a change to it moves tests between shards.
+          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_bug_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
+
+          # schedule and workflow_dispatch always run everything. The nightly is
+          # the backstop that catches drift a per-PR filter cannot see.
+          case "$EVENT" in
+            schedule|workflow_dispatch) emit true all; exit 0 ;;
+          esac
+
+          # A draft is not proposed for merge. Lint, security and smoke still
+          # run; the expensive tiers wait for ready_for_review.
+          if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+            emit false none
+            exit 0
           fi
+
+          truncated=false
+          case "$EVENT" in
+            pull_request)
+              # filename plus previous_filename: a rename src -> docs touches
+              # src, and the old path must be classified too.
+              if ! rows=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+                    --jq '.[] | [.filename, (.previous_filename // "")] | @tsv'); then
+                echo "could not list changed files -> running everything"
+                emit true all
+                exit 0
+              fi
+              if [ -z "$rows" ]; then
+                echo "empty file list -> running everything"
+                emit true all
+                exit 0
+              fi
+              # The files API returns at most 3000 entries; a list that long may
+              # be cut short, and a cut list can hide a code file behind docs.
+              entries=$(grep -c '' <<<"$rows")
+              if [ "$entries" -ge 3000 ]; then
+                echo "$entries entries (the API stops at 3000): list may be truncated"
+                truncated=true
+              fi
+              files=$(tr '\t' '\n' <<<"$rows" | sed '/^$/d')
+              ;;
+            push)
+              # Every push to main runs the full suite and the gallery: pushes
+              # are coalesced, so the diff of this push alone does not cover the
+              # commits an earlier, superseded run would have tested.
+              echo "push to main -> full suite and gallery"
+              emit true all
+              exit 0
+              ;;
+            *)
+              echo "unrecognized event -> running everything"
+              emit true all
+              exit 0
+              ;;
+          esac
+
+          echo "changed files:"
+          print_files
+
+          if [ "$ACTION" = "edited" ]; then
+            if [ "$BASE_CHANGED" = "true" ]; then
+              echo "edited: the base was retargeted to $BASE_REF"
+            else
+              echo "edited: the base did not change; the scope is recomputed from the same diff and labels"
+            fi
+          fi
+
+          # -v inverts the match: `non_docs` is "at least one file is NOT
+          # documentation", `any_docs` is "at least one is".
+          non_docs=false; any_docs=false; force=false; gallery=false
+          if grep -vqE "$docs_re" <<<"$files"; then non_docs=true; fi
+          if grep -qE "$docs_re" <<<"$files"; then any_docs=true; fi
+          if grep -qE "$force_re" <<<"$files"; then force=true; fi
+          if grep -qE "$gallery_re" <<<"$files"; then gallery=true; fi
+
+          # Does the pull request carry `full-tests`? Read from the event
+          # payload, so it is the current label set on a labeled/unlabeled event.
+          # The labels arrive as a JSON array and are never joined on a comma.
+          full_label=false
+          if jq -e 'index("full-tests") != null' <<<"$LABELS_JSON" > /dev/null; then
+            full_label=true
+          fi
+
+          if [ "$full_label" = "true" ] || [ "$force" = "true" ] || [ "$truncated" = "true" ]; then
+            scope=all
+          elif [ "$non_docs" != "true" ]; then
+            scope=docs
+          elif [ "$any_docs" = "true" ]; then
+            scope=cheap-docs
+          else
+            scope=cheap
+          fi
+
+          if [ "$scope" != "all" ]; then
+            echo "-> pull request without full-tests: cheap tier ($scope), no gallery"
+            gallery=false
+          elif [ "$truncated" = "true" ]; then
+            gallery=true
+          elif [ "$gallery" = "true" ]; then
+            echo "-> full suite, gallery inputs touched, running it"
+          else
+            echo "-> full suite, no gallery input touched, skipping it"
+          fi
+          emit "$gallery" "$scope"
 
   # Execute every sphinx-gallery example (#1146).
   #
@@ -695,7 +972,9 @@ jobs:
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
-        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        # Only the nightly writes: a PR or a push that saved here
+        # would add a 120 MB entry per source change to a quota already full.
+        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.gallery_jax_cache.outputs.cache-primary-key }}
@@ -791,6 +1070,13 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # A menu cell prints the registry through tengri.list_*() at render time, so a
+      # declaration edit leaves the published output quoting retired text (#2396:
+      # nb03 still printed the pre-#2158 agn_grahsp_a_bc declaration). Compares every
+      # registry row and parameter name quoted in the executed notebook outputs with
+      # tengri.list_all(). Needs tengri importable, so it lives here. Clean on main,
+      # so it runs --strict.
+      - run: python tools/check_rendered_registry_strings.py --strict
       # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
       # one asks the converse — whether every symbol tengri EXPORTS is named in
       # the docs — because the two failure modes are independent and only the
@@ -823,11 +1109,9 @@ jobs:
       - run: python tools/check_harness_parity.py
       # Docs-prose voice guard (#2326): the enforcement NAMING_CONTRACT names
       # for confusable codepoints in published docs, plus notation canon and
-      # dev-detail leakage. Runs in its default warn-only mode (exit 0): the
-      # tree currently carries 24 violations, so --strict waits on a docs
-      # cleanup; wiring it makes the report visible and keeps the guard from
-      # rotting unrun, which is the defect #2326 is about.
-      - run: python tools/check_docs_voice.py
+      # dev-detail leakage. Strict since #2413 cleared its standing findings,
+      # so a PR that reintroduces the class fails here.
+      - run: python tools/check_docs_voice.py --strict
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
@@ -861,18 +1145,35 @@ jobs:
       # deterministic and runs in the ordinary parallel sweep. Prefer that shape
       # for any new guard here: measure compiled cost, not wall clock, whenever
       # the question is "does this path do less work".
-      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval and not population_fit' -n 0
 
   test:
+    # One job per shard the scope owes, named `test (<shard>)`. The matrix is
+    # DYNAMIC: `gallery-changes` builds it (see its comment), so a withheld shard
+    # never starts and never takes a runner. `ci-ok` checks that the shards that
+    # ran are exactly the ones the scope requires.
+    name: test (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    needs: smoke
+    needs: [smoke, gallery-changes]
+    # `fromJSON` needs the gate's output, so this job can run only when the gate
+    # succeeded; when it did not, `ci-ok` is red on the gate itself. `!cancelled()`
+    # (not the implicit `success()`) so the condition is exactly what is written
+    # here and a cancelled run is not reported as a skip. An empty matrix (a
+    # draft, scope `none`) is not a valid matrix, so the job stands down; `ci-ok`
+    # accepts that only for a scope that owes no shard. `github.base_ref` stays in
+    # the condition because `tools/check_ci_pr_coverage.py` requires every
+    # full-tier job to carry it.
     if: >-
-      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
+      ${{ !cancelled()
+      && needs.smoke.result == 'success'
+      && needs.gallery-changes.result == 'success'
+      && needs.gallery-changes.outputs.shards != ''
+      && needs.gallery-changes.outputs.shards != '{"include":[]}'
       && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
-    # Sizes from warm working sets; see CHANGELOG.md.
+    # Sizes from warm working sets (the shard table's `cache_gb`); see CHANGELOG.md.
     env:
-      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"contract":"1.55","components":"0.6","regression-a":"1.0","regression-b1":"0.7","regression-b2":"1.1","regression-b3":"1.1","regression-c":"0.05","regression-d":"0.65","physics":"0.28"}')[matrix.shard] }}
+      TENGRI_JAX_CACHE_MAX_GB: ${{ matrix.cache_gb }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
@@ -913,133 +1214,29 @@ jobs:
     # accumulation instead of paying for it in headroom. See #1346.
     strategy:
       fail-fast: false
-      matrix:
-        # Per-shard worker count and step budget — the same shape #1371 gave the
-        # `coverage` job below, for the same reason and now on the same evidence.
-        #
-        # regression runs SERIAL. On main @a05ae7b5e both jobs ran the same tests
-        # at the same commit and split on `-n` alone:
-        #
-        #   coverage (regression)  -n 1, WITH --cov   40m00s  PASSED
-        #   test     (regression)  -n 2, no --cov     18m40s  RUNNER KILLED at 93%
-        #
-        # `--cov` adds 30-50% memory on top, so the serial job carried the heavier
-        # per-worker load and still finished — the second worker is what does not
-        # fit. Same host-OOM signature as always: zero FAILED markers, "runner has
-        # received a shutdown signal", and the kill at the byte-identical 93%
-        # position seen at 17m11s / 27m11s / 28m00s / 29m02s. A fixed *position*
-        # reached at wildly different speeds is a resource cliff, not a flake, and
-        # not a timeout — #1362 raised this step's cap to 50 min and it died at 18.
-        #
-        # The wall-clock bill is small, because `--dist=loadfile` pins a whole file
-        # to one worker and this shard is dominated by a few long files: the second
-        # worker mostly idles. Serial+cov (40m) against parallel-no-cov (30m) puts
-        # serial-no-cov near 30m, though that comparison is confounded by `--cov`
-        # and the budget below is sized so it does not have to be exact.
-        #
-        # INTERIM. The cure is the retention this exposes: `test_field_latents_
-        # reach_likelihood.py` peaks at 1.87 GB for one test but 5.16 GB for six
-        # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
-        # revisit with a measurement, not an assumption. See #1346.
-        include:
-          # 70, not 50: the budget must clear the shard's wall clock under
-          # runner-pool congestion, which is worth +60% on its own. Measured
-          # 2026-09-05 by rerunning the SAME main SHA's contract job in the
-          # evening pool: ~25m (original daytime run) -> 40m34s (rerun, run
-          # 33979717459 attempt 2). Evening PR runs sat at 47-48m, and
-          # #2147's job was killed AT the 50m cap with zero test failures.
-          # The per-test `--timeout=600` below still catches real hangs, so
-          # this cap only bounds total wall clock — sizing it tight buys
-          # nothing and manufactures spurious reds.
-          - shard: contract
-            paths: tests/contract
-            nproc: 2
-            budget: 70
-          # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
-          # #148 rehome emptied the tree and the matrix was rewritten around the
-          # physics-first trees without it, so anything landing back in
-          # `tests/unit` never gated a PR. Ten of its eleven files were the
-          # #1322 API epic's, and one of them had been RED on main since #1337
-          # phase 2 while CI stayed green. 87 tests, ~2 min at -n 2 — free
-          # inside this shard's budget. `tools/check_test_paths_covered.py`
-          # (lint job) now fails the build if any test tree escapes the matrix
-          # again.
-          - shard: components
-            paths: tests/components tests/unit
-            nproc: 2
-            budget: 50
-          # regression is split FOUR ways, each SERIAL. Two independent knobs,
-          # for two different problems:
-          #
-          #   nproc: 1  -> memory. With one worker a runner's peak is one file's
-          #                peak, so no combination of heavy files can OOM it. At
-          #                -n 2 this shard was runner-killed at a consistent
-          #                92-93% offset on four separate refs (#1346).
-          #   4 shards  -> wall clock. Serial cost the PR path 50 min (measured
-          #                on #1372, against 30 min at -n 2 when it survived).
-          #                More RUNNERS is free; more workers per runner is not.
-          #
-          # Boundaries are set from MEASURED shard durations. The first split used
-          # wall clock attributed to subtrees by mapping progress-percentage
-          # timestamps onto collection order, and that method UNDER-COUNTED bug/ by
-          # 2.3x — it assumes tests are evenly weighted inside each progress
-          # interval, and they are not. Predicted vs actual on #1380:
-          #
-          #   shard          predicted   ACTUAL
-          #   regression-a      16.2      6m40s
-          #   regression-b      11.4     26m24s   <- the long pole, 2.3x out
-          #   regression-c      10.0      3m03s
-          #   regression-d      10.5     15m18s
-          #
-          # So bug/ is now split in half at runtime (see the run step). Trust only
-          # the ACTUAL column; re-measure from a completed run's job durations
-          # rather than from progress lines. This file's timing notes have now gone
-          # stale three times — treat every number here as needing a date.
-          - shard: regression-a
-            paths: tests/regression/synthesizer_parity tests/regression/precision
-            nproc: 1
-            budget: 50
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
-          # than by a hardcoded list. `bug_half` triggers that in the run step;
-          # new test files are absorbed automatically instead of silently landing
-          # on whichever side a frozen glob happens to match.
-          - shard: regression-b1
-            paths: ""
-            bug_half: "1"
-            nproc: 1
-            budget: 50
-          - shard: regression-b2
-            paths: ""
-            bug_half: "2"
-            nproc: 1
-            budget: 50
-          - shard: regression-b3
-            paths: ""
-            bug_half: "3"
-            nproc: 1
-            budget: 50
-          - shard: regression-c
-            paths: tests/regression/paper tests/regression/agn
-            nproc: 1
-            budget: 50
-          # The top-level files only — every subdirectory above is excluded so no
-          # test runs twice. This shard holds the memory-heaviest files
-          # (test_field_latents_reach_likelihood.py at 4.06 GB).
-          - shard: regression-d
-            paths: >-
-              tests/regression
-              --ignore=tests/regression/synthesizer_parity
-              --ignore=tests/regression/precision
-              --ignore=tests/regression/bug
-              --ignore=tests/regression/agn
-              --ignore=tests/regression/paper
-            nproc: 1
-            budget: 50
-          - shard: physics
-            paths: tests/physics
-            nproc: 2
-            budget: 50
+      # The shard table is in `gallery-changes` (one definition: paths, worker
+      # count, step budget, cache cap, owing scopes). Notes on why it says what
+      # it says, kept here because the table is data:
+      #
+      #   * regression shards run SERIAL (`nproc: 1`). At -n 2 the shard was
+      #     runner-killed at a consistent 92-93% offset on four refs: memory
+      #     accumulates across the tests of a file (~0.66 GB/test unreleased in the
+      #     worst one) and `--dist=loadfile` pins a file to one worker. More
+      #     RUNNERS is free; more workers per runner is not (#1346).
+      #   * `bug/` is split in thirds at runtime from the committed duration ledger
+      #     (`tools/ci_bug_durations.json`, `tools/ci_split_paths.py`), so new test
+      #     files are absorbed instead of landing on whichever side a frozen glob
+      #     happens to match.
+      #   * `components` also carries `tests/unit`, which was in no shard once and
+      #     went dark; `tools/check_test_paths_covered.py` fails the build if any
+      #     test tree escapes the table again.
+      #   * budgets are above measured wall clock under runner-pool congestion
+      #     (+60%): contract 120 (re-measured 2026-10-06; one worker holding a
+      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 45, regression-a3 70,
+      #     regression-b1/b2/b3 70, the rest 50. The per-test `--timeout=600` below
+      #     still catches a real hang, so a budget bounds total wall clock only.
+      #     Re-measure from a completed run's job durations before changing one.
+      matrix: ${{ fromJSON(needs.gallery-changes.outputs.shards) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -1049,23 +1246,48 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       # Persist the XLA compile cache. Measured locally at -n 2: 468 s cold vs 307 s
-      # warm — a ~1.5x saving that this job has been paying on every run.
+      # warm -- a ~1.5x saving.
       #
-      # It was dropped once with the note "it never warmed — cancelled runs don't save
-      # it". That diagnosis was right and the conclusion was wrong: the combined
-      # `actions/cache` skips its implicit post-save when the job is cancelled OR fails,
-      # so a cache can never warm on a job that is ever red — the same trap that made
-      # the slow tier's cache a no-op until #1055. `cache/restore` + `cache/save` with
-      # `if: always()` writes regardless of outcome. Keyed per shard (each sees a
-      # different slice of the compile graph) with a run-id key + prefix restore-keys,
-      # so each run restores the newest snapshot and saves its own superset.
+      # `cache/restore` + `cache/save` with `if: always()`, NOT the combined
+      # `actions/cache`: the combined action skips its implicit post-save when
+      # the job fails or is cancelled, so a cache can never warm on a job that is
+      # ever red (the same trap that made the slow tier's cache a no-op until
+      # #1055).
+      #
+      # The key is CONTENT-HASHED, not per run: shard + hash(pyproject.toml) +
+      # the installed JAX version, with a prefix `restore-keys` for the nearest
+      # older snapshot. It used to end in `github.run_id`, which made every run's
+      # key unique and every save a new entry: at one save per `main` push per
+      # shard that wrote ~9 entries of ~0.5-1.5 GB per merge, evicting the
+      # others, and left the repository at 10.25 GB of a 10 GB quota across 35
+      # entries with the useful ones churned out before they were read. Now only
+      # the nightly `schedule` run (and a manual dispatch on `main`) saves, and
+      # only when no entry with the exact key exists, so one entry per shard is
+      # resident and it changes when the dependency set, JAX or the ISO week does. JAX keys its
+      # entries by program hash internally, so an older snapshot restored under
+      # a changed source tree is a partial miss, never a wrong hit.
+      - id: jaxver
+        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
+      # ISO year-week, so the key rotates weekly: with a key that depended only
+      # on pyproject.toml and JAX, the nightly never found a reason to save
+      # again and the snapshot went stale for as long as neither changed.
+      - id: week
+        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
+          # The regression-a1/a2/a3 shards (split from regression-a, #2908/#2909) fall
+          # back to the old shard's snapshot, which compiled the same tests, until
+          # the nightly saves under their own keys. `regression-a-` cannot prefix-
+          # match an `a1`/`a2`/`a3` key, and the empty line other shards get is
+          # dropped by actions/cache. A fallback restore is not an exact hit, so the
+          # nightly still saves each shard's own entry.
           restore-keys: |
             tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-test-${{ matrix.shard }}-
+            ${{ startsWith(matrix.shard, 'regression-a') && 'tengri-jax-test-regression-a-' || '' }}
       # Fast PR feedback: NO coverage instrumentation (cov adds ~30-50% wall
       # clock) — coverage runs separately on push/nightly in the `coverage` job
       # below. tests/inference + integration are gated to the slow tier; crossval
@@ -1120,127 +1342,45 @@ jobs:
             RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
+      # `--durations` lists each shard's 60 slowest tests (>= 5 s) at the end of
+      # its log, so a shard's growth can be named from a completed run (#2908).
+      # `-v` (not `-q`) prints one line per test, and the Actions log stamps every
+      # line, so a shard that hits its step budget (and never prints `--durations`)
+      # can still be timed per test.
       - run: |
-          pytest ${{ steps.paths.outputs.value }} -q \
+          pytest ${{ steps.paths.outputs.value }} -v \
             -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=signal \
+            --durations=60 --durations-min=5 \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        # 20 -> 35. #1146 committed the SSP grids, which turned ~36 previously-
-        # SKIPPED tests ON (main was 1418 passed / 85 skipped; now 1454 / 49). They
-        # are the expensive kind — real 5994-wavelength grids, Cue builds — and the
-        # `contract` shard, already the long pole, went from ~11 min to ~21 min. It
-        # passed at 18m24s on the PR branch and was KILLED at 21m29s on main: the
-        # margin was gone and runner variance ate it.
-        #
-        # This is more work getting done, not slower work: a data-gated test that
-        # skips on CI has zero coverage, which is the whole reason the grids are now
-        # committed. Give the shard headroom rather than un-cover 36 tests.
-        #
-        # The per-test `--timeout=600` above still guards the failure mode this
-        # number does NOT: a single hung test stalling a worker.
-        #
-        # 35 -> 50. Same story one shard over. After the #1356 four-way split
-        # `regression` became the long pole. Completed durations measured
-        # 2026-07-25, all against a 35 min cap:
-        #
-        #   main @8524a837   32m00s     #1360 branch   34m03s
-        #   #1362 branch     34m56s  <- 4 seconds of margin
-        #
-        # A four-second margin is not a margin. Whether the spread is test
-        # content or runner variance does not matter here: the observed range
-        # already reaches the cap, so the next run that drifts high is a red
-        # main, and it will carry the "passed on the branch, KILLED on main"
-        # shape described above rather than a useful failure.
-        #
-        # Raised to 50 to match the push/schedule path below rather than drop
-        # regression coverage — the precedent the #1146 note above sets.
-        #
-        # This is headroom, NOT a rebalance: physics runs 3m26s against
-        # regression's 32m. And it does not touch the OTHER way this shard
-        # dies — a runner-VM OOM at ~93% with zero FAILED markers, which is
-        # unrelated to wall clock (seen at 27m11s, well inside the old cap).
-        # See #1346 (OOM) and #1352 (imbalance).
-        #
-        # Now per-shard (`matrix.budget`), because the shards no longer run the
-        # same way: regression went serial (see the matrix note above), so its
-        # cap is 85 to match the coverage job's proven serial budget. The other
-        # three stay at 50 and stay at -n 2. That last paragraph called this OOM
-        # untouched by the cap — correct, and it is why raising 35 -> 50 did not
-        # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
-        #
-        # regression-a and contract budgets are above the matrix: regression-a reached
-        # 61 minutes against its 70-minute cap, and contract reached 71-72 minutes
-        # against its 70-minute cap (killed with all tests passing). The matrix value
-        # stays 50 because the auto-generated job name "test (shard, paths, workers,
-        # budget)" is a required status check on main, so changing the matrix value
-        # renames the job and blocks every merge until branch protection is re-pinned.
-        # When the protection is re-pinned, move the timeouts into the matrix and delete
-        # this expression. The budgets cover a cold cache, because a pyproject.toml
-        # change legitimately cold-starts every shard.
-        #
-        # regression-b1/b2 (2026-10-03, three consecutive main runs on the shared
-        # runners, 4ca28b4d0 .. 8ee85a914): b1 36, 48, 46 min; b2 41, 39, 50 min
-        # against the 50-minute cap. Two PR runs the same day were killed at 51-52
-        # min with 93 % of b2 done, each adding under two minutes of tests. Both
-        # halves get 70, the same margin regression-a was given over its measured 61.
-        # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
-        # 51 min; b2 49, 48, 49 min and one kill at 51.
-        #
-        # 2026-10-06: recent main runs took b1 57 and 37 min, b2 53 and 69 min (run
-        # 37406879725, 03:09 to 04:18), and two PR runs (#2716, #2736) were killed at
-        # exactly 70 min with b2 at 95-96 % done and every test passing. Both halves
-        # sat at the cap and runner speed varies by +-30 %. The bug tree is now split
-        # in thirds (regression-b1/b2/b3, each about two thirds of the former half
-        # load); b3 gets the same 70-minute cap and cache limit as b2.
-        #
-        # 2026-10-08: the thirds were contiguous equal-COUNT blocks of the sorted file
-        # list, so heavy files clustered: recent runs took b1 36-38 min, b3 45-54 min,
-        # b2 58-72 min against the 70-minute cap, and main's own b2 was killed at 72
-        # min (run 37662030748). The split is now balanced by duration from the
-        # committed ledger tools/ci_bug_durations.json (see tools/ci_split_paths.py
-        # for the regeneration command); matrix values and job names are unchanged.
-        #
-        # contract (re-measured 2026-10-06; the first version of this note blamed
-        # a "natural 92-95 minutes", which was FALSE): the shard reaches ~98 % at
-        # 81-85 min, then one worker died silently — test_agn_subblock_wildcard_
-        # scoping[disc/adaf] outgrew the 600 s per-test cap (#2768) and the
-        # thread-method timeout killed its xdist worker with the file's remaining
-        # tests never rescheduled under --dist=loadfile. With the timeout method
-        # on signal and that one case carrying pytest.mark.timeout(1800), the
-        # shard completes; 120 gives the worker holding that file (~98 % of the
-        # shard + up to 30 min for the marked case on a slow runner) its room.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2' || matrix.shard == 'regression-b3') && 70 || matrix.budget }}
+        # Step budget: the shard table's `timeout` (see the notes on the matrix).
+        # It bounds total wall clock; the per-test `--timeout=600` above is what
+        # catches a real hang.
+        timeout-minutes: ${{ matrix.timeout }}
       - uses: actions/cache/save@v6
-        if: always() && github.ref == 'refs/heads/main'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
 
   # The ONE context branch protection should require. Everything else advisory.
   #
-  # Protection currently names eleven contexts, eight of which are the expanded
-  # `test` matrix strings. That has two costs, and the second is why this job
-  # exists at all:
+  # Require exactly these four contexts, under the names GitHub shows: `ci-ok`,
+  # `lint`, `security`, `smoke`. Do NOT require any `test (<shard>)` context: the
+  # test matrix is built from the run's scope, so a shard the scope withholds has
+  # no job and its context never reports. (Pin the four BEFORE merging the change
+  # that made the matrix dynamic, or every pull request blocks on contexts that no
+  # longer exist.) The shard list is therefore not duplicated into a repository
+  # setting no file here can see; this job is what holds it.
   #
-  #   1. The shard list is duplicated into a repository setting no file here can
-  #      see. Rename or add a shard and the rule silently desynchronises.
-  #   2. NOTHING CAN BE WITHHELD. A matrix job skipped by `if:` publishes the
-  #      bare name `test`, never the eight expanded shard contexts — so a
-  #      required shard context simply never reports and the PR blocks forever.
-  #      That is why the heavy tiers cannot be path-filtered today, even though
-  #      53% of open PRs (measured 2026-08-17: 8 of 15) touch no importable
-  #      code and cannot change a test outcome, while paying all 8 shards.
-  #
-  # Collapsing to one context unblocks path-filtering. But it is only SAFE if
-  # this context is stricter than "nothing went red": a `skipped` must never
-  # read as approval. `tools/ci_ok.py` holds that policy, mirroring the buckets
-  # in `tools/check_ci_pr_coverage.py` — the always-run gates must be `success`
-  # (skipped is a policy violation there, not an outcome), the heavy tiers may
-  # skip ONLY when the base is not `main`, and `gallery` may skip because
-  # `gallery-changes` decides it.
+  # NOTHING CAN BE WITHHELD BY A SKIPPED JOB. A `skipped` result must never read
+  # as approval, so `tools/ci_ok.py` holds that policy: the always-run gates must
+  # be `success` (skipped is a policy violation there, not an outcome), the heavy
+  # tiers may skip ONLY when the base is not `main` (or, for `test`, when a draft
+  # owes no shard), and `gallery` may skip because `gallery-changes` decides it.
   #
   # The policy is a tested Python module rather than inline shell precisely
   # because this repo landed three new gates in one day that were themselves
@@ -1248,16 +1388,30 @@ jobs:
   # for each mistake it exists to catch; the skipped-heavy-job rule was verified
   # by inverting it and watching the suite fail, not by reading it.
   #
-  # In `needs`: `coverage`, `slow`, `crossval` are now included, but the tier
-  # policy accepts their skip on runs that do not owe them (push, PR to
-  # non-main). On schedule and workflow_dispatch, their failure or skip is red
-  # (issue #2128: before this change, nightly schedule reds were invisible,
-  # because these jobs were omitted from `needs`, so their results never reached
-  # the verdict policy at all).
+  # In `needs`: `coverage`, `slow`, `crossval` are included, but the tier policy
+  # accepts their skip on runs that do not owe them (push, PR to non-main). On
+  # schedule and workflow_dispatch, their failure or skip is red (issue #2128:
+  # before this change, nightly schedule reds were invisible, because these jobs
+  # were omitted from `needs`, so their results never reached the verdict policy
+  # at all).
   #
   # Timing note: on schedule/dispatch runs, ci-ok publishes only after the
   # slowest gated job finishes (slow ~ up to 3 hours). This is deliberate and
   # free on PR/push runs where those jobs skip instantly.
+  #
+  # Which shards ran. `needs.test.result` is the worst of the shards that ran,
+  # so it cannot show a shard that was owed and never started. This job lists
+  # the run's `test (<shard>)` jobs through the API and `tools/ci_ok.py` compares
+  # them with `expected` (the set the scope requires), and `expected` with its
+  # own table of what each scope owes. A scope that was chosen wrongly, a shard
+  # that is missing, a shard that ran and failed, and a shard that ran without
+  # being owed are all red. A listing failure is red too, never an approval.
+  #
+  # Event policy: a push, the nightly and manual runs owe scope `all`; a pull
+  # request owes `all` with the `full-tests` label and otherwise one of
+  # `cheap` / `cheap-docs` / `docs`; a draft owes `none` (no shard, `test`
+  # skipped). `ci-ok` reports on pull_request and push alike (`if: always()`, no
+  # event filter).
   ci-ok:
     name: ci-ok
     # `always()` so this still runs — and still reports — when a dependency
@@ -1268,8 +1422,27 @@ jobs:
     needs: [tier, lint, security, smoke, gallery-changes, gallery, test, slow, coverage, crossval]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
+      # The `test (<shard>)` jobs of THIS run, latest attempt. A failure to list
+      # them leaves the file absent and `ci_ok.py` reports it; it is never read
+      # as "no shard ran".
+      - name: List the test shards that ran
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          if jobs=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=latest&per_page=100" \
+                --jq '.jobs[] | select(.name | startswith("test (")) | select(.conclusion != "skipped") | {name, conclusion}'); then
+            jq -cs '.' <<<"$jobs" > "$RUNNER_TEMP/shard_jobs.json"
+          else
+            echo "::warning::could not list this run's jobs; ci-ok will report it"
+          fi
       # stdlib only, so the runner's preinstalled python3 is enough — no
       # setup-python, no install. This job must stay seconds, not minutes: it
       # sits at the end of every run's critical path.
@@ -1279,7 +1452,14 @@ jobs:
           CI_OK_RESULTS: ${{ toJSON(needs) }}
           CI_OK_EVENT: ${{ github.event_name }}
           CI_OK_BASE_REF: ${{ github.base_ref }}
-          CI_OK_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+          CI_OK_SCOPE: ${{ needs.gallery-changes.outputs.scope }}
+          CI_OK_EXPECTED_SHARDS: ${{ needs.gallery-changes.outputs.expected }}
+          CI_OK_ALL_SHARDS: ${{ needs.gallery-changes.outputs.all_shards }}
+          CI_OK_SHARD_JOBS_FILE: ${{ runner.temp }}/shard_jobs.json
+          CI_OK_DRAFT: ${{ github.event.pull_request.draft }}
+          CI_OK_ACTION: ${{ github.event.action }}
+          CI_OK_EVENT_LABEL: ${{ github.event.label.name }}
+          CI_OK_LABELS: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
 
   # Alert on nightly schedule run failure. Opens or updates a deduplicated
   # issue when ci-ok fails on schedule events, so red nightly runs are never
@@ -1339,17 +1519,18 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     needs: smoke
-    # NOT on `push`. This job and `test` run the SAME 8 shards over the SAME
-    # paths at the SAME `-n`; the invocations differ only in `--cov` (here) and
-    # `--timeout=600 --timeout-method=signal` (there). Verified 2026-08-13 by
-    # comparing both matrices field by field: 8 == 8, and every
-    # (shard, paths, nproc) triple identical.
+    # Runs only on `schedule` and `workflow_dispatch` (see `if:`), never on a
+    # pull request or a push. This job and `test` take their shards from the same
+    # table in `gallery-changes`, filtered by the run's scope, and run them over
+    # the same paths at the same `-n`; the invocations differ only in `--cov`
+    # (here) and `--timeout=600 --timeout-method=signal` (there).
     #
-    # `test` runs on everything except a bare `labeled` PR event, so before this
-    # change a push to `main` ran BOTH — 16 shards of identical tests, out of 24
-    # jobs total for the push. Removing `push` here drops the push path to 16
-    # jobs (-33%) and takes the serial `coverage (regression-*)` shards, the
-    # slowest things in the workflow, off `main`'s critical path.
+    # `test` is the dynamic matrix. A pull request runs the cheap tier (scopes
+    # `cheap`, `cheap-docs` or `docs`) unless it carries `full-tests`; a draft
+    # runs no shard; a push, a schedule and a dispatch run scope `all`. Keeping
+    # `push` out of this job's trigger means a push to `main` runs each shard once
+    # rather than twice, and takes the serial `coverage (regression-*)` shards,
+    # the slowest things in the workflow, off `main`'s critical path.
     #
     # Nothing stops being tested. Every test still runs on every commit to
     # `main` — once, under `test`, which is also the half carrying the pytest
@@ -1380,7 +1561,7 @@ jobs:
         #
         # coverage_budget is 1.5 × budget rounded up to the next 5, because
         # --cov adds 30-50% memory and wall-clock overhead (measured 2026-08-13:
-        # regression-a at 18m40s vs 40m00s with coverage on the same SHA).
+        # regression-a (before #2908's split) at 18m40s vs 40m00s with coverage on the same SHA).
         # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
           # 70, not 50, for the same reason as the test job's contract row
@@ -1433,10 +1614,20 @@ jobs:
           # the ACTUAL column; re-measure from a completed run's job durations
           # rather than from progress lines. This file's timing notes have now gone
           # stale three times — treat every number here as needing a date.
-          - shard: regression-a
-            paths: tests/regression/synthesizer_parity tests/regression/precision
+          - shard: regression-a1
+            paths: tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py
             nproc: 1
             budget: 50
+            coverage_budget: 105
+          - shard: regression-a2
+            paths: tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py
+            nproc: 1
+            budget: 45
+            coverage_budget: 105
+          - shard: regression-a3
+            paths: tests/regression/precision/test_float32_fitting_path_seams.py
+            nproc: 1
+            budget: 70
             coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
@@ -1526,8 +1717,9 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        # regression-a mirror: test job at 70 min, coverage at 1.5x = 105 min
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 105 || matrix.coverage_budget }}
+        # the three regression-a shards keep the 105 min coverage budget the
+        # combined regression-a shard had.
+        timeout-minutes: ${{ matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
@@ -1541,16 +1733,14 @@ jobs:
   #   - nightly schedule
   #   - manual workflow_dispatch
   #   - PRs carrying the `run-slow-tests` label
-  # Skip on regular push/PR to keep fast feedback under 15 min.
+  # Skip on a push to main and on a pull request without the label.
   #
-  # Note the `if:` reads `github.event.pull_request.labels.*.name` — the pull
-  # request's CURRENT label set — not `github.event.label`. So this opts in on
-  # any pull-request event once the label is on, and does NOT need `labeled` to
-  # be a trigger type (it no longer is; see the `types:` note at the top).
-  #
-  # The one behaviour that changed: adding the label to an already-open pull
-  # request no longer starts a run by itself. Push, or use `workflow_dispatch`,
-  # which is listed above precisely for this.
+  # The `if:` reads `github.event.pull_request.labels.*.name` -- the pull
+  # request's CURRENT label set -- so it opts in on any pull-request event once
+  # the label is on. `labeled` / `unlabeled` ARE triggers (the `full-tests` label
+  # needs them), and so this job stands down on a label event that is not its own
+  # label: an unrelated label never re-runs a multi-hour suite. Adding
+  # `run-slow-tests` itself starts it.
   slow:
     runs-on: ubuntu-latest
     # Split the ~1,270-test tier across two parallel runners (one per suite):
@@ -1617,7 +1807,10 @@ jobs:
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'run-slow-tests')
+          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+              || github.event.label.name == 'run-slow-tests'))
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
     # Sizes from warm working sets; see CHANGELOG.md.
     env:
@@ -1646,13 +1839,22 @@ jobs:
       # and this tier is red (#1031). A cache meant to speed up a failing
       # suite can never warm if warming requires the suite to pass — the
       # same trap that made the `test` job's cache a no-op (see its comment).
+      # Content-hashed key (pyproject.toml + installed JAX), saved by the nightly
+      # only; see the `test` job's cache note for why a per-run key was dropped.
+      - id: jaxver
+        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
+      # ISO year-week: the key rotates weekly so the nightly re-saves; a key that
+      # depended only on pyproject.toml and JAX left the snapshot stale.
+      - id: week
+        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
           restore-keys: |
             tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-
       # `-m 'not crossval'` overrides the default addopts selector, which
       # deselects the `slow` marker that conftest auto-applies to exactly these
       # two trees — without it this job would collect everything and run nothing.
@@ -1673,11 +1875,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1698,10 +1900,10 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
-        if: always() && github.ref == 'refs/heads/main'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
@@ -1733,7 +1935,10 @@ jobs:
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'run-crossval')
+          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+              || github.event.label.name == 'run-crossval'))
     # 30 -> 45: the per-file loop pays pytest+JAX startup ~55 times, and the
     # first run on a cold compile cache also pays every compilation once.
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
@@ -1750,13 +1955,20 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       # Persist the JAX compile cache (same pattern as the `test` job).
+      - id: jaxver
+        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
+      # ISO year-week, as in the `test` and `slow` jobs: the key rotates weekly so
+      # the nightly re-saves the snapshot.
+      - id: week
+        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
           restore-keys: |
             tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-crossval-
       # Reference grids are not in the repo; the affected modules skip
       # themselves when absent, so a missing file is reported as a skip rather
       # than an error. Check the skip count, not just the exit status.
@@ -1830,7 +2042,7 @@ jobs:
           name: crossval-test-results
           path: crossval-results/
       - uses: actions/cache/save@v6
-        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}

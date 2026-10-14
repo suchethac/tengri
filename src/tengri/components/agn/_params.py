@@ -153,12 +153,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
         Uniform(0.05, 0.5, default=0.3),
         "ADAF viscosity parameter alpha",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_adaf_beta",
         # Gas-to-total pressure ratio (magnetic fraction is 1-beta).
         Uniform(0.1, 0.9, default=0.5),
         "ADAF gas-to-total pressure ratio beta",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]: the magnetic fraction is 1 - beta",
     ),
     ParamDeclaration(
         "agn_adaf_delta",
@@ -171,6 +175,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.001, 0.5, default=0.1),
         "ADAF electron viscous-heating fraction delta "
         "(default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_astar",
@@ -751,7 +757,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_cool_width",
         Uniform(0.2, 0.65, default=0.45),
-        "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
+        "GRAHSP cool dust log-Gaussian standard deviation [dex] "
+        "(paper COOLwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -765,7 +772,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_hot_width",
         Uniform(0.2, 0.65, default=0.5),
-        "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
+        "GRAHSP hot dust log-Gaussian standard deviation [dex] "
+        "(paper HOTwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -836,17 +844,25 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         ),
     ),
     # CIGALE skirtor2016 disc-shape modulator (Boquien+2019). The skirtor2016
-    # grid samples delta in [-0.5, 0.5]; for the adaf_lopez2024 block it is a
-    # blend weight that the block itself clamps to [0, 1].
+    # grid samples delta in [-0.5, 0.5]. The adaf_lopez2024 blend weight is a
+    # different quantity and has its own key (agn_cigale_adaf_delta).
     ParamDeclaration(
         "agn_cigale_disk_delta",
         Uniform(-0.5, 0.5, default=0.0),
         "CIGALE skirtor2016 disc slope modulator (paper delta). "
         "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
         "power-law index alpha from its nominal value by -delta (positive "
-        "delta -> shallower optical slope). For 'adaf_lopez2024' block: "
-        "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
-        "thin disc (1).",
+        "delta -> shallower optical slope).",
+    ),
+    # CIGALE skirtor2016 disk_type=2 ADAF-to-thin-disc blend weight (paper delta).
+    # Unclipped in pcigale 2025.1 (skirtor2016.py:218-226); the declared [0, 1] is the range.
+    ParamDeclaration(
+        "agn_cigale_adaf_delta",
+        Uniform(0.0, 1.0, default=0.0),
+        "CIGALE skirtor2016 disk_type=2 blend weight (paper delta): 0 = pure ADAF, "
+        "1 = pure thin disc (Lopez et al. 2024). Read only by the 'adaf_lopez2024' disc.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
     ),
     # CIGALE skirtor2016 cross-component AGN power coupling
     ParamDeclaration(
@@ -862,7 +878,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "
         "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
-        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used.",
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used. With "
+        "``agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}`` the fraction is "
+        "that of the light in the window (CIGALE ``lambda_fracAGN``), not of the dust.",
         lambda lo, hi: lo >= 0 and hi < 1.0,
         "must be in [0, 1)",
     ),
@@ -917,6 +935,32 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # GRAHSP Netzer accretion-disc multilinear interpolation parameters (Task 3).
+    # The 16-node grid spans black-hole mass, spin, and Eddington ratio.
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mbh",
+        Uniform(6.0, 9.0, default=8.0),
+        "GRAHSP Netzer disc black-hole mass log10(M_BH/Msun). "
+        "Interpolates over the grid support [6, 9] dex; "
+        "clipped to edges outside this range.",
+        units="log10(Msun)",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_spin",
+        Uniform(0.0, 0.998, default=0.0),
+        "GRAHSP Netzer disc spin parameter. "
+        "Interpolates over the grid support [0, 0.998]; "
+        "clipped to edges outside this range.",
+        units="dimensionless",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mdot",
+        Uniform(-1.5228787452803376, -0.5228787452803376, default=-0.5228787452803376),
+        "GRAHSP Netzer disc Eddington ratio log10(Mdot). "
+        "Grid support [log10(0.03), log10(0.3)], with default 0.3. "
+        "Interpolates over this range; clipped to edges outside.",
+        units="dex",
+    ),
 )
 
 #: Default ``agn_log_lbol`` for standalone model functions, read from the
@@ -949,6 +993,17 @@ DEFAULT_AGN_LOG_LEDD = declared_default(PARAMS, "agn_log_ledd")
 #: §9 reproduction audit to be the dominant residual at the SKIRTOR torus peak,
 #: which is why the declaration moved and these call sites must follow.
 DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
+
+#: Default torus half-opening angle [deg] for the generic Type-1/2 mask, read off
+#: the declaration rather than repeated in the AGN blocks (ADR-0011).
+DEFAULT_AGN_THETA_TORUS = declared_default(PARAMS, "agn_theta_torus")
+
+#: Default SKIRTOR and AGNfitter-CLUMPY torus half-opening angles [deg].
+DEFAULT_AGN_OA_SKIRTOR = declared_default(PARAMS, "agn_oa_skirtor")
+DEFAULT_AGN_OA_NENKOVA = declared_default(PARAMS, "agn_oa_nenkova")
+
+#: Default SKIRTOR 9.7 um optical depth.
+DEFAULT_AGN_TAU_SKIRTOR = declared_default(PARAMS, "agn_tau_skirtor")
 
 #: Default AGN-to-stellar luminosity ratio. 1.0 means "use the configured AGN at
 #: full strength", so a wildcard ``'all_params': Fixed(DEFAULT)`` yields a working AGN
@@ -1234,6 +1289,10 @@ __all__ = [
     "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
+    "DEFAULT_AGN_OA_NENKOVA",
+    "DEFAULT_AGN_OA_SKIRTOR",
+    "DEFAULT_AGN_TAU_SKIRTOR",
+    "DEFAULT_AGN_THETA_TORUS",
     "GRID_EXTENT_SOURCES",
     "PARAMS",
 ]

@@ -60,7 +60,7 @@ for met in met_logzsol:
             "logZ_gas": met,
             "logU": -2.0,
             "fesc": 0.0,
-            "fesc_lya": 0.0,
+            "fesc_lya": 1.0,
         }
 
         dust_config = {

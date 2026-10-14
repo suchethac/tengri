@@ -114,7 +114,6 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._lgmet_scatter = 0.1
             self._met_interp = "lin"
             self._met_mode = "table"
-            self._z_interp = "lin"
             self._sfh_fn = None
             self._sfh_internal_names = []
             self._sfh_public_names = []
@@ -143,6 +142,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_t_birth_yr = 1e7
             self._dust_transition_width_dex = 0.0
             self._dust_ir_diffuse_screen = False
+            self._dust_ir_cmb = False
             self._astrodust_spinning_dust = False
             self._astrodust_f_cnm = 0.5
             self._wg00_dust_curve = 0
@@ -173,8 +173,11 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_lbol_is_user_fixed = False
             self._uses_radio = False
             self._radio_include_freefree = False
+            self._radio_ir_window = "fir"
+            self._radio_sf_nu_ref = None
             self._radio_sfr_mode = "kranichstein"
             self._radio_agn_model = "wilman"
+            self._radio_agn_loudness_ref = "4400"  # added by #2974; sed_model default
             self._uses_xray = False
             self._xray_model = "yu"
             self._uses_shock = False
@@ -203,6 +206,14 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._cached_full_state_chain = None
             self._dust_band_response_cache = None
             self._dust_band_response_decline = None
+            self._dust_shape_table_cache = None
+            self._dust_shape_table_decline = None
+            # Literal policy entry from #2974 (radio AGN loudness anchor): the mock must carry it.
+            self._radio_agn_loudness_ref = None
+            self._cloudy_band_table_cache = None
+            self._cloudy_band_table_decline = None
+            self._shock_band_table_cache = None
+            self._shock_band_table_decline = None
             self._energy_balance_lut_cache = None
             self._index_window_lut_cache = None
             self._line_window_lut_cache = None
@@ -1010,6 +1021,10 @@ _DYNAMIC_SETATTR_ALLOWLIST = {
     "_additive_term_band_response": (
         "setattr(self, f'_{name}_term_response_cache', ...): covered by "
         "pattern '_*_term_response_cache' in SIGNATURE_POLICY"
+    ),
+    "_additive_term_shape_table": (
+        "setattr(self, f'_{name}_term_shape_cache', ...): covered by "
+        "pattern '_*_term_shape_cache' in SIGNATURE_POLICY"
     ),
 }
 

@@ -197,7 +197,44 @@ from collections.abc import Sequence
 #: and in erg/s on float64, with ``numer`` in the matching unit, so one division serves both.
 #: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
 #: and still counted.
-EXPECTED_SITES = 84
+#:
+#: 84 -> 85 with #2766: ``cmb_luminosity_boost`` (components/dust/emission/_cmb.py) forms
+#: ``(T_eff / jnp.maximum(T_dust, 1.0)) ** (4 + beta)``. A scale floor: ``T_dust`` is the declared
+#: ``dust_T`` (prior 20-80 K, validated > 0) and the Schreiber libraries that apply the boost
+#: tabulate 15-99 K, so the 1 K floor never binds for a valid model; it only keeps a traced
+#: zero from producing inf.
+#:
+#: 85 -> 84 with the #2683 follow-up merged onto #2766: the follow-up's own count (83, one
+#: clamp retired with the histogram kernel) plus #2766's ``cmb_luminosity_boost`` site.
+#:
+#: 84 -> 83 with #2745: the SKIRTOR publication path integrates the disc and dust in closed
+#: form (``native_bolometric_nu``) instead of dividing a grid trapezoid by a clamped integral;
+#: one clamped-denominator division is gone.
+#:
+#: 83 -> 82 with #2783: the ``adaf_spectrum_from_state`` normalization no longer divides by
+#: ``jnp.maximum(integral, representable_floor(1e-100))``. It forms the same ratio in log space,
+#: ``exp(log numer - log integral + log(S + B))``, with ``log_integral`` a ``logsumexp`` of the
+#: segment and bremsstrahlung log powers, so the denominator is never clamped and never divided.
+#: A removal, not a relabel: a zero power would now show as -inf in the log, not as a floored
+#: quotient.
+#:
+#: 82 -> 81 with #2825: the ``alpha_c < 1`` branch of ``_adaf_electron_temperature`` no longer
+#: evaluates Eq. 43 with ``jnp.maximum(alpha_c, 1e-3)`` in the exponent (the former
+#: ``tau_es ** (-1.0 / jnp.maximum(alpha_c, 1e-3))`` in adaf.py). The energy-balance solve
+#: (``_adaf_solve_te_balance``) replaces Eq. 43 on the T_e path, so a degenerate input now fails
+#: loudly through the balance residual rather than flooring the exponent.
+#:
+#: 81 -> 80 (round 3, #2921): ``inference/posterior.py``'s ``agn_fraction`` divided by
+#: ``jnp.maximum(total, 1e-300)`` inside a ``jnp.where(total > 0, ...)``. The divisor is now
+#: selected before the division (``jnp.where(total > 0, total, 1.0)``), so the clamped
+#: denominator is gone rather than moved. A removal: the zero case was already excluded by
+#: the select, so no zero is newly exposed.
+#:
+#: 80 -> 79 (#2944): ``components/xray/component.py``'s LMXB age divided by
+#: ``jnp.maximum(_w_sum, ...)``. The shared ``xray.lmxb_stellar_age_gyr`` helper now selects
+#: its denominator before the division (surviving weights, then formed, then 1 Gyr), so the
+#: clamped denominator is gone rather than moved.
+EXPECTED_SITES = 79
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

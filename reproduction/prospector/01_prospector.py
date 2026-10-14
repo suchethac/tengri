@@ -172,7 +172,7 @@ print(
 # 1e-6.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL (2 tests, thin): CSP integral, CIC age kernel (default)
+# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -246,7 +246,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # printed `∫SFR dt` confirms the area integrates to 1 M⊙ (tengri `log_total_mass = 0`).
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (11/33): Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
 t_p, sfr_p = P.sfh_curve(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL)
@@ -431,7 +431,7 @@ V.print_window_table(_p1_rows, ref_name="FSPS", title="§2 cont'd — SFR(t) ove
 # codes order log-SFR ratios youngest-first with the same sign, so the same
 # numbers drive both.
 #
-# Remaining 0.3–2% optical residuals trace to comparison conventions: tengri's
+# Remaining 1.6–4.7% optical residuals (printed in §2a–§2d) trace to comparison conventions: tengri's
 # age weights match dense code-independent quadrature of the same SSP arrays
 # to ~1e-4 per node; Prospector floors the youngest bin at 1 Myr where
 # tengri fills to lookback 0; and FSPS's `sfh=3` path carries its own
@@ -751,8 +751,10 @@ print(f"§2d post-starburst: optical median residual {_res_p:.2e}")
 
 # tengri's dedicated Suess+2022 PSB template (now wired into the DSPS forward
 # pass): youngest bin [0, t_last], one flex bin to t_flex, then three
-# equal-width fixed old bins from t_flex out to 13.7 Gyr, which take the two
-# adjacent-step ratios below.
+# equal-width fixed old bins from t_flex out to age(z) (13.7 Gyr at z = 0). They
+# take one ratio per fixed bin: ratio_old_0 links the oldest flex bin to the
+# youngest fixed bin, and ratio_old_1 and ratio_old_2 are the adjacent steps
+# (ratio_old_2 is held at its default 0).
 _sfh_suess = {
     "type": "psb_suess2022",
     "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
@@ -761,6 +763,7 @@ _sfh_suess = {
     "ratio_young": Fixed(-1.5),
     "ratio_old_0": Fixed(0.2),
     "ratio_old_1": Fixed(-0.3),
+    "ratio_old_2": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
 }
 _m_suess, _s_suess = _tengri_nonparam(_sfh_suess)
@@ -858,10 +861,10 @@ save_fig("prospector_02e_sfh_ift_field.png")
 #
 # Stellar SED from τ-delayed SFH convolved with MIST+MILES SSPs, with no dust
 # or nebular. The printed optical ratio matches to unity to ≤0.2%: both engines
-# use the same dense convolution. Two historical offsets were fixed: the DSPS
-# age-weight handoff lost 3.8% of the oldest mass (+1.2% optical bias; fixed
-# #964), and the repackaged grid's FSPS-native L⊙ units were converted with the
-# IAU constant (0.29%; rescaled at SSP load, #969).
+# use the same dense convolution. Two offsets are corrected in this path: the DSPS
+# age-weight handoff lost 3.8% of the oldest mass (+1.2% optical bias), and the
+# repackaged grid's FSPS-native L⊙ units are converted with the IAU constant
+# (0.29%, rescaled at SSP load).
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0)
@@ -1007,7 +1010,7 @@ save_fig("prospector_03b_met_logzsol.png")
 # `f_bump = 0.6`. Tengri's `kriek_conroy` matches the FSPS construction.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Attenuation law library
+# **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 from tengri.dust import list_laws
@@ -1198,7 +1201,7 @@ V.print_window_table(_p2_rows_nir, ref_name="FSPS", title="§4b — A(λ)/A_V, 3
 # bright.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Attenuation law library
+# **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
@@ -1256,6 +1259,11 @@ fig.tight_layout()
 
 # %% [markdown]
 # ### §5b A_V and birth cloud
+#
+# The UV-to-NIR band medians sit about 3 % below FSPS at every A_V (0.968,
+# 0.967 and 0.963 at A_V = 0.3, 1 and 3) while the unattenuated continuum of §3
+# is at unity, so the deficit sits in the attenuation step itself; its cause is
+# not established here and it stays an open question.
 #
 # Single-screen Calzetti at `A_V ∈ {0.3, 1, 3}` (`dust_type=2`, `dust1=0`), then
 # a birth-cloud split at fixed diffuse depth: `dust_type=0`, `dust2=0.3`
@@ -1379,12 +1387,12 @@ save_fig("prospector_05b_dust_av_bc.png")
 # (WISE W1 at low z) inherit that choice. And FIR amplitude differs by construction:
 # FSPS re-emits all absorbed luminosity (measured `L_IR/L_abs = 0.9996`),
 # including LyC. Tengri's canonical balance excludes λ < 912 Å (those photons
-# re-emerge as nebular, the CIGALE convention). At this fiducial, LyC
-# carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
-# Both ratios are printed. Opt-in `dust_attenuation={'lyc_in_energy_balance': True}` closes the gap.
+# re-emerge as nebular, the CIGALE convention). At this fiducial the 30–1000 μm
+# median ratio is 0.996 canonical and 0.998 with the opt-in flag (both printed
+# below). Opt-in `dust_attenuation={'lyc_in_energy_balance': True}` closes the residual.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Dust IR emission physics (MBB, Casey12, CMB)
+# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
@@ -1465,13 +1473,13 @@ ax.text(
 _p_fir = w_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
 _L_fir = L_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
 _peak_p = _p_fir[np.argmax(_L_fir)]
-print(f"§6 FSPS far-IR peak at {_peak_p / 1e4:.0f} µm")
+print(f"§6 FSPS far-IR peak at {_peak_p / 1e4:.0f} μm")
 
 # FIR amplitude vs FSPS — quantifies the LyC energy-balance convention
-# (#961). The default (LyC-masked, #922) sits ~11 % low; the opt-in
-# `lyc_in_energy_balance` FSPS-parity mode re-emits the full absorbed luminosity
-# like FSPS and closes the gap.
-_fir_win = (w_p_ir > 3e5) & (w_p_ir < 1e7)  # 30–1000 µm
+# The default (LyC-masked) sits 0.4 % low at this fiducial (ratio
+# 0.996); the opt-in `lyc_in_energy_balance` FSPS-parity mode re-emits the full
+# absorbed luminosity like FSPS and closes the remaining 0.2 %.
+_fir_win = (w_p_ir > 3e5) & (w_p_ir < 1e7)  # 30–1000 μm
 _t_on_p_ir = U.regrid(np.asarray(s_ir.wave), sed_full_t, w_p_ir)
 _fir_ratio = float(np.median(_t_on_p_ir[_fir_win] / L_p_ir[_fir_win]))
 
@@ -1511,7 +1519,7 @@ _sed_fsps_mode = np.asarray(s_ir_fsps.derived["sed_dust_attenuated"]) + np.asarr
 _t_fsps_on_p = U.regrid(np.asarray(s_ir_fsps.wave), _sed_fsps_mode, w_p_ir)
 _fir_ratio_fsps = float(np.median(_t_fsps_on_p[_fir_win] / L_p_ir[_fir_win]))
 print(
-    f"§6 FIR amplitude tengri/FSPS (30–1000 µm): "
+    f"§6 FIR amplitude tengri/FSPS (30–1000 μm): "
     f"{_fir_ratio:.3f} (canonical LyC-masked) → "
     f"{_fir_ratio_fsps:.3f} with lyc_in_energy_balance=True (FSPS parity)"
 )
@@ -1607,7 +1615,7 @@ save_fig("prospector_06b_dust_ir_grid.png")
 # headline is overall shape, not bit-for-bit agreement at individual wavelengths.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Photometry projection
+# **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
 w_p_full, L_p_full = P.csp_lnu(
@@ -1689,7 +1697,7 @@ save_fig("prospector_07_panchromatic.png")
 # (width- and grid-independent).
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Cloudy grid / Cue vs FSPS baked-in
+# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
 
 # %%
 NEB_AGE = 0.01  # Gyr — a young constant-SFR population, where lines dominate
@@ -1861,11 +1869,11 @@ save_fig("prospector_08b_neb_logu_logz.png")
 # interpolates the same FSPS CLUMPY template library
 # (`Nenkova08_y010_torusg_n10_q2.0`) with a differentiable triweight kernel in
 # `agn_tau` (a fitted parameter, not frozen). At matched bolometric luminosity
-# both trace the same templates: mid-IR peak and 10 µm silicate feature
+# both trace the same templates: mid-IR peak and 10 μm silicate feature
 # coincide.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Nenkova+08 (CLUMPY) torus
+# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
 
 # %%
 FAGN = 0.5
@@ -1942,7 +1950,7 @@ fig.tight_layout()
 _peak_p_agn = w_p_agn[(w_p_agn > 1e4)][np.argmax(L_p_agn[(w_p_agn > 1e4)])]
 _w_t_agn = np.asarray(s_agn.wave)
 _peak_t_agn = _w_t_agn[(_w_t_agn > 1e4)][np.argmax(L_t_agn[(_w_t_agn > 1e4)])]
-print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t_agn / 1e4:.1f} µm")
+print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} μm, tengri {_peak_t_agn / 1e4:.1f} μm")
 
 
 # %% [markdown]
@@ -1959,7 +1967,7 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 #
 # The peak wavelength agrees to the printed digit from `agn_tau = 30` upward.
 # What remains is a trend with optical depth rather than a normalization
-# offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30-80, and falls
+# offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30–80, and falls
 # to 0.95× at 150. An optically thin clumpy torus distributes its emission over
 # fewer, hotter sightlines, and the two codes integrate that geometry
 # differently. The disagreement is in the shape, not in the energy budget.
@@ -2020,7 +2028,7 @@ for tau_agn in (5.0, 10.0, 30.0, 80.0, 150.0):
     L_t9_on_p = U.regrid(w_t9, L_t9, w_p9)
     rows = V.filter_rows(w_p9, L_t9_on_p, L_p9, filters=V.IR_BANDS)
     V.print_filter_table(rows, ref_name="FSPS", title=f"§9b {label}", compact=True)
-    print(f"    mid-IR peak: FSPS {peak_p9 / 1e4:.1f} µm, tengri {peak_t9 / 1e4:.1f} µm")
+    print(f"    mid-IR peak: FSPS {peak_p9 / 1e4:.1f} μm, tengri {peak_t9 / 1e4:.1f} μm")
 
 fig, (ax, ax_r), _p9_ratios = V.sweep_fig(
     _p9_cases,
@@ -2047,7 +2055,7 @@ save_fig("prospector_09b_agn_tau.png")
 # sequence; §10 X-ray and §11 radio are absent from Prospector.)
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
+# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
 # %%
 from tengri.igm import igm_transmission_madau
@@ -2155,8 +2163,8 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # *stellar continuum* matches FSPS to ~1%. The emission **lines are not in
 # this band**: they are sparse points the 16–84 percentile rejects as
 # outliers, and the residual panel shows them spiking to ±50–100 % — the
-# Cue-vs-Byler+2017 line-strength difference (§8: Hα 0.88×, [O III] 0.81×,
-# Hβ 0.95×) plus line center/width mismatches. So the tight spread is a
+# Cue-vs-Byler+2017 line-strength difference (§8: Hα 0.98×, [O III] 0.89×,
+# Hβ 1.04×) plus line center/width mismatches. So the tight spread is a
 # clean continuum match, not evidence that the lines agree. Below 912 Å both
 # codes absorb the stellar Lyman continuum at `neb_fesc = 0` (the gas
 # reprocesses the ionizing photons into nebular emission), so the region
@@ -2219,14 +2227,14 @@ plt.show()
 #
 # | Block | § | Cases | Worst tengri/FSPS | Where |
 # |---|---|---|---|---|
-# | SFH families | §2 cont'd | 8 | 17.3 % of peak | SFR(t), 2–95 % of age (sfh=4 τ=0.3, age=1) |
-# | logzsol | §3b | 4 | 0.996× | UV-to-NIR bands |
-# | Dust types | §4b | 11 | 1.21× (WG00) | A(λ)/A_V, 1216-10000 Å |
-# | A_V + birth cloud | §5b | 5 | 0.78× (birth cloud) | UV-to-NIR bands |
-# | DL07 grid | §6b | 4 | 0.89× | broadband, 3.4-863 µm |
+# | SFH families | §2 cont'd | 8 | 0.3 % of peak | SFR(t), 2–95 % of age (sfh=4 τ=0.3, age=1) |
+# | logzsol | §3b | 4 | 1.035× | UV-to-NIR bands (logzsol = −1) |
+# | Dust types | §4b | 11 | 1.21× (WG00) | A(λ)/A_V, 1216–10000 Å |
+# | A_V + birth cloud | §5b | 5 | 0.90× (A_V = 3, Calzetti); birth cloud up to 1.10× | UV-to-NIR bands |
+# | DL07 grid | §6b | 4 | 0.84× | broadband, 3.4–863 μm |
 # | gas_logU × gas_logZ | §8b | 9 | 0.45× ([O III]/Hβ) | line ratios to Hβ |
 # | agn_tau | §9b | 5 | 1.32×→0.95× with optical depth | mid/far-IR bands |
-# | IGM z sweep | §12b | 4 | 1.035× | T(λ), 850-1216 Å |
+# | IGM z sweep | §12b | 4 | 1.000× (max 0.0 % of unit T) | T(λ), 850–1210 Å |
 #
 # At matched parameters, FSPS-via-Prospector and tengri agree wherever they
 # evaluate the same mathematics: the SSP grid, the SFH shape, the attenuation
@@ -2240,7 +2248,7 @@ plt.show()
 #
 # 1. **Far-IR amplitude**: tengri's canonical energy balance excludes the
 #    Lyman continuum from dust heating, while FSPS re-emits all of it.
-#    At this fiducial the difference is ~11 % in every FIR band. Opt into
+#    At this fiducial the 30–1000 μm difference is 0.4 % (ratio 0.996, §6), and 0.2 % with the opt-in flag. Opt into
 #    the FSPS convention with `dust_attenuation={'lyc_in_energy_balance': True}` (§6).
 # 2. **IGM**: `SEDModel.build` defaults the IGM **on** (Inoue+2014).
 #    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
@@ -2251,7 +2259,7 @@ plt.show()
 # inherent to the backends, not a switchable convention.
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (68/126): Absolute SED normalization
+# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
 #
 
 # %% [markdown]

@@ -98,7 +98,7 @@ from __future__ import annotations
 
 import difflib
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
@@ -147,6 +147,7 @@ from tengri.parameters.agn_ownership import (  # noqa: F401
     _fracagn_value_is_active,
     agn_cross_category_claims,
     check_agn_torus_registry_agreement,
+    cigale_spelling_hint,
 )
 from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
@@ -158,6 +159,7 @@ from tengri.parameters.sentinels import (
     WILDCARD_KEY,
     _Sentinel,
 )
+from tengri.parameters.timing import check_free_gyr_alias
 
 __all__ = ["parameters_to_groups", "parse_groups"]
 
@@ -1213,7 +1215,10 @@ def parse_groups(**kwargs) -> Parameters:
         # before grid-file existence check, allowing bogus keys to be reported before
         # "missing grid" errors (#2328).
         structural_params = Parameters(
-            **structural_kwargs, _grammar_validated=True, _defer_resource_paths=True
+            **structural_kwargs,
+            _grammar_validated=True,
+            _defer_resource_paths=True,
+            _timing_keep_all=True,
         )
 
     # Partition declared params by owning group. ``met_*`` lands in
@@ -1300,6 +1305,7 @@ def parse_groups(**kwargs) -> Parameters:
                     # honored.
                     toplevel_registry_default = structural_params.get_distribution(param_name)
                     expanded = _expand_free(param_name, toplevel_registry_default)
+                    check_free_gyr_alias(param_name, FREE)
                     if expanded.is_fixed:
                         raise ParameterError(
                             f"{param_name!r}: FREE cannot be honored -- "
@@ -1526,20 +1532,22 @@ def parse_groups(**kwargs) -> Parameters:
 
     # ── Construct final Parameters ────────────────────────────────────
 
-    _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    timing_dropped = _settle_timing_pairs_for_build(resolved_kwargs, provenance)
+    grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
-    _catalog_z_range = getattr(_approx, "catalog_z_range", None)
-    _catalog_z_lo = float(_catalog_z_range[0]) if _catalog_z_range is not None else None
-    _narrow_free_priors_to_z(resolved_kwargs, provenance, catalog_z_lo=_catalog_z_lo)
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
     _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
-    final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    final_params = Parameters(
+        **resolved_kwargs, _grammar_validated=True, _timing_excluded=timing_dropped
+    )
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+    object.__setattr__(final_params, "_grid_resolution", grid_labels)
     object.__setattr__(final_params, "_parse_inputs", parse_inputs)
 
     # Raised HERE, after the groups have been translated and validated, not at
@@ -1590,7 +1598,7 @@ def parse_groups(**kwargs) -> Parameters:
     return final_params
 
 
-#: Marks a provenance tag whose prior was intersected with a component's grid.
+#: Marks a provenance tag whose prior was resolved to a component's grid support.
 _GRID_NARROWED_SUFFIX = "_grid"
 
 #: Marks a wildcard-FREE that found no declared prior and left the parameter
@@ -1598,26 +1606,12 @@ _GRID_NARROWED_SUFFIX = "_grid"
 #: is carried by the base tag, so :func:`_base_provenance` strips either.
 _WILDCARD_PINNED_SUFFIX = "_pinned"
 
-#: Marks a provenance tag whose free prior was capped at the age of the
-#: universe at the build's own source redshift (see
-#: :func:`_narrow_free_priors_to_z`). A parse-time cosmological narrowing, not
-#: a component grid, hence its own suffix distinct from ``_GRID_NARROWED_SUFFIX``.
-_Z_NARROWED_SUFFIX = "_zcap"
-
-#: Least fraction of a declared range that may survive an automatic narrowing.
-#:
-#: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
-#: 0.04 dex is not; it pins the parameter in all but name, and doing that
-#: silently is worse than the dead tail it removes. Below this, the narrowing
-#: is declined and the overhang is reported instead.
-_MIN_RETAINED_FRACTION = 0.10
-
 
 def _base_provenance(tag: str) -> str:
     """Strip outcome markers, leaving how the value was *chosen*.
 
     ``wildcard_free_grid`` still means "this came from ``all_params: FREE``";
-    the suffix only records that the declared range was then intersected with
+    the suffix only records that the declared range was then resolved to
     the selected component's grid. Round-tripping through
     :func:`parameters_to_groups` has to see the base tag, or a narrowed
     parameter loses its wildcard intent and gets emitted as an explicit
@@ -1630,11 +1624,6 @@ def _base_provenance(tag: str) -> str:
     the user asked for ``all_params: FREE`` and that is what ``to_groups()``
     should hand back.
 
-    ``wildcard_free_zcap`` is the same shape again: the declared free prior
-    was capped at the age of the universe at the build's own source redshift
-    (:func:`_narrow_free_priors_to_z`), and the request was still
-    ``all_params: FREE``, not an explicit narrowed range.
-
     Parameters
     ----------
     tag : str
@@ -1645,7 +1634,7 @@ def _base_provenance(tag: str) -> str:
     str
         The tag without its outcome marker.
     """
-    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX, _Z_NARROWED_SUFFIX):
+    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX):
         if tag.endswith(suffix):
             return tag[: -len(suffix)]
     return tag
@@ -1694,6 +1683,10 @@ def _selected_component(selector: str, structural) -> str | None:
     and they are untouched because they carry no grid.
     """
     base = selector.replace(".", "_")
+    # The WG00 screen is selected by dust_model, not a dust_attenuation attribute
+    # (#2862). It is the one selector whose attribute name is not derived.
+    if selector == "dust.attenuation":
+        base = "dust_model"
     for attr in (base, f"{base}_block"):
         value = getattr(structural, attr, None)
         if isinstance(value, str):
@@ -1701,92 +1694,173 @@ def _selected_component(selector: str, structural) -> str | None:
     return None
 
 
+#: Provenance tags of an explicit value or prior the user wrote by hand.
+_EXPLICIT_TAGS = frozenset({"user_fixed", "user_prior"})
+
+
+def _selected_grid_supports(structural) -> list[tuple[str, str, dict]]:
+    """``(selector, name, support)`` for each selected component with a registered support.
+
+    Parameters
+    ----------
+    structural : Parameters
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    list of tuple
+        One entry per selected component whose grid support is installed. A
+        component whose grid is absent contributes nothing, so the declaration
+        stands for it.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+    """
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+
+    selected: list[tuple[str, str, dict]] = []
+    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
+        name = _selected_component(selector, structural)
+        if name is None:
+            continue
+        support = grid_support(selector, name)
+        if support:
+            selected.append((selector, name, support))
+    return selected
+
+
+def _physically_admissible(pname: str, lo: float, hi: float) -> bool:
+    """Whether every registry bound check for ``pname`` accepts ``(lo, hi)``.
+
+    A widened grid support can cross a physical limit the declaration respects:
+    ``dust_lgU``'s support reaches ``lgU = -3`` while the registry holds it to
+    ``[0, 7]``. Those checks live on the component declarations, so each
+    declaration bucket is consulted for the name.
+
+    Parameters
+    ----------
+    pname : str
+        Canonical parameter name.
+    lo, hi : float
+        Candidate bounds.
+
+    Returns
+    -------
+    bool
+        ``True`` when no declaration that names ``pname`` rejects the bounds.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+    """
+    from tengri.parameters import _builders
+
+    for bucket in _builders._LAZY_DECL_SOURCES:
+        entry = _builders._resolve_lazy_bucket(bucket).get(pname)
+        if entry is not None and not entry[1](lo, hi):
+            return False
+    return True
+
+
+def _reach_of(resolved: dict) -> dict[str, tuple[float, float]]:
+    """``{param: (lo, hi)}`` of every resolved distribution that has bounds."""
+    return {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+
+
 def _narrow_free_priors_to_grid(
-    resolved: dict, provenance: dict[str, str], structural: dict
-) -> None:
-    """Intersect a declaration-supplied free prior with its component's grid.
+    resolved: dict, provenance: dict[str, str], structural
+) -> dict[str, str]:
+    """Resolve a declaration-supplied free prior to its component's grid support.
 
     A template-backed component clips its parameters onto the grid axes it
     interpolates over, where ``jnp.clip`` is flat: the SED is bit-identical and
-    the gradient is exactly zero (#1586). ``astrodust`` ships the live case:
-    ``dust_lgU`` declares ``free_prior=Uniform(0, 7)`` against a grid of
-    ``[-3, 6]``, so ``all_params: FREE`` handed a sampler a range whose top
-    14.3% could not move. Intersecting removes the dead region instead of only
-    warning about it.
+    the gradient is exactly zero (#1586). A ``FREE`` parameter is a request to
+    sample it, so its range is the one the selected backend can actually
+    evaluate. Owner ruling 2026-10-14 (#2626, #2244): the free prior resolves to
+    the selected backend's **full** support, even where that is wider than the
+    registry declaration -- ``neb_logZ_gas`` on Cue spans its trained range, and
+    a declaration that overhangs the grid is replaced rather than intersected.
+    The declaration stays the prior only for a component with no registered
+    support.
 
-    Mutates ``resolved`` in place and retags ``provenance`` so
-    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the narrowing
-    rather than silently reporting a range the caller never wrote.
+    Mutates ``resolved`` in place and retags ``provenance`` with the ``_grid``
+    suffix. The returned labels feed ``Parameters.summary()``, which shows
+    ``[resolved to <backend> grid: lo..hi]`` so the printed range is never the
+    declared one silently.
 
     Parameters
     ----------
     resolved : dict
         Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
     provenance : dict of str to str
-        Resolution tag per parameter.
+        Resolution tag per parameter, mutated in place.
     structural : Parameters
-        Structural-only spec carrying the component selections, e.g. its
-        ``dust_emission`` attribute.
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    labels : dict of str to str
+        ``{param_name: "<backend> grid: lo..hi"}`` for each resolved parameter.
+
+    Raises
+    ------
+    ParameterError
+        If two selected components resolve the same parameter to disjoint
+        supports, so no value is evaluable by both.
 
     Notes
     -----
     **JIT-compatible**: not applicable; composition-time only.
 
-    Deliberately narrow in scope:
-
-    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed. Intersecting
-      a Normal or LogUniform with a box is not a truncation of the same family,
-      so those keep their prior and fall through to the warning.
-    - The **declaration is never touched**. ``dust_lgU`` is shared with
-      ``draine2021_pah_ir``, whose grid need not match ``astrodust``'s, and
-      ``dust_umin``'s cap is 20 / 50 / 80 depending only on which backend is
-      selected. That is why the constraint lives per ``(component, parameter)``;
-      see :mod:`tengri.components.grid_support`.
-    - Narrowing only ever shrinks. The grid may extend *below* a declared
-      bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
-      widening there would assert physics the declaration deliberately excluded.
+    - Only :class:`~tengri.parameters.priors.Uniform` declarations are resolved.
+      A non-Uniform declaration keeps its prior and falls through to the
+      warning in ``Parameters._warn_on_grid_overhang``.
+    - The **declaration is never edited** in the registry. ``dust_lgU`` is
+      shared with ``draine2021_pah_ir``, whose grid need not match
+      ``astrodust``'s; that is why the constraint lives per
+      ``(component, parameter)``; see :mod:`tengri.components.grid_support`.
+    - An explicit user prior is never resolved here; see
+      :func:`_refuse_explicit_grid_overhang`.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
+    from tengri.components.grid_support import support_shift
+    from tengri.config.exceptions import ParameterError
     from tengri.parameters.priors import Uniform
 
-    # Drive off the registry itself, so registering a component is the only
-    # step needed for it to be narrowed as well as reported.
-    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
-        name = _selected_component(selector, structural)
-        if name is None:
-            continue
-        for pname, (g_lo, g_hi) in grid_support(selector, name).items():
+    labels: dict[str, str] = {}
+    cue_nitrogen = getattr(structural, "cue_nitrogen", "absolute")
+    for selector, name, support in _selected_grid_supports(structural):
+        for pname, (g_lo, g_hi) in support.items():
             if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
                 continue
             dist = resolved.get(pname)
             if not isinstance(dist, Uniform):
                 continue
-            lo, hi = dist.bounds
-            # An offset parameter (gas_logno, #2693) is bounded through its shift:
-            # the offset keeps the absolute quantity inside the support for every
-            # reachable value of the parameters the shift depends on.
-            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            # An offset parameter (gas_logno, #2693) is bounded through its shift.
             s_lo, s_hi = support_shift(
-                selector,
-                name,
-                pname,
-                reach,
-                {"cue_nitrogen": getattr(structural, "cue_nitrogen", "absolute")},
+                selector, name, pname, _reach_of(resolved), {"cue_nitrogen": cue_nitrogen}
             )
-            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
-            if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
-                # Disjoint (nothing sensible to narrow to; let the warning
-                # say so) or already contained.
-                continue
-            if (new_hi - new_lo) < _MIN_RETAINED_FRACTION * (hi - lo):
-                # The declaration and the grid barely overlap, so "narrowing"
-                # would replace a physical range with a sliver; effectively
-                # pinning the parameter without saying so. agn_log_ledd is the
-                # case: Uniform(-2, 0.5) against a grid ending at -1.9586
-                # retains 1.7%, a 0.04 dex prior. A disagreement that large is
-                # a modeling decision, not a tidy-up: leave it and let the
-                # warning report it.
-                continue
+            new_lo, new_hi = g_lo - s_lo, g_hi - s_hi
+            if not _physically_admissible(pname, new_lo, new_hi):
+                # The widened support crosses a physical limit the registry
+                # enforces (dust_lgU: [0, 7]). Keep as much of the declared
+                # range as is both admissible and inside the support.
+                dlo, dhi = dist.bounds
+                new_lo, new_hi = max(new_lo, dlo), min(new_hi, dhi)
+                if new_lo >= new_hi or not _physically_admissible(pname, new_lo, new_hi):
+                    continue
+            if pname in labels:
+                # A second selected component registers the same parameter: the
+                # value must be evaluable by both, so intersect the supports.
+                cur_lo, cur_hi = resolved[pname].bounds
+                new_lo, new_hi = max(new_lo, cur_lo), min(new_hi, cur_hi)
+                if new_lo >= new_hi:
+                    raise ParameterError(
+                        f"{pname!r}: the selected components have disjoint grid supports "
+                        f"(the last is {selector}={name!r}, [{g_lo:g}, {g_hi:g}]), so no "
+                        f"value of {pname} is evaluable by both. Select components that "
+                        f"share a support for {pname}."
+                    )
             default = dist.default
             if default is not None:
                 default = min(max(default, new_lo), new_hi)
@@ -1797,242 +1871,101 @@ def _narrow_free_priors_to_grid(
                 units=dist.units,
                 default=default,
             )
-            provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
+            provenance[pname] = _base_provenance(provenance[pname]) + _GRID_NARROWED_SUFFIX
+            labels[pname] = f"{name} grid: {new_lo:g}..{new_hi:g}"
+    return labels
 
 
-@lru_cache(maxsize=8)
-def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
-    """SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
-    correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
-    each one at ``age_at_z(z)`` when the build's redshift floor is known.
+def _refuse_explicit_grid_overhang(resolved: dict, provenance: dict[str, str], structural) -> None:
+    """Refuse an explicit value or prior that reaches past a component's grid (#2626).
 
-    Derived from :data:`~tengri.components.stellar.sfh.registry.SFH_REGISTRY`
-    (#2521): every ``ParamDef`` across every registered family whose
-    ``z_capped_onset`` flag is set, rather than a hand-written tuple. Before
-    this, a 3-entry tuple (``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` /
-    ``sfh_const_start_gyr``) covered only 3 of the 21 onset/age/peak-time
-    parameters across the registry -- the other 18 kept a static ceiling of
-    today's cosmic age even when the build's redshift prior made that
-    unphysical, so a free or high-z prior could silently place star
-    formation before the Big Bang with no warning (#2521). Deriving the set
-    from the registry means a new SFH family cannot reintroduce the gap by
-    omission.
-
-    Membership here is purely "this narrows", not "this is freeable" -- that
-    is the declaration's own business (``free_prior`` in the SFH registry). A
-    model that does not declare one of these (e.g. a ``dpl_lookback``-only
-    build never resolving ``sfh_dpl_age_gyr``) simply never resolves it, and
-    this set has nothing to narrow.
-
-    Parameters
-    ----------
-    _registry_keys : frozenset of str
-        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it
-        makes a plugin registering a new SFH type invalidate the memo rather
-        than being shadowed by a stale one (mirrors :func:`_sfh_type_prefixes`).
-
-    Returns
-    -------
-    tuple of str
-        Every marked public parameter name, deduplicated (aliases such as
-        ``psb_wild2020`` / ``psb`` share one ``SFHModelSpec`` instance).
-    """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-
-    names: dict[str, None] = {}
-    for spec in SFH_REGISTRY.values():
-        for pname, pdef in spec.params.items():
-            if getattr(pdef, "z_capped_onset", False):
-                names[pname] = None
-    return tuple(names)
-
-
-def _narrow_free_priors_to_z(
-    resolved: dict, provenance: dict[str, str], catalog_z_lo: float | None = None
-) -> None:
-    """Cap SF-onset lookback priors at the age of the universe at the source z.
-
-    :func:`_z_capped_onset_params`'s marked parameters each declare a static
-    ``free_prior``
-    ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
-    that is ever correct, since a registry declaration cannot know the source
-    redshift a given build will use. This intersects that declared range with
-    ``[lo, age_at_z(z_floor)]``, where ``z_floor`` is the lowest redshift the
-    build's ``redshift`` prior admits (its floor for a free redshift, or the
-    value itself for ``Fixed``): a bound generous enough for z~0 otherwise
-    admits draws at z=2 where star formation never happens, producing a
-    zero-mass galaxy with an exactly-zero gradient (measured in
-    ``test_bug_1031_dense_basis_composite::test_working_sfh_topologies_still_predict[dexp]``).
-
-    Mutates ``resolved`` in place and retags ``provenance`` so
-    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the
-    narrowing rather than silently reporting a range the declaration never
-    promised on its own.
+    A ``Fixed`` value or an explicit user prior outside the selected backend's
+    support would be clipped onto an edge node, bit-identical and with a zero
+    gradient. The user stated it, so the build refuses it rather than warning.
+    Components in :data:`~tengri.components.grid_support.EXTRAPOLATING_SUPPORT`
+    (Cue, a neural emulator) are exempt and keep their warning.
 
     Parameters
     ----------
     resolved : dict
-        Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
+        Resolved ``{param_name: Distribution}`` kwargs.
     provenance : dict of str to str
         Resolution tag per parameter.
+    structural : Parameters
+        Structural-only spec carrying the component selections.
 
     Raises
     ------
     ParameterError
-        If the cap falls at or below the parameter's declared floor -- the
-        onset window has vanished entirely (only reachable for
-        ``sfh_const_start_gyr``'s 0.01 Gyr floor at z >~ 30, so in practice
-        never, but handled rather than silently producing an inverted
-        ``Uniform``).
+        Naming the parameter, the component, the value or range, and the extent.
 
     Notes
     -----
     **JIT-compatible**: not applicable; composition-time only.
-
-    Deliberately narrow in scope, mirroring :func:`_narrow_free_priors_to_grid`:
-
-    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed, and only a
-      parameter whose provenance is in :data:`_DECLARATION_SOURCED_FREE` --
-      never a user's own explicit ``Uniform`` (that would silently substitute
-      a different prior for the one they wrote).
-    - Narrowing only ever shrinks: ``new_hi = min(hi, cap)``, never raised.
-    - Degrades to a no-op, rather than raising, when the redshift cannot be
-      read at this point: introspection callers (``_allow_empty_wildcard``)
-      legitimately reach here with no ``"redshift"`` key at all, and the
-      required-redshift ``ValueError`` that would otherwise catch a genuine
-      omission is raised later, after this function returns.
-
-    Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
-    cap retains only a small fraction of today's cosmic age
-    (:func:`~tengri.utils.cosmology.age_at_z0_host`), and declining to narrow
-    on that basis would reintroduce exactly the zero-flux draws this pass
-    exists to prevent. For a cosmological ceiling the narrowing IS the
-    physics, not a tidy-up of an incidentally dead tail.
-
-    A catalog fit with a per-galaxy redshift cannot be narrowed here: the
-    build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
-    ``catalog_z_range``, or one galaxy's), and ``parse_groups`` never sees the
-    catalog table -- ``approx=WavePrecomp(catalog_z_range=...)`` is dropped by
-    :data:`_SEDMODEL_PASSTHROUGH` before this function runs. That case is
-    refused where the catalog IS visible:
-    :class:`~tengri.inference.catalog.Catalog` raises when it finds a
-    z-narrowed onset parameter free beside a ``redshift_col``; see
-    :func:`_z_narrowed_onset_params`.
     """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-    from tengri.parameters.priors import Uniform
-    from tengri.utils.cosmology import age_at_z
+    from tengri.components.grid_support import (
+        EXTRAPOLATING_SUPPORT,
+        describe_clipping,
+        grid_refusal_message,
+        support_shift,
+    )
+    from tengri.config.exceptions import ParameterError
 
-    if catalog_z_lo is not None:
-        # approx=WavePrecomp(catalog_z_range=(zlo, zhi)) means this build's
-        # own `redshift` is only a placeholder -- a runtime z override (the
-        # Catalog / Fitter `params_override`/`fixed_values` path) replaces
-        # it per galaxy, and the age-of-universe cutoff that mass
-        # conservation applies genuinely tracks that runtime value (#2521).
-        # But this static PRIOR CEILING is still fixed once, at build time,
-        # so it must use catalog_z_range's own lower bound (the oldest
-        # universe the range admits, the same "most permissive single cap"
-        # this function already uses for one galaxy's z_floor) rather than
-        # the placeholder redshift -- otherwise two builds of the same
-        # catalog_z_range model at different placeholder redshifts would
-        # declare different prior widths for the identical parameter, and a
-        # value standardized against one would not unstandardize to the
-        # same physical age against the other.
-        z_floor = catalog_z_lo
-    else:
-        redshift_dist = resolved.get("redshift")
-        if redshift_dist is None:
-            # No redshift to narrow against yet -- either not given at all
-            # (introspection's `_allow_empty_wildcard`, whose caller has no
-            # target redshift) or not yet resolved. Either way, raising here
-            # would preempt the more specific "redshift is required" error this
-            # function's caller raises afterwards; leaving the static declaration
-            # untouched is exactly the earlier, correct-but-wide behavior.
-            return
-        try:
-            z_floor = redshift_dist.bounds[0]
-        except (AttributeError, NotImplementedError):
-            return
-        if z_floor is None:
-            return
-    cap = float(age_at_z(float(z_floor)))
-
-    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
-        if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
+    cue_nitrogen = getattr(structural, "cue_nitrogen", "absolute")
+    for selector, name, support in _selected_grid_supports(structural):
+        if (selector, name) in EXTRAPOLATING_SUPPORT:
             continue
-        dist = resolved.get(pname)
-        if not isinstance(dist, Uniform):
-            continue
-        lo, hi = dist.bounds
-        new_hi = min(hi, cap)
-        if new_hi <= lo:
-            raise ParameterError(
-                f"{pname!r}: the age of the universe at redshift {z_floor:g} is "
-                f"{cap:.4g} Gyr, at or below this parameter's declared floor of "
-                f"{lo:g} Gyr -- there is no admissible SF-onset window left at "
-                f"this redshift. Pass an explicit prior for {pname} that is "
-                f"valid for your target (e.g. {pname}=Uniform({lo:g}, ...) as a "
-                f"flat kwarg, or the equivalent sfh={{...}} override), or use a "
-                f"lower redshift."
+        for pname, extent in support.items():
+            if _base_provenance(provenance.get(pname, "")) not in _EXPLICIT_TAGS:
+                continue
+            dist = resolved.get(pname)
+            if dist is None or dist.bounds[0] is None or dist.bounds[1] is None:
+                continue
+            s_lo, s_hi = support_shift(
+                selector, name, pname, _reach_of(resolved), {"cue_nitrogen": cue_nitrogen}
             )
-        if new_hi >= hi:
-            continue  # declared range already sits inside the cap
-        default = dist.default
-        if default is not None:
-            default = min(max(default, lo), new_hi)
-        resolved[pname] = Uniform(
-            lo,
-            new_hi,
-            dist.description,
-            units=dist.units,
-            default=default,
-        )
-        provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+            active = (dist.bounds[0] + s_lo, dist.bounds[1] + s_hi)
+            detail = describe_clipping(active, extent)
+            if detail is not None:
+                raise ParameterError(grid_refusal_message(selector, name, pname, detail, extent))
+
+
+def _settle_timing_pairs_for_build(resolved: dict, provenance: dict[str, str]) -> frozenset[str]:
+    """Keep one of each ``*_frac`` / ``*_gyr`` timing pair (#2748).
+
+    See :func:`~tengri.parameters.timing.settle_timing_pairs`.
+
+    Returns the dropped names, which ``Parameters`` must leave out of its spec.
+    """
+    from tengri.parameters.timing import settle_timing_pairs
+
+    redshift = resolved.get("redshift")
+    fixed_z = redshift.value if isinstance(redshift, Fixed) else None
+    return settle_timing_pairs(resolved, provenance, redshift_fixed=fixed_z)
 
 
 def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
-    """Warn once when a free redshift's own range can outrun an onset ceiling.
+    """Warn once when a free redshift can place a Fixed Gyr onset before the Big Bang.
 
-    :func:`_narrow_free_priors_to_z` caps each z-capped onset/age/peak-time
-    parameter (:func:`_z_capped_onset_params`) at ``age_at_z(z_floor)``, the
-    age of the universe at the LOWEST redshift the build's own ``redshift``
-    prior admits. That is the most permissive age a single static cap can
-    use, and it is deliberately silent about the redshift range's upper
-    (younger-universe) end (see that function's docstring). This check
-    covers exactly that blind spot: it re-reads each z-capped parameter's
-    FINAL declared ceiling -- after any z_floor-based narrowing, so it also
-    sees a user's own untouched explicit prior -- and compares it against
-    ``age_at_z(z_ceil)``, the age at the redshift range's upper end. A draw
-    near ``z_ceil`` paired with an onset value between the two ages places
-    star formation before the Big Bang at that draw, even though the value
-    is within the parameter's own declared range.
-
-    Fires at most once per build, naming every offending parameter together
-    with both ages, rather than once per parameter: the underlying cause
-    (redshift is free) is shared, and one build-time notice is enough to act
-    on. See :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning`
-    for why this warns rather than raises, and for why a build-time check is
-    the only way to surface this at all for a fit that runs under
-    ``jax.jit`` (every sampling backend).
+    An absolute Gyr onset given as ``Fixed(x)`` is the shim of its fraction of
+    age(z) (#2748). It does not scale with the galaxy's age, so when redshift is
+    free a draw near the redshift range's upper (younger-universe) end can place
+    it above the age of the universe there. The forward model truncates such a
+    draw and conserves the formed mass (#2521), so this only warns.
 
     Parameters
     ----------
     resolved : dict
-        Final resolved ``{param_name: Distribution}`` kwargs, read after
-        :func:`_narrow_free_priors_to_z` has already run.
+        Final resolved ``{param_name: Distribution}`` kwargs.
 
     Notes
     -----
     **JIT-compatible**: not applicable; composition-time only.
 
-    A ``Fixed`` redshift has ``bounds == (z0, z0)``, so ``z_ceil <= z_floor``
-    and this returns immediately -- the warning never fires for a fixed
-    redshift. A z-capped parameter that is itself ``Fixed`` is skipped the
-    same way: fixing an onset value is exactly how a user opts out of the
-    z_floor-based cap's assumption, and this check does not second-guess
-    that choice.
+    A ``Fixed`` redshift returns at once. A fraction carries no such risk: it
+    is bounded by age(z) at every draw, so only a Fixed Gyr value is checked.
     """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.parameters.timing import timing_frac_params
     from tengri.utils.cosmology import age_at_z
 
     redshift_dist = resolved.get("redshift")
@@ -2047,33 +1980,27 @@ def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
     age_at_z_ceil = float(age_at_z(float(z_ceil)))
 
     offenders: list[tuple[str, float]] = []
-    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
-        dist = resolved.get(pname)
-        if dist is None or dist.is_fixed:
+    for gyr_name in sorted(set(timing_frac_params().values())):
+        dist = resolved.get(gyr_name)
+        if dist is None or not dist.is_fixed:
             continue
-        hi = dist.bounds[1]
-        if hi is None or hi <= age_at_z_ceil:
-            continue
-        offenders.append((pname, float(hi)))
+        value = float(dist.value)
+        if value > age_at_z_ceil:
+            offenders.append((gyr_name, value))
     if not offenders:
         return
 
     age_at_z_floor = float(age_at_z(float(z_floor)))
-    named = ", ".join(f"{n} (ceiling {h:.4g} Gyr)" for n, h in sorted(offenders))
-    tightest_offender_ceiling = min(h for _, h in offenders)
+    named = ", ".join(f"{n} = {v:.4g} Gyr" for n, v in offenders)
     warn_measured(
         f"redshift is free over [{z_floor:g}, {z_ceil:g}], spanning cosmic ages "
-        f"{age_at_z_floor:.4g} down to {age_at_z_ceil:.4g} Gyr. The following free "
-        f"SF-onset/age/peak-time parameter(s) keep a prior ceiling above "
-        f"{age_at_z_ceil:.4g} Gyr, the age of the universe at the redshift range's "
-        f"upper end: {named}. A prior draw near redshift {z_ceil:g} paired with an "
-        f"onset value above that ceiling places star formation before the Big Bang; "
-        f"the forward model truncates it and still conserves the requested formed "
-        f"mass (#2521), so the fit runs and reports no error there -- only the SFH "
-        f"shape at that draw is wrong, and under jax.jit not even the eager "
-        f"SFHBeforeBigBangWarning fires. Narrow the redshift prior, or give the "
-        f"affected parameter(s) an explicit tighter ceiling, e.g. "
-        f"{offenders[0][0]}=Uniform(lo, {age_at_z_ceil:.4g}).",
+        f"{age_at_z_floor:.4g} down to {age_at_z_ceil:.4g} Gyr. The following Fixed "
+        f"absolute Gyr onset(s) exceed {age_at_z_ceil:.4g} Gyr, the age of the "
+        f"universe at the redshift range's upper end: {named}. A draw near redshift "
+        f"{z_ceil:g} places star formation before the Big Bang; the forward model "
+        f"truncates it and still conserves the requested formed mass (#2521), so the "
+        f"fit runs and reports no error there. Narrow the redshift prior, or give the "
+        f"onset as a fraction of age(z) (the *_frac name), which cannot exceed age(z).",
         FreeRedshiftOnsetCeilingWarning,
         stacklevel=3,
         z_floor=z_floor,
@@ -2081,14 +2008,14 @@ def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
         age_at_z_floor=age_at_z_floor,
         age_at_z_ceil=age_at_z_ceil,
         n_offending_params=len(offenders),
-        tightest_offender_ceiling_gyr=tightest_offender_ceiling,
+        tightest_offender_ceiling_gyr=min(v for _, v in offenders),
     )
 
 
 #: SFH families whose default (unset) bin ladder is scaled to the source
 #: redshift rather than fixed at 0-13.7 Gyr. Distinct from
-#: :data:`_z_capped_onset_params`: this is a structural setting
-#: (``bin_edges_gyr``), not a free-parameter prior, and applies only to the
+#: this is a structural setting (``bin_edges_gyr``), not a free-parameter
+#: prior, and applies only to the
 #: families that share the plain ``DEFAULT_BIN_EDGES_GYR`` ladder --
 #: ``continuity_flex``, ``psb_suess2022`` and ``psb_flex`` derive their own
 #: edges from other declared parameters (``tflex_gyr`` and friends) and are
@@ -2124,8 +2051,7 @@ def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
 
     An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
     same convention the z-capped onset/age/peak-time *parameters* follow
-    (:func:`_narrow_free_priors_to_z` only narrows a declaration-sourced free
-    prior, never a user's own explicit value): a caller who names their own
+    (a user's own explicit value is never rewritten): a caller who names their own
     edges has already made the reachability decision, and nothing here
     second-guesses it or warns about it.
 
@@ -2251,9 +2177,8 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     Only 'bins' and 'bins_continuity' metallicity modes are checked. Other
     modes ('delta', 'table', 'ramp') do not use lookback-time bins.
 
-    Unlike :func:`_narrow_free_priors_to_z`, this function does NOT widen
-    or modify a prior. It only refuses (raises) when the configuration is
-    physically impossible.
+    This function does NOT widen or modify a prior. It only refuses (raises)
+    when the configuration is physically impossible.
     """
     from tengri.components.stellar.component import _DEFAULT_MET_BIN_EDGES_LOG_YR
     from tengri.utils.cosmology import age_at_z
@@ -2272,7 +2197,7 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
     bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
 
-    # Get redshift distribution and compute floor (as _narrow_free_priors_to_z does)
+    # Get redshift distribution and compute floor
     redshift_dist = resolved.get("redshift")
     if redshift_dist is None:
         return  # No redshift yet (introspection caller); skip check
@@ -2313,45 +2238,6 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
         f"(2) provide a custom met_bin_edges_log_yr={{'...'}} whose edges fit within "
         f"cosmic age at your redshift, or (3) use a different metallicity mode. "
         f"See issues #2204 and #2433."
-    )
-
-
-def _z_narrowed_onset_params(spec) -> frozenset[str]:
-    """Free :func:`_z_capped_onset_params` names on ``spec`` whose prior was z-narrowed.
-
-    Parameters
-    ----------
-    spec : Parameters
-        A spec built via :func:`parse_groups` (or ``SEDModel.build``).
-
-    Returns
-    -------
-    frozenset of str
-        Names from :func:`_z_capped_onset_params` that are free on ``spec``
-        and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
-        ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
-        capped at ``age_at_z`` of the build's own redshift. Empty for a spec
-        not built via ``parse_groups`` (no ``_group_provenance``), or one
-        whose onset params were never freed, or freed against an explicit
-        user prior (never narrowed).
-
-    Notes
-    -----
-    **JIT-compatible**: not applicable; introspection only.
-
-    Exists so a caller that CAN see a catalog's per-galaxy redshift --
-    :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
-    against a single placeholder redshift without duplicating
-    :func:`_z_capped_onset_params` or the provenance-suffix convention.
-    """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-
-    provenance = getattr(spec, "_group_provenance", None) or {}
-    free = set(getattr(spec, "free_params", ()))
-    return frozenset(
-        name
-        for name in _z_capped_onset_params(frozenset(SFH_REGISTRY))
-        if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
     )
 
 
@@ -3326,7 +3212,17 @@ def _wildcard_scopes(
         xray_model = getattr(structural_params, "xray_model", None) or structural_kwargs.get(
             "xray_model"
         )
+        xray_alpha_ox_mode = getattr(
+            structural_params, "xray_alpha_ox_mode", None
+        ) or structural_kwargs.get("xray_alpha_ox_mode", "delta")
         reads = _XRAY_PARAMS_BY_MODEL.get(xray_model, _XRAY_DEFAULT_MODEL_PARAMS)
+        if xray_model in _XRAY_ALPHA_OX_MODELS:
+            # The Just+2007 corona reads exactly one of the two alpha_ox declarations,
+            # chosen by how the group named it (#2661).
+            alpha_ox_read = (
+                "xray_alpha_ox" if xray_alpha_ox_mode == "absolute" else "xray_delta_alpha_ox"
+            )
+            reads = (reads - _XRAY_ALPHA_OX_PARAMS) | {alpha_ox_read}
         scopes["xray"] = frozenset(
             xray_group_params - (_XRAY_VARIANT_PARAMS - reads) - _XRAY_UNREACHABLE_PARAMS
         )
@@ -3686,6 +3582,7 @@ def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     that normalization staying upstream of this call.
     """
     from tengri.components.stellar.sfh.registry import (
+        psb_quench_frac_names,
         psb_quench_param_names,
         validate_psb_quench_ordering,
     )
@@ -3702,7 +3599,15 @@ def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     for full_name in names:
         key = _override_key_for(full_name, sfh_dict, warn=False)
         given.append(sfh_dict[key] if key is not None else wildcard)
-    validate_psb_quench_ordering(sfh_type, *given)
+    # A fraction is named only by its own key: the wildcard never frees one
+    # (``all_params: FREE`` leaves the *_frac timings at their Fixed shim).
+    frac_given = []
+    for full_name in psb_quench_frac_names(sfh_type):
+        key = _override_key_for(full_name, sfh_dict, warn=False)
+        frac_given.append(sfh_dict[key] if key is not None else None)
+    validate_psb_quench_ordering(
+        sfh_type, *given, tlast_frac=frac_given[0], tflex_frac=frac_given[1]
+    )
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
@@ -3738,8 +3643,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
                 f"(or None to auto-select). 'cic' is the first-order default; "
-                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
-                f"table (#964, #2683)."
+                f"'dsps' names the same dense integration (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
@@ -4669,6 +4573,14 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # line existed -- the actual defect: not (only) component_factory.py
         # forgetting to forward it, but this function never producing
         # 'dust_lyc_in_energy_balance' for wg00 in the first place.
+        # wg00 has no young/old split, so 'lyc_reprocessed_by' does not change
+        # its SED; it is parsed here only so an explicit value is stored and
+        # round-trips like the other dust types. The age-split and geometry keys
+        # stay refused earlier in this function.
+        if "lyc_reprocessed_by" in dust_atten_dict:
+            result["dust_lyc_reprocessed_by"] = _validate_lyc_reprocessed_by(
+                dust_atten_dict["lyc_reprocessed_by"]
+            )
         if "lyc_in_energy_balance" in dust_atten_dict:
             result["dust_lyc_in_energy_balance"] = _validate_lyc_in_energy_balance(
                 dust_atten_dict["lyc_in_energy_balance"]
@@ -5129,6 +5041,33 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
     if "diffuse_screen" in dust_emis_dict:
         result["dust_ir_diffuse_screen"] = bool(dust_emis_dict["diffuse_screen"])
 
+    # Opt-in CMB heating / contrast (da Cunha et al. 2013, #2766) of the
+    # tabulated emission models. Off by default (bit-identical to today). The
+    # analytic models (modified_blackbody, graybody, casey2012) always apply it,
+    # so asking for it again is refused rather than silently ignored.
+    if "cmb" in dust_emis_dict:
+        cmb = dust_emis_dict["cmb"]
+        if not isinstance(cmb, bool):
+            raise ValueError(
+                f"dust_emission cmb must be True or False, got {cmb!r} ({type(cmb).__name__})."
+            )
+        if cmb:
+            if emission_type is None:
+                raise ValueError(
+                    "dust_emission={'cmb': True} requires a dust_emission type to be "
+                    "specified. Set dust_emission={'type': ...} (a tabulated model such as "
+                    "'schreiber2016', 'draine_li2007', 'dale2014') or set cmb=False."
+                )
+            if not getattr(_dust_emission_component_class(emission_type), "cmb_supported", False):
+                raise ValueError(
+                    f"dust_emission={{'type': {emission_type!r}, 'cmb': True}} is refused: "
+                    f"{emission_type!r} has no CMB option. The analytic models "
+                    "(modified_blackbody, graybody, casey2012) apply the da Cunha et al. "
+                    "(2013) heating and contrast unconditionally; the tabulated models "
+                    "take cmb=True. Drop the key or pick a tabulated type."
+                )
+        result["dust_ir_cmb"] = cmb
+
 
 # Backend *implementations* are named after their physics (BakedInBackend,
 # CloudyGridBackend) and the internal NebularConfig.backend enum spells two of
@@ -5188,6 +5127,12 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
                     f"neb nitrogen={neb_dict['nitrogen']!r}: expected one of {NITROGEN_MODES}."
                 )
             result["cue_nitrogen"] = neb_dict["nitrogen"]
+        # 'all' (default) counts ionizing photons from every stellar age; a number of
+        # years is the oldest age counted (1e8 restores the former 100 Myr cut).
+        if "lyc_max_age_yr" in neb_dict:
+            from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
+
+            result["cue_lyc_max_age_yr"] = validate_lyc_max_age_yr(neb_dict["lyc_max_age_yr"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -5383,6 +5328,54 @@ def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
     )
 
 
+def _parse_radio_nu_ref(value: object) -> float:
+    """Resolve ``radio['sf']['nu_ref']`` to a frequency [Hz] (#2762).
+
+    ``"21cm"`` is CIGALE's anchor (lambda = 21 cm, 1.42758 GHz); ``"1.4GHz"`` is
+    Bell (2003)'s; a positive finite number is a frequency in Hz.
+    """
+    import math
+
+    from tengri.components.radio.radio import _NU_REF_BELL2003_HZ, NU_REF_21CM_HZ
+
+    named = {"21cm": NU_REF_21CM_HZ, "1.4ghz": _NU_REF_BELL2003_HZ}
+    if isinstance(value, str):
+        key = value.replace(" ", "").lower()
+        if key not in named:
+            raise ValueError(
+                f"radio['sf']['nu_ref'] must be '21cm', '1.4GHz' or a frequency in Hz, "
+                f"got {value!r}"
+            )
+        return named[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(
+            f"radio['sf']['nu_ref'] must be a string or a number [Hz], got {type(value).__name__}"
+        )
+    if not (math.isfinite(value) and value > 0.0):
+        raise ValueError(f"radio['sf']['nu_ref'] must be finite and positive [Hz], got {value!r}")
+    return float(value)
+
+
+def _parse_radio_agn_loudness_ref(value: object) -> str:
+    """Resolve ``radio['agn']['loudness_ref']`` against the menu (#2663).
+
+    ``"4400"`` (default) anchors the AGN radio loudness on the 4400 A disc luminosity;
+    ``"2500_30deg"`` anchors it on the 2500 A disc luminosity at 30 deg, CIGALE's
+    ``R_agn`` anchor. An unknown value raises with the menu.
+    """
+    from tengri.components.radio.component import AGN_LOUDNESS_REFS
+
+    if not isinstance(value, str):
+        raise TypeError(
+            f"radio['agn']['loudness_ref'] must be a string, got {type(value).__name__}"
+        )
+    if value not in AGN_LOUDNESS_REFS:
+        raise ValueError(
+            f"radio['agn']['loudness_ref'] must be one of {AGN_LOUDNESS_REFS}, got {value!r}"
+        )
+    return value
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -5472,6 +5465,21 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                         f"radio['sf']['freefree'] must be bool, got {type(freefree_val).__name__}"
                     )
                 result["radio_include_freefree"] = freefree_val
+            # Optional 'ir_window' string key (#2763): the IR band L_IR is integrated over.
+            if "ir_window" in sf_dict:
+                from tengri.components.radio.component import IR_WINDOWS
+
+                ir_window_val = sf_dict["ir_window"]
+                if ir_window_val not in IR_WINDOWS:
+                    raise _unknown_name_error(
+                        "radio sf ir_window",
+                        ir_window_val,
+                        frozenset(IR_WINDOWS),
+                        keyword="ir_window",
+                    )
+                result["radio_ir_window"] = ir_window_val
+            if "nu_ref" in sf_dict:
+                result["radio_sf_nu_ref"] = _parse_radio_nu_ref(sf_dict["nu_ref"])
         else:
             raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
 
@@ -5484,6 +5492,10 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
                 raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
+            if "loudness_ref" in agn_dict:
+                result["radio_agn_loudness_ref"] = _parse_radio_agn_loudness_ref(
+                    agn_dict["loudness_ref"]
+                )
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -5575,6 +5587,7 @@ _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: What the shared ``XRaySEDComponent`` corona reads on its non-``lopez24``
 #: branch (``yang20`` / ``simple`` / ``agn_xray_corona``, which all resolve to
 #: it). ``xray_alpha_irx`` is absent because only the lopez24 branch reads it.
+#: ``xray_a1`` / ``xray_a2`` are the yang20 anisotropy coefficients (#2661).
 _XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
     {
         "xray_delta_alpha_ox",
@@ -5583,8 +5596,16 @@ _XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
         "xray_log_nh",
         "xray_det_hmxb",
         "xray_det_lmxb",
+        "xray_a1",
+        "xray_a2",
     }
 )
+#: The two ways to declare the yang20 corona's alpha_ox (#2661): the offset from the
+#: Just+2007 relation, or the absolute value. Exactly one is read, chosen by the
+#: group's keys (``xray_alpha_ox_mode``), never both.
+_XRAY_ALPHA_OX_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox", "xray_alpha_ox"})
+#: Models whose corona reads the alpha_ox declaration (the Just+2007 corona).
+_XRAY_ALPHA_OX_MODELS: frozenset[str] = frozenset({"yang20", "simple"})
 #: Union of the above: the names the scope may narrow away.
 _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
     *_XRAY_PARAMS_BY_MODEL.values()
@@ -5698,6 +5719,29 @@ def _translate_agb_dust(agb_dust_dict: dict, result: dict) -> None:
         result["agb_dust_model"] = agb_dust_type
 
 
+def _xray_alpha_ox_mode(xray_dict: dict) -> str:
+    """Which yang20 alpha_ox declaration the xray group names: ``delta`` or ``absolute``.
+
+    The offset ``delta_alpha_ox`` and the absolute ``alpha_ox`` are alternatives; the
+    corona forms the offset from the absolute value per draw (#2661). Naming both is
+    refused, because one of them would silently do nothing.
+
+    Raises
+    ------
+    ParameterError
+        If the group names both ``delta_alpha_ox`` and ``alpha_ox``.
+    """
+    absolute = [k for k in ("alpha_ox", "xray_alpha_ox") if k in xray_dict]
+    delta = [k for k in ("delta_alpha_ox", "xray_delta_alpha_ox") if k in xray_dict]
+    if absolute and delta:
+        raise ParameterError(
+            f"xray group names both {delta[0]!r} and {absolute[0]!r}. Give exactly one: "
+            f"{delta[0]!r} is the offset from the Just+2007 alpha_ox relation, "
+            f"{absolute[0]!r} is the absolute alpha_ox."
+        )
+    return "absolute" if absolute else "delta"
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
@@ -5712,6 +5756,14 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     # component so it can dispatch; "simple" is the yang20 alias.
     if xray_type != "none":
         result["xray_model"] = xray_type
+        alpha_ox_mode = _xray_alpha_ox_mode(xray_dict)
+        if alpha_ox_mode == "absolute" and xray_type not in _XRAY_ALPHA_OX_MODELS:
+            raise ParameterError(
+                f"xray type {xray_type!r} does not read alpha_ox: only the yang20 corona "
+                f"does. Under {xray_type!r} the corona is anchored elsewhere, so the key "
+                f"would be silently ignored."
+            )
+        result["xray_alpha_ox_mode"] = alpha_ox_mode
 
 
 #: AGN sub-block keys recognized by the nested-dict grammar. Used when
@@ -5825,6 +5877,11 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # dust emission (#2533). Applied by the emission component's apply()
             # method when diffuse_screen=True.
             "diffuse_screen",
+            # Opt-in CMB contrast (and, for the single-temperature Schreiber
+            # libraries, CMB heating) of the tabulated dust-emission models
+            # (da Cunha et al. 2013, #2766). Applied inside the emission
+            # component's predict() when cmb=True.
+            "cmb",
         }
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
@@ -5840,10 +5897,11 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
-    "radio.agn": frozenset({"type", "*", "all_params"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
+    "radio.agn": frozenset({"type", "*", "all_params", "loudness_ref"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law", "ir_frac_window"})
+    | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
     "agn.nlr": frozenset({"type", "*", "all_params"}),
@@ -5892,7 +5950,7 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
-    "cue": frozenset({"nitrogen"}),
+    "cue": frozenset({"nitrogen", "lyc_max_age_yr"}),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -6019,6 +6077,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # Plain boolean, valid for every emission type (not restricted via
         # only_types), so a straight default comparison round-trips it.
         _Structural("diffuse_screen", "dust_ir_diffuse_screen", False),
+        # Opt-in CMB heating / contrast (da Cunha+2013) of a tabulated emission
+        # model (#2766). Plain boolean; the parser refuses it for a type that
+        # does not declare ``cmb_supported``, so a default comparison suffices.
+        _Structural("cmb", "dust_ir_cmb", False),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
         # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
@@ -6029,6 +6091,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
             "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
         ),
         _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
+        _Structural("lyc_max_age_yr", "cue_lyc_max_age_yr", "all", only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
@@ -6062,8 +6125,14 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     "agn": (
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
+        _Structural("ir_frac_window", "agn_ir_frac_window", (0.0, 0.0)),
     ),
-    "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
+    "radio.agn": (_Structural("loudness_ref", "radio_agn_loudness_ref", "4400"),),
+    "radio.sf": (
+        _Structural("freefree", "radio_include_freefree", None),
+        _Structural("ir_window", "radio_ir_window", None),
+        _Structural("nu_ref", "radio_sf_nu_ref", None),
+    ),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
         # entered the per-group emit loop at all: see the no-parameter pass
@@ -6439,6 +6508,186 @@ def _reject_foreign_variant_keys(
     )
 
 
+#: The composable AGN sub-block categories that carry a block type (``'type'``).
+_AGN_SELECTABLE_CATEGORIES: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii", "atten")
+
+
+def _agn_block_selection(agn_top: dict) -> dict[str, str]:
+    """Category -> block type for each composable AGN sub-block dict that names a type.
+
+    Parameters
+    ----------
+    agn_top : dict
+        The user's ``agn`` group dict.
+
+    Returns
+    -------
+    dict of str to str
+        The selected block type of every sub-block that declares a string ``'type'``.
+        A deprecated ``lines`` sub-block contributes its ``nlr`` and ``blr`` types,
+        expanded by the grammar's own :func:`expand_lines_alias`. An explicit
+        ``nlr`` / ``blr`` takes precedence; the grammar refuses the two together.
+    """
+    from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+    selection: dict[str, str] = {}
+    for cat in _AGN_SELECTABLE_CATEGORIES:
+        sub = agn_top.get(cat)
+        if isinstance(sub, dict) and isinstance(sub.get("type"), str):
+            selection[cat] = sub["type"]
+    lines = agn_top.get("lines")
+    if isinstance(lines, dict) and isinstance(lines.get("type"), str):
+        try:
+            nlr_type, blr_type = expand_lines_alias(lines["type"])
+        except ValueError:
+            # An unknown alias is refused by the grammar with its own message.
+            return selection
+        selection.setdefault("nlr", nlr_type)
+        selection.setdefault("blr", blr_type)
+    return selection
+
+
+def _agn_names_read_by_other_blocks(selection: Mapping[str, str], *, skip: str) -> frozenset[str]:
+    """Full ``agn_*`` names the selected blocks of the other categories declare as reads.
+
+    Reads only the consumes table (:data:`AGN_BLOCK_CONSUMES`), the same oracle
+    every other check uses. A signature is not consulted: a signature names
+    parameters a type does not use.
+
+    Parameters
+    ----------
+    selection : mapping of str to str
+        Grammar category -> selected block type.
+    skip : str
+        The category being validated; its own row is not consulted here.
+
+    Returns
+    -------
+    frozenset of str
+        Full parameter names read by the other selected blocks.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    names: set[str] = set()
+    for cat, block_type in selection.items():
+        if cat == skip or block_type in (None, "none"):
+            continue
+        consumes_cat = _AGN_CONSUMES_CATEGORY.get(cat, cat)
+        names |= AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset())
+    return frozenset(names)
+
+
+def _reject_inert_agn_subblock_keys(
+    category: str,
+    sub: dict,
+    selection: Mapping[str, str],
+    param_partition: dict[str, str],
+) -> None:
+    """Raise on an explicit key that the selected AGN block type never reads.
+
+    The key must belong to ``agn.<category>`` and be absent from the selected
+    type's declared reads (:func:`_agn_subblock_declared_params`), and no other
+    selected block may take it as an argument. Such a key is accepted and then
+    dropped without effect, which is a silent failure (design G3).
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key: ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``, ``"feii"`` or ``"atten"``.
+    sub : dict
+        The user's sub-block dict, with a string ``'type'``.
+    selection : mapping of str to str
+        The whole composable selection, for the selection-conditioned reads.
+    param_partition : dict
+        Full parameter name -> owning group.
+
+    Raises
+    ------
+    ParameterError
+        Naming the refused keys, the selected type, and the block types that do
+        read each key.
+    """
+    block_type = sub.get("type")
+    if not isinstance(block_type, str):
+        return
+    group = f"agn.{category}"
+    # The validator accepts, inside this sub-block, the short names the group
+    # owns AND the short names of the selected registered class (its prior
+    # names, e.g. SKIRTOR's ``delta``, ``oa_skirtor``). The refusal must see the
+    # same set, or a registered-class name owned by another group is accepted
+    # and then read by nothing. Shared (``agn``) names are read by the top level
+    # for every block, so they are never inert here.
+    registered = _short_names_for_registered_type(block_type)
+    spelling_to_full: dict[str, str] = {}
+    for name, owner in param_partition.items():
+        if owner == group:
+            for spelling in _name_spellings([name]):
+                spelling_to_full.setdefault(spelling, name)
+    for name, owner in param_partition.items():
+        if owner in (group, "agn"):
+            continue
+        for spelling in _name_spellings([name]):
+            if spelling in registered:
+                spelling_to_full.setdefault(spelling, name)
+    declared = _agn_subblock_declared_params(category, block_type, selection=selection)
+    if declared is None:
+        return
+    # A selected block in another category may read this category's parameter
+    # (the Synthesizer NLR/BLR read agn_log_mbh / agn_log_ledd, #2634); the
+    # disc row alone cannot record that, so the other rows are consulted.
+    read_elsewhere = _agn_names_read_by_other_blocks(selection, skip=category)
+    foreign = sorted(
+        key
+        for key in sub
+        if key in spelling_to_full
+        and spelling_to_full[key] not in declared
+        and spelling_to_full[key] not in read_elsewhere
+    )
+    if not foreign:
+        return
+    readers: dict[str, list[str]] = {}
+    for key in foreign:
+        full = spelling_to_full[key]
+        readers[key] = sorted(
+            other
+            for other in _agn_registered_block_types(category)
+            if other != block_type
+            and full
+            in (_agn_subblock_declared_params(category, other, selection=selection) or frozenset())
+        )
+    clauses = []
+    for key in foreign:
+        who = ", ".join(repr(t) for t in readers[key]) or "no registered type of this category"
+        clauses.append(f"{key!r} is read by {who}")
+    many = len(foreign) > 1
+    noun, pronoun = ("keys", "them") if many else ("key", "it")
+    offending = ", ".join(repr(k) for k in foreign)
+    hints = "".join(cigale_spelling_hint(key) for key in foreign)
+    raise ParameterError(
+        f"agn {category!r} type {block_type!r} does not read the {noun} {offending}, "
+        f"so writing {pronoun} here would be silently ignored. {'; '.join(clauses)}. "
+        f"Select a block that reads the {noun}, or drop {pronoun}.{hints}"
+    )
+
+
+def _agn_registered_block_types(category: str) -> tuple[str, ...]:
+    """Registered block types of one composable AGN category, sorted.
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key, as in :data:`_AGN_SELECTABLE_CATEGORIES`.
+
+    Returns
+    -------
+    tuple of str
+        The registered type names, the way the grammar spells them.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    return tuple(sorted(AGN_BLOCKS.get(_AGN_CONSUMES_CATEGORY.get(category, category), {})))
+
+
 def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     """Name the laws (or radio AGN models) that read a key the selected one does not.
 
@@ -6637,6 +6886,13 @@ def _validate_user_keys(
                     "absolute N/O knob (neb_dno is an offset from the grid's own relation)."
                 )
 
+            if "lyc_max_age_yr" in top_val and "lyc_max_age_yr" not in neb_type_specific_keys:
+                raise ConfigError(
+                    f"neb 'lyc_max_age_yr' is only available for type 'cue' (got {neb_type!r}): "
+                    "it sets the oldest stellar age whose ionizing photons Cue counts, and "
+                    "the other backends read a fixed age range from their own grids."
+                )
+
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
                 raise ValueError(
                     f"Unknown key 'grid' in group 'neb': type {neb_type!r} does not "
@@ -6728,6 +6984,7 @@ def _validate_user_keys(
                 "entries."
             )
         elif top_key == "agn":
+            agn_selection = _agn_block_selection(top_val)
             for sub_name in _AGN_SUBBLOCK_KEYS:
                 sub = top_val.get(sub_name)
                 if not isinstance(sub, dict):
@@ -6736,6 +6993,8 @@ def _validate_user_keys(
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
                 sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                if sub_name in _AGN_SELECTABLE_CATEGORIES:
+                    _reject_inert_agn_subblock_keys(sub_name, sub, agn_selection, param_partition)
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(
@@ -7283,6 +7542,7 @@ def _check_dict_keys(
                 f"{key!r} is a {owner!r} parameter, not a {group!r} one, so writing "
                 f"it here would be silently ignored. Nest it: "
                 f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
+                f"{cigale_spelling_hint(str(key))}"
             )
         # Check if the unknown key is a citation key
         from tengri.citations.resolve import citation_key_hint
@@ -7354,7 +7614,7 @@ def _check_dict_keys(
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{hint} "
             f"Valid structural keys for this group are: "
-            f"{displayed_keys}.{param_hint}"
+            f"{displayed_keys}.{param_hint}{cigale_spelling_hint(str(key))}"
         )
 
 
@@ -7495,6 +7755,7 @@ def _build_agn_search_view(
                             f"{key!r} is a {param_owner!r} parameter, not a "
                             f"{sibling_group!r} one. Nest it: "
                             f"agn={{{owner_subblock!r}: {{{key!r}: ...}}}}."
+                            f"{cigale_spelling_hint(key)}"
                         )
                     # Otherwise: shared param in sub-block (OK) or right sub-block (OK)
                 hits.append((location, sub[key]))
@@ -7677,6 +7938,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # this point on, ahead of the R37 validator and the R42 'none' branch
     # below.
     top_type = _normalize_off_switch(agn_dict.get("type"))
+    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time
+    # tuple. Parsed before the type branches so a monolithic model carries it too and the
+    # build refuses it there, instead of accepting and dropping the key.
+    if "ir_frac_window" in agn_dict:
+        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
+
     if top_type is not None and top_type != "composable":
         # R37: validate the name HERE, before anything else reads it. It used
         # to be forwarded to ``agn_model`` unchecked, "validated lazily by
@@ -7971,6 +8238,67 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
+
+
+def _parse_ir_frac_window(value: object) -> tuple[float, float]:
+    """Resolve ``agn['ir_frac_window']`` to ``(lambda_min_um, lambda_max_um)`` (#2662).
+
+    Accepts a pair ``(lambda_min_um, lambda_max_um)`` or CIGALE's string ``'5/20'``, which
+    is the same option. ``(0, 0)`` is the total-dust case; ``lambda_min == lambda_max != 0``
+    is monochromatic.
+
+    Parameters
+    ----------
+    value : object
+        The pair of micrometer wavelengths, or the ``'min/max'`` string.
+
+    Returns
+    -------
+    tuple of float
+        ``(lambda_min_um, lambda_max_um)``.
+
+    Raises
+    ------
+    ParameterError
+        If the value is not a pair of numbers, ``lambda_min`` is negative, or
+        ``lambda_min`` exceeds ``lambda_max``.
+    """
+    if isinstance(value, str):
+        parts = value.split("/")
+        if len(parts) != 2:
+            raise ParameterError(
+                f"agn['ir_frac_window'] string {value!r} must read 'lambda_min/lambda_max' "
+                "in micrometers, e.g. '5/20'."
+            )
+        try:
+            lo, hi = float(parts[0]), float(parts[1])
+        except ValueError as exc:
+            raise ParameterError(
+                f"agn['ir_frac_window'] string {value!r} holds a non-numeric wavelength."
+            ) from exc
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        try:
+            lo, hi = float(value[0]), float(value[1])
+        except (TypeError, ValueError) as exc:
+            raise ParameterError(
+                "agn['ir_frac_window'] must be a pair of wavelengths in micrometers, "
+                f"got {value!r}."
+            ) from exc
+    else:
+        raise ParameterError(
+            "agn['ir_frac_window'] must be (lambda_min_um, lambda_max_um) or CIGALE's "
+            f"'min/max' string, got {value!r}."
+        )
+    if lo < 0.0:
+        raise ParameterError(
+            f"agn['ir_frac_window'] lambda_min = {lo} um is negative; a window starts at 0 "
+            "or later."
+        )
+    if lo > hi:
+        raise ParameterError(
+            f"agn['ir_frac_window'] lambda_min = {lo} um exceeds lambda_max = {hi} um."
+        )
+    return (lo, hi)
 
 
 def _check_polar_law(law: object, where: str) -> str:
@@ -8325,6 +8653,7 @@ def _resolve_value(
             # message reads as "pass an explicit prior", never as "this is
             # broken".
             expanded = _expand_free(param_name, registry_default)
+            check_free_gyr_alias(param_name, FREE)
             if expanded.is_fixed:
                 raise ParameterError(
                     f"{short_name!r}: FREE cannot be honored -- {param_name!r} "
@@ -8613,6 +8942,34 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 # ── Inverse: Parameters to nested-dict form ────────────────────────────────
 
 
+def _agn_emittable_names(group_name: str, spec: Parameters) -> frozenset[str] | None:
+    """Full names an AGN sub-block of ``spec`` may emit: what its selected type declares.
+
+    Parameters
+    ----------
+    group_name : str
+        ``"agn.<category>"`` for one composable sub-block.
+    spec : Parameters
+        The Parameters being serialized.
+
+    Returns
+    -------
+    frozenset of str or None
+        The declared set for the selected type (companions included), or ``None`` when the
+        block has no selected type or the type is not registered.
+    """
+    category = group_name.split(".", 1)[1]
+    block_type = _extract_group_type(group_name, spec)
+    if block_type is None:
+        return None
+    selection = {}
+    for sub in _AGN_SELECTABLE_CATEGORIES:
+        selected = _extract_group_type(f"agn.{sub}", spec)
+        if selected is not None:
+            selection[sub] = selected
+    return _agn_subblock_declared_params(category, block_type, selection=selection)
+
+
 def parameters_to_groups(spec: Parameters) -> dict:
     """Convert a Parameters back to nested-dict form.
 
@@ -8777,6 +9134,13 @@ def parameters_to_groups(spec: Parameters) -> dict:
             read = _RADIO_AGN_READS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
             if read is not None:
                 param_names = [name for name in param_names if name in read]
+        elif group_name.startswith("agn.") and group_name != "agn":
+            # An AGN sub-block emits only the names its selected type declares:
+            # the same declared set the explicit-key refusal checks, so a dict
+            # this emitter writes is one the grammar accepts back.
+            declared = _agn_emittable_names(group_name, spec)
+            if declared is not None:
+                param_names = [name for name in param_names if name in declared]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:
@@ -8859,7 +9223,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # from the round-trip entirely. The MW foreground screen (#297) is the
     # standing case: it has three settings and no fitted parameters.
     for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
-        if group_name in result:
+        # A dotted name (``radio.sf``) lives NESTED under its parent: testing the
+        # flat key never matched, so a spec whose sub-block had already been
+        # emitted grew a stray top-level ``'radio.sf'`` that ``parse_groups``
+        # refuses on the way back in.
+        parent, _, subkey = group_name.partition(".")
+        if (subkey and subkey in result.get(parent, {})) or (not subkey and group_name in result):
             continue
         type_value = _extract_group_type(group_name, spec)
         pending: dict = {} if type_value is None else {"type": type_value}
@@ -8868,7 +9237,10 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Emit the group only when a setting actually fired: a bare type is
         # the business of the block above, which knows which are non-default.
         if len(pending) > n_before:
-            result[group_name] = pending
+            if subkey:
+                result.setdefault(parent, {})[subkey] = pending
+            else:
+                result[group_name] = pending
 
     # Handle top-level settings. No `apply_igm`: the igm group carries
     # activation on its own (``type: "none"`` when off, omitted when off and
@@ -9077,8 +9449,16 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
         # Round-trip the absorb-all LyC toggle (only emit when non-default).
-        if str(getattr(spec, "dust_lyc_reprocessed_by", "young")) == "all":
-            group_output["lyc_reprocessed_by"] = "all"
+        # The default is 'all' under Cue and 'young' elsewhere: emit when it differs.
+        _lyc_default = (
+            "all"
+            if getattr(spec, "nebular_mode", None) == "cue"
+            and getattr(spec, "cue_lyc_max_age_yr", "all") == "all"
+            else "young"
+        )
+        _lyc_value = str(getattr(spec, "dust_lyc_reprocessed_by", _lyc_default))
+        if _lyc_value != _lyc_default:
+            group_output["lyc_reprocessed_by"] = _lyc_value
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
             group_output["lyc_in_energy_balance"] = True

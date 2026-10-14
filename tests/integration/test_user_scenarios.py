@@ -12,6 +12,7 @@ Purpose: User review of tengri code for Paper I usability improvements
 import os
 import time
 import tracemalloc
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -79,7 +80,8 @@ def bpass_ssp():
     from BPASS causes posterior.derived to crash with TypeError.
     """
     if _BPASS_EXISTS:
-        return load_ssp_data(str(_BPASS_SSP))
+        # BPASS's surviving mass is pending (#2800): the fixture takes DSPS's fit explicitly.
+        return load_ssp_data(str(_BPASS_SSP), mass_remaining="dsps_fit")
     # Synthesize minimal BPASS-shaped SSPData lacking ssp_mass_remaining
     # to reproduce BUG-NSS-01 (posterior.derived crash with missing table).
     # Must be tengri's extended SSPData (ssp_mass_remaining/ssp_alpha_fe
@@ -248,7 +250,7 @@ def measure_jit_and_runtime(
             # For MAP/VI/NSS, measure cached runtime with warmup
             runtimes = []
             for i in range(n_warmup):
-                key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
+                key_i = jax.random.fold_in(rng_key, zlib.crc32(f"warmup_{i}".encode()) % (2**31))
                 t_start = time.perf_counter()
                 _ = fitter.run(
                     method,
@@ -390,7 +392,7 @@ class TestStandardGalaxyWorkflows:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -449,7 +451,7 @@ class TestStandardGalaxyWorkflows:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -605,7 +607,7 @@ class TestMemoryAndCompilation:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -654,7 +656,7 @@ class TestAGNScience:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -706,7 +708,7 @@ class TestAGNScience:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -813,7 +815,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -860,7 +862,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 1.0),  # Young universe
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.0725327),  # Young universe
             sfh_tsnorm_width_gyr=Uniform(0.1, 0.5),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 5.0),
@@ -907,7 +909,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -939,7 +941,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),

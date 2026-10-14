@@ -34,10 +34,14 @@
 # attenuation laws agree to floating point or a fraction of a percent; the dust
 # IR, the SKIRTOR AGN components, the X-ray corona and the radio synchrotron
 # agree to about 1 %. Three things differ, and each is stated where it is
-# measured: tengri's age-binning convention (§3), which sets a ~1 % floor under
-# the dust IR and the radio; the nebular emitter (Cue trained on Cloudy 22.00,
-# Li et al. 2025, ApJ 986, 9, arXiv:2405.04598) compared with CIGALE's bundled Cloudy
-# grids (§8); and the Fritz (2006) torus library (§9e). The Meiksin IGM
+# measured: the age convention of the SFH ⊗ SSP convolution (§3), exact in tengri
+# and a discrete 1 Myr sum, equivalent to aging every star by 0.5 Myr, in CIGALE,
+# which sets a ~1 % floor under the dust IR and the radio; the nebular emitter
+# (Cue trained on Cloudy 22.00, Li et al. 2025, ApJ 986, 9, arXiv:2405.04598)
+# compared with CIGALE's bundled Cloudy grids (§8, §11b); and the Fritz (2006)
+# torus library (§9e). Two further differences sit on CIGALE's side: its X-ray
+# templates are normalized on a truncated wavelength grid (§10), and its polar-dust
+# reference is integrated on a coarser axis than tengri's (§9d). The Meiksin IGM
 # agrees where one Lyman line is active and differs blueward of Lyβ (§12).
 # Every section prints the number it claims.
 
@@ -199,6 +203,25 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
     assert (a_ref > 0).any() and (a_t > 0).any(), f"{name}: zero/negative-only"
     ratio = a_ref.max() / a_t.max()
     assert 1e-3 < ratio < 1e3, f"{name}: y-scale ratio {ratio:.2e} out of range"
+
+
+def _band_energy_ratio(w_ref, l_ref, w_t, l_t, lo_aa: float, hi_aa: float) -> float:
+    """Energy-weighted tengri / reference ratio, ∫L_ν dν over [lo_aa, hi_aa] [Å].
+
+    tengri is regridded onto the reference grid and both are integrated over
+    the same points, so the ratio is the ratio of band luminosities. A median
+    over grid points would instead weight a band by how many points each code
+    places in it, and CIGALE's nebular line grid puts far more points in the
+    ultraviolet than in the optical.
+    """
+    w = np.asarray(w_ref)
+    sel = (w >= lo_aa) & (w <= hi_aa)
+    if int(sel.sum()) < 2:
+        return float("nan")
+    l_t_on_ref = U.regrid(np.asarray(w_t), np.asarray(l_t), w)
+    num = _lbol_nu(w[sel], l_t_on_ref[sel])
+    den = _lbol_nu(w[sel], np.asarray(l_ref)[sel])
+    return num / den if den > 0 else float("nan")
 
 
 # %% [markdown]
@@ -437,7 +460,8 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
     # dense lookback grid: the table compares the SFH form, not the
     # 256-point diagnostic grid
     n_grid=4096,
@@ -472,7 +496,9 @@ def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
     interior of the history (the first 2 % and last 1 % of the age are
     dropped: both ends are grid edges, not physics).
     """
-    _c_on_t = np.interp(t_t_yr, np.asarray(t_c_yr), np.asarray(sfr_c_arr), left=np.nan, right=np.nan)
+    _c_on_t = np.interp(
+        t_t_yr, np.asarray(t_c_yr), np.asarray(sfr_c_arr), left=np.nan, right=np.nan
+    )
     _ok = (
         np.isfinite(_c_on_t)
         & (_c_on_t > 0)
@@ -500,20 +526,28 @@ _keep_t_1 = (t_t_valid / 1e9 >= _t_min_broad) & (t_t_valid / 1e9 <= _t_max_broad
 _t_c_temp = (t_c / 1e9)[_keep_c_1]
 _t_t_temp = (t_t_valid / 1e9)[_keep_t_1]
 _t_min_aligned = max(_t_c_temp.min(), _t_t_temp.min())
-_keep_final_c = (_t_c_temp >= _t_min_aligned)
-_keep_final_t = (_t_t_temp >= _t_min_aligned)
+_keep_final_c = _t_c_temp >= _t_min_aligned
+_keep_final_t = _t_t_temp >= _t_min_aligned
 _t_c_overlap = t_c[_keep_c_1][_keep_final_c]
 _sfr_c_overlap = sfr_c[_keep_c_1][_keep_final_c]
 _t_t_valid_overlap = t_t_valid[_keep_t_1][_keep_final_t]
 _sfr_t_valid_overlap = sfr_t_valid[_keep_t_1][_keep_final_t]
 
 print(
-    f"  common interval: t_c [{_t_c_overlap.min()/1e9:.4f}, {_t_c_overlap.max()/1e9:.4f}] Gyr, "
-    f"t_t range [{_t_t_valid_overlap.min()/1e9:.4f}, {_t_t_valid_overlap.max()/1e9:.4f}] Gyr"
+    f"  common interval: t_c [{_t_c_overlap.min() / 1e9:.4f}, {_t_c_overlap.max() / 1e9:.4f}] Gyr, "
+    f"t_t range [{_t_t_valid_overlap.min() / 1e9:.4f}, {_t_t_valid_overlap.max() / 1e9:.4f}] Gyr"
 )
 
 fig, (ax, ax_r), ratio = V.sweep_fig(
-    [("delayed-τ", _t_c_overlap / 1e9, _sfr_c_overlap, _t_t_valid_overlap / 1e9, _sfr_t_valid_overlap)],
+    [
+        (
+            "delayed-τ",
+            _t_c_overlap / 1e9,
+            _sfr_c_overlap,
+            _t_t_valid_overlap / 1e9,
+            _sfr_t_valid_overlap,
+        )
+    ],
     ref_label="pcigale",
     title="§2 τ-delayed SFH (τ=1 Gyr, age=5 Gyr)",
     xlabel="Cosmic age since SF onset [Gyr]",
@@ -593,7 +627,8 @@ _m_2exp = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
     n_grid=4096,
 )
 _st_2exp = _m_2exp.predict_state({})
@@ -619,20 +654,28 @@ _keep2_t_1 = (_t_2exp_valid / 1e9 >= _t2_min_broad) & (_t_2exp_valid / 1e9 <= _t
 _t2_c_temp = (t_c2 / 1e9)[_keep2_c_1]
 _t2_t_temp = (_t_2exp_valid / 1e9)[_keep2_t_1]
 _t2_min_aligned = max(_t2_c_temp.min(), _t2_t_temp.min())
-_keep2_final_c = (_t2_c_temp >= _t2_min_aligned)
-_keep2_final_t = (_t2_t_temp >= _t2_min_aligned)
+_keep2_final_c = _t2_c_temp >= _t2_min_aligned
+_keep2_final_t = _t2_t_temp >= _t2_min_aligned
 _t_c2_overlap = t_c2[_keep2_c_1][_keep2_final_c]
 _sfr_c2_overlap = sfr_c2[_keep2_c_1][_keep2_final_c]
 _t_2exp_valid_overlap = _t_2exp_valid[_keep2_t_1][_keep2_final_t]
 _sfr_2exp_valid_overlap = _sfr_2exp_valid[_keep2_t_1][_keep2_final_t]
 
 print(
-    f"  common interval: t_c2 [{_t_c2_overlap.min()/1e9:.4f}, {_t_c2_overlap.max()/1e9:.4f}] Gyr, "
-    f"_t_2exp range [{_t_2exp_valid_overlap.min()/1e9:.4f}, {_t_2exp_valid_overlap.max()/1e9:.4f}] Gyr"
+    f"  common interval: t_c2 [{_t_c2_overlap.min() / 1e9:.4f}, {_t_c2_overlap.max() / 1e9:.4f}] Gyr, "
+    f"_t_2exp range [{_t_2exp_valid_overlap.min() / 1e9:.4f}, {_t_2exp_valid_overlap.max() / 1e9:.4f}] Gyr"
 )
 
 fig, (ax, ax_r), ratio = V.sweep_fig(
-    [("sfh2exp", _t_c2_overlap / 1e9, _sfr_c2_overlap, _t_2exp_valid_overlap / 1e9, _sfr_2exp_valid_overlap)],
+    [
+        (
+            "sfh2exp",
+            _t_c2_overlap / 1e9,
+            _sfr_c2_overlap,
+            _t_2exp_valid_overlap / 1e9,
+            _sfr_2exp_valid_overlap,
+        )
+    ],
     ref_label="pcigale",
     title="§2 sfh2exp (main + burst, age=10 Gyr)",
     xlabel="Cosmic age since SF onset [Gyr]",
@@ -680,7 +723,13 @@ _cases_2c = []
 
 for _r in (0.1, 5.0):
     _t_c, _sfr_c = C.sfh_curve(
-        "sfhdelayedbq", tau_main=2000, age_main=8000, age_bq=500, r_sfr=_r, sfr_A=1.0, normalise=True
+        "sfhdelayedbq",
+        tau_main=2000,
+        age_main=8000,
+        age_bq=500,
+        r_sfr=_r,
+        sfr_A=1.0,
+        normalise=True,
     )
     _m = SEDModel.build(
         ssp_data=ssp,
@@ -695,7 +744,8 @@ for _r in (0.1, 5.0):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -703,11 +753,19 @@ for _r in (0.1, 5.0):
     _sfr_t = np.asarray(_st.derived["sfr_history"])
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
-    _cases_2c.append((f"delayed_bq r_sfr={_r}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"delayed_bq r_sfr={_r}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _bt in (0, 1, 2):
     _t_c, _sfr_c = C.sfh_curve(
-        "sfhperiodic", type_bursts=_bt, delta_bursts=1000, tau_bursts=200, age=8000, sfr_A=1.0, normalise=True
+        "sfhperiodic",
+        type_bursts=_bt,
+        delta_bursts=1000,
+        tau_bursts=200,
+        age=8000,
+        sfr_A=1.0,
+        normalise=True,
     )
     _m = SEDModel.build(
         ssp_data=ssp,
@@ -722,7 +780,8 @@ for _bt in (0, 1, 2):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -731,7 +790,9 @@ for _bt in (0, 1, 2):
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
     _label = {0: "exponential", 1: "delayed", 2: "rectangular"}[_bt]
-    _cases_2c.append((f"periodic {_label}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"periodic {_label}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _v in (150, 250):
     _t_c, _sfr_c = C.sfh_curve("sfh_buat08", velocity=_v, age=8000, normalise=True)
@@ -746,7 +807,8 @@ for _v in (150, 250):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -754,7 +816,9 @@ for _v in (150, 250):
     _sfr_t = np.asarray(_st.derived["sfr_history"])
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
-    _cases_2c.append((f"buat08 v={_v}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"buat08 v={_v}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _label, _wr, _lr, _wt, _lt in _cases_2c:
     _assert_comparable(_lr, _lt, name=f"§2c {_label}")
@@ -793,36 +857,43 @@ V.print_window_table(
 # mass formed is reported in the annotation.
 #
 # **The one convention difference on this SSP, and where it goes.** The two
-# codes place the same star formation on the same SSP age grid in different
-# ways, and the whole rest of the notebook inherits the result, so it is
-# stated once here.
+# codes convolve the same star formation with the same SSP grid in different
+# ways, and the rest of the notebook inherits the result, so it is stated once
+# here.
 #
-# tengri integrates the SFH onto the age axis with a cloud-in-cell kernel
-# whose integrand extends to lookback zero, so the youngest SSP node (1 Myr
-# on this grid) receives the star formation of the whole `[0, 1 Myr]` parcel.
-# CIGALE gives that node exactly one 1-Myr bin and ages every star by +1 Myr
-# (`pcigale/sed_modules/bc03.py`). tengri therefore carries recent star
-# formation that a native-age binning drops, and since the 1–10 Myr
-# population dominates the ionizing and far-UV output, the difference is
-# strongly wavelength-dependent. Measured on this pair, printed below:
+# tengri computes the exact SFH ⊗ SSP convolution: each parcel of star formation
+# is placed at its own age, and a cloud-in-cell kernel splits it between the two
+# SSP nodes that bracket that age. CIGALE samples the SFR at integer Myr
+# (`pcigale/sed_modules/sfhdelayed.py`) and pairs each 1 Myr bin with the SSP at
+# the bin's older edge (`pcigale/sed_modules/bc03.py`). That ages every star by
+# about 0.5 Myr and gives no weight to stars younger than 1 Myr. Q_H and the
+# far-UV fall steeply over the first ~10 Myr, so 0.5 Myr is a large fraction of
+# the young population's output and a negligible one of the old population's: the
+# difference is strongly wavelength-dependent.
+#
+# The cell after the table tests this on Q_H. Convolving the SFH continuously
+# with the BC03 n_ly(t) of §1 reproduces tengri's Q_H, and aging every star by
+# 0.5 Myr before the same convolution reproduces CIGALE's. Measured on this pair
+# as energy-weighted ratios (the ratio of the luminosity each code puts in the
+# band; a median over grid points would weight a band by how many points CIGALE's
+# nebular line grid places in it), printed below:
 #
 # | quantity | tengri / CIGALE |
 # |---|---|
-# | 912–1200 Å | 1.060× |
-# | 1200–3000 Å | 1.034× |
-# | 0.3–1 µm | 1.002× |
+# | 912–1200 Å | 1.063× |
+# | 1200–3000 Å | 1.030× |
+# | 0.3–1 μm | 1.006× |
 # | stellar L_bol | 1.016× |
 # | Q_H (λ < 911.76 Å) | 1.150× |
 #
 # The 200–912 Å band is not quoted: with the nebular emitter on, both codes
 # absorb nearly every Lyman-continuum photon, so there is nothing to take a
-# ratio of. This is tengri's documented convention, not a defect: the ionizing
-# budget moves toward the analytic continuous SFH→SSP convolution, so the side
-# that drops the parcel is the one that is incomplete.
+# ratio of. Neither convention is a defect: tengri's is the continuous
+# convolution, CIGALE's a 1 Myr discrete sum with the bin's older-edge age.
 #
 # Three later sections are this table and nothing else. §6's dust IR is
 # normalized to `L_absorbed`, which inherits the L_bol offset weighted toward
-# the UV, and lands at 1.010× CIGALE's `dust.luminosity`. §11's synchrotron is
+# the UV, and lands at 1.011× CIGALE's `dust.luminosity`. §11's synchrotron is
 # anchored on the same luminosity, so that factor appears there as a flat
 # offset. §8's line luminosities scale with Q_H. None of those is a separate
 # discrepancy.
@@ -865,7 +936,8 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -895,29 +967,24 @@ ax.text(
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-_opt = (w_c >= 1e3) & (w_c <= 1e4) & (L_c > 0)
-print(f"§3 stellar tengri/CIGALE median (0.1–1 µm): {float(np.median(ratio[_opt])):.3f}×")
-
-# The age-binning convention, band by band. This is the table the §3 prose
-# quotes, and the term every later section inherits.
+# The age-binning convention, band by band, as energy-weighted ratios: the
+# ratio of the luminosity each code puts in the band. This is the table the §3
+# prose quotes, and the term every later section inherits. A median over grid
+# points is not used: CIGALE's nebular line grid carries many more points in the
+# ultraviolet than in the optical, so a point-count median weights the bands by
+# grid density.
 _L_t_on_c3 = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_c)
-# A relative floor, not a bare L_c > 0: the deep Lyman continuum carries a few
-# points where CIGALE's flux is positive but numerically negligible, and a
-# near-zero denominator turns a real agreement into a meaningless quadrillion-x
-# ratio.
-_r3 = _L_t_on_c3 / np.where(L_c > 1e-6 * L_c.max(), L_c, np.nan)
-print("§3 intrinsic stellar SED, median ratio by band (tengri / CIGALE):")
+print("§3 intrinsic stellar SED, energy-weighted ratio by band (∫L_ν dν, tengri / CIGALE):")
 for _lo, _hi, _wname in (
-    (200.0, 912.0, "200–912 Å  "),
     (912.0, 1200.0, "912–1200 Å "),
     (1200.0, 3000.0, "1200–3000 Å"),
     (3000.0, 10000.0, "0.3–1 µm   "),
+    (1000.0, 10000.0, "0.1–1 µm   "),
 ):
-    _m3 = (w_c >= _lo) & (w_c <= _hi) & np.isfinite(_r3)
-    if _m3.any():
-        print(f"    {_wname}: {float(np.median(_r3[_m3])):.3f}×")
-    else:
-        print(f"    {_wname}: --   (CIGALE flux below the 1e-6 floor here)")
+    print(
+        f"    {_wname}: "
+        f"{_band_energy_ratio(w_c, L_c, np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), _lo, _hi):.3f}×"
+    )
 _pos3 = L_c > 0
 _lbol_c3 = _lbol_nu(w_c[_pos3], np.asarray(L_c)[_pos3])
 _lbol_t3 = _lbol_nu(w_c[_pos3], _L_t_on_c3[_pos3])
@@ -935,40 +1002,93 @@ fig.tight_layout()
 plt.close(fig)  # superseded by §3b's tau x age grid, which replaces this panel
 
 
+# %%
+# The age convention, tested on the ionizing photon rate. The BC03 pickle read in
+# §1 carries n_ly(t) on a 1 Myr age axis. Convolving the τ-delayed SFH with it
+# continuously (every parcel at its own age, the SSP linear in age between nodes
+# and held at its 1 Myr value below) is the exact SFH ⊗ SSP convolution tengri
+# computes. Aging every star by 0.5 Myr first is the convention CIGALE's discrete
+# 1 Myr sum implies: each 1 Myr bin is paired with the SSP at its older edge.
+_t_ssp_myr = np.asarray(_raw.t, dtype=float)  # SSP ages [Myr], 1 Myr spacing
+_q_ssp = np.asarray(_raw.info)[2]  # n_ly per M☉ formed [ph/s]
+
+
+def _q_h_continuous(shift_myr: float, tau_myr=1000.0, age_myr=5000.0, d_age=0.01) -> float:
+    """Q_H [ph/s per M☉ formed] of the τ-delayed SFH, every star aged by ``shift_myr``."""
+    a = np.arange(0.5 * d_age, age_myr, d_age)  # lookback age of each parcel [Myr]
+    sfr = (age_myr - a) * np.exp(-(age_myr - a) / tau_myr)
+    sfr = sfr / (sfr.sum() * d_age)  # normalized to 1 M☉ formed
+    return float(np.sum(sfr * np.interp(a + shift_myr, _t_ssp_myr, _q_ssp)) * d_age)
+
+
+_q_exact_3 = _q_h_continuous(0.0)
+_q_shift_3 = _q_h_continuous(0.5)
+print(
+    f"§3 Q_H, continuous SFH ⊗ SSP convolution: {_q_exact_3:.4e} ph/s "
+    f"→ {_q_exact_3 / _q_h_t3:.3f}× tengri's {_q_h_t3:.4e}"
+)
+print(
+    f"§3 Q_H, the same convolution with every star aged by 0.5 Myr: {_q_shift_3:.4e} ph/s "
+    f"→ {_q_shift_3 / _n_ly_c3:.3f}× CIGALE's {_n_ly_c3:.4e}"
+)
+assert abs(_q_exact_3 / _q_h_t3 - 1.0) < 0.02, "continuous convolution should match tengri's Q_H"
+assert abs(_q_shift_3 / _n_ly_c3 - 1.0) < 0.01, "a 0.5 Myr aging should reproduce CIGALE's Q_H"
+
+
 # %% [markdown]
 # ### §3b τ × age grid
 #
 # Stellar SED dependence on the delayed SFH's shape parameters: τ ∈
 # {0.3, 1, 3} Gyr at age = 1 and 10 Gyr, plus the τ = 1 Gyr, age = 5 Gyr
-# fiducial (7 cases). One tengri build with `sfh_delayed_tau_gyr` and
-# `sfh_delayed_age_gyr` free, evaluated per case via `predict_rest_sed`;
+# fiducial (7 cases). One tengri build per case with `sfh_delayed_tau_gyr` and
+# `sfh_delayed_age_gyr` fixed (a free age is expressed as a fraction of the age of the
+# universe, so absolute ages are fixed per build), evaluated via `predict_rest_sed`;
 # one CIGALE `sfhdelayed` + `bc03` chain per case. Table over the
 # GALEX-through-2MASS bands (`UV_TO_NIR`), since this comparison carries
-# no dust IR. The worst band ratio in the printed table is τ = 0.3 Gyr, age = 10 Gyr.
+# no dust IR. The worst band ratio in the printed table is τ = 3 Gyr, age = 1 Gyr
+# (1.055×, SDSS u). The τ = 1 and 3 Gyr cases at age 1 Gyr
+# have one band each outside 5 % (worst 1.052× and 1.055×, both SDSS u), where the
+# youngest stars carry the §3 convention; the remaining five cases have none. Of
+# those five, τ = 1 Gyr at 10 Gyr ties τ = 0.3 Gyr at 10 Gyr at 1.044×, and the worst
+# band of the quiescent cases is in the GALEX far or near UV (printed per case). The
+# quiescent cases sit near unity because Cue counts ionizing photons from every
+# stellar age, so the old population supplies the nebular far-UV that CIGALE also
+# includes.
 
 # %%
-_tau_age_cases_grid = [(0.3, 1.0), (1.0, 1.0), (3.0, 1.0), (0.3, 10.0), (1.0, 10.0), (3.0, 10.0), (1.0, 5.0)]
+_tau_age_cases_grid = [
+    (0.3, 1.0),
+    (1.0, 1.0),
+    (3.0, 1.0),
+    (0.3, 10.0),
+    (1.0, 10.0),
+    (3.0, 10.0),
+    (1.0, 5.0),
+]
 
-m_3b = SEDModel.build(
-    ssp_data=ssp,
-    met=MET_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Uniform(0.1, 10.0, default=1.0),
-        "age_gyr": Uniform(0.5, 13.0, default=5.0),
-        "log_total_mass": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
-    dust_attenuation={
-        "law": "power_law",
-        "type": "two_component",
-        "tau_bc": Fixed(0.0),
-        "tau_diff": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
-)
-_p_3b = dict(m_3b.spec.sample(jax.random.PRNGKey(0)))
+def _build_3b(tau_gyr, age_gyr):
+    """One fixed-timing tengri build per (tau, age) case."""
+    return SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(tau_gyr),
+            "age_gyr": Fixed(age_gyr),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
+    )
+
 
 _cases_3b = []
 for _tau, _age in _tau_age_cases_grid:
@@ -992,11 +1112,16 @@ for _tau, _age in _tau_age_cases_grid:
         ]
     )
     _w_c3b, _L_c3b = C.to_lnu(_sed_c3b)
-    _o_3b = m_3b.predict_rest_sed(
-        {**_p_3b, "sfh_delayed_tau_gyr": jnp.float64(_tau), "sfh_delayed_age_gyr": jnp.float64(_age)}
-    )
+    _m_3b = _build_3b(_tau, _age)
+    _o_3b = _m_3b.predict_rest_sed(dict(_m_3b.spec.sample(jax.random.PRNGKey(0))))
     _cases_3b.append(
-        (f"τ={_tau:g}, age={_age:g} Gyr", _w_c3b, _L_c3b, np.asarray(_o_3b.wavelength), np.asarray(_o_3b.sed))
+        (
+            f"τ={_tau:g}, age={_age:g} Gyr",
+            _w_c3b,
+            _L_c3b,
+            np.asarray(_o_3b.wavelength),
+            np.asarray(_o_3b.sed),
+        )
     )
     _assert_comparable(_L_c3b, np.asarray(_o_3b.sed), name=f"§3b tau={_tau} age={_age}")
 
@@ -1008,8 +1133,12 @@ save_fig("cigale_03b_tau_age_grid.png")
 
 print("§3b τ × age grid (UV_TO_NIR band ratio per case):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_3b:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
-    V.print_filter_table(_rows, ref_name="CIGALE", title=f"§3b {_label}", compact=True)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
+    V.print_filter_table(
+        _rows, ref_name="CIGALE", title=f"§3b {_label}", compact=True, show_worst_band=True
+    )
 
 
 # %% [markdown]
@@ -1030,7 +1159,7 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_3b:
 # `calzetti` does not, which is an 8.4 % gap below 1500 Å between two laws
 # that are not the same law. `modified_CF00` needs two curves on each side:
 # CIGALE attenuates young stars through the birth cloud *and* the ISM
-# (`Av_BC = Av_ISM(1−µ)/µ = 1.53` at the defaults), so a single
+# (`Av_BC = Av_ISM(1−μ)/μ = 1.53` at the defaults), so a single
 # (λ/5500 Å)^−0.7 is the wrong object to compare it against.
 #
 # **The one real convention difference is the Leitherer↔Calzetti crossover.**
@@ -1088,7 +1217,9 @@ _law_pairs = [
     ),
     (
         "  + 2175 Å bump (E_b = 3)",
-        C.attenuation_curve("dustatt_modified_starburst", wave_law, **{**_BUMP_KW, "bump_ampl": 3.0}),
+        C.attenuation_curve(
+            "dustatt_modified_starburst", wave_law, **{**_BUMP_KW, "bump_ampl": 3.0}
+        ),
         np.asarray(_tengri_laws["noll09"](wave_law, dust_bump_strength=3.0)),
         "modified_starburst ↔ noll09",
     ),
@@ -1157,6 +1288,16 @@ plt.show()
 # two-component Calzetti law at τ_BC and τ_diff derived from the
 # same E(B−V)_lines via `cigale_ebv_lines_to_tau`.
 #
+# The printed energy-weighted ratios are the comparison. The printed maximum |Δ|
+# over 0.1–1 μm is a single point in an emission-line wing and not a continuum
+# difference. The point nearest the vacuum Lyα line (1215.67 Å) sits in a wing that
+# the two codes draw differently: tengri renders Cue's Lyα as a flux-conserving
+# triweight of σ = 100 km/s on the SSP wavelength grid and interpolates it onto
+# CIGALE's grid, while CIGALE uses a Gaussian of FWHM 300 km/s on its own
+# line-augmented grid. The cell therefore also prints the maximum outside ±10 Å of
+# Lyα; the largest remaining points are on other emission-line wings, for example
+# the Hα line wing (6563–6573 Å), and are set by the same difference in profile and sampling.
+#
 # **Verification Status:** PARTIAL (2/88): Two-component attenuation (birth cloud and diffuse)
 
 # %%
@@ -1218,7 +1359,8 @@ m_nd = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
 
@@ -1245,7 +1387,8 @@ m_d = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_c_d, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -1253,6 +1396,7 @@ _assert_comparable(L_c_d, s_d.derived["sed_dust_attenuated"], name="§5 dust app
 # The four panels are two comparisons — intrinsic and attenuated — and a
 # side-by-side layout with independent y-axes cannot show a normalization
 # offset in either. One number each.
+_LYA_VAC_AA, _LYA_WINDOW_AA = 1215.67, 10.0  # vacuum Lyα [Å], half-width of the excluded window
 print("§5 attenuation applied (tengri / CIGALE, on CIGALE's grid):")
 for _name, _wc, _Lc, _wt, _Lt in (
     ("intrinsic ", w_c_nd, L_c_nd, np.asarray(s_nd.wave), np.asarray(s_nd.sed_intrinsic)),
@@ -1269,13 +1413,21 @@ for _name, _wc, _Lc, _wt, _Lt in (
     for _lo, _hi, _wname in ((912.0, 1200.0, "912–1200 Å"), (1000.0, 10000.0, "0.1–1 µm  ")):
         _m5 = (_wc >= _lo) & (_wc <= _hi) & np.isfinite(_r5)
         _d5 = np.abs(_r5[_m5] - 1.0)
-        # Where the worst point is, not just how bad it is: on this ~20 Å
-        # optical grid the extremum is a single point in a line or a deep
-        # absorption trough, and the median is what the panel shows.
+        # The band luminosity ratio, and where the worst point is: the extremum
+        # is a single point in an emission-line wing, where the two codes draw the
+        # line with different profiles (a 100 km/s triweight on the SSP grid in
+        # tengri, a 300 km/s FWHM Gaussian on CIGALE's line grid) and different
+        # sampling. The maximum is therefore printed twice, over the whole band
+        # and outside a ±10 Å window around the vacuum Lyα line.
+        _m5_out = _m5 & (np.abs(_wc - _LYA_VAC_AA) > _LYA_WINDOW_AA)
+        _d5_out = np.abs(_r5[_m5_out] - 1.0)
         print(
-            f"    {_name} {_wname}: median {float(np.median(_r5[_m5])):.4f}×, "
+            f"    {_name} {_wname}: energy-weighted "
+            f"{_band_energy_ratio(_wc, _Lc, _wt, _Lt, _lo, _hi):.4f}×, "
             f"max |Δ| {float(_d5.max()) * 100:.2f}% at "
-            f"{float(_wc[_m5][int(np.argmax(_d5))]):.0f} Å"
+            f"{float(_wc[_m5][int(np.argmax(_d5))]):.0f} Å; "
+            f"outside Lyα ±{_LYA_WINDOW_AA:g} Å: {float(_d5_out.max()) * 100:.2f}% at "
+            f"{float(_wc[_m5_out][int(np.argmax(_d5_out))]):.0f} Å"
         )
 
 fig, ((ax_l1, ax_r1), (ax_l2, ax_r2)) = plt.subplots(2, 2, sharey=True, figsize=(12, 8))
@@ -1360,7 +1512,8 @@ for _ebv, _bump in [(0.1, 0.0), (0.3, 0.0), (0.6, 0.0), (0.1, 3.0), (0.3, 3.0), 
             "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
     _s_n = _m_n.predict_state({})
     _cases_5b_noll.append(
@@ -1372,16 +1525,23 @@ for _ebv, _bump in [(0.1, 0.0), (0.3, 0.0), (0.6, 0.0), (0.1, 3.0), (0.3, 3.0), 
             np.asarray(_s_n.derived["sed_dust_attenuated"]),
         )
     )
-    _assert_comparable(_L_cn, np.asarray(_s_n.derived["sed_dust_attenuated"]), name=f"§5b noll09 {_ebv},{_bump}")
+    _assert_comparable(
+        _L_cn, np.asarray(_s_n.derived["sed_dust_attenuated"]), name=f"§5b noll09 {_ebv},{_bump}"
+    )
 
 fig, (ax, ax_r), _ratios_5bn = V.sweep_fig(
-    _cases_5b_noll, ref_label="CIGALE", title="§5b modified_starburst E(B-V) × bump grid", xlim=(1e3, 1e4)
+    _cases_5b_noll,
+    ref_label="CIGALE",
+    title="§5b modified_starburst E(B-V) × bump grid",
+    xlim=(1e3, 1e4),
 )
 fig.tight_layout()
 save_fig("cigale_05b_noll09_grid.png")
 print("§5b modified_starburst E(B-V) × bump grid (UV_TO_NIR):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_5b_noll:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§5b {_label}", compact=True)
 
 _cases_5b_2pl = []
@@ -1434,7 +1594,8 @@ for _slope_ism in (-0.4, -0.7, -1.0):
             "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
     _s_2p = _m_2p.predict_state({})
     _cases_5b_2pl.append(
@@ -1447,11 +1608,16 @@ for _slope_ism in (-0.4, -0.7, -1.0):
         )
     )
     _assert_comparable(
-        _L_c2p, np.asarray(_s_2p.derived["sed_dust_attenuated"]), name=f"§5b 2powerlaws {_slope_ism}"
+        _L_c2p,
+        np.asarray(_s_2p.derived["sed_dust_attenuated"]),
+        name=f"§5b 2powerlaws {_slope_ism}",
     )
 
 fig, (ax, ax_r), _ratios_5b2 = V.sweep_fig(
-    _cases_5b_2pl, ref_label="CIGALE", title="§5b 2powerlaws slope_ISM sweep", xlim=(1e3, 1e4),
+    _cases_5b_2pl,
+    ref_label="CIGALE",
+    title="§5b 2powerlaws slope_ISM sweep",
+    xlim=(1e3, 1e4),
     cmap="Oranges",
     values=[-0.4, -0.7, -1.0],
     param_label="slope_ISM",
@@ -1460,7 +1626,9 @@ fig.tight_layout()
 save_fig("cigale_05c_2powerlaws_slope.png")
 print("§5b 2powerlaws slope_ISM sweep (UV_TO_NIR):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_5b_2pl:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§5b {_label}", compact=True)
 
 # Stand-alone A(λ)/A_V curves (no SFH/SSP, no E(B-V) scale — the ratio is
@@ -1471,14 +1639,22 @@ for _bump in (0.0, 3.0):
     _A_c = _norm_AV(
         _wave_5b,
         C.attenuation_curve(
-            "dustatt_modified_starburst", _wave_5b, bump_wave=217.5, bump_width=35.0,
-            bump_ampl=_bump, power_slope=0.0,
+            "dustatt_modified_starburst",
+            _wave_5b,
+            bump_wave=217.5,
+            bump_width=35.0,
+            bump_ampl=_bump,
+            power_slope=0.0,
         ),
     )
-    _A_t = _norm_AV(_wave_5b, np.asarray(_tengri_laws["noll09"](_wave_5b, dust_bump_strength=_bump)))
+    _A_t = _norm_AV(
+        _wave_5b, np.asarray(_tengri_laws["noll09"](_wave_5b, dust_bump_strength=_bump))
+    )
     _cases_5b_curve.append((f"bump={_bump:g}", _wave_5b, _A_c, _wave_5b, _A_t))
 _rows_5b_curve = V.window_rows(_cases_5b_curve, lo=1216.0, hi=3000.0)
-V.print_window_table(_rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, modified_starburst screen, 1216-3000 Å")
+V.print_window_table(
+    _rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, modified_starburst screen, 1216-3000 Å"
+)
 
 
 # %% [markdown]
@@ -1490,15 +1666,15 @@ V.print_window_table(_rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, m
 # floating point: the residual is annotated on the right panel and printed
 # below, and it is exactly zero.
 #
-# **The energy anchor.** tengri's `L_absorbed` sits 1.0 % above CIGALE's
-# `dust.luminosity` (printed below). That is §3's age-binning convention
-# arriving here: the absorbed luminosity is an integral over the attenuated
-# far-UV and optical, weighted toward the wavelengths where tengri's youngest
-# SSP node adds flux. The two codes' attenuation *curves* are not the cause:
+# **The energy anchor.** tengri's `L_absorbed` sits 1.1 % above CIGALE's
+# `dust.luminosity` (printed below). That is §3's age convention arriving here:
+# the absorbed luminosity is an integral over the attenuated far-UV and optical,
+# weighted toward the wavelengths where CIGALE's 0.5 Myr older stars emit less
+# than tengri's. The two codes' attenuation *curves* are not the cause:
 # §4 measures them agreeing to 0.000 % away from the 1500–1800 Å crossover,
 # and the absorbed fractions they produce are printed below (0.359 for CIGALE, 0.357 for tengri).
 # Since the IR is normalized to that anchor, it appears in the printed
-# 10–100 µm median as a floor under whatever the templates themselves do.
+# 10–100 μm median as a floor under whatever the templates themselves do.
 #
 # **Lyman continuum.** tengri's attenuation curves polynomial-extend
 # through the FUV; CIGALE zeros attenuation below 912 Å, and the models here
@@ -1555,8 +1731,13 @@ m_ir = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(2.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 L_abs = float(s_ir.derived.get("L_absorbed", 0.0))
@@ -1587,8 +1768,10 @@ ax.text(
     va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7),
 )
-_fir = (w_c_ir >= 1e5) & (w_c_ir <= 1e6) & (L_c_ir > 0)
-print(f"§6 dust IR tengri/CIGALE median (10–100 µm): {float(np.median(ratio[_fir])):.3f}×")
+print(
+    "§6 dust IR tengri/CIGALE energy-weighted (10–100 µm): "
+    f"{_band_energy_ratio(w_c_ir, L_c_ir, np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), 1e5, 1e6):.3f}×"
+)
 
 # The energy anchor the IR is normalized to, and the absorbed fraction that
 # sets it. Printed because §6's IR ratio, §11's synchrotron amplitude and the
@@ -1604,10 +1787,7 @@ print(
     f"§6 energy anchor: CIGALE dust.luminosity {_L_DUST_C:.4e}, "
     f"tengri L_absorbed {L_abs:.4e} erg/s → {L_abs / _L_DUST_C:.4f}×"
 )
-print(
-    f"§6 absorbed fraction: CIGALE {_L_DUST_C / _L_STAR_C:.6f}, "
-    f"tengri {L_abs / _L_star_t:.6f}"
-)
+print(f"§6 absorbed fraction: CIGALE {_L_DUST_C / _L_STAR_C:.6f}, tengri {L_abs / _L_star_t:.6f}")
 print(f"§6 energy balance |L_IR − L_abs| / L_abs = {residual:.3e}")
 fig.tight_layout()
 plt.close(fig)  # superseded by §6c's IR-library grids, which replace this panel
@@ -1621,7 +1801,7 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # attenuation block, a single screen (`tau_bc = 0`, matching
 # `dustatt_modified_starburst`, which has no Charlot & Fall birth cloud;
 # A_V = R_V × E(B−V)_cont = 4.05 × 0.132 = 0.535 mag) carrying the
-# Leitherer-extended Calzetti curve with the 912 Å clip. So the 1.0 % anchor
+# Leitherer-extended Calzetti curve with the 912 Å clip. So the 1.1 % anchor
 # offset of §3/§6 enters every ratio printed here, and what the panels add is
 # whatever the *templates* do on top of it.
 #
@@ -1633,8 +1813,8 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # to unit luminosity over its full native grid (~60 nm onward), where ~46 %
 # of the quasar energy is the UV/optical accretion-disc continuum below the
 # dust grid's blue edge. Only its ~0.42 IR share enters the dust mixing, and
-# tengri carries that same partition. The cell prints the 3–8 µm and
-# 8–1000 µm median ratio at each $f_{\rm AGN}$, so the question of whether
+# tengri carries that same partition. The cell prints the 3–8 μm and
+# 8–1000 μm median ratio at each $f_{\rm AGN}$, so the question of whether
 # the mid-IR lift drifts with $f_{\rm AGN}$ is answered by three numbers
 # rather than by eye.
 #
@@ -1647,7 +1827,7 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # the two must be reconciled before interpolation or the wrong grain model
 # is selected. One input is *not* matched and cannot be: CIGALE's own DustEM
 # run used `umax = 1e7`, a slightly hotter PDR. The cell prints both an
-# 8–30 µm and an 8–1000 µm ratio at each α, so a redistribution of the IR
+# 8–30 μm and an 8–1000 μm ratio at each α, so a redistribution of the IR
 # within the band can be told apart from a change in its total.
 
 # %%
@@ -1709,8 +1889,13 @@ def _knob_model(emission_type, **emkw):
             "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT), **emkw},
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        dust_emission=(
+            {"type": "none"}
+            if emission_type == "none"
+            else {"type": emission_type, "all_params": Fixed(DEFAULT), **emkw}
+        ),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
 
 
@@ -1744,12 +1929,20 @@ _peaks = []
 _ratios_l, _ratios_r = [], []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
-m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0), frac_agn=Uniform(0.0, 0.99, default=0.3))
+m_frac = _knob_model(
+    "dale2014_cigale", alpha_dale=Fixed(2.0), frac_agn=Uniform(0.0, 0.99, default=0.3)
+)
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — Dale 2014 fracAGN sweep (tengri / CIGALE, median in band):")
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dale2014", dict(alpha=2.0, fracAGN=f))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dale2014", dict(alpha=2.0, fracAGN=f)),
+        ]
     )
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
     ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
@@ -1774,7 +1967,9 @@ ax_l.legend(fontsize=8, frameon=False, ncol=2)
 ax_l.tick_params(labelbottom=False)
 
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
-m_alpha = _knob_model("themis", gamma_dl=Fixed(0.1), qhac=Fixed(0.17), alpha=Uniform(1.0, 3.0, default=2.0))
+m_alpha = _knob_model(
+    "themis", gamma_dl=Fixed(0.1), qhac=Fixed(0.17), alpha=Uniform(1.0, 3.0, default=2.0)
+)
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — THEMIS α sweep (tengri / CIGALE, median in band):")
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
@@ -1811,7 +2006,9 @@ for c, w, ratio in _ratios_l:
     ax_lr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
 ax_lr.axhspan(0.9, 1.1, color="0.85", zorder=0)
 ax_lr.axhline(1.0, color="0.5", linewidth=0.8)
-ax_lr.set(xlim=(1e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_lr.set(
+    xlim=(1e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE"
+)
 ax_lr.grid(True, alpha=0.3)
 
 for c, w, ratio in _ratios_r:
@@ -1819,7 +2016,9 @@ for c, w, ratio in _ratios_r:
     ax_rr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
 ax_rr.axhspan(0.9, 1.1, color="0.85", zorder=0)
 ax_rr.axhline(1.0, color="0.5", linewidth=0.8)
-ax_rr.set(xlim=(3e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_rr.set(
+    xlim=(3e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE"
+)
 ax_rr.grid(True, alpha=0.3)
 
 _ypk = max(_peaks)
@@ -1841,18 +2040,23 @@ plt.show()
 # α_mir=2.0); `schreiber2016` at T ∈ {25, 35, 50} K;
 # `dale2014` (CIGALE's own grid, via `dale2014_cigale`) at α ∈ {0.5, 2, 4}. One tengri build per
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
-# the 8–1000 µm L_ν ratio locate each family's shape. Both implementations are normalized
-# on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 µm L_ν ratios printed
-# below lie between 1.009× and 1.021× across the sweep. The filter-by-filter tables show
-# where shapes differ: `dl2014` at α=1 has a worst filter ratio of 1.370× with 7 of 13
-# bands outside 5%, and every other row has none outside 5% (`f_pah` matches CIGALE's 0.05
-# default). `schreiber2016` is the tabulated Schreiber et al. (2018) library as
+# the 8–1000 μm L_ν ratio locate each family's shape. Both implementations are normalized
+# on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 μm L_ν ratios printed
+# below lie between 1.0109× and 1.0141× across the sweep. The filter-by-filter tables show
+# where shapes differ: no row has a band outside 5 % (`f_pah` matches CIGALE's 0.05
+# default). `dl2014` is compared as dust emission alone: at α = 1 the dust is only
+# part of the total beyond 250 μm, and the rest is the nebular free-free continuum, so
+# a total-SED ratio there measures the nebular continuum and not the dust. Each code's
+# twin without dust emission, at the same attenuation, is subtracted from its total;
+# the dust-only 8–1000 μm medians are 1.0119×, 1.0116× and 1.0116× for α = 1, 2 and 3,
+# with worst filter ratios 1.012×, 0.985× and 0.975×.
+# `schreiber2016` is the tabulated Schreiber et al. (2018) library as
 # CIGALE packages it: per unit dust mass, a dust-continuum and a PAH template at
 # each temperature (the library tabulates 15–99 K; pcigale accepts 15–60 K), mixed
 # by the PAH mass fraction `f_pah` as pcigale does and normalized to the absorbed
 # energy. At T = 25, 35 and 50 K
-# its 8–1000 µm ratio is 1.010× each time, and its filter-by-filter median is 1.009×,
-# 1.009× and 1.010× with worst cases of 1.015×, 1.015× and 1.032×.
+# its 8–1000 μm ratio is 1.0115× each time, and its filter-by-filter median is 1.011×
+# each time, with worst cases of 1.020×, 1.020× and 1.037×.
 
 # %%
 _peaks_6c = []
@@ -1867,31 +2071,52 @@ ax_rr.sharey(ax_lr)
 print("§6c dl2007 grid (tengri / CIGALE, median in 8-1000 µm band):")
 m_dl07 = _knob_model(
     "draine_li2007",
-    qpah=Uniform(0.1, 10.0, default=2.5),
-    umin=Uniform(0.1, 25.0, default=1.0),
-    gamma_dl=Uniform(0.0, 1.0, default=0.1),
+    qpah=Uniform(0.47, 4.58, default=2.5),
+    umin=Uniform(0.1, 10.0, default=1.0),
+    gamma_dl=Uniform(0.01, 0.5, default=0.1),
 )
 p_dl07 = dict(m_dl07.spec.sample(jax.random.PRNGKey(0)))
 _dl07_cases = []
 _ratios_6c_l, _ratios_6c_r = [], []
-for (_qpah, _umin, _gamma), _c in zip([(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58, 10.0, 0.5)], ["C0", "C1", "C3"]):
+for (_qpah, _umin, _gamma), _c in zip(
+    [(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58, 10.0, 0.5)], ["C0", "C1", "C3"]
+):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dl2007", dict(qpah=_qpah, umin=_umin, gamma=_gamma))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dl2007", dict(qpah=_qpah, umin=_umin, gamma=_gamma)),
+        ]
     )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
     o = m_dl07.predict_rest_sed(
-        {**p_dl07, "dust_qpah": jnp.float64(_qpah), "dust_umin": jnp.float64(_umin), "dust_gamma_dl": jnp.float64(_gamma)}
+        {
+            **p_dl07,
+            "dust_qpah": jnp.float64(_qpah),
+            "dust_umin": jnp.float64(_umin),
+            "dust_gamma_dl": jnp.float64(_gamma),
+        }
     )
     w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
     ax_l.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"qpah={_qpah:g}, umin={_umin:g}")
     _peaks_6c.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
     _ratios_6c_l.append((_c, w_c, _rk))
-    print(f"    qpah={_qpah:g} umin={_umin:g} gamma={_gamma:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
+    print(
+        f"    qpah={_qpah:g} umin={_umin:g} gamma={_gamma:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
+    )
     _dl07_cases.append(
-        (f"dl2007 qpah={_qpah:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"dl2007 qpah={_qpah:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -1899,7 +2124,17 @@ ax_l.set(xlim=(1e4, 1e7), ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Draine & 
 ax_l.legend(fontsize=8, frameon=False)
 ax_l.tick_params(labelbottom=False)
 
-print("§6c dl2014 grid (tengri / CIGALE, median in 8-1000 µm band):")
+print("§6c dl2014 grid (dust emission only, tengri / CIGALE, median in 8-1000 µm band):")
+# Both codes add the dust emission to a stellar + nebular + attenuation baseline,
+# and at α = 1 the dust is a minor part of the total beyond 250 µm, where the
+# nebular free-free continuum carries the rest. The no-dust-emission twin of each
+# code is built at the same attenuation and subtracted, so the ratio is the dust
+# emission against the dust emission.
+_sed_c_twin = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN])
+_w_twin_c, _L_twin_c = C.to_lnu(_sed_c_twin)
+_m_twin_t = _knob_model("none")
+_o_twin_t = _m_twin_t.predict_rest_sed(dict(_m_twin_t.spec.sample(jax.random.PRNGKey(0))))
+_w_twin_t, _L_twin_t = np.asarray(_o_twin_t.wavelength), np.asarray(_o_twin_t.sed)
 m_dl14 = _knob_model(
     "draine_li2014",
     qpah=Fixed(2.5),
@@ -1909,9 +2144,16 @@ m_dl14 = _knob_model(
 )
 p_dl14 = dict(m_dl14.spec.sample(jax.random.PRNGKey(0)))
 _dl14_cases = []
+_dl14_medians = []
 for _alpha, _c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dl2014", dict(qpah=2.5, umin=1.0, alpha=_alpha, gamma=0.1))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dl2014", dict(qpah=2.5, umin=1.0, alpha=_alpha, gamma=0.1)),
+        ]
     )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
@@ -1920,12 +2162,32 @@ for _alpha, _c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
     ax_r.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"$\alpha$={_alpha:g}")
     _peaks_6c.append(float(np.nanmax(nl_t)))
-    _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    # Dust emission alone: total minus the same model without dust emission.
+    _L_dust_c = (_L_c_raw - U.regrid(_w_twin_c, _L_twin_c, _w_c_raw)) * _KNOB_MASS
+    _L_dust_t = np.asarray(o.sed) - U.regrid(_w_twin_t, _L_twin_t, np.asarray(o.wavelength))
+    _, nl_dust_c = _nu_lnu(_w_c_raw, _L_dust_c)
+    _, nl_dust_t = _nu_lnu(o.wavelength, _L_dust_t)
+    _rk = U.regrid(w_t, nl_dust_t, w_c) / np.where(nl_dust_c > 0, nl_dust_c, np.nan)
     _ratios_6c_r.append((_c, w_c, _rk))
-    print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
-    _dl14_cases.append(
-        (f"dl2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+    _dl14_medians.append(_band_median(_rk, w_c, 8.0, 1000.0))
+    _band_sel = (_w_c_raw >= 2.5e6) & (_w_c_raw <= 1e7)
+    _share_c = _lbol_nu(_w_c_raw[_band_sel], _L_dust_c[_band_sel]) / _lbol_nu(
+        _w_c_raw[_band_sel], (_L_c_raw * _KNOB_MASS)[_band_sel]
     )
+    print(
+        f"    alpha={_alpha:g}: dust-only 8-1000 µm {_dl14_medians[-1]:.4f}×; "
+        f"dust is {_share_c * 100:.0f}% of CIGALE's total SED over 250-1000 µm"
+    )
+    _dl14_cases.append(
+        (
+            f"dl2014 α={_alpha:g} (dust only)",
+            _w_c_raw,
+            _L_dust_c,
+            np.asarray(o.wavelength),
+            _L_dust_t,
+        )
+    )
+assert all(0.98 < _m < 1.04 for _m in _dl14_medians), _dl14_medians
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
 ax_r.set(xlim=(1e4, 1e7), title="Draine & Li 2014")
@@ -1960,13 +2222,19 @@ save_fig("cigale_06c_dl07_dl14.png")
 
 for _name, _cases in (("dl2007", _dl07_cases), ("dl2014", _dl14_cases)):
     for _label, _w_ref, _L_ref, _w_t, _L_t in _cases:
-        _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+        _rows = V.filter_rows_native(
+            np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+        )
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
 
 fig = plt.figure(figsize=(13.5, 6.5))
 gs = fig.add_gridspec(2, 3, height_ratios=[3, 1], hspace=0.3)
 ax_a, ax_b, ax_c = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[0, 2])
-ax_ar, ax_br, ax_cr = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1]), fig.add_subplot(gs[1, 2])
+ax_ar, ax_br, ax_cr = (
+    fig.add_subplot(gs[1, 0]),
+    fig.add_subplot(gs[1, 1]),
+    fig.add_subplot(gs[1, 2]),
+)
 ax_ar.sharex(ax_a)
 ax_br.sharex(ax_b)
 ax_cr.sharex(ax_c)
@@ -1975,12 +2243,22 @@ ax_cr.sharey(ax_ar)
 _peaks_6d = []
 
 print("§6c casey2012 T sweep (tengri / CIGALE, median in 8-1000 µm band):")
-m_cas = _knob_model("casey2012", T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(1.6), alpha_mir=Fixed(2.0))
+m_cas = _knob_model(
+    "casey2012", T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(1.6), alpha_mir=Fixed(2.0)
+)
 p_cas = dict(m_cas.spec.sample(jax.random.PRNGKey(0)))
 _cas_cases = []
 _ratios_6d_a = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("casey2012", dict(temperature=_T, beta=1.6, alpha=2.0))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("casey2012", dict(temperature=_T, beta=1.6, alpha=2.0)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_a.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -1992,7 +2270,13 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     _ratios_6d_a.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _cas_cases.append(
-        (f"casey2012 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"casey2012 T={_T:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_a.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_a.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2006,7 +2290,15 @@ p_sch = dict(m_sch.spec.sample(jax.random.PRNGKey(0)))
 _sch_cases = []
 _ratios_6d_b = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("schreiber2016", dict(tdust=_T))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("schreiber2016", dict(tdust=_T)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_b.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -2018,7 +2310,13 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     _ratios_6d_b.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _sch_cases.append(
-        (f"schreiber2016 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"schreiber2016 T={_T:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_b.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_b.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2032,7 +2330,15 @@ p_dale = dict(m_dale.spec.sample(jax.random.PRNGKey(0)))
 _dale_cases = []
 _ratios_6d_c = []
 for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dale2014", dict(alpha=_alpha))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dale2014", dict(alpha=_alpha)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_c.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -2044,7 +2350,13 @@ for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
     _ratios_6d_c.append((_c, w_c, _rk))
     print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dale_cases.append(
-        (f"dale2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"dale2014 α={_alpha:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_c.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_c.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2086,9 +2398,15 @@ ax_cr.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_06d_casey_schreiber_dale.png")
 
-for _name, _cases in (("casey2012", _cas_cases), ("schreiber2016", _sch_cases), ("dale2014", _dale_cases)):
+for _name, _cases in (
+    ("casey2012", _cas_cases),
+    ("schreiber2016", _sch_cases),
+    ("dale2014", _dale_cases),
+):
     for _label, _w_ref, _L_ref, _w_t, _L_t in _cases:
-        _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+        _rows = V.filter_rows_native(
+            np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+        )
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
 
 
@@ -2104,10 +2422,17 @@ for _name, _cases in (("casey2012", _cas_cases), ("schreiber2016", _sch_cases), 
 # drops to zero at 912 Å. Setting `dust_attenuation={'lyman_cutoff': True}`
 # applies the same 912 Å clip on both sides.
 #
-# **Beyond 1 cm.** Both Cue and CIGALE's nebular modules carry thermal
+# **Beyond 1 mm.** Both Cue and CIGALE's nebular modules carry thermal
 # free-free into the radio, and this panel shows the comparison when both
 # grids extend to 1 m (tengri with the nebular tail, CIGALE's native reach).
-# Both codes' Dale 2014 templates end at 6 mm.
+# Both codes' Dale 2014 templates end at 6 mm. The nebular continuum there is
+# Q_H times a per-photon continuum, so its ratio is §3's Q_H ratio times the
+# Cue-against-Cloudy ratio per ionizing photon that §11b measures.
+#
+# **Bands.** The ratios printed below are energy-weighted, ∫L_ν dν over each
+# band. The 1250–3000 Å band starts at 1250 Å, outside the Lyα window: the SSPs'
+# Lyα region differs by a large factor between the two grids at a few points and
+# would otherwise set the band.
 
 # %%
 # Two panels on independent y-axes read as agreement whatever they contain,
@@ -2121,12 +2446,11 @@ _L_t_pan = U.regrid(np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), w_c_i
 # residual.
 _L_c_ir_floor = 1e-6 * L_c_ir.max()
 _cov_pan = (L_c_ir > _L_c_ir_floor) & (_L_t_pan > 0)
-_r_pan = np.where(_cov_pan, _L_t_pan / np.where(_cov_pan, L_c_ir, 1.0), np.nan)
-print("§7 panchromatic median ratio (tengri / CIGALE):")
+print("§7 panchromatic energy-weighted ratio, ∫L_ν dν per band (tengri / CIGALE):")
 for _lo, _hi, _wname in (
     (200.0, 912.0, "200–912 Å (LyC) "),
     (912.0, 1200.0, "912–1200 Å      "),
-    (1200.0, 3000.0, "1200–3000 Å     "),
+    (1250.0, 3000.0, "1250–3000 Å     "),
     (3000.0, 10000.0, "0.3–1 µm        "),
     (3.0e4, 8.0e4, "3–8 µm          "),
     (1.0e5, 1.0e6, "10–100 µm       "),
@@ -2137,7 +2461,8 @@ for _lo, _hi, _wname in (
     _n_both = int((_band & _cov_pan).sum())
     if _n_both:
         print(
-            f"    {_wname}: {float(np.nanmedian(_r_pan[_band])):.4f}×  "
+            f"    {_wname}: "
+            f"{_band_energy_ratio(w_c_ir[_cov_pan], L_c_ir[_cov_pan], np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), _lo, _hi):.4f}×  "
             f"({_n_both}/{_n_c} points where both grids carry a model)"
         )
     else:
@@ -2182,25 +2507,37 @@ plt.show()
 # SSP-convolved ionizing spectrum below 911.76 Å, published by the stellar
 # component on every forward pass.
 #
-# **Read the ionizing budget before the line ratios.** Every line scales with
-# the Q_H handed to the emitter, so the cell prints Q_H first: CIGALE's
-# `stellar.n_ly` against tengri's `nion`, on the shared BC03 grid and on the
-# dense FSPS grid the lines are measured on. Two known terms enter it. On the
-# shared grid it is §3's age-binning convention alone. On the dense grid the
-# SSP swap adds to it as well, a deliberate choice, and the reason for it
-# follows below.
+# **Read the ionizing budget before the line ratios.** Every line scales with the
+# Q_H handed to the emitter, so the cell prints Q_H first: CIGALE's
+# `stellar.n_ly` against tengri's `nion`, both on the shared BC03 grid. There the
+# ratio is §3's age convention alone, 1.146× for this population. Both emitters
+# see the same stellar population, and the lines are compared on that shared
+# grid: tengri's from Cue's catalogue, which returns each line's integrated
+# luminosity independent of any wavelength grid, and CIGALE's from a window
+# integral over its own line-resolved grid.
 #
-# **What is left after that is the emitter.** Cue was trained on Cloudy 22.00
-# (Li et al. 2025, ApJ 986, 9, arXiv:2405.04598) while CIGALE evaluates its own
-# bundled Cloudy grids, and Cue's
-# bare-stellar path differs from CIGALE's wNE-SSP convolution. The printed
-# line ratios divide out neither term, so they are an upper bound on the
-# emitter difference rather than a measurement of it, and they do not move
-# together: the recombination lines and [O III] behave differently, which is
-# what a line-physics or abundance difference looks like and not what a
-# uniform normalization offset looks like. Closing this properly needs
-# tengri's own static grid at matched Q_H (`neb={'type': 'cloudy'}`, below),
-# a Cloudy-against-Cloudy comparison; this notebook does not run it.
+# **Raw ratios and ratios per ionizing photon.** The raw line ratio contains Q_H;
+# line / Q_H takes it out and leaves the emitter. Hα and Hβ are 1.12× raw, which is
+# the 1.146× of Q_H less the emitter's deficit, and 0.974× and 0.978× per photon:
+# Cue's Balmer emission per ionizing photon is 2–3 % below CIGALE's Cloudy grid, a
+# difference between two photoionization models.
+# [O III] is 0.96× raw and 0.834× per photon.
+#
+# **[O III] and the U definition.** Two conventions set the [O III] per photon,
+# and neither is a normalization error. First, Cue's ionizing spectrum enters as a
+# shape fitted to the stellar population, and the fitted shape of this population is
+# soft: §8b prints how strongly Cue's [O III]/Hβ response to logU depends on it.
+# Second, the two codes may not define the ionization parameter at the same radius.
+# Cue's `neb_logU` is $U = Q_{\rm H}/(4\pi R_{\rm inner}^2 n_{\rm H} c)$ at the inner face
+# of the cloud, with $R_{\rm inner}$ at the 10¹⁹ cm default of the Cue package's
+# `logQ` function (Li et al. 2025). CIGALE's nebular module reads a precomputed Cloudy
+# grid in logU, metallicity and density; the module's documentation (its docstring
+# and parameter text, pcigale 2025.1) does not state the radius at which logU is
+# evaluated. Other
+# nebular grids fix it elsewhere: Gutkin et al. (2016) define it at the Strömgren
+# radius. The offset between such definitions depends on the cloud, so it is not
+# quantified here, and the same
+# `logU = −2` need not be the same nebula. The higher-ionization lines move the most.
 #
 # Each line is quantified with the **integrated** luminosity
 # (continuum-subtracted, width-independent), not a single-bin peak ratio,
@@ -2306,9 +2643,7 @@ ax_l.legend(fontsize=8)
 # build on this page carries the nebular fiducial; see Setup).
 L_t_neb_only = np.maximum(np.asarray(s_neb.derived["sed_nebular"]), 1e-30)
 _s_stellar_on_neb = np.maximum(np.asarray(s_neb.sed_intrinsic) - L_t_neb_only, 1e-30)
-ax_r.plot(
-    s_neb.wave, _s_stellar_on_neb, "k--", linewidth=1.0, alpha=0.5, label="stellar only"
-)
+ax_r.plot(s_neb.wave, _s_stellar_on_neb, "k--", linewidth=1.0, alpha=0.5, label="stellar only")
 ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7, label="stellar + Cue")
 ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4, label="Cue nebular only")
 ax_r.legend(fontsize=8)
@@ -2323,65 +2658,55 @@ fig.tight_layout()
 plt.close(fig)  # superseded by §8b's logU x Z_gas x f_esc grid, which replaces this panel
 
 # Quantify the residual by integrated line luminosity (width- and grid-
-# independent). A single-bin peak ratio measures line width, not luminosity —
-# CIGALE broadens its lines (lines_width=300 km/s) while Cue applies its own.
-#
-# CIGALE's native BC03 grid (repackaged unchanged into `bc03_from_cigale.h5`) is
-# non-uniform and only ~20 Å in the optical — that is CIGALE's own spectral
-# resolution, not a repackaging artifact, and it cannot resolve an emission line (a
-# ±12 Å window holds a single grid point). So the integrated measure is taken on
-# the dense FSPS MIST+MILES bare-stellar SSP that Cue was validated on (the same
-# SSP swap the ProSpect notebook §8 makes, and for the same reason). The CIGALE
-# reference stays CLOUDY-on-BC03.
-_ssp_neb_dense = load_ssp_data(
-    str(tengri.download_ssp("fsps_mist_miles_chabrier", dest=str(_HERE / "_drivers" / "data")))
-)
-_m_neb_dense = SEDModel.build(
-    ssp_data=_ssp_neb_dense,
-    # CIGALE runs this section at Z = 0.02 for both the stars (bc03
-    # metallicity=0.02) and the gas (nebular zgas=0.02). Pin both sides of
-    # the dense-SSP twin to the same absolute metallicity — a bare
-    # ``logzsol = 0.0`` here would be Z = 0.0142, a 0.15 dex mismatch on top
-    # of the disclosed SSP swap, and it moves the metal lines much more than
-    # the recombination lines.
-    met=MET_FIDUCIAL,
-    sfh=_neb_sfh_kw,
-    neb=NEB_FIDUCIAL_TENGRI,
-    dust_attenuation={
-        "law": "power_law",
-        "type": "two_component",
-        "tau_bc": Fixed(0.0),
-        "tau_diff": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
-    redshift=Fixed(0.0),
-)
-_s_neb_dense = _m_neb_dense.predict_state({})
-_w_t_dense = np.asarray(_s_neb_dense.wave)
-_L_t_dense = np.asarray(_s_neb_dense.derived["sed_nebular"])
+# independent). A single-bin peak ratio measures line width, not luminosity:
+# CIGALE broadens its lines (lines_width = 300 km/s) while Cue applies its own.
+# Both emitters run on the shared BC03 SSP, so the only difference in the
+# ionizing budget reaching them is §3's age convention.
+def _tengri_line_lum(state, lo_aa: float, hi_aa: float) -> float:
+    """Integrated luminosity [erg/s] of the catalogued Cue lines in [lo_aa, hi_aa] (vacuum Å).
+
+    Cue returns each line's integrated luminosity directly, so the value does not
+    depend on the wavelength grid of the SSP the model was built on. CIGALE's side
+    is the window integral over its own line-resolved grid.
+    """
+    _lw = np.asarray(state.derived["line_waves"])
+    _ll = np.asarray(state.derived["line_lums"])
+    _sel = (_lw >= lo_aa) & (_lw <= hi_aa)
+    assert _sel.any(), (lo_aa, hi_aa)
+    return float(_ll[_sel].sum())
+
+
+_LINE_WINDOWS = {  # centre [Å] -> (lo, hi) catalogue window
+    6564.61: (6563.6, 6565.6),
+    5008.24: (5007.2, 5009.2),
+    4862.68: (4861.7, 4863.7),
+    3728.48: (3726.0, 3730.5),  # the [O II] doublet, 3727.09 + 3729.87
+}
+
 
 # The ionizing budget first. Every line scales with the Q_H handed to the
 # emitter, so a line ratio read without it cannot separate "different line
 # physics" from "different number of ionizing photons". CIGALE publishes it
-# as ``stellar.n_ly``; tengri as ``derived["nion"]``. Both sides form 1 M☉,
-# so the two are directly comparable.
+# as ``stellar.n_ly``; tengri as ``derived["nion"]``. Both sides form 1 M☉.
 _n_ly_c = float(sed_c_neb.info["stellar.n_ly"])
+_q_h_neb = float(np.asarray(s_neb.derived["nion"]))
 print("§8 ionizing photon rate Q_H reaching the emitter [ph/s per M☉ formed]:")
 print(f"    CIGALE  stellar.n_ly on BC03      {_n_ly_c:.4e}")
-for _label, _st in (
-    ("tengri  shared BC03 SSP          ", s_neb),
-    ("tengri  dense FSPS MIST+MILES    ", _s_neb_dense),
-):
-    _qh = float(np.asarray(_st.derived["nion"]))
-    print(f"    {_label}{_qh:.4e}  → {_qh / _n_ly_c:.3f}×")
+print(f"    tengri  nion on the shared BC03   {_q_h_neb:.4e}  → {_q_h_neb / _n_ly_c:.3f}×")
 
-print("§8 integrated line luminosity (tengri Cue / CIGALE CLOUDY; tengri on dense FSPS SSP):")
-for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+# Raw ratios and ratios per ionizing photon, side by side. Dividing each code's
+# line by its own Q_H removes the Q_H term and leaves the emitter.
+print("§8 integrated line luminosity, tengri Cue / CIGALE Cloudy, shared BC03 SSP:")
+_neb_line_rows = {}
+for _c, _name in [(6564.61, "Hα"), (5008.24, "[O III]"), (4862.68, "Hβ")]:
     _lc = U.line_lum(w_c_neb, L_c_neb_only, _c)
-    _lt = U.line_lum(_w_t_dense, _L_t_dense, _c)
+    _lt = _tengri_line_lum(s_neb, *_LINE_WINDOWS[_c])
     if _lc > 0:
+        _neb_line_rows[_name] = (_lt / _lc, (_lt / _q_h_neb) / (_lc / _n_ly_c))
         print(
-            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
+            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, tengri {_lt:.2e} erg/s → "
+            f"raw {_lt / _lc:.2f}×; per ionizing photon CIGALE {_lc / _n_ly_c:.3e}, "
+            f"tengri {_lt / _q_h_neb:.3e} erg → {_neb_line_rows[_name][1]:.3f}×"
         )
     else:
         # Not skipped silently: an empty CIGALE window is a grid-resolution
@@ -2392,22 +2717,41 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # %% [markdown]
 # ### §8b logU × Z_gas × f_esc
 #
-# Same young fiducial and dense FSPS SSP as above. logU ∈ {−3, −2, −1.5}
+# Same young fiducial and shared BC03 SSP as above. logU ∈ {−3, −2, −1.5}
 # at Z_gas = 0.02; Z_gas ∈ {0.004, 0.02, 0.041} (CIGALE's nearest grid
 # point to 0.04) at logU = −2; f_esc ∈ {0, 0.5} at the logU/Z_gas
 # fiducial (7 cases). One tengri build with `neb_logU`, `neb_logZ_gas`,
 # `neb_fesc` free, evaluated per case via `predict_state`; one CIGALE
 # `nebular` call per case. Rows: Hα/Hβ, [O III]/Hβ, [O II]/Hβ, tengri and
-# CIGALE side by side; a residual here is Cue versus CLOUDY (§8), not a
-# parity check. The cell closes with the largest tengri/CIGALE ratio-of-ratios
-# per line over the seven cases. The [O III]/Hβ and [O II]/Hβ ratios are an open
-# difference: across logU = −3 to −1.5 CIGALE's [O III]/Hβ rises from 0.559 to
-# 2.307 while Cue's stays between 0.603 and 0.665, and Cue's [O II]/Hβ is larger
-# than CIGALE's at every case printed.
+# CIGALE side by side, and the absolute line / Q_H beneath each; a residual here
+# is Cue versus CLOUDY (§8), not a parity check.
+#
+# **Z_gas = 0.041 is degenerate in CIGALE and is not a comparison.** CIGALE's
+# metallicity axis is a staircase: neighbouring Z nodes repeat the same model (the
+# printed library table shows Z = 0.016, 0.019, 0.02 and 0.022 identical), and
+# toward the high-Z end the library collapses: [O III]/Hβ is 0.0061 and [O II]/Hβ
+# 0.0095 at Z = 0.041 and smaller beyond. The ratio-of-ratios is therefore
+# reported at the six stable cases, with the 0.041 case printed beside it. The
+# absolute Hβ per ionizing photon is flat to 3 % across every case in both codes, so
+# the collapse is in the metal lines.
+#
+# **The f_esc rows test ratios, and ratios do not depend on f_esc.** The absolute
+# Hβ / Q_H does: both codes scale it by (1 − f)/(1 + 0.597 f), 0.385 at f = 0.5,
+# which the cell asserts against each code's own f = 0 value.
+#
+# **Reading the [O III]/Hβ response.** `neb_logU` reaches Cue unchanged as its own
+# ionization parameter. Cue's [O III]/Hβ response to it depends on the ionizing
+# spectrum Cue is fed. At the shape fitted to this population the ratio rises
+# modestly with logU (1.154, 1.596, 1.663 in the table above, for logU = −3, −2,
+# −1.5). A final cell evaluates the network at Cue's own default (hard)
+# young-starburst shape and prints the ratio for it, which rises much more steeply
+# (3.416, 5.499, 6.085). The cell shows that the response depends on the ionizing
+# shape; it does not by itself reproduce CIGALE's values, whose logU is defined
+# at a different radius (§8).
 
 # %%
 _m_8b = SEDModel.build(
-    ssp_data=_ssp_neb_dense,
+    ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
     neb={
@@ -2437,10 +2781,17 @@ _8b_grid = [
     ("fesc=0", -2.0, 0.02, 0.0),
     ("fesc=0.5", -2.0, 0.02, 0.5),
 ]
-_LINE_RATIOS_8B = (("Ha/Hb", 6563.0, 4861.0), ("[OIII]/Hb", 5007.0, 4861.0), ("[OII]/Hb", 3728.0, 4861.0))
+_LINE_RATIOS_8B = (
+    ("Ha/Hb", 6564.61, 4862.68),
+    ("[OIII]/Hb", 5008.24, 4862.68),
+    ("[OII]/Hb", 3728.48, 4862.68),  # center of the vacuum 3727.09 / 3729.88 doublet
+)
 
-_rt_8b_all, _rc_8b_all = [], []
-print("§8b logU × Z_gas × f_esc (7 cases) — Ha/Hb, [OIII]/Hb, [OII]/Hb, tengri vs CIGALE:")
+_ABS_LINES_8B = (("Hb", 4862.68), ("[OIII]", 5008.24), ("[OII]", 3728.48))
+_DEGENERATE_CASE_8B = "Zgas=0.041"  # CIGALE's grid collapses here; see the prose above
+
+_rt_8b_all, _rc_8b_all, _at_8b_all, _ac_8b_all = [], [], [], []
+print("§8b logU × Z_gas × f_esc (7 cases): line ratios to Hβ, then absolute line / Q_H.")
 for _label, _logU, _zgas, _fesc in _8b_grid:
     _sed_c8b = C.run_chain(
         [
@@ -2449,8 +2800,14 @@ for _label, _logU, _zgas, _fesc in _8b_grid:
             (
                 "nebular",
                 dict(
-                    logU=_logU, zgas=_zgas, ne=100, f_esc=_fesc, f_dust=0.0,
-                    lines_width=300.0, emission=True, line_list="",
+                    logU=_logU,
+                    zgas=_zgas,
+                    ne=100,
+                    f_esc=_fesc,
+                    f_dust=0.0,
+                    lines_width=300.0,
+                    emission=True,
+                    line_list="",
                 ),
             ),
         ]
@@ -2468,31 +2825,83 @@ for _label, _logU, _zgas, _fesc in _8b_grid:
             "neb_fesc": jnp.float64(_fesc),
         }
     )
-    _w_t8b = np.asarray(_st_8b.wave)
-    _L_t8b_neb = np.asarray(_st_8b.derived["sed_nebular"])
+    _q_t8b = float(np.asarray(_st_8b.derived["nion"]))
+    _q_c8b = float(_sed_c8b.info["stellar.n_ly"])
 
-    _rt, _rc = {}, {}
+    _rt, _rc, _at, _ac = {}, {}, {}, {}
     for _name, _num, _den in _LINE_RATIOS_8B:
-        _lt_n, _lt_d = U.line_lum(_w_t8b, _L_t8b_neb, _num), U.line_lum(_w_t8b, _L_t8b_neb, _den)
+        _lt_n = _tengri_line_lum(_st_8b, *_LINE_WINDOWS[_num])
+        _lt_d = _tengri_line_lum(_st_8b, *_LINE_WINDOWS[_den])
         _lc_n, _lc_d = U.line_lum(_w_c8b, _L_c8b_neb, _num), U.line_lum(_w_c8b, _L_c8b_neb, _den)
         _rt[_name] = _lt_n / _lt_d if _lt_d > 0 else float("nan")
         _rc[_name] = _lc_n / _lc_d if _lc_d > 0 else float("nan")
+    for _name, _wl in _ABS_LINES_8B:
+        _at[_name] = _tengri_line_lum(_st_8b, *_LINE_WINDOWS[_wl]) / _q_t8b
+        _ac[_name] = U.line_lum(_w_c8b, _L_c8b_neb, _wl) / _q_c8b
+    _flag = "  [CIGALE grid collapsed: degenerate]" if _label == _DEGENERATE_CASE_8B else ""
     print(
         f"    {_label:<14} tengri Ha/Hb {_rt['Ha/Hb']:.3f}, [OIII]/Hb {_rt['[OIII]/Hb']:.3f}, "
         f"[OII]/Hb {_rt['[OII]/Hb']:.3f}  |  CIGALE Ha/Hb {_rc['Ha/Hb']:.3f}, "
-        f"[OIII]/Hb {_rc['[OIII]/Hb']:.3f}, [OII]/Hb {_rc['[OII]/Hb']:.3f}"
+        f"[OIII]/Hb {_rc['[OIII]/Hb']:.3f}, [OII]/Hb {_rc['[OII]/Hb']:.3f}{_flag}"
+    )
+    print(
+        "    " + " " * 14 + " line/Q_H [1e-13 erg], tengri | CIGALE: "
+        + ", ".join(f"{_n} {_at[_n] * 1e13:.3f} | {_ac[_n] * 1e13:.3f}" for _n, _ in _ABS_LINES_8B)
     )
     _rt_8b_all.append(_rt)
     _rc_8b_all.append(_rc)
+    _at_8b_all.append(_at)
+    _ac_8b_all.append(_ac)
 
+# The ratio-of-ratios is reported at the stable nodes only; the degenerate
+# Z_gas = 0.041 case is printed beside it so the reader sees what is excluded.
+_stable_8b = [i for i, g in enumerate(_8b_grid) if g[0] != _DEGENERATE_CASE_8B]
+_degen_8b = [i for i, g in enumerate(_8b_grid) if g[0] == _DEGENERATE_CASE_8B][0]
 for _name, _, _ in _LINE_RATIOS_8B:
-    _rr = [_t[_name] / _c[_name] for _t, _c in zip(_rt_8b_all, _rc_8b_all)]
-    _j = int(np.argmax(np.abs(np.log(_rr))))
-    print(f"§8b {_name}: largest tengri/CIGALE ratio-of-ratios {_rr[_j]:.2f}× at {_8b_grid[_j][0]}")
+    _rr_all = [_t[_name] / _c[_name] for _t, _c in zip(_rt_8b_all, _rc_8b_all)]
+    _j = max(_stable_8b, key=lambda i: abs(np.log(_rr_all[i])))
+    print(
+        f"§8b {_name}: largest tengri/CIGALE ratio-of-ratios over the six stable cases "
+        f"{_rr_all[_j]:.2f}× at {_8b_grid[_j][0]}; at the degenerate {_DEGENERATE_CASE_8B} "
+        f"{_rr_all[_degen_8b]:.2f}×"
+    )
+
+# The f_esc rows test ratios, which f_esc leaves untouched. The absolute Hβ per
+# ionizing photon tests f_esc itself: each code's Hβ/Q_H at f_esc = 0.5 over its
+# own value at f_esc = 0 against the closed form (1 - f)/(1 + 0.597 f).
+_k_fesc = (1.0 - 0.5) / (1.0 + 0.597 * 0.5)
+_i0 = [g[0] for g in _8b_grid].index("fesc=0")
+_i5 = [g[0] for g in _8b_grid].index("fesc=0.5")
+_k_t = _at_8b_all[_i5]["Hb"] / _at_8b_all[_i0]["Hb"]
+_k_c = _ac_8b_all[_i5]["Hb"] / _ac_8b_all[_i0]["Hb"]
+print(
+    f"§8b Hβ/Q_H at f_esc = 0.5 over f_esc = 0: tengri {_k_t:.4f}, CIGALE {_k_c:.4f}; "
+    f"(1 - f)/(1 + 0.597 f) = {_k_fesc:.4f}"
+)
+assert abs(_k_t / _k_fesc - 1.0) < 0.01 and abs(_k_c / _k_fesc - 1.0) < 0.01
+
+# CIGALE's metallicity axis, read straight from its line library at logU = -2,
+# n_e = 100 cm^-3: neighbouring Z nodes repeat the same model, which is why the
+# 0.041 case above is not a point on a smooth curve.
+from pcigale.data import SimpleDatabase as _CigaleLineDB
+
+print("§8b CIGALE nebular line library, Z axis at logU = -2, n_e = 100 cm^-3:")
+with _CigaleLineDB("nebular_lines") as _line_db:
+    for _z in (0.014, 0.016, 0.019, 0.02, 0.022, 0.025, 0.03, 0.033, 0.037, 0.041, 0.046):
+        _rec = _line_db.get(Z=_z, logU=-2.0, ne=100.0)
+        _d = {str(n): v for n, v in zip(_rec.name, _rec.spec)}
+        print(
+            f"    Z = {_z:<6g} Hβ {_d['H-beta']:.4e}  [O III] 500.7/Hβ "
+            f"{_d['OIII-500.7'] / _d['H-beta']:.4f}  [O II] 372.6+372.9/Hβ "
+            f"{(_d['OII-372.6'] + _d['OII-372.9']) / _d['H-beta']:.4f}"
+        )
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
 _x_8b = np.arange(len(_8b_grid))
-for _ax, _rows, _title in ((ax_l, _rc_8b_all, "CIGALE (CLOUDY)"), (ax_r, _rt_8b_all, "tengri (Cue)")):
+for _ax, _rows, _title in (
+    (ax_l, _rc_8b_all, "CIGALE (CLOUDY)"),
+    (ax_r, _rt_8b_all, "tengri (Cue)"),
+):
     for _name, _color in zip(("Ha/Hb", "[OIII]/Hb", "[OII]/Hb"), ("C0", "C1", "C3")):
         _ax.plot(_x_8b, [r[_name] for r in _rows], "o-", color=_color, label=_name)
     _ax.set_xticks(_x_8b)
@@ -2505,6 +2914,41 @@ ax_l.legend(fontsize=8)
 fig.suptitle("§8b logU × Z_gas × f_esc — line ratios")
 fig.tight_layout()
 save_fig("cigale_08b_neb_grid.png")
+
+
+# %%
+# Cue's [O III]/Hβ response to logU at Cue's own default (hard) young-starburst
+# ionizing shape, from the same network `neb_logU` feeds. Only the ionizing
+# spectrum differs from the table above. Density (`gas_logn`) and `gas_logqion` are
+# left at Cue's own defaults (`gas_logn = 2.0`, the value the table uses;
+# `default_gas_logqion = 49.1`), and Z_gas is the table's 0.02.
+from tengri._data_setup import data_path as _data_path
+from tengri.components.nebular.cue import CueBackend
+
+_cue_hard = CueBackend(str(_data_path("cue_weights.npz")))
+_HARD_SHAPE = dict(CueBackend._IONSPEC_DEFAULTS)
+
+
+def _catalog_line(wave, lum, center_vac, tol=2.0):
+    """Luminosity of the catalogued line nearest ``center_vac`` (vacuum Å)."""
+    i = int(np.argmin(np.abs(wave - center_vac)))
+    assert abs(wave[i] - center_vac) < tol, (center_vac, wave[i])
+    return lum[i]
+
+
+_o3_hard = {}
+for _logU in (-3.0, -2.0, -1.5):
+    _w_h, _l_h = _cue_hard.predict_nebular_line_luminosities(
+        gas_logu=_logU,
+        gas_logz=float(np.log10(0.02) - LOG10_ZSUN),
+        **_HARD_SHAPE,
+    )
+    _w_h, _l_h = np.asarray(_w_h), np.asarray(_l_h)
+    _o3_hard[_logU] = _catalog_line(_w_h, _l_h, 5008.24) / _catalog_line(_w_h, _l_h, 4862.68)
+print(
+    "§8b Cue [OIII]/Hb at Cue's default hard shape, logU = -3 / -2 / -1.5: "
+    + " / ".join(f"{_o3_hard[k]:.3f}" for k in (-3.0, -2.0, -1.5))
+)
 
 
 # %% [markdown]
@@ -2538,7 +2982,7 @@ save_fig("cigale_08b_neb_grid.png")
 # geometry.
 #
 # **Polar-dust extinction law.** CIGALE's `law=0` is the Bongiorno et al. (2012)
-# power law `k = 1.39 (λ/µm)^−1.2` above 100 nm, with the SMC-bar shape of
+# power law `k = 1.39 (λ/μm)^−1.2` above 100 nm, with the SMC-bar shape of
 # Weingartner & Draine (2001) below it. tengri's `polar_law="bongiorno"` is that
 # curve and is what the builds here use. tengri's default, `polar_law="smc"`
 # (Pei 1992), is a different curve; §9d prints how far apart they are.
@@ -2620,7 +3064,8 @@ m_agn_base = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
 
@@ -2701,7 +3146,8 @@ m_agn = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 
@@ -2761,14 +3207,16 @@ save_fig("cigale_09_agn_skirtor.png")
 # %% [markdown]
 # ### §9c AGN parity — full-spectrum ratio
 #
-# The two `stellar + dust + AGN` SEDs of §9 on a shared grid, read out as the
-# tengri / CIGALE median in three AGN-dominated bands (disc UV, torus mid-IR,
-# polar/FIR) and then component by component as integrated luminosities. A band
+# The two `stellar + dust + AGN` SEDs of §9 on a shared grid, read out as
+# energy-weighted tengri / CIGALE ratios in three bands (1500–3000 Å, 5–30 μm and
+# 100 μm) and then component by component as integrated luminosities. A band
 # ratio locates a residual in wavelength but cannot say which component carries
-# it, since at 100 µm all three overlap; the component ladder can. Both codes
-# publish disc, torus and polar dust separately. The printed ladder gives the
-# three luminosity ratios (about 1 % each), the emergent disc shape deviation and
-# each code's polar share.
+# it: the 1500–3000 Å band is mostly host starlight (full SED 1.027×, host alone
+# 1.061×, disc alone 1.009×), and at 100 μm all three AGN components overlap with
+# the host. The component ladder separates them. Both codes publish disc, torus
+# and polar dust separately. The printed ladder gives the three luminosity
+# ratios (about 1 % each), the emergent disc shape deviation and each code's
+# polar share.
 
 # %%
 w_c_agn, L_c_agn = w_skirt, np.asarray(L_skirt)  # CIGALE stellar+dust+SKIRTOR
@@ -2803,13 +3251,28 @@ ax_r.grid(True, alpha=0.3)
 # Per-band AGN ratios (median over each AGN-dominated window).
 print("§9 AGN per-band parity (tengri / CIGALE, full stellar+dust+AGN SED):")
 for _name, _lo, _hi in [
-    ("disc UV    1500-3000 Å", 1500.0, 3000.0),
-    ("torus MIR  5-30 µm    ", 5.0e4, 3.0e5),
-    ("polar FIR  100 µm     ", 8.0e5, 1.2e6),
+    ("full SED 1500-3000 Å (host + disc)", 1500.0, 3000.0),
+    ("full SED 5-30 µm (torus + host)   ", 5.0e4, 3.0e5),
+    ("full SED 100 µm (polar + host)    ", 8.0e5, 1.2e6),
 ]:
     _m = (w_c_agn >= _lo) & (w_c_agn <= _hi) & (L_c_agn > 0)
     if _m.any():
-        print(f"  {_name}: {float(np.median(ratio_agn[_m])):.3f}×")
+        print(f"  {_name}: {_band_energy_ratio(w_c_agn[_m], L_c_agn[_m], w_t_agn, L_t_agn, _lo, _hi):.3f}×")
+# The full SED in the ultraviolet is mostly host starlight, so its ratio is the
+# host's, not the disc's. The disc component alone, from each code's own
+# published disc spectrum:
+_w_disc_c, _L_disc_c = U.wnm_to_erg_per_hz_per_aa(
+    np.asarray(sed_skirtor.wavelength_grid),
+    np.asarray(sed_skirtor.luminosities["agn.SKIRTOR2016_disk"]),
+)
+print(
+    "  disc component alone 1500-3000 Å: "
+    f"{_band_energy_ratio(_w_disc_c, _L_disc_c, np.asarray(s_agn.wave), np.asarray(s_agn.derived['sed_agn_disc']), 1500.0, 3000.0):.3f}×"
+)
+print(
+    "  host component alone 1500-3000 Å (stellar + dust, no AGN): "
+    f"{_band_energy_ratio(w_base, L_base, np.asarray(s_agn_base.wave), np.asarray(s_agn_base.sed_intrinsic), 1500.0, 3000.0):.3f}×"
+)
 
 
 # A band ratio locates a residual in wavelength; it does not say which
@@ -2870,8 +3333,12 @@ def _print_agn_report(header, sed_c, state_t):
     """
     print(header)
     _dev, _n = _disc_shape_dev(sed_c, state_t)
-    print(f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)")
-    _pairs = {_tk: _agn_component_pair(sed_c, state_t, _ck, _tk) for _, _ck, _tk in _AGN_COMPONENTS}
+    print(
+        f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)"
+    )
+    _pairs = {
+        _tk: _agn_component_pair(sed_c, state_t, _ck, _tk) for _, _ck, _tk in _AGN_COMPONENTS
+    }
     for _name, _ck, _tk in _AGN_COMPONENTS:
         _bc, _bt = _pairs[_tk]
         print(f"  {_name}: CIGALE {_bc:.4e}, tengri {_bt:.4e} erg/s → {_bt / _bc:.4f}×")
@@ -2973,7 +3440,8 @@ m_agn_sk = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
 
@@ -3041,27 +3509,29 @@ save_fig("cigale_09b_disc_skirtor.png")
 # `polar_law="bongiorno"` (CIGALE's `law=0`) and, for contrast, to the default
 # `polar_law="smc"` (Pei 1992).
 #
-# `R_faceon` agrees: tengri reads 4.553520 off the vendored SKIRTOR grid against
-# pcigale's own 4.562211, a ratio of 0.998095× (−0.19 %). What separates the
+# `R_faceon` agrees: tengri reads 4.553791 off the vendored SKIRTOR grid against
+# pcigale's own 4.562211, a ratio of 0.998154× (−0.18 %). What separates the
 # polar reference is the pair of terms printed beneath it.
 #
-# **The wavelength axis.** The vendored grid carries 136 wavelengths across
-# 10 Å – 10⁸ Å where pcigale's carries 948, and each code integrates on its own.
-# Holding the curve fixed (CIGALE's, on the vendored axis) and changing only the
-# axis moves the absorbed fraction from 0.222842 to 0.232605, worth +4.18 % once
-# `R_faceon` is included.
+# **The wavelength axis, a convention on pcigale's side.** The vendored grid
+# carries 136 wavelengths across 10 Å – 10⁸ Å where pcigale's carries 948, and each
+# code integrates on its own. With CIGALE's extinction curve held fixed, the
+# absorbed fraction J converges to 0.221723 on a dense axis. On tengri's 136
+# points it is 0.221928, +0.09 % from converged, and on pcigale's 948 points
+# 0.222842, +0.51 %. tengri's axis is the closer of the two to the integral, so
+# this term, 0.994058× (−0.59 %), is mostly pcigale's quadrature error.
 #
 # **The extinction curve.** With `polar_law="bongiorno"` the two curves coincide
 # above 100 nm (the printed A(λ)/E(B−V) ratios are 1.000 at 2500 Å, 5500 Å and
-# 1 µm) and differ only in the sub-100 nm SMC-bar shape (0.985 at 912 Å); the
-# curve term is 0.975828× (−2.42 %). The default `polar_law="smc"` is a different
+# 1 μm) and differ only in the sub-100 nm SMC-bar shape (0.985 at 912 Å); the
+# curve term is 1.002761× (+0.28 %). The default `polar_law="smc"` is a different
 # curve (A(λ)/E(B−V) ratios 1.076, 1.011, 0.972 and 1.207 at 912 Å, 2500 Å,
-# 5500 Å and 1 µm) and its curve term is 0.943527× (−5.65 %). Use
+# 5500 Å and 1 μm) and its curve term is 0.976712× (−2.33 %). Use
 # `polar_law="bongiorno"` to compare with CIGALE's default polar dust.
 #
-# The two terms multiply to 1.016639× with `polar_law="bongiorno"`: tengri sets
-# its polar dust from 1.66 % more absorbed disc power than pcigale does. With
-# the default `polar_law="smc"` the product is 0.982987×.
+# The two terms multiply to 0.996803× with `polar_law="bongiorno"`: tengri sets
+# its polar dust from 0.32 % less absorbed disc power than pcigale does. With
+# the default `polar_law="smc"` the product is 0.970908×.
 
 # %%
 from pcigale.data import SimpleDatabase as _CigaleDB
@@ -3082,7 +3552,7 @@ _COS_I_FIDUCIAL = float(np.cos(np.deg2rad(30.0)))
 _w_tie = np.logspace(1.0, 7.0, 20000)
 _tie = skirtor_disc_dust_ratio(
     _w_tie,
-    schartmann2005_disk_spectrum(_w_tie),
+    schartmann2005_disk_spectrum(_w_tie / 10.0),  # the disc spectrum takes nm
     np.ones_like(_w_tie),
     _template=load_skirtor_bundle().disc_dust,
     agn_oa_skirtor=_OA_SKIRTOR,
@@ -3125,8 +3595,12 @@ def _absorbed_fraction(disc_shape, wave_aa, k_lambda):
     )
 
 
-_J_t = _absorbed_fraction(_disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_tengri_dense))
-_J_pei = _absorbed_fraction(_disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_pei_dense))
+_J_t = _absorbed_fraction(
+    _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_tengri_dense)
+)
+_J_pei = _absorbed_fraction(
+    _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_pei_dense)
+)
 # CIGALE's curve on tengri's axis: the control that separates the two terms.
 _J_c_on_native = _absorbed_fraction(
     _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_cigale_dense)
@@ -3166,7 +3640,10 @@ print(
     f"{_polar_reference_ratio:.6f}× ({(_polar_reference_ratio - 1) * 100:+.2f}%)"
 )
 _CURVE_POINTS = ((912.0, "912 Å"), (2500.0, "2500 Å"), (5500.0, "5500 Å"), (1e4, "1 µm"))
-for _curve_name, _k_dense in (("bongiorno", _k_tengri_dense), ("smc (Pei 1992, default)", _k_pei_dense)):
+for _curve_name, _k_dense in (
+    ("bongiorno", _k_tengri_dense),
+    ("smc (Pei 1992, default)", _k_pei_dense),
+):
     print(
         f"  A(λ)/E(B−V), pcigale / tengri polar_law='{_curve_name}': "
         + ", ".join(
@@ -3174,6 +3651,25 @@ for _curve_name, _k_dense in (("bongiorno", _k_tengri_dense), ("smc (Pei 1992, d
             for _x, _label in _CURVE_POINTS
         )
     )
+# Which quadrature is closer to the integral? CIGALE's extinction curve on three
+# axes: tengri's vendored axis carrying tengri's face-on disc shape (`_J_c_on_native`
+# above), pcigale's own axis carrying pcigale's disc, and a dense axis for each
+# code's analytic disc, which gives the converged value.
+_w_conv = np.logspace(1.0, 8.0, 400001)
+_k_conv = _cigale_k_ext(_w_conv / 10.0, 0)
+_J_conv_c = _absorbed_fraction(_cigale_disc(_w_conv / 10.0), _w_conv, _k_conv)
+_J_conv_t = _absorbed_fraction(
+    np.asarray(schartmann2005_disk_spectrum(_w_conv / 10.0)), _w_conv, _k_conv
+)
+print(
+    f"  J with CIGALE's curve, converged: CIGALE's disc {_J_conv_c:.6f}, tengri's disc {_J_conv_t:.6f}"
+)
+print(
+    f"  J on tengri's {_wave_native.size}-point axis {_J_c_on_native:.6f} "
+    f"({(_J_c_on_native / _J_conv_t - 1) * 100:+.2f}% from converged); on pcigale's "
+    f"{_wave_c_nm.size}-point axis {_J_c:.6f} ({(_J_c / _J_conv_c - 1) * 100:+.2f}%)"
+)
+assert abs(_J_c_on_native / _J_conv_t - 1.0) < abs(_J_c / _J_conv_c - 1.0)
 print(
     f"  for contrast, the default polar_law='smc': J = {_J_pei:.6f}, term 2 = "
     f"{_J_pei / _J_c_on_native:.6f}× ({(_J_pei / _J_c_on_native - 1) * 100:+.2f}%), "
@@ -3194,8 +3690,8 @@ print(
 #
 # SKIRTOR: τ_9.7 ∈ {3, 7, 11}, oa ∈ {20°, 40°, 60°}, i ∈ {0°, 30°, 70°}, each
 # varied one at a time from §9's fiducial (7, 40°, 30°). The printed IR-band
-# table gives a median ratio of 1.002–1.007× in every case, with no band outside
-# 5 % and a worst band of at most 1.031×: optical depth, opening angle and
+# table gives a median ratio of 1.011–1.012× in every case, with no band outside
+# 5 % and a worst band of at most 1.013×: optical depth, opening angle and
 # inclination all agree.
 #
 # Fritz 2006: (τ, opening angle, ψ) ∈ {(1, 60°, 0.001°), (1, 100°, 40.1°),
@@ -3204,21 +3700,29 @@ print(
 # viewing elevation is ψ = 90° − i, so the cell passes `agn_cos_inc = sin ψ`.
 # CIGALE's opening angle is the full angle and maps to tengri's half-angle via
 # `agn_fritz_oa = (180 − opening_angle) / 2`. Under `cigale_joint` the Fritz torus
-# carries the same `agn_ir_frac` tie as SKIRTOR. The printed table gives band
-# medians of 0.919×–0.970×, with worst bands between 0.843× and 1.146× and 9 to
-# 10 of 12 IR bands outside 5 %: the median band differs by 3–8 % (9, 9 and 10 of
-# 12 bands are outside 5 %), and the spread across bands places the remaining
-# difference in the spectral distribution rather than in one scale factor.
+# carries the same `agn_ir_frac` tie as SKIRTOR. CIGALE's `fritz2006` carries a
+# disc-slope parameter δ whose default is −0.36; the cell passes `delta=0.0`, which
+# is the Schartmann disc of §9 and of the SKIRTOR runs, so the disc under the torus is
+# the same on both sides. The printed table gives band medians of
+# 1.009–1.010×, worst bands of 0.973–0.975× and
+# none of 12 IR bands outside 5 % in the three cases.
 
 # %%
 _AGN_SFH_9E = {
-    "type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-    "log_total_mass": Fixed(0.0), "all_params": Fixed(DEFAULT),
+    "type": "delayed",
+    "tau_gyr": Fixed(1.0),
+    "age_gyr": Fixed(5.0),
+    "log_total_mass": Fixed(0.0),
+    "all_params": Fixed(DEFAULT),
 }
 _AGN_DUSTATT_9E = {
-    "type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
-    "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-    "lyman_cutoff": True, "all_params": Fixed(DEFAULT),
+    "type": "two_component",
+    "law_bc": "leitherer02",
+    "law_diff": "leitherer02",
+    "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+    "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+    "lyman_cutoff": True,
+    "all_params": Fixed(DEFAULT),
 }
 
 
@@ -3232,8 +3736,21 @@ def _cigale_skirtor_sed(t, oa, i):
             (
                 "skirtor2016",
                 dict(
-                    t=t, pl=1.0, q=1.0, oa=oa, R=20, Mcl=0.97, i=i, disk_type=1, delta=0,
-                    fracAGN=0.3, lambda_fracAGN="0/0", law=0, EBV=0.03, temperature=100.0, emissivity=1.6,
+                    t=t,
+                    pl=1.0,
+                    q=1.0,
+                    oa=oa,
+                    R=20,
+                    Mcl=0.97,
+                    i=i,
+                    disk_type=1,
+                    delta=0,
+                    fracAGN=0.3,
+                    lambda_fracAGN="0/0",
+                    law=0,
+                    EBV=0.03,
+                    temperature=100.0,
+                    emissivity=1.6,
                 ),
             ),
         ]
@@ -3259,11 +3776,20 @@ m_skirtor_sweep = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 p_sk_sweep = dict(m_skirtor_sweep.spec.sample(jax.random.PRNGKey(0)))
 
-_skirtor_grid = [(3, 40, 30), (7, 40, 30), (11, 40, 30), (7, 20, 30), (7, 60, 30), (7, 40, 0), (7, 40, 70)]
+_skirtor_grid = [
+    (3, 40, 30),
+    (7, 40, 30),
+    (11, 40, 30),
+    (7, 20, 30),
+    (7, 60, 30),
+    (7, 40, 0),
+    (7, 40, 70),
+]
 _cases_9e_sk = []
 for _tau, _oa, _i in _skirtor_grid:
     _sed_c9e = _cigale_skirtor_sed(_tau, _oa, _i)
@@ -3282,9 +3808,7 @@ for _tau, _oa, _i in _skirtor_grid:
     _L_torus_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_torus"])
     _L_polar_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_polar"])
     _L_t_9e = _L_torus_t_9e + _L_polar_t_9e  # Sum torus + polar
-    _cases_9e_sk.append(
-        (f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e)
-    )
+    _cases_9e_sk.append((f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e))
     _assert_comparable(_L_c9e, _L_t_9e, name=f"§9e skirtor {_tau},{_oa},{_i}")
 
 fig, (ax, ax_r), _ratios_9e_sk = V.sweep_fig(
@@ -3294,7 +3818,9 @@ fig.tight_layout()
 save_fig("cigale_09e_skirtor_grid.png")
 print("§9e SKIRTOR (τ, oa, i) grid (IR_BANDS):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_sk:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§9e {_label}", compact=True)
 
 
@@ -3308,8 +3834,20 @@ def _cigale_fritz_sed(tau, oa, psy):
             (
                 "fritz2006",
                 dict(
-                    r_ratio=60.0, tau=tau, beta=-0.5, gamma=4.0, opening_angle=oa, psy=psy,
-                    disk_type=1, fracAGN=0.3, EBV=0.03, temperature=100.0, emissivity=1.6,
+                    r_ratio=60.0,
+                    tau=tau,
+                    beta=-0.5,
+                    gamma=4.0,
+                    opening_angle=oa,
+                    psy=psy,
+                    disk_type=1,
+                    # δ = 0 matches the Schartmann disc and the SKIRTOR runs; the
+                    # module's own default is −0.36.
+                    delta=0.0,
+                    fracAGN=0.3,
+                    EBV=0.03,
+                    temperature=100.0,
+                    emissivity=1.6,
                 ),
             ),
         ]
@@ -3342,7 +3880,8 @@ m_fritz_sweep = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 p_fritz_sweep = dict(m_fritz_sweep.spec.sample(jax.random.PRNGKey(0)))
 
@@ -3367,19 +3906,22 @@ for _tau, _oa, _psy in _fritz_grid:
     _L_torus_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_torus"])
     _L_polar_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_polar"])
     _L_t_9f = _L_torus_t_9f + _L_polar_t_9f  # Sum torus + polar
-    _cases_9e_fr.append(
-        (f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f)
-    )
+    _cases_9e_fr.append((f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f))
     _assert_comparable(_L_c9f, _L_t_9f, name=f"§9e fritz {_tau},{_oa},{_psy}")
 
 fig, (ax, ax_r), _ratios_9e_fr = V.sweep_fig(
-    _cases_9e_fr, ref_label="CIGALE", title="§9e Fritz 2006 (τ, opening angle, ψ) grid", xlim=(1e3, 1e7)
+    _cases_9e_fr,
+    ref_label="CIGALE",
+    title="§9e Fritz 2006 (τ, opening angle, ψ) grid",
+    xlim=(1e3, 1e7),
 )
 fig.tight_layout()
 save_fig("cigale_09f_fritz_grid.png")
 print("§9e Fritz 2006 (τ, opening angle, ψ) grid (IR_BANDS):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_fr:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§9e {_label}", compact=True)
 
 
@@ -3398,6 +3940,14 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_fr:
 # scattered floor is 1 % of an unabsorbed corona and is not what the printed
 # residual is. The cell prints the ratio at 2 keV and as a median over
 # 0.5–10 keV.
+#
+# **The binary and hot-gas templates.** pcigale normalizes its hot-gas (0.5–2 keV),
+# LMXB (2–10 keV) and HMXB (0.5–8 keV) templates with a trapezoid sum over its own
+# wavelength grid, restricted to the grid points inside each band
+# (`pcigale/sed_modules/yang20.py`). The band edges fall between grid points, so the
+# band integral CIGALE normalizes to is a truncated one. The 0.99× of the capstone's
+# X-ray rows, where the galaxy carries these templates and no corona, is that
+# convention.
 #
 # **Verification Status:** PARTIAL (3/16): Radio, X-ray and AGN
 
@@ -3509,7 +4059,8 @@ def _tengri_xray(log_lbol, cos_inc):
             "all_params": Fixed(DEFAULT),
         },
         xray={"type": "yang20", "log_nh": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
 
 
@@ -3640,7 +4191,8 @@ save_fig("cigale_10b_xray_inclination.png")
 # ## §11 Radio
 #
 # CIGALE module `radio` (`qir_sf`, `alpha_sf`) ↔ tengri
-# `radio={"sf": {"type": "bell2003", "freefree": False}, "radio_q_ir": 2.5,
+# `radio={"sf": {"type": "bell2003", "freefree": False, "nu_ref": "21cm",
+# "ir_window": "total"}, "radio_q_ir": 2.5,
 # "radio_alpha_sf": 0.8}`. The figure overlays the star-forming radio spectrum
 # of both codes; the lower panel is the tengri/CIGALE ratio.
 #
@@ -3654,25 +4206,40 @@ save_fig("cigale_10b_xray_inclination.png")
 # free-free term. `freefree: False` switches to CIGALE's convention: `q_IR`
 # calibrates the non-thermal term alone, the synchrotron carries all of it, and
 # the thermal free-free is whatever the nebular continuum supplies. The
-# like-for-like comparison below therefore uses `freefree: False`; the default
-# (total) convention is overlaid as the dash-dot curve.
+# like-for-like comparison below therefore uses `freefree: False`; tengri's default
+# (Bell 2003: TIR 8–1000 μm, 1.4 GHz, thermal from the nebular continuum) is
+# overlaid as the dash-dot curve.
+#
+# **Conventions.** tengri's defaults are Bell (2003)'s: `q_IR` defined at 1.4 GHz
+# and the IR luminosity integrated over the model's own paper window (TIR,
+# 8–1000 μm). pcigale normalizes the relation at 21 cm (1.4276 GHz) and feeds it
+# the total dust luminosity. The comparison builds therefore set
+# `nu_ref: "21cm"` and `ir_window: "total"` explicitly in the `sf` block.
 #
 # Both codes anchor the amplitude on the absorbed dust power, so any mismatch in
-# `L_absorbed` lands 1:1 in the radio. Two conventions predict the flat
-# synchrotron ratio without being fitted: the anchor frequency (Bell 2003 defines
-# `q_IR` at 1.4 GHz, CIGALE normalizes at 21 cm = 1.4276 GHz) and the energy anchor
-# (`L_absorbed` against CIGALE's `dust.luminosity`, §6). The cell prints the
-# measured range beside the prediction.
+# `L_absorbed` lands 1:1 in the radio. With the two conventions matched, the flat
+# synchrotron ratio is predicted by the energy anchor alone (`L_absorbed` against
+# CIGALE's `dust.luminosity`, §6). The cell prints the measured range beside the
+# prediction.
 #
-# With `freefree: False` the synchrotron carries the whole `q_IR`; in the default
-# (total) convention the printed (synchrotron + nebular continuum) / Bell total
-# at 1.4 GHz is 0.954, below 1 because the nebular free-free share there is
-# smaller than the Murphy et al. (2011) share `f_th` that the synchrotron
-# subtracts.
+# With `freefree: False` the synchrotron carries the whole `q_IR`. In tengri's
+# default the cell prints the following. The TIR input to the radio block is 0.944
+# of the total dust luminosity. The default synchrotron is 0.840 of the
+# CIGALE-convention synchrotron at 1.4 GHz, which combines the thermal share
+# removed from Bell's total, that smaller TIR input and the 1.4 against
+# 1.4276 GHz anchor. The remaining numbers share one base, Bell's TIR total at
+# exactly 1.4 GHz: the synchrotron is 0.9033 of it and the nebular continuum
+# 0.0583, so (synchrotron + nebular continuum) / Bell
+# total is 0.9616. It falls below 1 because the
+# thermal share removed from the total, which is the Murphy et al. (2011) term at
+# the TIR input (0.0967), exceeds the nebular continuum by
+# 0.0384.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
-# calibration comparison between two implementations of the same physics.
+# calibration comparison between two implementations of the same physics. §11b
+# tests the thermal free-free itself, per ionizing photon, against an analytic
+# reference.
 #
 # **Verification Status:** PARTIAL (3/25): Radio, X-ray, IGM and PSD physics
 
@@ -3745,11 +4312,21 @@ def _radio_model(sf_block):
 
 
 # CIGALE's convention: q_IR calibrates the non-thermal term alone.
-state_r = _radio_model({"type": "bell2003", "freefree": False}).predict_state({})
+# pcigale normalizes the relation at 21 cm and feeds it the total dust luminosity;
+# tengri's defaults are Bell (2003)'s 1.4 GHz and the TIR (8-1000 um) window, so
+# both are set explicitly here.
+_CIGALE_RADIO_SF = {
+    "type": "bell2003",
+    "freefree": False,
+    "nu_ref": "21cm",
+    "ir_window": "total",
+}
+state_r = _radio_model(_CIGALE_RADIO_SF).predict_state({})
 w_t = np.asarray(state_r.wave)
 sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron carrying the whole q_IR
 
-# tengri's default: q_IR calibrates Bell's total; thermal from the nebular continuum.
+# tengri's default (Bell 2003: TIR 8-1000 um window, 1.4 GHz): q_IR calibrates Bell's
+# total, and the thermal term comes from the nebular continuum.
 state_r_tot = _radio_model({"type": "bell2003"}).predict_state({})
 sed_t_tot = np.asarray(state_r_tot.derived["sed_radio"])  # (1 - f_th) of the total
 
@@ -3772,24 +4349,24 @@ for _ln in ax.get_lines():
     if _ln.get_label().startswith("CIGALE"):
         _ln.set(linewidth=4.0, alpha=0.35, solid_capstyle="round")
 
-# The default (total-q) build: synchrotron is the non-thermal share of Bell's total.
+# tengri's default build: synchrotron is the non-thermal share of Bell's total.
 ax.plot(
     C_AA / w_t / 1e9,
     sed_t_tot,
     color="C3",
     ls="-.",
     lw=1.4,
-    label="tengri  bell2003 default (q_IR calibrates the total; synchrotron = 1 − f_th)",
+    label="tengri  bell2003 default (TIR window, 1.4 GHz; synchrotron = 1 − f_th of Bell's total)",
 )
 ax.legend(fontsize=8, frameon=False)
 _nu_r = C_AA / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 
-# Synchrotron against the two conventions that predict the ratio.
+# With the anchor frequency and the IR window matched to pcigale's radio module,
+# the synchrotron ratio reduces to the energy balance of §6.
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
 _f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
-_f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
 _syn_t_on_c = U.regrid(w_t, sed_t, w_r)
 _valid = (_nu_r >= 0.1) & (_nu_r <= 100.0) & (L_r > 0) & np.isfinite(ratio)
 _syn_ratio = _syn_t_on_c[_valid] / L_r[_valid]
@@ -3798,41 +4375,72 @@ print(
     f"{_syn_ratio.min():.4f}–{_syn_ratio.max():.4f} across 0.1–100 GHz (flat)"
 )
 print(
-    f"§11   predicted from conventions: anchor ×{_f_anchor:.4f} · "
-    f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
+    f"§11   predicted from the energy balance alone (§6 L_absorbed / dust.luminosity): "
+    f"×{_f_lir:.4f}"
 )
 
-# The total-q convention: the synchrotron is a fixed share of the freefree=False one,
-# and synchrotron + nebular thermal recovers Bell's calibrated total at 1.4 GHz.
+# tengri's default build (Bell 2003, TIR 8-1000 um window, 1.4 GHz): the synchrotron is
+# a fixed share of Bell's calibrated total, and synchrotron + nebular thermal term is
+# compared with that total at 1.4 GHz. Bell's total is formed from the TIR input the
+# radio block published for this build (`radio_L_ir_input`), not from the total dust
+# luminosity the CIGALE-convention build above uses.
 _sed_neb = np.asarray(state_r.derived["sed_nebular"])  # nebular continuum incl. free-free tail
-_j14 = int(np.argmin(np.abs(C_AA / w_t - 1.4e9)))
-_bell_total_14 = _L_ir_t / (3.75e12 * 10.0**2.5)
+_W_14 = C_AA / 1.4e9  # rest wavelength of exactly 1.4 GHz [Å]
+
+
+def _at_14ghz(sed):
+    """``sed`` log-log interpolated to exactly 1.4 GHz."""
+    return float(np.exp(np.interp(np.log(_W_14), np.log(w_t), np.log(np.maximum(sed, 1e-300)))))
+
+
+_sync_14, _sync_cig_14, _neb_14 = (_at_14ghz(x) for x in (sed_t_tot, sed_t, _sed_neb))
+_L_tir_in = float(np.asarray(state_r_tot.derived["radio_L_ir_input"])) * L_SUN  # Lsun → erg/s
+_bell_total_14 = _L_tir_in / (3.75e12 * 10.0**2.5)
 print(
-    f"§11 default (total) convention: synchrotron / freefree=False synchrotron = "
-    f"{sed_t_tot[_j14] / sed_t[_j14]:.4f} at 1.4 GHz"
+    f"§11 tengri default (Bell 2003: TIR 8-1000 um, 1.4 GHz): L_TIR input / total dust "
+    f"luminosity = {_L_tir_in / _L_ir_t:.4f}"
 )
 print(
-    f"§11   (synchrotron + nebular continuum) / Bell's calibrated total L(1.4 GHz) = "
-    f"{(sed_t_tot[_j14] + _sed_neb[_j14]) / _bell_total_14:.3f}"
+    f"§11   default synchrotron / CIGALE-convention synchrotron = "
+    f"{_sync_14 / _sync_cig_14:.4f} at 1.4 GHz (thermal share, TIR window and "
+    f"the 1.4 vs 1.4276 GHz anchor together)"
+)
+print(
+    f"§11   (default synchrotron + nebular continuum) / Bell's calibrated total from the "
+    f"TIR input, L(1.4 GHz) = {(_sync_14 + _neb_14) / _bell_total_14:.3f}"
+)
+
+# The same residual in one base: every term at exactly 1.4 GHz, as a fraction of Bell's
+# TIR total there. The Murphy term is evaluated directly at 1.4 GHz.
+_sync_f = _sync_14 / _bell_total_14
+_neb_f = _neb_14 / _bell_total_14
+_murphy_tir = np.asarray(radio_freefree(jnp.asarray([_W_14]), _L_tir_in, T_e=1.0e4, alpha_ff=-0.1))
+_murphy_f = float(_murphy_tir[0] / _bell_total_14)
+print(
+    f"§11   as fractions of Bell's TIR total at 1.4 GHz: synchrotron {_sync_f:.4f}, "
+    f"nebular continuum {_neb_f:.4f}, sum {_sync_f + _neb_f:.4f}"
+)
+print(
+    f"§11   thermal share subtracted from the total {1.0 - _sync_f:.4f}; Murphy+2011 term "
+    f"at the TIR input {_murphy_f:.4f}; nebular continuum falls short of it by "
+    f"{1.0 - _sync_f - _neb_f:.4f}"
 )
 
 # Thermal free-free calibration, component-wise against CIGALE's synchrotron: the
 # nebular continuum's tail and the Murphy+2011 term (the free-free the radio block
 # adds with `freefree: True`) evaluated at the same L_IR.
-_sed_murphy = np.asarray(
-    radio_freefree(jnp.asarray(w_t), _L_ir_t, T_e=1.0e4, alpha_ff=-0.1)
-)
+_sed_murphy = np.asarray(radio_freefree(jnp.asarray(w_t), _L_ir_t, T_e=1.0e4, alpha_ff=-0.1))
 _den = np.where(L_r > 0, L_r, np.nan)
 _neb_on_c = np.asarray(U.regrid(w_t, _sed_neb, w_r))
 _murphy_on_c = np.asarray(U.regrid(w_t, _sed_murphy, w_r))
 ax_r.plot(_nu_r, _neb_on_c / _den, color="C2", ls="--", lw=1.2, label="nebular tail / CIGALE")
 ax_r.plot(_nu_r, _murphy_on_c / _den, color="C3", ls="-.", lw=1.2, label="Murphy+2011 / CIGALE")
 ax_r.axhline(
-    _f_anchor * _f_lir,
+    _f_lir,
     color="0.25",
     ls=":",
     lw=1.6,
-    label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})",
+    label=f"synchrotron only (energy balance = {_f_lir:.3f})",
 )
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
 _nu_valid = np.asarray(_nu_r[_valid])
@@ -3850,6 +4458,266 @@ save_fig("cigale_11_radio_synchrotron.png")
 
 
 # %% [markdown]
+# ### §11b Thermal free-free: four tests
+#
+# Beyond 1 mm the nebular continuum is thermal free-free, and in the full SED at the end
+# of the notebook it is where the two codes differ by more than the synchrotron's 1 %.
+# Four tests separate what is Q_H, what is the emitter and what is the radio block, on
+# the §3 galaxy (BC03, logU = −2, Z = 0.02, f_esc = 0). Each carries an `assert` against
+# the band stated here.
+#
+# **1. Per ionizing photon, Cue against Cloudy.** Each code's free-free continuum divided
+# by its own Q_H, at 3 cm, 1 cm, 3 mm and 1 mm. Cue's continuum per photon over CIGALE's
+# is 1.04–1.08× (1.044× at 3 cm, 1.077× at 1 cm, 1.075× at 3 mm and 1 mm), asserted to lie in 0.95–1.12×. The nebular continuum
+# ratio of the full SED is this ratio times §3's Q_H ratio, 1.150×: the excess there is
+# the age convention and the emitter, and not a normalization error in either code, since
+# lines and continuum share one Q_H.
+#
+# **2. An analytic reference.** The optically thin free-free luminosity of a hydrogen
+# plasma at 10⁴ K per ionizing photon, in case B, is the thermal bremsstrahlung
+# emissivity of Rybicki & Lightman (1979, §5.2, Eqs. 5.14a and 5.14b),
+# $\varepsilon_\nu = \frac{2^5 \pi e^6}{3 m_e c^3}\left(\frac{2\pi}{3 k m_e}\right)^{1/2}
+# T^{-1/2}\, n_e n_p\, e^{-h\nu/kT}\, \bar g_{\rm ff}$, divided by the recombination
+# rate $\alpha_B n_e n_p$ that sets Q_H. The cell evaluates the prefactor from CODATA
+# constants, 6.84e-38 in cgs against the 6.8e-38 of their Eq. 5.14b. The Gaunt
+# factor is the fit of Draine (2011); the cell checks it against the Hummer (1988) values
+# tabulated by Dickinson, Davies & Davis (2003, Table 2) at 10⁴ K, and it agrees to 1.2 %
+# at 0.4 GHz, 0.9 % at 1.4 GHz and 0.5 % at 70 GHz. $\alpha_B$ is the Hui & Gnedin (1997)
+# fit to the Ferland et al. (1992) case B coefficient, 2.592e-13 cm³ s⁻¹ at 10⁴ K.
+# CIGALE's continuum per photon is 0.78–0.80× this reference and Cue's is
+# 0.83–0.86×; both are asserted to lie in 0.70–1.00×. The
+# reference is hydrogen at one temperature, so a gas at another temperature or with a
+# different ionization structure sits off it; the cell does not separate those.
+# CIGALE's library adds a trend that a hydrogen plasma does not have: its continuum per
+# photon at 1 mm falls by 3.08× from Z = 0.0004 to Z = 0.041 (printed). That is a
+# property of the Cloudy models; that it comes from dust grains is an inference, as the
+# library's physics is not exposed here.
+#
+# **3. The radio block's free-free.** The term the radio block adds with
+# `freefree: True` (Murphy et al. 2011), against Cue's nebular free-free at the same
+# Q_H. A history that is nearly constant over 10 Myr (τ = 20 Gyr, age 1 Gyr) makes Q_H proportional to the
+# star formation rate over the last 10 Myr, so one SFR gives one Q_H; the radio block is
+# evaluated at the L_IR that Murphy et al.'s Eq. 4 assigns to that SFR. The ratio of the
+# two per unit Q_H is 0.985–1.119× (0.985× at 3 and 1 cm, 1.043× at 3 mm, 1.119× at 1 mm), asserted to lie in 0.8–1.25× at every
+# wavelength the radio block reaches.
+#
+# **4. Continuity through 1 mm.** The radio SED with `freefree: True` has no step
+# through 1 mm when synchrotron and free-free both extend below it: the largest
+# |d ln L_ν / d ln λ| between neighbouring points over 0.1–3 mm stays below 1.5, and the
+# flux at 0.95 mm is within 0.9–1.2× that at 1.05 mm. The test runs only where the radio
+# block carries emission shortward of 1 mm, which the cell reads from the data; it
+# prints that it was skipped otherwise. Result: the radio block carries emission below 1 mm, so the test runs. The largest |d ln L_ν / d ln λ| over 0.1–3 mm is 0.326 and the flux ratio across 1 mm is 0.9775.
+
+# %%
+import scipy.constants as _sc
+
+_FF_LAMBDAS = (("3 cm", 3.0e8), ("1 cm", 1.0e8), ("3 mm", 3.0e7), ("1 mm", 1.0e7))  # [Å]
+_FF_BAND_CUE_VS_CLOUDY = (0.95, 1.12)  # tengri / CIGALE, per ionizing photon
+_FF_BAND_VS_ANALYTIC = (0.70, 1.00)  # each code over the analytic reference
+
+
+def _loglog_at(wave_aa, lnu, target_aa):
+    """``lnu`` interpolated log-log to ``target_aa`` [Å]."""
+    return float(
+        np.exp(
+            np.interp(
+                np.log(target_aa), np.log(np.asarray(wave_aa)), np.log(np.maximum(lnu, 1e-300))
+            )
+        )
+    )
+
+
+# Check 1. Thermal free-free per ionizing photon, each code over its own Q_H, on
+# the §3 galaxy (BC03, logU = -2, Z = 0.02, f_esc = 0). CIGALE's nebular module
+# carries the continuum in its emission component; no emission line sits between
+# 1 mm and 3 cm, so the sum of its young and old emission components is the
+# continuum there.
+_, _l_old = C.to_lnu_contribution(sed_c, "nebular.emission_old")
+_w_ff_c, _l_young = C.to_lnu_contribution(sed_c, "nebular.emission_young")
+_l_ff_c = np.asarray(_l_old) + np.asarray(_l_young)
+_w_ff_t = np.asarray(s_stellar.wave)
+_l_ff_t = np.asarray(s_stellar.derived["sed_nebular"])
+
+# Check 2. The optically thin free-free emission of a pure hydrogen H II region
+# per ionizing photon, case B, T_e = 1e4 K. The emissivity is the thermal
+# bremsstrahlung expression of Rybicki & Lightman (1979, Eq. 5.14a),
+#   ε_ν = [2^5 π e^6 / (3 m_e c^3)] (2π / 3 k m_e)^(1/2) T^(-1/2) n_e n_p e^(-hν/kT) g_ff,
+# with the velocity-averaged Gaunt factor g_ff from the fit of Draine (2011).
+# Every recombination to n >= 2 in a gas that absorbs all of Q_H gives
+# Q_H = α_B n_e n_p V, so ε_ν / (α_B n_e n_p) is L_ν per ionizing photon. α_B is the
+# Hui & Gnedin (1997, MNRAS 292, 27) fit to the case B coefficient of Ferland et al.
+# (1992). Constants are CODATA, converted to cgs.
+_E_ESU = _sc.e * _sc.c * 10.0  # elementary charge [esu]
+_M_E, _C_CGS = _sc.m_e * 1e3, _sc.c * 1e2  # [g], [cm/s]
+_K_B, _H_P = _sc.k * 1e7, _sc.h * 1e7  # [erg/K], [erg s]
+_FF_PREFACTOR = (
+    2**5
+    * np.pi
+    * _E_ESU**6
+    / (3.0 * _M_E * _C_CGS**3)
+    * np.sqrt(2.0 * np.pi / (3.0 * _K_B * _M_E))
+)  # [erg cm^3 K^(1/2) / s / Hz] per (n_e n_i Z^2)
+
+
+def _gaunt_ff(nu_hz, t_e=1.0e4, z_ion=1.0):
+    """Velocity-averaged free-free Gaunt factor, the fit of Draine (2011)."""
+    return np.log(
+        np.exp(5.960 - np.sqrt(3.0) / np.pi * np.log(z_ion * nu_hz / 1e9 * (t_e / 1e4) ** -1.5))
+        + np.e
+    )
+
+
+def _alpha_b_hydrogen(t_e=1.0e4):
+    """Case B recombination coefficient of hydrogen [cm^3/s], Hui & Gnedin (1997)."""
+    lam = 2.0 * 157807.0 / t_e
+    return 2.753e-14 * lam**1.5 / (1.0 + (lam / 2.74) ** 0.407) ** 2.242
+
+
+def _ff_per_photon_analytic(wave_aa, t_e=1.0e4):
+    """Optically thin free-free L_ν per ionizing photon [erg/s/Hz per ph/s]."""
+    nu = C_AA / wave_aa
+    return (
+        _FF_PREFACTOR
+        * t_e**-0.5
+        * np.exp(-_H_P * nu / (_K_B * t_e))
+        * _gaunt_ff(nu, t_e)
+        / _alpha_b_hydrogen(t_e)
+    )
+
+
+print(
+    f"§11b analytic free-free: prefactor {_FF_PREFACTOR:.3e} (Rybicki & Lightman Eq. 5.14b quotes 6.8e-38), "
+    f"α_B(1e4 K) = {_alpha_b_hydrogen():.3e} cm^3/s"
+)
+assert abs(_FF_PREFACTOR / 6.8e-38 - 1.0) < 0.01
+
+# The Gaunt fit against the Hummer (1988) values tabulated by Dickinson, Davies &
+# Davis (2003, MNRAS 341, 369, their Table 2), at 1e4 K.
+_HUMMER88_GAUNT_1E4K = {0.4: 6.39, 1.4: 5.73, 70.0: 3.67}  # {ν [GHz]: g_ff}
+for _nu_ghz, _g_tab in _HUMMER88_GAUNT_1E4K.items():
+    _g_fit = float(_gaunt_ff(_nu_ghz * 1e9))
+    print(f"    g_ff({_nu_ghz:g} GHz, 1e4 K): fit {_g_fit:.3f}, table {_g_tab:.2f} ({_g_fit / _g_tab - 1:+.1%})")
+    assert abs(_g_fit / _g_tab - 1.0) < 0.02
+
+print("§11b thermal free-free per ionizing photon [erg/s/Hz per ph/s], §3 galaxy:")
+print("    λ        CIGALE      tengri Cue   Cue/CIGALE   analytic    CIGALE/analytic  Cue/analytic")
+_ff_rows = []
+for _name, _lam in _FF_LAMBDAS:
+    _pc = _loglog_at(_w_ff_c, _l_ff_c, _lam) / _n_ly_c3
+    _pt = _loglog_at(_w_ff_t, _l_ff_t, _lam) / _q_h_t3
+    _pa = float(_ff_per_photon_analytic(_lam))
+    _ff_rows.append((_name, _pc, _pt, _pa))
+    print(
+        f"    {_name:<5} {_pc:11.4e} {_pt:11.4e} {_pt / _pc:10.3f} {_pa:12.4e} "
+        f"{_pc / _pa:12.3f} {_pt / _pa:14.3f}"
+    )
+    assert _FF_BAND_CUE_VS_CLOUDY[0] < _pt / _pc < _FF_BAND_CUE_VS_CLOUDY[1], (_name, _pt / _pc)
+    assert _FF_BAND_VS_ANALYTIC[0] < _pc / _pa < _FF_BAND_VS_ANALYTIC[1], (_name, "CIGALE")
+    assert _FF_BAND_VS_ANALYTIC[0] < _pt / _pa < _FF_BAND_VS_ANALYTIC[1], (_name, "Cue")
+
+# CIGALE's continuum per photon over its metallicity axis, from its library at
+# logU = -2, n_e = 100 cm^-3, at 1 mm. A hydrogen plasma at fixed T_e does not
+# depend on Z, so the fall is a property of the Cloudy models, which carry dust.
+_cont_z = []
+with _CigaleLineDB("nebular_continuum") as _cont_db:
+    for _z in (0.0004, 0.004, 0.02, 0.041):
+        _rec = _cont_db.get(Z=_z, logU=-2.0, ne=100.0)
+        _wl_aa, _l_nu = U.wnm_to_erg_per_hz_per_aa(np.asarray(_rec.wl), np.asarray(_rec.spec))
+        _cont_z.append((_z, _loglog_at(_wl_aa, _l_nu, 1.0e7)))
+print(
+    "§11b CIGALE nebular continuum per ionizing photon at 1 mm vs Z: "
+    + ", ".join(f"Z = {_z:g}: {_v:.3e}" for _z, _v in _cont_z)
+    + f" (Z = 0.0004 over Z = 0.041: {_cont_z[0][1] / _cont_z[-1][1]:.2f}×)"
+)
+assert all(a[1] > b[1] for a, b in zip(_cont_z, _cont_z[1:]))
+
+# %%
+# Check 3. The free-free term the radio block adds with `freefree: True`
+# (Murphy et al. 2011) against the nebular free-free it stands in for, at the same
+# Q_H. A history that is nearly constant over 10 Myr (τ = 20 Gyr, age 1 Gyr) makes Q_H
+# proportional to the star formation rate over the last 10 Myr, so one SFR gives
+# one Q_H. The radio block is evaluated at the L_IR that Murphy et al.'s Eq. 4,
+# SFR = 3.88e-44 L_IR [erg/s], assigns to that SFR; the nebular term is Cue's, with
+# the nebular emitter on and no radio block.
+_MURPHY11_SFR_PER_LIR = 3.88e-44  # [M☉/yr per erg/s], Murphy et al. (2011) Eq. 4
+_m_ss = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(20.0),
+        "age_gyr": Fixed(1.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
+)
+_s_ss = _m_ss.predict_state({})
+_sfr_ss = float(np.asarray(_s_ss.derived["sfr_10myr"]))
+_q_ss = float(np.asarray(_s_ss.derived["nion"]))
+_w_ss = np.asarray(_s_ss.wave)
+_l_ss_cue = np.asarray(_s_ss.derived["sed_nebular"])
+_l_ss_radio = np.asarray(
+    radio_freefree(jnp.asarray(_w_ss), _sfr_ss / _MURPHY11_SFR_PER_LIR, T_e=1.0e4, alpha_ff=-0.1)
+)
+print(
+    f"§11b steady star formation: SFR(10 Myr) = {_sfr_ss:.3e} M☉/yr, Q_H = {_q_ss:.3e} ph/s "
+    f"({_q_ss / _sfr_ss:.3e} ph/s per M☉/yr)"
+)
+print("    λ      radio block per Q_H   Cue per Q_H    radio block / Cue")
+_FF_BAND_RADIO_VS_CUE = (0.8, 1.25)
+for _name, _lam in _FF_LAMBDAS:
+    _cue_pp = _loglog_at(_w_ss, _l_ss_cue, _lam) / _q_ss
+    _rad_pp = _loglog_at(_w_ss, _l_ss_radio, _lam) / _q_ss
+    if _rad_pp > 1e-30:
+        print(f"    {_name:<5} {_rad_pp:16.4e} {_cue_pp:16.4e} {_rad_pp / _cue_pp:12.3f}")
+        assert _FF_BAND_RADIO_VS_CUE[0] < _rad_pp / _cue_pp < _FF_BAND_RADIO_VS_CUE[1], _name
+    else:
+        print(f"    {_name:<5} the radio block's free-free term stops at a longer wavelength")
+
+# Check 4. Continuity of the radio SED through 1 mm. The check runs only when the
+# radio block extends below 1 mm, which the data decide: with `freefree: True`
+# the star-forming radio SED must be nonzero at 0.5 mm.
+_state_ff_on = _radio_model(
+    {"type": "bell2003", "freefree": True, "nu_ref": "21cm", "ir_window": "total"}
+).predict_state({})
+_w_rad = np.asarray(_state_ff_on.wave)
+_l_rad = np.asarray(_state_ff_on.derived["sed_radio"])
+_extends_below_1mm = bool(_loglog_at(_w_rad, _l_rad, 5.0e6) > 1e-30)
+
+
+def _max_abs_log_slope(wave_aa, lnu, lo_aa, hi_aa):
+    """Largest |d ln L_ν / d ln λ| between neighbouring grid points in [lo_aa, hi_aa]."""
+    w, y = np.asarray(wave_aa), np.asarray(lnu)
+    sel = (w >= lo_aa) & (w <= hi_aa) & (y > 0)
+    return float(np.max(np.abs(np.diff(np.log(y[sel])) / np.diff(np.log(w[sel])))))
+
+
+if _extends_below_1mm:
+    _slope_max = _max_abs_log_slope(_w_rad, _l_rad, 1.0e6, 3.0e7)
+    _step_1mm = _loglog_at(_w_rad, _l_rad, 0.95e7) / _loglog_at(_w_rad, _l_rad, 1.05e7)
+    print(
+        f"§11b radio SED across 1 mm: largest |d ln L_ν / d ln λ| over 0.1-3 mm = {_slope_max:.3f}; "
+        f"L_ν(0.95 mm) / L_ν(1.05 mm) = {_step_1mm:.4f}"
+    )
+    assert _slope_max < 1.5, "the radio SED has a step near 1 mm"
+    assert 0.9 < _step_1mm < 1.2, "the radio SED has a step at 1 mm"
+else:
+    print(
+        "§11b radio SED across 1 mm: skipped, the radio block carries no emission "
+        "shortward of 1 mm in this build"
+    )
+
+
+# %% [markdown]
 # ## §12 IGM transmission
 #
 # CIGALE module `redshifting` (`igm_transmission`) ↔ tengri
@@ -3858,12 +4726,14 @@ save_fig("cigale_11_radio_synchrotron.png")
 # plots each code's transmission against observed wavelength at z = 3, 5 and 7.
 #
 # **Where they differ.** CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series optical
-# depths at the source redshift (`redshifting.py:63-81`), while tengri evaluates
-# every line at its absorber redshift z_n = λ_obs/λ_n − 1 as Meiksin (2006)
-# Table 1 defines. This is an open difference: the printed |ΔT| statistics reach a
-# few percent at z = 3 and 5. Redward of Lyβ (rest ≥ 1026 Å) only Lyα is active;
-# the cell prints the max |ΔT| there separately, and prints both codes'
-# transmission at observed 1730 Å.
+# depths at the source redshift (`redshifting.py:63-81`) and chooses Meiksin's
+# Eq. 2/3 for Lyα from the source redshift. tengri evaluates every line at its
+# absorber redshift z_n = λ_obs/λ_n − 1, as Meiksin (2006) Table 1 defines. The
+# printed |ΔT| statistics reach a few percent at z = 3 and 5. Redward of Lyβ
+# (rest ≥ 1026 Å) only Lyα is active and the two codes agree there; the cell
+# prints the max |ΔT| for that region separately. Meiksin's Table 2 gives
+# T(1730 Å, z = 5) = 0.003277; the cell prints that literal beside both codes'
+# values at observed 1730 Å.
 #
 # **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
@@ -3911,6 +4781,15 @@ for _z in (3.0, 5.0):
     _t_t = float(np.asarray(igm_transmission_meiksin06(_jnp.asarray([1730.0]), _z))[0])
     print(f"    T(1730 Å) at z = {_z:.0f}: tengri {_t_t:.6f}, CIGALE {_t_c:.6f}")
 
+# Meiksin (2006) Table 2, transmission at observed 1730 Å and z = 5 (literal from the paper).
+_T_MEIKSIN06_TABLE2_1730_Z5 = 0.003277
+_t_c5 = float(np.asarray(cigale_igm(np.array([1730.0 / 10.0]), 5.0))[0])
+_t_t5 = float(np.asarray(igm_transmission_meiksin06(_jnp.asarray([1730.0]), 5.0))[0])
+print(
+    f"    T(1730 Å) at z = 5 against Meiksin (2006) Table 2 ({_T_MEIKSIN06_TABLE2_1730_Z5:.6f}, "
+    f"paper literal): tengri {_t_t5:.6f}, CIGALE {_t_c5:.6f}"
+)
+
 ax_l.legend(fontsize=9)
 
 ax_r.legend(fontsize=9)
@@ -3932,12 +4811,13 @@ save_fig("cigale_12_igm_transmission.png")
 # **The stellar-to-FIR core.** Optical agreement is reported as a normalization
 # ratio and its 16–84 % spread. With the single-screen dust mapping
 # (`tau_bc = 0`) the lower panel's shaded band marks ±25 %. The sub-912 Å
-# excursion is the Lyman-continuum extrapolation. The 1 mm to 1 cm decade carries
+# excursion is the Lyman-continuum extrapolation. The 1 mm to 3 cm decade carries
 # thermal free-free from the nebular continuum on both codes (Cue's tail on
-# tengri's side, CIGALE's `nebular` module on the other). The X-ray wing is
-# XRB + hot gas with no AGN corona (`alpha_ox` is supplied but there is no disc
-# for it to act on), and the Lehmer+2016 LMXB term is scaled by the SSP
-# mass-weighted age of this galaxy. Every number is printed below.
+# tengri's side, CIGALE's `nebular` module on the other), and its ratio is §3's Q_H
+# ratio times §11b's Cue-against-Cloudy ratio per ionizing photon; the radio blocks
+# add synchrotron only. The X-ray wing is XRB + hot gas with no AGN corona
+# (`alpha_ox` is supplied but there is no disc for it to act on), and its 0.99×
+# is pcigale's truncated band normalization (§10). Every number is printed below.
 
 # %%
 import chex
@@ -4003,16 +4883,21 @@ m_full = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(2.0),
+        "all_params": Fixed(DEFAULT),
+    },
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
-        "sf": {"type": "bell2003", "freefree": False},
+        "sf": {"type": "bell2003", "freefree": False, "nu_ref": "21cm", "ir_window": "total"},
         "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
 wave_t = np.asarray(s_full.wave)
@@ -4064,8 +4949,8 @@ print(
 )
 print(
     "  mm     1 mm = {:.2f}×, 3 mm = {:.2f}×, 1 cm = {:.2f}×, 3 cm = {:.2f}×  "
-    "(one thermal free-free term on the whole grid from the nebular continuum; "
-    "radio blocks synchrotron-only)".format(
+    "(nebular free-free on both sides, Q_H ratio × Cue-against-Cloudy per photon, §11b; "
+    "the radio blocks add synchrotron only)".format(
         _ratio_at(1e7), _ratio_at(3e7), _ratio_at(1e8), _ratio_at(3e8)
     )
 )
@@ -4133,25 +5018,33 @@ plt.show()
 # |---|---|---|
 # | 1 | SSP | median residual 2.0–2.2e-8 at every age (float32 round-trip) |
 # | 2 | SFH | `delayed` median 1.00002×; `sfh2exp` median 1.00015×, 2 of 1969 points beyond 1 % (burst step); §2c median 1.000× except periodic exponential 0.999× and rectangular 0.993× |
-# | 3 | stellar SED | 912–1200 Å 1.060×, 1200–3000 Å 1.034×, 0.3–1 µm 1.002×, L_bol 1.016×, Q_H 1.150× (age-binning convention); §3b band medians 0.999–1.020×, worst band 0.837× |
+# | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.030×, 0.3–1 μm 1.006×, L_bol 1.016×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 1.001–1.018×, worst band 1.055× (τ = 3 Gyr, age = 1 Gyr) |
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
-# | 5 | attenuation applied | 0.1–1 µm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
-# | 6 | dust IR | 10–100 µm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 µm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
-# | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 µm), 1.0075× (3–8 µm), 1.0102× (10–1000 µm) |
-# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids; open differences) |
-# | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
-# | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
+# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0165× intrinsic and 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×); §5b band medians 0.997–1.000×; single-point maxima of 75–942 % over 0.1–1 μm sit on emission-line wings (line profile and grid sampling), not on the continuum |
+# | 6 | dust IR | 10–100 μm energy-weighted 1.012×; `L_absorbed` 1.0112× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0109–1.0141×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0119×, 1.0116×, 1.0116× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
+# | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0122× (0.3–1 μm), 1.0081× (3–8 μm), 1.0125× (10–100 μm), 1.0116× (100–1000 μm) |
+# | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
+# | 9 | AGN, SKIRTOR | disc 1.0099×, torus 1.0111×, polar dust 1.0118× (§9); 1.0076×, 1.0147×, 0.9996× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
+# | 9 | AGN, Fritz | §9e band medians 1.009–1.010×, worst bands 0.973–0.975×, none of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
-# | 11 | radio | synchrotron 0.9941–0.9942× across 0.1–100 GHz against 0.9942× predicted from the 21 cm anchor and the energy anchor (`freefree: False`) |
-# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (open difference: the n ≥ 3 Lyman lines differ blueward of Lyβ); redward of Lyβ the max |ΔT| is printed in §12 |
-# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.96× (1 keV), 0.97× (5 keV); radio 1.00× (1.4 GHz), 1.01× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.00× / 1.07× / 1.05× / 1.02× |
+# | 11 | radio | synchrotron 1.0112× across 0.1–100 GHz against ×1.0112 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
+# | 11b | free-free | per ionizing photon Cue / CIGALE 1.04–1.08× (1.044× at 3 cm, 1.077× at 1 cm, 1.075× at 3 mm and 1 mm); against the analytic reference CIGALE 0.78–0.80× and Cue 0.83–0.86×; radio block / Cue 0.985–1.119× (0.985× at 3 and 1 cm, 1.043× at 3 mm, 1.119× at 1 mm); continuity through 1 mm: largest |d ln L_ν / d ln λ| 0.326 over 0.1–3 mm, flux ratio across 1 mm 0.9775 |
+# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is 0.003283 for tengri and 0.000909 for CIGALE against Meiksin's Table 2 0.003277; redward of Lyβ the max \|ΔT\| is ≤ 2.8e-16 |
+# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.99× (1 keV), 0.99× (5 keV); radio 1.02× (1.4 GHz), 1.02× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.02× / 1.09× / 1.07× / 1.04× |
 #
-# Three conventions account for most of the residuals and are stated where they
-# are measured. tengri's age-binning convention (§3) sets the UV, Q_H and, through
-# `L_absorbed`, the ~1 % offset under the dust IR and radio (§6, §11). The
-# nebular emitter differs by design (§8). The polar-dust extinction law must be
-# set to `polar_law="bongiorno"` to match CIGALE (§9, §9d), and `freefree: False`
-# makes `radio_q_ir` calibrate the synchrotron alone, as CIGALE's `qir_sf` does
+# Four conventions account for most of the residuals and are stated where they are
+# measured. The age convention (§3) is exact in tengri and a 1 Myr discrete sum, equivalent
+# to aging every star by 0.5 Myr, in CIGALE; it sets the UV, Q_H and, through
+# `L_absorbed`, the ~1 % offset under the dust IR and radio (§6, §11). The nebular
+# emitter differs by design: per ionizing photon Cue's Balmer lines are 2–3 % below
+# CIGALE's, its [O III] is lower because of the fitted ionizing shape and a different
+# definition of logU, and its free-free continuum is within about 10 % (§8, §11b). CIGALE's
+# own conventions are a polar-dust quadrature coarser than tengri's (§9d) and an X-ray
+# band normalization truncated on its wavelength grid (§10). The polar-dust extinction law
+# must be set to `polar_law="bongiorno"` to match CIGALE (§9, §9d), and `freefree: False`
+# makes `radio_q_ir` calibrate the synchrotron alone, as CIGALE's `qir_sf` does (§11).
+# tengri's radio defaults are Bell (2003)'s 1.4 GHz and the model's own paper's IR
+# window; the CIGALE comparison sets 21 cm and the total dust luminosity explicitly
 # (§11).
 
 # %% [markdown]
@@ -4164,13 +5057,18 @@ plt.show()
 # * Charlot & Fall 2000, ApJ 539, 718: two-component dust
 # * Condon 1992, ARA&A 30, 575: radio synchrotron / IR–radio correlation
 # * Dale et al. 2014, ApJ 784, 83: IR dust templates
+# * Dickinson, Davies & Davis 2003, MNRAS 341, 369: free-free Gaunt factors (Hummer 1988 values)
+# * Draine 2011, Physics of the Interstellar and Intergalactic Medium (Princeton University Press): free-free Gaunt-factor fit
 # * Fritz et al. 2006, MNRAS 366, 767: AGN torus
+# * Gutkin, Charlot & Bruzual 2016, MNRAS 462, 1757: nebular grid, ionization parameter at the Strömgren radius
+# * Hui & Gnedin 1997, MNRAS 292, 27: case B recombination coefficient fit
 # * Inoue et al. 2014, MNRAS 442, 1805: IGM transmission
 # * Li et al. 2025, ApJ, 986, 9 (Cue, arXiv:2405.04598): neural CLOUDY emulator
 # * Madau 1995, ApJ 441, 18: original IGM transmission
 # * Meiksin 2006, MNRAS 365, 807: updated IGM transmission
 # * Murphy et al. 2011, ApJ 737, 67: free-free radio SFR calibration
 # * Noll et al. 2009, A&A 507, 1793: modified Calzetti
+# * Rybicki & Lightman 1979, Radiative Processes in Astrophysics (Wiley), §5.2, Eqs. 5.14a-b: thermal bremsstrahlung
 # * Silva et al. 2004, MNRAS 355, 973: AGN torus
 # * Stalevski et al. 2016, MNRAS 458, 2288: SKIRTOR
 # * Yang et al. 2020, MNRAS 491, 740: X-ray CIGALE module

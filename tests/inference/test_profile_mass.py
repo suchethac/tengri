@@ -34,6 +34,21 @@ pytestmark = pytest.mark.contract
 
 _FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "des_g", "des_r", "des_i"]
 _MASS_NAME = "sfh_tsnorm_log_total_mass"
+
+#: Absolute bar on each MAP parameter's profiled-vs-unprofiled difference.
+#: Measured at snr=300 over mock seeds 0-5 (FSPS minimal recipe, same fit
+#: kwargs as the test): the worst single-parameter difference was 0.076
+#: (sfh_tsnorm_trunc, seed 1) and 0.025 (seed 2); seed 5, the test's own
+#: draw, is 4.96e-3. Profiled and unprofiled MAP are different optimization
+#: problems, so the difference is set by optimizer tolerance and the
+#: Occam-factor term, not by a shared fixed point. The bar sits above the
+#: measured maximum with margin; a 1e-3 bar failed on this draw (#2424).
+#: Most of that spread was the unprofiled L-BFGS-B stopping on scipy's
+#: relative-decrease test far from its minimum (seed 5 later read 0.19 on
+#: sfh_tsnorm_trunc at grad norm 0.057); with the gradient tolerance binding
+#: (``map_dispatch._SCIPY_FTOL``) seeds 0-5 measure 0.024, 0.012, 3.6e-3,
+#: 2.8e-3, 7.9e-4 and 3.7e-4, the remainder the estimators' own difference.
+_MAP_PARITY_BAR = 0.1
 _SPEC_WAVE = jnp.linspace(4000.0, 7000.0, 40)
 
 
@@ -281,13 +296,14 @@ class TestGuards:
 
         Issue #2359: the refusal message previously hardcoded 'photometry' regardless
         of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
-        blamed an AGN continuum even when the stochastic SFH was the real cause. The
-        measured deviations do not distinguish the two: O(1) for a mass-independent
-        component, O(1e-5) for the coarse age kernel. The alternative cause is the coarse
-        age kernel (age_kernel="dsps"), measured to cost roughly 1e-5 of mass-linearity.
-        The probe evaluates only one parameter set (every other free parameter at its prior
-        median, stochastic field latents at zero), so the message must say so and present
-        both causes rather than naming one confidently.
+        blamed an AGN continuum even when the stochastic SFH was the real cause.
+
+        It also used to offer the coarse histogram age kernel (age_kernel="dsps") as the
+        alternative cause, measured then at roughly 1e-5 of mass-linearity. Since #2683
+        both kernel names select one cloud-in-cell integration whose normalized weights are
+        scaled by the formed mass, so the age integral is proportional to round-off
+        (1e-13 measured, either name): the message must rule the age integration out
+        rather than send the reader to a kernel that no longer differs.
         """
         model = _agn_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
@@ -311,9 +327,15 @@ class TestGuards:
             f"reason contains old hardcoded blame phrase: {reason}"
         )
 
-        # 3. The reason must mention BOTH candidate causes: AGN continuum and age kernel.
+        # 3. The reason names the additive component this model carries, and rules the
+        #    age integration out as a cause instead of blaming a kernel choice (#2683).
         assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
-        assert "dsps" in reason, f"reason does not mention the coarse age kernel (dsps): {reason}"
+        assert "age integration is not a candidate cause" in reason, (
+            f"reason does not rule out the age integration: {reason}"
+        )
+        assert "dsps" not in reason and "coarse age kernel" not in reason, (
+            f"reason still blames an age-kernel choice, which no longer differs: {reason}"
+        )
 
         # 4. The reason must still report the measured number and tolerance.
         assert "max|ratio(+1 dex) - 10|" in reason, (
@@ -343,13 +365,24 @@ class TestMapParity:
         assert post_on.diagnostics["profile_mass_resolved"] is True
         assert post_off.diagnostics["profile_mass_resolved"] is False
 
+        # Both optimizers reached their stationary points. scipy's default
+        # relative-decrease test once stopped the unprofiled fit at grad norm
+        # 0.057 while reporting success, 1.4e-3 above the joint minimum the
+        # profiled MAP had found, which is the whole of the parity gap it left.
+        for label, post in (("unprofiled", post_off), ("profiled", post_on)):
+            grad_norm = post.diagnostics["grad_norm"]
+            # grad-assert: finite-only — a stationary point is the claim; zero is the ideal value
+            assert np.isfinite(grad_norm) and grad_norm < 1e-4, (
+                f"{label} MAP stopped at grad norm {grad_norm:.3g}, not at a minimum"
+            )
+
         for name in post_off.params:
             if name == _MASS_NAME:
                 diff = abs(float(post_off.params[name]) - float(post_on.params[name]))
-                assert diff < 1e-3, f"mass MAP differs by {diff:.3e} dex"
+                assert diff < _MAP_PARITY_BAR, f"mass MAP differs by {diff:.3e} dex"
             elif name in forward.spec.free_params:
                 diff = abs(float(post_off.params[name]) - float(post_on.params[name]))
-                assert diff < 1e-3, f"{name} MAP differs by {diff:.3e}"
+                assert diff < _MAP_PARITY_BAR, f"{name} MAP differs by {diff:.3e}"
 
     # Deliberately no joint/spectroscopy-mock counterpart, in any tolerance:
     # the profiled (marginal) MAP and the joint (theta, mass) MAP are
@@ -405,6 +438,23 @@ class TestSamplerParity:
             assert z < 3.0, f"{name}: off_mean={a.mean():.4g} on_mean={b.mean():.4g} z={z:.2f}"
 
     def test_nuts_posterior_means_agree_joint(self, ssp_data_fsps):
+        """Joint photometry+spectrum posterior means agree with and without profiling.
+
+        The profiled objective is exact: over 20 prior draws and the age kernel
+        (``cic`` and ``dsps`` name the same integration), the joint prediction
+        is linear in the mass to 3e-14 relative, the profiled prediction vector
+        equals the joint one bit for bit, the reference mass drops out of
+        ``(a_star, chi2_min)`` to 7e-14, and ``chi2(M)`` equals the quadratic
+        ``chi2_min + A (M/M_ref - a_star)^2`` to 9e-14, including draws whose
+        SFH extends past ``age(z)``. So the two arms sample the same posterior
+        and only the Monte Carlo error separates the means. At 100 warmup
+        steps the dense mass matrix was not yet adapted (ESS 3 to 40 on
+        ``met_logzsol``) and one draw gave z = 4.4; the run is therefore 400
+        warmup steps. Measured z (profiled minus unprofiled, per parameter),
+        mock seed 0, sampler keys 7 / 0 / 1 / 2: worst |z| 1.36 / 0.99 / 1.67 /
+        1.95, and ``met_logzsol`` z = +0.22 / +0.91 / -0.76 / -0.77, so no
+        parameter is offset in a consistent direction.
+        """
         model = _joint_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
         _, data, noise = _joint_mock(model, seed=0)
@@ -412,7 +462,7 @@ class TestSamplerParity:
         kw = dict(
             method="mcmc_nuts",
             dense_mass_matrix=True,
-            n_warmup=100,
+            n_warmup=400,
             n_samples=150,
             n_chains=2,
             key=jax.random.PRNGKey(7),
@@ -827,14 +877,19 @@ def test_reinsertion_chunk_size_never_exceeds_ceiling(ssp_data_fsps):
     assert 1 <= chunk <= mass_profile._REINSERT_CHUNK_MAX
 
 
-def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):
+def test_chunking_changes_reinserted_draws_by_reduction_noise_only(ssp_data_fsps, monkeypatch):
     """Chunk width must not change the answer beyond reduction-reordering noise.
 
     Two claims, both measured. With the width at or above ``n_draws`` the map
     degenerates to a single vmap and the draws are *bit-identical*, so a model
     that does not need chunking pays nothing at all. With the width biting, the
-    draws agree to about one ulp -- the chunk boundary reorders reductions but
-    the per-draw PRNG keys are untouched.
+    draws agree to a few ulp -- the chunk boundary reorders reductions but the
+    per-draw PRNG keys are untouched. Measured worst case over widths 16 / 7 / 1:
+    0.9 / 0.9 / 1.7 ulp before the young-sliver integral (#2635) and up to
+    4.7 ulp with it: the sliver adds its log-spaced samples to the summed
+    history, and each chunk width fuses those reductions differently. The bound
+    is sized to that measurement (the zero-SFH guard that once contributed is
+    gone since #2841).
     """
     from tengri.inference import mass_profile
     from tengri.inference._model_cache import _default_owner
@@ -875,7 +930,9 @@ def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, mon
     for width in (16, 7, 1):
         chunked = draws_at(width)
         rel = np.max(np.abs((chunked - reference) / reference))
-        assert rel < 1e-15, f"chunk width {width} moved draws by {rel:.3e} relative"
+        assert rel < 8 * np.finfo(float).eps, (
+            f"chunk width {width} moved draws by {rel:.3e} relative"
+        )
 
 
 def test_reinsertion_logs_the_chunk_width_and_whether_chunking_engaged(

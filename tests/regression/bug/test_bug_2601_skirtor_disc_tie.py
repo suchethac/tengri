@@ -35,6 +35,7 @@ References
 .. [4] Boquien et al. 2019, A&A, 622, A103 (CIGALE ``skirtor2016``).
 """
 
+import functools
 import warnings
 
 import jax
@@ -45,8 +46,12 @@ import pytest
 from tengri.components.agn import disc_cigale as DC
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.components.dust.attenuation import smc
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
+from tests.regression.bug.test_bug_2760_torus_screen_is_library_sightline import (
+    mm83_below_edge_reference,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -281,6 +286,57 @@ def _screen(wave_aa, i_deg, oa=40.0, tau_v=7.0):
     return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
 
 
+@functools.cache
+def _library_logs():
+    """Raw SKIRTOR columns and their logarithms (fiducial record of the runner defaults)."""
+    from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
+
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    return (
+        tuple(jnp.asarray(a) for a in raw["axes"]),
+        np.asarray(raw["wave"], dtype=float),
+        jnp.asarray(np.log(np.maximum(np.asarray(raw["disk"], dtype=float), 1e-35))),
+        jnp.asarray(np.log(np.maximum(np.asarray(raw["norm"], dtype=float), 1e-35))),
+    )
+
+
+def _library_transmission(wave_aa, i_deg):
+    """Obscuration of the untied torus: the library's normalized ratio over the disc anisotropy.
+
+    ``R_n = disk_i norm_i / (disk_0 norm_0)`` from the shipped library (fiducial t = 7, p = q = 1,
+    oa = 40, R = 20), node-exact PCHIP in the logarithms, a power law between library nodes and
+    held at the library's 10 A edge below its grid; ``T = R_n / eta`` with
+    ``eta = c (1 + 2c)/3`` and ``c`` floored at cos 85 deg by a softplus of width 0.01 (so the
+    edge-on value is finite). Where the face-on disc is absent, ``T = 1``. Below the library's
+    10 A edge: Morrison & McCammon (1983) absorption of the column 2.21e21 A_V (A_V from T at
+    V). This replaces the previous logistic Type-1/Type-2 blend ``T = R exp((w2 - 1) ln R)``,
+    which had no ``norm``.
+    """
+    axes, wave_native, log_disk, log_norm = _library_logs()
+    cos = _COS[i_deg]
+    geometry = (7.0, 1.0, 1.0, 40.0, 20.0)
+
+    def at(table, c):
+        return np.asarray(
+            interp_nd_pchip(table, axes, tuple(jnp.asarray(v) for v in (*geometry, c)))
+        )
+
+    drift = at(log_disk, cos) - at(log_disk, 1.0) + (at(log_norm, cos) - at(log_norm, 1.0))
+    live = (at(log_disk, 1.0) > np.log(1e-35) + 1.0).astype(float)
+    held = np.clip(np.asarray(wave_aa, float), wave_native[0], wave_native[-1])
+    lx = np.log(wave_native)
+    drift_q = np.interp(np.log(held), lx, drift)
+    live_q = np.interp(np.log(held), lx, live) > 0.5
+    ratio = np.minimum(np.exp(drift_q), 1.5)
+    c_eff = 0.0871557427476582 + 0.01 * np.logaddexp(0.0, (cos - 0.0871557427476582) / 0.01)
+    eta = c_eff * (1.0 + 2.0 * c_eff) / 3.0
+    t_lib = np.where(live_q, ratio / eta, 1.0)
+    if np.min(wave_aa) >= wave_native[0]:
+        return t_lib
+    t_v = float(_library_transmission(np.array([5500.0]), i_deg)[0])
+    return mm83_below_edge_reference(wave_aa, wave_native[0], t_v, t_lib)
+
+
 # ----------------------------------------------------------------------------------
 # 1. library facts and CIGALE formula transcription
 # ----------------------------------------------------------------------------------
@@ -399,13 +455,13 @@ def test_broad_lines_screened_identically_tied_and_untied(i_deg):
     wave = np.asarray(_WAVE)
     j = int(np.argmin(np.abs(wave - 5000.0)))
     assert face_on[j] > 0.0
-    expected = _screen(wave[j : j + 1], i_deg)[0] / _screen(wave[j : j + 1], 0)[0]
+    expected = _library_transmission(wave[j : j + 1], i_deg)[0]
     assert tied[j] / face_on[j] == pytest.approx(expected, rel=1e-6), (
         f"i={i_deg}: lines(i)/lines(0) at {wave[j]:.0f} A = {tied[j] / face_on[j]:.6e}, "
-        f"screen transmission ratio {expected:.6e} (T(5000 A) = {_screen([5000.0], i_deg)[0]:.4e})"
+        f"library line-of-sight transmission {expected:.6e}"
     )
     bright = face_on > 1e-3 * face_on.max()
-    expected_all = _screen(wave[bright], i_deg) / _screen(wave[bright], 0)
+    expected_all = _library_transmission(wave[bright], i_deg)
     np.testing.assert_allclose(tied[bright] / face_on[bright], expected_all, rtol=1e-6)
 
 
@@ -428,9 +484,11 @@ def test_untied_disc_is_screened(i_deg):
     Expected: the face-on disc (screen at i = 0 divided out) times the documented screen at i.
     """
     wave = np.asarray(_WAVE)
-    face_on = _run(0, frac=0.0)[1]["disc"] / _screen(wave, 0)
+    face_on = _run(0, frac=0.0)[1]["disc"] / _library_transmission(wave, 0)
     got = _run(i_deg, frac=0.0)[1]["disc"]
-    np.testing.assert_allclose(got, face_on * _screen(wave, i_deg), rtol=1e-9, atol=0.0)
+    np.testing.assert_allclose(
+        got, face_on * _library_transmission(wave, i_deg), rtol=1e-9, atol=0.0
+    )
     assert _power(got) > 0.0
 
 
@@ -629,19 +687,32 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
+#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de). Old -> new,
+#: relative, against the pins on origin/main (the file's prior values):
+#:   log M_BH 6: sum +9.20e-06, first +4.39e-02, middle -9.14e-07, last -2.73e-06
+#:   log M_BH 8: sum +8.12e-05, first -7.24e-02, middle +1.66e-04, last -4.07e-05
+#:   log M_BH 10: sum -3.16e-03, first -5.65e-01, middle -3.31e-03, last -2.51e-04
+#: Cause of the mbh 10 move: the #2733 kubota_done corona change on this branch (see the
+#: seam sweep block). #2818 and the #2808 merge are not separated from #2733 by a separate capture.
+#: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
+    6.0: (
+        1.5586902495503188e32,
+        85034899317424.44,
+        2.8901799287539962e28,
+        8.773302439087775e21,
+    ),
     8.0: (
-        1.6504080200641076e32,
-        2.226186048596356e16,
-        3.0968665997787287e28,
-        8.825196951058274e21,
+        1.6508958561152344e32,
+        2.0727111001488856e16,
+        3.098226134579877e28,
+        8.823054902409336e21,
     ),
     10.0: (
-        1.6769970954584036e32,
-        2.3324417803895464e16,
-        3.1396733849669233e28,
-        9.548716267622313e21,
+        1.6722001219825183e32,
+        1.018808832961018e16,
+        3.1303929653712365e28,
+        9.547258877226544e21,
     ),
 }
 
@@ -731,6 +802,9 @@ def test_intrinsic_anchors_equal_the_unit_area_disc(block, disk_type, delta):
     cut raises the ``skirtor`` anchors by 14 % (4.154e29 to 4.736e29 at L_bol = 1e12 L_sun)
     through the area it removes below 10 nm; the other discs move by 0.2 % or less.
     """
+    # The ADAF blend weight is its own key; ``agn_cigale_disk_delta`` is the slope modulator
+    # of the skirtor / schartmann2005 discs and is not read by ``adaf_lopez2024``.
+    delta_key = "agn_cigale_adaf_delta" if block == "adaf_lopez2024" else "agn_cigale_disk_delta"
     _, l2500, l4400 = compose_l_nu(
         _WAVE,
         _LOG_LBOL,
@@ -740,8 +814,8 @@ def test_intrinsic_anchors_equal_the_unit_area_disc(block, disk_type, delta):
         agn_feii_block="none",
         agn_torus_block="none",
         agn_attenuation_block="none",
-        agn_cigale_disk_delta=delta,
         return_l2500=True,
+        **{delta_key: delta},
     )
     l_bol = 10.0**_LOG_LBOL * L_SUN
     for got, lam_aa in ((l2500, 2500.0), (l4400, 4400.0)):

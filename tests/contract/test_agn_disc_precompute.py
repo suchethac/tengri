@@ -131,9 +131,10 @@ class TestCigaleDiscAdapter:
             waves, trans, redshift=2.0, parameters=None, model="cigale_disc"
         )
         phot = np.asarray(result["grid_phot"])
-        assert phot.shape[-1] == len(waves)
         chex.assert_tree_all_finite(phot)
-        assert result["axes"] == ()
+        # Free delta: one slope-modulator axis, shape (n_delta, n_filters).
+        assert len(result["axes"]) == 1
+        assert phot.shape == (np.asarray(result["axes"][0]).shape[0], len(waves))
 
     def test_lookup_callable(self, filter_set):
         from tengri.components.agn import disc_precompute
@@ -143,7 +144,7 @@ class TestCigaleDiscAdapter:
             waves, trans, redshift=2.0, parameters=None, model="cigale_disc"
         )
         lookup = disc_precompute.build_lookup(result, model="cigale_disc")
-        out = jax.jit(lookup)(jnp.float64(1.0))
+        out = jax.jit(lookup)(jnp.float64(1.0), jnp.float64(0.0))
         chex.assert_tree_all_finite(np.asarray(out))
 
 

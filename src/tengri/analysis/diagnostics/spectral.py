@@ -26,26 +26,16 @@ References
 
 import jax.numpy as jnp
 
+from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import representable_denominator, representable_floor
-from tengri.utils.sed_quantities import band_integral
+from tengri.utils.sed_quantities import CALZETTI94_WINDOWS_AA, band_integral
 
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
 
-# Calzetti et al. 1994 Table 2: ten spectral windows for UV slope measurement.
-CALZETTI94_WINDOWS_AA = (
-    (1268.0, 1284.0),
-    (1309.0, 1316.0),
-    (1342.0, 1371.0),
-    (1407.0, 1515.0),
-    (1562.0, 1583.0),
-    (1677.0, 1740.0),
-    (1760.0, 1833.0),
-    (1866.0, 1890.0),
-    (1930.0, 1950.0),
-    (2400.0, 2580.0),
-)
+# The ten Calzetti et al. 1994 windows (Table 2) live in utils.sed_quantities,
+# which the 1600 A UV luminosity also uses; re-exported here by name.
 
 
 def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
@@ -130,7 +120,8 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     r"""Dn4000 narrow-band break index (Balogh et al. 1999).
 
     Computes the ratio of the wavelength-averaged flux density in a red
-    band (4000–4100 Å) to a blue band (3850–3950 Å): ⟨F⟩ = ∫F dλ / ∫dλ,
+    band (4000–4100 Å) to a blue band (3850–3950 Å), both published in air and
+    applied here in vacuum (:mod:`tengri.utils.break_windows`): ⟨F⟩ = ∫F dλ / ∫dλ,
     a trapezoid integral over exactly the band, with F interpolated linearly at
     the band edges, so the value does not depend on the wavelength sampling.
 
@@ -167,8 +158,8 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
         ok = den > 1e-20
         return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
-    f_blue = _mean_flux_in_band(3850.0, 3950.0)
-    f_red = _mean_flux_in_band(4000.0, 4100.0)
+    f_blue = _mean_flux_in_band(*DN4000_BLUE_AA)
+    f_red = _mean_flux_in_band(*DN4000_RED_AA)
 
     return jnp.where(
         f_blue > 0.0,

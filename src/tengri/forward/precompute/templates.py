@@ -27,7 +27,7 @@ from tengri.config.exceptions import DeadPrecomputeAxisWarning
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
-    interp_nd_triweight,
+    library_lookup,
     preintegrate_grid,
     slice_fixed_axes,
 )
@@ -297,7 +297,6 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
     """
     phot = preint.phot
     axes = preint.axes
-    edges = preint.edges
 
     @jax.jit
     def lookup(scale, *grid_params):
@@ -319,7 +318,7 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
         -----
         **JIT-compatible**: yes, uses ``jnp`` and ``interp_nd_triweight`` primitives.
         """
-        normed = interp_nd_triweight(phot, axes, edges, grid_params)
+        normed = library_lookup(phot, axes, grid_params)
         return scale * normed
 
     return lookup

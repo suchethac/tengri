@@ -45,6 +45,7 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
     SEDComponentState,
+    declared_default,
 )
 from tengri.utils.scale import log10_magnitude
 
@@ -65,6 +66,18 @@ _BACKEND_KWARG_SINKS: tuple[str, ...] = (
     "predict_nebular_sed",
     "predict_nebular_line_luminosities",
 )
+
+
+def _shock_log_lhalpha(state, params) -> float:
+    """Return log10 shock Halpha luminosity [erg/s].
+
+    Prefers the ``state.derived`` publication, then the parameter, then the
+    declared ``SHOCK_PARAMS`` default.
+    """
+    from tengri.components.nebular._params import SHOCK_PARAMS
+
+    declared = declared_default(SHOCK_PARAMS, "shock_log_lhalpha")
+    return state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", declared))
 
 
 @cache
@@ -316,7 +329,7 @@ class NebularSEDComponent(TemplateThreading):
             ),
             ParamDeclaration(
                 "neb_fesc_lya",
-                Fixed(0.0),
+                Fixed(1.0),
                 "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
@@ -572,7 +585,7 @@ class NebularSEDComponent(TemplateThreading):
             "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
-            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
+            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 1.0)),
             # #2436: the fraction of the NON-escaping budget dust absorbs, not
             # the retired absolute share -- backends convert via `lyc_shares`.
             "neb_fdust_frac": jnp.asarray(params.get("neb_fdust_frac", 0.0)),
@@ -865,6 +878,12 @@ class NebularSEDComponent(TemplateThreading):
         grid_arrays = (
             template_data.get("nebular_grid") if isinstance(template_data, dict) else None
         )
+        # The CLOUDY age-resolved band table (WavePrecomp, #2324) rides beside the
+        # grid, under its own key, for the same reason: the ``nebular`` slot is the
+        # backend's own bundle and is peeled below.
+        band_table = (
+            template_data.get("nebular_band_table") if isinstance(template_data, dict) else None
+        )
         if isinstance(template_data, dict) and "nebular" in template_data:
             template_data = template_data["nebular"]
 
@@ -887,7 +906,7 @@ class NebularSEDComponent(TemplateThreading):
             # Source the Halpha luminosity normalization: prefer the
             # state.derived publication (e.g. from a future stellar
             # extension) over the param's Fixed default.
-            log_lha = state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", 40.0))
+            log_lha = _shock_log_lhalpha(state, params)
             l_shock_halpha = jnp.power(10.0, jnp.asarray(log_lha))
             nebular_sed = self.backend.predict_nebular_sed(
                 wavelength=state.wave,
@@ -1175,6 +1194,14 @@ class NebularSEDComponent(TemplateThreading):
                 derived_overrides["nebular_line_phot_waves_rest"] = jnp.asarray(
                     grid.sed_line_waves
                 )
+                if grid.cont_subband_frac is not None:
+                    # The observed sub-bands at the EVALUATION redshift: each SED
+                    # line spread over its rendered profile, plus the continuum's
+                    # chunks. A dust screen reads them, and so does the IGM, which
+                    # steps across Ly-alpha inside a band.
+                    phi_sub, lam_sub = nebular_subband_decomposition(packed, z, grid)
+                    derived_overrides["nebular_phot_lnu_subband_precomp"] = phi_sub
+                    derived_overrides["nebular_subband_waves_rest_precomp"] = lam_sub
                 derived_overrides["nebular_phot_lnu_precomp"] = line_bands.sum(axis=0) + cont_band
             else:
                 derived_overrides["nebular_phot_lnu_precomp"] = mix_dig_grid_reconstruction(
@@ -1205,16 +1232,11 @@ class NebularSEDComponent(TemplateThreading):
                 # integrate an all-zero shock SED over every filter on each call;
                 # ``sed_shock`` is absent, as it is when no shock component runs.
                 derived_overrides.pop("sed_shock", None)
-                # Per-subband nebular photometry (observed and rest frames)
-                if grid.serves_split_bands:
-                    # The observed sub-bands at the EVALUATION redshift: one chunk per
-                    # SED line (at its rest wavelength) plus the continuum's chunks.
-                    # The ``log_phot_subband_per_qh`` channel is the reference
-                    # redshift's and is not read here.
-                    phi_sub, lam_sub = nebular_subband_decomposition(packed, z, grid)
-                    derived_overrides["nebular_phot_lnu_subband_precomp"] = phi_sub
-                    derived_overrides["nebular_subband_waves_rest_precomp"] = lam_sub
-                else:
+                # Per-subband nebular photometry (observed and rest frames). A split
+                # table published the observed chunks above at the evaluation
+                # redshift; its ``log_phot_subband_per_qh`` channel is the reference
+                # redshift's and is not read.
+                if not grid.serves_split_bands:
                     derived_overrides["nebular_phot_lnu_subband_precomp"] = (
                         mix_dig_grid_reconstruction(
                             reconstruct_nebular_phot_subband,
@@ -1267,37 +1289,54 @@ class NebularSEDComponent(TemplateThreading):
             from tengri.observation.photometry import lnu_filter_integral
 
             z = jnp.asarray(require_redshift(params, "components.nebular.component.apply"))
-            # Filter-integrate nebular_sed directly via ``lnu_filter_integral``
-            # (ADR-0016, #398.e). Replaces the previous
-            # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
-            # that applied and immediately undid the (1+z)/(4π d_L²)
-            # dimming. Publishes the bare filter-integrated rest-frame L_ν.
-            nebular_phot_lnu_precomp = jnp.asarray(
-                [
-                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
-            derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
-            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
-            # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot: the SAME integral with redshift=0, not the observed-band
-            # value reused. Reusing it is what made the LUT report a different
-            # physical quantity from the exact path (769 % in des_g at z=0.5).
-            derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
-                [
-                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            if band_table is not None:
+                # CLOUDY band table (#2324): the observed and rest band rows are the
+                # contraction over ages of the tabulated per-age bands, so the
+                # per-call filter integrals are skipped. Exact mode keeps them.
+                from tengri.components.nebular.cloudy_band_table import table_band_photometry
+
+                log_z_gas = common_kwargs["neb_logZ_gas"]
+                bands = table_band_photometry(
+                    band_table,
+                    self.backend,
+                    jnp.log10(jnp.asarray(state.derived["ssp_ages_yr"])),
+                    state.derived["age_weights"],
+                    log_z,
+                    log_z if log_z_gas is None else log_z_gas,
+                    common_kwargs["neb_logU"],
+                    common_kwargs["neb_fesc"],
+                    common_kwargs["neb_fdust_frac"],
+                    common_kwargs["neb_fesc_lya"],
+                )
+                derived_overrides["nebular_phot_lnu_precomp"] = bands[0]
+                derived_overrides["nebular_restband_lnu_precomp"] = bands[1]
+            else:
+                nebular_phot_lnu_precomp = jnp.asarray(
+                    [
+                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+                derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
+                # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+                # z=0, so the filter sits in the REST frame and samples the rest SED at
+                # its own pivot: the SAME integral with redshift=0, not the observed-band
+                # value reused. Reusing it is what made the LUT report a different
+                # physical quantity from the exact path (769 % in des_g at z=0.5).
+                derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
+                    [
+                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
 
         # Spectrum LUT family (SpectrumPrecomp): point-sample the *un-attenuated*
         # rest-frame nebular SED at the pixel wavelengths (a pixel is a single

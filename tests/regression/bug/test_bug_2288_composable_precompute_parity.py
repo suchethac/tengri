@@ -46,10 +46,11 @@ from tests._data_skip import requires_grahsp
 
 pytestmark = pytest.mark.regression_bug
 
-#: Interior-midpoint bound: measured max 0.159 on the standard 21-node axis
-#: (plateau of the triweight kernel's Jensen bias on an exponential-in-
-#: coordinate quantity); pinned with ~1.6x headroom, well under the 50% rule.
-_INTERIOR_MAX_REL_ERR = 0.25
+#: Interior-midpoint bound. Re-pinned for #2861 PCHIP lookup: the composable
+#: lookup is now node-exact PCHIP. Old -> new measured max interior relative
+#: error on the standard 21-node axis: 0.159 (triweight Jensen-bias plateau) ->
+#: 2.4e-7 (PCHIP interpolation error). Pinned with ~40x headroom.
+_INTERIOR_MAX_REL_ERR = 1e-5
 
 _WAVE_REST = np.logspace(2.0, 6.0, 1500, dtype=np.float64)
 _AXIS_GRID = np.linspace(43.0, 46.0, 21)
@@ -131,12 +132,12 @@ def test_interior_accuracy_bounded_on_standard_grid():
     max_err = _max_interior_rel_err(lookup)
     assert max_err < _INTERIOR_MAX_REL_ERR, (
         f"interior midpoint max relative error {max_err:.3f} exceeds the pinned "
-        f"bound {_INTERIOR_MAX_REL_ERR} (measured 0.159 on this grid at pin time)"
+        f"bound {_INTERIOR_MAX_REL_ERR} (measured 2.4e-7 on this grid at pin time, #2861)"
     )
-    # The bound must also stay a measurement, not a vacuously huge ceiling:
-    # the kernel's plateau is real, so the measured max cannot be tiny either.
-    assert max_err > 0.05, (
-        f"interior max {max_err:.4f} is far below the known kernel plateau (~0.16); "
+    # The bound must also stay a measurement, not a vacuous ceiling: the PCHIP
+    # interior error is small but nonzero on this exponential-in-coordinate grid.
+    assert max_err > 1e-9, (
+        f"interior max {max_err:.3e} is at the float64 noise floor; "
         "the measurement is probably no longer evaluating the exponential regime"
     )
 

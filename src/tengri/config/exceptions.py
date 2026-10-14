@@ -333,6 +333,16 @@ class DeadFitWarning(UserWarning):
     """
 
 
+class SSPMassRemainingFallbackWarning(UserWarning):
+    """An SSP grid has no ``ssp_mass_remaining`` table; a generic fit is used instead (#2751).
+
+    The surviving-mass fraction then comes from the metallicity-independent
+    DSPS sigmoid rather than the library's own stellar mass loss, so
+    ``stellar_mass_surviving`` is only as accurate as that fit. The warning
+    names the grid file and the fallback used.
+    """
+
+
 class CorruptEnergyBalanceWarning(UserWarning):
     """The dust energy-balance integrand was non-finite (#1527).
 
@@ -403,6 +413,22 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class ZTableCoverageWarning(AdvisoryWarning):
+    """A fitted redshift prior reaches past the redshift table by a support gap.
+
+    The redshift tables (stellar free-z, term and band responses) are built on
+    ``WavePrecomp``'s ``z_min``/``z_max``, which default to the redshift prior.
+    A narrower explicit table leaves part of the prior outside it. Past the table
+    the value is held at the band edge, so the prior is not represented there and
+    the gradient is zero. Half a node spacing of overhang is extrapolated
+    (a numerical gap); a larger one is a support mismatch and is reported here.
+
+    See Also
+    --------
+    tengri.components._z_response.warn_if_z_table_narrower_than_prior
+    """
+
+
 class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
     """A free redshift's own range can outrun a z-capped onset parameter's ceiling.
 
@@ -440,10 +466,6 @@ class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
     parameter(s) an explicit, tighter ceiling, to silence the condition
     itself rather than just the warning.
 
-    See Also
-    --------
-    tengri.parameters.groups._narrow_free_priors_to_z
-        The z_floor-based cap this warning reports the blind spot of.
     """
 
 
@@ -497,6 +519,25 @@ class CloudyGridIsochroneMismatchWarning(AdvisoryWarning):
     """
 
 
+class CueIonizingShapeWarning(AdvisoryWarning):
+    """A young-population ionizing shape from the SSP lies outside Cue's training range.
+
+    Cue is queried with seven parameters that describe the shape of the
+    ionizing continuum (``ionspec_index1..4``, ``ionspec_logLratio1..3``),
+    fitted to the SSP. The emulator was trained inside a fixed box for each (the
+    Cue reference code's range; Li et al. 2025, arXiv:2405.04598, Table 1, with
+    two floors printed differently). When the shape fitted to the SSP leaves that
+    box (typically a very hard or very soft ionizing continuum, or a coarsely
+    sampled Lyman continuum) the network would be extrapolating, so tengri clamps
+    the parameter to the nearest bound before the
+    network (a straight-through clamp, gradients kept) and warns here.
+
+    The remedy is an SSP with a densely sampled Lyman continuum below 912 A
+    (for example ``fsps_mist_c3k_a_chabrier`` or ``fsps_prsc_miles_chabrier``),
+    or an explicit ``ionspec_*`` override.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 
@@ -527,6 +568,30 @@ class DegenerateParameterPairWarning(AdvisoryWarning):
     tengri.components.stellar.sps.dsps_wrapper.has_alpha_grid
         The 4D test that decides whether [alpha/Fe] is a real axis (#226) or a
         reparameterization of metallicity.
+    """
+
+
+class FilterCoverageWarning(AdvisoryWarning):
+    """A photometric band reaches past the model's observed-frame wavelength axis.
+
+    The model SED is zero outside its own axis, but a band's denominator
+    integrates over the filter's whole support. A band partly or wholly beyond
+    the axis therefore returns its covered fraction, or zero, rather than a
+    flux (#2620). Nothing raises at build time because the model is not wrong,
+    only unable to say anything about that band, and whether a fit should refuse
+    it depends on whether the band is masked in the data.
+
+    Emitted once per redshift at which the band is checked: the fixed redshift,
+    the finite ends of a free redshift prior, and the ends of ``catalog_z_range``.
+    Widen the model's axis (a longer SSP grid, or a dust or radio component that
+    extends it) or drop the band to silence the warning.
+
+    See Also
+    --------
+    tengri.observation.photometry.filter_coverage_fraction
+        The per-band out-of-axis fraction this warning reports.
+    tengri.observation.photometry.FILTER_COVERAGE_TOLERANCE
+        The fraction above which a band is reported.
     """
 
 
@@ -593,6 +658,29 @@ class NUTSTreeDepthWarning(UserWarning):
     Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit*
     that already ran, not a model being constructed, and must survive the
     introspection paths that silence advisories wholesale.
+    """
+
+
+class FrozenMovingChainWarning(UserWarning):
+    """Chains that move but never mix: each stays in its own narrow region.
+
+    A fit can return normally with zero divergences while every chain jitters
+    by a sliver of the posterior width around a center that differs from the
+    other chains' centers. R-hat can flag this, but the dead-fit guards cannot:
+    they need all-divergent draws or an exactly constant column, and the
+    divergence refusal needs a fraction of 0.9. The signature is a within-chain
+    spread that is tiny against both the between-chain disagreement and the
+    posterior width (#2112).
+
+    Raised as a warning, never an error: the samples are still a valid record of
+    where each chain went, and a caller may want to inspect them. The flag
+    ``posterior.diagnostics["frozen_moving_chains"]`` is ``True`` whenever this
+    fires, so a pipeline can check it without parsing the message. The remedy is
+    the same as for a dead fit: a longer warmup, a smaller step size, or a
+    mass-matrix choice that lets the chains find the posterior's scale.
+
+    Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit* that
+    already ran, not a model being constructed.
     """
 
 

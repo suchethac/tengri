@@ -43,6 +43,7 @@ from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
+from tengri.utils.scale import safe_ratio
 
 __all__ = ["AstrodustIRConfig", "AstrodustIRSEDComponent"]
 
@@ -153,6 +154,8 @@ class AstrodustIRSEDComponent(EmissionComponent):
     #: into the graph. The build-time resolution pass therefore skips this
     #: component and ``predict`` resolves per call (#1738).
     resolves_templates_at_trace_time: ClassVar[bool] = True
+
+    cmb_supported: ClassVar[bool] = True
 
     # Free parameter (user-facing name, prefix-stripped): starlight intensity.
     lgU = Uniform(
@@ -386,7 +389,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         # the shared quadrature, so the published spectrum integrates to L_ir
         # exactly regardless of the native template grid spacing.
         t_integral = integrate_lnu_over_nu(combined_spectrum, jnp.asarray(wave))
-        norm = jnp.where(t_integral > 0.0, L_ir / t_integral, 0.0)
+        norm = safe_ratio(L_ir, t_integral)
 
         sed_emission = norm * combined_spectrum
         return sed_in + sed_emission, {"sed_dust_ir": sed_emission}

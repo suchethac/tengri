@@ -73,7 +73,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# We use an FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0 and solar gas-phase metallicity (Z_gas/Z_sun = 1.0). Stellar metallicity is free to vary; gas-phase metallicity is fixed by the grid. These are independent parameters, so the nebular contribution does not respond to fitted stellar metallicity. The code marks this assumption by emitting a `BakedInNebularWarning` on fit start.
+# We use an FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0 and solar gas-phase metallicity (Z_gas/Z☉ = 1.0). Stellar metallicity is free to vary; gas-phase metallicity is fixed by the grid. These are independent parameters, so the nebular contribution does not respond to fitted stellar metallicity. The code marks this assumption by emitting a `BakedInNebularWarning` on fit start.
 
 # %%
 SSP_NAME = "prsc_miles_chabrier_wNE"
@@ -98,7 +98,7 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# The model has a double power-law SFH with single-component Calzetti dust attenuation (V-band optical depth τ_V free), baked-in nebular emission, free stellar metallicity, and redshift fixed at z = 0.05: six free parameters. The double power-law has four free shape parameters (alpha, beta, tau_gyr, log_total_mass) that control whether the SFR rises, peaks, and plateaus while remaining star-forming at the present epoch. The formation epoch, `age_gyr`, is pinned at 13.1 Gyr lookback, the age of the universe at z = 0.05 (formation at the Big Bang), following the convention of BAGPIPES. Pinning the formation epoch removes a strong (age, tau, alpha) degeneracy from the posterior. Infrared dust re-emission, full photoionized nebular grids, and active galactic nucleus components are shown in `02_sed_anatomy.py`.
+# The model has a double power-law SFH with single-component Calzetti dust attenuation (V-band optical depth τ_V free), baked-in nebular emission, free stellar metallicity, and redshift fixed at z = 0.05: six free parameters. The double power-law has four free shape parameters (alpha, beta, tau_gyr, log_total_mass) that control whether the SFR rises, peaks, and plateaus while remaining star-forming at the present epoch. The formation epoch, `age_frac`, is pinned at 1.0 of the age of the universe at z = 0.05, that is 13.09 Gyr lookback (formation at the Big Bang), following the convention of BAGPIPES. Pinning the formation epoch removes a strong (age, tau, alpha) degeneracy from the posterior. Infrared dust re-emission, full photoionized nebular grids, and active galactic nucleus components are shown in `02_sed_anatomy.py`.
 #
 # A single Calzetti screen reddens the entire stellar population uniformly. This simplicity makes the model suitable for a quickstart demonstration, prioritizing interpretability and speed over the realism of a stratified interstellar medium.
 
@@ -107,7 +107,7 @@ sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=WavePrecomp(),
-    sfh={"type": "dpl", "all_params": FREE, "age_gyr": 13.1},  # formation at the Big Bang
+    sfh={"type": "dpl", "all_params": FREE, "age_frac": Fixed(1.0)},  # formation at the Big Bang
     dust_attenuation={
         "type": "single_component",
         "law": "calzetti",

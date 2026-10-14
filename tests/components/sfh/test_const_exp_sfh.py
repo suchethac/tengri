@@ -130,6 +130,7 @@ class TestConstExpRegistry:
             "sfh_cexp_tau_gyr",
             "sfh_cexp_quench_gyr",
             "sfh_cexp_age_gyr",
+            "sfh_cexp_age_frac",
         }
         assert set(spec.params.keys()) == expected
 

@@ -38,13 +38,13 @@ import numpy as np
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn.qsogen import compute_qsogen_sed as _compute_qsogen_sed
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import PreintegratedGrid
-from tengri.utils.interpolation import edges_for_grid
 
 # ── Axis definitions ──────────────────────────────────────
 
@@ -153,6 +153,27 @@ def _build_grid_qsogen(
 # ── Protocol-shaped entry points ──────────────────────────────────
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -202,10 +223,10 @@ def precompute(
     AGN SED fits. Other QSOgen parameters are kept at their defaults during
     precomputation to avoid exploding the grid dimensionality.
     """
+    # agn_plslp1 has no parameter declaration, so no reach widens its literal axis.
     if plslp1_grid is None:
         plslp1_grid = np.array([-0.8, -0.35, 0.1], dtype=np.float64)
-    if ebv_grid is None:
-        ebv_grid = np.array([0.0, 0.05, 0.1, 0.2, 0.3], dtype=np.float64)
+    ebv_grid = _axis("agn_ebv", ebv_grid, np.array([0.0, 0.05, 0.1, 0.2, 0.3]), parameters)
 
     result = {
         "grid_phot": _build_grid_qsogen(
@@ -307,10 +328,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: return a wrapped lookup that takes remaining free params
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    if axes:
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    else:
-        edges = ()
 
     @jax.jit
     def qsogen_phot_collapsed(agn_log_lbol, *free_axis_values):
@@ -319,9 +336,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         l_bol_lsun = 10.0**agn_log_lbol
-        normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
+        normed = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_bol_lsun * normed
 
     return qsogen_phot_collapsed

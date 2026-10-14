@@ -106,7 +106,7 @@ sed_model = SEDModel.build(
     observation=obs,
     approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(
-        all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+        all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_frac=FREE, width_gyr=FREE
     ),
     dust_attenuation=builders.dust.two_component(
         all_params=Fixed(DEFAULT),
@@ -251,7 +251,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# The fit takes 35 seconds, with max R-hat 1.000. Spectroscopy alone recovers
+# The fit takes 35 seconds, with max R-hat 1.000. Spectroscopy alone constrains
 # stellar age, metallicity, and mass sharply from the absorption features, but dust
 # normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
 # adds broadband photometry, which fixes dust and tightens convergence.

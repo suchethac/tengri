@@ -56,6 +56,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Fixed, Uniform
+from tengri.parameters.parameters import Parameters
 from tests._data_skip import (
     CAT3D_WIND_GRID,
     SILVA04_GRID,
@@ -117,13 +119,39 @@ _ADAPTERS = [
     ),
     pytest.param(
         "disc_precompute",
-        {"model": "cigale_disc"},
+        {
+            "model": "cigale_disc",
+            "parameters": Parameters(
+                agn_model="composable",
+                agn_disc_block="skirtor",
+                agn_torus_block="none",
+                agn_cigale_disk_delta=Fixed(0.0),
+            ),
+        },
         {"model": "cigale_disc"},
         (),
         {},
         2,
         _DECADE,
         id="cigale_disc",
+    ),
+    pytest.param(
+        "disc_precompute",
+        {
+            "model": "cigale_disc",
+            "parameters": Parameters(
+                agn_model="composable",
+                agn_disc_block="skirtor",
+                agn_torus_block="none",
+                agn_cigale_disk_delta=Uniform(-0.5, 0.5),
+            ),
+        },
+        {"model": "cigale_disc"},
+        (0.2,),
+        {},
+        1,
+        _DECADE,
+        id="cigale_disc_free_delta",
     ),
     pytest.param(
         "qsogen_precompute",
@@ -163,9 +191,15 @@ _ARGS = ("module", "pre_kwargs", "build_kwargs", "axes", "call_kwargs", "ndim", 
 
 
 def _build(module, pre_kwargs, build_kwargs, waves, trans):
-    """Import the adapter, precompute against the filter set, return its lookup."""
+    """Import the adapter, precompute against the filter set, return its lookup.
+
+    A ``parameters`` entry in ``pre_kwargs`` is the declared parameter set the adapter reads its
+    axes from; without one the axes are the declared priors (free).
+    """
     adapter = importlib.import_module(f"tengri.components.agn.{module}")
-    result = adapter.precompute(waves, trans, redshift=0.1, parameters=None, **pre_kwargs)
+    kwargs = dict(pre_kwargs)
+    parameters = kwargs.pop("parameters", None)
+    result = adapter.precompute(waves, trans, redshift=0.1, parameters=parameters, **kwargs)
     return adapter.build_lookup(result, **build_kwargs)
 
 

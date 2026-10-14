@@ -156,7 +156,6 @@ UNCURATED_DOIS = frozenset(
         "10.1051/0004-6361:20078829",  # mean_sfh.py
         "10.1086/130714",  # _recombination_coeffs.py
         "10.1086/151796",  # disc.py +1
-        "10.1086/159815",  # balmer.py
         "10.1086/161102",  # xray.py
         "10.1086/162480",  # _polar_smc_opacity.py
         "10.1086/162686",  # attenuation.py
@@ -173,7 +172,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/342486",  # attenuation.py +1
         "10.1086/423885",  # polar_dust.py
         "10.1086/506270",  # blr.py
-        "10.1086/506525",  # disc.py +1
         "10.1086/509629",  # radio_precompute.py
         "10.1086/510378",  # drude_profiles.py +4
         "10.1086/519990",  # xray.py
@@ -229,7 +227,6 @@ UNCURATED_DOIS = frozenset(
         "10.3847/1538-4357/ac6959",  # _apply.py
         "10.3847/1538-4365/aa6541",  # mappings_photo.py +3
         "10.3847/1538-4365/aa96ad",  # unified.py
-        "10.3847/2041-8213/aa6838",  # cat3d_precompute.py
         "10.48550/arxiv.1008.4686",  # noise.py
         "10.5281/zenodo.14140949",  # mappings_photo.py
         "10.7910/dvn/3b6e6s",  # astrodust_hd23.py +1
@@ -255,7 +252,6 @@ BIB_TITLE_DRIFT = frozenset(
         "10.1086/589652",  # bib: The MAPPINGS III Library of Fast Radiative Shock Models
         "10.1088/0004-637x/780/2/172",  # bib: Andromeda's Dust
         "10.1111/j.1365-2966.2012.21455.x",  # bib: Far-infrared spectral energy distributio
-        "10.3847/0004-637x/825/1/7",  # bib: The Evolution of Normal Galaxy X-Ray Emission t
         "10.3847/1538-4357/ab133c",  # bib: How to Measure Galaxy Star Formation Histories.
         "10.3847/1538-4357/acc4c2",  # bib: The Astrodust+PAH Model: A Unified Description o
         "10.3847/1538-4365/abef67",  # bib: Stellar Population Inference with Prospector

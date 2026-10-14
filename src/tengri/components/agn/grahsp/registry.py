@@ -126,9 +126,9 @@ def grahsp(
     agn_grahsp_si : float, optional
         Si feature strength (paper ``Si``). Default ``0.0``.
     agn_grahsp_cool_lam_um, agn_grahsp_cool_width : float, optional
-        Cool dust peak [um] / log-width [dex]. Defaults ``17.0`` / ``0.45``.
+        Cool dust peak [um] / log-Gaussian standard deviation [dex]. Defaults ``17.0`` / ``0.45``.
     agn_grahsp_hot_lam_um, agn_grahsp_hot_width : float, optional
-        Hot dust peak [um] / log-width [dex]. Defaults ``2.0`` / ``0.5``.
+        Hot dust peak [um] / log-Gaussian standard deviation [dex]. Defaults ``2.0`` / ``0.5``.
     agn_grahsp_hot_fcov : float, optional
         Hot/cool peak ratio in :math:`\lambda L_\lambda` (paper
         :math:`f_\mathrm{hot}`). Default ``1.0``.

@@ -263,6 +263,7 @@ class ForwardModel:
         "name",
         "predict_observables_jit",
         "predict_properties",
+        "threaded_template_inputs",
     )
 
     def _single_inner_sed(self, what: str):
@@ -1097,7 +1098,7 @@ class ForwardModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``. Must be ``None`` if
             ``data`` is a :class:`Data` record.
-        method : str, default ``"vi"``
+        method : str, default ``"mcmc_nuts_fast"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).

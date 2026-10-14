@@ -57,7 +57,7 @@ from tengri.components.dust.wg00_model import (
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
-from tengri.components.nebular._models import nebular_backend_carries_freefree
+from tengri.components.nebular._models import nebular_carries_freefree
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
@@ -390,6 +390,7 @@ def build_components(
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
     agn_polar_law: str = "smc",
+    agn_ir_frac_window: tuple = (0.0, 0.0),
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -415,6 +416,7 @@ def build_components(
     dust_t_birth_yr: float = 1e7,
     dust_transition_width_dex: float = 0.0,
     dust_ir_diffuse_screen: bool = False,
+    dust_ir_cmb: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
     astrodust_f_cnm: float = 0.28,
@@ -464,7 +466,11 @@ def build_components(
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
     radio_include_freefree: bool | None = None,
+    radio_ir_window: str | None = None,
+    radio_sf_nu_ref: float | None = None,
+    radio_agn_loudness_ref: str = "4400",
     xray_model: str = "yang20",
+    xray_alpha_ox_mode: str = "delta",
     use_xray: bool = False,
     use_igm: bool = False,
     igm_model: str = "inoue",
@@ -526,9 +532,9 @@ def build_components(
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
     age_kernel : str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
-        ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
-        auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
-        for the accuracy/cost tradeoff (#964).
+        ``"dsps"`` (the same integration under its historical name, #2683), or
+        ``None`` (default) to auto-select. See
+        :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`.
     nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
@@ -556,6 +562,14 @@ def build_components(
         If ``False`` no dust component is added (no attenuation, no IR).
     use_radio, use_xray, use_igm : bool
         Add the corresponding adapter to the chain.
+    radio_sf_nu_ref : float or None
+        Frequency [Hz] at which ``radio_q_ir`` anchors the ``bell2003`` synchrotron
+        (grammar key ``radio.sf.nu_ref``). ``None`` keeps Bell (2003)'s 1.4 GHz;
+        ``"21cm"`` in the grammar gives CIGALE's 1.42758 GHz (#2762).
+    radio_agn_loudness_ref : str
+        AGN radio-loudness reference (grammar key ``radio.agn.loudness_ref``): ``"4400"``
+        (default, the 4400 A disc luminosity) or ``"2500_30deg"`` (CIGALE's 2500 A at
+        30 deg). The latter needs ``agn_model="composable"`` (#2663).
     radio_include_freefree : bool or None
         Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
         ``False`` when the declared nebular backend carries a free-free continuum
@@ -566,6 +580,12 @@ def build_components(
         applies only from the SSP grid edge upward
         (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
         always wins.
+    radio_ir_window : str or None
+        Rest-wavelength window of the dust-emission SED integrated to form the radio
+        block's ``L_IR``: ``"total"`` (the dust power as published, CIGALE's convention),
+        ``"tir"`` (8-1000 um) or ``"fir"`` (42.5-122.5 um, nominal IRAS band). ``None``
+        (default) takes the selected star-formation model's own paper window. See
+        :class:`RadioSEDComponentConfig` (``ir_window``, #2763).
 
     Returns
     -------
@@ -740,6 +760,14 @@ def build_components(
             )
             # Set the opt-in diffuse-screen attenuation flag (#2533)
             emission_component.diffuse_screen = dust_ir_diffuse_screen
+            # Opt-in CMB heating / contrast of tabulated IR models (#2766).
+            if dust_ir_cmb and not emission_component.cmb_supported:
+                raise ValueError(
+                    f"dust_ir_cmb=True with dust_emission {dust_emission_model!r}: this model "
+                    "already applies the da Cunha et al. (2013) CMB heating and contrast "
+                    "unconditionally (or has no CMB option); refusing to apply it twice."
+                )
+            emission_component.cmb = dust_ir_cmb
             components.append(emission_component)
 
     # 3. Nebular (optional)
@@ -813,6 +841,7 @@ def build_components(
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
                     agn_polar_law=agn_polar_law,
+                    agn_ir_frac_window=agn_ir_frac_window,
                 ),
             )
         )
@@ -828,38 +857,68 @@ def build_components(
         # (#2574).
         include_freefree = radio_include_freefree
         freefree_wave_min = None
+        # One predicate for both radio thermal gates (#2962): the declared backend
+        # name, or a backend object whose analytic tier supplies the free-free.
+        nebular_carries_ff = nebular_carries_freefree(nebular_backend, nebular_backend_instance)
         if include_freefree is None:
-            if nebular_backend_carries_freefree(nebular_backend):
+            if nebular_carries_ff:
                 include_freefree = False
-            elif (
-                getattr(ssp_data, "nebular", "unknown") == "included"
-                and radio_sfr_mode != "bell2003_split"
-            ):
+            elif getattr(ssp_data, "nebular", "unknown") == "included":
                 # A nebular-included SSP holds the nebular continuum inside its
                 # flux up to the SSP grid edge, so the radio thermal term starts
                 # at the edge: one thermal term below it, and the radio term
-                # alone beyond, where the SSP has no flux (#2574).
+                # alone beyond, where the SSP has no flux (#2574). The
+                # bell2003_split thermal law takes the same window (#2962).
                 # The ``nebular`` stamp is the declaration Cue and CloudyGrid
                 # read (#1014); the declared backend name cannot tell, because
                 # ``neb={'type': 'none'}`` also builds a baked-in backend. An
                 # unstamped grid keeps the term over its whole range.
                 freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
-        components.append(
-            _resolve_registry_component(
-                "radio",
-                "radio",
-                config=RadioSEDComponentConfig(
-                    sfr_mode=radio_sfr_mode,
-                    agn_radio_model=radio_agn_model,
-                    include_freefree=include_freefree,
-                    # q calibrates the total unless the user pinned ``freefree: False``,
-                    # which is the non-thermal (CIGALE) reading of q (#2590).
-                    q_is_total=radio_include_freefree is not False,
-                    freefree_wave_min=freefree_wave_min,
-                ),
+        if radio_agn_loudness_ref != "4400" and agn_model != "composable":
+            from tengri.config.exceptions import ConfigError
+
+            raise ConfigError(
+                f"radio: loudness_ref={radio_agn_loudness_ref!r} reads the composable AGN's "
+                "2500 A disc luminosity, which a monolithic AGN does not publish (it would "
+                "fall back silently to the L_bol correction). Use agn={'type': 'composable', ...} "
+                "or leave loudness_ref at its '4400' default."
             )
+        radio_config = RadioSEDComponentConfig(
+            sfr_mode=radio_sfr_mode,
+            agn_radio_model=radio_agn_model,
+            include_freefree=include_freefree,
+            # q calibrates the total unless the user pinned ``freefree: False``,
+            # which is the non-thermal (CIGALE) reading of q (#2590).
+            q_is_total=radio_include_freefree is not False,
+            freefree_wave_min=freefree_wave_min,
+            ir_window=radio_ir_window,
+            # One owner of the thermal emission: the split's own 10 % law
+            # gives way to a nebular continuum that carries free-free (#2764).
+            split_thermal=not (radio_sfr_mode == "bell2003_split" and nebular_carries_ff),
+            **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
+            agn_loudness_ref=radio_agn_loudness_ref,
         )
+        if (
+            radio_ir_window is None
+            and radio_config.resolved_ir_window != "total"
+            and dust_emission_model is None
+        ):
+            import warnings
+
+            from tengri.config.exceptions import AdvisoryWarning
+
+            warnings.warn(
+                f"radio: the {radio_sfr_mode!r} model defaults to ir_window="
+                f"{radio_config.resolved_ir_window!r}, but there is no dust_emission block to "
+                "integrate, so the published total dust power L_ir is used instead. Add a "
+                "dust_emission block, or set radio={'sf': {'ir_window': 'total'}} explicitly "
+                "to silence this.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
+        components.append(_resolve_registry_component("radio", "radio", config=radio_config))
+
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 
@@ -893,7 +952,9 @@ def build_components(
                 _resolve_registry_component(
                     "xray",
                     "xray",
-                    config=XRaySEDComponentConfig(model=xray_model),
+                    config=XRaySEDComponentConfig(
+                        model=xray_model, alpha_ox_mode=xray_alpha_ox_mode
+                    ),
                 )
             )
     if use_igm or use_dla:
@@ -929,8 +990,38 @@ def build_components(
     # dead code (the sort guarantees publisher-before-consumer);
     # the remaining checks are duplicate-publish and units mismatch.
     validate_pipeline(components)
+    _warn_unfed_optional_pair(components)
 
     return components
+
+
+def _warn_unfed_optional_pair(components: Sequence[SEDComponent]) -> None:
+    """Warn when a component reads ``L_ir`` and ``L_agn_bol`` and neither is published.
+
+    The optional-read fallback is 0.0, so a radio component with no dust
+    (energy-balance L_ir) and no AGN (L_agn_bol) in the chain silently emits
+    zero. The fallback is correct for the pipelines that legitimately omit both,
+    so this is an advisory at build time rather than an error.
+    """
+    import warnings
+
+    from tengri.config.exceptions import AdvisoryWarning
+    from tengri.forward.orchestrator import _optional_inputs, _outputs
+
+    pair = {"L_ir", "L_agn_bol"}
+    published = {key.name for c in components for key in _outputs(c)}
+    if pair & published:
+        return
+    for component in components:
+        read = {key.name for key in _optional_inputs(component)}
+        if pair <= read:
+            warnings.warn(
+                f"{type(component).__name__}: neither L_ir (dust) nor L_agn_bol (AGN) is "
+                "in this chain, so the radio output is zero (both fall back to 0.0). "
+                "Add a dust_attenuation/dust_emission block or an AGN block, or drop radio.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
 
 
 def chain_summary(components: Sequence[SEDComponent]) -> str:

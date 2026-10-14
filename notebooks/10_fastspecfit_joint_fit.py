@@ -125,7 +125,7 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # per-Q_H nebular grid. Build-time `approx=` sets the path `predict_*` uses;
 # `fit()` chooses its own path and defaults to `"auto"`, which picks the fast
 # tables, so the comparison passes `approx=` to `fit` directly. The line
-# wavelengths for the feature grid default to those in the observation.
+# wavelengths for the feature grid default to those in the observation. Timings are taken on one machine in one process, so the ratios show the cost structure, not a benchmark.
 
 
 # %%
@@ -175,7 +175,7 @@ def build(line_data, approx):
 # %%
 TRUTH = {
     "sfh_dpl_log_total_mass": 10.2,
-    "sfh_dpl_age_gyr": 6.0,
+    "sfh_dpl_age_frac": 6.0 / tengri.utils.cosmology.age_at_z(Z_GAL),  # 6.0 Gyr at z = 0.1
     "sfh_dpl_tau_gyr": 5.0,
     "sfh_dpl_alpha": 1.0,
     "sfh_dpl_beta": 3.0,

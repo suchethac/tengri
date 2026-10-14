@@ -174,3 +174,62 @@ def test_a_dusty_nebular_grid_takes_the_igm_at_its_sub_band_nodes(ssp):
     reference = _model(ssp, BANDS, z, None, **groups).predict_photometry({})
     worst = _worst(lut.predict_photometry({}), reference)
     assert worst < 0.02, f"grid-served dusty nebular off the integrator by {worst:.3%}"
+
+
+#: Free-redshift probes where Ly-alpha sits inside F090W (6.5, 7.0) and F115W (8.0, 8.5).
+_GRID_Z = (6.5, 7.0, 8.0, 8.5)
+
+
+@pytest.fixture(scope="module")
+def free_z_grid(ssp):
+    """A dust-free, free-redshift nebular grid model and the integrator's photometry."""
+    from tengri import FeaturePrecomp, Uniform
+
+    common = dict(
+        ssp_data=ssp,
+        observation=tengri.Observation(photometry=tengri.Photometry.from_names(BANDS)),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        igm={"type": "inoue", "all_params": Fixed(DEFAULT)},
+        redshift=Uniform(6.0, 9.0),
+    )
+    lut = SEDModel.build(approx=(WavePrecomp(z_min=6.0, z_max=9.0), FeaturePrecomp()), **common)
+    exact = SEDModel.build(approx=None, **common)
+    state = lut.predict_state({"redshift": 7.0}, observables_only=True)
+    assert state.derived.get("nebular_phot_lnu_lines_precomp") is not None, (
+        "the nebular grid no longer serves this dust-free model; the probe tests nothing"
+    )
+    return lut, {z: exact.predict_photometry({"redshift": z}) for z in _GRID_Z}
+
+
+def _grid_worst(free_z_grid):
+    lut, reference = free_z_grid
+    return max(_worst(lut.predict_photometry({"redshift": z}), r) for z, r in reference.items())
+
+
+def test_a_dust_free_nebular_grid_takes_the_igm_over_each_line_profile(free_z_grid):
+    """The dust-free grid serves line rows and a continuum, no dense spectrum.
+
+    It took ``<T>_b`` for both. Each line now takes the transmission averaged over
+    its rendered profile and the continuum over its sub-band chunks. Measured,
+    z = 6.5 to 8.5: worst band 0.07 %, against 20.6-23.8 % with ``<T>_b``.
+    """
+    worst = _grid_worst(free_z_grid)
+    assert worst < _TOL, f"grid-served nebular off the integrator by {worst:.3%}"
+
+
+def test_a_dust_free_nebular_grid_without_its_correction_is_wrong(free_z_grid, monkeypatch):
+    """Anti-vacuity: with the chunk correction zeroed the probe reads ``<T>_b``.
+
+    The correction is resolved at trace time, so clearing the kernel cache makes the
+    same model recompile with the patched function.
+    """
+    from tengri.inference._model_cache import clear_structural_kernel_cache
+
+    clear_structural_kernel_cache()
+    monkeypatch.setattr(_igm_weighting, "subband_igm_correction", _zeroed)
+    try:
+        worst = _grid_worst(free_z_grid)
+    finally:
+        clear_structural_kernel_cache()
+    assert worst > _WITHOUT_FLOOR, f"<T>_b alone is off by only {worst:.3%}"

@@ -38,6 +38,7 @@ from tengri.components.nebular.line_precompute import (
     precompute_line_per_qh,
     reconstruct_line_lums,
 )
+from tengri.cosmology import age_at_z
 from tengri.observation.line_flux_data import LineFluxData
 
 pytestmark = pytest.mark.contract
@@ -83,7 +84,10 @@ def test_line_table_reconstructs_exact_across_sfh_and_metallicity(ssp_data_fsps)
         p["met_logzsol"] = jnp.asarray(
             float(jax.random.uniform(k[1], minval=_MET_LO + 0.1, maxval=_MET_HI - 0.1))
         )
-        p["sfh_dpl_age_gyr"] = jnp.asarray(float(jax.random.uniform(k[2], minval=1.0, maxval=8.0)))
+        # The onset is drawn in Gyr and written as the fraction of age(z) at the test
+        # redshift, which is the same absolute onset (#2748).
+        onset_gyr = float(jax.random.uniform(k[2], minval=1.0, maxval=8.0))
+        p["sfh_dpl_age_frac"] = jnp.asarray(onset_gyr / float(age_at_z(0.15)))
         p["sfh_dpl_tau_gyr"] = jnp.asarray(float(jax.random.uniform(k[3], minval=0.5, maxval=5.0)))
         p["sfh_dpl_log_total_mass"] = jnp.asarray(
             float(jax.random.uniform(k[4], minval=9.0, maxval=11.0))

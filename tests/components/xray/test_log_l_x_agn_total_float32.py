@@ -35,19 +35,6 @@ def _panchromatic_model(ssp, forward_dtype):
     return build_model(ssp, forward_dtype)
 
 
-_XRAY_DEFAULTS = {
-    "xray_gamma_agn": 1.8,
-    "xray_gamma_hmxb": 2.0,
-    "xray_gamma_lmxb": 1.56,
-    "xray_E_cut": 300.0,
-    "xray_delta_alpha_ox": 0.0,
-    "xray_log_nh": 20.0,
-    "xray_alpha_irx": 0.3,
-    "xray_det_hmxb": 0.0,
-    "xray_det_lmxb": 0.0,
-}
-
-
 def test_log_l_x_agn_float64_is_the_emitted_corona_band_luminosity(ssp_bare):
     """float64 ``log_l_x_agn`` is the 2-10 keV integral of the emitted corona term.
 
@@ -65,7 +52,11 @@ def test_log_l_x_agn_float64_is_the_emitted_corona_band_luminosity(ssp_bare):
     assert float(np.asarray(state.derived["L_agn_bol"])) > 0.0, "fixture AGN is inactive"
     comp = XRaySEDComponent()
     inputs = {k: np.asarray(v) for k, v in comp.emitter_inputs(state.derived).items()}
-    terms = comp.emission_terms(_XRAY_DEFAULTS, np.asarray(state.wave), **inputs)
+    # The model's own resolved parameters (Fixed values under the sampled ones,
+    # as the forward pass merges them), so the direct term call and the property
+    # read below see the same values, every declared X-ray control included.
+    full = {**m64.spec.get_fixed_values(), **p}
+    terms = comp.emission_terms(full, np.asarray(state.wave), **inputs)
 
     hc, c_aa = 12.398419843, 2.99792458e18  # keV Angstrom, Angstrom Hz
     wave, lnu = np.asarray(state.wave), np.asarray(terms["agn"])

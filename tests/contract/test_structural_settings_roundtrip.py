@@ -132,6 +132,17 @@ CASES = [
         False,
     ),
     (
+        # 1e8 yr is the former hard cut; the default is 'all', so a default-valued
+        # case would compare default == default and pass vacuously.
+        "neb.lyc_max_age_yr",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "lyc_max_age_yr": 1.0e8},
+        ),
+        "cue_lyc_max_age_yr",
+        1.0e8,
+    ),
+    (
         "shock.norm",
         dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, shock={"norm": "lhalpha"}),
         "shock_norm",
@@ -146,12 +157,30 @@ CASES = [
         "twice_solar",
     ),
     (
+        "radio.sf.ir_window",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            radio={"sf": {"type": "bell2003", "ir_window": "tir"}},
+        ),
+        "radio_ir_window",
+        "tir",
+    ),
+    (
         "igm.patchy",
         dict(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             igm={"type": "inoue", "patchy": True},
         ),
         "igm_patchy",
+        True,
+    ),
+    (
+        "dust_emission.cmb",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_emission={"type": "schreiber2016", "all_params": Fixed(DEFAULT), "cmb": True},
+        ),
+        "dust_ir_cmb",
         True,
     ),
     (

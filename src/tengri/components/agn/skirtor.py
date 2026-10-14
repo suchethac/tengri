@@ -2,9 +2,9 @@
 """SKIRTOR clumpy two-phase torus model (Stalevski et al. 2012, 2016).
 
 Loads the full SKIRTOR SED library (``create_skirtor_from_grid``) and performs
-5D triweight kernel interpolation in JAX.  Provides C²-continuous gradients for
-smooth inference (VI, MAP, NUTS).  Requires a prior download of the template
-grid (~1 GB).
+5D node-exact PCHIP interpolation in JAX.  Passes through every tabulated node and
+provides C¹-continuous gradients for inference (VI, MAP, NUTS).  Requires a prior
+download of the template grid (~1 GB).
 
 Supports two HDF5 layouts:
 
@@ -28,18 +28,25 @@ References
 """
 
 import functools
+import warnings
 from collections.abc import Callable
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import (
+    interp_nd_pchip,
+    library_lookup,
+    loglog_integral,
+    resample_template,
+)
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -395,6 +402,16 @@ def _load_grid_arrays(grid_path: str):
     return _ascending_axes(result)
 
 
+def _cos_inc_extrapolate(axes: tuple) -> tuple:
+    """Per-axis extrapolation flags: ``cos_inclination`` (the last axis) extends past its ends.
+
+    The prior reaches ``cos_inc = 0`` but the stored axis starts at ``cos(90 deg) = 6e-17``.
+    Clipping there returns an exactly-zero gradient on a fittable parameter (#1911);
+    continuing the end cubic keeps it nonzero, and the cubic is node-exact (#2606).
+    """
+    return (False,) * (len(axes) - 1) + (True,)
+
+
 def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
     """Drop the R (radius_ratio) coordinate when the grid lacks that axis.
 
@@ -411,7 +428,6 @@ def _interpolate_and_normalize(
     grid_jax: jnp.ndarray,
     wave_grid: jnp.ndarray,
     axes: tuple,
-    edges: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
     l_scale: float,
@@ -437,8 +453,6 @@ def _interpolate_and_normalize(
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
         Grid axis values (tau, p, q, oa, cos_inc).
-    edges : tuple of ndarray
-        Precomputed bin edges for triweight interpolation.
     wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
     point : tuple
@@ -474,21 +488,27 @@ def _interpolate_and_normalize(
     # and only takes effect on axes it measures as non-uniform. On this grid
     # tau/p/q/oa/radius are uniform to floating-point, so the flag reaches only
     # cos_inclination (spacing ratio 11.43): see #1911.
-    template = interp_nd_triweight(
-        grid_jax, axes, edges, _match_point_to_axes(point, axes), index_space_interp=True
+    # Node-exact PCHIP, not the triweight smoother: the library is a tabulated
+    # radiative-transfer result, so an exact node must return its own SED (#2606).
+    template = interp_nd_pchip(
+        grid_jax, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
     )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
-    # over-normalize on truncated grids; trapezoid in λ matches the
-    # download script's normalization convention.
+    # over-normalize on truncated grids.
+    #
+    # The integral is the power-law (log-log) integral of the same interpolant
+    # ``resample_template`` builds, not a trapezoid over the native nodes. A
+    # trapezoid lays chords across the convex segments, so the resampled
+    # template would lose 0.4-0.5% of ``l_scale`` (#2319); the log-log integral
+    # is exact for the interpolant, so the resampled torus carries exactly
+    # ``l_scale`` on any caller grid fine enough to resolve it.
     #
     # ``wave_grid`` is monotonically ascending (set at load time in
-    # ``_load_grid_arrays``), so trapezoid integrates correctly without
-    # an explicit ``argsort``, the prior ``trapezoid(sed[idx_sort],
-    # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
-    # *descending* and needed reordering. Don't re-add a sort here.
-    integral_lam = jnp.trapezoid(template, wave_grid)
-    integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
+    # ``_load_grid_arrays``), so the integral is positive without an explicit
+    # ``argsort``. Don't re-add a sort here.
+    integral_lam = loglog_integral(wave_grid, template)
+    integral_safe = jnp.maximum(jnp.abs(integral_lam), representable_denominator(1e-100))
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
@@ -581,7 +601,7 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
 
     Notes
     -----
-    **JIT/grad-safe**: yes, triweight interpolation over threaded arrays.
+    **JIT/grad-safe**: yes, PCHIP interpolation over threaded arrays.
     """
     l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
     point = (
@@ -596,7 +616,6 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
         grid_data.grid,
         grid_data.wave_grid,
         grid_data.axes,
-        grid_data.edges,
         wavelength,
         point,
         l_scale,
@@ -655,7 +674,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     and can be used as a drop-in replacement.
 
     Grid dimensions: tau × p × q × oa × inc × wave.
-    Interpolation: 5D triweight kernel in JAX (JIT-compatible, C²-continuous
+    Interpolation: 5D node-exact PCHIP in JAX (JIT-compatible, C¹-continuous
     gradients).
 
     Parameters
@@ -684,7 +703,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP interpolation is fully differentiable.
 
     Supports v2 (total-only) and v3 (separate disk/dust) HDF5 layouts.
     When v3 is available, use ``create_skirtor_components_from_grid``
@@ -761,8 +780,40 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     return skirtor_grid
 
 
+def _physical_cubes(raw: dict) -> tuple[dict, bool]:
+    """The tabulated cubes on SKIRTOR's own relative scale across inclination.
+
+    Every stored spectrum was divided by its model's dust integral (``spectra/norm`` holds the
+    divisor), which erases the flux ratio between inclinations. Multiplying the stored spectra
+    by ``norm`` puts every record back on the single scale of the radiative-transfer run. The
+    common factor ``max(norm)`` is divided out (a constant of the file, absorbed by the
+    normalization of the caller) so the products stay inside the float32 range.
+
+    Parameters
+    ----------
+    raw : dict
+        Output of :func:`_load_grid_arrays`.
+
+    Returns
+    -------
+    cubes : dict
+        ``disk``, ``dust`` and ``total`` as float64 numpy arrays, shape
+        ``(*axes_shape, n_native)``.
+    has_norm : bool
+        Whether the file carries ``norm``. Without it the cubes are the stored ones, each
+        record on its own scale.
+    """
+    cubes = {k: np.asarray(raw[k], dtype=np.float64) for k in ("disk", "dust", "total")}
+    norm = raw.get("norm")
+    if norm is None:
+        return cubes, False
+    scale = np.asarray(norm, dtype=np.float64)
+    scale = scale / scale.max()
+    return {k: v * scale[..., None] for k, v in cubes.items()}, True
+
+
 def create_skirtor_components_from_grid(grid_path: str) -> Callable:
-    """Load SKIRTOR v3 templates and return a function giving separate components.
+    r"""Load SKIRTOR v3 templates and return a function giving separate components.
 
     Requires a v3 HDF5 grid with ``spectra/disk_emission`` and
     ``spectra/dust_emission`` datasets (produced by
@@ -794,7 +845,63 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP interpolation is C1 in every coordinate.
+
+    **Interpolation.** Every parameter axis (tau, p, q, opening angle, radius ratio) and the
+    inclination axis (:math:`\cos i`) is interpolated with the monotone piecewise cubic of
+    Fritsch & Carlson [3]_ (:func:`~tengri.utils.grid_interp.interp_nd_pchip`), applied one
+    axis at a time. It passes exactly through the tabulated records, so the component along a
+    library inclination IS the stored record times the common scale below; an axis of two
+    nodes is linear (the PCHIP of two nodes). A coordinate outside a parameter
+    axis is clamped to its end node; the inclination axis alone continues its end cubic, so the
+    prior's ``cos_inc = 0`` (the stored axis starts at 6e-17) keeps a nonzero gradient. That
+    extension is a numerical gap of a few 1e-17, not physics; the normalization below does not
+    depend on the sightline, so it cannot change that gradient.
+
+    **Normalization.** The library stores every record divided by its own dust integral
+    (``spectra/norm`` holds the divisor), which erases the flux ratio between inclinations.
+    The components here are the stored spectra multiplied back by that factor, interpolated,
+    and scaled by ONE factor per parameter point,
+    :math:`s = L_{\rm scale} / (\bar P_{\rm disc} + \bar P_{\rm dust})`, with
+    :math:`L_{\rm scale} = 10^{\log L_{\rm bol}} L_\odot f` (:math:`f` = ``frac_agn``) and
+
+    .. math::
+
+        \bar P_X = \int_0^1 P_X(\mu)\,d\mu, \qquad \mu = \cos i,
+
+    the sphere mean of the power :math:`P_X(\mu) = \int L_\nu\,d\nu` that the template
+    carries along inclination :math:`\mu`, over the template's own wavelength range (10 A to
+    1e8 A): the escaping disc (direct plus scattered) and the dust re-emission. SKIRTOR's
+    radiative transfer conserves energy, so these two add up to the intrinsic power of the
+    central source, which is the accretion power :math:`10^{\log L_{\rm bol}} L_\odot` (the
+    parameter, #2678). The disc is counted over its whole native range, including the part
+    below 8 nm where the analytic disc that the component emits is zero: the template disc
+    carries a further 9 to 58 % (median 14 %, sphere mean per cell) of its in-support power
+    outside the support of the emitted disc, power which the torus absorbs and re-emits as
+    dust when it is obscured and which leaves with the escaping rays otherwise.
+    Counting only the part above 8 nm drops that power from the budget and trends the
+    absolute scale with the opening angle (-4 % to +9 %). By symmetry about the equator
+    :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta = \int_0^1 P(\mu)\,d\mu`.
+    The sphere-mean disc plus dust is then :math:`L_{\rm scale}`, and every inclination keeps
+    SKIRTOR's own flux relative to the others: the same :math:`s` multiplies the disc and the
+    torus dust, so their power ratio at each inclination is the radiative-transfer one. The
+    integral over :math:`\mu` is Gauss-Legendre of order ``INCLINATION_GL_ORDER`` on each
+    interval between the library's inclination nodes (each panel is one cubic of the
+    interpolant; the power is a smooth function of that cubic). ``disk`` is the template disc
+    over its whole native range (the emitting component cuts it at 8 nm), and ``total`` is
+    ``disk + dust``.
+
+    Measured on the v3 library, the records conserve energy to 2.5 % rms over the 1920
+    parameter cells (the sphere-mean disc plus dust differs from cell to cell by -21 % to
+    +11 %, with no trend in the opening angle or tau, correlations +0.11 and -0.10; counting
+    the disc only above 8 nm gave 5.1 % rms and a correlation of +0.88 with the opening
+    angle). Most of the
+    remainder is the sampling of the disc's step at the edge of the torus by the ten
+    inclination nodes: resolving the polar cone leaves 1.6 % rms, the library's own residual.
+    The per-point scale absorbs that residual and nothing else.
+
+    A grid without ``spectra/norm`` is normalized the same way from the stored records, each
+    on its own scale, so its power carries no inclination dependence.
 
     The separate components enable:
 
@@ -807,7 +914,12 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     .. [1] M. Stalevski et al., MNRAS, 420, 2756 (2012). arXiv:1109.1286.
     .. [2] M. Boquien et al., "CIGALE," A&A, 622, A103 (2019).
        arXiv:1811.03094. https://doi.org/10.1051/0004-6361/201834156
+    .. [3] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
+       SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
     """
+    from tengri.components.agn import _publication
+    from tengri.components.agn._template_grid import native_bolometric_nu
+
     raw = _load_grid_arrays(grid_path)
 
     if "disk" not in raw or "dust" not in raw:
@@ -817,15 +929,44 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             "or use create_skirtor_from_grid() for total-only mode."
         )
 
+    cubes, has_norm = _physical_cubes(raw)
+    if not has_norm:
+        warnings.warn(
+            f"SKIRTOR grid {grid_path!r} carries no spectra/norm: every record is on its own "
+            "scale, so the disc and torus powers do not vary with inclination as SKIRTOR's "
+            "radiative transfer does.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # See note in create_skirtor_from_grid: wrap conversion in
-    # ensure_compile_time_eval to keep the cached closure trace-safe.
+    # ensure_compile_time_eval to keep the cached closure trace-safe. ``total`` is not
+    # interpolated: it is the sum of the two interpolated components (the stored one equals
+    # disk + dust to 1e-7, and a nonlinear interpolant would not keep the sum).
     with jax.ensure_compile_time_eval():
-        disk_jax = jnp.array(raw["disk"])
-        dust_jax = jnp.array(raw["dust"])
-        total_jax = jnp.array(raw["total"])
+        disk_jax = jnp.array(cubes["disk"])
+        dust_jax = jnp.array(cubes["dust"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
+    param_axes, inc_axis = axes[:-1], axes[-1]
+    # Node-exact PCHIP on every axis; an axis of two nodes is linear (the PCHIP of two nodes).
+    param_kinds = tuple("pchip" if ax.shape[0] >= 3 else "linear" for ax in param_axes)
+    inc_kinds = ("pchip" if inc_axis.shape[0] >= 3 else "linear",)
+
+    # Inclination quadrature nodes and weights (static host constants, float64).
+    mu_q, w_q = _publication.inclination_quadrature(
+        np.asarray(axes[-1], dtype=np.float64), _publication.INCLINATION_GL_ORDER
+    )
+
+    def _at_inclination(by_inc, cos_inc):
+        """PCHIP in cos i of an ``(n_inc, n_native)`` record."""
+        return interp_nd_pchip(
+            by_inc,
+            (inc_axis,),
+            (cos_inc,),
+            kinds=inc_kinds,
+            extrapolate=_cos_inc_extrapolate((inc_axis,)) if inc_kinds[0] == "pchip" else None,
+        )
 
     def skirtor_components(
         wavelength: jnp.ndarray,
@@ -877,25 +1018,53 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             luminosity_frac = frac_agn
 
         l_scale = 10.0**agn_log_lbol * _L_SUN * luminosity_frac
-        point = (
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_radius_ratio,
-            agn_cos_inc,
+        point = _match_point_to_axes(
+            (
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_radius_ratio,
+                agn_cos_inc,
+            ),
+            axes,
         )
-        disk = _interpolate_and_normalize(
-            disk_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        dust = _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        total = _interpolate_and_normalize(
-            total_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        return SKIRTORComponents(disk=disk, dust=dust, total=total)
+        # (n_inc, n_native): each cube interpolated over the five parameter axes, inclination
+        # axis kept, so the sphere mean and the sightline value share one interpolation.
+        by_inc = {
+            "disk": interp_nd_pchip(disk_jax, param_axes, point[:-1], kinds=param_kinds),
+            "dust": interp_nd_pchip(dust_jax, param_axes, point[:-1], kinds=param_kinds),
+        }
 
+        # Sphere-mean power of the escaping disc plus the dust, in the cube's own units: the
+        # quadrature of the powers at the Gauss-Legendre points of every inclination interval.
+        weight = jnp.asarray(w_q, dtype=by_inc["disk"].dtype)
+        mu_nodes = jnp.asarray(mu_q, dtype=by_inc["disk"].dtype)
+
+        def _power_at(mu):
+            rows = {
+                k: _at_inclination(v, mu) * wave_grid**2 / _C_AA_PER_S for k, v in by_inc.items()
+            }
+            return native_bolometric_nu(rows["disk"], wave_grid, floor=0.0) + native_bolometric_nu(
+                rows["dust"], wave_grid, floor=0.0
+            )
+
+        mean_power = jnp.sum(weight * jax.vmap(_power_at)(mu_nodes))
+        scale = l_scale / jnp.where(mean_power > 0.0, mean_power, 1.0)
+
+        out = []
+        for key in ("disk", "dust"):
+            lam = _at_inclination(by_inc[key], point[-1])  # L_lambda-like, cube units
+            sed_lam = resample_template(wavelength, wave_grid, lam, left=0.0, right=0.0)
+            out.append(sed_lam * wavelength**2 / _C_AA_PER_S * scale)
+        return SKIRTORComponents(disk=out[0], dust=out[1], total=out[0] + out[1])
+
+    # The template's own wavelength nodes: a publication grid built on them integrates the
+    # emitted (log-log interpolated) SED exactly, see ``_template_grid.native_bolometric_nu``.
+    skirtor_components.native_wave = wave_grid
+    # The template's own cos(inclination) nodes, ascending: the angle-integrated powers are
+    # quadratures over this axis.
+    skirtor_components.native_cos_inc = np.asarray(axes[-1], dtype=np.float64)
     return skirtor_components
 
 
@@ -1089,7 +1258,9 @@ def skirtor_disc_dust_ratio(
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
         # does not pass through grid nodes, distorting the disk/dust *integral
         # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
-        return interp_nd_pchip(grid, axes, _match_point_to_axes(point, axes))
+        return interp_nd_pchip(
+            grid, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
+        )
 
     disk_i_n = _interp_native(disk_jax, agn_cos_inc)
     dust_i_n = _interp_native(dust_jax, agn_cos_inc)
@@ -1099,9 +1270,16 @@ def skirtor_disc_dust_ratio(
     # Bring the analytic disc shape + reddening onto the native grid.
     disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
     ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
-    int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
+    # The bolometric integrals of the polar reference are the power-law integrals of the
+    # same interpolant ``resample_template`` builds, not a trapezoid over the 136 native
+    # nodes (#2322). That is the converged value: a 4000-node trapezoid of the resampled
+    # templates sits 1.5e-6 from it, and a trapezoid over the native nodes 6e-5.
+    int_disk0 = loglog_integral(wave_grid, disk_0_n)
+    # The shape is unit-normalized with the same log-log integral it is integrated with.
+    # A trapezoid normalization here left ``loglog(shape_n)`` 0.39 % off unity, so R at
+    # i = 0 read 4.40727 against R_faceon 4.42464 (#2319, #2322).
     shape_n = disc_n / jnp.maximum(
-        jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
+        loglog_integral(wave_grid, disc_n), representable_denominator(1e-30)
     )
     disk_analytic = shape_n * int_disk0
     # CIGALE nan_to_num: continue the inclination ratio smoothly where the
@@ -1128,8 +1306,8 @@ def skirtor_disc_dust_ratio(
     )
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
-    int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    R = jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    int_dust = jnp.maximum(loglog_integral(wave_grid, dust_i_n), 1e-30)
+    R = loglog_integral(wave_grid, sk_disk_reddened) / int_dust
     # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
@@ -1426,7 +1604,6 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
         total_j = jnp.array(total)
         wave_g = jnp.array(wave)
         axes = tuple(jnp.array(a) for a in (ta, p, q, oa, rr, ideg))
-        edges = tuple(edges_for_grid(a) for a in axes)
         nu_g = _C_AA_PER_S / wave_g
         order = jnp.argsort(nu_g)
 
@@ -1451,7 +1628,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
             agn_radius_ratio,
             i_deg,
         )
-        spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
+        spec = library_lookup(total_j, axes, point)  # L_nu shape on wave_g
         l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
         bolo = jnp.trapezoid(spec[order], nu_g[order])
         spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), representable_denominator(1e-100)))
@@ -1572,12 +1749,17 @@ class SKIRTORDiscAttenGrid(NamedTuple):
         The SKIRTOR parameter axes.
     edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
+    norm : ndarray, shape ``(*axes_shape)``, or None
+        The per-record scale divided out of ``disk`` (no wavelength axis), so that
+        ``disk * norm`` is comparable between inclinations. ``None`` for a file that
+        carries no ``norm`` dataset.
     """
 
     disk: jnp.ndarray
     wave_grid: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     edges: tuple[jnp.ndarray, ...]
+    norm: jnp.ndarray | None = None
 
 
 def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
@@ -1589,6 +1771,7 @@ def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
             wave_grid=jnp.array(raw["wave"]),
             axes=axes,
             edges=tuple(edges_for_grid(ax) for ax in axes),
+            norm=jnp.array(raw["norm"]) if "norm" in raw else None,
         )
 
 
@@ -1637,7 +1820,6 @@ def skirtor_disc_attenuation_from_grid(
     disk_grid = jnp.asarray(grid.disk)
     wave_grid = jnp.asarray(grid.wave_grid)
     axes = tuple(jnp.asarray(a) for a in grid.axes)
-    edges = tuple(jnp.asarray(e) for e in grid.edges)
 
     point_i = (
         agn_tau_skirtor,
@@ -1659,12 +1841,8 @@ def skirtor_disc_attenuation_from_grid(
     # index-space treatment (#1911). Both evaluations must use it: the returned
     # quantity is the ratio disk(i)/disk(face-on), and mixing the two paths
     # would put a different interpolant in the numerator and denominator.
-    disk_at_i = interp_nd_triweight(
-        disk_grid, axes, edges, _match_point_to_axes(point_i, axes), index_space_interp=True
-    )
-    disk_at_face = interp_nd_triweight(
-        disk_grid, axes, edges, _match_point_to_axes(point_face, axes), index_space_interp=True
-    )
+    disk_at_i = library_lookup(disk_grid, axes, _match_point_to_axes(point_i, axes))
+    disk_at_face = library_lookup(disk_grid, axes, _match_point_to_axes(point_face, axes))
     # Safe ratio: where face-on is zero (shouldn't be, but be safe),
     # return 0 attenuation (no contribution).
     ratio_template = jnp.where(

@@ -11,6 +11,7 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -53,16 +54,26 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: Bump when the curve-fit algorithm, the table layout, or field set changes.
 #: One version constant per cache (disk + in-memory) to ensure a stale entry
 #: cannot be reused after an algorithm change.
-#: 2 (this module's LyC brief): ``gas_logqion`` now integrates via the shared
-#: :func:`tengri.components.lyc.edge_trapezoid` step model instead of a hard
-#: ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction here for
-#: the first time -- a disk entry computed under version 1 is stale.
-_IONSPEC_CACHE_VERSION = 2
+#: 2: ``gas_logqion`` integrates via the shared
+#: :func:`tengri.components.lyc.edge_trapezoid` step model (#537 partial-bin
+#: correction), not a hard ``wave <= HI_LIMIT`` mask.
+#: 3: ``gas_logqion`` integrates in the log domain (#2849), and the computation
+#: dtype is part of the key, so entries written under version 2 are not reused.
+#: 4: bins older than 100 Myr carry a Q_H and a shape (every age is counted by
+#: default); the age axis, the age cutoff and the old-bin thinning limit are part
+#: of the key, so the young-only tables written under version 3 are never served.
+_IONSPEC_CACHE_VERSION = 4
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
 
-def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.ndarray) -> tuple:
+def _ssp_fingerprint(
+    ssp_wave: np.ndarray,
+    ssp_flux: np.ndarray,
+    ssp_lgmet: np.ndarray,
+    ssp_log_age_yr: np.ndarray | None = None,
+    max_log_age: float | None = None,
+) -> tuple:
     """Content fingerprint for an SSP grid: including the flux VALUES.
 
     Parameters
@@ -73,6 +84,12 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
         SSP flux grid [Lsun/Hz/Msun].
     ssp_lgmet : array_like, shape (n_met,)
         SSP metallicity grid, log10(Z) absolute.
+    ssp_log_age_yr : array_like, shape (n_age,), optional
+        SSP age axis, log10(age/yr). Which bins are fitted, which are thinned and
+        which are counted at all follow from it, so it is part of the key.
+    max_log_age : float, optional
+        Oldest counted age, log10(age/yr); ``None`` counts every age. A table
+        built under one cutoff is never served to another.
 
     Returns
     -------
@@ -81,21 +98,15 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
 
     Notes
     -----
-    The flux is digested, not merely shaped. It used to enter the key as nothing
-    but ``(shape, dtype)`` while ``ssp_wave`` and ``ssp_lgmet`` were hashed
-    byte-for-byte: which made this a *shape* cache wearing a *content* cache's
-    clothes. A bare-stellar grid and its with-nebular-emission twin share a
-    wavelength axis, a metallicity axis, a shape and a dtype, and differ only in
-    the flux (by a factor ~100 in the Lyman continuum, which is precisely the part
-    this table integrates). They therefore collided, and whichever grid was loaded
-    first in a process silently supplied the ionizing spectrum for the other: in
-    memory, and then on disk under the colliding hash, outliving the process.
-
-    That is the same wound the ``inf``-rejection guard in :func:`_load_ionspec_disk`
-    was dressing (#458): it rejected a *symptom* of a bad table while leaving the
-    key that produced one intact. Hashing the flux closes it at the source. Old
-    entries are not deleted: they simply stop being addressable, because the key
-    they were written under no longer hashes to the same name.
+    The flux is digested, not merely shaped. ``ssp_wave`` and ``ssp_lgmet`` are
+    hashed byte for byte, and the flux enters as a SHA-256 digest. A bare-stellar
+    grid and its with-nebular-emission twin share a wavelength axis, a metallicity
+    axis, a shape and a dtype, and differ only in the flux (by a factor of about
+    100 in the Lyman continuum, which is the part this table integrates). Keying on
+    the flux therefore keeps the two grids in separate entries, in memory and on
+    disk. The key also carries the computation dtype (#2849), so the
+    :func:`_load_ionspec_disk` rejection of non-finite tables (#458) is a second
+    check and not the only one.
 
     The digest costs one SHA-256 pass over the flux array per fingerprint, which is
     a fraction of the SSP's own load time and is dwarfed by the scipy curve-fits it
@@ -109,7 +120,28 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
         bytes(np.asarray(ssp_wave).tobytes()),
         bytes(np.asarray(ssp_lgmet).tobytes()),
         _hashlib.sha256(flux.tobytes()).hexdigest(),
+        _computation_dtype(),
+        None if ssp_log_age_yr is None else bytes(np.asarray(ssp_log_age_yr).tobytes()),
+        None if max_log_age is None else float(max_log_age),
+        (MAX_OLD_FITS_PER_METALLICITY, MIN_COUNTED_OLD_LOG_QION),
     )
+
+
+def _computation_dtype() -> str:
+    """Float precision the table is computed in: ``float64`` with x64 on, else ``float32``.
+
+    The edge quadrature runs in JAX, so its precision follows ``jax_enable_x64``,
+    not the dtype of the input array. A float64 SSP built with x64 off therefore
+    yields a float32 table, and that table does not share a key with the x64-on one
+    (#2849).
+
+    Returns
+    -------
+    str
+        ``"float64"`` or ``"float32"``, the dtype JAX returns for a Python float
+        under the current ``jax_enable_x64`` setting.
+    """
+    return str(jnp.result_type(float))
 
 
 def _fingerprint_hash(key: tuple) -> str:
@@ -125,6 +157,10 @@ def _fingerprint_hash(key: tuple) -> str:
     h.update(key[3])  # raw wave bytes
     h.update(key[4])  # raw lgmet bytes
     h.update(key[5].encode())  # flux content digest: without it, see _ssp_fingerprint
+    h.update(key[6].encode())  # computation dtype: float32 and float64 tables differ
+    h.update(b"-" if key[7] is None else key[7])  # age axis: selects which bins are fitted
+    h.update(repr(key[8]).encode())  # age cutoff: a young-only table is not an all-age table
+    h.update(repr(key[9]).encode())  # old-bin thinning limit: it changes the copied shapes
     return h.hexdigest()
 
 
@@ -160,7 +196,7 @@ def _load_ionspec_disk(key: tuple) -> dict | None:
         with np.load(path) as data:
             logqion = np.asarray(data["logqion_table"])
             if np.isinf(logqion).any():
-                # Legacy float32-overflow cache: discard.
+                # An overflowed (inf) table is not usable: discard and recompute.
                 return None
             return {
                 "ionspec_table": data["ionspec_table"],
@@ -401,15 +437,28 @@ HI_LIMIT = LYMAN_LIMIT_AA
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
-# Cue-emulator TRAINING-GRID bounds, used to clip the auto-derived (SSP-fit)
-# ionspec coefficients so the Cue neural emulator is never evaluated outside the
-# grid it was trained on (extrapolation → garbage). These are DISTINCT from, and
-# deliberately NOT unified with, the user-facing prior bounds in
-# ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g. index1 clips to
-# [1, 42] here vs. the prior range [0, 50] there): the prior range is what a
-# user may sample, the clip range is what the emulator can faithfully evaluate.
-# Two different quantities; see #887 (which considered deriving one from the
-# other and confirmed they must stay separate).
+# Cue-emulator range of the 7 ionizing-shape parameters, used to clip the
+# auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is never
+# evaluated outside the range it was trained on.
+#
+# Source: the Cue reference code (github.com/efburnham/cue; ``emulator.py``
+# docstring and the ``np.clip`` bounds of the SSP-fit routine in ``utils.py``):
+# index1 [1, 42], index2 [-0.3, 30], index3 [-1, 14], index4 [-1.7, 8],
+# logLratio1 [-1, 10.1], logLratio2 [-0.5, 1.9], logLratio3 [-0.4, 2.2].
+#
+# Discrepancy with the paper: Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598),
+# Table 1, prints index3 [-1.1, 14] and logLratio1 [-0.1, 10.1]. The other five
+# agree. The code values are used because the paper's own text places AGN power
+# laws with 1.2 <= alpha <= 2 inside the training set, and those have
+# logLratio1 between -0.86 and -0.26 (Eq. 2 definition), which a -0.1 floor would
+# exclude; the printed -0.1 is most likely a dropped digit of -1.0. Measured on
+# the emulator itself, lines vary smoothly in logLratio1 from -1.0 to +0.3.
+#
+# These are DISTINCT from, and deliberately NOT unified with, the user-facing
+# prior bounds in ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g.
+# index1 clips to [1, 42] here vs. the prior range [0, 50] there): the prior
+# range is what a user may sample, the clip range is what the emulator can
+# faithfully evaluate. See #887 (which confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
     "ionspec_index2": (-0.3, 30.0),
@@ -419,6 +468,51 @@ _CLIP_RANGES = {
     "ionspec_logLratio2": (-0.5, 1.9),
     "ionspec_logLratio3": (-0.4, 2.2),
 }
+
+#: Parameter names in the order of the 7-vector the Cue backend carries.
+IONSPEC_NAMES: tuple[str, ...] = tuple(_CLIP_RANGES)
+
+
+def clamp_ionspec_straight_through(i7):
+    """Clamp a 7-vector of ionizing-shape parameters to the Cue training box.
+
+    Parameters
+    ----------
+    i7 : array_like, shape (7,)
+        ``[ionspec_index1..4, ionspec_logLratio1..3]`` [dimensionless].
+
+    Returns
+    -------
+    jnp.ndarray, shape (7,)
+        The input moved onto the box ``_CLIP_RANGES`` (Cue's reference bounds; the
+        comment above ``_CLIP_RANGES`` records how they differ from Li et al. 2025,
+        Table 1).
+
+    Notes
+    -----
+    Straight-through: the forward value is ``clip(x)`` and, for finite input, the
+    gradient is the identity, so a fit driven past the box keeps a signal (a plain
+    clip would zero it). The forward value is ``clip(x)`` plus ``x - x`` (exactly
+    0.0), so it equals the bound out of range and the input bit-for-bit in range.
+
+    The out-of-range gradient is deliberately inconsistent with the pinned
+    value: the value stays at the bound while the gradient still says "move".
+    Non-finite input: ``+/-inf`` returns the bound (zero gradient), ``nan`` stays
+    ``nan``. JIT/grad/vmap safe.
+    """
+    x = jnp.asarray(i7)
+    lo = jnp.asarray([_CLIP_RANGES[k][0] for k in IONSPEC_NAMES], dtype=x.dtype)
+    hi = jnp.asarray([_CLIP_RANGES[k][1] for k in IONSPEC_NAMES], dtype=x.dtype)
+    # Double-where: the straight-through arithmetic only ever sees finite input
+    # (``inf - inf`` is NaN, and a single outer ``where`` still differentiates that
+    # branch), and the non-finite branch is a constant for autodiff, so a +/-inf or
+    # NaN component carries neither a NaN nor a tangent into the finite ones.
+    finite = jnp.isfinite(x)
+    x_safe = jnp.where(finite, x, 0.5 * (lo + hi))
+    clipped_safe = jnp.clip(x_safe, lo, hi)
+    through = jax.lax.stop_gradient(clipped_safe) + (x_safe - jax.lax.stop_gradient(x_safe))
+    bound = jax.lax.stop_gradient(jnp.clip(x, lo, hi))  # +/-inf -> bound, nan -> nan
+    return jnp.where(finite, through, bound)
 
 
 def fit_ionizing_spectrum(
@@ -530,12 +624,10 @@ def fit_ionizing_spectrum(
     #
     # Cast rather than re-floor: raising the two literals to representable values
     # would fix these two sites and leave every other float32-sensitive
-    # intermediate in a scipy least-squares fit available for the next report.
-    # This is a build-time, once-per-SSP numpy routine producing a small table,
-    # so float64 costs nothing, and #458 already established the pattern in this
-    # same function for ``Q_total`` (and ``Q_seg`` in ``_fit_segment``). Those
-    # two casts are now redundant with this one and deliberately left in place:
-    # they document their own overflow and cost nothing.
+    # intermediate in a scipy least-squares fit exposed. This is a build-time,
+    # once-per-SSP numpy routine producing a small table, so float64 costs nothing.
+    # ``Q_seg`` in ``_fit_segment`` and the Q_H integrand below are formed in
+    # float64 for the same reason.
     #
     # float64 input is unaffected: ``astype`` on a float64 array is a no-op copy.
     wave = np.asarray(wave, dtype=np.float64)
@@ -562,28 +654,26 @@ def fit_ionizing_spectrum(
     log_L = _compute_segment_luminosities(coeff, edges)
     logLratios = np.diff(log_L)
 
-    # Total Q_H: integrate the ionizing photon rate via the one shared
-    # step-model primitive (tengri.components.lyc.edge_trapezoid) instead of
-    # a hard ``wave <= HI_LIMIT`` mask + plain trapezoid, so this table picks
-    # up the same #537 partial-bin Lyman correction
-    # :mod:`tengri.components.stellar.component` already applies to the same
-    # Q_H integral (module docstring of ``tengri.components.lyc``).
-    #
-    # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
-    # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
-    # produces intermediates ~ 1e30 and integrating over the ~ 1e16 Hz
-    # bandwidth gives ~ 1e46: well past float32's 3.4e38 max, so the running
-    # sum overflows to ``inf`` from a few terms in. Result: every (Z, age)
-    # bin in the cached table collapses to ``log10(inf) = inf``, downstream
-    # treats the SSP as wNE / dead, and Cue silently emits ~zero nebular
-    # emission (issue #458). The slope fits above are float32-safe because
-    # ``normalized = flux * 1e-18 / ref_flux`` rescales each segment before
-    # fitting.
+    # Total Q_H (#458, #2849). The integrand (flux * L_sun) / (h nu) is formed in
+    # float64 NumPy. Its integral reaches ~1e46-1e47, past float32's ceiling, so
+    # the quadrature runs on the integrand divided by a power of two (exact in
+    # binary floating point) and the exponent is restored in float64. The exponent
+    # is set from the finite ionizing pixels only: a NaN or inf beyond the Lyman
+    # edge does not enter the Q_H integral, so it must not set the scale either.
+    # The log is taken in NumPy.
     integrand = (flux * _LSUN) / (_H_PLANCK * (_C_AA / wave))
-    Q_total = float(
-        edge_trapezoid(integrand, wave, variable="nu", side="ionizing", edge_aa=HI_LIMIT)
+    ionizing_mag = np.where((wave < HI_LIMIT) & np.isfinite(integrand), np.abs(integrand), 0.0)
+    exponent = int(np.frexp(np.max(ionizing_mag, initial=0.0))[1])
+    q_scaled = float(
+        edge_trapezoid(
+            np.ldexp(integrand, -exponent),
+            wave,
+            variable="nu",
+            side="ionizing",
+            edge_aa=HI_LIMIT,
+        )
     )
-    log_qion = np.log10(max(Q_total, 1e-99))
+    log_qion = float(np.log10(max(np.ldexp(q_scaled, exponent), 1e-99)))
 
     return {
         "ionspec_index1": np.clip(coeff[0, 0], *_CLIP_RANGES["ionspec_index1"]),
@@ -604,14 +694,224 @@ def fit_ionizing_spectrum(
     }
 
 
-#: Max log10(age/yr) at which Cue's downstream Q_H weighting can still receive
-#: a non-zero contribution. Bins older than this have ``weighted_qh`` zeroed in
-#: :meth:`CueBackend._compute_weighted_cue_params`, so fitting them here is
-#: pure waste. Single source of truth for both the precompute cutoff (here)
-#: and the downstream forward filter (``cue.MAX_NEB_LOG_AGE``, which re-exports
-#: this constant). Lives in :mod:`ionizing_spectrum` rather than :mod:`cue`
-#: to avoid a circular import (``cue`` already depends on this module).
+#: log10(age/yr) of 100 Myr. Ages up to here are always fitted bin by bin; older ages
+#: are counted (by default) from the thinned fits described at
+#: :data:`MAX_OLD_FITS_PER_METALLICITY`. It is also the cutoff the former hard age cut
+#: used, ``neb={'type': 'cue', 'lyc_max_age_yr': 1e8}``. Lives in :mod:`ionizing_spectrum`
+#: rather than :mod:`cue` to avoid a circular import (``cue`` already depends on this
+#: module).
 MAX_NEB_LOG_AGE: float = 8.0  # 100 Myr
+
+#: Value of ``neb={'type': 'cue', 'lyc_max_age_yr': ...}`` that counts every stellar age.
+LYC_ALL_AGES: str = "all"
+
+
+def validate_lyc_max_age_yr(value: object) -> str | float:
+    """Validate a ``lyc_max_age_yr`` value: ``'all'`` or a positive finite age [yr].
+
+    Parameters
+    ----------
+    value : object
+        The user's value: ``'all'`` or a number of years (``1e8`` is the former 100 Myr cut).
+
+    Returns
+    -------
+    str or float
+        ``'all'`` unchanged, or the age as a float [yr].
+
+    Raises
+    ------
+    ConfigError
+        If ``value`` is neither ``'all'`` nor a positive finite real number (a ``bool`` is
+        refused: ``True`` would read as 1 yr).
+    """
+    from tengri.config.exceptions import ConfigError
+
+    if isinstance(value, str) and value == LYC_ALL_AGES:
+        return LYC_ALL_AGES
+    is_number = isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(
+        value, (bool, np.bool_)
+    )
+    if not is_number or not np.isfinite(value) or value <= 0:
+        raise ConfigError(
+            f"neb lyc_max_age_yr must be 'all' or a positive finite age in years "
+            f"(1e8 is the former 100 Myr cut); got {value!r}."
+        )
+    return float(value)
+
+
+def lyc_max_log_age(value: str | float) -> float | None:
+    """The cutoff as log10(age/yr), or ``None`` when every age is counted.
+
+    Parameters
+    ----------
+    value : str or float
+        A validated ``lyc_max_age_yr``: ``'all'`` or an age [yr].
+
+    Returns
+    -------
+    float or None
+        ``log10(value)`` [log10(yr)]; ``None`` for ``'all'``. ``1e8`` maps to exactly 8.0,
+        which is :data:`MAX_NEB_LOG_AGE`, so the former mask is reproduced bit for bit.
+    """
+    return None if value == LYC_ALL_AGES else float(np.log10(value))
+
+
+#: Most old bins (older than :data:`MAX_NEB_LOG_AGE`) fitted per metallicity. A grid with
+#: more old ages than this fits a log-spaced subset of that size; every other old bin
+#: takes the shape of the nearest fitted bin and its own exact Q_H. FSPS and MIST grids
+#: (46 old ages) fit every bin; BC03 from CIGALE (13600 old ages) fits this many,
+#: which takes seconds where fitting every bin takes 7-14 minutes.
+MAX_OLD_FITS_PER_METALLICITY: int = 128
+
+_NO_IONIZING_LOG_Q: float = -99.0  #: ``logqion_table`` value of a bin with no Lyman continuum
+
+#: Old bins (older than :data:`MAX_NEB_LOG_AGE`) with ``log10 Q_H`` [photons/s/Msun] below
+#: this are left unfitted, like a bin with no Lyman continuum. A galaxy of 1e13 Msun at
+#: this rate emits 1e37 photons/s, an Halpha luminosity of order 1e25 erg/s, which is
+#: nothing next to any observed galaxy; and the SSP flux that yields it (below 1e-38 Lsun/Hz
+#: in the Lyman continuum) is at the edge of float32 storage, so a fit of its shape would
+#: depend on the storage dtype rather than on the stellar population.
+MIN_COUNTED_OLD_LOG_QION: float = 24.0
+
+
+def _thinned_old_indices(old_idx: np.ndarray, log_age: np.ndarray, limit: int) -> np.ndarray:
+    """The subset of old bins that gets its own fit, log-spaced in age.
+
+    Parameters
+    ----------
+    old_idx : ndarray of int, shape (n_old,)
+        Indices of the old bins in the SSP age axis, ascending in age.
+    log_age : ndarray, shape (n_age,)
+        log10(age/yr) of every SSP age bin.
+    limit : int
+        Most bins to select.
+
+    Returns
+    -------
+    ndarray of int, shape (<= limit,)
+        ``old_idx`` itself when it already fits within ``limit``; otherwise the bins
+        nearest to ``limit`` log-spaced ages across the old range, endpoints included.
+    """
+    if old_idx.size <= limit:
+        return old_idx
+    ages = log_age[old_idx]
+    targets = np.linspace(ages[0], ages[-1], limit)
+    nearest = np.abs(ages[None, :] - targets[:, None]).argmin(axis=1)
+    return old_idx[np.unique(nearest)]
+
+
+def _exact_log_qion(
+    ssp_wave: np.ndarray, ssp_flux: np.ndarray, rows: np.ndarray, chunk: int = 2048
+) -> np.ndarray:
+    """``log10 Q_H`` of the selected spectra by the same quadrature the per-bin fit uses.
+
+    Parameters
+    ----------
+    ssp_wave : ndarray, shape (n_wave,)
+        Wavelength grid, ascending [Angstrom].
+    ssp_flux : ndarray, shape (n_age, n_wave)
+        Spectra of one metallicity [Lsun/Hz/Msun].
+    rows : ndarray of int, shape (n_rows,)
+        Which spectra to integrate.
+    chunk : int, optional
+        Spectra integrated per pass (bounds memory on very fine age grids).
+
+    Returns
+    -------
+    ndarray, shape (n_rows,)
+        ``log10`` of the ionizing photon rate [photons/s/Msun]; -99 where there is none.
+
+    Notes
+    -----
+    The integrand ``L_nu / (h nu)`` is formed in float64 NumPy and divided row by row by a
+    power of two before the JAX quadrature, then restored in float64, as in
+    :func:`fit_ionizing_spectrum` (#458, #2849), so the result is finite in pure float32.
+    Only the grid up to the first point at or above the Lyman edge enters the ionizing
+    side of :func:`~tengri.components.lyc.edge_trapezoid`, so the rest is dropped.
+    """
+    wave = np.asarray(ssp_wave, dtype=np.float64)
+    last = int(np.searchsorted(wave, HI_LIMIT, side="left"))
+    cut = min(last + 1, wave.size)
+    wave_ion = wave[:cut]
+    nu = _C_AA / wave_ion
+    out = np.empty(rows.size)
+    for start in range(0, rows.size, chunk):
+        flux = np.asarray(ssp_flux[rows[start : start + chunk], :cut], dtype=np.float64)
+        integrand = (flux * _LSUN) / (_H_PLANCK * nu)
+        magnitude = np.where(
+            (wave_ion < HI_LIMIT) & np.isfinite(integrand), np.abs(integrand), 0.0
+        ).max(axis=1, initial=0.0)
+        exponent = np.frexp(magnitude)[1]
+        q_scaled = np.asarray(
+            edge_trapezoid(
+                np.ldexp(integrand, -exponent[:, None]),
+                wave_ion,
+                variable="nu",
+                side="ionizing",
+                edge_aa=HI_LIMIT,
+            )
+        )
+        q = np.ldexp(q_scaled.astype(np.float64), exponent)
+        # log10 of the positive rates only; a bin with none keeps the -99 'no photons' value.
+        positive = q > 0.0
+        log_q = np.log10(np.where(positive, q, 1.0))
+        out[start : start + chunk] = np.where(
+            positive, np.maximum(log_q, _NO_IONIZING_LOG_Q), _NO_IONIZING_LOG_Q
+        )
+    return out
+
+
+def _share_nearest_fit(
+    tables: dict,
+    log_age: np.ndarray,
+    fitted: np.ndarray,
+    old_idx: np.ndarray,
+    exact_log_q: np.ndarray,
+    live: np.ndarray,
+) -> None:
+    """Give every unfitted live old bin the nearest fitted shape and its own exact Q_H.
+
+    Parameters
+    ----------
+    tables : dict
+        ``ionspec_table`` (n_met, n_age, 7), ``logqion_table`` (n_met, n_age) and
+        ``seglum_table`` (n_met, n_age, 4); modified in place.
+    log_age : ndarray, shape (n_age,)
+        log10(age/yr) of each SSP age bin.
+    fitted : ndarray of bool, shape (n_met, n_age)
+        Bins whose own fit succeeded.
+    old_idx : ndarray of int, shape (n_old,)
+        Counted bins older than :data:`MAX_NEB_LOG_AGE`.
+    exact_log_q : ndarray, shape (n_met, n_old)
+        ``log10 Q_H`` of each old bin by :func:`_exact_log_qion` [photons/s/Msun].
+    live : ndarray of bool, shape (n_met, n_old)
+        Old bins above :data:`MIN_COUNTED_OLD_LOG_QION`.
+
+    Notes
+    -----
+    The donor is the nearest fitted old bin in log-age at the same metallicity. The
+    segment luminosities move with the bin's Q_H by one common offset, so the four
+    segment ratios and the slopes stay the donor's, and the bin's own photon rate is
+    exact. A bin below the Q_H floor, or one with no fitted donor at its metallicity,
+    keeps the unfitted convention (zeros, -99).
+    """
+    ionspec, logq, seglum = (
+        tables["ionspec_table"],
+        tables["logqion_table"],
+        tables["seglum_table"],
+    )
+    for im in range(ionspec.shape[0]):
+        donors = old_idx[fitted[im, old_idx]]
+        pending = live[im] & ~fitted[im, old_idx]
+        if donors.size == 0 or not pending.any():
+            continue
+        todo, exact = old_idx[pending], exact_log_q[im, pending]
+        nearest = np.abs(log_age[todo][:, None] - log_age[donors][None, :]).argmin(axis=1)
+        donor = donors[nearest]
+        ionspec[im, todo] = ionspec[im, donor]
+        seglum[im, todo] = seglum[im, donor] + (exact - logq[im, donor])[:, None]
+        logq[im, todo] = exact
 
 
 def precompute_ionizing_params_table(
@@ -619,13 +919,16 @@ def precompute_ionizing_params_table(
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
     ssp_log_age_yr: np.ndarray | None = None,
+    max_log_age: float | None = None,
 ) -> dict:
     """Precompute Cue ionizing parameters for a full SSP grid.
 
-    Batch-fits piecewise power laws to (metallicity, age) SSP spectra younger
-    than 100 Myr (older bins contribute nothing to Cue's weighted Q_H so they
-    are skipped: ``logqion_table[im, ia] = -99`` for those). Called once at
-    model initialization; results are stored and interpolated at runtime.
+    Batch-fits piecewise power laws to (metallicity, age) SSP spectra. Bins up to
+    100 Myr are fitted one by one. Older bins are counted too (unless ``max_log_age``
+    excludes them): a grid with more than :data:`MAX_OLD_FITS_PER_METALLICITY` old ages
+    fits a log-spaced subset, and every other old bin takes the shape of the nearest
+    fitted one with its own exact Q_H. Called once at model initialization; results
+    are stored and interpolated at runtime.
 
     Parameters
     ----------
@@ -636,12 +939,14 @@ def precompute_ionizing_params_table(
     ssp_lgmet : array, shape (n_met,)
         Metallicity grid in log10(Z). [log10(Z)]
     ssp_log_age_yr : array, shape (n_age,), optional
-        log10(age/yr) for each age bin. When provided, bins older than
-        :data:`MAX_NEB_LOG_AGE` (100 Myr) are skipped without
-        invoking scipy: a ~140× speedup for unusually fine age grids
-        (BC03-from-CIGALE has 13700 ages of which only ~10 are young).
-        When ``None`` (legacy callers), every bin is attempted; the per-bin
-        ``np.max(flux_iz) <= 0`` early-exit still skips dead bins.
+        log10(age/yr) for each age bin. Required for the old-bin handling: when
+        ``None`` (legacy callers) every bin is attempted, none is thinned, and
+        ``max_log_age`` is ignored; the per-bin ``np.max(flux_iz) <= 0`` early-exit
+        still skips dead bins.
+    max_log_age : float, optional
+        Oldest age to count, log10(age/yr). Bins older than this are left unfitted
+        (``logqion_table = -99``), the table the former 100 Myr cut used when this is
+        :data:`MAX_NEB_LOG_AGE`. ``None`` (default) counts every age.
 
     Returns
     -------
@@ -652,18 +957,23 @@ def precompute_ionizing_params_table(
           [ionspec_index1..4, ionspec_logLratio1..3] per SSP
         - **logqion_table** (array, shape (n_met, n_age)): Q_H ionizing photon rates
           [log10(photons/s)]
+        - **seglum_table** (array, shape (n_met, n_age, 4)): integrated segment
+          luminosities [log10(erg/s)]
         - **n_met, n_age** (int): Grid dimensions
 
     Notes
     -----
     **One-time cost**: This function is not JAX-compatible (uses scipy). Call
     once per Cue model initialization and store results (e.g., in h5 file).
-    Precomputation is O(n_met × n_age_young × n_segments) where n_age_young is
-    the count of bins ≤ 100 Myr; typically < 1 second for modern SSP grids.
+    Precomputation is O(n_met × n_fitted_ages × n_segments); n_fitted_ages is the number
+    of bins up to 100 Myr plus at most :data:`MAX_OLD_FITS_PER_METALLICITY` older ones.
 
-    **Metadata**: Unfittable SSPs (old ages with zero ionizing flux, corrupted
-    data) are left with all parameters = 0 (or −99 for log-space). Downstream
-    code handles these gracefully via clipping and default fallback values.
+    **Old bins**: ``logqion_table`` of a thinned bin is its exact edge-aware Q_H, the
+    same quadrature as a fitted bin; only its slopes and segment ratios are borrowed.
+
+    **Metadata**: Unfittable SSPs (zero ionizing flux, corrupted data) are left with all
+    parameters = 0 (or −99 for log-space). Downstream code handles these gracefully via
+    clipping and default fallback values.
 
     """
     # float64 before anything else, including the cache key (#1206).
@@ -691,7 +1001,10 @@ def precompute_ionizing_params_table(
     #    constants → the JAX persistent compilation cache misses on every
     #    fresh process. The single_thread_blas wrapper below removes the
     #    remaining BLAS-threading non-determinism inside the fits.
-    key = _ssp_fingerprint(ssp_wave, ssp_flux, ssp_lgmet)
+    # The age axis and the cutoff are in the key: they decide which bins are fitted.
+    key = _ssp_fingerprint(
+        ssp_wave, ssp_flux, ssp_lgmet, ssp_log_age_yr=ssp_log_age_yr, max_log_age=max_log_age
+    )
     cached = _IONSPEC_TABLE_CACHE.get(key)
     if cached is not None:
         return cached
@@ -702,25 +1015,40 @@ def precompute_ionizing_params_table(
 
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
-    logqion_table = np.full((n_met, n_age), -99.0)
+    logqion_table = np.full((n_met, n_age), _NO_IONIZING_LOG_Q)
     # Absolute per-segment integrated luminosities (log10). Same -99 "empty"
     # convention as logqion_table: 10**-99 == 0 contributes nothing to a sum.
-    seglum_table = np.full((n_met, n_age, 4), -99.0)
+    seglum_table = np.full((n_met, n_age, 4), _NO_IONIZING_LOG_Q)
 
     wave_np = np.asarray(ssp_wave)
 
-    # Optional age-cutoff: skip the scipy fit on bins older than the
-    # downstream Q_H weighting threshold. Saves ~99 % of fits on fine-age
-    # grids (e.g. BC03-from-CIGALE: 13700 ages → ~10 young bins).
+    # Which bins get their own scipy fit. Without an age axis every bin does. With one,
+    # bins up to 100 Myr always do; counted older bins do too, up to the thinning limit
+    # per metallicity, among those with a photon rate worth counting (the rest of the
+    # live ones are filled from their nearest fitted neighbor below).
+    fit_mask = np.ones((n_met, n_age), dtype=bool)
+    old_idx = np.zeros(0, dtype=int)
     if ssp_log_age_yr is not None:
-        young_age_mask = np.asarray(ssp_log_age_yr) <= MAX_NEB_LOG_AGE
+        log_age = np.asarray(ssp_log_age_yr, dtype=np.float64)
+        counted = np.ones(n_age, dtype=bool) if max_log_age is None else log_age <= max_log_age
+        old = counted & (log_age > MAX_NEB_LOG_AGE)
+        old_idx = np.where(old)[0]
+        fit_mask[:] = (counted & ~old)[None, :]
     else:
-        young_age_mask = np.ones(n_age, dtype=bool)
+        log_age = np.zeros(n_age)
+    exact_log_q = np.zeros((n_met, old_idx.size))
+    live = np.zeros((n_met, old_idx.size), dtype=bool)
+    for im in range(n_met if old_idx.size else 0):
+        exact_log_q[im] = _exact_log_qion(wave_np, ssp_flux[im], old_idx)
+        live[im] = exact_log_q[im] >= MIN_COUNTED_OLD_LOG_QION
+        chosen = _thinned_old_indices(old_idx[live[im]], log_age, MAX_OLD_FITS_PER_METALLICITY)
+        fit_mask[im, chosen] = True
 
+    fitted = np.zeros((n_met, n_age), dtype=bool)
     with _single_thread_blas():
         for im in range(n_met):
             for ia in range(n_age):
-                if not young_age_mask[ia]:
+                if not fit_mask[im, ia]:
                     continue
                 flux_np = np.asarray(ssp_flux[im, ia, :])
 
@@ -740,11 +1068,26 @@ def precompute_ionizing_params_table(
                     ionspec_table[im, ia, 6] = fit["ionspec_logLratio3"]
                     logqion_table[im, ia] = fit["gas_logqion"]
                     seglum_table[im, ia, :] = fit["log_seglum"]
+                    fitted[im, ia] = True
                 except (ValueError, IndexError, RuntimeError):
                     # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
                     # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
                     # RuntimeError: scipy optimization failed to converge
                     continue
+
+    if old_idx.size:
+        _share_nearest_fit(
+            {
+                "ionspec_table": ionspec_table,
+                "logqion_table": logqion_table,
+                "seglum_table": seglum_table,
+            },
+            log_age,
+            fitted,
+            old_idx,
+            exact_log_q,
+            live,
+        )
 
     result = {
         "ionspec_table": ionspec_table,

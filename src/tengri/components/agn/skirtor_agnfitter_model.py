@@ -34,6 +34,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._publication import (
+    template_sed_and_log_power,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 from tengri.components.agn.skirtor_agnfitter import create_skirtor_agnfitter_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -123,8 +128,10 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_torus : erg/s
-        Bolometric luminosity contribution from torus emission.
+    log_L_agn_torus : dex
+        log10 of the bolometric luminosity of the torus emission [dex re erg/s]: the
+        frequency integral of the emitted torus SED, formed in log space so it is finite and
+        accurate in pure float32 (NAMING_CONTRACT section 4c). ``-inf`` is an absent torus.
 
     Notes
     -----
@@ -213,7 +220,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"L_agn_torus": "erg/s"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs({"log_L_agn_torus": "dex"})
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load SKIRTOR_mean_3p template grid if available.
@@ -276,32 +283,31 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + torus contribution).
-            - published: {"L_agn_torus": bolometric torus luminosity [erg/s]}.
+            - published: {"log_L_agn_torus": log10 of the bolometric torus luminosity
+              [dex re erg/s]}.
 
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"L_agn_torus": jnp.array(0.0)}
+            return sed_in, with_lsun_siblings({"log_L_agn_torus": jnp.array(-jnp.inf)})
 
         skirtor_agnfitter_fn = self.data
 
-        # Call SKIRTOR_mean_3p interpolator
-        sed_torus = skirtor_agnfitter_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_oa_skirtor=p["oa_skirtor"],
-            agn_incl_skirtor=p["incl_skirtor"],
-            agn_tv_skirtor=p["tv_skirtor"],
-            agn_torus_frac=p["torus_frac"],
+        def _torus(wave_eval, log_lbol_eval):
+            return skirtor_agnfitter_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=log_lbol_eval,
+                agn_oa_skirtor=p["oa_skirtor"],
+                agn_incl_skirtor=p["incl_skirtor"],
+                agn_tv_skirtor=p["tv_skirtor"],
+                agn_torus_frac=p["torus_frac"],
+            )
+
+        # Published log_L_agn_torus: the exact integral of the emitted torus SED, in log space.
+        # The template is a log-log power law between its native nodes, so the integral is
+        # closed form on them.
+        torus, log_L_torus = template_sed_and_log_power(
+            _torus, skirtor_agnfitter_fn.native_wave, wave, p["log_lbol"]
         )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_torus = bolometric_integral_nu(sed_torus, nu)
-
-        # Add to intrinsic SED
-        sed_out = sed_in + sed_torus
-
-        return sed_out, {"L_agn_torus": L_torus}
+        return sed_in + torus, with_lsun_siblings({"log_L_agn_torus": log_L_torus})

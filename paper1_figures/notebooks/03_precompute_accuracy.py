@@ -29,7 +29,7 @@ while not (HERE / "paper1_figures").is_dir() and HERE.parent != HERE:
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "paper1_figures"))
 
-from _run import repo_root, run_figure
+from _run import figure_outcome, repo_root, report_figures, run_figure
 
 REPO = repo_root(HERE)
 sys.path.insert(0, str(REPO))
@@ -81,6 +81,11 @@ print(f"fig03_precompute: {status}")
 # inspection rather than for inclusion.
 
 # %%
-for name in ("figB1_lut_accuracy.pdf", "fig03_precompute.pdf"):
-    path = OUT / name
-    print(f"{'ok ' if path.is_file() else 'MISSING'} {name}")
+raise SystemExit(
+    report_figures(
+        {
+            "figB1_lut_accuracy.pdf": figure_outcome(status, OUT / "figB1_lut_accuracy.pdf"),
+            "fig03_precompute.pdf": figure_outcome(status, OUT / "fig03_precompute.pdf"),
+        }
+    )
+)

@@ -105,7 +105,10 @@ def grid_spacing(log_age_grid: jnp.ndarray) -> float:
 
 
 def interpolate_to_linear_time(
-    log_age_grid: jnp.ndarray, values: jnp.ndarray, n_linear: int = 1000
+    log_age_grid: jnp.ndarray,
+    values: jnp.ndarray,
+    n_linear: int = 1000,
+    age_at_z_gyr=None,
 ) -> tuple:
     """Interpolate a quantity from log-age grid to uniform linear time.
 
@@ -122,6 +125,14 @@ def interpolate_to_linear_time(
         Values on the log-age grid (e.g., SFR).
     n_linear : int
         Number of points in the output linear grid.
+    age_at_z_gyr : float, optional
+        Cosmic age at the model redshift [Gyr]. When given, the resampled
+        values are multiplied by the output grid's own cell-overlap weight of
+        ``[0, age(z)]`` (partial weight for the straddling cell) and are
+        exactly zero at every output node beyond ``age(z)``. The AXIS stays
+        redshift independent, so histories of different draws (posterior SFH
+        bands) share one abscissa. ``None`` (default) leaves the values
+        unbounded.
 
     Returns
     -------
@@ -135,4 +146,11 @@ def interpolate_to_linear_time(
     t_linear_yr = jnp.linspace(age_yr_min, age_yr_max, n_linear)
     log_t_linear = jnp.log10(t_linear_yr)
     values_linear = jnp.interp(log_t_linear, log_age_grid, values)
+    if age_at_z_gyr is not None:
+        from tengri.components.stellar.sfh.mean_sfh import window_weight
+
+        age_yr = age_at_z_gyr * 1e9
+        values_linear = (
+            values_linear * window_weight(t_linear_yr, 0.0, age_yr) * (t_linear_yr <= age_yr)
+        )
     return t_linear_yr / 1e9, values_linear

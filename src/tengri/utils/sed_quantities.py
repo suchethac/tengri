@@ -45,9 +45,16 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import logsumexp
 
+from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
-from tengri.utils.scale import LN10, log10_magnitude, pow10, representable_denominator
+from tengri.utils.scale import (
+    LN10,
+    log10_magnitude,
+    pow10,
+    representable_denominator,
+    representable_floor,
+)
 
 # Re-export for convenience
 __all__ = [
@@ -379,6 +386,69 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     return jnp.maximum(_trapz_to_lsun(sed_ir, C_AA / wave), 0.0)
 
 
+def log10_band_luminosity(
+    sed: jnp.ndarray, wave: jnp.ndarray, lo_aa: float, hi_aa: float
+) -> jnp.ndarray:
+    r"""log10 of the luminosity in a rest-wavelength window, edge-exact [dex re erg/s].
+
+    .. math::
+
+        L_{[\lambda_{\rm lo},\lambda_{\rm hi}]} =
+        \int_{c/\lambda_{\rm hi}}^{c/\lambda_{\rm lo}} L_\nu \, d\nu
+
+    The window edges need not sit on grid nodes: :math:`L_\nu` is taken linear in
+    :math:`\nu` between nodes, every grid cell is clipped to the window, and the
+    trapezoid rule is applied to the clipped cell. A window with its edges
+    between two nodes therefore integrates exactly the requested band, where
+    :func:`compute_l_tir` keeps or drops whole nodes.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz].
+    wave : array, shape (n_wave,)
+        Rest wavelength grid, ascending [Angstrom].
+    lo_aa, hi_aa : float
+        Window edges [Angstrom], ``lo_aa < hi_aa``.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\log_{10}(L / {\rm erg\,s^{-1}})`; ``-inf`` when the window holds
+        no positive flux. Formed from the peak-normalized integrand, so the
+        ~1e43 erg/s value is never materialized (float32-safe, #1206). Repeated grid
+        nodes (a float32 grid) are zero-width cells and carry no weight.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes; the window is a static Python pair.
+    """
+    nu = C_AA / wave
+    nu_lo = C_AA / hi_aa
+    nu_hi = C_AA / lo_aa
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed), initial=0.0))
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    f = sed / peak
+    nu_a, nu_b = nu[:-1], nu[1:]  # nu_a > nu_b: wave ascends
+    f_a, f_b = f[:-1], f[1:]
+    a = jnp.clip(nu_a, nu_lo, nu_hi)
+    b = jnp.clip(nu_b, nu_lo, nu_hi)
+    # A float32 rest grid spanning 10 A to 3e11 A repeats nodes at the long end
+    # (nu_a == nu_b), where the slope is 0/0 and poisons the sum. Such a cell has
+    # zero width after clipping, so it carries no weight; the double where keeps
+    # the NaN out of the backward pass as well.
+    dnu = nu_a - nu_b
+    wide = dnu > 0.0
+    slope = jnp.where(wide, (f_a - f_b) / jnp.where(wide, dnu, jnp.ones_like(dnu)), 0.0)
+    f_at_a = f_b + slope * (a - nu_b)
+    f_at_b = f_b + slope * (b - nu_b)
+    norm = jnp.sum(0.5 * (f_at_a + f_at_b) * (a - b))
+    positive = norm > 0.0
+    safe = jnp.where(positive, norm, jnp.ones_like(norm))
+    log_l = jnp.log10(safe) + jnp.log10(peak)
+    return jnp.where(positive, log_l, -jnp.inf)
+
+
 def compute_l_dust_absorbed(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,
@@ -525,7 +595,8 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Narrow 4000 Å break index (Balogh et al. 1999).
 
     Defined as the ratio of mean f_ν in the red (4000–4100 Å) to blue
-    (3850–3950 Å) windows:
+    (3850–3950 Å) windows, published in air and applied in vacuum
+    (:mod:`tengri.utils.break_windows`):
 
     .. math::
 
@@ -546,8 +617,8 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     float
         Dn4000 (dimensionless).
     """
-    red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
-    blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
+    red = _mean_flux_in_band(sed, wave, *DN4000_RED_AA)
+    blue = _mean_flux_in_band(sed, wave, *DN4000_BLUE_AA)
     # Denominator floor sized for its derivative, not its value: 1e-30 squares
     # to exactly 0.0 in float32 so the quotient's VJP divides by zero (#1860).
     return red / jnp.maximum(blue, representable_denominator(1e-30))
@@ -704,24 +775,162 @@ def compute_m_uv(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     return lnu_to_absolute_ab_mag(l_nu)
 
 
-def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
-    """Monochromatic UV luminosity νL_ν at rest-frame 1600 Å.
+#: Calzetti, Kinney & Storchi-Bergmann 1994, ApJ 429, 582, Table 2: the ten
+#: rest-frame windows that measure the UV continuum slope (the 2175 A bump and
+#: Lya are excluded). ``(lo, hi)`` in Angstrom.
+CALZETTI94_WINDOWS_AA: tuple[tuple[float, float], ...] = (
+    (1268.0, 1284.0),
+    (1309.0, 1316.0),
+    (1342.0, 1371.0),
+    (1407.0, 1515.0),
+    (1562.0, 1583.0),
+    (1677.0, 1740.0),
+    (1760.0, 1833.0),
+    (1866.0, 1890.0),
+    (1930.0, 1950.0),
+    (2400.0, 2580.0),
+)
 
-    Used in IRX-β and ionizing efficiency calculations.
+#: Rest-frame anchor of the UV luminosity [Angstrom].
+UV_ANCHOR_AA: float = 1600.0
+
+#: Minimum number of Calzetti-window grid points that can fix a power law.
+_UV_MIN_FIT_POINTS: int = 2
+
+#: Floor under ``L_nu`` before a log, made representable at the working dtype.
+_LOG_L_NU_FLOOR: float = 1e-300
+
+
+def _calzetti_window_mask(wave_np: np.ndarray) -> np.ndarray:
+    """True where a grid point lies in one of the Calzetti 1994 UV windows."""
+    in_window = np.zeros(wave_np.shape, dtype=bool)
+    for lo, hi in CALZETTI94_WINDOWS_AA:
+        in_window |= (wave_np >= lo) & (wave_np <= hi)
+    return in_window
+
+
+def _power_law_anchor_weights(lam_fit: np.ndarray) -> np.ndarray:
+    """Weights ``c`` with ``log10 L_nu(1600) = c . log10 L_nu`` on the fit points.
+
+    Unweighted least squares of ``log10 L_nu`` on ``log10 lambda``. The design
+    depends only on the grid, so the weights are static and every gradient
+    with respect to the SED is a fixed linear combination.
+    """
+    x = np.log10(lam_fit)
+    design = np.stack([np.ones_like(x), x], axis=1)
+    pseudo_inverse = np.linalg.solve(design.T @ design, design.T)
+    anchor = np.array([1.0, np.log10(UV_ANCHOR_AA)])
+    return anchor @ pseudo_inverse
+
+
+def _uv_anchor_plan(wave):
+    """Decide how ``L_nu(1600 A)`` is obtained from the grid, once per grid.
+
+    Returns ``(mode, weights)``:
+
+    - ``"in_grid"``: the grid spans 1600 A; plain linear interpolation.
+    - ``"extrapolate"``: the grid stops short of 1600 A but has at least two
+      Calzetti-window points; ``weights`` (full grid length) give
+      ``log10 L_nu(1600)`` as a dot product with ``log10 L_nu``.
+    - ``"edge"``: no UV information; the nearest edge value (the legacy clamp).
+    - ``"traced"``: ``wave`` is a tracer, so coverage cannot be decided here.
+
+    Warns for ``"extrapolate"`` and ``"edge"``.
+    """
+    if isinstance(wave, jax.core.Tracer):
+        return "traced", None
+    from tengri.config.exceptions import warn_measured
+
+    wave_np = np.asarray(wave, dtype=np.float64)
+    lo, hi = float(wave_np[0]), float(wave_np[-1])
+    if lo <= UV_ANCHOR_AA <= hi:
+        return "in_grid", None
+    fit_idx = np.flatnonzero(_calzetti_window_mask(wave_np))
+    if fit_idx.size < _UV_MIN_FIT_POINTS:
+        warn_measured(
+            f"SED grid [{lo:g}, {hi:g}] A does not span {UV_ANCHOR_AA:g} A and has "
+            f"{fit_idx.size} point(s) in the Calzetti 1994 UV windows; L_nu(1600 A) "
+            "falls back to the nearest edge value, which carries no UV information.",
+            grid_min_aa=lo,
+            grid_max_aa=hi,
+            n_fit_points=float(fit_idx.size),
+        )
+        return "edge", None
+    lam_fit = wave_np[fit_idx]
+    weights = np.zeros(wave_np.shape, dtype=np.float64)
+    weights[fit_idx] = _power_law_anchor_weights(lam_fit)
+    warn_measured(
+        f"SED grid [{lo:g}, {hi:g}] A does not span {UV_ANCHOR_AA:g} A; L_nu(1600 A) is "
+        f"extrapolated along a power law fitted in log-log over {fit_idx.size} "
+        f"Calzetti 1994 UV-window points in [{lam_fit.min():g}, {lam_fit.max():g}] A.",
+        grid_min_aa=lo,
+        grid_max_aa=hi,
+        n_fit_points=float(fit_idx.size),
+    )
+    return "extrapolate", weights
+
+
+def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    r"""Monochromatic UV luminosity :math:`\nu L_\nu` at rest-frame 1600 A [erg/s].
+
+    Used in IRX-beta and ionizing efficiency calculations. Three cases, decided
+    from the wavelength grid:
+
+    - The grid spans 1600 A: linear interpolation, exact.
+    - The grid stops short of 1600 A but has at least two points in the
+      Calzetti 1994 UV windows: power-law UV extrapolation (see Notes).
+      Warns.
+    - Fewer than two window points: the nearest edge value, the legacy clamp.
+      Warns. This is the only case with no better estimate.
 
     Parameters
     ----------
-    sed : array, shape (n_wave,)
+    sed : array_like, shape (n_wave,)
         SED in erg/s/Hz.
-    wave : array, shape (n_wave,)
-        Wavelength in Angstrom.
+    wave : array_like, shape (n_wave,)
+        Wavelength in Angstrom, ascending.
 
     Returns
     -------
-    float
-        νL_ν at 1600 Å in erg/s.
+    ndarray, shape ()
+        :math:`\nu L_\nu` at 1600 A [erg/s]. Not float32-representable for a
+        normal galaxy; prefer :func:`compute_log_uv_luminosity_1600` there.
+
+    Warns
+    -----
+    UserWarning
+        When the grid does not span 1600 A (see the cases above), naming the
+        grid range and the method used. Emitted when ``wave`` is concrete;
+        under a JAX trace the grid coverage is not decided (see Notes).
+
+    Notes
+    -----
+    **Approximation: power-law UV extrapolation over the Calzetti 1994 windows.**
+    Valid when the UV continuum is a power law between the covered window and
+    1600 A. :math:`\log_{10} L_\nu` is fitted against :math:`\log_{10}\lambda` on
+    the grid points in the Calzetti, Kinney & Storchi-Bergmann (1994, ApJ 429,
+    582) windows, and the fitted line is evaluated at 1600 A. Its slope is
+    :math:`\beta + 2` for :math:`L_\lambda \propto \lambda^\beta`. Only the
+    covered portion is used. The fit weights depend only on the grid, so
+    gradients with respect to the SED are finite and exact for the linear fit.
+
+    **Coverage is static.** For a concrete ``wave`` the branch is taken in
+    Python, so the unused branch is never traced. Under a JAX trace (a
+    ``wave`` threaded through ``jax.jit`` as an argument) the grid cannot be
+    inspected, so the value is NaN where ``wave`` does not span 1600 A. The
+    shipped SSP grids all span it.
+
+    **JIT/grad/vmap-compatible**: yes for a concrete grid (the usual case).
+    Under a trace, yes, with the NaN rule above.
     """
-    l_nu_1600 = jnp.interp(1600.0, wave, sed)
+    mode, weights = _uv_anchor_plan(wave)
+    if mode == "extrapolate":
+        log_l_nu = jnp.log10(jnp.maximum(sed, representable_floor(_LOG_L_NU_FLOOR)))
+        l_nu_1600 = jnp.power(10.0, jnp.dot(weights, log_l_nu))
+    elif mode == "edge":
+        l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed)
+    else:
+        l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed, left=jnp.nan, right=jnp.nan)
     nu_1600 = C_AA / 1600.0
     return nu_1600 * l_nu_1600
 
@@ -745,6 +954,10 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
     float32** at all: its ``inf`` then propagated into ``irx`` as ``NaN``, even
     though IRX itself is a dex ratio of order unity (issue #1837).
 
+    The coverage cases (in grid, power-law extrapolation, edge fallback) are
+    those of :func:`compute_uv_luminosity_1600`; the warnings and the
+    approximation flag carry over unchanged.
+
     Parameters
     ----------
     sed : array_like, shape (n_wave,)
@@ -757,16 +970,46 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
     ndarray, shape ()
         :math:`\log_{10}(\nu L_\nu)` [dex re erg/s]. ``-inf`` where the
         interpolated :math:`L_\nu` is exactly zero, following the
-        :func:`~tengri.utils.scale.log10_magnitude` sentinel contract.
+        :func:`~tengri.utils.scale.log10_magnitude` sentinel contract. Finite
+        for every concrete grid: a grid with no UV information returns the
+        nearest-edge value (with a warning), and a grid short of 1600 A returns
+        the power-law extrapolation (with a warning).
+
+    Warns
+    -----
+    UserWarning
+        As for :func:`compute_uv_luminosity_1600`.
 
     Notes
     -----
-    **JIT/grad/vmap-compatible**: yes. Equal to
+    **Approximation: power-law UV extrapolation over the Calzetti 1994 windows**
+    when the grid stops short of 1600 A; see :func:`compute_uv_luminosity_1600`.
+    Valid when the UV continuum is a power law between the covered window and
+    1600 A.
+
+    **JIT/grad/vmap-compatible**: yes for a concrete grid. Equal to
     ``log10(compute_uv_luminosity_1600(...))`` to ~1e-15 relative in float64,
-    and finite in float32 wherever :math:`L_\nu` itself is.
+    and finite in float32 wherever :math:`L_\nu` itself is. The extrapolated
+    branch takes the log of :math:`L_\nu` under a representable floor, so a
+    zero :math:`L_\nu` at a fit point is finite (very negative), not ``-inf``.
     """
-    l_nu_1600 = jnp.interp(1600.0, wave, sed)
-    return log10_magnitude(l_nu_1600) + LOG10_NU_1600
+    mode, weights = _uv_anchor_plan(wave)
+    if mode == "extrapolate":
+        log_l_nu = jnp.log10(jnp.maximum(sed, representable_floor(_LOG_L_NU_FLOOR)))
+        return jnp.dot(weights, log_l_nu) + LOG10_NU_1600
+    if mode == "edge":
+        l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed)
+        return log10_magnitude(l_nu_1600) + LOG10_NU_1600
+    l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed, left=jnp.nan, right=jnp.nan)
+    log_in_grid = log10_magnitude(l_nu_1600) + LOG10_NU_1600
+    if mode == "traced":
+        return jnp.where(_grid_spans_1600(wave), log_in_grid, jnp.nan)
+    return log_in_grid
+
+
+def _grid_spans_1600(wave: jnp.ndarray) -> jnp.ndarray:
+    """True when the ascending ``wave`` grid covers the 1600 A anchor."""
+    return (wave[0] <= 1600.0) & (wave[-1] >= 1600.0)
 
 
 def compute_irx(
@@ -835,6 +1078,10 @@ def compute_irx(
 
 def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Rest-frame U-V color from rectangular band approximations.
+
+    Definition: the AB color between two rectangular top-hats on the rest-frame
+    :math:`L_\\nu`, 3200–3900 Å (U) minus 5000–5800 Å (V). It is not FUV−NUV and
+    not f_1500 − f_2300.
 
     Uses approximate Johnson U (3200–3900 Å) and V (5000–5800 Å)
     bands. Sufficient for UVJ classification; for precision photometry

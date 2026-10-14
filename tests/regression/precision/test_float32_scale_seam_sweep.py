@@ -453,95 +453,47 @@ _AGN_MBH_DUST = {
     "tau_bc": 0.0,
 }
 
-#: Reference float64 values (17 significant figures) captured on THIS branch's own
-#: merged tree (audit/agnfitter-parity, post-#2292 merge) using
-#: :func:`_agn_black_hole_mass_predict` (:data:`_F64_REFERENCE_CHILD`) with
-#: ``sfh_delayed_log_total_mass=10.0``, in a fresh process, jax/jaxlib 0.11.1 on
-#: CPU. These are NOT the values #2270 shipped upstream: this branch's own
-#: polar/torus dust-budget physics -- the polar re-emission folded into the AGN
-#: dust budget, the covering factor following the disc's own frame, and the
-#: stored inclination normalization applied to the torus grid -- moves
-#: ``rest_sed_sum`` by -2.26% / -2.04% / -1.96% (mbh 6/8/10) relative to the
-#: original capture on origin/main at 18cf9fb9ec73e5b2010b278f21b7c473431ae800
-#: (the commit #2270 branched from). Guards float64 stability of the #2210
-#: regrouping through the full disc -- not bit-identity with upstream's numbers,
-#: which this branch changed on purpose (rtol=1e-8; see
-#: :func:`test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping`
-#: for the tolerance derivation and #2225).
-#: ``rest_sed_last`` (the far-IR end of the grid) was re-taken on the #1512 fix, which
-#: carries the composable disc's inclination ratio past the 1e7 Å template edge instead
-#: of zeroing it; the other keys were unchanged to 3e-11.
-#: ``photometry`` (redshift=0.1) was re-taken for #2517, which adds the photon and
-#: massive-neutrino density terms to ``E(z)``: the luminosity distance at z=0.1 shifts
-#: by a few parts in 1e4, and photometry carries the ``(1+z)/(4 pi d_L^2)`` dimming
-#: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
-#: (max relative difference ~3e-11, noise floor). See
-#: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
-#: Re-taken for the Lyman-edge convention of the dust energy balance (the cell that
-#: straddles 911.76 A is integrated with the step model, not zeroed-and-trapezoided
-#: from 912 A). Measured: ``L_absorbed`` drops by 1.357e-3 on this model; an independent
-#: numpy step-model integral of the same SEDs reproduces the new ``L_ir`` to 3e-9 and the
-#: old hard-912 construction reproduces the old one to 1.4e-3. The AGN components scale
-#: with the stellar dust luminosity (``fracAGN``), so ``rest_sed`` below 912 A (AGN only)
-#: moves by exactly -1.357e-3 and the dust-emission bands (WISE) by -7.5e-4; the
-#: stellar optical is unchanged to 5e-5. rest_sed_sum moved -7.2e-5 / -1.1e-4 / -1.3e-4.
-#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
-#: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
-#: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
-#: ``test_tied_disc_reference_of_the_seam_sweep`` in
-#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
-#: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
-#: disc is multiplied by ``eta(30 deg) T``.
-#: Re-captured on the native kubota_done wavelength axis: the model's master grid now
-#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade, 75 below 1000 A; 6604
-#: nodes), so the node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
-#: (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The composable runner's
-#: budgets no longer depend on the caller's grid, which is what makes the entries a property
-#: of the model: the photometry agrees with the variant that carries 200 points per decade
-#: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
-#: dust-energy balance is integrated on the master grid).
-#: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
-#: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
-#: where the corona now weighs four times less relative to the disc than under
-#: ``(cos i / 2) D_nu + H_nu``, so the disc part of the tied shape rises by +0.25 % / +88 % /
-#: +102 % (mbh 6/8/10; the formula and the measured in-grid corona-to-disc ratios are beside
-#: ``_DISC_TIMES_ETA_T_REFERENCE``). The disc is 0.21 % / 5.2 % / 6.2 % of ``rest_sed_sum``,
-#: which moves by +5.1e-6 / +2.26 % / +2.35 % (at mbh 6 the product closes, 0.25 % x 0.0021;
-#: at 8 and 10 the corona's own bins mix in); the r-band photometry moves by +5.6e-6 /
-#: +2.9 % / +2.7 %.
-#: Re-captured for the SKIRTOR tie that normalizes the disc only and carries the corona on top
-#: (angle-integrated share ``f/(1 - f)`` of the tied disc's power, torus-screened; the formula and
-#: every measured input are beside ``_DISC_TIMES_ETA_T_REFERENCE`` in
-#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``). The disc part of the tied
-#: disc rises by 1.00084 / 1.41163 / 1.51225 (mbh 6/8/10) and the corona is added; the disc
-#: sum changes by 0.084 % / 40.61 % / 49.11 % (measured sums 3.2340e+29 /
-#: 8.5090e+30 / 1.0286e+31). The first bin (0.01 A) is the corona alone, below the library
-#: range, and no longer vanishes. Predicted forward from the previous capture (rest_sed_sum
-#: 1.559372e+32 / 1.675785e+32 / 1.709509e+32) it agrees with these entries to
-#: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
-#: the three photometry entries are predicted through the same filter projection (band disc
-#: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
+#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de, which carries
+#: #2808 and #2694/#2807/#2837). Old -> new, relative, against the pins on origin/main (the file's
+#: prior values):
+#:
+#:     log M_BH 6: rest_sed_sum +1.17e-05, rest_sed_0 +4.39e-02,
+#:       rest_sed_mid -1.16e-06, rest_sed_last -3.46e-06
+#:     photometry (r, W3, W4) +2.93e-06, -6.32e-07, -1.63e-07
+#:
+#:     log M_BH 8: rest_sed_sum +1.01e-04, rest_sed_0 -7.24e-02,
+#:       rest_sed_mid +2.07e-04, rest_sed_last -5.16e-05
+#:     photometry (r, W3, W4) +2.14e-04, -8.48e-06, -2.32e-06
+#:
+#:     log M_BH 10: rest_sed_sum -3.94e-03, rest_sed_0 -5.65e-01,
+#:       rest_sed_mid -4.11e-03, rest_sed_last -3.12e-04
+#:     photometry (r, W3, W4) -4.28e-03, -7.10e-04, -3.79e-05
+#: Cause of the largest move (mbh 10, rest_sed_0 -5.65e-1, rest_sed_sum -3.9e-3): the #2733
+#: kubota_done corona change on this branch (243acb9a3, b24c8bc5d, b4e2cb526), the same move the
+#: #2733 re-pin recorded against its own pre-#2733 parent. Branch contribution measured as the
+#: merged tree minus origin/main bc4c183de (the table above is that difference). #2818 (float32
+#: intent in disc.py) is not separated from #2733 by a separate capture.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593717102152515e32,
-        "rest_sed_0": 102893969334605.2,
-        "rest_sed_mid": 2.8913768894385195e28,
-        "rest_sed_last": 8.775429623072713e21,
-        "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
+        "rest_sed_sum": 1.5593843975410476e32,
+        "rest_sed_0": 107819931932531.69,
+        "rest_sed_mid": 2.891412814811677e28,
+        "rest_sed_last": 8.773429501326086e21,
+        "photometry": (1.0995053322079293e-27, 1.5613862801437854e-27, 1.770439035766937e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6757849286069842e32,
-        "rest_sed_0": 2.8226908028998744e16,
-        "rest_sed_mid": 3.1537086678827116e28,
-        "rest_sed_last": 8.838700680503838e21,
-        "photometry": (1.2055131101702632e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
+        "rest_sed_sum": 1.6764087615329647e32,
+        "rest_sed_0": 2.6280923659312508e16,
+        "rest_sed_mid": 3.1554292154441393e28,
+        "rest_sed_last": 8.836513097035511e21,
+        "photometry": (1.2062026449580821e-27, 1.5634711019050015e-27, 1.7710420103722184e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.709508629849637e32,
-        "rest_sed_0": 2.9574176722363988e16,
-        "rest_sed_mid": 3.2080316645611165e28,
-        "rest_sed_last": 9.756086413931552e21,
-        "photometry": (1.220384227860453e-27, 1.596873080026319e-27, 1.7715814700124443e-27),
+        "rest_sed_sum": 1.703425617122919e32,
+        "rest_sed_0": 1.2917978371688406e16,
+        "rest_sed_mid": 3.1962498151353243e28,
+        "rest_sed_last": 9.754766942342692e21,
+        "photometry": (1.2157011889186551e-27, 1.5872221286512619e-27, 1.77876016593289e-27),
     },
 }
 

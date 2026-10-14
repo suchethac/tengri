@@ -17,6 +17,16 @@ For empirical disc backends that do not model a corona explicitly, the X-ray lum
 $$ (eq-alpha-ox)
  where $L_\nu(2500\,\text{\AA})$ is in $\mathrm{erg\,s^{-1}\,Hz^{-1}}$. The definition $\alpha_{\rm ox} \equiv 0.384\,\log(L_{2\,\rm keV}/L_{2500})$ then gives the 2 keV monochromatic luminosity. An additive offset $\Delta\alpha_{\rm ox}$ (prior $|\Delta\alpha_{\rm ox}| < 0.2$) absorbs scatter around the mean relation.
 
+#### Reproducing CIGALE's yang20 controls.
+
+The `xray={'type': 'yang20'}` block exposes the three controls of CIGALE's `yang20` module, with the same formulas:
+
+- **Absolute $\alpha_{\rm ox}$.** `xray={'type': 'yang20', 'alpha_ox': Uniform(-1.9, -1.1)}` sets the slope directly, as CIGALE's `alpha_ox` list does. The corona forms the offset $\Delta\alpha_{\rm ox} = \alpha_{\rm ox} - \alpha_{\rm ox}^{\rm Just07}(L_{2500})$ on every draw, so the 2 keV anchor is exactly $\alpha_{\rm ox}$. Give `alpha_ox` or `delta_alpha_ox`, never both: naming both raises `ParameterError`. Without either key the offset defaults to $\Delta\alpha_{\rm ox} = 0$.
+- **Anisotropy coefficients.** `xray_a1` (default 0.5, prior Uniform(0, 1)) and `xray_a2` (default 0.0, prior Uniform(-0.5, 0.5)) are the coefficients of the anisotropy in Eq. (eq-xray-aniso). `xray_a1=0, xray_a2=0` is isotropic, CIGALE's `angle_coef` "0 & 0".
+- **`max_dev_alpha_ox`.** CIGALE rejects a model whose $\alpha_{\rm ox}$ lies more than `max_dev_alpha_ox` from the Just et al. (2007) relation. tengri offers the soft form: a Gaussian prior on the offset with $\sigma$ equal to `max_dev_alpha_ox`, `xray={'type': 'yang20', 'delta_alpha_ox': Gaussian(0.0, 0.2)}` for `max_dev_alpha_ox = 0.2`. The log-prior at $\Delta\alpha_{\rm ox} = \pm 0.2$ is 0.5 below its value at $\Delta\alpha_{\rm ox} = 0$; a model is penalized, not rejected.
+
+The per-term X-ray luminosities that CIGALE reports are derived keys in $\log_{10}$ [dex re erg s$^{-1}$], each the band integral of the term that enters the X-ray SED. The properties are `log_l_x_hmxb_2_10` (HMXB, 2--10 keV), `log_l_x_lmxb_2_10` (LMXB, 2--10 keV), `log_l_x_hotgas_0p5_2` (hot gas, 0.5--2 keV), `log_l_x_agn_2_10` (corona, 2--10 keV), `log_l_x_agn_total` (unabsorbed corona, 0.25--1240 keV, the band of CIGALE's `yang20` module), and `log_lnu_2kev_30deg`, the intrinsic 2 keV monochromatic $L_\nu$ at $\cos i = 30^\circ$ in $\log_{10}$ [dex re erg s$^{-1}$ Hz$^{-1}$], the $\alpha_{\rm ox}$ anchor CIGALE prints. The two XRB terms add to `log_l_x_xrb`. Terms that are exactly zero report $-\infty$. Under the `lopez24` corona the 2 keV anchor is not defined, so `log_lnu_2kev_30deg` reports $-\infty$ there.
+
 #### X-ray spectral shape.
 
 The corona spectrum is a power law with exponential cutoff: $$L_\nu \propto E^{1 - \Gamma}\,\exp\!\left(-\frac{E}{E_{\rm cut}}\right),
@@ -75,17 +85,30 @@ $$ (eq-fir-radio)
 
 - `bell2003` (Bell 2003): constant $q_{\rm IR} = 2.64$, the calibration of the total 1.4 GHz luminosity (see the free-free section below).
 
-- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term.
+- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above. Because the nebular free-free is modeled rather than fixed at Bell's empirical 10 %, that total differs from the calibration by a few per cent (0.96 for a delayed-tau galaxy of 1 Gyr at 5 Gyr, 1.02 for constant star formation).
 
-- `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
+- `delvecchio2021` (Delvecchio et al. 2021, Eq. 5): the multi-parametric total-radio fit $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$ at 1.4 GHz, with defaults $q_0 = 2.646$, $m_s = 0.148$, $z_s = -0.023$ (the paper's best fit, $\pm 0.024$, $\pm 0.013$, $\pm 0.008$).
 
-- `mccheyne2022` (McCheyne et al. 2022): same functional form with defaults $q_0 = 1.98$, $m_s = -0.22$, $z_s = 0.02$.
+- `mccheyne2022` (McCheyne et al. 2022, A&A 662, A100, Sect. 5.2): the joint redshift and mass fit at 150 MHz, $q_{\rm TIR} = q_0(1+z)^{z_s} + m_s(\log M_\star - 10.45)$ with $q_0 = 1.98 \pm 0.02$, $z_s = 0.02 \pm 0.04$, $m_s = -0.22 \pm 0.03$, valid for $z < 0.4$ and $M_\star > 10^{10.45}$. The IR input is the 8--1000 $\mu$m luminosity (the paper's Eq. 4 definition), and the 150 MHz synchrotron uses the paper's $\alpha = 0.60$ (Table 3). The constants are from the paper's accepted-manuscript text layer (Leiden repository, hdl 1887/3561784).
+
+For both mass/redshift modes $q_{\rm IR}$ calibrates the **total** luminosity at the mode's own reference frequency, $L^{\rm tot}_{\nu_{\rm ref}} = L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\cdot10^{q_{\rm IR}})$, exactly as for `bell2003`: the synchrotron term is the total minus the Murphy et al. (2011) free-free term at $\nu_{\rm ref}$, and no Bell $n(L)$ factor multiplies it (the mass and luminosity trend is already in $q_{\rm IR}$). The build evaluates the worst corner of the declared box, over $q_0$, the mass and redshift slopes, the redshift, and the stellar mass the radio block reads, and refuses the box if $q$ there exceeds $q_\ast$ at $\nu_{\rm ref}$ (the same limit as for `bell2003`). The lowest reachable $\log M_\star$ is the SFH `log_total_mass` floor plus $\log_{10}$ of the smallest SSP mass-remaining fraction (a conservative bound).
+
+#### Calibrated domain of the mass and redshift relations.
+
+Each relation is an empirical linear fit, valid only over the sample it was fitted to. Outside that sample it is not extrapolated: its mass and redshift arguments are held at the nearest edge, so the relation is constant beyond the edge and its gradient with respect to those arguments is zero there.
+
+- `delvecchio2021`: $0.1 < z < 4.5$ and $10^8 < M_\star/M_\odot < 10^{12}$ (Delvecchio et al. 2021, Sect. 2).
+- `mccheyne2022`: $M_\star > 10^{10.45}\,M_\odot$ and $z < 0.4$ (McCheyne et al. 2022, Sect. 5.2, the joint fit). No upper mass bound is stated.
+
+If a declared prior on the stellar mass or the redshift reaches outside these ranges, the build issues a warning that names the range and the calibration. It is not an error: the relation is held at the edge there. A default galaxy at $z = 0$ therefore warns in `delvecchio2021`, because $z = 0$ lies below the calibrated range, and its $q_{\rm IR}$ is the value at $z = 0.1$.
+
+The build refuses a declared box only when its worst corner makes the synchrotron term negative. For the default free priors of both modes that worst corner stays below $q_\ast$, so those boxes build.
 
 The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters in all mass/redshift-dependent modes, enabling hierarchical inference over galaxy populations.
 
 #### Normalization relative to CIGALE.
 
-CIGALE's `radio` module normalizes the star-forming synchrotron at the 21 cm wavelength ($\nu = 1.42758\,$GHz) with a default $q_{\rm IR} = 2.58$. tengri anchors at $1.4\,$GHz, the frequency at which Bell (2003) defines $q_{\rm IR}$, and its default is $q_{\rm IR} = 2.64$. At equal $L_{\rm IR}$ and $\alpha_{\rm SF}$ the tengri luminosity is the CIGALE one times the frequency-independent factor $10^{\,q_{\rm CIGALE} - q_{\rm IR}}\,(1.4/1.42758)^{\alpha_{\rm SF}}$, which is 0.857 at the defaults ($\alpha_{\rm SF} = 0.8$). Setting `radio_q_ir = 2.58` leaves the anchor factor alone: 0.985 at $\alpha_{\rm SF} = 0.8$, 0.988 at 0.6 and 0.981 at 1.0. The anchor frequency is not a model-grammar parameter.
+CIGALE's `radio` module normalizes the star-forming synchrotron at the 21 cm wavelength ($\nu = 1.42758\,$GHz) with a default $q_{\rm IR} = 2.58$. tengri anchors at $1.4\,$GHz, the frequency at which Bell (2003) defines $q_{\rm IR}$, and its default is $q_{\rm IR} = 2.64$. At equal $L_{\rm IR}$ and $\alpha_{\rm SF}$ the tengri luminosity is the CIGALE one times the frequency-independent factor $10^{\,q_{\rm CIGALE} - q_{\rm IR}}\,(1.4/1.42758)^{\alpha_{\rm SF}}$, which is 0.857 at the defaults ($\alpha_{\rm SF} = 0.8$). Setting `radio_q_ir = 2.58` leaves the anchor factor alone: 0.985 at $\alpha_{\rm SF} = 0.8$, 0.988 at 0.6 and 0.981 at 1.0. The anchor is a model-grammar key: `radio={'sf': {'type': 'bell2003', 'nu_ref': '21cm', 'freefree': False}}` normalizes at CIGALE's 1.42758 GHz (a number in Hz is also accepted; `'1.4GHz'`, the default, is Bell's). With that spelling and `radio_q_ir` set to CIGALE's value, tengri and the installed pcigale 2025.1 radio module agree to 2e-5 at 0.15, 1.4, 5 and 30 GHz (`tests/regression/radio/test_radio_21cm_anchor_2762.py`); without it the ratio is the constant 0.98451 at $\alpha_{\rm SF} = 0.8$. In $q_{\rm IR}$ the frequency is a property of the calibration: Bell (2003, Eq. 1) and Yun et al. (2001) measure $L_\nu$ at 1.4 GHz, Helou et al. (1985) at 1.49 GHz, so the default keeps Bell's. The key applies to `bell2003` only.
 
 #### Synchrotron suppression at low SFR.
 
@@ -95,7 +118,7 @@ At low star-formation rates, cosmic-ray electrons lose energy through inverse Co
 \end{cases}
 
 $$ (eq-synch-suppression)
- where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$.
+ where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$. The `bell2003` mode applies it nowhere (its $q_{\rm IR}$ is a total calibration). The `delvecchio2021` and `mccheyne2022` modes do not apply it either: their $q_{\rm IR}(M_\star, z)$ already carries the mass and luminosity dependence that $n(L)$ would correct for. The `apply_suppression` argument of the functions is an opt-in kept for callers that want the legacy multiplier.
 
 ### Thermal Free-Free Emission
 
@@ -141,11 +164,31 @@ For the default spelling the synchrotron term would turn negative for $q_{\rm IR
 
 Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
 
+#### Which infrared window `L_IR` is integrated over: `ir_window`
+
+Without the key, each model uses the window its own paper defines $q$ on: `bell2003` and `bell2003_split` (Bell 2003, total infrared 8--1000 $\mu$m), `delvecchio2021` (Delvecchio et al. 2021, $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) and `mccheyne2022` (McCheyne et al. 2022, $q_{\rm TIR}$ with $L_{\rm TIR}$ the 8--1000 $\mu$m MAGPHYS luminosity, their Sect. 5 and Eq. 4) all default to `'tir'`. An explicit `ir_window` always wins, so `'total'` gives CIGALE's convention.
+
+The q relations are written for different infrared luminosities. Helou et al. (1985) define $q$ on the far-infrared flux between 42.5 and 122.5 $\mu$m; Bell (2003) and the recent calibrations (for example Delvecchio et al. 2021, whose abstract defines $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) use the total infrared, 8--1000 $\mu$m. The `radio.sf` key `ir_window` selects the rest-wavelength window of the dust-emission SED that is integrated to form $L_{\rm IR}$, for every q-based star-formation model (`bell2003`, `bell2003_split`, `delvecchio2021`, `mccheyne2022`) and for the Murphy et al. (2011) free-free term, which is scaled by the same $L_{\rm IR}$:
+
+- **`'total'`.** $L_{\rm IR}$ is the dust power as the dust components publish it (`L_ir`), CIGALE's convention. No band integral is taken. It is never the default of a q-based model; name it to reproduce CIGALE.
+- **`'tir'` (the default of every q-based model).** $L_{\rm IR} = \int_{8\,\mu{\rm m}}^{1000\,\mu{\rm m}} L_\nu\,d\nu$ of the re-emitted dust SED (`sed_dust_ir`).
+- **`'fir'`.** The same integral over 42.5--122.5 $\mu$m. Helou et al. (1985) define their FIR from the IRAS 60 and 100 $\mu$m fluxes, so 42.5--122.5 $\mu$m is the nominal IRAS band; the integral over it is what is evaluated here.
+
+The window edges need not fall on grid nodes: the SED is taken linear in frequency between nodes and each grid cell is clipped to the window, so the band is the requested one to the accuracy of the grid trapezoid. For the default delayed-$\tau$ galaxy the 8--1000 $\mu$m band holds 0.944 (DL14) and 0.958 (Casey 2012) of the dust power, so `'tir'` lowers the radio flux by 0.025 and 0.019 dex relative to `'total'`; this is the shift in the default output.
+
+```python
+radio={"sf": {"type": "bell2003", "ir_window": "tir"}, "agn": {"type": "powerlaw"}}
+```
+
+A window named explicitly needs a `dust_emission` block (it reads `sed_dust_ir`) and raises a `ConfigError` without one; a model with no dust-emission SED and no `ir_window` key uses the published dust power. A rest wavelength grid that does not span the window (for `'tir'`, 8--1000 $\mu$m) also raises a `ConfigError`. Under `diffuse_screen` the window is applied to the emergent (screened) dust SED. The derived property `q_ir` always reports the ratio of the total dust power `L_ir` to the 1.4 GHz luminosity, whatever window calibrated the model, so with `'tir'` it differs from the input `radio_q_ir` by the band fraction.
+
+Defaults against the literature: the four models default to the window of their own paper (all 8--1000 $\mu$m), none is calibrated on the 42.5--122.5 $\mu$m window of Helou et al. (1985), and CIGALE's total-dust-power convention needs `ir_window: 'total'`.
+
 ### AGN Radio Jets
 
 For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) is sufficient. It is normalized through the radio loudness `radio_loudness` $= \log_{10}[L_\nu(5\,{\rm GHz})/L_\nu(4400\,\text{\AA})]$, the B-band ratio. $L_\nu(4400\,\text{\AA})$ is the intrinsic accretion-disc luminosity that a composable AGN model publishes at its 30° reference inclination; the other AGN models publish no disc luminosity, and the radio block then uses $L_{\rm bol}/(5.15\,\nu_B)$, a bolometric correction of 5.15 at 4400 Å. The power law is multiplied by $\exp(-\nu/\nu_{\rm cut})$ with `radio_log_nu_cut` $= \log_{10}(\nu_{\rm cut}/{\rm Hz}) = 13$ by default, the synchrotron-aging cutoff of AGNfitter-rX; `radio_log_nu_cut = 40` removes it. At the default the cutoff lowers the jet by the factors 0.997, 0.990 and 0.970 at 30, 100 and 300 GHz, and by 0.9995 at the 5 GHz anchor of the loudness.
 
-CIGALE defines the loudness on the 2500 Å anchor, linearly, as $R = L_\nu(5\,{\rm GHz})/L_\nu(2500\,\text{\AA})$ with the intrinsic disc luminosity at the same 30° inclination, and applies no cutoff. A CIGALE value $R$ corresponds to `radio_loudness` $= \log_{10}R + \log_{10}[L_\nu(2500\,\text{\AA})/L_\nu(4400\,\text{\AA})]$; the last term is the logarithm of the disc color and depends on the disc model.
+CIGALE defines the loudness on the 2500 Å anchor, linearly, as $R = L_\nu(5\,{\rm GHz})/L_\nu(2500\,\text{\AA})$ with the intrinsic disc luminosity at a 30° line of sight, and applies no cutoff. The anchor is a model-grammar key on the AGN radio block: `radio={'agn': {'type': 'powerlaw', 'loudness_ref': '2500_30deg'}}` takes the loudness on the composable disc's 2500 Å luminosity at 30°, and `radio_loudness` stays $\log_{10}R$ for either anchor, so CIGALE's $R$ is `radio_loudness` $= \log_{10}R$ and its linear value is $10^{\rm radio\_loudness}$. The default `'4400'` keeps the B-band anchor. The 2500 Å option needs a composable AGN, because the monolithic models publish no disc luminosity; the build raises otherwise rather than fall back to the bolometric correction. With `radio_loudness = 1` (CIGALE's $R = 10$) the 5 GHz luminosity is $8.35\times10^{29}\,{\rm erg\,s^{-1}\,Hz^{-1}}$ for the Schartmann (2005) disc at $\log_{10}L_{\rm agn,bol} = 11$ and $30°$, CIGALE's value to 2 per mille; the 4400 Å anchor gives $1.11\times10^{30}$ for the same disc. The jet's $\exp(-\nu/10^{13}\,{\rm Hz})$ cutoff still applies in the 2500 Å case, and removes 0.05 per cent at 5 GHz; `radio_log_nu_cut = 40` takes it away.
 
 For radio-loud AGN with spectral curvature, the double power-law (DPL) model from AGNfitter-rx (Martı́nez-Ramı́rez et al. 2024) captures the optically thick/thin transition: $$L_\nu = L_{5{\rm GHz}} \left(\frac{\nu}{\nu_t}\right)^{\!\alpha_1}\!
   \left[1 - \exp\!\left(-\!\left(\frac{\nu_t}{\nu}\right)^{\!\alpha_1-\alpha_2}\right)\right]

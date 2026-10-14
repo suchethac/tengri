@@ -47,7 +47,7 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._template_grid import float32_safe_template, scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -153,7 +153,10 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     # ``jnp.asarray`` of a numpy array inside the closure body is safe in
     # either context: a DeviceArray when called eagerly, a JIT constant
     # when called under trace.
-    return functools.partial(silva04_sed_from_grid, load_silva04_grid(grid_path))
+    grid = load_silva04_grid(grid_path)
+    sed_fn = functools.partial(silva04_sed_from_grid, grid)
+    sed_fn.native_wave = np.asarray(grid.wave_grid)
+    return sed_fn
 
 
 @functools.cache
@@ -257,15 +260,14 @@ def silva04_sed_from_grid(
        arXiv:1606.05648.
     """
     template = interp_nd_pchip(
-        jnp.asarray(grid.template),
+        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
         (jnp.asarray(grid.log_nh_axis),),
         (agn_log_nh_silva,),
     )
     wave_native = jnp.asarray(grid.wave_grid)
-    integral_safe = native_bolometric_nu(template, wave_native)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-    return l_scale * sed / integral_safe
+    return scale_to_lbol_native(template, wave_native, sed, l_scale)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (

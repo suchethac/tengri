@@ -204,7 +204,12 @@ print(
 
 # %%
 SEED = 1
-DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, "sfh_dpl_age_gyr": 12.0, "sfh_dpl_tau_gyr": 13.0}
+DPL = {
+    "sfh_dpl_alpha": 2.0,
+    "sfh_dpl_beta": 1.5,
+    "sfh_dpl_age_frac": 12.0 / tengri.utils.cosmology.age_at_z(Z_GAL),  # 12 Gyr at z = 0.1
+    "sfh_dpl_tau_gyr": 13.0,
+}
 
 truth = {
     **spec.sample(jax.random.PRNGKey(SEED)),  # a field realization, xi ~ N(0, I)

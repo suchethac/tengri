@@ -74,10 +74,11 @@ from tengri.components.nebular.nebular_grid_dust_build import (
 )
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
-from tengri.utils.scale import apply_log10_scale, pow10
+from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -1281,6 +1282,10 @@ def precompute_nebular_grid(
     # tabulated over redshift.
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
     ref_params["redshift"] = ref_z
+    # A timing fraction converts to Gyr at ref_z, so the reference onset would differ
+    # between a catalog build (lower bound 0.01) and a plain one (0.1). Written in the
+    # z = 0 frame, it is the same absolute onset at every reference redshift (#2748).
+    ref_params = reference_timing_fracs(spec, ref_params, ref_z)
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),
@@ -1569,7 +1574,8 @@ def precompute_nebular_grid(
 
     def _stack_log(arr) -> jnp.ndarray:
         # log space: nebular luminosities span decades across the ionization grid
-        return jnp.log10(jnp.maximum(arr, 1e-300)).reshape(*grid_shape, arr.shape[-1])
+        floor = representable_floor(1e-300)
+        return jnp.log10(jnp.maximum(arr, floor)).reshape(*grid_shape, arr.shape[-1])
 
     log_line = _stack_log(line_all)
     log_phot = None if phot_all is None else _stack_log(phot_all)
@@ -1578,11 +1584,12 @@ def precompute_nebular_grid(
     split_fields = {}
     if split_all is not None:
         cont_all, sed_wave_all, sed_log_all = split_all
-        state0 = model.predict_state(_params_at(points[0]), fixed_values={})
         request = nebular_z_request(model) if redshift_range == "auto" else redshift_range
         split_fields = _split_band_fields(
             params0=_params_at(points[0]),
-            wave=state0.wave,
+            # ``predict_state`` puts exactly this array in ``ForwardState.wave`` and
+            # no component rewrites it: read it, not a whole eager forward (#2914).
+            wave=model._rest_wavelength,
             cont_nodes=cont_all,
             sed_line_waves=sed_wave_all[0],
             log_sed_lines=sed_log_all,
@@ -2028,7 +2035,7 @@ def nebular_subband_decomposition(packed, redshift, table):
     **JIT-compatible / gradient-safe**: yes.
     """
     lines, cont = packed[:-1], packed[-1]
-    i, w = z_bracket(table.cont_lnz, redshift)
+    i, w = z_bracket(table.cont_lnz, redshift, extrapolate=True)
     frac_t, lam_t = table.cont_subband_frac, table.cont_subband_waves_rest
     if table.cont_lnz.shape[0] == 1:
         frac, lam_c = frac_t[0], lam_t[0]

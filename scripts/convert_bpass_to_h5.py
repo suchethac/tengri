@@ -1,262 +1,201 @@
-"""Convert BPASS v2.2.1 SSP spectra to tengri HDF5 format.
+#!/usr/bin/env python3
+"""Rebuild the ``bpss_stars_c3k_a_chabrier`` SSP grid from ProSpect's BPASS speclib.
 
-BPASS (Binary Population and Spectral Synthesis) provides SEDs for
-simple stellar populations across a wide range of metallicities and ages.
+The shipped grid ``data/bpss_stars_c3k_a_chabrier.h5`` is a repackaging of ProSpect's
+``BPASS_St_Ch300.fits`` (Robotham et al. 2020, MNRAS 495, 905): BPASS v2.2.1 binary
+stellar populations (``bin``), IMF ``imf_chab300`` (Chabrier, 0.1-300 Msun), 13
+metallicities (Z = 1e-5 ... 0.04), 51 ages (log10 yr = 6.0 ... 11.0), 1221 wavelengths
+(91 A ... 1.6e6 A). It is not built from the ``spectra-bin-imf135_300`` files (those are
+a Salpeter-slope IMF with a different spectral grid) and it has 13 metallicities, not 11.
 
-Data source: https://bpass.auckland.ac.nz/
+ProSpect stores each metallicity as extension ``Zspec<i>``, shape (n_wave, n_age), in
+Lsun/Angstrom per Msun formed (BPASS's per-1e6-Msun values scaled by 1e-6). The grid
+holds the same numbers as Lsun/Hz/Msun:
 
-Download instructions:
-1. Visit https://bpass.auckland.ac.nz/
-2. Select "Binary + Single Stars" and "v2.2.1"
-3. Choose "Chabrier IMF" (or your preferred IMF)
-4. Download the "spectra-bin-imf135_300-* files (metallicity files)
-5. Extract to a directory, e.g., ~/data/bpass_v2.2.1/
+    L_nu = L_lambda * lambda**2 / c,        c = 2.998e18 A/s,
 
-File format:
-- ASCII files named spectra-bin-imf135_300.zXXX.dat
-- Metallicities: z001, z002, z003, z004, z006, z008, z010, z014, z020, z030, z040
-  (Z = 0.001, 0.002, 0.003, 0.004, 0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040)
-- Wavelength: 1-100000 Angstrom
-- Flux units: L_sun/Angstrom per 1e6 Msun (must convert to erg/s/Hz/Msun)
+with ProSpect's rounded ``c`` (the exact 2.99792458e18 differs by the constant factor
+1.0000251 and is not what the shipped file uses). Ages are ``log10(Age/yr) - 9``
+[log10 Gyr]; metallicities are ``log10(Z)`` with Z the absolute metal mass fraction;
+all stored as float32.
 
-Conversion formula:
-  F_erg = F_Lsun_A * L_sun_erg * (lambda_A)^2 / c / 1e6
-  where:
-    - lambda_A is wavelength in Angstrom
-    - c = 2.99792458e18 Angstrom/s
-    - L_sun_erg = 3.828e33 erg/s (IAU 2015)
-    - 1e6 factor because flux is per 1e6 Msun
+Usage::
+
+    python scripts/convert_bpass_to_h5.py --input BPASS_St_Ch300.fits --output out.h5
+    python scripts/convert_bpass_to_h5.py --input BPASS_St_Ch300.fits \\
+        --verify data/bpss_stars_c3k_a_chabrier.h5
+
+The surviving mass of this grid is not read from the FITS ``Zevo<i>`` tables (their
+``SMstar``/``SMrem`` are BPASS's ``starmass`` columns 2 and 3, living stars and an
+untested remnant column); see ``src/tengri/data/ssp_mass_remaining/PROVENANCE.md``.
+
+References
+----------
+.. [1] Robotham, A. S. G., Bellstedt, S., Lagos, C. del P., et al. 2020, MNRAS, 495, 905,
+       "ProSpect: Generating spectral energy distributions with complex star formation
+       and metallicity histories", doi:10.1093/mnras/staa1116.
+.. [2] Eldridge, J. J. et al. 2017, PASA, 34, e058, doi:10.1017/pasa.2017.51.
+.. [3] Stanway, E. R. & Eldridge, J. J. 2018, MNRAS, 479, 75, doi:10.1093/mnras/sty1353.
 """
 
+from __future__ import annotations
+
 import argparse
-import logging
+import hashlib
 import sys
 from pathlib import Path
 
 import h5py
 import numpy as np
+from astropy.io import fits
 
-# Physical constants
-L_SUN_ERG = 3.828e33  # erg/s (IAU 2015)
-C_ANGSTROM_PER_S = 2.99792458e18  # Angstrom/s
-
-# BPASS metallicity mapping
-BPASS_METALLICITIES = {
-    "z001": 0.001,
-    "z002": 0.002,
-    "z003": 0.003,
-    "z004": 0.004,
-    "z006": 0.006,
-    "z008": 0.008,
-    "z010": 0.010,
-    "z014": 0.014,
-    "z020": 0.020,
-    "z030": 0.030,
-    "z040": 0.040,
-}
-
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
+#: Speed of light as ProSpect writes it [A/s]; the shipped grid is built with it.
+C_PROSPECT_A_PER_S = 2.998e18
+N_MET = 13
+N_AGE = 51
+N_WAVE = 1221
+#: Verification tolerance on ``ssp_flux`` relative to the rebuild, elementwise, for
+#: values above ``FLUX_FLOOR``; float32 round-off is 6e-8.
+VERIFY_RTOL = 5e-7
+#: Axis nodes of the rebuild and of the shipped grid agree to one float32 ulp at |x| ~ 3
+#: (1.19e-7): one metallicity and five age nodes round differently in the original build.
+AXES_ATOL = 1.5e-7
+#: Below this the grid stores float32 values at or near underflow, and are not compared.
+FLUX_FLOOR = 1e-30
 
 
-def read_bpass_spectrum(filepath: Path) -> tuple:
-    """Read BPASS ASCII spectrum file.
+def read_prospect_bpass(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Read ProSpect's BPASS speclib.
 
     Parameters
     ----------
-    filepath : Path
-        Path to BPASS .dat file.
+    path : Path
+        ``BPASS_St_Ch300.fits``.
 
     Returns
     -------
-    wavelength : ndarray, shape (n_wave,)
-        Wavelength in Angstrom.
-    flux : ndarray, shape (n_age, n_wave)
-        Flux in L_sun/Angstrom per 1e6 Msun.
-    ages_myr : ndarray, shape (n_age,)
-        Ages in Myr.
+    wave : ndarray, shape (n_wave,)
+        Wavelength [Angstrom].
+    z_abs : ndarray, shape (n_met,)
+        Absolute metal mass fraction [dimensionless].
+    age_yr : ndarray, shape (n_age,)
+        Age [yr].
+    l_lambda : ndarray, shape (n_met, n_age, n_wave)
+        Luminosity density per Msun formed [Lsun/Angstrom/Msun].
     """
-    data = np.loadtxt(filepath, skiprows=1)
-    # First column is age in Myr, rest are flux at each wavelength
-    ages_myr = data[:, 0]
-    wavelengths = np.loadtxt(filepath, skiprows=0, max_rows=1)[1:]
-    flux = data[:, 1:]
+    with fits.open(path, memmap=True) as hdul:
+        wave = np.array(hdul["Wave"].data, dtype=np.float64).ravel()
+        z_abs = np.array(hdul["Z"].data, dtype=np.float64).ravel()
+        age_yr = np.array(hdul["Age"].data, dtype=np.float64).ravel()
+        spec = np.stack(
+            [np.array(hdul[f"Zspec{i}"].data, dtype=np.float64) for i in range(1, z_abs.size + 1)]
+        )
+    if (z_abs.size, age_yr.size, wave.size) != (N_MET, N_AGE, N_WAVE):
+        raise ValueError(f"{path}: unexpected axes {(z_abs.size, age_yr.size, wave.size)}")
+    if spec.shape != (N_MET, N_WAVE, N_AGE):
+        raise ValueError(f"{path}: unexpected Zspec shape {spec.shape}")
+    return wave, z_abs, age_yr, np.transpose(spec, (0, 2, 1))
 
-    return wavelengths, flux, ages_myr
 
-
-def convert_flux_to_erg_per_hz(
-    flux_lsun_per_a: np.ndarray, wavelength_a: np.ndarray
-) -> np.ndarray:
-    """Convert flux from L_sun/A to erg/s/Hz/Msun.
+def to_grid_arrays(
+    wave: np.ndarray, z_abs: np.ndarray, age_yr: np.ndarray, l_lambda: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Convert ProSpect arrays to the grid's datasets.
 
     Parameters
     ----------
-    flux_lsun_per_a : ndarray
-        Flux in L_sun/Angstrom per 1e6 Msun.
-    wavelength_a : ndarray, shape (n_wave,)
-        Wavelength in Angstrom.
+    wave : ndarray, shape (n_wave,)
+        Wavelength [Angstrom].
+    z_abs : ndarray, shape (n_met,)
+        Absolute metal mass fraction [dimensionless].
+    age_yr : ndarray, shape (n_age,)
+        Age [yr].
+    l_lambda : ndarray, shape (n_met, n_age, n_wave)
+        L_lambda [Lsun/Angstrom/Msun].
 
     Returns
     -------
-    ndarray
-        Flux in erg/s/Hz/Msun.
+    dict
+        ``ssp_flux`` (n_met, n_age, n_wave) [Lsun/Hz/Msun], ``ssp_wave`` [Angstrom],
+        ``ssp_lg_age_gyr`` [log10 Gyr], ``ssp_lgmet`` [log10 absolute Z]; all float32.
     """
-    # Convert: L_sun/A to erg/s
-    flux_erg_per_a = flux_lsun_per_a * L_SUN_ERG
-
-    # Convert per-unit-mass from 1e6 Msun to 1 Msun
-    flux_erg_per_a /= 1e6
-
-    # Convert A to Hz: F_nu = F_lambda * (lambda^2 / c)
-    flux_erg_per_hz = flux_erg_per_a * (wavelength_a**2) / C_ANGSTROM_PER_S
-
-    return flux_erg_per_hz
+    l_nu = l_lambda * (wave**2 / C_PROSPECT_A_PER_S)[None, None, :]
+    return {
+        "ssp_flux": l_nu.astype(np.float32),
+        "ssp_wave": wave.astype(np.float32),
+        "ssp_lg_age_gyr": (np.log10(age_yr) - 9.0).astype(np.float32),
+        "ssp_lgmet": np.log10(z_abs).astype(np.float32),
+    }
 
 
-def convert_bpass(input_dir: Path, output_path: Path, dry_run: bool = False) -> bool:
-    """Convert BPASS data to HDF5.
+def write_grid(arrays: dict[str, np.ndarray], path: Path) -> None:
+    """Write the grid file (datasets and attributes of the shipped grid)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as f:
+        for key, value in arrays.items():
+            f.create_dataset(key, data=value)
+        f.attrs["flux_units"] = "Lsun/Hz/Msun"
+        f.attrs["wave_units"] = "Angstrom"
+        f.attrs["n_met"] = N_MET
+        f.attrs["n_ages"] = N_AGE
+        f.attrs["n_wave"] = N_WAVE
 
-    Parameters
-    ----------
-    input_dir : Path
-        Directory containing BPASS .dat files.
-    output_path : Path
-        Output HDF5 file path.
-    dry_run : bool
-        If True, print summary without writing.
+
+def verify(arrays: dict[str, np.ndarray], grid: Path) -> dict[str, float]:
+    """Compare a rebuild with an existing grid; raises ``AssertionError`` on a mismatch.
 
     Returns
     -------
-    bool
-        True if successful.
+    dict
+        ``axes_max_abs_diff``, ``flux_median_rel``, ``flux_max_rel`` (above
+        ``FLUX_FLOOR``) and ``n_compared``.
     """
-    input_dir = Path(input_dir)
-
-    # Find all metallicity files
-    files = sorted(input_dir.glob("spectra-bin-imf135_300.z???.dat"))
-    if not files:
-        logger.error(f"No BPASS files found in {input_dir}")
-        logger.error("Expected files matching: spectra-bin-imf135_300.zXXX.dat")
-        return False
-
-    logger.info(f"Found {len(files)} metallicity files")
-
-    # Read first file to get wavelength grid and age structure
-    logger.info(f"Reading {files[0].name}...")
-    wavelength, flux_data, ages_myr = read_bpass_spectrum(files[0])
-    n_wave = len(wavelength)
-    n_age = flux_data.shape[0]
-
-    logger.info(f"  n_wave={n_wave}, n_age={n_age}")
-    logger.info(f"  wavelength range: {wavelength[0]:.1f} - {wavelength[-1]:.1f} A")
-    logger.info(f"  age range: {ages_myr[0]:.2f} - {ages_myr[-1]:.2e} Myr")
-
-    # Allocate arrays
-    ssp_flux = np.zeros((len(files), n_age, n_wave), dtype=np.float32)
-    ssp_lgmet = np.zeros(len(files), dtype=np.float32)
-    ssp_wave = np.array(wavelength, dtype=np.float32)
-    ssp_lg_age_gyr = np.log10(ages_myr / 1000.0)
-
-    # Read all files and convert flux
-    for i, filepath in enumerate(files):
-        filename = filepath.name
-        # Extract metallicity code from filename
-        zcode = filename.split(".")[-2]  # e.g., "z001"
-
-        if zcode not in BPASS_METALLICITIES:
-            logger.warning(f"Unknown metallicity code: {zcode} in {filename}")
-            continue
-
-        z_absolute = BPASS_METALLICITIES[zcode]
-        ssp_lgmet[i] = np.log10(z_absolute)
-
-        logger.info(f"Reading {filename}... Z={z_absolute:.4f}, log10(Z)={ssp_lgmet[i]:.4f}")
-
-        wavelength, flux_data, ages_myr_check = read_bpass_spectrum(filepath)
-
-        # Verify consistency
-        if len(ages_myr_check) != n_age:
-            logger.error(f"Age mismatch in {filename}: {len(ages_myr_check)} vs {n_age}")
-            return False
-        if len(wavelength) != n_wave:
-            logger.error(f"Wavelength mismatch in {filename}: {len(wavelength)} vs {n_wave}")
-            return False
-
-        # Convert flux
-        flux_erg = convert_flux_to_erg_per_hz(flux_data, wavelength)
-        ssp_flux[i, :, :] = flux_erg.astype(np.float32)
-
-    # Print summary
-    logger.info("\n" + "=" * 60)
-    logger.info("BPASS Conversion Summary")
-    logger.info("=" * 60)
-    logger.info(f"n_met={len(files)}, n_age={n_age}, n_wave={n_wave}")
-    logger.info(f"wavelength: {wavelength[0]:.1f} - {wavelength[-1]:.1f} A")
-    logger.info(f"age: {ages_myr[0]:.2e} - {ages_myr[-1]:.2e} Myr")
-    logger.info(f"metallicity (Z): {10 ** ssp_lgmet[0]:.4f} - {10 ** ssp_lgmet[-1]:.4f}")
-    logger.info(f"log10(Z): {ssp_lgmet[0]:.4f} - {ssp_lgmet[-1]:.4f}")
-    logger.info(f"Output: {output_path}")
-    logger.info("=" * 60 + "\n")
-
-    if dry_run:
-        logger.info("(dry-run mode: not writing file)")
-        return True
-
-    # Write HDF5
-    logger.info("Writing HDF5...")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(output_path, "w") as f:
-        f.create_dataset("ssp_wave", data=ssp_wave)
-        f.create_dataset("ssp_flux", data=ssp_flux, compression="gzip", compression_opts=4)
-        f.create_dataset("ssp_lg_age_gyr", data=ssp_lg_age_gyr)
-        f.create_dataset("ssp_lgmet", data=ssp_lgmet)
-
-    logger.info(f"✓ Wrote {output_path}")
-
-    # Validate by loading
-    logger.info("Validating...")
-    try:
-        from tengri.components.sps.dsps_wrapper import load_ssp_data
-
-        ssp_data = load_ssp_data(str(output_path))
-        logger.info(f"✓ Loaded successfully: {ssp_data.ssp_flux.shape}")
-    except Exception as e:
-        logger.error(f"Validation failed: {e}")
-        return False
-
-    return True
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Convert BPASS v2.2.1 SSP spectra to tengri HDF5 format.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+    with h5py.File(grid, "r") as f:
+        ref = {k: np.asarray(f[k][:]) for k in arrays}
+    axes = max(
+        float(np.max(np.abs(arrays[k].astype(np.float64) - ref[k].astype(np.float64))))
+        for k in ("ssp_wave", "ssp_lg_age_gyr", "ssp_lgmet")
     )
-    parser.add_argument(
-        "--input-dir",
-        type=str,
-        required=True,
-        help="Directory containing BPASS .dat files",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="data/ssp_bpass_v2.2.h5",
-        help="Output HDF5 file path (default: data/ssp_bpass_v2.2.h5)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print summary without writing",
-    )
+    new = arrays["ssp_flux"].astype(np.float64)
+    old = ref["ssp_flux"].astype(np.float64)
+    mask = (new > FLUX_FLOOR) & (old > FLUX_FLOOR)
+    rel = np.abs(old[mask] / new[mask] - 1.0)
+    out = {
+        "axes_max_abs_diff": axes,
+        "flux_median_rel": float(np.median(rel)),
+        "flux_max_rel": float(rel.max()),
+        "n_compared": int(mask.sum()),
+    }
+    assert axes <= AXES_ATOL, f"axes differ: {axes}"
+    assert out["flux_max_rel"] < VERIFY_RTOL, f"flux differs: {out}"
+    return out
 
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--input", required=True, type=Path, help="BPASS_St_Ch300.fits")
+    parser.add_argument("--output", type=Path, help="write the rebuilt grid here")
+    parser.add_argument("--verify", type=Path, help="compare the rebuild with this grid")
     args = parser.parse_args()
-
-    success = convert_bpass(args.input_dir, Path(args.output), dry_run=args.dry_run)
-    sys.exit(0 if success else 1)
+    if args.output is None and args.verify is None:
+        parser.error("give --output and/or --verify")
+    arrays = to_grid_arrays(*read_prospect_bpass(args.input))
+    print(f"input sha256 {_sha256(args.input)}")
+    if args.output is not None:
+        write_grid(arrays, args.output)
+        print(f"wrote {args.output}")
+    if args.verify is not None:
+        print("verify", verify(arrays, args.verify))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

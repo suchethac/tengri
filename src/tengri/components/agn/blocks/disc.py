@@ -177,10 +177,11 @@ def adaf_disc_block(
     (see :func:`tengri.components.agn.adaf.adaf_spectrum`).
 
     ``agn_log_lbol`` is the canonical luminosity; the accretion rate is derived
-    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired: consistent with
-    the disc convention of #846). Pure ADAF: no bundled truncated thin disc (the
-    ad-hoc split of the old model is removed; use a separate disc block or the
-    Nemmen template block for the outer-disc red bump).
+    from it through the radiated power of Mahadevan Sect. 5.2,
+    Q_ie + delta Q+ (Eq. 49 is its high-rate limit; ``agn_log_ledd`` is
+    retired: consistent with the disc convention of #846). Pure ADAF: no bundled
+    truncated thin disc (the ad-hoc split of the old model is removed; use a separate
+    disc block or the Nemmen template block for the outer-disc red bump).
 
     .. warning::
 
@@ -274,7 +275,7 @@ def cigale_adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_adaf_delta: float = 0.0,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` ADAF↔thin-disc transitional spectrum.
@@ -291,10 +292,11 @@ def cigale_adaf_disc_block(
         Rest-frame wavelength [Å].
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_cigale_disk_delta : float, optional
+    agn_cigale_adaf_delta : float, optional
         Blend weight in ``[0, 1]`` (paper ``delta``). ``0`` -> pure ADAF;
-        ``1`` -> pure thin disc. Note: for this block the parameter is a
-        blend weight, **not** a slope modulator. Default ``0.0``.
+        ``1`` -> pure thin disc. This is a blend weight, not the slope
+        modulator ``agn_cigale_disk_delta`` of the other CIGALE discs.
+        Default ``0.0``.
 
     Returns
     -------
@@ -321,7 +323,7 @@ def cigale_adaf_disc_block(
         wavelength,
         agn_log_lbol,
         adaf_disk_spectrum,
-        delta=agn_cigale_disk_delta,
+        delta=agn_cigale_adaf_delta,
     )
 
 
@@ -934,7 +936,7 @@ def relagn_disc_block(
 @register_agn_block(
     "disc",
     "richards2006",
-    citation="Richards et al. 2006, ApJ, 166, 470",
+    citation="Richards et al. 2006, ApJS, 166, 470",
     status="production",
     short_doc="Richards et al. 2006 mean SDSS quasar composite SED",
 )
@@ -977,7 +979,7 @@ def richards2006_disc_block(
 
     References
     ----------
-    .. [1] Richards, G. T., et al. 2006, ApJ, 166, 470. Supermassive Black
+    .. [1] Richards, G. T., et al. 2006, ApJS, 166, 470. Supermassive Black
        Holes in SDSS Quasars and the Role of Quasar Triggering. Published
        2006 May 10. https://doi.org/10.1086/506525
     """

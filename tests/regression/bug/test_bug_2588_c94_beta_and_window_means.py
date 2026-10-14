@@ -30,7 +30,7 @@ from tengri.observation.spectral_indices import (
     _window_mean_flux,
     measure_index_jax,
     precompute_index_windows,
-    soft_window_ssp_integral,
+    window_ssp_integral,
 )
 from tengri.utils.sed_quantities import compute_dn4000
 
@@ -409,7 +409,7 @@ _WINDOWS = [(3850.0, 3950.0), (4000.0, 4100.0), (5160.0, 5192.0), (4847.0, 4876.
 def test_soft_window_integral_matches_exact_window_mean(lo, hi):
     """LUT mean (integral / norm) equals `_window_mean_flux` on a non-uniform grid."""
     wave, flux = _nonuniform_ssp()
-    integral, norm = soft_window_ssp_integral(jnp.asarray(wave), jnp.asarray(flux), lo, hi)
+    integral, norm = window_ssp_integral(jnp.asarray(wave), jnp.asarray(flux), lo, hi)
     for i in range(flux.shape[0]):
         for j in range(flux.shape[1]):
             exact = float(_window_mean_flux(jnp.asarray(wave), jnp.asarray(flux[i, j]), lo, hi))
@@ -438,7 +438,7 @@ def test_soft_window_integral_matches_exact_on_miles_grid(lo, hi):
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
     wave = jnp.asarray(ssp.ssp_wave)
     flux = jnp.asarray(ssp.ssp_flux[:2, :3])
-    integral, norm = soft_window_ssp_integral(wave, flux, lo, hi)
+    integral, norm = window_ssp_integral(wave, flux, lo, hi)
     for i in range(2):
         for j in range(3):
             exact = float(_window_mean_flux(wave, flux[i, j], lo, hi))
@@ -468,22 +468,26 @@ _LINE_WAVES = np.array([4862.68, 5008.24, 6564.61, 6585.28])
 _LINE_NAMES = ("Hbeta", "OIII_5007", "Halpha", "NII_6584")
 
 
-def _soft_window_mean_numpy(w: np.ndarray, f: np.ndarray, lo: float, hi: float) -> float:
-    """⟨F⟩ = ∫F W dλ / ∫W dλ with the 1 Å sigmoid-edge W, trapezoid on the pixel edges."""
+def _hard_window_mean_numpy(w: np.ndarray, f: np.ndarray, lo: float, hi: float) -> float:
+    """⟨F⟩ = ∫F dλ / (hi − lo) over the hard window [lo, hi] (#2802, #2637).
 
-    from scipy.special import expit
-
-    weight = expit(w - lo) * expit(hi - w)
-    return float(np.trapezoid(f * weight, w) / np.trapezoid(weight, w))
+    The spectrum is the piecewise-linear interpolant through the nodes, so the
+    integral is exact when it is taken over the nodes inside the window plus the
+    two edges: the interpolant is linear between consecutive breakpoints.
+    """
+    inside = w[(w > lo) & (w < hi)]
+    pts = np.unique(np.concatenate([[lo, hi], inside]))
+    f_pts = np.interp(pts, w, f)
+    return float(np.trapezoid(f_pts, pts) / (hi - lo))
 
 
 def _line_flux_numpy(w, lnu, line, dl_cm) -> float:
     """Catalog-style line flux of the documented operator from the numpy window means."""
     (blo, bhi), (rlo, rhi) = line.continuum
     flo, fhi = line.feature
-    f_blue = _soft_window_mean_numpy(w, lnu, blo, bhi)
-    f_red = _soft_window_mean_numpy(w, lnu, rlo, rhi)
-    f_feat = _soft_window_mean_numpy(w, lnu, flo, fhi)
+    f_blue = _hard_window_mean_numpy(w, lnu, blo, bhi)
+    f_red = _hard_window_mean_numpy(w, lnu, rlo, rhi)
+    f_feat = _hard_window_mean_numpy(w, lnu, flo, fhi)
     lam_c = 0.5 * (flo + fhi)
     x_b, x_r = 0.5 * (blo + bhi), 0.5 * (rlo + rhi)
     cont = f_blue + (f_red - f_blue) * (lam_c - x_b) / (x_r - x_b)
@@ -503,9 +507,10 @@ def test_measure_line_fluxes_exact_path_is_the_wavelength_integral_mean(backend)
 
     The reference is the documented operator written in numpy on the model's own
     rest spectrum: window means ∫F W dλ / ∫W dλ (trapezoid on the wavelength
-    differences, 1 Å sigmoid edges), a linear side-band continuum at the feature
-    center, and (L_ν − L_ν^cont) (c / λ_c²) Δλ / (4π d_L²) at the 10 pc distance of
-    z = 0. Measured agreement is 1e-13 or better; the test allows 1e-10. The
+    differences, hard edges as the spectral indices, #2802), a linear side-band
+    continuum at the feature center, and (L_ν − L_ν^cont) (c / λ_c²) Δλ / (4π d_L²)
+    at the 10 pc distance of z = 0. Measured agreement is 1e-13 or better; the test
+    allows 1e-10. The
     pixel-count mean differs from the integral by +7.2e-6 (Hβ), −3.2e-6 (OIII 5007),
     +1.1e-5 (Hα) and −1.7e-3 (NII 6584) on the wNE model, and by +4.7e-2, +8.2e-3,
     +5.7e-2 and −2.9e-2 on the Cue model (narrow additive lines on a non-uniform

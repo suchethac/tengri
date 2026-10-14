@@ -52,7 +52,7 @@ class MockNebularBackend:
         neb_logU=-3.0,
         neb_logZ_gas=None,
         neb_fesc=0.0,
-        neb_fesc_lya=0.0,
+        neb_fesc_lya=1.0,
         line_sigma_aa=0.0,
         **kwargs,
     ) -> jnp.ndarray:
@@ -80,7 +80,7 @@ def common_kw():
         ssp_log_ages_yr=jnp.linspace(6.5, 10.0, N_AGE),
         log_z=-1.848,
         neb_fesc=0.0,
-        neb_fesc_lya=0.0,
+        neb_fesc_lya=1.0,
         line_sigma_aa=0.0,
     )
 

@@ -77,7 +77,7 @@ wave, lum = backend.predict_nebular_line_luminosities(
     neb_logZ_gas=None,      # None → tied to stellar metallicity
     neb_logn=2.0,
     neb_fesc=0.0,
-    neb_fesc_lya=0.0,
+    neb_fesc_lya=1.0,
 )
 # wave: (n_lines,) vacuum wavelengths in Angstrom
 # lum:  (n_lines,) luminosities in L_sun
@@ -174,11 +174,16 @@ need free N/O, use `CB19Backend` instead.
 ## Using the backends
 
 :::{warning}
-The MAPPINGS photoionization backends are **not yet wired into the
-`SEDModel.build` grammar** — `neb={'type': ...}` accepts only
-`ssp`, `cloudy`, `cue`, `cb19`, and `none` today. The backend classes
-are implemented, exported, and usable directly; grammar wiring is
-tracked as a follow-up.
+The MAPPINGS photoionization backends are registered and selectable —
+`neb={'type': 'mappings'}` (stellar) and `neb={'type': 'mappings_agn'}`, both
+`experimental` in `tengri.list_nebular_backends()` — but a build refuses today
+(#1239 closed as resolved-by-code, 2026-10-14): the shipped `flury2024_grids.h5`
+covers only instantaneous bursts of 7 Myr or younger and continuous star
+formation of 50 Myr or older, so its `logHB_per_logq` table is 51 % NaN and
+`SEDModel` refuses it (#2082 tracks the grid regeneration via
+`scripts/build_flury2024_grids.py`); the AGN variant's `predict_nebular_sed`
+is not implemented. The stellar precompute adapter is kept out of
+`forward/precompute/registry.py` until the data is complete.
 :::
 
 The classes load the Flury et al. (2024) grids

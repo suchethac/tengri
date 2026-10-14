@@ -76,6 +76,11 @@ from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
     split_lines_result,
 )
+from tengri.components.agn.blocks.torus_library_transmission import (
+    BelowLibraryIndex,
+    library_torus_sightline,
+    tied_incl_with_library_edge,
+)
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_BLOCKS,
     polar_follow_opening_angle,
@@ -101,10 +106,11 @@ from tengri.utils.scale import representable_denominator, representable_floor
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
-#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED;
-#: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
-#: are handled by their own wavelength-dependent screen above.
-_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
+#: (``qsogen``, ``grahsp``, ``grahsp_mn12``), which already encode an
+#: inclination-averaged SED; masking them would be double-counting. The
+#: dusty-screen tori (skirtor/fritz) are handled by their own
+#: wavelength-dependent screen above.
+_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp", "grahsp_mn12"})
 
 #: Fixed wavelength grids [A] on which the runner measures the bolometric integrals
 #: that tie and debit its components (the conserving line ledger, the polar-dust
@@ -144,6 +150,13 @@ _TIE_FINE_NODES = 4001
 #: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
 #: and ``fritz2006``).
 _TIE_TORI: tuple[str, ...] = ("skirtor", "fritz")
+
+#: Disc blocks whose spectrum carries the ``2 cos i`` inclination law (``agn_log_lbol`` is the
+#: accretion power, #2678). Behind a library torus they take the library's combined factor
+#: ``2 cos i R_n/eta`` in place of (their own law x the transmission); every other disc is
+#: isotropic and takes the transmission. A contract test pins the set to the blocks' response
+#: to ``agn_cos_inc``.
+_COS_LAW_DISC_BLOCKS: frozenset[str] = frozenset({"multicolor", "relagn", "kubota_done"})
 
 #: The Fritz library coordinates the tie reads off the model, as the torus block does; the
 #: viewing elevation ``psy`` is not one of them, it is derived from ``agn_cos_inc``.
@@ -237,8 +250,8 @@ _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
     # the one that does not move at all.
     "nlr": frozenset({"grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
-    "feii": frozenset({"grahsp", "boroson_green"}),
-    "torus": frozenset({"grahsp"}),
+    "feii": frozenset({"grahsp", "grahsp_veroncetty", "boroson_green"}),
+    "torus": frozenset({"grahsp", "grahsp_mn12"}),
 }
 
 # Disc impls covered by the multicolor / Kubota-Done set are added to the
@@ -258,16 +271,25 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 # (test_slone_netzer_vs_agnfitter.py / test_kd18_grid_vs_agnfitter.py) confirm
 # the standard UV/optical accretion-disc peak (< 1 um in L_nu), so 5100A is a
 # meaningful continuum for all three, not an edge case like ADAF's inner flow.
+# grahsp_netzer is similarly template-normalized to 1 at 510 nm (5100 A).
 _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
     {
         "slone_netzer",
         "kd18_agnfitter",
         "kd18_agnfitter_warmindex",
+        "grahsp_netzer",
     }
 )
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_THETA_TORUS,
+)
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S, L_SUN as L_SUN_ERG
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
@@ -629,6 +651,7 @@ def compose_l_nu(
     template_state: dict | None = None,
     return_l2500: bool = False,
     return_components: bool = False,
+    torus_below_index: BelowLibraryIndex | None = None,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
@@ -744,6 +767,21 @@ agn_torus_block, agn_attenuation_block : str
         found = template_state.get(f"{category}/{name}")
         return _legacy_grahsp if found is None else found
 
+    _sightline_cache: dict = {}
+
+    def _library_sightline():
+        """The library torus's line of sight on ``wave``, built once (``None``: no disc column)."""
+        if "sight" not in _sightline_cache:
+            _sightline_cache["sight"] = library_torus_sightline(
+                agn_torus_block,
+                wave,
+                cos_inc=params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
+                params=params,
+                library=_templates_for("torus", agn_torus_block),
+                below_index=torus_below_index,
+            )
+        return _sightline_cache["sight"]
+
     disc_templates = _templates_for("disc", agn_disc_block)
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
@@ -848,7 +886,7 @@ agn_torus_block, agn_attenuation_block : str
     # reddening factor ``skirtor_disc_dust_ratio`` takes is always the
     # identity now.
     _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", 0.0))
-    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
+    _cos_inc = jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC))
     _disc_R = None
     _disc_incl = None
     _disc_R_faceon = None
@@ -927,10 +965,10 @@ agn_torus_block, agn_attenuation_block : str
                 jnp.ones_like(_tie_wave),
                 incl_wave=wave,
                 _template=_library,
-                agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
+                agn_tau_skirtor=params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
                 agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
                 agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
-                agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
+                agn_oa_skirtor=params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
                 # R70: the grid's third geometry axis. Left out, the tie
                 # interpolated the SKIRTOR templates at the signature default
                 # R = 20 while the torus block honored the model's value, so
@@ -1170,7 +1208,11 @@ agn_torus_block, agn_attenuation_block : str
     # With no line block selected the debit is exactly zero, so the disc energy is not
     # measured at all.
     _has_lines = any(b != "none" for b in (agn_nlr_block, agn_blr_block, agn_feii_block))
-    if _agn_norm == "conserving" and agn_torus_block not in ("grahsp", "qsogen") and _has_lines:
+    if (
+        _agn_norm == "conserving"
+        and agn_torus_block not in ("grahsp", "grahsp_mn12", "qsogen")
+        and _has_lines
+    ):
         # The line power comes from the blocks' closed forms when they register one
         # (``LINE_ENERGY_BLOCKS``: unit-integral Gaussians, so the power is set by the
         # normalization); only a block without one is evaluated, on the fixed line grid and
@@ -1258,7 +1300,16 @@ agn_torus_block, agn_attenuation_block : str
             _disc_part, _corona_part = L_lambda_disc, None
         else:
             _disc_part, _corona_part, _ = _disc_parts(wave)
-        _disc_reweighted = _disc_part * _disc_incl
+        # Below the library's first node the tabulated ratio is zero, which would silence the
+        # tied disc in the X-rays; there it takes the library sightline's absorbed factor, the
+        # same Morrison & McCammon column as the untied path (owner ruling 10, #2760).
+        _tie_sight = _library_sightline()
+        _disc_incl_tied = (
+            _disc_incl
+            if _tie_sight is None
+            else tied_incl_with_library_edge(_disc_incl, wave, _tie_sight, agn_torus_block)
+        )
+        _disc_reweighted = _disc_part * _disc_incl_tied
         if _library_wave is None:
             _disc_integral = jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave)
         else:
@@ -1290,19 +1341,25 @@ agn_torus_block, agn_attenuation_block : str
             # tied disc's 4 pi power, the face-on library power ``agn_power x R_faceon`` times
             # the library disc's hemisphere mean. The corona then scales by
             # ``P_D,tied / P_D,model`` with ``P_D,model = (1 - f) L_acc``, and on the line of
-            # sight it carries only the torus screen: the same transmission on a Type-2
-            # sightline as the dusty torus gives any source behind it, unity on a Type-1 one.
+            # sight it carries only the torus screen: the library's line of sight (``T = R_n/eta``,
+            # with the X-rays photoelectrically absorbed below its grid), the same transmission
+            # any source behind the torus takes, unity face-on. The analytic screen remains only
+            # for a torus without a disc column.
             _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
             _corona_scale = (
                 _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
             ) / _p_disc_model
-            _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
-            _corona_screen = torus_screen_transmission(
-                wave,
-                cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-                oa_deg=_corona_oa,
-                tau_v=_corona_tau_v,
-            )
+            _corona_sight = _library_sightline()
+            if _corona_sight is None:
+                _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
+                _corona_screen = torus_screen_transmission(
+                    wave,
+                    cos_inc=params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
+                    oa_deg=_corona_oa,
+                    tau_v=_corona_tau_v,
+                )
+            else:
+                _corona_screen = _corona_sight.transmission
             _disc_scaled = _disc_scaled + _corona_part * _corona_screen * _corona_scale
         _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
@@ -1344,10 +1401,11 @@ agn_torus_block, agn_attenuation_block : str
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays
     # visible at all inclinations. Each torus carries ONE obscuration model (no
-    # double-counting): dusty-screen tori (fritz/skirtor, #294) apply a
-    # wavelength-dependent screen; every other non-"none" torus applies the gray
-    # geometric visibility mask, the same one the monolithic ``unified_nlr_blr``
-    # uses: so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
+    # double-counting): dusty-screen tori (fritz/skirtor, #294) apply the library's
+    # own line-of-sight disc as a wavelength-dependent transmission; every other
+    # non-"none" torus applies the gray geometric visibility mask, the same one
+    # the monolithic ``unified_nlr_blr`` uses: so a composable disc+torus+NLR+BLR
+    # reproduces its Type-1/2 geometry.
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
     # default-inclination models are unchanged. Static dispatch on the torus name
     # is JIT-safe.
@@ -1358,8 +1416,8 @@ agn_torus_block, agn_attenuation_block : str
     # IDENTICAL factors to each term: multiplication distributes over the sum,
     # so the two formulations agree to floating-point reassociation.
     #
-    # The broad lines and FeII always carry the torus screen. The disc carries it
-    # unless it is tied to the SKIRTOR template (fracAGN > 0 on the R-tie path):
+    # The broad lines and FeII carry the torus transmission. The disc carries it
+    # unless it is tied to the library template (fracAGN > 0 on the R-tie path):
     # there the disc is ``agn_power x disk(i)/disk(0) x analytic shape`` and the
     # library ratio disk(i)/disk(0) already is the torus extinction (about 3e-3 of
     # the face-on disc at i = 70 deg), so a second screen would remove the same
@@ -1369,23 +1427,68 @@ agn_torus_block, agn_attenuation_block : str
     _disc_mask = 1.0
     if agn_torus_block in TORUS_SCREEN_BLOCKS:
         # One inclination, one opening angle: the same agn_cos_inc and the torus's
-        # own angle feed this screen, the Fritz library's viewing elevation and
-        # the polar-dust mask below.
+        # own angle feed this transmission, the Fritz library's viewing elevation and
+        # the polar-dust mask below. The library's own line-of-sight disc is the
+        # transmission wherever the library carries a disc column; the analytic
+        # screen is the fallback for a grid without one.
         _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
-        _screen = torus_screen_transmission(
-            wave,
-            cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-            oa_deg=_screen_oa,
-            tau_v=_screen_tau_v,
-        )
-        _lines_mask = _screen
-        _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
+        _cos_inc_screen = params.get("agn_cos_inc", DEFAULT_AGN_COS_INC)
+        _sight = _library_sightline()
+        if _sight is None:
+            # A torus without a disc column (SKIRTOR v2) has no library sightline: the
+            # analytic screen is its only obscuration.
+            _screen = torus_screen_transmission(
+                wave,
+                cos_inc=_cos_inc_screen,
+                oa_deg=_screen_oa,
+                tau_v=_screen_tau_v,
+            )
+            _lines_mask = _screen
+            _disc_mask = (
+                _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
+            )
+        else:
+            _lines_mask = _sight.transmission
+            if agn_disc_block in _COS_LAW_DISC_BLOCKS:
+                # The library's T = R_n/eta diverges as eta -> 0 at i = 90 deg, while the disc
+                # carries its own 2 cos i: the product 2 cos i R_n/eta is finite. So the disc
+                # is read at the angle-integrated reference (2 cos i = 1) and takes the
+                # combined factor in place of (its own law x T); a corona stays isotropic and
+                # takes T.
+                _ref = {**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE}
+                _ebv = jnp.asarray(params.get("agn_ebv_disc", 0.0))
+                _split_ref = DISC_SPLIT_BLOCKS.get(agn_disc_block)
+                if _split_ref is None:
+                    _d_ref = disc_fn(
+                        wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **_ref
+                    )
+                    _h_ref = 0.0
+                else:
+                    _d_ref, _h_ref, _ = _split_ref(
+                        wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **_ref
+                    )
+                _disc_lib = (
+                    redden_disc(wave, _d_ref, _ebv) * _sight.disc_factor
+                    + redden_disc(wave, _h_ref, _ebv) * _sight.transmission
+                ) * _disc_scalar
+                L_lambda_disc = (
+                    _disc_lib
+                    if _disc_R is None
+                    else jnp.where(_agn_fracAGN > 0.0, L_lambda_disc, _disc_lib)
+                )
+                _disc_mask = 1.0
+            else:
+                _disc_mask = (
+                    _sight.transmission
+                    if _disc_R is None
+                    else jnp.where(_agn_fracAGN > 0.0, 1.0, _sight.transmission)
+                )
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
         # The generic tori read the same Type-1/2 weight, one width in cos i, as the dusty-
         # screen tori and the polar mask: Type 1 iff i < 90 - agn_theta_torus.
         _lines_mask = type1_weight(
-            params.get("agn_cos_inc", 0.86602540378443864),
-            params.get("agn_theta_torus", 30.0),
+            params.get("agn_cos_inc", DEFAULT_AGN_COS_INC),
+            params.get("agn_theta_torus", DEFAULT_AGN_THETA_TORUS),
         )
         _disc_mask = _lines_mask
     L_lambda_central = (
@@ -1718,6 +1821,7 @@ def composable_agn_l_nu(
     template_state: dict | None = None,
     return_l2500: bool = False,
     return_components: bool = False,
+    torus_below_index: BelowLibraryIndex | None = None,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point: :data:`L_ν` in erg/s/Hz.
@@ -1802,6 +1906,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         template_state=template_state,
         return_l2500=return_l2500,
         return_components=return_components,
+        torus_below_index=torus_below_index,
         **params,
     )
     if return_l2500 and return_components:

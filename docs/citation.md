@@ -98,7 +98,8 @@ the forward model, and listed oldest first within each group.
   synthesis, used as a grid generator. Conroy, Gunn & White (2009),
   [arXiv:0809.4261](https://arxiv.org/abs/0809.4261); and the reference
   implementation, Conroy & Gunn (2010),
-  [arXiv:0911.3151](https://arxiv.org/abs/0911.3151).
+  [arXiv:0911.3151](https://arxiv.org/abs/0911.3151). Its stellar remnants
+  follow Renzini & Ciotti (1993), [doi:10.1086/187068](https://doi.org/10.1086/187068).
 - Carbon-star spectral library extending the FSPS TP-AGB stars redward of
   K. Aringer et al. (2009),
   [arXiv:0905.4415](https://arxiv.org/abs/0905.4415).
@@ -112,6 +113,8 @@ the forward model, and listed oldest first within each group.
 - Circumstellar AGB dust-shell SEDs in FSPS (`add_agb_dust_model`).
   Villaume et al. (2015),
   [arXiv:1504.00900](https://arxiv.org/abs/1504.00900).
+- PARSEC massive-star tracks (the metallicity limit of the PARSEC SSP grids). Chen et al. (2015),
+  [arXiv:1506.01681](https://arxiv.org/abs/1506.01681).
 - MIST: stellar isochrones. Choi et al. (2016),
   [arXiv:1604.08592](https://arxiv.org/abs/1604.08592); isochrone
   construction method, Dotter (2016),
@@ -291,6 +294,12 @@ the forward model, and listed oldest first within each group.
   Hagen & Done (2023), [arXiv:2304.01253](https://arxiv.org/abs/2304.01253).
 - GRAHSP: composable AGN and host SED model. Buchner et al. (2024),
   [arXiv:2405.19297](https://arxiv.org/abs/2405.19297).
+- CAT3D-Wind clumpy-disc-plus-polar-wind torus model. Hönig & Kishimoto
+  (2017), [doi:10.3847/2041-8213/aa6838](https://doi.org/10.3847/2041-8213/aa6838).
+- Type-1 quasar SED template. Richards et al. (2006),
+  [doi:10.1086/506525](https://doi.org/10.1086/506525).
+- Smooth torus SED model. Silva, Maiolino & Granato (2004),
+  [doi:10.1111/j.1365-2966.2004.08380.x](https://doi.org/10.1111/j.1365-2966.2004.08380.x).
 
 ### Radio and X-ray
 
@@ -299,6 +308,15 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Far-infrared band (42.5-122.5 um) definition of the IR-radio ratio q, the
+  ``ir_window='fir'`` option. Helou (1985),
+  [doi:10.1086/184556](https://doi.org/10.1086/184556).
+- Mass- and redshift-dependent IR-radio correlation at 1.4 GHz,
+  ``delvecchio2021``. Delvecchio et al. (2021),
+  [doi:10.1051/0004-6361/202039647](https://doi.org/10.1051/0004-6361/202039647).
+- Joint redshift and stellar-mass IR-radio correlation at 150 MHz,
+  ``mccheyne2022``. McCheyne et al. (2022),
+  [doi:10.1051/0004-6361/202141307](https://doi.org/10.1051/0004-6361/202141307).
 - Total-infrared SFR calibration cited for comparison in ``sfr_from_lir``'s
   docstring (tengri's own default calibration is Murphy et al. 2011).
   Kennicutt (1998),
@@ -308,6 +326,8 @@ the forward model, and listed oldest first within each group.
   [doi:10.1051/0004-6361:20053936](https://doi.org/10.1051/0004-6361:20053936).
 - X-ray binary luminosity scalings with stellar mass and SFR. Lehmer et al.
   (2016), [arXiv:1604.06461](https://arxiv.org/abs/1604.06461).
+- HMXB metallicity and LMXB age luminosity scalings (Eqs. 3 and 4). Fragos et al.
+  (2013), [arXiv:1306.1405](https://arxiv.org/abs/1306.1405).
 - X-ray AGN corona, the X-CIGALE alpha-ox relation. Yang et al. (2020),
   [doi:10.1093/mnras/stz3001](https://doi.org/10.1093/mnras/stz3001).
 

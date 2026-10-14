@@ -159,7 +159,10 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import (
+    CLOUDY_LABEL_AIR_MAX_AA,
+    catalog_air_to_vacuum,
+)
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 from tengri.protocols.component import declared_default
 
@@ -553,7 +556,7 @@ class SynthesizerGridData:
 
     Notes
     -----
-    Grid data is interpolated using C²-continuous triweight interpolation on all
+    Grid data is interpolated with node-exact PCHIP (``library_lookup``, #2861) on all
     6 parameter axes. All axes except ``cosine_axis`` are stored in log10 space
     internally for uniform sampling.
 
@@ -583,6 +586,32 @@ class SynthesizerGridData:
     # than re-broadening the discrete ``/lines`` table.
     spectra_wavelengths_aa: jnp.ndarray | None = None
     nebular_per_lbol: jnp.ndarray | None = None
+
+
+#: Angstrom per unit of the wavelength suffix of a Cloudy line id.
+_CLOUDY_ID_UNIT_AA = {"A": 1.0, "m": 1.0e4, "c": 1.0e8}
+
+
+def _synthesizer_line_ids_by_wavelength(ids, wavelengths) -> tuple[str, ...]:
+    """Line ids reordered to follow ``lines/wavelength`` (and ``lines/luminosity``).
+
+    The Synthesizer line tables store ``lines/id`` alphabetically but
+    ``lines/wavelength`` sorted by wavelength, and the luminosities follow the
+    wavelength order. Each id carries its own catalog wavelength (``H 1 6562.80A``,
+    ``Fe 2 1.25668m``), so the ids sorted by that wavelength line up with the stored
+    wavelengths; the pairing is checked, not assumed.
+    """
+    names = [i.decode() if isinstance(i, bytes) else str(i) for i in ids]
+    own = np.array(
+        [float(n.split()[-1][:-1]) * _CLOUDY_ID_UNIT_AA[n.split()[-1][-1]] for n in names]
+    )
+    order = np.argsort(own, kind="stable")
+    if not np.allclose(own[order], np.asarray(wavelengths, dtype=np.float64), rtol=1e-6, atol=0.0):
+        raise ValueError(
+            "Synthesizer lines/id wavelengths do not match lines/wavelength after sorting; "
+            "cannot pair line names with the stored wavelengths and luminosities."
+        )
+    return tuple(names[k] for k in order)
 
 
 def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
@@ -644,10 +673,15 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         logn_axis = jnp.log10(nH)
 
         # Load emission lines
-        line_wav = jnp.array(f["lines"]["wavelength"][:])
+        # ``lines/wavelength`` holds Cloudy c23.01's line labels: AIR above 2000
+        # Angstrom (H-alpha 6562.80, [O III] 5006.84, Pa-alpha 18751.0). Convert
+        # them once, here; everything downstream is vacuum.
+        line_wav = jnp.array(
+            catalog_air_to_vacuum(f["lines"]["wavelength"][:], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA)
+        )
         line_lum = jnp.array(f["lines"]["luminosity"][:])  # (2,2,2,2,2,2,215)
-        line_ids = tuple(
-            i.decode() if isinstance(i, bytes) else str(i) for i in f["lines"]["id"][:]
+        line_ids = _synthesizer_line_ids_by_wavelength(
+            f["lines"]["id"][:], f["lines"]["wavelength"][:]
         )
 
         # Load log10(specific ionizing luminosity for HI)
@@ -718,8 +752,8 @@ class SynthesizerNLRBackend:
 
     Interpolation strategy
     ----------------------
-    All 6 axes use C²-continuous triweight interpolation via
-    ``interp_nd_triweight``:
+    All 6 axes use node-exact PCHIP interpolation via
+    ``library_lookup`` (#2861):
 
     - Internal storage in log10 (except cosine_inclination, which is linear)
     - All axes interpolated independently
@@ -760,8 +794,8 @@ class SynthesizerNLRBackend:
         self.grid_path = str(grid_path)
         self.grid = _load_synthesizer_nlr_grid(grid_path)
 
-        # Pre-compute triweight edges for all 6 axes at init time.
-        # Axes must be sorted ascending for interp_nd_triweight.
+        # Pre-compute bin edges for all 6 axes at init time.
+        # Axes must be sorted ascending for library_lookup.
         from tengri.utils.interpolation import edges_for_grid
 
         # Check and sort each axis
@@ -783,7 +817,7 @@ class SynthesizerNLRBackend:
         self._nH_sorted = jnp.sort(self.grid.logn_axis)
         self._nH_descending = bool(self.grid.logn_axis[0] > self.grid.logn_axis[-1])
 
-        # Precompute edges for triweight interpolation
+        # Bin edges for the six axes (kept on the instance).
         self._edges_mass = edges_for_grid(self._mass_sorted)
         self._edges_edd = edges_for_grid(self._edd_sorted)
         self._edges_cos = edges_for_grid(self._cos_sorted)
@@ -839,12 +873,12 @@ class SynthesizerNLRBackend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         Interpolation is performed on all 6 axes (mass, Eddington ratio,
-        inclination, metallicity, ionU, nH) using C²-continuous triweight
-        interpolation. Grid axes are stored in log10 (except cosine_inclination,
+        inclination, metallicity, ionU, nH) using node-exact PCHIP
+        (``library_lookup``). Grid axes are stored in log10 (except cosine_inclination,
         which is linear) and must be sorted ascending for interpolation.
 
         """
-        from tengri.utils.grid_interp import interp_nd_triweight
+        from tengri.utils.grid_interp import library_lookup
 
         grid = self.grid
 
@@ -872,17 +906,9 @@ class SynthesizerNLRBackend:
             self._ionU_sorted,
             self._nH_sorted,
         )
-        edges = (
-            self._edges_mass,
-            self._edges_edd,
-            self._edges_cos,
-            self._edges_met,
-            self._edges_ionU,
-            self._edges_nH,
-        )
         point = (log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH)
 
-        log_line_per_qh_interp = interp_nd_triweight(log_line_slice, axes, edges, point)
+        log_line_per_qh_interp = library_lookup(log_line_slice, axes, point)
 
         # Convert to linear luminosity and scale by Q_H and escape fraction
         # L_line = 10^(log_line_per_qh) × Q_H × (1 - fesc)  [L_sun]
@@ -919,7 +945,7 @@ class SynthesizerNLRBackend:
         jnp.ndarray
             Scalar ``log10(Q_H / L_bol)`` [log10(photons/s/W)] at the point.
         """
-        from tengri.utils.grid_interp import interp_nd_triweight
+        from tengri.utils.grid_interp import library_lookup
 
         grid = self.grid
         if grid.log_qh_specific is None:
@@ -947,16 +973,8 @@ class SynthesizerNLRBackend:
             self._ionU_sorted,
             self._nH_sorted,
         )
-        edges = (
-            self._edges_mass,
-            self._edges_edd,
-            self._edges_cos,
-            self._edges_met,
-            self._edges_ionU,
-            self._edges_nH,
-        )
         point = (log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH)
-        return interp_nd_triweight(sl, axes, edges, point)
+        return library_lookup(sl, axes, point)
 
     def predict_agn_nebular_spectrum(
         self,
@@ -1002,7 +1020,7 @@ class SynthesizerNLRBackend:
         scrambled ``/lines`` table cannot (issue #694). Implemented to match
         Synthesizer (Lovell et al. 2025; Roper et al. 2026).
         """
-        from tengri.utils.grid_interp import interp_nd_triweight
+        from tengri.utils.grid_interp import library_lookup
 
         grid = self.grid
         if grid.nebular_per_lbol is None or grid.spectra_wavelengths_aa is None:
@@ -1035,18 +1053,10 @@ class SynthesizerNLRBackend:
             self._ionU_sorted,
             self._nH_sorted,
         )
-        edges = (
-            self._edges_mass,
-            self._edges_edd,
-            self._edges_cos,
-            self._edges_met,
-            self._edges_ionU,
-            self._edges_nH,
-        )
         # cosine_inclination is held at 0.5 (Synthesizer's isotropic line-region
         # convention) so the line regions are inclination-independent.
         point = (log_bh_mass, log_eddington, 0.5, log_metallicity, log_ionU, log_nH)
-        nebular_per_lbol = interp_nd_triweight(sl, axes, edges, point)  # (n_wave_grid,)
+        nebular_per_lbol = library_lookup(sl, axes, point)  # (n_wave_grid,)
 
         l_nu_grid = nebular_per_lbol * l_bol_erg * covering_fraction
         return jnp.interp(
@@ -1126,8 +1136,8 @@ class FeltreGridData:
     -----
     Grid axes follow the Feltre et al. (2016) CLOUDY c13.03 photoionization
     calculations. All five are node samplings of continuous physical
-    quantities and all five are interpolated with the same C2-continuous
-    triweight kernel: :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` are tabulated
+    quantities and all five are interpolated with the same node-exact
+    PCHIP lookup: :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` are tabulated
     at four and three nodes respectively, which is a coarser sampling, not a
     different kind of axis.
 
@@ -1220,9 +1230,9 @@ class FeltreNLRBackend:
     ----------------------
 
     All five grid axes (:math:`\\alpha_{\\rm pl}, \\log U_S, \\log n_{\\rm H},
-    \\log Z, \\xi_d`) are interpolated together with the C2-continuous
-    triweight kernel via ``interp_nd_triweight``, so every one of them carries
-    a gradient and is usable under VI/MAP/NUTS.
+    \\log Z, \\xi_d`) are interpolated together with the node-exact PCHIP
+    lookup ``library_lookup`` (#2861), so every one of them carries a gradient
+    and is usable under VI/MAP/NUTS.
 
     :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` were snapped to their nearest
     node until R41 (#2214). A nearest-neighbor lookup is piecewise constant, so
@@ -1235,15 +1245,10 @@ class FeltreNLRBackend:
     construction, which is also what makes a descending stored axis a
     non-issue rather than a per-call reversal.
 
-    The alpha axis is non-uniformly spaced (node spacings 0.3, 0.3, 0.2) and
-    ``interp_nd_triweight`` runs with its default ``index_space_interp=None``
-    (the physical-space path) here; the logZ axis is far more non-uniform
-    (ratio 5.94) and already took this same path before R41 with no measured
-    dead plateau, and none was measured on alpha either (gradient nonzero and
-    smooth at every prior quantile, including at the nodes). If a future round
-    wants the corrected index-space kernel for every Feltre axis,
-    ``index_space_interp=True`` is the documented remedy (see
-    :func:`~tengri.utils.grid_interp.interp_nd_triweight`'s Notes).
+    The axes are non-uniformly spaced (the alpha node spacings are 0.3, 0.3,
+    0.2; the logZ ratio is 5.94). PCHIP works on the node coordinates
+    directly, so no index-space remap is needed, and the lookup returns the
+    stored value at every node (:func:`~tengri.utils.grid_interp.library_lookup`).
 
     This backend has ``has_continuum = False``.
 
@@ -1353,22 +1358,22 @@ class FeltreNLRBackend:
         -----
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        One C2-continuous triweight interpolation over all five grid axes
+        One node-exact PCHIP lookup over all five grid axes
         (alpha, logU_S, logn, logZ, xi_d), so every axis carries a gradient.
         Before R41 (#2214) alpha and xi_d were snapped to their nearest node
         first and only the remaining 3-D slice was interpolated, which left
         xi_d with an exactly zero gradient everywhere.
 
         """
-        from tengri.utils.grid_interp import interp_nd_triweight
+        from tengri.utils.grid_interp import library_lookup
 
         # One interpolation over all five axes, in the stored order
         # (alpha, logUs, logn, logZ, xi_d). ``line_ratios`` carries a trailing
-        # line axis, which interp_nd_triweight preserves.
+        # line axis, which library_lookup preserves.
         point = (alpha_pl, neb_logU, neb_logn, neb_logZ_gas, xi_d)
 
-        logHB_interp = interp_nd_triweight(self._logHB_sorted, self._axes, self._edges, point)
-        ratios_interp = interp_nd_triweight(self._ratios_sorted, self._axes, self._edges, point)
+        logHB_interp = library_lookup(self._logHB_sorted, self._axes, point)
+        ratios_interp = library_lookup(self._ratios_sorted, self._axes, point)
 
         # L_Hβ = 10^{logHB_per_logq} × Q_H  [erg/s]
         # L_line = ratio × L_Hβ × (1 − fesc) / L_sun

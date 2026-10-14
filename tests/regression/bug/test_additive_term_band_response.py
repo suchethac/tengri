@@ -36,6 +36,8 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, Uniform, WavePrecomp
+from tengri.components.radio import component as _radio_component
+from tengri.components.xray import component as _xray_component
 from tengri.observation.filters import load_tophat_filter
 from tengri.observation.photometry_config import Photometry
 
@@ -135,6 +137,13 @@ EMITTERS = {
     },
 }
 
+#: The component module whose ``_term_shape_response`` a free shape parameter reads.
+_EMITTER_MODULES = {
+    "radio": _radio_component,
+    "xray_yang20": _xray_component,
+    "xray_lopez24": _xray_component,
+}
+
 
 def _block(name):
     return EMITTERS[name].get("block", name)
@@ -146,7 +155,7 @@ def _photometry(name):
     return Photometry(filters=(*tuple(optical.filters), EMITTERS[name]["band"]))
 
 
-def _model(name, *, approx, free_shape=False, bands=None):
+def _model(name, *, approx, free_shape=False, bands=None, dust_extra=None):
     """Build a model carrying one additive emitter (plus an AGN, so its terms are lit).
 
     ``name=None`` builds the same model with no additive emitter at all — the reference
@@ -176,7 +185,11 @@ def _model(name, *, approx, free_shape=False, bands=None):
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+        dust_emission={
+            "type": "dale2014_cigale",
+            "all_params": Fixed(DEFAULT),
+            **(dust_extra or {}),
+        },
         agn=AGN,
         approx=approx,
         **block,
@@ -225,7 +238,7 @@ def test_the_emitter_band_is_not_vacuous(name):
 
 
 @pytest.mark.parametrize("name", sorted(EMITTERS))
-def test_band_response_is_exact_against_the_dense_filter_integral(name):
+def test_band_response_is_exact_against_the_dense_filter_integral(name, monkeypatch):
     """sum_k A_k * R_kf must equal the full per-call filter integral, to fp roundoff.
 
     Goes through ``predict_photometry`` — the ONLY entry point that threads
@@ -234,21 +247,25 @@ def test_band_response_is_exact_against_the_dense_filter_integral(name):
     path; correct, just slow — and useless as a test of the fast one.)
 
     The reference is the SAME model with one shape parameter freed, which makes the gate
-    refuse the response and fall back to integrating the emitter's SED through the true
-    filter transmission on the full wavelength grid. The freed parameter is then pinned
-    back to the value the fast model has fixed, so the two are the same physics computed
-    two independent ways. ``test_the_emitter_band_is_not_vacuous`` guarantees the emitter
-    actually dominates the band being compared.
+    refuse the exact response. A model with a free shape parameter then reads the emitter's
+    shape-only band table (an interpolation over the shape, accurate to 1e-3 and pinned in
+    ``tests/contract/test_precompute_registry_fills_free_shape_gap.py``), so the table is
+    switched off here and the emitter integrates its SED through the true filter
+    transmission on the full wavelength grid, the exact per-call integral. The freed
+    parameter is then pinned back to the value the fast model has fixed, so the two are the
+    same physics computed two independent ways. ``test_the_emitter_band_is_not_vacuous``
+    guarantees the emitter actually dominates the band being compared.
     """
     lut = _model(name, approx=WavePrecomp())
-    dense = _model(name, approx=WavePrecomp(), free_shape=True)
+    f_lut = np.asarray(lut.predict_photometry(_params(lut)))
 
     pname, _ = EMITTERS[name]["free"]
-    p_dense = _params(dense)
-    p_dense[pname] = jnp.asarray(float(lut.spec.get_fixed_values()[pname]))
-
-    f_lut = np.asarray(lut.predict_photometry(_params(lut)))
-    f_dense = np.asarray(dense.predict_photometry(p_dense))
+    with monkeypatch.context() as patch:
+        patch.setattr(_EMITTER_MODULES[name], "_term_shape_response", lambda *a, **k: None)
+        dense = _model(name, approx=WavePrecomp(), free_shape=True)
+        p_dense = _params(dense)
+        p_dense[pname] = jnp.asarray(float(lut.spec.get_fixed_values()[pname]))
+        f_dense = np.asarray(dense.predict_photometry(p_dense))
 
     nz = f_dense != 0.0
     assert nz.any()
@@ -278,6 +295,38 @@ def test_band_response_is_fast(name):
         f"{name}: adds {added:,.0f} compiled FLOPs — it is still paying a dense per-call "
         f"filter integral (budget {MAX_EMITTER_FLOPS:,})."
     )
+
+
+def test_a_zero_term_is_not_referenced_at_the_first_grid_node():
+    """A term that is zero on the whole grid must not pin its reference to node 0.
+
+    ``argmax`` of zeros is node 0, the shortest wavelength of the grid: 0.0413 A once an
+    X-ray wing is attached. The AGN is then evaluated there on every call, and
+    ``xray_yang20`` was charged 4.2e6 FLOPs for it. Here the AGN's disc, lines and polar
+    terms are zero, so their reference must sit at the live torus peak instead.
+    """
+    m = _model("xray_yang20", approx=WavePrecomp())
+    _params(m)
+    lam_ref = np.asarray(m._agn_term_response_cache["lam_ref"])
+    first_node = float(np.asarray(m._rest_wavelength)[0])
+    assert first_node < 1.0, "the X-ray wing is the premise of this test"
+    assert not np.any(lam_ref == first_node), lam_ref
+    assert np.all(lam_ref == lam_ref.max()), lam_ref  # the torus peak, 21.9 um
+
+
+def test_lopez24_corona_follows_the_agn_12um_luminosity_on_the_fast_path():
+    """The ``lopez24`` corona is anchored to the AGN's 12 um luminosity, from the term response.
+
+    ``log_L_12um`` comes from the AGN terms' amplitudes times their build-time shapes at the
+    diagnostic nodes, with no dense AGN evaluation. The corona flux is proportional to
+    10**log_L_12um, so every band must agree with the exact path (no ``approx``) to
+    round-off: a wrong 12 um value shows one-for-one in the X-ray band.
+    """
+    fast = _model("xray_lopez24", approx=WavePrecomp())
+    exact = _model("xray_lopez24", approx=None)
+    got = np.asarray(fast.predict_photometry(_params(fast)))
+    ref = np.asarray(exact.predict_photometry(_params(exact)))
+    np.testing.assert_allclose(got, ref, rtol=1e-10, atol=0.0)
 
 
 @pytest.mark.parametrize("name", sorted(EMITTERS))
@@ -332,3 +381,99 @@ def test_the_summed_sed_is_not_rank1():
             continue
         r = y[m] / x[m]
         assert np.abs(r / r[0] - 1.0).max() < 1e-12, f"term {key!r} is not rank-1"
+
+
+def _window_share(state):
+    """log10 of the share of the dust power inside the radio IR window [dex]."""
+    from tengri.utils.physics_constants import L_SUN
+
+    return float(state.derived["radio_log_L_ir_input"]) - (
+        float(state.derived["log_L_ir"]) - float(np.log10(L_SUN))
+    )
+
+
+def _with_table_shifted(template, dex):
+    """A copy of the threaded template data with every tabulated window fraction shifted."""
+    response = template["dust_ir"]["emission_band_response"]
+    shifted = {k: v + dex for k, v in response["log_window_fraction"].items()}
+    return {
+        **template,
+        "dust_ir": {
+            **template["dust_ir"],
+            "emission_band_response": {**response, "log_window_fraction": shifted},
+        },
+    }
+
+
+def test_radio_window_luminosity_from_the_dust_table_matches_the_exact_integral(monkeypatch):
+    """Under WavePrecomp with a fixed dust shape the radio block reads its IR-window
+    luminosity from the dust-emission block's build-time table (a scalar, as it reads
+    ``L_ir``) instead of integrating the dust SED on the full grid every call.
+
+    ``predict_state`` only sees the table when the threaded template data is passed in, so
+    it is passed explicitly here; a spy proves the table is what was read, and a table
+    shifted by 1e-6 dex must move the result by exactly that (a read that ignored the table
+    would not move). The value itself must equal the exact path's band integral."""
+    from tengri.components.radio.component import RadioSEDComponent
+
+    lut, exact = _model("radio", approx=WavePrecomp()), _model("radio", approx=None)
+    template = lut._template_data_for_jit()
+    table = template["dust_ir"]["emission_band_response"]
+    assert set(table["log_window_fraction"]) >= {"tir", "fir"}
+
+    seen = []
+    original = RadioSEDComponent._table_log_window_fraction
+
+    def spy(self, template_data, z):
+        out = original(self, template_data, z)
+        seen.append(out)
+        return out
+
+    monkeypatch.setattr(RadioSEDComponent, "_table_log_window_fraction", spy)
+
+    # The window luminosity is compared as its share of the dust power: the LUT model's
+    # upstream energy balance (the table-driven L_ir) differs from the exact one by ~2e-7
+    # dex, which is not what is under test.
+    want = _window_share(exact.predict_state(_params(exact)))
+    seen.clear()
+    state = lut.predict_state(_params(lut), template_data=template)
+    got = float(state.derived["radio_log_L_ir_input"])
+    assert seen and all(x is not None for x in seen), "the radio block did not read the table"
+    assert _window_share(state) == pytest.approx(want, abs=1e-13)
+
+    shifted = lut.predict_state(_params(lut), template_data=_with_table_shifted(template, 1e-6))
+    moved = float(shifted.derived["radio_log_L_ir_input"]) - got
+    assert moved == pytest.approx(1e-6, abs=1e-12)
+
+    np.testing.assert_allclose(
+        np.asarray(lut.predict_photometry(_params(lut))),
+        np.asarray(exact.predict_photometry(_params(exact))),
+        rtol=1e-13,
+    )
+
+
+def test_a_free_dust_shape_falls_back_to_the_dense_window_integral():
+    """With ``dust_alpha_dale`` free there is no build-time table, and the radio block
+    integrates the dust SED: its IR-window luminosity follows alpha, equals the exact
+    model's, and equals an independent dense band integral of that model's dust SED."""
+    from tengri.utils.physics_constants import L_SUN
+    from tests._radio_band import band_l_ir
+
+    free = {"alpha_dale": Uniform(1.0, 3.0)}
+    lut = _model("radio", approx=WavePrecomp(), dust_extra=free)
+    exact = _model("radio", approx=None, dust_extra=free)
+    assert "emission_band_response" not in (lut._template_data_for_jit().get("dust_ir") or {})
+    template = lut._template_data_for_jit()
+
+    values = []
+    for alpha in (1.2, 2.0, 2.8):
+        p_lut = {**_params(lut), "dust_alpha_dale": jnp.asarray(alpha)}
+        p_exact = {**_params(exact), "dust_alpha_dale": jnp.asarray(alpha)}
+        s_lut = lut.predict_state(p_lut, template_data=template)
+        s_exact = exact.predict_state(p_exact)
+        got = float(s_lut.derived["radio_log_L_ir_input"])
+        assert _window_share(s_lut) == pytest.approx(_window_share(s_exact), abs=1e-13)
+        # Independent of the radio block: a dense band integral of the LUT model's own SED.
+        assert got == pytest.approx(np.log10(band_l_ir(s_lut, "tir") / L_SUN), abs=1e-6)
+        values.append(got)
+    assert max(values) - min(values) > 1e-2, "the window luminosity must follow the dust shape"
