@@ -2974,7 +2974,9 @@ class Parameters:
             modules.append(f"met={met_mode}")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
-        if self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+        if dust_mdl in ("single_component", "wg00"):
+            lines.append("  LyC reprocessed by: n/a (no young/old split)")
+        elif self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
             _origin = (
                 "[user]"
                 if getattr(self, "dust_lyc_reprocessed_by_explicit", False)
