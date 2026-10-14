@@ -116,3 +116,51 @@ def test_scan_flags_unguarded_jnp_and_accepts_guarded(tmp_path, monkeypatch):
     hits = mod._violations()
     assert len(hits) == 1
     assert hits[0].endswith(" bad")
+
+
+_COLD_JIT_SCRIPT = """
+import jax, jax.numpy as jnp, numpy as np
+from tengri.components.agn import _nthcomp
+from tengri.components.agn.disc import load_relagn_default_grid, relagn_disc_from_grid
+from tengri.components.agn.unified import kubota_done_full_agn
+
+wave = jnp.geomspace(1.0e3, 1.0e5, 48)
+
+def kd(w, lb):
+    return kubota_done_full_agn(w, agn_log_lbol=lb)
+
+def rel(w, lb):
+    return relagn_disc_from_grid(
+        load_relagn_default_grid(), w, agn_log_lbol=lb, agn_log_mbh=8.0,
+        agn_log_mdot=-1.0, agn_astar=0.5, agn_cos_inc=0.8,
+    )
+
+def norm(x):
+    grid = _nthcomp.nthcomp_norm_grid(16)
+    return x * jnp.asarray(grid).sum()
+
+# Every cached grid loader's FIRST call happens under a jit trace; a second
+# model in the same process must then still work.
+for fn in (kd, rel):
+    jit = jax.jit(fn)
+    a, b = np.asarray(jit(wave, 44.0)), np.asarray(jit(wave, 43.0))
+    assert np.all(np.isfinite(a)) and np.all(np.isfinite(b)), fn.__name__
+assert np.isfinite(float(jax.jit(norm)(1.0)))
+print("OK")
+"""
+
+
+def test_cached_grid_loaders_survive_a_cold_first_call_under_jit():
+    """Behavioral twin of the AST scan: host-side helpers that read a cached grid.
+
+    The scan above only sees ``jnp`` calls written in the cached function itself; a helper
+    such as ``_get_nu_jax`` (device array) later ``np.asarray``-ed on the host slips past it.
+    A fresh interpreter makes the jit call the first call of every loader.
+    """
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-c", _COLD_JIT_SCRIPT], capture_output=True, text=True, timeout=300
+    )
+    assert proc.returncode == 0 and "OK" in proc.stdout, proc.stderr[-1500:]

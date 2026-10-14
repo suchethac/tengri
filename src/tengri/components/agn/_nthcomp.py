@@ -113,6 +113,18 @@ def _get_nu_jax():
     return nu
 
 
+def _get_nu_host() -> np.ndarray:
+    """Return the template frequency grid as host float32 numpy (never a tracer).
+
+    Host-side consumers (``np.geomspace`` bounds, static grids) must read this, not
+    ``_get_nu_jax``: under ``jax.jit`` the latter's ``jnp.asarray`` yields a tracer.
+    """
+    _, _, _, nu, _, available = _load_nthcomp_templates_impl()
+    if not available:
+        raise RuntimeError("nthcomp templates are not available; cannot build the norm grid")
+    return nu
+
+
 def _get_table_jax():
     """Return log-space nthcomp template table from cached templates."""
     _, _, _, _, table_log, _ = _get_nthcomp_templates()
@@ -497,7 +509,7 @@ def nthcomp_norm_grid(n_points: int = 4000) -> np.ndarray:
     the template is defined, and its tails are negligible), so the warm zone carries exactly
     its counted power, whatever the (Gamma, kTe, kTbb) of the ring.
     """
-    nu = np.asarray(_get_nu_jax(), dtype=float)
+    nu = np.asarray(_get_nu_host(), dtype=float)
     return np.geomspace(nu[0], nu[-1], n_points)
 
 
