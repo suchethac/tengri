@@ -138,6 +138,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_lyc_reprocessed_by = "young"
             self._dust_lyc_in_energy_balance = False
             self._dust_lyc_escape_geometry = "screened"
+            self._dust_age_mixture = "per_node"
             self._dust_t_birth_yr = 1e7
             self._dust_transition_width_dex = 0.0
             self._dust_ir_diffuse_screen = False

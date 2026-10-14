@@ -4372,6 +4372,23 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # lifetime; ``transition_width_dex`` is the dispersal width of every age
     # edge (age_binned windows included). Refuse them on a type that has no
     # age split rather than drop them silently.
+    # The age-mixture evaluation order is a two_component setting (the one
+    # attenuator whose screen is a two-interval mixture evaluated per node).
+    if "age_mixture" in dust_atten_dict:
+        from tengri.components.dust.two_component import AGE_MIXTURES
+
+        if dust_type != "two_component":
+            raise ValueError(
+                f"dust_attenuation 'age_mixture' is a two_component setting (got "
+                f"type={dust_type!r}); drop 'age_mixture'."
+            )
+        if dust_atten_dict["age_mixture"] not in AGE_MIXTURES:
+            raise ValueError(
+                f"dust_attenuation['age_mixture'] must be one of {AGE_MIXTURES}; "
+                f"got {dust_atten_dict['age_mixture']!r}."
+            )
+        result["dust_age_mixture"] = dust_atten_dict["age_mixture"]
+
     if "t_birth_yr" in dust_atten_dict and dust_type != "two_component":
         raise ValueError(
             f"dust_attenuation 't_birth_yr' is the two_component birth-cloud lifetime "
@@ -5828,6 +5845,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # (birth-cloud-screen types) only -- see
             # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
             "lyc_escape_geometry",
+            # Evaluation order of the two-component age mixture ('per_node' |
+            # 'grouped'); same model either way. Two-component only.
+            "age_mixture",
             # Young/old split: birth-cloud dispersal age [yr] (two_component) and
             # the dispersal width [dex] of every age edge (0 = hard step). Static.
             "t_birth_yr",
@@ -6040,6 +6060,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
+        _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
         # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
         # bc/diff/neb), the Lyman flags and the law keys are emitted by
         # _add_structural_settings / _emit_declared_structural, not by this table.
@@ -8582,6 +8603,7 @@ def _resolve_value(
             "lyc_reprocessed_by",
             "lyc_in_energy_balance",
             "lyc_escape_geometry",
+            "age_mixture",
             "t_birth_yr",
             "transition_width_dex",
         }
