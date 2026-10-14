@@ -176,6 +176,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._radio_sf_nu_ref = None
             self._radio_sfr_mode = "kranichstein"
             self._radio_agn_model = "wilman"
+            self._radio_agn_loudness_ref = "4400"  # added by #2974; sed_model default
             self._uses_xray = False
             self._xray_model = "yu"
             self._uses_shock = False
