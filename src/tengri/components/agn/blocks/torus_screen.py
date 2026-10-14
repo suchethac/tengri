@@ -242,11 +242,8 @@ def torus_screen_transmission(
     # complement of the polar mask's Type-1 weight, at the same width.
     type2 = 1.0 - _type1_mask(cos_inc, oa_deg)
 
-    tau_lambda = (
-        jnp.maximum(tau_v, 0.0)
-        * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
-        * type2
-    )
+    tau_v_eff = jnp.maximum(tau_v, 0.0) * type2
+    tau_lambda = tau_v_eff * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
     t_optical = jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
 
     # Below the library edge the X-rays are photoelectrically absorbed, exp(-sigma N_H), with
@@ -254,7 +251,7 @@ def torus_screen_transmission(
     # The same MM83 column the library sightline takes (owner ruling 10).
     below = wave < XRAY_LIBRARY_EDGE_AA
     energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
-    a_v = _MAG_PER_TAU * jnp.maximum(tau_v, 0.0) * type2
+    a_v = _MAG_PER_TAU * tau_v_eff
     t_xray = jnp.exp(-wabs_cross_section(energy) * NH_PER_AV * a_v)
     return jnp.where(below, t_xray, t_optical)
 
