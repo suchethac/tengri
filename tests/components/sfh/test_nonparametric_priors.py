@@ -20,7 +20,8 @@ from tengri.components.stellar.sfh.nonparametric import (
     make_agebins_from_zred,
 )
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.priors import StudentT, Uniform
+from tengri.cosmology import age_at_z
+from tengri.parameters.priors import Fixed, StudentT, Uniform
 
 pytestmark = pytest.mark.contract
 
@@ -134,13 +135,21 @@ class TestPSBSuess2022Registration:
         spec = SFH_REGISTRY["psb_suess2022"]
         assert "sfh_psb2022_tlast_gyr" in spec.params
         assert "sfh_psb2022_tflex_gyr" in spec.params
-        # Priors should be the Suess defaults (uniform over the physically
-        # meaningful quenching-timescale ranges).
-        assert spec.params["sfh_psb2022_tlast_gyr"].default == Uniform(0.01, 1.0)
+        # The Gyr twins are Fixed shims (#2748); the fractions of age(z) carry
+        # the Suess priors, uniform over the quenching-timescale ranges in Gyr
+        # divided by the age of the universe.
+        age0 = float(age_at_z(0.0))
+        assert isinstance(spec.params["sfh_psb2022_tlast_gyr"].default, Fixed)
+        tlast = spec.params["sfh_psb2022_tlast_frac"].default
+        assert isinstance(tlast, Uniform)
+        assert tlast.lo == pytest.approx(0.01 / age0)
+        assert tlast.hi == pytest.approx(1.0 / age0)
         # The tflex floor is the tlast ceiling: overlapping priors could draw a
         # negative-width flexible zone (#2184). Suess+2022 fix tflex at 2 Gyr,
         # which is still the default.
-        assert spec.params["sfh_psb2022_tflex_gyr"].default == Uniform(1.0, 5.0)
+        tflex = spec.params["sfh_psb2022_tflex_frac"].default
+        assert tflex.lo == pytest.approx(1.0 / age0)
+        assert tflex.hi == pytest.approx(5.0 / age0)
 
     def test_ratio_priors_are_studentt(self):
         # Three old ratios, one per fixed bin (#2612): ratio_old_0 is the link

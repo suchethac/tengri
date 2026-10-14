@@ -467,7 +467,7 @@ def _contract_bg(
             )
         from tengri.components._z_response import z_bracket
 
-        k0, w_z = z_bracket(ln1pz, redshift)  # (), (2,)
+        k0, w_z = z_bracket(ln1pz, redshift, extrapolate=True)  # (), (2,)
         g_sub = jax.lax.dynamic_slice(
             G,
             (k0, zero, zero, i0, j0),

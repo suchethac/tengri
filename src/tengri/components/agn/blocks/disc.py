@@ -275,7 +275,7 @@ def cigale_adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_adaf_delta: float = 0.0,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` ADAF↔thin-disc transitional spectrum.
@@ -292,10 +292,11 @@ def cigale_adaf_disc_block(
         Rest-frame wavelength [Å].
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_cigale_disk_delta : float, optional
+    agn_cigale_adaf_delta : float, optional
         Blend weight in ``[0, 1]`` (paper ``delta``). ``0`` -> pure ADAF;
-        ``1`` -> pure thin disc. Note: for this block the parameter is a
-        blend weight, **not** a slope modulator. Default ``0.0``.
+        ``1`` -> pure thin disc. This is a blend weight, not the slope
+        modulator ``agn_cigale_disk_delta`` of the other CIGALE discs.
+        Default ``0.0``.
 
     Returns
     -------
@@ -322,7 +323,7 @@ def cigale_adaf_disc_block(
         wavelength,
         agn_log_lbol,
         adaf_disk_spectrum,
-        delta=agn_cigale_disk_delta,
+        delta=agn_cigale_adaf_delta,
     )
 
 

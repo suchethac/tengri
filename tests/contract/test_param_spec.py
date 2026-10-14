@@ -342,7 +342,7 @@ class TestSampleSubstreamStability:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_age_gyr=Uniform(0.5, 13.5),
+            sfh_dpl_age_frac=Uniform(0.0362663, 0.979191),
             sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),

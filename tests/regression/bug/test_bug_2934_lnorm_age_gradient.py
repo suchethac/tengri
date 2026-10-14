@@ -14,7 +14,9 @@ grid carries zero-width cells. :func:`lognormal` divides by the local spacing
 of that division is ``0 / 0`` on those cells even though the forward value
 (clipped to 0) is finite.
 
-The parameter ages below span the prior, and the two redshifts exercise both
+The lognormal age is fitted as ``sfh_lnorm_age_frac``, a fraction of the age of
+the universe at z (#2748). The fractions below span the prior (0.76 at z = 0.1
+is the 9.473 Gyr of the original report), and the two redshifts exercise both
 the extended grid (z = 0.1) and the shorter one at z = 2.
 """
 
@@ -26,9 +28,9 @@ import tengri
 from tengri import DEFAULT, Fixed, Observation, SEDModel, Uniform
 from tengri.observation.photometry_config import Photometry
 
-AGES_GYR = [1.0, 5.0, 9.473, 12.0]
+AGE_FRACS = [0.08, 0.4, 0.76, 0.96]
 REDSHIFTS = [0.1, 2.0]
-AGE_KEY = "sfh_lnorm_age_gyr"
+AGE_KEY = "sfh_lnorm_age_frac"
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +43,7 @@ def _build(ssp, redshift):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
         redshift=Fixed(redshift),
-        sfh={"type": "lnorm", "all_params": Fixed(DEFAULT), "age_gyr": Uniform(1.0, 12.0)},
+        sfh={"type": "lnorm", "all_params": Fixed(DEFAULT), "age_frac": Uniform(0.05, 1.0)},
         dust_attenuation={"type": "none"},
     )
 
@@ -51,9 +53,9 @@ def models(ssp):
     return {z: _build(ssp, z) for z in REDSHIFTS}
 
 
-def _params(model, age_gyr):
+def _params(model, age_frac):
     p = {k: jnp.asarray(v) for k, v in model.spec.sample(jax.random.PRNGKey(1)).items()}
-    p[AGE_KEY] = jnp.asarray(age_gyr)
+    p[AGE_KEY] = jnp.asarray(age_frac)
     return p
 
 
@@ -63,12 +65,12 @@ def _loss(model, p):
 
 @pytest.mark.regression_bug
 @pytest.mark.parametrize("redshift", REDSHIFTS)
-@pytest.mark.parametrize("age_gyr", AGES_GYR)
-def test_lnorm_age_gradient_is_finite_and_nonzero(models, redshift, age_gyr):
+@pytest.mark.parametrize("age_frac", AGE_FRACS)
+def test_lnorm_age_gradient_is_finite_and_nonzero(models, redshift, age_frac):
     model = models[redshift]
-    grad = jax.grad(lambda q: _loss(model, q))(_params(model, age_gyr))[AGE_KEY]
+    grad = jax.grad(lambda q: _loss(model, q))(_params(model, age_frac))[AGE_KEY]
     assert jnp.isfinite(grad), (
-        f"d(log photometry)/d{AGE_KEY} is {grad} at {age_gyr} Gyr, z={redshift}"
+        f"d(log photometry)/d{AGE_KEY} is {grad} at fraction {age_frac}, z={redshift}"
     )
     assert grad != 0.0
 
@@ -76,15 +78,15 @@ def test_lnorm_age_gradient_is_finite_and_nonzero(models, redshift, age_gyr):
 @pytest.mark.regression_bug
 def test_lnorm_age_gradient_matches_central_difference(models):
     model = models[0.1]
-    age_gyr = 9.473
-    h = 1e-4
-    p = _params(model, age_gyr)
+    age_frac = 0.76
+    h = 1e-5
+    p = _params(model, age_frac)
     ad = jax.grad(lambda q: _loss(model, q))(p)[AGE_KEY]
 
     def at(a):
         return _loss(model, _params(model, a))
 
-    fd = (at(age_gyr + h) - at(age_gyr - h)) / (2.0 * h)
+    fd = (at(age_frac + h) - at(age_frac - h)) / (2.0 * h)
     assert jnp.isfinite(ad)
     assert ad != 0.0
     assert abs(float(ad) - float(fd)) <= 1e-4 * abs(float(fd))

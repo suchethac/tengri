@@ -40,6 +40,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
 )
 from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.scale import pow10
 
 #: log10 floor for a band that is exactly zero (no filter overlap).
@@ -246,7 +247,7 @@ def _bilinear_log(log_tab, z_axis, u_axis, z, u, axis: int):
     does. Trailing and leading dimensions are carried through.
 
     Scheme: linear weights in (log Z, log U), the (Z, U) restriction of the
-    default ``grid_interp="linear"`` path of
+    ``grid_interp="linear"`` path of
     ``CloudyGridBackend._make_interp_fn`` (``_trilinear_interp`` in
     ``cloudy_grid.py``), which interpolates log10 values. The table holds the
     band of each node (line luminosities for lines), not the luminosity behind
@@ -271,12 +272,35 @@ def _bilinear_log(log_tab, z_axis, u_axis, z, u, axis: int):
     return pow10(logv)
 
 
+def _pchip_log(log_tab, z_axis, u_axis, z, u, axis: int):
+    """Node-exact PCHIP of log10 values in (Z, U), then pow10.
+
+    The same ``interp_nd_pchip`` the CLOUDY backend uses for its ``"pchip"``
+    default (``CloudyGridBackend._make_interp_fn``), with the Z axis first and
+    the U axis second, clipped at the node range (no extrapolation).
+    """
+    moved = jnp.moveaxis(log_tab, (axis, axis + 1), (0, 1))
+    return pow10(interp_nd_pchip(moved, (z_axis, u_axis), (z, u)))
+
+
+def _read_log_zu(log_tab, z_axis, u_axis, z, u, axis: int, grid_interp: str):
+    """Interpolate a log table in (Z, U) with the backend's scheme."""
+    if grid_interp == "pchip":
+        return _pchip_log(log_tab, z_axis, u_axis, z, u, axis)
+    if grid_interp == "linear":
+        return _bilinear_log(log_tab, z_axis, u_axis, z, u, axis)
+    raise ValueError(
+        f"the CLOUDY band table reproduces grid_interp 'pchip' or 'linear', not {grid_interp!r}"
+    )
+
+
 def contract_cloudy_band_table(
     table: CloudyBandTable,
     age_weights,
     neb_logz_gas_abs,
     neb_logu,
     fesc_lya=0.0,
+    grid_interp: str = "pchip",
 ):
     """Contract the band table over ages at one (Z_gas, logU) point.
 
@@ -292,6 +316,8 @@ def contract_cloudy_band_table(
         log10 U.
     fesc_lya : float
         Ly-alpha escape fraction; scales the Ly-alpha line alone.
+    grid_interp : {"pchip", "linear"}
+        The interpolation of the CLOUDY backend the table was built from.
 
     Returns
     -------
@@ -299,23 +325,25 @@ def contract_cloudy_band_table(
         Observed (0) and rest (1) band L_nu [erg/s/Hz].
     """
     aw = jnp.asarray(age_weights)
-    cont = _bilinear_log(
+    cont = _read_log_zu(
         jnp.asarray(table.log_cont),
         jnp.asarray(table.cont_z),
         jnp.asarray(table.cont_u),
         neb_logz_gas_abs,
         neb_logu,
         axis=2,
+        grid_interp=grid_interp,
     )  # (2, n_young, n_filt)
     cont_band = jnp.einsum("i,cif->cf", aw, cont)
 
-    lines = _bilinear_log(
+    lines = _read_log_zu(
         jnp.asarray(table.log_lines),
         jnp.asarray(table.line_z),
         jnp.asarray(table.line_u),
         neb_logz_gas_abs,
         neb_logu,
         axis=1,
+        grid_interp=grid_interp,
     )  # (n_young, n_lines)
     lum = jnp.einsum("i,ij->j", aw, lines)
     lum = apply_lya_escape(lum, jnp.asarray(table.line_wavelengths), fesc_lya)
@@ -385,4 +413,6 @@ def table_band_photometry(
     aw = runtime_age_weights(
         backend, ssp_log_ages_yr, ssp_weights, log_z, neb_fesc, neb_fdust_frac
     )
-    return contract_cloudy_band_table(table, aw, log_z_gas, neb_logu, neb_fesc_lya)
+    return contract_cloudy_band_table(
+        table, aw, log_z_gas, neb_logu, neb_fesc_lya, grid_interp=backend._grid_interp
+    )

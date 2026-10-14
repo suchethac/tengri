@@ -103,7 +103,9 @@ class SKIRTORTorus(SEDModelComponent):
     theta_view    = Uniform( 0.0, 90.0, "viewing angle",       units="deg")
     optical_depth = Uniform( 3.0, 11.0, "9.7 µm optical depth", units="")
 
-    outputs = {"L_agn_torus": "erg/s"}
+    # An integrated luminosity is published as log10 [dex re erg/s]: ~1e44 erg/s is `inf`
+    # in float32 (NAMING_CONTRACT section 4c), so the integral is never formed linearly.
+    outputs = {"log_L_agn_torus": "dex"}
 
     def load(self, wave):
         return load_skirtor("data/skirtor_v3.h5", wave)
@@ -111,7 +113,7 @@ class SKIRTORTorus(SEDModelComponent):
     def predict(self, p, sed_in, wave):
         sed = skirtor_interp(self.data, p["log_lbol"],
                              p["theta_view"], p["optical_depth"])
-        return sed_in + sed, {"L_agn_torus": trapz_freq(sed, wave)}
+        return sed_in + sed, {"log_L_agn_torus": log10_trapz_freq(sed, wave)}
 ```
 
 ### Neural-network emulator

@@ -61,6 +61,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._term_response import term_band_response
+from tengri.components.agn._ir_frac_window import (
+    PROVISIONAL_TORUS_FRAC,
+    log10_torus_frac_from_window,
+)
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
     reference_evaluation,
@@ -68,6 +72,8 @@ from tengri.components.agn._lbol_reference import (
 )
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
+from tengri.components.agn._publication import with_lsun_siblings
+from tengri.components.agn.adaf import adaf_accretion_diagnostics
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.blocks.torus_library_transmission import below_library_index
@@ -91,6 +97,14 @@ __all__ = [
     "AGNSEDComponent",
     "AGNSEDComponentConfig",
 ]
+
+#: ``(alpha, beta, delta)`` of the ADAF when the parameters are not supplied: the defaults of
+#: :func:`~tengri.components.agn.adaf.adaf_spectrum`.
+_ADAF_DEFAULTS: tuple[float, float, float] = (0.3, 0.5, 0.1)
+
+
+#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
+_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
 
 
 def _amplitude_probe_draws() -> tuple[dict[str, float], ...]:
@@ -140,6 +154,12 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
+    agn_ir_frac_window : tuple of float
+        CIGALE ``lambda_fracAGN`` window (#2662), ``(lambda_min_um, lambda_max_um)``. ``(0, 0)``
+        (default) is the total-dust case: ``agn_ir_frac`` is the fraction of the total dust
+        luminosity. A window makes ``agn_ir_frac`` the fraction of the light in
+        ``[lambda_min, lambda_max]``; ``lambda_min == lambda_max != 0`` is monochromatic.
+        A static build-time value, not a parameter.
     agn_polar_law : str
         Polar-dust extinction curve: ``"smc"`` (default), ``"calzetti"``,
         ``"gaskell"`` or ``"bongiorno"``. A static string read by the runner.
@@ -165,6 +185,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     agn_attenuation_block: str = "none"
     agn_norm: str = "cigale_joint"
     agn_polar_law: str = "smc"
+    agn_ir_frac_window: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -249,8 +270,17 @@ class AGNSEDComponent(TemplateThreading):
     #: first draw. Each draw sets both amplitudes, so the probe never reads a free value.
     EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], ...]] = _amplitude_probe_draws()
 
+    #: Wavelengths [Angstrom] at which the AGN publishes point diagnostics (6 and 12 um); the
+    #: term response carries each term's shape there (``S_diag``).
+    EMITTER_DIAGNOSTIC_NODES: ClassVar[tuple[float, ...]] = _MIR_DIAGNOSTIC_AA
+
     #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
     _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
+
+    #: The term band response carries each term's amplitude at its reference wavelength when
+    #: no amplitude parameter is free (#2987), so the photometry does not re-evaluate the AGN
+    #: on every call. Read by the term-response builder in ``tengri.SEDModel``.
+    FIXED_TERM_AMPLITUDES: ClassVar[bool] = True
 
     def term_response_refusal(self, free: set[str], fixed: Mapping[str, Any]) -> str | None:
         """Why the rank-1 band response must not be built for this AGN, or ``None``.
@@ -392,15 +422,34 @@ class AGNSEDComponent(TemplateThreading):
         band: Mapping[str, Any],
         params: Mapping[str, Any],
         template_state: Mapping[str, Any] | None,
-    ) -> jnp.ndarray:
-        """Filter-integrated AGN :math:`L_\\nu` from the build-time term response.
+    ) -> tuple[jnp.ndarray, tuple[jnp.ndarray, jnp.ndarray]]:
+        """Filter-integrated AGN :math:`L_\\nu` and the 6 and 12 um logs from the term response.
 
         The amplitude of each term is its value at the reference wavelength divided by the
-        shape there, so the photometry is ``sum_k A_k R_kf`` with no dense grid.
+        shape there, so the photometry is ``sum_k A_k R_kf`` with no dense grid. The same
+        amplitudes times the build-time term shapes at the two mid-infrared diagnostic nodes
+        (``S_diag``) give the 6 and 12 um luminosities, so a model that reads ``log_L_12um``
+        (the ``lopez24`` corona) does not keep a dense AGN evaluation alive for it.
+
+        Returns
+        -------
+        phot : ndarray, shape (n_filters,)
+            Filter-integrated rest-frame :math:`L_\\nu` [erg/s/Hz].
+        mir_logs : tuple of ndarray, scalar
+            ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
         """
-        ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
-        amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
-        return amps @ band["R"]
+        if "amp" in band:
+            # Every amplitude parameter is fixed, so the build evaluated these at the fixed
+            # values: the same numbers this branch would compute (#2987).
+            amps = band["amp"]
+        else:
+            ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
+            amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
+        keys = list(self._TERM_KEYS)
+        rows = jnp.asarray([keys.index(k) for k in ("disc", "torus", "polar")])
+        mir_lnu = jnp.sum(amps[rows][:, None] * band["S_diag"][rows], axis=0)
+        diag = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=mir_lnu.dtype)
+        return amps @ band["R"], _mir_logs(diag, mir_lnu, 0.0)
 
     def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this AGN component publishes.
@@ -427,6 +476,37 @@ class AGNSEDComponent(TemplateThreading):
                 "[dex re erg/s] of the AGN direct emission, int L_nu(i) dnu with "
                 "L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust; "
                 "composable model only. Compare with a catalog L_bol",
+            ),
+            DerivedKey(
+                "agn_adaf_mdot",
+                "",
+                "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd with "
+                "Mdot_Edd = L_Edd / (0.1 c^2) (Mahadevan 1997, Eq. 4), derived from the "
+                "radiated agn_log_lbol; composable model with the 'adaf' disc only",
+            ),
+            DerivedKey(
+                "log_L_agn_adaf_accretion",
+                "dex",
+                "log10 of the ADAF accretion power mdot L_Edd = eta_eff Mdot c^2 [dex re "
+                "erg/s] with eta_eff = 0.1 (Mahadevan 1997, Eq. 4), the power the paper "
+                "compares L_ADAF against; agn_log_lbol stays the radiated luminosity "
+                "Q_ie + delta Q+; composable model with the 'adaf' disc only",
+            ),
+            DerivedKey(
+                "L_agn_bol_lsun",
+                "Lsun",
+                "10**agn_log_lbol, the AGN accretion power in solar luminosities",
+            ),
+            DerivedKey(
+                "L_agn_los_lsun",
+                "Lsun",
+                "log_L_agn_los in solar luminosities; composable model only",
+            ),
+            DerivedKey(
+                "L_agn_adaf_accretion_lsun",
+                "Lsun",
+                "log_L_agn_adaf_accretion in solar luminosities; composable model with the "
+                "'adaf' disc only",
             ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
@@ -494,6 +574,22 @@ class AGNSEDComponent(TemplateThreading):
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Optional inputs: the dust publications and, under a CIGALE window, the host continuum.
+
+        A window reads the host SED (``sed_intrinsic``), which holds the nebular continuum.
+        Declaring ``sed_nebular`` keeps the fast nebular grid, which zeroes that continuum,
+        from being armed for this chain (#2662).
+        """
+        if self.config.agn_ir_frac_window != (0.0, 0.0):
+            nebular = DerivedKey(
+                "sed_nebular",
+                "erg/s/Hz",
+                "Nebular continuum; read by the CIGALE lambda_fracAGN window (#2662)",
+            )
+            return (nebular, *self._cigale_joint_inputs())
+        return self._cigale_joint_inputs()
+
+    def _cigale_joint_inputs(self) -> tuple[DerivedKey, ...]:
         """Dust publications, when using CIGALE-joint cross-component norm.
 
         When ``agn_norm == "cigale_joint"``, the AGN component reads
@@ -666,67 +762,6 @@ class AGNSEDComponent(TemplateThreading):
 
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
 
-        # CIGALE-faithful cross-component coupling
-        # ────────────────────────────────────────────────────────────
-        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
-        # bookkeeping: the AGN dust-IR power is derived from the
-        # stellar dust-absorbed luminosity via
-        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
-        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
-        # the existing block normalization ``l_scale = L_bol × frac``
-        # produces ``l_scale = agn_power``. This way the torus block
-        # API stays unchanged while the higher-level driver matches
-        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
-        # whole-IR default) is assumed; the alternative wavelength-
-        # window flow is not yet wired.
-        #
-        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
-        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
-        # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
-        # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
-        # torus_frac), with the log branch still finite so its unused-branch
-        # gradient cannot leak (#1206).
-        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
-        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
-        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
-        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
-        # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
-        # stellar+nebular energy the dust screen actually intercepted, not the
-        # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
-        # ``dust_log_L_ir`` override) can scale away from it (#1837/
-        # #2187-series split). The ``log_L_ir`` fallback below covers a chain
-        # built before the split published the new key.
-        _log_L_absorbed = state.derived.get("log_L_absorbed")
-        if _log_L_absorbed is None:
-            _log_L_absorbed = state.derived.get("log_L_ir")
-        if _log_L_absorbed is None and "L_absorbed" in state.derived:
-            _log_L_absorbed = jnp.log10(
-                jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
-            )
-        if _log_L_absorbed is None:
-            # No dust screen published an absorbed luminosity. Construction
-            # refuses an active fracAGN in that case (sed_model._validate_
-            # fracagn_requires_dust), so only the inert Fixed(0) coupling
-            # reaches here, and the user torus fraction is used directly.
-            agn_torus_frac_effective = agn_torus_frac_user
-        else:
-            # log10(agn_power / L_agn_bol)
-            #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
-            _log_torus_frac = (
-                _log_L_absorbed
-                + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
-                - jnp.log10(_one_minus_frac)
-                - agn_log_lbol
-                - _LOG10_L_SUN
-            )
-            agn_torus_frac_effective = jnp.where(
-                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
-            )
-        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
-        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
-        # consumers needing it linearly run in float64.
-        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
-
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
         # so it folds into a JIT trace cleanly. If template_data is
@@ -758,7 +793,7 @@ class AGNSEDComponent(TemplateThreading):
             # CIGALE-coupled override: see ``agn_torus_frac_effective``
             # block above. When ``agn_ir_frac > 0`` this carries the
             # stellar-derived agn_power; otherwise it's the user value.
-            "agn_torus_frac": agn_torus_frac_effective,
+            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
             "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
             "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
             "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
@@ -803,6 +838,110 @@ class AGNSEDComponent(TemplateThreading):
         master_wave = getattr(self._state, "torus_master_wave", None)
         if self.config.model == "composable" and below_index is not None and wave is master_wave:
             agn_kwargs["torus_below_index"] = below_index
+
+        # CIGALE-faithful cross-component coupling
+        # ────────────────────────────────────────────────────────────
+        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
+        # bookkeeping: the AGN dust-IR power is derived from the
+        # stellar dust-absorbed luminosity via
+        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
+        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
+        # the existing block normalization ``l_scale = L_bol × frac``
+        # produces ``l_scale = agn_power``. This way the torus block
+        # API stays unchanged while the higher-level driver matches
+        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's whole-IR default) is the
+        # default; ``agn={'ir_frac_window': ...}`` selects a wavelength window instead (#2662),
+        # which changes only the scale factor of ``agn_power`` (see ``_ir_frac_window``).
+        #
+        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
+        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
+        # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
+        # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
+        # torus_frac), with the log branch still finite so its unused-branch
+        # gradient cannot leak (#1206).
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
+        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
+        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
+        # stellar+nebular energy the dust screen actually intercepted, not the
+        # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
+        # ``dust_log_L_ir`` override) can scale away from it (#1837/
+        # #2187-series split). The ``log_L_ir`` fallback below covers a chain
+        # built before the split published the new key.
+        ir_frac_window = tuple(self.config.agn_ir_frac_window)
+        _log_L_absorbed = state.derived.get("log_L_absorbed")
+        if _log_L_absorbed is None:
+            _log_L_absorbed = state.derived.get("log_L_ir")
+        if _log_L_absorbed is None and "L_absorbed" in state.derived:
+            _log_L_absorbed = jnp.log10(
+                jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
+            )
+        if _log_L_absorbed is None:
+            # No dust screen published an absorbed luminosity. Construction
+            # refuses an active fracAGN in that case (sed_model._validate_
+            # fracagn_requires_dust), so only the inert Fixed(0) coupling
+            # reaches here, and the user torus fraction is used directly.
+            agn_torus_frac_effective = agn_torus_frac_user
+        elif ir_frac_window != (0.0, 0.0):
+            # CIGALE lambda_fracAGN window (#2662): agn_power = f/(1-f) * H * D / W, with H and
+            # W the host and AGN window luminosities and D the AGN dust luminosity. The
+            # AGN shape is set by the cigale_joint tie, so D/W is scale-free: one provisional
+            # evaluation at the user torus fraction gives it, and the final evaluation runs
+            # at the window-derived fraction. Only the scale factor changes; agn_power keeps
+            # its meaning and its place in the ledger.
+            from tengri.config.exceptions import ParameterError
+
+            if self.config.model != "composable":
+                raise ParameterError(
+                    f"agn['ir_frac_window']={ir_frac_window} needs the composable AGN "
+                    f"(model {self.config.model!r} has no disc/torus/polar split to take the "
+                    "dust luminosity from)."
+                )
+            _host = (
+                state.sed_intrinsic if state.sed_intrinsic is not None else jnp.zeros_like(wave)
+            )
+            # Same grid and kwargs as the final evaluation (extended master grid, build-time
+            # below-library index), so the provisional D/W carries the final pass's numerics.
+            _wave_ext, _to_caller, _ = _with_diagnostic_nodes(wave)
+            _prov_kwargs = {**agn_kwargs, "agn_torus_frac": PROVISIONAL_TORUS_FRAC}
+            _L_ext, _, _, _ = agn_fn(
+                _wave_ext,
+                agn_log_lbol=agn_log_lbol,
+                return_l2500=True,
+                return_components=True,
+                **_prov_kwargs,
+            )
+            _L_prov = jnp.take(_L_ext, _to_caller, axis=-1)
+            _log_torus_frac = log10_torus_frac_from_window(
+                wave,
+                _host,
+                _L_prov,
+                agn_ir_frac,
+                ir_frac_window[0] * 1.0e4,
+                ir_frac_window[1] * 1.0e4,
+            )
+            agn_torus_frac_effective = jnp.where(
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            )
+        else:
+            # log10(agn_power / L_agn_bol)
+            #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
+            _log_torus_frac = (
+                _log_L_absorbed
+                + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
+                - jnp.log10(_one_minus_frac)
+                - agn_log_lbol
+                - _LOG10_L_SUN
+            )
+            agn_torus_frac_effective = jnp.where(
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            )
+        agn_kwargs = {**agn_kwargs, "agn_torus_frac": agn_torus_frac_effective}
+        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
+        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
+        # consumers needing it linearly run in float64.
+        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
 
         # Call AGN function. For composable models, request L_2500_intrinsic
         # and L_4400_intrinsic. For monolithic models, both default to 0.0
@@ -879,10 +1018,25 @@ class AGNSEDComponent(TemplateThreading):
             # SED, measured on the reference-scale spectrum with the true scale
             # added in log space.
 
+        # The rank-1 band response, when the build made one: its evaluation at the reference
+        # wavelengths also yields the 6 and 12 um diagnostics (see ``_term_band_photometry``).
+        term_phot = None
+        if (
+            self.config.model == "composable"
+            and self._state is not None
+            and self._state.filter_waves is not None
+            and self._state.filter_trans is not None
+        ):
+            band = term_band_response(template_data, "agn", params)
+            if band is not None:
+                term_phot = self._term_band_photometry(band, params, block_templates)
+
         # Point diagnostics: the emitted 6 and 12 um values, from a second evaluation of the
         # same chain at exactly those wavelengths. The chain's normalization does not depend
         # on the wave, so these are the emitted values, not an interpolation of the caller's grid.
         if self.config.model == "composable":
+            if term_phot is not None:
+                mir_logs = term_phot[1]
             log_L_6um, log_L_12um = mir_logs
         else:
             log_L_6um, log_L_12um = _mir_point_logs(
@@ -926,6 +1080,33 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
             derived_overrides["log_L_agn_los"] = agn_components[LOS_LOG_LUMINOSITY_KEY]
+        if self.config.model == "composable" and self.config.agn_disc_block == "adaf":
+            # The ADAF's accretion side (Mahadevan 1997, Eq. 4): ``agn_log_lbol`` is the
+            # radiated luminosity Q_ie + delta Q+, so the accretion power is not it.
+            derived_overrides["agn_adaf_mdot"], derived_overrides["log_L_agn_adaf_accretion"] = (
+                adaf_accretion_diagnostics(
+                    agn_log_lbol,
+                    agn_kwargs["agn_log_mbh"],
+                    agn_kwargs.get("agn_adaf_alpha", _ADAF_DEFAULTS[0]),
+                    agn_kwargs.get("agn_adaf_beta", _ADAF_DEFAULTS[1]),
+                    agn_kwargs.get("agn_adaf_delta", _ADAF_DEFAULTS[2]),
+                    dtype=wave.dtype,
+                )
+            )
+        # Solar-luminosity siblings of the log10 powers (NAMING_CONTRACT 4c).
+        derived_overrides.update(
+            {
+                k: v
+                for k, v in with_lsun_siblings(
+                    {
+                        key: derived_overrides[key]
+                        for key in ("log_L_agn_bol", "log_L_agn_los", "log_L_agn_adaf_accretion")
+                        if key in derived_overrides
+                    }
+                ).items()
+                if k.endswith("_lsun")
+            }
+        )
         # The line-only light exactly as it enters the pipeline SED (#2565): the
         # AGN's own screen is already applied (``agn_components["lines"]``, the
         # monolithic ``return_components`` lines), the host dust screen is not.
@@ -951,11 +1132,10 @@ class AGNSEDComponent(TemplateThreading):
             # dimming. The new helper returns the bare filter-integrated
             # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
-            band = term_band_response(template_data, "agn", params)
-            if band is not None:
+            if term_phot is not None:
                 # Rank-1 fast path (#1118): every sub-block is a fixed shape times its
                 # amplitude, so the filter integral is sum_k A_k R_kf with R_kf built once.
-                agn_phot_lnu_precomp = self._term_band_photometry(band, params, block_templates)
+                agn_phot_lnu_precomp = term_phot[0]
             else:
                 agn_phot_lnu_precomp = jnp.asarray(
                     [
@@ -1008,9 +1188,6 @@ class AGNSEDComponent(TemplateThreading):
 # top-level dispatch is a single registered component, exactly like the other
 # composite domain (nebular).
 from tengri.components.sed_model_component import _REGISTRY
-
-#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
-_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
 
 
 def _with_diagnostic_nodes(wave):

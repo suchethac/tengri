@@ -87,7 +87,7 @@ def _model(ssp, *, approx, dust, dust_emission=True):
             sfh={
                 "type": "dpl",
                 "all_params": Fixed(DEFAULT),
-                "age_gyr": Uniform(0.05, 2.0),
+                "age_frac": Uniform(0.00362663, 0.145065),
                 "log_total_mass": Uniform(8, 12),
             },
             dust_attenuation=dust,

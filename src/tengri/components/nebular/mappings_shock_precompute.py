@@ -40,7 +40,7 @@ from tengri.components.nebular.shock import (
     _resolve_abundance,
 )
 from tengri.utils.grid_interp import (
-    interp_nd_triweight,
+    library_lookup,
 )
 from tengri.utils.interpolation import edges_for_grid
 
@@ -214,7 +214,6 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     line_wavelengths = preint["line_wavelengths"]
     line_ratios_grid = preint["line_ratios_grid"]
     grid_axes = preint["grid_axes"]
-    edges = preint["_preint_edges"]
     collapsed_axes = preint.get("_collapsed_axes", {})
 
     @jax.jit
@@ -248,14 +247,8 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
                 full_point.append(free_axis_vals[free_idx])
                 free_idx += 1
 
-        # Clip to grid bounds
-        full_point = tuple(
-            jnp.clip(full_point[i], grid_axes[i][0], grid_axes[i][-1])
-            for i in range(len(full_point))
-        )
-
-        # Triweight interpolation: all 3 axes jointly
-        ratios_interp = interp_nd_triweight(line_ratios_grid, grid_axes, edges, full_point)
+        # PCHIP lookup over all axes jointly (#2861); clamps to the grid per axis.
+        ratios_interp = library_lookup(line_ratios_grid, grid_axes, full_point)
         # ratios_interp: shape (n_lines,)
 
         # Normalize to unity Hα ratio: Hα is typically the last line

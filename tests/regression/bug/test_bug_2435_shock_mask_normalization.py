@@ -182,7 +182,12 @@ def test_gradient_is_finite_and_live_at_populated_points(mappings_grid):
         ratios = shock_line_ratios(400.0, shock_log_density=0.0, shock_b_over_sqrt_n=b)
         return ratios["O3_5007A"] / ratios["Hb_4861A"]
 
-    for b_field in (0.5, 1.0, 5.0, 50.0):
+    # #2861 PCHIP lookup (shock): a monotone cubic has zero tangent at a discrete local
+    # extremum of the node values, so the derivative is exactly zero at B = 0.5, 1.0, 5.0
+    # and 50 uG, which are nodes where O3/Hb turns over. Those probes are moved to points
+    # strictly between nodes, where the derivative is live. Old -> new at B = 0.55 uG:
+    # 1.609 -> 3.906 (the triweight smoother had no node-level extremum rule).
+    for b_field in (0.55, 1.5, 2.5, 45.0):
         grad = float(jax.grad(o3_over_hb)(jnp.asarray(b_field)))
         assert np.isfinite(grad), (
             f"gradient at B={b_field} uG is {grad}: the W == 0 branch leaked NaN into "

@@ -46,6 +46,24 @@ _DATA = Path(__file__).resolve().parents[2] / "data"
 
 _TORUS_KEYS = ("L_agn_torus",)
 
+
+def _linear_luminosities(published):
+    """Published ``L_*`` [erg/s] as floats: the erg/s keys and the ``log_L_*`` keys as 10**dex.
+
+    The components publish powers as ``log10`` [dex re erg/s] (NAMING_CONTRACT 4c); the ledger
+    compares them to integrals in erg/s, in float64. An absent piece (``-inf`` dex) is dropped.
+    """
+    out = {
+        k: float(np.asarray(v))
+        for k, v in published.items()
+        if k.startswith("L_") and not k.endswith("_lsun")
+    }
+    for k, v in published.items():
+        if k.startswith("log_L_") and np.isfinite(float(np.asarray(v))):
+            out[k[len("log_") :]] = 10.0 ** float(np.asarray(v))
+    return out
+
+
 #: Component -> (published keys whose sum the spectrum integrates to). The keys are the
 #: definitions of agn_log_lbol (owner ruling #2678): L_agn_disc is the angle-integrated
 #: accretion power, and the line-of-sight disc luminosity is the derived L_agn_disc_los
@@ -58,9 +76,10 @@ _SEDMODEL_LEDGER = {
     "powerlaw_disc": ("L_agn_disc",),
     "silva04": _TORUS_KEYS,
     "skirtor_agnfitter": _TORUS_KEYS,
-    # The spectrum is the attenuated disc plus torus plus polar re-emission. The disc
-    # and torus sum is the closure target; the re-emission returns the absorbed power.
-    "skirtor": ("L_agn_disc", "L_agn_torus"),
+    # The spectrum along cos_inc is the attenuated disc plus torus plus polar re-emission:
+    # the three emitted pieces, each at its line-of-sight key. The unemitted disc is not in
+    # the spectrum.
+    "skirtor": ("L_agn_disc_los", "L_agn_torus_los", "L_agn_polar_dust"),
 }
 
 _GRAHSP_PARAMS = {
@@ -135,7 +154,7 @@ def _predict(name, wave, overrides=None):
     for key, value in (overrides or {}).items():
         p[key] = jnp.asarray(value, dtype=wave.dtype)
     sed, published = comp.predict(p, jnp.zeros_like(wave), wave)
-    return sed, {k: float(np.asarray(v)) for k, v in published.items() if k.startswith("L_")}
+    return sed, _linear_luminosities(published)
 
 
 def _grahsp(wave, **config):
@@ -229,7 +248,7 @@ def test_grahsp_torus_spectrum_integrates_to_L_agn_torus():
         include_balmer=False,
         apply_attenuation=False,
     )
-    target = float(out.derived["L_agn_torus"])
+    target = 10.0 ** float(out.derived["log_L_agn_torus"])
     spectrum = _power(out.sed_intrinsic, _CONVERGED)
     rel = _rel(spectrum, target)
     assert rel < _LEDGER_RTOL, f"grahsp torus: spectrum vs L_agn_torus rel {rel:.3e}"
@@ -254,7 +273,7 @@ def test_grahsp_published_luminosity_is_grid_independent():
 
     def _published(wave):
         out = _grahsp(wave)
-        return {k: float(v) for k, v in out.derived.items() if k.startswith("L_")}
+        return _linear_luminosities(out.derived)
 
     coarse = _published(_L_COARSE)
     fine = _published(_L_FINE)

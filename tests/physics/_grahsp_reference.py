@@ -283,7 +283,14 @@ class Reference:
             def pub(w, p):
                 state = ForwardState(wave=w, sed_intrinsic=jnp.zeros_like(w), derived={})
                 derived = comp.apply(state, p, templates_state=tpl).derived
-                return {k: derived[k] for k in KEYS}
+                # The torus and absorbed powers are published as log10 [dex re erg/s] (#2842);
+                # the reference compares linear integrals, and 10**-inf is the zero of an
+                # absent power.
+                return {
+                    "L_agn_bol": derived["L_agn_bol"],
+                    "L_agn_torus": 10.0 ** derived["log_L_agn_torus"],
+                    "L_agn_absorbed": 10.0 ** derived["log_L_agn_absorbed"],
+                }
 
             self._pub_fn = pub
         out = self._pub_fn(jnp.asarray(np.asarray(wave_aa, dtype=float)), params)
