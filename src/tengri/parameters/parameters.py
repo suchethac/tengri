@@ -3100,6 +3100,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by_explicit": content(
+        "build-time flag: True when the caller stated lyc_reprocessed_by. It selects "
+        "whether an incoherent Cue pairing raises or the backend default applies, and "
+        "drives spec.summary() provenance and to_groups() emission; the resolved "
+        "dust_lyc_reprocessed_by is keyed above. It reaches no kernel, so content only "
+        "costs a compile slot for two otherwise-identical specs (as _nebular_explicit)."
+    ),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
     "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
     "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
