@@ -153,6 +153,10 @@ class DerivedState:
 
     # Stellar: SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None
+    # Resolved SFH timings in Gyr, keyed by the public ``*_gyr`` name (#2748):
+    # frac * age(z) when the fraction is sampled, the Fixed Gyr otherwise. Only
+    # the active SFH's timings are present. Read by the ``sfh_*_gyr`` properties.
+    sfh_timing_gyr: dict[str, Any] | None = None
     sfr_history: jnp.ndarray | None = None
     log_metallicity_history: jnp.ndarray | None = None
 

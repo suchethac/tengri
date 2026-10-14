@@ -511,13 +511,13 @@ class PopulationFitter:
         "photometry" or "spectroscopy".
     approx : "auto" or None or precompute config, optional
         Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
-        (default) routes every factory-built model through the LUT for the
-        data type (photometry -> ``WavePrecomp``, spectroscopy ->
-        ``SpectrumPrecomp``), a hierarchical sampler evaluates the forward
+        (default) routes every factory-built photometry model through the
+        ``WavePrecomp`` LUT, a hierarchical sampler evaluates the forward
         model thousands of times, and the exact path costs a measured ~2-6x
-        more per evaluation. ``None`` forces the exact wave-grid path; an
-        explicit config is used verbatim. A factory whose models already
-        carry the LUT is respected untouched.
+        more per evaluation. Spectroscopy and joint fits stay exact under
+        ``"auto"``, since the spectrum LUT is opt-in. ``None`` forces the exact
+        wave-grid path; an explicit config is used verbatim. A factory whose
+        models already carry the LUT is respected untouched.
 
     Notes
     -----
@@ -913,6 +913,7 @@ class PopulationFitter:
             raise ValueError(self._unknown_method_message(method, _method_map))
 
         cfm_method, sample_mode = _method_map[method]
+        self._refuse_unknown_kwargs(method, cfm_method, kwargs)
         if cfm_method == "geovi":
             extra = {"sample_mode": sample_mode} if sample_mode is not None else {}
             return self._run_geovi(key=key, **extra, **kwargs)
@@ -924,6 +925,49 @@ class PopulationFitter:
             return self._run_native_vi_nonlinear(key=key, **kwargs)
         else:
             raise ValueError(f"Unmapped method: {method!r}")
+
+    def _refuse_unknown_kwargs(self, method: str, cfm_method: str, kwargs: dict) -> None:
+        """Refuse a ``**kwargs`` name the hierarchical engine about to run does not take.
+
+        These engines receive ``kwargs`` as explicit keywords, so an unknown name
+        surfaced as ``TypeError: PopulationFitter._run_geovi() got an unexpected
+        keyword argument 'lines'``: an internal function the caller never chose
+        (#1469). Validates against the engine's own signature through the same
+        validator the registry dispatch uses. The flat-sampler branch is not
+        covered here; ``run_flat_sampler`` validates its own accepted set.
+
+        Parameters
+        ----------
+        method : str
+            The resolved method name, as returned by ``resolve_method``.
+        cfm_method : str
+            The engine tag from the dispatch table: ``"geovi"``, ``"raytrace"``,
+            ``"native_vi_linear"`` or ``"native_vi_nonlinear"``.
+        kwargs : dict
+            The ``**kwargs`` the caller passed to :meth:`run`.
+
+        Raises
+        ------
+        TypeError
+            If ``kwargs`` carries a name the engine cannot accept.
+        """
+        import dataclasses
+        import inspect
+
+        from tengri.inference._backend_registry import check_unknown_kwargs, get_backend
+        from tengri.inference.fitter import fit_surface_ctor_names
+
+        engines = {
+            "geovi": type(self)._run_geovi,
+            "raytrace": type(self)._run_raytrace,
+            "native_vi_linear": type(self)._run_native_vi_linear,
+            "native_vi_nonlinear": type(self)._run_native_vi_nonlinear,
+        }
+        entry = dataclasses.replace(get_backend(method), runner=engines[cfm_method])
+        # Names ``run`` consumes itself never reach kwargs; listing them only
+        # sharpens the suggestion for a near-miss.
+        run_names = frozenset(inspect.signature(self.run).parameters)
+        check_unknown_kwargs(entry, kwargs, also_accepted=run_names | fit_surface_ctor_names())
 
     def _run_native_vi_nonlinear(
         self,

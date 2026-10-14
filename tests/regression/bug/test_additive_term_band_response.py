@@ -284,6 +284,38 @@ def test_band_response_is_fast(name):
     )
 
 
+def test_a_zero_term_is_not_referenced_at_the_first_grid_node():
+    """A term that is zero on the whole grid must not pin its reference to node 0.
+
+    ``argmax`` of zeros is node 0, the shortest wavelength of the grid: 0.0413 A once an
+    X-ray wing is attached. The AGN is then evaluated there on every call, and
+    ``xray_yang20`` was charged 4.2e6 FLOPs for it. Here the AGN's disc, lines and polar
+    terms are zero, so their reference must sit at the live torus peak instead.
+    """
+    m = _model("xray_yang20", approx=WavePrecomp())
+    _params(m)
+    lam_ref = np.asarray(m._agn_term_response_cache["lam_ref"])
+    first_node = float(np.asarray(m._rest_wavelength)[0])
+    assert first_node < 1.0, "the X-ray wing is the premise of this test"
+    assert not np.any(lam_ref == first_node), lam_ref
+    assert np.all(lam_ref == lam_ref.max()), lam_ref  # the torus peak, 21.9 um
+
+
+def test_lopez24_corona_follows_the_agn_12um_luminosity_on_the_fast_path():
+    """The ``lopez24`` corona is anchored to the AGN's 12 um luminosity, from the term response.
+
+    ``log_L_12um`` comes from the AGN terms' amplitudes times their build-time shapes at the
+    diagnostic nodes, with no dense AGN evaluation. The corona flux is proportional to
+    10**log_L_12um, so every band must agree with the exact path (no ``approx``) to
+    round-off: a wrong 12 um value shows one-for-one in the X-ray band.
+    """
+    fast = _model("xray_lopez24", approx=WavePrecomp())
+    exact = _model("xray_lopez24", approx=None)
+    got = np.asarray(fast.predict_photometry(_params(fast)))
+    ref = np.asarray(exact.predict_photometry(_params(exact)))
+    np.testing.assert_allclose(got, ref, rtol=1e-10, atol=0.0)
+
+
 @pytest.mark.parametrize("name", sorted(EMITTERS))
 def test_a_free_shape_parameter_refuses_the_band_response(name):
     """A free shape parameter must DISABLE the fast path, not silently freeze the shape.

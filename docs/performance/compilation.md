@@ -182,26 +182,29 @@ gradients = (n_warmup + n_samples) * n_leapfrog_steps
 > the clock about 1.9x. Use these counters to find where cost lives; use a
 > stopwatch to find out what it costs.
 
-## The redshift default is fixed, not free
+## State the redshift: the build refuses without one
 
-`SEDModel.build(...)` with no `redshift=` argument pins the redshift to
-`Fixed(0.1)`. It does not leave it free.
+`SEDModel.build(...)` has no redshift default. A build that names no
+`redshift=` is refused with the accepted spellings, because a silent default
+puts every galaxy at one distance and every cost measurement on one path.
 
 ```python
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...})
-# -> redshift is Fixed(0.1); the galaxy sits at z = 0.1
+model = SEDModel.build(ssp_data=ssp, observation=obs,
+                       sfh={'type': 'dpl', 'all_params': FREE},
+                       redshift=Fixed(0.1))              # known redshift
 
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...},
-                       redshift=Uniform(0.0, 3.0))   # free, and fitted
+model = SEDModel.build(ssp_data=ssp, observation=obs,
+                       sfh={'type': 'dpl', 'all_params': FREE},
+                       redshift=Uniform(0.0, 3.0))       # free, and fitted
 ```
 
-State it explicitly whenever the redshift matters: either `redshift=Fixed(z)` at your galaxy's known redshift, or a prior to fit it. Two things follow from the default that are easy to miss:
+State it deliberately whenever the redshift matters for what you are
+measuring: `redshift=Fixed(z)` at your galaxy's known redshift, or a prior to
+fit it.
 
-- A model you meant to be free-redshift is silently at z = 0.1, so the
-  fit reports whatever the other parameters can do at that distance.
-- Build-cost measurements taken without an explicit free prior exercise
-  the fixed-z path, where the IGM fold above costs ~0.4 s instead of
-  ~9 s.
+- A free redshift exercises the redshift-table path, where the IGM fold
+  above costs ~9 s at build; a fixed redshift takes the fixed-z path at
+  ~0.4 s. Compare build costs only between models that make the same choice.
 
 ## Three-layer cache architecture
 

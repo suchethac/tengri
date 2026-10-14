@@ -106,7 +106,7 @@ def _model(dusty, neb_extra):
         sfh={
             "type": "dpl",
             "all_params": Fixed(DEFAULT),
-            "age_gyr": Uniform(0.05, 10.0),
+            "age_frac": Uniform(0.00362663, 0.725327),
             "log_total_mass": Uniform(8, 12),
         },
         neb={

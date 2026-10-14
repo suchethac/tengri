@@ -59,7 +59,7 @@ class TestDPLTauGradientBeyondAge:
             sfh={
                 "type": "dpl",
                 "log_total_mass": Uniform(1.0, 15.0),
-                "age_gyr": Uniform(0.01, 20.0),
+                "age_frac": Uniform(0.000725327, 1),
                 "alpha": Uniform(0.01, 10.0),
                 "beta": Uniform(0.01, 10.0),
                 "tau_gyr": Uniform(0.01, 20.0),
@@ -148,7 +148,7 @@ class TestDPLTauGradientBeyondAge:
             sfh={
                 "type": "dpl",
                 "log_total_mass": Uniform(1.0, 15.0),
-                "age_gyr": Uniform(0.01, 20.0),
+                "age_frac": Uniform(0.000725327, 1),
                 "alpha": Uniform(0.01, 10.0),
                 "beta": Uniform(0.01, 10.0),
                 "tau_gyr": Uniform(0.01, 20.0),

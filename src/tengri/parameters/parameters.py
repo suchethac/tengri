@@ -31,7 +31,7 @@ Shorthand tsnorm equivalent::
     spec = Parameters(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_total_mass = Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac = Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
         sfh_tsnorm_trunc = Uniform(1, 10),
@@ -90,6 +90,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
+from tengri.utils.wave_unit import check_timescales
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
 
@@ -572,6 +573,12 @@ class Parameters:
 
         # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        # Timing names the build dropped: each ``*_frac`` / ``*_gyr`` pair keeps
+        # exactly one name in the spec (#2748); see parameters/timing.py.
+        timing_excluded = frozenset(kwargs.pop("_timing_excluded", ()))
+        # ``_timing_keep_all`` is the structural spec ``parse_groups`` validates
+        # keys against: both names of a pair must stay declared there.
+        timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
@@ -684,6 +691,7 @@ class Parameters:
         self.radio_include_freefree = kwargs.pop("radio_include_freefree", None)
         self.radio_ir_window = kwargs.pop("radio_ir_window", None)
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
+        self.radio_agn_loudness_ref = kwargs.pop("radio_agn_loudness_ref", "4400")
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
         self.shock = kwargs.pop("shock", False)
@@ -809,7 +817,7 @@ class Parameters:
                     f"(current mode: '{self.nebular_mode}')."
                 )
 
-        self._valid_param_names = frozenset(self._param_registry.keys())
+        self._valid_param_names = frozenset(self._param_registry.keys()) - timing_excluded
 
         # --- Extract mirror specifications (string values → param tying) ---
         # Must run before validation so mirrored params (which may reference
@@ -866,6 +874,14 @@ class Parameters:
                 )
 
         # --- Resolve shorthands and store distributions ---
+        from tengri.parameters.timing import check_free_gyr_alias, timing_names_to_exclude
+
+        for name, value in resolved_kwargs.items():
+            check_free_gyr_alias(name, value)
+        if not timing_keep_all:
+            self._valid_param_names = self._valid_param_names - timing_names_to_exclude(
+                resolved_kwargs, self._valid_param_names
+            )
         self._distributions: dict[str, Distribution] = {}
         self._user_provided: frozenset[str] = frozenset()
         user_names = set()
@@ -876,6 +892,8 @@ class Parameters:
             else:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
+        # Timescale bounds are checked once, here, on the declared bounds (#2162).
+        check_timescales(self._distributions)
 
         # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
         # sees ``parse_groups``'s richer ``_group_provenance`` map: that
@@ -935,7 +953,7 @@ class Parameters:
                 continue
             param_support[_name] = (float(_lo), float(_hi))
 
-        self._warn_on_grid_overhang(param_support)
+        self._warn_on_grid_overhang(param_support, grammar_validated=grammar_validated)
 
         if self.agn_model == "composable":
             from tengri.components.agn.blocks import validate_block_recipe
@@ -1823,13 +1841,60 @@ class Parameters:
             selected.append(("neb", neb))
         return selected
 
-    def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
-        """Warn when a reachable range overhangs the grid that consumes it.
+    def _provenance_label(
+        self, name: str, provenance: dict[str, str], tags: dict[str, str]
+    ) -> str:
+        """The Source column text for one parameter in :meth:`summary`.
+
+        A parameter resolved to a backend's grid support reads
+        ``[resolved to <backend> grid: lo..hi]`` (#2626), so the printed prior
+        shows the range the backend evaluates, not the declaration it replaced.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name.
+        provenance : dict of str to str
+            Resolution tag per parameter.
+        tags : dict of str to str
+            Tag text per resolution tag.
+
+        Returns
+        -------
+        str
+            The label for the Source column.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- display only.
+        """
+        resolution = (getattr(self, "_grid_resolution", None) or {}).get(name)
+        if resolution is not None:
+            return f"[resolved to {resolution}]"
+        return tags.get(provenance.get(name, "registry_default"), "")
+
+    def _warn_on_grid_overhang(
+        self, param_support: dict[str, tuple[float, float]], *, grammar_validated: bool = False
+    ) -> None:
+        """Refuse or warn about a reachable range that overhangs the grid consuming it.
 
         Parameters
         ----------
         param_support : dict of str to (float, float)
             ``{param_name: (lo, hi)}`` each parameter can actually take.
+        grammar_validated : bool, optional
+            ``True`` when :func:`~tengri.parameters.groups.parse_groups` built
+            this spec. It has already resolved declaration-sourced free priors
+            and refused explicit overhang with the provenance it holds, so this
+            method only warns. A direct flat ``Parameters(...)`` build has no
+            such pass, so an explicit ``Fixed`` or ``Uniform`` that overhangs is
+            refused here, from ``_flat_provenance``.
+
+        Raises
+        ------
+        ParameterError
+            For a direct flat build whose explicit value or prior lies outside a
+            non-extrapolating component's grid (#2626).
 
         Notes
         -----
@@ -1843,13 +1908,23 @@ class Parameters:
         from tengri.components.grid_support import (
             EXTRAPOLATING_SUPPORT,
             check_grid_support,
+            grid_refusal_message,
             support_shift,
         )
-        from tengri.config.exceptions import GridSupportWarning
+        from tengri.config.exceptions import GridSupportWarning, ParameterError
 
         settings = {"cue_nitrogen": self.cue_nitrogen}
         findings = check_grid_support(self._selected_grid_components(), param_support, settings)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
+            explicit = self._flat_provenance.get(pname) in ("user_fixed", "user_prior")
+            if (
+                not grammar_validated
+                and explicit
+                and (selector, name) not in EXTRAPOLATING_SUPPORT
+            ):
+                raise ParameterError(
+                    grid_refusal_message(selector, name, pname, detail, (g_lo, g_hi))
+                )
             if (selector, name) in EXTRAPOLATING_SUPPORT:
                 # No jnp.clip here (a smooth emulator, not a grid): the SED is
                 # NOT bit-identical and the gradient is NOT exactly zero past
@@ -1934,7 +2009,7 @@ class Parameters:
         zero too, giving a gradient sampler an absorbing basin with no way out
         (#1277). Free priors are rejected when their supports *overlap*, since an
         overlap means the sampler can reach the dead region: measured at 21.8 % of
-        prior draws for ``start_gyr=Uniform(0.5, 10)``, ``end_gyr=Uniform(0, 5)``.
+        prior draws for ``start_frac=Uniform(0.0362663, 0.725327)``, ``end_gyr=Uniform(0, 5)``.
         """
         for greater, lesser, reason in self._ORDERED_PAIRS:
             if greater not in self._distributions or lesser not in self._distributions:
@@ -2928,12 +3003,6 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
-            # The "_zcap" suffix marks a declared free prior (an SF-onset
-            # lookback) that was capped at the age of the universe at the
-            # build's own source redshift. Same shown-never-silent principle
-            # as "_grid" above, see _narrow_free_priors_to_z.
-            "user_free_zcap": "[user FREE -> z cap]",
-            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it
@@ -2956,7 +3025,7 @@ class Parameters:
             prior_str = repr(dist)
             bounds_str = f"[{lo:.4g}, {hi:.4g}]"
             if provenance:
-                tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                tag = self._provenance_label(name, provenance, _TAGS)
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str:<22s} {tag}")
             else:
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
@@ -2969,7 +3038,7 @@ class Parameters:
                 dist = self._distributions[name]
                 val = dist.bounds[0]
                 if provenance:
-                    tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                    tag = self._provenance_label(name, provenance, _TAGS)
                     val_str = f"{val:.4g}"
                     if name == "agn_polar_oa" and val == 0.0:
                         from tengri.components.agn.blocks.torus_screen import (
@@ -3100,6 +3169,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by_explicit": content(
+        "build-time flag: True when the caller stated lyc_reprocessed_by. It selects "
+        "whether an incoherent Cue pairing raises or the backend default applies, and "
+        "drives spec.summary() provenance and to_groups() emission; the resolved "
+        "dust_lyc_reprocessed_by is keyed above. It reaches no kernel, so content only "
+        "costs a compile slot for two otherwise-identical specs (as _nebular_explicit)."
+    ),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
     "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
     "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
@@ -3149,6 +3225,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "radio_include_freefree": content("thermal free-free on/off changes the emitted radio SED"),
     "radio_ir_window": content("IR band L_IR is integrated over changes the radio normalization"),
     "radio_sf_nu_ref": content("synchrotron anchor frequency changes the emitted radio SED"),
+    "radio_agn_loudness_ref": content("AGN loudness anchor changes the emitted radio SED"),
     "radio_sfr_mode": content("radio SFR mode determines parameters"),
     "shock": content("shock component flag determines parameters"),
     "shock_abundance": content("shock abundance setting determines parameters"),
