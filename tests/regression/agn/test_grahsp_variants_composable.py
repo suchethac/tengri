@@ -13,6 +13,7 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 
 from tengri.components.agn.blocks import AGN_BLOCKS, composable_agn_l_nu
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.utils.physics_constants import C_AA
@@ -41,6 +42,11 @@ class TestSbplDiscBitIdentityPin:
     # Re-recorded for that: new / old - 1 = -1.1306e-8 at all seven wavelengths, which is the
     # unit-SBPL tail fraction past 1e8 nm at plslope = -1.6 (measured: the integral to 1e8 nm is
     # low by 1.1306e-8 of the integral to 1e40 nm; to 1e14 nm it matches it to better than 1e-15).
+    # Row 4 re-recorded again, 2026-10-13: the bolometric target now integrates above upstream's
+    # lumBolBBB cut, 91.1753 nm, not the 91.2 nm Lyman limit (GRAHSP lumBolBBB over all BBB
+    # blocks above 91.1753 nm, as upstream, owner 2026-10-13). The sliver 91.1753-91.2 nm adds
+    # 1.0129e-4 of the unit integral at plslope = -1.6, so the normalized output falls by that
+    # fraction at all seven wavelengths: new / old - 1 = -1.012899e-04 (uniform, as a scale).
     _PIN_WAVE_AA = (912.0, 1216.0, 2500.0, 5100.0, 10000.0, 50000.0, 200000.0)
     _PINNED = (
         (
@@ -97,13 +103,13 @@ class TestSbplDiscBitIdentityPin:
         (
             dict(agn_log_lbol=45.0, agn_grahsp_uvslope=0.2, agn_grahsp_plslope=-1.6),
             (
-                "0x1.bc3e0c2c09210p+249",
-                "0x1.666b57b7f5e03p+249",
-                "0x1.3b259e51e8633p+248",
-                "0x1.bd12ad5ee2e94p+246",
-                "0x1.36bfdab055bacp+245",
-                "0x1.4a33842d45325p+241",
-                "0x1.05b4899e52abfp+237",
+                "0x1.bc32873af73d0p+249",
+                "0x1.66620c7b6fd96p+249",
+                "0x1.3b1d7254d5750p+248",
+                "0x1.bd0722ea59ff5p+246",
+                "0x1.36b7cbe43cd86p+245",
+                "0x1.4a2af4417ea6cp+241",
+                "0x1.05adc06222e94p+237",
             ),
         ),
         (
@@ -805,9 +811,9 @@ class TestNetzerDiscGrahsp:
         from tengri.utils.physics_constants import L_SUN
 
         # Independent dense reference: trapezoid in ln(lambda) of the emitted L_lambda over
-        # the full Lyman-limit support [91.2 nm, 1e8 nm], on a grid that does not depend on
+        # the full lumBolBBB support [91.1753 nm, 1e8 nm], on a grid that does not depend on
         # the block's own publication grid.
-        wave_dense = np.geomspace(91.2, 1.0e8, 2_000_000)
+        wave_dense = np.geomspace(BBB_BOL_CUT_NM, 1.0e8, 2_000_000)
         out_aa = np.asarray(
             disc_block(
                 jnp.asarray(wave_dense * 10.0),
