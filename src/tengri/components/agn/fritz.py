@@ -126,10 +126,16 @@ def _load_grid_arrays(grid_path: str):
     return result
 
 
-#: The library's ``psy`` axis extent [deg]: the grid stops at these values, and
-#: the exact endpoints 0 and 90 extrapolate.
+#: The library's ``psy`` axis extent [deg]. The grid stops at these values. The
+#: prior's endpoints ``cos i = 0`` and ``cos i = 1`` map to psi = 0 and 90 deg,
+#: which lie 0.001 and 0.01 deg past the end nodes: a numerical gap, so the psy
+#: lookup extends its end cubic across it (see :data:`_PSY_EXTRAPOLATE`).
 FRITZ_PSY_MIN = 0.001
 FRITZ_PSY_MAX = 89.99
+#: Margin [deg] within which an off-grid psy is the numerical end gap, not a refusal.
+FRITZ_PSY_EDGE_MARGIN = 0.02
+#: Per-axis extrapolation for the six-axis library: only psy (the last axis).
+_PSY_EXTRAPOLATE = (False, False, False, False, False, True)
 
 #: Largest :math:`\cos i` handed to ``arccos``: :math:`1 - 10^{-6}`, 0.08 degrees
 #: from the pole. At :math:`\cos i = 1` the slope of ``arccos`` is infinite and
@@ -151,8 +157,8 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
     -------
     ndarray, scalar
         :math:`\psi = 90^\circ - i`, the elevation above the equatorial plane
-        that keys the library, held to the grid's extent
-        [:data:`FRITZ_PSY_MIN`, :data:`FRITZ_PSY_MAX`]. [deg]
+        that keys the library [deg]. Not clipped to the library's psy axis: the
+        psy lookup extends its end cubic across the numerical gap at 0 and 90.
 
     Notes
     -----
@@ -160,25 +166,34 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
     :math:`\psi > 90^\circ - \theta_c` (:math:`i < \theta_c`), where
     :math:`\theta_c` is ``agn_fritz_oa`` [1]_.
 
-    **JIT-compatible**: yes. **Gradient-safe**: yes; the gradient is zero
-    beyond the grid extent, where the library is constant.
+    **JIT-compatible**: yes. **Gradient-safe**: yes; finite and nonzero on the
+    whole cos i prior. The face-on cap (cos i above ``1 - 1e-6``) continues
+    linearly from the cap rather than freezing psi there.
 
     References
     ----------
     .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, MNRAS, 366, 767
        (2006). arXiv:astro-ph/0511428.
     """
-    c = jnp.minimum(jnp.asarray(cos_inc), _COS_INC_FACE_ON_CAP)
-    psy = 90.0 - jnp.degrees(jnp.arccos(c))
-    return jnp.clip(psy, FRITZ_PSY_MIN, FRITZ_PSY_MAX)
+    c = jnp.asarray(cos_inc)
+    cap = _COS_INC_FACE_ON_CAP
+    # psi = arcsin(cos i) in degrees, exact on [0, cap]. Past the cap (the arcsin
+    # slope is infinite at 1) the line tangent to the cap continues, so the
+    # derivative is finite and nonzero on the whole prior rather than frozen.
+    psi_cap = jnp.degrees(jnp.arcsin(cap))
+    slope_cap = jnp.degrees(1.0 / jnp.sqrt(1.0 - cap * cap))
+    inside = jnp.degrees(jnp.arcsin(jnp.where(c <= cap, c, cap)))
+    beyond = psi_cap + slope_cap * (c - cap)
+    return jnp.where(c <= cap, inside, beyond)
 
 
-def _refuse_off_grid(name: str, value, axis) -> None:
-    """Raise if a concrete ``value`` lies outside the grid ``axis``.
+def _refuse_off_grid(name: str, value, axis, margin: float = 0.0) -> None:
+    """Raise if a concrete ``value`` lies outside the grid ``axis`` by more than ``margin``.
 
     Traced values, and a grid threaded through ``jit`` as an argument, cannot be
     checked here (the builder's declared bounds refuse them at build time);
-    concrete ones would otherwise be clamped to the edge template without a word.
+    concrete ones beyond the margin would otherwise be extrapolated past the table
+    without a word.
     """
     if isinstance(value, jax.core.Tracer):
         return
@@ -186,7 +201,7 @@ def _refuse_off_grid(name: str, value, axis) -> None:
         axis_np = np.asarray(axis)
     except jax.errors.TracerArrayConversionError:
         return
-    lo, hi = float(axis_np[0]), float(axis_np[-1])
+    lo, hi = float(axis_np[0]) - margin, float(axis_np[-1]) + margin
     v = float(value)
     if not lo <= v <= hi:
         raise ValueError(
@@ -269,8 +284,8 @@ def _interpolate_and_normalize(
     # The torus library is a tabulated radiative-transfer result, so the lookup is a
     # node-exact PCHIP interpolant rather than the triweight smoother (#2606).
     _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
-    _refuse_off_grid("agn_fritz_psy", point[5], axes[5])
-    template = interp_nd_pchip(grid_jax, axes, point)
+    _refuse_off_grid("agn_fritz_psy", point[5], axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
+    template = interp_nd_pchip(grid_jax, axes, point, extrapolate=_PSY_EXTRAPOLATE)
     # Normalize on the template's native grid, before resampling, so the
     # result does not depend on the caller's wavelength sampling or range.
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
@@ -789,7 +804,12 @@ def fritz_disc_dust_ratio(
         # Node-exact PCHIP, not the triweight smoother the torus block uses: the smoother
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
-        return interp_nd_pchip(jnp.asarray(table), axes, tuple(jnp.asarray(c) for c in point))
+        return interp_nd_pchip(
+            jnp.asarray(table),
+            axes,
+            tuple(jnp.asarray(c) for c in point),
+            extrapolate=_PSY_EXTRAPOLATE,
+        )
 
     disk_i_n = _interp(grid.disk, agn_fritz_psy)
     dust_i_n = _interp(grid.dust, agn_fritz_psy)

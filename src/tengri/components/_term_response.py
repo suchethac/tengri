@@ -81,12 +81,14 @@ def term_band_response(
 
     z = require_redshift(params or {}, f"components.{name}.term_band_response")
     out = {
-        "R": interp_z_table({"ln1pz": nodes, "values": table["R"]}, z),
+        "R": interp_z_table({"ln1pz": nodes, "values": table["R"]}, z, extrapolate=True),
         "lam_ref": table["lam_ref"],
-        "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z),
+        "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z, extrapolate=True),
     }
     if "S_diag" in table:
-        out["S_diag"] = interp_z_table({"ln1pz": nodes, "values": table["S_diag"]}, z)
+        out["S_diag"] = interp_z_table(
+            {"ln1pz": nodes, "values": table["S_diag"]}, z, extrapolate=True
+        )
     return out
 
 

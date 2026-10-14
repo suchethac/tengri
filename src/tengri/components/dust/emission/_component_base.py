@@ -657,6 +657,7 @@ class EmissionComponent(SEDModelComponent):
                     require_redshift(
                         p, "components.dust.emission._component_base._apply_photometry_precomp"
                     ),
+                    extrapolate=True,
                 )
             phot_lnu = L_ir * response
         elif shape_table is not None and self.precompute_key is not None:

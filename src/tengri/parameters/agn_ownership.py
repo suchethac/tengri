@@ -786,6 +786,49 @@ _AGN_IR_FRAC_SPELLINGS = frozenset({"agn_ir_frac", "ir_frac", "agn_fracAGN", "fr
 #: they are scanned separately across the same locations.
 _AGN_IR_FRAC_LEGACY_SPELLINGS: tuple[str, ...] = ("agn_fracAGN", "fracAGN")
 
+#: CIGALE (pcigale) AGN key -> one-line tengri hint. A refused key found here
+#: gets ``"CIGALE's <key>: <hint>"`` appended to its refusal, so a CIGALE user is
+#: pointed at the tengri key that does the same job (or told there is none yet).
+#: One table for every refusal path; see :func:`cigale_spelling_hint`.
+CIGALE_AGN_SPELLINGS: dict[str, str] = {
+    "disk_type": (
+        "tengri chooses the disc with agn={'disc': {'type': ...}}: 0 -> 'skirtor', "
+        "1 -> 'schartmann2005', 2 -> 'adaf_lopez2024'."
+    ),
+    "delta": (
+        "on agn.disc the disc slope modulator is agn_cigale_disk_delta (disc type "
+        "'skirtor' or 'schartmann2005'), and the ADAF blend weight is "
+        "agn_cigale_adaf_delta (disc type 'adaf_lopez2024'). The torus parameter "
+        "agn_delta is a different quantity that no composable torus block reads."
+    ),
+    "lambda_fracAGN": (
+        "tengri's agn_ir_frac is the '0/0' case only (fraction of the total dust "
+        "luminosity); the wavelength window is not available yet, so write agn_ir_frac."
+    ),
+    "fracAGN": (
+        "the same parameter as agn_ir_frac (the '0/0' case); write agn_ir_frac, "
+        "at the top level of agn."
+    ),
+}
+
+
+def cigale_spelling_hint(key: str) -> str:
+    """The CIGALE hint to append to a refusal of ``key``, or ``""``.
+
+    Parameters
+    ----------
+    key : str
+        The key as the user wrote it.
+
+    Returns
+    -------
+    str
+        ``" CIGALE's <key>: <hint>"`` (leading space included) when ``key`` is in
+        :data:`CIGALE_AGN_SPELLINGS`, else the empty string.
+    """
+    hint = CIGALE_AGN_SPELLINGS.get(key)
+    return f" CIGALE's {key}: {hint}" if hint else ""
+
 
 def _fracagn_value_is_active(value: object) -> bool:
     """Whether one written fracAGN value can be nonzero.
