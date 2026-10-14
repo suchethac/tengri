@@ -79,6 +79,7 @@ from tengri.components.agn.blocks.masking import (
 from tengri.components.agn.blocks.torus_library_transmission import (
     BelowLibraryIndex,
     library_torus_sightline,
+    tied_incl_with_library_edge,
 )
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_BLOCKS,
@@ -1299,7 +1300,16 @@ agn_torus_block, agn_attenuation_block : str
             _disc_part, _corona_part = L_lambda_disc, None
         else:
             _disc_part, _corona_part, _ = _disc_parts(wave)
-        _disc_reweighted = _disc_part * _disc_incl
+        # Below the library's first node the tabulated ratio is zero, which would silence the
+        # tied disc in the X-rays; there it takes the library sightline's absorbed factor, the
+        # same Morrison & McCammon column as the untied path (owner ruling 10, #2760).
+        _tie_sight = _library_sightline()
+        _disc_incl_tied = (
+            _disc_incl
+            if _tie_sight is None
+            else tied_incl_with_library_edge(_disc_incl, wave, _tie_sight, agn_torus_block)
+        )
+        _disc_reweighted = _disc_part * _disc_incl_tied
         if _library_wave is None:
             _disc_integral = jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave)
         else:

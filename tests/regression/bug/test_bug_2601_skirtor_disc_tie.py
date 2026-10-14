@@ -804,6 +804,9 @@ def test_intrinsic_anchors_equal_the_unit_area_disc(block, disk_type, delta):
     cut raises the ``skirtor`` anchors by 14 % (4.154e29 to 4.736e29 at L_bol = 1e12 L_sun)
     through the area it removes below 10 nm; the other discs move by 0.2 % or less.
     """
+    # The ADAF blend weight is its own key; ``agn_cigale_disk_delta`` is the slope modulator
+    # of the skirtor / schartmann2005 discs and is not read by ``adaf_lopez2024``.
+    delta_key = "agn_cigale_adaf_delta" if block == "adaf_lopez2024" else "agn_cigale_disk_delta"
     _, l2500, l4400 = compose_l_nu(
         _WAVE,
         _LOG_LBOL,
@@ -813,8 +816,8 @@ def test_intrinsic_anchors_equal_the_unit_area_disc(block, disk_type, delta):
         agn_feii_block="none",
         agn_torus_block="none",
         agn_attenuation_block="none",
-        agn_cigale_disk_delta=delta,
         return_l2500=True,
+        **{delta_key: delta},
     )
     l_bol = 10.0**_LOG_LBOL * L_SUN
     for got, lam_aa in ((l2500, 2500.0), (l4400, 4400.0)):

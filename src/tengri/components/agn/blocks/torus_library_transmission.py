@@ -619,6 +619,65 @@ def _below_library_index(wavelength, torus_block: str) -> np.ndarray | None:
     return np.flatnonzero(np.asarray(wavelength, dtype=np.float64) < wave_min)
 
 
+def library_edge_wavelength(torus_block: str) -> float:
+    """Shortest wavelength [Angstrom] of a packaged torus library's grid.
+
+    Parameters
+    ----------
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+
+    Returns
+    -------
+    float
+        The library's first wavelength node: the edge below which the X-ray column applies.
+
+    Notes
+    -----
+    **JIT-compatible**: construction-time only; a host value read from the packaged grid.
+    """
+    if torus_block == "skirtor":
+        return float(np.asarray(load_skirtor_disc_atten_grid().wave_grid)[0])
+    if torus_block == "fritz":
+        return float(np.asarray(load_fritz_default_grid().wave_grid)[0])
+    raise ValueError(f"library_edge_wavelength: no packaged library for torus {torus_block!r}")
+
+
+def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline, torus_block: str):
+    r"""The tied disc's inclination ratio, with the X-ray column below the library's edge.
+
+    The tied disc takes the library ratio :math:`{\rm disk}_i/{\rm disk}_0` on the caller's grid,
+    which the library holds at zero below its first node, so the tied disc would emit nothing in
+    the X-rays. Shortward of that node the untied path's factor :math:`2\cos i\,T_X` is taken
+    instead (:attr:`LibrarySightline.disc_factor`, the Morrison & McCammon (1983) column of
+    :func:`library_torus_sightline`); every other sample keeps ``incl_ratio``.
+
+    Parameters
+    ----------
+    incl_ratio : array_like, shape (n_wave,)
+        The tabulated inclination ratio on ``wavelength`` [dimensionless].
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom], the grid ``incl_ratio`` is evaluated on.
+    sight : LibrarySightline
+        The library's line of sight on the same grid, from :func:`library_torus_sightline`.
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        The inclination ratio with the absorbed library factor below the edge [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the edge is a host constant and the selection is a ``where``.
+    **Gradient-safe**: yes.
+    """
+    edge = library_edge_wavelength(torus_block)
+    wave = jnp.asarray(wavelength)
+    return jnp.where(wave < edge, sight.disc_factor, jnp.asarray(incl_ratio))
+
+
 def library_torus_transmission(
     torus_block: str,
     wavelength,

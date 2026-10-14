@@ -633,6 +633,9 @@ class Parameters:
         # Polar-dust extinction curve: static string like agn_norm, validated here
         # so a flat-kwarg caller gets the same refusal as the grammar.
         self.agn_polar_law = kwargs.pop("agn_polar_law", "smc")
+        # CIGALE lambda_fracAGN window for agn_ir_frac (#2662): (lambda_min_um, lambda_max_um),
+        # a build-time config value; (0, 0) is the total-dust case.
+        self.agn_ir_frac_window = tuple(kwargs.pop("agn_ir_frac_window", (0.0, 0.0)))
         from tengri.components.agn.polar_dust import POLAR_LAWS
 
         if self.agn_polar_law not in POLAR_LAWS:
@@ -694,6 +697,9 @@ class Parameters:
         self.radio_agn_loudness_ref = kwargs.pop("radio_agn_loudness_ref", "4400")
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
+        # yang20 alpha_ox declaration: "delta" (offset) or "absolute" (#2661). Static
+        # structural setting, not a traced parameter.
+        self.xray_alpha_ox_mode = kwargs.pop("xray_alpha_ox_mode", "delta")
         self.shock = kwargs.pop("shock", False)
         # Composable MAPPINGS V shock config (#851). ``shock_norm`` selects the
         # relative (``"frac"``) vs absolute (``"lhalpha"``) Halpha
@@ -3140,6 +3146,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "agn_nlr_block": content("AGN NLR type determines parameters"),
     "agn_norm": content("AGN normalization mode determines parameters"),
     "agn_polar_law": content("polar-dust extinction law changes the emitted SED"),
+    "agn_ir_frac_window": content("CIGALE lambda_fracAGN window changes the AGN dust power"),
     "agn_torus_block": content("AGN torus type determines parameters"),
     "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
     "apply_igm": content("IGM application affects forward model"),
@@ -3239,6 +3246,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "shock_norm": content("shock normalization determines parameters"),
     "xray": content("X-ray component flag determines parameters"),
     "xray_model": content("X-ray model determines parameters"),
+    "xray_alpha_ox_mode": content("which alpha_ox declaration the corona reads"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
     "_parse_inputs": exclude(

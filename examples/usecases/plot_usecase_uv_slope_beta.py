@@ -147,13 +147,13 @@ def _beta_uv(wave, l_nu):
     return float(slope)
 
 
-# Build model with fixed peak_lbt_gyr and dust parameters, then override during sampling
+# Build model with fixed peak_lbt_frac and dust parameters, then override during sampling
 model_age_dust = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": tengri.FREE,
+        "peak_lbt_frac": tengri.FREE,
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -170,6 +170,7 @@ model_age_dust = tengri.SEDModel.build(
 )
 
 baseline_age_dust = dict(model_age_dust.spec.sample(jax.random.PRNGKey(0)))
+AGE_Z = float(tengri.cosmology.age_at_z(0.01))  # Gyr
 
 # 2D sweep: age × dust (limited range to avoid IR artifacts)
 age_values = np.logspace(np.log10(0.01), np.log10(1.0), 12)
@@ -181,7 +182,7 @@ for age_idx, age in enumerate(age_values):
     for tau_idx, tau in enumerate(tau_values):
         p = {
             **baseline_age_dust,
-            "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
+            "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z),
             "dust_tau_diff": jnp.float64(tau),
         }
         out = model_age_dust.predict(p)

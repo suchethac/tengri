@@ -35,6 +35,7 @@ from tengri import (
 )
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.nebular.nebular_grid_precompute import (
+    _RECONSTRUCTION_SCALED,
     _nebular_screen_for,
     precompute_nebular_grid,
     reconstruct_nebular_eb_absorbed_per_qh,
@@ -43,8 +44,12 @@ from tengri.components.nebular.nebular_grid_precompute import (
     reconstruct_nebular_restband,
     reconstruct_nebular_restband_subband,
     reconstruct_nebular_subband_waves,
+    reference_redshift,
 )
+from tengri.components.stellar.reference_history import reference_history_params
 from tengri.forward.energy_balance import bolometric_absorbed_log10
+from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import reference_timing_fracs
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 
 pytestmark = pytest.mark.conservation
@@ -120,6 +125,28 @@ def _resolved(m, key=0):
     return p
 
 
+def _builder_reference(m):
+    """The reference params ``precompute_nebular_grid`` evaluates its nodes at.
+
+    Mirrors the builder's own ``ref_params`` steps when no caller params are given:
+    a sample merged with the Fixed values, the reference redshift, the timing
+    fractions and history params at that redshift, and the nebular screens zeroed.
+    Without the timing and history steps the eager reference sits at a different
+    SFH (log Q_H 54.63 against the table's 51.78), and the per-Q_H normalization
+    leaves the ionizing-shape difference as a 5.7e-6 residual.
+    """
+    spec = m.spec
+    p = merge_fixed_params(spec, dict(spec.sample(jax.random.PRNGKey(0))))
+    ref_z = reference_redshift(m)
+    p["redshift"] = ref_z
+    p = reference_timing_fracs(spec, p, ref_z)
+    p = {**reference_history_params(m, redshift=ref_z), **p}
+    p["neb_dig_frac"] = 0.0
+    for name in _RECONSTRUCTION_SCALED:
+        p[name] = 0.0
+    return p
+
+
 def _point(m, table, key=0):
     p = _resolved(m, key)
     return {k: p[k] for k in table.axis_names}
@@ -182,7 +209,7 @@ def test_energy_balance_channel_is_exact_at_every_tau_node(built, which):
     np.testing.assert_array_equal(np.asarray(table.eb_tau_a_grid), tau_a)
     np.testing.assert_array_equal(np.asarray(table.eb_tau_b_grid), tau_b)
     # exact reference at the grid's first node: the materialized nebular SED
-    p = _resolved(m)
+    p = _builder_reference(m)
     for i, name in enumerate(table.axis_names):
         p[name] = float(table.axes[i][0])
     # the attenuator re-publishes sed_nebular reddened: a unit screen gives the intrinsic one

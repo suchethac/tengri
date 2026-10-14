@@ -33,7 +33,7 @@ predictions w.r.t. parameters and C^{-1} is the inverse noise covariance.
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-187
+.. GENERATED FROM PYTHON SOURCE LINES 17-188
 
 
 
@@ -105,9 +105,10 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     COLORS_BAR = ["#4477AA", "#EE6677", "#228833"]
 
     key = jax.random.PRNGKey(42)
+    age_z = float(tengri.cosmology.age_at_z(0.1))  # Gyr, the age of the universe at z = 0.1
     true_params = {
         "sfh_tsnorm_log_total_mass": 10.5,
-        "sfh_tsnorm_peak_lbt_gyr": 4.0,
+        "sfh_tsnorm_peak_lbt_frac": 4.0 / age_z,
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 5.0,
@@ -222,7 +223,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.878 seconds)
+   **Total running time of the script:** (0 minutes 26.984 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

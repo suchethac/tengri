@@ -30,7 +30,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.0),
         "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
         " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"
-        " negative hardens the X-ray corona, positive softens it.",
+        " negative hardens the X-ray corona, positive softens it. The soft form"
+        " of CIGALE's max_dev_alpha_ox is the Gaussian prior"
+        " xray={'delta_alpha_ox': Gaussian(0.0, max_dev)} (sigma = max_dev).",
         # AGNfitter-rX (Martinez-Ramirez et al. 2024) fits Δα_ox over ±0.4;
         # the intrinsic scatter of α_ox about the L_2500 relation is σ =
         # 0.146 dex (31 < log L < 32) and 0.131 dex (32 < log L < 33) (Just
@@ -39,6 +41,38 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(
             -0.4, 0.4, "Offset applied to the L_2500-derived alpha_ox", default=0.0
         ),
+    ),
+    # Absolute alpha_ox (CIGALE's ``alpha_ox`` list, #2661). Read only when the
+    # ``xray`` group names ``alpha_ox`` instead of ``delta_alpha_ox``; the grammar
+    # then sets the yang20 corona to absolute mode and the corona forms the offset
+    # per draw as ``alpha_ox - Just+2007(L_2500)``. Under the default (delta) mode
+    # the value is inert, as ``xray_alpha_irx`` is under yang20: the Fixed default
+    # sits inside the free range, and the wildcard scope never frees it there.
+    ParamDeclaration(
+        "xray_alpha_ox",
+        Fixed(-1.5),
+        "Absolute optical-to-X-ray slope alpha_ox [dimensionless] (CIGALE's alpha_ox "
+        "list, default -1.9 to -1.1). Declared as an alternative to xray_delta_alpha_ox: "
+        "name exactly one of them. Read only in absolute mode.",
+        free_prior=Uniform(-2.0, -1.0, "Absolute optical-to-X-ray slope alpha_ox", default=-1.5),
+    ),
+    # Anisotropy coefficients of the yang20 corona (Yang+2022): Lx(i)/Lx(30 deg) =
+    # (a1 cos i + a2 cos^2 i + 1 - a1 - a2) / (1 - 0.13397 a1 - 0.25 a2). The
+    # defaults are Yang+2022's intermediate solution; (0, 0) is isotropic.
+    ParamDeclaration(
+        "xray_a1",
+        Fixed(0.5),
+        "Linear coefficient a1 of the yang20 corona anisotropy, Lx(i)/Lx(0) = a1 cos i + "
+        "a2 cos^2 i + 1 - a1 - a2 (CIGALE angle_coef; Yang+2022 intermediate 0.5) "
+        "[dimensionless]",
+        free_prior=Uniform(0.0, 1.0, "Linear anisotropy coefficient a1", default=0.5),
+    ),
+    ParamDeclaration(
+        "xray_a2",
+        Fixed(0.0),
+        "Quadratic coefficient a2 of the yang20 corona anisotropy (CIGALE angle_coef; "
+        "Yang+2022 intermediate 0.0) [dimensionless]",
+        free_prior=Uniform(-0.5, 0.5, "Quadratic anisotropy coefficient a2", default=0.0),
     ),
     # The two X-ray-binary photon indices deliberately get NO free_prior. They
     # are not per-galaxy quantities: Gamma = 2.0 (HMXB) and 1.56 (LMXB) are the

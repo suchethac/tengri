@@ -25,8 +25,13 @@
 | `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha`. `log_halpha = log10(halpha) + log10(L_sun)`. |
 | `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta`. `log_hbeta = log10(hbeta) + log10(L_sun)`. |
 | `log_l_x_agn` | dex | xray | xray | log10 X-ray luminosity from AGN [dex re erg/s]; float32-safe form of `l_x_agn`. -inf when no AGN is present, where the linear form is 0.0 |
+| `log_l_x_agn_total` | dex | xray | xray | log10 luminosity of the unabsorbed AGN corona integrated over 0.25-1240 keV, the pcigale yang20 grid [dex re erg/s]; -inf without an AGN |
+| `log_l_x_hmxb_2_10` | dex | xray | xray | log10 2-10 keV luminosity of the HMXB term [dex re erg/s] |
+| `log_l_x_hotgas_0p5_2` | dex | xray | xray | log10 0.5-2 keV luminosity of the hot-gas term [dex re erg/s] |
+| `log_l_x_lmxb_2_10` | dex | xray | xray | log10 2-10 keV luminosity of the LMXB term [dex re erg/s] |
 | `log_l_x_total` | dex | xray | xray | log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; float32-safe form of `l_x_total` |
 | `log_l_x_xrb` | dex | xray | xray | log10 X-ray luminosity from X-ray binaries [dex re erg/s]; float32-safe form of `l_x_xrb` |
+| `log_lnu_2kev_30deg` | dex | xray | xray | log10 intrinsic 2 keV monochromatic L_nu at an inclination of 30 deg (cos i = 0.866), the alpha_ox anchor [dex re erg/s/Hz]; -inf without an AGN and under lopez24 |
 | `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya`. `log_lya = log10(lya) + log10(L_sun)`. |
 | `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548`. `log_nii_6548 = log10(nii_6548) + log10(L_sun)`. |
 | `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584`. `log_nii_6584 = log10(nii_6584) + log10(L_sun)`. |

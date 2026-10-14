@@ -272,13 +272,32 @@ def _mock(ssp, obs, model, zspec, snr):
         )
 
 
+#: ``(model, repr(zspec), snr, id(ssp), id(obs)) -> (flux, noise, ssp, obs)``. ``_mock``
+#: reads nothing else: its projector is hard-wired to ``None`` (exact), its key is the
+#: fixed ``PRNGKey(0)``, and the redshift enters only through ``zspec``. So two seams
+#: that name the same model and redshift spec (``lut_freez`` and ``lut_quad8_freez``
+#: differ only in the *fit* projector, never in the mock) get the same arrays. The
+#: ``ssp``/``obs`` references are held in the value so their ids cannot be recycled.
+_MOCK_MEMO: dict = {}
+
+
+def _cached_mock(ssp, obs, model, zspec, snr):
+    """:func:`_mock`, memoized on the inputs above; returns fresh copies each call."""
+    key = (model, repr(zspec), float(snr), id(ssp), id(obs))
+    if key not in _MOCK_MEMO:
+        flux, noise = _mock(ssp, obs, model, zspec, snr)
+        _MOCK_MEMO[key] = (flux.copy(), noise.copy(), ssp, obs)
+    flux, noise, _, _ = _MOCK_MEMO[key]
+    return flux.copy(), noise.copy()
+
+
 @pytest.fixture(scope="module")
 def measured(ssp_bare, obs, request):
     """``(seam, f64, f32)`` for one seam id, computed once and shared by every assertion."""
     seam = request.param
     model, path = seam.split("/")
     build_approx, fit_approx, zfac = _PATHS[path]
-    flux, noise = _mock(ssp_bare, obs, model, zfac(), _SNR)
+    flux, noise = _cached_mock(ssp_bare, obs, model, zfac(), _SNR)
 
     # Thirteen seams, each building two models at two precisions, accumulate a large
     # number of distinct compiled programs in one process. Left alone this module
@@ -569,7 +588,7 @@ def lut_bias_freez(ssp_bare, obs, request):
     """
     model = request.param
     zfac = _PATHS["lut_freez"][2]
-    flux, noise = _mock(ssp_bare, obs, model, zfac(), _SNR)
+    flux, noise = _cached_mock(ssp_bare, obs, model, zfac(), _SNR)
     kw = dict(model=model, zspec=zfac(), flux=flux, noise=noise)
     return model, {
         "exact64": _gradients(
@@ -652,7 +671,7 @@ def snr_interaction(ssp_bare, obs):
     """
     out = {}
     for snr in (_SNR_LOW, _SNR_HIGH):
-        flux, noise = _mock(ssp_bare, obs, "stellar_dust", Fixed(0.1), snr)
+        flux, noise = _cached_mock(ssp_bare, obs, "stellar_dust", Fixed(0.1), snr)
         kw = dict(model="stellar_dust", zspec=Fixed(0.1), flux=flux, noise=noise)
         out[snr] = {
             "exact64": _gradients(

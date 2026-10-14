@@ -390,6 +390,7 @@ def build_components(
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
     agn_polar_law: str = "smc",
+    agn_ir_frac_window: tuple = (0.0, 0.0),
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -467,6 +468,7 @@ def build_components(
     radio_sf_nu_ref: float | None = None,
     radio_agn_loudness_ref: str = "4400",
     xray_model: str = "yang20",
+    xray_alpha_ox_mode: str = "delta",
     use_xray: bool = False,
     use_igm: bool = False,
     igm_model: str = "inoue",
@@ -833,6 +835,7 @@ def build_components(
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
                     agn_polar_law=agn_polar_law,
+                    agn_ir_frac_window=agn_ir_frac_window,
                 ),
             )
         )
@@ -943,7 +946,9 @@ def build_components(
                 _resolve_registry_component(
                     "xray",
                     "xray",
-                    config=XRaySEDComponentConfig(model=xray_model),
+                    config=XRaySEDComponentConfig(
+                        model=xray_model, alpha_ox_mode=xray_alpha_ox_mode
+                    ),
                 )
             )
     if use_igm or use_dla:
