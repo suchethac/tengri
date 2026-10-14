@@ -145,33 +145,24 @@ def test_absolute_mode_compares_gas_logno_directly():
     assert check_grid_support(cue, {"gas_logno": (-0.3, 0.3), "neb_logZ_gas": (-1.0, -1.0)}) == []
 
 
-#: [H-beta, N II 6584] fluxes of Cue with the 100 Myr age cut
-#: (``lyc_max_age_yr=1e8``), as they were on origin/main with the default
-#: ``gas_logno`` and log U = -2, same SFH: the cut must reproduce them.
-#: Re-pinned after #2724: Cue's per-SSP Q_H table now integrates the ionizing
-#: photon rate with the edge-exact step model, picking up the partial bin
-#: between the last SSP node below 911.76 A and the edge that the former
-#: ``wave <= 911.76`` mask dropped (the stellar ``nion`` already had it, #537,
-#: and is unchanged). Every line at both metallicities moves by the same
-#: factor, 1.0173561: the Q_H normalization, with no change in the ratios.
+#: [H-beta, N II 6584] fluxes of Cue with the 100 Myr age cut (``lyc_max_age_yr=1e8``),
+#: default ``gas_logno`` and log U = -2, same SFH. Composite-fit values: the shape is the
+#: power-law fit of the composite spectrum of the counted ages.
 _CUT_DEFAULT_FLUXES = {
-    0.0: [75.18923406031823, 28.4730570167633],
-    math.log10(0.3): [74.0586722765041, 19.449401607798606],
+    0.0: [75.13613578708367, 29.30114910366262],
+    math.log10(0.3): [73.98885105988407, 19.81320048943734],
 }
 
-#: The same fluxes with every stellar age counted (the default). This SFH forms stars
-#: from 1 Gyr ago, and the FSPS/Padova bins between 100 Myr and 1 Gyr carry about 1e-8
-#: of the population's photon rate, so [H-beta] moves by 6e-9 (relative) and [N II] by
-#: 1.2e-7 at 0.3 Zsun (their shape pulls it): measured, and removed by the cut above.
+#: The same fluxes with every stellar age counted (the default). Composite-fit values.
 _ALL_AGES_DEFAULT_FLUXES = {
-    0.0: [75.18923449162212, 28.47306128523541],
-    math.log10(0.3): [74.05867272183987, 19.449403852584325],
+    0.0: [75.13613626951776, 29.301152904121412],
+    math.log10(0.3): [73.98885156575217, 19.813202541163456],
 }
 
 
 @pytest.mark.parametrize("log_z", sorted(_CUT_DEFAULT_FLUXES))
-def test_cut_is_bit_identical_to_origin_main(log_z):
-    """``lyc_max_age_yr=1e8`` leaves Cue exactly as it was before every age was counted."""
+def test_cut_is_pinned(log_z):
+    """``lyc_max_age_yr=1e8`` reproduces the pinned composite-fit fluxes of the cut."""
     flux = _line_fluxes("cue", log_z, lyc_max_age_yr=1.0e8)
     np.testing.assert_allclose(flux, _CUT_DEFAULT_FLUXES[log_z], rtol=1e-12, atol=0)
 

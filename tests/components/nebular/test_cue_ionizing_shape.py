@@ -133,59 +133,45 @@ def test_ionizing_shape_gradient_wrt_sfh_is_nonzero_and_exact():
 
 
 def test_effective_shape_matches_a_refit_of_the_composite_spectrum():
-    """The combined 7 params must reproduce a direct fit of the true composite spectrum.
+    """The backend's shape is the converged fit of the composite spectrum of the counted ages.
 
-    Ground truth: sum the young, met-weighted SSP spectra and re-fit the broken power
-    law. The luminosity-additive combination lands within a few percent; an arithmetic
-    mean of the parameters does not (it biases the log-ratios).
+    The model's age weights drive the backend at an SSP metallicity node. The
+    reference is :func:`fit_ionizing_spectrum` on the linear composite
+    ``sum_a w_a f_a`` at that node, and the two agree to 1e-8 (both are the converged
+    stationary point of the same objective).
     """
     import warnings
 
-    from tengri.components.nebular.ionizing_spectrum import (
-        MAX_NEB_LOG_AGE,
-        fit_ionizing_spectrum,
-        interpolate_ionizing_params,
-        interpolate_ionizing_seglum,
-    )
-    from tengri.parameters.translate import LOG10_ZSUN
+    from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
 
     m, _lw, ssp = _model()
     be = m._nebular_backend
-    met = -1.20
+    im = 7
+    log_z = float(np.asarray(ssp.ssp_lgmet)[im])
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["met_logzsol"] = jnp.asarray(met)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         st = m.predict_state(p)
-    jw = np.asarray(st.derived["joint_weights"])
-    log_ages = np.log10(np.asarray(st.derived["ssp_ages_yr"]))
-    young = log_ages <= MAX_NEB_LOG_AGE
-    wave = np.asarray(ssp.ssp_wave)
 
-    # ground truth: fit the composite young ionizing spectrum
-    spec_a = np.einsum("ma,maw->aw", jw, np.asarray(ssp.ssp_flux))
-    truth = fit_ionizing_spectrum(wave, spec_a[young].sum(axis=0))
-    t_idx = np.array([truth[f"ionspec_index{i}"] for i in (1, 2, 3, 4)])
-    t_lr = np.array([truth[f"ionspec_logLratio{i}"] for i in (1, 2, 3)])
+    ages = np.asarray(be._ssp_log_age_yr)
+    aw = np.asarray(st.derived["age_weights"], dtype=np.float64)
+    # The backend counts every age by default, so the composite has every weighted bin.
+    comp = np.sum(aw[:, None] * np.asarray(ssp.ssp_flux, dtype=np.float64)[im], axis=0)
+    ref = fit_ionizing_spectrum(np.asarray(ssp.ssp_wave), comp)
+    ref_pl = np.asarray(ref["powerlaw_params"])
+    ref7 = np.concatenate([ref_pl[:, 0], np.diff(np.asarray(ref["log_seglum"]))])
 
-    # the rule the backend uses, rebuilt from the same tables
-    log_z = met + LOG10_ZSUN
-    i_all, _q = jax.vmap(
-        lambda la: interpolate_ionizing_params(
-            be._ionspec_table, be._logqion_table, be._ssp_lgmet, be._ssp_log_age_yr, log_z, la
-        )
-    )(jnp.asarray(log_ages))
-    seg = jax.vmap(
-        lambda la: interpolate_ionizing_seglum(
-            be._seglum_table, be._ssp_lgmet, be._ssp_log_age_yr, log_z, la
-        )
-    )(jnp.asarray(log_ages))
-    aw = np.asarray(st.derived["age_weights"])
-    w = np.where(young & (aw > 0), aw, 0.0)[:, None]
-    seg_w = w * np.asarray(10.0**seg)
-    Lk = seg_w.sum(axis=0)
-    alpha = (seg_w * np.asarray(i_all)[:, :4]).sum(axis=0) / np.maximum(Lk, 1e-300)
-    lr = np.diff(np.log10(np.maximum(Lk, 1e-300)))
+    raw = be._weighted_cue_params_raw(jnp.asarray(aw), jnp.asarray(ages), log_z)
+    got = np.array([float(raw[k]) for k in _SHAPE_KEYS])
+    np.testing.assert_allclose(got, ref7, rtol=0, atol=1e-8)
 
-    assert np.max(np.abs(alpha - t_idx)) < 0.5, f"slopes off: {alpha} vs {t_idx}"
-    assert np.max(np.abs(lr - t_lr)) < 0.05, f"logLratios off: {lr} vs {t_lr}"
+
+_SHAPE_KEYS = (
+    "ionspec_index1",
+    "ionspec_index2",
+    "ionspec_index3",
+    "ionspec_index4",
+    "ionspec_logLratio1",
+    "ionspec_logLratio2",
+    "ionspec_logLratio3",
+)
