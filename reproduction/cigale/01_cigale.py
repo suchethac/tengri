@@ -1296,7 +1296,7 @@ plt.show()
 # CIGALE's grid, while CIGALE uses a Gaussian of FWHM 300 km/s on its own
 # line-augmented grid. The cell therefore also prints the maximum outside ±10 Å of
 # Lyα; the largest remaining points are on other emission-line wings, for example
-# Hα at 6564.6 Å, and are set by the same difference in profile and sampling.
+# the Hα line wing (6563–6573 Å), and are set by the same difference in profile and sampling.
 #
 # **Verification Status:** PARTIAL (2/88): Two-component attenuation (birth cloud and diffuse)
 
@@ -5020,7 +5020,7 @@ plt.show()
 # | 2 | SFH | `delayed` median 1.00002×; `sfh2exp` median 1.00015×, 2 of 1969 points beyond 1 % (burst step); §2c median 1.000× except periodic exponential 0.999× and rectangular 0.993× |
 # | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.030×, 0.3–1 μm 1.006×, L_bol 1.016×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 1.001–1.018×, worst band 1.055× (τ = 3 Gyr, age = 1 Gyr) |
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
-# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0165× intrinsic, 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×; maxima 14.5 % at 915 Å in 912–1200 Å, 942 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, both single points in the Lyα line wing set by the line profile and grid sampling, not by the continuum; outside Lyα ±10 Å the maxima are 150 % at 6573 Å and 75 % at 6563 Å, on the Hα line wing); §5b band medians 0.997–1.000× |
+# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0165× intrinsic and 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×); §5b band medians 0.997–1.000×; single-point maxima of 75–942 % over 0.1–1 μm sit on emission-line wings (line profile and grid sampling), not on the continuum |
 # | 6 | dust IR | 10–100 μm energy-weighted 1.012×; `L_absorbed` 1.0112× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0109–1.0141×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0119×, 1.0116×, 1.0116× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
 # | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0122× (0.3–1 μm), 1.0081× (3–8 μm), 1.0125× (10–100 μm), 1.0116× (100–1000 μm) |
 # | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
