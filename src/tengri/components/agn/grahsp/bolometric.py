@@ -4,9 +4,9 @@
 Implements §2.1.4 of Buchner+ 2024 (arXiv:2405.19297):
 
 - ``lumBolBBB``: trapezoidal integral of the AGN UV-optical components
-  (BBB + lines + FeII), restricted to :math:`\\lambda \\geq 91.2\\,\\mathrm{nm}`
-  (the Lyman limit). This is the rest-frame, isotropic, intrinsic luminosity
-  *before* attenuation.
+  (BBB + lines + FeII), restricted to :math:`\\lambda > 91.1753\\,\\mathrm{nm}`
+  (upstream's cut; see :data:`BBB_BOL_CUT_NM`). This is the rest-frame, isotropic,
+  intrinsic luminosity *before* attenuation.
 - ``lumBolTOR``: integral of the torus component over its full wavelength
   support.
 - ``ratioTORBBB``: ``lumBolTOR / lumBolBBB``.
@@ -27,6 +27,7 @@ import jax.numpy as jnp
 from jax import Array
 
 __all__ = [
+    "BBB_BOL_CUT_NM",
     "LYMAN_LIMIT_NM",
     "agn_fraction_dale",
     "bolometric_luminosity_bbb",
@@ -36,7 +37,17 @@ __all__ = [
 ]
 
 LYMAN_LIMIT_NM: float = 91.2
-"""Lyman limit at 91.2 nm: lower bound for ``lumBolBBB`` integration."""
+"""Lyman limit at 91.2 nm (912 A)."""
+
+BBB_BOL_CUT_NM: float = 91.1753
+"""Lower bound of the BBB-side bolometric integral ``lumBolBBB`` [nm].
+
+Upstream GRAHSP's ``activatebol`` integrates every non-torus component for wave > 91.1753 nm
+(owner ruling 16, 2026-10-13), not from the 91.2 nm Lyman limit. Both the monolithic and the
+composable paths take their bolometric normalization and every published BBB power from this
+cut. Tengri's line widths stay sqrt(2 pi sigma^2) (upstream's sqrt(pi sigma^2) is an upstream
+bug), so only the cut differs from upstream's integral.
+"""
 
 
 def _trapz_above(
