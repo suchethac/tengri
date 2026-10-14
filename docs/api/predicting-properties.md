@@ -347,14 +347,15 @@ props = jax.lax.map(
 stellar_masses = props["stellar_mass"]
 sfrs = props["sfr_100myr"]
 
-# Write to file or dataframe
-import pandas as pd
-catalog = pd.DataFrame({
-    "stellar_mass_msun": np.array(stellar_masses),
-    "sfr_100myr_msunyr": np.array(sfrs),
-    # ... add photometry as columns
-})
-catalog.to_csv("mock_catalog.csv", index=False)
+# Write the table (a pandas DataFrame works the same way from these arrays)
+catalog = np.column_stack([np.array(stellar_masses), np.array(sfrs)])
+np.savetxt(
+    "mock_catalog.csv",
+    catalog,
+    delimiter=",",
+    header="stellar_mass_msun,sfr_100myr_msunyr",
+    comments="",
+)
 ```
 
 This workflow is pure JAX — no loop, fully differentiable, and trivial to parallelize.
