@@ -206,6 +206,8 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_band_response_decline = None
             self._dust_shape_table_cache = None
             self._dust_shape_table_decline = None
+            # Literal policy entry added by #2974 (radio AGN loudness anchor); the mock must carry it.
+            self._radio_agn_loudness_ref = None
             self._cloudy_band_table_cache = None
             self._cloudy_band_table_decline = None
             self._shock_band_table_cache = None
