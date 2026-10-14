@@ -25,6 +25,7 @@ from tengri._cache_keys import (
 from tengri.observation.constants import ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
 from tengri.parameters.priors import Distribution, Gaussian
+from tengri.utils.wave_unit import check_wavelength_plausible, to_angstrom
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,7 +35,15 @@ class Spectroscopy:
     Parameters
     ----------
     wave_obs : jnp.ndarray
-        Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
+        Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``, unless
+        ``wave_unit`` states otherwise.
+    wave_unit : str, optional
+        Unit of ``wave_obs`` at construction: ``"AA"`` (default; ``"angstrom"``
+        is equivalent), ``"nm"``, ``"um"`` or ``"micron"``, case-insensitive.
+        Converted to Angstrom once, here; the stored ``wave_obs`` is always
+        Angstrom. A range wholly below 0.01 Å or above 1e9 Å is refused with
+        ``ValueError``. A range wholly in 100-1340 Å warns when the unit is
+        Angstrom. Not a field: it is not stored on the instance.
     wave_obs_segment_sizes : tuple[int, ...] or None
         Pixel counts for each camera segment. Multi-camera spectrographs
         (e.g., DESI) concatenate camera grids that overlap at seams;
@@ -198,8 +207,18 @@ class Spectroscopy:
     covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
     wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
+    #: Unit of ``wave_obs`` at construction [AA | angstrom | nm | um | micron].
+    #: Init-only: ``wave_obs`` is converted to Angstrom here and stored in Angstrom.
+    wave_unit: dataclasses.InitVar[str] = "AA"
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, wave_unit: str) -> None:
+        # Convert once, at ingestion, before any check reads the numbers as Angstrom.
+        # Angstrom input is returned as the same object, so it is not re-wrapped.
+        w_in = np.asarray(self.wave_obs, dtype=np.float64)
+        w_aa = to_angstrom(w_in, wave_unit)
+        if w_aa is not w_in:
+            object.__setattr__(self, "wave_obs", jnp.asarray(w_aa))
+
         # Validate wave_obs first (finite, positive, monotonic)
         w = np.asarray(self.wave_obs, dtype=np.float64)
 
@@ -230,6 +249,10 @@ class Spectroscopy:
                         f"wave_obs must be strictly increasing; index {idx} "
                         f"({w[idx]}) >= index {idx + 1} ({w[idx + 1]})"
                     )
+
+        check_wavelength_plausible(
+            w, "spectrum", source="Spectroscopy wave_obs", wave_unit=wave_unit
+        )
 
         # Validate other fields
         if self.calibration_order < 0:
@@ -654,7 +677,7 @@ class Spectroscopy:
         Parameters
         ----------
         wave_obs : ndarray, shape (n_pix,)
-            Observed-frame wavelength grid [Angstrom].
+            Observed-frame wavelength grid [Angstrom], or in ``wave_unit``.
         resolution : float, ndarray, or None
             Spectral resolution ``R = lambda / delta_lambda``. Scalar for
             constant R, per-pixel array for wavelength-dependent, or None
@@ -688,13 +711,17 @@ class Spectroscopy:
         )
 
     @staticmethod
-    def nirspec_prism(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
+    def nirspec_prism(wave_obs: jnp.ndarray, *, wave_unit: str = "AA", **kwargs) -> Spectroscopy:
         """JWST NIRSpec PRISM: variable R ~ 30-330 (Jakobsen+2022).
 
         Parameters
         ----------
         wave_obs : ndarray, shape (n_pix,)
-            Observed-frame wavelength grid [Angstrom].
+            Observed-frame wavelength grid [Angstrom], or in ``wave_unit``.
+        wave_unit : str, optional
+            Unit of ``wave_obs``: ``"AA"`` (default), ``"nm"``, ``"um"``, ``"micron"``
+            or ``"angstrom"``, case-insensitive. Converted to Angstrom before the
+            resolution law is evaluated.
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
@@ -713,18 +740,22 @@ class Spectroscopy:
         """
         from tengri.observation.spectrum import nirspec_prism_resolution
 
-        wave_jax = jnp.asarray(wave_obs)
+        wave_jax = jnp.asarray(to_angstrom(jnp.asarray(wave_obs), wave_unit))
         resolution = nirspec_prism_resolution(wave_jax / 1e4)
         return Spectroscopy._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
-    def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
+    def nirspec_g140m(wave_obs: jnp.ndarray, *, wave_unit: str = "AA", **kwargs) -> Spectroscopy:
         """JWST NIRSpec G140M: roughly constant R ~ 1000.
 
         Parameters
         ----------
         wave_obs : ndarray, shape (n_pix,)
-            Observed-frame wavelength grid [Angstrom].
+            Observed-frame wavelength grid [Angstrom], or in ``wave_unit``.
+        wave_unit : str, optional
+            Unit of ``wave_obs``: ``"AA"`` (default), ``"nm"``, ``"um"``, ``"micron"``
+            or ``"angstrom"``, case-insensitive. Converted to Angstrom before the
+            resolution law is evaluated.
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
@@ -743,21 +774,27 @@ class Spectroscopy:
         """
         from tengri.observation.spectrum import nirspec_g140m_resolution
 
-        wave_jax = jnp.asarray(wave_obs)
+        wave_jax = jnp.asarray(to_angstrom(jnp.asarray(wave_obs), wave_unit))
         resolution = nirspec_g140m_resolution(wave_jax / 1e4)
         return Spectroscopy._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
-    def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> Spectroscopy:
+    def constant_r(
+        wave_obs: jnp.ndarray, R: float, *, wave_unit: str = "AA", **kwargs
+    ) -> Spectroscopy:
         """Constant-resolution spectrograph.
 
         Parameters
         ----------
         wave_obs : ndarray, shape (n_pix,)
-            Observed-frame wavelength grid [Angstrom].
+            Observed-frame wavelength grid [Angstrom], or in ``wave_unit``.
         R : float
             Spectral resolution ``R = lambda / delta_lambda`` (constant across
             all wavelengths, dimensionless).
+        wave_unit : str, optional
+            Unit of ``wave_obs``: ``"AA"`` (default), ``"nm"``, ``"um"``, ``"micron"``
+            or ``"angstrom"``, case-insensitive. Converted to Angstrom before the
+            resolution law is evaluated.
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
@@ -774,11 +811,17 @@ class Spectroscopy:
         approximations or ideal spectrographs.
 
         """
-        return Spectroscopy._from_resolution(wave_obs, float(R), **kwargs)
+        wave_aa = to_angstrom(jnp.asarray(wave_obs), wave_unit)
+        return Spectroscopy._from_resolution(wave_aa, float(R), **kwargs)
 
     @classmethod
     def desi_like(
-        cls, wave_obs: jnp.ndarray, resolution: float = 2500.0, **kwargs
+        cls,
+        wave_obs: jnp.ndarray,
+        resolution: float = 2500.0,
+        *,
+        wave_unit: str = "AA",
+        **kwargs,
     ) -> Spectroscopy:
         """DESI-like spectroscopic configuration with full line fitting.
 
@@ -792,10 +835,14 @@ class Spectroscopy:
         Parameters
         ----------
         wave_obs : ndarray, shape (n_pix,)
-            Observed-frame wavelength grid [Angstrom].
+            Observed-frame wavelength grid [Angstrom], or in ``wave_unit``.
         resolution : float, optional
             Spectral resolution ``R = lambda / delta_lambda`` (dimensionless).
             Default: 2500 (DESI standard).
+        wave_unit : str, optional
+            Unit of ``wave_obs``: ``"AA"`` (default), ``"nm"``, ``"um"``, ``"micron"``
+            or ``"angstrom"``, case-insensitive. Converted to Angstrom before the
+            resolution law is evaluated.
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
@@ -817,6 +864,7 @@ class Spectroscopy:
 
         return cls(
             wave_obs=wave_obs,
+            wave_unit=wave_unit,
             resolution=resolution,
             calibration_order=3,
             eline_mode="marginalized",
@@ -852,7 +900,6 @@ class Spectroscopy:
         resolution : float, ndarray, or None
             Spectral resolution override.  If None, auto-selects based on
             the ``FILTER`` or ``GRATING`` header keyword. Default: None.
-        **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns
@@ -935,7 +982,10 @@ class Spectroscopy:
             Column name for flux error. Default: ``"FLUX_ERROR"``.
         wave_unit_aa : float
             Multiplicative factor to convert wavelength column to Angstrom.
-            E.g., 1e4 for µm input. Default: 1.0 (already Å).
+            E.g., 1e4 for µm input. Default: 1.0 (already Å). This is a scale
+            factor read from the file's header, not a unit name; to state a unit
+            name for a raw array, pass ``wave_unit=`` to the ``Spectroscopy``
+            constructor instead.
         flux_unit_cgs : float
             Multiplicative factor to convert flux column to erg/s/cm²/Hz.
             E.g., 1e-29 for µJy. Default: 1.0 (already CGS).
@@ -943,7 +993,6 @@ class Spectroscopy:
             FITS extension. Default: 1.
         resolution : float, ndarray, or None
             Spectral resolution. Default: None.
-        **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns

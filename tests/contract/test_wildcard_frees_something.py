@@ -41,6 +41,7 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, Uniform
+from tengri.components.grid_support import grid_support
 from tengri.config.exceptions import (
     ParameterError,
     WildcardNoOpWarning,
@@ -928,8 +929,13 @@ class TestBurstSfrFreesUnderWildcard2187:
 
 @pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
 def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
-    """``neb_logZ_gas`` must free at the same declared range under cue,
-    cloudy, and cb19 alike -- the wildcard is not backend-scoped.
+    """``neb_logZ_gas`` frees over each backend's own support, under cue, cloudy and cb19.
+
+    Owner ruling 2026-10-14 (#2626, #2244): a declaration-sourced ``FREE`` resolves to
+    the selected backend's grid support, which can be wider than the registry
+    declaration (Cue's trained range, CB19's axis). The expectation is therefore the
+    backend's registered ``neb_logZ_gas`` support, falling back to the declared
+    ``Uniform(-1.30, 0.20)`` only for a backend with no registered support.
 
     Data-gated for cloudy: its structural translation resolves the grid file
     during ``parse_groups`` (not at build time), so a checkout without
@@ -957,7 +963,9 @@ def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
                 pytest.skip(f"{neb_type} grid not on disk: {exc}")
             raise
     assert "neb_logZ_gas" in spec.free_params
-    assert spec.get_distribution("neb_logZ_gas") == Uniform(-1.30, 0.20)
+    expected = grid_support("neb", neb_type).get("neb_logZ_gas", (-1.30, 0.20))
+    got = spec.get_distribution("neb_logZ_gas").bounds
+    assert got == pytest.approx(expected, abs=1e-6)
 
 
 def test_radio_dpl_slopes_free_at_the_martinez_ramirez_table_1_ranges():

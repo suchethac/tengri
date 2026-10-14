@@ -503,9 +503,16 @@ def clamp_ionspec_straight_through(i7):
     x = jnp.asarray(i7)
     lo = jnp.asarray([_CLIP_RANGES[k][0] for k in IONSPEC_NAMES], dtype=x.dtype)
     hi = jnp.asarray([_CLIP_RANGES[k][1] for k in IONSPEC_NAMES], dtype=x.dtype)
-    clipped = jnp.clip(x, lo, hi)
-    through = jax.lax.stop_gradient(clipped) + (x - jax.lax.stop_gradient(x))
-    return jnp.where(jnp.isfinite(x), through, clipped)
+    # Double-where: the straight-through arithmetic only ever sees finite input
+    # (``inf - inf`` is NaN, and a single outer ``where`` still differentiates that
+    # branch), and the non-finite branch is a constant for autodiff, so a +/-inf or
+    # NaN component carries neither a NaN nor a tangent into the finite ones.
+    finite = jnp.isfinite(x)
+    x_safe = jnp.where(finite, x, 0.5 * (lo + hi))
+    clipped_safe = jnp.clip(x_safe, lo, hi)
+    through = jax.lax.stop_gradient(clipped_safe) + (x_safe - jax.lax.stop_gradient(x_safe))
+    bound = jax.lax.stop_gradient(jnp.clip(x, lo, hi))  # +/-inf -> bound, nan -> nan
+    return jnp.where(finite, through, bound)
 
 
 def fit_ionizing_spectrum(

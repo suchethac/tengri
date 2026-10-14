@@ -476,18 +476,19 @@ def test_log_mbh_is_narrowed_onto_the_sn12_grid():
     assert spec._group_provenance["agn_log_mbh"].endswith("_grid")
 
 
-def test_log_ledd_is_left_alone_because_narrowing_would_pin_it():
-    """A 1.7% overlap is a disagreement, not a tail to trim.
+def test_log_ledd_free_resolves_to_the_grid_though_the_overlap_is_small():
+    """A 1.7% overlap resolves to the grid, not declined (owner ruling 2026-10-14, #2626).
 
-    ``Uniform(-2, 0.5)`` against a grid ending at -1.9586 retains 0.04 dex.
-    Substituting that silently would pin the parameter in all but name, so the
-    narrowing is declined and the overhang reported -- the one case where
-    warning beats fixing.
+    ``Uniform(-2, 0.5)`` against a grid ending at -1.9586 used to retain 0.04 dex
+    and be declined. The free prior now resolves to the backend's own support
+    and carries the ``_grid`` tag, so ``summary()`` shows the resolution and no
+    overhang remains to warn about.
     """
     _sn12_grid()
     spec = _spec_with_disc("slone_netzer")
-    assert spec._distributions["agn_log_ledd"].bounds == pytest.approx((-2.0, 0.5))
-    assert not spec._group_provenance["agn_log_ledd"].endswith("_grid")
+    lo, hi = _sn12_grid()["agn_log_ledd"]
+    assert spec._distributions["agn_log_ledd"].bounds == pytest.approx((lo, hi), abs=1e-6)
+    assert spec._group_provenance["agn_log_ledd"].endswith("_grid")
 
     from tengri.parameters import FREE, parse_groups
 
@@ -503,8 +504,7 @@ def test_log_ledd_is_left_alone_because_narrowing_would_pin_it():
             redshift=0.1,
         )
     messages = [str(w.message) for w in caught if "agn_log_ledd" in str(w.message)]
-    assert len(messages) == 1, messages
-    assert "98%" in messages[0]
+    assert messages == []
 
 
 def test_narrowing_does_not_touch_a_grid_free_disc():
