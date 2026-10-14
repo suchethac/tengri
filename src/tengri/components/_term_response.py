@@ -51,8 +51,10 @@ def term_band_response(
     -------
     mapping or None
         ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``
-        at the evaluation redshift, or ``None`` when no response was built: in
-        which case the caller must keep the exact per-call dense filter integral.
+        at the evaluation redshift (plus ``"S_diag": (n_terms, n_nodes)``, the term shapes at
+        the emitter's ``EMITTER_DIAGNOSTIC_NODES``, when it declares any), or ``None`` when no
+        response was built: in which case the caller must keep the exact per-call dense
+        filter integral.
         Term order matches the emitter's ``emission_terms`` dict order.
 
     Notes
@@ -69,12 +71,20 @@ def term_band_response(
         return None
     nodes = table["ln1pz"]
     if nodes.shape[0] == 1:
-        return {"R": table["R"][0], "lam_ref": table["lam_ref"], "S_ref": table["S_ref"][0]}
+        out = {"R": table["R"][0], "lam_ref": table["lam_ref"], "S_ref": table["S_ref"][0]}
+        if "S_diag" in table:
+            out["S_diag"] = table["S_diag"][0]
+        return out
     from tengri.parameters.resolve import require_redshift
 
     z = require_redshift(params or {}, f"components.{name}.term_band_response")
-    return {
+    out = {
         "R": interp_z_table({"ln1pz": nodes, "values": table["R"]}, z, extrapolate=True),
         "lam_ref": table["lam_ref"],
         "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z, extrapolate=True),
     }
+    if "S_diag" in table:
+        out["S_diag"] = interp_z_table(
+            {"ln1pz": nodes, "values": table["S_diag"]}, z, extrapolate=True
+        )
+    return out

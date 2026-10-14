@@ -320,6 +320,10 @@ CENSUS: dict[str, str] = {
     "components/nebular/shock.py": "fitted-ok (jnp.clip upstream; velocity/density inside hull)",
     "components/nebular/cb19_precompute.py": "unknown (cb19 grid absent in worktree)",
     "components/nebular/cloudy_cb19.py": "fitted-ok",
+    "components/nebular/cloudy_grid.py": (
+        "fitted-ok (GRID_SUPPORT registered for neb/cloudy; PCHIP read clamps to the hull edge "
+        "and the build-time check narrows or warns; owner ruling 2026-10-11, #2857)"
+    ),
     "components/nebular/mappings_photo.py": "fitted-ok",
     "components/_collapsed_lookup.py": "fitted-ok by construction (axes over prior)",
     "components/dust/wg00.py": "fitted-physical-registered (GRID_SUPPORT wg00, gap 1.0 spacing)",
@@ -360,22 +364,8 @@ def test_gradient_is_finite_and_nonzero_across_prior(lookup: FittedLookup) -> No
     )
 
 
-_PCHIP_TIE_PR = (
-    "depends on #2857: its where-based clamp in _pchip_eval_axis0 removes the tie halving"
-)
-
-
 @pytest.mark.contract
-@pytest.mark.parametrize(
-    "which",
-    [
-        pytest.param(
-            "interp_nd_pchip",
-            marks=pytest.mark.xfail(strict=True, reason=_PCHIP_TIE_PR),
-        ),
-        "pchip_interp_local",
-    ],
-)
+@pytest.mark.parametrize("which", ["interp_nd_pchip", "pchip_interp_local"])
 def test_clamped_pchip_boundary_derivative_is_not_halved(which: str) -> None:
     """The default (clamped) PCHIP read keeps its derivative on the outermost node.
 

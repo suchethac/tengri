@@ -141,15 +141,19 @@ for user-provided transmission curves.
 
 Curve files may be whitespace- or comma-separated, with or without a header
 row; ``#`` comments are stripped. Wavelengths are Angstrom unless you say
-otherwise with ``wave_unit="nm"`` or ``"um"``.
+otherwise with ``wave_unit="nm"``, ``"um"`` (or ``"micron"``), or ``"AA"`` /
+``"angstrom"``. The name is case-insensitive, and the curve is converted to
+Angstrom once, at registration. See :doc:`/units` for the one spelling used at
+every raw-array boundary.
 
-State the unit whenever the file is not already in Angstrom. A curve given in
-nanometers is a valid array of numbers describing the extreme UV, so it cannot
-always be detected: registration falls back to a range heuristic that warns
-when a curve lies wholly inside the 100-1340 Angstrom gap where the ISM is
-opaque and no bandpass exists. That backstop cannot see micron input at all,
-and cannot catch a nanometer set running past 1340 nm without also firing on
-GALEX FUV.
+State the unit whenever the file is not already in Angstrom. A range wholly
+below 0.01 Angstrom or above 1e9 Angstrom is refused with ``ValueError``, since
+it cannot be a bandpass in Angstrom. A curve given in nanometers is a valid
+array of numbers describing the extreme UV, so it cannot always be detected:
+registration warns when a curve lies wholly inside the 100-1340 Angstrom gap
+where the ISM is opaque and no bandpass exists. That backstop cannot see micron
+input at all, since a 0.3-1.0 Angstrom curve is a real NuSTAR band, and cannot
+catch a nanometer set running past 1340 nm without also firing on GALEX FUV.
 
 The ``$TENGRI_FILTER_DIR`` route has nowhere to record a unit, so files placed
 there must already be in Angstrom.

@@ -2,26 +2,38 @@
 
 ### Added
 
+- **Radio loudness anchor on CIGALE's 2500 Å disc luminosity (#2663).** `radio={'agn': {'loudness_ref': '2500_30deg'}}` anchors `radio_loudness` on the composable disc's 2500 Å luminosity at 30 deg, CIGALE's `R_agn`. `radio_loudness` stays log10 (CIGALE's linear `R_agn` is `10 ** radio_loudness`). The default `'4400'` is unchanged and bit-exact; the 2500 Å option raises on a non-composable AGN rather than fall back to the bolometric correction. With `R_agn = 10` the 5 GHz luminosity is 8.35e29 erg/s/Hz against CIGALE's 8.350135e29 to 2 per mille (the disc normalization moved 0.22 % at 2500 Å since the pinned commit; the anchor identity is exact to 1e-4). The 21 cm star-formation anchor is the existing `radio={'sf': {'nu_ref': '21cm'}}` key (#2762); no second spelling is added.
+- **One `wave_unit=` at every raw-array boundary (#2144).** `register_filter`, `register_filter_from_file`, `load_filter_from_dsps_transmission_curve`, `load_filter_from_dsps_file`, `Spectroscopy(...)` and the `nirspec_prism`, `nirspec_g140m`, `constant_r` and `desi_like` factories take `wave_unit=` with one spelling set: `"AA"`/`"angstrom"` (default), `"nm"`, `"um"`/`"micron"`, case-insensitive. The array is converted to Angstrom once, at ingestion, and an unknown name raises `ValueError` listing the accepted names. Nanometer or micron input is bit-identical to the same grid stated in Angstrom. `Spectroscopy.from_fits` keeps its `wave_unit_aa` scale factor.
 - **CLOUDY nebular band table, measured (#2324).** `components/nebular/cloudy_band_table.py` tabulates the CLOUDY photoionised band projection per SSP age on the grid's own (Z_gas, logU) nodes: continuum bands and per-line luminosities with fixed-width line band coefficients, contracted over ages at runtime. Against the per-call path the worst relative band error is 1.7e-4 at five seeded draws (neb_logU, neb_logZ_gas and metallicity in their priors, delayed-tau SFH, z = 0.1), build 3.5 s. Wired through the registry in the next entry. cb19 is skipped (placeholder grid).
 - **WavePrecomp tabulates CLOUDY nebular emission through the registry (#2324).** `registry.resolve("cloudy").precompute` builds the age-resolved band table of `cloudy_band_table.py` when the gate holds: WavePrecomp on, the CLOUDY grid backend (not DIG), a single Fixed redshift, a Fixed `neb_eline_sigma_kms`, and no free `neb_*`/`gas_*`/`ionspec_*` parameter outside (Z_gas, logU, fesc, fesc_lya, fdust_frac). The table must also cover the spec's (Z_gas, logU) priors, or the gate declines; the reason is recorded in `_cloudy_band_table_decline`. `apply()` then contracts the table over ages with the runtime SSP weights, Q_H and k-factor instead of the per-call filter integrals, with `neb_fesc_lya` applied to Ly-alpha alone. Exact mode is unchanged. Measured on the free-logU model (four bands): jitted `predict_photometry` at 2.3 ms per call against 9.5 ms per call on the per-call path; the table path agrees with the per-call path at three seeded draws (worst relative photometry error 9.6e-6; band-level worst 1.7e-4 over five draws), with finite non-zero gradients in neb_logU and neb_logZ_gas. The band table is held on device, as the table rides in the jitted template data every call.
 - **WavePrecomp serves the composable MAPPINGS V shock photometry from fixed per-line band coefficients (#2324).** `mappings_shock_precompute.shock_band_coefficients` builds the band of a unit-luminosity shock line through each filter, at build time, through `registry.resolve("mappings_shock")`. `ShockNebular.apply` then forms the observed and rest shock bands as the line luminosities of the backend's own kernel contracted with those coefficients, in place of the per-call batch filter integral of the shock SED. The gate requires WavePrecomp, a composable shock, and a Fixed redshift; a free redshift declines with the reason recorded. Measured at the band level against the per-call path over six draws: worst relative error 4.4e-16. Build time for the 24-line coefficient table was 3.1 s. The shock SED itself is still computed for `sed_intrinsic`.
 
+### Changed
+
+- **Grid-support overhang is refused at build, and FREE resolves to the backend's support (#2626, #2244; breaking-change).** A `Fixed` value or an explicit prior that lies outside a template-backed component's grid now raises `ParameterError` at build, naming the parameter, the component, the value or range and the extent. It was a `GridSupportWarning`, so scripts that set an out-of-grid value now fail where they used to run. A declaration-sourced `FREE` parameter resolves to the selected backend's full support, even where that is wider than the registry declaration, and `summary()` shows `[resolved to <backend> grid: lo..hi]`. For example `neb={'type': 'cue', 'logZ_gas': FREE}` spans Cue's trained `[-2.2, 0.5]`, and `neb={'type': 'cloudy', 'logZ_gas': FREE}` spans the cloudy grid's `[-1.98, 0.2]`. Components with no registered support keep the declaration. Cue, a neural emulator, still warns and never raises.
+
 ### Fixed
 
+- **Out-of-grid values are no longer silently clipped onto an edge node (#2626, #2244).** A template-backed nebular, dust-emission or AGN-disc parameter outside its component's grid was clamped to the edge node: the SED was bit-identical across the excess and the gradient was exactly zero, so the parameter stopped doing anything with no error. The build now applies the four rules of the grid-support policy (see `docs/model_reference/nebular.md`, "Parameter support"). `neb_logZ_gas` is registered for cb19 through its own `log_OH_total` offset.
+
+- **Implausible wavelength ranges are refused, and timescale parameters are bounded (#2162).** A filter or spectrum whose Angstrom range lies wholly below 0.01 Å or above 1e9 Å now raises `ValueError` naming the object, the measured range, the likely unit and the fix; before, such input produced garbage photometry without error. A range wholly in the 100-1340 Å extreme-UV gap still warns. `*_myr`, `*_gyr` and `*_yr` `Fixed` values and prior bounds are checked once at `Parameters` build, against [1e-3, 2e4] Myr, [1e-6, 20] Gyr and [1, 2e10] yr; an out-of-range value raises `ParameterError` naming the parameter, value and unit.
+- **A default spectroscopy fit no longer runs on a LUT that moves a high-SNR posterior by about one sigma (#1688).** The spectrum LUT evaluates the model at pixel centers, not the pixel mean, and a 50-pixel, 5%-noise fit measured a 0.023 shift in `psd_sigma` (about 1 sigma against the exact path) on the default policy. See the Changed entry for the new default and its opt-in.
+- **`kubota_done` and ADAF are normalized at unit ratio, so `agn_lum_ratio = 0` has an exact gradient (#2767).** The Kubota & Done disc folded `log10(agn_lum_ratio)` into its normalization exponent, so at a ratio of 0 the reverse pass formed `0 * inf = NaN`, and that NaN reached the `agn_log_lbol` gradient too. The disc now normalizes at unit ratio and multiplies its spectra (total, disc and hot corona) by `agn_lum_ratio` linearly, so the SED at ratio 0 is exactly 0 and `d/d(agn_lum_ratio)` there is the SED at unit ratio. The SED at ratio 0.5 is unchanged to 1e-12 (float64). ADAF already entered the ratio linearly and is unchanged.
+- **The BAGPIPES reproduction page compares like with like at intermediate metallicity and under dust attenuation.** Between BC03 metallicity nodes tengri's lognormal weights select the nearest node at the smallest width while BAGPIPES interpolates linearly in Z, and every BAGPIPES model with a `dust` block carries DL07 emission that tengri's attenuated starlight lacks. The page now mixes the straddling nodes with BAGPIPES's weights (worst band at Z = 0.5 and 1.5 Z☉,B: 1.038 and 1.090 to 1.002 and 1.003) and removes the emission from the BAGPIPES side of the attenuation comparisons (30 Myr burst, near infrared J/H/Ks: 0.943/0.949/0.900 to 1.004/1.005/1.006).
+- **Every fit entry refuses an unknown kwarg by naming the call, not the runner (#1469).** `Catalog.fit(lines=...)` leaked `TypeError: run_map() got an unexpected keyword argument 'lines'`, and the batched engines leaked `_run_native_mcmc()` and `PopulationFitter._run_geovi()` the same way. `CatalogFitter.run` and `PopulationFitter.run` now validate through `check_unknown_kwargs`, and the error lists the accepted names. Test: `tests/contract/test_fit_kwargs_validated.py`.
+- **The BAGPIPES reproduction page compares like with like at intermediate metallicity and under dust attenuation.** Between BC03 metallicity nodes tengri's lognormal weights select the nearest node at the smallest width while BAGPIPES interpolates linearly in Z, and every BAGPIPES model with a `dust` block carries DL07 emission that tengri's attenuated starlight lacks. The page now mixes the straddling nodes with BAGPIPES's weights (worst band at Z = 0.5 and 1.5 Z☉,B: 1.038 and 1.090 to 1.002 and 1.003) and removes the emission from the BAGPIPES side of the attenuation comparisons (30 Myr burst, near infrared J/H/Ks: 0.943/0.949/0.900 to 1.004/1.005/1.006).
 - **Masked lookups interpolate between populated brackets (#2575).** `interp_nd_triweight(..., population_mask=...)` renormalised over the populated cells by snapping to the nearest populated node, so a query between two populated nodes across a masked gap returned a value from the wrong side of the gap, or NaN. Along the B-field and density axes a query whose kernel stencil reaches a masked cell now returns the linear interpolant of the populated brackets; where the stencil reaches populated cells only, the kernel's own weights apply. A query with populated cells on one side holds the nearest populated node, and NaN is returned only when no cell is populated. The velocity axis is unmasked and is unchanged. Owner ruling 2026-10-09: this supersedes the #2435 mask semantics. A MAPPINGS shock query above the highest populated density node now holds that node's spectrum instead of returning zeros.
 
+- **Masked lookups interpolate between populated brackets (#2575).** `interp_nd_triweight(..., population_mask=...)` renormalised over the populated cells by snapping to the nearest populated node, so a query between two populated nodes across a masked gap returned a value from the wrong side of the gap, or NaN. Along the B-field and density axes a query whose kernel stencil reaches a masked cell now returns the linear interpolant of the populated brackets; where the stencil reaches populated cells only, the kernel's own weights apply. A query with populated cells on one side holds the nearest populated node, and NaN is returned only when no cell is populated. The velocity axis is unmasked and is unchanged. Owner ruling 2026-10-09: this supersedes the #2435 mask semantics. A MAPPINGS shock query above the highest populated density node now holds that node's spectrum instead of returning zeros.
 - **The Feltre NLR precompute tabulates all five grid axes (#2324).** `feltre_grid.h5` is stored on `(alpha, logU, logn, logZ, xi_d)`, but the precompute adapter declared four axes in another order and dropped the gas density, so its lookup could not be called with the grid's dimensionality. The adapter now declares `agn_nlr_alpha_pl`, `agn_nlr_logU`, `agn_nlr_logn`, `agn_nlr_logZ` and `agn_nlr_xi_d` in the grid's order, and its table matches the exact `FeltreNLRBackend` lines at an off-node point to 1e-8 relative.
-
-- **The SKIRTOR and Fritz torus lookups are node-exact (#2606).** Both torus libraries are tabulated radiative-transfer results, so the lookup at a grid node must return that node. The triweight smoother blended each node with its neighbours and moved the band shares by up to 65 % at a node. `_interpolate_and_normalize` in `skirtor.py` and `fritz.py` now uses the node-exact PCHIP interpolant, and the unused `edges` argument is dropped from the helper. The Fritz off-node band and median residuals recorded in `test_bug_2604_fritz_grid_units.py` are now exactly zero at the two off-node points tested there. The template-photometry lookup in `forward/precompute/templates.py` still uses the triweight kernel, because the shared axis-collapse machinery must match it.
-
-- **Precompute template tables integrate over the filter's support, as the exact path does (#2817, main red).** `preintegrate_transposed` kept one union-grid node past each filter edge, so the straddle segment ramped the zero-filled transmission in the table but not in `lnu_filter_integral`. Torus node tables (AGNfitter-rX Nenkova and SKIRTOR, CAT3D) disagreed with the exact path by 0.01 to 1.0 percent, and the node equivalence test failed at rtol 1e-10. The SSP band integrals (`stellar/sps/precompute.py`) and the nebular band kernel (`nebular/nebular_band_z.py`) had the same straddle node. All three now use one helper, `filter_support_slice`, that keeps exactly the union nodes inside `[fw[0], fw[-1]]`.
+- **The SKIRTOR and Fritz torus lookups are node-exact (#2606).** Both torus libraries are tabulated radiative-transfer results, so the lookup at a grid node must return that node. The triweight smoother blended each node with its neighbours and moved the band shares by up to 65 % at a node. `_interpolate_and_normalize` in `skirtor.py` and `fritz.py` now uses the node-exact PCHIP interpolant, and the unused `edges` argument is dropped from the helper. The Fritz off-node band and median residuals recorded in `test_bug_2604_fritz_grid_units.py` are now exactly zero at the two off-node points tested there. The template-photometry lookup in `forward/precompute/templates.py` still uses the triweight kernel, because the shared axis-collapse machinery must match it.- **Precompute template tables integrate over the filter's support, as the exact path does (#2817, main red).** `preintegrate_transposed` kept one union-grid node past each filter edge, so the straddle segment ramped the zero-filled transmission in the table but not in `lnu_filter_integral`. Torus node tables (AGNfitter-rX Nenkova and SKIRTOR, CAT3D) disagreed with the exact path by 0.01 to 1.0 percent, and the node equivalence test failed at rtol 1e-10. The SSP band integrals (`stellar/sps/precompute.py`) and the nebular band kernel (`nebular/nebular_band_z.py`) had the same straddle node. All three now use one helper, `filter_support_slice`, that keeps exactly the union nodes inside `[fw[0], fw[-1]]`.
 
 - **The photometry gradient wrt the lognormal SFH age is finite (#2934).** The lognormal partial-cell weight divided by the local grid spacing, and the dense SFH integrand carries zero-width cells (repeated top nodes past the oldest template, from the extension to the age of the universe). The forward value was finite, but the reverse pass formed `0 / 0`, so `d log(photometry) / d sfh_lnorm_age_gyr` was NaN at every age tested (z = 0.1 and z = 2). A zero-width cell now takes the point test, and the division is double-where guarded. Test: `tests/regression/bug/test_bug_2934_lnorm_age_gradient.py`.
 
-
-- **The BAGPIPES reproduction page compares like with like at intermediate metallicity and under dust attenuation.** Between BC03 metallicity nodes tengri's lognormal weights select the nearest node at the smallest width while BAGPIPES interpolates linearly in Z, and every BAGPIPES model with a `dust` block carries DL07 emission that tengri's attenuated starlight lacks. The page now mixes the straddling nodes with BAGPIPES's weights (worst band at Z = 0.5 and 1.5 Z☉,B: 1.038 and 1.090 to 1.002 and 1.003) and removes the emission from the BAGPIPES side of the attenuation comparisons (30 Myr burst, near infrared J/H/Ks: 0.943/0.949/0.900 to 1.004/1.005/1.006).
-
 - **Rest-frame photometry under `WavePrecomp` keeps the dust emission (#2559).** The dust emission component published only the observed-band key, so the rest-band projector left the infrared out of `phot_rest_fnu` (and absolute magnitudes) on the LUT path: against the exact path, rest irac_36 was -15 % and rest irac_80 -91 % on a Calzetti + dale2014 model at z = 1. The band-response table now carries the unit-luminosity integral at redshift 0, and the component publishes `dust_emission_restband_lnu_precomp` beside the observed key. Test: `tests/regression/bug/test_bug_2559_restband_dust_emission.py`.
+
+- **The SKIRTOR and Fritz torus lookups are node-exact (#2606).** Both torus libraries are tabulated radiative-transfer results, so the lookup at a grid node must return that node. The triweight smoother blended each node with its neighbours and moved the band shares by up to 65 % at a node. `_interpolate_and_normalize` in `skirtor.py` and `fritz.py` now uses the node-exact PCHIP interpolant, and the unused `edges` argument is dropped from the helper. The Fritz off-node band and median residuals recorded in `test_bug_2604_fritz_grid_units.py` are now exactly zero at the two off-node points tested there. The template-photometry lookup in `forward/precompute/templates.py` still uses the triweight kernel, because the shared axis-collapse machinery must match it.
+
 - **A fit whose chains move but never mix now warns (#2112).** A parameter whose within-chain spread is tiny against both the between-chain spread and the posterior width returned with zero divergences and no warning, because the dead-fit guards need all-divergent draws or an exactly constant column. `Posterior` now emits `FrozenMovingChainWarning` and sets `diagnostics["frozen_moving_chains"]`. It warns and never raises.
 - **The shock Halpha fallback reads its declared default (#2297).** The MAPPINGS shock branch of the nebular component fell back to a literal `40.0` for `shock_log_lhalpha` while the parameter is declared as `41.0` in `SHOCK_PARAMS`, so a call that omitted the key used a value the declaration does not own. The fallback now reads the declaration through `declared_default`; the declared value is unchanged. The literal-default guard now covers the nebular tree, with its 121 pre-existing sites baselined in `tools/literal_param_defaults_baseline.txt` so that new ones fail.
 
@@ -35,12 +47,15 @@
 - **The star-formation radio block runs down to 100 um, as pcigale's radio module does.** `_RADIO_WAVE_MIN_AA = 1 mm` zeroed the Bell (2003), Delvecchio+2021 and McCheyne+2022 synchrotron, the Murphy+2011 free-free term and `bell2003_split`'s two power laws shortward of 1 mm; the edge was a radio/IR bookkeeping boundary from the first radio commit, not physics. pcigale evaluates the synchrotron power law on `logspace(5, 11)` nm (>= 100 um), where it is 1.3 % of the CIGALE SED at 1 mm and 0.7 % at 850 um, and the missing flux cancelled a nebular excess in the CIGALE reproduction. One 100 um edge (inclusive) now serves the synchrotron and, by owner ruling, the free-free; the former 1 mm free-free edge made the radio block step by about 7x (`bell2003` with free-free) or 4.6x (split) at 1 mm on a bare SSP, and that step is gone. The overlap gates are unchanged: free-free is off beside a nebular backend that carries it (`cue`, `cloudy`, #2346), starts at the SSP edge on a nebular-included SSP (#2574), and is off for the split where applicable. With free-free on, tengri sits above pcigale's radio module shortward of 1 mm by the thermal share (pcigale has no free-free; q calibrates its non-thermal power law), which the CIGALE reproduction avoids with `freefree=False`. The `ir_window` integrals read `sed_dust_ir`, not the radio block, so the energy-balance `L_ir` and `radio_L_ir_input` are bit-identical and the dust SED is untouched; values longward of 1 mm are unchanged. The quantities that integrate the final SED over 8-1000 um (`l_tir`, `irx`, `SEDQuantities.l_tir`) now include the radio block between 100 and 1000 um, about 1e-5 of the TIR for the synchrotron alone (pinned in the regression test, free-free included). The 1 mm floor pinned by `test_sf_radio_keeps_its_floor` (#1071) is replaced by a 100 um pin: the dust-emission SED holds no synchrotron, so nothing is double-counted. The radio precompute grid gains 171 nodes between 100 um and 1 mm and keeps its original nodes.
 - **Batched photometry matches per-filter integrals for filters with nonzero edge transmission (#2817).** Padding a batch of filter tables to the longest one ramped the last tabulated transmission down to zero over 1 A, so WISE W1/W4 and MIPS 24 disagreed with their own integrals, and the disagreement depended on which other filters shared the batch. Padded nodes now repeat the last tabulated wavelength and transmission, so they add no area and the batch result no longer depends on its neighbours.
 - **Mappings Q_H is carried in the log domain, and the published photon rates and line luminosities are on the right scale (#2853).** (1) The mappings photoionization backend holds Q_H as log10 end to end, so a float32 build no longer raises `QHTableOverflowError` (the linear table holds ~1e47 photons/s per Msun). Float32 log Q_H agrees with float64 within the test bar of 1e-5 dex. (2) `Prediction.q_h_total` for Cloudy and CB19 is restored by the table's 10**~46.9 scale, which had been dropped: a 1e10 Msun delayed-SFH population gave 10**5.9 photons/s where it should give 10**52.8. (3) Mappings `line_lums` are no longer 3.83e33 times too bright: the backend returns [Lsun] as documented and the component converts to [erg/s]. L(H-alpha)/Q_H is 5.3e21 erg on main and 1.38e-12 erg (Case B) here. Tests: `tests/regression/precision/test_qh_absolute_scale.py`, `tests/regression/bug/test_log_q_h_total_zero_weight_gradient.py`.
+- **The pipeline-wiring census probes `xray_E_cut` on a model that has a corona (#2944).** `xray_E_cut` is the AGN corona's cutoff only since the XRB cutoff became the fixed 100 keV of Yang et al. 2020 (Sect. 2.2.2), so the XRB-only census model measured it flat and `test_parameter_reaches_the_physics[xray_E_cut]` failed. The parameter is declared once, on the `xray` group, and still reaches the physics wherever an AGN supplies L_2500. The census now sweeps it on an AGN (`multicolor` disc) plus `yang20` model, and a new test pins that the sweep moves the corona's published X-ray spectrum while the XRB-only model is exactly unchanged. No physics change.
+- **The X-ray terms are back on the rank-1 band-response path (the `test_band_response_is_fast` budget, 500,000 FLOPs).** Two causes, both from the AGN term response of #2936 and neither from #2944. (1) A term that is zero on the whole grid took its reference wavelength at grid node 0, the shortest wavelength, which is 0.0413 A once the X-ray wing is attached; the AGN was then evaluated there on every call (+4.2e6 FLOPs for `yang20`). A zero term is now referenced at a live term's peak, where its amplitude is 0 all the same. (2) `lopez24` reads the AGN `log_L_12um`, which kept the dense AGN evaluation alive (+5.9e6 FLOPs); the term response now carries each AGN term's shape at the 6 and 12 um diagnostic nodes, so the mid-infrared luminosities are the term amplitudes times those build-time shapes. Added FLOPs: `yang20` 4,247,424 -> 29,072, `lopez24` 5,913,860 -> 31,816; photometry agrees with the exact path to 1e-14.
 - **Cached grid loaders no longer leak JAX tracers into later models (#2827).** The RELAGN disc grid, the nthcomp template cache and the MAPPINGS shock loader stored `jnp` arrays inside `functools.cache`, so a first load under `jit` kept a tracer that failed every later model with `UnexpectedTracerError`. The loaders now cache host NumPy arrays and make device copies per call, and a contract test scans `src/tengri` for cached functions that call `jnp` outside the compile-time-eval guard.
 - **The registry route of `psb_flex` / `psb_suess2022` refuses to run without `age_universe_yr`, and the agreement of every public SFH route at age(z) is pinned (#2645).** Since the formed-mass fix (#2694) the component's history, `predict_sfh` (both grids), `predict_sfh_quantities`, the profiling pipeline and `sample_sfh_prior` already end within one grid cell of the age of the universe at the evaluation redshift (z = 0.5 / 2 / 6: 8.59 / 3.28 / 0.93 Gyr); the registry's composed SFH now raises `ValueError` naming `age_universe_yr` instead of falling back to a constant 13.7 Gyr, and a regression file plus two route-enumeration contract tests keep the routes in step.
 - **The young Z = 0.06 node of the PARSEC grids is refused, and a MIST top node is an opt-in (#2822).** `ISOCHRONES/PARSEC/isoc_z0.0600.dat` caps the initial mass at 12.01 Msun for every log age up to 7.15 (the PARSEC massive-star tracks stop at Z = 0.04, Chen et al. 2015), so the top node of `fsps_prsc_*` and `ssp_prsc_*` was ~800-2700x low in Q_H and ~16x low at 1500 A at log age 5.5-6.5 (measured on the loaded grid: Q_H(Z = 0.06) / Q_H(Z = 0.04) = 3.7e-4 at log age 5.5, 4.1e-4 at 6.0 and 1.3e-3 at 6.5; L_1500 ratio 0.059-0.068). `load_ssp_data` / `load_ssp` take `top_z=`: `"clip"` (default) holds the metallicity at the highest complete node (Z = 0.04) for log age <= 7.15 and brings the Z = 0.06 node back with a linear-in-log-age weight over the next 0.05 dex, one grid step (0 at log age 7.15, 1 from 7.20, where FSPS's Z = 0.06 isochrones are lifetime-limited and complete), so the population is continuous in age; every other node, and the top node from log age 7.20, are bit-identical to the file. `"mist"` is the opt-in: a MIST [Z/H] = +0.5 SSP (FSPS's zlegend value Z = Z_sun 10^[Z/H] = 0.0142 x 10^0.5 = 0.0449, Choi et al. 2016), MILES, same IMF and ages, built by `scripts/build_mist_top_z_node.py` with its surviving mass from the same FSPS build, is inserted as a 16th node at that metallicity and becomes the clip target; it has MIST isochrones, so between Z = 0.040 and 0.0449 the young population switches isochrone physics, not only metallicity (MIST / PARSEC-0.04 ratios at log age 6.0 / 6.5 / 7.0: Q_H 0.909 / 1.72 / 0.434, L_1500 0.908 / 0.773 / 0.783) (bare and wNE nodes ship in `src/tengri/data/ssp_top_z/`). `"raw"` keeps the file as shipped. The limit is registry data (`TOP_Z_REGISTRY`, keyed by isochrone code), carried on `SSPData.top_z`. `SEDModel.build` and `Catalog.from_histories` warn (`YoungTopMetallicityWarning`) when a `met_logzsol` prior (its upper bound plus the 3 sigma span of the metallicity-scatter kernel) or `met=` history reaches above the highest complete node, naming the limit, the clip and the `top_z="mist"` spelling. Test: `tests/regression/bug/test_bug_2822_parsec_top_z_young.py`.
 - **The local-path guard checks symlink targets (#2784).** `tools/check_no_local_paths.py` skipped every tracked symlink, so a link whose target was an absolute home path (`/Users/<name>/...` or `/home/<name>/...`) passed, and a broken link was skipped outright. A link's target string is now matched with the same pattern and allowlist, without following the link into its content; broken links are checked too.
 - **Traced wavelength grids and runtime redshifts take the general path (#2847, #2858).** Under `jit`, a traced `wave_obs` no longer uses the single constant-R FFT, which is only correct on a log-uniform grid, so a linear grid is broadened correctly. `velocity_broaden` now routes a traced grid to the piecewise general path instead of raising, matching the eager result to 3e-10 relative on a log grid and 1e-8 on a linear grid. A catalog redshift is runtime in spectroscopy, so a placeholder `Fixed` value no longer overwrites the photometry redshift spec, and a free `sigma_v_kms` or `lsf_scale` missing from `params` raises rather than defaulting to no broadening.
 - **The monolithic and composable GRAHSP paths share one converged own-grid disc integral (#2839).** The monolithic `grahsp` path integrated the SBPL disc on its own 1024-node log-trapezoid grid, 2.8e-6 (relative) away from the dense reference and from the composable disc block. Both now call `bolometric_unit_nm` in `grahsp/publication.py` (the publication-grid Gauss-Legendre integral) through `grahsp/normalization.py`; the Netzer disc is unchanged in value.
+- **The Cue trained-box clamp is NaN-free under non-finite input, and the #2539 gradient check uses a second-order boundary stencil (#2539, #2943).** `clamp_ionspec_straight_through` now sanitizes non-finite components before the straight-through arithmetic and returns a constant bound for them, so a `+/-inf` or NaN shape component carries no NaN tangent into the finite ones (in-range value and gradient are unchanged, bit for bit). The `test_end_to_end_gradient_finite_through_single_component` failure that appeared with #2943 was not a gradient fault: the clamp moved the analytic slope at `neb_fdust_frac = 0` from -0.654 to +0.2328, and the test's two-point forward difference has relative truncation error `h ln(10) g / 2`, which at `h = 1e-4` exceeded `rtol = 1e-4` for `g > 0.217`. The boundary reference is now the three-point forward stencil (O(h^2)); the tolerance is unchanged.
 
 - **The X-ray-binary spectra use their own fixed 100 keV cutoff, not the AGN corona's `xray_E_cut`.** `xray_total_terms` and `xray_total_lopez24_terms` handed the corona's `E_cut` (300 keV by default) to the HMXB and LMXB terms. Yang et al. 2020 (MNRAS 491, 740, Sect. 2.2.2) fix `E_cut` = 100 keV for both populations, citing Zhang 1997 and Motta et al. 2009, and use the free `E_cut` for the corona only. The constant is now `XRB_E_CUT_KEV`; `xray_E_cut` moves the corona and nothing else. In the CIGALE notebook head-to-head the galaxy X-ray spectrum went from 0.9599 to 0.9817 of CIGALE at 1 keV and from 0.9727 to 0.9742 at 5 keV; the remaining 0.9% is CIGALE's band normalization, which sums only the grid points inside 2-10 keV. The HMXB and LMXB amplitudes are Fragos et al. 2013 (ApJL 776, L31) Eqs. 3 and 4, not Lehmer et al. 2016 as the docstrings said; they are corrected.
 - **The LMXB age is weighted by the surviving mass it multiplies, not the formed mass.** The Fragos et al. 2013 (ApJL 776, L31) Eq. 4 relation is `L_X/M_*` against the mass-weighted mean age of the population's current stars. `XRaySEDComponent.emitter_inputs` weighted the age by the formed mass per SSP age bin while the luminosity multiplied the surviving mass, and a comment claimed this matched CIGALE (whose `age_m_star` is in fact surviving-mass weighted). The stellar component now publishes `age_weights_surviving` (per-bin surviving mass, summing to `10**log_mstar`) and the X-ray component weights the age by it, falling back to the formed-mass weights when the SSP has no mass-remaining table. `XRaySEDComponent` and `XRayAirdSEDComponent` read the age through one helper, `lmxb_stellar_age_gyr`, so the two cannot disagree. On a delayed tau = 1 Gyr, 5 Gyr SFH the age goes 3.1755 to 3.1247 Gyr and the LMXB rises by about 2%.
@@ -74,8 +89,13 @@
 
 - **Float32 Cue builds keep the ionizing Q_H table finite (#2849).** With `JAX_ENABLE_X64=0`, `neb={'type': 'cue'}` on a bare-stellar SSP raised `CueWNESSPError` (young log Q_H = inf; 46.92 in float64), and `TENGRI_ALLOW_WNE_CUE` shipped the inf table silently. The ionizing-spectrum fit now integrates the Q_H integrand divided by a power of two (exact in binary floating point), with the exponent taken from the finite ionizing pixels, so a NaN or inf beyond the Lyman edge does not change the scale. Float64 output is bit-identical to the previous release. Float32 log Q_H agrees with float64 to 1.9e-6 dex or better on four SSPs (measured maxima 1.23e-7 for fsps_prsc_miles, 6.9e-8 for bpss, 8.6e-8 for a bare bc03 grid, 1.87e-6 for fsps_mist_c3k_a, a wNE grid). The ionizing-spectrum cache key carries the computation dtype and the cache version is 3, so a float32 build never reads a float64 table or the reverse. The mappings photoionization backend still refuses a float32 build with `QHTableOverflowError`, tracked in #2853.
 
+- **Contract fixtures keep their bands inside the model axis, and the guess allowlist names the free-redshift path (#2620 follow-up).** The coverage refusal of #2620 made `test_fitter_extra_log_prior.py` (all tests) and `test_loss_ssp_threading.py::test_hierarchical_forwards_are_excluded_from_threading` fail on main: their bands at 3500-6200 A ran past the observed-frame axis of the 3000-10000 A toy SSP at z=0.5. Their band centres now sit at 6000, 7000 and 8000 A, and the threading test builds its own inside-axis observation. No model or fitter behaviour changes. Tests: `tests/contract/test_fitter_extra_log_prior.py`, `tests/contract/test_loss_ssp_threading.py`, `tests/contract/test_static_guess_takes_general_path.py`.
+
 ### Changed
 
+- **Spectroscopy and joint fits default to the exact path (#1688).** `approx="auto"` on `Fitter`, `PopulationFitter` and `CatalogFitter` used to resolve a spectroscopy fit to `SpectrumPrecomp`, which samples the model at pixel centers and shifts a high-SNR spectroscopic posterior by about one sigma. The default is now `approx=None` for spectroscopy and joint observations, so those fits run slower and no longer carry that bias. Photometry still defaults to `WavePrecomp`. Pass `approx=SpectrumPrecomp()` explicitly to keep the LUT; the `PrecompBiasWarning` advisory names the bias when it is material. A joint fit cannot keep `WavePrecomp` for its photometry alone, since a joint observation promotes it onto the spectrum LUT too. Breaking for anyone who relied on the default spectroscopy speedup.
+- **The CSP total mass is exactly invariant under the metallicity table (#2675, #2841).** `compute_dsps_met_table_weights` takes its age weights from DSPS's SFH age marginal (`result.age_weights`) times the SFH's formed mass, and neither depends on the metallicity table; the metallicity-marginalized flux uses the per-age metallicity distribution, each column normalized to one. `d(total mass)/d(lgmet_table)` is exactly zero rather than about 1e-11. This is the #2841 formed-mass path; the #2675 call to `compute_dsps_age_weights` is superseded by it in the merge.
+- **Fewer eager forward models at build (#2914).** The #2069 `agn_log_lbol` flat-direction probe evaluates the forward model eagerly at both prior bounds, so every primitive compiles on its own, almost all below the persistent cache's 0.05 s floor. A `with_approx` clone (every `Fitter(..., approx=...)` makes one) now inherits its source's verdict instead of probing again: the clone shares the source's spec, SSP grid, dtype and AGN config and differs only in how the SED is projected, and a fresh build of the same spec still probes. The probe stays eager: traced under `jax.jit`, build-time paths that need concrete values (the stellar `_cic_parcels` boundary split, #2760's below-library index) fail. Two build-time reads that ran an eager forward model only to fetch a fixed value now read it directly: `_snap_to_nebular_catalog` reads the backend catalog through `_published_line_wavelengths_static` (bit-for-bit the published `line_waves`, #2239) and snaps in numpy, and `precompute_nebular_grid` reads `SEDModel._rest_wavelength` (the array `predict_state` puts in `ForwardState.wave`). On the `panchromatic/lut_freez` fixture of `test_float32_fitting_path_seams.py` the probe runs 3 times instead of 5. Tests: `test_with_approx_clone_inherits_the_probe_verdict`, `tests/regression/bug/test_issue_2914_build_reads_no_forward.py`.
 - **The disc behind a library torus is dimmed by the library's normalized line of sight, with the disc anisotropy divided out (#2760).** On the untied path (`agn_norm='independent'`, or `cigale_joint` with `agn_ir_frac = 0`) a SKIRTOR or Fritz (2006) torus obscures the disc and the broad/narrow lines by `T = R_n/eta`, with `R_n = disk_i norm_i / (disk_0 norm_0)` the library's inclination ratio including each record's `norm` and `eta = cos i (1 + 2 cos i)/3` (SKIRTOR) or 1 (Fritz, isotropic disc), evaluated at the actual inclination with node-exact PCHIP: the CIGALE convention, with no Type-1/Type-2 switch (the previous logistic blend is gone). Without `norm` the SKIRTOR `R/eta` was 11 % off unity at a Type-1 inclination and the Fritz ratio exceeded the face-on disc (1.12); with it `R_n/eta` is 1.009 (SKIRTOR tau 7, oa 40, i 40) and 0.999 (Fritz). At i = 30 deg (inside the oa-40 polar cone) `T` is 1.007 at V rather than exactly 1. The old analytic screen `exp(-tau_9.7 k(lambda)/k_V w(i))` was off the library by 0.007x to 2000x. A disc that carries the `2 cos i` law (`multicolor`, `relagn`, `kubota_done`) takes the product `2 cos i R_n/eta` (`6 R_n/(1 + 2 cos i)` for SKIRTOR, `2 cos i R_n` for Fritz) in place of its own law times `T`, so the disc factor is finite and differentiable at i = 90 deg where `eta = 0`; every other disc, the lines and FeII take `T`, with `eta` taken at cos i smoothly floored at cos 85 deg (a numerical choice, within 1e-5 relative of `T` up to i = 80 deg). `norm` is threaded in `SKIRTORDiscAttenGrid`. Below the library's 10 A edge (1.24 keV) the transmission is `exp(-sigma(E) N_H)` with the Morrison & McCammon (1983) photoelectric cross-section (Table 2; the last segment extended above 10 keV), `N_H = 2.21e21 cm^-2 x A_V` (Guver & Ozel 2009) and `A_V = -2.5 log10 T(5500 A)` from the sightline's own `T` (zero when `T >= 1`); it replaces the hold at the library's edge value. For a Type-2 sightline the 2-10 keV transmission is below 1 and above `T(5500 A)`. The tied hot corona (`kubota_done` behind a SKIRTOR or Fritz tie) takes the same sightline, `T` and the X-ray absorption, in place of the analytic screen: at 2, 5 and 9 keV on a 75 deg SKIRTOR sightline it is dimmed by the library column's `exp(-sigma N_H)` and is unchanged face-on. The analytic screen is kept only as the fallback for a torus without a disc column (SKIRTOR v2). Test: `tests/regression/bug/test_bug_2760_torus_screen_is_library_sightline.py`.
 - **Breaking: `neb_fesc_lya` now means the escaping fraction (Lyα × f_esc, default 1).** Stored fits made before this change used the destroyed fraction; convert with f_new = 1 − f_old. The declared default in `components/nebular/component.py` was still `Fixed(0.0)` (Lyα removed) and is now `Fixed(1.0)`, matching the runtime default and the parameter table.
 
@@ -85,6 +105,7 @@
 
 - **`neb_fesc_lya` means the escape fraction (#2607).** `apply_lya_escape` multiplied Lyα by `1 - neb_fesc_lya`, so the parameter named as an escape fraction was a suppression fraction. The code now multiplies Lyα by `neb_fesc_lya`, the declared default is 1 (no extra scaling), and the prior stays [0, 1]. The default output is unchanged. **Fitted values change meaning:** a stored `neb_fesc_lya = v` now means `1 - v` under the old convention, so any result that set or fitted `neb_fesc_lya` must be re-read as `1 - v`. ADR-0014 and the parity table are updated to match.
 
+- **The CLOUDY grid lookup is node-exact PCHIP by default (owner ruling 2026-10-11).** The nebular backend's lookup over (log Z_gas, log age, log U) interpolates log10 luminosity with the node-exact, shape-preserving monotone cubic that the library-template lookups use (`interp_nd_pchip`, #2606), instead of trilinear. `CloudyGridBackend(grid_interp=...)` defaults to `"pchip"`; `"linear"` and `"triweight"` remain explicit opt-ins. Each axis clamps to its grid hull (no extrapolation): the declared logU prior `Uniform(-5, 0)` reaches two node spacings past the `[-4, -1]` hull, a support mismatch that the build-time `GRID_SUPPORT` check narrows or warns on, and the gas-metallicity prior lies inside every hull. The shared PCHIP clamp in `interp_nd_pchip` now uses a `where` in place of `jnp.clip`, so the derivative at a boundary node is the full one-sided slope; `jnp.clip` had halved it there. Fitted CLOUDY values move off the nodes: over 300 random in-hull points of `cloudy_grid_mist.h5`, the median per-point largest change in a line luminosity is 0.36 relative (0.14 dex in log10), and the largest is a line switching on across the luminosity floor (4.7 dex). Node values do not move. Photometry preintegration still uses the triweight collapse of fixed axes.
 - **Four more wavelength conventions are established from primary sources (vacuum-wavelength ruling, 2026-10-11).** (1) The Synthesizer NLR `spectra/wavelength` axis is vacuum: synthesizer-grids writes it from Cloudy's `save last continuum ... units Angstroms`, which Cloudy computes as `RYDLAM / E` (`energy.h`: 'all remaining methods return vacuum wavelengths'); the shipped mesh also shows no air-index curvature (-0.2e-6 against a predicted -7.5e-6 over 4000-5000 A). (2) The qsogen emission-line template above 5100 A is vacuum: the Glikman et al. (2006) composite was reduced with Spextool, whose wavelengths 'are given in vacuum' (Cushing et al. 2004, Sect. 4.2.6), and qsogen applies no conversion. (3) Space-mission SVO filter curves are registered vacuum by facility (`SPACE_FILTER_FACILITIES`, `filter_wavelength_convention`); the ground-based families stay unestablished, with the Doi et al. (2010) +-3 A lamp calibration, the LSST, 2MASS, DES and HSC documentation recorded as checked. (4) Cloudy prints every wavelength longward of 2000 A in air with no upper limit (`t_wavl::sprt_wl`, `p_RefIndex`), so `CLOUDY_LABEL_AIR_MAX_AA` is unbounded and the six Cue labels beyond 100 micron ([N II] 122, [O I] 145, [C II] 157.6, [N II] 205, [C I] 370 and 609 micron) now convert (+2.7e-4 relative), where they were used as vacuum. Tests: `tests/regression/bug/test_bug_vacuum_conventions_final.py`; the pin that left labels beyond 100 micron unconverted is re-pinned.
 
 - **Delvecchio+2021 and McCheyne+2022 are total-radio calibrations; Delvecchio coefficients follow Eq. 5; McCheyne pivot and spectral index follow the joint fit.** Both relations calibrate the total radio luminosity at their own reference frequency, so the synchrotron term is the calibrated total $L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\cdot10^{q})$ minus the Murphy et al. (2011) free-free term at the same frequency, as for `bell2003` (#2590). The Bell $n(L)$ multiplier that these modes applied on top of $q$ is removed (it counted the mass and luminosity trend twice); `apply_suppression` is an opt-in that defaults to `False`.
@@ -98,7 +119,6 @@
 - **GRAHSP blocks declare their native wavelength nodes (#985).** `torus:grahsp_mn12` (the Mor & Netzer 2012 continuum and silicate nodes), `disc:grahsp_netzer` (its disc axis) and `feii:grahsp` / `feii:grahsp_veroncetty` (their FeII nodes) now add those nodes to the master wavelength grid. GRAHSP configurations therefore change numbers. Measured on a synthetic SSP with `agn={'torus': {'type': 'grahsp_mn12'}}` at z = 1, the band photometry changes by 5.7e-7 relative at 5000 Å, 1.3e-6 at 2.5e5 Å and 2.3e-6 at 2e6 Å, and is unchanged at 1500 Å. The FeII and Netzer-disc changes are not measured here.
 
 - **Explicit AGN sub-block keys that no selected block reads now raise (#985).** A key the category owns, written in a sub-block whose selected type does not read it, and which no other selected block reads, raises `ParameterError` and names the block types that do read it. Before, such a key was accepted and silently ignored. The Synthesizer NLR and BLR read `agn_log_mbh` and `agn_log_ledd` (#2634), so `disc: {'log_ledd': ...}` stays accepted when either is selected, including through the deprecated `lines` alias. A spec that relied on an inert key must drop it or select a block that reads it.
-
 
 - **The six wavelength conventions #2778 left open are established from evidence (vacuum-wavelength ruling, 2026-10-07).** Each source is registered in `src/tengri/utils/wavelength_conventions.py` with its convention, its evidence and, where it is not settled, the reason. (1) The Synthesizer AGN NLR grid's `lines/wavelength` holds Cloudy c23.01's *air* labels (H-alpha 6562.80, [O III] 5006.84, Pa-alpha 18751.0; vacuum 6564.61, 5008.24, 18756.1) and is converted once at load, so the NLR lines sit 1.4 to 5.1 A bluer in air than the vacuum lines they now land on. (2) Cloudy air-labels every line above 2000 A including the infrared ones, so the Cue and Synthesizer labels from 1 to 100 micron are converted too (Pa-alpha, [Ne II] 12.8101, [O III] 88.3323 micron; all thirteen checked labels reach the vacuum value to 7e-5 or better, 2.7e-4 unconverted); the Flury+2024 infrared labels are the NIST vacuum values and are left alone, and Cloudy labels beyond 100 micron stay unconverted because no single rule fits them. (3) SVO filter curves stay unconverted and on the open list: no source (the SVO VOTables, the LSST throughputs README, Doi+2010) states the medium of any curve. (4) `qsogen_emline_template.dat` is vacuum below 5100 A (Temple+2021 Sec. 1 and the SDSS DR7 composites it is built from) and stays unconverted; its Glikman+2006 near-infrared part is unestablished. (5) The Dn4000 (Balogh+1999) and D4000 (Bruzual 1983) windows are air (Balogh+1999 Table 1 centres its [O II] window on the air name 3727; Westfall+2019 Table 4 lists both passbands for air); they are stored as published in `tengri.utils.break_windows` and converted at import like the Lick windows, so `Dn4000` integrates 3851.09-3951.12 / 4001.13-4101.16 A and `D4000` 3751.07-3951.12 / 4051.14-4251.20 A, and the catalog, `dn4000` and `compute_dn4000` share one set of windows (a spectrum's Dn4000 moves by the slope of its 4000 A region over 1.1 to 1.2 A). (6) The Flury and 3MdB Hgamma and Mg II labels read as air labels (their integer labels round the air wavelengths); their residuals against the vacuum lines, at most 0.7 A, are the label rounding.
 
@@ -149,6 +169,15 @@
 
 ### Fixed
 
+- **The `kubota_done` corona carries exactly its counted power (#2733).** The hot corona now integrates to `l_hot = f_hard L_Edd` and the disc and warm zones to `L_acc - l_hot`, so the line-of-sight power at cos i = 0.5 equals `L_acc` to 2.6e-6 (was 0.99929). The corona was 3.7 % short because one scale was applied to both zones, the disc rings were a 50-point rectangle sum (2.6 % high), and the warm nthcomp shape integrated to 0.9946. The rings are now a fixed Gauss-Legendre rule in `ln r`, and the warm shape is normalized by its own integral.
+
+- **`kubota_done` is finite and accurate in pure float32, forward and reverse (#2767).** The rest-frame SED was NaN in pure float32, because the outer-disc and warm-zone ring sums formed `Planck prefactor x ring area` (~1e43) and `nthcomp shape x ring power` (~1e47) as float32 products, and its gradient was NaN because the unnormalized ~1e28 spectra met a ~1e34 cotangent. The zone luminosities now carry their scales as log10 exponents and apply each once with `apply_log10_scale`: ring areas relative to the largest ring, the nthcomp template shape in its own unit (`nthcomp_lnu_interp(..., unit=)`, default 1), the corona as a peak-normalized shape plus a log10 amplitude, and the bolometric normalization as a base-10 logsumexp of the ring powers. The reverse pass no longer forms `cotangent x T^4`, `cotangent / h` or `cotangent x 10^log M_BH` ahead of the small factor (`_nt_l0`, `nu_seed_hot`, the self-gravity radius, the Eddington ratio), and the Page-Thorne `R_t` no longer divides by the near-zero root `y_2 ~ 2a/3` at low spin (`R_t` is unchanged to rounding). Float64 results move by rounding only, except `kubota_done`, whose float64 SED moves through #2733 (the corona now carries its counted power, see that entry): on the seam fixture (`agn_log_mbh` 6/8/10, `log_total_mass` 10) the branch's commits before #2733 move the float64 `rest_sed_sum` by at most 3e-14 relative, and the #2733 commits move it by +1.17e-5 / +1.02e-4 / -3.89e-3. The `kubota_done` expected-failure cell of `test_float32_grad_sed_path.py` is removed.
+
+- **The ADAF helpers no longer force float64 casts (#2783).** `theta` in the `g(theta_e)`, amplification, `F(theta_e)` and `x_M` helpers and the Bessel input follow the input dtype, so the solve runs in the caller's precision; float64 results are unchanged.
+
+- **Exponential ceilings are representable in float32 (#2767, partial).** The disc's Wien-tail and Comptonization clips bound `exp` with `representable_exponent(500.0, base=math.e)` (identity in float64). The hot-corona shape is formed in log space, shifted by its grid peak before exponentiating, so no exponential of an unscaled value enters the reverse pass. `d/d(agn_log_mbh)` of the `kubota_done` SED is still non-finite in pure float32 (the cotangent overflows inside the L_sun-scaled chain through `nt_h`); #2767 stays open.
+
+- **A dtype-free `jnp.asarray` on a module-level numpy constant no longer poisons the next x64 state (#2774).** The cosmology Gauss-Legendre nodes and weights, the non-thermal emissivity quadrature, the EUV band of the multicolor tail and the BLR line strengths go through `device_table`, which passes the canonical dtype explicitly. `tools/check_jnp_asarray_module_constants.py` (wired in CI) rejects a new dtype-free site.
 - The SKIRTOR polar absorbed fraction is the exact integral, not a 136-node trapezoid. `R` and `R_faceon` integrate the polar reference and the reddened disc and the dust with the log-log integral of the same interpolant the templates are resampled with, so they match a converged 40000-node integral to 1.9e-8 (the trapezoid was 6e-5 off). The polar `l_ext` share moves by that amount (#2322).
 - GRAHSP publishes `L_agn_bol`, `L_agn_torus` and `L_agn_absorbed` from the fixed budget grid instead of a trapezoid over the caller's wavelength array. On a 60-point against a 6000-point caller grid the BBB value had moved by 14 % (#2745).
 - The SKIRTOR torus is renormalized with the log-log integral of the template interpolant rather than a trapezoid over the native nodes, so the resampled torus carries its full normalized power at every inclination (0.37-0.59 % was lost before; the loss depended on inclination) (#2319).
@@ -160,7 +189,6 @@
 - CLOUDY grids converted from FSPS record the isochrone's solar metallicity. `scripts/convert_fsps_cloudy_grid.py` writes the root attribute `zsun` (MIST 0.0142, PARSEC 0.01524, Padova 0.019, BPASS and others 0.020) and describes the `log_met` axes as log10(Z / Z_sun). `load_cloudy_grid` converts the axis with that value; a file without the attribute is read with the MIST value and warns once, naming the file. Grid files already shipped are unchanged and keep the MIST conversion (#2633).
 
 - The reproduction band average (`reproduction/_validation.py::band_average`, and through it `filter_rows`, `filter_rows_native` and `convention_sensitivity`) integrates on the spectrum's own nodes with the filter interpolated onto them, zero outside its support, instead of sampling the spectrum at the filter's coarse nodes. Emission lines now contribute their flux rather than aliasing against the filter's 25 Angstrom spacing: a 1 Angstrom line between two SDSS nodes was missed entirely. `integrate="filter"` remains as an explicit opt-in that reproduces the old numbers. Band tables in the reproduction notebooks and `validate_matched_physics.py` scripts move where they carry emission lines (#2680).
-
 - **The ADAF spectrum shape agrees between float32 and float64 over the declared box (#2783); a zero `agn_lum_ratio` now gives an exact zero spectrum with the exact derivative with respect to the ratio (the ratio enters linearly).** The float32 synchrotron self-absorption solve `_adaf_x_m` formed its bracket `2.49e-10 4 pi n_e R / (B theta^3 K_2)` as one linear ratio, ~4e39 at the electron-temperature floor where the clipped accretion rate lands (`alpha = 0.5`), which overflows float32 (max 3.4e38). The Newton solve then stuck at its upper bound and returned x_M = 1e6 against the float64 9.07e4, so the shape differed by up to 0.997 relative at 18 of the 72 box corners (`alpha = 0.5`, and `log M_BH = 10` with `beta = 0.1`). The bracket, the peak luminosity and the normalization (quadrature and integral) are now formed as sums of logs. Float64 changes by at most 3.6e-14 relative on the 72 box points, and the float32 shape agrees with float64 to 2.8e-5 relative at worst (tolerance 1e-4 pointwise; see `tests/physics/agn/test_adaf_float32_shape.py`). The Eq. 43 square root and the normalization are also made differentiable at their zero floors: the gradient is finite at the box corners in both precisions, where it was NaN in float64 at two corners and in float32 at one.
 - **Published AGN `L_*` diagnostics are integrals of the SED the component emits, never of the caller's wavelength grid (#2745).** Each published bolometric luminosity is now the exact integral of the emitted SED: closed form on the template's own native nodes for the tabulated torus classes (`Silva04Torus`, `CAT3DTorus`, `SKIRTORAgnfitterTorus`, `L_agn_torus`) and for `SKIRTORTorus`'s disc and dust, and a trapezoid in ln(nu) on a fixed grid for the analytic disc classes (`KD18Disc`, `PowerLawDisc`, `L_agn_disc`). The point diagnostics `L_2500_30deg`, `L_6um` and `L_12um` of `SKIRTORTorus`, and `log_L_6um` and `log_L_12um` of the composable `AGNSEDComponent`, are the emitted value at exactly that wavelength, from a second evaluation of the chain there, not an interpolation of the caller's grid.
   - **KD18 `L_agn_disc`** is the angle-integrated emitted power (the outer disc and warm Comptonization at their two-face spectrum, plus the isotropic corona), integrated on a fixed grid from 1e-3 A to 1e10 A, so it is independent of `agn_cos_inc` and of the caller's grid, and follows the `agn_log_lbol` ruling (accretion power times `lum_ratio`, less the cut corona tail: 3.825e43 erg/s at `log_lbol = 10`, 0.99927 of the 3.828e43 erg/s that `log_lbol` implies). The line-of-sight isotropic-equivalent luminosity, the integral of the inclination-projected emitted SED, is the new published key `L_agn_disc_los`. Old `L_agn_disc` (on a 10 A to 1e7 A grid, which omitted the corona below 10 A) to new `L_agn_disc` and `L_agn_disc_los` [erg/s]: cos_inc 0.1: 1.090e43 to 3.825e43 and 2.786e43; 0.5: 2.128e43 to 3.825e43 and 3.825e43; 0.866 (default): 3.078e43 to 3.825e43 and 4.776e43; 0.95: 3.296e43 to 3.825e43 and 4.994e43.
@@ -1603,7 +1631,6 @@
   flag spelling; a no-op if `XLA_FLAGS` already requests a host device count.
   See `docs/dev/inference_methods.md` and the JAX section of `CLAUDE.md`.
 
-
 - `Fitter`/`ForwardModel.fit(..., profile_mass=...)` analytically marginalizes
 
 - The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
@@ -1624,7 +1651,6 @@
   ``mix_dig_emission``, sharing its DIG mixing core. It calls
   ``predict_nebular_line_luminosities`` (instead of ``predict_nebular_sed``),
   keeps the HII call's ``line_waves``, and mixes only the luminosities (#2221).
-
 
 - `met_logzsol_scatter` (the lognormal MDF width, in dex) now declares a
   `free_prior` of `Uniform(0.02, 0.4)`, so `met={'all_params': FREE}` (delta
@@ -1680,7 +1706,6 @@
 
 - `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
 
-
 - `tools/check_gradient_assertions.py`, wired into the `lint` job — a guard on
   the "undecided treated as good" assertion class. A gradient has three states,
   not two, and a predicate written against the *bad* state is satisfied for free
@@ -1710,7 +1735,6 @@
   assertions verbatim and `tests/contract/test_gradient_assertion_guard.py`
   pins that the guard fires on each (#2100, #2178).
 
-
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
   SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
   `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
@@ -1723,7 +1747,6 @@
   `docs/dev/api_migration_v0.x.md` for the full migration note, including the
   one shipped recipe (`quiescent_z0`) whose free-parameter count changes.
 
-
 - `bench/scripts/probe_block_metric_structure.py` — scores a candidate
   mass-matrix structure against the analytic metric without running a sampler.
   For a layout it forms the structured inverse mass matrix, whitens with it, and
@@ -1735,7 +1758,6 @@
   are dominated by a rank-`k` correction to a diagonal on every fixture and every
   storage budget tested, so the feature was declined rather than built. Numbers
   and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
-
 
 - `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
   themselves rather than sampling a representative model. A scale seam is a site
@@ -1756,7 +1778,6 @@
   `check_float32_representable_constants.py`, which is where the checks that
   need tengri installed live — `lint` installs only ruff.
 
-
 - `tests/regression/precision/test_float32_scale_seam_sweep.py` — sweeps each
   enumerated seam family across its parameter's whole declared prior in float32
   and requires the gradient to be finite **and** non-zero at every point (`nan
@@ -1769,7 +1790,6 @@
   prior, and the float32 forward of a `kubota_done` disc is `nan` there under
   jaxlib 0.11.1 while finite under 0.11.0.
 
-
 - **New AGN template-library blocks**, vendored at native grid resolution from AGNfitter-rX: `kd18_agnfitter` / `kd18_agnfitter_warmindex` (two distinct grids — KD18's warm-Comptonization spectral index is not interchangeable with a fixed value, up to 27% off at any single `warmIndex`), `nenkova_agnfitter_2p` / `nenkova_agnfitter_3p`, `skirtor_agnfitter_1p` / `skirtor_agnfitter_2p`, and `cat3d_wind_lowfwd`. Each ships crossval tests against the vendored AGNfitter-rX reference and a `GRID_EXTENT_SOURCES` entry so its declared prior bounds are guarded against the vendored grid's own axis extent.
 
 - **Per-component AGN SED publishing**: `state.derived["sed_agn_disc"]`, `["sed_agn_torus"]`, `["sed_agn_lines"]` (NLR + BLR + Fe II combined), and `["sed_agn_polar"]` alongside the existing combined `["sed_agn"]`, so a caller can inspect or plot the disc/torus/line/polar-dust contributions separately instead of only their sum.
@@ -1779,7 +1799,6 @@
 - `tools/check_repro_render_fresh.py`: every reproduction-notebook render `scripts/render_reproduction_notebook.py` produces now carries a `metadata["tengri_render"]` stamp (`source_sha256`, `executed_at`, `tengri_version`) recording the exact source state it was rendered from; the guard recomputes the source hash and fails if a committed render's stamp disagrees with the `.py` sitting beside it today (`--strict` additionally requires every notebook to carry a stamp).
 
 - Three public-API gaps closed, surfaced by the reproduction notebook needing workarounds for each: `tengri.declining_exponential` (the FSPS/bagpipes "tau" SFH shape, registered type `"tau"`) now resolves at the top level like its siblings `exponential`/`delayed_exponential` (it was already reachable via `tengri.sfh.declining_exponential`, just not flat-imported); `tengri.agn.priors.agnfitter_priors`'s Notes and `AGNFITTER_PRIOR_DEFAULTS` are now documented in `docs/api/models.rst` (the function itself already worked, only its docs entry and the defaults constant's were missing); `FilterCurve` is promoted from importable-but-undemoted to `tengri.__all__` and `docs/api/core.rst`, alongside `FilterConvention`.
-
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
@@ -1820,7 +1839,6 @@
   and `step_size_gain` now defaults to `0.0`, matching the reference page.
   Measured in `bench/reports/2026-08-31_smc_evaluation.md`.
 
-
 - `tengri.utils.scale.loss_scaled_grad` — `jax.grad` with the cotangent chain
   lifted into float32's normal range (multiply the scalar by `2**100`, divide
   the gradient back; exact for a power of two, so float64 gradients are
@@ -1838,7 +1856,6 @@
   `grad(neg_log_posterior_fn)` tracks float64 to ≤5.3e-04 in pure float32 on
   every measured seam. The underlying seam is unchanged and still needs
   #1388's scaled-SED contract (#1415).
-
 
 - `DeadFitError`: NUTS, HMC and dynamic HMC keep the per-step divergence
   flags of their own warmup and refuse to sample when the final 10% of
@@ -1860,7 +1877,6 @@
 
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
-
 ### Fixed
 
 - `agn_grahsp_a_bc` parameter description now correctly names the 5100 Å (510 nm)
@@ -1875,7 +1891,6 @@
   was silently accepted, reporting success while having zero effect. It now
   raises with a message that explains the mechanism and suggests declaring it
   in the spec. (#2193).
-
 
 ### Changed
 
@@ -2065,7 +2080,6 @@
   overridable; its draw budget lives in `defaults.toml`
   `[inference.mcmc_nuts_fast]`.
 
-
 - **NUTS/HMC/dynamic-HMC `dense_mass_matrix=None` auto-policy is dense at
   D <= 12, not D < 8** (behavioral change, #319 revision). The D < 8 cliff
   generalized a `mean_sfh_type="dense_basis"` finding (22.78 GB warmup peak
@@ -2083,7 +2097,6 @@
   overrides are unchanged. A fit at D=8-12 that pinned a diagonal-metric
   posterior mean or wall-time to a tight tolerance may need updating; pass
   `dense_mass_matrix=False` to keep the previous diagonal behavior exactly.
-
 
 - **MAP defaults to L-BFGS, not Adam** (behavioral change). `run_map`'s
   `optimizer=` default is now `"lbfgs"` (alias `"lbfgs_scipy"`), and every
@@ -2116,7 +2129,6 @@
   `builders.dust.emission.relaxed_energy_balance(sigma=)` takes the linear
   sigma.
 
-
 - `import tengri` raises the default matmul precision to `"highest"` at
   import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
   set or the live config already holds a value; `tengri.utils.devices.setup_jax`
@@ -2129,7 +2141,6 @@
   exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
   explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
 
-
 - Cue's default line catalog is now the full ~138-line set instead of the
   128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
   `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
@@ -2138,7 +2149,6 @@
   `predict_photometry`, `rest_sed` and every other headline line are
   bit-identical either way: only the discrete line catalog and `civ_1549`
   change (#2239).
-
 
 - The shock SED's default dust screen flips from the unconditional
   birth-cloud form (`tau_bc·k_bc + tau_diff·k_diff`) to diffuse-only
@@ -2166,14 +2176,11 @@
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
 
-
 - The four inference-side hand-written cache keys are now policy-derived too (#2163 E.5): `Fitter._engine_cache_key()` and `_data_fingerprint()` share a pair of complementary ledgers (`tengri.inference._engine_policy.ENGINE_POLICY`/`FINGERPRINT_POLICY`) over every `Fitter` attribute — engine `shape` rows are exactly the fingerprint's `content` rows — instead of two independently hand-maintained field lists that had never been checked against each other or against the live attribute set; the engine key gains a `_user_likelihood` row a custom Likelihood previously had no representation in at all, and `_line_flux_override`'s row is now the strictly more complete `LineFluxData.cache_key()` (per-line upper/lower-limit flags, not merely "any limit mask present"). Every MCMC backend's adaptation cache (`nuts`/`hmc`/`dynamic_hmc`/`chees`/`ghmc`/`mclmc`/`adjusted_mclmc`/`first_order`) now builds its tuning tuple through one `adaptation_method_key()` helper that binds the runner's own signature and drops a written exclusion ledger (`_ADAPT_IRRELEVANT`: `context`, `key`, `init_from`, `n_burnin`, `n_samples`, `n_chains`, `chain_method`, `verbose`), instead of a hand-picked tuple every backend maintained separately. `PreconditionedProblem.cache_key` is now a small policy ledger (`strength` content, everything else excluded — the wrapped closure and the per-galaxy starting position cannot be keyed without either aliasing two different whitening bases together or defeating cross-galaxy adaptation sharing) rather than a hand-picked `("whiten", strength)` tuple.
 
 - `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
 
-
 - The on-disk WavePrecomp z-table and IGM subband caches are keyed by every field of a frozen request dataclass (`ZTableRequest`, `SubbandRequest`) instead of a hand-written field list, with one version constant per cache (both bumped, so existing tables recompute once) and the cosmology the integrand uses folded in as the #2145 tripwire; the ionizing-spectrum table gains a version constant (#2163).
-
 
 - `SEDModel.from_config`'s dust parameter docstring stated a MODEL name
   (`"charlot_fall"`) and LAW names (`"calzetti"`, `"kl04"`, …) as though they
@@ -2253,7 +2260,6 @@
     the `qsogen_smc` block's own E(B-V) -- and not `agn_attenuation_ebv`. Each
     name keeps its own prefix-stripped short spelling; write
     `'attenuation_ebv'` for the attenuation-stage screen.
-
 
 - **`agn['type']` is validated at build time.** It was forwarded to
   `agn_model` unchecked and the first `predict_photometry` raised `Unknown AGN
@@ -2366,7 +2372,6 @@
   translators calls it immediately after reading its raw `type` value, before
   any type-menu validation.
 
-
 ### Fixed
 
 - The nebular continuum (Cue, CloudyGrid) no longer stops at its 1 cm table
@@ -2399,9 +2404,7 @@
   opposite directions, and the one-line summary contradicted the function's
   own docstring.
 
-
 ### Deprecated
-
 
 - Attenuation-law keyword `n_slope` is renamed `dust_slope` on `power_law` and
   `conroy2010`, so the law keyword equals the registry name (`dust_slope`) and the
@@ -2410,13 +2413,11 @@
   law-kwarg resolver and the per-screen override dicts (`dust_law_overrides`,
   `bc_law_overrides`, `neb_law_overrides`) use `dust_slope` only.
 
-
 - `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
   renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
   `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
   disagreeing values raises `ValueError`. `dust=` will be removed in a later
   release (#2021).
-
 
 ### Removed
 
@@ -2424,7 +2425,6 @@
   (`nebular_grid_precompute._refuse_active_dig_mixing`). Building the per-Q_H
   nebular grid with an active `neb_dig_frac` no longer raises: the grid now
   reconstructs DIG mixing via two lookups instead (see `### Added`, #2222).
-
 
 - The `stellar` build group (#1720). Metallicity is now configured through
   `met`, parallel to `sfh`: `stellar={'met_mode': 'table'}` becomes
@@ -2490,7 +2490,6 @@
   explicit-law rule.
 
 - **`z_interp` removed (closes #2811).** The option had no effect: it was stored and hashed into the compile signature but never read, since the free-z z-table read is always the local PCHIP (monotone cubic Hermite) read (#2749). `Parameters(z_interp=...)` now raises `ValueError`. Physics and numbers are unchanged.
-
 
 ### Changed
 
@@ -2836,7 +2835,6 @@
   aliases stay lazy (no eager submodule imports at ``import tengri``)
   (#2256).
 
-
 - Four AGN sites integrated over the descending frequency grid by reversing
   both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
   ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s
@@ -2865,7 +2863,6 @@
   and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
   in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
 
-
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
   types' own ``grid`` keys already did, and the path now round-trips through
@@ -2877,7 +2874,6 @@
   silently accepted and dropped; the three cb19 refusal messages now name
   the key (#2220).
 
-
 - `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
   `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
   handful of emission lines this is ever called with) hit "GEMM is not
@@ -2887,7 +2883,6 @@
   never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
   it replaced (rtol 1e-12) (#2023).
 
-
 - A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
   returning a silent NaN when the currently selected nebular catalog carries
   no entry within tolerance of its target wavelength; the warning names the
@@ -2895,7 +2890,6 @@
   Angstrom, and the remedy (`neb={'type': 'cue', 'full_catalog': True}` when
   the backend is cue and on the legacy subset). Generalizes across every
   line-catalog backend (#2239).
-
 
 - The #2239 warning seam's static catalog accessor
   (`_published_line_wavelengths_static`) now applies tengri's vacuum-wavelength
@@ -2908,7 +2902,6 @@
   warning or a missed one for lines not already covered by the #2239
   regression test. `predict_photometry`, `rest_sed` and every already-tested
   headline line are unaffected (#2239).
-
 
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
@@ -2931,7 +2924,6 @@
   tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
   identical wavelength.
 
-
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
   ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
@@ -2939,7 +2931,6 @@
   the alias with a DeprecationWarning instead of raising TypeError. Per-dict
   strictness is unchanged: ``select_law_kwargs`` and ``reject_unread_law_kwargs``
   still reject ``n_slope`` (only the callable wrapper accepts it) (#2257).
-
 
 - The audit that came with `tools/check_gradient_assertions.py`: **279 test
   sites** across 140 files asserted half the finite-AND-non-zero rule and now
@@ -2958,7 +2949,6 @@
   zero is the correct answer there and only the finite half is a claim — and
   where the surrounding test's real claim was that a gradient *flows*, that
   claim is now stated a step away from the zero, where it can actually fail.
-
 
 - Two further tests turned out to be measuring nothing, both found by the
   non-zero half of the rule and neither a gradient defect in `src/`:
@@ -2992,7 +2982,6 @@
   repairs a predicate that runs and admits the undecided state. Complementary,
   not duplicative.
 
-
 - `test_met_table_grad_wrt_lgmet` was **vacuous**, and the guard found it. It
   differentiated the total CSP mass with respect to `lgmet_table` and asserted
   only `isfinite`. The metallicity table chooses which SSP template each age bin
@@ -3006,7 +2995,6 @@
   (measured `max|grad| = 25.7`, all 20 entries non-zero), so the test measures a
   gradient rather than a conservation law twice.
 
-
 - `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
   and the guard found it. It differentiated `cmb_contrast_factor` at
   `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is
@@ -3016,7 +3004,6 @@
   `grad = 2.6` at `T_eff = 50 K` on the same grid. The sub-CMB point is now
   pinned *as* zero (which is the correct physics) and a live point above the
   floor is pinned finite AND non-zero, so the test measures a gradient again.
-
 
 - The flat `Parameters(...)` form refuses a dust shape parameter or a
   `dust_law_overrides` entry that the resolved attenuation law never reads, and
@@ -3036,9 +3023,7 @@
   `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
   `src/`, `tests/`, `bench/`, `examples/` and `analysis/`. Test, bench and analysis call sites that pinned `dust_slope` beside a law that never reads it drop the dead kwarg (`power_law` keeps its registry default of -0.7), and one engine-cache test that varied `dust_Rv` now does so under `cardelli`.
 
-
 - LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
-
 
 - The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
   used when `dust_model` is `off`/`wg00` and by the #950
@@ -3054,7 +3039,6 @@
   live forward pass calls for its continuum, so there is exactly one
   implementation of the two-component line screen. `attenuate_emission` is
   removed; it had no public callers left (#2223).
-
 
 - A flat `Parameters(...)` spec that freed or pinned a dust attenuation shape
   parameter (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) had
@@ -3076,7 +3060,6 @@
   change 0.00% -> 17.04%, matching the equivalent `parse_groups` build to
   `rtol=1e-10` (#2231).
 
-
 - `SEDModel.compile_signature()` did not key on which dust attenuation shape
   parameters (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) a
   build resolved "live", so two structurally-identical models that disagreed
@@ -3094,7 +3077,6 @@
   `params` dict previously reported identical `galex_nuv` photometry
   (0.00% difference, the not-live kernel silently reused); with the fix the
   two differ by 12.06% (#2231).
-
 
 - The `optimization_barrier` that PR #2194 put on `_mass_scale_lnu`'s primal
   costs neither memory nor time, measured rather than assumed. On the
@@ -3117,7 +3099,6 @@
   reproduce the defect at all, so it cannot adjudicate that note either way
   (#2178, #2194).
 
-
 - **Symptom 2 of #2178 was the same defect, not a second one.** The float64
   spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
   run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
@@ -3131,7 +3112,6 @@
   seam, so it is deleted rather than widened, and
   `tests/regression/precision/test_float32_fitting_path_seams.py` runs
   41 passed / 0 skipped / 6 xfailed on jaxlib 0.11.1 (#2178, #2143).
-
 
 - `narayanan_prior(z)` and `narayanan_tau_prior(z, log_mstar)` centered
   unbounded `Gaussian` priors on `dust_bump_strength` and `dust_tau_diff`,
@@ -3156,7 +3136,6 @@
   could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
   (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
 
-
 - `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
   had two consequences. The #1999 post-adaptation stability probe had nowhere to
   run, leaving the one dense-capable metric path reachable above the D=30 cap
@@ -3170,7 +3149,6 @@
   Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
   bit-identical adapted step size, so this is insurance rather than repair
   (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
-
 
 - The dense mass-matrix cap is one seam, and crossing it is no longer silent.
   `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
@@ -3189,7 +3167,6 @@
   setting is not a verbosity question. Nothing about which metric is *chosen*
   changes — every existing fit gets the same mass matrix it got before.
 
-
 - Flat `Parameters(dust_model="single_component", dust_law_diff=...)` silently
   discarded `dust_law_diff` and built `power_law` on the one attenuation
   screen; a disagreeing `(dust_law_bc, dust_law_diff)` pair silently kept
@@ -3201,7 +3178,6 @@
   `single_component`) still builds. `two_component`/`wg00`/`off` inheritance
   (#1989) is unchanged in both directions (#2224).
 
-
 - `SEDModel.from_config(dust=...)` named only the birth-cloud screen
   (`spec_kwargs["dust_law_bc"] = dust`); the diffuse-ISM screen's law was
   filled in only because the model happens to stay `dust_model="two_component"`
@@ -3212,7 +3188,6 @@
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
-
 - **`download_ssp` and `download_template` no longer print an absolute path.**
   `SSP file already exists at {filepath}; skipping download.` and its three
   siblings interpolated the full path, and a rendered notebook captures those
@@ -3222,7 +3197,6 @@
   on every re-render. Every such message now goes through one helper,
   `_display_path`, which shows the path relative to the working directory when
   the file is under it and the file's name alone otherwise. Never absolute.
-
 
 - **The composable AGN precompute's default wavelength grid is derived from
   the blocks it is about to evaluate, instead of a hard-coded
@@ -3242,7 +3216,6 @@
   grid's share to 1e-6. A `wave_rest` the caller passes is checked by the
   guard itself and raises the same `ConfigError`.
 
-
 - **`agn_radius_ratio` now reaches the `cigale_joint` disc tie, which used the
   SKIRTOR grid's R = 20 node whatever the model asked for.** The torus block
   always honored the value; `compose_l_nu` forwarded `agn_tau_skirtor`,
@@ -3257,7 +3230,6 @@
   that pinned or freed `agn_radius_ratio` away from 20 got a polar reference
   off by up to that much at edge-on sightlines. The fiducial is R = 20, so no
   shipped number moves.
-
 
 - **`grad` of an AGN prediction is finite at `agn_polar_ebv = 0`, the registry
   default.** The AGN dust-budget split shares one budget between the torus and
@@ -3280,7 +3252,6 @@
   by `jnp.maximum(integral, 1e-30)`, so a disc fainter than that floor came
   back scaled by `integral / 1e-30` rather than to unit area — measured
   9.9e-06 instead of 1.0.
-
 
 - **A model wavelength grid that truncates the polar dust's absorbed-power
   reference is now refused at build time instead of shifting the torus/polar
@@ -3322,7 +3293,6 @@
   91 Å – 1e8 Å SSP grid to 10 Å – 1e8 Å — so the refusal is a ratchet on that
   union rather than something callers will meet, and its message says so.
 
-
 - **`agn={'norm': 'independent'}` and `agn={'norm': 'conserving'}` beside an
   active `agn_ir_frac` now raise `ConfigError` at build time instead of
   silently producing an AGN whose disc/torus ratio reports the stellar mass.**
@@ -3362,7 +3332,6 @@
   `agn_ir_frac=0.0` (which then lets `'independent'` put the disc on
   `agn_log_lbol`) and to state that switching policy while keeping fracAGN
   active is refused separately.
-
 
 - **The CIGALE-lineage SKIRTOR grid's stored inclination normalization is now
   read and applied, so every `agn_norm='cigale_joint'` + `torus='skirtor'`
@@ -3409,7 +3378,6 @@
   transmission, all pinned bit-identical across this change.
   `tests/components/agn/test_skirtor_lineage_separation.py` holds the
   separation.
-
 
 - The composable-AGN polar-dust attenuation block no longer disagrees with
   CIGALE's `skirtor2016` module on how the torus and polar re-emission share
@@ -3503,7 +3471,6 @@
   `examples/agn/plot_polar_dust_ebv_type12_sweep.py` and its committed
   `docs/auto_examples/agn/` outputs.
 
-
 - Rule 4 of the composable-AGN recipe validator no longer names
   `nlr={'type': 'analytic'}` as disc-anchored. `nlr_analytic_block` is
   illuminated by the intrinsic bolometric `10**agn_log_lbol` and its body opens
@@ -3519,7 +3486,6 @@
   `torus='grahsp'` 0 -> 2.493180e+34). Rule 4's negative control was probing
   with `analytic`, which the fix makes un-fireable, so it would have passed
   vacuously; it now probes `nlr='grahsp'`, measured disc-anchored.
-
 
 - The #1970 refusal (Dale+2014's embedded star-forming radio synchrotron
   double-counted against an SF radio block) now measures the selected template
@@ -3575,7 +3541,6 @@
   now returns a named `GridRedEnd` carrying the key and unit alongside the
   edge and index.
 
-
 - A user-provided `agn_log_lbol` is no longer accepted and discarded when the
   CIGALE fracAGN coupling owns the AGN power. #2069 already refused a **free**
   `agn_log_lbol` under `agn_norm='cigale_joint'` with a SKIRTOR torus and an
@@ -3594,7 +3559,6 @@
   The refusal's advice also no longer reads "Fix agn_log_lbol (any value; it
   cancels)", which this same guard now refuses -- advice a guard refuses is the
   #1364 defect.
-
 
 - A Dale+2014 template grid must now **declare** the convention its rows are
   stored in, and `load_dale2014_lnu_grid` refuses a grid it cannot type instead
@@ -3624,7 +3588,6 @@
   names the array entry to add, because both scripts write HDF5 and could
   never produce that file -- advice a user cannot follow is the #1364 defect.
 
-
 - The composable AGN `validate_block_recipe` "no disc, active downstream"
   advisory (Rule 3) named every active `nlr`/`blr`/`feii`/`torus` block when
   `agn_disc_block='none'`, but only a block that actually reads
@@ -3638,7 +3601,6 @@
   threaded from `Parameters` into `validate_block_recipe` so the check can
   become policy-aware if a future norm policy changes anchoring; measured at
   this HEAD, none does.
-
 
 - `_mass_scale_lnu`'s forward product went `nan` in float32 on the
   `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
@@ -3660,7 +3622,6 @@
   #2100's hole, where `isfinite` admitted zero. This closes the float32
   symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
-
 
 - `compute_l_dust_absorbed` (`tengri.utils.sed_quantities`) integrated the
   whole wavelength grid, while `bolometric_absorbed_log10`
@@ -3725,7 +3686,6 @@
   defect at the same call site (wrong by -0.034x with an O(1) cotangent, and
   cured by `agn_f_hard=0`, so it is the hot-corona zone) and stays open
   (#1439, #1388).
-
 
 - The construction-time dead-fit guard (`DeadFitWarning`) and
   `convergence_check` compared the divergence count, which is summed over
