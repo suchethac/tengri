@@ -801,7 +801,8 @@ class SpectrumPrecomp:
     free ``sigma_v_kms``, an explicit ``SpectrumPrecomp()`` stays on the lookup
     table and warns once about the cost, and a joint observation's photometry
     ``WavePrecomp()`` is not promoted onto the spectrum channel, which stays exact
-    and says so once (``approx="auto"`` keeps spectroscopy exact regardless).
+    and says so once; ``approx="auto"`` selects the table only where it serves the
+    pixels exactly (:meth:`_spectrum_lut_serves_exactly`).
 
     Parameters
     ----------
