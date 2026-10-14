@@ -519,7 +519,8 @@ class Catalog:
             ``_CatalogFitterOriginal.run``
             itself, which is how ``fallback="mcmc_chees"`` -- the experimental,
             opt-in second sampler for galaxies the first one froze on -- is
-            spelled from here.
+            spelled from here. A name the chosen method does not accept raises
+            ``TypeError`` that names the method and lists the accepted names (#1469).
 
         Returns
         -------
@@ -530,6 +531,8 @@ class Catalog:
         ------
         ValueError
             If no table was provided at construction (use `.predict()` instead).
+        TypeError
+            If ``**kwargs`` carries a name the chosen method does not accept.
         """
         if self._catalog_arrays is None:
             raise ValueError("No table provided at construction; use .predict() instead.")

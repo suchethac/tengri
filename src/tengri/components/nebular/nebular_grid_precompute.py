@@ -1584,11 +1584,12 @@ def precompute_nebular_grid(
     split_fields = {}
     if split_all is not None:
         cont_all, sed_wave_all, sed_log_all = split_all
-        state0 = model.predict_state(_params_at(points[0]), fixed_values={})
         request = nebular_z_request(model) if redshift_range == "auto" else redshift_range
         split_fields = _split_band_fields(
             params0=_params_at(points[0]),
-            wave=state0.wave,
+            # ``predict_state`` puts exactly this array in ``ForwardState.wave`` and
+            # no component rewrites it: read it, not a whole eager forward (#2914).
+            wave=model._rest_wavelength,
             cont_nodes=cont_all,
             sed_line_waves=sed_wave_all[0],
             log_sed_lines=sed_log_all,

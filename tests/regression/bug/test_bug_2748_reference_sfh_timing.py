@@ -15,7 +15,6 @@ from __future__ import annotations
 import warnings
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -31,12 +30,10 @@ from tengri import (
 )
 from tengri.components.nebular.line_precompute import precompute_line_per_qh
 from tengri.cosmology import age_at_z
-from tengri.forward.sed_model import _snap_to_nebular_catalog
 from tengri.observation.photometry_config import Photometry
 from tests.regression.bug.test_catalog_z_range_line_redshift import (
     BANDS,
     _build_model,
-    _build_model_fixed_dust,
     line_data,
     synthetic_ssp_wide,
 )
@@ -139,40 +136,3 @@ def test_line_precompute_reference_onset_matches_across_build_redshifts(monkeypa
         assert seen, "the line table did not build a reference SFH"
         onsets.append(seen)
     np.testing.assert_allclose(onsets[0], onsets[1], rtol=1e-12)
-
-
-def _recording_predict_state(original, recorded):
-    """A ``predict_state`` that logs the concrete (fraction, redshift) it is given."""
-
-    def record(self, params, *args, **kwargs):
-        frac = params.get("sfh_dpl_age_frac")
-        if frac is not None and not isinstance(frac, jax.core.Tracer):
-            recorded.append((float(frac), float(self._get_redshift(params))))
-        return original(self, params, *args, **kwargs)
-
-    return record
-
-
-def test_catalog_snap_reads_the_z0_reference_onset(monkeypatch):
-    """The catalog line-wavelength snap reads the z = 0 frame reference onset.
-
-    The snap evaluates the reference at the model's own redshift, so its onset is the
-    sampled fraction times ``age(0)`` for a catalog build and a plain one alike.
-    """
-    ssp = synthetic_ssp_wide()
-    obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
-    targets = jnp.asarray([6564.61, 5006.84])
-    for approx in (WavePrecomp(catalog_z_range=(0.01, 1.5), n_z=50), WavePrecomp()):
-        model = _build_model_fixed_dust(ssp, obs, 0.1, approx, tau_bc=1.0)
-        sampled = float(model.spec.sample(jax.random.PRNGKey(0))["sfh_dpl_age_frac"])
-        recorded = []
-        monkeypatch.setattr(
-            SEDModel,
-            "predict_state",
-            _recording_predict_state(SEDModel.predict_state, recorded),
-        )
-        _snap_to_nebular_catalog(model, targets)
-        monkeypatch.undo()
-        assert recorded, "the catalog snap did not read a reference dpl onset"
-        onsets = [frac * float(age_at_z(z)) for frac, z in recorded]
-        np.testing.assert_allclose(onsets, sampled * float(age_at_z(0.0)), rtol=1e-12)

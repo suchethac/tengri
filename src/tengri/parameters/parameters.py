@@ -90,6 +90,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
+from tengri.utils.wave_unit import check_timescales
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
 
@@ -690,6 +691,7 @@ class Parameters:
         self.radio_include_freefree = kwargs.pop("radio_include_freefree", None)
         self.radio_ir_window = kwargs.pop("radio_ir_window", None)
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
+        self.radio_agn_loudness_ref = kwargs.pop("radio_agn_loudness_ref", "4400")
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
         self.shock = kwargs.pop("shock", False)
@@ -890,6 +892,8 @@ class Parameters:
             else:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
+        # Timescale bounds are checked once, here, on the declared bounds (#2162).
+        check_timescales(self._distributions)
 
         # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
         # sees ``parse_groups``'s richer ``_group_provenance`` map: that
@@ -949,7 +953,7 @@ class Parameters:
                 continue
             param_support[_name] = (float(_lo), float(_hi))
 
-        self._warn_on_grid_overhang(param_support)
+        self._warn_on_grid_overhang(param_support, grammar_validated=grammar_validated)
 
         if self.agn_model == "composable":
             from tengri.components.agn.blocks import validate_block_recipe
@@ -1837,13 +1841,60 @@ class Parameters:
             selected.append(("neb", neb))
         return selected
 
-    def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
-        """Warn when a reachable range overhangs the grid that consumes it.
+    def _provenance_label(
+        self, name: str, provenance: dict[str, str], tags: dict[str, str]
+    ) -> str:
+        """The Source column text for one parameter in :meth:`summary`.
+
+        A parameter resolved to a backend's grid support reads
+        ``[resolved to <backend> grid: lo..hi]`` (#2626), so the printed prior
+        shows the range the backend evaluates, not the declaration it replaced.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name.
+        provenance : dict of str to str
+            Resolution tag per parameter.
+        tags : dict of str to str
+            Tag text per resolution tag.
+
+        Returns
+        -------
+        str
+            The label for the Source column.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- display only.
+        """
+        resolution = (getattr(self, "_grid_resolution", None) or {}).get(name)
+        if resolution is not None:
+            return f"[resolved to {resolution}]"
+        return tags.get(provenance.get(name, "registry_default"), "")
+
+    def _warn_on_grid_overhang(
+        self, param_support: dict[str, tuple[float, float]], *, grammar_validated: bool = False
+    ) -> None:
+        """Refuse or warn about a reachable range that overhangs the grid consuming it.
 
         Parameters
         ----------
         param_support : dict of str to (float, float)
             ``{param_name: (lo, hi)}`` each parameter can actually take.
+        grammar_validated : bool, optional
+            ``True`` when :func:`~tengri.parameters.groups.parse_groups` built
+            this spec. It has already resolved declaration-sourced free priors
+            and refused explicit overhang with the provenance it holds, so this
+            method only warns. A direct flat ``Parameters(...)`` build has no
+            such pass, so an explicit ``Fixed`` or ``Uniform`` that overhangs is
+            refused here, from ``_flat_provenance``.
+
+        Raises
+        ------
+        ParameterError
+            For a direct flat build whose explicit value or prior lies outside a
+            non-extrapolating component's grid (#2626).
 
         Notes
         -----
@@ -1857,13 +1908,23 @@ class Parameters:
         from tengri.components.grid_support import (
             EXTRAPOLATING_SUPPORT,
             check_grid_support,
+            grid_refusal_message,
             support_shift,
         )
-        from tengri.config.exceptions import GridSupportWarning
+        from tengri.config.exceptions import GridSupportWarning, ParameterError
 
         settings = {"cue_nitrogen": self.cue_nitrogen}
         findings = check_grid_support(self._selected_grid_components(), param_support, settings)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
+            explicit = self._flat_provenance.get(pname) in ("user_fixed", "user_prior")
+            if (
+                not grammar_validated
+                and explicit
+                and (selector, name) not in EXTRAPOLATING_SUPPORT
+            ):
+                raise ParameterError(
+                    grid_refusal_message(selector, name, pname, detail, (g_lo, g_hi))
+                )
             if (selector, name) in EXTRAPOLATING_SUPPORT:
                 # No jnp.clip here (a smooth emulator, not a grid): the SED is
                 # NOT bit-identical and the gradient is NOT exactly zero past
@@ -2964,7 +3025,7 @@ class Parameters:
             prior_str = repr(dist)
             bounds_str = f"[{lo:.4g}, {hi:.4g}]"
             if provenance:
-                tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                tag = self._provenance_label(name, provenance, _TAGS)
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str:<22s} {tag}")
             else:
                 lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
@@ -2977,7 +3038,7 @@ class Parameters:
                 dist = self._distributions[name]
                 val = dist.bounds[0]
                 if provenance:
-                    tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                    tag = self._provenance_label(name, provenance, _TAGS)
                     val_str = f"{val:.4g}"
                     if name == "agn_polar_oa" and val == 0.0:
                         from tengri.components.agn.blocks.torus_screen import (
@@ -3157,6 +3218,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "radio_include_freefree": content("thermal free-free on/off changes the emitted radio SED"),
     "radio_ir_window": content("IR band L_IR is integrated over changes the radio normalization"),
     "radio_sf_nu_ref": content("synchrotron anchor frequency changes the emitted radio SED"),
+    "radio_agn_loudness_ref": content("AGN loudness anchor changes the emitted radio SED"),
     "radio_sfr_mode": content("radio SFR mode determines parameters"),
     "shock": content("shock component flag determines parameters"),
     "shock_abundance": content("shock abundance setting determines parameters"),

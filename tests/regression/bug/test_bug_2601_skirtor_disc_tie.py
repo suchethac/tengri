@@ -687,24 +687,33 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked). Every
-#: cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy ledger,
-#: #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed by
-#: T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
-#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
-#: 6.0: sum +2.16e-4, rest_sed_0 +3.86e-3, mid +6.28e-6, last +1.23e-5;
-#: 8.0: sum +4.28e-4, rest_sed_0 +3.86e-3, mid +2.73e-4, last +3.40e-5;
-#: 10.0: sum +5.14e-4, rest_sed_0 +3.86e-3, mid +3.59e-4, last +3.24e-4.
+#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de). Old -> new,
+#: relative, against the pins on origin/main (the file's prior values):
+#:   log M_BH 6: sum +9.20e-06, first +4.39e-02, middle -9.14e-07, last -2.73e-06
+#:   log M_BH 8: sum +8.12e-05, first -7.24e-02, middle +1.66e-04, last -4.07e-05
+#:   log M_BH 10: sum -3.16e-03, first -5.65e-01, middle -3.31e-03, last -2.51e-04
+#: Cause of the mbh 10 move: the #2733 kubota_done corona change on this branch (see the
+#: seam sweep block). #2818 and the #2808 merge are not separated from #2733 by a separate capture.
 #: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586759060882227e32, 81456209353478.88, 2.8901825691320397e28, 8.77332638502807e21),
-    8.0: (
-        1.6507617942542995e32,
-        2.2345886203830524e16,
-        3.0977105009651904e28,
-        8.823414402335067e21,
+    6.0: (
+        1.5586902495503188e32,
+        85034899317424.44,
+        2.8901799287539962e28,
+        8.773302439087775e21,
     ),
-    10.0: (1.6775034618643003e32, 2.341245406443339e16, 3.140794236498581e28, 9.54965994194651e21),
+    8.0: (
+        1.6508958561152344e32,
+        2.0727111001488856e16,
+        3.098226134579877e28,
+        8.823054902409336e21,
+    ),
+    10.0: (
+        1.6722001219825183e32,
+        1.018808832961018e16,
+        3.1303929653712365e28,
+        9.547258877226544e21,
+    ),
 }
 
 

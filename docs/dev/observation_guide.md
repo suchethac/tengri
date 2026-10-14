@@ -33,7 +33,7 @@ concatenation, and noise/calibration parameters had to be hand-wired into
   encode instrument knowledge.
 - Observation-driven parameters (calibration coefficients, noise floor) are
   auto-merged into `ParamSpec` by `Model`.
-- Spectroscopy precomputation triggers automatically when redshift is fixed.
+- Spectroscopy precomputation is opt-in (`approx=SpectrumPrecomp()`). Fits default to the exact path for spectroscopy (#1688).
 - `pack_data` / `unpack_prediction` provide validated data concatenation for
   joint fitting.
 
