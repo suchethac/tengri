@@ -878,7 +878,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "
         "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
-        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used.",
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used. With "
+        "``agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}`` the fraction is "
+        "that of the light in the window (CIGALE ``lambda_fracAGN``), not of the dust.",
         lambda lo, hi: lo >= 0 and hi < 1.0,
         "must be in [0, 1)",
     ),

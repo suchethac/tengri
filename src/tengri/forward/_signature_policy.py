@@ -186,6 +186,7 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_agn_feii_block": content("AGN FeII block selector (#1462)"),
     "_agn_attenuation_block": content("AGN attenuation block selector (#1462)"),
     "_agn_polar_law": content("AGN polar-dust extinction law changes the emitted SED"),
+    "_agn_ir_frac_window": content("AGN CIGALE lambda_fracAGN window changes the AGN dust power"),
     "_agn_norm": content("AGN cross-block normalization policy changes the emitted SED"),
     "_agn_config": content("frozen AGNConfig, keyed field by field"),
     "_agn_ir_frac_dist": content("AGN IR-fraction Distribution, keyed via jit_cache_key"),

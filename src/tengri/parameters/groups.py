@@ -5822,7 +5822,8 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
     "radio.agn": frozenset({"type", "*", "all_params", "loudness_ref"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law", "ir_frac_window"})
+    | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
     "agn.nlr": frozenset({"type", "*", "all_params"}),
@@ -6045,6 +6046,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     "agn": (
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
+        _Structural("ir_frac_window", "agn_ir_frac_window", (0.0, 0.0)),
     ),
     "radio.agn": (_Structural("loudness_ref", "radio_agn_loudness_ref", "4400"),),
     "radio.sf": (
@@ -8151,6 +8153,71 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
+
+    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time tuple.
+    if "ir_frac_window" in agn_dict:
+        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
+
+
+def _parse_ir_frac_window(value: object) -> tuple[float, float]:
+    """Resolve ``agn['ir_frac_window']`` to ``(lambda_min_um, lambda_max_um)`` (#2662).
+
+    Accepts a pair ``(lambda_min_um, lambda_max_um)`` or CIGALE's string ``'5/20'``, which
+    is the same option. ``(0, 0)`` is the total-dust case; ``lambda_min == lambda_max != 0``
+    is monochromatic.
+
+    Parameters
+    ----------
+    value : object
+        The pair of micrometer wavelengths, or the ``'min/max'`` string.
+
+    Returns
+    -------
+    tuple of float
+        ``(lambda_min_um, lambda_max_um)``.
+
+    Raises
+    ------
+    ParameterError
+        If the value is not a pair of numbers, ``lambda_min`` is negative, or
+        ``lambda_min`` exceeds ``lambda_max``.
+    """
+    if isinstance(value, str):
+        parts = value.split("/")
+        if len(parts) != 2:
+            raise ParameterError(
+                f"agn['ir_frac_window'] string {value!r} must read 'lambda_min/lambda_max' "
+                "in micrometers, e.g. '5/20'."
+            )
+        try:
+            lo, hi = float(parts[0]), float(parts[1])
+        except ValueError as exc:
+            raise ParameterError(
+                f"agn['ir_frac_window'] string {value!r} holds a non-numeric wavelength."
+            ) from exc
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        try:
+            lo, hi = float(value[0]), float(value[1])
+        except (TypeError, ValueError) as exc:
+            raise ParameterError(
+                "agn['ir_frac_window'] must be a pair of wavelengths in micrometers, "
+                f"got {value!r}."
+            ) from exc
+    else:
+        raise ParameterError(
+            "agn['ir_frac_window'] must be (lambda_min_um, lambda_max_um) or CIGALE's "
+            f"'min/max' string, got {value!r}."
+        )
+    if lo < 0.0:
+        raise ParameterError(
+            f"agn['ir_frac_window'] lambda_min = {lo} um is negative; a window starts at 0 "
+            "or later."
+        )
+    if lo > hi:
+        raise ParameterError(
+            f"agn['ir_frac_window'] lambda_min = {lo} um exceeds lambda_max = {hi} um."
+        )
+    return (lo, hi)
 
 
 def _check_polar_law(law: object, where: str) -> str:

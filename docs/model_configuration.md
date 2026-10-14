@@ -207,7 +207,7 @@ The refusal for a key that CIGALE's AGN modules use, but tengri spells different
 |---|---|
 | `disk_type` | `agn={'disc': {'type': ...}}`: 0 is `'skirtor'`, 1 is `'schartmann2005'`, 2 is `'adaf_lopez2024'` |
 | `delta` | on `agn.disc`, `agn_cigale_disk_delta` for disc types `'skirtor'` and `'schartmann2005'`, and `agn_cigale_adaf_delta` for `'adaf_lopez2024'` (the ADAF blend weight) |
-| `lambda_fracAGN` | `agn_ir_frac`, the `"0/0"` case (total dust luminosity); the wavelength window is not available yet |
+| `lambda_fracAGN` | `agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}` (or the string `'5/20'`) together with `agn_ir_frac`; `(0, 0)` is the total-dust case |
 | `fracAGN` | `agn_ir_frac` |
 
 The torus parameter `agn_delta` is a different quantity, and no composable torus block reads it.

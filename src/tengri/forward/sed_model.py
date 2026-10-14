@@ -1321,6 +1321,65 @@ def _param_is_user_provided(spec, name: str) -> bool:
     return provenance.get(name) in _USER_PROVIDED_PROVENANCE
 
 
+def _validate_ir_frac_window_has_fraction(spec) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` with no active ``agn_ir_frac`` (#2662).
+
+    The window only changes how ``agn_ir_frac`` is scaled (pcigale's ``scale``). With the
+    fraction absent or ``Fixed(0)`` there is nothing to scale, so the window would be
+    silently inert.
+
+    Raises
+    ------
+    ParameterError
+        If the window is not ``(0, 0)`` and ``agn_ir_frac`` is neither FREE nor a positive
+        ``Fixed`` value.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
+    if window == (0.0, 0.0):
+        return
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    if "agn_ir_frac" in free or float(fixed.get("agn_ir_frac", 0.0)) > 0.0:
+        return
+    raise ParameterError(
+        f"agn['ir_frac_window']={window} scales the AGN dust power by the window fraction, "
+        "but agn_ir_frac is absent or Fixed(0): there is no fraction to scale. Give "
+        "agn_ir_frac a positive value or FREE, or drop ir_frac_window."
+    )
+
+
+def _check_ir_frac_window_grid(rest_wavelength, window) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` edge outside the rest wavelength grid (#2662).
+
+    Parameters
+    ----------
+    rest_wavelength : array_like, shape (n_wave,)
+        The model's rest wavelength grid [Angstrom], ascending.
+    window : tuple of float
+        ``(lambda_min_um, lambda_max_um)``; ``(0, 0)`` is the total-dust case and passes.
+
+    Raises
+    ------
+    ParameterError
+        If an edge (or the monochromatic wavelength) lies outside the grid.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    lo_um, hi_um = (float(v) for v in window)
+    if (lo_um, hi_um) == (0.0, 0.0):
+        return
+    grid = np.asarray(rest_wavelength, dtype=float)
+    lo_aa, hi_aa = lo_um * 1.0e4, hi_um * 1.0e4
+    if lo_aa < grid[0] or hi_aa > grid[-1]:
+        raise ParameterError(
+            f"agn['ir_frac_window']=({lo_um}, {hi_um}) um lies outside the model's rest "
+            f"wavelength grid [{grid[0] / 1.0e4:.4g}, {grid[-1] / 1.0e4:.4g}] um. Choose a "
+            "window inside the grid."
+        )
+
+
 def _validate_torus_frac_fracagn_conflict(spec) -> None:
     """Raise if BOTH agn_torus_frac AND fracAGN are explicitly set (#2189, R15).
 
@@ -3105,6 +3164,7 @@ class SEDModel:
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
+        _validate_ir_frac_window_has_fraction(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -4975,6 +5035,7 @@ class SEDModel:
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_norm = getattr(spec, "agn_norm", "cigale_joint")
         self._agn_polar_law = getattr(spec, "agn_polar_law", "smc")
+        self._agn_ir_frac_window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
         self._agn_luminosity_mode = False
 
         delta = {}
@@ -5273,6 +5334,9 @@ class SEDModel:
         -----
         **JIT-compatible**: not applicable -- construction-time only.
         """
+        _check_ir_frac_window_grid(
+            self._rest_wavelength, getattr(self, "_agn_ir_frac_window", (0.0, 0.0))
+        )
         _check_polar_reference_grid_extent(
             self._rest_wavelength,
             attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
@@ -12918,6 +12982,7 @@ class SEDModel:
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
             agn_polar_law=getattr(self, "_agn_polar_law", "smc"),
+            agn_ir_frac_window=getattr(self, "_agn_ir_frac_window", (0.0, 0.0)),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
