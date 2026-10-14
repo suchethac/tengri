@@ -42,6 +42,8 @@ References
 
 from __future__ import annotations
 
+import math
+
 import jax.numpy as jnp
 
 from tengri.components.agn._params import (
@@ -50,12 +52,23 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_TAU_SKIRTOR,
     DEFAULT_AGN_THETA_TORUS,
 )
+from tengri.components.agn.blocks.torus_library_transmission import NH_PER_AV
 from tengri.components.agn.polar_dust import (
     _type1_mask,
     calzetti2000_extinction_curve,
     smc_extinction_curve,
 )
+from tengri.components.xray.xray import wabs_cross_section
+from tengri.utils.physics_constants import HC_KEV_ANGSTROM
 from tengri.utils.scale import representable_denominator
+
+#: Shortest wavelength [Angstrom] of the packaged torus libraries (1.24 keV). Below it the
+#: X-rays are photoelectrically absorbed (owner ruling 10), not reddened by the dust curve.
+#: Equals the first node of the SKIRTOR and Fritz grids; pinned against them by a test.
+XRAY_LIBRARY_EDGE_AA = 10.0
+
+#: V-band extinction per unit optical depth, 2.5 log10(e) [mag].
+_MAG_PER_TAU = 2.5 * math.log10(math.e)
 
 #: Declared fallback angle [deg] per opening-angle parameter (ADR-0011).
 _OPENING_ANGLE_DEFAULT: dict[str, float] = {
@@ -234,7 +247,16 @@ def torus_screen_transmission(
         * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
         * type2
     )
-    return jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
+    t_optical = jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
+
+    # Below the library edge the X-rays are photoelectrically absorbed, exp(-sigma N_H), with
+    # the column of this screen's own V-band extinction, A_V = 2.5 log10(e) tau_V (k_V = 1).
+    # The same MM83 column the library sightline takes (owner ruling 10).
+    below = wave < XRAY_LIBRARY_EDGE_AA
+    energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
+    a_v = _MAG_PER_TAU * jnp.maximum(tau_v, 0.0) * type2
+    t_xray = jnp.exp(-wabs_cross_section(energy) * NH_PER_AV * a_v)
+    return jnp.where(below, t_xray, t_optical)
 
 
 def jax_sigmoid(x: jnp.ndarray) -> jnp.ndarray:
