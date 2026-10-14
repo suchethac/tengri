@@ -54,8 +54,7 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
-    edges_for_grid,
-    interp_nd_triweight,
+    library_lookup,
 )
 
 __all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
@@ -507,7 +506,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes) if axes else ()
 
     @jax.jit
     def _lookup_collapsed(scale, *free_axis_values):
@@ -517,7 +515,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         mapped = tuple(
             _query_transform(name, v) for name, v in zip(surviving_names, free_axis_values)
         )
-        normed = interp_nd_triweight(grid_phot, axes, edges, mapped)
+        normed = library_lookup(grid_phot, axes, mapped)
         return scale * normed
 
     return ComposableLookup(_lookup_collapsed, axis_names=surviving_names)

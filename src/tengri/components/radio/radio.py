@@ -1486,6 +1486,8 @@ def radio_total(
     q_is_total: bool | None = None,
     sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     split_thermal: bool = True,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1550,6 +1552,10 @@ def radio_total(
     log_nu_cut : float
         log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
         (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
+    log_L_ir, log_L_agn_bol : float or None
+        ``log10`` of ``L_ir`` and ``L_agn_bol`` [dex re erg/s]. When given, the kernels form the
+        representable ~1e28 erg/s/Hz radio luminosity from them by ``pow10`` and the linear
+        erg/s values (~1e44, ``inf`` in float32) are not used. ``None`` keeps the linear path.
 
     Returns
     -------
@@ -1583,6 +1589,8 @@ def radio_total(
         q_is_total=q_is_total,
         sf_nu_ref=sf_nu_ref,
         split_thermal=split_thermal,
+        log_L_ir=log_L_ir,
+        log_L_agn_bol=log_L_agn_bol,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1783,6 +1791,8 @@ def radio_total_dpl(
     q_is_total: bool | None = None,
     sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     split_thermal: bool = True,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission: star-forming + optional free-free + AGN double power-law.
@@ -1846,6 +1856,8 @@ def radio_total_dpl(
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn_dpl instead of deriving from
         L_agn_bol bolometric correction. Default 0.0 (uses L_bol correction).
+    log_L_ir, log_L_agn_bol : float or None
+        ``log10`` of ``L_ir`` and ``L_agn_bol`` [dex re erg/s]; see :func:`radio_total`.
 
     Returns
     -------
@@ -1881,6 +1893,8 @@ def radio_total_dpl(
         q_is_total=q_is_total,
         sf_nu_ref=sf_nu_ref,
         split_thermal=split_thermal,
+        log_L_ir=log_L_ir,
+        log_L_agn_bol=log_L_agn_bol,
     )
     return t["sf"] + t["ff"] + t["agn"]
 

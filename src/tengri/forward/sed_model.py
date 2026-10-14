@@ -11859,7 +11859,12 @@ class SEDModel:
             pad = 0.01 * (z_hi - z_lo)
         z_min = cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)
         z_max = cfg.z_max if cfg.z_max is not None else z_hi + pad
-        return ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        nodes = ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        if bounds is not None and len(bounds) >= 2 and self._catalog_z_range is None:
+            from tengri.components._z_response import warn_if_z_table_narrower_than_prior
+
+            warn_if_z_table_narrower_than_prior(nodes, (float(bounds[0]), float(bounds[1])))
+        return nodes
 
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
@@ -12165,14 +12170,14 @@ class SEDModel:
             or not isinstance(nebular.backend, CloudyGridBackend)
         ):
             return "the nebular backend is not the CLOUDY grid"
-        # The band table's contraction over (Z, U) is the bilinear scheme of the default
-        # linear path only (cloudy_band_table._bilinear_log). Any other interpolation of the
-        # grid, today triweight and from #2857 the pchip default, would make the table differ
-        # from the per-call path, so it is refused until the table is updated to match.
-        if nebular.backend._grid_interp != "linear":
+        # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
+        # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
+        # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
+        if nebular.backend._grid_interp not in ("pchip", "linear"):
             return (
                 f"the CLOUDY backend interpolates with grid_interp="
-                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'linear'"
+                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
+                f"and 'linear'"
             )
         if _dig_may_be_active(self.spec):
             return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
@@ -13086,6 +13091,16 @@ class SEDModel:
                         "z_max": cfg.z_max if cfg.z_max is not None else z_hi + pad,
                         "n_z": cfg.n_z,
                     }
+                    if self._catalog_z_range is None and z_bounds is not None:
+                        from tengri.components._z_response import (
+                            ln1pz_nodes,
+                            warn_if_z_table_narrower_than_prior,
+                        )
+
+                        warn_if_z_table_narrower_than_prior(
+                            ln1pz_nodes(redshift_spec["z_min"], redshift_spec["z_max"], cfg.n_z),
+                            (float(z_bounds[0]), float(z_bounds[1])),
+                        )
 
             if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs

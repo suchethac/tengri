@@ -413,6 +413,22 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class ZTableCoverageWarning(AdvisoryWarning):
+    """A fitted redshift prior reaches past the redshift table by a support gap.
+
+    The redshift tables (stellar free-z, term and band responses) are built on
+    ``WavePrecomp``'s ``z_min``/``z_max``, which default to the redshift prior.
+    A narrower explicit table leaves part of the prior outside it. Past the table
+    the value is held at the band edge, so the prior is not represented there and
+    the gradient is zero. Half a node spacing of overhang is extrapolated
+    (a numerical gap); a larger one is a support mismatch and is reported here.
+
+    See Also
+    --------
+    tengri.components._z_response.warn_if_z_table_narrower_than_prior
+    """
+
+
 class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
     """A free redshift's own range can outrun a z-capped onset parameter's ceiling.
 

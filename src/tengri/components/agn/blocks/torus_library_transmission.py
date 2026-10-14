@@ -75,7 +75,7 @@ from tengri.components.agn.skirtor import (
 )
 from tengri.components.xray.xray import wabs_cross_section
 from tengri.config.exceptions import TengriIOError
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.grid_interp import library_lookup, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import HC_KEV_ANGSTROM
 from tengri.utils.scale import representable_floor
@@ -101,6 +101,17 @@ _COS_FLOOR = 0.0871557427476582
 
 #: Softening width of that floor [dimensionless].
 _COS_FLOOR_WIDTH = 0.01
+
+
+#: Per-axis extrapolation of the library lookups, by torus block. Only the inclination axis
+#: has a numerical gap to its prior (SKIRTOR: stored cos 90 deg = 6.1e-17 against a prior
+#: reaching 0; Fritz: stored psy 0.001 and 89.99 against the prior's 0 and 90 deg). Every
+#: other axis is either fixed at a node or has its prior on the stored axis (census in
+#: tests/contract/test_no_zero_gradient_outside_node_hull.py). Owner ruling 12.
+_LOOKUP_EXTRAPOLATE = {
+    "skirtor": (False, False, False, False, False, True),
+    "fritz": (False, False, False, False, False, True),
+}
 
 
 class BelowLibraryIndex(NamedTuple):
@@ -189,18 +200,24 @@ def _hold_at_library_edges(wavelength, wave_grid):
     return jnp.clip(jnp.asarray(wavelength), wg[0], wg[-1])
 
 
-def _normalized_ratio(log_disk, log_norm, axes, point, point_face, wave_grid, wavelength):
+def _normalized_ratio(
+    log_disk, log_norm, axes, point, point_face, wave_grid, wavelength, extrapolate
+):
     """:math:`R_n` on ``wavelength`` and the mask of wavelengths where the face-on disc exists.
 
     Node-exact PCHIP of the logarithms of the disc and of ``norm`` at the viewing record and
     at the face-on record; the ratio is the exponential of the difference, so no quotient by a
-    near-zero face-on disc enters the reverse pass.
+    near-zero face-on disc enters the reverse pass. ``extrapolate`` is the per-axis flag of
+    :func:`library_lookup`: the numerical gaps of the prior (see :data:`_LOOKUP_EXTRAPOLATE`)
+    continue the end cubic rather than clip to a zero gradient.
     """
     point = tuple(jnp.asarray(c) for c in point)
     point_face = tuple(jnp.asarray(c) for c in point_face)
-    log_i = interp_nd_pchip(log_disk, axes, point)
-    log_0 = interp_nd_pchip(log_disk, axes, point_face)
-    log_n = interp_nd_pchip(log_norm, axes, point) - interp_nd_pchip(log_norm, axes, point_face)
+    log_i = library_lookup(log_disk, axes, point, extrapolate=extrapolate)
+    log_0 = library_lookup(log_disk, axes, point_face, extrapolate=extrapolate)
+    log_n = library_lookup(log_norm, axes, point, extrapolate=extrapolate) - library_lookup(
+        log_norm, axes, point_face, extrapolate=extrapolate
+    )
     drift_native = log_i - log_0 + log_n
     live_native = (log_0 > jnp.log(_TABLE_FLOOR) + _LIVE_MARGIN).astype(drift_native.dtype)
     wave_grid = jnp.asarray(wave_grid)
@@ -278,6 +295,7 @@ def skirtor_line_of_sight_ratio(
         (*geometry, 1.0),
         grid.wave_grid,
         wavelength,
+        _LOOKUP_EXTRAPOLATE["skirtor"],
     )
 
 
@@ -330,6 +348,7 @@ def fritz_line_of_sight_ratio(
         (*geometry, axes[5][-1]),
         grid.wave_grid,
         wavelength,
+        _LOOKUP_EXTRAPOLATE["fritz"],
     )
 
 

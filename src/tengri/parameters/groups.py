@@ -147,6 +147,7 @@ from tengri.parameters.agn_ownership import (  # noqa: F401
     _fracagn_value_is_active,
     agn_cross_category_claims,
     check_agn_torus_registry_agreement,
+    cigale_spelling_hint,
 )
 from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
@@ -1682,6 +1683,10 @@ def _selected_component(selector: str, structural) -> str | None:
     and they are untouched because they carry no grid.
     """
     base = selector.replace(".", "_")
+    # The WG00 screen is selected by dust_model, not a dust_attenuation attribute
+    # (#2862). It is the one selector whose attribute name is not derived.
+    if selector == "dust.attenuation":
+        base = "dust_model"
     for attr in (base, f"{base}_block"):
         value = getattr(structural, attr, None)
         if isinstance(value, str):
@@ -6575,12 +6580,24 @@ def _reject_inert_agn_subblock_keys(
     if not isinstance(block_type, str):
         return
     group = f"agn.{category}"
-    spelling_to_full = {
-        spelling: name
-        for name, owner in param_partition.items()
-        if owner == group
-        for spelling in _name_spellings([name])
-    }
+    # The validator accepts, inside this sub-block, the short names the group
+    # owns AND the short names of the selected registered class (its prior
+    # names, e.g. SKIRTOR's ``delta``, ``oa_skirtor``). The refusal must see the
+    # same set, or a registered-class name owned by another group is accepted
+    # and then read by nothing. Shared (``agn``) names are read by the top level
+    # for every block, so they are never inert here.
+    registered = _short_names_for_registered_type(block_type)
+    spelling_to_full: dict[str, str] = {}
+    for name, owner in param_partition.items():
+        if owner == group:
+            for spelling in _name_spellings([name]):
+                spelling_to_full.setdefault(spelling, name)
+    for name, owner in param_partition.items():
+        if owner in (group, "agn"):
+            continue
+        for spelling in _name_spellings([name]):
+            if spelling in registered:
+                spelling_to_full.setdefault(spelling, name)
     declared = _agn_subblock_declared_params(category, block_type, selection=selection)
     if declared is None:
         return
@@ -6614,10 +6631,11 @@ def _reject_inert_agn_subblock_keys(
     many = len(foreign) > 1
     noun, pronoun = ("keys", "them") if many else ("key", "it")
     offending = ", ".join(repr(k) for k in foreign)
+    hints = "".join(cigale_spelling_hint(key) for key in foreign)
     raise ParameterError(
         f"agn {category!r} type {block_type!r} does not read the {noun} {offending}, "
         f"so writing {pronoun} here would be silently ignored. {'; '.join(clauses)}. "
-        f"Select a block that reads the {noun}, or drop {pronoun}."
+        f"Select a block that reads the {noun}, or drop {pronoun}.{hints}"
     )
 
 
@@ -7493,6 +7511,7 @@ def _check_dict_keys(
                 f"{key!r} is a {owner!r} parameter, not a {group!r} one, so writing "
                 f"it here would be silently ignored. Nest it: "
                 f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
+                f"{cigale_spelling_hint(str(key))}"
             )
         # Check if the unknown key is a citation key
         from tengri.citations.resolve import citation_key_hint
@@ -7564,7 +7583,7 @@ def _check_dict_keys(
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{hint} "
             f"Valid structural keys for this group are: "
-            f"{displayed_keys}.{param_hint}"
+            f"{displayed_keys}.{param_hint}{cigale_spelling_hint(str(key))}"
         )
 
 
@@ -7705,6 +7724,7 @@ def _build_agn_search_view(
                             f"{key!r} is a {param_owner!r} parameter, not a "
                             f"{sibling_group!r} one. Nest it: "
                             f"agn={{{owner_subblock!r}: {{{key!r}: ...}}}}."
+                            f"{cigale_spelling_hint(key)}"
                         )
                     # Otherwise: shared param in sub-block (OK) or right sub-block (OK)
                 hits.append((location, sub[key]))
