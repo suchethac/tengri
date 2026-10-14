@@ -153,12 +153,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
         Uniform(0.05, 0.5, default=0.3),
         "ADAF viscosity parameter alpha",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_adaf_beta",
         # Gas-to-total pressure ratio (magnetic fraction is 1-beta).
         Uniform(0.1, 0.9, default=0.5),
         "ADAF gas-to-total pressure ratio beta",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]: the magnetic fraction is 1 - beta",
     ),
     ParamDeclaration(
         "agn_adaf_delta",
@@ -171,6 +175,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.001, 0.5, default=0.1),
         "ADAF electron viscous-heating fraction delta "
         "(default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_astar",
@@ -855,6 +861,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.0, 1.0, default=0.0),
         "CIGALE skirtor2016 disk_type=2 blend weight (paper delta): 0 = pure ADAF, "
         "1 = pure thin disc (Lopez et al. 2024). Read only by the 'adaf_lopez2024' disc.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
     ),
     # CIGALE skirtor2016 cross-component AGN power coupling
     ParamDeclaration(

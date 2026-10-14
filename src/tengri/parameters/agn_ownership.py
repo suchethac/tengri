@@ -187,6 +187,7 @@ _AGN_PARTITION = {
     "agn_astar": "agn.disc",  # relagn black-hole spin
     "agn_log_mdot": "agn.disc",  # relagn accretion rate
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
+    "agn_cigale_adaf_delta": "agn.disc",  # adaf_lopez2024 ADAF-to-thin-disc blend weight
     "agn_grahsp_cutoff_nm": "agn.disc",
     "agn_grahsp_log_l5100": "agn.disc",
     "agn_grahsp_netzer_log_mbh": "agn.disc",

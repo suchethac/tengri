@@ -56,23 +56,36 @@ def test_adaf_blend_is_live_across_the_range() -> None:
         assert np.ptp(ratio) / np.mean(ratio) < 1e-5, delta
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#2662: no declared-bounds refusal exists for user-supplied Fixed agn values "
-        "(bound_check runs only on FREE grid-support narrowing, groups._physically_admissible), "
-        "so Fixed(1.5) is accepted today. Remove the xfail when that mechanism lands."
-    ),
-)
 @pytest.mark.parametrize("bad", [1.5, -0.5])
 def test_out_of_range_fixed_blend_weight_is_refused(bad: float) -> None:
-    """(b) A Fixed blend weight outside the declared [0, 1] is refused at build."""
-    with pytest.raises(ParameterError, match=r"agn_cigale_adaf_delta.*\[0(\.0)?, 1(\.0)?\]"):
+    """(b) A Fixed blend weight outside the declared [0, 1] is refused at build.
+
+    The declaration's ``bound_check`` is applied to Fixed values by
+    ``Parameters._validate_bounds`` (``lo = hi = value``); the block never clamps.
+    """
+    with pytest.raises(ValueError, match=r"agn_cigale_adaf_delta.*must be in \[0, 1\]"):
         tengri.parse_groups(
             redshift=tengri.Fixed(0.1),
             agn={
                 "type": "composable",
                 "disc": {"type": "adaf_lopez2024", "agn_cigale_adaf_delta": tengri.Fixed(bad)},
+                "torus": {"type": "none"},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("key", "bad"),
+    [("agn_adaf_delta", 5.0), ("agn_adaf_beta", 1.5), ("agn_adaf_alpha", 0.0)],
+)
+def test_out_of_range_fixed_adaf_fraction_is_refused(key: str, bad: float) -> None:
+    """The ADAF plasma fractions (heating fraction, pressure ratio, viscosity) share the rule."""
+    with pytest.raises(ValueError, match=rf"{key}.*must be in \(0, 1\]"):
+        tengri.parse_groups(
+            redshift=tengri.Fixed(0.1),
+            agn={
+                "type": "composable",
+                "disc": {"type": "adaf", key: tengri.Fixed(bad)},
                 "torus": {"type": "none"},
             },
         )
