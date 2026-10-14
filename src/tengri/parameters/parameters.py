@@ -633,6 +633,9 @@ class Parameters:
         # Polar-dust extinction curve: static string like agn_norm, validated here
         # so a flat-kwarg caller gets the same refusal as the grammar.
         self.agn_polar_law = kwargs.pop("agn_polar_law", "smc")
+        # CIGALE lambda_fracAGN window for agn_ir_frac (#2662): (lambda_min_um, lambda_max_um),
+        # a build-time config value; (0, 0) is the total-dust case.
+        self.agn_ir_frac_window = tuple(kwargs.pop("agn_ir_frac_window", (0.0, 0.0)))
         from tengri.components.agn.polar_dust import POLAR_LAWS
 
         if self.agn_polar_law not in POLAR_LAWS:
@@ -2974,7 +2977,9 @@ class Parameters:
             modules.append(f"met={met_mode}")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
-        if self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+        if dust_mdl in ("single_component", "wg00"):
+            lines.append("  LyC reprocessed by: n/a (no young/old split)")
+        elif self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
             _origin = (
                 "[user]"
                 if getattr(self, "dust_lyc_reprocessed_by_explicit", False)
@@ -3138,6 +3143,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "agn_nlr_block": content("AGN NLR type determines parameters"),
     "agn_norm": content("AGN normalization mode determines parameters"),
     "agn_polar_law": content("polar-dust extinction law changes the emitted SED"),
+    "agn_ir_frac_window": content("CIGALE lambda_fracAGN window changes the AGN dust power"),
     "agn_torus_block": content("AGN torus type determines parameters"),
     "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
     "apply_igm": content("IGM application affects forward model"),

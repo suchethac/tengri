@@ -1321,6 +1321,65 @@ def _param_is_user_provided(spec, name: str) -> bool:
     return provenance.get(name) in _USER_PROVIDED_PROVENANCE
 
 
+def _validate_ir_frac_window_has_fraction(spec) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` with no active ``agn_ir_frac`` (#2662).
+
+    The window only changes how ``agn_ir_frac`` is scaled (pcigale's ``scale``). With the
+    fraction absent or ``Fixed(0)`` there is nothing to scale, so the window would be
+    silently inert.
+
+    Raises
+    ------
+    ParameterError
+        If the window is not ``(0, 0)`` and ``agn_ir_frac`` is neither FREE nor a positive
+        ``Fixed`` value.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
+    if window == (0.0, 0.0):
+        return
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    if "agn_ir_frac" in free or float(fixed.get("agn_ir_frac", 0.0)) > 0.0:
+        return
+    raise ParameterError(
+        f"agn['ir_frac_window']={window} scales the AGN dust power by the window fraction, "
+        "but agn_ir_frac is absent or Fixed(0): there is no fraction to scale. Give "
+        "agn_ir_frac a positive value or FREE, or drop ir_frac_window."
+    )
+
+
+def _check_ir_frac_window_grid(rest_wavelength, window) -> None:
+    """Refuse a CIGALE ``ir_frac_window`` edge outside the rest wavelength grid (#2662).
+
+    Parameters
+    ----------
+    rest_wavelength : array_like, shape (n_wave,)
+        The model's rest wavelength grid [Angstrom], ascending.
+    window : tuple of float
+        ``(lambda_min_um, lambda_max_um)``; ``(0, 0)`` is the total-dust case and passes.
+
+    Raises
+    ------
+    ParameterError
+        If an edge (or the monochromatic wavelength) lies outside the grid.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    lo_um, hi_um = (float(v) for v in window)
+    if (lo_um, hi_um) == (0.0, 0.0):
+        return
+    grid = np.asarray(rest_wavelength, dtype=float)
+    lo_aa, hi_aa = lo_um * 1.0e4, hi_um * 1.0e4
+    if lo_aa < grid[0] or hi_aa > grid[-1]:
+        raise ParameterError(
+            f"agn['ir_frac_window']=({lo_um}, {hi_um}) um lies outside the model's rest "
+            f"wavelength grid [{grid[0] / 1.0e4:.4g}, {grid[-1] / 1.0e4:.4g}] um. Choose a "
+            "window inside the grid."
+        )
+
+
 def _validate_torus_frac_fracagn_conflict(spec) -> None:
     """Raise if BOTH agn_torus_frac AND fracAGN are explicitly set (#2189, R15).
 
@@ -3105,6 +3164,7 @@ class SEDModel:
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
+        _validate_ir_frac_window_has_fraction(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -3494,131 +3554,28 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
-            # These precomputes are independent and fail independently. A single
-            # try around all of them meant one failure disabled the rest, and
-            # reported itself under the first one's warning, blaming the wrong
-            # subsystem.
-            #
-            # They do share one prerequisite -- the component chain -- and it has
-            # to be built outside them. Left inside the energy-balance try, a
-            # chain failure was announced as an energy-balance failure and then
-            # surfaced three more times as an AttributeError on the cache the
-            # failed build never set, so one root cause produced four warnings
-            # naming three subsystems that had not run. An error that names a
-            # missing attribute instead of the reason it is missing sends the
-            # reader to the wrong place.
-            chain = None
-            try:
-                chain = self._cached_component_chain = self._build_component_chain()
-            except Exception as e:
-                warnings.warn(
-                    f"WavePrecomp precompute is unavailable: the component chain "
-                    f"could not be built ({e!r}). Every LUT below needs it, so all "
-                    "of them fall back to the exact per-call path (correct, but "
-                    "without the precomputed speedup).",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                self._energy_balance_lut_cache = None
-                self._dust_band_response_cache = None
-                self._dust_shape_table_cache = None
-                self._cloudy_band_table_cache = None
-                self._shock_band_table_cache = None
-                self._xray_term_response_cache = None
-                self._radio_term_response_cache = None
+            # These precomputes are independent, but they share one prerequisite:
+            # the component chain, built first. A failing builder is a defect in
+            # the table it was asked for, not an optional absence, so it raises
+            # here. Falling back to the exact per-call path would produce correct
+            # numbers while hiding the defect (#2826 was a KeyError swallowed
+            # this way).
+            chain = self._cached_component_chain = self._build_component_chain()
+            self._energy_balance_lut(chain)
+            self._dust_emission_band_response(chain)
+            self._dust_emission_shape_table(chain)
+            # The CLOUDY band table is built here, eagerly, as the dust response
+            # above is: a build inside a jit trace would see tracers.
+            self._cloudy_band_table(chain)
+            self._shock_band_table(chain)
 
-            if chain is not None:
-                try:
-                    self._energy_balance_lut(chain)
-                except Exception as e:
-                    # The exact full-wave energy-balance path is the correct fallback,
-                    # but it forfeits the speedup the astronomer opted into, so say so.
-                    warnings.warn(
-                        f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
-                        "falling back to the exact energy-balance path (correct, "
-                        "but without the precomputed-LUT speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._energy_balance_lut_cache = None
-
-                try:
-                    self._dust_emission_band_response(chain)
-                except Exception as e:
-                    warnings.warn(
-                        f"WavePrecomp dust-emission band-response precompute failed "
-                        f"({e!r}); falling back to the exact per-call filter integral "
-                        "(correct, but without the precomputed-response speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._dust_band_response_cache = None
-
-                try:
-                    self._dust_emission_shape_table(chain)
-                except Exception as e:
-                    warnings.warn(
-                        f"WavePrecomp dust-emission shape-table precompute failed "
-                        f"({e!r}); falling back to the exact per-call filter integral "
-                        "(correct, but without the precomputed-table speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._dust_shape_table_cache = None
-                # The CLOUDY band table is built here, eagerly, as the dust response
-                # above is: a build inside a jit trace would see tracers.
-                try:
-                    self._cloudy_band_table(chain)
-                except Exception as e:
-                    warnings.warn(
-                        f"WavePrecomp CLOUDY band-table precompute failed ({e!r}); "
-                        "falling back to the exact per-call filter integral (correct, "
-                        "but without the precomputed-table speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._cloudy_band_table_cache = None
-
-                try:
-                    self._shock_band_table(chain)
-                except Exception as e:
-                    warnings.warn(
-                        f"WavePrecomp shock line-band precompute failed ({e!r}); falling "
-                        "back to the exact per-call filter integral (correct, but without "
-                        "the precomputed-coefficient speedup).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self._shock_band_table_cache = None
-
-                # Derive which emitters in the chain implement the emission_terms
-                # contract rather than hardcoding ("xray", "radio"). Any additive
-                # emitter added in future automatically inherits the band-response
-                # optimization without silent performance regression.
-                for _emitter in _chain_implements_emission_terms(chain):
-                    try:
-                        self._additive_term_band_response(chain, _emitter)
-                    except Exception as e:
-                        warnings.warn(
-                            f"WavePrecomp {_emitter} term band-response precompute failed "
-                            f"({e!r}); falling back to the exact per-call filter integral "
-                            "(correct, but without the precomputed-response speedup).",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                        setattr(self, f"_{_emitter}_term_response_cache", None)
-
-                    try:
-                        self._additive_term_shape_table(chain, _emitter)
-                    except Exception as e:
-                        warnings.warn(
-                            f"WavePrecomp {_emitter} term shape-table precompute failed "
-                            f"({e!r}); falling back to the exact per-call filter integral "
-                            "(correct, but without the precomputed-table speedup).",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                        setattr(self, f"_{_emitter}_term_shape_cache", None)
+            # Derive which emitters in the chain implement the emission_terms
+            # contract rather than hardcoding ("xray", "radio"). Any additive
+            # emitter added in future automatically inherits the band-response
+            # optimization without silent performance regression.
+            for _emitter in _chain_implements_emission_terms(chain):
+                self._additive_term_band_response(chain, _emitter)
+                self._additive_term_shape_table(chain, _emitter)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -4975,6 +4932,7 @@ class SEDModel:
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_norm = getattr(spec, "agn_norm", "cigale_joint")
         self._agn_polar_law = getattr(spec, "agn_polar_law", "smc")
+        self._agn_ir_frac_window = tuple(getattr(spec, "agn_ir_frac_window", (0.0, 0.0)))
         self._agn_luminosity_mode = False
 
         delta = {}
@@ -5035,11 +4993,13 @@ class SEDModel:
                 # Calling _load_skirtor_fn() lazily inside jit.trace causes a
                 # tracer leak because create_skirtor_from_grid allocates jnp.array
                 # objects that get captured as DynamicJaxprTracers.
+                # Only a missing grid file is skipped here: the lazy load that
+                # follows reports it at the point of use.
                 try:
                     from tengri.components.agn.unified import _load_skirtor_fn
 
                     _load_skirtor_fn()
-                except Exception:
+                except FileNotFoundError:
                     pass
 
             # Pre-warm the Synthesizer CLOUDY line-region grid singletons for
@@ -5273,6 +5233,9 @@ class SEDModel:
         -----
         **JIT-compatible**: not applicable -- construction-time only.
         """
+        _check_ir_frac_window_grid(
+            self._rest_wavelength, getattr(self, "_agn_ir_frac_window", (0.0, 0.0))
+        )
         _check_polar_reference_grid_extent(
             self._rest_wavelength,
             attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
@@ -11184,7 +11147,7 @@ class SEDModel:
                     from tengri.components.agn.skirtor import _load_skirtor_default_grid
 
                     skirtor = _load_skirtor_default_grid()
-                except Exception:
+                except FileNotFoundError:
                     skirtor = None
             if skirtor is not None:
                 agn_templates["skirtor"] = skirtor
@@ -12396,7 +12359,12 @@ class SEDModel:
             and hasattr(comp, "emission_terms")
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
-            response = self._build_term_response_table(comp, fw_pad, ft_pad)
+            amplitudes_fixed = bool(getattr(comp, "FIXED_TERM_AMPLITUDES", False)) and not any(
+                p in getattr(comp, "AMPLITUDE_PARAMS", ()) for p in free
+            )
+            response = self._build_term_response_table(
+                comp, fw_pad, ft_pad, amplitudes=amplitudes_fixed
+            )
             if response is None:
                 setattr(
                     self,
@@ -12408,7 +12376,7 @@ class SEDModel:
         setattr(self, cache_attr, response)
         return response
 
-    def _build_term_response_table(self, comp, fw_pad, ft_pad):
+    def _build_term_response_table(self, comp, fw_pad, ft_pad, *, amplitudes=False):
         """Tabulate an additive emitter's per-term response over redshift.
 
         Each node evaluates the emitter's terms with ``redshift`` set to the
@@ -12418,6 +12386,10 @@ class SEDModel:
         model-range midpoint node), ``S_ref(z)`` the shape at that wavelength on
         every node, so ``A_k = term_k(lam_ref) / S_ref_k(z)`` stays the amplitude
         at every redshift.
+
+        With ``amplitudes=True`` (every amplitude parameter fixed) the table also
+        carries ``amp`` = ``A_k`` at the fixed values, so the emitter need not
+        re-evaluate its terms at ``lam_ref`` on every call (#2987).
 
         Returns ``None`` (dense path) when a term is not rank-1 at any node, or is
         zero at some nodes only (its reference amplitude would be 0/0 there).
@@ -12458,6 +12430,8 @@ class SEDModel:
         # luminosities). Each term is its amplitude times a fixed shape, so the shape there is
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
+        # The reference wavelengths as one array, evaluated exactly as the per-call path does.
+        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
@@ -12468,6 +12442,7 @@ class SEDModel:
                 if diag_wave.shape[0]
                 else None
             )
+            at_ref = comp.emission_terms({**fixed, "redshift": z}, lam_ref) if amplitudes else None
             for key in keys:
                 s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
@@ -12499,6 +12474,10 @@ class SEDModel:
             out = {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
             if diag_terms is not None:
                 out["S_diag"] = jnp.stack(s_diag)
+            if at_ref is not None:
+                # A_k = term_k(lam_ref) / S_ref_k, the per-call amplitude at the fixed values.
+                at_lam = jnp.stack([at_ref[key][i] for i, key in enumerate(keys)])
+                out["amp"] = at_lam / jnp.stack(s_ref)
             return out
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -12509,10 +12488,11 @@ class SEDModel:
             "ln1pz": built["ln1pz"],
             "R": values["R"],
             "S_ref": values["S_ref"],
-            "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
+            "lam_ref": lam_ref,
         }
-        if "S_diag" in values:
-            table["S_diag"] = values["S_diag"]
+        for key in ("S_diag", "amp"):
+            if key in values:
+                table[key] = values[key]
         return table
 
     def _additive_term_shape_table(self, chain, name):
@@ -12918,6 +12898,7 @@ class SEDModel:
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
             agn_polar_law=getattr(self, "_agn_polar_law", "smc"),
+            agn_ir_frac_window=getattr(self, "_agn_ir_frac_window", (0.0, 0.0)),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
