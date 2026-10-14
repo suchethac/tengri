@@ -197,7 +197,7 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc_': 0.5}
 # Raises: "Unknown key 'tau_bc_' in dust_attenuation. Did you mean: tau_bc?"
 ```
 
-A key that a sub-block's selected type does not read is refused too, so it is never accepted and then dropped. The AGN sub-blocks refuse a key the selected type does not read, and name the types that do read it.
+An AGN sub-block refuses a key that its selected type does not read, so the key is never accepted and then dropped; the message names the types that do read it.
 
 #### CIGALE spellings
 
