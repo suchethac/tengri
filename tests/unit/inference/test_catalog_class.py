@@ -76,12 +76,10 @@ def fwd_3band_zrange(synthetic_ssp_wide, simple_observation):
 
 @pytest.fixture
 def fwd_3band_zcapped_onset(synthetic_ssp_wide, simple_observation):
-    """3-band ForwardModel with a z-narrowed SF-onset prior (dexp, all_params: FREE).
+    """3-band ForwardModel with a free SF-onset fraction (dexp, all_params: FREE).
 
-    ``sfh_dexp_start_gyr`` is freed by the wildcard and capped at
-    ``age_at_z(0.5)`` by ``_narrow_free_priors_to_z`` -- the exact shape the
-    catalog guard in ``Catalog.__init__`` must refuse once a per-galaxy
-    ``redshift_col`` is layered on top of this single-redshift build.
+    ``sfh_dexp_start_frac`` is freed by the wildcard; its prior is bounded by
+    age(z) at every redshift, so a per-galaxy ``redshift_col`` needs no check.
     """
     from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, WavePrecomp
 
@@ -172,30 +170,24 @@ def test_construction_validates_eagerly(fwd_3band, table_3band_bad_missing_col):
         Catalog(fwd_3band, table_3band_bad_missing_col, flux_unit="cgs_fnu")
 
 
-def test_catalog_renarrows_z_narrowed_onset_beside_per_galaxy_redshift(
+def test_catalog_keeps_a_free_onset_fraction_bounded_beside_per_galaxy_redshift(
     fwd_3band_zcapped_onset, table_3band
 ):
-    """A z-narrowed onset prior is re-narrowed to the catalog's own range, not refused.
+    """A free onset fraction is bounded by age(z) at every galaxy; nothing re-narrows it (#2748).
 
-    ``sfh_dexp_start_gyr`` was capped at ``age_at_z(0.5)`` -- the ONE redshift
-    the model was built with -- but ``table_3band``'s ``"z"`` column carries
-    three different redshifts (0.1, 0.5, 0.3). That single-galaxy cap is not
-    the right one for the catalog, so construction re-narrows it to
-    ``age_at_z`` of the catalog's lowest redshift (0.1, the oldest universe
-    in the sample -- the widest ceiling valid for every row) and warns
-    instead of refusing: every galaxy still forms its declared mass inside
-    its own [0, age(z_i)] at runtime regardless of the prior's ceiling
-    (#2521, mass-conserving truncation).
+    The fraction maps to Gyr through each galaxy's own age(z), so the catalog's
+    per-galaxy redshift needs no ceiling of its own and no warning fires.
     """
+    import warnings
+
     from tengri import Catalog
     from tengri.config.exceptions import FreeRedshiftOnsetCeilingWarning
-    from tengri.utils.cosmology import age_at_z
 
-    with pytest.warns(FreeRedshiftOnsetCeilingWarning, match="redshift_col"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FreeRedshiftOnsetCeilingWarning)
         cat = Catalog(fwd_3band_zcapped_onset, table_3band, flux_unit="cgs_fnu", redshift_col="z")
 
-    new_hi = cat.fwd.spec.get_distribution("sfh_dexp_start_gyr").hi
-    assert new_hi == pytest.approx(float(age_at_z(0.1)), rel=1e-9)
+    assert cat.fwd.spec.get_distribution("sfh_dexp_start_frac").hi <= 1.0 + 1e-12
 
 
 def test_fit_default_is_map_and_returns_catalog_posterior(fwd_3band, table_3band):

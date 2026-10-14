@@ -27,7 +27,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `sfh_burst_width_dex` | $\Delta_b$ | Uniform | $[0.1, 1.0]$ | dex | Burst width in log-age |
 | *Metallicity* |  |  |  |  |  |
 | `met_logzsol` | $\log(Z/Z_\odot)$ | Gaussian | $[-2.0, 0.2]$ | dex | Log solar metallicity |
-| *Alpha-Element Enhancement (opt-in; requires 4D SSP grid or fallback mode)* |  |  |  |  |  |
+| *Alpha-Element Enhancement (acts only on a grid with an [α/Fe] axis; no shipped grid has one, so leave at default)* |  |  |  |  |  |
 | `met_alpha_fe` | $[\alpha/\mathrm{Fe}]$ | Uniform | $[-0.2, 0.6]$ | dex | Alpha-to-iron ratio (uniform mode) |
 | `met_alpha_fe_old` | $[\alpha/\mathrm{Fe}]_{\rm old}$ | Uniform | $[0.0, 0.6]$ | dex | Alpha enhancement at old ages (time-evolving mode) |
 | `met_alpha_fe_young` | $[\alpha/\mathrm{Fe}]_{\rm young}$ | Fixed(0) | $[-0.2, 0.4]$ | dex | Alpha enhancement at young ages (typically fixed at 0) |

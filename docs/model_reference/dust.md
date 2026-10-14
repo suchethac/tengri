@@ -139,6 +139,8 @@ The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and
 
 (app-dust-emission-details)=
 
+**UV crossover.** The Leitherer et al. (2002) far-UV extension, used by `leitherer02`, `noll09` and `salim_sbl18` below 1800 Å, joins the Calzetti curve at 1800 Å.
+
 ## Dust Emission Models
 
 Dust emission models span parametric (modified blackbody, Casey (2012)) and tabulated (Dale et al. (2014), Draine and Li (2007), Draine and Li (2014), Hensley and Draine (2023), Jones et al. (2017), da Cunha et al. (2008), Boquien and Salim (2021)) approaches. Tabulated models are loaded lazily from pre-computed template grids at first use; the templates are interpolated in the model parameters via JAX-compatible routines and are fully differentiable. All models are normalized by an energy-balance constraint.
