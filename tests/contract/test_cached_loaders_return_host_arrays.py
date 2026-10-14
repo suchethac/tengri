@@ -139,7 +139,8 @@ def norm(x):
     grid = _nthcomp.nthcomp_norm_grid(16)
     return x * jnp.asarray(grid).sum()
 
-# Every cached grid loader's FIRST call happens under a jit trace; a second
+# The kubota_done, relagn and nthcomp norm-grid loaders are FIRST called under a jit
+# trace; a second
 # model in the same process must then still work.
 for fn in (kd, rel):
     jit = jax.jit(fn)
@@ -155,7 +156,8 @@ def test_cached_grid_loaders_survive_a_cold_first_call_under_jit():
 
     The scan above only sees ``jnp`` calls written in the cached function itself; a helper
     such as ``_get_nu_jax`` (device array) later ``np.asarray``-ed on the host slips past it.
-    A fresh interpreter makes the jit call the first call of every loader.
+    A fresh interpreter makes the jit call the first call of the loaders it exercises
+    (kubota_done, relagn and the nthcomp norm grid).
     """
     import subprocess
     import sys
