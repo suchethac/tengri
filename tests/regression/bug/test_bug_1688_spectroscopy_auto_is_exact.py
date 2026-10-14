@@ -35,7 +35,7 @@ _WAVES = np.array([6564.61, 4862.71, 5008.24])
 
 
 def _spectroscopy_fixture(ssp, *, line_fluxes=None, coarse=False):
-    """Point-sampled 64 pixels by default; ``coarse`` gives 50 pixels that need the bin integral."""
+    """64 point-sampled pixels, or with ``coarse`` 50 pixels that need the bin integral."""
     if coarse:
         wave_obs = np.linspace(4500.0, 7500.0, 50)
         spectro = Spectroscopy(resample="auto", wave_obs=wave_obs)

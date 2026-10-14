@@ -230,7 +230,7 @@ def test_f_map_under_the_lut_agrees_with_exact(ssp_data_wne):
     sigma = _laplace_std(exact, jnp.asarray(flux), jnp.asarray(noise), truth)
 
     lut_fit = Fitter(_fwd(_free_model(ssp_data_wne)), flux, noise, data_type="spectroscopy")
-    exact_fit = Fitter(_fwd(exact), flux, noise, data_type="spectroscopy")
+    exact_fit = Fitter(_fwd(exact), flux, noise, data_type="spectroscopy", approx=None)
     assert lut_fit.model.approx.spectrum_precomp
     assert not exact_fit.model.approx.spectrum_precomp
 

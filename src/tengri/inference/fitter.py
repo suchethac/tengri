@@ -1170,8 +1170,9 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     approx : "auto" or None or precompute config
         ``"auto"`` selects ``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
         spectroscopy where the LUT serves the pixels exactly (#2958, otherwise
-        exact, #1688), and respects a model that already carries a LUT; ``None`` returns the model untouched (the exact
-        path); anything else is handed to ``with_approx`` verbatim.
+        exact, #1688), and respects a model that already carries a LUT; ``None``
+        returns the model untouched (the exact path); anything else is handed to
+        ``with_approx`` verbatim.
     data_type : str
         The fit's data type; selects the LUT under ``"auto"``.
 

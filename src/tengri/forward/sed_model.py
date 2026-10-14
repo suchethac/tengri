@@ -3116,9 +3116,9 @@ class SEDModel:
         is free, or when a banded resolution matrix is attached. The free-sigma_v
         case is slower on the LUT (the stellar sum is broadened on the full model
         grid per draw), so the spectrum channel stays exact and says so once. The
-        decision is :meth:`_spectrum_lut_serves_exactly`, shared with ``approx="auto"``. An explicit ``SpectrumPrecomp()`` is never
-        asked here; it is resolved earlier, stays on the table and warns about the
-        cost there.
+        decision is :meth:`_spectrum_lut_serves_exactly`, shared with ``approx="auto"``.
+        An explicit ``SpectrumPrecomp()`` is never asked here; it is resolved earlier,
+        stays on the table and warns about the cost there.
 
         Parameters
         ----------
