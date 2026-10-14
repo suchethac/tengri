@@ -270,12 +270,12 @@ def test_float64_does_not_move_under_the_barrier():
 
 
 def test_the_spectrum_precomp_forward_is_finite_and_nonzero_in_float32(ssp_bare):
-    """``SpectrumPrecomp`` on the fitting path, which is what ``approx="auto"`` resolves to.
+    """``SpectrumPrecomp`` on the fitting path, as an explicit opt-in.
 
-    The unit tests above pin the operator; this pins the shipped path. ``Fitter``'s
-    default resolves a spectroscopy channel to ``SpectrumPrecomp``, so a ``nan`` here is
-    every default spectroscopic float32 fit, not an opt-in corner (``_check_channel_scales``
-    (#1495) then raises at construction — loud, but the channel is unavailable).
+    The unit tests above pin the operator; this pins the shipped path. Spectroscopy
+    fits no longer default to the LUT (#1688), so a ``nan`` here is every explicitly
+    opted-in spectroscopic float32 fit (``_check_channel_scales`` (#1495) then raises
+    at construction — loud, but the channel is unavailable).
     """
     from tengri import DEFAULT, Fixed, Observation, SEDModel, SpectrumPrecomp, Uniform
     from tengri.observation.spectroscopy import Spectroscopy

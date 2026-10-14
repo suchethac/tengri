@@ -222,7 +222,7 @@ def test_loaded_top_node_follows_the_weights_node_by_node(raw_file, ssp_clip):
 
 def test_csp_has_no_jump_where_a_population_crosses_the_limit(ssp_clip):
     """Sweep the age of a young burst through the limit: L1500 changes by small steps."""
-    model = _model(ssp_clip, age_gyr=Uniform(1e-4, 0.1))
+    model = _model(ssp_clip, age_frac=Uniform(7.25327e-06, 0.00725327))
     ages_gyr = 10.0 ** (np.arange(6.95, 7.45, 0.01) - 9.0)
     out = [_csp(model, LOGZSOL_Z06, sfh_delayed_age_gyr=float(a))[1] for a in ages_gyr]
     steps = np.abs(np.diff(np.log(np.array(out))))

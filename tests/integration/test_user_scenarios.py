@@ -392,7 +392,7 @@ class TestStandardGalaxyWorkflows:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -451,7 +451,7 @@ class TestStandardGalaxyWorkflows:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -607,7 +607,7 @@ class TestMemoryAndCompilation:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -656,7 +656,7 @@ class TestAGNScience:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -708,7 +708,7 @@ class TestAGNScience:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -815,7 +815,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -862,7 +862,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 1.0),  # Young universe
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.0725327),  # Young universe
             sfh_tsnorm_width_gyr=Uniform(0.1, 0.5),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 5.0),
@@ -909,7 +909,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -941,7 +941,7 @@ class TestEdgeCases:
         params = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
