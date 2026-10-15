@@ -17,10 +17,9 @@ parameters (yang20.py:64–75).
 .. [1] Yang, G. et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
    CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
    https://doi.org/10.1093/mnras/stz3001
-.. [2] Lehmer, B. D. et al., "The evolution of the X-ray binary
-   luminosity functions of nearby galaxies with the Chandra COSMOS
-   survey," ApJ, 825, 7 (2016).
-   https://doi.org/10.3847/0004-637X/825/1/7
+.. [2] Fragos, T. et al., "Energy Feedback from X-ray Binaries in the
+   Early Universe," ApJ, 776, L31 (2013).
+   https://doi.org/10.1088/2041-8205/776/2/L31
 """
 
 from __future__ import annotations
@@ -82,7 +81,7 @@ def test_xray_xrb_hmxb_offset_positive_scales_xrb_luminosity() -> None:
     """HMXB offset +0.3 dex multiplies total XRB by 10^0.3.
 
     Physical interpretation: a +0.3 dex offset means the HMXB population
-    is 10^0.3 ≈ 1.995× brighter than the Lehmer+2016 expectation at the
+    is 10^0.3 ≈ 1.995× brighter than the Fragos+2013 expectation at the
     given SFR and metallicity.
 
     Integrated 2–10 keV luminosity should scale as 10^0.3.
@@ -132,7 +131,7 @@ def test_xray_xrb_lmxb_offset_positive_scales_xrb_luminosity() -> None:
     """LMXB offset +0.3 dex multiplies total XRB by 10^0.3.
 
     Physical interpretation: a +0.3 dex offset means the LMXB population
-    is 10^0.3 brighter than the Lehmer+2016 expectation at the given
+    is 10^0.3 brighter than the Fragos+2013 expectation at the given
     stellar mass and age.
 
     Integrated 2–10 keV luminosity should scale as 10^0.3.
