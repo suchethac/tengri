@@ -28,6 +28,7 @@ import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.conservation
 
@@ -126,16 +127,26 @@ def test_kernels_agree_for_every_sfh_type_beyond_the_oldest_template(ssp_parsec,
 # --- 4-D alpha-enhanced library -------------------------------------------------
 
 ALPHA_NODES = jnp.array([-0.2, 0.0, 0.2, 0.4])
-SFH_4D = {
-    "delayed_5gyr": {
-        "type": "delayed",
-        "tau_gyr": Fixed(1.0),
-        "age_gyr": Fixed(5.0),
-        "log_total_mass": Fixed(10.0),
-    },
-    "continuity": {"type": "continuity"},
-    "field": {"type": "delayed", "field": True},
-}
+#: Onset of the 5 Gyr delayed SFH [Gyr at z = 0]. At z = 2.5 the universe is younger
+#: than that, so the fraction of age(z) is capped below 1 there.
+DELAYED_AGE_GYR = 5.0
+_MAX_ONSET_FRAC = 0.99
+_SFH_4D_NAMES = ("continuity", "delayed_5gyr", "field")
+
+
+def _sfh_4d(name, z=0.0):
+    """The 4-D test SFH ``name`` at redshift ``z``; timing is a fraction of age(z) (#2748)."""
+    if name == "delayed_5gyr":
+        age = float(age_at_z(z))
+        return {
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_frac": Fixed(min(DELAYED_AGE_GYR / age, _MAX_ONSET_FRAC)),
+            "log_total_mass": Fixed(10.0),
+        }
+    if name == "continuity":
+        return {"type": "continuity"}
+    return {"type": "delayed", "field": True}
 
 
 @pytest.fixture(scope="module")
@@ -163,9 +174,9 @@ def _build4(ssp4, obs, kernel, z, sfh, alpha, **kw):
 
 @pytest.mark.parametrize("alpha", [0.0, 0.3])
 @pytest.mark.parametrize("z", ZS)
-@pytest.mark.parametrize("name", sorted(SFH_4D))
+@pytest.mark.parametrize("name", _SFH_4D_NAMES)
 def test_4d_grid_both_kernels(ssp4, obs, name, z, alpha):
-    sfh = SFH_4D[name]
+    sfh = _sfh_4d(name, z)
     out = {}
     for kernel in ("cic", "dsps"):
         m = _build4(ssp4, obs, kernel, z, sfh, Fixed(alpha))
@@ -180,7 +191,7 @@ def test_4d_grid_both_kernels(ssp4, obs, name, z, alpha):
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])
 def test_4d_at_scaled_solar_equals_3d(ssp, ssp4, obs, kernel):
-    sfh = SFH_4D["delayed_5gyr"]
+    sfh = _sfh_4d("delayed_5gyr")
     p4 = np.asarray(_build4(ssp4, obs, kernel, 0.0, sfh, Fixed(0.0)).predict_photometry({}))
     p3 = np.asarray(_build(ssp, obs, kernel, 0.0, sfh).predict_photometry({}))
     np.testing.assert_allclose(p4, p3, rtol=1e-10, atol=0)
@@ -193,7 +204,7 @@ def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
     Compared as the stellar SED: the fast-path weights folded with the collapsed
     flux cube must be proportional to the apply SED at every wavelength.
     """
-    sfh = SFH_4D["delayed_5gyr"]
+    sfh = _sfh_4d("delayed_5gyr")
     m = SEDModel.build(
         ssp_data=ssp4,
         observation=obs,
@@ -232,7 +243,7 @@ def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
 def test_4d_alpha_gradient_is_kernel_independent(ssp4, obs):
     g = {}
     for kernel in ("cic", "dsps"):
-        m = _build4(ssp4, obs, kernel, 0.0, SFH_4D["delayed_5gyr"], Uniform(-0.2, 0.4))
+        m = _build4(ssp4, obs, kernel, 0.0, _sfh_4d("delayed_5gyr"), Uniform(-0.2, 0.4))
 
         def band(a, model=m):
             return model.predict_photometry({"met_alpha_fe": a})[2]
@@ -251,7 +262,7 @@ def test_4d_evolving_metallicity_route(ssp4, obs, kernel):
         observation=obs,
         neb={"type": "none"},
         redshift=Fixed(0.0),
-        sfh={**SFH_4D["delayed_5gyr"], "all_params": Fixed(DEFAULT), "age_kernel": kernel},
+        sfh={**_sfh_4d("delayed_5gyr"), "all_params": Fixed(DEFAULT), "age_kernel": kernel},
         met={"type": "ramp", "all_params": Fixed(DEFAULT)},
     )
     assert np.all(np.isfinite(np.asarray(m.predict_photometry({}))))
