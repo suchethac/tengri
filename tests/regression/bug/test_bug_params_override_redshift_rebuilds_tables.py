@@ -25,6 +25,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, FREE, FeaturePrecomp, Fitter, Fixed, Observation, SEDModel, Uniform
+from tengri.cosmology import age_at_z
 from tengri.forward import convenience
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population import Population
@@ -44,12 +45,12 @@ Z_BASE = 0.05
 Z_OVERRIDE = 1.0
 
 #: Physical evaluation point, valid at every redshift used here (the universe is
-#: still older than sfh_dpl_age_gyr at z=2.5).
+#: still older than DPL_AGE_GYR at z=2.5).
+DPL_AGE_GYR = 0.5
 PARAMS = {
     "sfh_dpl_log_total_mass": 10.0,
     "sfh_dpl_alpha": 2.0,
     "sfh_dpl_tau_gyr": 3.0,
-    "sfh_dpl_age_gyr": 0.5,
     "sfh_dpl_beta": 1.0,
     "neb_logU": -2.5,
     "neb_logZ_gas": 0.0,
@@ -155,8 +156,17 @@ def _loss(fitter, key=11):
 
 
 def _params_for(model):
+    """Evaluation point of ``model``: the onset is DPL_AGE_GYR at the model's own redshift.
+
+    The timing is a fraction of age(z), so the fraction is the onset divided by the
+    age of the universe at this model's redshift.
+    """
     free = set(model.spec.free_params)
-    return {k: v for k, v in PARAMS.items() if k in free}
+    params = {k: v for k, v in PARAMS.items() if k in free}
+    if "sfh_dpl_age_frac" in free:
+        z = float(model.spec.get_fixed_values()["redshift"])
+        params["sfh_dpl_age_frac"] = DPL_AGE_GYR / float(age_at_z(z))
+    return params
 
 
 def _override_vs_direct(builder, ssp, bands, approx, z2=Z_OVERRIDE):
