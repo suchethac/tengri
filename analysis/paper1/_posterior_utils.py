@@ -6,9 +6,37 @@ serialize MCMC posteriors consistently across both drivers, and by
 fig01_mock_joint_infer.py to find what they wrote.
 """
 
+import re
 from pathlib import Path
 
 import numpy as np
+
+
+def chain_output_paths(results_dir: Path, method: str, tag: str) -> tuple[Path, Path]:
+    """Paths for single-chain intermediate files, pooled later.
+
+    When --chain-tag is given, chain results are written to the mock_joint_chains
+    subdirectory instead of the canonical results_dir. The tag distinguishes
+    multiple independent runs that will be pooled later by pool_mock_chains.py.
+
+    Args:
+        results_dir: The canonical results directory (RESULTS).
+        method: The ``--method`` value, e.g. ``"mcmc_nuts"``.
+        tag: A string identifier for this chain; must match ``^[A-Za-z0-9_-]+$``.
+
+    Returns:
+        ``(npz_path, json_path)`` in results_dir/mock_joint_chains/.
+
+    Raises:
+        ValueError: If tag contains characters outside [A-Za-z0-9_-].
+    """
+    if not re.match(r"^[A-Za-z0-9_-]+$", tag):
+        raise ValueError(
+            f"chain tag {tag!r} must match ^[A-Za-z0-9_-]+$; found invalid characters"
+        )
+    chains_dir = results_dir / "mock_joint_chains"
+    stem = f"mock_joint_{method}_{tag}"
+    return chains_dir / f"{stem}.npz", chains_dir / f"{stem}.json"
 
 
 def build_npz_payload(samples_thin: dict, *extras: dict) -> dict:

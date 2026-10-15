@@ -218,8 +218,35 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int, spec=
 #: Largest sampled dimension at which a dense mass matrix is actually allocated.
 #:
 #: Above this the dense request is refused and the fit falls back to a diagonal
-#: metric, because the mass matrix alone is O(D^2) and warmup has been measured
-#: at 20+ GB on problems well below this size (#319).
+#: metric.
+#:
+#: **The number is right; the reason it was given for is not.** The comment
+#: here used to say the cap existed because "the mass matrix alone is O(D^2)"
+#: and cite 20+ GB from #319. The matrix is not the driver: it is 36^2 x 8
+#: bytes = 10 kB at D = 36. The #319 figure -- 22.78 GB peak -- was measured at
+#: D ~ 8 with ``mean_sfh_type="dense_basis"``, a property of how many
+#: per-sample quantities that SFH publishes, and that driver has its own two
+#: handlers (``_maybe_warn_high_memory_nuts`` from D >= 8, and the
+#: ``dense_mass_matrix=None`` auto-policy refusing ``dense_basis`` by name).
+#:
+#: What actually costs is the window adaptation's per-chain state, and it was
+#: measured on 2026-09-28 against the paper's D = 36 joint mock (continuity
+#: SFH, photometry + spectrum, #2493):
+#:
+#: * **one chain, full 1000-step warmup: peak RSS 8.13 GB**, reached 431 s in
+#:   while the adaptation windows were open.
+#: * four chains at the same settings: SIGKILLed twelve minutes in, as warmup
+#:   began, against a machine that still showed ~50% memory free -- the
+#:   allocation is fast enough to drive swap rather than to show up as a
+#:   steady footprint.
+#:
+#: An earlier probe in that same session reported 4.5 GB and was wrong to be
+#: trusted: it ran 60 warmup steps, so no adaptation window ever opened. A
+#: short dense run does not measure dense adaptation.
+#:
+#: So the cap stays at 30. Four chains is the realistic configuration at this
+#: dimension and it does not fit; raising the cap on the strength of the short
+#: probe was reverted rather than left standing.
 #:
 #: **The fallback is not neutral, and that is why it is announced rather than
 #: applied quietly.** On the D = 74 field posterior a diagonal metric recovers
@@ -292,8 +319,9 @@ def resolve_dense_mass_gate(
 
     warn_measured(
         f"{method}: dense_mass_matrix=True at D={n_dim} exceeds the "
-        f"D<={DENSE_MASS_MAX_DIM} cap (the mass matrix alone is O(D^2), and "
-        f"warmup has been measured at 20+ GB well below this size, #319). "
+        f"D<={DENSE_MASS_MAX_DIM} cap, which is a backstop against dimensions "
+        f"nobody has measured rather than a statement about the matrix (that "
+        f"term is tens of kB here). "
         f"Falling back to a DIAGONAL metric. That fallback is not neutral: on "
         f"a D=74 field posterior the diagonal metric was measured recovering "
         f"only a small fraction of the conditioning a full one recovers, "
