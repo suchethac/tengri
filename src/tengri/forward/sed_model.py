@@ -11958,7 +11958,10 @@ class SEDModel:
                 "log-luminosity input was not provided)"
             )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            live_first, ok_first = _probe_at(z_first)
+            # One traced program for the two probe SEDs (#2914): evaluated eagerly,
+            # the template's primitives dispatched ~60 XLA compiles per build, each
+            # below the persistent cache's floor. The verdicts are two booleans.
+            live_first, ok_first = jax.jit(_probe_at)(z_first)
             if not bool(live_first):
                 # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
                 # was never activated, so decline and let the exact integral run.
@@ -12039,9 +12042,12 @@ class SEDModel:
             # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
             # probe is integrated through the filters at z = 0 (#2559). The homogeneity
             # check above already covers the template, so it is not repeated here.
-            rest_values = lnu_filter_integral_batch(
-                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
-            )
+            # One traced program (#2914); the grids ride in as arguments so XLA does
+            # not constant-fold the union-grid sort of a baked filter array. Evaluated
+            # eagerly, the template and the per-filter sort dispatched ~60 compiles.
+            rest_values = jax.jit(
+                lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
+            )(wave, fw_pad, ft_pad)
             response = {
                 "ln1pz": built["ln1pz"],
                 "values": built["values"]["R"],
@@ -12421,17 +12427,32 @@ class SEDModel:
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        mid_terms = _terms(z_mid, probes[0])
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in mid_terms.items()}
+        # One traced program for the midpoint terms (#2914), then host arithmetic for
+        # the peaks: evaluated eagerly, the X-ray and radio terms dispatched ~40 XLA
+        # compiles per build, each below the persistent cache's floor. The term ORDER
+        # is captured inside the trace and the values returned as a tuple: a jitted
+        # function hands back a dict with its keys sorted, while the table's rows must
+        # follow the emitter's own ``emission_terms`` order, which every consumer pairs
+        # by position (``term_band_response``; tests/contract/test_term_response_order.py).
+        order: list[str] = []
+
+        def _mid_terms(z):
+            terms = _terms(z, probes[0])
+            order.extend(terms)
+            return tuple(terms.values())
+
+        mid_values = jax.jit(_mid_terms)(z_mid)
+        mid_terms = {key: np.asarray(v) for key, v in zip(order, mid_values, strict=True)}
+        peaks = {key: int(np.argmax(np.abs(s_a))) for key, s_a in mid_terms.items()}
         # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
         # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
         # the emitter is then evaluated there on every call. Its amplitude is 0 at any
         # wavelength, so reference it at a live term's peak: the same evaluation point the
         # live term already pays for, and one the emitter supports.
-        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(jnp.max(jnp.abs(s_a))) > 0]
+        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(np.max(np.abs(s_a))) > 0]
         if live_peaks:
             peaks = {
-                k: (peaks[k] if float(jnp.max(jnp.abs(mid_terms[k]))) > 0 else live_peaks[0])
+                k: (peaks[k] if float(np.max(np.abs(mid_terms[k]))) > 0 else live_peaks[0])
                 for k in peaks
             }
         keys = tuple(peaks)
@@ -12440,7 +12461,7 @@ class SEDModel:
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
         # The reference wavelengths as one array, evaluated exactly as the per-call path does.
-        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
+        lam_ref = jnp.asarray(np.asarray(wave)[[peaks[key] for key in keys]], dtype=wave.dtype)
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]

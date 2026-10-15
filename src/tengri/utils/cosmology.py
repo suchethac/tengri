@@ -42,6 +42,7 @@ from __future__ import annotations
 import math
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri._completion import curated_dir
@@ -503,6 +504,13 @@ def _comoving_distance_mpc_jax(z: float, cosmo, ogamma0: float, ode0: float) -> 
     return integral * c_over_h0_mpc
 
 
+#: :func:`_comoving_distance_mpc_jax` as one traced program (#2914). Evaluated
+#: eagerly (a Fixed-redshift build reads ``luminosity_distance`` once), its
+#: quadrature dispatched tens of XLA compiles, each below the persistent cache's
+#: floor. ``jit`` is transparent to ``grad`` and to an enclosing ``jit``/``vmap``.
+_comoving_distance_mpc_jit = jax.jit(_comoving_distance_mpc_jax)
+
+
 def _age_gyr_jax(z: float, cosmo, ogamma0: float, ode0: float) -> float:
     r"""Age of universe at redshift z via Gauss-Legendre quadrature in JAX.
 
@@ -570,6 +578,14 @@ def _age_gyr_jax(z: float, cosmo, ogamma0: float, ode0: float) -> float:
     integral = jnp.sum(gl_weights * integrand) * (a_z / 2.0)
     hubble_time_gyr = HUBBLE_TIME_GYR_H1 / cosmo.h
     return integral * hubble_time_gyr
+
+
+#: :func:`_age_gyr_jax` as one traced program (#2914). The SFH timing ceilings and
+#: their warnings call ``age_at_z`` eagerly at eight build-time sites, and each call
+#: dispatched the 512-node quadrature as ~40 XLA compiles below the persistent
+#: cache's floor. ``jit`` is transparent to ``grad`` (the documented gradients
+#: through ``h`` and ``Om0`` are unchanged) and to an enclosing ``jit``/``vmap``.
+_age_gyr_jit = jax.jit(_age_gyr_jax)
 
 
 __all__ = [
@@ -848,7 +864,7 @@ def luminosity_distance(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    dc_mpc = _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
     # Luminosity distance: D_L = (1+z) * D_c
     dl_mpc = (1.0 + z) * dc_mpc
     # At z=0, use 10 pc (1e-5 Mpc) for the optical absolute-magnitude convention
@@ -894,7 +910,7 @@ def luminosity_distance_mpc(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    dc_mpc = _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
     # Luminosity distance: D_L = (1+z) * D_c
     return (1.0 + z) * dc_mpc
 
@@ -932,7 +948,7 @@ def comoving_distance(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    dc_mpc = _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
     return dc_mpc * MPC_CM
 
 
@@ -969,7 +985,7 @@ def comoving_distance_mpc(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    return _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    return _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
 
 
 def angular_diameter_distance(
@@ -1008,7 +1024,7 @@ def angular_diameter_distance(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    dc_mpc = _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
     return (dc_mpc / (1.0 + z)) * MPC_CM
 
 
@@ -1045,7 +1061,7 @@ def angular_diameter_distance_mpc(
     """
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
-    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    dc_mpc = _comoving_distance_mpc_jit(z, c, ogamma0, ode0)
     return dc_mpc / (1.0 + z)
 
 
@@ -1169,7 +1185,7 @@ def age_at_z(
     ogamma0, ode0 = _flat_density_params(c)
     # Use vectorize to handle array inputs
     z_arr = jnp.atleast_1d(z)
-    result = jnp.vectorize(lambda z_val: _age_gyr_jax(z_val, c, ogamma0, ode0))(z_arr)
+    result = jnp.vectorize(lambda z_val: _age_gyr_jit(z_val, c, ogamma0, ode0))(z_arr)
     # Return scalar if input was scalar
     return result[0] if jnp.ndim(z) == 0 else result
 
@@ -1342,7 +1358,7 @@ def comoving_volume_element(
     c = _cosmo_from_args(h0, om0, cosmo)
     ogamma0, ode0 = _flat_density_params(c)
     z_arr = jnp.atleast_1d(z)
-    dc_mpc = jnp.vectorize(lambda z_val: _comoving_distance_mpc_jax(z_val, c, ogamma0, ode0))(
+    dc_mpc = jnp.vectorize(lambda z_val: _comoving_distance_mpc_jit(z_val, c, ogamma0, ode0))(
         z_arr
     )
     ez = _e_of_z(z_arr, c, ogamma0, ode0)

@@ -1191,7 +1191,9 @@ def _compute_photometry_ztable(
     # luminosity distance and the IGM transmission. Eager per-z dispatch of
     # these was the dominant cost of the build (#2769).
     z_np = np.asarray(z_grid, dtype=np.float64)
-    dl_cm_all = np.asarray(jax.vmap(luminosity_distance)(jnp.asarray(z_np)))
+    # jit as well as vmap (#2914): the bare vmap dispatched the distance integral's
+    # primitives as ~40 separate XLA compiles per build, each below the cache floor.
+    dl_cm_all = np.asarray(jax.jit(jax.vmap(luminosity_distance))(jnp.asarray(z_np)))
     if apply_igm:
         from tengri.components.igm import igm_transmission
 
