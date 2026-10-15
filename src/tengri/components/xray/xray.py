@@ -2650,7 +2650,7 @@ def xray_total_log_band_luminosities(
     Parameters
     ----------
     sfr : float
-        SFR averaged over the last 100 Myr [Msun/yr] (Lehmer+2019, 2021; Yang+2022,
+        SFR averaged over the last 100 Myr [Msun/yr] (as in pcigale yang20; Yang+2022,
         Sect. 3.3).
     stellar_mass : float
         Surviving stellar mass [Msun].

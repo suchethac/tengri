@@ -144,7 +144,8 @@ def test_xray_anisotropy_polynomial():
     References
     ----------
     Yang, G., et al. 2022, ApJ, 927, 192.
-    CIGALE yang20.py:231–235 (Yang et al. 2022 anisotropy normalization).
+    CIGALE yang20.py:231–235: Yang et al. 2022, Eq. 2 (Sect. 2.3), divided by its value at the
+    30-degree reference angle, 1 - 0.13397 a1 - 0.25 a2.
     """
     # Test wavelength grid (arbitrary; anisotropy is geometry-independent)
     wavelength = jnp.array([10.0, 50.0, 100.0])
