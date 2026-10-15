@@ -114,9 +114,15 @@ def test_hot_corona_underflowed_normalization_is_finite_float32():
 
     with jax.enable_x64(False):
         nu = jnp.array([1e15, 1e17], dtype=jnp.float32)
-        l_nu = _hot_corona_lnu(nu, jnp.float32(1e30), 1.8, jnp.float32(1e-30), 0.0)
-        assert bool(jnp.all(jnp.isfinite(l_nu)))
-        assert bool(jnp.all(l_nu == 0.0))
+        shape, log10_amplitude = _hot_corona_lnu(
+            nu, jnp.float32(1e30), 1.8, jnp.float32(1e-30), 0.0
+        )
+        # The function returns the normalized shape and the log10 amplitude separately,
+        # never their product (#2767): both must be finite, and the shape stays within
+        # its documented [0, 1] bound relative to the grid peak.
+        assert bool(jnp.all(jnp.isfinite(shape)))
+        assert bool(jnp.isfinite(log10_amplitude))
+        assert bool(jnp.all((shape >= 0.0) & (shape <= 1.0)))
 
 
 def test_fracagn_zero_agn_luminosity_log_is_finite_float32():
