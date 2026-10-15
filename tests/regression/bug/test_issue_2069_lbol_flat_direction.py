@@ -370,16 +370,27 @@ class TestLBolFlatDirectionRefusal:
         )
 
 
-def test_with_approx_clone_inherits_the_probe_verdict(synthetic_ssp_wide, simple_filters):
+def test_with_approx_clone_inherits_the_probe_verdict(
+    synthetic_ssp_wide, simple_filters, monkeypatch
+):
     """A ``with_approx`` clone does not re-run the #2069 probe its source passed (#2914).
 
     The clone shares the source's ``spec``, ``ssp_data``, dtype and AGN config and
     differs only in how the SED is projected, so it cannot change whether
     ``agn_log_lbol`` moves the rest-frame SED; a source that failed the probe raised
     and has no clone. ``Fitter(..., approx=...)`` clones through ``with_approx``, so
-    every approximate fit used to pay the probe's forward-model compile twice. A fresh
-    build of the same spec still probes: the inheritance is scoped to the clone.
+    every approximate fit used to pay the probe's forward-model compile twice. The
+    verdict is memoized on its content (spec, SSP grid, dtype, AGN config), so a fresh
+    build of an equal spec inherits it too; what probes again is pinned by
+    ``test_the_probe_verdict_is_shared_by_content_and_not_beyond``.
     """
+    from collections import OrderedDict
+
+    from tengri.forward import sed_model as sed_model_mod
+
+    # Start from an empty memo: an earlier test in this module may have built an
+    # equal spec, whose verdict this spec would otherwise inherit.
+    monkeypatch.setattr(sed_model_mod, "_AGN_LBOL_PROBE_MEMO", OrderedDict())
     spec = Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
@@ -435,7 +446,127 @@ def test_with_approx_clone_inherits_the_probe_verdict(synthetic_ssp_wide, simple
         f"the with_approx clone re-ran the #2069 probe ({n_after_clone - n_source} "
         "predict_state calls); it must inherit the verdict its source measured"
     )
-    assert n_after_fresh > n_after_clone, (
-        "a fresh SEDModel of the same spec skipped the #2069 probe: the inherited "
-        "verdict leaked out of with_approx"
+    assert n_after_fresh == n_after_clone, (
+        "a fresh SEDModel of the same spec re-ran the #2069 probe: the verdict is keyed "
+        "on content, and nothing the probe reads differs between the two builds"
+    )
+
+
+def _skirtor_nlr_spec(**overrides):
+    """A SKIRTOR + analytic-NLR spec whose #2069 probe runs and passes."""
+    kwargs = dict(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Fixed(1.5),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_log_total_mass=Fixed(10.5),
+        met_logzsol=Fixed(-0.5),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        dust_slope=Fixed(-0.7),
+        redshift=Fixed(0.3),
+        agn_model="composable",
+        agn_disc_block="multicolor",
+        agn_torus_block="skirtor",
+        agn_nlr_block="analytic",
+        agn_blr_block="none",
+        agn_feii_block="none",
+        agn_log_lbol=Uniform(9.0, 12.0),
+        agn_tau_skirtor=Fixed(3.0),
+        agn_p_skirtor=Fixed(1.0),
+        agn_q_skirtor=Fixed(1.0),
+        agn_oa_skirtor=Fixed(40.0),
+        agn_cos_inc=Fixed(0.7),
+        agn_torus_frac=Fixed(0.5),
+        agn_alpha=Fixed(-1.0),
+        agn_polar_ebv=Fixed(0.0),
+        agn_polar_oa=Fixed(60.0),
+        agn_ir_frac=Fixed(0.2),
+    )
+    kwargs.update(overrides)
+    return Parameters(**kwargs)
+
+
+def test_the_probe_verdict_is_shared_by_content_and_not_beyond(
+    synthetic_ssp_wide, simple_filters, monkeypatch
+):
+    """The #2069 memo keys on everything the verdict depends on, and nothing else (#2914).
+
+    The probe sweeps ``agn_log_lbol`` across its prior with every other parameter at
+    a seeded draw of the spec, through the forward model the spec, SSP grid, dtype and
+    AGN config select. Two builds that agree on those cannot disagree on the verdict,
+    so the second inherits it whether or not it is a ``with_approx`` clone; a build
+    that moves a prior bound measures again. The dtype rule is one-directional: a
+    float64 pass (the SEDs differ by at least 1e-10 relative) holds in float32, which
+    can only measure that difference as larger, so a float32 build inherits it; a
+    float32 pass can be rounding noise around a coupling float64 would call flat, so a
+    float64 build does not inherit it.
+    """
+    from collections import OrderedDict
+
+    from tengri.forward import sed_model as sed_model_mod
+
+    monkeypatch.setattr(sed_model_mod, "_AGN_LBOL_PROBE_MEMO", OrderedDict())
+    real_predict_state = SEDModel.predict_state
+    probe_calls = []
+
+    def _recording_predict_state(self, params, fixed_values=None, **kwargs):
+        if fixed_values is not None and "agn_log_lbol" in params:
+            probe_calls.append(id(self))
+        return real_predict_state(self, params, fixed_values=fixed_values, **kwargs)
+
+    counts = {}
+    with (
+        mock.patch.object(SEDModel, "predict_state", _recording_predict_state),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore")
+        SEDModel(_skirtor_nlr_spec(), synthetic_ssp_wide, filters=simple_filters)
+        counts["first"] = len(probe_calls)
+        SEDModel(_skirtor_nlr_spec(), synthetic_ssp_wide, filters=simple_filters)
+        counts["equal spec"] = len(probe_calls)
+        SEDModel(
+            _skirtor_nlr_spec(agn_log_lbol=Uniform(9.0, 12.5)),
+            synthetic_ssp_wide,
+            filters=simple_filters,
+        )
+        counts["wider prior"] = len(probe_calls)
+        SEDModel(
+            _skirtor_nlr_spec(),
+            synthetic_ssp_wide,
+            filters=simple_filters,
+            forward_dtype="float32",
+        )
+        counts["float32 after float64"] = len(probe_calls)
+        # The other direction, from an empty memo: float32 first, then float64.
+        sed_model_mod._AGN_LBOL_PROBE_MEMO.clear()
+        SEDModel(
+            _skirtor_nlr_spec(),
+            synthetic_ssp_wide,
+            filters=simple_filters,
+            forward_dtype="float32",
+        )
+        counts["float32 first"] = len(probe_calls)
+        SEDModel(_skirtor_nlr_spec(), synthetic_ssp_wide, filters=simple_filters)
+        counts["float64 after float32"] = len(probe_calls)
+
+    assert counts["first"] >= 1, "the first build did not run the #2069 probe"
+    assert counts["equal spec"] == counts["first"], (
+        "a new Parameters with the same arguments re-ran the probe: the memo must key on "
+        "the spec's content, not its identity"
+    )
+    assert counts["wider prior"] > counts["equal spec"], (
+        "a spec with a different agn_log_lbol bound inherited the verdict: the probe sweeps "
+        "that bound, so the memo must key on it"
+    )
+    assert counts["float32 after float64"] == counts["wider prior"], (
+        "a float32 build re-ran a probe its float64 twin passed: a float64 pass is a "
+        "difference of at least 1e-10 relative, which float32 can only measure as larger"
+    )
+    assert counts["float32 first"] > counts["float32 after float64"], (
+        "a float32 build on an empty memo did not probe"
+    )
+    assert counts["float64 after float32"] > counts["float32 first"], (
+        "a float64 build inherited a float32 verdict: a float32 pass can be rounding noise "
+        "around a coupling float64 would measure as flat"
     )
