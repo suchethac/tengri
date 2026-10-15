@@ -105,8 +105,9 @@ def _atten_ebv():
 # through the same filters, z = 0.1, six bands from 3000 A to 800 um. The build's cell-center
 # gate holds every table it keeps to ``SEDModel._AGN_TABLE_RTOL`` (1e-3), so that is each rtol.
 # Measured at the cell centers (the build's own probe): kubota_done over lbol (10.5, 14) passes
-# at the 129 one-axis nodes (1.06e-3 at 65, 1.13e-3 at 33); powerlaw+simple with the SMC E(B-V) axis
-# passes. powerlaw+simple over lbol alone is rank-1, so the exact term response serves it.
+# at the 129 one-axis nodes (1.06e-3 at 65, 1.13e-3 at 33); powerlaw+simple with the SMC
+# E(B-V) axis passes. powerlaw+simple over lbol alone is rank-1, so the exact term response
+# serves it.
 FAMILIES: dict[str, Family] = {
     "kubota_done+skirtor/lbol>10.5": Family(
         "kubota_done", "skirtor", _free("agn_log_lbol", lbol=(10.5, 14.0)), rtol=1e-3
