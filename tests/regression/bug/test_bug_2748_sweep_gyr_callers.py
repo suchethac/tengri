@@ -101,3 +101,73 @@ def test_no_caller_frees_or_doubles_a_gyr_timing():
     assert files, "caller globs matched nothing: the scan would pass vacuously"
     found = [v for path in files for v in _violations(path)]
     assert not found, "refused *_gyr timing forms in callers:\n" + "\n".join(found)
+
+
+# A params dict is what predict, predict_photometry, the loss functions and the truth
+# dicts consume. The Fixed-alias ``*_gyr`` names are legal only inside an ``sfh=`` build
+# dict, so a write of one into any other dict is a caller still speaking the old
+# parametrization. Subscript assignment, ``{**params, ...}`` and ``.update`` are the
+# shapes the first test does not reach.
+_WRITE_GLOBS = (*_CALLER_GLOBS, "notebooks/**/*.py", "scripts/**/*.py", "tools/**/*.py")
+
+
+def _write_files() -> list[pathlib.Path]:
+    out: set[pathlib.Path] = set()
+    for pattern in _WRITE_GLOBS:
+        out.update(p for p in REPO.glob(pattern) if "archive" not in p.parts)
+    return sorted(out)
+
+
+def _full_gyr_names() -> frozenset[str]:
+    """The absolute-Gyr timing names as written in a params dict (full, not group-local)."""
+    return frozenset(timing_frac_params().values())
+
+
+def _build_dict_ids(tree: ast.AST) -> set[int]:
+    """Ids of the dict literals passed as an ``sfh=`` keyword: build dicts, not params."""
+    return {
+        id(kw.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for kw in node.keywords
+        if kw.arg == "sfh" and isinstance(kw.value, ast.Dict)
+    }
+
+
+def _write_violations(path: pathlib.Path) -> list[str]:
+    gyr = _full_gyr_names()
+    tree = ast.parse(path.read_text(), filename=str(path))
+    build = _build_dict_ids(tree)
+    rel = path.relative_to(REPO)
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Subscript) and _key_name(target.slice) in gyr:
+                    found.append(
+                        f"{rel}:{target.lineno}: subscript write of {_key_name(target.slice)!r}"
+                    )
+        elif isinstance(node, ast.Dict) and id(node) not in build:
+            for key in node.keys:
+                name = _key_name(key) if key is not None else None
+                if name in gyr:
+                    found.append(f"{rel}:{key.lineno}: dict key {name!r} outside an sfh= build")
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "update"
+        ):
+            for kw in node.keywords:
+                if kw.arg in gyr:
+                    found.append(f"{rel}:{node.lineno}: .update() writes {kw.arg!r}")
+    return found
+
+
+def test_no_caller_writes_a_gyr_timing_into_a_params_dict():
+    files = _write_files()
+    assert files, "caller globs matched nothing: the scan would pass vacuously"
+    found = [v for path in files for v in _write_violations(path)]
+    assert not found, "*_gyr timing written into a params dict; use the *_frac name:\n" + (
+        "\n".join(found)
+    )
