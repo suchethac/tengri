@@ -152,8 +152,10 @@ class TestDeltaParameterEffect:
         """ADAF delta is the ADAF->thin-disc blend weight over [0, 1].
 
         delta=0 is pure ADAF, delta=1 is the thin disc, and intermediate
-        values are genuine blends. Out-of-range delta stays finite (the blend
-        weight is clipped to [0, 1]).
+        values are genuine blends. The blend weight is not clipped (#2662):
+        its range is enforced where the parameter is declared, and an
+        out-of-range value is refused at build
+        (``tests/regression/bug/test_bug_2662_adaf_blend_weight.py``).
         """
         from tengri.components.agn.disc_cigale import adaf_disk_spectrum
 
@@ -171,10 +173,6 @@ class TestDeltaParameterEffect:
         # is a genuine mixture (not equal to either endpoint).
         assert not jnp.allclose(spec_adaf, spec_disc)
         assert not jnp.allclose(spec_mid, spec_adaf)
-
-        # Out-of-range delta must remain finite (blend weight clipped to [0, 1]).
-        chex.assert_tree_all_finite(adaf_disk_spectrum(wave_nm, delta=-0.5))
-        chex.assert_tree_all_finite(adaf_disk_spectrum(wave_nm, delta=1.5))
 
 
 class TestSKIRTORTorusParameterDiscovery:
