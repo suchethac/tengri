@@ -41,8 +41,12 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.643 Gyr old at redshift 0.01. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.643 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
+    /tengri/src/tengri/forward/sed_model.py:13787: YoungTopMetallicityWarning: met_logzsol reaches Z = 0.0565 (its upper bound, Z = 0.0283, plus 3 x the metallicity-scatter upper bound of 0.1 dex that the scatter kernel spans), above Z = 0.0497, where the metallicity weights start to use the Z = 0.0600 node of this SSP grid (its highest complete node is Z = 0.0400). The Z = 0.0600 node has no stars above ~12 Msun for log10(age/yr) <= 7.15: FSPS ISOCHRONES/PARSEC/isoc_z0.0600.dat: Mini capped at 12.01 Msun for every log age 5.50-7.15 (343 rows at 5.50; isoc_z0.0200.dat reaches 300 Msun); the PARSEC massive-star tracks stop at Z = 0.04 (Chen et al. 2015, MNRAS 452, 1068). The metallicity is therefore held at Z = 0.0400 for log10(age/yr) <= 7.15, and the top node's weight rises linearly with log age to 1 at 7.20; older populations use the top node unchanged. To use a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) at young ages instead, load the grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or load_ssp_data(<path>, top_z='mist'). That node has MIST isochrones, so between Z = 0.0400 and 0.0449 the young population switches isochrone physics, not only metallicity.
+      return cls(
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.643 Gyr old at redshift 0.01. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.643 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
 
@@ -107,7 +111,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
+            "peak_lbt_frac": tengri.Uniform(0.0366, 0.2932),
             "width_gyr": tengri.Uniform(1.0, 4.0),
             "skew": tengri.Uniform(-0.5, 1.0),
             "trunc": tengri.Uniform(2.0, 6.0),
@@ -132,7 +136,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
+            "peak_lbt_frac": tengri.Uniform(0.5131, 0.8062),
             "width_gyr": tengri.Uniform(0.5, 1.5),
             "skew": tengri.Uniform(-1.5, 0.0),
             "trunc": tengri.Uniform(1.5, 3.0),
@@ -206,7 +210,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.198 seconds)
+   **Total running time of the script:** (0 minutes 7.420 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

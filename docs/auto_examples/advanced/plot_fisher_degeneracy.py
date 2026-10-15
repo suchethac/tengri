@@ -71,9 +71,10 @@ PARAM_LABELS = [r"$\log(Z/Z_\odot)$", r"$\tau_{\rm bc}$", r"$\tau_{\rm diff}$"]
 COLORS_BAR = ["#4477AA", "#EE6677", "#228833"]
 
 key = jax.random.PRNGKey(42)
+age_z = float(tengri.cosmology.age_at_z(0.1))  # Gyr, the age of the universe at z = 0.1
 true_params = {
     "sfh_tsnorm_log_total_mass": 10.5,
-    "sfh_tsnorm_peak_lbt_gyr": 4.0,
+    "sfh_tsnorm_peak_lbt_frac": 4.0 / age_z,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.0,
     "sfh_tsnorm_trunc": 5.0,
