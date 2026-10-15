@@ -37,11 +37,11 @@ pytestmark = pytest.mark.contract
 _SSP_PATH = DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
 #: Cold XLA compiles of the build below. Measured 2026-10-15 (jax 0.11.1, CPU): 456
-#: before the build-time eager evaluations of #2914 were traced, 206 after the first
-#: six of them; the budget sits just above that count. What remains is listed in the
-#: #2914 thread (the onset-ceiling warning's eager cosmology, the dale2014 loader,
-#: small eager tails in the z-table, term-table and energy-balance builds).
-BUILD_COMPILE_BUDGET = 220
+#: before the build-time eager evaluations of #2914 were traced, 106 after; the
+#: budget sits just above that count. What remains is a long tail of one to a few
+#: eager operations per build step (filter padding, grid-support checks, the
+#: z-table's node arithmetic, loader bookkeeping), each listed in the #2914 thread.
+BUILD_COMPILE_BUDGET = 120
 
 
 @pytest.fixture(scope="module")

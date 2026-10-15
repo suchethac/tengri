@@ -12429,11 +12429,20 @@ class SEDModel:
         # the same wavelength's shape on every node.
         # One traced program for the midpoint terms (#2914), then host arithmetic for
         # the peaks: evaluated eagerly, the X-ray and radio terms dispatched ~40 XLA
-        # compiles per build, each below the persistent cache's floor.
-        mid_terms = {
-            key: np.asarray(s_a)
-            for key, s_a in jax.jit(lambda z: _terms(z, probes[0]))(z_mid).items()
-        }
+        # compiles per build, each below the persistent cache's floor. The term ORDER
+        # is captured inside the trace and the values returned as a tuple: a jitted
+        # function hands back a dict with its keys sorted, while the table's rows must
+        # follow the emitter's own ``emission_terms`` order, which every consumer pairs
+        # by position (``term_band_response``; tests/contract/test_term_response_order.py).
+        order: list[str] = []
+
+        def _mid_terms(z):
+            terms = _terms(z, probes[0])
+            order.extend(terms)
+            return tuple(terms.values())
+
+        mid_values = jax.jit(_mid_terms)(z_mid)
+        mid_terms = {key: np.asarray(v) for key, v in zip(order, mid_values, strict=True)}
         peaks = {key: int(np.argmax(np.abs(s_a))) for key, s_a in mid_terms.items()}
         # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
         # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
@@ -12452,7 +12461,7 @@ class SEDModel:
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
         # The reference wavelengths as one array, evaluated exactly as the per-call path does.
-        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
+        lam_ref = jnp.asarray(np.asarray(wave)[[peaks[key] for key in keys]], dtype=wave.dtype)
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
