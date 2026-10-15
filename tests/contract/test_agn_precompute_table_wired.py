@@ -105,7 +105,7 @@ def _atten_ebv():
 # through the same filters, z = 0.1, six bands from 3000 A to 800 um. The build's cell-center
 # gate holds every table it keeps to ``SEDModel._AGN_TABLE_RTOL`` (1e-3), so that is each rtol.
 # Measured at the cell centers (the build's own probe): kubota_done over lbol (10.5, 14) passes
-# at the 65 one-axis nodes (1.13e-3 at 33 nodes); powerlaw+simple with the SMC E(B-V) axis
+# at the 129 one-axis nodes (1.06e-3 at 65, 1.13e-3 at 33); powerlaw+simple with the SMC E(B-V) axis
 # passes. powerlaw+simple over lbol alone is rank-1, so the exact term response serves it.
 FAMILIES: dict[str, Family] = {
     "kubota_done+skirtor/lbol>10.5": Family(
@@ -318,7 +318,7 @@ def test_table_matches_exact_and_has_finite_gradients(key):
 def test_agn_axis_grids_sets_the_table_axes():
     """The grids a user gives reach the table (#2471); a grid short of the prior is refused."""
     family = FAMILIES["kubota_done+skirtor/lbol>10.5"]
-    nodes = np.linspace(10.5, 14.0, 129)
+    nodes = np.linspace(10.5, 14.0, 193)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         default = _model(family, _wavepre())
@@ -336,7 +336,7 @@ def test_agn_axis_grids_sets_the_table_axes():
 def test_agn_axis_grids_round_trips_through_the_groups():
     """The grammar carries the grids onto the spec and ``to_groups`` gives them back (#2471)."""
     family = FAMILIES["kubota_done+skirtor/lbol>10.5"]
-    nodes = np.linspace(10.5, 14.0, 129)
+    nodes = np.linspace(10.5, 14.0, 193)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = _model(family, None, axis_grids={"agn_log_lbol": nodes})

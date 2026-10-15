@@ -12126,7 +12126,7 @@ class SEDModel:
     #: Per-axis node count of the composable AGN band table, by the number of free axes. The
     #: build evaluates the recipe at every node of the cartesian product, so the count falls
     #: with the dimension and more than four free axes is refused.
-    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 65, 2: 17, 3: 11, 4: 7}
+    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 129, 2: 17, 3: 11, 4: 7}
 
     def _agn_band_table(self, chain):
         """Registry-adapter band fluxes of the composable AGN over its free parameters.
