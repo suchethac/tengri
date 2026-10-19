@@ -284,6 +284,8 @@ class TestTabularSFHRouting:
         delayed = SFH_REGISTRY["delayed"]
         kw = {}
         for public, (internal, scale, offset) in delayed.internal_param_map.items():
+            if public.endswith("_frac"):
+                continue  # the Gyr twin carries this onset into the registry fn
             val = {
                 "sfh_delayed_log_total_mass": 10.0,
                 "sfh_delayed_tau_gyr": 2.0,
