@@ -802,8 +802,9 @@ CIGALE_AGN_SPELLINGS: dict[str, str] = {
         "agn_delta is a different quantity that no composable torus block reads."
     ),
     "lambda_fracAGN": (
-        "tengri's agn_ir_frac is the '0/0' case only (fraction of the total dust "
-        "luminosity); the wavelength window is not available yet, so write agn_ir_frac."
+        "write agn={'ir_frac_window': (lambda_min_um, lambda_max_um)} together with "
+        "agn_ir_frac; (0, 0) is the total-dust case, and the string '5/20' is the same "
+        "window."
     ),
     "fracAGN": (
         "the same parameter as agn_ir_frac (the '0/0' case); write agn_ir_frac, "

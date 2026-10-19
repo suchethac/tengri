@@ -229,14 +229,19 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Pre-fix LUT values (resolution=None, sigma_v=0, madau IGM), at _IDX, captured from the
 # conftest fixtures on origin/main before the kernel was applied. With no resolution there
 # is no kernel to apply, so the fixed LUT must reproduce them exactly.
+# Re-captured on main ac75d42fe: the SFH timing parameters became fractions of
+# age(z) (#2748), which moves the fixture's default tsnorm SFH at z = 0.1, so the
+# arrays pinned before it (and the ones below in _PINNED_EXACT) no longer apply.
+# The pins still guard the LUT-with-no-instrument and the exact path against
+# unintended change; a ruled physics change re-captures them.
 _PREFIX_LUT_WNE_RNONE = [
-    7.585321879860206e-29,
-    2.7566442699605755e-28,
-    4.476516855282938e-28,
-    6.528615494672773e-28,
-    7.666995745049181e-28,
-    1.0511964695858449e-27,
-    1.2729797128126482e-27,
+    8.832206167702604e-29,
+    3.165934477902422e-28,
+    5.070904983979376e-28,
+    7.318035949559824e-28,
+    8.560968754669802e-28,
+    1.1660212420805499e-27,
+    1.4095711285515449e-27,
 ]
 
 
@@ -256,22 +261,22 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.616654422948485e-12,
-        1.9176771331791432e-12,
-        1.4729137600973475e-12,
-        1.1699882140946834e-12,
-        9.526091195785729e-13,
-        7.922208055230021e-13,
-        6.692538866622282e-13,
+        2.6005432403292307e-12,
+        1.905869690855171e-12,
+        1.463844810911483e-12,
+        1.162784433602384e-12,
+        9.467437807646447e-13,
+        7.873430053226903e-13,
+        6.6513321392689e-13,
     ],
     "wne_B": [
-        7.59369890747518e-29,
-        2.70378918815045e-28,
-        4.39145217903001e-28,
-        6.586601334966522e-28,
-        7.890869728131413e-28,
-        1.0505243755535244e-27,
-        1.2730962692858322e-27,
+        8.84153748248348e-29,
+        3.105164351808286e-28,
+        4.976330494264325e-28,
+        7.382143463596137e-28,
+        8.807978458553114e-28,
+        1.1653075487088356e-27,
+        1.4096784141453878e-27,
     ],
 }
 

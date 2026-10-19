@@ -175,7 +175,7 @@ def build(line_data, approx):
 # %%
 TRUTH = {
     "sfh_dpl_log_total_mass": 10.2,
-    "sfh_dpl_age_gyr": 6.0,
+    "sfh_dpl_age_frac": 6.0 / tengri.utils.cosmology.age_at_z(Z_GAL),  # 6.0 Gyr at z = 0.1
     "sfh_dpl_tau_gyr": 5.0,
     "sfh_dpl_alpha": 1.0,
     "sfh_dpl_beta": 3.0,

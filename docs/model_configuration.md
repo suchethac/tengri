@@ -207,7 +207,7 @@ The refusal for a key that CIGALE's AGN modules use, but tengri spells different
 |---|---|
 | `disk_type` | `agn={'disc': {'type': ...}}`: 0 is `'skirtor'`, 1 is `'schartmann2005'`, 2 is `'adaf_lopez2024'` |
 | `delta` | on `agn.disc`, `agn_cigale_disk_delta` for disc types `'skirtor'` and `'schartmann2005'`, and `agn_cigale_adaf_delta` for `'adaf_lopez2024'` (the ADAF blend weight) |
-| `lambda_fracAGN` | `agn_ir_frac`, the `"0/0"` case (total dust luminosity); the wavelength window is not available yet |
+| `lambda_fracAGN` | `agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}` (or the string `'5/20'`) together with `agn_ir_frac`; `(0, 0)` is the total-dust case |
 | `fracAGN` | `agn_ir_frac` |
 
 The torus parameter `agn_delta` is a different quantity, and no composable torus block reads it.
@@ -522,6 +522,7 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'norm'`: Across-component normalization: `'cigale_joint'` (default, CIGALE-style energy conservation across disc/torus/polar) or `'independent'` (each component on its own scale).
 - `'polar_law'`: Extinction curve of the polar dust: `'smc'` (default, Pei 1992), `'calzetti'`, `'gaskell'` or `'bongiorno'` (CIGALE's `extinction_law = 0`: the Bongiorno et al. 2012 power law above 100 nm with the Weingartner & Draine 2001 SMC-bar shape below it). Also accepted inside `'atten'`.
+- `'ir_frac_window'`: CIGALE's `lambda_fracAGN` window for `agn_ir_frac`, `(lambda_min_um, lambda_max_um)` or the string `'5/20'`. `(0, 0)` (default) makes `agn_ir_frac` the fraction of the total dust luminosity; a window makes it the fraction of the light in `[lambda_min, lambda_max]`; equal non-zero edges are monochromatic. Needs the composable AGN and an active `agn_ir_frac`.
 - `'disc'`: AGN accretion disk sub-block (with `'type'`, `'all_params'`, parameters).
 - `'torus'`: Infrared-obscured torus sub-block (with `'type'`, `'all_params'`, parameters).
 - `'nlr'`: Narrow-line region sub-block (with `'type'`, `'all_params'`, parameters).

@@ -48,12 +48,13 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 # Just test a few points
 print("Testing color grid computation:")
+age_z = float(tengri.cosmology.age_at_z(0.05))  # Gyr
 for i, age_gyr in enumerate(AGES_GYR[:3]):
     age_clamped = np.clip(age_gyr, 0.03, 13.0)
     for j, met_logzsol in enumerate(MET_LOGZSOL[:3]):
         p = {
             **baseline,
-            "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age_clamped),
+            "sfh_tsnorm_peak_lbt_frac": jnp.float64(age_clamped / age_z),
             "met_logzsol": jnp.float64(met_logzsol),
         }
         flux = np.asarray(model.predict_photometry(p))
