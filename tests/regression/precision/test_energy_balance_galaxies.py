@@ -19,6 +19,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.lyc import edge_trapezoid
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
@@ -32,11 +33,27 @@ SFHS = {
 }
 
 
+def _timing_fracs(sfh, z):
+    """Gyr onsets as fractions of age(z), capped at the Big Bang (#2748).
+
+    The sweep runs to z = 5, where the universe is 1.2 Gyr old, and a Fixed onset
+    later than that is refused. A galaxy older than the universe at that redshift
+    is the whole universe, so the fraction caps at 1.
+    """
+    age = float(age_at_z(z))
+    out = dict(sfh)
+    for gyr_key, frac_key in (("age_gyr", "age_frac"), ("start_gyr", "start_frac")):
+        if gyr_key in out:
+            onset = out.pop(gyr_key).value
+            out[frac_key] = Fixed(min(onset / age, 1.0))
+    return out
+
+
 def _build(
     ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emission=True, lyc=False
 ):
     """Two-component dust model at a given optical depth and galaxy config."""
-    sfh = dict(sfh)
+    sfh = _timing_fracs(sfh, z)
     sfh["log_total_mass"] = Fixed(log_mass)
     sfh["all_params"] = Fixed(DEFAULT)
     dust_attenuation = {

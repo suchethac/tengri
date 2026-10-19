@@ -22,6 +22,9 @@ pytestmark = pytest.mark.regression_bug
 
 Z = 0.1
 LOG_MASS = 9.0
+# Onset at the Big Bang: the largest legal timing fraction of age(z). The
+# fraction is in (0, 1] at every redshift, so the grid still runs to age(z).
+AGE_FRAC_BIG_BANG = 1.0
 
 
 def _build(ssp, sfh):
@@ -44,7 +47,7 @@ def _cases():
                 "type": "dpl",
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Fixed(LOG_MASS),
-                "age_gyr": Fixed(1.1 * age),
+                "age_frac": Fixed(AGE_FRAC_BIG_BANG),
                 "age_kernel": kernel,
             },
             {},
@@ -55,7 +58,7 @@ def _cases():
                 "type": "delayed",
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Fixed(LOG_MASS),
-                "age_gyr": Fixed(1.1 * age),
+                "age_frac": Fixed(AGE_FRAC_BIG_BANG),
                 "age_kernel": kernel,
             },
             {},
@@ -65,7 +68,7 @@ def _cases():
     yield pytest.param(
         {
             "type": ["dpl", "field"],
-            "sfh_dpl_age_gyr": Fixed(1.1 * age),
+            "sfh_dpl_age_frac": Fixed(AGE_FRAC_BIG_BANG),
             "sfh_dpl_log_total_mass": Fixed(LOG_MASS),
             "sfh_dpl_alpha": Fixed(1.0),
             "sfh_dpl_beta": Fixed(1.5),
