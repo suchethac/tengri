@@ -534,10 +534,10 @@ def test_default_profile_mass_override_matches_direct_build_on_real_ssp(ssp_data
 
 # ── The spec is re-derived too: parse-time quantities depend on z ─────────
 #
-# parse_groups narrows onset/age priors to age_at_z(z) and scales the default
-# nonparametric age bins to age(z). Re-pinning the redshift constant alone keeps
-# the FIRST build's ceilings, so the rebuilt model's parameter space differs from
-# a direct build at the new redshift.
+# parse_groups scales the default nonparametric age bins to age(z). Re-pinning the
+# redshift constant alone keeps the FIRST build's bins, so the rebuilt model's
+# parameter space differs from a direct build at the new redshift. Onset and age
+# priors are fractions of age(z) (#2748) and so are the same at every redshift.
 
 _SFH_FOR_SPEC = {
     "dpl": {"type": "dpl", "all_params": FREE},
@@ -586,8 +586,14 @@ def test_rebuilt_spec_equals_a_direct_build_at_the_new_redshift(
 
 
 def test_the_spec_check_is_not_vacuous(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Two redshifts really do give different onset ceilings and bin edges."""
-    for sfh_name in ("dexp", "nonparametric"):
+    """Two redshifts give different nonparametric bin edges, and the same onset priors.
+
+    The nonparametric bins scale with age(z), so the equality test above can see a
+    stale spec. The dexp onset is a fraction of age(z) (#2748): its spec is the same
+    at every redshift, so its equality case holds by construction.
+    """
+
+    def _differing(sfh_name):
         sfh = _SFH_FOR_SPEC[sfh_name]
         lo = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, Z_BASE, sfh).spec
         hi = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, 2.5, sfh).spec
@@ -598,6 +604,13 @@ def test_the_spec_check_is_not_vacuous(synthetic_ssp_wide, synthetic_tophat_obs)
         ]
         e_lo, e_hi = lo.bin_edges_gyr, hi.bin_edges_gyr
         edges_differ = e_lo is not None and e_hi is not None and not np.allclose(e_lo, e_hi)
-        assert differ or edges_differ, (
-            f"{sfh_name}: no z-dependent spec quantity, so the equality test cannot see one"
-        )
+        return differ, edges_differ
+
+    differ, edges_differ = _differing("nonparametric")
+    assert differ or edges_differ, (
+        "nonparametric: no z-dependent spec quantity, so the equality test cannot see one"
+    )
+    differ, edges_differ = _differing("dexp")
+    assert not differ and not edges_differ, (
+        f"dexp: a fraction-of-age(z) onset gave a z-dependent spec: {differ}"
+    )
