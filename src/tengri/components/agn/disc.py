@@ -1425,7 +1425,8 @@ def _hot_flow_fraction(
     :math:`L_{\rm diss,hot}` of their Eq. 2), divided through by :math:`L_{\rm bol}`
     analytically. The disc temperature scale is set by the accretion rate,
     :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4 = 3 G M \dot M / (2 R_{\rm isco})`,
-    with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
+    with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and
+    :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
 
     .. math::
 
