@@ -36,11 +36,13 @@ pytestmark = pytest.mark.contract
 
 _SSP_PATH = DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
-#: Cold XLA compiles of the build below. Measured 2026-10-15 (jax 0.11.1, CPU): 456
-#: before the build-time eager evaluations of #2914 were traced, 106 after; the
-#: budget sits just above that count. What remains is a long tail of one to a few
-#: eager operations per build step (filter padding, grid-support checks, the
-#: z-table's node arithmetic, loader bookkeeping), each listed in the #2914 thread.
+#: Cold XLA compiles of the build below, with Cue's ionizing-table memos cold (see the
+#: test). Measured on jax 0.11.1, CPU: 456 before the build-time eager evaluations of
+#: #2914 were traced (2026-10-15, ionizing table warm); 136 after them with the table's
+#: own quadrature still dispatched eagerly, 101 with it traced (2026-10-19); the budget
+#: sits above that count. What remains is a long tail of one to a few eager operations
+#: per build step (filter padding, grid-support checks, the z-table's node arithmetic,
+#: loader bookkeeping), each listed in the #2914 thread.
 BUILD_COMPILE_BUDGET = 120
 
 
@@ -101,7 +103,18 @@ def count_build_compiles(build):
 
 
 @requires_cue_weights
-def test_a_free_redshift_panchromatic_build_compiles_within_budget(_cue_fixture_available):
+def test_a_free_redshift_panchromatic_build_compiles_within_budget(
+    _cue_fixture_available, monkeypatch, tmp_path
+):
+    from tengri.components.nebular import ionizing_spectrum as ion
+
+    # Cue's ionizing table is memoized in-process and on disk under the JAX cache
+    # directory, and nothing in the suite clears either tier, so on a machine that
+    # had built this SSP's table before, the count skipped the table's own compiles
+    # and the guard passed warm and failed cold (the fresh-runner case it exists
+    # for). Both tiers are cold here.
+    monkeypatch.setattr(ion, "_IONSPEC_TABLE_CACHE", {})
+    monkeypatch.setattr(ion, "_ionspec_disk_cache_dir", lambda: tmp_path)
     n, names = count_build_compiles(_build_panchromatic_no_agn)
     assert n <= BUILD_COMPILE_BUDGET, (
         f"{n} XLA compiles during SEDModel.build against a budget of "
