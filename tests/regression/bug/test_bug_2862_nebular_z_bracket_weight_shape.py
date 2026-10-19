@@ -84,6 +84,6 @@ def test_the_blended_continuum_band_keeps_the_filter_shape_under_jit_and_grad(z)
     )
     np.testing.assert_allclose(np.asarray(band), expected, rtol=1e-12)
 
-    dz = jax.grad(lambda zz: jnp.sum(_band(zz)))(jnp.asarray(z))
-    chex.assert_tree_all_finite(dz)
-    assert float(dz) != 0.0, "the z gradient must survive, inside the hull and past it"
+    dz = float(jax.grad(lambda zz: jnp.sum(_band(zz)))(jnp.asarray(z)))
+    assert np.isfinite(dz), "the z gradient must be finite, inside the hull and past it"
+    assert dz != 0.0, "the z gradient must survive, inside the hull and past it"
