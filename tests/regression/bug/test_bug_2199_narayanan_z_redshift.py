@@ -176,9 +176,7 @@ def _dust_group(screen: str, law: str, **shape) -> dict:
     return group
 
 
-def _build(
-    uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, sfh_extra=None, **shape
-):
+def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, sfh_extra=None, **shape):
     """One model, one screen, one law, at a pinned or freed redshift."""
     with warnings.catch_warnings():
         _filter_fixture_warnings()
