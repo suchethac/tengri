@@ -402,21 +402,45 @@ def _build_param_map(
 # (find_short_param moved to _aliases.py: imported at top)
 
 
-def _apply_timing_frac(internal, params, param_map):
+def _apply_timing_frac(internal, params, param_map, spec):
     """Resolve ``*_frac`` timings to Gyr in ``internal`` (#2748).
 
-    A fraction absent from ``params`` is its registry default; a fraction
-    and its Gyr name both present is refused.
+    A timing the spec holds Fixed is not in ``params`` (free parameters only),
+    so it is read from the spec: a Fixed ``*_gyr`` alias stands as given and a
+    Fixed ``*_frac`` is converted at its own value. A fraction absent from both
+    is its registry default; a fraction and its Gyr name both present is
+    refused.
     """
     from tengri.config.exceptions import ConfigError
     from tengri.parameters.timing import resolve_timing_fracs, timing_frac_params
 
-    for frac_name, gyr_name in timing_frac_params(param_map).items():
+    pairs = timing_frac_params(param_map)
+    view = dict(params)
+    for frac_name, gyr_name in pairs.items():
+        for name, twin in ((gyr_name, frac_name), (frac_name, gyr_name)):
+            if name in view or twin in view or name not in param_map:
+                continue
+            fixed = _spec_fixed_value(spec, name)
+            if fixed is not None:
+                view[name] = fixed
+    for frac_name, gyr_name in pairs.items():
         if frac_name in param_map and frac_name in params and gyr_name in params:
             raise ConfigError(
                 f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
             )
-    resolve_timing_fracs(internal, params, param_map, redshift=internal.get("redshift"))
+    resolve_timing_fracs(internal, view, param_map, redshift=internal.get("redshift"))
+
+
+def _spec_fixed_value(spec, name):
+    """The numeric Fixed value ``spec`` holds for ``name``, or None."""
+    try:
+        dist = spec.get_distribution(name)
+    except KeyError:
+        return None
+    if not dist.is_fixed:
+        return None
+    value = dist.bounds[0]
+    return value if isinstance(value, (int, float)) else None
 
 
 def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_params: bool = True):
@@ -546,7 +570,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         elif "psd_xi" in params:
             internal["xi"] = params["psd_xi"]
 
-    _apply_timing_frac(internal, params, param_map)
+    _apply_timing_frac(internal, params, param_map, spec)
     # Raise/warn about unrecognized keys (silent bugs when wrong names used)
     unrecognized = _unknown_param_keys(params, param_map)
     if unrecognized:
