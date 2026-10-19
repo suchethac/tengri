@@ -3212,7 +3212,17 @@ def _wildcard_scopes(
         xray_model = getattr(structural_params, "xray_model", None) or structural_kwargs.get(
             "xray_model"
         )
+        xray_alpha_ox_mode = getattr(
+            structural_params, "xray_alpha_ox_mode", None
+        ) or structural_kwargs.get("xray_alpha_ox_mode", "delta")
         reads = _XRAY_PARAMS_BY_MODEL.get(xray_model, _XRAY_DEFAULT_MODEL_PARAMS)
+        if xray_model in _XRAY_ALPHA_OX_MODELS:
+            # The Just+2007 corona reads exactly one of the two alpha_ox declarations,
+            # chosen by how the group named it (#2661).
+            alpha_ox_read = (
+                "xray_alpha_ox" if xray_alpha_ox_mode == "absolute" else "xray_delta_alpha_ox"
+            )
+            reads = (reads - _XRAY_ALPHA_OX_PARAMS) | {alpha_ox_read}
         scopes["xray"] = frozenset(
             xray_group_params - (_XRAY_VARIANT_PARAMS - reads) - _XRAY_UNREACHABLE_PARAMS
         )
@@ -5560,6 +5570,7 @@ _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: What the shared ``XRaySEDComponent`` corona reads on its non-``lopez24``
 #: branch (``yang20`` / ``simple`` / ``agn_xray_corona``, which all resolve to
 #: it). ``xray_alpha_irx`` is absent because only the lopez24 branch reads it.
+#: ``xray_a1`` / ``xray_a2`` are the yang20 anisotropy coefficients (#2661).
 _XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
     {
         "xray_delta_alpha_ox",
@@ -5568,8 +5579,16 @@ _XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
         "xray_log_nh",
         "xray_det_hmxb",
         "xray_det_lmxb",
+        "xray_a1",
+        "xray_a2",
     }
 )
+#: The two ways to declare the yang20 corona's alpha_ox (#2661): the offset from the
+#: Just+2007 relation, or the absolute value. Exactly one is read, chosen by the
+#: group's keys (``xray_alpha_ox_mode``), never both.
+_XRAY_ALPHA_OX_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox", "xray_alpha_ox"})
+#: Models whose corona reads the alpha_ox declaration (the Just+2007 corona).
+_XRAY_ALPHA_OX_MODELS: frozenset[str] = frozenset({"yang20", "simple"})
 #: Union of the above: the names the scope may narrow away.
 _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
     *_XRAY_PARAMS_BY_MODEL.values()
@@ -5683,6 +5702,29 @@ def _translate_agb_dust(agb_dust_dict: dict, result: dict) -> None:
         result["agb_dust_model"] = agb_dust_type
 
 
+def _xray_alpha_ox_mode(xray_dict: dict) -> str:
+    """Which yang20 alpha_ox declaration the xray group names: ``delta`` or ``absolute``.
+
+    The offset ``delta_alpha_ox`` and the absolute ``alpha_ox`` are alternatives; the
+    corona forms the offset from the absolute value per draw (#2661). Naming both is
+    refused, because one of them would silently do nothing.
+
+    Raises
+    ------
+    ParameterError
+        If the group names both ``delta_alpha_ox`` and ``alpha_ox``.
+    """
+    absolute = [k for k in ("alpha_ox", "xray_alpha_ox") if k in xray_dict]
+    delta = [k for k in ("delta_alpha_ox", "xray_delta_alpha_ox") if k in xray_dict]
+    if absolute and delta:
+        raise ParameterError(
+            f"xray group names both {delta[0]!r} and {absolute[0]!r}. Give exactly one: "
+            f"{delta[0]!r} is the offset from the Just+2007 alpha_ox relation, "
+            f"{absolute[0]!r} is the absolute alpha_ox."
+        )
+    return "absolute" if absolute else "delta"
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
@@ -5697,6 +5739,14 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     # component so it can dispatch; "simple" is the yang20 alias.
     if xray_type != "none":
         result["xray_model"] = xray_type
+        alpha_ox_mode = _xray_alpha_ox_mode(xray_dict)
+        if alpha_ox_mode == "absolute" and xray_type not in _XRAY_ALPHA_OX_MODELS:
+            raise ParameterError(
+                f"xray type {xray_type!r} does not read alpha_ox: only the yang20 corona "
+                f"does. Under {xray_type!r} the corona is anchored elsewhere, so the key "
+                f"would be silently ignored."
+            )
+        result["xray_alpha_ox_mode"] = alpha_ox_mode
 
 
 #: AGN sub-block keys recognized by the nested-dict grammar. Used when
@@ -7867,6 +7917,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # this point on, ahead of the R37 validator and the R42 'none' branch
     # below.
     top_type = _normalize_off_switch(agn_dict.get("type"))
+    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time
+    # tuple. Parsed before the type branches so a monolithic model carries it too and the
+    # build refuses it there, instead of accepting and dropping the key.
+    if "ir_frac_window" in agn_dict:
+        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
+
     if top_type is not None and top_type != "composable":
         # R37: validate the name HERE, before anything else reads it. It used
         # to be forwarded to ``agn_model`` unchecked, "validated lazily by
@@ -8161,10 +8217,6 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
-
-    # CIGALE's lambda_fracAGN window for agn_ir_frac (#2662): structural, a build-time tuple.
-    if "ir_frac_window" in agn_dict:
-        result["agn_ir_frac_window"] = _parse_ir_frac_window(agn_dict["ir_frac_window"])
 
 
 def _parse_ir_frac_window(value: object) -> tuple[float, float]:

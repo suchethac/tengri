@@ -43,7 +43,7 @@ References:
 - Meurer, Heckman & Calzetti 1999, ApJ, 521, 64 (starburst IRX–β relation)
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582 (UV slope fitting windows)
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-253
+.. GENERATED FROM PYTHON SOURCE LINES 28-254
 
 
 
@@ -57,18 +57,10 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:2677: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.77 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.25 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.77 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:249: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
-      ax_right.clabel(contours, inline=True, fontsize=8, fmt="β=%.1f")
-    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:251: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:251: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:252: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:252: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.787 Gyr old at redshift 0. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.787 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.643 Gyr old at redshift 0.01. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.643 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
 
@@ -201,13 +193,13 @@ References:
         return float(slope)
 
 
-    # Build model with fixed peak_lbt_gyr and dust parameters, then override during sampling
+    # Build model with fixed peak_lbt_frac and dust parameters, then override during sampling
     model_age_dust = tengri.SEDModel.build(
         ssp,
         sfh={
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "peak_lbt_gyr": tengri.FREE,
+            "peak_lbt_frac": tengri.FREE,
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
@@ -224,6 +216,7 @@ References:
     )
 
     baseline_age_dust = dict(model_age_dust.spec.sample(jax.random.PRNGKey(0)))
+    AGE_Z = float(tengri.cosmology.age_at_z(0.01))  # Gyr
 
     # 2D sweep: age × dust (limited range to avoid IR artifacts)
     age_values = np.logspace(np.log10(0.01), np.log10(1.0), 12)
@@ -235,7 +228,7 @@ References:
         for tau_idx, tau in enumerate(tau_values):
             p = {
                 **baseline_age_dust,
-                "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
+                "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z),
                 "dust_tau_diff": jnp.float64(tau),
             }
             out = model_age_dust.predict(p)
@@ -308,7 +301,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.979 seconds)
+   **Total running time of the script:** (0 minutes 32.085 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

@@ -32,7 +32,7 @@ star formation, weak break). Old populations climb to
 The Kauffmann+2003 green-valley cut at ``D_n(4000) ≈ 1.5`` is the
 horizontal divider.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-110
+.. GENERATED FROM PYTHON SOURCE LINES 16-117
 
 
 
@@ -42,13 +42,30 @@ horizontal divider.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:13787: SFHBeyondOldestTemplateWarning: The SSP grid's oldest template is 12.589 Gyr but the universe is 13.090 Gyr old at redshift 0.05. Stars formed in that gap are older than every template, so both age kernels assign them to the oldest one: the formed mass is conserved, and those stars carry the colors of a 12.589 Gyr population. Use a grid whose oldest template reaches 13.090 Gyr (e.g. MIST) to remove the approximation.
+      return cls(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
 
     import os
+
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    _PEAK_FRAC_LO, _PEAK_FRAC_HI = (
+        SFH_REGISTRY["tsnorm"].params["sfh_tsnorm_peak_lbt_frac"].default.bounds
+    )
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
@@ -80,7 +97,7 @@ horizontal divider.
         sfh={
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+            "peak_lbt_frac": tengri.Uniform(_PEAK_FRAC_LO, _PEAK_FRAC_HI),
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
@@ -96,13 +113,14 @@ horizontal divider.
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    AGE_Z = float(tengri.cosmology.age_at_z(0.05))  # Gyr
 
     ages = np.geomspace(0.03, 11.0, 28)
     d4000 = np.empty_like(ages)
     ssfr = np.empty_like(ages)
 
     for i, age in enumerate(ages):
-        p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
+        p = {**baseline, "sfh_tsnorm_peak_lbt_frac": jnp.float64(age / AGE_Z)}
         out = model.predict(p)
         wave = np.asarray(model.wavelengths)
         l_nu = np.asarray(out.rest_sed())
@@ -141,6 +159,11 @@ horizontal divider.
 
     fig.tight_layout()
     plt.savefig("plot_usecase_d4000_vs_ssfr.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.728 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_d4000_vs_ssfr.py:
