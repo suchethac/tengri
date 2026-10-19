@@ -358,7 +358,8 @@ class TestSampleSubstreamStability:
         This is the #548/#563 regression: spec_b enables ``dust_emission``,
         which adds free ``dust_T``/``dust_beta_ir``. Under positional key
         splitting this shifted the shared ``sfh_dpl_*`` draws (notably
-        ``sfh_dpl_age_gyr``: 13.62 vs 13.08); per-name substreams keep them
+        ``sfh_dpl_age_gyr``: 13.62 vs 13.08, since renamed
+        ``sfh_dpl_age_frac``); per-name substreams keep them
         identical.
         """
         key = jax.random.PRNGKey(0)
@@ -376,7 +377,7 @@ class TestSampleSubstreamStability:
         )
         # Every param free in BOTH must draw identically.
         shared_free = set(spec_a.free_params) & set(spec_b.free_params)
-        assert "sfh_dpl_age_gyr" in shared_free, "age_gyr must be free in both"
+        assert "sfh_dpl_age_frac" in shared_free, "age_frac must be free in both"
         for name in shared_free:
             np.testing.assert_allclose(
                 np.asarray(a[name]),
