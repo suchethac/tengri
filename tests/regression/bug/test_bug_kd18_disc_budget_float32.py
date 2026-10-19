@@ -10,7 +10,7 @@ of :math:`\epsilon` in the corona share by :math:`0.959/0.041 = 23.6`.
 The invariants are (1) the corona share equals the closed form :math:`\min(f_{\rm hard}
 L_{\rm Edd}/L_{\rm bol},\ 3 h_{\rm cap}/(2 \eta\, r_{\rm isco}))` (float64, 1e-12), and (2) the
 float32 disc spectrum follows float64 to 5e-5 at that edge, where forming the budget from
-``log10 L_bol`` and ``log10 l_hot`` gave 1.6e-4.
+``log10 L_bol`` and ``log10 l_hot`` gave 1.68e-4.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def test_hot_flow_fraction_matches_hot_flow_luminosity_in_float64():
 
 
 def test_float32_disc_spectrum_follows_float64_at_the_corona_dominated_edge():
-    """The disc spectrum, the cancellation-sensitive part, agrees to 5e-5 (was 1.7e-4)."""
+    """The disc spectrum, the cancellation-sensitive part, agrees to 5e-5 (was 1.68e-4)."""
     p64, p32 = _parts(False), _parts(True)
     disc64, disc32 = p64[1], p32[1]
     significant = disc64 > 1e-3 * disc64.max()
