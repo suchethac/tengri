@@ -1421,8 +1421,8 @@ def _hot_flow_fraction(
     r"""Corona share of the accretion power, :math:`L_{\rm hot} / L_{\rm bol}` [dimensionless].
 
     The cap of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard} L_{\rm
-    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.3, with :math:`L_{\rm diss,hot}` of
-    their Eq. 2), divided through by :math:`L_{\rm bol}` analytically. The disc temperature
+    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
+    :math:`L_{\rm diss,hot}` of their Eq. 2), divided through by :math:`L_{\rm bol}` analytically. The disc temperature
     scale is set by the accretion rate, :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4
     = 3 G M \dot M / (2 R_{\rm isco})`, with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and
     :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
@@ -1683,8 +1683,8 @@ def _compute_zone_luminosities(
 
     The corona power is :math:`L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}}
     \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Eq. 2), set to
-    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.3). The disc budget is the rest of the accretion
-    power, :math:`L_{\rm bol}\,|1 - L_{\rm hot}/L_{\rm bol}|`, with the share formed by
+    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.2.1, Table 3). The disc budget is the rest of the
+    accretion power, :math:`L_{\rm bol}\,|1 - L_{\rm hot}/L_{\rm bol}|`, with the share formed by
     :func:`_hot_flow_fraction` so the difference is taken between O(1) numbers, not between two
     float32 logarithms of ~1e11 powers.
 
