@@ -64,6 +64,8 @@ _BAKED_BUDGET_MB = 1.0
 # 0.05 MB per trace. The same graph measures 0.668 MB (9 x 4000-node grid 0.288 MB, 162 x
 # 128-node 0.166 MB, 9 x 2000-node corona grid 0.144 MB), so the budget sits 0.07 MB above it
 # and still catches one extra copy of the 13001-node budget grid (+0.10 MB per copy).
+# The nine copies are redundant: #3044 tracks deduplicating the kubota tables so the budget
+# can return to about 0.35 MB.
 _FRITZ_TIED_BUDGET_MB = 0.74
 
 # ``none`` is the no-op selector present in every category.
