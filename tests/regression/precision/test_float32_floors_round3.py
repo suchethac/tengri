@@ -104,25 +104,36 @@ def test_powerlaw_disc_underflowed_normalization_is_finite_float32():
 
 
 def test_hot_corona_underflowed_normalization_is_finite_float32():
-    """A corona whose normalization grid underflows gives a finite zero, not ``NaN``.
+    """A corona whose normalization grid underflows matches float64, with no ``NaN``.
 
     With ``kT`` far below the photon energy, the Comptonization cutoff ``exp(-500)``
-    is zero in float32 across the normalization grid, so the integral is 0 and the
-    divisor must be the derivative-safe floor, not ``0``.
+    is zero in float32 across the normalization grid, so a linear-domain integral is 0.
+    The function works in log space and returns the peak-normalized ``shape`` and the
+    ``log10_amplitude`` separately (#2767), so both stay finite and equal their float64
+    values to float32 rounding: the log-shape arguments reach ~500, so a relative
+    error of a few hundred float32 epsilons (eps = 1.2e-7) bounds them.
     """
+    import numpy as np
+
     from tengri.components.agn.disc import _hot_corona_lnu
 
-    with jax.enable_x64(False):
-        nu = jnp.array([1e15, 1e17], dtype=jnp.float32)
-        shape, log10_amplitude = _hot_corona_lnu(
-            nu, jnp.float32(1e30), 1.8, jnp.float32(1e-30), 0.0
+    def _run(dtype):
+        nu = jnp.array([1e15, 1e17], dtype=dtype)
+        shape, log_amp = _hot_corona_lnu(
+            nu, jnp.asarray(1e30, dtype), 1.8, jnp.asarray(1e-30, dtype), 0.0
         )
-        # The function returns the normalized shape and the log10 amplitude separately,
-        # never their product (#2767): both must be finite, and the shape stays within
-        # its documented [0, 1] bound relative to the grid peak.
-        assert bool(jnp.all(jnp.isfinite(shape)))
-        assert bool(jnp.isfinite(log10_amplitude))
-        assert bool(jnp.all((shape >= 0.0) & (shape <= 1.0)))
+        return np.asarray(shape, dtype=np.float64), float(log_amp)
+
+    with jax.enable_x64(True):
+        shape64, log_amp64 = _run(jnp.float64)
+    with jax.enable_x64(False):
+        shape32, log_amp32 = _run(jnp.float32)
+
+    eps32 = float(np.finfo(np.float32).eps)
+    assert np.all(np.isfinite(shape32)) and np.isfinite(log_amp32)
+    assert np.all((shape32 >= 0.0) & (shape32 <= 1.0))
+    np.testing.assert_allclose(shape32, shape64, rtol=500 * eps32, atol=0.0)
+    assert abs(log_amp32 - log_amp64) <= 500 * eps32 * max(1.0, abs(log_amp64))
 
 
 def test_fracagn_zero_agn_luminosity_log_is_finite_float32():
