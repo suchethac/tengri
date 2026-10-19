@@ -176,14 +176,16 @@ def _dust_group(screen: str, law: str, **shape) -> dict:
     return group
 
 
-def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, **shape):
+def _build(
+    uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, sfh_extra=None, **shape
+):
     """One model, one screen, one law, at a pinned or freed redshift."""
     with warnings.catch_warnings():
         _filter_fixture_warnings()
         return SEDModel.build(
             ssp_data=uv_ssp,
             observation=uv_obs,
-            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT), **(sfh_extra or {})},
             dust_attenuation=_dust_group(screen, law, **shape),
             redshift=redshift,
             approx=approx,
@@ -206,9 +208,11 @@ def _params(model, screen: str, tau: float = _TAU) -> dict:
 
 
 def _photometry(
-    uv_ssp, uv_obs, screen: str, law: str, z: float, approx=None, **shape
+    uv_ssp, uv_obs, screen: str, law: str, z: float, approx=None, sfh_extra=None, **shape
 ) -> np.ndarray:
-    model = _build(uv_ssp, uv_obs, screen, law, Fixed(z), approx=approx, **shape)
+    model = _build(
+        uv_ssp, uv_obs, screen, law, Fixed(z), approx=approx, sfh_extra=sfh_extra, **shape
+    )
     with warnings.catch_warnings():
         _filter_fixture_warnings()
         return np.asarray(model.predict_photometry(_params(model, screen)))
@@ -747,7 +751,17 @@ def test_a_law_that_does_not_read_redshift_is_unchanged_to_ulp(screen, law, uv_s
     below, which is ulp-free.
     """
     reference = np.asarray(_UNTOUCHED_LAW_PHOTOMETRY[(screen, law)])
-    measured = _photometry(uv_ssp, uv_obs, screen, law, 0.5)
+    from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
+    from tengri.utils.cosmology import age_at_z
+
+    # The references were taken with the DPL onset at the registry's former
+    # absolute default (_AGE_UNIV_GYR Gyr). The onset is now a fraction of
+    # age(z) whose default is 1.0, so state the old absolute age explicitly.
+    z = 0.5
+    onset_frac = float(_AGE_UNIV_GYR / age_at_z(z))
+    measured = _photometry(
+        uv_ssp, uv_obs, screen, law, z, sfh_extra={"age_frac": Fixed(onset_frac)}
+    )
     np.testing.assert_allclose(
         measured,
         reference,
