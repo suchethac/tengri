@@ -358,9 +358,10 @@ def test_a_pinned_value_a_free_prior_can_cross_is_refused_at_build(synthetic_ssp
     spelling of the pinned key.
 
     The epochs are fractions of age(z) (#2748): ``*_gyr`` is a Fixed-only alias
-    and ``all_params: FREE`` does not free a fraction, so the free prior is
-    stated explicitly on ``tlast_frac``, over the same Gyr range divided by the
-    age of the universe at z=0, and ``tflex_frac`` is pinned at 0.7 Gyr.
+    and the build-time ordering check only sees explicitly named keys, so the
+    old ``tflex_gyr`` pin with ``all_params: FREE`` stopped raising. The free
+    prior is therefore named on ``tlast_frac``, over the same Gyr range divided
+    by the age of the universe at z=0, and ``tflex_frac`` is pinned at 0.7 Gyr.
     """
     age0 = float(age_at_z0_host())
     tlast_free = Uniform(0.01 / age0, 1.0 / age0)

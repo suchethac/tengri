@@ -52,7 +52,9 @@ from tengri import (
     Uniform,
     WavePrecomp,
 )
+from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
 from tengri.observation.photometry import FilterCurve
+from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
@@ -749,9 +751,6 @@ def test_a_law_that_does_not_read_redshift_is_unchanged_to_ulp(screen, law, uv_s
     below, which is ulp-free.
     """
     reference = np.asarray(_UNTOUCHED_LAW_PHOTOMETRY[(screen, law)])
-    from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
-    from tengri.utils.cosmology import age_at_z
-
     # The references were taken with the DPL onset at the registry's former
     # absolute default (_AGE_UNIV_GYR Gyr). The onset is now a fraction of
     # age(z) whose default is 1.0, so state the old absolute age explicitly.
