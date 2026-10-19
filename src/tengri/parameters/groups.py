@@ -1533,6 +1533,11 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     timing_dropped = _settle_timing_pairs_for_build(resolved_kwargs, provenance)
+    _validate_sfh_quench_ordering(
+        (kwargs.get("sfh") or {}).get("type") if isinstance(kwargs.get("sfh"), dict) else None,
+        resolved_kwargs,
+        provenance,
+    )
     grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
@@ -3561,53 +3566,36 @@ def _validate_met_ladder_keys(met_type, met_dict, n_bins: int) -> None:
             )
 
 
-def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
+def _validate_sfh_quench_ordering(sfh_type, resolved: dict, provenance: dict[str, str]) -> None:
     """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
 
-    Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
-    grammar's own order of precedence, and hands both to the registry. The rule
-    itself lives there, beside :func:`validate_bin_edges_gyr`, so the grammar
-    owns only the lookup.
+    Runs on the RESOLVED priors, after the wildcard has expanded and each
+    ``*_gyr`` / ``*_frac`` pair has been settled to one member, so a timing the
+    user never wrote but ``all_params: FREE`` freed (or pinned) is ordered like
+    one they did. Reading the user's dict alone missed exactly that case: a
+    ``tflex_gyr`` pin beside the wildcard-freed ``tlast_frac`` crossed
+    undetected. The rule itself lives in the registry, beside
+    :func:`validate_bin_edges_gyr`; the grammar only supplies what it resolved,
+    which keys were user-written, and the resolved redshift.
 
-    The lookup goes through :func:`_override_key_for`, the same resolution
-    :func:`_resolve_value` performs, so every spelling the grammar accepts for
-    these two parameters reaches the check: short (``tflex_gyr``), full
-    (``sfh_psb2022_tflex_gyr``), and legacy. Reading only the short key left the
-    full-name spelling of a crossing accepted, which is a guard with a bypass.
-    When neither is present the wildcard applies, and when there is no wildcard
-    either the registry default does.
-
-    By this pass ``all_params`` / ``other_params`` have been normalized to the
-    ``'*'`` key; both spellings are still read so the lookup does not depend on
-    that normalization staying upstream of this call.
+    Parameters
+    ----------
+    sfh_type : str or list of str or None
+        The ``sfh`` group's ``type``; each member of a composition is checked.
+    resolved : dict
+        Resolved ``public_name -> Distribution`` after the timing pairs are settled.
+    provenance : dict
+        ``public_name -> provenance tag``, as for ``resolved``.
     """
-    from tengri.components.stellar.sfh.registry import (
-        psb_quench_frac_names,
-        psb_quench_param_names,
-        validate_psb_quench_ordering,
-    )
+    from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
+    from tengri.parameters.timing import _USER_NAMED
 
-    names = psb_quench_param_names(sfh_type)
-    if names is None:
-        return
-
-    wildcard = sfh_dict.get("*")
-    if wildcard is None:
-        wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
-
-    given = []
-    for full_name in names:
-        key = _override_key_for(full_name, sfh_dict, warn=False)
-        given.append(sfh_dict[key] if key is not None else wildcard)
-    # A fraction is named only by its own key: the wildcard never frees one
-    # (``all_params: FREE`` leaves the *_frac timings at their Fixed shim).
-    frac_given = []
-    for full_name in psb_quench_frac_names(sfh_type):
-        key = _override_key_for(full_name, sfh_dict, warn=False)
-        frac_given.append(sfh_dict[key] if key is not None else None)
-    validate_psb_quench_ordering(
-        sfh_type, *given, tlast_frac=frac_given[0], tflex_frac=frac_given[1]
-    )
+    types = sfh_type if isinstance(sfh_type, list) else [sfh_type]
+    user_named = frozenset(name for name, tag in provenance.items() if tag in _USER_NAMED)
+    for type_name in types:
+        validate_psb_quench_ordering(
+            type_name, resolved, user_named=user_named, redshift=resolved.get("redshift")
+        )
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
@@ -3713,7 +3701,6 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                         "sfh 'type' list, not with a scalar 'type='."
                     ),
                 )
-            _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
 
@@ -3729,7 +3716,6 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if sfh_type not in valid:
         raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type", n_suggestions=3)
 
-    _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
 
 

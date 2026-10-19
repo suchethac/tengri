@@ -365,10 +365,14 @@ def test_a_pinned_value_a_free_prior_can_cross_is_refused_at_build(synthetic_ssp
 def test_a_pinned_value_the_free_prior_cannot_reach_is_accepted(synthetic_ssp_wide):
     """The check refuses crossings, not mixed dispositions.
 
-    ``tflex_gyr`` pinned at 1.5 Gyr sits above everything ``tlast_gyr``'s prior
-    can draw, so this build is well posed and must go through; so must the
-    default, where both epochs are pinned at their registry values.
+    ``tflex_frac`` pinned at 1.5 Gyr (as a fraction of the age of the universe)
+    sits above everything the wildcard-freed ``tlast_frac`` prior can draw, so
+    this build is well posed and must go through; so must the default, where
+    both epochs are pinned at their registry values.
     """
-    _build_psb(synthetic_ssp_wide, tflex_gyr=Fixed(1.5), all_params=FREE)
+    from tengri.components.stellar.sfh.registry import _AGE_FRAC_PRIORS
+
+    tlast_ceiling = _AGE_FRAC_PRIORS["sfh_psb2022_tlast_frac"].bounds[1]  # 1.0 Gyr / age0
+    _build_psb(synthetic_ssp_wide, tflex_frac=Fixed(1.5 * tlast_ceiling), all_params=FREE)
     _build_psb(synthetic_ssp_wide, all_params=FREE)
     _build_psb(synthetic_ssp_wide, all_params=Fixed(DEFAULT))
