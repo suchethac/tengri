@@ -3588,10 +3588,10 @@ def _validate_sfh_quench_ordering(sfh_type, resolved: dict, provenance: dict[str
         ``public_name -> provenance tag``, as for ``resolved``.
     """
     from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
-    from tengri.parameters.timing import _USER_NAMED
+    from tengri.parameters.timing import user_named_timing_keys
 
     types = sfh_type if isinstance(sfh_type, list) else [sfh_type]
-    user_named = frozenset(name for name, tag in provenance.items() if tag in _USER_NAMED)
+    user_named = user_named_timing_keys(provenance)
     for type_name in types:
         validate_psb_quench_ordering(
             type_name, resolved, user_named=user_named, redshift=resolved.get("redshift")

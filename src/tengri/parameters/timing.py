@@ -495,3 +495,19 @@ def route_timing_fracs(full_params, sampled):
         if frac_name in out:
             out.pop(gyr_name, None)
     return out
+
+
+def user_named_timing_keys(provenance):
+    """Names the user wrote explicitly, as opposed to a wildcard or default (#2748).
+
+    Parameters
+    ----------
+    provenance : dict
+        ``public_name -> provenance tag`` of a build.
+
+    Returns
+    -------
+    frozenset of str
+        The names whose tag marks a user-written fixed value, prior or FREE.
+    """
+    return frozenset(name for name, tag in provenance.items() if tag in _USER_NAMED)

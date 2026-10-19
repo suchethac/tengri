@@ -87,3 +87,15 @@ def test_user_written_mixed_units_are_still_an_error(synthetic_ssp_wide):
             tflex_gyr=Fixed(2.0),
             all_params=Fixed(DEFAULT),
         )
+
+
+def test_mixed_units_without_a_redshift_raise_for_a_direct_caller():
+    """A fraction beside a Gyr time cannot be ordered without a redshift; it is not skipped."""
+    from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
+
+    resolved = {
+        "sfh_psb2022_tlast_frac": Uniform(0.0007, 0.0725),
+        "sfh_psb2022_tflex_gyr": Fixed(0.7),
+    }
+    with pytest.raises(ConfigError, match="redshift"):
+        validate_psb_quench_ordering("psb_suess2022", resolved)

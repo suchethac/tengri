@@ -2916,9 +2916,9 @@ def validate_psb_quench_ordering(sfh_type, resolved, *, user_named=(), redshift=
     fractions is ``tlast <= tflex`` in Gyr at any z. A fraction beside a Gyr
     time that no one wrote as a fraction (a wildcard or default supplied it) is
     converted to Gyr over the ages the build's redshift can give,
-    ``[frac_lo * age(z_max), frac_hi * age(z_min)]``, which treats the
-    redshift of the two ends independently and so refuses at most a narrow
-    window of pins near the edge of a prior, never a crossing it could miss.
+    ``[frac_lo * age(z_max), frac_hi * age(z_min)]``. The Gyr end is a constant
+    pin, so only the fraction end depends on the redshift and this range is
+    exactly the set of values the build can reach: the conversion is exact.
 
     Equality is legal, and is the single point the two priors share. Measured at
     ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
@@ -2960,7 +2960,15 @@ def validate_psb_quench_ordering(sfh_type, resolved, *, user_named=(), redshift=
             "redshift."
         )
     ages = _redshift_age_range_gyr(redshift)
-    if ages is None or last is None or flex is None:
+    if ages is None:
+        raise ConfigError(
+            f"sfh type={sfh_type!r} gives the two quench times in mixed units "
+            f"({last_name!r} as {last_unit}, {flex_name!r} as {flex_unit}) and the "
+            "redshift is missing or unreadable, so a fraction of age(z) cannot be "
+            "converted to Gyr to order them. Pass the resolved redshift, or give "
+            "both times in the same unit."
+        )
+    if last is None or flex is None:
         return
     if last_unit == "frac":
         last = (last[0] * ages[0], last[1] * ages[1])
