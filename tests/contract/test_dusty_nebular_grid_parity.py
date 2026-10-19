@@ -73,10 +73,17 @@ def _age_frac(age_gyr):
     return age_gyr / AGE_AT_Z
 
 
+#: Absolute onsets [Gyr] of the four PRNG draws, the values these keys drew when the onset
+#: was a Gyr parameter. ``Parameters.sample`` seeds each parameter by its name, so the
+#: rename to ``sfh_dpl_age_frac`` (#2748) drew different onsets from the same keys; they
+#: are pinned so the tolerances below keep the points they were measured on.
+_DRAW_ONSETS_GYR = (1.276897, 9.545921, 2.075379, 5.424307)
+
+
 _SFH = {
     "type": "dpl",
     "all_params": Fixed(DEFAULT),
-    "age_frac": Uniform(0.00362663, 0.725327),
+    "age_frac": Uniform(_age_frac(0.05), _age_frac(10.0)),
     "tau_gyr": Uniform(0.05, 10.0),
     "log_total_mass": Uniform(8.0, 12.0),
 }
@@ -234,6 +241,7 @@ def _points(model):
     for s in range(4):
         key = jax.random.PRNGKey(s)
         draw_dict = dict(model.spec.sample(key))
+        draw_dict["sfh_dpl_age_frac"] = _age_frac(_DRAW_ONSETS_GYR[s])
         points[f"draw_{s}"] = draw_dict
 
     # Verify all dicts have correct keys
