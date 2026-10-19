@@ -418,9 +418,14 @@ def _tied_disc_component(i_deg: float, monkeypatch=None, unscreened: bool = Fals
         real = runner.library_torus_sightline
 
         def open_sightline(*args, **kwargs):
+            # The tied disc takes the column through disc_factor (2 cos i T_X below the library
+            # edge, #2760), so the unscreened control removes it from both the transmission and
+            # the disc factor: the corona and the disc then see the same unit column.
             sight = real(*args, **kwargs)
             one = jnp.ones_like(sight.transmission)
-            return sight._replace(transmission=one)
+            return sight._replace(
+                transmission=one, disc_factor=2.0 * jnp.asarray(kwargs["cos_inc"]) * one
+            )
 
         monkeypatch.setattr(runner, "library_torus_sightline", open_sightline)
     _, comps = compose_l_nu(
@@ -444,8 +449,8 @@ def _tied_disc_component(i_deg: float, monkeypatch=None, unscreened: bool = Fals
 def test_tied_corona_is_absorbed_on_a_type2_sightline(monkeypatch):
     """The tied X-ray corona is dimmed by exp(-sigma N_H) of the library column at i = 75 deg.
 
-    The same composition is run once with the sightline's transmission forced to 1: the ratio
-    is the transmission the corona took (the tied thin disc is negligible at 2 to 9 keV).
+    The same composition is run once with the sightline forced to unit column (transmission and
+    disc factor): the ratio is the transmission that both the corona and the tied disc took.
     """
     i_deg = 75.0
     screened = _tied_disc_component(i_deg)

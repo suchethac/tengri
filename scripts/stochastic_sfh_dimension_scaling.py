@@ -54,6 +54,7 @@ from tengri import (
     builders,
     load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 from tengri.observation import LineFluxData
 from tengri.observation.line_measurement import default_line_defs
 
@@ -84,7 +85,7 @@ LINE_NAMES = [
 DPL_TEMPLATE = {
     "sfh_dpl_alpha": 2.0,
     "sfh_dpl_beta": 1.5,
-    "sfh_dpl_age_gyr": 12.0,
+    "sfh_dpl_age_frac": 12.0 / float(age_at_z(0.1)),
     "sfh_dpl_tau_gyr": 13.0,
 }
 MET_FIXED = -0.3

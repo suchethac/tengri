@@ -17,6 +17,16 @@ For empirical disc backends that do not model a corona explicitly, the X-ray lum
 $$ (eq-alpha-ox)
  where $L_\nu(2500\,\text{\AA})$ is in $\mathrm{erg\,s^{-1}\,Hz^{-1}}$. The definition $\alpha_{\rm ox} \equiv 0.384\,\log(L_{2\,\rm keV}/L_{2500})$ then gives the 2 keV monochromatic luminosity. An additive offset $\Delta\alpha_{\rm ox}$ (prior $|\Delta\alpha_{\rm ox}| < 0.2$) absorbs scatter around the mean relation.
 
+#### Reproducing CIGALE's yang20 controls.
+
+The `xray={'type': 'yang20'}` block exposes the three controls of CIGALE's `yang20` module, with the same formulas:
+
+- **Absolute $\alpha_{\rm ox}$.** `xray={'type': 'yang20', 'alpha_ox': Uniform(-1.9, -1.1)}` sets the slope directly, as CIGALE's `alpha_ox` list does. The corona forms the offset $\Delta\alpha_{\rm ox} = \alpha_{\rm ox} - \alpha_{\rm ox}^{\rm Just07}(L_{2500})$ on every draw, so the 2 keV anchor is exactly $\alpha_{\rm ox}$. Give `alpha_ox` or `delta_alpha_ox`, never both: naming both raises `ParameterError`. Without either key the offset defaults to $\Delta\alpha_{\rm ox} = 0$.
+- **Anisotropy coefficients.** `xray_a1` (default 0.5, prior Uniform(0, 1)) and `xray_a2` (default 0.0, prior Uniform(-0.5, 0.5)) are the coefficients of the anisotropy in Eq. (eq-xray-aniso). `xray_a1=0, xray_a2=0` is isotropic, CIGALE's `angle_coef` "0 & 0".
+- **`max_dev_alpha_ox`.** CIGALE rejects a model whose $\alpha_{\rm ox}$ lies more than `max_dev_alpha_ox` from the Just et al. (2007) relation. tengri offers the soft form: a Gaussian prior on the offset with $\sigma$ equal to `max_dev_alpha_ox`, `xray={'type': 'yang20', 'delta_alpha_ox': Gaussian(0.0, 0.2)}` for `max_dev_alpha_ox = 0.2`. The log-prior at $\Delta\alpha_{\rm ox} = \pm 0.2$ is 0.5 below its value at $\Delta\alpha_{\rm ox} = 0$; a model is penalized, not rejected.
+
+The per-term X-ray luminosities that CIGALE reports are derived keys in $\log_{10}$ [dex re erg s$^{-1}$], each the band integral of the term that enters the X-ray SED. The properties are `log_l_x_hmxb_2_10` (HMXB, 2--10 keV), `log_l_x_lmxb_2_10` (LMXB, 2--10 keV), `log_l_x_hotgas_0p5_2` (hot gas, 0.5--2 keV), `log_l_x_agn_2_10` (corona, 2--10 keV), `log_l_x_agn_total` (unabsorbed corona, 0.25--1240 keV, the band of CIGALE's `yang20` module), and `log_lnu_2kev_30deg`, the intrinsic 2 keV monochromatic $L_\nu$ at $\cos i = 30^\circ$ in $\log_{10}$ [dex re erg s$^{-1}$ Hz$^{-1}$], the $\alpha_{\rm ox}$ anchor CIGALE prints. The two XRB terms add to `log_l_x_xrb`. Terms that are exactly zero report $-\infty$. Under the `lopez24` corona the 2 keV anchor is not defined, so `log_lnu_2kev_30deg` reports $-\infty$ there.
+
 #### X-ray spectral shape.
 
 The corona spectrum is a power law with exponential cutoff: $$L_\nu \propto E^{1 - \Gamma}\,\exp\!\left(-\frac{E}{E_{\rm cut}}\right),

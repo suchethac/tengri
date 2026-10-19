@@ -40,8 +40,9 @@ model = tengri.SEDModel.build(
 )
 
 key = jax.random.PRNGKey(42)
+age_z = float(tengri.cosmology.age_at_z(0.1))  # Gyr
 truth_params = {
-    "sfh_tsnorm_peak_lbt_gyr": 2.5,
+    "sfh_tsnorm_peak_lbt_frac": 2.5 / age_z,
     "sfh_tsnorm_width_gyr": 1.5,
     "sfh_tsnorm_log_total_mass": 0.9,
     "sfh_tsnorm_skew": 0.2,
