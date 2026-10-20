@@ -61,9 +61,10 @@ _HALPHA_OBS = 6562.8 * (1.0 + _Z)
 _HBETA_OBS = 4861.3 * (1.0 + _Z)
 # The pins were captured on one platform and are checked on others (linux CI, macOS, other
 # jaxlib builds), where the FFT and the reductions round differently in the last bits:
-# measured 3e-16 relative on the CI runner against the pins captured on macOS. 1e-12 is
-# ~4500 ulp, far below anything a change to the stages or their order produces (those move
-# the spectrum at 1e-3 and above), so the pins still catch any real change.
+# measured up to 1.7e-15 relative on the CI runner (test e 1.67e-15, test d 3.1e-16) against
+# the pins captured on macOS. 1e-12 sits about 600 times above that and well below a real
+# change: a 1 % change in sigma_v moves the pinned spectra by 6.7e-9 (synth_B) to 1.6e-4
+# (wne_B), so the pins still catch it. synth_B cannot see the instrument-R stage at all.
 _PIN_RTOL = 1e-12
 _IDX = [0, 333, 666, 999, 1332, 1666, 1999]
 _MADAU = {"type": "madau"}
