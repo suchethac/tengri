@@ -573,14 +573,12 @@ plt.show()
 # model has 25 free parameters, so a fixed-length HMC trajectory with a dense
 # metric keeps the cost predictable. The posterior is wide and strongly correlated;
 # the non-centered field rotates with $\tau$, so the curvature is position-dependent.
-# At this budget the bands show the recovered SFH shape, not credible intervals;
-# the split R-hat printed below, from one chain, quantifies how far from converged
-# the run is.
+# This is a single chain, so the split R-hat printed below (about 1.08) is above
+# the 1.01 convergence bar: read the bands as the shape of the recovered history,
+# not as calibrated credible intervals.
 
 # %%
 # Trajectory length sets the cost; this demonstration budget runs in tens of minutes.
-# A short warmup leaves the dense metric and step size poorly adapted for this
-# correlated posterior, so the warmup is 1000 iterations.
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit(
     *DATA["B"],
@@ -615,14 +613,15 @@ ax.figure.savefig(FIG_DIR / "sfh_posterior_lines.png", dpi=150, bbox_inches="tig
 plt.show()
 
 # %% [markdown]
-# Read that figure carefully, because it shows the failure as well as the success.
+# Read that figure carefully, because it shows the limit as well as the success.
 # Below ~0.1 Gyr the posterior tracks the injected history and the band is
 # narrow: that is the emission lines doing their work. Between 0.1 and
-# 1 Gyr the band is *too* narrow: the truth sits outside it at the burst peaks,
-# so those intervals under-cover rather than merely being wide.
+# 1 Gyr the band is wide, yet the truth still leaves it at the 0.3 Gyr trough
+# and the 0.6 Gyr peak, so the posterior smooths over the bursts rather than
+# resolving them. The chain's split R-hat of about 1.08 is a further reason to read
+# the band as shape, not as a calibrated interval.
 #
-# That is the geometry problem, not a budget problem, and it is the
-# concrete reason for the advice in the next section: quote integrated
+# That is the concrete reason for the advice in the next section: quote integrated
 # quantities, whose errors are dominated by the well-measured part of the
 # history, rather than the star-formation rate in an individual age bin.
 
@@ -631,7 +630,7 @@ plt.show()
 #
 # **1. Emission lines are the biggest single win, and extra filters are not.**
 # Adding 8 optical lines to the *same* 7 filters is what fixes the recent history:
-# a factor of five below 15 Myr for the galaxy above (0.30 → 0.06 dex), and 0.37 →
+# a factor of twelve below 15 Myr for the galaxy above (0.68 → 0.06 dex), and 0.37 →
 # 0.10 dex as a median over three independent realizations. Widening the *filter*
 # set instead, to
 # a COSMOS-like 20 bands with medium bands included, leaves that number essentially
@@ -639,18 +638,22 @@ plt.show()
 # it. For an SDSS-like sample the spectrum is the whole game and extra filters add
 # almost nothing.
 #
-# **2. The spectrum's distinctive contribution is the old mass budget.** The
-# fraction of mass formed more than 1 Gyr ago improves monotonically from A to C and
-# lands on the truth once the continuum is included (the same ordering as the
-# three-realization study: truth 0.798; 0.758 photometry, 0.780 with lines, 0.804
-# with a spectrum). The 4000 Å break and Balmer absorption carry that information
-# and a list of line fluxes throws it away.
+# **2. The old mass budget comes from the continuum and the lines.** In the galaxy
+# above the fraction of mass formed more than 1 Gyr ago is 0.68 from photometry
+# alone, 0.77 with lines and 0.85 with the spectrum, against a truth of 0.80: the
+# photometry underestimates it by 0.12, and lines and spectrum land within about
+# 0.05 of the truth on either side. The three-realization study gives the same
+# ordering (truth 0.798; 0.758 photometry, 0.780 with lines, 0.804 with a spectrum),
+# where the spectrum comes closest. The 4000 Å break and Balmer absorption carry
+# that information beyond what a list of line fluxes holds.
 #
 # **3. Below 15 Myr, lines and a spectrum are equivalent; one galaxy cannot
 # rank them.** That equivalence is expected: the lines *are* the part of the
 # spectrum carrying recent-SFH information, and over three realizations both give
-# 0.10 dex. The intermediate window (15 Myr – 1 Gyr) is noisier still. In the single
-# galaxy above the spectrum happens to score *worst* of the three there, while the
+# 0.10 dex. In the single galaxy above they score 0.06 and 0.10 dex, both far
+# ahead of photometry alone (0.68 dex). The intermediate window (15 Myr – 1 Gyr) is
+# noisier still: 0.39 dex from photometry, 0.26 with lines and 0.34 with the
+# spectrum, a gap that one realization cannot separate, while the
 # three-realization medians put lines and spectrum within 0.01 dex of each other and
 # both ahead of photometry alone. Read the direction of these effects, not the
 # ordering of one realization.
@@ -665,8 +668,8 @@ plt.show()
 # **5. More age bins do not mean more resolution.** `n_grid` sets how *smooth* the
 # field is, not how much the data can say: quadrupling it from 16 to 64 leaves the
 # recovered information flat while tripling the dimension a sampler has to explore.
-# `n_grid=32` is a good default (as smooth as 64, and small enough that HMC still
-# behaves).
+# This page uses `n_grid=16`, which keeps the dimension (25 here) small enough
+# that HMC still behaves.
 #
 # ### Scope of this demonstration
 #
