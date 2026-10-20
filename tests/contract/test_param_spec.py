@@ -139,7 +139,7 @@ class TestLegacyCompat:
             spec = Parameters(
                 mean_sfh_type="const",
                 dust_emission="schreiber2018",
-                dust_tdust=Uniform(15.0, 99.0),
+                dust_tdust=Uniform(15.0, 60.0),
                 dust_fpah=Uniform(0.0, 1.0),
             )
         assert "dust_T" in spec.free_params
