@@ -55,8 +55,11 @@ _POINTS = {
     "spin_0": dict(agn_a_spin=0.0),
     "spin_0998": dict(agn_a_spin=0.998),
 }
-#: Largest per-band difference measured after the fix is 2.1%; the filter tables are linear in
-#: temperature and photon index, which sets the floor.
+#: Largest per-band difference measured after the fix is 2.1%, at the default resolution. The
+#: residual comes from the preintegrated path's own discretization, not from the power split: its
+#: 50-ring radial quadrature (spin 0.998 reads -1.8% at 50 rings and -0.4% at 200) and the coarse
+#: corona table grid (20/15/16 nodes; f_hard 0.5 reads +0.3% at 40/30/32). The 3% bound is for
+#: that default resolution.
 _BAND_TOLERANCE = 0.03
 
 
