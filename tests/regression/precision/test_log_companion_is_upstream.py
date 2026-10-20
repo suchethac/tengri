@@ -131,7 +131,11 @@ def _derived(ssp, *, x64):
         }
         for k, v in derived.items():
             if isinstance(v, Mapping):
-                assert all(np.all(np.isfinite(np.asarray(leaf))) for leaf in v.values()), k
+                for name, leaf in v.items():
+                    timing = np.asarray(leaf, dtype=np.float64)
+                    # A timing is finite and strictly positive here: the fixture's SFH has a
+                    # nonzero age, so a zero would be a collapsed value, not an onset at t = 0.
+                    assert np.all(np.isfinite(timing)) and float(np.max(timing)) > 0.0, (k, name)
         recomputed_np = {k: np.asarray(v, dtype=np.float64) for k, v in recomputed.items()}
     return as_np, recomputed_np
 

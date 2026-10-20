@@ -168,7 +168,11 @@ def derived_pair(synthetic_ssp_wide):
         }
         for k, v in state32.derived.items():
             if isinstance(v, Mapping):
-                assert all(np.all(np.isfinite(np.asarray(leaf))) for leaf in v.values()), k
+                for name, leaf in v.items():
+                    timing = np.asarray(leaf, dtype=np.float64)
+                    # A timing is finite and strictly positive here: the fixture's SFH has a
+                    # nonzero age, so a zero would be a collapsed value, not an onset at t = 0.
+                    assert np.all(np.isfinite(timing)) and float(np.max(timing)) > 0.0, (k, name)
         dtypes = {k: state32.derived[k].dtype for k in MUST_BE_FINITE if k in state32.derived}
     assert dtypes, "setup: no log keys published at all"
     assert all(dt == jnp.float32 for dt in dtypes.values()), (
