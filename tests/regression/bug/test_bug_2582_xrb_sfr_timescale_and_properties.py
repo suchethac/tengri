@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for #2582: X-ray SFR timescale and registered properties.
 
-The HMXB and hot-gas relations (Lehmer et al. 2016, ApJ 825, 7, Eqs. 13-14, as
+The HMXB and hot-gas relations (Fragos et al. 2013, ApJ 776, L31, Eq. 3, as
 adopted by Yang et al. 2022, ApJ 927, 192, Sect. 3.3) are calibrated on the SFR
 averaged over the last 100 Myr, not on the instantaneous SFR. The emitted
 spectrum must therefore read ``sfr_100myr``.
@@ -139,7 +139,7 @@ def test_block_reads_the_100myr_sfr(ssp, sfh_name, xray_type):
 
 
 def test_burst_hmxb_luminosity_is_lehmer_per_sfr_times_the_100myr_sfr(ssp):
-    """Emitted HMXB L(2-10 keV) = 10**(Lehmer+2016 Eq. 13 quartic in Z) * sfr_100myr.
+    """Emitted HMXB L(2-10 keV) = 10**(Fragos+2013 Eq. 3 quartic in Z) * sfr_100myr.
 
     For the burst SFH of the issue (instantaneous 147.07, 100 Myr 96.45 Msun/yr).
     """
@@ -239,7 +239,7 @@ def _declared_range(pattern):
 
 
 def _lehmer2016_log_xrb(sfr_100myr, z, stellar_mass, age_gyr):
-    """log10(L_HMXB + L_LMXB) [erg/s], 2-10 keV, from the Lehmer et al. (2016) coefficients."""
+    """log10(L_HMXB + L_LMXB) [erg/s], 2-10 keV, from the Fragos et al. (2013) coefficients."""
     log_hmxb = 40.28 - 62.12 * z + 569.44 * z**2 - 1833.80 * z**3 + 1968.33 * z**4
     t = np.log10(age_gyr)
     log_lmxb = 40.276 - 1.503 * t - 0.423 * t**2 + 0.425 * t**3 + 0.136 * t**4
@@ -282,7 +282,7 @@ def _mass_sweep_model(ssp, xray_type, x64):
 def test_log_properties_across_the_declared_mass_prior_in_float32(ssp, xray_type):
     """log_l_x_xrb / log_l_x_agn: finite, float32 within 1e-4 dex of float64, nine prior points.
 
-    log_l_x_xrb in float64 equals the Lehmer et al. (2016) sum evaluated here from
+    log_l_x_xrb in float64 equals the Fragos et al. (2013) sum evaluated here from
     the coefficients, with SFR_100Myr, Z, M* and age read off the forward state.
     """
     names = ("log_l_x_xrb", "log_l_x_agn")

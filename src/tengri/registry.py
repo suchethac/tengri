@@ -1287,7 +1287,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     """List all registered X-ray emission models.
 
     The X-ray group composes the AGN corona (Yang+2020 ``alpha_ox(L_2500)``
-    relation), the Lehmer+2016 high- and low-mass X-ray binary fits,
+    relation), the Fragos+2013 high- and low-mass X-ray binary scalings,
     and optional thermal hot-gas emission. The ``'none'`` entry disables
     the whole block.
 
