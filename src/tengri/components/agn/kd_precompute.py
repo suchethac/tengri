@@ -33,7 +33,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._nt_emissivity import nt_rt as _nt_rt
+from tengri.components.agn._nt_emissivity import (
+    X_MAX as _NT_X_MAX,
+    nt_h as _nt_h,
+    nt_rt as _nt_rt,
+)
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
     DEFAULT_AGN_LOG_MBH,
@@ -791,6 +795,7 @@ def _compute_bh_and_radii(
     _G_GRAV: float,
     _MSUN_G: float,
     _SIGMA_SB: float,
+    h_inf: float | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, float]:
     """Compute black hole parameters and zone radii for K&D disc.
 
@@ -852,7 +857,7 @@ def _compute_bh_and_radii(
     l_bol_erg = 10.0**agn_log_lbol * L_SUN
     l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN - log10_l_edd), 1e-10, 1.0)
     # Mdot such that the disc's total Page-Thorne dissipation equals L_bol (as in ``disc.py``).
-    mdot = l_bol_erg / (_disc_dissipation_per_mdot_c2(agn_a_spin) * _C_LIGHT**2)
+    mdot = l_bol_erg / (_disc_dissipation_per_mdot_c2(agn_a_spin, h_inf) * _C_LIGHT**2)
 
     t_in = (
         3.0
@@ -874,6 +879,7 @@ def _compute_bh_and_radii(
         _nt_l0(r_isco_cm, t_in),
         agn_a_spin,
         x_hot_max=_hot_zone_x_max(r_isco_rg, r_sg_rg),
+        h_inf=h_inf,
     )
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, a_spin=agn_a_spin)
 
@@ -1138,6 +1144,8 @@ def kubota_done_disc_preintegrated(
     log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): L_bol is the knob; Eddington ratio derived (see runtime path).
 
+    # h(inf) once: it sets Mdot, the hot-flow cap and the corona share.
+    h_inf = _nt_h(jnp.log(_NT_X_MAX), agn_a_spin)
     r_hot_cm, r_warm_cm, r_out_cm, t_in, _eta = _compute_bh_and_radii(
         agn_log_mbh,
         agn_a_spin,
@@ -1149,6 +1157,7 @@ def kubota_done_disc_preintegrated(
         _G_GRAV,
         _MSUN_G,
         _SIGMA_SB,
+        h_inf,
     )
 
     # ── Zone 1: Outer standard disc ──
@@ -1190,6 +1199,7 @@ def kubota_done_disc_preintegrated(
         log10_l_edd - (agn_log_lbol + _LOG10_LSUN),
         agn_a_spin,
         x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * l_bol_unit
 

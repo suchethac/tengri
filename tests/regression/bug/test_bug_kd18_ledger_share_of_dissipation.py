@@ -34,7 +34,8 @@ _BASE = dict(
     agn_kt_hot=175.0,
     agn_r_warm_ratio=3.0,
 )
-#: (log L_bol, a_spin, f_hard): the first three were saturated (share 1.04-1.13) before the ruling.
+#: (log L_bol, a_spin, f_hard): the first two were saturated on the base (share 1.12 and
+#: 1.02); the last two are unsaturated controls (share 0.03 and 0.96).
 _POINTS = [(11.0, 0.998, 0.1), (11.0, 0.9, 0.1), (13.0, 0.998, 0.1), (11.0, 0.499, 0.05)]
 
 

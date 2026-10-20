@@ -54,8 +54,13 @@ _POINTS = {
     "f_hard_half": dict(agn_f_hard=0.5),
     "spin_0": dict(agn_a_spin=0.0),
     "spin_0998": dict(agn_a_spin=0.998),
+    # Hot flow saturated: the share is capped at 0.99 of L_bol (L_0 = L_bol / h(inf)).
+    "saturated_0998": dict(agn_a_spin=0.998, agn_f_hard=0.1),
+    "saturated_09": dict(agn_a_spin=0.9, agn_f_hard=0.1),
 }
-#: Largest per-band difference measured after the fix is 2.1%, at the default resolution. The
+#: Largest per-band difference measured after the fix is 2.5% (saturated_0998, share capped at
+#: 0.99, where the 50-ring quadrature adds to the corona-table residual), at the default
+#: resolution. The
 #: residual comes from the preintegrated path's own discretization, not from the power split: its
 #: 50-ring radial quadrature (spin 0.998 reads -1.8% at 50 rings and -0.4% at 200) and the coarse
 #: corona table grid (20/15/16 nodes; f_hard 0.5 reads +0.3% at 40/30/32). The 3% bound is for
