@@ -348,6 +348,14 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
 #: registry about the backend it chose instead of naming one in an ``if``.
 _CAPABILITY_FIELDS: dict[str, str] = {"precondition": "accepts_precondition"}
 
+#: Names the fit entry point consumes before it validates ``**kwargs``, so they are
+#: not offered as runner options. A runner that itself takes one (the batched
+#: catalog MCMC engine takes ``init_from``) says so through ``check_unknown_kwargs``.
+CALLER_CONSUMED_KWARGS: frozenset[str] = frozenset({"key", "init_from"})
+
+#: Dispatch plumbing on the batched catalog engines, never a user-facing option.
+_INTERNAL_RUNNER_PARAMS: frozenset[str] = frozenset({"method_tag"})
+
 
 def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
     """Refuse a capability kwarg the backend does not implement.
@@ -413,7 +421,11 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
 
 
 def check_unknown_kwargs(
-    entry: BackendEntry, kwargs: dict, also_accepted: frozenset[str] = frozenset()
+    entry: BackendEntry,
+    kwargs: dict,
+    also_accepted: frozenset[str] = frozenset(),
+    *,
+    runner_takes: frozenset[str] = frozenset(),
 ) -> None:
     """Refuse a kwarg the backend's runner does not declare.
 
@@ -486,7 +498,9 @@ def check_unknown_kwargs(
         name for name, p in params.items() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
     }
     accepted -= {names[0]} if names else set()
-    accepted -= {"key", "init_from"}
+    # ``runner_takes`` names the CALLER_CONSUMED_KWARGS the runner itself accepts
+    # (they arrive in ``kwargs`` for engines whose ``run`` has no parameter of that name).
+    accepted -= (CALLER_CONSUMED_KWARGS - runner_takes) | _INTERNAL_RUNNER_PARAMS
     accepted |= set(_CAPABILITY_FIELDS)
 
     unknown = sorted(k for k in kwargs if k not in accepted)
