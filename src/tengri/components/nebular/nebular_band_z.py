@@ -321,7 +321,13 @@ def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     if n_z == 1:
         return 0, 0.0
     if extrapolate:
-        return _hull_z_bracket(lnz_grid, redshift, extrapolate=True)
+        # The shared helper returns the node-weight PAIR ``(1 - t, t)``, shape
+        # ``(2,)``. This module's contract, and both blends that read it
+        # (``continuum_band_from_slab``, ``nebular_subband_decomposition``), is
+        # the scalar upper weight ``t``: returning the pair broadcast it against
+        # the ``(n_filter,)`` band rows and failed every free-redshift read.
+        i0, pair = _hull_z_bracket(lnz_grid, redshift, extrapolate=True)
+        return i0, pair[1]
     lnz = jnp.log1p(jnp.asarray(redshift))
     i = jnp.clip(jnp.searchsorted(lnz_grid, lnz, side="right") - 1, 0, n_z - 2)
     span = lnz_grid[i + 1] - lnz_grid[i]
