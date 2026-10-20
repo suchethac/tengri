@@ -188,5 +188,11 @@ def test_batched_mcmc_engine_accepts_init_from_but_not_unknown_names(fwd_3band, 
     ]
     fitter = _CatalogFitterOriginal(fwd_3band, galaxies, data_type="photometry")
     fitter._refuse_unknown_kwargs("mcmc_hmc", {"init_from": "prior", "n_samples": 5})
-    with pytest.raises(TypeError, match="init_form"):
+    with pytest.raises(TypeError, match="init_form") as excinfo:
         fitter._refuse_unknown_kwargs("mcmc_hmc", {"init_form": "prior"})
+    listed = str(excinfo.value).split("It takes:")[1].split("]")[0]
+    assert "init_from" in listed, "the engine takes init_from, so the list must offer it"
+    assert "method_tag" not in listed, "internal dispatch plumbing is not a user option"
+    # The native VI engine takes no init_from: it is still refused there.
+    with pytest.raises(TypeError, match="init_from"):
+        fitter._refuse_unknown_kwargs("native_vi_linear", {"init_from": "prior"})
