@@ -574,17 +574,20 @@ plt.show()
 # metric keeps the cost predictable. The posterior is wide and strongly correlated;
 # the non-centered field rotates with $\tau$, so the curvature is position-dependent.
 # At this budget the bands show the recovered SFH shape, not credible intervals;
-# the maximum R-hat is 1.51.
+# the split R-hat printed below, from one chain, quantifies how far from converged
+# the run is.
 
 # %%
-# Trajectory length sets the cost; this demonstration budget runs in minutes.
+# Trajectory length sets the cost; this demonstration budget runs in tens of minutes.
+# A short warmup leaves the dense metric and step size poorly adapted for this
+# correlated posterior, so the warmup is 1000 iterations.
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit(
     *DATA["B"],
     method="mcmc_hmc",
     init_from=fits["B"],
-    n_warmup=300,
-    n_samples=200,
+    n_warmup=1000,
+    n_samples=400,
     n_leapfrog_steps=100,
     dense_mass_matrix=True,
     key=jax.random.PRNGKey(SEED + 7),
@@ -593,8 +596,10 @@ posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit
 print(f"HMC in {time.perf_counter() - t0:.0f} s")
 
 # %%
-max_rhat = float(np.nanmax(list(posterior.rhat().values())))
-print(f"max R-hat {max_rhat:.3f}")
+rhat = {k: float(v) for k, v in posterior.rhat().items()}
+worst = max(rhat, key=lambda k: rhat[k] if np.isfinite(rhat[k]) else np.inf)
+max_rhat = float(np.nanmax(list(rhat.values())))
+print(f"max R-hat {max_rhat:.3f} ({worst})")
 
 ax = plot_sfh(
     model["B"],
