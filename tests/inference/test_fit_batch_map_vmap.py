@@ -47,6 +47,12 @@ _MASS_LO, _MASS_HI = 7.0, 12.5
 #: A 1e10 Msun galaxy — mid-prior, so a converged MAP lands nowhere near an edge.
 _MASS_TRUTH = 10.0
 
+#: Model redshift, and the truth lookback-time peak of the tsnorm SFH. The
+#: peak timing is a fraction of age(z), so the Gyr truth is divided by the age
+#: of the universe at the model redshift.
+_Z_MODEL = 0.1
+_PEAK_LBT_TRUTH_GYR = 3.0
+
 
 def _make_model(ssp):
     from tengri import (
@@ -68,7 +74,7 @@ def _make_model(ssp):
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 1.5),
         dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
+        redshift=Fixed(_Z_MODEL),
         mean_sfh_type="tsnorm",
     )
     obs = Observation(
@@ -80,11 +86,12 @@ def _make_model(ssp):
 def _synthesize_catalog(model, n: int = 4, snr: float = 30.0, seed: int = 0):
     """Generate N mock photometry rows by perturbing one base parameter draw."""
     from tengri import generate_mock
+    from tengri.cosmology import age_at_z
 
     key = jax.random.PRNGKey(seed)
     base = {**model.spec.sample(key)}
     base["sfh_tsnorm_log_total_mass"] = jnp.array(_MASS_TRUTH)
-    base["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+    base["sfh_tsnorm_peak_lbt_frac"] = jnp.array(_PEAK_LBT_TRUTH_GYR / float(age_at_z(_Z_MODEL)))
     base["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 
     fluxes = []

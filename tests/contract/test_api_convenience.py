@@ -14,7 +14,13 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.cosmology import age_at_z
+
 pytestmark = pytest.mark.contract
+
+#: Age of the universe at the mock model's redshift (z = 0.1) [Gyr]. The formation
+#: age of the dpl SFH is sampled as a fraction of it (#2748).
+_AGE_AT_MOCK_Z = float(age_at_z(0.1))
 
 # ── SSP availability gate ─────────────────────────────────────────
 
@@ -401,7 +407,7 @@ class TestModelFitIntegration:
             # age is FREE in this spec — leaving it out used to silently pin
             # the mock at an internal default; predict paths now require a
             # value for every free parameter (MissingParameterError).
-            "sfh_dpl_age_gyr": 8.0,
+            "sfh_dpl_age_frac": 8.0 / _AGE_AT_MOCK_Z,
             "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,

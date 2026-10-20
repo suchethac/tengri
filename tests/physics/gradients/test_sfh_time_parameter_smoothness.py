@@ -30,6 +30,8 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+from tengri.cosmology import age_at_z
 from tests._step_excess import local_step_excess
 
 pytestmark = pytest.mark.gradient
@@ -175,17 +177,48 @@ def observation():
 _INTERNAL_PREFIX = {"const_exp": "cexp", "psb_suess2022": "psb2022"}
 
 
+#: Redshift of the sweep. Each absolute Gyr timing is swept as its ``*_frac`` twin,
+#: a fraction of age(z) at this redshift, when the registry declares one (#2748).
+_SWEEP_Z = 0.1
+_SWEEP_AGE_GYR = float(age_at_z(_SWEEP_Z))
+
+
+def _timing_name(family, name):
+    """Return ``(short name, scale)`` for a grammar name of ``family``.
+
+    A ``*_gyr`` timing whose ``*_frac`` twin the registry declares becomes that
+    twin, and ``scale`` is ``1 / age(z)`` so a Gyr value maps to its fraction.
+    Any other name is returned unchanged with scale 1.
+    """
+    if name.endswith("_gyr"):
+        frac = name[: -len("_gyr")] + "_frac"
+        prefix = _INTERNAL_PREFIX.get(family, family)
+        if f"sfh_{prefix}_{frac}" in SFH_REGISTRY[family].params:
+            return frac, 1.0 / _SWEEP_AGE_GYR
+    return name, 1.0
+
+
+def _fixed_extras(family, extra):
+    """Rewrite the Fixed overrides of a row onto the same names and scales as its sweep."""
+    out = {}
+    for name, value in extra.items():
+        short, scale = _timing_name(family, name)
+        out[short] = Fixed(value.value * scale)
+    return out
+
+
 def _sweep_excess(ssp_data_fsps, observation, family, param, window, extra, kernel):
-    lo, hi = window
+    short, scale = _timing_name(family, param)
+    lo, hi = window[0] * scale, window[1] * scale
     prefix = _INTERNAL_PREFIX.get(family, family)
-    full_param = f"sfh_{prefix}_{param}"
+    full_param = f"sfh_{prefix}_{short}"
 
     sfh_group = {
         "type": family,
         "all_params": Fixed(DEFAULT),
-        param: Uniform(lo, hi),
+        short: Uniform(lo, hi),
         "age_kernel": kernel,
-        **extra,
+        **_fixed_extras(family, extra),
     }
 
     model = SEDModel.build(
@@ -193,7 +226,7 @@ def _sweep_excess(ssp_data_fsps, observation, family, param, window, extra, kern
         observation=observation,
         neb={"type": "none"},
         sfh=sfh_group,
-        redshift=Fixed(0.1),
+        redshift=Fixed(_SWEEP_Z),
         approx=None,
     )
     f = jax.jit(jax.vmap(lambda a: jnp.sum(model.predict_photometry({full_param: a}))))

@@ -31,10 +31,14 @@ import pytest
 import tengri
 from tengri import FREE, Fixed, SEDModel
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
 _TYPE = "declining_exp"
+#: Redshift of the SED helper; its onset fraction is the Gyr onset over age(z) here.
+_SED_Z = 0.1
+_AGE_AT_SED_Z = float(age_at_z(_SED_Z))
 
 
 # ── selectable, and under a name that cannot be misread ───────────
@@ -73,6 +77,8 @@ def test_the_parameters_carry_the_full_prefix():
     assert declared == {
         "sfh_declining_exp_log_total_mass",
         "sfh_declining_exp_tau_gyr",
+        "sfh_declining_exp_age_frac",
+        # Fixed-only alias of the onset fraction above (#2748).
         "sfh_declining_exp_age_gyr",
     }, declared
 
@@ -130,7 +136,7 @@ def _sed(ssp_data, sfh_type, tau_gyr=2.0, age_gyr=5.0):
         redshift=Fixed(0.1),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    for key, value in (("tau_gyr", tau_gyr), ("age_gyr", age_gyr)):
+    for key, value in (("tau_gyr", tau_gyr), ("age_frac", age_gyr / _AGE_AT_SED_Z)):
         name = f"sfh_{sfh_type}_{key}"
         if name in params:
             params[name] = jnp.asarray(value)
@@ -199,7 +205,9 @@ def test_every_declared_parameter_moves_the_photometry(ssp_data_wne):
     params = model.spec.sample(jax.random.PRNGKey(0))
     grad = jax.grad(lambda p: jnp.sum(model.predict_photometry(p)))(params)
 
-    for name in SFH_REGISTRY[_TYPE].params:
+    declared = SFH_REGISTRY[_TYPE].params
+    knobs = [n for n in declared if n.replace("_gyr", "_frac") not in declared]
+    for name in knobs:
         g = float(grad[name])
         assert np.isfinite(g), f"{name}: non-finite gradient {g}"
         assert g != 0.0, f"{name}: identically-zero gradient — an inert knob (#1764)"
