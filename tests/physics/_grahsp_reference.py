@@ -40,7 +40,7 @@ _PER_DECADE = 20
 _GL_ORDER = 16
 #: Hard edges of the emitted pieces [nm]: X-ray floor, Lyman limit, Balmer threshold and edge,
 #: SMC attenuation break.
-_HARD_EDGES_NM = (12.4, 91.2, 250.0, 364.6, 1100.0)
+_HARD_EDGES_NM = (12.4, 91.1753, 91.2, 250.0, 364.6, 1100.0)
 #: Silicate feature centers and sigmas [nm] (Mullaney+ 2011 difference template).
 _SI_CENTERS_NM = (9841.0, 14224.0)
 _SI_SIGMAS_NM = (1025.3, 1163.5)
@@ -266,7 +266,8 @@ class Reference:
         attenuated = self._attenuated(lam, params)
         # The emitted SED is additive in L_nu: intrinsic = bbb side + torus side.
         out = {
-            "L_agn_bol": float(np.sum(w * np.where(lam >= 91.2, bbb, 0.0))),
+            # lumBolBBB is upstream's cut, 91.1753 nm (owner ruling 16, 2026-10-13).
+            "L_agn_bol": float(np.sum(w * np.where(lam >= 91.1753, bbb, 0.0))),
             "L_agn_torus": float(np.sum(w * torus)),
             "L_agn_absorbed": float(np.sum(w * (bbb + torus - attenuated))),
         }
