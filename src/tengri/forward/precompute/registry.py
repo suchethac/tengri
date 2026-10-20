@@ -78,6 +78,8 @@ _REGISTRY: dict[str, str] = {
     "cb19": "tengri.components.nebular.cb19_precompute",
     # MAPPINGS V photoionization (stellar and AGN) grids evaluate at runtime only.
     # Issue #2078: both backends have defective adapters that fail under JIT.
+    # Composable AGN recipe (disc, torus, lines, attenuation), tabulated over its free axes
+    "composable_agn": "tengri.components.agn.blocks.composable_precompute",
     # AGN BLR / NLR Gaussian-line composers (filter-projection precompute only)
     "blr": "tengri.components.agn.blr_precompute",
     "nlr_gaussian": "tengri.components.agn.nlr_gaussian_precompute",
