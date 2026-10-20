@@ -131,6 +131,8 @@ def test_hot_corona_underflowed_normalization_is_finite_float32():
 
     eps32 = float(np.finfo(np.float32).eps)
     assert np.all(np.isfinite(shape32)) and np.isfinite(log_amp32)
+    # log10(1e30 / integral) is ~14.33 here: a zero would be a collapsed amplitude.
+    assert log_amp32 > 0.0
     assert np.all((shape32 >= 0.0) & (shape32 <= 1.0))
     np.testing.assert_allclose(shape32, shape64, rtol=500 * eps32, atol=0.0)
     assert abs(log_amp32 - log_amp64) <= 500 * eps32 * max(1.0, abs(log_amp64))
