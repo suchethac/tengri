@@ -48,6 +48,11 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: the disc's total Page-Thorne dissipation equals L_bol (it was L_bol / (eta c^2), 2-13% larger
 #: than that at this spin): sum 3.8327887527784238e31 -> 3.9045676922874174e31 (+1.9%), the eight
 #: points move between -1.2% and +4.6%.
+#: Provenance of the previous pin: it held to 1e-12 on main at 77f4f94b6 and 5dde4ad11, run alone
+#: and as a whole file. One full-suite CI run at 77f4f94b6 (run 38614426907) read four of the eight
+#: points 7e-8 (relative) away from it, a float32-sized offset that is not a model change and did
+#: not reproduce; the cause was not isolated. The +1.9% above is the only model change this pin
+#: carries.
 #: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
