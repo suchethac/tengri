@@ -62,10 +62,10 @@ _OBS = Observation(
 _OPT_EXACT_MAIN = 3.8029878990438525e-27
 
 
-def _build(ssp, approx):
+def _build(ssp, approx, observation=_OBS):
     return SEDModel.build(
         ssp_data=ssp,
-        observation=_OBS,
+        observation=observation,
         sfh={"type": "const", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
@@ -99,8 +99,45 @@ def test_band_above_the_ssp_edge_matches_the_lut(ssp_data_wne):
     np.testing.assert_allclose(exact[1:], lut[1:], rtol=1e-6, atol=0.0)
 
 
-def test_band_well_below_the_ssp_edge_is_unchanged(ssp_data_wne):
-    """A band far below the edge keeps its exact-path flux to 1e-10 relative."""
+def test_band_well_below_the_ssp_edge_is_unchanged(ssp_data_wne, real_ssp_only):
+    """A band far below the edge keeps its exact-path flux to 1e-10 relative.
+
+    The pinned value is a calibrated number on the real wNE grid, so it skips on
+    the #613 synthetic fixture (see ``real_ssp_only``). The locality invariant
+    below carries the same claim on every grid.
+    """
     exact = _flux(_build(ssp_data_wne, approx=None))
 
     np.testing.assert_allclose(exact[0], _OPT_EXACT_MAIN, rtol=1e-10, atol=0.0)
+
+
+def test_flux_at_the_ssp_edge_node_does_not_reach_the_bands_below_it(ssp_data_wne):
+    """Changing only the SSP's last (edge) node leaves the far-below band untouched.
+
+    Runs on any grid, synthetic included. The SSP flux is multiplied by 2 at the
+    edge node alone (``wave >= edge``) on a copy; the original fixture is not
+    mutated. The optical band far below the edge must read the same flux to
+    1e-10. A band in the last master-grid cell inside the grid must change (about
+    17 % on the wNE grid), which shows the perturbation is seen where the grid has
+    flux. The above-edge band is not asserted here: on the fixed path the edge node
+    cannot reach it, which is the invariant.
+    """
+    wave = np.asarray(ssp_data_wne.ssp_wave)
+    edge = float(wave.max())
+    obs = Observation(
+        photometry=Photometry(
+            filters=(
+                _tophat(5.0e3, 6.0e3, "opt"),  # far below the edge
+                _tophat(0.99 * edge, 0.999 * edge, "inside"),  # last cell, inside the grid
+            )
+        )
+    )
+    flux = np.asarray(ssp_data_wne.ssp_flux)
+    bumped_flux = np.where(wave >= edge, flux * 2.0, flux)
+    bumped_ssp = ssp_data_wne._replace(ssp_flux=bumped_flux)
+
+    base = _flux(_build(ssp_data_wne, approx=None, observation=obs))
+    bumped = _flux(_build(bumped_ssp, approx=None, observation=obs))
+
+    np.testing.assert_allclose(bumped[0], base[0], rtol=1e-10, atol=0.0)
+    assert not np.allclose(bumped[1], base[1], rtol=1e-6, atol=0.0)
