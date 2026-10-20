@@ -3281,4 +3281,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_param_registry": exclude(
         "registry is a pure function of parameter names (keyed) and installed registry"
     ),
+    "_grid_resolution": exclude(
+        "display label only (#2626): maps a parameter whose free prior was resolved to "
+        "its grid support to the text shown in the Source column of the summary; it is "
+        "read only by that renderer and reaches no kernel. The resolved bounds are in "
+        "the keyed distributions and the resolution is recorded in the keyed provenance"
+    ),
 }

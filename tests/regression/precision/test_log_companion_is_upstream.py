@@ -31,6 +31,8 @@ this repository has keyed on a hand-written list has been green on the one item
 nobody thought to add (#1534, #1482, #1276).
 """
 
+from collections.abc import Mapping
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -120,7 +122,16 @@ def _derived(ssp, *, x64):
             for k in derived
             if k.startswith("log_") and k[4:] in derived
         }
-        as_np = {k: np.asarray(v, dtype=np.float64) for k, v in derived.items()}
+        # Mapping-valued keys (``sfh_timing_gyr``, #2748) are name -> array dicts, not
+        # numeric arrays: their leaves are Gyr timings, checked finite rather than swept.
+        as_np = {
+            k: np.asarray(v, dtype=np.float64)
+            for k, v in derived.items()
+            if not isinstance(v, Mapping)
+        }
+        for k, v in derived.items():
+            if isinstance(v, Mapping):
+                assert all(np.all(np.isfinite(np.asarray(leaf))) for leaf in v.values()), k
         recomputed_np = {k: np.asarray(v, dtype=np.float64) for k, v in recomputed.items()}
     return as_np, recomputed_np
 
