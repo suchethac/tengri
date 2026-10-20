@@ -863,7 +863,13 @@ class _CatalogFitterOriginal:
         # Names ``run`` consumes itself (chunking, store, fallback...) never reach
         # kwargs; listing them only sharpens the suggestion for a near-miss.
         run_names = frozenset(inspect.signature(self.run).parameters)
-        check_unknown_kwargs(entry, kwargs, also_accepted=run_names | fit_surface_ctor_names())
+        # ``init_from`` reaches the batched engines through ``**kwargs`` (``run`` has no
+        # parameter of that name) and the engine takes it. ``check_unknown_kwargs``
+        # drops it from the accepted set because ``Fitter.run`` consumes it before
+        # validating, so hand it only the names the engine does not own.
+        engine_owned = frozenset(inspect.signature(engine).parameters) & {"init_from"}
+        unchecked = {k: v for k, v in kwargs.items() if k not in engine_owned}
+        check_unknown_kwargs(entry, unchecked, also_accepted=run_names | fit_surface_ctor_names())
 
     def _refuse_unsupported_channels(self, resolved: str) -> None:
         """Refuse per-galaxy channels the chosen engine cannot carry.

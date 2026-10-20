@@ -169,3 +169,24 @@ def test_population_runner_kwarg_is_not_refused(method, cfm_method, knob):
     """The engine's own knob passes the check (the engine itself is not run here)."""
     pop = _population_fitter()
     assert pop._refuse_unknown_kwargs(method, cfm_method, {knob: 1}) is None
+
+
+def test_batched_mcmc_engine_accepts_init_from_but_not_unknown_names(fwd_3band, table_3band):
+    """``init_from`` is an engine parameter, not an unknown name (#2961 refused it).
+
+    The check runs at the dispatch seam, so no fit is needed: the engine's own
+    ``init_from`` passes while a misspelled sibling is still refused by name.
+    """
+    from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+
+    galaxies = [
+        {
+            "flux_obs": np.array([table_3band[f"band_{b}"][i] for b in range(3)]),
+            "noise": np.array([table_3band[f"band_{b}_err"][i] for b in range(3)]),
+        }
+        for i in range(3)
+    ]
+    fitter = _CatalogFitterOriginal(fwd_3band, galaxies, data_type="photometry")
+    fitter._refuse_unknown_kwargs("mcmc_hmc", {"init_from": "prior", "n_samples": 5})
+    with pytest.raises(TypeError, match="init_form"):
+        fitter._refuse_unknown_kwargs("mcmc_hmc", {"init_form": "prior"})
