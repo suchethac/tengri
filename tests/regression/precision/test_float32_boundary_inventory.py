@@ -37,6 +37,8 @@ so this guard runs on CI instead of skipping with the gitignored
 reached main).
 """
 
+from collections.abc import Mapping
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -157,7 +159,16 @@ def derived_pair(synthetic_ssp_wide):
         state32 = _model(ssp).predict_state({})
         # Materialize inside the context: the catalog is lazy, so reading a key
         # outside it would silently evaluate in float64 and prove nothing.
-        f32 = {k: np.asarray(state32.derived[k]) for k in state32.derived}
+        # Mapping-valued keys (``sfh_timing_gyr``, #2748) are name -> array dicts, not
+        # numeric arrays: their leaves are Gyr timings, checked finite rather than swept.
+        f32 = {
+            k: np.asarray(state32.derived[k])
+            for k in state32.derived
+            if not isinstance(state32.derived[k], Mapping)
+        }
+        for k, v in state32.derived.items():
+            if isinstance(v, Mapping):
+                assert all(np.all(np.isfinite(np.asarray(leaf))) for leaf in v.values()), k
         dtypes = {k: state32.derived[k].dtype for k in MUST_BE_FINITE if k in state32.derived}
     assert dtypes, "setup: no log keys published at all"
     assert all(dt == jnp.float32 for dt in dtypes.values()), (
