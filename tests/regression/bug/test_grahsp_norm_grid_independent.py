@@ -36,12 +36,14 @@ FINE_N = 5000
 
 # Compiled FLOPs of one ``compute_grahsp_sed`` call at 2000 rest-frame nodes
 # (912 A to 1e8 A), jitted with ``agn_log_lbol`` traced, keyed by the jax major.minor
-# that compiled it. The 0.11 value was measured on origin/main (2f891d207, #2834) on
-# 2026-10-12; the 0.12 value on jax 0.12.0 (arm; CI linux reports 909490). XLA 0.12 changed
-# the compiled HLO for this graph (+8.8 %), with no tengri change, so one number cannot serve
-# both. The margin below is not widened: it still catches a real regression on either version.
+# that compiled it. CI (linux x86) is the gate, so the baselines are CI measurements; arm
+# macOS differs from x86 by about 0.2 to 1.3 % (0.11.1 arm 834461, 0.12.0 arm 907490, 0.12.0
+# CI linux 909490). The 0.11 value, 824020, is the original CI-era capture on origin/main
+# (2f891d207, #2834, 2026-10-12). XLA 0.12 changed the compiled HLO for this graph
+# (+10.4 % on CI linux), with no tengri change, so one number cannot serve both. The margin
+# below is not widened: it still catches a real regression on either version.
 # Wall time, warm: about 0.5 ms on main.
-MAIN_FLOPS_N2000_BY_JAX = {"0.11": 8.2402e5, "0.12": 9.0749e5}
+MAIN_FLOPS_N2000_BY_JAX = {"0.11": 8.2402e5, "0.12": 9.0949e5}
 COST_MARGIN = 1.10
 
 
