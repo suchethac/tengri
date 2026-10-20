@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""The kubota_done corona share is a fraction of the disc's dissipation; the SED closes on L_bol.
+r"""The kubota_done Mdot comes from the disc's own dissipation; the SED closes on L_bol.
 
 Kubota & Done (2018, MNRAS 480, 1247; arXiv:1804.00171) fix the hot-flow power
-:math:`L_{\rm diss,hot}` (Eq. 2, Sec. 4.2.1, Table 3). The Page & Thorne (1974) dissipation
-integral of the disc is :math:`L_0 h(\infty) \approx 1.02\,\eta \dot M c^2` at zero spin and rises
-with spin, so dividing :math:`L_{\rm hot}` by :math:`L_{\rm bol}` gave a share of 1.127 inside the
-declared priors (spin 0.998, :math:`f_{\rm hard} = 0.1`) and a total near 1.25 :math:`L_{\rm bol}`.
-The share is now :math:`L_{\rm hot} / (L_0 h(\infty)) \le 0.99` (owner ruling 2026-10-20), the
-corona carries :math:`s L_{\rm bol}`, the disc :math:`(1 - s) L_{\rm bol}`.
+:math:`L_{\rm diss,hot} = f_{\rm hard} L_{\rm Edd}` (Eq. 2, Table 3). The Page & Thorne (1974)
+dissipation integral of the disc is :math:`L_0 h(\infty) \approx 1.02\,\eta \dot M c^2` at zero
+spin and rises with spin, so :math:`\dot M = L_{\rm bol}/(\eta c^2)` gave a corona share
+:math:`L_{\rm hot}/L_{\rm bol}` of 1.127 inside the declared priors (spin 0.998,
+:math:`f_{\rm hard} = 0.1`) and a total near 1.25 :math:`L_{\rm bol}`. :math:`\dot M` is now
+inferred so that :math:`L_0 h(\infty) = L_{\rm bol}` (owner ruling 2026-10-20, refined): the share
+is at most 0.99, the corona carries exactly :math:`L_{\rm hot}` and the disc :math:`(1 - s)
+L_{\rm bol}`.
 """
 
 from __future__ import annotations
@@ -62,15 +64,17 @@ def test_share_is_at_most_one_and_sed_closes_on_lbol(log_lbol, a_spin, f_hard):
 
 
 def test_f_hard_gradient_is_finite_and_nonzero_across_the_former_saturation_boundary():
-    # At log L_bol = 11.45, log M = 8 the old share L_hot / L_bol crossed 1 near f_hard = 0.089.
-    # The new share is linear in f_hard below its cap, so the gradient stays finite and nonzero
-    # up to the 0.99 cap (reached near f_hard = 0.097 here,
-    # where the hot flow saturates and the gradient is zero by the unchanged min()).
+    # At log L_bol = 11.45, log M = 8 the old share L_hot / L_bol crossed 1 near f_hard = 0.0858.
+    # The share is linear in f_hard below the 0.99 cap (reached at f_hard = 0.085 here), so the
+    # gradient is finite and nonzero below it; above it the hot flow saturates (the unchanged
+    # min()), the gradient is exactly zero and finite, and no 1/(1 - share) singularity remains.
     with jax.enable_x64(True):
-        for f in (0.07, 0.085, 0.09, 0.095):
+        for f in (0.05, 0.07, 0.08):
             g = float(jax.grad(_grad_target)(jnp.asarray(f)))
             assert np.isfinite(g)
             assert g != 0.0
+        for f in (0.085, 0.09, 0.1):
+            assert np.isfinite(float(jax.grad(_grad_target)(jnp.asarray(f))))
 
 
 def _grad_target(f_hard):

@@ -2,17 +2,15 @@
 r"""The kubota_done corona carries exactly its counted power; the total closes on L_acc (#2733).
 
 The three-zone model splits the accretion power into the hot corona, :math:`H_\nu`, and the
-disc and warm zones, :math:`D_\nu`. The hot flow dissipates :math:`l_{\rm hot}` (equal to
-:math:`f_{\rm hard} L_{\rm Edd}` at the defaults); the corona's share is that power over the
-disc's own Page-Thorne dissipation integral, :math:`s = l_{\rm hot} / L_{\rm diss}` with
-:math:`L_{\rm diss} = 3 h(\infty) L_{\rm acc} / (2 \eta r_{\rm isco})` (owner ruling
-2026-10-20; before it the share was :math:`l_{\rm hot} / L_{\rm acc}`). The corona takes
-:math:`s L_{\rm acc}`, and the disc and warm zones carry the rest, so that
+disc and warm zones, :math:`D_\nu`. The corona is counted at :math:`l_{\rm hot}` (the
+Page-Thorne dissipation inside :math:`R_{\rm hot}`, equal to :math:`f_{\rm hard} L_{\rm Edd}`
+at the defaults). The corona takes exactly that power, and the disc and warm zones carry the
+rest, :math:`L_{\rm acc} - l_{\rm hot}`, so that
 
 .. math::
 
-    \int H_\nu\,{\rm d}\nu = s L_{\rm acc}, \qquad
-    \int D_\nu\,{\rm d}\nu = (1 - s) L_{\rm acc}, \qquad
+    \int H_\nu\,{\rm d}\nu = l_{\rm hot}, \qquad
+    \int D_\nu\,{\rm d}\nu = L_{\rm acc} - l_{\rm hot}, \qquad
     \int (2\cos i\,D_\nu + H_\nu)\,{\rm d}\nu \big|_{\cos i = 0.5} = L_{\rm acc}.
 
 Every expected value is written from these identities, never read from a pin. The spectra
@@ -69,15 +67,6 @@ def _l_hot_counted_over_lbol() -> float:
     return float(defaults["agn_f_hard"].default * l_edd / _L_ACC)
 
 
-def _share_of_dissipation() -> float:
-    """The corona's share ``s = l_hot / L_diss``, ``L_diss = 1.5 h(inf) L_acc / (eta r_isco)``."""
-    defaults = inspect.signature(disc_module.kubota_done_disc).parameters
-    r_isco = disc_module._isco_radius(defaults["agn_a_spin"].default)
-    eta = disc_module._radiative_efficiency(r_isco)
-    h_inf = disc_module._nt_h(jnp.log(disc_module._NT_X_MAX), defaults["agn_a_spin"].default)
-    return float(_l_hot_counted_over_lbol() / (1.5 * h_inf / (eta * r_isco)))
-
-
 def _spectrum(cos_inc: float):
     _, components = compose_l_nu(
         jnp.asarray(_WAVE),
@@ -91,16 +80,16 @@ def _spectrum(cos_inc: float):
 
 
 def test_corona_spectrum_integrates_to_its_counted_power():
-    """H_nu (isotropic, cos i = 0) integrates to s L_acc, the power the normalizer counts."""
+    """H_nu (isotropic, cos i = 0) integrates to l_hot, the power the normalizer counts."""
     corona = _spectrum(0.0)
-    assert _integral_over_lbol(corona) == pytest.approx(_share_of_dissipation(), rel=_TOL)
+    assert _integral_over_lbol(corona) == pytest.approx(_l_hot_counted_over_lbol(), rel=_TOL)
 
 
 def test_disc_and_warm_zones_carry_the_rest_of_the_accretion_power():
-    """2 cos i D_nu at cos i = 1 has the disc power (1 - s) L_acc, so D_nu = (1 - s) L_acc."""
+    """2 cos i D_nu at cos i = 1 has the disc power L_acc - l_hot, so D_nu = L_acc - l_hot."""
     disc_only = _spectrum(1.0) - _spectrum(0.0)  # 2 D_nu
     assert _integral_over_lbol(disc_only) / 2.0 == pytest.approx(
-        1.0 - _share_of_dissipation(), rel=_TOL
+        1.0 - _l_hot_counted_over_lbol(), rel=_TOL
     )
 
 

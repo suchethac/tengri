@@ -830,6 +830,7 @@ def _compute_bh_and_radii(
         efficiency [all in CGS units].
     """
     from tengri.components.agn.disc import (
+        _disc_dissipation_per_mdot_c2,
         _gravitational_radius,
         _hot_flow_luminosity,
         _hot_zone_x_max,
@@ -850,7 +851,8 @@ def _compute_bh_and_radii(
     # ``_eddington_luminosity`` product never reappears here.
     l_bol_erg = 10.0**agn_log_lbol * L_SUN
     l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN - log10_l_edd), 1e-10, 1.0)
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+    # Mdot such that the disc's total Page-Thorne dissipation equals L_bol (as in ``disc.py``).
+    mdot = l_bol_erg / (_disc_dissipation_per_mdot_c2(agn_a_spin) * _C_LIGHT**2)
 
     t_in = (
         3.0
@@ -1179,8 +1181,8 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    # The corona's share ``s`` of the disc's own dissipation, as in ``disc.py``
-    # (``_hot_flow_fraction``): the corona carries ``s L_bol`` and the disc and warm zones
+    # The corona's share ``s = L_hot / L_bol`` (``s <= 0.99``), as in ``disc.py``
+    # (``_hot_flow_fraction``): the corona carries ``L_hot`` and the disc and warm zones
     # carry ``(1 - s) L_bol`` (#2733).
     l_bol_unit = 10.0**agn_log_lbol * L_SUN
     hot_fraction = _hot_flow_fraction(
@@ -1226,9 +1228,9 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
-    # The disc and warm zones carry ``(1 - s) L_bol`` and the corona ``s L_bol``, with ``s`` the
-    # hot flow's share of the disc's own dissipation (``s <= 0.99``), as in the full-wavelength
-    # path; the output scales linearly with ``agn_lum_ratio``.
+    # The disc and warm zones carry ``(1 - s) L_bol`` and the corona
+    # ``s L_bol = L_hot``, with ``s`` the hot flow's share of L_bol (``s <= 0.99``), as in the
+    # full-wavelength path; the output scales linearly with ``agn_lum_ratio``.
     l_disc_unnorm = _TWO_FACES * (outer_bol + warm_bol)
     scale_disc = (
         l_bol_unit
