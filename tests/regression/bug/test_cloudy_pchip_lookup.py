@@ -30,6 +30,7 @@ References
 """
 
 import inspect
+import shutil
 
 import jax
 import jax.numpy as jnp
@@ -38,22 +39,16 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, Observation, Photometry, Uniform
-from tengri._data_setup import find_data_str
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.config.exceptions import ParameterError
+from tests._cloudy_grid import write_synthetic_cloudy_grid
 
 pytestmark = pytest.mark.regression_bug
 
-_MIST = find_data_str("cloudy_grid_mist.h5")
-
-_needs_mist = pytest.mark.skipif(
-    _MIST is None,
-    reason=(
-        "cloudy_grid_mist.h5 is not shipped in git; set TENGRI_DATA_DIR to a checkout that has it"
-    ),
-)
+#: Log U nodes [dex] of the synthetic grid: the hull the real MIST grid has, [-4, -1].
+_LOG_U_NODES = (-4.0, -3.0, -2.0, -1.0)
 
 # Declared free-parameter priors (components/nebular/_params.py). The gas
 # metallicity prior is in log10(Z/Zsun); the grid axes are absolute log10(Z).
@@ -62,8 +57,23 @@ PRIOR_LOG_Z_GAS = (-1.30, 0.20)
 
 
 @pytest.fixture(scope="module")
-def backend():
-    return CloudyGridBackend(_MIST, ionizing_source_warning="suppress")
+def grid_path(tmp_path_factory):
+    """A deterministic CLOUDY-format grid on the real grid's log U hull.
+
+    The properties below concern the lookup, not the tabulated values, so a
+    smooth synthetic grid in the loader's layout is the right input and it
+    exists on every runner (the real grids are not tracked in git).
+    """
+    return str(
+        write_synthetic_cloudy_grid(
+            tmp_path_factory.mktemp("cloudy") / "grid.h5", log_u_axis=_LOG_U_NODES
+        )
+    )
+
+
+@pytest.fixture(scope="module")
+def backend(grid_path):
+    return CloudyGridBackend(grid_path, ionizing_source_warning="suppress")
 
 
 def _lookups(backend):
@@ -96,22 +106,19 @@ def _node_indices(shape):
     return [(i, j, k) for i in picks_z for j in picks_a for k in picks_u]
 
 
-@_needs_mist
 def test_default_grid_interp_is_pchip():
     """(d) The default lookup mode is the node-exact PCHIP interpolant."""
     default = inspect.signature(CloudyGridBackend.__init__).parameters["grid_interp"].default
     assert default == "pchip"
 
 
-@_needs_mist
-def test_linear_and_triweight_remain_explicit_opt_ins():
+def test_linear_and_triweight_remain_explicit_opt_ins(grid_path):
     """The earlier modes stay available as explicit choices, not deleted."""
     for mode in ("linear", "triweight"):
-        b = CloudyGridBackend(_MIST, grid_interp=mode, ionizing_source_warning="suppress")
+        b = CloudyGridBackend(grid_path, grid_interp=mode, ionizing_source_warning="suppress")
         assert b._grid_interp == mode
 
 
-@_needs_mist
 def test_default_lookup_is_exact_at_grid_nodes(backend):
     """(a) At every sampled node the default lookup equals the tabulated value."""
     for name, (interp, data, (z, a, u)) in _lookups(backend).items():
@@ -128,7 +135,6 @@ def test_default_lookup_is_exact_at_grid_nodes(backend):
             )
 
 
-@_needs_mist
 def test_between_nodes_no_new_extrema_along_each_axis(backend):
     """(b) A 1-D sweep between two nodes stays inside their band, per line."""
     tol_rel = 1e-10
@@ -177,7 +183,6 @@ def _sweep_within_hull(prior_abs, axis):
     return np.linspace(lo, hi, 81)
 
 
-@_needs_mist
 def test_gradient_wrt_log_u_nonzero_across_prior_within_hull(backend):
     """(c) d/d(log U) is finite and nonzero over prior and hull, boundary nodes included."""
     interp, _, (z, a, u) = _lookups(backend)["lines"]
@@ -187,7 +192,6 @@ def test_gradient_wrt_log_u_nonzero_across_prior_within_hull(backend):
     _gradient_is_finite_and_nonzero(lambda q: interp(z_mid, a_mid, q), sweep)
 
 
-@_needs_mist
 def test_gradient_wrt_log_z_gas_nonzero_across_prior_within_hull(backend):
     """(c) d/d(log Z_gas) is finite and nonzero over prior and hull, boundary nodes included."""
     interp, _, (z, a, u) = _lookups(backend)["lines"]
@@ -197,7 +201,6 @@ def test_gradient_wrt_log_z_gas_nonzero_across_prior_within_hull(backend):
     _gradient_is_finite_and_nonzero(lambda q: interp(q, a_mid, u_mid), sweep)
 
 
-@_needs_mist
 def test_boundary_node_gradient_equals_one_sided_slope_from_inside(backend):
     """(c) At logU = -4.0 and -1.0 the derivative is the slope from inside, not half of it."""
     interp, _, (z, a, u) = _lookups(backend)["lines"]
@@ -225,8 +228,7 @@ def _synthetic_ssp() -> SSPData:
     )
 
 
-@_needs_mist
-def test_log_u_prior_beyond_hull_refused_at_build():
+def test_log_u_prior_beyond_hull_refused_at_build(grid_path, tmp_path, monkeypatch):
     """A CLOUDY build with the explicit Uniform(-5, 0) logU prior raises ParameterError.
 
     The check is ``GRID_SUPPORT`` (``components/grid_support.py``, registered
@@ -237,8 +239,13 @@ def test_log_u_prior_beyond_hull_refused_at_build():
     The fixed-outside case is pinned in
     ``test_2460_neb_logu_prior_within_grid_axis.py``.
     """
+    # GRID_SUPPORT reads the default grid, ``cloudy_grid_mist.h5`` under
+    # ``$TENGRI_DATA_DIR``, not the explicit ``grid`` path. Give it the synthetic
+    # grid under that name, so the check sees the real grid's [-4, -1] hull.
+    shutil.copy(grid_path, tmp_path / "cloudy_grid_mist.h5")
+    monkeypatch.setenv("TENGRI_DATA_DIR", str(tmp_path))
     obs = Observation(photometry=Photometry.from_names(["sdss_g"]))
-    neb = {"type": "cloudy", "grid": _MIST, "logU": Uniform(-5.0, 0.0)}
+    neb = {"type": "cloudy", "grid": grid_path, "logU": Uniform(-5.0, 0.0)}
     with pytest.raises(ParameterError) as excinfo:
         tengri.SEDModel.build(
             ssp_data=_synthetic_ssp(),
