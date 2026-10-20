@@ -500,13 +500,13 @@ radio={'type': 'sf_agn', 'sf': {'type': 'condon'}, 'agn': {'type': 'nandra'}}
 ### X-ray emission: `xray`
 
 **Structural keys:**
-- `'type'`: X-ray model: `'yang22'` (Yang+2022), `'lehmer'` (Lehmer+2022), `'none'` (off).
+- `'type'`: X-ray model: `'simple'` / `'yang20'` (Yang+2020 corona, Fragos+2013 XRBs), `'lopez24'` (Lopez+2024 corona), `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 
 **Minimal example:**
 ```python
-xray={'type': 'yang22', 'all_params': Fixed(DEFAULT)}
-xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
+xray={'type': 'yang20', 'all_params': Fixed(DEFAULT)}
+xray={'type': 'simple', 'log_nh': Fixed(21.0)}  # Hydrogen column density, log10(cm^-2)
 ```
 
 **Gotchas:**

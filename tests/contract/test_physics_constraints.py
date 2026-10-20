@@ -173,7 +173,7 @@ class TestSFRIndicatorConsistency:
             )
 
     def test_hmxb_scales_linearly_with_sfr(self):
-        """Emitted HMXB 2-10 keV luminosity is linear in SFR (Lehmer+2016): +1 dex per decade."""
+        """Emitted HMXB 2-10 keV luminosity is linear in SFR (Fragos+2013): +1 dex per decade."""
         from tengri.components.xray.xray import xray_total_log_band_luminosities
 
         lx = [
@@ -183,7 +183,7 @@ class TestSFRIndicatorConsistency:
         np.testing.assert_allclose(np.diff(lx), [1.0, 1.0], atol=1e-12)
 
     def test_lmxb_scales_linearly_with_mass(self):
-        """Emitted LMXB 2-10 keV luminosity is linear in M* (Lehmer+2016): +1 dex per decade."""
+        """Emitted LMXB 2-10 keV luminosity is linear in M* (Fragos+2013): +1 dex per decade."""
         from tengri.components.xray.xray import xray_total_log_band_luminosities
 
         lx = [
@@ -193,7 +193,7 @@ class TestSFRIndicatorConsistency:
         np.testing.assert_allclose(np.diff(lx), [1.0, 1.0], atol=1e-12)
 
     def test_hmxb_calibration_value(self):
-        """HMXB 2-10 keV luminosity per Msun/yr at solar Z is 3.22e39 erg/s (Lehmer+2016)."""
+        """HMXB 2-10 keV luminosity per Msun/yr at solar Z is 3.22e39 erg/s (Fragos+2013 Eq. 3)."""
         from tengri.components.xray.xray import xray_total_log_band_luminosities
 
         lx = float(xray_total_log_band_luminosities(sfr=1.0)["hmxb"])

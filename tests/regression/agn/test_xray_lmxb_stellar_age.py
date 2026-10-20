@@ -4,7 +4,7 @@
 Building the CIGALE panchromatic head-to-head
 (``reproduction/cigale/01_cigale.py``) exposed a wiring bug: the
 ``XRaySEDComponent`` never passed ``stellar_age_gyr`` to ``xray_total``, so the
-Lehmer+2016 **LMXB** term — which dominates the galaxy X-ray — used the 1 Gyr
+Fragos+2013 **LMXB** term — which dominates the galaxy X-ray — used the 1 Gyr
 default regardless of the stellar population. The ``logT`` polynomial is steep,
 so an evolved (~3 Gyr) galaxy came out ~3-4x too luminous vs CIGALE ``yang20``
 (which uses ``stellar.age_m_star``). The component now threads the SSP

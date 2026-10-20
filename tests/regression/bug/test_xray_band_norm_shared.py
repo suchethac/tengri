@@ -11,8 +11,8 @@ disagree about its contract. ``_cutoff_powerlaw_band_norm`` is now the single
 definition, and :func:`test_band_norm_matches_inline_form` pins it to the
 inline arithmetic it replaced so the refactor is provably behavior-preserving.
 
-**#1755** — the ``xray_xrb_terms`` docstring claimed the Lehmer et al. (2016)
-Eq. 15 relation "yields ~2.6e39 erg/s per M_sun/yr" at Z=0.02, where its own
+**#1755** — the ``xray_xrb_terms`` docstring claimed the Fragos et al. (2013)
+Eq. 3 relation "yields ~2.6e39 erg/s per M_sun/yr" at Z=0.02, where its own
 equation gives 1.78e39 — a factor of 1.46. A prose number that restates a
 formula is a second source of truth, and this one was wrong.
 :func:`test_xray_lehmer_hmxb_docstring_values` evaluates the documented
@@ -29,12 +29,12 @@ from tengri.components.xray.xray import _cutoff_powerlaw_band_norm
 
 pytestmark = pytest.mark.regression_bug
 
-# Lehmer et al. 2016, ApJ 825, 7, Eq. 15 — the polynomial the docstring quotes.
+# Fragos et al. 2013, ApJ 776, L31, Eq. 3 — the polynomial the docstring quotes.
 _LEHMER_COEFFS = (40.28, -62.12, 569.44, -1833.80, 1968.33)
 
 
 def _lehmer_log_l_over_sfr(z: float) -> float:
-    """log10(L_X^HMXB(2-10 keV) / SFR) from the documented Eq. 15 polynomial."""
+    """log10(L_X^HMXB(2-10 keV) / SFR) from the documented Eq. 3 polynomial."""
     return sum(c * z**i for i, c in enumerate(_LEHMER_COEFFS))
 
 
@@ -46,7 +46,7 @@ def _lehmer_log_l_over_sfr(z: float) -> float:
     ],
 )
 def test_xray_lehmer_hmxb_docstring_values(z: float, expected: float) -> None:
-    """The docstring's quoted luminosities must equal what Eq. 15 produces (#1755).
+    """The docstring's quoted luminosities must equal what Eq. 3 produces (#1755).
 
     Before this test the docstring asserted 2.6e39 at Z=0.02 while the equation
     gives 1.78e39. Pinning both quoted values means the prose cannot drift from
@@ -54,7 +54,7 @@ def test_xray_lehmer_hmxb_docstring_values(z: float, expected: float) -> None:
     """
     got = 10.0 ** _lehmer_log_l_over_sfr(z)
     assert got == pytest.approx(expected, rel=5e-3), (
-        f"Lehmer+2016 Eq. 15 at Z={z} gives {got:.4e}, but the xray_xrb_terms "
+        f"Fragos+2013 Eq. 3 at Z={z} gives {got:.4e}, but the xray_xrb_terms "
         f"docstring quotes {expected:.4e}. Update whichever is wrong — the "
         "docstring restates the equation, so they must agree."
     )

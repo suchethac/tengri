@@ -5576,9 +5576,9 @@ _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
             "xray_det_lmxb",
         }
     ),
-    # Aird+2015 XRB scaling: the Lehmer+2016 offsets, and no corona.
+    # Aird+2015 XRB scaling: the Fragos+2013 offsets, and no corona.
     "xray_aird": frozenset({"xray_det_hmxb", "xray_det_lmxb"}),
-    # The alpha_ox corona and nothing else: no XRB channel, so the Lehmer+2016
+    # The alpha_ox corona and nothing else: no XRB channel, so the Fragos+2013
     # offsets are genuinely unread here, and no N_H screen.
     "agn_xray_corona": frozenset({"xray_gamma_agn", "xray_E_cut", "xray_delta_alpha_ox"}),
 }
@@ -5611,7 +5611,7 @@ _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().
 #: Declared and freeable, but read by no model the grammar can currently build.
 #:
 #: **Empty since #1706.** It held ``xray_det_hmxb`` / ``xray_det_lmxb``, the
-#: Lehmer+2016 XRB luminosity offsets, which were inert under every X-ray type
+#: Fragos+2013 XRB luminosity offsets, which were inert under every X-ray type
 #: because ``XRaySEDComponent._terms()`` never passed them on to
 #: ``xray_total_terms`` / ``xray_total_lopez24_terms``. Both call sites now do,
 #: so every model reads them and there is no variant to scope them to.

@@ -13,7 +13,7 @@ Over the course of an audit spanning PRs #290–#304, we identified six categori
 1. **NLR line ratios** (nlr.py:39–63): Hα/Hβ = 2.0 (observed Case B = 2.86, Seyfert 2 ≥ 3.1). [O III]/Hβ = 3.5 (observed = 10–15). Hand-tuned, no citation.
 2. **BLR internal tuning** (blr.py:54): Code confesses "tuned to maintain MgII/Hbeta ratio ~0.72" — not Vanden Berk+01 Table 2.
 3. **FeII template** (blr.py:93–103): Five Gaussians at round wavelengths, not the hundreds of multiplet lines spanning UV–optical.
-4. **X-ray scaling** (xray.py): Used Grimm+2003 (SFR-only HMXB) and Gilfanov 2004 (M*-only LMXB) instead of Lehmer+16 metallicity/age quartics. Anisotropy denominator wrong (missing −0.13397·a1 − 0.25·a2 term).
+4. **X-ray scaling** (xray.py): Used Grimm+2003 (SFR-only HMXB) and Gilfanov 2004 (M*-only LMXB) instead of the Fragos+13 metallicity/age quartics. Anisotropy denominator wrong (missing −0.13397·a1 − 0.25·a2 term).
 5. **SKIRTOR shipped total-only**: Three components (disc, scattered/direct, thermal torus) exist in the grid but were folded into one output, blocking self-consistent AGN bolometric calibration and polar dust wiring.
 6. **Toy IR-torus functions** (torus.py): `simple_torus` and `two_temperature_torus` are 1–2 temperature modified blackbodies, not RT results. Still used by four production models.
 
@@ -52,7 +52,7 @@ Four production AGN models previously used toy modified-blackbody tori:
 
 Fixes already landed:
 - PR 1: NLR template rewired to Richardson+14 a42 table; BLR ratios corrected to Vanden Berk+01; FeII replaced with three templates (Vestergaard+01, Tsuzuki+06, Boroson+92/Kovacevic+10).
-- PR 2: X-ray Lehmer+16 quartics for HMXB/LMXB; anisotropy denominator corrected; hot-gas term added; α_OX driver wired to L_2500_30deg.
+- PR 2: X-ray Fragos+13 quartics for HMXB/LMXB; anisotropy denominator corrected; hot-gas term added; α_OX driver wired to L_2500_30deg.
 - PR 3: SKIRTOR refactored to export disc / scattered_plus_direct / thermal_torus separately; L_2500_30deg computed at 30° inclination; polar dust (Casey+12 modified blackbody) wired into Type-1 path.
 
 ## Free-parameter changes
@@ -79,8 +79,8 @@ Every formula below links to its source (paper equation or CIGALE line number).
 | **NLR** | Hα 6563 Å rest flux | Richardson+14 Table 3, column a42 (exact template). |
 | **BLR** | Hβ 4861, Mg II 2798, etc. (25 lines) | Vanden Berk+01 Table 2 (composite spectrum). |
 | **BLR FeII** | 1250–7500 Å template blend | Vestergaard+01 (UV), Tsuzuki+06 (UV), Boroson & Green 1992 / Kovacevic+10 (optical). |
-| **X-ray HMXB** | L_X(Z, M_*) quartic | Lehmer+16 (ApJ 825, 7), yang20.py lines 207–214. |
-| **X-ray LMXB** | L_X(age, M_*) quartic | Lehmer+16, yang20.py lines 216–224. |
+| **X-ray HMXB** | L_X(Z, M_*) quartic | Fragos+13 (ApJ 776, L31, Eq. 3), yang20.py lines 207–214. |
+| **X-ray LMXB** | L_X(age, M_*) quartic | Fragos+13 (ApJ 776, L31, Eq. 4), yang20.py lines 216–224. |
 | **X-ray anisotropy** | f_aniso = 7/18 − sin²Φ/6 − (2/9) sin³Φ | yang20.py lines 231–234. |
 | **X-ray hot gas** | L_X(SFR) power law | yang20.py lines 110–116, 203 (HMXB contribution at different E range). |
 | **SKIRTOR disc** | L_nu(λ, τ, p, q, oa, inc) | skirtor2016.py lines 391–411 (disc extraction at θ=30°). |
@@ -137,7 +137,7 @@ For a canonical Type-1 quasar at z=1, agn_log_lbol=12 (L_bol ≈ 10^45 erg/s), i
 
 .. [7] Richardson, C. T., Allen, J. T., Baldwin, J. A., Hewett, P. C., & Ferland, G. J. (2014). Interpreting the ionization sequence in AGN emission-line spectra. MNRAS, 437, 2376. https://doi.org/10.1093/mnras/stt2056
 
-.. [8] Lehmer, B. D., et al. (2016). The Low-luminosity End of the Radius–Luminosity Relationship for Active Galactic Nuclei. ApJ, 825, 7. https://doi.org/10.3847/0004-637X/825/1/7
+.. [8] Fragos, T., Lehmer, B. D., Naoz, S., Zezas, A., & Basu-Zych, A. (2013). Energy Feedback from X-ray Binaries in the Early Universe. ApJ, 776, L31. https://doi.org/10.1088/2041-8205/776/2/L31
 
 .. [9] Yang, G., et al. (2020). X-CIGALE: fitting AGN/galaxy SEDs from X-ray to infrared. MNRAS, 491, 740. https://doi.org/10.1093/mnras/stz3001
 
