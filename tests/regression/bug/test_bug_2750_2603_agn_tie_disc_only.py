@@ -663,6 +663,9 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
     # takes the screen ``T``, and since #2760 (owner ruling 10) so does the tied disc, whose
     # library ratio would otherwise vanish there. Two scales, solved from the model's own
     # spectrum by least squares; the fit is exact to rounding when the form holds.
+    # ``b_D`` differs from ``b_H`` by up to 2e-3 because the disc is tied through the library's
+    # ratio R / R_face-on (the library incl ratio is 1.0022 at psi = 70.1) and its in-library power
+    # fraction, while the corona takes the closed-form share; the corona scale is the one checked.
     y = tied[below] / screen[below]
     basis = np.stack([2.0 * cos_inc * d_lam[below], h_lam[below]], axis=1)
     (b_disc, b_corona), *_ = np.linalg.lstsq(basis / y[:, None], np.ones(y.size), rcond=None)
@@ -671,7 +674,7 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
         _WAVE, _LOG_LBOL, agn_log_mbh=disc_mbh
     )
     expected = accretion * _power(comps["torus"]) / ((1.0 - float(f_corona)) * _L_ACC)
-    assert b_corona == pytest.approx(expected, rel=3e-3)
+    assert b_corona == pytest.approx(expected, rel=1e-4)
 
 
 def test_fritz_disc_is_independent_of_agn_log_lbol_under_the_tie():
