@@ -44,6 +44,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._nt_emissivity import (
+    H_CEILING_FRACTION as _NT_H_CEILING_FRACTION,
     X_MAX as _NT_X_MAX,
     isco_radius as _isco_radius,
     nt_dh_dlogx as _nt_dh_dlogx,
@@ -1418,7 +1419,7 @@ def _hot_flow_fraction(
     a_spin: float,
     x_hot_max: float | None = None,
 ) -> float:
-    r"""Corona share of the disc's own dissipation, :math:`L_{\rm hot} / L_{\rm diss}` [dimensionless].
+    r"""Corona share of the disc's dissipation, :math:`L_{\rm hot} / L_{\rm diss}` [dimensionless].
 
     The hot-flow power of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard}
     L_{\rm Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
@@ -1470,11 +1471,12 @@ def _hot_flow_fraction(
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     r_isco_rg = _isco_radius(a_spin)
     l0_over_bol = 1.5 / (_radiative_efficiency(r_isco_rg) * r_isco_rg)
+    # One evaluation of ``h(inf)``: the disc's total dissipation and, times 0.99, the cap.
     l_diss_over_l0 = _nt_h(jnp.log(_NT_X_MAX), a_spin)
-    hot_over_l0 = jnp.minimum(
-        f_hard_safe * _pow10(log10_edd_over_bol) / l0_over_bol,
-        _hot_flow_h_cap(a_spin, x_hot_max),
-    )
+    cap = _NT_H_CEILING_FRACTION * l_diss_over_l0
+    if x_hot_max is not None:
+        cap = jnp.minimum(cap, _nt_h(jnp.log(x_hot_max), a_spin))
+    hot_over_l0 = jnp.minimum(f_hard_safe * _pow10(log10_edd_over_bol) / l0_over_bol, cap)
     return hot_over_l0 / l_diss_over_l0
 
 

@@ -44,20 +44,23 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: SED at ratio 0.5, log L_bol = 11, log M_BH = 8, float64, on ``_WAVE``. Post-#2733 values
 #: (243acb9a3, the kubota_done corona carries exactly its counted l_hot): the head SED equals
 #: them exactly, and the pre-#2733 SED (b4e2cb526^) is 4.8% lower in sum for kubota_done.
+#: The kubota_done golden is re-recorded for the owner ruling of 2026-10-20 (the corona share is
+#: a fraction of the disc's own dissipation, not of L_bol): sum 3.8327887527784238e31 ->
+#: 3.9603089768137987e31 (+3.3%), the eight points move +1.1% to +3.5%.
 #: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
     "kubota_done": {
-        "sum": 3.8327887527784238e31,
+        "sum": 3.9603089768137987e31,
         "pts": (
-            1.0573030251412472e27,
-            1.9196515988084435e27,
-            1.0550830147246337e28,
-            6.202396359576807e28,
-            6.040546092056626e27,
-            1.9771627743794663e26,
-            5.61556392901215e24,
-            1.5416332609025254e23,
+            1.0693260952174706e27,
+            1.9511842640298e27,
+            1.084306657925824e28,
+            6.4153171934708306e28,
+            6.253235173087912e27,
+            2.0467804408683152e26,
+            5.813292948505486e24,
+            1.5959155443828586e23,
         ),
     },
     "multicolor": {
