@@ -1418,12 +1418,16 @@ def _hot_flow_fraction(
     a_spin: float,
     x_hot_max: float | None = None,
 ) -> float:
-    r"""Corona share of the accretion power, :math:`L_{\rm hot} / L_{\rm bol}` [dimensionless].
+    r"""Corona share of the disc's own dissipation, :math:`L_{\rm hot} / L_{\rm diss}` [dimensionless].
 
-    The cap of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard} L_{\rm
-    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
-    :math:`L_{\rm diss,hot}` of their Eq. 2), divided through by :math:`L_{\rm bol}`
-    analytically. The disc temperature scale is set by the accretion rate,
+    The hot-flow power of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard}
+    L_{\rm Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
+    :math:`L_{\rm diss,hot}` of their Eq. 2), is expressed as a fraction of the disc's total
+    dissipation :math:`L_{\rm diss} = L_0 h(\infty)`, the Page & Thorne (1974) integral over
+    every annulus, :math:`2\int_{R_{\rm isco}}^{\infty} \sigma T_{\rm NT}^4\, 2\pi R\,{\rm d}R`,
+    in the normalization of the cap (:func:`_nt_h` at ``X_MAX``). The cap is 99% of that
+    integral at most, so the share is at most 0.99 by construction and needs no clamp. The
+    disc temperature scale is set by the accretion rate,
     :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4 = 3 G M \dot M / (2 R_{\rm isco})`,
     with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and
     :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
@@ -1435,6 +1439,12 @@ def _hot_flow_fraction(
     depends on the spin alone. Every factor is O(1), so the share carries a few float32 ulps
     instead of the ~1e-6 dex that ``log10 L_hot`` and ``log10 L_bol`` (each ~11 in L_sun)
     carry, which a difference of near-equal powers would amplify.
+
+    The corona then carries :math:`s L_{\rm bol}` and the disc and warm zones
+    :math:`(1 - s) L_{\rm bol}`, so the total closes on :math:`L_{\rm bol}`. The Page & Thorne
+    integral is :math:`\approx 1.02\,\eta \dot M c^2` at zero spin and rises with spin, so
+    dividing :math:`L_{\rm hot}` by :math:`L_{\rm bol}` instead would exceed one inside the
+    declared priors (1.127 at spin 0.998, :math:`f_{\rm hard} = 0.1`).
 
     Parameters
     ----------
@@ -1450,14 +1460,22 @@ def _hot_flow_fraction(
     Returns
     -------
     float
-        ``L_hot / L_bol`` [dimensionless].
+        ``L_hot / L_diss`` [dimensionless], at most 0.99.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, MNRAS, 480, 1247 (2018), arXiv:1804.00171.
+    .. [2] D. N. Page and K. S. Thorne, ApJ, 191, 499 (1974).
     """
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     r_isco_rg = _isco_radius(a_spin)
     l0_over_bol = 1.5 / (_radiative_efficiency(r_isco_rg) * r_isco_rg)
-    return jnp.minimum(
-        f_hard_safe * _pow10(log10_edd_over_bol), l0_over_bol * _hot_flow_h_cap(a_spin, x_hot_max)
+    l_diss_over_l0 = _nt_h(jnp.log(_NT_X_MAX), a_spin)
+    hot_over_l0 = jnp.minimum(
+        f_hard_safe * _pow10(log10_edd_over_bol) / l0_over_bol,
+        _hot_flow_h_cap(a_spin, x_hot_max),
     )
+    return hot_over_l0 / l_diss_over_l0
 
 
 def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
@@ -1676,18 +1694,20 @@ def _compute_zone_luminosities(
     -----
     **JIT-compatible**: yes, uses ``jax.vmap`` for radial integration.
 
-    **Energy conservation**: The corona carries its counted power ``l_hot`` exactly; the
-    disc and warm zones carry ``l_bol - l_hot``. The disc power is the radial integral of the
+    **Energy conservation**: The corona carries ``s l_bol`` and the disc and warm zones
+    ``(1 - s) l_bol``, where ``s`` is the hot-flow power as a fraction of the disc's own total
+    dissipation, so the total closes on ``l_bol``. The disc power is the radial integral of the
     zone rings (Gauss-Legendre in ``ln r``, independent of ``n_radii``), and the warm shape is
     normalized by its own integral, so the spectra integrate to their counted powers on any
     grid that covers the template band.
 
     The corona power is :math:`L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}}
     \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Eq. 2), set to
-    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.2.1, Table 3). The disc budget is the rest of the
-    accretion power, :math:`L_{\rm bol}\,|1 - L_{\rm hot}/L_{\rm bol}|`, with the share formed by
-    :func:`_hot_flow_fraction` so the difference is taken between O(1) numbers, not between two
-    float32 logarithms of ~1e11 powers.
+    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.2.1, Table 3). The share :math:`s` is that power over
+    the disc's own total Page & Thorne (1974) dissipation integral (:func:`_hot_flow_fraction`),
+    so :math:`s \le 0.99` by construction; the corona carries :math:`s L_{\rm bol}` and the disc
+    budget is :math:`L_{\rm bol}(1 - s)`. The difference is taken between O(1) numbers, not
+    between two float32 logarithms of ~1e11 powers.
 
     References
     ----------
@@ -1884,12 +1904,9 @@ def _compute_zone_luminosities(
     # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude; within the
     # shape, the disc carries ``L_shape - l_hot``. The corona carries ``k * l_hot`` exactly.
     log10_k = jnp.log10(l_bol_erg) - log10_bol_shape
-    # ``|L_bol - l_hot| = L_bol |1 - l_hot / L_bol|``: the share is subtracted from one, so
-    # the near-equal powers (corona 96% of the total at the prior edge) are never differenced.
-    disc_share = jnp.abs(1.0 - hot_fraction)
-    log10_disc_share = jnp.where(
-        disc_share > 0, jnp.log10(jnp.where(disc_share > 0, disc_share, 1.0)), -jnp.inf
-    )
+    # ``(1 - s) L_bol`` with ``s <= 0.99`` the corona's share of the disc's own dissipation, so
+    # the argument of the log is positive by construction (no abs, no guarded where).
+    log10_disc_share = jnp.log10(1.0 - hot_fraction)
     log10_budget_disc = jnp.maximum(
         log10_bol_shape + log10_disc_share,
         jnp.log10(_representable_denominator(1e-100)),

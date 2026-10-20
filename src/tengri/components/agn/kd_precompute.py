@@ -1179,9 +1179,9 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    # The corona's share of the accretion power, ``L_hot / L_bol``, as in ``disc.py``
-    # (``_hot_flow_fraction``): the corona carries ``L_hot`` exactly and the disc and warm zones
-    # carry the rest (#2733).
+    # The corona's share ``s`` of the disc's own dissipation, as in ``disc.py``
+    # (``_hot_flow_fraction``): the corona carries ``s L_bol`` and the disc and warm zones
+    # carry ``(1 - s) L_bol`` (#2733).
     l_bol_unit = 10.0**agn_log_lbol * L_SUN
     hot_fraction = _hot_flow_fraction(
         agn_f_hard,
@@ -1226,13 +1226,13 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
-    # The disc and warm zones carry ``L_bol - L_hot = L_bol |1 - L_hot / L_bol|`` and the corona
-    # exactly ``L_hot``, as in the full-wavelength path; the output scales linearly with
-    # ``agn_lum_ratio``.
+    # The disc and warm zones carry ``(1 - s) L_bol`` and the corona ``s L_bol``, with ``s`` the
+    # hot flow's share of the disc's own dissipation (``s <= 0.99``), as in the full-wavelength
+    # path; the output scales linearly with ``agn_lum_ratio``.
     l_disc_unnorm = _TWO_FACES * (outer_bol + warm_bol)
     scale_disc = (
         l_bol_unit
-        * jnp.abs(1.0 - hot_fraction)
+        * (1.0 - hot_fraction)
         / jnp.maximum(l_disc_unnorm, representable_denominator(1e-100))
     )
 
