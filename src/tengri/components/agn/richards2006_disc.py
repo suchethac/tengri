@@ -25,6 +25,7 @@ from importlib.resources import files
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.host_array import device_table, host_array
 
 __all__ = [
@@ -63,10 +64,12 @@ _RICHARDS2006_NU_HZ = _C_AA_PER_S / RICHARDS2006_WAVE_AA
 _RICHARDS2006_LNU_SHAPE = RICHARDS2006_LNU
 # Integrate L_nu shape over frequency for bolometric normalization
 _idx_sort = np.argsort(_RICHARDS2006_NU_HZ)
+# Log-log over the template's own nodes: the integral of the log-log interpolant the template is
+# resampled with. A trapezoid over the same nodes is 3.5e-4 high.
 _RICHARDS2006_BOL_INTEGRAL = float(
-    np.trapezoid(
-        np.asarray(_RICHARDS2006_LNU_SHAPE)[_idx_sort],
-        np.asarray(_RICHARDS2006_NU_HZ)[_idx_sort],
+    loglog_integral(
+        jnp.asarray(np.asarray(_RICHARDS2006_NU_HZ)[_idx_sort]),
+        jnp.asarray(np.asarray(_RICHARDS2006_LNU_SHAPE)[_idx_sort]),
     )
 )
 
