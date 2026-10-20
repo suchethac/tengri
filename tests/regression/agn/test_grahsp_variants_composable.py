@@ -121,7 +121,7 @@ class TestSbplDiscBitIdentityPin:
     )
 
     def test_sbpl_bit_identity_pinned_before_extraction(self, sbpl_block):
-        """sbpl output equals the pinned values, bit for bit.
+        """sbpl output equals the pinned values to within 2 ulp.
 
         Covers the explicit-l5100 branch, the bolometric (``agn_grahsp_log_l5100=None``)
         branch and the float32 ``agn_log_lbol_shape`` pre-shift branch.
@@ -130,7 +130,11 @@ class TestSbplDiscBitIdentityPin:
         for params, hexes in self._PINNED:
             got = np.asarray(sbpl_block(wave, **params))
             expected = np.array([float.fromhex(h) for h in hexes])
-            np.testing.assert_array_equal(got, expected, err_msg=f"sbpl drifted at {params}")
+            # maxulp=2: a different XLA release can reassociate one reduction (the
+            # normalization integral) and move the last bit of a value (jax 0.11 -> 0.12 moved
+            # one element by 1 ulp). Any change to the formula, or to a coefficient above
+            # ~1e-15 relative, moves the output by far more than 2 ulp and still fails.
+            np.testing.assert_array_max_ulp(got, expected, maxulp=2)
 
     def test_sbpl_bit_identity_at_three_nodes(self, wave_nm, sbpl_block):
         """SBPL block must be bit-identical at three parameter sets before helper extraction."""
