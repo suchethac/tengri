@@ -11,18 +11,20 @@ import jax.random as jr
 jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
+
 from tengri import (
-    SEDModel,
-    Parameters,
-    Uniform,
-    Gaussian,
-    LogUniform,
-    LogNormal,
-    StudentT,
     Fitter,
-    load_ssp_data,
+    Gaussian,
+    LogNormal,
+    LogUniform,
+    Parameters,
+    SEDModel,
+    StudentT,
+    Uniform,
     load_filter_set,
+    load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 
 
 def test_loss_with_different_priors():
@@ -45,7 +47,7 @@ def test_loss_with_different_priors():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -57,7 +59,7 @@ def test_loss_with_different_priors():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
                 "sfh_tsnorm_width_gyr": 1.0,
                 "sfh_tsnorm_trunc": 0.5,
                 "sfh_tsnorm_log_total_mass": 1.0,
@@ -72,7 +74,7 @@ def test_loss_with_different_priors():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": Gaussian(0.0, 0.2, -0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -84,7 +86,7 @@ def test_loss_with_different_priors():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
                 "sfh_tsnorm_width_gyr": 1.0,
                 "sfh_tsnorm_trunc": 0.5,
                 "sfh_tsnorm_log_total_mass": 1.0,
@@ -99,7 +101,7 @@ def test_loss_with_different_priors():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -111,7 +113,7 @@ def test_loss_with_different_priors():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
                 "sfh_tsnorm_width_gyr": 1.0,
                 "sfh_tsnorm_trunc": 0.5,
                 "sfh_tsnorm_log_total_mass": 1.0,
@@ -126,7 +128,7 @@ def test_loss_with_different_priors():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -138,7 +140,7 @@ def test_loss_with_different_priors():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
                 "sfh_tsnorm_width_gyr": 1.0,
                 "sfh_tsnorm_trunc": 0.5,
                 "sfh_tsnorm_log_total_mass": 1.0,
@@ -153,7 +155,7 @@ def test_loss_with_different_priors():
             "spec_kwargs": {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_skew": StudentT(0.0, 0.2, 3.0, -0.5, 0.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
                 "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -165,7 +167,7 @@ def test_loss_with_different_priors():
             },
             "true_params": {
                 "sfh_tsnorm_skew": 0.1,
-                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
                 "sfh_tsnorm_width_gyr": 1.0,
                 "sfh_tsnorm_trunc": 0.5,
                 "sfh_tsnorm_log_total_mass": 1.0,
