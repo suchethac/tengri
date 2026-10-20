@@ -43,6 +43,7 @@ pytestmark = pytest.mark.regression_bug
 
 import tengri
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri.cosmology import age_at_z
 from tengri.observation.photometry import FilterCurve
 from tengri.parameters.resolve import merge_fixed_params
 from tengri.utils.scale import pow10
@@ -92,7 +93,8 @@ def _build_model(ssp_bare, observation, *, dust, redshift=0.05, neb=True):
             "type": "const",
             "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
-            "start_gyr": 10.0,
+            # 10 Gyr, or the Big Bang where the universe is younger (#2748).
+            "start_gyr": Fixed(min(10.0, float(age_at_z(redshift)))),
             "end_gyr": 0.0,
         },
         dust_attenuation=dust,

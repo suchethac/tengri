@@ -2525,6 +2525,20 @@ def _seed_zero_declaration_wildcards(
     return seeded
 
 
+def _without_twinned_gyr_aliases(entries: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
+    """Drop the Fixed-only ``*_gyr`` timing aliases whose ``*_frac`` twin is covered (#2748).
+
+    A timing alias is the Fixed shim of its fraction, never a parameter the
+    wildcard could free: the twin carries the freedom, so the alias is neither
+    counted as covered nor named as stuck.
+    """
+    from tengri.parameters.timing import timing_frac_params
+
+    covered = {name for name, _ in entries}
+    twinned = {gyr for frac, gyr in timing_frac_params(covered).items() if frac in covered}
+    return [(name, freed) for name, freed in entries if name not in twinned]
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
@@ -2595,6 +2609,7 @@ def _check_wildcard_freed_something(
                 f"{{'param_name': Uniform(lo, hi)}} for whichever parameter "
                 f"your chosen configuration actually declares)."
             )
+        entries = _without_twinned_gyr_aliases(entries)
         stuck = [name for name, freed in entries if not freed]
         if not stuck:
             # Freed everything it covered; exactly what was asked for.
