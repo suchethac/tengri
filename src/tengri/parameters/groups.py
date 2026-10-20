@@ -5605,8 +5605,10 @@ _XRAY_ALPHA_OX_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox", "xray_
 #: Models whose corona reads the alpha_ox declaration (the Just+2007 corona).
 _XRAY_ALPHA_OX_MODELS: frozenset[str] = frozenset({"yang20", "simple"})
 #: Union of the above: the names the scope may narrow away.
-_XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
-    *_XRAY_PARAMS_BY_MODEL.values()
+_XRAY_VARIANT_PARAMS: frozenset[str] = (
+    _XRAY_DEFAULT_MODEL_PARAMS
+    | frozenset().union(*_XRAY_PARAMS_BY_MODEL.values())
+    | _XRAY_ALPHA_OX_PARAMS
 )
 #: Declared and freeable, but read by no model the grammar can currently build.
 #:
