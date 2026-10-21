@@ -9,23 +9,35 @@ product passes the 3.403e38 ceiling at ``agn_log_lbol`` ~ 5, so every declared
 representable. The fix carries the luminosity scale as a log10 offset applied last,
 on an O(1) peak-normalized shape, through ``utils/scale.py``.
 
-Three guards:
+Four guards:
 
 * (a) float32 output is finite over the whole declared prior and matches float64 to
   float32 precision on the nonzero part;
 * (b) float64 output equals the pre-change formula, re-implemented here in NumPy
   from the documented definition (shape ``nu**alpha exp(-h nu / k T)`` normalized
-  over the fixed 10 A - 1e8 A band by ``trapz`` in frequency);
-* (c) the float32 gradient with respect to ``agn_log_lbol`` is finite and non-zero.
+  over the fixed 10 A - 1e8 A band by the log-log rule of #2919, the production
+  integrator);
+* (c) the float32 gradient with respect to ``agn_log_lbol`` is finite and non-zero;
+* (d) the normalization equals the closed-form band integral, an upper incomplete
+  gamma function, to ``ANALYTIC_RTOL``, independently of any quadrature rule.
 """
+
+import math
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.special import exp1, gamma, gammaincc
 
 from tengri.components.agn._phys import C_LIGHT, H_PLANCK, K_BOLTZ
-from tengri.components.agn.disc import powerlaw_disc
+from tengri.components.agn.disc import (
+    _PL_BAND_HI_AA,
+    _PL_BAND_LO_AA,
+    _PL_BAND_NODES,
+    powerlaw_disc,
+)
+from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import AA_TO_CM, L_SUN
 
 pytestmark = [
@@ -37,27 +49,77 @@ pytestmark = [
 LOG_LBOL_PRIOR = (8.0, 14.0)
 #: Rest-frame grid spanning the ionizing UV to the far IR [Angstrom].
 WAVE = np.geomspace(100.0, 1.0e6, 400)
-#: The documented normalization band [Angstrom] and its node count.
-BAND_AA = np.geomspace(1.0e8, 10.0, 2049)
+#: Dust-free disc temperature scale [K] shared by every float64 reference in this file.
+T_MAX = 1e5
+#: Node count of the superseded 2049-node trapezoid, kept only for the sensitivity check.
+_LEGACY_TRAPEZOID_NODES = 2049
+#: Relative tolerance of the closed-form check. Measured 2026-10-21: the 8001-node log-log
+#: normalization is 1.7e-7 from the closed form at its worst alpha, the 2049-node trapezoid
+#: is 1.9e-5 off, so 1e-6 sits well above the first and well below the second.
+ANALYTIC_RTOL = 1e-6
+
+
+def _band_nu_hz(nodes):
+    """The normalization band in frequency [Hz], log-spaced in wavelength as production."""
+    band_aa = np.exp(np.linspace(math.log(_PL_BAND_HI_AA), math.log(_PL_BAND_LO_AA), nodes))
+    return C_LIGHT / (band_aa * AA_TO_CM)
+
+
+def _band_shape(nu, alpha, t_max):
+    """Plain linear-space shape ``nu**alpha exp(-h nu / k T)`` with the exponent clipped."""
+    x = np.clip(H_PLANCK * nu / (K_BOLTZ * max(t_max, 1.0)), 0.0, 500.0)
+    return nu**alpha * np.exp(-x)
 
 
 def _old_powerlaw_disc(wave, log_lbol, lum_ratio, alpha, t_max):
-    """The pre-change formula, NumPy float64, as documented in ``powerlaw_disc``."""
+    """The pre-change formula, NumPy float64, as documented in ``powerlaw_disc``.
+
+    The normalization integral follows #2919's converged log-log rule (was a 2049-node
+    trapezoid, ~1.05e-5 off): the same ``loglog_integral`` and the same band that production
+    now uses, so only the float32-safe log-space formulation differs from this reference.
+    """
     wave = np.asarray(wave, dtype=np.float64)
     nu = C_LIGHT / (wave * AA_TO_CM)
     l_bol_erg = 10.0**log_lbol * L_SUN
-    x = np.clip(H_PLANCK * nu / (K_BOLTZ * max(t_max, 1.0)), 0.0, 500.0)
-    shape = nu**alpha * np.exp(-x)
+    shape = _band_shape(nu, alpha, t_max)
 
-    nu_int = C_LIGHT / (BAND_AA * AA_TO_CM)
-    x_int = np.clip(H_PLANCK * nu_int / (K_BOLTZ * max(t_max, 1.0)), 0.0, 500.0)
-    shape_int = nu_int**alpha * np.exp(-x_int)
-    integral = np.trapezoid(shape_int, nu_int)
+    nu_int = _band_nu_hz(_PL_BAND_NODES)
+    shape_int = _band_shape(nu_int, alpha, t_max)
+    with jax.enable_x64(True):
+        integral = float(loglog_integral(jnp.asarray(nu_int), jnp.asarray(shape_int)))
     integral_safe = max(abs(integral), 1e-100)
     return l_bol_erg * lum_ratio * shape / integral_safe
 
 
-def _float64_disc(log_lbol, alpha=-1.0, t_max=1e5, lum_ratio=1.0):
+def _upper_gamma(s, x):
+    """Upper incomplete gamma ``Gamma(s, x)`` for real ``s``, from scipy's regularized form.
+
+    ``gammaincc`` needs ``s > 0``, so ``s <= 0`` steps up with the recurrence
+    ``Gamma(s, x) = (Gamma(s + 1, x) - x**s exp(-x)) / s`` (``Gamma(0, x) = E1(x)``).
+    """
+    if s == 0.0:
+        return float(exp1(x))
+    if s > 0.0:
+        return float(gammaincc(s, x) * gamma(s))
+    return (_upper_gamma(s + 1.0, x) - x**s * math.exp(-x)) / s
+
+
+def _closed_form_band_integral(alpha, t_max):
+    """``|int nu**alpha exp(-h nu / k T) dnu|`` over the band, in closed form [Hz**(alpha+1)].
+
+    With ``x = h nu / k T`` the integral is ``(k T / h)**s [Gamma(s, x_lo) - Gamma(s, x_hi)]``
+    with ``s = alpha + 1``. The band end points come from the disc module, not restated here.
+    """
+    kt_over_h = K_BOLTZ * t_max / H_PLANCK
+    nu_lo = C_LIGHT / (_PL_BAND_HI_AA * AA_TO_CM)
+    nu_hi = C_LIGHT / (_PL_BAND_LO_AA * AA_TO_CM)
+    s = alpha + 1.0
+    x_lo = H_PLANCK * nu_lo / (K_BOLTZ * t_max)
+    x_hi = H_PLANCK * nu_hi / (K_BOLTZ * t_max)
+    return kt_over_h**s * (_upper_gamma(s, x_lo) - _upper_gamma(s, x_hi))
+
+
+def _float64_disc(log_lbol, alpha=-1.0, t_max=T_MAX, lum_ratio=1.0):
     with jax.enable_x64(True):
         out = powerlaw_disc(
             jnp.asarray(WAVE, dtype=jnp.float64),
@@ -69,7 +131,7 @@ def _float64_disc(log_lbol, alpha=-1.0, t_max=1e5, lum_ratio=1.0):
         return np.asarray(out, dtype=np.float64)
 
 
-def _float32_disc(log_lbol, alpha=-1.0, t_max=1e5, lum_ratio=1.0):
+def _float32_disc(log_lbol, alpha=-1.0, t_max=T_MAX, lum_ratio=1.0):
     with jax.enable_x64(False):
         out = powerlaw_disc(
             jnp.asarray(WAVE, dtype=jnp.float32),
@@ -100,8 +162,38 @@ def test_float32_finite_and_matches_float64_across_prior(log_lbol):
 def test_float64_equals_pre_change_formula(log_lbol, alpha):
     """(b) float64 output equals the old expression to round-off (rtol <= 1e-12)."""
     got = _float64_disc(log_lbol, alpha=alpha, lum_ratio=0.7)
-    want = _old_powerlaw_disc(WAVE, log_lbol, 0.7, alpha, 1e5)
+    want = _old_powerlaw_disc(WAVE, log_lbol, 0.7, alpha, T_MAX)
     np.testing.assert_allclose(got, want, rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.parametrize("alpha", [-1.5, -1.0, -0.5])
+def test_normalization_matches_closed_form(alpha):
+    """(d) the normalization equals the closed-form band integral to ``ANALYTIC_RTOL``.
+
+    The normalization is recovered from the output at its peak: ``L_nu = l_bol * lum * shape
+    / |integral|``, so ``|integral| = l_bol * lum * shape / L_nu`` at any node. The reference
+    is the upper-incomplete-gamma closed form, which no quadrature rule can share a bias with.
+    """
+    log_lbol, lum_ratio = 12.0, 1.0
+    out = _float64_disc(log_lbol, alpha=alpha, lum_ratio=lum_ratio)
+    i = int(np.argmax(out))
+    nu = C_LIGHT / (WAVE[i] * AA_TO_CM)
+    l_bol_erg = 10.0**log_lbol * L_SUN
+    integral_from_output = l_bol_erg * lum_ratio * _band_shape(nu, alpha, T_MAX) / out[i]
+    want = _closed_form_band_integral(alpha, T_MAX)
+    assert integral_from_output == pytest.approx(want, rel=ANALYTIC_RTOL)
+
+
+@pytest.mark.parametrize("alpha", [-1.5, -1.0, -0.5])
+def test_legacy_trapezoid_is_outside_closed_form_tolerance(alpha):
+    """Sensitivity of (d): the superseded 2049-node trapezoid misses the closed form.
+
+    If this stops holding, ``ANALYTIC_RTOL`` is no longer a test of the quadrature rule.
+    """
+    nu = _band_nu_hz(_LEGACY_TRAPEZOID_NODES)
+    trapezoid = abs(np.trapezoid(_band_shape(nu, alpha, T_MAX), nu))
+    want = _closed_form_band_integral(alpha, T_MAX)
+    assert abs(trapezoid / want - 1.0) > ANALYTIC_RTOL
 
 
 def test_float32_gradient_wrt_log_lbol_is_finite_and_nonzero():

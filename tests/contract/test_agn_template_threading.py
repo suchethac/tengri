@@ -57,8 +57,16 @@ _BAKED_BUDGET_MB = 1.0
 # multiple. A kubota_done disc behind a Fritz torus with the analytic NLR measures 0.196 MB
 # without the disc tie, 0.481 MB when the tie evaluated the 13001-node budget grid twice
 # as graph literals, and 0.283 MB with that grid built once inside the trace; the budget
-# sits 0.07 MB above the measurement.
-_FRITZ_TIED_BUDGET_MB = 0.35
+# sat 0.07 MB above the measurement. The kubota_done graph is traced nine times on this path
+# (the tie, the band response and the normalizations), and since the float32 rewrite of
+# kubota_done (#2774) and #3009 each trace carries the 128-node Gauss-Legendre ring
+# nodes (18 arrays) and the 4000-node warm-zone normalization grid as host literals, about
+# 0.05 MB per trace. The same graph measures 0.668 MB (9 x 4000-node grid 0.288 MB, 162 x
+# 128-node 0.166 MB, 9 x 2000-node corona grid 0.144 MB), so the budget sits 0.07 MB above it
+# and still catches one extra copy of the 13001-node budget grid (+0.10 MB per copy).
+# The nine copies are redundant: #3044 tracks deduplicating the kubota tables so the budget
+# can return to about 0.35 MB.
+_FRITZ_TIED_BUDGET_MB = 0.74
 
 # ``none`` is the no-op selector present in every category.
 _SKIP_BLOCKS = frozenset({"none"})

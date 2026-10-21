@@ -40,9 +40,11 @@ from tengri.components.nebular.nebular_grid_precompute import (
     reconstruct_nebular_line_lums,
     reconstruct_nebular_lines,
     reconstruct_nebular_phot,
+    reference_redshift,
 )
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import reference_timing_fracs
 from tengri.utils.scale import apply_log10_scale, pow10
 
 pytestmark = pytest.mark.contract
@@ -61,7 +63,7 @@ def _require():
         pytest.skip("Cue weights (data/cue_weights.npz) not present")
 
 
-def _model(neb, sfh_wild=FREE, met=None):
+def _model(neb, sfh_wild=FREE, met=None, sfh_extra=None):
     import warnings
 
     _require()
@@ -72,7 +74,7 @@ def _model(neb, sfh_wild=FREE, met=None):
         kwargs = dict(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": sfh_wild},
+            sfh={"type": "dpl", "all_params": sfh_wild, **(sfh_extra or {})},
             dust_attenuation=None,
             neb=neb,
             redshift=Fixed(Z),
@@ -793,8 +795,25 @@ def test_degenerate_dig_extension_drops_the_axis_and_matches_hii():
         f"build an all-identical one: {table.axis_names}"
     )
 
+    # The table is built on the reference SFH, whose timing fraction is rescaled into the
+    # z = 0 frame (#2748). The exact models take that same rescaled onset as their Fixed
+    # timing, so the table and the exact prediction see one absolute onset. (A call-time
+    # override of a Fixed timing is refused, so the onset cannot be passed in `p`.)
+    ref_onset = reference_timing_fracs(m.spec, {}, reference_redshift(m))["sfh_dpl_age_frac"]
+    sfh_ref = {"age_frac": Fixed(ref_onset)}
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    nion = _nion(m, p)
+    m_ref = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Fixed(-3.0),
+            "dig_frac": Fixed(1.0),
+            "dig_delta_logU": Fixed(0.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+        sfh_extra=sfh_ref,
+    )
+    nion = _nion(m_ref, p)
     recon = np.asarray(reconstruct_nebular_line_lums(nion, p, table))
     assert np.all(np.isfinite(recon)), f"reconstruction is not finite: {recon}"
 
@@ -806,6 +825,7 @@ def test_degenerate_dig_extension_drops_the_axis_and_matches_hii():
             "dig_frac": Fixed(0.0),
         },
         sfh_wild=Fixed(DEFAULT),
+        sfh_extra=sfh_ref,
     )
     exact_hii = np.asarray(m_hii.predict_line_fluxes(p, target_wavelengths=_LW, redden=False))
     recon_flux = np.asarray(apply_log10_scale(recon, -_log10_four_pi_dl2(Z)))

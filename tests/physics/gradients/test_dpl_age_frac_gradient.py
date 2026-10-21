@@ -23,14 +23,6 @@ _Z = 2.0
 _FRAC = 0.99
 _LOG_TOTAL_MASS = 10.0
 
-_LNORM_NAN = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the lnorm age gradient is NaN on the base commit with the Gyr parameter "
-        "too (pre-existing, outside the #2748 fraction work)"
-    ),
-)
-
 #: One representative per onset family: (SFH type, onset stem).
 FAMILIES = (
     ("dpl", "age"),
@@ -39,7 +31,7 @@ FAMILIES = (
     ("declining_exp", "age"),
     ("psb", "age"),
     ("delayed_bq", "age_main"),
-    pytest.param("lnorm", "age", marks=_LNORM_NAN),
+    ("lnorm", "age"),
     ("tsnorm", "peak_lbt"),
     ("snorm", "peak_lbt"),
     ("snorm_burst", "peak_lbt"),

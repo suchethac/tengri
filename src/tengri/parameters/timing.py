@@ -11,23 +11,13 @@ kernels, which are unchanged.
 from __future__ import annotations
 
 import functools
+import re
 import warnings
 
 
 @functools.cache
-def timing_frac_params() -> dict[str, str]:
-    """Fractional timing parameter -> the absolute-Gyr parameter it replaces (#2748).
-
-    Derived from the SFH registry: every ParamDef whose ``gyr_twin`` is set. The
-    Gyr name keeps its ``internal_param_map`` entry and its role as the Fixed
-    shim; the translate post-pass writes ``frac * age(z)`` under its internal
-    name when the fraction is sampled.
-
-    Returns
-    -------
-    dict of str to str
-        ``frac public name -> Gyr public name``.
-    """
+def _registry_timing_pairs() -> dict[str, str]:
+    """``frac -> Gyr`` of every registry ParamDef whose ``gyr_twin`` is set (#2748)."""
     from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
     return {
@@ -36,6 +26,51 @@ def timing_frac_params() -> dict[str, str]:
         for name, pdef in spec.params.items()
         if pdef.gyr_twin is not None
     }
+
+
+#: ``sfh_<type>_<ordinal>_<rest>``: a repeated SFH instance's public name.
+_INSTANCE_NAME = re.compile(r"^(sfh_[^_]+)_(\d+)_(.+)$")
+
+
+def timing_frac_params(names=None) -> dict[str, str]:
+    """Fractional timing parameter -> the absolute-Gyr parameter it replaces (#2748).
+
+    Derived from the SFH registry: every ParamDef whose ``gyr_twin`` is set. The
+    Gyr name keeps its ``internal_param_map`` entry and its role as the Fixed
+    shim; the translate post-pass writes ``frac * age(z)`` under its internal
+    name when the fraction is sampled.
+
+    A repeated SFH instance (``sfh_norm_2_*``) carries the same timings under
+    numbered names. Those are not registry entries, so they are paired from
+    ``names``: a numbered fraction is the twin of the numbered form of its
+    base pair's Gyr name, by the same rule that numbers the parameters.
+
+    Parameters
+    ----------
+    names : collection of str, optional
+        Public names in play. Each numbered instance of a registry fraction
+        found here adds its own pair. Default ``None`` returns the registry
+        pairs alone.
+
+    Returns
+    -------
+    dict of str to str
+        ``frac public name -> Gyr public name``.
+    """
+    base = _registry_timing_pairs()
+    if not names:
+        return dict(base)
+    pairs = dict(base)
+    for name in names:
+        match = _INSTANCE_NAME.match(name)
+        if match is None:
+            continue
+        prefix, ordinal, rest = match.groups()
+        gyr_base = base.get(f"{prefix}_{rest}")
+        if gyr_base is None or not gyr_base.startswith(f"{prefix}_"):
+            continue
+        pairs[name] = f"{prefix}_{ordinal}_{gyr_base[len(prefix) + 1 :]}"
+    return pairs
 
 
 def timing_gyr(*, frac=None, fixed_gyr=None, age_universe_gyr):
@@ -146,7 +181,7 @@ def settle_timing_pairs(resolved, provenance, *, redshift_fixed=None):
     from tengri.config.exceptions import ConfigError
 
     dropped = set()
-    for frac_name, gyr_name in timing_frac_params().items():
+    for frac_name, gyr_name in timing_frac_params(resolved).items():
         if frac_name not in resolved and gyr_name not in resolved:
             continue
         gyr_user = gyr_name in resolved and provenance.get(gyr_name) in _USER_NAMED
@@ -234,7 +269,7 @@ def alias_gyr_timings(params, param_map, spec):
     """
     from tengri.config.exceptions import ConfigError
 
-    for frac_name, gyr_name in timing_frac_params().items():
+    for frac_name, gyr_name in timing_frac_params(param_map).items():
         if gyr_name not in params or gyr_name not in param_map or frac_name not in param_map:
             continue
         if frac_name in params:
@@ -246,13 +281,23 @@ def alias_gyr_timings(params, param_map, spec):
 
 def gyr_supplies_fraction(frac_name, params):
     """True when ``params`` gives the absolute Gyr twin of fraction ``frac_name`` (#2748)."""
-    gyr_name = timing_frac_params().get(frac_name)
+    gyr_name = timing_frac_params([frac_name]).get(frac_name)
     return gyr_name is not None and gyr_name in params
 
 
-def _gyr_to_frac() -> dict[str, str]:
-    """Absolute-Gyr timing alias -> the fraction that replaces it (#2748)."""
-    return {gyr: frac for frac, gyr in timing_frac_params().items()}
+def _frac_of_gyr(gyr_name):
+    """The fraction that replaces absolute-Gyr alias ``gyr_name``, numbered or not (#2748)."""
+    base = {gyr: frac for frac, gyr in timing_frac_params().items()}
+    if gyr_name in base:
+        return base[gyr_name]
+    match = _INSTANCE_NAME.match(gyr_name)
+    if match is None:
+        return None
+    prefix, ordinal, rest = match.groups()
+    frac_base = base.get(f"{prefix}_{rest}")
+    if frac_base is None:
+        return None
+    return f"{prefix}_{ordinal}_{frac_base[len(prefix) + 1 :]}"
 
 
 def check_free_gyr_alias(name, value):
@@ -280,7 +325,7 @@ def check_free_gyr_alias(name, value):
     from tengri.parameters.priors import Distribution, Uniform
     from tengri.parameters.sentinels import FREE
 
-    frac_name = _gyr_to_frac().get(name)
+    frac_name = _frac_of_gyr(name)
     if frac_name is None:
         return
     is_free = value is FREE or (isinstance(value, Distribution) and not value.is_fixed)
@@ -332,7 +377,7 @@ def timing_names_to_exclude(user_names, valid_names):
     user = set(user_names)
     valid = set(valid_names)
     excluded = set()
-    for frac_name, gyr_name in timing_frac_params().items():
+    for frac_name, gyr_name in timing_frac_params(valid).items():
         if frac_name not in valid or gyr_name not in valid:
             continue
         if frac_name in user and gyr_name in user:
@@ -392,8 +437,8 @@ def reference_timing_fracs(spec, params, ref_z):
     from tengri.parameters.resolve import merge_fixed_params
 
     scale = float(age_at_z(0.0)) / float(age_at_z(ref_z))
-    frac_names = timing_frac_params()
     fixed = merge_fixed_params(spec, {})
+    frac_names = timing_frac_params({*params, *fixed})
     out = dict(params)
     for name in frac_names:
         if name in params:
@@ -436,7 +481,7 @@ def resolve_timing_fracs(internal, params, param_map, *, redshift):
     from tengri.cosmology import age_at_z
 
     defaults = timing_frac_defaults()
-    for frac_name, gyr_name in timing_frac_params().items():
+    for frac_name, gyr_name in timing_frac_params(param_map).items():
         if frac_name not in param_map or gyr_name not in param_map:
             continue
         frac_int = param_map[frac_name][0]
@@ -487,7 +532,7 @@ def route_timing_fracs(full_params, sampled):
     from tengri.config.exceptions import ConfigError
 
     out = dict(full_params)
-    for frac_name, gyr_name in timing_frac_params().items():
+    for frac_name, gyr_name in timing_frac_params(full_params).items():
         if frac_name in sampled and gyr_name in sampled:
             raise ConfigError(
                 f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
@@ -495,3 +540,19 @@ def route_timing_fracs(full_params, sampled):
         if frac_name in out:
             out.pop(gyr_name, None)
     return out
+
+
+def user_named_timing_keys(provenance):
+    """Names the user wrote explicitly, as opposed to a wildcard or default (#2748).
+
+    Parameters
+    ----------
+    provenance : dict
+        ``public_name -> provenance tag`` of a build.
+
+    Returns
+    -------
+    frozenset of str
+        The names whose tag marks a user-written fixed value, prior or FREE.
+    """
+    return frozenset(name for name, tag in provenance.items() if tag in _USER_NAMED)

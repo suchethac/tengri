@@ -35,6 +35,7 @@ from tengri.components.nebular.nebular_grid_precompute import grid_baked_free_pa
 from tengri.forward.sed_model import FeaturePrecomp
 from tengri.inference import Fitter
 from tengri.inference.fitter import fast_nebular_can_engage
+from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.contract
 
@@ -149,8 +150,9 @@ def _views(dusty: bool, key: str, lo: float, hi: float):
 
 def _point(m) -> dict:
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    assert "sfh_dpl_age_gyr" in p
-    p["sfh_dpl_age_gyr"] = 0.1
+    assert "sfh_dpl_age_frac" in p
+    # A 0.1 Gyr burst age, stated as the fraction of age(z) the parameter carries.
+    p["sfh_dpl_age_frac"] = 0.1 / age_at_z(Z)
     for name in _TAU_NAMES:
         if name in m.spec.free_params:
             p[name] = 1.0

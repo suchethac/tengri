@@ -43,20 +43,27 @@ PSB_FAMILIES = ["psb_flex", "psb_suess2022"]
 AGE_KERNELS = ["cic", "dsps"]
 
 
+#: Quench times as fractions of age(z) (#2748): both are fractions, so they are mixed
+#: units with neither. The free range is 1 to 5 Gyr of age(0), converted once.
+AGE0_GYR = float(age_at_z(0.0))
+TLAST_FRAC = 0.02
+TFLEX_FRAC = 0.25
+
+
 def _build(ssp, sfh_type, redshift, *, age_kernel="cic", tflex_free=False):
     sfh_group = {
         "type": sfh_type,
         "all_params": Fixed(DEFAULT),
         "log_total_mass": Fixed(10.0),
-        "tlast_gyr": Fixed(0.2),
+        "tlast_frac": Fixed(TLAST_FRAC),
         "age_kernel": age_kernel,
     }
     if tflex_free:
         from tengri import Uniform
 
-        sfh_group["tflex_gyr"] = Uniform(1.0, 5.0, default=2.0)
+        sfh_group["tflex_frac"] = Uniform(1.0 / AGE0_GYR, 5.0 / AGE0_GYR, default=TFLEX_FRAC)
     else:
-        sfh_group["tflex_gyr"] = Fixed(2.0)
+        sfh_group["tflex_frac"] = Fixed(TFLEX_FRAC)
     return SEDModel.build(
         ssp_data=ssp,
         redshift=Fixed(redshift),
@@ -160,7 +167,7 @@ def test_gradient_wrt_tflex_is_finite(synthetic_ssp_wide, sfh_type, age_kernel):
     """
     m = _build(synthetic_ssp_wide, sfh_type, 0.5, age_kernel=age_kernel, tflex_free=True)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    tflex_key = next(k for k in p if k.endswith("tflex_gyr"))
+    tflex_key = next(k for k in p if k.endswith("tflex_frac"))
 
     def loss(pp):
         return jnp.sum(m.predict_state(pp).sed_intrinsic)

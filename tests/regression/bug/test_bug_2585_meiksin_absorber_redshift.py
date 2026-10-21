@@ -15,6 +15,7 @@ import pytest
 from scipy import integrate
 
 from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
@@ -173,6 +174,8 @@ def test_meiksin06_series_ratio_to_source_redshift_reading(z, rest_aa, expected)
 
 # ── Cell 2: the public path, SEDModel.build + photometry ───────────────────
 _BAND_REST_AA = (850.0, 1000.0)
+#: Delayed-SFH onset [Gyr]; capped at the age of the universe at the model redshift.
+_SFH_ONSET_GYR = 1.0
 _PUBLIC_RTOL = 2e-2
 # closed-form LLS vs numerical Eq. 6 reference: up to 1.6 % at z = 6, rest 800-900 A
 _INDEPENDENT_RTOL = 3e-2
@@ -190,6 +193,9 @@ def _band_photometry_ratio(ssp_data, z, fold, *, x64):
     from tengri.observation.photometry import FilterCurve
 
     lo, hi = (1.0 + z) * _BAND_REST_AA[0], (1.0 + z) * _BAND_REST_AA[1]
+    # A Fixed onset later than the age of the universe is refused, so at z = 6
+    # (0.93 Gyr) star formation starts at the Big Bang.
+    onset_gyr = min(_SFH_ONSET_GYR, float(age_at_z(z)))
     with jax.enable_x64(x64):
         curve = FilterCurve(
             wave=jnp.linspace(lo, hi, 200), trans=jnp.ones(200), name=f"lyman_{z:g}"
@@ -204,7 +210,7 @@ def _band_photometry_ratio(ssp_data, z, fold, *, x64):
                 sfh={
                     "type": "delayed",
                     "tau_gyr": Fixed(1.0),
-                    "age_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(onset_gyr),
                     "log_total_mass": Fixed(10.0),
                     "all_params": Fixed(DEFAULT),
                 },
