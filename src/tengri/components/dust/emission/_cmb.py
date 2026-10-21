@@ -19,7 +19,7 @@ What a tabulated model can support depends on whether it has a dust temperature:
   the dust temperature ``T`` as a parameter. Heating and contrast are both
   applied as in the paper: the template is read at the heated temperature
   :math:`T_{\\rm d}(z)` and scaled by the luminosity boost the paper derives
-  (see :func:`cmb_heating_luminosity_boost`), then multiplied by the contrast.
+  (see :func:`cmb_luminosity_boost`), then multiplied by the contrast.
 * **Radiation-field libraries** (Draine & Li, Dale et al., THEMIS, Astrodust,
   Dale & Helou / Chary & Elbaz) have no dust temperature: a spectrum is a
   mixture of grains at many temperatures set by a radiation field. Heating has
@@ -45,7 +45,7 @@ import numpy as np
 from tengri.components.dust._params import ANALYTIC_BETA_IR_DEFAULT
 from tengri.components.dust.emission._physics import (
     cmb_contrast_factor,
-    cmb_heating_luminosity_boost,
+    cmb_luminosity_boost,
     planck_bnu,
 )
 from tengri.utils.physics_constants import AA_TO_CM, C_CGS
@@ -53,7 +53,7 @@ from tengri.utils.physics_constants import AA_TO_CM, C_CGS
 __all__ = [
     "CMB_FAR_IR_MIN_AA",
     "CMB_TEMPLATE_BETA_IR",
-    "cmb_heating_luminosity_boost",
+    "cmb_luminosity_boost",
     "cmb_observed_emission",
     "template_far_ir_temperature",
 ]

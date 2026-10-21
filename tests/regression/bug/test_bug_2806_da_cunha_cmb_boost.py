@@ -124,19 +124,89 @@ def test_boost_is_exactly_one_at_z0():
     assert float(boost) == 1.0
 
 
-@pytest.mark.contract
-def test_closed_form_boost_is_eq11_with_eq12_substituted():
-    """The closed-form boost equals Eq. 11 applied to the Eq. 12 temperature (#2806).
+#: Schreiber 2016 CMB output, sampled at 1, 10, 250, 500 and 1000 um rest on the
+#: grid ``np.geomspace(1e3, 3e7, 4000)``, captured once at commit d0c7c4d0d (#2806),
+#: i.e. before the single-helper consolidation, with the same T_CMB0 = 2.7255 K. A
+#: relative change of 1e-12 or more would mean the consolidation moved Schreiber.
+_SCHREIBER_PRE_CONSOLIDATION = {
+    ("schreiber2016", 35.0, 4.0): (
+        8.600009205691639e-18,
+        2.706996734043223e-15,
+        2.5149958069289976e-14,
+        2.8843073691739244e-15,
+        2.7084580446479655e-16,
+    ),
+    ("schreiber2016", 25.0, 6.0): (
+        1.0343067311084527e-17,
+        3.1217187626327653e-15,
+        5.0380982468218995e-14,
+        5.888791879477046e-15,
+        5.519857409689982e-16,
+    ),
+    ("schreiber2016", 50.0, 10.0): (
+        9.027684718701017e-18,
+        3.245272454077447e-15,
+        4.7768895923367924e-15,
+        4.3779951040651277e-16,
+        3.8532434487345546e-17,
+    ),
+}
+_SCHREIBER_INDICES = (893, 1786, 3035, 3304, 3573)
 
-    Two forms of one factor: the closed form the analytic closures use, and the
-    shared helper that takes the heated temperature (the tabulated path). They
-    agree at round-off for z > 0.
+
+@pytest.mark.regression_paper
+def test_schreiber_cmb_output_matches_pre_consolidation_values():
+    """Schreiber's CMB output is unchanged by the consolidated boost helper (#2806).
+
+    The Schreiber path now multiplies by ``cmb_luminosity_boost(T_d, z, beta)`` at
+    the same redshift its heated temperature came from. Its sampled output matches
+    the values captured before the change to 1e-12 relative.
     """
-    for z in (0.5, 2.0, Z_HIGH):
-        t_eff = _physics.cmb_corrected_temperature(T_D0_K, z, BETA)
-        via_helper = _physics.cmb_heating_luminosity_boost(jnp.asarray(T_D0_K), t_eff, BETA)
-        closed = _physics.cmb_luminosity_boost(jnp.asarray(T_D0_K), jnp.asarray(z), BETA)
-        assert float(closed) == pytest.approx(float(via_helper), rel=1e-12)
+    from tengri.forward.component_factory import _resolve_registry_component
+
+    wave = jnp.geomspace(1.0e3, 3.0e7, 4000)
+    for (name, t_dust, z), expected in _SCHREIBER_PRE_CONSOLIDATION.items():
+        comp = _resolve_registry_component("dust_emission", name, config=None)
+        comp.cmb = True
+        lib = _resolve_registry_component("dust_emission", name, config=None).load(None)
+        sed, _ = comp.predict(
+            {"T": t_dust, "f_pah": 0.05, "redshift": z},
+            jnp.zeros_like(wave),
+            wave,
+            L_ir=1.0,
+            templates=lib,
+        )
+        got = np.asarray(sed)[list(_SCHREIBER_INDICES)]
+        np.testing.assert_allclose(got, np.asarray(expected), rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.gradient
+def test_schreiber_redshift_gradient_at_z0_is_finite_and_nonzero():
+    """Schreiber's CMB output has a finite, nonzero z-derivative at z = 0 (#2806).
+
+    The boost bracket ``(1+z)^(4+beta) - 1`` vanishes at z = 0 but its slope does
+    not, and the contrast's z-dependence is live there, so the derivative of the
+    observed flux at 500 um is nonzero. A branch-selected boost would zero the slope.
+    """
+    from tengri.forward.component_factory import _resolve_registry_component
+
+    wave = jnp.geomspace(1.0e3, 3.0e7, 4000)
+    comp = _resolve_registry_component("dust_emission", "schreiber2016", config=None)
+    comp.cmb = True
+    lib = _resolve_registry_component("dust_emission", "schreiber2016", config=None).load(None)
+
+    def flux_500(z):
+        sed, _ = comp.predict(
+            {"T": 35.0, "f_pah": 0.05, "redshift": z},
+            jnp.zeros_like(wave),
+            wave,
+            L_ir=1.0,
+            templates=lib,
+        )
+        return jnp.interp(5.0e6, wave, sed)
+
+    g = float(jax.grad(flux_500)(jnp.asarray(0.0)))
+    assert np.isfinite(g) and g != 0.0
 
 
 @pytest.mark.gradient
@@ -170,17 +240,14 @@ def test_gradients_wrt_dust_temperature_and_redshift_are_finite(name, fn):
 
 
 @pytest.mark.contract
-def test_boost_helper_is_one_function_shared_by_schreiber_and_analytic():
-    """The boost helper lives once in ``_physics`` and Schreiber's path reuses it (#2806).
+def test_one_boost_helper_serves_schreiber_and_analytic():
+    """One CMB luminosity boost helper, shared by the tabulated and analytic paths (#2806).
 
-    ``_cmb`` re-exports the same object, so the Schreiber CMB path and the
-    analytic closures apply one formula. The helper's value is the Sect. 2.2
-    power law at a fixed temperature pair, bit for bit.
+    The old helper taking the heated temperature is gone; ``_cmb`` re-exports the
+    single ``cmb_luminosity_boost``.
     """
-    assert _cmb.cmb_heating_luminosity_boost is _physics.cmb_heating_luminosity_boost
-    t_eff = jnp.asarray(22.0)
-    got = _physics.cmb_heating_luminosity_boost(jnp.asarray(T_D0_K), t_eff, BETA)
-    assert float(got) == float((22.0 / T_D0_K) ** (4.0 + BETA))
+    assert _cmb.cmb_luminosity_boost is _physics.cmb_luminosity_boost
+    assert not hasattr(_physics, "cmb_heating_luminosity_boost")
 
 
 @pytest.mark.contract

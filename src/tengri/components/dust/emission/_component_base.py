@@ -25,7 +25,7 @@ import jax.numpy as jnp
 from tengri.components._z_response import interp_z_table
 from tengri.components.dust.emission._cmb import (
     CMB_TEMPLATE_BETA_IR,
-    cmb_heating_luminosity_boost,
+    cmb_luminosity_boost,
     cmb_observed_emission,
     template_far_ir_temperature,
 )
@@ -306,7 +306,7 @@ class EmissionComponent(SEDModelComponent):
             T_dust = p["T"]
             T_eff = cmb_corrected_temperature(T_dust, z, CMB_TEMPLATE_BETA_IR)
             emission, published = inner(self, {**p, "T": T_eff}, zeros, wave, **inputs)
-            emission = emission * cmb_heating_luminosity_boost(T_dust, T_eff, CMB_TEMPLATE_BETA_IR)
+            emission = emission * cmb_luminosity_boost(T_dust, z, CMB_TEMPLATE_BETA_IR)
         else:
             emission, published = inner(self, p, zeros, wave, **inputs)
             T_eff = cmb_corrected_temperature(

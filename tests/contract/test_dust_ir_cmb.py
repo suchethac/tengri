@@ -28,7 +28,7 @@ from tengri._data_setup import find_data_str
 from tengri.components.dust.emission._cmb import (
     CMB_FAR_IR_MIN_AA,
     CMB_TEMPLATE_BETA_IR,
-    cmb_heating_luminosity_boost,
+    cmb_luminosity_boost,
     template_far_ir_temperature,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
@@ -133,7 +133,7 @@ class TestPaperEquations:
         for t0 in (15.0, 35.0, 80.0):
             t_eff = _paper_heated_temperature(t0, 0.0)
             assert t_eff == pytest.approx(t0, rel=1e-14)
-            boost = cmb_heating_luminosity_boost(jnp.asarray(t0), jnp.asarray(t_eff), BETA)
+            boost = cmb_luminosity_boost(jnp.asarray(t0), jnp.asarray(0.0), BETA)
             assert float(boost) == pytest.approx(1.0, abs=1e-12)
 
     @pytest.mark.parametrize("t0,z", [(35.0, 4.0), (25.0, 6.0), (18.0, 8.0)])
@@ -149,7 +149,7 @@ class TestPaperEquations:
             return -np.trapezoid(nu**BETA * _planck_nu(nu, t), nu)
 
         by_quadrature = power(t_eff) / power(t0)
-        boost = float(cmb_heating_luminosity_boost(jnp.asarray(t0), jnp.asarray(t_eff), BETA))
+        boost = float(cmb_luminosity_boost(jnp.asarray(t0), jnp.asarray(z), BETA))
         assert boost == pytest.approx(by_quadrature, rel=2e-4)
         assert boost == pytest.approx(
             1 + (T_CMB0 / t0) ** (4 + BETA) * ((1 + z) ** (4 + BETA) - 1), rel=1e-12
