@@ -339,7 +339,7 @@ def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     return i, w
 
 
-def blend_z_nonneg(b0, b1, weight):
+def blend_z_nonneg(b0, b1, weight, log_ratio=None):
     r"""Blend two non-negative table rows at a bracket weight that may leave [0, 1].
 
     Inside the cell (:math:`0 \le t \le 1`) this is the linear blend
@@ -349,13 +349,17 @@ def blend_z_nonneg(b0, b1, weight):
 
     .. math::
 
-        b(t) = b_e \exp\!\left(\frac{b_1 - b_0}{b_e}\,(t - t_e)\right),
+        b(t) = b_e \exp\!\left(\left(\frac{b_1 - b_0}{b_e}\right)(t - t_e)\right),
 
     with :math:`b_e` the edge band and :math:`t_e` its weight (0 below the
     table, 1 above). The value and the first derivative in :math:`t` are
-    continuous at the node, the value is positive, and the derivative is nonzero
-    across the continued cell. A band that is exactly zero at the edge node has no
-    scale to continue: it keeps the linear value floored at zero.
+    continuous at the node and the value is positive. The slope ratio is
+    :math:`b_1/b_0 - 1` (below) or :math:`1 - b_0/b_1` (above), clipped so the
+    exponent lies in :math:`[-80, 0.5]`: the gradient is nonzero while the
+    continuation stays above :math:`e^{-80}` of the edge value, and zero past
+    that for a very steep cell. A band that is exactly zero at the edge node has
+    no scale to continue: it keeps the linear value floored at zero (a kink at
+    the node).
 
     Parameters
     ----------
@@ -364,6 +368,11 @@ def blend_z_nonneg(b0, b1, weight):
         [erg/s/Hz].
     weight : float or ndarray, shape ()
         Upper-node weight :math:`t`, in :math:`[-0.5, 1.5]`. [dimensionless]
+    log_ratio : ndarray, shape (..., n_filter), optional
+        :math:`\log_{10}(b_1/b_0)` from the log table. When given, the node ratio
+        is formed from it and never divides one flux by another, so the exponent
+        does not depend on the flux scale (:math:`Q_H`) and its gradient neither
+        overflows nor underflows in float32. [dex]
 
     Returns
     -------
@@ -373,8 +382,7 @@ def blend_z_nonneg(b0, b1, weight):
     Notes
     -----
     **JIT/grad/vmap-safe**: every branch is evaluated on safe operands, so the
-    gradient is finite where the edge band is zero. The exponent never exceeds
-    0.5, since :math:`(b_1 - b_0)/b_e \le 1` in the direction of continuation.
+    gradient is finite where the edge band is zero.
     """
     linear = (1.0 - weight) * b0 + weight * b1
     below = weight < 0.0
@@ -384,7 +392,14 @@ def blend_z_nonneg(b0, b1, weight):
     offset = jnp.where(below, weight, jnp.where(above, weight - 1.0, 0.0))
     lit = edge > 0.0
     safe = jnp.where(lit, edge, 1.0)
-    exponent = jnp.clip((b1 - b0) / safe * offset, -80.0, 0.5)
+    if log_ratio is None:
+        slope = (b1 - b0) / safe
+    else:
+        d = jnp.clip(log_ratio, -30.0, 30.0)
+        up = jnp.where(b1 > 0.0, pow10(d), 0.0)  # b1 / b0
+        down = jnp.where(b0 > 0.0, pow10(-d), 0.0)  # b0 / b1
+        slope = jnp.where(below, up - 1.0, 1.0 - down)
+    exponent = jnp.clip(slope * offset, -80.0, 0.5)
     continued = jnp.where(lit, safe * jnp.exp(exponent), jnp.maximum(linear, 0.0))
     return jnp.where(beyond, continued, linear)
 
@@ -423,7 +438,7 @@ def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):
         return pow10(jnp.asarray(log_nion) + log_bands[0]) * keep[0]
     keep2 = jax.lax.dynamic_slice_in_dim(keep, lower, 2, axis=0)
     bands = pow10(jnp.asarray(log_nion) + log_bands) * keep2
-    return blend_z_nonneg(bands[0], bands[1], weight)
+    return blend_z_nonneg(bands[0], bands[1], weight, log_bands[1] - log_bands[0])
 
 
 def continuum_band_at_z(log_nion, log_table, keep, lnz_grid, redshift, node_interp):

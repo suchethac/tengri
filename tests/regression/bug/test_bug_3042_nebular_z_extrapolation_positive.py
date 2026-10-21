@@ -169,3 +169,36 @@ def test_z_bracket_docstrings_do_not_claim_the_table_is_never_extrapolated():
     assert "not extrapolated" not in nz.z_bracket.__doc__
     assert "extrapolate" in zr.z_bracket.__doc__
     assert z_bracket is nz.z_bracket
+
+
+def _dband_dlognion(dtype, log_nion, log_table, z):
+    lnz = _LNZ.astype(dtype)
+    table = log_table.astype(dtype)
+
+    def total(ln):
+        slab, lower, weight = continuum_z_slab(table, lnz, jnp.asarray(z, dtype))
+        return jnp.sum(continuum_band_from_slab(ln, slab, _KEEP, lower, weight))
+
+    return float(jax.grad(total)(jnp.asarray(log_nion, dtype)))
+
+
+@pytest.mark.parametrize("log_nion", [50.0, 55.0, 58.0, 60.0, 62.0])
+@pytest.mark.parametrize("z", [0.33, _Z_HI_EDGE, 0.06])
+def test_the_float32_gradient_in_log_nion_matches_float64_beyond_the_table(log_nion, z):
+    """The exponent uses the log-table ratio, so the flux scale never enters it."""
+    # log L_nu per Q_H of order -30 (a stellar-mass population has log Q_H of 50-62)
+    table = _LOG_TABLE - 30.0
+    g32 = _dband_dlognion(jnp.float32, log_nion, table, z)
+    g64 = _dband_dlognion(jnp.float64, log_nion, table, z)
+    assert np.isfinite(g32)
+    np.testing.assert_allclose(g32, g64, rtol=1e-3)
+
+
+@pytest.mark.parametrize("z", [0.06, 0.15, 0.25, 0.33])
+def test_the_float32_gradient_is_finite_for_tiny_band_fluxes(z):
+    """Bands near 1e-23 (the divide by the edge flux underflowed in float32)."""
+    tiny = _LOG_TABLE - 28.0
+    g32 = _dband_dlognion(jnp.float32, 5.0, tiny, z)
+    g64 = _dband_dlognion(jnp.float64, 5.0, tiny, z)
+    assert np.isfinite(g32)
+    np.testing.assert_allclose(g32, g64, rtol=1e-3)
