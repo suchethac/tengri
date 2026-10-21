@@ -2657,6 +2657,48 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         return
 
 
+#: SFH families whose bin edges may differ per evaluation, arriving as a traced
+#: ``sfh_bin_edges_gyr`` array instead of the build-time ladder (the batched
+#: spectroscopic stack gives each galaxy its own). Their shape function reads the
+#: whole ladder (:func:`continuity`, :func:`dirichlet`) and no declared prior
+#: depends on where the edges sit. ``bursty_continuity`` is excluded because its
+#: per-ratio prior scales are set from the default ladder; the post-starburst and
+#: ``continuity_flex`` families derive their edges from other parameters.
+RUNTIME_BIN_EDGE_TYPES = frozenset({"continuity", "prospector_beta", "dirichlet"})
+
+
+def runtime_bin_edges_count(sfh_type, configured_edges) -> int:
+    """Edge count a runtime ``sfh_bin_edges_gyr`` array must have for this SFH.
+
+    Parameters
+    ----------
+    sfh_type : str or list of str
+        Registry name of the model's SFH (a list for a composite SFH).
+    configured_edges : array_like, shape (n_edges,), or None
+        The build-time bin edges [Gyr]; ``None`` means ``DEFAULT_BIN_EDGES_GYR``.
+
+    Returns
+    -------
+    int
+        ``n_edges`` of the build-time ladder. The declared ratio (or ``z_frac``)
+        parameters fix the bin count, so a runtime ladder may move the edges but
+        not add or remove one.
+
+    Raises
+    ------
+    ValueError
+        If ``sfh_type`` is not in :data:`RUNTIME_BIN_EDGE_TYPES` (composite SFHs
+        included): the edges would reach no bin, or would disagree with a prior.
+    """
+    if not isinstance(sfh_type, str) or sfh_type not in RUNTIME_BIN_EDGE_TYPES:
+        raise ValueError(
+            f"per-evaluation sfh_bin_edges_gyr applies only to the SFH types "
+            f"{sorted(RUNTIME_BIN_EDGE_TYPES)}, not {sfh_type!r}."
+        )
+    edges = DEFAULT_BIN_EDGES_GYR if configured_edges is None else configured_edges
+    return len(edges)
+
+
 #: SFH families whose flexible zone spans ``[tlast_gyr, tflex_gyr]`` and which
 #: therefore need those two ordered.
 _PSB_QUENCH_TYPES = frozenset({"psb_suess2022", "psb_flex"})
