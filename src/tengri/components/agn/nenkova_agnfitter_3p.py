@@ -40,7 +40,7 @@ share one scale across inclination; the AGNfitter-rX reductions are linear means
 (``NK0_mean_3p`` averaged over its optical-depth axis is ``NK0_mean_2p`` to 5e-4).
 The template is therefore normalized ONCE per parameter point, by the sphere mean of its
 power over inclination
-(:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`): the
+(``_torus_inclination.torus_lnu_sphere_normalized``): the
 angle-integrated torus power is ``L_bol * agn_torus_frac`` and each sightline keeps the
 library's own flux relative to the others.
 
@@ -71,7 +71,7 @@ from tengri.components.agn._torus_inclination import (
 
 #: The library's inclination axis: the records share one radiative-transfer scale
 #: across inclination, so the template is normalized once by its sphere-mean power
-#: (:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`).
+#: (``_torus_inclination.torus_lnu_sphere_normalized``).
 TORUS_INCLINATION = TorusInclination(axis=0, variable="cos_inc")
 
 __all__ = [
