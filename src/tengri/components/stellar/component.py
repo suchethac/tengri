@@ -2038,6 +2038,16 @@ METALLICITY_TABLE_SOURCE_MESSAGE = (
     "sfh_model='table', so with any other SFH the table must be given here."
 )
 
+#: Parameter key of a per-evaluation non-parametric bin ladder [Gyr], shape
+#: ``(n_edges,)``. Traced like ``sfh_t_gyr`` (#996): the key's presence is
+#: static under ``jit``, its values are not, so galaxies with different ladders
+#: share one compile. Read by :meth:`StellarSEDComponentConfig.bin_edges_sfh_kwarg`.
+#: Not a recognized public key: only internal callers that thread
+#: ``fixed_values`` (the batched spectroscopic stack) can pass it, so a
+#: single-galaxy ``predict`` cannot apply it to the spectrum but not the
+#: properties.
+RUNTIME_SFH_BIN_EDGES_KEY = "sfh_bin_edges_gyr"
+
 
 @dataclass(frozen=True)
 class StellarSEDComponentConfig(SEDComponentConfig):
@@ -2205,7 +2215,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 stacklevel=3,
             )
 
-    def bin_edges_sfh_kwarg(self) -> dict:
+    def bin_edges_sfh_kwarg(self, params: Mapping | None = None) -> dict:
         """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
 
         ``resolve_sfh`` binds these edges with ``functools.partial`` for the
@@ -2214,7 +2224,35 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         user's edges are accepted and silently ignored (#1975). Shared by
         ``apply`` and ``compute_joint_weights`` so the exact forward and the
         precompute fast path cannot read different bins.
+
+        Parameters
+        ----------
+        params : Mapping, optional
+            This evaluation's parameters. A ``sfh_bin_edges_gyr`` entry, shape
+            ``(n_edges,)`` [Gyr], replaces the build-time ladder for this
+            evaluation only; the batched spectroscopic stack supplies one per
+            galaxy. Its length must equal the build-time ladder's, because the
+            declared ratio parameters fix the bin count.
+
+        Raises
+        ------
+        ValueError
+            If a runtime ladder is given for an SFH outside
+            ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``)
+            or with the wrong length.
         """
+        if params is not None and RUNTIME_SFH_BIN_EDGES_KEY in params:
+            from tengri.components.stellar.sfh.registry import runtime_bin_edges_count
+
+            n_edges = runtime_bin_edges_count(self.sfh_model, self.sfh_bin_edges_gyr)
+            edges = jnp.asarray(params[RUNTIME_SFH_BIN_EDGES_KEY])
+            if edges.shape != (n_edges,):
+                raise ValueError(
+                    f"{RUNTIME_SFH_BIN_EDGES_KEY} has shape {edges.shape}, but the "
+                    f"{self.sfh_model!r} model was built with {n_edges} bin edges; a runtime "
+                    f"ladder may move the edges but not change their count."
+                )
+            return {"bin_edges_gyr": edges}
         if self.sfh_bin_edges_gyr is None:
             return {}
         from tengri.components.stellar.sfh.registry import _NONPARAM_NAMES
@@ -2997,7 +3035,7 @@ class StellarSEDComponent:
         resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
         sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
         sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
         # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
@@ -4453,7 +4491,7 @@ class StellarSEDComponent:
         # of every ``_AGE_FAMILIES`` member to age(z).
         resolve_timing_fracs(sfh_kwargs, params, sfh_spec.internal_param_map, redshift=z)
         sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
         # knots the exact forward builds, from the single shared helper, so the
