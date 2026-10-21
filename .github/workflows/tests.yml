@@ -129,6 +129,8 @@ concurrency:
 # resolved dependency (pinned to <0.4.8 in pyproject.toml). See #798.
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  # Pin JAX for every pip install in this workflow (.github/ci-constraints.txt).
+  PIP_CONSTRAINT: ${{ github.workspace }}/.github/ci-constraints.txt
   # Arm the whole-file-skip guard (tests/conftest.py, #1615/#1946): a file whose
   # every collected test skips is inert coverage and fails the session. The guard
   # scopes itself to the fast-tier trees and excludes integration/crossval, so
@@ -742,14 +744,14 @@ jobs:
           # owe it). `scopes` is stripped before the matrix is emitted.
           table=$(cat <<'JSON'
           [
-            {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":120,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
+            {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":180,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
             {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a2","paths":"tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":45,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a3","paths":"tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
-            {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":70,"cache_gb":"0.7","scopes":["all"]},
-            {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
-            {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
+            {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":120,"cache_gb":"0.7","scopes":["all"]},
+            {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":120,"cache_gb":"1.1","scopes":["all"]},
+            {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":120,"cache_gb":"1.1","scopes":["all"]},
             {"shard":"regression-c","paths":"tests/regression/paper tests/regression/agn","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.05","scopes":["cheap","cheap-docs","all"]},
             {"shard":"regression-d","paths":"tests/regression --ignore=tests/regression/synthesizer_parity --ignore=tests/regression/precision --ignore=tests/regression/bug --ignore=tests/regression/agn --ignore=tests/regression/paper","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.65","scopes":["docs","cheap-docs","all"]},
             {"shard":"physics","paths":"tests/physics","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.28","scopes":["cheap","cheap-docs","all"]}
@@ -1231,9 +1233,13 @@ jobs:
       #     went dark; `tools/check_test_paths_covered.py` fails the build if any
       #     test tree escapes the table again.
       #   * budgets are above measured wall clock under runner-pool congestion
-      #     (+60%): contract 120 (re-measured 2026-10-06; one worker holding a
-      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 45, regression-a3 70,
-      #     regression-b1/b2/b3 70, the rest 50. The per-test `--timeout=600` below
+      #     (+60%): contract 180 (re-measured 2026-10-21: cut at 120 min at 86 % with no
+      #     failure on two runs, so ~140 min complete; one worker holding a case marked
+      #     `timeout(1800)` needs the room), regression-a1 50, regression-a2 45, regression-a3 70,
+      #     regression-b1/b2/b3 120 (re-measured 2026-10-21 once their #2748-era tests
+      #     stopped failing in seconds: over two runs of the same tree the three shards
+      #     took 48-72 min each, and each was cut at the old 70 at least once), the rest
+      #     50. The per-test `--timeout=600` below
       #     still catches a real hang, so a budget bounds total wall clock only.
       #     Re-measure from a completed run's job durations before changing one.
       matrix: ${{ fromJSON(needs.gallery-changes.outputs.shards) }}

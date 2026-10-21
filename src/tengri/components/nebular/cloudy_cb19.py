@@ -372,6 +372,18 @@ class CB19GridData(NamedTuple):
 _LOG_FLOOR = 1e-30  # prevent log(0) for zero-flux lines
 
 
+def _log10_ratios_f32(ratios: np.ndarray) -> np.ndarray:
+    """``log10`` of a line-ratio slab, evaluated in float64 and rounded once to float32.
+
+    Non-finite and non-positive entries map to ``log10(_LOG_FLOOR)``. numpy's
+    float32 ``log10`` is a platform-dependent SIMD kernel (#3067), so the slab
+    is widened first; the result is identical on every platform.
+    """
+    valid = np.isfinite(ratios) & (ratios > 0)
+    wide = np.where(valid, np.asarray(ratios, dtype=np.float64), _LOG_FLOOR)
+    return np.log10(wide).astype(np.float32)
+
+
 def load_cb19_grid(
     filepath: str | Path | None = None,
     sed_type: str = "SSP",
@@ -496,7 +508,7 @@ def load_cb19_grid(
     _reject_degenerate_line_ratios(ratios, filepath)
 
     # Convert to log10 space; replace NaN with log10(floor)
-    log_ratios = np.log10(np.where(np.isfinite(ratios) & (ratios > 0), ratios, _LOG_FLOOR))
+    log_ratios = _log10_ratios_f32(ratios)
 
     return CB19GridData(
         log_OH_grid=log_OH,

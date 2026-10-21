@@ -31,7 +31,11 @@ from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._publication import (
     template_sed_and_log_power,
     with_lsun_outputs,
-    with_lsun_siblings,
+)
+from tengri.components.agn._torus_inclination import (
+    TORUS_LEDGER_KEYS,
+    absent_torus_ledger,
+    torus_ledger,
 )
 from tengri.components.agn.silva04 import create_silva04_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
@@ -113,10 +117,15 @@ class Silva04Torus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    log_L_agn_torus : dex
-        log10 of the bolometric luminosity of the torus emission [dex re erg/s]: the
-        frequency integral of the emitted torus SED, formed in log space so it is finite and
-        accurate in pure float32 (NAMING_CONTRACT section 4c). ``-inf`` is an absent torus.
+    log_L_agn_torus, log_L_agn_torus_los, log_L_agn_disc_unemitted : dex
+        The torus-only energy ledger [dex re erg/s] (NAMING_CONTRACT section 4c,
+        "Template tori"): the angle-integrated torus power ``f L_bol``
+        (``f = torus_frac``), the frequency integral of the torus SED emitted along
+        the sightline, and the disc share ``(1 - f) L_bol`` this component does not
+        emit, so the first and last add up to ``10**log_lbol L_sun``. Here the first
+        two are equal: the Silva et al. (2004) templates have no inclination axis. Each has
+        an ``L_agn_*_lsun`` [Lsun] sibling; ``-inf``
+        is an absent piece.
 
     Notes
     -----
@@ -182,7 +191,7 @@ class Silva04Torus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = with_lsun_outputs({"log_L_agn_torus": "dex"})
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(dict.fromkeys(TORUS_LEDGER_KEYS, "dex"))
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load Silva+04 template grid if available.
@@ -243,13 +252,14 @@ class Silva04Torus(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + torus contribution).
-            - published: {"log_L_agn_torus": log10 of the bolometric torus luminosity
-              [dex re erg/s]}.
+            - published: ``log_L_agn_torus``, ``log_L_agn_torus_los`` and
+              ``log_L_agn_disc_unemitted`` [dex re erg/s] with their ``_lsun`` siblings
+              (see Cross-component outputs).
 
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, with_lsun_siblings({"log_L_agn_torus": jnp.array(-jnp.inf)})
+            return sed_in, absent_torus_ledger()
 
         silva04_fn = self.data
 
@@ -268,4 +278,4 @@ class Silva04Torus(SEDModelComponent):
             _torus, silva04_fn.native_wave, wave, p["log_lbol"]
         )
 
-        return sed_in + torus, with_lsun_siblings({"log_L_agn_torus": log_L_torus})
+        return sed_in + torus, torus_ledger(p["log_lbol"], p["torus_frac"], log_L_torus)

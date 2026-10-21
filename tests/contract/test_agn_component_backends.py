@@ -292,12 +292,16 @@ class TestSilva04TorusContract:
             assert prior.default == canonical.default, attr
 
     def test_silva04_outputs(self):
-        """Silva04Torus publishes log_L_agn_torus [dex]."""
+        """Silva04Torus publishes the torus-only ledger [dex] (NAMING_CONTRACT 4c, #2851)."""
         component = Silva04Torus()
         outputs = component.outputs()
         assert {o.name: o.units for o in outputs} == {
             "log_L_agn_torus": "dex",
             "L_agn_torus_lsun": "Lsun",
+            "log_L_agn_torus_los": "dex",
+            "L_agn_torus_los_lsun": "Lsun",
+            "log_L_agn_disc_unemitted": "dex",
+            "L_agn_disc_unemitted_lsun": "Lsun",
         }
 
     def test_silva04_predict_no_grid(self):
@@ -378,12 +382,16 @@ class TestCAT3DTorusContract:
             assert prior.default == canonical.default, attr
 
     def test_cat3d_outputs(self):
-        """CAT3DTorus publishes log_L_agn_torus [dex]."""
+        """CAT3DTorus publishes the torus-only ledger [dex] (NAMING_CONTRACT 4c, #2851)."""
         component = CAT3DTorus()
         outputs = component.outputs()
         assert {o.name: o.units for o in outputs} == {
             "log_L_agn_torus": "dex",
             "L_agn_torus_lsun": "Lsun",
+            "log_L_agn_torus_los": "dex",
+            "L_agn_torus_los_lsun": "Lsun",
+            "log_L_agn_disc_unemitted": "dex",
+            "L_agn_disc_unemitted_lsun": "Lsun",
         }
 
     def test_cat3d_predict_no_grid(self):
