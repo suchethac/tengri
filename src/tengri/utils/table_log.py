@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Platform-independent logarithms of tabulated float32 data.
 
 numpy evaluates ``log``/``log10`` of a float32 array with a SIMD kernel whose
