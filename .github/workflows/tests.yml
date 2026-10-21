@@ -129,6 +129,8 @@ concurrency:
 # resolved dependency (pinned to <0.4.8 in pyproject.toml). See #798.
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  # Pin JAX for every pip install in this workflow (.github/ci-constraints.txt).
+  PIP_CONSTRAINT: ${{ github.workspace }}/.github/ci-constraints.txt
   # Arm the whole-file-skip guard (tests/conftest.py, #1615/#1946): a file whose
   # every collected test skips is inert coverage and fails the session. The guard
   # scopes itself to the fast-tier trees and excludes integration/crossval, so
