@@ -469,7 +469,8 @@ class TestCmbContrastFactorBounds:
 
         T_eff = 50.0
         redshift = 10.0
-        T_cmb_z = 2.725 * (1.0 + redshift)
+        # #2806 T_CMB0 2.7255 K (was 2.725): one CMB temperature, Fixsen 2009.
+        T_cmb_z = 2.7255 * (1.0 + redshift)
 
         # Hand-compute expected values using numpy float64
         h_planck = 6.62607015e-27  # erg*s

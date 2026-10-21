@@ -28,7 +28,7 @@ from tengri._data_setup import find_data_str
 from tengri.components.dust.emission._cmb import (
     CMB_FAR_IR_MIN_AA,
     CMB_TEMPLATE_BETA_IR,
-    cmb_heating_luminosity_boost,
+    cmb_luminosity_boost,
     template_far_ir_temperature,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
@@ -41,7 +41,10 @@ from tengri.utils.physics_constants import AA_TO_CM, C_CGS, H_PLANCK, K_BOLTZ
 pytestmark = pytest.mark.contract
 
 #: The CMB temperature at z = 0 the package uses for every dust model [K].
-T_CMB0 = 2.725
+#: #2806 T_CMB0 2.7255 K (was 2.725): one constant, Fixsen 2009, now shared by the
+#: analytic and tabulated CMB paths. Relative change 1.8e-4 in T_CMB0; the Eq. 12 and
+#: Eq. 18 expectations below move with it, and their tolerances are unchanged.
+T_CMB0 = 2.7255
 BETA = CMB_TEMPLATE_BETA_IR
 UM = 1.0e4  # Angstrom per micron
 
@@ -130,7 +133,7 @@ class TestPaperEquations:
         for t0 in (15.0, 35.0, 80.0):
             t_eff = _paper_heated_temperature(t0, 0.0)
             assert t_eff == pytest.approx(t0, rel=1e-14)
-            boost = cmb_heating_luminosity_boost(jnp.asarray(t0), jnp.asarray(t_eff), BETA)
+            boost = cmb_luminosity_boost(jnp.asarray(t0), jnp.asarray(0.0), BETA)
             assert float(boost) == pytest.approx(1.0, abs=1e-12)
 
     @pytest.mark.parametrize("t0,z", [(35.0, 4.0), (25.0, 6.0), (18.0, 8.0)])
@@ -146,7 +149,7 @@ class TestPaperEquations:
             return -np.trapezoid(nu**BETA * _planck_nu(nu, t), nu)
 
         by_quadrature = power(t_eff) / power(t0)
-        boost = float(cmb_heating_luminosity_boost(jnp.asarray(t0), jnp.asarray(t_eff), BETA))
+        boost = float(cmb_luminosity_boost(jnp.asarray(t0), jnp.asarray(z), BETA))
         assert boost == pytest.approx(by_quadrature, rel=2e-4)
         assert boost == pytest.approx(
             1 + (T_CMB0 / t0) ** (4 + BETA) * ((1 + z) ** (4 + BETA) - 1), rel=1e-12
