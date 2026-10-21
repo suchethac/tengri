@@ -159,4 +159,4 @@ def test_disc_total_dissipation_is_the_page_thorne_one_not_newtonian():
     ) ** 0.25
     l_bol = 10.0**log_lbol * D._LSUN_ERG
     total = float(D._nt_l_diss_analytic(1.0e4, r_isco, t_in))
-    np.testing.assert_allclose(total / l_bol, 1.0, rtol=2e-3)
+    np.testing.assert_allclose(total / l_bol, 1.0, rtol=1e-3)
