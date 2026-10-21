@@ -1354,7 +1354,12 @@ class CueBackend:
             return
         w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
         lgmet = jnp.asarray(self._ssp_lgmet)
-        raw = jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))(lgmet)
+        # One traced program (#2914): the bare vmap dispatched its ~130 primitives as
+        # separate XLA compiles, each below the persistent cache's floor.
+        composite = jax.jit(
+            jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))
+        )
+        raw = composite(lgmet)
         lgmet_np = np.asarray(lgmet)
         worst: dict[str, tuple[float, float]] = {}
         for name in IONSPEC_NAMES:

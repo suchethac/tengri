@@ -66,6 +66,16 @@ _IONSPEC_CACHE_VERSION = 4
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
+#: :func:`~tengri.components.lyc.edge_trapezoid` traced once per integrand shape. The
+#: table builder calls it from NumPy code, once per fitted bin and once per chunk of old
+#: bins; dispatched eagerly, each of its ``jnp`` operations compiled as its own XLA
+#: program on every cold table build (34 on the FSPS grid, none above the persistent
+#: cache's 0.05 s floor, #2914). Traced, each shape is one program, and the persistent
+#: cache serves it to the next process.
+_edge_trapezoid_jit = jax.jit(
+    edge_trapezoid, static_argnames=("variable", "side", "edge_aa", "axis")
+)
+
 
 def _ssp_fingerprint(
     ssp_wave: np.ndarray,
@@ -665,7 +675,7 @@ def fit_ionizing_spectrum(
     ionizing_mag = np.where((wave < HI_LIMIT) & np.isfinite(integrand), np.abs(integrand), 0.0)
     exponent = int(np.frexp(np.max(ionizing_mag, initial=0.0))[1])
     q_scaled = float(
-        edge_trapezoid(
+        _edge_trapezoid_jit(
             np.ldexp(integrand, -exponent),
             wave,
             variable="nu",
@@ -844,7 +854,7 @@ def _exact_log_qion(
         ).max(axis=1, initial=0.0)
         exponent = np.frexp(magnitude)[1]
         q_scaled = np.asarray(
-            edge_trapezoid(
+            _edge_trapezoid_jit(
                 np.ldexp(integrand, -exponent[:, None]),
                 wave_ion,
                 variable="nu",

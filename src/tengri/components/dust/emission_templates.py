@@ -32,6 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
@@ -835,6 +836,13 @@ def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
     )
 
 
+#: :func:`loglog_integral` as one traced program (#2914): the loaders below call it
+#: once per template row to normalize the grid, and evaluated eagerly each row's
+#: integral dispatched its primitives as separate XLA compiles below the persistent
+#: cache's floor (about twenty per process on the first build).
+_loglog_integral_jit = jax.jit(loglog_integral)
+
+
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
     r"""Load + normalize a Dale+2014 template grid into L_nu jnp arrays.
 
@@ -948,7 +956,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         # then drifts with the native grid spacing, which for Dale2014 reaches
         # dlog10(lambda) = 0.125.
         for i in range(templates_lnu.shape[0]):
-            integral = -float(loglog_integral(jnp.asarray(nu), jnp.asarray(templates_lnu[i])))
+            integral = -float(_loglog_integral_jit(jnp.asarray(nu), jnp.asarray(templates_lnu[i])))
             if integral > 0:
                 templates_lnu[i] /= integral
 
@@ -997,7 +1005,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
     def _to_loglog_norm(row: np.ndarray) -> np.ndarray:
         trap = -float(np.trapezoid(row, _nu_native))
-        ll = -float(loglog_integral(jnp.asarray(_nu_native), jnp.asarray(row)))
+        ll = -float(_loglog_integral_jit(jnp.asarray(_nu_native), jnp.asarray(row)))
         return row * (trap / ll) if (ll > 0.0 and trap > 0.0) else row
 
     templates_np = np.stack([_to_loglog_norm(r) for r in templates_np])

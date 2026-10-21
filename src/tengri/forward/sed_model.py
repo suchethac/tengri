@@ -56,13 +56,13 @@ marker lines to jump. In order:
 from __future__ import annotations
 
 import contextlib
-import contextvars
 import dataclasses
 import functools
 import inspect
 import pathlib
 import types
 import warnings
+from collections import OrderedDict
 from collections.abc import Mapping
 from typing import ClassVar
 
@@ -70,7 +70,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri._cache_keys import frozen_dataclass_key
+from tengri._cache_keys import baked, frozen_dataclass_key
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
@@ -2666,21 +2666,84 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     return jnp.asarray(np.where(nearest_dist <= tol_aa, nearest_val, target))
 
 
-#: The ``(spec, ssp_data)`` pair whose #2069 ``agn_log_lbol`` probe already passed,
-#: set by :meth:`SEDModel.with_approx` for the duration of its clone's construction
-#: only (#2914). The clone shares the source's physics and differs only in how the
-#: SED is projected, so it inherits the verdict instead of compiling the forward model
-#: again. Matched by identity: any other build -- nested, or a fresh one of the same
-#: spec -- still probes.
-_AGN_LBOL_PROBE_PASSED: contextvars.ContextVar = contextvars.ContextVar(
-    "_AGN_LBOL_PROBE_PASSED", default=None
-)
+#: Content keys of the builds whose #2069 ``agn_log_lbol`` probe already passed,
+#: oldest first (#2914). The probe evaluates the forward model eagerly at both
+#: prior bounds, so every primitive compiles on its own, below the persistent
+#: cache's floor (about 1,500 compiles and 25 s per probe on a panchromatic
+#: build; measured in #2914). Its verdict depends on the spec's content (every
+#: prior, fixed value and structural setting), the SSP grid, the forward dtype
+#: and the AGN config, and on nothing else: not on the observation, not on the
+#: projector. A later build that agrees on all of them -- the clone
+#: :meth:`SEDModel.with_approx` makes, the same spec rebuilt for another
+#: observation, an equal spec written out again -- inherits the verdict; one that
+#: differs in any of them probes. A failing probe raises and records nothing.
+#:
+#: The dtype rule is one-directional. The probe refuses when the two SEDs agree to
+#: 1e-10 relative; a float64 pass means the direction moves the SED by at least
+#: that much, and float32 can only measure the same physics as a larger
+#: difference (its own rounding is ~1e-7), so a float32 build inherits a float64
+#: pass. A float32 pass says nothing about float64 (a 1e-15 coupling reads as
+#: rounding noise in float32 and as flat in float64), so a float64 build does
+#: not inherit a float32 verdict.
+_AGN_LBOL_PROBE_MEMO: OrderedDict = OrderedDict()
+_AGN_LBOL_PROBE_MEMO_SIZE = 64
+_PROBE_DTYPE_FLOAT64 = "float64"
+_PROBE_DTYPE_FLOAT32 = "float32"
 
 
-def _agn_lbol_probe_inherited(spec, ssp_data) -> bool:
-    """Whether this build is a ``with_approx`` clone of a model that passed the probe."""
-    passed = _AGN_LBOL_PROBE_PASSED.get()
-    return passed is not None and passed[0] is spec and passed[1] is ssp_data
+def _agn_lbol_probe_key(spec, ssp_data, *, forward_dtype, csp_integration, agn_config) -> tuple:
+    """Everything the #2069 probe's verdict depends on, as ``(content, dtype)``.
+
+    The spec enters three ways because ``Parameters.cache_key()`` keys structure
+    only (which names are fixed or free), while the probe sweeps ``agn_log_lbol``
+    over its prior bounds and draws every other free parameter from its prior:
+    the fixed values and each free prior's :meth:`Distribution.jit_cache_key`
+    (bounds and shape constants) are keyed beside it, as ``Fitter`` keys them.
+    The dtype is the canonical one, so a build under ``jax_enable_x64=False`` is
+    keyed as float32 whatever ``forward_dtype`` spells.
+    """
+    from tengri.parameters.priors import hashable_baked_value
+
+    fixed = spec.get_fixed_values()
+    priors = tuple(
+        (name, dist.jit_cache_key() if hasattr(dist, "jit_cache_key") else repr(dist))
+        for name, dist in ((n, spec.get_distribution(n)) for n in sorted(spec.free_params))
+    )
+    content = (
+        spec.cache_key(),
+        tuple((name, hashable_baked_value(fixed[name])) for name in sorted(fixed)),
+        priors,
+        baked(getattr(spec, "mirrors", None) or {}),
+        baked(ssp_data),
+        str(csp_integration),
+        baked(agn_config),
+    )
+    return content, str(jax.dtypes.canonicalize_dtype(jnp.dtype(forward_dtype)))
+
+
+def _agn_lbol_probe_passed(key: tuple) -> bool:
+    """Whether this build inherits a passed probe; refreshes the entry's age.
+
+    Matches the same content at the same dtype, or at float64 when this build
+    is float32 (see the memo's dtype rule above).
+    """
+    content, dtype = key
+    candidates = [key]
+    if dtype == _PROBE_DTYPE_FLOAT32:
+        candidates.append((content, _PROBE_DTYPE_FLOAT64))
+    for candidate in candidates:
+        if candidate in _AGN_LBOL_PROBE_MEMO:
+            _AGN_LBOL_PROBE_MEMO.move_to_end(candidate)
+            return True
+    return False
+
+
+def _remember_agn_lbol_probe(key: tuple) -> None:
+    """Record a passed probe, evicting the oldest key past the memo's size."""
+    _AGN_LBOL_PROBE_MEMO[key] = True
+    _AGN_LBOL_PROBE_MEMO.move_to_end(key)
+    while len(_AGN_LBOL_PROBE_MEMO) > _AGN_LBOL_PROBE_MEMO_SIZE:
+        _AGN_LBOL_PROBE_MEMO.popitem(last=False)
 
 
 @functools.cache
@@ -3167,9 +3230,6 @@ class SEDModel:
         # forward path now.
         del strategy
         self._agn_config = agn_config
-        # Read against the arguments as passed: ``_init_observation`` may return
-        # a new ``spec`` object, which would never match the clone's source.
-        agn_lbol_probe_inherited = _agn_lbol_probe_inherited(spec, ssp_data)
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
@@ -3601,9 +3661,20 @@ class SEDModel:
         # This check was deferred from _init_agn until after the model is fully
         # constructed and predict_photometry is available. Run it before feature
         # precomp so errors are reported at the top of the build flow.
-        # A ``with_approx`` clone inherits its source's verdict (#2914).
-        if self._needs_agn_lbol_flat_check and not agn_lbol_probe_inherited:
-            self._check_agn_lbol_flat_direction(self.spec)
+        # A build that agrees with an earlier one on everything the probe reads
+        # inherits its verdict (#2914): the clone ``with_approx`` makes, or an
+        # equal spec rebuilt for another observation or projector.
+        if self._needs_agn_lbol_flat_check:
+            probe_key = _agn_lbol_probe_key(
+                self.spec,
+                self.ssp_data,
+                forward_dtype=self._forward_dtype,
+                csp_integration=csp_integration,
+                agn_config=self._agn_config,
+            )
+            if not _agn_lbol_probe_passed(probe_key):
+                self._check_agn_lbol_flat_direction(self.spec)
+                _remember_agn_lbol_probe(probe_key)
 
         # The emission-line precompute, if the astronomer asked for one. Last,
         # because it needs the nebular backend (``_init_nebular``) and the
@@ -5159,8 +5230,9 @@ class SEDModel:
         # Eager on purpose (#2914): with the probe parameters traced under
         # ``jax.jit``, build-time paths that need concrete values (the stellar
         # ``_cic_parcels`` boundary split, #2760's below-library index) fail.
-        # The cost is bounded instead by ``with_approx`` clones inheriting the
-        # verdict (``_AGN_LBOL_PROBE_PASSED``).
+        # The cost is bounded instead by the content memo (``_AGN_LBOL_PROBE_MEMO``):
+        # a build that agrees with an earlier one on the spec, SSP grid, dtype and
+        # AGN config inherits the verdict.
         state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
         state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
         sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
@@ -6428,22 +6500,19 @@ class SEDModel:
         if approx is None and observation is None and not self._has_modern_approx():
             return self
         # This model exists, so it passed (or never needed) the #2069 probe; the
-        # clone's physics is the same, so it inherits the verdict (#2914).
-        token = _AGN_LBOL_PROBE_PASSED.set((self.spec, self.ssp_data))
-        try:
-            return SEDModel(
-                self.spec,
-                self.ssp_data,
-                observation=self.observation if observation is None else observation,
-                forward_dtype=str(self._forward_dtype),
-                csp_integration=str(self._csp_integration),
-                wave_chunk_size=self._wave_chunk_size,
-                agn_config=self._agn_config,
-                compile=str(self._compile_mode),
-                approx=approx,
-            )
-        finally:
-            _AGN_LBOL_PROBE_PASSED.reset(token)
+        # clone agrees with it on everything the probe reads, so it inherits the
+        # verdict through the content memo (#2914).
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation if observation is None else observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=approx,
+        )
 
     def with_fixed_redshift(self, redshift):
         """Return a copy of this model built at a different Fixed redshift.
@@ -12063,7 +12132,10 @@ class SEDModel:
                 "log-luminosity input was not provided)"
             )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            live_first, ok_first = _probe_at(z_first)
+            # One traced program for the two probe SEDs (#2914): evaluated eagerly,
+            # the template's primitives dispatched ~60 XLA compiles per build, each
+            # below the persistent cache's floor. The verdicts are two booleans.
+            live_first, ok_first = jax.jit(_probe_at)(z_first)
             if not bool(live_first):
                 # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
                 # was never activated, so decline and let the exact integral run.
@@ -12144,9 +12216,12 @@ class SEDModel:
             # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
             # probe is integrated through the filters at z = 0 (#2559). The homogeneity
             # check above already covers the template, so it is not repeated here.
-            rest_values = lnu_filter_integral_batch(
-                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
-            )
+            # One traced program (#2914); the grids ride in as arguments so XLA does
+            # not constant-fold the union-grid sort of a baked filter array. Evaluated
+            # eagerly, the template and the per-filter sort dispatched ~60 compiles.
+            rest_values = jax.jit(
+                lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
+            )(wave, fw_pad, ft_pad)
             response = {
                 "ln1pz": built["ln1pz"],
                 "values": built["values"]["R"],
@@ -12734,17 +12809,32 @@ class SEDModel:
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        mid_terms = _terms(z_mid, probes[0])
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in mid_terms.items()}
+        # One traced program for the midpoint terms (#2914), then host arithmetic for
+        # the peaks: evaluated eagerly, the X-ray and radio terms dispatched ~40 XLA
+        # compiles per build, each below the persistent cache's floor. The term ORDER
+        # is captured inside the trace and the values returned as a tuple: a jitted
+        # function hands back a dict with its keys sorted, while the table's rows must
+        # follow the emitter's own ``emission_terms`` order, which every consumer pairs
+        # by position (``term_band_response``; tests/contract/test_term_response_order.py).
+        order: list[str] = []
+
+        def _mid_terms(z):
+            terms = _terms(z, probes[0])
+            order.extend(terms)
+            return tuple(terms.values())
+
+        mid_values = jax.jit(_mid_terms)(z_mid)
+        mid_terms = {key: np.asarray(v) for key, v in zip(order, mid_values, strict=True)}
+        peaks = {key: int(np.argmax(np.abs(s_a))) for key, s_a in mid_terms.items()}
         # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
         # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
         # the emitter is then evaluated there on every call. Its amplitude is 0 at any
         # wavelength, so reference it at a live term's peak: the same evaluation point the
         # live term already pays for, and one the emitter supports.
-        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(jnp.max(jnp.abs(s_a))) > 0]
+        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(np.max(np.abs(s_a))) > 0]
         if live_peaks:
             peaks = {
-                k: (peaks[k] if float(jnp.max(jnp.abs(mid_terms[k]))) > 0 else live_peaks[0])
+                k: (peaks[k] if float(np.max(np.abs(mid_terms[k]))) > 0 else live_peaks[0])
                 for k in peaks
             }
         keys = tuple(peaks)
@@ -12753,7 +12843,7 @@ class SEDModel:
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
         # The reference wavelengths as one array, evaluated exactly as the per-call path does.
-        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
+        lam_ref = jnp.asarray(np.asarray(wave)[[peaks[key] for key in keys]], dtype=wave.dtype)
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
