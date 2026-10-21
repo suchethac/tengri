@@ -41,7 +41,10 @@ from tengri.utils.physics_constants import AA_TO_CM, C_CGS, H_PLANCK, K_BOLTZ
 pytestmark = pytest.mark.contract
 
 #: The CMB temperature at z = 0 the package uses for every dust model [K].
-T_CMB0 = 2.725
+#: #2806 T_CMB0 2.7255 K (was 2.725): one constant, Fixsen 2009, now shared by the
+#: analytic and tabulated CMB paths. Relative change 1.8e-4 in T_CMB0; the Eq. 12 and
+#: Eq. 18 expectations below move with it, and their tolerances are unchanged.
+T_CMB0 = 2.7255
 BETA = CMB_TEMPLATE_BETA_IR
 UM = 1.0e4  # Angstrom per micron
 

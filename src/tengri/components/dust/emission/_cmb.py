@@ -45,6 +45,7 @@ import numpy as np
 from tengri.components.dust._params import ANALYTIC_BETA_IR_DEFAULT
 from tengri.components.dust.emission._physics import (
     cmb_contrast_factor,
+    cmb_heating_luminosity_boost,
     planck_bnu,
 )
 from tengri.utils.physics_constants import AA_TO_CM, C_CGS
@@ -73,57 +74,6 @@ CMB_FAR_IR_MIN_AA: float = 5.0e5
 _T_LOOKUP_K = np.geomspace(4.0, 250.0, 96)
 
 _THZ = 1.0e12  # Hz per THz: keeps the frequency moments O(1) in float32
-
-
-def cmb_heating_luminosity_boost(
-    T_dust: jnp.ndarray,
-    T_eff: jnp.ndarray,
-    beta: float = CMB_TEMPLATE_BETA_IR,
-) -> jnp.ndarray:
-    r"""Factor by which CMB heating raises the intrinsic dust luminosity.
-
-    Parameters
-    ----------
-    T_dust : array_like
-        Intrinsic (:math:`z = 0`) dust temperature. [K]
-    T_eff : array_like
-        CMB-heated dust temperature :math:`T_{\rm d}(z)` from
-        ``tengri.components.dust.emission._physics.cmb_corrected_temperature``. [K]
-    beta : float
-        Dust emissivity index. [dimensionless]
-
-    Returns
-    -------
-    ndarray
-        :math:`L_{\rm dust}(z) / L_{\rm dust}(z=0)`, at least 1. [dimensionless]
-
-    Notes
-    -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    **Gradient-safe**: yes; ``T_dust`` is floored at 1 K, as in
-    ``tengri.components.dust.emission._physics.cmb_corrected_temperature``.
-
-    With the stellar heating unchanged, the dust also absorbs the CMB, so its
-    total emitted power grows with temperature as Eq. 11 of da Cunha et al.
-    (2013) [1]_ (:math:`\int \nu^\beta B_\nu(T)\, d\nu \propto T^{4+\beta}`):
-
-    .. math::
-
-        \frac{L_{\rm dust}(z)}{L_{\rm dust}(0)}
-        = \left[\frac{T_{\rm d}(z)}{T_{\rm d}^{z=0}}\right]^{4+\beta}
-        = 1 + \left(\frac{T_{\rm CMB}^{z=0}}{T_{\rm d}^{z=0}}\right)^{4+\beta}
-        \left[(1+z)^{4+\beta} - 1\right]
-
-    The paper states this as point (ii) of Sec. 2.2. It is the energy that the
-    contrast factor (Eq. 18) later removes again from what is observed.
-
-    References
-    ----------
-    .. [1] da Cunha et al. 2013, ApJ, 766, 13. https://doi.org/10.1088/0004-637X/766/1/13
-    """
-    # Scale floor: dust_T has prior 20-80 K (library 15-99 K); the 1 K floor never binds.
-    return (T_eff / jnp.maximum(T_dust, 1.0)) ** (4.0 + beta)
 
 
 def template_far_ir_temperature(
