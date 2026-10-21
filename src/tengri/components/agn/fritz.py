@@ -2,7 +2,7 @@
 r"""Fritz et al. (2006) smooth-dust AGN torus model.
 
 Loads the full Fritz SED library (``create_fritz_from_grid``) and performs
-6D triweight kernel interpolation in JAX. Provides C²-continuous gradients for
+6D node-exact PCHIP interpolation in JAX. Provides C¹-continuous gradients for
 smooth inference (VI, MAP, NUTS).
 
 The Fritz2006 model provides a semi-empirical radiative-transfer grid of
@@ -37,6 +37,7 @@ References
 """
 
 import functools
+import warnings
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -48,12 +49,18 @@ from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import L_SUN as _L_SUN
 from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._torus_inclination import (
+    AnisotropyGrid,
+    TorusInclination,
+    anisotropy_grid,
+    log10_anisotropy,
+)
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import pow10, representable_denominator
 
 
 class FritzComponents(NamedTuple):
@@ -106,8 +113,10 @@ def _load_grid_arrays(grid_path: str):
 
     with _h5py.File(grid_path, "r") as f:
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
-        result["dust"] = np.array(f["fritz2006/dust"][:])
-        result["disk"] = np.array(f["fritz2006/disk"][:])
+        # Read as float64 on the host: the file stores float32, and a few far-UV nodes are
+        # float32 subnormals that a device-side conversion would flush to zero.
+        result["dust"] = np.asarray(f["fritz2006/dust"][:], dtype=np.float64)
+        result["disk"] = np.asarray(f["fritz2006/disk"][:], dtype=np.float64)
         # Per-record scale (pcigale ``model.norm``, 1e42-1e46: past float32), kept relative to
         # its largest value, which is all the face-on/viewing-angle ratio needs. Absent from
         # grids downloaded before it was added.
@@ -310,7 +319,7 @@ class FritzGrid(NamedTuple):
     axes : tuple of ndarray
         The six parameter axes, in interpolation order.
     edges : tuple of ndarray
-        Triweight bin edges derived from ``axes``.
+        Bin edges derived from ``axes`` (kept for callers of the grid; the lookup is PCHIP).
     disk : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave), optional
         Tabulated accretion-disc SEDs on the same axes, in the library's own units relative
         to the unit-integral ``dust``. Read by :func:`fritz_disc_dust_ratio` for the
@@ -326,6 +335,65 @@ class FritzGrid(NamedTuple):
     edges: tuple[jnp.ndarray, ...]
     disk: jnp.ndarray | None = None
     norm: jnp.ndarray | None = None
+
+
+#: The library's inclination axis: ``psy``, the elevation above the equatorial plane, the last
+#: of the six axes. The lookup continues its end cubic across the 0.001 and 0.01 degree gaps
+#: to the poles (:data:`_PSY_EXTRAPOLATE`).
+TORUS_INCLINATION = TorusInclination(axis=5, variable="elevation_deg", extrapolate=True)
+
+
+def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
+    r"""The Fritz library's power along each sightline, over its model's mean (``norm``).
+
+    Parameters
+    ----------
+    grid : FritzGrid
+        The Fritz library.
+
+    Returns
+    -------
+    AnisotropyGrid
+        ``norm / mean norm`` on the six axes (``_torus_inclination.anisotropy_grid``, the
+        mean a trapezoid in :math:`\mu = \sin\psi` over the ``psy`` nodes); all ones for a
+        grid without ``norm``, whose torus then carries the same power along every sightline.
+
+    Notes
+    -----
+    **Provenance.** Fritz, Franceschini & Hatziminaoglou (2006) [1]_ illuminate every torus
+    model with one isotropic central source (their Sect. 2.5) of the same luminosity,
+    :math:`L_{\rm AGN} = 10^{46}` erg/s (Sect. 3.3), and the radiative transfer conserves its
+    energy to 1 per cent for typical solutions (Sect. 2.6); the dust emission changes with
+    the viewing angle (Sect. 3.2.2). CIGALE's ``fritz2006`` database [2]_ stores every record
+    divided by its own dust integral and keeps the divisor as ``norm``
+    (``fritz2006/norm`` in ``fritz2006_torus_grid.h5``), so ``norm`` is the power each
+    record carries on that common scale. Measured on the shipped grid: every stored ``dust``
+    record integrates to 10 on the Angstrom axis, and ``disk x norm`` face-on agrees within
+    -0.5 % and +12.5 % of the median for 2398 of 2400 models; the other two (r_ratio 100,
+    tau 3, beta -0.75, gamma 6, half-angle 40 and r_ratio 150, tau 10, beta -1, gamma 6,
+    half-angle 20) sit about 10 times higher. **Sightline convention**: the axis is
+    ``psy``, the elevation above the equatorial plane [deg] (0.001 edge-on, 89.99 face-on),
+    so :math:`\mu = \cos i = \sin\psi`.
+
+    Dividing by each model's mean removes the inter-model scale, so those two models do not
+    weight the interpolation of the scalar over the other five axes.
+
+    **JIT-compatible**: yes.
+
+    References
+    ----------
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+       infrared spectra of active galactic nuclei with a new torus emission
+       model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+       https://doi.org/10.1111/j.1365-2966.2006.09866.x
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
+       A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+    """
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    if grid.norm is None:
+        return anisotropy_grid(jnp.ones(jnp.shape(grid.dust)[:-1]), axes, TORUS_INCLINATION)
+    return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
 
 
 @functools.cache
@@ -351,6 +419,15 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     leak out of the trace scope.
     """
     raw = _load_grid_arrays(grid_path)
+    if "norm" not in raw:
+        warnings.warn(
+            "The Fritz (2006) grid carries no fritz2006/norm: every record is on its own "
+            "scale, so the torus power does not vary with the viewing angle as the "
+            "radiative transfer does. Add it with "
+            "`python scripts/build_fritz2006_grid.py --add-norm --dest <data directory>`.",
+            UserWarning,
+            stacklevel=2,
+        )
     with jax.ensure_compile_time_eval():
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         return FritzGrid(
@@ -376,7 +453,7 @@ def fritz_sed_from_grid(
     agn_fritz_psy: float = 0.001,
     **_kwargs,
 ) -> jnp.ndarray:
-    r"""Fritz+2006 torus :math:`L_\nu` by 6-D triweight grid interpolation.
+    r"""Fritz+2006 torus :math:`L_\nu` along one sightline, energy-normalized over the sphere.
 
     Parameters
     ----------
@@ -385,7 +462,7 @@ def fritz_sed_from_grid(
     wavelength : ndarray, shape (n_wave,)
         Wavelength grid. [Angstrom]
     agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. [dimensionless]
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power. [dex]
     agn_torus_frac : float
         Fraction of L_bol reprocessed by the torus. [dimensionless]
     agn_fritz_r_ratio : float
@@ -409,12 +486,49 @@ def fritz_sed_from_grid(
     ndarray, shape (n_wave,)
         Dust torus specific luminosity :math:`L_\nu`. [erg/s/Hz]
 
+    Raises
+    ------
+    ValueError
+        If a concrete ``agn_fritz_oa`` or ``agn_fritz_psy`` lies off the grid.
+
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes, the triweight kernel
-    is C2-continuous across all six axes.
+    .. math::
+
+        L_\nu(\lambda;\psi) = f L_{\rm bol}\,
+            \frac{T_\nu(\lambda;\psi)}{\int T_\nu\,d\nu}\;\frac{a(\mu)}{\bar a},
+        \qquad \bar a = \int_0^1 a(\mu)\,d\mu, \qquad \mu = \cos i = \sin\psi.
+
+    The first factor is the stored dust record :math:`U_\lambda` (unit integral, converted with
+    :math:`L_\nu = L_\lambda\lambda^2/c`) interpolated with node-exact PCHIP on all six axes
+    and normalized on the library's own wavelength nodes, exactly as for a torus normalized
+    per sightline, so the shape at any point is that one. The second is the library's
+    anisotropy (:func:`fritz_anisotropy`): each record's own dust power (CIGALE
+    ``model.norm``) [2]_ over its model's mean, a scalar interpolated with the same PCHIP,
+    and :math:`\bar a` its sphere mean (Gauss-Legendre over the ``psy`` panels). The
+    angle-integrated torus power is :math:`f L_{\rm bol}`; along :math:`\psi` the torus
+    carries :math:`f L_{\rm bol}\,a/\bar a`, the radiative transfer's anisotropy of
+    Fritz, Franceschini & Hatziminaoglou [1]_ (measured on the shipped grid: the equatorial
+    record carries 0.06 to 0.98, median 0.52, of the polar record's dust power).
+
+    Without ``norm`` the records keep their own scales (each carries unit power), so the
+    torus power is :math:`f L_{\rm bol}` along every sightline.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes, node-exact PCHIP is C1 on all six axes.
+
+    References
+    ----------
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+       infrared spectra of active galactic nuclei with a new torus emission
+       model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+       https://doi.org/10.1111/j.1365-2966.2006.09866.x
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
+       A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
     """
-    l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    _refuse_off_grid("agn_fritz_oa", agn_fritz_oa, axes[4])
+    _refuse_off_grid("agn_fritz_psy", agn_fritz_psy, axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
     point = (
         agn_fritz_r_ratio,
         agn_fritz_tau,
@@ -423,22 +537,25 @@ def fritz_sed_from_grid(
         agn_fritz_oa,
         agn_fritz_psy,
     )
-    return _interpolate_and_normalize(
+    # Anisotropy restored here (#2851). Provenance: fritz2006_torus_grid.h5 ``fritz2006/norm``
+    # (pcigale model.norm, each record's own dust power: one isotropic 1e46 erg/s source per
+    # model, Fritz et al. 2006 Sect. 2.5, 2.6 and 3.3), over the model's mean norm, as a
+    # scalar on the six axes; the shape is the unit-power ``fritz2006/dust`` records as
+    # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
+    # axis, mu = cos i = sin(psy).
+    shape = _interpolate_and_normalize(
         jnp.asarray(grid.dust),
         jnp.asarray(grid.wave_grid),
-        tuple(jnp.asarray(a) for a in grid.axes),
+        axes,
         wavelength,
         point,
-        l_scale,
+        10.0**agn_log_lbol * _L_SUN * agn_torus_frac,
     )
+    return shape * pow10(log10_anisotropy(fritz_anisotropy(grid), point, TORUS_INCLINATION))
 
 
 def create_fritz_from_grid(grid_path: str) -> Callable:
-    """Load Fritz2006 templates and return an interpolation function.
-
-    The returned function interpolates the 6D Fritz grid using triweight
-    kernel interpolation (C²-continuous, fully differentiable) and normalizes
-    the output so the integrated luminosity equals ``agn_torus_frac × L_bol``.
+    """Load Fritz2006 templates and bind them to :func:`fritz_sed_from_grid`.
 
     Parameters
     ----------
@@ -448,12 +565,9 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
     Returns
     -------
     callable
-        Function with signature::
-
-            fn(wavelength, agn_log_lbol, agn_torus_frac,
-               agn_fritz_r_ratio, agn_fritz_tau, agn_fritz_beta,
-               agn_fritz_gamma, agn_fritz_oa, agn_fritz_psy,
-               **kwargs) -> L_nu [erg s^-1 Hz^-1]
+        ``fn(wavelength, agn_log_lbol, agn_torus_frac, agn_fritz_r_ratio, agn_fritz_tau,
+        agn_fritz_beta, agn_fritz_gamma, agn_fritz_oa, agn_fritz_psy, **kwargs) -> L_nu``
+        [erg/s/Hz], the sightline torus of :func:`fritz_sed_from_grid`.
 
     Raises
     ------
@@ -467,8 +581,6 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
-
     References
     ----------
     .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
@@ -476,69 +588,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
        model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
        https://doi.org/10.1111/j.1365-2966.2006.09866.x
     """
-    grid = load_fritz_grid(grid_path)
-    dust_jax, wave_grid, axes = grid.dust, grid.wave_grid, grid.axes
-
-    def fritz_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_torus_frac: float = 0.5,
-        agn_fritz_r_ratio: float = 60.0,
-        agn_fritz_tau: float = 1.0,
-        agn_fritz_beta: float = -0.5,
-        agn_fritz_gamma: float = 4.0,
-        agn_fritz_oa: float = 60.0,
-        agn_fritz_psy: float = 0.001,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """Fritz2006 torus from template grid interpolation.
-
-        Parameters
-        ----------
-        wavelength : ndarray, shape (n_wave,)
-            Wavelength grid. [Å]
-        agn_log_lbol : float
-            log₁₀(L_bol / L_sun). [dimensionless]
-        agn_torus_frac : float
-            Fraction of L_bol reprocessed by the torus. [dimensionless]
-        agn_fritz_r_ratio : float
-            Dust torus radius ratio (r_max / r_min). [dimensionless]
-            Allowed values: 10, 30, 60, 100, 150.
-        agn_fritz_tau : float
-            Optical depth at 9.7 µm. [dimensionless]
-            Allowed values: 0.1, 0.3, 0.6, 1.0, 2.0, 3.0, 6.0, 10.0.
-        agn_fritz_beta : float
-            Radial dust density power-law index. [dimensionless]
-            Allowed values: -1.0, -0.75, -0.5, -0.25, 0.0.
-        agn_fritz_gamma : float
-            Polar dust density gradient. [dimensionless]
-            Allowed values: 0, 2, 4, 6.
-        agn_fritz_oa : float
-            Half-angle of the dust-free polar cone. [degrees]
-            Allowed values: 20, 40, 60 (full opening angle 180 - 2 x half).
-            Outside [20, 60] raises ``ValueError``.
-        agn_fritz_psy : float
-            Library viewing elevation above the equatorial plane. [degrees]
-            Grid nodes: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1,
-            89.99; type 1 when it exceeds 90 - ``agn_fritz_oa``.
-
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Dust torus specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
-        """
-        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
-        point = (
-            agn_fritz_r_ratio,
-            agn_fritz_tau,
-            agn_fritz_beta,
-            agn_fritz_gamma,
-            agn_fritz_oa,
-            agn_fritz_psy,
-        )
-        return _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
-
-    return fritz_grid
+    return functools.partial(fritz_sed_from_grid, load_fritz_grid(grid_path))
 
 
 def create_fritz_components_from_grid(grid_path: str) -> Callable:
@@ -571,7 +621,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP interpolation is C1 in every coordinate.
 
     The separate components enable applying different extinction laws to
     disk vs. dust and computing anisotropy corrections independently.
@@ -801,7 +851,7 @@ def fritz_disc_dust_ratio(
             agn_fritz_oa,
             psy,
         )
-        # Node-exact PCHIP, not the triweight smoother the torus block uses: the smoother
+        # Node-exact PCHIP, as the torus block uses (#2606): a smoother
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
         return interp_nd_pchip(
@@ -875,8 +925,9 @@ def _load_fritz_components():
 def fritz_sed(*args, **kwargs):
     """Fritz2006 torus SED (auto-loaded from tabulated templates).
 
-    This function uses the tabulated Fritz et al. (2006) template grid
-    with 6D triweight interpolation.
+    This function uses the tabulated Fritz et al. (2006) template grid: the unit-power
+    records' shape by 6D node-exact PCHIP interpolation, times the scalar anisotropy
+    table (:func:`fritz_anisotropy`) over its sphere mean (see :func:`fritz_sed_from_grid`).
 
     Parameters
     ----------

@@ -27,8 +27,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.nenkova_agnfitter import _load_nenkova_agnfitter_arrays
+from tengri.components.agn._torus_inclination import node_power_scale
+from tengri.components.agn.nenkova_agnfitter import (
+    TORUS_INCLINATION,
+    _load_nenkova_agnfitter_arrays,
+    load_nenkova_agnfitter_grid,
+)
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -95,7 +99,7 @@ def precompute_nenkova_agnfitter_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
+    integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``nenkova_agnfitter.py``.
     """
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
@@ -118,14 +122,11 @@ def precompute_nenkova_agnfitter_photometry(
     # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
     # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
 
-    n_incl, _ = grid_reordered.shape
-    lnu_grid = np.empty_like(grid_reordered)
-
-    for i in range(n_incl):
-        template = grid_reordered[i]
-        integral = native_bolometric_nu_np(template, wave_grid)
-        integral_safe = max(abs(integral), 1e-100)
-        lnu_grid[i] = _LSUN_ERG * template / integral_safe
+    # Each record at unit power times its anisotropy a / mean a (the scalar table),
+    # as the runtime path normalizes the records (nenkova_agnfitter.TORUS_INCLINATION).
+    runtime_grid = load_nenkova_agnfitter_grid(grid_path)
+    scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
+    lnu_grid = _LSUN_ERG * grid_reordered * scale[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,

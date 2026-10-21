@@ -406,6 +406,38 @@ normalization's interpolant against the smooth cut-off). `KD18Disc` is ruled sep
 (Mdot inferred from the disc's own dissipation integral). Checked over the declared prior box
 by `tests/contract/test_agn_disc_ledger_closes.py`.
 
+### Template tori (#2851)
+
+A torus-only template component has no disc of its own. It publishes three powers, each a
+`log_L_agn_*` [dex re erg/s] with its `L_agn_*_lsun` [Lsun] sibling:
+
+- `log_L_agn_torus`: the angle-integrated torus power, `int_0^1 P(mu) dmu`, which is
+  `agn_torus_frac * 10**agn_log_lbol L_sun`;
+- `log_L_agn_torus_los`: the frequency integral of the torus SED emitted along the sightline;
+- `log_L_agn_disc_unemitted`: the disc share `(1 - agn_torus_frac) 10**agn_log_lbol L_sun`
+  that the component does not emit, so `torus + disc_unemitted` is the accretion power to
+  1e-12.
+
+Whether the sightline value differs from the angle-integrated one depends on the library.
+A library whose records share one radiative-transfer scale across inclination is emitted as
+two factors: the records normalized to unit power and interpolated as for a per-sightline
+library (so the spectral shape at every point is that one; measured over 180 random off-node
+Fritz points it equals it to 1.5e-14), times a scalar, the records' own powers over their
+model's mean, interpolated with the same node-exact PCHIP and divided by its sphere mean
+(Gauss-Legendre on the panels between the inclination nodes, in the variable the library is
+interpolated in). The angle-integrated power is `agn_torus_frac L_bol` and every sightline
+keeps the library's flux ratio: Fritz et al. 2006 (the scalar is the `norm` record),
+`SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
+whose scale across inclination is not established stays normalized per sightline, so its
+sightline and angle-integrated powers are equal: `SKIRTOR_mean_2p` and `3p` (their inclination
+ratios do not follow the SKIRTOR v3 records averaged the same way), `CAT3D_mean_3p` (no source
+states the scale of its records across inclination) and Silva et al. 2004 (no inclination
+axis). The standalone `cat3d_wind`, `skirtor_agnfitter` and `silva04` components publish the
+three keys. The restored libraries are reached through the composable torus blocks, which do
+not publish them yet: the kernel seam is `torus_ledger_from_grid` in
+`components/agn/_torus_inclination.py` with the kernel's `TORUS_INCLINATION`, and the runner
+wiring is #3076.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
 exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a

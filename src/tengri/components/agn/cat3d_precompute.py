@@ -11,7 +11,7 @@ References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
    observations with models," ApJL 838,
-   L20 (2017). arXiv:1702.08691. https://doi.org/10.3847/2041-8213/aa6838
+   L20 (2017). arXiv:1703.07781. https://doi.org/10.3847/2041-8213/aa6838
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -89,7 +89,7 @@ def precompute_cat3d_photometry(
     ----------
     .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
        observations with models," ApJL 838,
-       L20 (2017). arXiv:1702.08691.
+       L20 (2017). arXiv:1703.07781.
 
     Notes
     -----
@@ -192,7 +192,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
     ----------
     .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
        observations with models," ApJL 838,
-       L20 (2017). arXiv:1702.08691.
+       L20 (2017). arXiv:1703.07781.
 
     Notes
     -----
@@ -269,7 +269,7 @@ def precompute(
     ----------
     .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
        observations with models," ApJL 838,
-       L20 (2017). arXiv:1702.08691.
+       L20 (2017). arXiv:1703.07781.
 
     Notes
     -----
@@ -324,7 +324,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     ----------
     .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
        observations with models," ApJL 838,
-       L20 (2017). arXiv:1702.08691.
+       L20 (2017). arXiv:1703.07781.
 
     Notes
     -----
