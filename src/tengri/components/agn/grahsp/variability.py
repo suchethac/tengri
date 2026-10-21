@@ -31,7 +31,7 @@ def normalized_excess_variance(L_bol_BBB: Array | float) -> Array:
     Parameters
     ----------
     L_bol_BBB : array_like or float
-        Bolometric BBB luminosity [erg/s] (the upper-limit-of-91.2-nm-integrated
+        Bolometric BBB luminosity [erg/s] (the upper-limit-of-91.1753-nm-integrated
         AGN BBB component, see :mod:`bbb`). Must be strictly positive.
 
     Returns
