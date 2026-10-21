@@ -6,8 +6,8 @@ CIGALE stores every Fritz model divided by its own dust power and keeps the divi
 torus kernel did, gave every sightline the same torus power and erased the radiative
 transfer's result that an edge-on torus radiates less (measured on the shipped grid: the
 equatorial record carries 0.06 to 0.98, median 0.52, of the polar record's dust power). The
-records multiplied by ``norm`` share one scale (the face-on disc of every model agrees to 1 %
-for 95 % of the 2400 models), and the kernel now divides them by ONE sphere-mean power per
+records multiplied by ``norm`` share one scale (the face-on disc power of 98 % of the 2400
+models lies within -0.5 % and +12.5 % of the median), and the kernel now divides them by ONE sphere-mean power per
 parameter point, so the angle-integrated torus power is ``f L_bol`` and every sightline keeps
 the library's ratio.
 
