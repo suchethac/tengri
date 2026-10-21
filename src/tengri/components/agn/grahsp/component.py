@@ -9,6 +9,9 @@ The component publishes (all under ``state.derived``):
   (paper §2.1.4 ``lumBolBBB``). The erg/s key is the one the radio component reads, and the
   X-ray component reads ``log_L_agn_bol``; the erg/s key is ``inf`` in float32, where the
   log key is the value.
+- ``log_L_agn_bol_ionizing``: log10 of the BBB-side power emitted below upstream's 91.1753 nm
+  cut, from the X-ray floor (the sub-912 A share of the accretion power) [dex re erg/s].
+  ``log_L_agn_bol`` plus this is the whole emitted BBB side (NAMING_CONTRACT 4c).
 - ``log_L_agn_torus``: log10 torus bolometric luminosity (``lumBolTOR``) [dex re erg/s].
 - ``log_L_agn_absorbed``: log10 of the energy absorbed by the AGN bi-attenuation (the
   intrinsic-minus-attenuated integral over the AGN-side spectrum) [dex re erg/s]. Useful
@@ -391,6 +394,11 @@ class GRAHSPSEDComponent(PublishedLuminosities):
                 "log10(L_agn_bol / (erg/s)); float32-safe form "
                 "(L_agn_bol ~1e44 overflows float32)",
             ),
+            DerivedKey(
+                "log_L_agn_bol_ionizing",
+                "dex",
+                "log10 BBB-side power below 91.1753 nm, from the X-ray floor [dex re erg/s]",
+            ),
             DerivedKey("log_L_agn_torus", "dex", "log10 torus thermal luminosity [dex re erg/s]"),
             DerivedKey(
                 "log_L_agn_absorbed",
@@ -399,7 +407,12 @@ class GRAHSPSEDComponent(PublishedLuminosities):
             ),
             *(
                 DerivedKey(key, "Lsun", f"{key.removesuffix('_lsun')} in solar luminosities")
-                for key in ("L_agn_bol_lsun", "L_agn_torus_lsun", "L_agn_absorbed_lsun")
+                for key in (
+                    "L_agn_bol_lsun",
+                    "L_agn_bol_ionizing_lsun",
+                    "L_agn_torus_lsun",
+                    "L_agn_absorbed_lsun",
+                )
             ),
             DerivedKey("sed_grahsp", "erg/s/Hz", "Full GRAHSP AGN SED on pipeline wave grid"),
         )
@@ -511,6 +524,7 @@ class GRAHSPSEDComponent(PublishedLuminosities):
             # ``inf`` stop_gradient'd constant in float32 (as AGNSEDComponent publishes it).
             "L_agn_bol": jax.lax.stop_gradient(pow10(log_bol)) if use_ref else powers["L_agn_bol"],
             "log_L_agn_bol": log_bol,
+            "log_L_agn_bol_ionizing": log10_magnitude(powers["L_agn_bol_ionizing"]) + offset,
             "log_L_agn_torus": log10_magnitude(powers["L_agn_torus"]) + offset,
             "log_L_agn_absorbed": log10_magnitude(powers["L_agn_absorbed"]) + offset,
         }

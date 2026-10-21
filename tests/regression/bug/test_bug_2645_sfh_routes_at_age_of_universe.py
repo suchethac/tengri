@@ -38,13 +38,19 @@ REDSHIFTS = (0.5, 2.0, 6.0)
 N_DRAWS = 8
 
 
+#: The quench times as fractions of age(z), so the same configuration is legal at
+#: every redshift of the sweep (a 2 Gyr onset is later than age(6) = 0.93 Gyr).
+TLAST_FRAC = 0.02
+TFLEX_FRAC = 0.25
+
+
 def _build(ssp, sfh_type, redshift):
     sfh_group = {
         "type": sfh_type,
         "all_params": Fixed(DEFAULT),
         "log_total_mass": Fixed(10.0),
-        "tlast_gyr": Fixed(0.2),
-        "tflex_gyr": Fixed(2.0),
+        "tlast_frac": Fixed(TLAST_FRAC),
+        "tflex_frac": Fixed(TFLEX_FRAC),
     }
     return SEDModel.build(
         ssp_data=ssp,

@@ -35,7 +35,9 @@ from tengri.components.stellar.sps.top_z_validity import (
     YoungTopMetallicityWarning,
     top_node_weight,
 )
+from tengri.cosmology import age_at_z
 from tengri.utils.physics_constants import LOG10_ZSUN
+from tengri.utils.wave_unit import TIMESCALE_BOUNDS
 
 pytestmark = pytest.mark.regression_bug
 
@@ -98,17 +100,31 @@ def _l1500(wave, lnu):
     return lnu[..., int(np.argmin(np.abs(wave - 1500.0)))]
 
 
-def _model(ssp, *, logzsol_hi=0.7, scatter=0.0, age_gyr=0.002):
+#: Model redshift of the young-burst fixtures.
+Z_MODEL = 0.05
+#: Age of the universe at the model redshift [Gyr]: the SFH onset is a fraction of it.
+AGE_GYR = float(age_at_z(Z_MODEL))
+#: Delayed-SFH e-folding time [Gyr]: the upper limit of the plausible ``*_gyr`` range,
+#: so the burst is constant to within age / tau.
+TAU_GYR = TIMESCALE_BOUNDS["_gyr"][1]
+#: Onset range [Gyr] swept by the age-crossing test.
+SWEEP_AGE_GYR = (1e-4, 0.1)
+
+
+def _model(ssp, *, logzsol_hi=0.7, scatter=0.0, age_gyr=0.002, age_frac=None):
     """A young constant-ish burst: stars younger than ~log age 6.3, one metallicity.
 
-    ``age_gyr`` may be a prior, to sweep the population's age with one build.
+    ``age_frac`` may be a prior on the onset as a fraction of the age of the universe,
+    to sweep the population's age with one build; otherwise the onset is Fixed at
+    ``age_gyr``.
     """
+    onset = {"age_gyr": Fixed(age_gyr)} if age_frac is None else {"age_frac": age_frac}
     return SEDModel.build(
         ssp_data=ssp,
         sfh={
             "type": "delayed",
-            "tau_gyr": Fixed(100.0),
-            "age_gyr": age_gyr if not isinstance(age_gyr, float) else Fixed(age_gyr),
+            "tau_gyr": Fixed(TAU_GYR),
+            **onset,
             "log_total_mass": Fixed(6.0),
             "all_params": Fixed(DEFAULT),
         },
@@ -124,7 +140,7 @@ def _model(ssp, *, logzsol_hi=0.7, scatter=0.0, age_gyr=0.002):
             "tau_diff": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.05),
+        redshift=Fixed(Z_MODEL),
     )
 
 
@@ -222,9 +238,9 @@ def test_loaded_top_node_follows_the_weights_node_by_node(raw_file, ssp_clip):
 
 def test_csp_has_no_jump_where_a_population_crosses_the_limit(ssp_clip):
     """Sweep the age of a young burst through the limit: L1500 changes by small steps."""
-    model = _model(ssp_clip, age_frac=Uniform(7.25327e-06, 0.00725327))
+    model = _model(ssp_clip, age_frac=Uniform(*(a / AGE_GYR for a in SWEEP_AGE_GYR)))
     ages_gyr = 10.0 ** (np.arange(6.95, 7.45, 0.01) - 9.0)
-    out = [_csp(model, LOGZSOL_Z06, sfh_delayed_age_gyr=float(a))[1] for a in ages_gyr]
+    out = [_csp(model, LOGZSOL_Z06, sfh_delayed_age_frac=float(a) / AGE_GYR)[1] for a in ages_gyr]
     steps = np.abs(np.diff(np.log(np.array(out))))
     assert np.all(np.isfinite(steps))
     assert steps.max() < 0.08  # a hard switch would step by ln(1.7) ~ 0.5 at this age
@@ -478,7 +494,7 @@ def test_gradients_are_finite_through_the_clip(policy):
         observation=obs,
         sfh={
             "type": "delayed",
-            "tau_gyr": Fixed(100.0),
+            "tau_gyr": Fixed(TAU_GYR),
             "age_gyr": Fixed(0.002),
             "log_total_mass": Fixed(6.0),
             "all_params": Fixed(DEFAULT),
@@ -486,7 +502,7 @@ def test_gradients_are_finite_through_the_clip(policy):
         met={"logzsol": Uniform(-2.0, 0.7)},
         neb={"type": "none"},
         dust_attenuation={"type": "none"},
-        redshift=Fixed(0.05),
+        redshift=Fixed(Z_MODEL),
     )
 
     def loss(lz):

@@ -48,6 +48,7 @@ attenuation)::
 
 from __future__ import annotations
 
+import inspect
 import warnings
 
 import jax
@@ -60,6 +61,7 @@ from tengri.components.agn._lbol_reference import (
     rescale,
 )
 from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
+from tengri.components.agn.blocks._grahsp_recipe import grahsp_recipe_log_l5100
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     describe_clipping,
@@ -128,6 +130,16 @@ LOS_LOG_LUMINOSITY_KEY = "log_L_agn_los"
 _LINE_LEDGER_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
 
 
+def _closed_templates(fn, templates) -> dict:
+    """``{"templates": ...}`` when a closed form takes a template bundle, else ``{}``.
+
+    Only the GRAHSP closed forms read a bundle; the others have fixed keyword signatures.
+    """
+    if templates is None or "templates" not in inspect.signature(fn).parameters:
+        return {}
+    return {"templates": templates}
+
+
 #: The Kubota & Done disc is evaluated 4e3 FLOP per node (gradient), so its budget grid
 #: carries the 1000 points per decade only over 1e-2 - 1e6 A, where the trapezoid error of
 #: the whole 13 001-node ledger comes from, and 100 per decade in the tails: those hold
@@ -145,7 +157,7 @@ _KUBOTA_LEDGER_WAVE = np.unique(
 )
 
 #: Trapezoid nodes the CIGALE tie integrates the disc on over the SKIRTOR library's range.
-_TIE_FINE_NODES = 4001
+_TIE_FINE_NODES = 8001
 
 #: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
 #: and ``fritz2006``).
@@ -784,6 +796,23 @@ agn_torus_block, agn_attenuation_block : str
 
     disc_templates = _templates_for("disc", agn_disc_block)
 
+    # GRAHSP BBB recipe (owner ruling 16): one explicit l5100 for the whole accretion-powered
+    # side, so the disc and the GRAHSP lines, FeII and Balmer continuum share one scale, as
+    # upstream's activatebol does. ``agn_log_lbol`` is the TRUE value here; the disc block
+    # applies the float32 reference shift to the explicit value itself.
+    if params.get("agn_grahsp_log_l5100") is None:
+        _recipe_log_l5100 = grahsp_recipe_log_l5100(
+            agn_log_lbol,
+            params,
+            disc_block=agn_disc_block,
+            nlr_block=agn_nlr_block,
+            blr_block=agn_blr_block,
+            feii_block=agn_feii_block,
+            templates=disc_templates,
+        )
+        if _recipe_log_l5100 is not None:
+            params = {**params, "agn_grahsp_log_l5100": _recipe_log_l5100}
+
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
     # A disc whose scalar solve does not depend on the wavelength (the ADAF's electron
@@ -1229,7 +1258,12 @@ agn_torus_block, agn_attenuation_block : str
                 continue
             _closed = LINE_ENERGY_BLOCKS.get((_kind, _name))
             if _closed is not None:
-                _e_lines = _e_lines + _closed(agn_log_lbol_eval, l5100_disc, **params)
+                _e_lines = _e_lines + _closed(
+                    agn_log_lbol_eval,
+                    l5100_disc,
+                    **_closed_templates(_closed, _templates_for(_kind, _name)),
+                    **params,
+                )
                 continue
             _w_lines = jnp.asarray(_LINE_LEDGER_WAVE, dtype=wave.dtype)
             _on_grid = _fn(
@@ -1249,7 +1283,12 @@ agn_torus_block, agn_attenuation_block : str
         _e_disc = jnp.maximum(
             _disc_power_on_ledger()
             if _closed_disc is None
-            else _closed_disc(agn_log_lbol_eval, **params) * (10.0**agn_log_lbol_eval * L_SUN_ERG),
+            else _closed_disc(
+                agn_log_lbol_eval,
+                **_closed_templates(_closed_disc, disc_templates),
+                **params,
+            )
+            * (10.0**agn_log_lbol_eval * L_SUN_ERG),
             1e-30,
         )
         _line_fraction = _e_lines / _e_disc
@@ -1316,7 +1355,9 @@ agn_torus_block, agn_attenuation_block : str
             # ``R`` is a ratio of trapezoids over the 136-node library axis, but the disc
             # output is continuous, so its reweighted bolometric is the continuous
             # integral over the library's range: the disc re-evaluated on a fixed fine grid
-            # spanning it (4000 points, ~3e-4 in ln lambda per node).
+            # spanning it (8001 points, 2e-3 in ln lambda per node), integrated log-log:
+            # the trapezoid on 4001 nodes sat 3e-6 high on the Kubota disc, the log-log on
+            # 8001 nodes 4e-7 off the 400000-node value.
             _fine = jnp.geomspace(_tie_wave[0], _tie_wave[-1], _TIE_FINE_NODES)
             if _split_fn is None:
                 _disc_fine = redden_disc(
@@ -1329,7 +1370,7 @@ agn_torus_block, agn_attenuation_block : str
             else:
                 _disc_fine = _disc_parts(_fine)[0]
             _incl_fine = resample_template(_fine, _tie_wave, _tie_incl_native, left=0.0, right=0.0)
-            _disc_integral = jnp.trapezoid(_disc_fine * _incl_fine, _fine)
+            _disc_integral = loglog_integral(_fine, _disc_fine * _incl_fine)
         _disc_int = jnp.maximum(_disc_integral, 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
         if _corona_part is not None:

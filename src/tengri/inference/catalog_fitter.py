@@ -850,7 +850,11 @@ class _CatalogFitterOriginal:
         import dataclasses
         import inspect
 
-        from tengri.inference._backend_registry import check_unknown_kwargs, get_backend
+        from tengri.inference._backend_registry import (
+            CALLER_CONSUMED_KWARGS,
+            check_unknown_kwargs,
+            get_backend,
+        )
         from tengri.inference.fitter import fit_surface_ctor_names
 
         engine = {
@@ -863,7 +867,16 @@ class _CatalogFitterOriginal:
         # Names ``run`` consumes itself (chunking, store, fallback...) never reach
         # kwargs; listing them only sharpens the suggestion for a near-miss.
         run_names = frozenset(inspect.signature(self.run).parameters)
-        check_unknown_kwargs(entry, kwargs, also_accepted=run_names | fit_surface_ctor_names())
+        # ``init_from`` reaches the batched engines through ``**kwargs`` (``run`` has no
+        # parameter of that name); the engine takes it when its signature does. The MCMC
+        # engine does; native_vi does not, so it still refuses it.
+        runner_takes = CALLER_CONSUMED_KWARGS & frozenset(inspect.signature(engine).parameters)
+        check_unknown_kwargs(
+            entry,
+            kwargs,
+            also_accepted=run_names | fit_surface_ctor_names(),
+            runner_takes=runner_takes,
+        )
 
     def _refuse_unsupported_channels(self, resolved: str) -> None:
         """Refuse per-galaxy channels the chosen engine cannot carry.

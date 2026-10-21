@@ -30,14 +30,22 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 C_AA_PER_S = 2.99792458e18
-LYMAN_NM = 91.2
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
+
+BBB_CUT_NM = BBB_BOL_CUT_NM
 COARSE_N = 200
 FINE_N = 5000
 
 # Compiled FLOPs of one ``compute_grahsp_sed`` call at 2000 rest-frame nodes
-# (912 A to 1e8 A), jitted with ``agn_log_lbol`` traced, measured on origin/main
-# (2f891d207, #2834) on 2026-10-12. Wall time, warm: about 0.5 ms on main.
-MAIN_FLOPS_N2000 = 8.2402e5
+# (912 A to 1e8 A), jitted with ``agn_log_lbol`` traced, keyed by the jax major.minor
+# that compiled it. CI (linux x86) is the gate, so the baselines are CI measurements; arm
+# macOS differs from x86 by about 0.2 to 1.3 % (0.11.1 arm 834461, 0.12.0 arm 907490, 0.12.0
+# CI linux 909490). The 0.11 value, 824020, is the original CI-era capture on origin/main
+# (2f891d207, #2834, 2026-10-12). XLA 0.12 changed the compiled HLO for this graph
+# (+10.4 % on CI linux), with no tengri change, so one number cannot serve both. The margin
+# below is not widened: it still catches a real regression on either version.
+# Wall time, warm: about 0.5 ms on main.
+MAIN_FLOPS_N2000_BY_JAX = {"0.11": 8.2402e5, "0.12": 9.0949e5}
 COST_MARGIN = 1.10
 
 
@@ -111,7 +119,7 @@ def _dense_log_integral(wave_nm: np.ndarray, f: np.ndarray) -> float:
 
 
 def test_grahsp_normalization_is_grid_independent():
-    coarse, fine = _shared_grids(912.0, 1e8)
+    coarse, fine = _shared_grids(10.0 * BBB_CUT_NM, 1e8)
     at_coarse = _grahsp_spectrum(coarse, 12.0)
     at_fine = _grahsp_spectrum(fine, 12.0)[np.searchsorted(fine, coarse)]
     scale = np.max(np.abs(at_coarse))
@@ -135,7 +143,7 @@ def test_grahsp_emits_declared_bolometric_power_on_converged_grid(disc_model):
     declared = 10.0**12.0 * 3.828e33
     l5100 = declared / float(bbb_side_unit_power(params, templates))
     published = evaluate_grahsp_agn(
-        jnp.asarray(np.geomspace(LYMAN_NM, 1.0e6, 400_000)),
+        jnp.asarray(np.geomspace(BBB_CUT_NM, 1.0e6, 400_000)),
         _unit_params(disc_model=disc_model, l5100=l5100),
         templates,
     )
@@ -161,7 +169,7 @@ def test_unit_power_matches_dense_per_component_integrals():
     for disc_model in (None, "netzer"):
         params = _unit_params(disc_model=disc_model)
         if disc_model == "netzer":
-            grid = np.geomspace(LYMAN_NM, float(np.max(templates.disc_wave_nm)), 200_000)
+            grid = np.geomspace(BBB_CUT_NM, float(np.max(templates.disc_wave_nm)), 200_000)
             idx = select_disc_model(
                 templates.disc_m,
                 templates.disc_a,
@@ -177,7 +185,7 @@ def test_unit_power_matches_dense_per_component_integrals():
                 disc_lumin_model=templates.disc_lumin[idx],
             )
         else:
-            grid = np.geomspace(LYMAN_NM, 1.0e10, 200_000)
+            grid = np.geomspace(BBB_CUT_NM, 1.0e10, 200_000)
             disc_dense = floor_disc_xray(
                 jnp.asarray(grid),
                 sbpl_bbb(
@@ -195,7 +203,7 @@ def test_unit_power_matches_dense_per_component_integrals():
         )
 
     params = _unit_params()
-    lines_grid = np.geomspace(LYMAN_NM, 1.0e5, 800_000)
+    lines_grid = np.geomspace(BBB_CUT_NM, 1.0e5, 800_000)
     broad, narrow = gaussian_lines(
         wave_nm=jnp.asarray(lines_grid),
         line_wave_nm=templates.line_wave_nm,
@@ -223,7 +231,7 @@ def test_unit_power_matches_dense_per_component_integrals():
         _dense_log_integral(lines_grid, feii), rel=1e-5
     )
 
-    balmer_grid = np.geomspace(LYMAN_NM, 1.0e6, 400_000)
+    balmer_grid = np.geomspace(BBB_CUT_NM, 1.0e6, 400_000)
     balmer = balmer_continuum(
         wave_nm=jnp.asarray(balmer_grid),
         l5100=1.0,
@@ -251,10 +259,17 @@ def test_normalization_cost_not_above_main():
     """
     from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
-    wave = jnp.asarray(np.geomspace(912.0, 1e8, 2000))
+    wave = jnp.asarray(np.geomspace(10.0 * BBB_CUT_NM, 1e8, 2000))
     flops = _compiled_flops(
         lambda log_lbol: compute_grahsp_sed(wave, agn_log_lbol=log_lbol),
         jnp.asarray(12.0),
     )
     assert flops > 0.0
-    assert flops <= COST_MARGIN * MAIN_FLOPS_N2000
+    series = ".".join(jax.__version__.split(".")[:2])
+    if series not in MAIN_FLOPS_N2000_BY_JAX:
+        pytest.fail(
+            f"no compiled-FLOP baseline recorded for jax {jax.__version__} (series {series}); "
+            f"measured {flops:.0f} FLOPs. Re-capture the baseline on origin/main under this "
+            "jax and add it to MAIN_FLOPS_N2000_BY_JAX."
+        )
+    assert flops <= COST_MARGIN * MAIN_FLOPS_N2000_BY_JAX[series]

@@ -343,6 +343,12 @@ class CueWeights(NamedTuple):
         Actual number of output lines per sub-network.
     batched_sort_idx : ndarray, shape (n_total_lines,)
         Wavelength sort indices for line ordering.
+    line_emul_sigma_frac : ndarray, shape (n_lines_total,), float32, or None
+        Fractional 1-sigma emulator error per line [dimensionless], in the
+        catalog (sorted) order of ``sorted_line_wav``. Provenance: upstream
+        Cue ``nn_stats_v0.pkl``, ``1 / SN_quantile[1]`` per line (the convention
+        of upstream ``cue.utils.sigma_line_for_fsps``). ``None`` when the
+        weights file predates this key.
 
     Notes
     -----
@@ -375,6 +381,7 @@ class CueWeights(NamedTuple):
     batched_spec_shift: jnp.ndarray = None  # (16, max_lines)
     batched_n_lines: tuple = None  # tuple of int (actual n_lines per net)
     batched_sort_idx: jnp.ndarray = None  # (n_total_lines,) wavelength sort
+    line_emul_sigma_frac: jnp.ndarray = None  # (n_lines_total,) float32 fractional 1-sigma
 
 
 # ── Weight loading ────────────────────────────────────────────────
@@ -592,7 +599,27 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         batched_spec_shift=np.stack([_pad1d(n.log_spec_shift, max_lines) for n in nets]),
         batched_n_lines=tuple(n.pca_components.shape[1] for n in nets),
         batched_sort_idx=np.argsort(nn_line_wav),
+        line_emul_sigma_frac=_load_line_emul_sigma(npz),
     )
+
+
+def _load_line_emul_sigma(npz: dict) -> np.ndarray | None:
+    """Read the per-line emulator error, or ``None`` for a pre-#2941 weights file.
+
+    Parameters
+    ----------
+    npz : dict
+        Loaded npz contents, keyed by array name.
+
+    Returns
+    -------
+    ndarray or None
+        Float32 array, shape (n_lines_total,), in ``sorted_line_wav`` order, or
+        ``None`` when the key is absent.
+    """
+    if "line_emul_sigma_frac" not in npz:
+        return None
+    return np.asarray(npz["line_emul_sigma_frac"], dtype=np.float32)
 
 
 # ── Neural network forward pass (pure JAX, JIT-compatible) ────────
@@ -1327,7 +1354,12 @@ class CueBackend:
             return
         w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
         lgmet = jnp.asarray(self._ssp_lgmet)
-        raw = jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))(lgmet)
+        # One traced program (#2914): the bare vmap dispatched its ~130 primitives as
+        # separate XLA compiles, each below the persistent cache's floor.
+        composite = jax.jit(
+            jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))
+        )
+        raw = composite(lgmet)
         lgmet_np = np.asarray(lgmet)
         worst: dict[str, tuple[float, float]] = {}
         for name in IONSPEC_NAMES:
@@ -1641,6 +1673,54 @@ class CueBackend:
         if cloudyfsps_only:
             return wav_sorted[np.asarray(weights.line_old_idx)]
         return wav_sorted
+
+    def published_line_model_sigma(self, *, cloudyfsps_only: bool) -> np.ndarray | None:
+        """Fractional 1-sigma emulator error per published line, without a forward pass.
+
+        Optional generic backend hook: other nebular backends may implement a
+        method of this name later, and callers reach it with ``getattr``.
+
+        Parameters
+        ----------
+        cloudyfsps_only : bool
+            Select the legacy 128-line CLOUDY/FSPS-matched subset, as in
+            :meth:`published_line_wavelengths`. Pass the same value to both
+            methods so the arrays align line by line.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,), float32, or None
+            Dimensionless fractional 1-sigma error on each line, in the same
+            order and length as ``published_line_wavelengths(cloudyfsps_only=...)``.
+            ``None`` when the weights carry no sigma (a weights file written
+            before ``line_emul_sigma_frac`` existed).
+
+        Raises
+        ------
+        ValueError
+            If the stored sigma does not have one entry per sorted line.
+
+        Notes
+        -----
+        **Trace-safe by construction**: like :meth:`published_line_wavelengths`,
+        every array here is plain ``numpy`` loaded from the weights file. The
+        stored array is already in the ``sorted_line_wav`` order, which is the
+        order :meth:`published_line_wavelengths` returns, so no reordering is
+        needed; the 128-line subset indexes it with ``line_old_idx``, the same
+        index the wavelengths use.
+        """
+        weights = self.weights
+        if weights.line_emul_sigma_frac is None:
+            return None
+        sigma = np.asarray(weights.line_emul_sigma_frac, dtype=np.float32)
+        if sigma.shape != np.shape(weights.sorted_line_wav):
+            raise ValueError(
+                f"line_emul_sigma_frac has shape {sigma.shape}, expected "
+                f"{np.shape(weights.sorted_line_wav)} (one entry per sorted line)"
+            )
+        if cloudyfsps_only:
+            return sigma[np.asarray(weights.line_old_idx)]
+        return sigma
 
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
@@ -2484,6 +2564,8 @@ def _cue_weights_flatten(cw):
         # cache lookup, because aux equality compares with ``==`` which
         # returns an array on ndarray inputs. See issue #464.
         cw.line_wav_selections,
+        # Optional per-line emulator error (None for pre-#2941 weights files).
+        cw.line_emul_sigma_frac,
     )
     # Non-array aux: strings and int tuples only.
     aux_data = (cw.line_names, cw.batched_n_lines)
@@ -2515,6 +2597,7 @@ def _cue_weights_unflatten(aux_data, children):
         b_ssh,
         b_si,
         line_wav_selections,
+        line_emul_sigma_frac,
     ) = children
     line_names, batched_n_lines = aux_data
     return CueWeights(
@@ -2542,6 +2625,7 @@ def _cue_weights_unflatten(aux_data, children):
         batched_spec_shift=b_ssh,
         batched_n_lines=batched_n_lines,
         batched_sort_idx=b_si,
+        line_emul_sigma_frac=line_emul_sigma_frac,
     )
 
 

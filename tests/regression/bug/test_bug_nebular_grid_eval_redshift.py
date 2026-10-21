@@ -746,18 +746,38 @@ class TestContinuumTable:
         for z in np.linspace(3.0, 5.6, 27):
             assert np.isfinite(float(jax.grad(band)(z))) and float(band(z)) >= 0.0
 
-    def test_outside_the_table_is_clamped_to_the_edge(self, ssp_data_fsps):
+    def test_outside_the_table_the_edge_cell_continues_half_a_spacing_then_holds(
+        self, ssp_data_fsps
+    ):
+        """Past the table the read follows #2862: the edge cell's line continues across
+        half an end spacing (so a redshift prior reaching past the table keeps a
+        nonzero derivative), and beyond that band it holds at the band edge."""
         from tengri.components.nebular.nebular_band_z import continuum_band_at_z
+        from tengri.utils.grid_interp import extrapolation_band
 
         g = _filter("SLOAN_SDSS_g")
         wave = np.asarray(ssp_data_fsps.ssp_wave)
         lnz, log_tab, nonzero, tab = self._table(wave, g.wave, g.trans, z_lo=0.2, z_hi=1.5, n_z=40)
+        lnz_np = np.asarray(lnz)
 
         def band(z):
             return float(continuum_band_at_z(0.0, log_tab, nonzero, lnz, z, lambda s: s)[0])
 
-        assert band(0.05) == pytest.approx(tab[0, 0], rel=1e-12)
-        assert band(3.0) == pytest.approx(tab[-1, 0], rel=1e-12)
+        lo_edge, hi_edge = (float(v) for v in extrapolation_band(lnz_np))
+        # The band edge is the edge cell's line, continued by half a spacing: the
+        # two-node blend with t = -1/2 at the low end and t = 3/2 at the high end.
+        t_lo = (lo_edge - lnz_np[0]) / (lnz_np[1] - lnz_np[0])
+        t_hi = (hi_edge - lnz_np[-2]) / (lnz_np[-1] - lnz_np[-2])
+        assert t_lo == pytest.approx(-0.5) and t_hi == pytest.approx(1.5)
+        expected_lo = (1.0 - t_lo) * tab[0, 0] + t_lo * tab[1, 0]
+        expected_hi = (1.0 - t_hi) * tab[-2, 0] + t_hi * tab[-1, 0]
+        assert band(float(np.expm1(lo_edge))) == pytest.approx(expected_lo, rel=1e-9)
+        assert band(float(np.expm1(hi_edge))) == pytest.approx(expected_hi, rel=1e-9)
+        # Beyond the band the read holds at the band edge, not at the end node.
+        assert band(0.05) == pytest.approx(expected_lo, rel=1e-9)
+        assert band(3.0) == pytest.approx(expected_hi, rel=1e-9)
+        assert band(0.05) != pytest.approx(tab[0, 0], rel=1e-6)
+        # Inside the table the read is unchanged: a blend of two tabulated rows.
         mid = band(0.6)
         assert min(tab[:, 0]) <= mid <= max(tab[:, 0])
 

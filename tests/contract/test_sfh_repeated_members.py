@@ -76,9 +76,11 @@ def test_resolve_sfh_numbers_the_second_instance():
     assert set(params) == {
         "sfh_norm_log_total_mass",
         "sfh_norm_peak_lbt_gyr",
+        "sfh_norm_peak_lbt_frac",
         "sfh_norm_width_gyr",
         "sfh_norm_2_log_total_mass",
         "sfh_norm_2_peak_lbt_gyr",
+        "sfh_norm_2_peak_lbt_frac",
         "sfh_norm_2_width_gyr",
     }
     # The repeat carries the base entry's prior and its internal kwarg.

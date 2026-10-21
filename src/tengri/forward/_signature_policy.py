@@ -150,6 +150,9 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_lyc_escape_geometry": content(
         "age-selective LyC escape geometry (#2529) changes the dust screen"
     ),
+    "_dust_age_mixture": content(
+        "per_node vs grouped two-component age mixture: same values, different graph"
+    ),
     "_dust_ir_diffuse_screen": content("diffuse-screen pass changes the emitted IR SED"),
     "_dust_ir_cmb": content("CMB heating/contrast changes the emitted IR SED"),
     "_astrodust_spinning_dust": content("astrodust AME enable flag changes the emitted SED"),
@@ -291,6 +294,11 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_shape_table_cache": exclude("memo cache computed from keyed structure"),
     "_dust_shape_table_decline": exclude(
         "the verdict that accompanies _dust_shape_table_cache; derived from the same keyed "
+        "structure and read by no numerical path"
+    ),
+    "_agn_band_table_cache": exclude("memo cache computed from keyed structure"),
+    "_agn_band_table_decline": exclude(
+        "the verdict that accompanies _agn_band_table_cache; derived from the same keyed "
         "structure and read by no numerical path"
     ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),

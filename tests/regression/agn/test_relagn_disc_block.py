@@ -268,6 +268,10 @@ class TestRelagnIndexSpaceInterp:
         Re-pinned for the template normalization on its own native grid: sum(L_nu) is the
         in-band fraction of L_bol on logspace(2, 5, 256); 3.292058817297e+31 / 4.275819488080e+31
         = 0.7699 equals the measured grid / dense energy ratio (dense integral / L_bol = 1.0000).
+        Re-pinned again to 3.258161499729e+31 (-1.03%) for #2890: the library lookup is the
+        node-exact monotone-cubic read (PCHIP on the spin-axis nodes, which are non-uniform),
+        not the triweight smoother that averaged across neighboring nodes. Measured by
+        running the commit before and the commit of #2890 on this call: only #2890 moves it.
         """
         wavelength = jnp.logspace(2, 5, 256)
 
@@ -289,8 +293,8 @@ class TestRelagnIndexSpaceInterp:
         )
         obj = float(jnp.sum(sed))
 
-        assert jnp.isclose(obj, 3.292058817297e31, rtol=1e-6), (
-            f"a*=0.9675: expected 3.292058817297e+31, got {obj:.12e}. "
+        assert jnp.isclose(obj, 3.2581614997288e31, rtol=1e-6), (
+            f"a*=0.9675: expected 3.258161499729e+31, got {obj:.12e}. "
             f"(FAILS on unfixed main with ~1.88% error)"
         )
 
@@ -307,6 +311,8 @@ class TestRelagnIndexSpaceInterp:
         Re-pinned for the template normalization on its own native grid: sum(L_nu) is the
         in-band fraction of L_bol on logspace(2, 5, 256); 3.056662100478e+31 / 4.137520596764e+31
         = 0.7388 equals the measured grid / dense energy ratio (dense integral / L_bol = 1.0000).
+        Re-pinned again to 3.008972271050e+31 (-1.56%) for #2890, the node-exact monotone-cubic
+        library lookup that replaced the triweight smoother (measured, as for a*=0.9675).
         """
         wavelength = jnp.logspace(2, 5, 256)
 
@@ -328,7 +334,7 @@ class TestRelagnIndexSpaceInterp:
         )
         obj = float(jnp.sum(sed))
 
-        assert jnp.isclose(obj, 3.056662100478e31, rtol=1e-6), (
-            f"a*=0.998: expected 3.056662100478e+31, got {obj:.12e}. "
+        assert jnp.isclose(obj, 3.0089722710504e31, rtol=1e-6), (
+            f"a*=0.998: expected 3.008972271050e+31, got {obj:.12e}. "
             f"(FAILS on unfixed main with ~3.86% error)"
         )

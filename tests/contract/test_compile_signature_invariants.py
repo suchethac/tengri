@@ -138,6 +138,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_lyc_reprocessed_by = "young"
             self._dust_lyc_in_energy_balance = False
             self._dust_lyc_escape_geometry = "screened"
+            self._dust_age_mixture = "per_node"
             self._dust_t_birth_yr = 1e7
             self._dust_transition_width_dex = 0.0
             self._dust_ir_diffuse_screen = False
@@ -165,6 +166,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_attenuation_block = None
             self._agn_norm = "independent"
             self._agn_polar_law = "smc"
+            self._agn_ir_frac_window = (0.0, 0.0)  # added by #3010; sed_model default
             self._agn_config = None
             self._agn_ir_frac_dist = None
             self._agn_lbol_dist = None
@@ -179,6 +181,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._radio_agn_loudness_ref = "4400"  # added by #2974; sed_model default
             self._uses_xray = False
             self._xray_model = "yu"
+            self._xray_alpha_ox_mode = "delta"  # added by #2983; sed_model default
             self._uses_shock = False
             self._shock_norm = "frac"
             self._shock_abundance = "anders_grevesse"
@@ -207,6 +210,8 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_band_response_decline = None
             self._dust_shape_table_cache = None
             self._dust_shape_table_decline = None
+            self._agn_band_table_cache = None
+            self._agn_band_table_decline = None
             # Literal policy entry from #2974 (radio AGN loudness anchor): the mock must carry it.
             self._radio_agn_loudness_ref = None
             self._cloudy_band_table_cache = None

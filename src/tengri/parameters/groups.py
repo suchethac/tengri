@@ -1533,6 +1533,11 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     timing_dropped = _settle_timing_pairs_for_build(resolved_kwargs, provenance)
+    _validate_sfh_quench_ordering(
+        (kwargs.get("sfh") or {}).get("type") if isinstance(kwargs.get("sfh"), dict) else None,
+        resolved_kwargs,
+        provenance,
+    )
     grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
@@ -2525,6 +2530,20 @@ def _seed_zero_declaration_wildcards(
     return seeded
 
 
+def _without_twinned_gyr_aliases(entries: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
+    """Drop the Fixed-only ``*_gyr`` timing aliases whose ``*_frac`` twin is covered (#2748).
+
+    A timing alias is the Fixed shim of its fraction, never a parameter the
+    wildcard could free: the twin carries the freedom, so the alias is neither
+    counted as covered nor named as stuck.
+    """
+    from tengri.parameters.timing import timing_frac_params
+
+    covered = {name for name, _ in entries}
+    twinned = {gyr for frac, gyr in timing_frac_params(covered).items() if frac in covered}
+    return [(name, freed) for name, freed in entries if name not in twinned]
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
@@ -2595,6 +2614,7 @@ def _check_wildcard_freed_something(
                 f"{{'param_name': Uniform(lo, hi)}} for whichever parameter "
                 f"your chosen configuration actually declares)."
             )
+        entries = _without_twinned_gyr_aliases(entries)
         stuck = [name for name, freed in entries if not freed]
         if not stuck:
             # Freed everything it covered; exactly what was asked for.
@@ -3561,53 +3581,36 @@ def _validate_met_ladder_keys(met_type, met_dict, n_bins: int) -> None:
             )
 
 
-def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
+def _validate_sfh_quench_ordering(sfh_type, resolved: dict, provenance: dict[str, str]) -> None:
     """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
 
-    Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
-    grammar's own order of precedence, and hands both to the registry. The rule
-    itself lives there, beside :func:`validate_bin_edges_gyr`, so the grammar
-    owns only the lookup.
+    Runs on the RESOLVED priors, after the wildcard has expanded and each
+    ``*_gyr`` / ``*_frac`` pair has been settled to one member, so a timing the
+    user never wrote but ``all_params: FREE`` freed (or pinned) is ordered like
+    one they did. Reading the user's dict alone missed exactly that case: a
+    ``tflex_gyr`` pin beside the wildcard-freed ``tlast_frac`` crossed
+    undetected. The rule itself lives in the registry, beside
+    :func:`validate_bin_edges_gyr`; the grammar only supplies what it resolved,
+    which keys were user-written, and the resolved redshift.
 
-    The lookup goes through :func:`_override_key_for`, the same resolution
-    :func:`_resolve_value` performs, so every spelling the grammar accepts for
-    these two parameters reaches the check: short (``tflex_gyr``), full
-    (``sfh_psb2022_tflex_gyr``), and legacy. Reading only the short key left the
-    full-name spelling of a crossing accepted, which is a guard with a bypass.
-    When neither is present the wildcard applies, and when there is no wildcard
-    either the registry default does.
-
-    By this pass ``all_params`` / ``other_params`` have been normalized to the
-    ``'*'`` key; both spellings are still read so the lookup does not depend on
-    that normalization staying upstream of this call.
+    Parameters
+    ----------
+    sfh_type : str or list of str or None
+        The ``sfh`` group's ``type``; each member of a composition is checked.
+    resolved : dict
+        Resolved ``public_name -> Distribution`` after the timing pairs are settled.
+    provenance : dict
+        ``public_name -> provenance tag``, as for ``resolved``.
     """
-    from tengri.components.stellar.sfh.registry import (
-        psb_quench_frac_names,
-        psb_quench_param_names,
-        validate_psb_quench_ordering,
-    )
+    from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
+    from tengri.parameters.timing import user_named_timing_keys
 
-    names = psb_quench_param_names(sfh_type)
-    if names is None:
-        return
-
-    wildcard = sfh_dict.get("*")
-    if wildcard is None:
-        wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
-
-    given = []
-    for full_name in names:
-        key = _override_key_for(full_name, sfh_dict, warn=False)
-        given.append(sfh_dict[key] if key is not None else wildcard)
-    # A fraction is named only by its own key: the wildcard never frees one
-    # (``all_params: FREE`` leaves the *_frac timings at their Fixed shim).
-    frac_given = []
-    for full_name in psb_quench_frac_names(sfh_type):
-        key = _override_key_for(full_name, sfh_dict, warn=False)
-        frac_given.append(sfh_dict[key] if key is not None else None)
-    validate_psb_quench_ordering(
-        sfh_type, *given, tlast_frac=frac_given[0], tflex_frac=frac_given[1]
-    )
+    types = sfh_type if isinstance(sfh_type, list) else [sfh_type]
+    user_named = user_named_timing_keys(provenance)
+    for type_name in types:
+        validate_psb_quench_ordering(
+            type_name, resolved, user_named=user_named, redshift=resolved.get("redshift")
+        )
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
@@ -3713,7 +3716,6 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                         "sfh 'type' list, not with a scalar 'type='."
                     ),
                 )
-            _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
 
@@ -3729,7 +3731,6 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if sfh_type not in valid:
         raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type", n_suggestions=3)
 
-    _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
 
 
@@ -4372,6 +4373,23 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # lifetime; ``transition_width_dex`` is the dispersal width of every age
     # edge (age_binned windows included). Refuse them on a type that has no
     # age split rather than drop them silently.
+    # The age-mixture evaluation order is a two_component setting (the one
+    # attenuator whose screen is a two-interval mixture evaluated per node).
+    if "age_mixture" in dust_atten_dict:
+        from tengri.components.dust.two_component import AGE_MIXTURES
+
+        if dust_type != "two_component":
+            raise ValueError(
+                f"dust_attenuation 'age_mixture' is a two_component setting (got "
+                f"type={dust_type!r}); drop 'age_mixture'."
+            )
+        if dust_atten_dict["age_mixture"] not in AGE_MIXTURES:
+            raise ValueError(
+                f"dust_attenuation['age_mixture'] must be one of {AGE_MIXTURES}; "
+                f"got {dust_atten_dict['age_mixture']!r}."
+            )
+        result["dust_age_mixture"] = dust_atten_dict["age_mixture"]
+
     if "t_birth_yr" in dust_atten_dict and dust_type != "two_component":
         raise ValueError(
             f"dust_attenuation 't_birth_yr' is the two_component birth-cloud lifetime "
@@ -5561,9 +5579,9 @@ _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
             "xray_det_lmxb",
         }
     ),
-    # Aird+2015 XRB scaling: the Lehmer+2016 offsets, and no corona.
+    # Aird+2015 XRB scaling: the Fragos+2013 offsets, and no corona.
     "xray_aird": frozenset({"xray_det_hmxb", "xray_det_lmxb"}),
-    # The alpha_ox corona and nothing else: no XRB channel, so the Lehmer+2016
+    # The alpha_ox corona and nothing else: no XRB channel, so the Fragos+2013
     # offsets are genuinely unread here, and no N_H screen.
     "agn_xray_corona": frozenset({"xray_gamma_agn", "xray_E_cut", "xray_delta_alpha_ox"}),
 }
@@ -5590,13 +5608,15 @@ _XRAY_ALPHA_OX_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox", "xray_
 #: Models whose corona reads the alpha_ox declaration (the Just+2007 corona).
 _XRAY_ALPHA_OX_MODELS: frozenset[str] = frozenset({"yang20", "simple"})
 #: Union of the above: the names the scope may narrow away.
-_XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
-    *_XRAY_PARAMS_BY_MODEL.values()
+_XRAY_VARIANT_PARAMS: frozenset[str] = (
+    _XRAY_DEFAULT_MODEL_PARAMS
+    | frozenset().union(*_XRAY_PARAMS_BY_MODEL.values())
+    | _XRAY_ALPHA_OX_PARAMS
 )
 #: Declared and freeable, but read by no model the grammar can currently build.
 #:
 #: **Empty since #1706.** It held ``xray_det_hmxb`` / ``xray_det_lmxb``, the
-#: Lehmer+2016 XRB luminosity offsets, which were inert under every X-ray type
+#: Fragos+2013 XRB luminosity offsets, which were inert under every X-ray type
 #: because ``XRaySEDComponent._terms()`` never passed them on to
 #: ``xray_total_terms`` / ``xray_total_lopez24_terms``. Both call sites now do,
 #: so every model reads them and there is no variant to scope them to.
@@ -5828,6 +5848,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # (birth-cloud-screen types) only -- see
             # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
             "lyc_escape_geometry",
+            # Evaluation order of the two-component age mixture ('per_node' |
+            # 'grouped'); same model either way. Two-component only.
+            "age_mixture",
             # Young/old split: birth-cloud dispersal age [yr] (two_component) and
             # the dispersal width [dex] of every age edge (0 = hard step). Static.
             "t_birth_yr",
@@ -5880,7 +5903,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
     "radio.agn": frozenset({"type", "*", "all_params", "loudness_ref"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law", "ir_frac_window"})
+    "agn": frozenset(
+        {"type", "*", "all_params", "norm", "polar_law", "axis_grids", "ir_frac_window"}
+    )
     | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
@@ -6040,6 +6065,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
+        _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
         # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
         # bc/diff/neb), the Lyman flags and the law keys are emitted by
         # _add_structural_settings / _emit_declared_structural, not by this table.
@@ -6104,6 +6130,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     "agn": (
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
+        _Structural("axis_grids", "agn_axis_grids", None),
         _Structural("ir_frac_window", "agn_ir_frac_window", (0.0, 0.0)),
     ),
     "radio.agn": (_Structural("loudness_ref", "radio_agn_loudness_ref", "4400"),),
@@ -8218,6 +8245,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
 
+    # Node grids of the composable AGN band table (``agn['axis_grids']``): ``{parameter name:
+    # node values}`` for free AGN parameters. Parameters validates the container; the nodes are
+    # checked against the priors when WavePrecomp builds the table.
+    if "axis_grids" in agn_dict:
+        result["agn_axis_grids"] = agn_dict["axis_grids"]
+
 
 def _parse_ir_frac_window(value: object) -> tuple[float, float]:
     """Resolve ``agn['ir_frac_window']`` to ``(lambda_min_um, lambda_max_um)`` (#2662).
@@ -8582,6 +8615,7 @@ def _resolve_value(
             "lyc_reprocessed_by",
             "lyc_in_energy_balance",
             "lyc_escape_geometry",
+            "age_mixture",
             "t_birth_yr",
             "transition_width_dex",
         }

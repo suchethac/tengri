@@ -153,6 +153,7 @@ from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
 )
+from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 
@@ -1342,7 +1343,9 @@ def relagn_agn(
     # ``nu`` is descending: negate the trapezoid instead of flipping the
     # operands (reversed operands are silently zeroed under MLX compile on
     # Apple GPU: jax-mps#232, #2295).
-    lbol_disc_erg = -jnp.trapezoid(l_native, _C_AA / wave_native)
+    # Log-log over the template nodes: the integral of the interpolant the disc is resampled
+    # with. A trapezoid over these nodes was 4e-5 high on the reference row.
+    lbol_disc_erg = -loglog_integral(_C_AA / wave_native, l_native)
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol

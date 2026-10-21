@@ -261,7 +261,7 @@ def main():
         f"    l_2500     tengri {l25_t:.2e} / CIGALE {l25_c:.2e} = {l25_t / l25_c:.2f}×"
         "   (multicolor vs SKIRTOR disc; log_lbol vs fracAGN)"
     )
-    print("    X-ray norm α_ox=just2007(l_2500)+Lehmer16 XRB (tengri) vs α_ox=-1.4 (CIGALE)")
+    print("    X-ray norm α_ox=just2007(l_2500)+Fragos13 XRB (tengri) vs α_ox=-1.4 (CIGALE)")
     print("               -> soft-band excess is α_ox convention + XRB (l_2500 alone is 0.81×)")
     print("    q_IR       tengri 2.64 (Bell03 default) vs CIGALE 2.50 -> radio ×0.72 (convention)")
     print("    AGN radio  tengri jets ON (disc-driven) vs CIGALE R_agn=0 -> radio band excess")
