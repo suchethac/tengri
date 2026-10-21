@@ -36,6 +36,9 @@ def test_float32_vjp_is_finite_at_a_sed_gradient_cotangent():
     _, vjp = jax.vjp(loglog_integral, x, y)
     grad_y = np.asarray(vjp(jnp.float32(_COTANGENT))[1])
     assert np.all(np.isfinite(grad_y)), f"{np.sum(~np.isfinite(grad_y))} non-finite entries"
+    # d(integral)/dy is positive for positive x and y, so a positive cotangent gives a positive,
+    # non-collapsed gradient at every node.
+    assert np.all(grad_y > 0.0), f"{np.sum(grad_y <= 0.0)} nodes with a zero or negative gradient"
 
 
 def test_float32_vjp_matches_float64():
