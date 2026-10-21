@@ -157,9 +157,9 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
         return
     observation = getattr(model, "observation", None)
     has_phot = getattr(observation, "photometry", None) is not None
-    # A joint fit is exact under "auto" for its spectroscopy channel (#1688), and
-    # WavePrecomp would promote that channel onto the LUT, so the advice below
-    # does not apply to it.
+    # A joint fit under "auto" carries WavePrecomp, which the joint promotion may
+    # extend to its spectrum channel (#1688, #2958), so the advice below does not
+    # apply to it.
     has_spec = getattr(observation, "spectroscopy", None) is not None
     if has_phot and not has_spec and not model.approx.wave_precomp:
         import warnings
@@ -452,6 +452,36 @@ def split_fitter_kwargs(kwargs):
 # Keyed weakly on the source model, so the entry dies with the user's model and
 # clones are not pinned. Mirrors ``_model_cache``'s WeakKeyDictionary, which
 # already establishes that models are hashable and weak-referenceable.
+def _inner_sed(model):
+    """The SEDModel under a ForwardModel wrapper, or ``model`` itself when unwrapped."""
+    resolve = getattr(model, "_inner_sed_for_delegation", None)
+    return resolve() if callable(resolve) else model
+
+
+def _spectrum_lut_for_auto(model):
+    """``SpectrumPrecomp()`` when ``"auto"`` may take the spectrum LUT, else ``None``.
+
+    The decision is :meth:`SEDModel._spectrum_lut_serves_exactly` (#2958): point
+    or sub-grid pixels, a Fixed ``sigma_v_kms``, no banded resolution matrix. A
+    free sigma_v stays on the exact path, which is faster for it, and says so
+    here once. Used by both the single-fit and the batch resolvers.
+    """
+    from tengri.forward.sed_model import SpectrumPrecomp
+
+    inner = _inner_sed(model)
+    if inner._spectrum_lut_serves_exactly(inner.observation):
+        return SpectrumPrecomp()
+    if inner._fixed_sigma_v_kms() is None:
+        import warnings
+
+        warnings.warn(
+            "a free sigma_v_kms is fitted on the exact spectrum path, which is faster for it",
+            UserWarning,
+            stacklevel=3,
+        )
+    return None
+
+
 _APPROX_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
@@ -1138,10 +1168,11 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         The batch fit's model (or one built by its factory). Never mutated;
         ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
     approx : "auto" or None or precompute config
-        ``"auto"`` selects ``WavePrecomp`` for photometry and keeps
-        spectroscopy and joint fits exact (#1688), and respects a model that
-        already carries a LUT; ``None`` returns the model untouched (the exact
-        path); anything else is handed to ``with_approx`` verbatim.
+        ``"auto"`` selects ``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
+        spectroscopy where the LUT serves the pixels exactly (#2958, otherwise
+        exact, #1688), and respects a model that already carries a LUT; ``None``
+        returns the model untouched (the exact path); anything else is handed to
+        ``with_approx`` verbatim.
     data_type : str
         The fit's data type; selects the LUT under ``"auto"``.
 
@@ -1265,11 +1296,19 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                     return _memoized_approx_clone(model, (*existing, *extra))
             if has_wave:
                 return model
+        elif data_type == "spectroscopy" or data_type == "joint":
+            # #1688 / #2958: spectroscopy takes the spectrum LUT only where it serves
+            # the pixels exactly (_spectrum_lut_for_auto); a joint fit takes
+            # WavePrecomp and the promotion decides its spectrum channel.
+            if state is not None and (state.wave_precomp or state.spectrum_precomp):
+                return model
+            if data_type == "spectroscopy":
+                cfg = _spectrum_lut_for_auto(model)
+                if cfg is None:
+                    return model
+            else:
+                cfg = WavePrecomp()
         else:
-            # #1688: spectroscopy and joint fits stay exact under "auto". The
-            # spectrum LUT is opt-in (an explicit SpectrumPrecomp() still engages),
-            # and a joint fit cannot keep WavePrecomp for photometry alone, since
-            # a joint observation promotes it onto the spectrum LUT as well.
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         resolved = (*existing, cfg) if existing else cfg
@@ -2192,10 +2231,12 @@ class Fitter:
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
-        Photometry -> ``WavePrecomp``; spectroscopy and joint -> no pixel LUT
-        (#1688). ``FeaturePrecomp`` is attached when emission lines are fit, on
-        its own for spectroscopy and joint fits. Returns ``None`` when nothing
-        applies (the fit then stays exact).
+        Photometry and joint -> ``WavePrecomp`` (a joint observation promotes its
+        spectrum channel onto the spectrum LUT under the same predicate).
+        Spectroscopy -> ``SpectrumPrecomp`` only where the LUT serves the pixels
+        exactly (#2958, see :func:`_spectrum_lut_for_auto`); otherwise no pixel LUT
+        (#1688). ``FeaturePrecomp`` is attached when emission lines are fit. Returns
+        ``None`` when nothing applies (the fit then stays exact).
 
         "Emission lines are fit" means **any** line channel: the spectroscopy
         nuisance amplitudes (``_eline_marginalize`` / ``_eline_fitted``) *and*
@@ -2220,19 +2261,21 @@ class Fitter:
         if _has_free_agb_dust_weight(model):
             return None
 
-        # #1688: spectroscopy and joint fits take no pixel LUT by default.
-        # SpectrumPrecomp samples the model at pixel centers, which moves a
-        # high-SNR spectroscopic posterior by about one sigma against the exact
-        # path, and an explicit SpectrumPrecomp() opts in. A joint fit cannot keep
-        # WavePrecomp for its photometry alone: a joint observation promotes it
-        # onto the spectrum LUT too (SEDModel.__init__). The emission-line
-        # FeaturePrecomp is a separate mechanism and is still attached below
-        # where the fit has a line channel, since FeaturePrecomp alone does not
-        # engage either pixel LUT.
-        if self.data_type == "photometry":
-            base = WavePrecomp()
+        # #1688 / #2958: SpectrumPrecomp samples the model at pixel centers, which
+        # moved a high-SNR spectroscopic posterior by about one sigma, so "auto"
+        # takes it for spectroscopy only where it serves the pixels exactly
+        # (_spectrum_lut_for_auto). A joint fit takes WavePrecomp and the joint
+        # promotion (SEDModel.__init__) puts its spectrum channel on the spectrum LUT
+        # under the same predicate. The emission-line FeaturePrecomp is a separate
+        # mechanism and is still attached below where the fit has a line channel,
+        # since FeaturePrecomp alone does not engage either pixel LUT.
+        if self.data_type in ("photometry", "joint"):
+            base = (WavePrecomp(),)
+        elif self.data_type == "spectroscopy":
+            spectrum = _spectrum_lut_for_auto(model)
+            base = () if spectrum is None else (spectrum,)
         else:
-            base = None
+            base = ()
         # A line-flux channel earns the LUT, but an index/ratio channel on the
         # SAME fit vetoes it: those read the rest-frame SED / discrete catalog,
         # which the fast grid does not serve (#1665). Such a fit pays the
@@ -2255,9 +2298,10 @@ class Fitter:
             and not _has_line_adjacent_channel(model)
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
-        if base is None:
-            return FeaturePrecomp() if wants_lut else None
-        return (base, FeaturePrecomp()) if wants_lut else base
+        configs = (*base, FeaturePrecomp()) if wants_lut else base
+        if not configs:
+            return None
+        return configs[0] if len(configs) == 1 else configs
 
     def _add_feature_precomp(
         self, model, *, warn_on_failure: bool = True, serves_line_channel: bool = True
