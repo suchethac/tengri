@@ -2326,9 +2326,9 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     a = jnp.log(x1 / x0)
     u = a + jnp.log(y1_safe) - jnp.log(y0_safe)
     # expm1(u)/u = sum_k u^k / (k + 1)!. For |u| < 0.05 the series to u^7 is exact to double
-    # precision (the next term is below 1e-16), and it has no 1 / u in its derivative: the VJP of
-    # ``expm1(u) / u`` forms ``cot * x y / u^2`` before the cancellation, which overflows float32
-    # for a cotangent of ~1e14 at |u| ~ 1e-3 (#2767).
+    # precision (the first dropped term, u^8 / 9!, is 1.1e-16 at |u| = 0.05), and it has no 1 / u
+    # in its derivative: the VJP of ``expm1(u) / u`` forms ``cot * x y a / u^2`` before the
+    # cancellation, which overflows float32 for a cotangent of ~1e14 at |u| ~ 1e-3 (#2767).
     small = jnp.abs(u) < _LOGLOG_SERIES_U
     u_safe = jnp.where(small, 1.0, u)
     series = 1.0 + u * (
@@ -2336,7 +2336,11 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
         + u
         * (
             1.0 / 6.0
-            + u * (1.0 / 24.0 + u * (1.0 / 120.0 + u * (1.0 / 720.0 + u * (1.0 / 5040.0))))
+            + u
+            * (
+                1.0 / 24.0
+                + u * (1.0 / 120.0 + u * (1.0 / 720.0 + u * (1.0 / 5040.0 + u / 40320.0)))
+            )
         )
     )
     ratio = jnp.where(small, series, jnp.expm1(u_safe) / u_safe)

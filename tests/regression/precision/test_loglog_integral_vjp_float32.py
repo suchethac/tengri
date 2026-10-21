@@ -8,8 +8,8 @@ cotangent of the summed kubota_done SED and :math:`x \sim 5\times10^{18}` Hz, th
 the float32 maximum and the gradient is NaN. Below :math:`|u| = 0.05` the integral uses the Taylor
 series of the quotient, which has no :math:`1/u` in its derivative.
 
-The gradient must be finite at that cotangent and, in float64 where nothing overflows, equal to
-the closed form to rounding.
+The gradient must be finite at that cotangent (for un-normalized ``y``, here scaled to 1e10) and
+float32 must agree with float64.
 """
 
 import jax
@@ -22,16 +22,17 @@ from tengri.utils.grid_interp import loglog_integral
 pytestmark = pytest.mark.regression_bug
 
 _COTANGENT = 2.07e14  # the cotangent that reached the corona normalization in #2767
+_Y_SCALE = 1.0e10  # un-normalized y: the VJP overflows the float32 maximum without the series
 
 
-def _grid(dtype):
+def _grid(dtype, y_scale=1.0):
     x = jnp.asarray(np.geomspace(2.418e13, 2.418e21, 8000), dtype=dtype)
-    y = jnp.asarray((np.asarray(x, np.float64) / 2.418e13) ** -0.9995, dtype=dtype)
+    y = jnp.asarray(y_scale * (np.asarray(x, np.float64) / 2.418e13) ** -0.9995, dtype=dtype)
     return x, y
 
 
 def test_float32_vjp_is_finite_at_a_sed_gradient_cotangent():
-    x, y = _grid(jnp.float32)
+    x, y = _grid(jnp.float32, _Y_SCALE)
     _, vjp = jax.vjp(loglog_integral, x, y)
     grad_y = np.asarray(vjp(jnp.float32(_COTANGENT))[1])
     assert np.all(np.isfinite(grad_y)), f"{np.sum(~np.isfinite(grad_y))} non-finite entries"
