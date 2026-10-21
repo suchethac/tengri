@@ -24,6 +24,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
+    T_CMB_0 as _T_CMB_0,
 )
 
 # ── Utility: frequency integral ───────────────────────────────────
@@ -113,8 +114,6 @@ def planck_bnu(
 
 # ── CMB heating correction (da Cunha+2013) ────────────────────────
 
-_T_CMB_0 = 2.725  # CMB temperature at z=0 (K)
-
 
 def cmb_corrected_temperature(
     T_dust: float,
@@ -155,7 +154,8 @@ def cmb_corrected_temperature(
         T_{\rm eff} = \left[T_{\rm dust}^{4+\beta} + T_{\rm CMB}(z)^{4+\beta}
         - T_{\rm CMB}(z=0)^{4+\beta}\right]^{1/(4+\beta)}
 
-    where :math:`T_{\rm CMB}(z) = T_{\rm CMB,0} (1 + z)` with :math:`T_{\rm CMB,0} = 2.725` K.
+    where :math:`T_{\rm CMB}(z) = T_{\rm CMB,0} (1 + z)` with :math:`T_{\rm CMB,0} = 2.7255` K
+    (:data:`tengri.utils.physics_constants.T_CMB_0`, Fixsen 2009).
 
     """
     exponent = 4.0 + beta_ir
@@ -166,6 +166,56 @@ def cmb_corrected_temperature(
     inner = jnp.maximum(T_dust_safe**exponent + T_cmb_z**exponent - _T_CMB_0**exponent, 0.0)
     T_eff = inner ** (1.0 / exponent)
     return T_eff
+
+
+def cmb_luminosity_boost(
+    T_dust: jnp.ndarray,
+    redshift: jnp.ndarray,
+    beta: float,
+) -> jnp.ndarray:
+    r"""Heated-dust luminosity boost as a closed form in redshift (#2806).
+
+    Eq. 11 of da Cunha et al. (2013) with the Eq. 12 heated temperature substituted,
+    in closed form:
+
+    .. math::
+
+        \left[\frac{T_{\rm d}(z)}{T_{\rm d}^{z=0}}\right]^{4+\beta}
+        = 1 + \left(\frac{T_{\rm CMB,0}}{T_{\rm d}^{z=0}}\right)^{4+\beta}
+        \left[(1+z)^{4+\beta} - 1\right]
+
+    Parameters
+    ----------
+    T_dust : array_like
+        Intrinsic (:math:`z = 0`) dust temperature. [K]
+    redshift : array_like
+        Source redshift. [dimensionless]
+    beta : float
+        Dust emissivity index. [dimensionless]
+
+    Returns
+    -------
+    ndarray
+        :math:`L_{\rm dust}(z) / L_{\rm dust}(z=0)`, at least 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes, smooth in ``redshift`` and ``T_dust`` at every ``z >= 0``.
+    The bracket :math:`(1+z)^{4+\beta} - 1` vanishes at :math:`z = 0` but its
+    derivative does not, so the z-derivative at :math:`z = 0` is live (the one-sided
+    limit toward :math:`z > 0`) and no branch selects a constant there.
+
+    The factor is exactly 1.0 at :math:`z = 0`. An earlier form computed the same
+    number from the heated temperature :func:`cmb_corrected_temperature`, which at
+    :math:`z = 0` gives :math:`1 + 10^{-15}` and whose z-derivative was zeroed by a
+    ``where`` guard (#2806). Both the tabulated (Schreiber) and analytic paths use
+    this one function.
+    """
+    exponent = 4.0 + beta
+    T_safe = jnp.maximum(T_dust, 1.0)
+    return 1.0 + (_T_CMB_0 / T_safe) ** exponent * ((1.0 + redshift) ** exponent - 1.0)
 
 
 def cmb_contrast_factor(

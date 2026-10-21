@@ -198,6 +198,12 @@ def skirtor_agnfitter_sed_from_grid(
     AGNfitter-faithful torus modeling, use this component; for X-CIGALE
     faithful modeling, use the default SKIRTOR.
     """
+    # Normalized per sightline (#2851): the stored power ratios between inclinations of
+    # AGNfitter-rX SKIRTOR_mean_3p.pickle do not follow the SKIRTOR v3 records (dust_emission x
+    # spectra/norm) averaged the same way (ratios scatter 0.2 to 3.9 about 1), so the reduction is
+    # not on SKIRTOR's
+    # radiative-transfer scale. Sightline: 'incl_axis', the inclination from the polar
+    # axis [deg] (0 face-on).
     return torus_lnu_from_grid(
         grid,
         wavelength,

@@ -289,6 +289,12 @@ CENSUS: dict[str, str] = {
     "components/agn/_template_grid.py": (
         "fitted-ok (cat3d grid cos 6.1e-17 vs prior 0; numerical, see skirtor pattern)",
     ),
+    "components/agn/_torus_inclination.py": (
+        "fitted-ok (the scalar anisotropy lookup on the same axes, hulls and rules as the "
+        "shape lookups of _template_grid and fritz.py: non-inclination axes clamp as there; "
+        "the sightline reuses each library's own inclination rule, NK0_mean_1p's cos gap "
+        "registered as GRID_SUPPORT nenkova_agnfitter, Fritz psy extended)"
+    ),
     "components/agn/cat3d_precompute.py": "fitted-ok (cos 6.1e-17 vs prior 0)",
     "components/agn/cat3d_wind_lowfwd_precompute.py": "fitted-ok (cos 6.1e-17 vs prior 0)",
     "components/agn/silva04.py": "fitted-ok",

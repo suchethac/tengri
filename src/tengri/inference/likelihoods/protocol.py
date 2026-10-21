@@ -310,6 +310,12 @@ class CensoredLikelihood:
         If set, detected points use a Student-t instead of a Gaussian.
     channel : str, keyword-only
         Which prediction-dict key to read.
+    model_sigma_frac : ndarray, float or None, keyword-only
+        Fractional 1-sigma model error per point [dimensionless]; see
+        :func:`tengri.observation.noise.censored_neg_log_likelihood`. ``None``
+        (default) treats the model as exact.
+    model_sigma_frac_key : str or None, keyword-only
+        ``data_args`` entry to read ``model_sigma_frac`` from at call time.
 
     Notes
     -----
@@ -331,6 +337,8 @@ class CensoredLikelihood:
     err_key: str | None = None
     mask_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    model_sigma_frac: jnp.ndarray | float | None = None
+    model_sigma_frac_key: str | None = None
 
     def log_prob(
         self,
@@ -349,6 +357,9 @@ class CensoredLikelihood:
             mask=resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
             f_cal=f_cal,
             dof=self.dof,
+            model_sigma_frac=resolve_channel_data(
+                self.model_sigma_frac, self.model_sigma_frac_key, self.data_slice, data_args
+            ),
         )
 
     def declared_parameters(self):
@@ -379,6 +390,14 @@ _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "err_key": content("data_args routing key changes which traced input is read"),
     "mask_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
+    "model_sigma_frac": content(
+        "fractional model error baked as a constant when no key routes it: its VALUES change "
+        "the traced program, and a float is not array-like, so shape mode cannot key it. "
+        "Per-galaxy values arrive through model_sigma_frac_key, where they do not key the program"
+    ),
+    "model_sigma_frac_key": content(
+        "data_args routing key: whether the model error is wired in at all changes the graph"
+    ),
 }
 
 

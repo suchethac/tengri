@@ -30,7 +30,9 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 C_AA_PER_S = 2.99792458e18
-LYMAN_NM = 91.2
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
+
+BBB_CUT_NM = BBB_BOL_CUT_NM
 COARSE_N = 200
 FINE_N = 5000
 
@@ -117,7 +119,7 @@ def _dense_log_integral(wave_nm: np.ndarray, f: np.ndarray) -> float:
 
 
 def test_grahsp_normalization_is_grid_independent():
-    coarse, fine = _shared_grids(912.0, 1e8)
+    coarse, fine = _shared_grids(10.0 * BBB_CUT_NM, 1e8)
     at_coarse = _grahsp_spectrum(coarse, 12.0)
     at_fine = _grahsp_spectrum(fine, 12.0)[np.searchsorted(fine, coarse)]
     scale = np.max(np.abs(at_coarse))
@@ -141,7 +143,7 @@ def test_grahsp_emits_declared_bolometric_power_on_converged_grid(disc_model):
     declared = 10.0**12.0 * 3.828e33
     l5100 = declared / float(bbb_side_unit_power(params, templates))
     published = evaluate_grahsp_agn(
-        jnp.asarray(np.geomspace(LYMAN_NM, 1.0e6, 400_000)),
+        jnp.asarray(np.geomspace(BBB_CUT_NM, 1.0e6, 400_000)),
         _unit_params(disc_model=disc_model, l5100=l5100),
         templates,
     )
@@ -167,7 +169,7 @@ def test_unit_power_matches_dense_per_component_integrals():
     for disc_model in (None, "netzer"):
         params = _unit_params(disc_model=disc_model)
         if disc_model == "netzer":
-            grid = np.geomspace(LYMAN_NM, float(np.max(templates.disc_wave_nm)), 200_000)
+            grid = np.geomspace(BBB_CUT_NM, float(np.max(templates.disc_wave_nm)), 200_000)
             idx = select_disc_model(
                 templates.disc_m,
                 templates.disc_a,
@@ -183,7 +185,7 @@ def test_unit_power_matches_dense_per_component_integrals():
                 disc_lumin_model=templates.disc_lumin[idx],
             )
         else:
-            grid = np.geomspace(LYMAN_NM, 1.0e10, 200_000)
+            grid = np.geomspace(BBB_CUT_NM, 1.0e10, 200_000)
             disc_dense = floor_disc_xray(
                 jnp.asarray(grid),
                 sbpl_bbb(
@@ -201,7 +203,7 @@ def test_unit_power_matches_dense_per_component_integrals():
         )
 
     params = _unit_params()
-    lines_grid = np.geomspace(LYMAN_NM, 1.0e5, 800_000)
+    lines_grid = np.geomspace(BBB_CUT_NM, 1.0e5, 800_000)
     broad, narrow = gaussian_lines(
         wave_nm=jnp.asarray(lines_grid),
         line_wave_nm=templates.line_wave_nm,
@@ -229,7 +231,7 @@ def test_unit_power_matches_dense_per_component_integrals():
         _dense_log_integral(lines_grid, feii), rel=1e-5
     )
 
-    balmer_grid = np.geomspace(LYMAN_NM, 1.0e6, 400_000)
+    balmer_grid = np.geomspace(BBB_CUT_NM, 1.0e6, 400_000)
     balmer = balmer_continuum(
         wave_nm=jnp.asarray(balmer_grid),
         l5100=1.0,
@@ -257,7 +259,7 @@ def test_normalization_cost_not_above_main():
     """
     from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
-    wave = jnp.asarray(np.geomspace(912.0, 1e8, 2000))
+    wave = jnp.asarray(np.geomspace(10.0 * BBB_CUT_NM, 1e8, 2000))
     flops = _compiled_flops(
         lambda log_lbol: compute_grahsp_sed(wave, agn_log_lbol=log_lbol),
         jnp.asarray(12.0),

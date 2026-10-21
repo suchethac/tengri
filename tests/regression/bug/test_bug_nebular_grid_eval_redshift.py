@@ -764,13 +764,15 @@ class TestContinuumTable:
             return float(continuum_band_at_z(0.0, log_tab, nonzero, lnz, z, lambda s: s)[0])
 
         lo_edge, hi_edge = (float(v) for v in extrapolation_band(lnz_np))
-        # The band edge is the edge cell's line, continued by half a spacing: the
-        # two-node blend with t = -1/2 at the low end and t = 3/2 at the high end.
+        # The band edge is the edge cell continued by half a spacing: the two-node
+        # weight is t = -1/2 at the low end and t = 3/2 at the high end. The value
+        # follows the edge band exponentially with the edge cell's slope (#3042), which
+        # keeps it positive where the linear continuation of a falling band is not.
         t_lo = (lo_edge - lnz_np[0]) / (lnz_np[1] - lnz_np[0])
         t_hi = (hi_edge - lnz_np[-2]) / (lnz_np[-1] - lnz_np[-2])
         assert t_lo == pytest.approx(-0.5) and t_hi == pytest.approx(1.5)
-        expected_lo = (1.0 - t_lo) * tab[0, 0] + t_lo * tab[1, 0]
-        expected_hi = (1.0 - t_hi) * tab[-2, 0] + t_hi * tab[-1, 0]
+        expected_lo = tab[0, 0] * np.exp((tab[1, 0] - tab[0, 0]) / tab[0, 0] * t_lo)
+        expected_hi = tab[-1, 0] * np.exp((tab[-1, 0] - tab[-2, 0]) / tab[-1, 0] * (t_hi - 1.0))
         assert band(float(np.expm1(lo_edge))) == pytest.approx(expected_lo, rel=1e-9)
         assert band(float(np.expm1(hi_edge))) == pytest.approx(expected_hi, rel=1e-9)
         # Beyond the band the read holds at the band edge, not at the end node.

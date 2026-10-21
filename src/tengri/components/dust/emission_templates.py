@@ -2989,7 +2989,10 @@ def _red_end_from_grid_file(path: str) -> GridRedEnd | None:
         m = window & (row > 0.0)
         if int(m.sum()) < 3:
             continue
-        fit = np.polyfit(-np.log10(wave[m]), np.log10(row[m]), 1)
+        # Diagnostic gate on a non-thermal index, not a stored table: it returns a
+        # scalar and no value built here is kept, so a float32 row's log10 platform
+        # dependence (#3067) cannot reach a model output. Rows are widened anyway.
+        fit = np.polyfit(-np.log10(wave[m]), np.log10(np.asarray(row[m], dtype=np.float64)), 1)
         index = min(index, float(fit[0]))
     if not np.isfinite(index):
         return None

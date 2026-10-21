@@ -454,6 +454,8 @@ def build_likelihood_extras(context: InferenceContext):
     list of Likelihood
         Likelihood adapters for constraint terms (line fluxes, spectral indices).
     """
+    import jax.numpy as jnp
+
     from tengri.inference.likelihoods import CensoredLikelihood, GaussianLikelihood
 
     data_args = context.data_args
@@ -461,17 +463,32 @@ def build_likelihood_extras(context: InferenceContext):
     if "line_flux_waves" in data_args:
         # Lines flagged as upper/lower limits enter as censored data
         # points (ln Φ terms), not Gaussian detections at the limit value.
-        if "line_flux_limit_mask" in data_args:
+        # A nebular model error (line_flux_model_sigma_frac) also needs the
+        # censored adapter: it carries the ln sigma_eff term that the plain
+        # Gaussian (-0.5 chi2 only) lacks, and that term keeps the fit from
+        # inflating F_model to inflate its own error.
+        has_model_sigma = "line_flux_model_sigma_frac" in data_args
+        if "line_flux_limit_mask" in data_args or has_model_sigma:
+            if "line_flux_limit_mask" in data_args:
+                limit_mask = data_args["line_flux_limit_mask"]
+                limit_mask_key = "line_flux_limit_mask"
+            else:
+                # No limits: every line is a detection. The zeros are fixed by the
+                # line count, which the likelihood already keys by shape, so they
+                # are baked as a constant and need no data_args entry of their own.
+                limit_mask = jnp.zeros(data_args["line_flux_obs"].shape[0], dtype=jnp.int32)
+                limit_mask_key = None
             extras.append(
                 CensoredLikelihood(
                     obs=data_args["line_flux_obs"],
                     err=data_args["line_flux_err"],
-                    mask=data_args["line_flux_limit_mask"],
+                    mask=limit_mask,
                     channel="line_fluxes",
                     name="line_flux_constraint",
                     obs_key="line_flux_obs",
                     err_key="line_flux_err",
-                    mask_key="line_flux_limit_mask",
+                    mask_key=limit_mask_key,
+                    model_sigma_frac_key="line_flux_model_sigma_frac" if has_model_sigma else None,
                 )
             )
         else:

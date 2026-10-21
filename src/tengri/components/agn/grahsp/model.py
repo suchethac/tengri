@@ -434,7 +434,7 @@ def compute_grahsp_sed(
                 / (l_bol_bbb / l5100_unit)
 
     where ``l_bol_bbb / l5100_unit`` is the bolometric correction of the
-    accretion luminosity (the BBB, lines and FeII above 91.2 nm; the paper's
+    accretion luminosity (the BBB, lines and FeII above 91.1753 nm; the paper's
     ``lumBolBBB``) measured on a unit-``l5100`` evaluation. The torus
     luminosity is not added: it is reprocessed accretion light. Upstream
     GRAHSP keeps ``lumBolBBB`` and ``lumBolTOR`` separate.
@@ -583,7 +583,7 @@ agn_grahsp_hot_fcov
         # value this function's internals use.
         l5100 = 10.0**agn_grahsp_log_l5100
     else:
-        # The accretion luminosity: everything but the torus above 91.2 nm (the paper's
+        # The accretion luminosity: everything but the torus above 91.1753 nm (the paper's
         # lumBolBBB). The torus re-radiates absorbed accretion light, so adding it here
         # would count that light twice and make l5100 depend on fcov.
         l_bol_unit = bbb_side_unit_power(unit_params, templates)

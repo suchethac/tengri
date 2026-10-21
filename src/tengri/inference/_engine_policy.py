@@ -235,6 +235,11 @@ ENGINE_POLICY: KeyPolicy = {
         "eline-amplitude-fitted merge (_init_eline_arrays) reassigns fitter.spec"
     ),
     "use_components": content("orchestrator-vs-legacy predict path is a different graph"),
+    "line_model_sigma": content(
+        "whether the measured line-flux likelihood carries the model's per-line error: it "
+        "decides if line_flux_model_sigma_frac is packed into data_args, which changes the "
+        "likelihood class and the data_arg key set"
+    ),
     "_free_names": content("which parameters are latent determines the unravel structure"),
     "_bounds": content(
         "per-free-parameter (lo, hi) bounds; redundant with the 'priors' tail row's "
@@ -418,6 +423,7 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_eline_constraint_matrix": exclude(_STRUCTURE_REASON),
     "_eline_amplitude_names": exclude(_STRUCTURE_REASON),
     "_eline_amp_priors": exclude(_STRUCTURE_REASON),
+    "line_model_sigma": exclude(_STRUCTURE_REASON),
     "_line_flux_override": exclude(_STRUCTURE_REASON),
     "_extra_log_prior": exclude(_STRUCTURE_REASON),
 }

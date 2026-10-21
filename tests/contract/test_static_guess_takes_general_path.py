@@ -155,6 +155,10 @@ ALLOWLIST: dict[str, str] = {
         "GAP (documented #2832): traced components count as 2000 km/s via the bound; a traced "
         "grid pads by n - 1 (general)"
     ),
+    "components/agn/_torus_inclination.py::inclination_quadrature_in": (
+        "GAP: traced nodes skip the ascending-order check; every library's loader builds its "
+        "inclination axis ascending on the host, so the traced axis is that one (documented)"
+    ),
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "
         "traced values at build (documented)"
