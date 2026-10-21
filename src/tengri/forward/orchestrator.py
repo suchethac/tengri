@@ -198,6 +198,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar, age-resolved tensors (hard needs for nebular / dust2c)
     "L_age": "erg/s",
     "lnu_age": "erg/s/Hz",
+    "lnu_interval": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
     "age_weights_surviving": "Msun",
@@ -1029,16 +1030,28 @@ def wire_age_boundaries(components: Iterable[SEDComponent]) -> list[SEDComponent
             f"attenuators in one chain request different age boundaries: {sorted(requests)}"
         )
     ((boundaries, width),) = requests
+    # An attenuator evaluating its age mixture as interval sums
+    # (``age_mixture='grouped'``) reads the stellar component's per-interval
+    # spectra instead of the per-age cube.
+    grouped = any(
+        getattr(getattr(c, "config", None), "age_mixture", "per_node") == "grouped"
+        for c in components
+        if not isinstance(c, StellarSEDComponent)
+    )
     wired = []
     for c in components:
         if isinstance(c, StellarSEDComponent) and (
             tuple(c.config.age_boundaries_yr) != boundaries
             or float(c.config.age_boundary_width_dex) != width
+            or bool(c.config.publish_interval_spectra) != grouped
         ):
             c = replace(
                 c,
                 config=replace(
-                    c.config, age_boundaries_yr=boundaries, age_boundary_width_dex=width
+                    c.config,
+                    age_boundaries_yr=boundaries,
+                    age_boundary_width_dex=width,
+                    publish_interval_spectra=grouped,
                 ),
             )
         wired.append(c)

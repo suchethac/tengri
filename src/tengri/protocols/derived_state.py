@@ -96,6 +96,12 @@ class DerivedState:
     #: genuinely emits nothing, ``+inf`` that the input was corrupt (#1527).
     log_L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
+    #: Per-age-interval L_nu [erg/s/Hz], shape (n_interval, n_wave):
+    #: ``sum_a F_j(a) lnu_age(a)`` for the stellar component's
+    #: ``age_boundaries_yr`` (``F_j`` from ``age_boundary_younger_fraction``).
+    #: Published only when an attenuator asks for its grouped age mixture
+    #: (``StellarSEDComponentConfig.publish_interval_spectra``).
+    lnu_interval: jnp.ndarray | None = None
     # DSPS joint (metallicity, age) weights and the total_mass x L_sun scaling,
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.

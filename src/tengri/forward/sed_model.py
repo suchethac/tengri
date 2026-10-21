@@ -4727,6 +4727,9 @@ class SEDModel:
         self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
         self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
+        # Evaluation order of the two-component age mixture (same model; a
+        # different graph). See DustSEDComponentConfig.age_mixture.
+        self._dust_age_mixture = str(getattr(spec, "dust_age_mixture", "per_node"))
         # Young/old split: birth-cloud dispersal age [yr] and the dispersal width
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
@@ -13391,6 +13394,7 @@ class SEDModel:
             dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
             dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
+            dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
