@@ -473,7 +473,8 @@ def fritz_sed_from_grid(
     :math:`f L_{\rm bol}\,P(\mu)/\bar P`, the library's own anisotropy (measured on the
     shipped grid: the equatorial record carries 0.06 to 0.98, median 0.52, of the polar
     record's dust power). The sphere mean is the Gauss-Legendre quadrature of
-    ``_torus_inclination.torus_lnu_sphere_normalized`` over the ``psy`` panels, on the same node-exact PCHIP lookup that gives the sightline.
+    ``_torus_inclination.torus_lnu_sphere_normalized`` over the ``psy`` panels, on the same
+    node-exact PCHIP lookup that gives the sightline.
 
     Without ``norm`` the records keep their own scales (each carries unit power), so the
     torus power is :math:`f L_{\rm bol}` along every sightline.
