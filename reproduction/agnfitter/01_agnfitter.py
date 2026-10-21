@@ -1273,8 +1273,8 @@ for _name in ("NK08_2P", "NK08_3P", "SKIRTOR_MEAN1P", "SKIRTOR_MEAN2P", "CAT3D_L
 _reduction_pairs = [
     ("NK08_2P", lambda incl, oa: B.torus("nenkova_agnfitter_2p", agn_cos_inc=np.cos(np.deg2rad(incl)), agn_oa_nenkova=oa), dict(incl=30.0, oa=40.0)),
     ("NK08_3P", lambda incl, oa, tau: B.torus("nenkova_agnfitter_3p", agn_cos_inc=np.cos(np.deg2rad(incl)), agn_oa_nenkova=oa, agn_tv_nenkova=tau), dict(incl=30.0, oa=40.0, tau=60.0)),
-    ("SKIRTOR_MEAN1P", lambda incl: B.torus("skirtor_agnfitter_1p", agn_incl_skirtor=incl), dict(incl=30.0)),
-    ("SKIRTOR_MEAN2P", lambda oa, incl: B.torus("skirtor_agnfitter_2p", agn_oa_skirtor=oa, agn_incl_skirtor=incl), dict(oa=40.0, incl=30.0)),
+    ("SKIRTOR_MEAN1P", lambda incl: B.torus("skirtor_agnfitter_1p", agn_cos_inc=np.cos(np.deg2rad(incl))), dict(incl=30.0)),
+    ("SKIRTOR_MEAN2P", lambda oa, incl: B.torus("skirtor_agnfitter_2p", agn_oa_skirtor=oa, agn_cos_inc=np.cos(np.deg2rad(incl))), dict(oa=40.0, incl=30.0)),
     ("CAT3D_LOWFWD", lambda incl, a, fwd: B.torus("cat3d_wind_lowfwd", agn_cos_inc=np.cos(np.deg2rad(incl)), agn_a_cat3d_lowfwd=a, agn_fwd_cat3d_lowfwd=fwd), dict(incl=0.0, a=-2.0, fwd=0.3)),
 ]
 _reduction_rows, _reduction_curves = [], {}
@@ -1334,7 +1334,7 @@ for oi, ii, ti in sk_triples:
     incl = float(sk_axes["incl"][ii])
     tau = float(sk_axes["tau"][ti])
     w_a, L_a = A.torus_template("SKIRTOR", oa=oa, incl=incl, tau=tau)
-    w_t, L_t = B.torus("skirtor_agnfitter", oa_skirtor=oa, incl_skirtor=incl, tv_skirtor=tau)
+    w_t, L_t = B.torus("skirtor_agnfitter", oa_skirtor=oa, cos_inc=float(np.cos(np.deg2rad(incl))), tv_skirtor=tau)
     label = f"SKIRTOR ({oi},{ii},{ti})"
     a_n, t_n = norm_peak(L_a), norm_peak(L_t)
     assert_comparable(a_n, t_n, name=f"§3 {label}")

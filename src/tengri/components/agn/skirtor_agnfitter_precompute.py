@@ -31,7 +31,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    accepts_retired_incl_skirtor,
+    cos_inc_axis_from_incl,
+)
 from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import (
@@ -45,10 +49,11 @@ from tengri.utils.grid_interp import (
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
-# oa (half-opening angle), incl (inclination), tv (optical depth).
+# oa (half-opening angle), the inclination keyed by the model's one agn_cos_inc
+# (the degree axis re-keyed by ascending cos i), tv (optical depth).
 AXIS_PARAMS: tuple[str, ...] = (
     "agn_oa_skirtor",
-    "agn_incl_skirtor",
+    "agn_cos_inc",
     "agn_tv_skirtor",
 )
 
@@ -136,6 +141,7 @@ def precompute_skirtor_agnfitter_photometry(
                 integral = native_bolometric_nu_np(template, wave_grid)
                 integral_safe = max(abs(integral), 1e-100)
                 lnu_grid[i_oa, i_incl, i_tv] = _LSUN_ERG * template / integral_safe
+    lnu_grid, cos_inc_axis = cos_inc_axis_from_incl(lnu_grid, incl_axis, axis=1)
 
     preint = precompute_template_photometry(
         templates=lnu_grid,
@@ -144,14 +150,14 @@ def precompute_skirtor_agnfitter_photometry(
         filter_trans=[np.asarray(ft) for ft in filter_trans],
         redshift=redshift,
         dl_cm=1.0,
-        axes=(oa_axis, incl_axis, tv_axis),
+        axes=(oa_axis, cos_inc_axis, tv_axis),
         energy_normalize=False,  # templates already normalized per L_sun
         units="lnu",
     )
 
     axes_jax = (
         jnp.asarray(oa_axis),
-        jnp.asarray(incl_axis),
+        jnp.asarray(cos_inc_axis),
         jnp.asarray(tv_axis),
     )
     return {
@@ -174,7 +180,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``fn(agn_log_lbol, agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor,
+        ``fn(agn_log_lbol, agn_oa_skirtor, agn_cos_inc, agn_tv_skirtor,
         agn_torus_frac, **_) -> photometry [erg/s/Hz]``.
         Output has the same shape as ``precomp["grid_phot"][:, :, :, :]``
         but along the filter axis.
@@ -188,10 +194,11 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     grid_jax = jnp.asarray(grid_phot)
 
+    @accepts_retired_incl_skirtor
     def skirtor_agnfitter_photometry(
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_oa_skirtor: float = 40.0,
-        agn_incl_skirtor: float = 30.0,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_tv_skirtor: float = 7.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -204,8 +211,10 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
             ``log10(L_bol / L_sun)``. Default 11.0.
         agn_oa_skirtor : float
             Half-opening angle [deg]. Default 40.0.
-        agn_incl_skirtor : float
-            Inclination [deg]. Default 30.0.
+        agn_cos_inc : float
+            :math:`\cos i`, the model's one inclination (1 = face-on)
+            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis is
+            stored as ascending ``cos i``.
         agn_tv_skirtor : float
             Equatorial optical depth τ_9.7. Default 7.0.
         agn_torus_frac : float
@@ -229,7 +238,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         phot = interp_nd_pchip(
             grid_jax,
             axes,
-            (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
+            (agn_oa_skirtor, agn_cos_inc, agn_tv_skirtor),
         )
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do

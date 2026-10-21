@@ -812,7 +812,9 @@ from tengri.observation.photometry import lnu_filter_integral
 
 def _grid_torus_specs() -> list[dict]:
     """One entry per grid-torus adapter: (name, modules, loader/sed_fn names,
-    grid path, axis kwarg names in ``grid.axes`` order)."""
+    grid path, axis kwarg names in ``grid.axes`` order, and ``deg_axes``: the axes
+    the runtime grid stores as an inclination in degrees while the kwarg is its
+    cosine, ``agn_cos_inc``)."""
     return [
         dict(
             name="nenkova_agnfitter_2p",
@@ -839,7 +841,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_1p_grid",
             sed_fn="skirtor_agnfitter_1p_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean1p_torus_grid.h5",
-            axis_kwargs=("agn_incl_skirtor",),
+            axis_kwargs=("agn_cos_inc",),
+            deg_axes=(0,),
         ),
         dict(
             name="skirtor_agnfitter_2p",
@@ -848,7 +851,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_2p_grid",
             sed_fn="skirtor_agnfitter_2p_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean2p_torus_grid.h5",
-            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor"),
+            axis_kwargs=("agn_oa_skirtor", "agn_cos_inc"),
+            deg_axes=(1,),
         ),
         dict(
             name="cat3d_wind_lowfwd",
@@ -875,7 +879,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_grid",
             sed_fn="skirtor_agnfitter_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean3p_torus_grid.h5",
-            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor", "agn_tv_skirtor"),
+            axis_kwargs=("agn_oa_skirtor", "agn_cos_inc", "agn_tv_skirtor"),
+            deg_axes=(1,),
         ),
     ]
 
@@ -900,6 +905,14 @@ def _node_and_offnode(grid):
         else:
             offnode_vals.append(float(ax[j]))
     return node_vals, tuple(offnode_vals)
+
+
+def _kwarg_values(spec, values):
+    """Runtime-grid axis values as the kwargs take them: ``cos`` of a degree inclination."""
+    deg_axes = spec.get("deg_axes", ())
+    return tuple(
+        float(np.cos(np.radians(v))) if i in deg_axes else v for i, v in enumerate(values)
+    )
 
 
 def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans):
@@ -976,7 +989,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
         loader = getattr(runtime_mod, spec["loader"])
         sed_fn = getattr(runtime_mod, spec["sed_fn"])
         grid = loader(str(spec["grid_path"]))
-        node_vals, _ = _node_and_offnode(grid)
+        node_vals = _kwarg_values(spec, _node_and_offnode(grid)[0])
         waves, trans = grid_torus_filters
 
         exact = _exact_grid_torus_photometry(
@@ -996,7 +1009,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
         loader = getattr(runtime_mod, spec["loader"])
         sed_fn = getattr(runtime_mod, spec["sed_fn"])
         grid = loader(str(spec["grid_path"]))
-        _, offnode_vals = _node_and_offnode(grid)
+        offnode_vals = _kwarg_values(spec, _node_and_offnode(grid)[1])
         waves, trans = grid_torus_filters
 
         exact = _exact_grid_torus_photometry(

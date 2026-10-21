@@ -211,7 +211,9 @@ def make_agn_builders(ssp, sfh, no_dust):
 
     def disc_atten(disc_type, atten_type, ebv, **atten_params):
         """Disc SED with a named ``atten`` law at a given E(B-V)."""
-        atten = {"type": atten_type, "ebv": Fixed(ebv)}
+        atten = {"type": atten_type}
+        if atten_type != "none":
+            atten["ebv"] = Fixed(ebv)
         atten.update({k: Fixed(v) for k, v in atten_params.items()})
         agn = _agn({"type": disc_type, "all_params": Fixed(DEFAULT)}, {"type": "none"}, 11.0)
         agn["atten"] = atten

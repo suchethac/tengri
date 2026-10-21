@@ -28,7 +28,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    accepts_retired_incl_skirtor,
+    cos_inc_axis_from_incl,
+)
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.skirtor_agnfitter_1p import (
     TORUS_INCLINATION,
@@ -45,8 +49,9 @@ from tengri.utils.grid_interp import (
 )
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
-# SKIRTOR_mean_1p grid parametrized by inclination only (degrees).
-AXIS_PARAMS: tuple[str, ...] = ("agn_incl_skirtor",)
+# SKIRTOR_mean_1p grid parametrized by inclination only, keyed by the model's one
+# inclination agn_cos_inc (the library's degree axis re-keyed by ascending cos i).
+AXIS_PARAMS: tuple[str, ...] = ("agn_cos_inc",)
 
 
 def precompute_skirtor_agnfitter_1p_photometry(
@@ -82,7 +87,7 @@ def precompute_skirtor_agnfitter_1p_photometry(
         ``grid_phot`` : ndarray, shape (n_incl, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
         ``axes`` : tuple of 1 grid array (jnp.ndarray)
-            Grid axis (incl, degrees).
+            Grid axis (cos i, ascending).
         ``_preint`` : PreintegratedGrid
             Internal preintegration data structure.
 
@@ -104,7 +109,9 @@ def precompute_skirtor_agnfitter_1p_photometry(
     # as the runtime path normalizes the records (skirtor_agnfitter_1p.TORUS_INCLINATION).
     runtime_grid = load_skirtor_agnfitter_1p_grid(grid_path)
     scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
-    lnu_grid = _LSUN_ERG * grid * scale[..., None]
+    lnu_grid, cos_inc_axis = cos_inc_axis_from_incl(
+        _LSUN_ERG * grid * scale[..., None], incl_axis, axis=0
+    )
 
     preint = precompute_template_photometry(
         templates=lnu_grid,
@@ -113,12 +120,12 @@ def precompute_skirtor_agnfitter_1p_photometry(
         filter_trans=[np.asarray(ft) for ft in filter_trans],
         redshift=redshift,
         dl_cm=1.0,
-        axes=(incl_axis,),
+        axes=(cos_inc_axis,),
         energy_normalize=False,  # templates already normalized per L_sun
         units="lnu",
     )
 
-    axes_jax = (jnp.asarray(incl_axis),)
+    axes_jax = (jnp.asarray(cos_inc_axis),)
     return {
         "grid_phot": preint.phot,
         "axes": axes_jax,
@@ -139,7 +146,7 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``fn(agn_log_lbol, agn_incl_skirtor, agn_torus_frac, **_)
+        ``fn(agn_log_lbol, agn_cos_inc, agn_torus_frac, **_)
         -> photometry [erg/s/Hz]``.
 
     Notes
@@ -151,9 +158,10 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
 
     grid_jax = jnp.asarray(grid_phot)
 
+    @accepts_retired_incl_skirtor
     def skirtor_agnfitter_1p_photometry(
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_incl_skirtor: float = 30.0,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -163,8 +171,10 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
         ----------
         agn_log_lbol : float
             ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_incl_skirtor : float
-            Inclination [deg]. Default 30.0.
+        agn_cos_inc : float
+            :math:`\cos i`, the model's one inclination (1 = face-on)
+            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis is
+            stored as ascending ``cos i``.
         agn_torus_frac : float
             Torus reprocessing fraction. Default 0.5.
 
@@ -179,7 +189,7 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
 
         **Gradient-safe**: yes, node-exact PCHIP is C¹ differentiable.
         """
-        phot = interp_nd_pchip(grid_jax, axes, (agn_incl_skirtor,))
+        phot = interp_nd_pchip(grid_jax, axes, (agn_cos_inc,))
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
         # not multiply it in again here (fix round 1: this double-counted

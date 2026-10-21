@@ -81,7 +81,8 @@ def _sed(ssp, torus: dict) -> np.ndarray:
         # while the grid never did.
         ("silva04", "log_nh_silva", 21.5, 24.45),
         ("skirtor_agnfitter", "oa_skirtor", 20.0, 70.0),
-        ("skirtor_agnfitter", "incl_skirtor", 10.0, 80.0),
+        # The inclination is the AGN's one agn_cos_inc, read by the torus and the
+        # disc alike: test_bug_3085_skirtor_agnfitter_cos_inc.py pins it.
         ("skirtor_agnfitter", "tv_skirtor", 3.0, 11.0),
     ],
 )
@@ -141,7 +142,7 @@ def test_skirtor_agnfitter_runtime_normalized():
             wave,
             agn_log_lbol=12.0,
             agn_oa_skirtor=40.0,
-            agn_incl_skirtor=30.0,
+            agn_cos_inc=float(np.cos(np.radians(30.0))),
             agn_tv_skirtor=7.0,
             agn_torus_frac=1.0,
         )

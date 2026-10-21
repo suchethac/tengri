@@ -97,6 +97,7 @@ True
 from __future__ import annotations
 
 import difflib
+import math
 import warnings
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
@@ -150,7 +151,7 @@ from tengri.parameters.agn_ownership import (  # noqa: F401
     cigale_spelling_hint,
 )
 from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
-from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
+from tengri.parameters.priors import Distribution, Fixed, Uniform, _is_default_fixed
 from tengri.parameters.sentinels import (
     DEFAULT,
     FREE,
@@ -7307,6 +7308,60 @@ def _agn_fritz_psy_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: The retired SKIRTOR-AGNfitter inclination (owner ruling #2605, #3085): the
+#: ``skirtor_agnfitter{,_1p,_2p}`` tori were keyed by their own angle in degrees
+#: while the disc screen read ``agn_cos_inc``, so a model saw its torus and its
+#: disc along two sightlines. The library's inclination is derived from the one
+#: inclination, i = arccos(agn_cos_inc).
+_AGN_INCL_SKIRTOR_KEYS: frozenset[str] = frozenset({"agn_incl_skirtor", "incl_skirtor"})
+
+
+def _incl_skirtor_translation(value) -> str:
+    """The closing ``agn_cos_inc`` entry for a retired ``agn_incl_skirtor`` value, when known."""
+
+    def _cos(deg) -> float:
+        return round(math.cos(math.radians(float(deg))), 6)
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"'cos_inc': Fixed({_cos(value)!r})}}"
+    if isinstance(value, Fixed) and isinstance(value.value, (int, float)):
+        return f"'cos_inc': Fixed({_cos(value.value)!r})}}"
+    if isinstance(value, Uniform):
+        return (
+            f"'cos_inc': Uniform({_cos(value.hi)!r}, {_cos(value.lo)!r})}}  "
+            f"# the same sightlines; a Uniform in cos i is not uniform in degrees"
+        )
+    return "'cos_inc': Fixed(cos(radians(incl)))}"
+
+
+def _agn_incl_skirtor_retired_error(group: str, key: str, value) -> ValueError:
+    """The one message the retired ``agn_incl_skirtor`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.torus'``, ...).
+    key : str
+        The spelling the caller wrote.
+    value : object
+        What the caller wrote for it; a number, ``Fixed`` or ``Uniform`` is translated.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement parameter, the mapping and the translated entry.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) is retired (#3085): the AGN has one "
+        f"inclination, 'agn_cos_inc' (cos i, i from the polar axis), read by the torus, the "
+        f"disc screen and the X-ray corona alike (#2605). The SKIRTOR-AGNfitter tori "
+        f"(skirtor_agnfitter, skirtor_agnfitter_1p, skirtor_agnfitter_2p) key their 0-90 deg "
+        f"inclination axis at i = arccos(agn_cos_inc). Give the inclination at the top of the "
+        f"agn group:\n"
+        f"  agn={{'type': 'composable', ..., {_incl_skirtor_translation(value)}"
+    )
+
+
 #: The retired absolute Lyman-continuum dust-absorption fraction (owner
 #: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
 #: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
@@ -7479,6 +7534,10 @@ def _check_dict_keys(
         # intercepted in every group; the one inclination is agn_cos_inc.
         if key in _AGN_FRITZ_PSY_KEYS or (key == "psy" and str(group).endswith("torus")):
             raise _agn_fritz_psy_retired_error(group, str(key))
+        # #3085 (owner ruling #2605): the retired SKIRTOR-AGNfitter angle,
+        # likewise intercepted in every group.
+        if key in _AGN_INCL_SKIRTOR_KEYS:
+            raise _agn_incl_skirtor_retired_error(group, str(key), user_dict[key])
         # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
         # before the generic resolver reaches it -- it was always written
         # under the 'neb' group, so no cross-group form is needed here.

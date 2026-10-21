@@ -444,6 +444,17 @@ exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps
 `DeprecationWarning` alias through v0.x because the component accepted it as a plain mapping
 key that could not be intercepted at the call site.
 
+**One inclination (#2605, #3085).** Every torus reads the AGN's one inclination, `agn_cos_inc`
+(`cos i`, `i` from the polar axis, 1 = face-on), as the disc screen and the X-ray corona do.
+A library tabulated in another angle derives it: Fritz et al. 2006 at the elevation
+`psi = 90 deg - i`, and the AGNfitter-rX SKIRTOR reductions (`skirtor_agnfitter`, `_1p`,
+`_2p`) at `i = arccos(agn_cos_inc)` on their 0-90 deg axis. No torus declares an angle of
+its own. The retired `agn_incl_skirtor` [deg] is refused by the grammar (in any group, as
+`incl_skirtor` or `agn_incl_skirtor`) and by `model.predict`, each naming the `agn_cos_inc`
+translation; the kernel and block functions accept it through v0.x as a `DeprecationWarning`
+alias for `agn_cos_inc = cos(radians(agn_incl_skirtor))` and refuse a call that passes both
+with different sightlines.
+
 ---
 
 ## 5. Inference Method Names

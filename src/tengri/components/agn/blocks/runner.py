@@ -61,6 +61,7 @@ from tengri.components.agn._lbol_reference import (
     rescale,
 )
 from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
+from tengri.components.agn._skirtor_agnfitter_sightline import resolve_retired_incl_skirtor
 from tengri.components.agn.blocks._grahsp_recipe import grahsp_recipe_log_l5100
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
@@ -745,6 +746,9 @@ agn_torus_block, agn_attenuation_block : str
     (e.g. α_ox in X-ray corona).
     """
     wave = jnp.asarray(wavelength)
+    # One inclination for every block (#2605): a retired SKIRTOR-AGNfitter angle becomes
+    # agn_cos_inc here, before the disc mask and the torus read it (#3085).
+    params = resolve_retired_incl_skirtor(params, caller="compose_l_nu()")
 
     # Apply float32 reference evaluation guard (#1206, #2321): when operating
     # in pure float32, pass a reference luminosity to blocks to avoid overflow,
