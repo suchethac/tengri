@@ -194,4 +194,5 @@ def test_log_sed_gradient_is_finite_in_the_far_ultraviolet(fritz):
     sed = mod.fritz_sed_from_grid(grid, wave, agn_fritz_psy=45.0, agn_fritz_oa=40.0, **_KW)
     assert np.all(np.asarray(sed) > 0.0)
     grad = np.asarray(jax.grad(objective)(params))
-    assert np.all(np.isfinite(grad)), grad
+    assert np.all(np.isfinite(grad)), f"NaN/inf gradient of the far-UV log torus: {grad}"
+    assert np.any(grad != 0.0), f"the far-UV log torus does not respond to its shape: {grad}"
