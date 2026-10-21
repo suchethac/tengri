@@ -57,9 +57,12 @@ _OBS = Observation(
     )
 )
 
-# Exact-path flux of the optical band (index 0) on this configuration, as measured
-# on ``main`` before the fix. Nothing below the edge moves, so it must hold to 1e-10.
-_OPT_EXACT_MAIN = 3.8029878990438525e-27
+# Exact-path flux of the optical band (index 0) on this configuration. Nothing below
+# the edge moves, so it must hold to 1e-10.
+# #3059: the closed t_obs endpoint's trapezoid half-panel is now included on every
+# platform (was dropped on macOS arm64 by a 28-ulp round trip); 3.80298790e-27 ->
+# 3.799456754378686e-27, -9.3e-4. The new value is bit-identical to Linux CI's.
+_OPT_EXACT_MAIN = 3.799456754378686e-27
 
 
 def _build(ssp, approx):
