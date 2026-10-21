@@ -37,6 +37,7 @@ from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import pow10
 
 __all__ = [
+    "blend_z_nonneg",
     "continuum_band_at_z",
     "continuum_band_from_slab",
     "continuum_z_slab",
@@ -312,10 +313,13 @@ def continuum_z_slab(log_table, lnz_grid, redshift):
 def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     """Lower node index and upper-node weight of ``ln(1+z)`` on the grid.
 
-    Weight linear in :math:`\\ln(1+z)` and clipped to [0, 1]: the table is not
-    extrapolated. With ``extrapolate=True`` the edge cell's line continues past
-    the table ends (the shared ``z_bracket`` of the z-response module). A
-    one-node grid returns ``(0, 0.0)``.
+    Weight linear in :math:`\\ln(1+z)`. By default it is clipped to [0, 1], so a
+    redshift outside the table holds the end node. With ``extrapolate=True`` it is
+    the shared ``z_bracket`` weight of the z-response module: the edge cell's
+    weight continues past the table ends for half an end spacing, to
+    :math:`[-0.5, 1.5]`, then holds. A one-node grid returns ``(0, 0.0)``. The
+    band blends that read the weight (:func:`blend_z_nonneg`) keep a band
+    non-negative across the continued cell.
     """
     n_z = lnz_grid.shape[0]
     if n_z == 1:
@@ -335,10 +339,61 @@ def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     return i, w
 
 
+def blend_z_nonneg(b0, b1, weight):
+    r"""Blend two non-negative table rows at a bracket weight that may leave [0, 1].
+
+    Inside the cell (:math:`0 \le t \le 1`) this is the linear blend
+    :math:`(1 - t)\,b_0 + t\,b_1`, unchanged to the bit. Past an end node the
+    cell's line would go negative wherever the band falls steeply, so the
+    continuation is exponential in the edge band instead,
+
+    .. math::
+
+        b(t) = b_e \exp\!\left(\frac{b_1 - b_0}{b_e}\,(t - t_e)\right),
+
+    with :math:`b_e` the edge band and :math:`t_e` its weight (0 below the
+    table, 1 above). The value and the first derivative in :math:`t` are
+    continuous at the node, the value is positive, and the derivative is nonzero
+    across the continued cell. A band that is exactly zero at the edge node has no
+    scale to continue: it keeps the linear value floored at zero.
+
+    Parameters
+    ----------
+    b0, b1 : ndarray, shape (..., n_filter)
+        Band :math:`L_\nu` at the lower and upper bracketing nodes, non-negative
+        [erg/s/Hz].
+    weight : float or ndarray, shape ()
+        Upper-node weight :math:`t`, in :math:`[-0.5, 1.5]`. [dimensionless]
+
+    Returns
+    -------
+    ndarray, shape (..., n_filter)
+        The blended band [erg/s/Hz], non-negative.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: every branch is evaluated on safe operands, so the
+    gradient is finite where the edge band is zero. The exponent never exceeds
+    0.5, since :math:`(b_1 - b_0)/b_e \le 1` in the direction of continuation.
+    """
+    linear = (1.0 - weight) * b0 + weight * b1
+    below = weight < 0.0
+    above = weight > 1.0
+    beyond = below | above
+    edge = jnp.where(below, b0, b1)
+    offset = jnp.where(below, weight, jnp.where(above, weight - 1.0, 0.0))
+    lit = edge > 0.0
+    safe = jnp.where(lit, edge, 1.0)
+    exponent = jnp.clip((b1 - b0) / safe * offset, -80.0, 0.5)
+    continued = jnp.where(lit, safe * jnp.exp(exponent), jnp.maximum(linear, 0.0))
+    return jnp.where(beyond, continued, linear)
+
+
 def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):
     r"""Blend the two interpolated table rows into the continuum band.
 
-    The blend is linear because the continuum is exactly zero below the 915
+    The blend is linear inside the table (see :func:`blend_z_nonneg` for the
+    continuation past its end nodes) because the continuum is exactly zero below the 915
     Angstrom truncation: interpolating a floored log between a zero and a finite
     node would invent flux at the edge. Exponentiation comes first, so a band
     that is zero at one node stays zero there.
@@ -368,7 +423,7 @@ def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):
         return pow10(jnp.asarray(log_nion) + log_bands[0]) * keep[0]
     keep2 = jax.lax.dynamic_slice_in_dim(keep, lower, 2, axis=0)
     bands = pow10(jnp.asarray(log_nion) + log_bands) * keep2
-    return (1.0 - weight) * bands[0] + weight * bands[1]
+    return blend_z_nonneg(bands[0], bands[1], weight)
 
 
 def continuum_band_at_z(log_nion, log_table, keep, lnz_grid, redshift, node_interp):

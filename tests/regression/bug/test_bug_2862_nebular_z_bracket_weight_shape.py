@@ -79,9 +79,13 @@ def test_the_blended_continuum_band_keeps_the_filter_shape_under_jit_and_grad(z)
     band = jax.jit(_band)(z)
     chex.assert_shape(band, (_LOG_TABLE.shape[1],))
     t = _expected_t(z)
-    expected = (1.0 - t) * 10.0 ** np.asarray(_LOG_TABLE[1]) + t * 10.0 ** np.asarray(
-        _LOG_TABLE[2]
-    )
+    b0, b1 = 10.0 ** np.asarray(_LOG_TABLE[1]), 10.0 ** np.asarray(_LOG_TABLE[2])
+    if t <= 1.0:
+        expected = (1.0 - t) * b0 + t * b1
+    else:
+        # Past the last node the continuation is exponential in the edge band with
+        # the edge cell's slope (#3042), so a falling band cannot go negative.
+        expected = b1 * np.exp((b1 - b0) / b1 * (t - 1.0))
     np.testing.assert_allclose(np.asarray(band), expected, rtol=1e-12)
 
     dz = float(jax.grad(lambda zz: jnp.sum(_band(zz)))(jnp.asarray(z)))
