@@ -7322,6 +7322,10 @@ def _incl_skirtor_translation(value) -> str:
     def _cos(deg) -> float:
         return round(math.cos(math.radians(float(deg))), 6)
 
+    if value is FREE:
+        return "'cos_inc': FREE}  # frees the one inclination, for the disc and torus alike"
+    if _is_default_fixed(value):
+        return "'cos_inc': Fixed(DEFAULT)}"
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return f"'cos_inc': Fixed({_cos(value)!r})}}"
     if isinstance(value, Fixed) and isinstance(value.value, (int, float)):
@@ -7357,7 +7361,7 @@ def _agn_incl_skirtor_retired_error(group: str, key: str, value) -> ValueError:
         f"disc screen and the X-ray corona alike (#2605). The SKIRTOR-AGNfitter tori "
         f"(skirtor_agnfitter, skirtor_agnfitter_1p, skirtor_agnfitter_2p) key their 0-90 deg "
         f"inclination axis at i = arccos(agn_cos_inc). Give the inclination at the top of the "
-        f"agn group:\n"
+        f"agn group (a torus-level 'all_params': FREE does not free it):\n"
         f"  agn={{'type': 'composable', ..., {_incl_skirtor_translation(value)}"
     )
 

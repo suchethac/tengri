@@ -439,10 +439,12 @@ not publish them yet: the kernel seam is `torus_ledger_from_grid` in
 wiring is #3076.
 
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
-and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
-exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a
-`DeprecationWarning` alias through v0.x because the component accepted it as a plain mapping
-key that could not be intercepted at the call site.
+and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. There are
+two exceptions, each keeping a `DeprecationWarning` alias through v0.x because the retired
+name travels as a plain mapping key that cannot be intercepted at a call signature:
+#2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, and #3085's `agn_incl_skirtor`, which
+reaches the SKIRTOR-AGNfitter kernels and blocks inside the composable runner's `params`
+mapping (see "One inclination" below).
 
 **One inclination (#2605, #3085).** Every torus reads the AGN's one inclination, `agn_cos_inc`
 (`cos i`, `i` from the polar axis, 1 = face-on), as the disc screen and the X-ray corona do.

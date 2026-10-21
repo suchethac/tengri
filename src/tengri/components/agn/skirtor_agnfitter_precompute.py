@@ -33,8 +33,10 @@ import numpy as np
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._skirtor_agnfitter_sightline import (
+    AXIS_TRANSFORMS,
     accepts_retired_incl_skirtor,
-    cos_inc_axis_from_incl,
+    free_incl_position,
+    skirtor_incl_from_cos_inc,
 )
 from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
@@ -49,8 +51,10 @@ from tengri.utils.grid_interp import (
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
-# oa (half-opening angle), the inclination keyed by the model's one agn_cos_inc
-# (the degree axis re-keyed by ascending cos i), tv (optical depth).
+# oa (half-opening angle), incl (inclination), tv (optical depth).
+# The inclination axis is tabulated in degrees from the polar axis, as the runtime
+# kernel reads it, and governed by the model's one inclination agn_cos_inc: lookups
+# and the Fixed-axis collapse read it at i = arccos(agn_cos_inc) (AXIS_TRANSFORMS).
 AXIS_PARAMS: tuple[str, ...] = (
     "agn_oa_skirtor",
     "agn_cos_inc",
@@ -141,7 +145,6 @@ def precompute_skirtor_agnfitter_photometry(
                 integral = native_bolometric_nu_np(template, wave_grid)
                 integral_safe = max(abs(integral), 1e-100)
                 lnu_grid[i_oa, i_incl, i_tv] = _LSUN_ERG * template / integral_safe
-    lnu_grid, cos_inc_axis = cos_inc_axis_from_incl(lnu_grid, incl_axis, axis=1)
 
     preint = precompute_template_photometry(
         templates=lnu_grid,
@@ -150,14 +153,14 @@ def precompute_skirtor_agnfitter_photometry(
         filter_trans=[np.asarray(ft) for ft in filter_trans],
         redshift=redshift,
         dl_cm=1.0,
-        axes=(oa_axis, cos_inc_axis, tv_axis),
+        axes=(oa_axis, incl_axis, tv_axis),
         energy_normalize=False,  # templates already normalized per L_sun
         units="lnu",
     )
 
     axes_jax = (
         jnp.asarray(oa_axis),
-        jnp.asarray(cos_inc_axis),
+        jnp.asarray(incl_axis),
         jnp.asarray(tv_axis),
     )
     return {
@@ -213,8 +216,9 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
             Half-opening angle [deg]. Default 40.0.
         agn_cos_inc : float
             :math:`\cos i`, the model's one inclination (1 = face-on)
-            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis is
-            stored as ascending ``cos i``.
+            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis
+            is in degrees from the polar axis and is read at
+            :math:`i = \arccos(\cos i)`, as the runtime kernel reads it.
         agn_tv_skirtor : float
             Equatorial optical depth τ_9.7. Default 7.0.
         agn_torus_frac : float
@@ -238,7 +242,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         phot = interp_nd_pchip(
             grid_jax,
             axes,
-            (agn_oa_skirtor, agn_cos_inc, agn_tv_skirtor),
+            (agn_oa_skirtor, skirtor_incl_from_cos_inc(agn_cos_inc), agn_tv_skirtor),
         )
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
@@ -291,7 +295,11 @@ def precompute(
     )
     preint: PreintegratedGrid = result["_preint"]
     collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, AXIS_PARAMS, parameters, origin="skirtor_agnfitter_precompute"
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        axis_transforms=AXIS_TRANSFORMS,
+        origin="skirtor_agnfitter_precompute",
     )
     if not fixed:
         return result
@@ -337,10 +345,15 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    incl_at = free_incl_position(1, preint["_collapsed_axes"])
 
     @jax.jit
     def skirtor_agnfitter_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_3p torus photometry with collapsed (fixed) axes via PCHIP."""
+        if incl_at is not None:
+            free_axis_values = list(free_axis_values)  # cos i -> library degrees
+            free_axis_values[incl_at] = skirtor_incl_from_cos_inc(free_axis_values[incl_at])
+            free_axis_values = tuple(free_axis_values)
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
         # not multiply it in again here (fix round 1: this double-counted

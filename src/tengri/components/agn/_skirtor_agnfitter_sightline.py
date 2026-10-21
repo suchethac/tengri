@@ -38,14 +38,14 @@ from typing import Any, TypeVar
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from tengri.components.agn.fritz import _COS_INC_FACE_ON_CAP
 
 __all__ = [
+    "AXIS_TRANSFORMS",
     "RETIRED_INCL_KEY",
     "accepts_retired_incl_skirtor",
-    "cos_inc_axis_from_incl",
+    "free_incl_position",
     "resolve_retired_incl_skirtor",
     "skirtor_incl_from_cos_inc",
 ]
@@ -105,28 +105,34 @@ def skirtor_incl_from_cos_inc(cos_inc) -> jnp.ndarray:
     return jnp.where(c <= cap, inside, beyond)
 
 
-def cos_inc_axis_from_incl(grid: np.ndarray, incl_axis: np.ndarray, axis: int):
-    """Re-key a tabulation on the library's inclination axis by ascending ``cos i``.
+def free_incl_position(incl_axis: int, collapsed: Mapping[int, float]) -> int | None:
+    """Position of the inclination among a collapsed lookup's free axis values.
 
     Parameters
     ----------
-    grid : ndarray
-        Values tabulated on ``incl_axis`` along dimension ``axis``.
-    incl_axis : ndarray, shape (n_incl,)
-        The library's inclination nodes from the polar axis [deg], ascending.
-    axis : int
-        The dimension of ``grid`` that ``incl_axis`` labels.
+    incl_axis : int
+        Index of the inclination axis in the full grid.
+    collapsed : mapping of int to float
+        Collapsed axis index -> the coordinate it was collapsed at.
 
     Returns
     -------
-    grid_out : ndarray
-        ``grid`` with dimension ``axis`` reordered to match ``cos_inc_axis``.
-    cos_inc_axis : ndarray, shape (n_incl,)
-        :math:`\\cos i` of each node [dimensionless], ascending (edge-on first).
+    int or None
+        Index of the inclination in the free values a collapsed lookup receives, or
+        ``None`` when the inclination axis was itself collapsed.
     """
-    cos_inc = np.cos(np.deg2rad(np.asarray(incl_axis, dtype=np.float64)))
-    order = np.argsort(cos_inc)
-    return np.take(grid, order, axis=axis), cos_inc[order]
+    if incl_axis in collapsed:
+        return None
+    return incl_axis - sum(1 for i in collapsed if i < incl_axis)
+
+
+#: Grid-axis coordinate of the parameter governing each SKIRTOR-AGNfitter axis that is not
+#: tabulated in that parameter: the inclination axis is in degrees, governed by
+#: ``agn_cos_inc``. Passed to ``collapse_fixed_axes`` so a Fixed ``agn_cos_inc`` collapses
+#: at its degree coordinate.
+AXIS_TRANSFORMS: dict[str, Callable[[float], float]] = {
+    "agn_cos_inc": lambda cos_inc: float(skirtor_incl_from_cos_inc(cos_inc)),
+}
 
 
 def _is_concrete(value) -> bool:

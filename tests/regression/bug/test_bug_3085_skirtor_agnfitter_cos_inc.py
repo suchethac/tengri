@@ -32,7 +32,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri._data_setup import find_data
 from tengri.components.agn._template_grid import torus_lnu_from_grid
 from tengri.components.agn._torus_inclination import torus_lnu_anisotropic
@@ -207,6 +207,8 @@ def _model(inputs, agn_top=None, **torus):
     [
         (Fixed(60.0), r"'cos_inc': Fixed\(0\.5\)"),
         (Uniform(10.0, 80.0), r"'cos_inc': Uniform\(0\.173648, 0\.984808\)"),
+        (FREE, r"'cos_inc': FREE\}"),
+        (Fixed(DEFAULT), r"'cos_inc': Fixed\(DEFAULT\)\}"),
     ],
 )
 @pytest.mark.parametrize("key", ["incl_skirtor", "agn_incl_skirtor"])
@@ -224,3 +226,12 @@ def test_model_frees_one_inclination_for_disc_and_torus(_model_inputs):
     assert "agn_cos_inc" in model.spec.free_params
     names = [*model.spec.free_params, *model.spec.fixed_params]
     assert not any("incl_skirtor" in name for name in names)
+
+
+def test_predict_refuses_the_retired_angle_with_its_translation(_model_inputs):
+    """``model.predict({'agn_incl_skirtor': ...})`` names ``agn_cos_inc``, not a guess."""
+    from tengri.config.exceptions import UnknownParameterError
+
+    model = _model(_model_inputs, agn_top={"cos_inc": Uniform(0.0, 1.0)})
+    with pytest.raises(UnknownParameterError, match=r"retired \(#3085\)(.|\n)*agn_cos_inc"):
+        model.predict({"agn_cos_inc": 0.5, "agn_incl_skirtor": 40.0})
