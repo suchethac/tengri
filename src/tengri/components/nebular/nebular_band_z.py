@@ -358,8 +358,7 @@ def blend_z_nonneg(b0, b1, weight, log_ratio=None):
     exponent lies in :math:`[-80, 0.5]`: the gradient is nonzero while the
     continuation stays above :math:`e^{-80}` of the edge value, and zero past
     that for a very steep cell. A band that is exactly zero at the edge node has
-    no scale to continue: it keeps the linear value floored at zero (a kink at
-    the node).
+    no scale to continue: it stays at zero beyond the node (a kink at the node).
 
     Parameters
     ----------
@@ -395,12 +394,21 @@ def blend_z_nonneg(b0, b1, weight, log_ratio=None):
     if log_ratio is None:
         slope = (b1 - b0) / safe
     else:
+        # Log-space clip, not a flux floor: +-30 dex keeps pow10 finite in float32
+        # (1e30 < 3.4e38) for the ratio of two nodes; real node ratios are far inside.
         d = jnp.clip(log_ratio, -30.0, 30.0)
         up = jnp.where(b1 > 0.0, pow10(d), 0.0)  # b1 / b0
         down = jnp.where(b0 > 0.0, pow10(-d), 0.0)  # b0 / b1
         slope = jnp.where(below, up - 1.0, 1.0 - down)
+    # Log-space clip on exp's argument, not a flux floor: -80 keeps exp finite and
+    # its VJP free of 0 * inf (e**-80 = 1.8e-35 is representable in float32); the upper
+    # bound 0.5 is the largest value the argument can take over a half-spacing
+    # continuation (slope <= 1, |offset| <= 0.5), so it never binds.
     exponent = jnp.clip(slope * offset, -80.0, 0.5)
-    continued = jnp.where(lit, safe * jnp.exp(exponent), jnp.maximum(linear, 0.0))
+    # A dark edge node has no scale to continue. There the linear line is never
+    # positive past the node (it is ``t b_1 <= 0`` below, ``(1 - t) b_0 <= 0``
+    # above), so the non-negative continuation is exactly zero.
+    continued = jnp.where(lit, safe * jnp.exp(exponent), jnp.zeros_like(linear))
     return jnp.where(beyond, continued, linear)
 
 

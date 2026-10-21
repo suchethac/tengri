@@ -14,6 +14,12 @@
 # divisor was deleted outright (the where-select now picks the divisor). Still live:
 # adaf.py's 1e-300 K_0/K_1 clip (xs/2 flushes in float32, so a floor of tiny does not
 # help there), disc.py's 1e-100 target clip, qsogen.py's 1e-60 continuum clamp.
+# nebular_band_z.blend_z_nonneg (#3042): the -30.0 and -80.0 clip floors are LOG-SPACE exponents
+# (a dex difference clipped to +-30, and exp's argument clipped to [-80, 0.5]), not floors on a
+# flux; 10**-30 and e**-80 are representable in float32 and the clips keep pow10/exp finite.
+# nebular_grid_precompute's 0.0 maximum floors the sub-band chunk fractions, outside the table
+# only (inside, the convex blend of non-negative fractions is already >= 0): a partition cannot
+# carry a negative chunk, and a negative linear continuation is not a physical value to keep.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 4
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -109,3 +115,6 @@ src/tengri/utils/interpolation.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/utils/magnitudes.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
+src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -30.0 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -80.0 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 0.0 < 1e-20 -> 1

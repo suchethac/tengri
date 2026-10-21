@@ -190,7 +190,9 @@ def test_the_float32_gradient_in_log_nion_matches_float64_beyond_the_table(log_n
     table = _LOG_TABLE - 30.0
     g32 = _dband_dlognion(jnp.float32, log_nion, table, z)
     g64 = _dband_dlognion(jnp.float64, log_nion, table, z)
-    assert np.isfinite(g32)
+    # d(sum band)/d(log_nion) = ln(10) sum(band) > 0: the bands are lit, so zero is wrong
+    assert np.isfinite(g32) and g32 > 0.0, g32
+    assert np.isfinite(g64) and g64 > 0.0, g64
     np.testing.assert_allclose(g32, g64, rtol=1e-3)
 
 
@@ -200,5 +202,47 @@ def test_the_float32_gradient_is_finite_for_tiny_band_fluxes(z):
     tiny = _LOG_TABLE - 28.0
     g32 = _dband_dlognion(jnp.float32, 5.0, tiny, z)
     g64 = _dband_dlognion(jnp.float64, 5.0, tiny, z)
-    assert np.isfinite(g32)
+    assert np.isfinite(g32) and g32 > 0.0, g32
+    assert np.isfinite(g64) and g64 > 0.0, g64
     np.testing.assert_allclose(g32, g64, rtol=1e-3)
+
+
+def test_a_lit_edge_band_stays_strictly_positive_and_only_a_dark_edge_is_zero():
+    """Past the table a band is zero exactly when its edge node is dark.
+
+    The dark-edge continuation is zero because the linear line there is never
+    positive; a lit edge is continued exponentially and is strictly positive. No
+    negative linear value is replaced by a small positive one, or hidden.
+    """
+    zs = [*np.linspace(_Z_LO_EDGE, 0.1, 5)[:-1], *np.linspace(0.3, _Z_HI_EDGE, 5)[1:]]
+    for z in zs:
+        lower = z < 0.1
+        edge = _BANDS[0] if lower else _BANDS[2]
+        band = np.asarray(_band(float(z)))
+        assert np.all(band[edge > 0.0] > 0.0), (z, band)
+        assert np.all(band[edge == 0.0] == 0.0), (z, band)
+        t = (np.log1p(z) - float(_LNZ[0 if lower else 1])) / float(_LNZ[1] - _LNZ[0])
+        lin = (1 - t) * _BANDS[0 if lower else 1] + t * _BANDS[1 if lower else 2]
+        assert np.all(lin[edge == 0.0] <= 0.0), "a dark edge's linear line is never positive"
+
+
+def test_the_subband_floor_binds_only_outside_the_table():
+    """Inside the table the chunk fractions are the plain convex blend (no floor)."""
+    from types import SimpleNamespace
+
+    frac = np.zeros((3, 1, 3))
+    frac[0, 0], frac[1, 0], frac[2, 0] = [0.7, 0.3, 0.0], [0.2, 0.3, 0.5], [0.0, 0.1, 0.9]
+    table = SimpleNamespace(
+        cont_lnz=_LNZ,
+        cont_subband_frac=jnp.asarray(frac),
+        cont_subband_waves_rest=jnp.ones((3, 1, 3)),
+        sed_line_node_waves=jnp.zeros((0, 1)),
+        sed_line_node_weights=jnp.zeros((0, 1)),
+    )
+    for z in np.linspace(0.1, 0.3, 9):
+        phi, _ = nebular_subband_decomposition(jnp.ones((1, 1)), float(z), table)
+        i, w = z_bracket(_LNZ, float(z), extrapolate=True)
+        i = int(i)
+        linear = (1.0 - float(w)) * frac[i, 0] + float(w) * frac[i + 1, 0]
+        assert np.all(linear >= 0.0)
+        np.testing.assert_allclose(np.asarray(phi)[0], linear, rtol=1e-6)
