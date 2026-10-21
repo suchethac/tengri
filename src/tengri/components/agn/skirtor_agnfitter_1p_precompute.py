@@ -29,7 +29,7 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._torus_inclination import sphere_mean_power_at_nodes
+from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.skirtor_agnfitter_1p import (
     TORUS_INCLINATION,
     _load_skirtor_agnfitter_1p_arrays,
@@ -91,7 +91,7 @@ def precompute_skirtor_agnfitter_1p_photometry(
     **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / (sphere-mean native power over inclination). This matches
+    integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``skirtor_agnfitter_1p.py``.
     """
 
@@ -100,11 +100,11 @@ def precompute_skirtor_agnfitter_1p_photometry(
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
 
-    # One scale per point of the other axes, the sphere-mean power over inclination,
+    # Each record at unit power times its anisotropy a / mean a (the scalar table),
     # as the runtime path normalizes the records (skirtor_agnfitter_1p.TORUS_INCLINATION).
     runtime_grid = load_skirtor_agnfitter_1p_grid(grid_path)
-    mean_power = sphere_mean_power_at_nodes(runtime_grid, TORUS_INCLINATION)
-    lnu_grid = _LSUN_ERG * grid / mean_power[..., None]
+    scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
+    lnu_grid = _LSUN_ERG * grid * scale[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,

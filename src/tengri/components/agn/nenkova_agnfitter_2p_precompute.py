@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._torus_inclination import sphere_mean_power_at_nodes
+from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.nenkova_agnfitter_2p import (
     TORUS_INCLINATION,
     _load_nenkova_agnfitter_2p_arrays,
@@ -94,7 +94,7 @@ def precompute_nenkova_agnfitter_2p_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / (sphere-mean native power over inclination). This matches
+    integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``nenkova_agnfitter_2p.py``.
 
     **Grid reordering**: The native inclination axis is stored in degrees
@@ -114,11 +114,11 @@ def precompute_nenkova_agnfitter_2p_photometry(
     cos_inc_axis = cos_inc_axis[order]
     grid_reordered = grid[order]
 
-    # One scale per point of the other axes, the sphere-mean power over inclination,
+    # Each record at unit power times its anisotropy a / mean a (the scalar table),
     # as the runtime path normalizes the records (nenkova_agnfitter_2p.TORUS_INCLINATION).
     runtime_grid = load_nenkova_agnfitter_2p_grid(grid_path)
-    mean_power = sphere_mean_power_at_nodes(runtime_grid, TORUS_INCLINATION)
-    lnu_grid = _LSUN_ERG * grid_reordered / mean_power[..., None]
+    scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
+    lnu_grid = _LSUN_ERG * grid_reordered * scale[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,

@@ -48,17 +48,19 @@ import numpy as np
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import L_SUN as _L_SUN
-from tengri.components.agn._template_grid import TorusTemplateGrid, native_bolometric_nu
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn._torus_inclination import (
+    AnisotropyGrid,
     TorusInclination,
-    torus_lnu_sphere_normalized,
+    anisotropy_grid,
+    log10_anisotropy,
 )
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import pow10, representable_denominator
 
 
 class FritzComponents(NamedTuple):
@@ -111,8 +113,10 @@ def _load_grid_arrays(grid_path: str):
 
     with _h5py.File(grid_path, "r") as f:
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
-        result["dust"] = np.array(f["fritz2006/dust"][:])
-        result["disk"] = np.array(f["fritz2006/disk"][:])
+        # Read as float64 on the host: the file stores float32, and a few far-UV nodes are
+        # float32 subnormals that a device-side conversion would flush to zero.
+        result["dust"] = np.asarray(f["fritz2006/dust"][:], dtype=np.float64)
+        result["disk"] = np.asarray(f["fritz2006/disk"][:], dtype=np.float64)
         # Per-record scale (pcigale ``model.norm``, 1e42-1e46: past float32), kept relative to
         # its largest value, which is all the face-on/viewing-angle ratio needs. Absent from
         # grids downloaded before it was added.
@@ -323,12 +327,6 @@ class FritzGrid(NamedTuple):
     norm : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy), optional
         Each record's own scale (pcigale ``model.norm``) relative to the largest, with no
         wavelength axis; ``None`` for a grid without it.
-    dust_lnu : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave), optional
-        The torus records as :math:`L_\nu` carrying the library's anisotropy:
-        ``dust * (norm / mean norm) * lambda**2 / c`` (:func:`fritz_anisotropy_table`),
-        relative to its largest value, in float64. The emitted torus
-        (:func:`fritz_sed_from_grid`) reads this. ``None`` builds it from ``dust`` and
-        ``norm`` on use.
     """
 
     dust: jnp.ndarray
@@ -337,7 +335,6 @@ class FritzGrid(NamedTuple):
     edges: tuple[jnp.ndarray, ...]
     disk: jnp.ndarray | None = None
     norm: jnp.ndarray | None = None
-    dust_lnu: jnp.ndarray | None = None
 
 
 #: The library's inclination axis: ``psy``, the elevation above the equatorial plane, the last
@@ -346,51 +343,42 @@ class FritzGrid(NamedTuple):
 TORUS_INCLINATION = TorusInclination(axis=5, variable="elevation_deg", extrapolate=True)
 
 
-def fritz_anisotropy_table(dust, norm, wave, psy_axis):
-    r"""The Fritz torus records as :math:`L_\nu`, carrying the library's anisotropy only.
+def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
+    r"""The Fritz library's power along each sightline, over its model's mean (``norm``).
 
     Parameters
     ----------
-    dust : array_like, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
-        Stored dust records :math:`U_\lambda`, each of unit integral [W/nm, per unit power].
-    norm : array_like, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy) or None
-        Each record's own dust power (pcigale ``model.norm``, the divisor taken out of it),
-        on any common scale.
-    wave : array_like, shape (n_wave,)
-        The library's wavelength nodes [Angstrom].
-    psy_axis : array_like, shape (n_psy,)
-        Elevation of the sightline above the equatorial plane [deg], ascending.
+    grid : FritzGrid
+        The Fritz library.
 
     Returns
     -------
-    ndarray, same shape as ``dust``
-        :math:`U_\lambda\,(n/\bar n)\,\lambda^2/c`, divided by its largest value.
+    AnisotropyGrid
+        ``norm / mean norm`` on the six axes (``_torus_inclination.anisotropy_grid``, the
+        mean a trapezoid in :math:`\mu = \sin\psi` over the ``psy`` nodes); all ones for a
+        grid without ``norm``, whose torus then carries the same power along every sightline.
 
     Notes
     -----
-    **Provenance.** Fritz, Franceschini & Hatziminaoglou (2006) [1]_ compute each torus model
-    by radiative transfer for one central source; CIGALE's ``fritz2006`` database [2]_ stores
-    every record divided by its own dust integral and keeps the divisor as ``norm``
-    (``fritz2006/norm`` in ``fritz2006_torus_grid.h5``). Measured on the shipped grid: every
-    stored ``dust`` record integrates to 10 on the Angstrom axis, and ``disk x norm`` is the
-    same face-on source for 2398 of 2400 models (within -0.5 % and +12.5 % of the median).
-    **Sightline convention**: the library axis is ``psy``, the elevation above the equatorial
-    plane [deg] (0.001 is edge-on, 89.99 face-on), so :math:`\mu = \cos i = \sin\psi`.
+    **Provenance.** Fritz, Franceschini & Hatziminaoglou (2006) [1]_ illuminate every torus
+    model with one isotropic central source (their Sect. 2.5) of the same luminosity,
+    :math:`L_{\rm AGN} = 10^{46}` erg/s (Sect. 3.3), and the radiative transfer conserves its
+    energy to 1 per cent for typical solutions (Sect. 2.6); the dust emission changes with
+    the viewing angle (Sect. 3.2.2). CIGALE's ``fritz2006`` database [2]_ stores every record
+    divided by its own dust integral and keeps the divisor as ``norm``
+    (``fritz2006/norm`` in ``fritz2006_torus_grid.h5``), so ``norm`` is the power each
+    record carries on that common scale. Measured on the shipped grid: every stored ``dust``
+    record integrates to 10 on the Angstrom axis, and ``disk x norm`` face-on agrees within
+    -0.5 % and +12.5 % of the median for 2398 of 2400 models; the other two (r_ratio 100,
+    tau 3, beta -0.75, gamma 6, half-angle 40 and r_ratio 150, tau 10, beta -1, gamma 6,
+    half-angle 20) sit about 10 times higher. **Sightline convention**: the axis is
+    ``psy``, the elevation above the equatorial plane [deg] (0.001 edge-on, 89.99 face-on),
+    so :math:`\mu = \cos i = \sin\psi`.
 
-    **Only the anisotropy is restored.** Each model's ``norm`` is divided by its own mean
-    over the sphere, :math:`\bar n = \int_0^1 n\,d\mu` (trapezoid in :math:`\mu` over the
-    ``psy`` nodes, divided by the span), so every model carries the same angle-averaged
-    weight and its ``psy`` profile alone. The absolute power between models is then the
-    sphere normalization's, and the interpolation over the five other axes mixes records
-    of equal weight, as it did before. Two models sit on a different source scale
-    (face-on ``disk x norm`` 9.95 and 9.99 times the median, at r_ratio 100, tau 3,
-    beta -0.75, gamma 6, half-angle 40 and at r_ratio 150, tau 10, beta -1, gamma 6,
-    half-angle 20); carried at their absolute scale they would weight the interpolation
-    next to them by 10 to 18 times. Without ``norm`` the stored records are returned,
-    each on its own scale, and the torus carries the same power along every sightline.
+    Dividing by each model's mean removes the inter-model scale, so those two models do not
+    weight the interpolation of the scalar over the other five axes.
 
-    **JIT-compatible**: yes (pure ``jnp``); used at load time and by
-    :func:`fritz_torus_grid` for a hand-built grid.
+    **JIT-compatible**: yes.
 
     References
     ----------
@@ -402,35 +390,10 @@ def fritz_anisotropy_table(dust, norm, wave, psy_axis):
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    wave = jnp.asarray(wave)
-    table = jnp.asarray(dust) * wave**2 / _C_AA_PER_S
-    if norm is not None:
-        norm = jnp.asarray(norm)
-        mu = jnp.sin(jnp.deg2rad(jnp.asarray(psy_axis)))
-        mean = jnp.trapezoid(norm, mu, axis=-1) / (mu[-1] - mu[0])
-        table = table * (norm / mean[..., None])[..., None]
-    return table / jnp.max(table)
-
-
-def _physical_dust_lnu(raw: dict) -> np.ndarray:
-    """:func:`fritz_anisotropy_table` of a loaded grid, float64; warns once without ``norm``."""
-    if "norm" not in raw:
-        warnings.warn(
-            "The Fritz (2006) grid carries no fritz2006/norm: every record is on its own "
-            "scale, so the torus power does not vary with the viewing angle as the "
-            "radiative transfer does. Add it with "
-            "`python scripts/build_fritz2006_grid.py --add-norm --dest <data directory>`.",
-            UserWarning,
-            stacklevel=3,
-        )
-    return np.asarray(
-        fritz_anisotropy_table(
-            np.asarray(raw["dust"], dtype=np.float64),
-            None if "norm" not in raw else np.asarray(raw["norm"], dtype=np.float64),
-            np.asarray(raw["wave"], dtype=np.float64),
-            np.asarray(raw["axes"][5], dtype=np.float64),
-        )
-    )
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    if grid.norm is None:
+        return anisotropy_grid(jnp.ones(jnp.shape(grid.dust)[:-1]), axes, TORUS_INCLINATION)
+    return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
 
 
 @functools.cache
@@ -456,6 +419,15 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     leak out of the trace scope.
     """
     raw = _load_grid_arrays(grid_path)
+    if "norm" not in raw:
+        warnings.warn(
+            "The Fritz (2006) grid carries no fritz2006/norm: every record is on its own "
+            "scale, so the torus power does not vary with the viewing angle as the "
+            "radiative transfer does. Add it with "
+            "`python scripts/build_fritz2006_grid.py --add-norm --dest <data directory>`.",
+            UserWarning,
+            stacklevel=2,
+        )
     with jax.ensure_compile_time_eval():
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         return FritzGrid(
@@ -465,7 +437,6 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
             edges=tuple(edges_for_grid(ax) for ax in axes),
             disk=jnp.array(raw["disk"]),
             norm=jnp.array(raw["norm"]) if "norm" in raw else None,
-            dust_lnu=jnp.array(_physical_dust_lnu(raw)),
         )
 
 
@@ -524,23 +495,21 @@ def fritz_sed_from_grid(
     -----
     .. math::
 
-        L_\nu(\lambda;\psi) = f L_{\rm bol}\,\frac{T_\nu(\lambda;\psi)}{\bar P},
-        \qquad \bar P = \int_0^1 P(\mu)\,d\mu, \qquad \mu = \cos i = \sin\psi,
+        L_\nu(\lambda;\psi) = f L_{\rm bol}\,
+            \frac{T_\nu(\lambda;\psi)}{\int T_\nu\,d\nu}\;\frac{a(\mu)}{\bar a},
+        \qquad \bar a = \int_0^1 a(\mu)\,d\mu, \qquad \mu = \cos i = \sin\psi.
 
-    where :math:`T_\nu = U_\lambda\,(n/\bar n)\,\lambda^2/c` is the stored dust record
-    :math:`U_\lambda` (unit integral) times its own dust power :math:`n` (CIGALE
-    ``model.norm``) [2]_ over that model's sphere mean :math:`\bar n`
-    (:func:`fritz_anisotropy_table`), so every sightline keeps the flux ratio of the
-    radiative-transfer run of Fritz, Franceschini & Hatziminaoglou [1]_ while every model
-    carries the same angle-averaged weight in the interpolation over the five other axes,
-    and :math:`P(\mu) = \int T_\nu\,d\nu` over the library's own wavelength nodes. The
-    angle-integrated torus power is
-    :math:`f L_{\rm bol}`; along :math:`\psi` the torus carries
-    :math:`f L_{\rm bol}\,P(\mu)/\bar P`, the library's own anisotropy (measured on the
-    shipped grid: the equatorial record carries 0.06 to 0.98, median 0.52, of the polar
-    record's dust power). The sphere mean is the Gauss-Legendre quadrature of
-    ``_torus_inclination.torus_lnu_sphere_normalized`` over the ``psy`` panels, on the same
-    node-exact PCHIP lookup that gives the sightline.
+    The first factor is the stored dust record :math:`U_\lambda` (unit integral, converted with
+    :math:`L_\nu = L_\lambda\lambda^2/c`) interpolated with node-exact PCHIP on all six axes
+    and normalized on the library's own wavelength nodes, exactly as for a torus normalized
+    per sightline, so the shape at any point is that one. The second is the library's
+    anisotropy (:func:`fritz_anisotropy`): each record's own dust power (CIGALE
+    ``model.norm``) [2]_ over its model's mean, a scalar interpolated with the same PCHIP,
+    and :math:`\bar a` its sphere mean (Gauss-Legendre over the ``psy`` panels). The
+    angle-integrated torus power is :math:`f L_{\rm bol}`; along :math:`\psi` the torus
+    carries :math:`f L_{\rm bol}\,a/\bar a`, the radiative transfer's anisotropy of
+    Fritz, Franceschini & Hatziminaoglou [1]_ (measured on the shipped grid: the equatorial
+    record carries 0.06 to 0.98, median 0.52, of the polar record's dust power).
 
     Without ``norm`` the records keep their own scales (each carries unit power), so the
     torus power is :math:`f L_{\rm bol}` along every sightline.
@@ -568,47 +537,21 @@ def fritz_sed_from_grid(
         agn_fritz_oa,
         agn_fritz_psy,
     )
-    # Anisotropy restored here (#2851). Provenance: fritz2006_torus_grid.h5 ``fritz2006/dust``
-    # times ``fritz2006/norm`` (pcigale model.norm, each record's own dust power; Fritz et al.
-    # 2006 radiative transfer, one central source per model), over the model's sphere-mean
-    # norm. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last axis,
-    # mu = cos i = sin(psy).
-    return torus_lnu_sphere_normalized(
-        fritz_torus_grid(grid),
+    # Anisotropy restored here (#2851). Provenance: fritz2006_torus_grid.h5 ``fritz2006/norm``
+    # (pcigale model.norm, each record's own dust power: one isotropic 1e46 erg/s source per
+    # model, Fritz et al. 2006 Sect. 2.5, 2.6 and 3.3), over the model's mean norm, as a
+    # scalar on the six axes; the shape is the unit-power ``fritz2006/dust`` records as
+    # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
+    # axis, mu = cos i = sin(psy).
+    shape = _interpolate_and_normalize(
+        jnp.asarray(grid.dust),
+        jnp.asarray(grid.wave_grid),
+        axes,
         wavelength,
         point,
-        TORUS_INCLINATION,
-        agn_log_lbol=agn_log_lbol,
-        agn_torus_frac=agn_torus_frac,
+        10.0**agn_log_lbol * _L_SUN * agn_torus_frac,
     )
-
-
-def fritz_torus_grid(grid: FritzGrid) -> TorusTemplateGrid:
-    """The emitted-torus table of ``grid`` as a :class:`TorusTemplateGrid` (``dust x norm``).
-
-    Parameters
-    ----------
-    grid : FritzGrid
-        The Fritz library.
-
-    Returns
-    -------
-    TorusTemplateGrid
-        ``dust_lnu`` on the six axes (built from ``dust`` and ``norm`` by
-        :func:`fritz_anisotropy_table` when the grid carries none), the table
-        :func:`fritz_sed_from_grid` emits; with
-        :data:`TORUS_INCLINATION` it feeds
-        ``_torus_inclination.torus_ledger_from_grid``.
-    """
-    wave_grid = jnp.asarray(grid.wave_grid)
-    table = (
-        fritz_anisotropy_table(grid.dust, grid.norm, wave_grid, grid.axes[5])
-        if grid.dust_lnu is None
-        else jnp.asarray(grid.dust_lnu)
-    )
-    return TorusTemplateGrid(
-        template=table, axes=tuple(jnp.asarray(a) for a in grid.axes), wave_grid=wave_grid
-    )
+    return shape * pow10(log10_anisotropy(fritz_anisotropy(grid), point, TORUS_INCLINATION))
 
 
 def create_fritz_from_grid(grid_path: str) -> Callable:

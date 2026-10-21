@@ -7,9 +7,11 @@ torus kernel did, gave every sightline the same torus power and erased the radia
 transfer's result that an edge-on torus radiates less (measured on the shipped grid: the
 equatorial record carries 0.06 to 0.98, median 0.52, of the polar record's dust power). The
 records multiplied by ``norm`` share one scale (the face-on disc power of 98 % of the 2400
-models lies within -0.5 % and +12.5 % of the median), and the kernel now divides them by
-ONE sphere-mean power per parameter point, so the angle-integrated torus power is
-``f L_bol`` and every sightline keeps the library's ratio.
+models lies within -0.5 % and +12.5 % of the median). The kernel now emits the unit-power
+records' shape, interpolated as before, times a scalar: ``norm`` over its model's mean,
+interpolated on the same axes and divided by its sphere mean. The angle-integrated torus
+power is ``f L_bol``, every sightline keeps the library's ratio, and the spectral shape at
+any point is the per-sightline one.
 
 The reference (``tests/physics/_template_torus_reference.py``) reads the file with ``h5py``,
 interpolates with SciPy's PCHIP and integrates the power laws in closed form.
@@ -17,11 +19,14 @@ interpolates with SciPy's PCHIP and integrates the power laws in closed form.
 
 from __future__ import annotations
 
+import h5py
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri._data_setup import find_data
+from tengri.components.agn._torus_inclination import log10_anisotropy
 from tengri.utils.physics_constants import L_SUN
 from tests.physics._agn_publication import ln_nu_integral
 from tests.physics._template_torus_reference import RawTorus
@@ -73,7 +78,7 @@ def test_node_sightlines_keep_the_records_power_ratio(fritz, point):
     )
     psy = raw.inc_nodes
     emitted = [ln_nu_integral(_sed(fritz, point, float(p)), _WIDE) for p in psy]
-    stored = [raw.node_power(idx, j) for j in range(psy.size)]
+    stored = raw.anisotropy[idx]
     for j in range(psy.size):
         assert emitted[j] / emitted[-1] == pytest.approx(stored[j] / stored[-1], rel=1e-5), j
     assert emitted[0] < emitted[-1], "the equatorial torus must be dimmer than the polar one"
@@ -96,72 +101,116 @@ def test_sightline_power_is_the_raw_record_over_its_sphere_mean(fritz, point, mu
     assert emitted == pytest.approx(float(expected), rel=2e-5)
 
 
-#: Off-node points next to the two models on a different source scale (face-on disc x norm
-#: 9.95 and 9.99 times the median of the other 2398), with the axis between their bracketing
-#: nodes: (point, sightline psy [deg], axis index, lower node, upper node).
-_OFF_NODE = (
-    ((100.0, 2.5, -0.75, 6.0, 40.0), 10.1, 1, 2.0, 3.0),
-    ((150.0, 8.0, -1.0, 6.0, 20.0), 80.1, 1, 6.0, 10.0),
-)
-_SHAPE_WAVE = np.geomspace(1.0e3, 1.0e7, 4000)
+#: 60 random (r_ratio, tau, beta, gamma, half-angle) points inside the grid, each along three
+#: sightlines: 180 off-node evaluations.
+_RNG_POINTS = 60
+_SWEEP_PSY = (10.1, 45.0, 80.1)
+_SHAPE_WAVE = np.geomspace(1.0e3, 1.0e7, 2000)
+#: Bound on the shape ratio. Measured over the 180 points: median 1.4e-14, max 1.5e-14
+#: (rounding of the same float64 arithmetic in two evaluation orders).
+_SHAPE_RTOL = 1.0e-12
 
 
-def _unit_shape(fritz, point, psy):
-    """The emitted torus on ``_SHAPE_WAVE`` divided by its own power (shape only)."""
+def _random_points(grid):
+    rng = np.random.default_rng(1)
+    lo = [float(a[0]) for a in grid.axes[:5]]
+    hi = [float(a[-1]) for a in grid.axes[:5]]
+    return [tuple(rng.uniform(lo, hi)) for _ in range(_RNG_POINTS)]
+
+
+def _per_sightline_shape(grid, point, psy):
+    """The per-sightline Fritz shape at ``point``: the unit-power lookup used before #2851.
+
+    Built from the library utilities (node-exact PCHIP over the six axes, log-log resampling,
+    the native power-law integral), not from the component.
+    """
+    from tengri.components.agn._template_grid import native_bolometric_nu
+    from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    wave_native = jnp.asarray(grid.wave_grid)
+    table = interp_nd_pchip(
+        jnp.asarray(grid.dust),
+        axes,
+        (*point, psy),
+        extrapolate=(False, False, False, False, False, True),
+    )
+    native = native_bolometric_nu(table * wave_native**2 / 2.99792458e18, wave_native)
+    lam = resample_template(jnp.asarray(_SHAPE_WAVE), wave_native, table, left=0.0, right=0.0)
+    return np.asarray(lam * _SHAPE_WAVE**2 / 2.99792458e18 / native)
+
+
+def test_off_node_shape_is_the_per_sightline_shape_at_180_points(fritz):
+    """Off-node, the emitted torus is the per-sightline shape times one scalar (1e-12).
+
+    The anisotropy is a scalar table (``norm`` over its model's mean) interpolated on its own,
+    so the spectral shape between nodes is exactly that of the unit-power records. Carrying
+    ``norm`` inside the spectral interpolation instead weighted each neighbor by its own
+    sightline power (0.5 to 1.9) and moved the shape by a median of 2.4 % and up to 56 %.
+    """
     mod, grid, _ = fritz
-    keys = ("agn_fritz_r_ratio", "agn_fritz_tau", "agn_fritz_beta", "agn_fritz_gamma")
-    sed = np.asarray(
-        mod.fritz_sed_from_grid(
+    fn = jax.jit(
+        lambda p, psy: mod.fritz_sed_from_grid(
             grid,
             jnp.asarray(_SHAPE_WAVE),
-            agn_fritz_oa=point[4],
+            agn_fritz_r_ratio=p[0],
+            agn_fritz_tau=p[1],
+            agn_fritz_beta=p[2],
+            agn_fritz_gamma=p[3],
+            agn_fritz_oa=p[4],
             agn_fritz_psy=psy,
-            **dict(zip(keys, point[:4], strict=True)),
             **_KW,
         )
     )
-    return sed / ln_nu_integral(sed, _SHAPE_WAVE)
+    worst = 0.0
+    for point in _random_points(grid):
+        for psy in _SWEEP_PSY:
+            emitted = np.asarray(fn(jnp.asarray(point), psy))
+            ref = _per_sightline_shape(grid, point, psy)
+            sig = ref > 0.0
+            ratio = emitted[sig] / ref[sig]
+            spread = float(np.max(np.abs(ratio / np.median(ratio) - 1.0)))
+            worst = max(worst, spread)
+            assert spread <= _SHAPE_RTOL, (point, psy, spread)
+    assert worst <= _SHAPE_RTOL
 
 
-def _equal_weight_shape(fritz, point, psy):
-    """Shape of the stored unit-power records looked up at ``point`` (no inter-model weight)."""
-    from tengri.utils.grid_interp import interp_nd_pchip
+def _anisotropy(mod, grid, point, psy):
+    """The scalar anisotropy a/mean a of the Fritz library at ``point`` along ``psy``."""
+    aniso = mod.fritz_anisotropy(grid)
+    return 10.0 ** float(log10_anisotropy(aniso, (*point, psy), mod.TORUS_INCLINATION))
 
-    _, grid, _ = fritz
-    table = interp_nd_pchip(
-        jnp.asarray(grid.dust, dtype=jnp.float64),
-        tuple(jnp.asarray(a) for a in grid.axes),
-        (*point, psy),
+
+@pytest.mark.parametrize("point", _POINTS[:3])
+def test_scalar_anisotropy_is_node_exact(fritz, point):
+    """At the nodes, the scalar's ratio between sightlines is the stored ``norm`` ratio (1e-12)."""
+    mod, grid, raw = fritz
+    idx = tuple(
+        int(np.argmin(np.abs(ax - v))) for ax, v in zip(raw.other_axes, point, strict=True)
     )
-    wave = np.asarray(grid.wave_grid)
-    l_lam = np.exp(np.interp(np.log(_SHAPE_WAVE), np.log(wave), np.log(np.asarray(table))))
-    lnu = l_lam * _SHAPE_WAVE**2 / 2.99792458e18
-    return lnu / ln_nu_integral(lnu, _SHAPE_WAVE)
+    with h5py.File(find_data("fritz2006_torus_grid.h5"), "r") as f:
+        norm = np.asarray(f["fritz2006/norm"][idx], dtype=float)
+    psy = raw.inc_nodes
+    got = np.array([_anisotropy(mod, grid, point, float(p)) for p in psy])
+    np.testing.assert_allclose(got / got[-1], norm / norm[-1], rtol=1e-12)
 
 
-@pytest.mark.parametrize(("point", "psy", "axis", "lo", "hi"), _OFF_NODE)
-def test_off_node_shape_does_not_follow_the_inter_model_scale(fritz, point, psy, axis, lo, hi):
-    """Between nodes the torus shape is the equal-weight mixture of its neighbors (5 %).
+def test_scalar_anisotropy_is_continuous_along_the_sightline(fritz):
+    """Along a fine sweep of ``psy`` the scalar is finite, positive, and has no jump.
 
-    Only the anisotropy is restored: each model's ``norm`` is divided by its own sphere mean,
-    so the interpolation over r_ratio, tau, beta, gamma and the opening angle mixes records of
-    equal weight. Carrying ``norm`` at its absolute scale weighted the two models on a
-    different source scale 10 to 18 times and moved the shape here by 0.48 to 1.15. The shape
-    also stays within the envelope of the two bracketing nodes' shapes (1 %).
+    PCHIP is C1, so the factor between neighboring samples 0.03 deg apart may change by
+    its slope times the step only; a jump at a node or a panel edge would exceed that.
     """
-    shape = _unit_shape(fritz, point, psy)
-    sig = shape * (2.99792458e18 / _SHAPE_WAVE) > 1.0e-3 * np.max(
-        shape * 2.99792458e18 / _SHAPE_WAVE
-    )
-    ratio = shape[sig] / _equal_weight_shape(fritz, point, psy)[sig]
-    assert ratio.min() > 0.95 and ratio.max() < 1.05, (ratio.min(), ratio.max())
-    bracket = []
-    for node in (lo, hi):
-        p = list(point)
-        p[axis] = node
-        bracket.append(_unit_shape(fritz, tuple(p), psy)[sig])
-    low, high = np.minimum(*bracket), np.maximum(*bracket)
-    assert np.all(shape[sig] >= 0.99 * low) and np.all(shape[sig] <= 1.01 * high)
+    mod, grid, _ = fritz
+    point = (45.0, 1.5, -0.6, 3.0, 50.0)
+    psy = np.linspace(0.001, 89.99, 3000)
+    aniso = mod.fritz_anisotropy(grid)
+    fn = jax.jit(lambda p: 10.0 ** log10_anisotropy(aniso, (*point, p), mod.TORUS_INCLINATION))
+    values = np.array([float(fn(p)) for p in psy])
+    assert np.all(np.isfinite(values)) and np.all(values > 0.0)
+    step = np.abs(np.diff(values))
+    slope = np.abs(np.gradient(values, psy))
+    assert np.all(step <= 2.0 * np.maximum(slope[:-1], slope[1:]) * np.diff(psy) + 1e-12)
 
 
 def test_log_sed_gradient_is_finite_in_the_far_ultraviolet(fritz):
@@ -170,8 +219,6 @@ def test_log_sed_gradient_is_finite_in_the_far_ultraviolet(fritz):
     The emitted table is kept in the active dtype; a float32 copy in float64 mode flushed
     these nodes (1e-24 of the peak) to exactly zero and made ``grad(log(sed))`` NaN.
     """
-    import jax
-
     mod, grid, _ = fritz
     wave = jnp.asarray(np.geomspace(1000.0, 1100.0, 40))
 

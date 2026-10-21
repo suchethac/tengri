@@ -404,12 +404,15 @@ A torus-only template component has no disc of its own. It publishes three power
   1e-12.
 
 Whether the sightline value differs from the angle-integrated one depends on the library.
-A library whose records share one radiative-transfer scale across inclination is normalized
-ONCE per parameter point, by the sphere mean of its records' powers (Gauss-Legendre on the
-panels between the inclination nodes, in the variable the library is interpolated in), so
-every sightline keeps the library's flux ratio: Fritz et al. 2006 (`dust` times its `norm`
-record over the model's sphere-mean `norm`, so only the anisotropy enters and every model
-keeps equal weight in the interpolation over the other axes), `SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
+A library whose records share one radiative-transfer scale across inclination is emitted as
+two factors: the records normalized to unit power and interpolated as for a per-sightline
+library (so the spectral shape at every point is that one; measured over 180 random off-node
+Fritz points it equals it to 1.5e-14), times a scalar, the records' own powers over their
+model's mean, interpolated with the same node-exact PCHIP and divided by its sphere mean
+(Gauss-Legendre on the panels between the inclination nodes, in the variable the library is
+interpolated in). The angle-integrated power is `agn_torus_frac L_bol` and every sightline
+keeps the library's flux ratio: Fritz et al. 2006 (the scalar is the `norm` record),
+`SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
 whose scale across inclination is not established stays normalized per sightline, so its
 sightline and angle-integrated powers are equal: `SKIRTOR_mean_2p` and `3p` (their inclination
 ratios do not follow the SKIRTOR v3 records averaged the same way), `CAT3D_mean_3p` (no source

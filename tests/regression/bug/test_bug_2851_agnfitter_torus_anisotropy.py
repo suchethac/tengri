@@ -8,7 +8,7 @@ sphere (restored) or once per sightline (kept):
 
 * ``SKIRTOR_mean_1p``: restored. Its stored power ratios between inclinations match the
   SKIRTOR v3 records (``skirtor_templates_v3.h5``, multiplied back by their ``norm``)
-  averaged over tau, p, q, opening angle and radius ratio to 1 %, the same radiative
+  averaged over tau, p, q, opening angle and radius ratio to 0.4 %, the same radiative
   transfer averaged the same way.
 * ``NK0_mean_1p``/``2p``/``3p``: restored. CLUMPY fluxes are normalized to the bolometric
   AGN flux ``F_AGN = L/4 pi D^2`` in every direction (Nenkova et al. 2008, ApJ 685, 160,
@@ -88,6 +88,31 @@ def test_restored_sightline_is_the_raw_record_over_its_sphere_mean(library, mu):
     assert _emitted_power(name, mod, grid, mu) == pytest.approx(float(expected), rel=2e-5)
 
 
+@pytest.mark.parametrize("mu", [0.13, 0.48, 0.91])
+def test_restored_shape_is_the_per_sightline_shape(library, mu):
+    """The emitted torus is the per-sightline library times one scalar (1e-12).
+
+    The anisotropy is a scalar on the library's axes, so the spectral shape off-node, between
+    inclination and other-axis nodes alike, is that of the records normalized per sightline.
+    """
+    from tengri.components.agn._template_grid import torus_lnu_from_grid
+
+    name, mod, grid, _ = library
+    kwargs = dict(_RESTORED[name][1], **_KW)
+    if name == "skirtor_agnfitter_1p":
+        kwargs["agn_incl_skirtor"] = float(np.degrees(np.arccos(mu)))
+        coords = (kwargs["agn_incl_skirtor"],)
+    else:
+        kwargs["agn_cos_inc"] = mu
+        coords = (mu, *_RESTORED[name][1].values())
+    wave = jnp.asarray(_WIDE)
+    sed = np.asarray(getattr(mod, f"{name}_sed_from_grid")(grid, wave, **kwargs))
+    shape = np.asarray(torus_lnu_from_grid(grid, wave, coords, **_KW))
+    sig = shape > 0.0
+    ratio = sed[sig] / shape[sig]
+    assert np.max(np.abs(ratio / np.median(ratio) - 1.0)) < 1e-12
+
+
 def test_restored_face_on_is_brighter_than_edge_on(library):
     """The face-on torus carries more power than the edge-on one (it was equal before)."""
     name, mod, grid, _ = library
@@ -104,7 +129,7 @@ def _fnu_power(path, group):
 
 
 def test_skirtor_mean1p_scale_is_the_v3_radiative_transfer_averaged():
-    """``SKIRTOR_mean_1p`` P(i)/P(90) equals the norm-restored v3 dust mean to 1 %."""
+    """``SKIRTOR_mean_1p`` P(i)/P(90) equals the norm-restored v3 dust mean (0.4 %)."""
     mean1p = _fnu_power(_path("skirtor_mean1p_torus_grid.h5"), "skirtor_mean1p")
     with h5py.File(_path("skirtor_templates_v3.h5"), "r") as f:
         wave = np.asarray(f["wavelength"][()], dtype=float)
@@ -113,7 +138,7 @@ def test_skirtor_mean1p_scale_is_the_v3_radiative_transfer_averaged():
         cos_i = np.asarray(f["grid/cos_inclination"][()], dtype=float)
     v3 = loglog_power(wave, (dust * norm[..., None]).mean(axis=(0, 1, 2, 3, 4)))
     v3 = v3[np.argsort(-cos_i)]  # 0 deg first, as mean1p
-    np.testing.assert_allclose(mean1p / mean1p[-1], v3 / v3[-1], rtol=1e-2)
+    np.testing.assert_allclose(mean1p / mean1p[-1], v3 / v3[-1], rtol=5e-3)
     assert mean1p[0] / mean1p[-1] > 2.0
 
 

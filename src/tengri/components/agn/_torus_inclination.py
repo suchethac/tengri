@@ -1,26 +1,28 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Angle-integrated power and energy ledger of a tabulated torus library.
 
-A torus library whose records sit on one radiative-transfer scale across inclination keeps
-the flux ratio between sightlines: a face-on CLUMPY torus is brighter in the infrared than
-an edge-on one at the same central luminosity. Such a library is normalized ONCE per
-parameter point, by the sphere mean of the power its records carry,
+A torus library whose records sit on one radiative-transfer scale per model keeps the flux
+ratio between sightlines: a face-on CLUMPY torus is brighter in the infrared than an edge-on
+one at the same central luminosity. Such a library is emitted as two factors. The SHAPE is
+the library normalized per sightline (each record to unit power, interpolated as before,
+``_template_grid.torus_lnu_from_grid``). The POWER along a sightline is a scalar table, the
+records' own powers over their model's mean, interpolated with the same node-exact PCHIP:
 
 .. math::
 
-    \bar P = \int_0^1 P(\mu)\,d\mu, \qquad
-    P(\mu) = \int T_\nu(\mu)\,d\nu, \qquad \mu = \cos i,
+    L_\nu(\mu) = f L_{\rm bol}\,\hat T_\nu(\mu)\,\frac{a(\mu)}{\bar a}, \qquad
+    \bar a = \int_0^1 a(\mu)\,d\mu, \qquad \mu = \cos i,
 
-so the angle-integrated torus power is :math:`f L_{\rm bol}` and every sightline keeps the
-library's own flux relative to the others. By symmetry about the equator
+so the angle-integrated torus power is :math:`f L_{\rm bol}`, every sightline keeps the
+library's flux relative to the others, and the shape between nodes is exactly that of the
+per-sightline library. By symmetry about the equator
 :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta = \int_0^1 P(\mu)\,d\mu`.
 
-The quadrature is Gauss-Legendre of order ``TORUS_GL_ORDER`` on each interval between
-the library's inclination nodes, in the variable the library is interpolated in (each panel
-is one cubic of the interpolant), weighted by :math:`|d\mu/dx|`. The panels run over the
-whole of :math:`\mu \in [0, 1]`; beyond an end node the row is whatever the lookup returns
-there (the end record, or the continued end cubic), which is what the component emits along
-such a sightline.
+The sphere mean is Gauss-Legendre of order ``TORUS_GL_ORDER`` on each interval between the
+library's inclination nodes, in the variable the library is interpolated in, weighted by
+:math:`|d\mu/dx|`. The panels run over the whole of :math:`\mu \in [0, 1]`; beyond an end
+node the profile is whatever the lookup returns there (the end value, or the continued end
+cubic), as the shape is.
 
 A torus-only component has no disc of its own: the disc share :math:`(1 - f) L_{\rm bol}` is
 published as ``log_L_agn_disc_unemitted`` so the ledger closes on the accretion power,
@@ -42,23 +44,28 @@ from tengri.components.agn._template_grid import (
     TorusTemplateGrid,
     float32_safe_template,
     native_bolometric_nu,
+    torus_lnu_from_grid,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-from tengri.utils.scale import log10_magnitude
+from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
     "TORUS_GL_ORDER",
     "TORUS_LEDGER_KEYS",
+    "AnisotropyGrid",
     "TorusInclination",
     "absent_torus_ledger",
+    "anisotropy_at_nodes",
+    "anisotropy_grid",
     "inclination_quadrature_in",
-    "sphere_mean_power_at_nodes",
+    "library_anisotropy",
+    "log10_anisotropy",
+    "node_power_scale",
     "torus_ledger",
     "torus_ledger_from_grid",
-    "torus_lnu_sphere_normalized",
+    "torus_lnu_anisotropic",
     "torus_log_power",
-    "torus_rows_by_inclination",
 ]
 
 #: ``log10(L_sun / (erg/s))`` [dex].
@@ -72,10 +79,12 @@ _X_RANGE: dict[str, tuple[float, float]] = {
 }
 
 
-#: Gauss-Legendre points per inclination panel. Measured against order 32 of the same
-#: interpolant: the sphere-mean power of every restored library (Fritz at three corners of
-#: the grid, NK0_mean_1p/2p/3p across the opening-angle and tau_V axes, SKIRTOR_mean_1p) is
-#: within 1.3e-11 at order 6 and 2.1e-9 at order 4; order 16 costs 2.7 times as much.
+#: Gauss-Legendre points per inclination panel. Each panel of the anisotropy profile is one
+#: cubic times the smooth Jacobian |d mu/dx|. Measured against order 32 of the same
+#: interpolant, for every restored library (Fritz at five points including the corners
+#: (150, 10, 0, 6, 60) and (10, 0.1, -1, 0, 20), NK0_mean_1p/2p/3p across the opening-angle
+#: and tau_V axes, SKIRTOR_mean_1p): the sphere mean is within 3.3e-16 at order 6 and
+#: 6.5e-13 at order 4.
 TORUS_GL_ORDER: int = 6
 
 
@@ -159,96 +168,204 @@ def inclination_quadrature_in(x_nodes, variable: str, order: int = TORUS_GL_ORDE
     return x, weight / jnp.sum(weight)
 
 
-def torus_rows_by_inclination(
-    grid: TorusTemplateGrid, coords: tuple, inc: TorusInclination, dtype
-):
-    """Template rows at every inclination node, the other axes interpolated at ``coords``.
+class AnisotropyGrid(NamedTuple):
+    """A library's power along each sightline, relative to its model's mean over the sphere.
 
-    Parameters
+    Attributes
     ----------
-    grid : TorusTemplateGrid
-        The library.
-    coords : tuple of float
-        One coordinate per axis of ``grid.axes``; the inclination entry is not read.
-    inc : TorusInclination
-        The library's inclination axis.
-    dtype : dtype
-        Evaluation dtype (the caller's wavelength dtype), for the float32-safe table.
-
-    Returns
-    -------
-    rows : ndarray, shape (n_inc, n_native)
-        Interpolated template rows [library units: shape across inclination is kept].
-    x_nodes : ndarray, shape (n_inc,)
-        The inclination nodes, in ``inc.variable``.
+    values : ndarray, shape (n_ax1, ..., n_axk)
+        One scalar per library record, the leading shape of the template: the record's
+        power over its model's mean over the inclination nodes [dimensionless].
+    axes : tuple of ndarray
+        The library's axes, as in ``TorusTemplateGrid.axes``.
     """
-    template = jnp.asarray(float32_safe_template(grid.template, dtype))
-    n_axes = len(grid.axes)
-    template = jnp.moveaxis(template, inc.axis, n_axes - 1)
-    other = tuple(i for i in range(n_axes) if i != inc.axis)
-    x_nodes = jnp.asarray(grid.axes[inc.axis])
-    if not other:
-        return template, x_nodes
-    rows = interp_nd_pchip(
-        template,
-        tuple(jnp.asarray(grid.axes[i]) for i in other),
-        tuple(coords[i] for i in other),
-    )
-    return rows, x_nodes
+
+    values: jnp.ndarray
+    axes: tuple[jnp.ndarray, ...]
 
 
-def _row_at(rows, x_nodes, x, extrapolate: bool):
-    """PCHIP in the inclination variable of an ``(n_inc, n_native)`` table."""
-    return interp_nd_pchip(rows, (x_nodes,), (x,), extrapolate=(extrapolate,))
+def _mu_of(x, variable: str):
+    """``cos i`` at the inclination coordinate ``x``."""
+    if variable == "cos_inc":
+        return x
+    rad = jnp.pi / 180.0
+    return jnp.cos(x * rad) if variable == "incl_deg" else jnp.sin(x * rad)
 
 
-def _sphere_mean_power(rows, x_nodes, wave_native, inc: TorusInclination):
-    """Sphere-mean frequency integral of the rows, on the native grid [library units]."""
-    x_q, w_q = inclination_quadrature_in(x_nodes, inc.variable)
-
-    def _power(x):
-        return native_bolometric_nu(_row_at(rows, x_nodes, x, inc.extrapolate), wave_native)
-
-    return jnp.sum(w_q * jax.vmap(_power)(x_q))
-
-
-def sphere_mean_power_at_nodes(grid: TorusTemplateGrid, inc: TorusInclination) -> np.ndarray:
-    """Sphere-mean power of the library at every node of its other axes, for build-time tables.
+def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
+    r"""Per-record powers divided by their model's mean over the sphere.
 
     Parameters
     ----------
-    grid : TorusTemplateGrid
-        The library (host arrays).
+    powers : array_like, shape (n_ax1, ..., n_axk)
+        The power each record carries along its own sightline, on one common scale per
+        model [any units].
+    axes : tuple of array_like
+        The library's axes.
     inc : TorusInclination
         The library's inclination axis.
 
     Returns
     -------
-    ndarray
-        :math:`\bar P` [library units] at every node of the other axes, the denominator
-        :func:`torus_lnu_sphere_normalized` divides by there, in float64; shape
-        ``grid.template.shape[:-1]`` with the inclination axis of length 1, so it
-        broadcasts against the template's leading axes.
+    AnisotropyGrid
+        ``powers / pbar`` with ``pbar`` the model's trapezoid mean over :math:`\mu = \cos i`
+        at its inclination nodes, so every model carries unit mean and its profile alone; the
+        exact sphere mean at a parameter point is taken later on the interpolated profile.
 
     Notes
     -----
-    **JIT-compatible**: no; a host loop over the nodes, evaluated with the runtime lookup
-    so a precomputed table and the runtime path normalize identically.
+    **JIT-compatible**: yes.
     """
-    other = [i for i in range(len(grid.axes)) if i != inc.axis]
-    shape = tuple(len(grid.axes[i]) for i in other)
-    out = np.empty(shape, dtype=np.float64)
-    wave_native = jnp.asarray(grid.wave_grid, dtype=jnp.float64)
-    for idx in np.ndindex(*shape):
-        coords = [0.0] * len(grid.axes)
-        for i, j in zip(other, idx, strict=True):
-            coords[i] = float(np.asarray(grid.axes[i])[j])
-        rows, x_nodes = torus_rows_by_inclination(grid, tuple(coords), inc, jnp.float64)
-        out[idx] = float(_sphere_mean_power(rows, x_nodes, wave_native, inc))
-    return np.expand_dims(out, inc.axis)
+    powers = jnp.asarray(powers)
+    mu = _mu_of(jnp.asarray(axes[inc.axis]), inc.variable)
+    mean = jnp.trapezoid(powers, mu, axis=inc.axis) / (mu[-1] - mu[0])
+    return AnisotropyGrid(
+        values=powers / jnp.expand_dims(mean, inc.axis),
+        axes=tuple(jnp.asarray(a) for a in axes),
+    )
 
 
-def torus_lnu_sphere_normalized(
+def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) -> AnisotropyGrid:
+    r"""The :class:`AnisotropyGrid` of a library whose records share one scale per model.
+
+    Parameters
+    ----------
+    grid : TorusTemplateGrid
+        The library (its records at their stored scale).
+    inc : TorusInclination
+        The library's inclination axis.
+    dtype : dtype
+        Evaluation dtype; a float32 host table is divided by its peak first.
+
+    Returns
+    -------
+    AnisotropyGrid
+        Each record's frequency integral on its own wavelength nodes
+        (``native_bolometric_nu``), over its model's mean (:func:`anisotropy_grid`).
+
+    Notes
+    -----
+    **JIT/vmap-safe**: yes; the integrals are evaluated in the graph for a threaded grid.
+    """
+    return anisotropy_grid(_record_powers(grid, dtype), grid.axes, inc)
+
+
+def _record_powers(grid: TorusTemplateGrid, dtype):
+    """Each record's frequency integral on its own wavelength nodes, leading shape."""
+    template = jnp.asarray(float32_safe_template(grid.template, dtype))
+    wave = jnp.asarray(grid.wave_grid)
+    flat = template.reshape(-1, template.shape[-1])
+    powers = jax.vmap(lambda row: native_bolometric_nu(row, wave, floor=0.0))(flat)
+    return powers.reshape(template.shape[:-1])
+
+
+def _profile(aniso: AnisotropyGrid, coords: tuple, inc: TorusInclination):
+    """The anisotropy at every inclination node, the other axes interpolated at ``coords``."""
+    n_axes = len(aniso.axes)
+    values = jnp.moveaxis(jnp.asarray(aniso.values), inc.axis, n_axes - 1)
+    other = tuple(i for i in range(n_axes) if i != inc.axis)
+    if not other:
+        return values
+    return interp_nd_pchip(
+        values, tuple(aniso.axes[i] for i in other), tuple(coords[i] for i in other)
+    )
+
+
+def _profile_at(profile, x_nodes, x, extrapolate: bool):
+    """Node-exact PCHIP of an inclination profile at ``x``."""
+    return interp_nd_pchip(profile, (x_nodes,), (x,), extrapolate=(extrapolate,))
+
+
+def _profile_mean(profile, x_nodes, inc: TorusInclination):
+    """Sphere mean of the interpolated profile (Gauss-Legendre over the inclination panels)."""
+    x_q, w_q = inclination_quadrature_in(x_nodes, inc.variable)
+    return jnp.sum(
+        w_q * jax.vmap(lambda x: _profile_at(profile, x_nodes, x, inc.extrapolate))(x_q)
+    )
+
+
+def log10_anisotropy(aniso: AnisotropyGrid, coords: tuple, inc: TorusInclination):
+    r"""``log10`` of the sightline power over the sphere-mean power, :math:`a(\mu)/\bar a`.
+
+    Parameters
+    ----------
+    aniso : AnisotropyGrid
+        The library's anisotropy table.
+    coords : tuple of float
+        One coordinate per axis; the inclination entry is the sightline.
+    inc : TorusInclination
+        The library's inclination axis.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\log_{10}(a(\mu)/\bar a)` [dex], with :math:`a` the table interpolated with
+        node-exact PCHIP (Fritsch & Carlson [1]_, the lookup of #2606) over the other axes
+        and then along the inclination, and :math:`\bar a = \int_0^1 a\,d\mu` (Gauss-Legendre
+        of order ``TORUS_GL_ORDER`` on each inclination panel, in the library's variable).
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; a ratio of the same profile, so it is float32 safe.
+
+    References
+    ----------
+    .. [1] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
+       SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
+    """
+    profile = _profile(aniso, coords, inc)
+    x_nodes = aniso.axes[inc.axis]
+    los = _profile_at(profile, x_nodes, coords[inc.axis], inc.extrapolate)
+    return jnp.log10(los / _profile_mean(profile, x_nodes, inc))
+
+
+def anisotropy_at_nodes(aniso: AnisotropyGrid, inc: TorusInclination) -> np.ndarray:
+    r""":math:`a/\bar a` at every library node, for build-time tables (float64, host).
+
+    Parameters
+    ----------
+    aniso : AnisotropyGrid
+        The library's anisotropy table.
+    inc : TorusInclination
+        The library's inclination axis.
+
+    Returns
+    -------
+    ndarray, shape (n_ax1, ..., n_axk)
+        The factor :func:`torus_lnu_anisotropic` applies at each node (at a node the
+        profile is the stored column, so this is the runtime value there).
+    """
+    n_axes = len(aniso.axes)
+    values = jnp.moveaxis(jnp.asarray(aniso.values, dtype=jnp.float64), inc.axis, n_axes - 1)
+    x_nodes = jnp.asarray(aniso.axes[inc.axis], dtype=jnp.float64)
+    flat = values.reshape(-1, values.shape[-1])
+    means = jax.jit(jax.vmap(lambda p: _profile_mean(p, x_nodes, inc)))(flat)
+    ratio = np.asarray(flat / means[:, None]).reshape(values.shape)
+    return np.moveaxis(ratio, n_axes - 1, inc.axis)
+
+
+def node_power_scale(grid: TorusTemplateGrid, inc: TorusInclination) -> np.ndarray:
+    r"""Per-record factor that turns a stored record into the emitted torus per unit power.
+
+    Parameters
+    ----------
+    grid : TorusTemplateGrid
+        The library (host arrays, as loaded).
+    inc : TorusInclination
+        The library's inclination axis.
+
+    Returns
+    -------
+    ndarray, shape (n_ax1, ..., n_axk)
+        :math:`(a/\bar a) / P` at each node, float64: a build-time table multiplied by it
+        and by :math:`f L_{\rm bol}` equals :func:`torus_lnu_anisotropic` at that node.
+    """
+    powers = np.asarray(_record_powers(grid, jnp.float64))
+    ratio = anisotropy_at_nodes(library_anisotropy(grid, inc, jnp.float64), inc)
+    return ratio / powers
+
+
+def torus_lnu_anisotropic(
     grid: TorusTemplateGrid,
     wavelength: jnp.ndarray,
     coords: tuple,
@@ -257,12 +374,12 @@ def torus_lnu_sphere_normalized(
     agn_log_lbol: float,
     agn_torus_frac: float,
 ) -> jnp.ndarray:
-    r"""Torus :math:`L_\nu` along one sightline, the library scaled once by its sphere mean.
+    r"""Torus :math:`L_\nu` along one sightline: the per-sightline shape times the anisotropy.
 
     Parameters
     ----------
     grid : TorusTemplateGrid
-        Library whose records share one scale across inclination (:math:`T_\nu`, any units).
+        Library whose records share one scale per model across inclination.
     wavelength : array_like, shape (n_wave,)
         Rest-frame output wavelength grid [Angstrom].
     coords : tuple of float
@@ -284,35 +401,22 @@ def torus_lnu_sphere_normalized(
     -----
     .. math::
 
-        L_\nu(\lambda; \mu) = f\,L_{\rm bol}\,\frac{T_\nu(\lambda; \mu)}{\bar P},
-        \qquad \bar P = \int_0^1 \!\! \int T_\nu(\mu)\,d\nu\,d\mu,
+        L_\nu(\lambda; \mu) = f\,L_{\rm bol}\,\frac{T_\nu(\lambda; \mu)}{\int T_\nu\,d\nu}
+        \;\frac{a(\mu)}{\bar a},
 
-    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol} L_\odot`, :math:`f` = ``agn_torus_frac``,
-    :math:`T_\nu` the library interpolated node-exactly (PCHIP, Fritsch & Carlson [1]_) at the
-    parameter point, and the frequency integral that of the interpolant on the library's own
-    wavelength nodes (``native_bolometric_nu``). The angle-integrated power is
-    :math:`f L_{\rm bol}`; the power along :math:`\mu` is :math:`f L_{\rm bol} P(\mu)/\bar P`.
+    The first factor is ``torus_lnu_from_grid``, the records normalized to unit power and
+    interpolated as for a library normalized per sightline (so the shape between nodes is
+    that one exactly). The second is :func:`log10_anisotropy`, the scalar table of the
+    records' own powers interpolated with the same node-exact PCHIP, so the angle-integrated
+    power is :math:`f L_{\rm bol}` and the sightline power :math:`f L_{\rm bol}\,a/\bar a`.
 
     **JIT/grad/vmap-safe**: yes.
-
-    References
-    ----------
-    .. [1] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
-       SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
     """
-    rows, x_nodes = torus_rows_by_inclination(grid, coords, inc, wavelength.dtype)
-    wave_native = jnp.asarray(grid.wave_grid)
-    row = _row_at(rows, x_nodes, coords[inc.axis], inc.extrapolate)
-    sed = resample_template(wavelength, wave_native, row, left=0.0, right=0.0)
-    mean_power = _sphere_mean_power(rows, x_nodes, wave_native, inc)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-    return sed * (l_scale / mean_power)
-
-
-def _log10_anisotropy(rows, x_nodes, wave_native, x_los, inc: TorusInclination):
-    """``log10(P(mu) / P_mean)`` of a row table along ``x_los`` [dex]; a ratio, float32 safe."""
-    los = native_bolometric_nu(_row_at(rows, x_nodes, x_los, inc.extrapolate), wave_native)
-    return jnp.log10(los / _sphere_mean_power(rows, x_nodes, wave_native, inc))
+    shape = torus_lnu_from_grid(
+        grid, wavelength, coords, agn_log_lbol=agn_log_lbol, agn_torus_frac=agn_torus_frac
+    )
+    aniso = library_anisotropy(grid, inc, wavelength.dtype)
+    return shape * pow10(log10_anisotropy(aniso, coords, inc))
 
 
 def torus_log_power(agn_log_lbol, agn_torus_frac):
@@ -400,20 +504,20 @@ def torus_ledger(agn_log_lbol, agn_torus_frac, log_los) -> dict:
 
 
 def torus_ledger_from_grid(
-    grid: TorusTemplateGrid,
+    aniso: AnisotropyGrid,
     coords: tuple,
     inc: TorusInclination,
     *,
     agn_log_lbol,
     agn_torus_frac,
-    dtype,
 ) -> dict:
-    r"""The :func:`torus_ledger` of :func:`torus_lnu_sphere_normalized` at one point.
+    r"""The :func:`torus_ledger` of :func:`torus_lnu_anisotropic` at one point.
 
     Parameters
     ----------
-    grid : TorusTemplateGrid
-        Library whose records share one scale across inclination.
+    aniso : AnisotropyGrid
+        The library's anisotropy table (:func:`library_anisotropy`; Fritz builds its own from
+        ``norm``).
     coords : tuple of float
         Interpolation coordinate per axis; the inclination entry is the sightline.
     inc : TorusInclination
@@ -422,24 +526,17 @@ def torus_ledger_from_grid(
         :math:`\log_{10}(L_{\rm bol}/L_\odot)` [dex].
     agn_torus_frac : float
         Fraction of :math:`L_{\rm bol}` reprocessed by the torus [dimensionless].
-    dtype : dtype
-        Evaluation dtype (the caller's wavelength dtype).
 
     Returns
     -------
     dict
-        As :func:`torus_ledger`; the sightline power is
-        :math:`f L_{\rm bol} P(\mu)/\bar P`, the integral of the SED that
-        :func:`torus_lnu_sphere_normalized` emits along ``coords``.
+        As :func:`torus_ledger`; the sightline power is :math:`f L_{\rm bol}\,a/\bar a`,
+        the integral of the SED the kernel emits along ``coords``.
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes, and float32 safe: only the ratio
-    :math:`P(\mu)/\bar P` is formed from the table.
+    **JIT/grad/vmap-safe**: yes, and float32 safe: only the ratio :math:`a/\bar a` is formed
+    from the table.
     """
-    rows, x_nodes = torus_rows_by_inclination(grid, coords, inc, dtype)
-    log_aniso = _log10_anisotropy(
-        rows, x_nodes, jnp.asarray(grid.wave_grid), coords[inc.axis], inc
-    )
-    log_los = torus_log_power(agn_log_lbol, agn_torus_frac) + log_aniso
+    log_los = torus_log_power(agn_log_lbol, agn_torus_frac) + log10_anisotropy(aniso, coords, inc)
     return torus_ledger(agn_log_lbol, agn_torus_frac, log_los)

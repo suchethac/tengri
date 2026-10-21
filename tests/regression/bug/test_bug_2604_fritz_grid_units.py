@@ -276,11 +276,7 @@ def test_fritz_components_disc_and_dust_share_the_conversion():
         assert _native_power_nu(np.asarray(arr), wave) == pytest.approx(L_SUN, rel=1e-6)
     torus = np.asarray(FR.fritz_sed(jnp.asarray(wave), **kw))
     scale = _native_power_nu(torus, wave) / L_SUN
-    # ``fritz_components`` reads the stored float32 records, which flush two far-UV nodes
-    # (5e-24 and 8e-19 of the peak) that the float64 torus table keeps.
-    np.testing.assert_allclose(
-        np.asarray(comp.dust) * scale, torus, rtol=1e-6, atol=1e-12 * np.max(torus)
-    )
+    np.testing.assert_allclose(np.asarray(comp.dust) * scale, torus, rtol=1e-12, atol=0.0)
 
 
 # -- b. shape against CIGALE ---------------------------------------------
@@ -443,12 +439,11 @@ def _model_sightline_power(node):
         FR.fritz_psy_from_cos_inc(float(np.sin(np.radians(psy)))),
     )
     ledger = torus_ledger_from_grid(
-        FR.fritz_torus_grid(FR.load_fritz_default_grid()),
+        FR.fritz_anisotropy(FR.load_fritz_default_grid()),
         coords,
         FR.TORUS_INCLINATION,
         agn_log_lbol=_MODEL_AGN_LOG_LBOL,
         agn_torus_frac=1.0,
-        dtype=jnp.float64,
     )
     assert 10.0 ** float(ledger["log_L_agn_torus"]) == pytest.approx(
         _MODEL_TORUS_POWER_ERG_S, rel=1e-12
@@ -573,12 +568,11 @@ def test_torus_power_equals_l_scale(node):
         agn_fritz_psy=psy,
     )
     ledger = torus_ledger_from_grid(
-        FR.fritz_torus_grid(FR.load_fritz_default_grid()),
+        FR.fritz_anisotropy(FR.load_fritz_default_grid()),
         (r, tau, beta, gamma, _half_angle(theta), psy),
         FR.TORUS_INCLINATION,
         agn_log_lbol=1.5,
         agn_torus_frac=0.4,
-        dtype=jnp.float64,
     )
     assert 10.0 ** float(ledger["log_L_agn_torus"]) == pytest.approx(
         10.0**1.5 * L_SUN * 0.4, rel=1e-12

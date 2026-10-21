@@ -140,7 +140,7 @@ def _nenkova(module, extra):
 
 
 def _kernel_case(name):
-    """``(ledger grid, sed(grid, wave, mu, **kw), coords(mu), TORUS_INCLINATION, grid)``."""
+    """``(dtype -> anisotropy, sed(grid, wave, mu, **kw), coords(mu), inclination, grid)``."""
     if name == "fritz":
         from tengri.components.agn import fritz as mod
 
@@ -163,7 +163,13 @@ def _kernel_case(name):
         def coords(mu):
             return (*shape.values(), mod.fritz_psy_from_cos_inc(mu))
 
-        return mod.fritz_torus_grid(grid), sed, coords, mod.TORUS_INCLINATION, grid
+        return (
+            lambda dtype: mod.fritz_anisotropy(grid),
+            sed,
+            coords,
+            mod.TORUS_INCLINATION,
+            grid,
+        )
     mod = importlib.import_module(f"tengri.components.agn.{name}")
     files = {
         "nenkova_agnfitter": "nenkova_agnfitter_torus_grid.h5",
@@ -184,14 +190,14 @@ def _kernel_case(name):
         def coords(mu):
             return (jnp.degrees(jnp.arccos(jnp.clip(mu, 0.0, 1.0))),)
 
-        return grid, sed, coords, mod.TORUS_INCLINATION, grid
+        return _aniso(grid, mod), sed, coords, mod.TORUS_INCLINATION, grid
     extra = {
         "nenkova_agnfitter": {},
         "nenkova_agnfitter_2p": {"agn_oa_nenkova": 37.5},
         "nenkova_agnfitter_3p": {"agn_oa_nenkova": 37.5, "agn_tv_nenkova": 50.0},
     }[name]
     sed, coords = _nenkova(mod, extra)
-    return grid, sed, coords, mod.TORUS_INCLINATION, grid
+    return _aniso(grid, mod), sed, coords, mod.TORUS_INCLINATION, grid
 
 
 _RESTORED = (
@@ -209,15 +215,22 @@ def restored(request):
     return request.param, *_kernel_case(request.param)
 
 
+def _aniso(grid, mod):
+    """``dtype -> AnisotropyGrid`` of a restored AGNfitter-rX kernel's library."""
+    from tengri.components.agn._torus_inclination import library_anisotropy
+
+    return lambda dtype: library_anisotropy(grid, mod.TORUS_INCLINATION, dtype)
+
+
 def _ledger(case, mu, dtype=jnp.float64):
     """``torus_ledger_from_grid`` at ``mu`` (jitted in ``mu``), as floats."""
     from tengri.components.agn._torus_inclination import torus_ledger_from_grid
 
-    _, ledger_grid, _, coords, inc, _ = case
+    _, make_aniso, _, coords, inc, _ = case
 
     @jax.jit
     def _at(m):
-        return torus_ledger_from_grid(ledger_grid, tuple(coords(m)), inc, dtype=dtype, **_KW)
+        return torus_ledger_from_grid(make_aniso(dtype), tuple(coords(m)), inc, **_KW)
 
     pub = _at(jnp.asarray(mu, dtype=dtype))
     return {k: float(v) for k, v in pub.items()}

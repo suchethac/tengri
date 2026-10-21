@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Independent reader of the template-torus libraries for the energy-ledger tests (#2851).
+r"""Independent reader of the template-torus libraries for the energy-ledger tests (#2851).
 
 ``RawTorus`` reads one library file with ``h5py`` alone (no tengri import, no tengri
-interpolation): the stored records, their native wavelength nodes and the parameter axes. For
-the Fritz (2006) grid it multiplies the ``dust`` records by their ``norm`` (the divisor CIGALE
-took out of each model) over that model's sphere mean of ``norm``, and converts :math:`L_\\lambda`
-to :math:`L_\\nu`. It interpolates with
-SciPy's ``PchipInterpolator`` one axis at a time, the inclination axis last, integrates the
-log-log interpolant in closed form (``loglog_power``), and forms the sphere mean of the power
-as a dense trapezoid in :math:`\\mu = \\cos i`, not the Gauss-Legendre quadrature the
-component uses.
+interpolation): the stored records, their native wavelength nodes and the parameter axes. Each
+record's power is its log-log interpolant integrated in closed form (``loglog_power``); for the
+Fritz (2006) grid, whose stored ``dust`` records have unit integral, it is their ``norm`` (the
+divisor CIGALE took out of each model). The powers are divided by
+their model's trapezoid mean in :math:`\mu = \cos i` over the inclination nodes, then
+interpolated with SciPy's ``PchipInterpolator`` one axis at a time, the inclination axis last;
+the sphere mean of that profile is a dense trapezoid in :math:`\mu`, not the Gauss-Legendre
+quadrature the component uses. The component emits ``f L_bol`` times this profile over its
+sphere mean along each sightline.
 """
 
 from __future__ import annotations
@@ -72,7 +73,7 @@ def power_of_lnu(wave, lnu):
 
 
 class RawTorus:
-    """One template-torus library read from its file, on its stored common scale."""
+    """One template-torus library read from its file: its records' powers per sightline."""
 
     def __init__(self, name, path):
         _, group, axis_names, inc_name = LIBRARIES[name]
@@ -83,25 +84,37 @@ class RawTorus:
                 self.wave = np.asarray(g["wavelength_aa"][()], dtype=float)
                 dust = np.asarray(g["dust"][()], dtype=float)
                 norm = np.asarray(g["norm"][()], dtype=float)
-                psy = np.asarray(g["psy_axis"][()], dtype=float)
-                # Each model's norm over its own sphere mean (trapezoid in mu = sin psy over
-                # the nodes): the anisotropy, with every model at equal angle-averaged weight.
-                mu = np.sin(np.radians(psy))
-                mean = np.trapezoid(norm, mu, axis=-1) / (mu[-1] - mu[0])
-                records = dust * (norm / mean[..., None])[..., None] * self.wave**2 / _C_AA
+                records = dust * norm[..., None] * self.wave**2 / _C_AA
+                # The record's power on the common scale is ``norm`` itself (CIGALE's divisor;
+                # the stored ``dust`` has unit integral), the field the component reads.
+                powers = norm
             else:
                 self.wave = np.asarray(g["wavelength"][()], dtype=float)
                 records = np.asarray(g["template"][()], dtype=float)
+                powers = None
             axes = [np.asarray(g[a][()], dtype=float) for a in axis_names]
         self.inc_index = axis_names.index(inc_name)
-        # The inclination axis is moved last; it is interpolated after the others.
-        self.records = np.moveaxis(records, self.inc_index, len(axes) - 1)
         self.inc_nodes = axes[self.inc_index]
         self.other_axes = [a for i, a in enumerate(axes) if i != self.inc_index]
-        # Records are scaled by a common constant so the powers sit near 1 (they are stored
-        # at 1e-55 to 1e44 depending on the library); the ratios are what the tests read.
-        self.records = self.records / np.max(self.records)
-        self._rows = {}
+        # The inclination axis is moved last; it is interpolated after the others. Records
+        # are scaled by one constant so the powers sit near 1 (they are stored at 1e-55 to
+        # 1e44 depending on the library); only ratios within a model enter.
+        records = np.moveaxis(records, self.inc_index, len(axes) - 1)
+        self.records = records / np.max(records)
+        if powers is None:
+            powers = power_of_lnu(self.wave, self.records)  # (..., n_inc)
+        else:
+            powers = np.moveaxis(powers, self.inc_index, len(axes) - 1)
+        mu_nodes = self.node_mu()
+        mean = np.trapezoid(powers, mu_nodes, axis=-1) / (mu_nodes[-1] - mu_nodes[0])
+        self.anisotropy = powers / mean[..., None]
+        self._profiles = {}
+
+    def node_mu(self):
+        """``cos i`` at the stored inclination nodes."""
+        if self.name == "fritz":
+            return np.sin(np.radians(self.inc_nodes))
+        return np.cos(np.radians(self.inc_nodes))
 
     def mu_to_x(self, mu):
         """The interpolation coordinate at ``mu = cos i``, with the matching node axis.
@@ -116,43 +129,34 @@ class RawTorus:
             return mu, np.cos(np.radians(self.inc_nodes))
         return np.degrees(np.arccos(mu)), self.inc_nodes
 
-    def rows(self, point):
-        """Records interpolated over the non-inclination axes at ``point`` (SciPy PCHIP)."""
+    def profile(self, point):
+        """The anisotropy at every inclination node, other axes at ``point`` (SciPy PCHIP)."""
         key = tuple(float(v) for v in point)
-        if key not in self._rows:
-            self._rows[key] = self._interpolate_rows(key)
-        return self._rows[key]
+        if key not in self._profiles:
+            table = self.anisotropy
+            for axis, value in zip(self.other_axes, key, strict=True):
+                table = PchipInterpolator(axis, table, axis=0)(np.clip(value, axis[0], axis[-1]))
+            self._profiles[key] = table  # (n_inc,)
+        return self._profiles[key]
 
-    def _interpolate_rows(self, point):
-        table = self.records
-        for axis, value in zip(self.other_axes, point, strict=True):
-            table = PchipInterpolator(axis, table, axis=0)(np.clip(value, axis[0], axis[-1]))
-        return table  # (n_inc, n_wave)
-
-    def row_at(self, point, mu):
-        """The record at ``mu``: SciPy PCHIP in the library's inclination coordinate.
+    def power(self, point, mu):
+        """The anisotropy along ``mu``: SciPy PCHIP in the library's inclination coordinate.
 
         The AGNfitter-rX libraries clamp at their end nodes; the Fritz lookup continues its
         end cubic (SciPy's ``extrapolate=True``), as the component does.
         """
         x, nodes = self.mu_to_x(mu)
-        rows = self.rows(point)
+        prof = self.profile(point)
         if self.name == "fritz":
-            return PchipInterpolator(nodes, rows, axis=0, extrapolate=True)(x)
+            return PchipInterpolator(nodes, prof, extrapolate=True)(x)
         if nodes[0] > nodes[-1]:
-            nodes, rows = nodes[::-1], rows[::-1]
-        return PchipInterpolator(nodes, rows, axis=0)(np.clip(x, nodes[0], nodes[-1]))
-
-    def power(self, point, mu):
-        """Power of the record along ``mu`` [common relative units]."""
-        return power_of_lnu(self.wave, self.row_at(point, mu))
+            nodes, prof = nodes[::-1], prof[::-1]
+        return PchipInterpolator(nodes, prof)(np.clip(x, nodes[0], nodes[-1]))
 
     def sphere_mean(self, point):
-        """``int_0^1 P(mu) dmu`` by a dense trapezoid in ``mu``."""
+        """``int_0^1 a(mu) dmu`` by a dense trapezoid in ``mu``."""
         mu = np.linspace(0.0, 1.0, MU_POINTS)
-        rows = self.row_at(point, mu)
-        powers = power_of_lnu(self.wave, rows)
-        return float(np.trapezoid(powers, mu))
+        return float(np.trapezoid(self.power(point, mu), mu))
 
     def node_power(self, idx_other, inc_index):
         """Power of one stored record (indices into the other axes, then inclination)."""
