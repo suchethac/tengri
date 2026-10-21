@@ -697,24 +697,33 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: tie integral moves from a trapezoid on 4001 nodes to a log-log integral on 8001 nodes). The
 #: trapezoid sat 1.43e-5 low on the disc-dominated first bin, the same move this note records for
 #: that rule; the other bins move by the quadrature rule alone.
+#: Re-captured for the owner ruling of 2026-10-20 (#3052). The tied disc is ``kubota_done``, whose
+#: ``Mdot`` is now inferred so that its total Page-Thorne dissipation equals L_bol (it was
+#: ``L_bol / (eta c^2)``, 1.9% larger at spin 0); this moves T_in, R_hot, the corona and the disc.
+#: Old -> new, relative, in (sum, first, middle, last) order, against the pins above:
+#:   log M_BH 6: +1.33e-05 / -2.23e-04 / +1.43e-05 / +7.64e-07
+#:   log M_BH 8: +1.20e-03 / -1.31e-03 / +1.64e-03 / +2.62e-04
+#:   log M_BH 10: -8.03e-05 / -3.63e-02 / -1.33e-04 / +1.14e-03
+#: The same model's pins in ``test_float32_scale_seam_sweep`` move the same way (log M_BH 6:
+#: sum +1.7e-05, first -2.2e-04). Captured per mass in a fresh process on the merged tree.
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
-        1.558690256968471e32,
-        85036116576310.58,
-        2.8901799419663798e28,
-        8.773302440454935e21,
+        1.558710938929855e32,
+        85017112985480.6,
+        2.8902213555268623e28,
+        8.773309142845245e21,
     ),
     8.0: (
-        1.6508961495700146e32,
-        2.072740689496749e16,
-        3.098226787412647e28,
-        8.823055046580316e21,
+        1.652877199966401e32,
+        2.0700319790200544e16,
+        3.103315723328423e28,
+        8.825368698532178e21,
     ),
     10.0: (
-        1.6722003924903472e32,
-        1.0188233623266798e16,
-        3.13039352903208e28,
-        9.54726034380585e21,
+        1.672066126593175e32,
+        9818827856132108.0,
+        3.1299782093620715e28,
+        9.558113648207253e21,
     ),
 }
 
