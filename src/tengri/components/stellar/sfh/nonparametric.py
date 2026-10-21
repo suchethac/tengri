@@ -1355,13 +1355,27 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     has no branch of its own, because no registry entry names it and its edges
     are not knowable from ``sfh_kwargs`` alone (the caller supplies the fixed
     ladder separately).
+
+    :func:`continuity` and :func:`dirichlet` (and the registry entries that name
+    them, ``bursty_continuity`` and ``prospector_beta``) get the ladder they are
+    called with: ``sfh_kwargs["bin_edges_gyr"]`` when present, else
+    :data:`DEFAULT_BIN_EDGES_GYR`, the same precedence the shape functions
+    apply. Until #3038 this branch always returned the default ladder, so a
+    model with its own ``bin_edges_gyr`` (including the redshift-built ladder
+    ``SEDModel.build`` gives every fixed-redshift model, #2521) got exact knots
+    at 0.03 ... 13.7 Gyr while its own steps fell between grid nodes. The
+    ladder may be a traced array (the batched stack passes per-galaxy edges);
+    only its length must be static, which :func:`_inject_edge_knots` needs.
     """
     if fn is continuity_flex:
         return _continuity_flex_edges_yr(sfh_kwargs)
     if fn is psb_continuity_flex:
         return _psb_flex_edges_yr(sfh_kwargs)
     if fn is continuity or fn is dirichlet:
-        return device_table(DEFAULT_BIN_EDGES_GYR) * 1e9
+        bin_edges_gyr = sfh_kwargs.get("bin_edges_gyr")
+        if bin_edges_gyr is None:
+            return device_table(DEFAULT_BIN_EDGES_GYR) * 1e9
+        return jnp.asarray(bin_edges_gyr) * 1e9
     if fn is periodic:
         return _periodic_edges_yr(sfh_kwargs)
     return None

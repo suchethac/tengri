@@ -18,12 +18,13 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Gaussian,
+    Parameters,
     SEDModel,
     Uniform,
     load_filter_set,
     load_ssp_data,
 )
-from tengri import Parameters
+from tengri.cosmology import age_at_z
 
 data_dir = Path(__file__).resolve().parents[1] / "data"
 ssp_file = data_dir / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -39,7 +40,7 @@ def build_fitter():
     spec = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_skew=Uniform(-0.5, 0.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.5 / float(age_at_z(1.0)), 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
         sfh_tsnorm_trunc=Uniform(0.01, 1.0),
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
@@ -53,7 +54,7 @@ def build_fitter():
 
     true_params = {
         "sfh_tsnorm_skew": 0.1,
-        "sfh_tsnorm_peak_lbt_gyr": 3.0,
+        "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
         "sfh_tsnorm_width_gyr": 1.2,
         "sfh_tsnorm_trunc": 0.3,
         "sfh_tsnorm_log_total_mass": 1.0,

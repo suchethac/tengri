@@ -11,9 +11,8 @@ Cross-component reads
 X-ray depends on quantities owned by other components:
 
 - ``sfr_100myr`` (M_⊙/yr): the SFR averaged over the last 100 Myr, produced
-  by the stellar component. The HMXB and hot-gas relations are
-  calibrated on it (Lehmer et al. 2019, 2021, as adopted by Yang et al. 2022,
-  Sect. 3.3). Read from
+  by the stellar component. X-CIGALE 2022 and later read it for the HMXB and
+  hot-gas terms (pcigale ``yang20.py``; Yang et al. 2022, Sect. 3.3). Read from
   ``state.derived["sfr_100myr"]``; only when the SFH publishes no 100 Myr
   average does the instantaneous ``state.derived["sfr"]`` stand in, and
   failing that 1.0.
@@ -232,7 +231,7 @@ class XRaySEDComponent(TemplateThreading):
                 "sfr_100myr",
                 "Msun/yr",
                 "SFR averaged over the last 100 Myr (stellar); scales the HMXB and "
-                "hot-gas terms (Lehmer+2019, 2021; Yang+2022 Sect. 3.3)",
+                "hot-gas terms (as in pcigale yang20; Yang+2022 Sect. 3.3)",
             ),
             DerivedKey(
                 "sfr",
@@ -507,11 +506,10 @@ class XRaySEDComponent(TemplateThreading):
             ``metallicity_z`` [mass fraction], ``l_2500`` [erg/s/Hz],
             ``cos_inc`` [dimensionless], ``log_l_12um`` [dex re erg/s].
         """
-        # Lehmer+2019, 2021 characterize the HMXB and hot-gas relations on the SFR
-        # averaged over the last 100 Myr, and X-CIGALE >= 2022 reads
-        # ``sfh.sfr100Myrs`` for them (Yang+2022, Sect. 3.3): HMXB emission
-        # varies on ~10 Myr timescales, so the instantaneous SFR is not the
-        # calibrated quantity. The instantaneous value stands in only for an SFH
+        # X-CIGALE >= 2022 reads ``sfh.sfr100Myrs`` for the HMXB and hot-gas terms
+        # (pcigale yang20.py:164; Yang+2022, Sect. 3.3): HMXB emission varies on
+        # ~10 Myr timescales, so the instantaneous SFR is not the adopted
+        # quantity. The instantaneous value stands in only for an SFH
         # that publishes no 100 Myr average.
         sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 1.0)))
         # Contract: stellar publishes log_mstar (log10 M_⊙). xray_total
@@ -631,7 +629,7 @@ class XRaySEDComponent(TemplateThreading):
         wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
         sfr : array_like, scalar
-            SFR averaged over the last 100 Myr [Msun/yr] (Lehmer et al. 2019, 2021;
+            SFR averaged over the last 100 Myr [Msun/yr] (as in pcigale yang20;
             Yang et al. 2022, Sect. 3.3): sets the HMXB and hot-gas amplitudes.
         stellar_mass : array_like, scalar
             Stellar mass [Msun]: sets the LMXB amplitude.

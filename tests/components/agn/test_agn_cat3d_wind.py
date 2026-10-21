@@ -168,22 +168,23 @@ def test_gradient_is_exactly_zero_off_grid(torus_fn, wavelength, axis, point, ar
     assert float(g) == 0.0, f"{axis}: expected a clamped (zero) gradient, got {float(g)}"
 
 
-@pytest.mark.xfail(
+_EDGE_ON_STILL_WRONG = pytest.mark.xfail(
     strict=True,
     reason=(
-        "cat3d_wind: d/d(agn_cos_inc) is wrong at both ends of the declared "
-        "Uniform(0, 1) prior, while correct in the interior. At cos_inc=0 "
-        "(edge-on) it is exactly -0.0 against a limit of -3.941267e-01. At "
-        "cos_inc=1 (face-on) it is exactly HALF the limit: -1.176157 vs "
-        "-2.352332, ratio 2.000016 / 2.000037 / 2.000010 / 1.999975 at "
-        "(a,fwd) = (-2.0,1.5) / (-2.5,2.0) / (-1.75,1.2) / (-3.0,1.1). "
-        "Interior points are clean to 6 s.f., so this is an endpoint "
-        "convention, not a general interpolation defect."
+        "cat3d_wind: d/d(agn_cos_inc) at cos_inc=0 (edge-on) is exactly 0.0 against a "
+        "one-sided limit of -3.918e-01 (a=-2.0, fwd=1.5), while it is correct in the "
+        "interior. The face-on end, which used to be exactly half its limit, is right "
+        "since #2857 (the boundary clamp keeps the full one-sided slope)."
     ),
 )
+
+
 @pytest.mark.parametrize(
     ("cos_inc", "nudge"),
-    [pytest.param(0.0, 1e-6, id="edge-on"), pytest.param(1.0, -1e-6, id="face-on")],
+    [
+        pytest.param(0.0, 1e-6, id="edge-on", marks=_EDGE_ON_STILL_WRONG),
+        pytest.param(1.0, -1e-6, id="face-on"),
+    ],
 )
 def test_cos_inc_gradient_is_right_at_the_prior_endpoints(
     torus_fn, wavelength, cos_inc, nudge

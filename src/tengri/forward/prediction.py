@@ -1593,7 +1593,7 @@ class XRayProperties(_CachedBase):
     """Lazy property accessor for X-ray derived quantities.
 
     The 2-10 keV luminosities of the X-ray terms the model emits: the HMXB +
-    LMXB terms (Lehmer et al. 2016, SFR averaged over 100 Myr) and the AGN
+    LMXB terms (Fragos et al. 2013, SFR averaged over 100 Myr) and the AGN
     corona, published by the X-ray component (``log_L_x_xrb_2_10``,
     ``log_L_x_agn_2_10``).
 

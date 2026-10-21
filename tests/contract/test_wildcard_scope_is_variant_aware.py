@@ -797,3 +797,31 @@ def test_no_group_is_excused_without_a_reason():
             f"wildcard for — delete the entry."
         )
         assert len(reason.split()) >= 5, f"_EXCUSED['{group}'] does not state a reason"
+
+
+def _xray_free_params(xray):
+    """Free ``xray_*`` names of a spec whose X-ray group is ``xray``."""
+    import tengri
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            xray=xray,
+            redshift=Fixed(0.1),
+        )
+    return {p for p in spec.free_params if p.startswith("xray_")}
+
+
+@pytest.mark.parametrize("model", ["yang20", "simple", "lopez24", "xray_aird", "agn_xray_corona"])
+def test_xray_wildcard_leaves_absolute_alpha_ox_fixed_in_offset_mode(model):
+    """``xray_alpha_ox`` is read only in absolute mode, so the default mode never frees it."""
+    assert "xray_alpha_ox" not in _xray_free_params({"type": model, "all_params": FREE})
+
+
+def test_xray_wildcard_frees_alpha_ox_in_absolute_mode_only():
+    """Naming ``alpha_ox`` selects absolute mode: it is free and the offset is not."""
+    freed = _xray_free_params({"type": "yang20", "alpha_ox": FREE, "all_params": FREE})
+    assert "xray_alpha_ox" in freed
+    assert "xray_delta_alpha_ox" not in freed
