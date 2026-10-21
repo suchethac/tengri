@@ -276,14 +276,15 @@ IGM_CITATIONS: dict[str, list[str]] = {
 DLA_CITATIONS: list[str] = ["teppergarcia2006"]
 
 #: X-ray model name → citation keys. Star-formation X-rays always carry the
-#: X-ray-binary scalings (Lehmer+2016); the AGN corona adds the X-CIGALE
-#: alpha_ox-L2500 module (Yang+2020).
+#: X-ray-binary scalings (the Fragos+2013 metallicity and age quartics,
+#: benchmarked against the Lehmer+2016 observations); the AGN corona adds the
+#: X-CIGALE alpha_ox-L2500 module (Yang+2020).
 XRAY_CITATIONS: dict[str, list[str]] = {
-    "simple": ["lehmer2016"],
-    "yang20": ["yang2020", "lehmer2016"],
+    "simple": ["fragos2013", "lehmer2016"],
+    "yang20": ["yang2020", "fragos2013", "lehmer2016"],
     # The Lopez+2024 IRX corona is a variant within the same X-CIGALE X-ray
     # framework (Yang+2020) layered on the XRB scalings.
-    "lopez24": ["yang2020", "lehmer2016"],
+    "lopez24": ["yang2020", "fragos2013", "lehmer2016"],
     None: [],
 }
 

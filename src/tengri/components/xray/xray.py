@@ -1938,7 +1938,7 @@ def xray_total(
     """Total X-ray emission (HMXB + LMXB + hot gas + AGN corona).
 
     Combines X-ray binaries (HMXB and LMXB), diffuse hot gas, and AGN
-    corona emission into a single SED. Implements Lehmer et al. 2016
+    corona emission into a single SED. Implements Fragos et al. 2013
     (metallicity and age-dependent XRB scaling), Yang et al. 2020 (hot gas),
     and Just et al. 2007 / Yang et al. 2020 (AGN corona).
 
@@ -2459,7 +2459,7 @@ def _xrb_hotgas_log_band_luminosities(
     r"""``log10`` band luminosities of the HMXB, LMXB and hot-gas terms [dex re erg/s].
 
     The emitters (:func:`xray_xrb_terms`, :func:`xray_hotgas`) form each amplitude
-    as ``L_band / band_integral`` with ``L_band`` the Lehmer+2016 / Yang+2020
+    as ``L_band / band_integral`` with ``L_band`` the Fragos+2013 / Yang+2020
     relation evaluated below, and ``band_integral`` the shape's integral over the
     same band (:func:`_cutoff_powerlaw_band_norm`). The band integral of the
     emitted spectrum is therefore ``L_band`` itself, and this returns it directly
@@ -2650,7 +2650,7 @@ def xray_total_log_band_luminosities(
     Parameters
     ----------
     sfr : float
-        SFR averaged over the last 100 Myr [Msun/yr] (Lehmer+2016; Yang+2022,
+        SFR averaged over the last 100 Myr [Msun/yr] (as in pcigale yang20; Yang+2022,
         Sect. 3.3).
     stellar_mass : float
         Surviving stellar mass [Msun].
@@ -2664,7 +2664,7 @@ def xray_total_log_band_luminosities(
     alpha_ox_relation, pexrav_R
         Corona shape and amplitude controls, as in :func:`xray_agn_corona`.
     log_L_hmxb_offset, log_L_lmxb_offset : float
-        Departures from the Lehmer+2016 relations [dex].
+        Departures from the Fragos+2013 relations [dex].
 
     Returns
     -------
@@ -2755,7 +2755,7 @@ def xray_total_lopez24_log_band_luminosities(
     alpha_irx, gamma_agn, E_cut, log_nh
         As in :func:`xray_agn_corona_lopez24`.
     log_L_hmxb_offset, log_L_lmxb_offset : float
-        Departures from the Lehmer+2016 relations [dex].
+        Departures from the Fragos+2013 relations [dex].
 
     Returns
     -------

@@ -47,17 +47,24 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
+    # re-captured 2026-10-21: #2919 43020af08 converged corona log-log integral (was 2000-pt
+    # trapezoid, 1.6e-5 off converged; now 8000-pt log-log, 1.2e-7 off). Cause attributed by
+    # reverting only that hunk: the revert reproduces the pins above exactly, and origin/main
+    # 5dde4ad11 gives the same values as the revert. Old -> new, relative: point 0 +6.35e-6,
+    # point 1 +5.0e-6, point 2 +2.0e-6, point 3 +2.3e-7, points 4-7 below 2e-10, sum +5.2e-7.
+    # Only the corona term is rescaled, so the shift is largest where the corona dominates
+    # (point 0, the hard end) and vanishes where the disc does (points 4-7).
     "kubota_done": {
-        "sum": 3.8327887527784238e31,
+        "sum": 3.8327907332299085e31,
         "pts": (
-            1.0573030251412472e27,
-            1.9196515988084435e27,
-            1.0550830147246337e28,
-            6.202396359576807e28,
-            6.040546092056626e27,
-            1.9771627743794663e26,
-            5.61556392901215e24,
-            1.5416332609025254e23,
+            1.0573097384788504e27,
+            1.9196612031686297e27,
+            1.0550851259728304e28,
+            6.202397816766065e28,
+            6.040546093105991e27,
+            1.97716277437947e26,
+            5.61556392901216e24,
+            1.541633260902528e23,
         ),
     },
     "multicolor": {

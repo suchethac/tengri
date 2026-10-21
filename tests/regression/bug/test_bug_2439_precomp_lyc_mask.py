@@ -53,6 +53,7 @@ from tengri import (
     WavePrecomp,
 )
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.cosmology import age_at_z
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
 from tests._data_skip import requires_cue_weights
@@ -188,7 +189,8 @@ def _build(
             "type": "delayed",
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
-            "age_gyr": 3.0,
+            # 3 Gyr, or the Big Bang where the universe is younger (#2748).
+            "age_gyr": Fixed(min(3.0, float(age_at_z(z)))),
             "all_params": Fixed(DEFAULT),
         },
         met={"logzsol": 0.0, "all_params": Fixed(DEFAULT)},
@@ -830,7 +832,8 @@ def _spec_build(ssp, z, approx, fesc=0.0, n_pix=40):
             "type": "delayed",
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
-            "age_gyr": 3.0,
+            # 3 Gyr, or the Big Bang where the universe is younger (#2748).
+            "age_gyr": Fixed(min(3.0, float(age_at_z(z)))),
             "all_params": Fixed(DEFAULT),
         },
         met={"logzsol": 0.0, "all_params": Fixed(DEFAULT)},
