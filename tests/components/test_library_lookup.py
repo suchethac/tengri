@@ -122,3 +122,26 @@ def test_extrapolate_flags_length_checked():
     except ValueError:
         return
     raise AssertionError("extrapolate with the wrong length must raise ValueError")
+
+
+def test_single_node_axis_is_constant_and_the_other_axes_still_interpolate():
+    """A one-node axis returns the table along it with zero derivative (GRAHSP default grid)."""
+    x, y = _grid_1d()
+    table = y[:, None, None]  # axes (x, one-node, one-node)
+    axes = (x, jnp.asarray([-1.7]), jnp.asarray([0.0]))
+    far = (x[2], jnp.asarray(5.0), jnp.asarray(-3.0))
+    assert float(library_lookup(table, axes, far)) == float(y[2])
+    between = (jnp.asarray(1.0), jnp.asarray(-1.7), jnp.asarray(0.0))
+    assert float(library_lookup(table, axes, between)) == float(
+        library_lookup(y, (x,), (jnp.asarray(1.0),))
+    )
+    grad = jax.grad(lambda q: library_lookup(table, axes, (x[1], q, jnp.asarray(0.0))))(
+        jnp.asarray(-1.7)
+    )
+    assert float(grad) == 0.0
+
+
+def test_all_axes_single_node_returns_the_lone_entry():
+    table = jnp.asarray([[3.5]])
+    got = library_lookup(table, (jnp.asarray([1.0]), jnp.asarray([2.0])), (0.0, 9.0))
+    assert float(got) == 3.5

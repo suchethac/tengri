@@ -41,6 +41,7 @@ import numpy as np
 import pytest
 
 from tengri import Fixed
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.conservation
 
@@ -55,36 +56,40 @@ def _log_total_mass_public_name(family: str) -> str:
     raise AssertionError(f"family {family!r} has no log_total_mass parameter")
 
 
-# Family -> its public onset/age/peak-time parameter name.
+# Family -> its public onset/age/peak-time parameter name (the fraction of age(z)).
 ONSET_PARAMS_BY_FAMILY = {
-    "const": "sfh_const_start_gyr",
-    "dexp": "sfh_dexp_start_gyr",
-    "exp": "sfh_exp_start_gyr",
-    "declining_exp": "sfh_declining_exp_age_gyr",
-    "delayed": "sfh_delayed_age_gyr",
-    "delayed_bq": "sfh_delayed_bq_age_main_gyr",
-    "dpl": "sfh_dpl_age_gyr",
-    "dpl_lookback": "sfh_dpl_lookback_age_gyr",
-    "lnorm": "sfh_lnorm_age_gyr",
-    "norm": "sfh_norm_peak_lbt_gyr",
-    "periodic": "sfh_periodic_age_gyr",
-    "psb": "sfh_psb_age_gyr",
-    "sfh2exp": "sfh_sfh2exp_age_gyr",
-    "snorm": "sfh_snorm_peak_lbt_gyr",
-    "snorm_burst": "sfh_snorm_burst_peak_lbt_gyr",
-    "trunc_exp": "sfh_trunc_exp_age_gyr",
-    "tsnorm": "sfh_tsnorm_peak_lbt_gyr",
-    "tsnorm_burst": "sfh_tsnorm_burst_peak_lbt_gyr",
-    "const_exp": "sfh_cexp_age_gyr",
-    "psb_flex": "sfh_psb_flex_tflex_gyr",
-    "psb_suess2022": "sfh_psb2022_tflex_gyr",
+    "const": "sfh_const_start_frac",
+    "dexp": "sfh_dexp_start_frac",
+    "exp": "sfh_exp_start_frac",
+    "declining_exp": "sfh_declining_exp_age_frac",
+    "delayed": "sfh_delayed_age_frac",
+    "delayed_bq": "sfh_delayed_bq_age_main_frac",
+    "dpl": "sfh_dpl_age_frac",
+    "dpl_lookback": "sfh_dpl_lookback_age_frac",
+    "lnorm": "sfh_lnorm_age_frac",
+    "norm": "sfh_norm_peak_lbt_frac",
+    "periodic": "sfh_periodic_age_frac",
+    "psb": "sfh_psb_age_frac",
+    "sfh2exp": "sfh_sfh2exp_age_frac",
+    "snorm": "sfh_snorm_peak_lbt_frac",
+    "snorm_burst": "sfh_snorm_burst_peak_lbt_frac",
+    "trunc_exp": "sfh_trunc_exp_age_frac",
+    "tsnorm": "sfh_tsnorm_peak_lbt_frac",
+    "tsnorm_burst": "sfh_tsnorm_burst_peak_lbt_frac",
+    "const_exp": "sfh_cexp_age_frac",
+    "psb_flex": "sfh_psb_flex_tflex_frac",
+    "psb_suess2022": "sfh_psb2022_tflex_frac",
 }
 
 Z_VALUES = (0.5, 2.5, 6.0)
 MULTIPLIERS = (0.5, 1.2, 2.0)
 LOG_TOTAL_MASS = 9.0
-#: Wide enough to hold 2.0 x age_at_z(0.5) (~17.4 Gyr) plus headroom.
-_OVERRIDE_CEIL_GYR = 100.0
+#: Upper bound of the swept onset fractions: wide enough to hold 2.0 x age(z) at
+#: every z (the fraction of age(z) is at most 2.0 here), in units of age(z=0).
+_OVERRIDE_CEIL_FRAC = 100.0 / float(age_at_z(0.0))
+#: Upper bound of the free delayed_bq age_bq [Gyr]: a Gyr name, not a fraction. Its
+#: swept values are at most 0.3 Gyr, and a bound above 20 Gyr is refused as implausible.
+_OVERRIDE_CEIL_GYR = 10.0
 
 
 #: ``_sfh_type_prefixes`` only ever tries the literal ``sfh_<registry_key>_``
@@ -136,20 +141,31 @@ def _build_model(ssp, family, onset_name, z, age_kernel="cic"):
     sfh_group = {
         "type": family,
         "all_params": Fixed(DEFAULT),
-        onset_short: Uniform(floor, _OVERRIDE_CEIL_GYR),
+        onset_short: Uniform(floor, _OVERRIDE_CEIL_FRAC),
         mass_short: Fixed(LOG_TOTAL_MASS),
         "age_kernel": age_kernel,
     }
     if family == "delayed_bq":
         # Default age_bq_gyr (0.5 Gyr, the burst/quench onset) can exceed a
-        # swept age_main_gyr at the smallest multiplier (0.5 x age(z) at
+        # swept age_main at the smallest multiplier (0.5 x age(z) at
         # z=6 is 0.467 Gyr) -- a physically nonsensical "quench before
         # formation" combination unrelated to this test's own onset sweep.
-        # Free it too so it can be pinned below age_main_gyr per cell.
+        # Free it too so it can be pinned below age_main per cell.
         bq_name = "sfh_delayed_bq_age_bq_gyr"
         bq_short = _short_key(family, bq_name, prefixes)
         bq_floor = _onset_override_floor(family, bq_name)
         sfh_group[bq_short] = Uniform(bq_floor, _OVERRIDE_CEIL_GYR)
+
+    if family in ("psb_flex", "psb_suess2022"):
+        # The two quench times are both fractions of age(z) or both Gyr (#2748). The
+        # sweep moves tflex only, so tlast stays at its absolute Gyr default.
+        tlast_gyr = onset_name.replace("tflex_frac", "tlast_gyr")
+        tlast_short = _short_key(family, onset_name.replace("tflex", "tlast"), prefixes)
+        tlast_value = float(SFH_REGISTRY[family].params[tlast_gyr].default.value)
+        tlast_frac = tlast_value / float(age_at_z(z))
+        sfh_group[tlast_short] = Fixed(tlast_frac)
+        # The swept tflex must stay above tlast, so its prior starts there.
+        sfh_group[onset_short] = Uniform(max(floor, tlast_frac), _OVERRIDE_CEIL_FRAC)
 
     return SEDModel.build(
         ssp_data=ssp,
@@ -184,14 +200,12 @@ def _cells():
 def test_formed_mass_conserved_and_sfr_zero_before_big_bang(
     family, onset_name, z, mult, age_kernel, synthetic_ssp_wide
 ):
-    from tengri.utils.cosmology import age_at_z
-
     age_gyr = float(age_at_z(z))
-    onset_value = mult * age_gyr
+    # The onset is a fraction of age(z), so mult x age(z) Gyr at this redshift.
     model = _build_model(synthetic_ssp_wide, family, onset_name, z, age_kernel=age_kernel)
-    params = {onset_name: onset_value}
+    params = {onset_name: mult}
     if family == "delayed_bq":
-        params["sfh_delayed_bq_age_bq_gyr"] = min(0.3, 0.3 * onset_value)
+        params["sfh_delayed_bq_age_bq_gyr"] = min(0.3, 0.3 * mult * age_gyr)
 
     state = model.predict_state(params)
     joint_weights = np.asarray(state.derived["joint_weights"])
@@ -246,15 +260,12 @@ def test_gp_field_formed_mass_conserved(synthetic_ssp_wide):
     from tengri import DEFAULT, Fixed, SEDModel
 
     z = 2.5
-    from tengri.utils.cosmology import age_at_z
-
-    age_gyr = float(age_at_z(z))
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={
             "type": "dpl",
             "all_params": Fixed(DEFAULT),
-            "age_gyr": Fixed(2.0 * age_gyr),
+            "age_frac": Fixed(2.0),
             "log_total_mass": Fixed(LOG_TOTAL_MASS),
             "field": True,
         },
@@ -274,41 +285,67 @@ def test_gp_field_formed_mass_conserved(synthetic_ssp_wide):
 #: [0, age(z)] (untruncated), so the pooled truncation genuinely differs
 #: per member -- the regime ``_mass_conserving_total``'s composite branch
 #: pins to the AGGREGATE total, not per member (see its own docstring).
+#: Gyr values of the untruncated members. A timing given in Gyr is written as its
+#: ``*_frac`` twin at the test redshift, capped below 1 where the universe is younger
+#: than the Gyr value (the 1.0 Gyr start at z = 6), so the member stays inside [0, age(z)].
 _COMPOSITE_PAIRS: tuple[tuple[str, dict, str, dict], ...] = (
     (
         "dpl",
-        {"sfh_dpl_alpha": Fixed(1.5), "sfh_dpl_beta": Fixed(1.0), "sfh_dpl_tau_gyr": Fixed(3.0)},
+        {"sfh_dpl_alpha": 1.5, "sfh_dpl_beta": 1.0, "sfh_dpl_tau_gyr": 3.0},
         "const",
-        {"sfh_const_start_gyr": Fixed(1.0), "sfh_const_end_gyr": Fixed(0.0)},
+        {"sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
     ),
     (
         "exp",
-        {"sfh_exp_tau_gyr": Fixed(2.0)},
+        {"sfh_exp_tau_gyr": 2.0},
         "delayed",
-        {"sfh_delayed_tau_gyr": Fixed(1.0), "sfh_delayed_age_gyr": Fixed(0.9)},
+        {"sfh_delayed_tau_gyr": 1.0, "sfh_delayed_age_gyr": 0.9},
     ),
     (
         "declining_exp",
-        {"sfh_declining_exp_tau_gyr": Fixed(2.0)},
+        {"sfh_declining_exp_tau_gyr": 2.0},
         "dexp",
-        {"sfh_dexp_tau_gyr": Fixed(0.5), "sfh_dexp_start_gyr": Fixed(0.9)},
+        {"sfh_dexp_tau_gyr": 0.5, "sfh_dexp_start_gyr": 0.9},
     ),
     (
         "norm",
-        {"sfh_norm_width_gyr": Fixed(0.5)},
+        {"sfh_norm_width_gyr": 0.5},
         "const",
-        {"sfh_const_start_gyr": Fixed(1.0), "sfh_const_end_gyr": Fixed(0.0)},
+        {"sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
     ),
 )
 
 #: Onset/age/peak-time public param name per family used above, so the
-#: truncated member's own boundary can be set to 2 x age(z).
+#: truncated member's own boundary can be set to 2 x age(z) (a fraction of age(z)).
 _ONSET_PARAM = {
-    "dpl": "sfh_dpl_age_gyr",
-    "exp": "sfh_exp_start_gyr",
-    "declining_exp": "sfh_declining_exp_age_gyr",
-    "norm": "sfh_norm_peak_lbt_gyr",
+    "dpl": "sfh_dpl_age_frac",
+    "exp": "sfh_exp_start_frac",
+    "declining_exp": "sfh_declining_exp_age_frac",
+    "norm": "sfh_norm_peak_lbt_frac",
 }
+
+#: Largest onset fraction of age(z) a Gyr value is converted to (#2748).
+_MAX_ONSET_FRAC = 0.99
+
+
+def _member_fixed(family: str, extra: dict, z: float) -> dict:
+    """Fixed overrides of one composite member at redshift ``z``.
+
+    A ``*_gyr`` timing whose ``*_frac`` twin the registry declares becomes that
+    twin, valued at its Gyr value over age(z) and capped at ``_MAX_ONSET_FRAC``.
+    Every other entry is a Fixed value unchanged.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    age = float(age_at_z(z))
+    out = {}
+    for name, value in extra.items():
+        frac = name[: -len("_gyr")] + "_frac" if name.endswith("_gyr") else None
+        if frac is not None and frac in SFH_REGISTRY[family].params:
+            out[frac] = Fixed(min(value / age, _MAX_ONSET_FRAC))
+        else:
+            out[name] = Fixed(value)
+    return out
 
 
 @pytest.mark.parametrize("truncated,extra_t,untruncated,extra_u", _COMPOSITE_PAIRS)
@@ -328,17 +365,15 @@ def test_composite_sfh_mass_conserved_in_aggregate(
     aggregate guarantee only.
     """
     from tengri import DEFAULT, Fixed, SEDModel
-    from tengri.utils.cosmology import age_at_z
 
-    age_gyr = float(age_at_z(z))
     onset_param = _ONSET_PARAM[truncated]
     sfh_group = {
         "type": [truncated, untruncated],
         f"sfh_{truncated}_log_total_mass": Fixed(LOG_TOTAL_MASS),
-        onset_param: Fixed(2.0 * age_gyr),
+        onset_param: Fixed(2.0),
         f"sfh_{untruncated}_log_total_mass": Fixed(LOG_TOTAL_MASS),
-        **extra_t,
-        **extra_u,
+        **_member_fixed(truncated, extra_t, z),
+        **_member_fixed(untruncated, extra_u, z),
     }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -378,12 +413,10 @@ def test_sfr_history_integral_equals_formed_mass(family, z, mult, age_kernel, sy
     PLAIN trapezoid over the published grid equals the formed mass to float64
     precision.
     """
-    from tengri.utils.cosmology import age_at_z
-
     age_gyr = float(age_at_z(z))
     onset_name = ONSET_PARAMS_BY_FAMILY[family]
     model = _build_model(synthetic_ssp_wide, family, onset_name, z, age_kernel=age_kernel)
-    params = {onset_name: mult * age_gyr}
+    params = {onset_name: mult}
     if family == "delayed_bq":
         params["sfh_delayed_bq_age_bq_gyr"] = min(0.3, 0.3 * mult * age_gyr)
 
@@ -417,16 +450,14 @@ def test_sfr_history_integral_equals_formed_mass_composite_field(synthetic_ssp_w
     import jax
 
     from tengri import DEFAULT, SEDModel
-    from tengri.utils.cosmology import age_at_z
 
     z = 0.1
-    age_gyr = float(age_at_z(z))
     n_grid = 256
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={
             "type": ["dpl", "field"],
-            "sfh_dpl_age_gyr": Fixed(2.0 * age_gyr),  # onset exceeds age(z): truncated
+            "sfh_dpl_age_frac": Fixed(2.0),  # onset exceeds age(z): truncated
             "sfh_dpl_log_total_mass": Fixed(LOG_TOTAL_MASS),
             "sfh_dpl_alpha": Fixed(1.0),
             "sfh_dpl_beta": Fixed(1.5),

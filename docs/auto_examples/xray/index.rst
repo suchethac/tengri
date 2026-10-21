@@ -55,7 +55,7 @@ X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: lumin
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct emitters: the AGN corona (a cut-off power law normalized through the α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR; Lehmer et al. 2016 metallicity/age scalings), and a hot interstellar-gas term (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host: L_2–10 keV = 10⁴³ erg s⁻¹, M⋆ = 10¹¹ M⊙, SFR = 10 M⊙ yr⁻¹, T = 1 Gyr, Z = 0.02.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct emitters: the AGN corona (a cut-off power law normalized through the α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR; Fragos et al. 2013 metallicity/age scalings), and a hot interstellar-gas term (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host: L_2–10 keV = 10⁴³ erg s⁻¹, M⋆ = 10¹¹ M⊙, SFR = 10 M⊙ yr⁻¹, T = 1 Gyr, Z = 0.02.">
 
 .. only:: html
 

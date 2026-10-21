@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""The galaxy's metallicity reaches the Lehmer+2016 HMXB term (#1755).
+r"""The galaxy's metallicity reaches the Fragos+2013 HMXB term (#1755).
 
 ``xray_model.py`` documented five "opportunistic cross-component reads", one of
 them ``metallicity_z``. Nothing in ``src/tengri`` has ever published a key by
@@ -10,7 +10,7 @@ HMXB quartic could ever see, and ``component.py`` did not pass metallicity to
 ``xray_total`` at all.
 
 Measured before the fix: ``sed_xray`` was **bit-identical** between
-``met_logzsol = -1.0`` and ``+0.3``, a range over which Lehmer+2016 Eq. 15
+``met_logzsol = -1.0`` and ``+0.3``, a range over which Fragos+2013 Eq. 3
 implies an 18x change in L_HMXB.
 
 Same failure mode as #1706, one argument over — there the component simply never
@@ -22,7 +22,7 @@ of "solar" inside a project whose canonical value is
 MIST). At the two values the same relation gives 1.78e39 and 3.22e39 — a factor
 1.8 in the stellar baseline against which an AGN corona is measured.
 
-Lehmer et al. 2016, ApJ 825, 7, Eq. 15:
+Fragos et al. 2013, ApJ 776, L31, Eq. 3:
 
 .. math::
 
@@ -55,7 +55,7 @@ _LOGZSOL_HI = 0.3
 
 
 def _lehmer_l_over_sfr(z: float) -> float:
-    """L_X^HMXB(2-10 keV) per unit SFR from Eq. 15. [erg/s/(Msun/yr)]"""
+    """L_X^HMXB(2-10 keV) per unit SFR from Eq. 3. [erg/s/(Msun/yr)]"""
     return 10.0 ** sum(c * z**i for i, c in enumerate(_LEHMER_COEFFS))
 
 
@@ -183,14 +183,14 @@ def test_sed_xray_responds_to_the_fitted_metallicity(ssp_data_wne, obs, xray_typ
     assert not np.array_equal(lo, hi), (
         f"sed_xray is bit-identical for {xray_type} across met_logzsol "
         f"{_LOGZSOL_LO} -> {_LOGZSOL_HI}. The metallicity is not reaching the "
-        "Lehmer+2016 HMXB term (#1755)."
+        "Fragos+2013 HMXB term (#1755)."
     )
 
     # Direction: metal-poor galaxies host *more* luminous HMXBs, so the low-Z
     # SED must be the brighter one everywhere the X-ray band is populated.
     assert np.all(hi[band] < lo[band]), (
         "raising the metallicity did not lower the X-ray luminosity — the "
-        "Lehmer+2016 relation is monotonically decreasing over this range."
+        "Fragos+2013 relation is monotonically decreasing over this range."
     )
 
 

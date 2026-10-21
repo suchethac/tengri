@@ -23,8 +23,12 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
 from tengri.config.exceptions import ConfigError
+from tengri.cosmology import age_at_z
 from tengri.utils.physics_constants import C_AA
 from tests._old_lyc_ssp import FSPS_PRSC, ssp_with_old_lyc
+
+#: Age of the universe at the test redshift (z = 0) [Gyr]: the divisor of the ``*_frac`` timing.
+_AGE_Z0_GYR = float(age_at_z(0.0))
 
 pytestmark = pytest.mark.skipif(
     not FSPS_PRSC.is_file(), reason="needs data/fsps_prsc_miles_chabrier.h5"
@@ -73,7 +77,7 @@ def _build(neb, reprocessed_by=None, fdust_frac=0.0):
             sfh={
                 "type": "delayed",
                 "tau_gyr": FREE,
-                "age_gyr": FREE,
+                "age_frac": FREE,
                 "log_total_mass": FREE,
                 "all_params": Fixed(DEFAULT),
             },
@@ -87,7 +91,7 @@ def _build(neb, reprocessed_by=None, fdust_frac=0.0):
 def _params(tau, age):
     return {
         "sfh_delayed_tau_gyr": jnp.asarray(tau),
-        "sfh_delayed_age_gyr": jnp.asarray(age),
+        "sfh_delayed_age_frac": jnp.asarray(age / _AGE_Z0_GYR),
         "sfh_delayed_log_total_mass": jnp.asarray(10.0),
     }
 

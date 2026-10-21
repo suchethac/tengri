@@ -74,7 +74,7 @@ class TestDPLTauGradientBeyondAge:
         # Define a base parameter set
         params_base = {
             "sfh_dpl_log_total_mass": 9.0,
-            "sfh_dpl_age_gyr": cosmic_age_gyr - 0.5,
+            "sfh_dpl_age_frac": (cosmic_age_gyr - 0.5) / cosmic_age_gyr,
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
         }
@@ -162,7 +162,7 @@ class TestDPLTauGradientBeyondAge:
 
         params_base = {
             "sfh_dpl_log_total_mass": 9.0,
-            "sfh_dpl_age_gyr": cosmic_age_gyr - 0.5,
+            "sfh_dpl_age_frac": (cosmic_age_gyr - 0.5) / cosmic_age_gyr,
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
         }

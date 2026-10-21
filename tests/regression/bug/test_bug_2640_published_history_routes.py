@@ -22,6 +22,9 @@ pytestmark = pytest.mark.regression_bug
 
 Z = 0.1
 LOG_MASS = 9.0
+# Onset 10 % before the Big Bang, 1.1 x age(z) at every redshift: the history is
+# truncated at age(z), which the published routes must respect.
+AGE_FRAC_BEFORE_BIG_BANG = 1.1
 
 
 def _build(ssp, sfh):
@@ -44,7 +47,7 @@ def _cases():
                 "type": "dpl",
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Fixed(LOG_MASS),
-                "age_gyr": Fixed(1.1 * age),
+                "age_frac": Fixed(AGE_FRAC_BEFORE_BIG_BANG),
                 "age_kernel": kernel,
             },
             {},
@@ -55,7 +58,7 @@ def _cases():
                 "type": "delayed",
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Fixed(LOG_MASS),
-                "age_gyr": Fixed(1.1 * age),
+                "age_frac": Fixed(AGE_FRAC_BEFORE_BIG_BANG),
                 "age_kernel": kernel,
             },
             {},
@@ -65,7 +68,7 @@ def _cases():
     yield pytest.param(
         {
             "type": ["dpl", "field"],
-            "sfh_dpl_age_gyr": Fixed(1.1 * age),
+            "sfh_dpl_age_frac": Fixed(AGE_FRAC_BEFORE_BIG_BANG),
             "sfh_dpl_log_total_mass": Fixed(LOG_MASS),
             "sfh_dpl_alpha": Fixed(1.0),
             "sfh_dpl_beta": Fixed(1.5),
@@ -175,10 +178,18 @@ def test_published_sfr_averages_match_dense_quadrature(synthetic_ssp_wide, famil
     quadrature of the history, here 1.2e-3 at z = 6); tolerance is 3x that.
     A zeroed node plus a partial weight at age(z) biased these by +1.4e-2 at z = 6.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.cosmology import age_at_z
+
+    # The onset is the family's Gyr default, or the Big Bang where the universe is
+    # younger: the history these tolerances were measured on. The default fraction
+    # of age(z) (#2748) is a different, younger history at high z.
+    onset_default = SFH_REGISTRY[family].params[f"sfh_{family}_age_gyr"].default.value
     sfh = {
         "type": family,
         "all_params": Fixed(DEFAULT),
         "log_total_mass": Fixed(LOG_MASS),
+        "age_gyr": Fixed(min(float(onset_default), float(age_at_z(z)))),
     }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,

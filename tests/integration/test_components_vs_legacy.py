@@ -30,8 +30,24 @@ import pytest
 
 from tengri import Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.cosmology import age_at_z
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.timing import timing_frac_params
+from tengri.utils.wave_unit import TIMESCALE_BOUNDS
 from tests._bounds import assert_non_negative
+
+#: Redshift of the stellar-only models below, and the age of the universe there.
+#: SFH timings are fractions of this age, so a fiducial value quoted in Gyr is
+#: divided by it.
+_Z_MODEL = 0.05
+_AGE_GYR = float(age_at_z(_Z_MODEL))
+_TSNORM_PEAK_LBT_FRAC = 2.0 / _AGE_GYR
+
+#: Largest timescale the Gyr-suffixed parameters accept.
+_MAX_TIMESCALE_GYR = TIMESCALE_BOUNDS["_gyr"][1]
+
+#: Public names of the Gyr-valued SFH timings and the fractions that replace them.
+_FRAC_OF_GYR = {gyr: frac for frac, gyr in timing_frac_params().items()}
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
@@ -54,7 +70,7 @@ def stellar_only_model(ssp):
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -70,7 +86,7 @@ _STELLAR_PARAMS = {
     # predict_state (the latter injects via
     # spec.get_fixed_values()). This is the realistic call site.
     "sfh_tsnorm_log_total_mass": 1.0,
-    "sfh_tsnorm_peak_lbt_gyr": 2.0,
+    "sfh_tsnorm_peak_lbt_frac": _TSNORM_PEAK_LBT_FRAC,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": 0.0,
     "sfh_tsnorm_trunc": 3.0,
@@ -86,7 +102,7 @@ def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
     from spec.get_fixed_values()."""
     free_only = {
         "sfh_tsnorm_log_total_mass": 1.0,
-        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_peak_lbt_frac": _TSNORM_PEAK_LBT_FRAC,
         "sfh_tsnorm_width_gyr": 1.0,
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 3.0,
@@ -111,7 +127,7 @@ def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
 
     free_only = {
         "sfh_tsnorm_log_total_mass": 1.0,
-        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_peak_lbt_frac": _TSNORM_PEAK_LBT_FRAC,
         "sfh_tsnorm_width_gyr": 1.0,
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 3.0,
@@ -255,7 +271,7 @@ def stellar_field_model(ssp):
         sfh_field_psd_sigma=Uniform(0.05, 0.5),
         sfh_field_psd_tau_myr=Uniform(50.0, 500.0),
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -387,7 +403,7 @@ def stellar_dirichlet_model(ssp):
         sfh_dir_z_4=Uniform(0.01, 0.99),
         sfh_dir_z_5=Uniform(0.01, 0.99),
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -464,7 +480,7 @@ def stellar_continuity_model(ssp):
         sfh_cont_ratio_4=Uniform(-1.0, 1.0),
         sfh_cont_ratio_5=Uniform(-1.0, 1.0),
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -510,7 +526,7 @@ def stellar_dense_basis_model(ssp):
         sfh_db_tx_frac_1=Uniform(0.05, 0.95),
         sfh_db_tx_frac_2=Uniform(0.05, 0.95),
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -568,7 +584,7 @@ def stellar_chem_evol_model(ssp):
         chem_eta_outflow=Fixed(0.0),
         chem_f_gas_init=Fixed(0.9),
         chem_return_frac=Fixed(0.4),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -640,7 +656,7 @@ def stellar_ramp_model(ssp):
         sfh_tsnorm_trunc=Uniform(1, 10),
         met_logzsol_0=Uniform(-2.0, 0.2),
         met_logzsol_final=Uniform(-2.0, 0.2),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -743,7 +759,10 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
         )
         positive_only = not any(token in k for token in unconstrained_keys)
         if positive_only:
-            free_priors[k] = Uniform(max(v * 0.1, 1e-3), max(v * 5.0, 0.5))
+            hi = max(v * 5.0, 0.5)
+            if k.endswith("_gyr"):
+                hi = min(hi, _MAX_TIMESCALE_GYR)
+            free_priors[k] = Uniform(max(v * 0.1, 1e-3), hi)
         else:
             free_priors[k] = Uniform(v - 1.5, v + 1.5)
 
@@ -778,10 +797,18 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
         )
         free_priors[greater] = Uniform(new_lo, greater_hi)
 
+    # A Gyr-valued timing is freed through its fraction of age(z).
+    free_priors = {
+        _FRAC_OF_GYR.get(k, k): (
+            Uniform(v.bounds[0] / _AGE_GYR, v.bounds[-1] / _AGE_GYR) if k in _FRAC_OF_GYR else v
+        )
+        for k, v in free_priors.items()
+    }
+
     return Parameters(
         mean_sfh_type=[sfh_name],
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -799,7 +826,10 @@ def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: f
     # omits. Fill any such with its spec default, which is exactly the value the
     # forward substituted silently before the missing-parameter guard landed. A
     # no-op for variants whose dict already covers every free parameter.
-    params = dict(sfh_params)
+    params = {
+        _FRAC_OF_GYR.get(k, k): (v / _AGE_GYR if k in _FRAC_OF_GYR else v)
+        for k, v in sfh_params.items()
+    }
     for name in spec.free_params:
         if name not in params:
             params[name] = float(spec.get_distribution(name).default)
@@ -949,7 +979,7 @@ def _stellar_only_spec_with_priors(sfh_name: str, priors: dict):
     return Parameters(
         mean_sfh_type=[sfh_name],
         met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.05),
+        redshift=Fixed(_Z_MODEL),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
@@ -1054,16 +1084,22 @@ def test_orchestrator_continuity_flex_close_to_legacy(ssp):
 # ── Phase II-2.5c: sharp-cutoff exponential SFH variants ──────────────
 
 
+#: The registry's default Fixed onset of the ``exp`` and ``dexp`` families [Gyr];
+#: it is earlier than age(z) at the model redshift, so it stays a legal Fixed value.
+_EXP_START_GYR = 5.0
+
+
 def test_orchestrator_exp_close_to_legacy(ssp):
-    """``exp`` (exponential) — agrees at rtol=5e-2 when ``start_gyr``
-    is at its default Fixed(0) (no sharp cutoff). Variants with
-    non-zero ``sfh_exp_start_gyr`` would expose the legacy log-space
-    vs orchestrator linear-space SFR interpolation residual at the
-    cutoff edge, which closes only with the SFH-side CSP migration.
+    """``exp`` (exponential) — agrees at rtol=5e-2 with ``start_gyr`` pinned
+    at its default Fixed value, which keeps the cutoff out of the integrand.
+    A different onset would expose the legacy log-space vs orchestrator
+    linear-space SFR interpolation residual at the cutoff edge, which closes
+    only with the SFH-side CSP migration.
     """
     priors = {
         "sfh_exp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_exp_tau_gyr": Uniform(0.1, 10.0),
+        "sfh_exp_start_gyr": Fixed(_EXP_START_GYR),
     }
     sfh_params = {
         "sfh_exp_log_total_mass": 1.0,
@@ -1113,6 +1149,7 @@ def test_orchestrator_dexp_close_to_legacy(ssp):
     priors = {
         "sfh_dexp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_dexp_tau_gyr": Uniform(0.1, 10.0),
+        "sfh_dexp_start_gyr": Fixed(_EXP_START_GYR),
     }
     sfh_params = {
         "sfh_dexp_log_total_mass": 1.0,

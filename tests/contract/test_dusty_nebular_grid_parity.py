@@ -54,6 +54,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 from tengri.forward.sed_model import FeaturePrecomp
 from tengri.inference import Fitter
 
@@ -63,11 +64,26 @@ _BARE = "data/fsps_prsc_miles_chabrier.h5"
 _BANDS = ["galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2", "wise_w3"]
 _IR = [5, 6, 7]  # indices of the bands the dust emission reaches
 Z = 0.15
+#: Age of the universe at ``Z`` [Gyr]; the SFH age is sampled as a fraction of it.
+AGE_AT_Z = float(age_at_z(Z))
+
+
+def _age_frac(age_gyr):
+    """Fraction of the age of the universe at ``Z`` for an absolute age in Gyr."""
+    return age_gyr / AGE_AT_Z
+
+
+#: Absolute onsets [Gyr] of the four PRNG draws, the values these keys drew when the onset
+#: was a Gyr parameter. ``Parameters.sample`` seeds each parameter by its name, so the
+#: rename to ``sfh_dpl_age_frac`` (#2748) drew different onsets from the same keys; they
+#: are pinned so the tolerances below keep the points they were measured on.
+_DRAW_ONSETS_GYR = (1.276897, 9.545921, 2.075379, 5.424307)
+
 
 _SFH = {
     "type": "dpl",
     "all_params": Fixed(DEFAULT),
-    "age_frac": Uniform(0.00362663, 0.725327),
+    "age_frac": Uniform(_age_frac(0.05), _age_frac(10.0)),
     "tau_gyr": Uniform(0.05, 10.0),
     "log_total_mass": Uniform(8.0, 12.0),
 }
@@ -191,21 +207,21 @@ def _points(model):
     points = {
         "young_dusty": {
             **base,
-            "sfh_dpl_age_gyr": 0.1,
+            "sfh_dpl_age_frac": _age_frac(0.1),
             "sfh_dpl_tau_gyr": 0.05,
             "sfh_dpl_log_total_mass": 10.0,
             "neb_logU": -2.5,
         },
         "old_dusty": {
             **base,
-            "sfh_dpl_age_gyr": 8.0,
+            "sfh_dpl_age_frac": _age_frac(8.0),
             "sfh_dpl_tau_gyr": 0.5,
             "sfh_dpl_log_total_mass": 10.0,
             "neb_logU": -2.5,
         },
         "young_thin": {
             **base,
-            "sfh_dpl_age_gyr": 0.1,
+            "sfh_dpl_age_frac": _age_frac(0.1),
             "sfh_dpl_tau_gyr": 0.05,
             "sfh_dpl_log_total_mass": 10.0,
             "neb_logU": -2.5,
@@ -225,6 +241,7 @@ def _points(model):
     for s in range(4):
         key = jax.random.PRNGKey(s)
         draw_dict = dict(model.spec.sample(key))
+        draw_dict["sfh_dpl_age_frac"] = _age_frac(_DRAW_ONSETS_GYR[s])
         points[f"draw_{s}"] = draw_dict
 
     # Verify all dicts have correct keys
@@ -343,7 +360,7 @@ def test_the_young_point_is_a_real_test(views, ssp):
 
     if neb_share < 0.10:
         # Try younger point
-        p_younger = {**p, "sfh_dpl_age_gyr": 0.05, "sfh_dpl_tau_gyr": 0.05}
+        p_younger = {**p, "sfh_dpl_age_frac": _age_frac(0.05), "sfh_dpl_tau_gyr": 0.05}
         L0_y = m_no_neb.predict_state(p_younger, observables_only=True).derived["log_L_absorbed"]
         L1_y = m_exact.predict_state(p_younger, observables_only=True).derived["log_L_absorbed"]
         neb_share_y = 1.0 - 10.0 ** (L0_y - L1_y)

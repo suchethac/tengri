@@ -103,7 +103,7 @@ _AGE_UNIV_GYR_EXACT = float(age_at_z0_host())
 #: Lower bound of the delayed_bq main age [Gyr]; defined with its family below.
 _DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
 
-#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
+#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 3), and therefore
 #: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
 #: priors must not overlap or their joint support contains ladders whose
 #: flexible zone has negative width. Shared with the fraction priors below.
@@ -1962,7 +1962,7 @@ _register(
 #
 # Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
 # bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
-# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 1 sets tlast
+# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 3 sets tlast
 # uniform in [0.01, 1.0] Gyr and a Student-t on every SFR ratio, here
 # StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(1.0, 5.0).
 #
@@ -2796,6 +2796,15 @@ def _refuse_quench_crossing(sfh_type, names, given, labels, unit) -> None:
     spec = SFH_REGISTRY[sfh_type]
     last = _reachable_range(spec, names[0], given[0])
     flex = _reachable_range(spec, names[1], given[1])
+    _refuse_crossed_ranges(sfh_type, last, flex, labels, unit)
+
+
+def _refuse_crossed_ranges(sfh_type, last, flex, labels, unit) -> None:
+    """Raise ``ValueError`` when ``last`` can exceed ``flex``; ``None`` ranges pass.
+
+    ``last`` and ``flex`` are ``(lo, hi)`` pairs in one unit, or ``None`` for a
+    form that cannot be read (never turned into a refusal).
+    """
     if last is None or flex is None or last[1] <= flex[0]:
         return
     lo_label, hi_label = labels
@@ -2813,9 +2822,45 @@ def _refuse_quench_crossing(sfh_type, names, given, labels, unit) -> None:
     )
 
 
-def validate_psb_quench_ordering(
-    sfh_type, tlast, tflex, *, tlast_frac=None, tflex_frac=None
-) -> None:
+def _redshift_age_range_gyr(redshift):
+    """Smallest and largest age(z) [Gyr] a build's redshift can give, or None.
+
+    ``redshift`` is the resolved redshift ``Distribution`` (a ``Fixed`` gives a
+    single age). ``None`` is returned for anything unreadable, so a fraction of
+    age(z) is then left unconverted rather than guessed at.
+    """
+    from tengri.cosmology import age_at_z
+
+    if isinstance(redshift, Fixed):
+        z_lo = z_hi = redshift.value
+    elif isinstance(redshift, Distribution):
+        z_lo, z_hi = redshift.bounds
+    else:
+        return None
+    if not (isinstance(z_lo, (int, float)) and isinstance(z_hi, (int, float))):
+        return None
+    if not (math.isfinite(z_lo) and math.isfinite(z_hi)):
+        return None
+    return float(age_at_z(z_hi)), float(age_at_z(z_lo))
+
+
+def _quench_time_choice(gyr_name, frac_name, resolved, user_named):
+    """The name and unit under which one quench time survives in ``resolved``.
+
+    After the grammar settles each ``*_gyr`` / ``*_frac`` pair exactly one of
+    the two remains; if both are present the user-named one wins, then the
+    fraction. ``None`` when neither is present.
+    """
+    has_gyr = gyr_name in resolved
+    has_frac = frac_name in resolved
+    if has_gyr and (not has_frac or gyr_name in user_named):
+        return gyr_name, "gyr"
+    if has_frac:
+        return frac_name, "frac"
+    return None
+
+
+def validate_psb_quench_ordering(sfh_type, resolved, *, user_named=(), redshift=None) -> None:
     """Refuse a post-starburst build whose flexible zone could have negative width.
 
     Parameters
@@ -2823,44 +2868,57 @@ def validate_psb_quench_ordering(
     sfh_type : str
         Registry name of the SFH being built. Any family other than a
         post-starburst one returns immediately.
-    tlast : Distribution or float or None
-        What the build grammar resolved for ``tlast_gyr``: a ``Fixed``, a free
-        ``Distribution``, the ``FREE`` sentinel, or ``None`` when the parameter
-        was not named (which pins it at the registry default).
-    tflex : Distribution or float or None
-        The same for ``tflex_gyr``.
-    tlast_frac : Distribution or float or None, optional
-        The same for the fraction twin ``tlast_frac`` (#2748).
-    tflex_frac : Distribution or float or None, optional
-        The same for the fraction twin ``tflex_frac``.
+    resolved : mapping of str to Distribution
+        The build's resolved priors, keyed by full public name, as they stand
+        after wildcard expansion and after each ``*_gyr`` / ``*_frac`` pair has
+        been settled to one member. A name the wildcard freed or pinned is
+        read exactly like one the user wrote; a pair with neither member
+        present (the SFH is not part of the build) passes.
+    user_named : iterable of str, optional
+        Full names the user wrote explicitly, as opposed to ones a wildcard or
+        a default supplied. Only these can make a mixed-units build an error.
+    redshift : Distribution or None, optional
+        The resolved redshift. Needed only to compare a fraction of age(z)
+        with a time in Gyr; without it such a pair is not ordered.
 
     Raises
     ------
     ConfigError
-        If the two quench times are given in mixed units: a fraction for one
-        and Gyr (or nothing) for the other. An unnamed Gyr time stands at its
-        Gyr default, which cannot be ordered against a fraction of age(z)
-        without knowing the redshift.
+        If the user wrote the two quench times in mixed units, a fraction for
+        one and Gyr for the other.
     ValueError
         If some ``tlast`` the build can reach is strictly greater than some
-        ``tflex`` it can reach, in the units the times were given in.
+        ``tflex`` it can reach.
 
     Notes
     -----
-    The flexible zone is ``[tlast, tflex]``. The declared priors cannot
-    cross, because ``tflex``'s floor is ``tlast``'s ceiling, but a pinned value
-    bypasses its prior, so a build can still ask for ``tlast > tflex``. Nothing
-    downstream raises there: the ladder stops ascending, the flexible bin takes
-    a negative width, the youngest bin overruns it, and the total mass still
-    closes, because the same signed widths that build the history also normalize
-    it. Measured at ``tlast_gyr = 1.0, tflex_gyr = 0.5``: ladder
-    ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass 1.000128 of the declared
-    total. Silent, so it is refused here rather than left to a mass-closure test
-    that cannot see it.
+    The flexible zone is ``[tlast, tflex]``, the middle part of the three-part
+    history of Suess et al. (2022, ApJ 935, 146; arXiv:2207.02883, Sect. 3.1.4):
+    ``tlast`` is the width of the last time bin, uniform on [0.01, 1.0] Gyr
+    (their Table 3), and the fixed old bins end ``tflex`` before the
+    observation (2 Gyr in the paper). The declared priors cannot cross,
+    because ``tflex``'s floor is ``tlast``'s ceiling, but a pinned value
+    bypasses its prior, so a build can still ask for ``tlast > tflex``.
+    Nothing downstream raises there: the ladder stops ascending, the flexible
+    bin takes a negative width, the youngest bin overruns it, and the total
+    mass still closes, because the same signed widths that build the history
+    also normalize it. Measured at
+    ``tlast_gyr = 1.0, tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3,
+    13.7]``, integrated mass 1.000128 of the declared total. Silent, so it is
+    refused here rather than left to a mass-closure test that cannot see it.
 
-    A fraction pair is ordered in fraction units, which is exact at every
-    redshift: both fractions scale with the same age(z), so ``tlast <= tflex``
-    as fractions is ``tlast <= tflex`` in Gyr at any z.
+    The check reads ``resolved``, not the user's dict, because ``all_params:
+    FREE`` frees the ``*_frac`` timings the user never wrote, and a ``*_gyr``
+    pin beside one of those is a crossing the user's keys alone do not show.
+
+    Two times in the same unit are ordered in that unit. Two fractions need no
+    redshift: both scale with the same age(z), so ``tlast <= tflex`` as
+    fractions is ``tlast <= tflex`` in Gyr at any z. A fraction beside a Gyr
+    time that no one wrote as a fraction (a wildcard or default supplied it) is
+    converted to Gyr over the ages the build's redshift can give,
+    ``[frac_lo * age(z_max), frac_hi * age(z_min)]``. The Gyr end is a constant
+    pin, so only the fraction end depends on the redshift and this range is
+    exactly the set of values the build can reach: the conversion is exact.
 
     Equality is legal, and is the single point the two priors share. Measured at
     ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
@@ -2876,28 +2934,49 @@ def validate_psb_quench_ordering(
     if gyr_names is None:
         return
     frac_names = psb_quench_frac_names(sfh_type)
-    frac_given = (tlast_frac, tflex_frac)
-    gyr_given = (tlast, tflex)
-    if any(_is_named_frac(v) for v in frac_given):
-        if not all(_is_named_frac(v) for v in frac_given) or any(
-            _is_named_gyr(v) for v in gyr_given
-        ):
-            raise ConfigError(
-                f"sfh type={sfh_type!r} gives the two quench times in mixed units: "
-                "tlast and tflex must both be fractions of age(z) (tlast_frac, "
-                "tflex_frac), or both in Gyr (tlast_gyr, tflex_gyr). An unnamed "
-                "Gyr time stands at its Gyr default, which cannot be ordered "
-                "against a fraction of age(z) without the redshift."
-            )
-        _refuse_quench_crossing(
-            sfh_type,
-            frac_names,
-            frac_given,
-            ("tlast_frac", "tflex_frac"),
-            " of age(z)",
-        )
+    user_named = frozenset(user_named)
+    spec = SFH_REGISTRY[sfh_type]
+    chosen = [
+        _quench_time_choice(g, f, resolved, user_named) for g, f in zip(gyr_names, frac_names)
+    ]
+    if None in chosen:
         return
-    _refuse_quench_crossing(sfh_type, gyr_names, gyr_given, ("tlast_gyr", "tflex_gyr"), " Gyr")
+    (last_name, last_unit), (flex_name, flex_unit) = chosen
+    last = _reachable_range(spec, last_name, resolved[last_name])
+    flex = _reachable_range(spec, flex_name, resolved[flex_name])
+    prefix = _spec_public_prefix(spec)
+    labels = (last_name[len(prefix) :], flex_name[len(prefix) :])
+    if last_unit == flex_unit:
+        unit = " of age(z)" if last_unit == "frac" else " Gyr"
+        _refuse_crossed_ranges(sfh_type, last, flex, labels, unit)
+        return
+    frac_name = last_name if last_unit == "frac" else flex_name
+    if frac_name in user_named:
+        raise ConfigError(
+            f"sfh type={sfh_type!r} gives the two quench times in mixed units: "
+            "tlast and tflex must both be fractions of age(z) (tlast_frac, "
+            "tflex_frac), or both in Gyr (tlast_gyr, tflex_gyr). A fraction of "
+            "age(z) cannot be ordered against a time in Gyr without the "
+            "redshift."
+        )
+    ages = _redshift_age_range_gyr(redshift)
+    if ages is None:
+        raise ConfigError(
+            f"sfh type={sfh_type!r} gives the two quench times in mixed units "
+            f"({last_name!r} as {last_unit}, {flex_name!r} as {flex_unit}) and the "
+            "redshift is missing or unreadable, so a fraction of age(z) cannot be "
+            "converted to Gyr to order them. Pass the resolved redshift, or give "
+            "both times in the same unit."
+        )
+    if last is None or flex is None:
+        return
+    if last_unit == "frac":
+        last = (last[0] * ages[0], last[1] * ages[1])
+        labels = (f"{labels[0]} x age(z)", labels[1])
+    else:
+        flex = (flex[0] * ages[0], flex[1] * ages[1])
+        labels = (labels[0], f"{labels[1]} x age(z)")
+    _refuse_crossed_ranges(sfh_type, last, flex, labels, " Gyr")
 
 
 def _spec_public_prefix(spec) -> str:

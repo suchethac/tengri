@@ -1114,11 +1114,10 @@ def kubota_done_disc_preintegrated(
     """
     from tengri.components.agn.disc import (
         _gravitational_radius,
-        _hot_flow_luminosity,
+        _hot_flow_fraction,
         _isco_radius,
         _l_seed_geometric,
         _log10_eddington_luminosity,
-        _nt_l0,
         beloborodov_gamma_hot,
     )
     from tengri.utils.physics_constants import (
@@ -1180,13 +1179,17 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    l_hot_erg = _hot_flow_luminosity(
+    # The corona's share of the accretion power, ``L_hot / L_bol``, as in ``disc.py``
+    # (``_hot_flow_fraction``): the corona carries ``L_hot`` exactly and the disc and warm zones
+    # carry the rest (#2733).
+    l_bol_unit = 10.0**agn_log_lbol * L_SUN
+    hot_fraction = _hot_flow_fraction(
         agn_f_hard,
-        log10_l_edd,
-        _nt_l0(r_isco_cm, t_in),
+        log10_l_edd - (agn_log_lbol + _LOG10_LSUN),
         agn_a_spin,
         x_hot_max=0.5 * r_out_cm / r_isco_cm,
     )
+    l_hot_erg = hot_fraction * l_bol_unit
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, a_spin=agn_a_spin)
@@ -1223,12 +1226,18 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
-    l_bol_unnorm = _TWO_FACES * (outer_bol + warm_bol) + l_hot_erg
-    l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
-    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, representable_denominator(1e-100))
+    # The disc and warm zones carry ``L_bol - L_hot = L_bol |1 - L_hot / L_bol|`` and the corona
+    # exactly ``L_hot``, as in the full-wavelength path; the output scales linearly with
+    # ``agn_lum_ratio``.
+    l_disc_unnorm = _TWO_FACES * (outer_bol + warm_bol)
+    scale_disc = (
+        l_bol_unit
+        * jnp.abs(1.0 - hot_fraction)
+        / jnp.maximum(l_disc_unnorm, representable_denominator(1e-100))
+    )
 
-    total_phot = outer_phot + warm_phot + hot_phot
-    return total_phot * scale
+    total_phot = (outer_phot + warm_phot) * scale_disc + hot_phot
+    return total_phot * agn_lum_ratio
 
 
 # ───────────────────────────────────────────────────────────────────

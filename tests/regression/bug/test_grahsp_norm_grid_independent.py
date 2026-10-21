@@ -37,9 +37,15 @@ COARSE_N = 200
 FINE_N = 5000
 
 # Compiled FLOPs of one ``compute_grahsp_sed`` call at 2000 rest-frame nodes
-# (912 A to 1e8 A), jitted with ``agn_log_lbol`` traced, measured on origin/main
-# (2f891d207, #2834) on 2026-10-12. Wall time, warm: about 0.5 ms on main.
-MAIN_FLOPS_N2000 = 8.2402e5
+# (912 A to 1e8 A), jitted with ``agn_log_lbol`` traced, keyed by the jax major.minor
+# that compiled it. CI (linux x86) is the gate, so the baselines are CI measurements; arm
+# macOS differs from x86 by about 0.2 to 1.3 % (0.11.1 arm 834461, 0.12.0 arm 907490, 0.12.0
+# CI linux 909490). The 0.11 value, 824020, is the original CI-era capture on origin/main
+# (2f891d207, #2834, 2026-10-12). XLA 0.12 changed the compiled HLO for this graph
+# (+10.4 % on CI linux), with no tengri change, so one number cannot serve both. The margin
+# below is not widened: it still catches a real regression on either version.
+# Wall time, warm: about 0.5 ms on main.
+MAIN_FLOPS_N2000_BY_JAX = {"0.11": 8.2402e5, "0.12": 9.0949e5}
 COST_MARGIN = 1.10
 
 
@@ -259,4 +265,11 @@ def test_normalization_cost_not_above_main():
         jnp.asarray(12.0),
     )
     assert flops > 0.0
-    assert flops <= COST_MARGIN * MAIN_FLOPS_N2000
+    series = ".".join(jax.__version__.split(".")[:2])
+    if series not in MAIN_FLOPS_N2000_BY_JAX:
+        pytest.fail(
+            f"no compiled-FLOP baseline recorded for jax {jax.__version__} (series {series}); "
+            f"measured {flops:.0f} FLOPs. Re-capture the baseline on origin/main under this "
+            "jax and add it to MAIN_FLOPS_N2000_BY_JAX."
+        )
+    assert flops <= COST_MARGIN * MAIN_FLOPS_N2000_BY_JAX[series]

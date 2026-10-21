@@ -292,7 +292,7 @@ class XRayQuantities(NamedTuple):
     luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
     - ``l_x_xrb`` (Lsun), 2-10 keV luminosity of the emitted HMXB + LMXB terms
-      (Lehmer 2016; SFR averaged over the last 100 Myr).
+      (Fragos et al. 2013; SFR averaged over the last 100 Myr).
     - ``l_x_agn`` (Lsun), 2-10 keV luminosity of the emitted AGN corona; zero
       without an AGN.
     - ``l_x_total`` (Lsun), sum of the two.

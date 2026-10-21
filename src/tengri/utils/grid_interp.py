@@ -2142,7 +2142,9 @@ def library_lookup(
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes. The value is continuous
     everywhere. The derivative is nonzero inside the numerical band and zero beyond
-    its outer edge, and it is one-sided (not halved) on the outermost node.
+    its outer edge, and it is one-sided (not halved) on the outermost node. An axis
+    with a single node is constant: the lookup returns the table along it and its
+    derivative is zero.
     """
     if extrapolate is None:
         extrapolate = (True,) * len(axes)
@@ -2156,6 +2158,17 @@ def library_lookup(
         from tengri.utils.masked_pchip import masked_pchip_lookup  # lazy: module imports us
 
         return masked_pchip_lookup(grid, axes, point, population_mask, bool(extrapolate[0]))
+    # A one-node axis carries no shape to interpolate: its table is the value, the query
+    # cannot move it, and the derivative along it is zero. Peel it before the PCHIP read,
+    # which needs two nodes per axis.
+    keep = [i for i, ax in enumerate(axes) if ax.shape[0] > 1]
+    if len(keep) < len(axes):
+        grid = grid[tuple(slice(None) if i in keep else 0 for i in range(len(axes)))]
+        axes = tuple(axes[i] for i in keep)
+        point = tuple(point[i] for i in keep)
+        extrapolate = tuple(extrapolate[i] for i in keep)
+        if not axes:
+            return grid
     queries = tuple(
         _library_axis_query(ax, p, bool(ext))
         for ax, p, ext in zip(axes, point, extrapolate, strict=True)

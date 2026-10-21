@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import inspect
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -31,8 +30,6 @@ from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.regression_bug
-
-jax.config.update("jax_enable_x64", True)
 
 _LOG_LBOL = 12.0
 _L_ACC = 10.0**_LOG_LBOL * L_SUN  # [erg/s]
