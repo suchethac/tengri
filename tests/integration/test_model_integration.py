@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import MockData, SEDModel
 from tengri.observation.filters import load_filter_set
@@ -20,9 +21,7 @@ from tests._bounds import assert_non_negative
 #: The value the forward used to substitute for a free ``sfh_dpl_age_gyr`` before
 #: the missing-parameter guard landed. Pinning it keeps these specs fully Fixed,
 #: so ``predict_*({})`` stays valid and the SEDs are unchanged (#1021).
-_DPL_AGE_DEFAULT = float(
-    Parameters(mean_sfh_type="dpl").get_distribution("sfh_dpl_age_gyr").default
-)
+_DPL_AGE_DEFAULT = _AGE_UNIV_GYR
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"

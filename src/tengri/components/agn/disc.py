@@ -53,8 +53,8 @@ from tengri.components.agn._nt_emissivity import (
 )
 from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
-    load_nthcomp_table as _load_nthcomp_table,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
+    nthcomp_norm_grid as _nthcomp_norm_grid,
 )
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
@@ -72,9 +72,8 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.components.agn._publication import PUBLICATION_HI_AA, PUBLICATION_LO_AA
 from tengri.components.agn._template_grid import scale_to_lbol_native
-from tengri.utils.grid_interp import library_lookup, resample_template
+from tengri.utils.grid_interp import library_lookup, loglog_integral, resample_template
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
@@ -88,7 +87,6 @@ from tengri.utils.physics_constants import (
 )
 from tengri.utils.scale import (
     apply_log10_scale,
-    log10_add,
     log10_weighted_sum,
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
@@ -146,6 +144,8 @@ _BNU_BOL_PER_T4: float = float(
 )
 # 4*pi*sigma_SB / L_sun; l0_lsun = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4.
 _4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
+# 2*pi*sigma_SB / L_sun; per-annulus (sigma T^4 * 2*pi*r*dr) energy in L_sun.
+_2PI_SIGMA_SB_OVER_LSUN: float = float(2.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
 # L_sun / c^2; mdot [g/s] = _LSUN_OVER_C2 * 10**log_lbol / eta (avoids l_bol_erg).
 _LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
 # R_g = G*M_bh/c^2 = _GRAV_RADIUS_PER_MSUN * 10**log_mbh [cm] (#2210): folding
@@ -157,8 +157,20 @@ _GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
 
 
+#: End points [Angstrom] of the power-law normalization band, shared with ``powerlaw_disc_model``
+#: (its published band and this normalization are the same 10 A to 1e8 A range).
+_PL_BAND_LO_AA: float = 10.0
+_PL_BAND_HI_AA: float = 1.0e8
 #: Internal normalization band of ``powerlaw_disc`` [Angstrom] (descending = ascending nu).
-_PL_BAND_AA = np.geomspace(1.0e8, 10.0, 2049)
+#: Integrated by :func:`loglog_integral` (power law between nodes): at 8001 nodes the
+#: normalization is 3e-8 from its 40980-node value (a trapezoid at 2049 nodes was 1.2e-5 off).
+_PL_BAND_NODES: int = 8001
+
+
+def _pl_band_aa(dtype) -> jnp.ndarray:
+    """The power-law normalization band [Angstrom], descending, built in the trace."""
+    hi, lo = math.log(_PL_BAND_HI_AA), math.log(_PL_BAND_LO_AA)
+    return jnp.exp(jnp.linspace(hi, lo, _PL_BAND_NODES, dtype=dtype))
 
 
 def _powerlaw_shape_unit(nu, agn_alpha, agn_T_max, nu_ref):
@@ -274,15 +286,15 @@ def powerlaw_disc(
     nu_ref = jax.lax.stop_gradient(jnp.min(nu))
     shape_unit = _powerlaw_shape_unit(nu, agn_alpha, agn_T_max, nu_ref)
 
-    # Normalize over the FIXED band [_PL_BAND_AA] (log-spaced internal nodes), not over the
+    # Normalize over the FIXED band [_pl_band_aa] (log-spaced internal nodes), not over the
     # caller's grid: the same SED must come out whichever grid it is evaluated on (#2572). The
     # band integral is peak-factored the same way, and the 1e-100 floor is the one the linear
     # form used.
-    nu_int = _wavelength_to_nu(jnp.asarray(_PL_BAND_AA, dtype=nu.dtype))
+    nu_int = _wavelength_to_nu(_pl_band_aa(nu.dtype))
     nu_int_ref = jax.lax.stop_gradient(jnp.min(nu_int))
     shape_int_unit = _powerlaw_shape_unit(nu_int, agn_alpha, agn_T_max, nu_int_ref)
     int_peak = jax.lax.stop_gradient(jnp.max(shape_int_unit))
-    integral_hat = jnp.trapezoid(shape_int_unit / int_peak, nu_int)
+    integral_hat = loglog_integral(nu_int, shape_int_unit / int_peak)
     log_integral = jnp.maximum(
         agn_alpha * jnp.log10(nu_int_ref) + jnp.log10(int_peak) + jnp.log10(integral_hat),
         math.log10(_representable_denominator(1e-100)),
@@ -1143,26 +1155,28 @@ def _log_r_gauss_legendre(log_lo, log_hi):
     return nodes, weights
 
 
-#: Number of log-uniform nodes of the corona normalization grid. The trapezoid in ln(nu) of the
-#: band-limited Comptonization shape converges spectrally: measured on the corona L_nu at 41
-#: points of the KD18 prior box (center, edges, 20 draws) against 32000 nodes, 500 to 4000
-#: nodes all agree to 1.1e-13 (float64 rounding).
-_CORONA_NU_NODES: int = 1000
+# Fixed internal frequency grid for corona normalization.
+# Matches RELAGN (scotthgn/RELAGN) default: [1e-4, 1e4] keV → [2.418e13, 2.418e21] Hz.
+# Using a fixed grid makes the normalization integral grid-independent,
+# so the corona's optical flux doesn't change with the caller's wavelength grid.
+# The bare power-law nu^(1-Gamma) diverges at low frequencies for Gamma > 1;
+# a fixed lower bound removes this ambiguity. The normalization is the log-log integral on
+# 8000 log-spaced points: 1e-7 from its 40000-node value (a trapezoid on 2000 points was 1.6e-5
+# off and a log-log on 2000 points 1.9e-6).
+_CORONA_NU_LO_HZ: float = 2.418e13
+_CORONA_NU_HI_HZ: float = 2.418e21
+_CORONA_NU_NODES: int = 8000
 
-#: Fixed internal frequency grid for the corona normalization [Hz], ascending: the whole
-#: emission range of the AGN publication grid, 1e-3 A to 1e10 A (``_publication``). The
-#: corona is normalized on the range it emits over, so the SED carries exactly the counted
-#: hot-flow power ``l_hot`` (#2851 ledger, owner ruling 2026-10-13). The RELAGN band
-#: [1e-4, 1e4] keV used before cut the shape at 12.4 um, where for a cold seed (log M_BH = 10)
-#: the corona still carries 4e-5 of its power and up to 70 % of the total L_nu, so the emitted
-#: corona exceeded ``l_hot``. A fixed grid keeps the normalization independent of the caller's
-#: wavelength grid; the seed-photon rollover makes the shape vanish at the low end, so the
-#: lower edge is not a cut of the bare ``nu**(1-Gamma)`` divergence.
-_CORONA_NU_GRID = host_array(
-    np.geomspace(
-        _C_AA_PER_S / PUBLICATION_HI_AA, _C_AA_PER_S / PUBLICATION_LO_AA, _CORONA_NU_NODES
+
+def _corona_nu_grid() -> jnp.ndarray:
+    """The fixed corona normalization grid, built inside the trace from scalar end points.
+
+    An array literal would enter the traced graph as a constant (the grid is 8000 nodes); the
+    log-spaced nodes are computed from the two end points instead.
+    """
+    return jnp.exp(
+        jnp.linspace(math.log(_CORONA_NU_LO_HZ), math.log(_CORONA_NU_HI_HZ), _CORONA_NU_NODES)
     )
-)
 
 
 def _hot_corona_lnu(
@@ -1200,20 +1214,10 @@ def _hot_corona_lnu(
     the seed energy (Kubota & Done 2018 [1]_, Section 2.2).
 
     Normalized so that the frequency-integrated luminosity equals
-    ``l_hot_erg``:
-
-    .. math::
-
-        \int_{\nu_{\rm lo}}^{\nu_{\rm hi}} L_\nu\,d\nu
-        = \int L_\nu\,\nu\,d\ln\nu = L_{\rm hot},
-
-    with the trapezoid in :math:`\ln\nu` on a fixed internal grid spanning the AGN
-    publication range, 1e-3 A to 1e10 A (:math:`\nu_{\rm lo} = 3.0\times10^{8}` Hz,
-    :math:`\nu_{\rm hi} = 3.0\times10^{21}` Hz), which contains the whole shape: the seed
-    rollover and the electron-temperature cutoff drive it to zero inside both edges. The
-    result is independent of the caller's wavelength grid. RELAGN [2]_ normalizes on
-    [1e-4, 1e4] keV; that band cuts the shape at 12.4 um, below which a cold seed photon
-    population (large :math:`M_{\rm BH}`) still emits, so it is not used here.
+    ``l_hot_erg``. The normalization integral is computed on a fixed internal
+    frequency grid matching RELAGN's default [1e-4, 1e4] keV, making the result
+    independent of the caller's wavelength grid (the corona's optical contribution
+    does not vary with grid extent).
 
     Parameters
     ----------
@@ -1275,7 +1279,7 @@ def _hot_corona_lnu(
         )
         return (1.0 - gamma_hard) * jnp.log(freq_safe) - x_hi - x_lo
 
-    grid_nu = device_table(_CORONA_NU_GRID)
+    grid_nu = _corona_nu_grid()
     # Normalize on the fixed internal grid (grid-independent). The shape and the
     # integral are both taken relative to the grid peak in log space: shape/integral is
     # unchanged by the shift, the integral is O(1) per node, and the shift's own
@@ -1283,23 +1287,12 @@ def _hot_corona_lnu(
     # multiplies cotangents by 1/peak, which overflows float32 (#2767).
     log_norm = _comp_log_shape(grid_nu)
     log_peak = jax.lax.stop_gradient(jnp.max(log_norm))
-    # int shape dnu = int shape nu dln(nu): the trapezoid in ln(nu) of a smooth integrand that
-    # vanishes at both ends is spectrally accurate on the log-uniform grid. The trapezoid in
-    # linear nu on the same nodes overestimates by sinh(h)/h - 1 (h the ln-nu spacing, 1.4e-5
-    # on 2000 nodes over 8 decades), whatever the shape, which left the emitted corona 1.4e-5
-    # short of ``l_hot`` (#2851 ledger). ``nu dln(nu)`` is peak-factored separately (``ln_peak``)
-    # so the integrand stays O(1) in float32.
-    log_nu = jnp.log(grid_nu)
-    ln_peak = jax.lax.stop_gradient(jnp.max(log_norm + log_nu))
-    integral_hat = jnp.trapezoid(jnp.exp(log_norm + log_nu - ln_peak), log_nu)
-    integral_safe = jnp.maximum(jnp.abs(integral_hat), _representable_denominator(1e-100))
+    integral = loglog_integral(grid_nu, jnp.exp(log_norm - log_peak))
+    integral_safe = jnp.maximum(jnp.abs(integral), _representable_denominator(1e-100))
 
     shape_scaled = jnp.exp(_comp_log_shape(nu) - log_peak)
-    # integral of shape_scaled = integral_hat * exp(ln_peak - log_peak).
-    log10_amplitude = (
-        jnp.log10(jnp.maximum(l_hot_erg, _representable_floor(1e-100)))
-        - jnp.log10(integral_safe)
-        - (ln_peak - log_peak) / math.log(10.0)
+    log10_amplitude = jnp.log10(jnp.maximum(l_hot_erg, _representable_floor(1e-100))) - jnp.log10(
+        integral_safe
     )
     return shape_scaled, log10_amplitude
 
@@ -1359,7 +1352,7 @@ def _compute_bh_params(
     r_isco_rg = _isco_radius(agn_a_spin)
     r_isco_cm = r_isco_rg * r_g
 
-    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+    eta = _radiative_efficiency(r_isco_rg)
 
     log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): derive the accretion rate from the requested L_bol
@@ -1425,10 +1418,72 @@ def _hot_flow_luminosity(
         l_hot = f_hard_safe * (_L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh)
     else:
         l_hot = f_hard_safe * _pow10(log10_l_edd)
-    ceiling = l0 * _nt_h_ceiling(a_spin)
+    return jnp.minimum(l_hot, l0 * _hot_flow_h_cap(a_spin, x_hot_max))
+
+
+def _radiative_efficiency(r_isco_rg: float) -> float:
+    """Novikov-Thorne efficiency ``eta = 1 - sqrt(1 - 2 / (3 r_isco))`` [dimensionless]."""
+    return 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+
+
+def _hot_flow_h_cap(a_spin: float, x_hot_max: float | None = None) -> float:
+    """Largest ``L_diss,hot / L_0`` the disc can supply [dimensionless].
+
+    The bisection ceiling ``h_ceiling(a)``, further limited to ``h(x_hot_max)`` when the zone
+    clip is given. :func:`_hot_flow_luminosity` caps the corona power at ``L_0`` times this.
+    """
+    cap = _nt_h_ceiling(a_spin)
     if x_hot_max is not None:
-        ceiling = jnp.minimum(ceiling, l0 * _nt_h(jnp.log(x_hot_max), a_spin))
-    return jnp.minimum(l_hot, ceiling)
+        cap = jnp.minimum(cap, _nt_h(jnp.log(x_hot_max), a_spin))
+    return cap
+
+
+def _hot_flow_fraction(
+    agn_f_hard: float,
+    log10_edd_over_bol: float,
+    a_spin: float,
+    x_hot_max: float | None = None,
+) -> float:
+    r"""Corona share of the accretion power, :math:`L_{\rm hot} / L_{\rm bol}` [dimensionless].
+
+    The cap of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard} L_{\rm
+    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
+    :math:`L_{\rm diss,hot}` of their Eq. 2), divided through by :math:`L_{\rm bol}`
+    analytically. The disc temperature scale is set by the accretion rate,
+    :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4 = 3 G M \dot M / (2 R_{\rm isco})`,
+    with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and
+    :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
+
+    .. math::
+
+        \frac{L_0}{L_{\rm bol}} = \frac{3}{2\,\eta\, r_{\rm isco}}
+
+    depends on the spin alone. Every factor is O(1), so the share carries a few float32 ulps
+    instead of the ~1e-6 dex that ``log10 L_hot`` and ``log10 L_bol`` (each ~11 in L_sun)
+    carry, which a difference of near-equal powers would amplify.
+
+    Parameters
+    ----------
+    agn_f_hard : float
+        Hard fraction of Eddington [dimensionless].
+    log10_edd_over_bol : float
+        ``log10(L_Edd / L_bol)`` [dex].
+    a_spin : float
+        Dimensionless black hole spin [dimensionless].
+    x_hot_max : float, optional
+        ``0.5 R_out / R_isco`` zone clip [dimensionless].
+
+    Returns
+    -------
+    float
+        ``L_hot / L_bol`` [dimensionless].
+    """
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    r_isco_rg = _isco_radius(a_spin)
+    l0_over_bol = 1.5 / (_radiative_efficiency(r_isco_rg) * r_isco_rg)
+    return jnp.minimum(
+        f_hard_safe * _pow10(log10_edd_over_bol), l0_over_bol * _hot_flow_h_cap(a_spin, x_hot_max)
+    )
 
 
 def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
@@ -1578,7 +1633,7 @@ def _compute_zone_luminosities(
     agn_a_spin: float = 0.0,
     nthcomp_table=None,
 ) -> tuple:
-    """Compute self-consistent luminosities of the three AGN zones, disc and corona apart.
+    r"""Compute self-consistent luminosities of the three AGN zones, disc and corona apart.
 
     Integrates the Novikov-Thorne temperature profile over annuli in each zone
     (outer standard disc, warm Comptonization, hot corona) and combines the
@@ -1653,6 +1708,13 @@ def _compute_zone_luminosities(
     normalized by its own integral, so the spectra integrate to their counted powers on any
     grid that covers the template band.
 
+    The corona power is :math:`L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}}
+    \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Eq. 2), set to
+    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.2.1, Table 3). The disc budget is the rest of the
+    accretion power, :math:`L_{\rm bol}\,|1 - L_{\rm hot}/L_{\rm bol}|`, with the share formed by
+    :func:`_hot_flow_fraction` so the difference is taken between O(1) numbers, not between two
+    float32 logarithms of ~1e11 powers.
+
     References
     ----------
     .. [1] A. Kubota and C. Done, MNRAS, 480, 1247 (2018).
@@ -1714,13 +1776,7 @@ def _compute_zone_luminosities(
     dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
 
-    # The warm shape is the template resampled LINEARLY in nu between the template's own
-    # frequency nodes and zero outside them (``_nthcomp``), so its exact integral is the
-    # trapezoid in linear nu on those nodes. Normalizing there makes each ring carry exactly
-    # ``p_plain``; the 4000-node geometric grid used before missed the interior nodes and
-    # left the warm zone 1e-6 off its counted power (#2851 ledger).
-    table_nodes = nthcomp_table if nthcomp_table is not None else _load_nthcomp_table()
-    nu_norm = jnp.asarray(table_nodes.nu, dtype=nu.dtype)
+    nu_norm = device_table(_nthcomp_norm_grid())
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Comptonized L_nu of one warm-zone annulus, in units of the largest ring area."""
@@ -1732,7 +1788,7 @@ def _compute_zone_luminosities(
         shape = _nthcomp_lnu_interp(
             nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table, unit=_NTHCOMP_UNIT
         )
-        # The template is normalized by its own integral over its nodes, so the ring carries
+        # The template is normalized by its own integral over its band, so the ring carries
         # exactly ``p_plain`` (the template's own normalization is ~0.5 % off, #2733).
         shape_band = _nthcomp_lnu_interp(
             nu_norm,
@@ -1760,15 +1816,21 @@ def _compute_zone_luminosities(
     # in L_sun units (l_edd from M_BH, L_bol from the SHAPE luminosity: the
     # corona fraction lambda_Edd must track the TRUE L_bol, not the reference the
     # magnitude normalizes to). Beloborodov uses only their ratio, so units cancel.
-    l_hot_erg = _hot_flow_luminosity(
+    # The corona's share of the accretion power is formed from O(1) ratios (see
+    # ``_hot_flow_fraction``), and its power is that share times the shape luminosity, so the
+    # disc budget below subtracts a share, never two ~1e11 powers carried as logarithms.
+    log10_bol_shape = agn_log_lbol_shape if float32 else agn_log_lbol_shape + _LOG10_LSUN_ERG
+    if float32:
+        log10_edd_over_bol = math.log10(_L_EDD_1MSUN_LSUN) + agn_log_mbh - log10_bol_shape
+    else:
+        log10_edd_over_bol = log10_l_edd - log10_bol_shape
+    hot_fraction = _hot_flow_fraction(
         agn_f_hard,
-        log10_l_edd,
-        _nt_l0(r_isco_cm, t_in, float32),
+        log10_edd_over_bol,
         agn_a_spin,
-        float32=float32,
-        agn_log_mbh=agn_log_mbh,
         x_hot_max=0.5 * r_out_cm / r_isco_cm,
     )
+    l_hot_erg = hot_fraction * _pow10(log10_bol_shape)
     if float32:
         l_seed_geom = _l_seed_geometric(
             r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True, a_spin=agn_a_spin
@@ -1825,14 +1887,7 @@ def _compute_zone_luminosities(
     # logarithms and the rings are combined in a base-10 logsumexp, so no product of the large
     # (``T^4``, ``r``, ``dr``) and small (``c``) factors is ever formed, and the reverse pass
     # carries O(1) weights instead of the ~1e28-scale unnormalized spectra (#2767).
-    # ``sigma`` here is ``pi int B_nu dnu / T^4`` built from the h, k, c of ``planck_lnu``
-    # (``_BNU_BOL_PER_T4``), not the tabulated sigma_SB: the rings are summed as the very
-    # Planck spectra the SED carries, so the counted and the emitted disc power agree to
-    # rounding. The tabulated constant differs by 3.3e-11 (#2851 ledger).
-    log10_sigma_planck = math.log10(math.pi * _BNU_BOL_PER_T4)
-    log10_c = math.log10(2.0 * math.pi) + log10_sigma_planck
-    if float32:
-        log10_c = log10_c - math.log10(_LSUN_ERG)
+    log10_c = math.log10(_2PI_SIGMA_SB_OVER_LSUN if float32 else 2.0 * math.pi * _SIGMA_SB)
     r_both = jnp.concatenate([r_outer, r_warm_grid])
     t_both = jnp.concatenate([t_outer, t_warm])
     dr_both = jnp.concatenate([dr_outer, dr_warm])
@@ -1843,32 +1898,26 @@ def _compute_zone_luminosities(
         + jnp.log10(dr_both)
     )
     log10_disc_power = math.log10(_TWO_FACES) + log10_weighted_sum(log10_rings, 1.0)
-    log10_hot_power = jnp.log10(jnp.maximum(l_hot_erg, _representable_floor(1e-100)))
-    # The corona carries its counted power exactly, ``l_hot_erg`` (at most ``L_bol``, below). The
-    # disc and warm zones carry the rest, ``L_bol - l_hot``, so the disc gets its own scale. The
+    # The corona carries its counted power exactly, ``l_hot_erg``. The disc and warm zones carry
+    # the rest of the accretion power, ``L_bol - l_hot``, so the disc gets its own scale. The
     # Page-Thorne disc-frame dissipation of the disc is 1.019 eta Mdot c^2 (see
     # ``_nt_emissivity``), so a single scale over both zones would take the corona's share away
-    # from its counted power (#2733). The log10 difference is formed with the signed log-add, so
-    # no unnormalized ~1e28 spectrum is formed in float32 (#2767).
+    # from its counted power (#2733). The budget is ``L_bol (1 - l_hot / L_bol)``: the share is
+    # formed from O(1) ratios, so it is not a difference of two ~1e11 powers, and no
+    # unnormalized ~1e28 spectrum is formed in float32 (#2767).
     # Units: the shape powers (disc, corona) are in the shape's own luminosity units, and
     # ``l_bol_erg`` is the output magnitude, which the float32 path sets to a reference. The
     # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude; within the
     # shape, the disc carries ``L_shape - l_hot``. The corona carries ``k * l_hot`` exactly.
-    log10_bol_shape = agn_log_lbol_shape if float32 else agn_log_lbol_shape + _LOG10_LSUN_ERG
     log10_k = jnp.log10(l_bol_erg) - log10_bol_shape
-    # The corona radiates at most the whole accretion power. ``l_hot`` is a disc-frame
-    # dissipation, capped by ``_hot_flow_luminosity`` at 99% of the disc's total Page-Thorne
-    # dissipation, which is 1.019 (a = 0) to 1.13 (a = 0.998) times the accretion power; where
-    # ``f_hard L_Edd`` reaches that cap (lambda_Edd below f_hard, the whole flow hot) the corona
-    # would carry up to 1.13 L and the signed log-add below gave the disc ``|L - l_hot|``
-    # instead of zero, so the SED radiated up to 1.24 L (#2851 ledger). The radiated corona is
-    # therefore ``min(l_hot, L)``, the disc the rest. The zone radii and Gamma_hot keep the
-    # uncapped ``l_hot`` (the corona cap of ``_hot_flow_luminosity`` is unchanged).
-    log10_hot_radiated = jnp.minimum(log10_hot_power, log10_bol_shape)
-    log10_hot_amplitude = log10_hot_amplitude + (log10_hot_radiated - log10_hot_power)
-    log10_hot_power = log10_hot_radiated
+    # ``|L_bol - l_hot| = L_bol |1 - l_hot / L_bol|``: the share is subtracted from one, so
+    # the near-equal powers (corona 96% of the total at the prior edge) are never differenced.
+    disc_share = jnp.abs(1.0 - hot_fraction)
+    log10_disc_share = jnp.where(
+        disc_share > 0, jnp.log10(jnp.where(disc_share > 0, disc_share, 1.0)), -jnp.inf
+    )
     log10_budget_disc = jnp.maximum(
-        log10_add(log10_bol_shape, log10_hot_power, sign_b=-1.0),
+        log10_bol_shape + log10_disc_share,
         jnp.log10(_representable_denominator(1e-100)),
     )
     log10_scale = log10_k + log10_budget_disc - log10_disc_power
@@ -1884,7 +1933,7 @@ def _compute_zone_luminosities(
         scale,
         l_nu_disc_norm,
         l_nu_hot_norm,
-        _pow10(log10_hot_power - log10_bol_shape),
+        hot_fraction,
         log10_scale,
     )
 

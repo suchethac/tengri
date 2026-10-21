@@ -587,7 +587,7 @@ def _build_nb00_today(ssp):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(list(_NB00_FILTERS))),
         approx=WavePrecomp(),
-        sfh={"type": "dpl", "all_params": FREE, "age_gyr": 13.1},
+        sfh={"type": "dpl", "all_params": FREE, "age_frac": Fixed(1.0)},
         dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
@@ -755,7 +755,7 @@ NOTEBOOKS = {
                 "dust_attenuation.type",
                 "free_params",
                 "neb.type",
-                "sfh.age_gyr",
+                "sfh.age_frac",
                 "sfh.type",
                 "ssp.file",
                 "ssp.nebular",

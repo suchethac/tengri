@@ -25,6 +25,11 @@ from tengri.components._z_response import interp_z_table
 #: Key under which each emitter's namespace carries its term band response.
 TERM_BAND_RESPONSE_KEY = "term_band_response"
 
+#: Optional per-node tables, read alongside ``R`` and ``S_ref`` when the emitter declares them:
+#: the term shapes at its diagnostic nodes (``S_diag``) and the term amplitudes at ``lam_ref``
+#: when no amplitude parameter is free (``amp``, #2987).
+_OPTIONAL_NODE_KEYS = ("S_diag", "amp")
+
 
 def term_band_response(
     template_data: Any, name: str, params: Mapping[str, Any] | None = None
@@ -74,8 +79,9 @@ def term_band_response(
     nodes = table["ln1pz"]
     if nodes.shape[0] == 1:
         out = {"R": table["R"][0], "lam_ref": table["lam_ref"], "S_ref": table["S_ref"][0]}
-        if "S_diag" in table:
-            out["S_diag"] = table["S_diag"][0]
+        for key in _OPTIONAL_NODE_KEYS:
+            if key in table:
+                out[key] = table[key][0]
         return out
     from tengri.parameters.resolve import require_redshift
 
@@ -85,10 +91,9 @@ def term_band_response(
         "lam_ref": table["lam_ref"],
         "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z, extrapolate=True),
     }
-    if "S_diag" in table:
-        out["S_diag"] = interp_z_table(
-            {"ln1pz": nodes, "values": table["S_diag"]}, z, extrapolate=True
-        )
+    for key in _OPTIONAL_NODE_KEYS:
+        if key in table:
+            out[key] = interp_z_table({"ln1pz": nodes, "values": table[key]}, z, extrapolate=True)
     return out
 
 

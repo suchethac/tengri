@@ -43,6 +43,7 @@ from tengri.parameters.groups import (
     parameters_to_groups,
     parse_groups,
 )
+from tengri.parameters.timing import timing_frac_params
 
 pytestmark = pytest.mark.contract
 
@@ -132,16 +133,40 @@ def _sfh_type_value(sfh_type):
     return ["dpl", sfh_type] if sfh_type in _COMPOSE_WITH_DPL else sfh_type
 
 
+# A ``*_gyr`` timing that has a ``*_frac`` twin is a Fixed-only alias: naming
+# both in one group is refused by design, so the sampled spelling is the
+# ``*_frac`` name and the Gyr name is exercised on its own below.
+_GYR_ALIASES = frozenset(timing_frac_params().values())
+
+#: Absolute Gyr for a Fixed ``*_gyr`` alias. It must not exceed the age of the
+#: universe at the test redshift (z = 0.05, about 12.9 Gyr).
+GYR_SHIM_VALUE = 0.3
+
+
+def _sampled_params(sfh_type):
+    """Registry parameters a user writes by short key, Gyr aliases excluded."""
+    return tuple(p for p in SFH_REGISTRY[sfh_type].params if p not in _GYR_ALIASES)
+
+
+def _gyr_alias_cases():
+    return [
+        (sfh_type, gyr)
+        for sfh_type in _sfh_types_the_builder_accepts()
+        for gyr in SFH_REGISTRY[sfh_type].params
+        if gyr in _GYR_ALIASES
+    ]
+
+
 @pytest.mark.parametrize("sfh_type", _sfh_types_the_builder_accepts())
 def test_every_short_key_resolves_back_to_its_full_parameter(sfh_type):
-    """Writing every parameter by its short key sets every full parameter.
+    """Writing every sampled parameter by its short key sets every full parameter.
 
     The inverse direction is ``parse_groups`` itself: it walks the declared
     full names and looks each one up in the user's group dict by its short
     spelling. Provenance records which lookups hit, so an unresolved short
     key shows up as ``registry_default`` rather than ``user_*``.
     """
-    params = tuple(SFH_REGISTRY[sfh_type].params)
+    params = _sampled_params(sfh_type)
     group = {"type": _sfh_type_value(sfh_type), "all_params": Fixed(DEFAULT)}
     for full in params:
         group[_extract_short_name(full, {})] = Fixed(DEFAULT)
@@ -157,6 +182,20 @@ def test_every_short_key_resolves_back_to_its_full_parameter(sfh_type):
     assert not unresolved, (
         f"short keys for {sfh_type!r} did not reach these parameters: {unresolved}"
     )
+
+
+@pytest.mark.parametrize(("sfh_type", "gyr"), _gyr_alias_cases())
+def test_gyr_alias_short_key_is_a_fixed_shim(sfh_type, gyr):
+    """A ``*_gyr`` short key on its own is accepted as a Fixed absolute Gyr value."""
+    group = {
+        "type": _sfh_type_value(sfh_type),
+        "all_params": Fixed(DEFAULT),
+        _extract_short_name(gyr, {}): Fixed(GYR_SHIM_VALUE),
+    }
+
+    spec = parse_groups(sfh=group, redshift=Fixed(0.05))
+
+    assert spec._group_provenance.get(gyr) == "user_fixed"
 
 
 @pytest.mark.parametrize("sfh_type", _sfh_types_the_builder_accepts())
@@ -184,20 +223,15 @@ def test_builder_factory_kwargs_are_the_keys_the_parser_accepts(sfh_type):
     key" ``ValueError`` one step later.
     """
     factory = getattr(builders.sfh, sfh_type)
-    kwargs = {
-        _extract_short_name(full, {}): Fixed(DEFAULT) for full in SFH_REGISTRY[sfh_type].params
-    }
+    params = _sampled_params(sfh_type)
+    kwargs = {_extract_short_name(full, {}): Fixed(DEFAULT) for full in params}
     group = factory(all_params=Fixed(DEFAULT), **kwargs)
     if sfh_type in _COMPOSE_WITH_DPL:
         group = {**group, "type": _sfh_type_value(sfh_type)}
 
     spec = parse_groups(sfh=group, redshift=Fixed(0.05))
     provenance = spec._group_provenance
-    unresolved = [
-        full
-        for full in SFH_REGISTRY[sfh_type].params
-        if not str(provenance.get(full)).startswith("user")
-    ]
+    unresolved = [full for full in params if not str(provenance.get(full)).startswith("user")]
     assert not unresolved, unresolved
 
 

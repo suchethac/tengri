@@ -33,8 +33,11 @@ pytestmark = pytest.mark.regression_bug
 
 KEY = jax.random.PRNGKey(0)
 
-#: The FSPS PARSEC/C3K grid the issue measured on.
-_SSP_NAME = "fsps_prsc_c3k_a_chabrier.h5"
+#: A grid tracked in git, so the test executes on every runner. The defect is in the
+#: rest-band projection of the dust emission component, which reads only the SSP
+#: through the stellar spectrum and never its spectral library; the issue measured
+#: it on the PARSEC/C3K grid and the same projection runs on the PARSEC/MILES one.
+_SSP_NAME = "fsps_prsc_miles_chabrier.h5"
 _DATA_DIR = Path(os.environ.get("TENGRI_DATA_DIR", "data"))
 
 BANDS = ["hst_f435w", "hst_f814w", "hst_f160w", "irac_36", "irac_80"]
@@ -51,8 +54,7 @@ _RTOL_OBS = 0.02
 @pytest.fixture(scope="module")
 def ssp():
     path = _DATA_DIR / _SSP_NAME
-    if not path.is_file():
-        pytest.skip(f"SSP data not found: {path}")
+    assert path.is_file(), f"tracked SSP grid missing from the checkout: {path}"
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(path))

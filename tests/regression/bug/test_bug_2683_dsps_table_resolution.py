@@ -20,12 +20,15 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
 BANDS = ["galex_fuv", "sdss_u", "sdss_r", "2mass_h"]
 R_BAND = BANDS.index("sdss_r")
-ONSET_KEY = "sfh_delayed_age_gyr"
+#: The models are built at z = 0, so the onset fraction is the onset in Gyr over age(0).
+AGE0_GYR = float(age_at_z(0.0))
+ONSET_KEY = "sfh_delayed_age_frac"
 
 
 @pytest.fixture(scope="module")
@@ -119,11 +122,16 @@ def test_d_formed_mass_is_the_declared_mass(ssp, obs, kernel):
 
 
 def _flux_and_grad(ssp, obs, kernel):
-    sfh = {**_delayed(5.0), "age_frac": Uniform(0.0725327, 0.725327)}
+    sfh = {
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "log_total_mass": Fixed(10.0),
+        "age_frac": Uniform(0.0725327, 0.725327),
+    }
     m = _build(ssp, obs, kernel, **sfh)
 
     def r_flux(x):
-        return m.predict_photometry({ONSET_KEY: x})[R_BAND]
+        return m.predict_photometry({ONSET_KEY: x / AGE0_GYR})[R_BAND]
 
     return jax.jit(r_flux), jax.jit(jax.grad(r_flux))
 

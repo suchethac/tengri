@@ -120,22 +120,31 @@ def _support_or_skip(selector: str, name: str) -> dict[str, tuple[float, float]]
 
 
 def _key(selector: str, name: str, pname: str) -> tuple[str, str]:
-    """``(group, key)`` the build grammar uses for one parameter."""
-    if selector == "agn.disc":
+    """``(group, key)`` the build grammar uses for one parameter.
+
+    Derived from the selector, so every ``GRID_SUPPORT`` row builds without a
+    hand-written table: ``agn.<sub>`` is a composable sub-block of ``agn``,
+    ``dust.<sub>`` is the ``dust_<sub>`` group, ``neb`` is ``neb``. The key is the
+    parameter name without its group prefix, with the nebular spellings the
+    grammar renames kept in :data:`_NEB_KEY` and :data:`_CUE_KEYS`.
+    """
+    head = selector.split(".", 1)[0]
+    if head == "agn":
         return "agn", pname[len("agn_") :] if pname.startswith("agn_") else pname
-    if selector == "dust.emission":
-        return "dust_emission", pname[len("dust_") :]
+    if head == "dust":
+        return f"dust_{selector.split('.', 1)[1]}", pname[len("dust_") :]
     if pname in _NEB_KEY:
         return "neb", _NEB_KEY[pname]
-    return "neb", _CUE_KEYS[pname]
+    return "neb", _CUE_KEYS.get(pname, pname)
 
 
 def _build(selector: str, name: str, pname: str, value):
     """Build a spec with ``pname`` set to ``value`` through the grammar."""
     group, key = _key(selector, name, pname)
     body = {"type": name, key: value}
-    if selector == "agn.disc":
-        spec = {"type": "composable", "disc": body}
+    if group == "agn":
+        sub = selector.split(".", 1)[1]
+        spec = {"type": "composable", sub: body}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RecipeWarning)
             return parse_groups(sfh={"type": "dpl"}, agn=spec, redshift=0.1)
@@ -275,19 +284,7 @@ def _model_with_logzgas_free(neb: dict):
     [
         pytest.param("cloudy", id="cloudy"),
         pytest.param("cue", id="cue"),
-        pytest.param(
-            "cb19",
-            id="cb19",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "#2969: d(photometry)/d(neb_logZ_gas) is exactly zero at an interior "
-                    "point of the CB19 grid (cloudy_cb19.py log_OH_total lookup carries no "
-                    "gradient); the knob is dead there. Strict, so this flips to a failure "
-                    "once #2969 is fixed."
-                ),
-            ),
-        ),
+        pytest.param("cb19", id="cb19"),
     ],
 )
 def test_logzgas_gradient_is_live_at_interior_point(name, tmp_path):

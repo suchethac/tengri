@@ -59,6 +59,13 @@ _WAVE_OBS = np.linspace(4000.0, 9000.0, 2000)
 _Z = 0.1
 _HALPHA_OBS = 6562.8 * (1.0 + _Z)
 _HBETA_OBS = 4861.3 * (1.0 + _Z)
+# The pins were captured on one platform and are checked on others (linux CI, macOS, other
+# jaxlib builds), where the FFT and the reductions round differently in the last bits:
+# measured up to 1.7e-15 relative on the CI runner (test e 1.67e-15, test d 3.1e-16) against
+# the pins captured on macOS. 1e-12 sits about 600 times above that and well below a real
+# change: a 1 % change in sigma_v moves the pinned spectra by 6.7e-9 (synth_B) to 1.6e-4
+# (wne_B), so the pins still catch it. synth_B cannot see the instrument-R stage at all.
+_PIN_RTOL = 1e-12
 _IDX = [0, 333, 666, 999, 1332, 1666, 1999]
 _MADAU = {"type": "madau"}
 
@@ -229,14 +236,19 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Pre-fix LUT values (resolution=None, sigma_v=0, madau IGM), at _IDX, captured from the
 # conftest fixtures on origin/main before the kernel was applied. With no resolution there
 # is no kernel to apply, so the fixed LUT must reproduce them exactly.
+# Re-captured on main ac75d42fe: the SFH timing parameters became fractions of
+# age(z) (#2748), which moves the fixture's default tsnorm SFH at z = 0.1, so the
+# arrays pinned before it (and the ones below in _PINNED_EXACT) no longer apply.
+# The pins still guard the LUT-with-no-instrument and the exact path against
+# unintended change; a ruled physics change re-captures them.
 _PREFIX_LUT_WNE_RNONE = [
-    7.585321879860206e-29,
-    2.7566442699605755e-28,
-    4.476516855282938e-28,
-    6.528615494672773e-28,
-    7.666995745049181e-28,
-    1.0511964695858449e-27,
-    1.2729797128126482e-27,
+    8.832206167702604e-29,
+    3.165934477902422e-28,
+    5.070904983979376e-28,
+    7.318035949559824e-28,
+    8.560968754669802e-28,
+    1.1660212420805499e-27,
+    1.4095711285515449e-27,
 ]
 
 
@@ -249,29 +261,29 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
         sigma_v=Fixed(0.0),
     )
     s = np.asarray(lut.predict_spectrum({}))
-    np.testing.assert_array_equal(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE))
+    np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
 
 
 # ── (e) exact path bit-for-bit across the extraction ──────────────────────────
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.616654422948485e-12,
-        1.9176771331791432e-12,
-        1.4729137600973475e-12,
-        1.1699882140946834e-12,
-        9.526091195785729e-13,
-        7.922208055230021e-13,
-        6.692538866622282e-13,
+        2.6005432403292307e-12,
+        1.905869690855171e-12,
+        1.463844810911483e-12,
+        1.162784433602384e-12,
+        9.467437807646447e-13,
+        7.873430053226903e-13,
+        6.6513321392689e-13,
     ],
     "wne_B": [
-        7.59369890747518e-29,
-        2.70378918815045e-28,
-        4.39145217903001e-28,
-        6.586601334966522e-28,
-        7.890869728131413e-28,
-        1.0505243755535244e-27,
-        1.2730962692858322e-27,
+        8.84153748248348e-29,
+        3.105164351808286e-28,
+        4.976330494264325e-28,
+        7.382143463596137e-28,
+        8.807978458553114e-28,
+        1.1653075487088356e-27,
+        1.4096784141453878e-27,
     ],
 }
 
@@ -279,12 +291,12 @@ _PINNED_EXACT = {
 def test_e_exact_path_bit_for_bit_across_extraction(synthetic_ssp_wide, ssp_data_wne):
     sv = Uniform(0.0, 2000.0)
     exact = _build(synthetic_ssp_wide, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
-    np.testing.assert_array_equal(
-        _spectrum(exact, 150.0)[_IDX], np.asarray(_PINNED_EXACT["synth_B"])
+    np.testing.assert_allclose(
+        _spectrum(exact, 150.0)[_IDX], np.asarray(_PINNED_EXACT["synth_B"]), rtol=_PIN_RTOL, atol=0
     )
     exact_w = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
-    np.testing.assert_array_equal(
-        _spectrum(exact_w, 150.0)[_IDX], np.asarray(_PINNED_EXACT["wne_B"])
+    np.testing.assert_allclose(
+        _spectrum(exact_w, 150.0)[_IDX], np.asarray(_PINNED_EXACT["wne_B"]), rtol=_PIN_RTOL, atol=0
     )
 
 

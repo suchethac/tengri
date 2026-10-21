@@ -23,6 +23,7 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 
 
 def main():
@@ -49,7 +50,7 @@ def main():
     spec_kwargs = {
         "mean_sfh_type": "tsnorm",
         "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-        "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+        "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(1.0)), 1.0),
         "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
         "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
         "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
@@ -63,7 +64,7 @@ def main():
     # Galaxy A: young, dusty, high SFR
     params_a = {
         "sfh_tsnorm_skew": 0.1,
-        "sfh_tsnorm_peak_lbt_gyr": 3.0,
+        "sfh_tsnorm_peak_lbt_frac": 3.0 / float(age_at_z(1.0)),
         "sfh_tsnorm_width_gyr": 1.2,
         "sfh_tsnorm_trunc": 0.3,
         "sfh_tsnorm_log_total_mass": 1.0,
@@ -77,7 +78,7 @@ def main():
     # Galaxy B: old, metal-poor, heavy dust — completely different SED
     params_b = {
         "sfh_tsnorm_skew": -0.4,
-        "sfh_tsnorm_peak_lbt_gyr": 8.0,
+        "sfh_tsnorm_peak_lbt_frac": 8.0 / float(age_at_z(1.0)),
         "sfh_tsnorm_width_gyr": 0.3,
         "sfh_tsnorm_trunc": 0.9,
         "sfh_tsnorm_log_total_mass": -0.5,

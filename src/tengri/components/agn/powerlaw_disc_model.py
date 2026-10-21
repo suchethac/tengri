@@ -20,19 +20,23 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 
+from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import with_lsun_outputs, with_lsun_siblings
-from tengri.components.agn.disc import _powerlaw_shape_unit
+from tengri.components.agn._publication import (
+    log10_emitted_bolometric,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
+from tengri.components.agn.disc import (
+    _PL_BAND_HI_AA,
+    _PL_BAND_LO_AA,
+    powerlaw_disc as _powerlaw_disc_fn,
+)
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
-from tengri.utils.host_array import device_table, host_array
-from tengri.utils.physics_constants import C_AA, L_SUN
-from tengri.utils.scale import apply_log10_scale, log10_magnitude
 
 __all__ = ["PowerLawDisc"]
 
@@ -49,100 +53,23 @@ _ALPHA_PRIOR = declared_prior(_AGN_PARAMS, "agn_alpha")
 _T_MAX_PRIOR = declared_prior(_AGN_PARAMS, "agn_T_max")
 _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
-#: Edges of the band the disc is defined on [Angstrom], ascending: the SED is zero outside it.
-_PUBLISHED_BAND_AA = np.array([10.0, 1.0e8])
-
-#: Gauss-Legendre panels per decade and points per panel of the band quadrature in ln(nu).
-#: The integrand nu**(alpha+1) exp(-h nu / k T) is smooth in ln(nu); measured against 64
-#: panels/decade x 32 points over the declared prior box (alpha -2 to 0, T_max 1e4 to 1e6 K),
-#: 4 x 16 agrees to 8e-16 at 81 points (float64 rounding).
-_BAND_PANELS_PER_DECADE: int = 4
-_BAND_GL_ORDER: int = 16
-
-#: ``log10(L_sun / (erg/s))`` [dex].
-_LOG10_L_SUN: float = math.log10(L_SUN)
+#: Nodes of the log-uniform grid over the normalization band (10 A to 1e8 A), on which the
+#: published bolometric luminosity is integrated by :func:`loglog_integral`. 8001 nodes agree
+#: with a 160001-node value to 2e-7 for the steep, cut-off shapes; 500 nodes were 4e-5 off.
+_PUBLISHED_BAND_NODES: int = 8001
 
 
-def _band_quadrature(band_aa, panels_per_decade, order):
-    """Gauss-Legendre nodes ``nu`` [Hz] and ``d ln(nu)`` weights over a wavelength band [A]."""
-    ln_lo = math.log(C_AA / band_aa[1])
-    ln_hi = math.log(C_AA / band_aa[0])
-    n_panel = round(panels_per_decade * math.log10(band_aa[1] / band_aa[0]))
-    edges = np.linspace(ln_lo, ln_hi, n_panel + 1)
-    x, w = np.polynomial.legendre.leggauss(order)
-    half = 0.5 * (edges[1:] - edges[:-1])[:, None]
-    mid = 0.5 * (edges[1:] + edges[:-1])[:, None]
-    return np.exp(mid + half * x).ravel(), (half * w * np.ones_like(x)).ravel()
+def _published_band_aa(dtype) -> jnp.ndarray:
+    """The published normalization band [Angstrom], ascending, built in the trace.
 
-
-_BAND_NU, _BAND_W = (
-    host_array(a)
-    for a in _band_quadrature(_PUBLISHED_BAND_AA, _BAND_PANELS_PER_DECADE, _BAND_GL_ORDER)
-)
-#: Lowest band frequency [Hz], the reference that keeps ``(nu / nu_ref)**alpha`` O(1).
-_BAND_NU_REF: float = float(C_AA / _PUBLISHED_BAND_AA[1])
-
-
-def band_limited_powerlaw_disc(wavelength, agn_log_lbol, agn_lum_ratio, agn_alpha, agn_T_max):
-    r"""Power-law disc with exponential cutoff, emitted only inside its band.
-
-    .. math::
-
-        L_\nu = r\,10^{\log L_{\rm bol}} L_\odot\,
-            \frac{\nu^\alpha e^{-h\nu/k_B T_{\rm max}}}
-                 {\int_{\nu_1}^{\nu_2} \nu'^\alpha e^{-h\nu'/k_B T_{\rm max}}\,d\nu'}
-            \quad (\nu_1 \le \nu \le \nu_2), \qquad L_\nu = 0 \ \text{otherwise},
-
-    with :math:`\nu_1 = c/10^8` A and :math:`\nu_2 = c/10` A the band edges [Hz], :math:`r`
-    the luminosity ratio [dimensionless], :math:`\alpha` the index [dimensionless],
-    :math:`T_{\rm max}` the cutoff temperature [K], and :math:`h`, :math:`k_B` the Planck
-    and Boltzmann constants. The band integral is Gauss-Legendre in :math:`\ln\nu`
-    (``_BAND_PANELS_PER_DECADE`` panels per decade of ``_BAND_GL_ORDER`` points), converged
-    to float64 rounding, so the SED carries exactly :math:`r\,10^{\log L_{\rm bol}} L_\odot`.
-
-    Parameters
-    ----------
-    wavelength : array_like, shape (n_wave,)
-        Rest-frame wavelengths [Angstrom].
-    agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)` [dex].
-    agn_lum_ratio : float
-        Disc luminosity ratio [dimensionless].
-    agn_alpha : float
-        Power-law index of :math:`L_\nu` [dimensionless].
-    agn_T_max : float
-        Cutoff temperature [K].
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        :math:`L_\nu` [erg/s/Hz], zero outside 10 A to 1e8 A.
-
-    Notes
-    -----
-    **JIT/grad/vmap-safe**: yes. The shape is that of ``powerlaw_disc`` in
-    ``tengri.components.agn.disc``, a phenomenological form with no derivation in the
-    literature, so there is no paper equation to cite. **Approximation**: the power law does
-    not converge at long wavelength (:math:`\nu L_\nu` is constant at :math:`\alpha = -1`),
-    so the band is part of the model's definition and the SED is truncated at its edges. The
-    luminosity scale is applied as a log10 offset, so no erg/s-scale value is formed
-    (float32-safe).
+    The end points are those of ``powerlaw_disc``'s normalization band, so the published
+    integral and the normalization cover the same range.
     """
-    wave = jnp.asarray(wavelength)
-    nu = C_AA / wave
-    band_nu = device_table(_BAND_NU).astype(wave.dtype)
-    band_w = device_table(_BAND_W).astype(wave.dtype)
-    # int shape dnu = nu_ref**(alpha+1) sum_k w_k (nu_k/nu_ref)**(alpha+1) e^{-x_k}; the sum is
-    # peak-factored (stop_gradient: the value does not depend on the factor) to stay O(1).
-    terms = _powerlaw_shape_unit(band_nu, agn_alpha, agn_T_max, _BAND_NU_REF) * (
-        band_nu / _BAND_NU_REF
+    return jnp.exp(
+        jnp.linspace(
+            math.log(_PL_BAND_LO_AA), math.log(_PL_BAND_HI_AA), _PUBLISHED_BAND_NODES, dtype=dtype
+        )
     )
-    peak = jax.lax.stop_gradient(jnp.max(terms))
-    log_integral = jnp.log10(jnp.sum(band_w * terms / peak)) + jnp.log10(peak)
-    log_scale = agn_log_lbol + _LOG10_L_SUN - log_integral - math.log10(_BAND_NU_REF)
-    shape = _powerlaw_shape_unit(nu, agn_alpha, agn_T_max, _BAND_NU_REF)
-    in_band = (wave >= _PUBLISHED_BAND_AA[0]) & (wave <= _PUBLISHED_BAND_AA[1])
-    return agn_lum_ratio * jnp.where(in_band, apply_log10_scale(shape, log_scale), 0.0)
 
 
 @dataclass(frozen=True)
@@ -156,8 +83,7 @@ class PowerLawDiscConfig(SEDComponentConfig):
 class PowerLawDisc(SEDModelComponent):
     """Simple power-law accretion disc with exponential UV cutoff.
 
-    A fast phenomenological disc model: L_ν ∝ ν^α exp(-hν / k_B T_max) between 10 A and
-    1e8 A, zero outside (see :func:`band_limited_powerlaw_disc`).
+    A fast phenomenological disc model: L_ν ∝ ν^α exp(-hν / k_B T_max).
     Suitable for rapid fitting and when fine spectral details are not required.
 
     Attributes
@@ -184,10 +110,8 @@ class PowerLawDisc(SEDModelComponent):
     -----------------------
     log_L_agn_disc : dex
         log10 of the bolometric luminosity of the disc [dex re erg/s]: the frequency integral
-        of the emitted SED, which is zero outside 10 A - 1e8 A and carries the whole budget
-        ``lum_ratio * 10**log_lbol L_sun``, formed in log space so it is finite in pure
-        float32 (NAMING_CONTRACT section 4c). ``-inf`` is an absent disc. The disc has no
-        inclination, so there is no ``_los`` sibling.
+        of the emitted SED over 10 A - 1e8 A, formed in log space so it is finite and accurate
+        in pure float32 (NAMING_CONTRACT section 4c). ``-inf`` is an absent disc.
 
     Notes
     -----
@@ -283,19 +207,35 @@ class PowerLawDisc(SEDModelComponent):
 
             - sed_out: Updated SED (sed_in + disc contribution).
             - published: {"log_L_agn_disc": log10 of the bolometric disc luminosity [dex re
-              erg/s], ``log10(lum_ratio) + log_lbol + log10(L_sun)``}. The SED is zero outside
-              10 A - 1e8 A and normalized so that its integral is this whole budget, so the
-              closed form is the integral of the emitted SED (no ``_unemitted`` piece). The
-              band is part of the definition: the power-law tail (L_nu nu ~ const at long
-              wavelength) does not converge beyond it.
+              erg/s], the integral of the emitted SED over the normalization band
+              10 A - 1e8 A}. The band is part of the
+              definition: the emitted power-law tail (L_nu nu ~ const at long wavelength) does
+              not converge beyond it, so the integral would depend on an arbitrary upper limit.
 
         """
 
-        disc = band_limited_powerlaw_disc(
-            wave, p["log_lbol"], p["lum_ratio"], p["alpha"], p["T_max"]
-        )
-        # The SED is normalized so its band integral is the whole budget: closed form.
-        log_L_disc = log10_magnitude(p["lum_ratio"]) + p["log_lbol"] + _LOG10_L_SUN
-        sed_out = sed_in + disc
+        # Pure float32 cannot hold the disc's erg/s scale: the SED is evaluated at the reference
+        # luminosity and the true magnitude restored in log space (float64: the true value).
+        lbol_eval, use_ref, offset = reference_evaluation(p["log_lbol"], wave)
+
+        def _powerlaw(wave_eval):
+            return _powerlaw_disc_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=lbol_eval,
+                agn_lum_ratio=p["lum_ratio"],
+                agn_alpha=p["alpha"],
+                agn_T_max=p["T_max"],
+            )
+
+        # Published log_L_agn_disc: the integral of the emitted SED over the band the disc is
+        # normalized on (10 A to 1e8 A). The emitted power-law tail is not integrable beyond
+        # that band (L_nu nu ~ const at long wavelength), so the band is part of the
+        # definition. It is evaluated on a fixed grid, never the caller's wave.
+        wave_band = _published_band_aa(wave.dtype)
+        log_L_disc = log10_emitted_bolometric(_powerlaw(wave_band), wave_band) + offset
+
+        # Add to intrinsic SED
+        disc = _powerlaw(wave)
+        sed_out = sed_in + (rescale(disc, offset) if use_ref else disc)
 
         return sed_out, with_lsun_siblings({"log_L_agn_disc": log_L_disc})

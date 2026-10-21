@@ -236,7 +236,7 @@ labels = {
     "dust_tau_bc": r"$\tau_{\rm bc}$",
     "dust_tau_diff": r"$\tau_{\rm diff}$",
     "sfh_tsnorm_log_total_mass": r"$\log M_\star$",
-    "sfh_tsnorm_peak_lbt_gyr": r"$t_{\rm peak}$",
+    "sfh_tsnorm_peak_lbt_frac": r"$t_{\rm peak}/t_{\rm age}$",
     "sfh_tsnorm_width_gyr": r"$\sigma_t$",
 }
 fig_corner = posterior.plot_corner(truths=truth, color=C_POST)

@@ -84,6 +84,9 @@ def _full_params() -> dict:
         # defaulting to a neutral 0.0 that would look wired and do nothing.
         "xray_det_hmxb": 0.0,
         "xray_det_lmxb": 0.0,
+        # The yang20 anisotropy coefficients (#2661), indexed directly like the above.
+        "xray_a1": 0.5,
+        "xray_a2": 0.0,
         "dust_tau_v": 0.3,
         "dust_T": 30.0,
         "dust_beta_ir": 1.8,
