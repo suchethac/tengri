@@ -20,6 +20,10 @@ from tengri.utils.table_log import log_table_f32
 
 pytestmark = pytest.mark.contract
 
+# The references are evaluated in extended precision (``np.longdouble``) so they do
+# not share the float64 ``log`` of the code under test. Where ``longdouble`` is
+# float64 (Apple ARM, Windows) this reduces to the float64 reference.
+
 
 def test_log_table_helper_matches_float64_reference_bit_for_bit():
     rng = np.random.default_rng(3067)
@@ -27,7 +31,7 @@ def test_log_table_helper_matches_float64_reference_bit_for_bit():
     table[:5] = 0.0
     for base, fn in (("e", np.log), ("10", np.log10)):
         got = log_table_f32(table, floor=1e-37, base=base)
-        ref = fn(np.maximum(table.astype(np.float64), 1e-37)).astype(np.float32)
+        ref = fn(np.maximum(table.astype(np.longdouble), 1e-37)).astype(np.float32)
         assert got.dtype == np.float32
         np.testing.assert_array_equal(got, ref)
 
@@ -43,7 +47,7 @@ def test_nthcomp_table_log_is_float64_rounded_once():
     table_log = _load_nthcomp_templates_impl()[4]
     with h5py.File(_DEFAULT_TEMPLATE_PATH, "r") as f:
         table = f["table"][:]
-    ref = np.log(np.maximum(table.astype(np.float64), 1e-37)).astype(np.float32)
+    ref = np.log(np.maximum(table.astype(np.longdouble), 1e-37)).astype(np.float32)
     assert table_log.dtype == np.float32
     np.testing.assert_array_equal(table_log, ref)
 
@@ -56,7 +60,7 @@ def test_cb19_log_line_ratios_are_float64_rounded_once():
     ratios[:3] = [0.0, np.nan, -1.0]
     got = cb._log10_ratios_f32(ratios)
     valid = np.isfinite(ratios) & (ratios > 0)
-    ref = np.log10(np.where(valid, ratios.astype(np.float64), cb._LOG_FLOOR)).astype(np.float32)
+    ref = np.log10(np.where(valid, ratios.astype(np.longdouble), cb._LOG_FLOOR)).astype(np.float32)
     assert got.dtype == np.float32
     np.testing.assert_array_equal(got, ref)
     assert got[0] == got[1] == got[2] == np.float32(np.log10(cb._LOG_FLOOR))

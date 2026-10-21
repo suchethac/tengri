@@ -21,7 +21,7 @@ def log_table_f32(
     floor: float,
     base: Literal["e", "10"] = "e",
 ) -> np.ndarray:
-    """Logarithm of ``max(table, floor)`` computed in float64, rounded once to float32.
+    """Logarithm of ``max(table, floor)`` computed in float64, rounded essentially once to float32.
 
     Parameters
     ----------
@@ -37,7 +37,9 @@ def log_table_f32(
     ndarray
         float32, same shape as ``table``. Equals
         ``np.log(np.maximum(table.astype(float64), floor)).astype(float32)``
-        (or ``log10``) bit for bit on every platform.
+        (or ``log10``) on every platform, up to the float64 ``log`` itself: numpy's
+        float64 log is faithfully, not always correctly, rounded, so the result is
+        essentially one rounding.
 
     Notes
     -----
