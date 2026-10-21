@@ -127,3 +127,17 @@ def test_template_use_after_a_float64_conversion_of_the_same_array():
         assert (scale * device_table(templates.line_broad)).dtype == jnp.float32
     with jax.enable_x64(True):
         assert device_table(templates.line_broad).dtype == jnp.float64
+
+
+def test_device_table_casts_a_concrete_device_array_to_the_trace_dtype():
+    """A float64 device array under x64=False becomes float32; float32 stays float32 under x64."""
+    from tengri.utils.host_array import device_table
+
+    with jax.enable_x64(True):
+        f64 = jnp.linspace(1.0, 2.0, 5)
+        f32 = jnp.linspace(1.0, 2.0, 5, dtype=jnp.float32)
+        assert f64.dtype == jnp.float64
+        assert device_table(f32).dtype == jnp.float32
+        assert device_table(f64).dtype == jnp.float64
+    with jax.enable_x64(False):
+        assert device_table(f64).dtype == jnp.float32

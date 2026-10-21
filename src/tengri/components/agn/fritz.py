@@ -856,7 +856,7 @@ def fritz_disc_dust_ratio(
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
         return interp_nd_pchip(
-            jnp.asarray(table),
+            device_table(table),
             axes,
             tuple(jnp.asarray(c) for c in point),
             extrapolate=_PSY_EXTRAPOLATE,
