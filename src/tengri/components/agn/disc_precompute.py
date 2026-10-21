@@ -46,6 +46,8 @@ import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
 from tengri.components.agn.disc import (
+    _PL_BAND_HI_AA,
+    _PL_BAND_LO_AA,
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
 )
@@ -82,6 +84,32 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Relative offset of the zero-valued node placed just outside each band edge.
+_POWERLAW_EDGE_EPS: float = 1.0e-9
+
+#: Rest-frame grid of the powerlaw_disc template [Angstrom]: the disc's band, 10 A to 1e8 A
+#: (``_PL_BAND_LO_AA`` to ``_PL_BAND_HI_AA``), with both edges as nodes, plus one node a
+#: relative 1e-9 outside each edge where ``powerlaw_disc`` is zero. The filter fold interpolates
+#: the template linearly onto the union of these nodes and the filter's, so the step at each
+#: edge is resolved within 1e-9 of its position: a filter straddling an edge integrates the
+#: in-band part only, as the band-limited SED does. About 250 nodes per decade from 100 A to
+#: 1e8 A (below 1e5 A the nodes of the earlier 10 A - 1e5 A table, so a band inside that range
+#: reads the same values), and 10000 per decade from 10 A to 100 A, where the exponential cutoff
+#: (``h nu / k T_max`` up to 144 at 10 A for ``T_max = 1e5`` K) changes the template by a
+#: factor e per 0.0035 dex; linear interpolation there is within 1.4e-4 of the shape.
+_POWERLAW_UV_TO_FIR_AA = np.logspace(1, 5, 1000, dtype=np.float64)
+_POWERLAW_UV_TO_FIR_AA = _POWERLAW_UV_TO_FIR_AA[_POWERLAW_UV_TO_FIR_AA >= 100.0]
+_POWERLAW_REST_WAVE_AA = np.concatenate(
+    [
+        [_PL_BAND_LO_AA * (1.0 - _POWERLAW_EDGE_EPS)],
+        np.geomspace(_PL_BAND_LO_AA, _POWERLAW_UV_TO_FIR_AA[0], 10001, dtype=np.float64)[:-1],
+        _POWERLAW_UV_TO_FIR_AA,
+        np.logspace(5, 8, 751, dtype=np.float64)[1:],
+        [_PL_BAND_HI_AA * (1.0 + _POWERLAW_EDGE_EPS)],
+    ]
+)
+
+
 def _build_grid_powerlaw(
     filter_waves: list,
     filter_trans: list,
@@ -114,9 +142,7 @@ def _build_grid_powerlaw(
     """
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
 
-    # Standard rest-frame wavelength grid for integration
-    # (covers ~10 Angstrom to ~1 mm with fine sampling)
-    wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
+    wave_rest = _POWERLAW_REST_WAVE_AA
 
     # Precompute L_nu for each alpha value
     phot_grid = []
