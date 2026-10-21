@@ -59,16 +59,14 @@ _BAKED_BUDGET_MB = 1.0
 # as graph literals, and 0.283 MB with that grid built once inside the trace; the budget
 # sat 0.07 MB above the measurement. The kubota_done graph is traced nine times on this path
 # (the tie, the band response and the normalizations), and since the float32 rewrite of
-# kubota_done (#2774) and #3009 each trace carries the 128-node Gauss-Legendre ring
-# nodes (18 arrays) and the 4000-node warm-zone normalization grid as host literals, about
-# 0.05 MB per trace. The same graph measures 0.668 MB (9 x 4000-node grid 0.288 MB, 162 x
-# 128-node 0.166 MB, 9 x 2000-node corona grid 0.144 MB), so the budget sits 0.07 MB above it
-# and still catches one extra copy of the 13001-node budget grid (+0.10 MB per copy).
-# #3044 removed the redundancy: the ring and warm-zone tables now come from jitted
-# nullary accessors, so the nine traces call one cached sub-jaxpr and the tables are counted
-# once (the 4000-node grid 0.032 MB, the 128-node and 64-node rules 0.004 MB). The same graph
-# measures 0.215 MB, so the budget sits 0.085 MB above it and still catches one extra copy of
-# the 13001-node budget grid (+0.104 MB).
+# kubota_done (#2774) and #3009 each trace carried its own 128-node and 64-node Gauss-Legendre
+# ring rules and the 4000-node warm-zone normalization grid as literals. #3044 removed the
+# redundancy: the tables come from jitted nullary accessors, so the nine traces call one
+# cached sub-jaxpr and the tables are counted once (the 4000-node grid 0.032 MB, the 128-node
+# and 64-node rules 0.004 MB). The measurement depends on the SSP, because the test takes the
+# first data/ssp_*.h5 by sorted name: with prsc_miles the graph went from 0.614 MB to 0.215 MB,
+# with mist_c3k from 0.505 MB to 0.106 MB. The budget sits 0.085 MB above the larger figure
+# (0.215 MB) and still catches one extra copy of the 13001-node budget grid (+0.104 MB).
 _FRITZ_TIED_BUDGET_MB = 0.30
 
 # ``none`` is the no-op selector present in every category.
