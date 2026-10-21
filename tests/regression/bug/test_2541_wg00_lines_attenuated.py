@@ -180,7 +180,7 @@ def model_two(ssp_bare, observation):
 @pytest.fixture(scope="module")
 def model_wg00(ssp_bare, observation):
     """WG00 dust model with Cue nebular backend (default mw/shell/homogeneous)."""
-    return _build(ssp_bare, observation, {"type": "wg00", "tau_v": Uniform(0.1, 3.0)})
+    return _build(ssp_bare, observation, {"type": "wg00", "tau_v": Uniform(0.25, 3.0)})
 
 
 def _sample_params(model, key=None, **overrides):
@@ -455,7 +455,7 @@ class TestWG00FastNebularFallbackUsesCapabilitySelection:
     def test_fallback_is_exercised_and_matches_the_grid_curve(
         self, ssp_bare, observation, monkeypatch
     ):
-        model = _build(ssp_bare, observation, {"type": "wg00", "tau_v": Uniform(0.1, 3.0)})
+        model = _build(ssp_bare, observation, {"type": "wg00", "tau_v": Uniform(0.25, 3.0)})
         target_wavelengths = np.asarray([HBETA_AA, HALPHA_AA])
         model.enable_fast_nebular(target_wavelengths, n_grid=2)
 

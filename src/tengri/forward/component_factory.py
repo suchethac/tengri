@@ -292,7 +292,7 @@ class XRayQuantities(NamedTuple):
     luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
     - ``l_x_xrb`` (Lsun), 2-10 keV luminosity of the emitted HMXB + LMXB terms
-      (Lehmer 2016; SFR averaged over the last 100 Myr).
+      (Fragos et al. 2013; SFR averaged over the last 100 Myr).
     - ``l_x_agn`` (Lsun), 2-10 keV luminosity of the emitted AGN corona; zero
       without an AGN.
     - ``l_x_total`` (Lsun), sum of the two.
@@ -409,6 +409,8 @@ def build_components(
     dust_lyc_reprocessed_by: str = "young",
     dust_lyc_in_energy_balance: bool = False,
     dust_lyc_escape_geometry: str = "screened",
+    # Evaluation order of the two-component age mixture ("per_node" | "grouped").
+    dust_age_mixture: str = "per_node",
     # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,
@@ -672,6 +674,7 @@ def build_components(
                 transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,
+                age_mixture=dust_age_mixture,
             )
 
     # 1. Stellar (always required, it publishes the cross-component
@@ -690,6 +693,9 @@ def build_components(
                 met_bin_edges_log_yr=met_bin_edges_log_yr,
                 age_boundaries_yr=tuple(getattr(atten_config, "age_boundaries_yr", ())),
                 age_boundary_width_dex=float(getattr(atten_config, "age_boundary_width_dex", 0.0)),
+                publish_interval_spectra=(
+                    getattr(atten_config, "age_mixture", "per_node") == "grouped"
+                ),
             ),
             ssp_data=ssp_data,
             agb_dust_ratio=agb_dust_ratio,

@@ -23,7 +23,8 @@ Notes
 -----
 **JIT-compatible**: yes.
 
-**Models**: Lehmer et al. (2010, 2016) for X-ray binaries + Lusso &
+**Models**: Fragos et al. (2013) metallicity and age scalings for X-ray
+binaries (benchmarked against Lehmer et al. 2010, 2016) + Lusso &
 Risaliti (2016) for AGN X-ray corona. Both are analytic scalings with
 no grid dependence.
 
@@ -36,6 +37,7 @@ References
 .. [2] Lehmer et al. 2016, ApJ, 825, 7
 .. [3] Lusso & Risaliti 2016, ApJ, 819, 154
 .. [4] Aird et al. 2017, MNRAS, 465, 3390
+.. [5] Fragos et al. 2013, ApJ, 776, L31
 """
 
 from __future__ import annotations
@@ -75,10 +77,10 @@ class XRayAirdSEDComponentConfig(SEDComponentConfig):
 
 
 class XRayAirdSEDComponent(SEDModelComponent):
-    """SEDComponent for X-ray emission (Lehmer+2016 / Yang+2020 canonical).
+    """SEDComponent for X-ray emission (Fragos+2013 / Yang+2020 canonical).
 
     Computes total X-ray continuum from X-ray binaries (HMXB + LMXB),
-    hot gas, and AGN corona. Implements Lehmer et al. 2016 (metallicity-
+    hot gas, and AGN corona. Implements Fragos et al. 2013 (metallicity-
     and age-dependent XRB scaling), Yang et al. 2020 (hot gas and AGN
     anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
@@ -120,8 +122,8 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
     **Models**:
 
-    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
-    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - HMXB: Fragos+2013 metallicity quartic (Eq. 3), scaling with SFR
+    - LMXB: Fragos+2013 age quartic (Eq. 4), scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020 α_OX, scaling with L_2500
 
@@ -201,7 +203,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         description=(
             "Deviation from expected HMXB log L_X (Yang+2020 [1]_). "
             "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-            "around the Lehmer+2016 SFR relation."
+            "around the Fragos+2013 L_X/SFR relation (Eq. 3)."
         ),
         units="dex",
         default=0.0,
@@ -212,7 +214,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         description=(
             "Deviation from expected LMXB log L_X (Yang+2020 [1]_). "
             "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-            "around the Lehmer+2016 age/mass relation."
+            "around the Fragos+2013 L_X/M* age relation (Eq. 4)."
         ),
         units="dex",
         default=0.0,
@@ -243,7 +245,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        """Predict X-ray SED via Lehmer+Yang canonical path.
+        """Predict X-ray SED via Fragos+Yang canonical path.
 
         Parameters
         ----------
@@ -272,7 +274,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
             - ssp_ages_yr [yr]; SSP age grid; paired with age_weights.
             - log_metallicity_history [dex, absolute log10(Z)]: stellar's SFH-
               indexed metallicity history. Present-day bin (index 0) drives the
-              Lehmer+2016 HMXB quartic; if absent, metallicity_from_history()
+              Fragos+2013 HMXB quartic; if absent, metallicity_from_history()
               returns Z_SUN (0.0142).
 
         Returns

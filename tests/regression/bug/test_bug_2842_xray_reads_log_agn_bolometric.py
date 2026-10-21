@@ -58,6 +58,9 @@ _XRAY = {
     "xray_alpha_irx": 0.3,
     "xray_det_hmxb": 0.0,
     "xray_det_lmxb": 0.0,
+    # yang20 anisotropy coefficients, at their declared defaults (#2661).
+    "xray_a1": 0.5,
+    "xray_a2": 0.0,
 }
 #: Rest wavelengths from the UV to the hard X-ray [Angstrom]; the corona sits below ~100 A.
 _WAVE = np.geomspace(0.5, 1.0e4, 120)

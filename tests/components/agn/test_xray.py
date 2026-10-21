@@ -2,7 +2,7 @@
 """Tests for X-ray emission module (models/xray.py).
 
 Physics references:
-- Lehmer+2016, ApJ 825, 7 (HMXB quartic in Z, LMXB quartic in log τ).
+- Fragos+2013, ApJ 776, L31, Eqs. 3-4 (HMXB quartic in Z, LMXB quartic in log τ).
 - Yang+2020, MNRAS 491, 740 / X-CIGALE (canonical alpha_ox(L_2500) path).
 - Just+2007, ApJ 665, 1004 (alpha_ox-L_2500 calibration).
 
@@ -39,7 +39,7 @@ _WAVE_GRID = _C_AA / _NU_GRID  # Angstrom (x-ray)
 _NU_2500 = 1.199e15  # Hz
 _BC_2500 = 5.15
 
-# Gilfanov 2004 / Yang+22-Lehmer+14 assume an old (10 Gyr) stellar population
+# Gilfanov 2004 / Yang+22-Fragos+13 assume an old (10 Gyr) stellar population
 # for LMXB normalization. Set explicitly so tests don't drift if the default
 # ever changes.
 _LMXB_AGE_GYR = 10.0
@@ -71,7 +71,7 @@ class TestXRBNormalization:
     def test_hmxb_band_luminosity(self):
         """HMXB 2-10 keV luminosity at SFR=1 Msun/yr and the default Z.
 
-        Yang+22 / Lehmer+19 quartic in Z:
+        Yang+22 / Fragos+13 Eq. 3 quartic in Z:
             log L_HMXB(2-10 keV) [W] = 33.28 - 62.12 Z + 569.44 Z² - 1833.8 Z³
                                       + 1968.33 Z⁴
 
@@ -94,15 +94,15 @@ class TestXRBNormalization:
             expected,  # ~3.22e39 at Z_SUN = 0.0142
             rtol=0.05,
             err_msg=(
-                f"Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV should be "
+                f"Fragos+13 Eq. 3 (yang20.py:207-214): HMXB L_2-10keV should be "
                 f"{expected:.3e} erg/s at the default Z={Z_SUN}"
             ),
         )
 
     def test_lmxb_band_luminosity(self):
-        """LMXB 2-10 keV luminosity at M*=1e10 Msun, age=10 Gyr matches Lehmer+14.
+        """LMXB 2-10 keV luminosity at M*=1e10 Msun, age=10 Gyr matches Fragos+13.
 
-        Yang+22 / Lehmer+14 quartic in log τ:
+        Yang+22 / Fragos+13 Eq. 4 quartic in log τ:
             log L_LMXB(2-10) [W / (M*/1e10 Msun)] = 33.276 - 1.503 logT - 0.423 logT²
                                                    + 0.425 logT³ + 0.136 logT⁴
         At logT = 1 (10 Gyr): log L = 31.911 W / 1e10 Msun → ~ 8.15e38 erg/s.
@@ -119,13 +119,13 @@ class TestXRBNormalization:
             L_band,
             10**31.911 * 1e7,  # W -> erg/s, ~ 8.15e38
             rtol=0.05,
-            err_msg="Lehmer+14: LMXB L_2-10keV ≈ 8.15e38 erg/s at M*=1e10, age=10 Gyr",
+            err_msg="Fragos+13 Eq. 4: LMXB L_2-10keV ≈ 8.15e38 erg/s at M*=1e10, age=10 Gyr",
         )
 
     def test_combined_ranalli2003(self):
         """Combined XRB at SFR=1, M*=1e10, age=10 Gyr sits inside Ranalli+2003.
 
-        HMXB (Lehmer+16, Z_sun = 0.0142) + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38
+        HMXB (Fragos+13 Eq. 3, Z_sun = 0.0142) + LMXB (Fragos+13 Eq. 4, 10 Gyr) ~ 8.15e38
         sums to 4.0324e39 erg/s, against Ranalli+2003's 3.7e39 — an 8.98%
         error, comfortably inside the relation's own ~30% scatter.
 

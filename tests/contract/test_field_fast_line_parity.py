@@ -30,6 +30,7 @@ from tengri import (
     builders,
     load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 from tengri.observation import LineFluxData
 from tengri.observation.line_measurement import default_line_defs
 
@@ -38,6 +39,8 @@ _SSP = (
     / "data"
     / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
+#: Age of the universe at the model redshift (``Fixed(0.1)``) [Gyr].
+_AGE_AT_Z = float(age_at_z(0.1))
 
 
 @pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
@@ -70,7 +73,7 @@ def test_field_fast_line_matches_exact():
         **p,
         "sfh_dpl_alpha": jnp.array(2.0),
         "sfh_dpl_beta": jnp.array(1.5),
-        "sfh_dpl_age_gyr": jnp.array(11.0),
+        "sfh_dpl_age_frac": jnp.array(11.0 / _AGE_AT_Z),
         "sfh_dpl_tau_gyr": jnp.array(13.0),
         "sfh_field_psd_sigma": jnp.array(0.4),
         "sfh_field_psd_tau_myr": jnp.array(150.0),

@@ -1154,10 +1154,10 @@ def _pcigale_fritz(psy, ebv):
     return {k: sed.info[k] / per for k in keys}
 
 
-def _tied_fritz(psy, ebv, *, disc="schartmann2005", mbh=8.0):
+def _tied_fritz(psy, ebv, *, disc="schartmann2005", mbh=8.0, wave=_FRITZ_WAVE):
     """Components of the tied Fritz composition at the library elevation ``psy`` [erg/s/Hz]."""
     _, comps = compose_l_nu(
-        _FRITZ_WAVE,
+        wave,
         _LOG_LBOL,
         agn_ir_frac=_FRITZ_FRAC,
         agn_cos_inc=_cos_of_psy(psy),
@@ -1168,6 +1168,9 @@ def _tied_fritz(psy, ebv, *, disc="schartmann2005", mbh=8.0):
     )
     return {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_los"}
 
+
+#: Hard X-rays [A] (7.7 to 17.7 keV), where the tied disc has no flux and the corona is alone.
+_HARD_XRAY_WAVE = jnp.asarray(np.geomspace(0.7, 1.6, 64))
 
 _TYPE2_PSY = (10.1, 20.1)  # i = 79.9 and 69.9 deg, beyond the 60 deg cone half-angle
 
@@ -1227,15 +1230,18 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
 
     mbh = 8.0
     comps = _tied_fritz(psy, ebv, disc="kubota_done", mbh=mbh)
-    wave = np.asarray(_FRITZ_WAVE, dtype=float)
-    below = wave < 9.0
+    # Below the library edge the tied disc takes the absorbed library factor (#2760), so the
+    # corona stands alone only where the disc has no flux: above 7.7 keV the disc-to-corona
+    # ratio is below 1e-13 (it is 0.6 at 9 A), which the 1e-9 constancy of ``b`` below needs.
+    comps_x = _tied_fritz(psy, ebv, disc="kubota_done", mbh=mbh, wave=_HARD_XRAY_WAVE)
+    wave = np.asarray(_HARD_XRAY_WAVE, dtype=float)
     _, h_lam, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
-        _FRITZ_WAVE, _LOG_LBOL, agn_log_mbh=mbh
+        _HARD_XRAY_WAVE, _LOG_LBOL, agn_log_mbh=mbh
     )
     cos_inc = _cos_of_psy(psy)
     screen = fritz_transmission(wave, psy, oa=_FRITZ_HALF, tau=_FRITZ_TIE_TAU)
-    tied = comps["disc"] * C_AA / wave**2  # L_lambda [erg/s/A]
-    b = tied[below] / (np.asarray(h_lam)[below] * screen[below])
+    tied = comps_x["disc"] * C_AA / wave**2  # L_lambda [erg/s/A]
+    b = tied / (np.asarray(h_lam) * screen)
     np.testing.assert_allclose(b, b[0], rtol=1e-9)  # one scale: b H T
     polar = _power(comps["polar"], _FRITZ_WAVE)
     agn_power = _power(comps["torus"], _FRITZ_WAVE) + polar
