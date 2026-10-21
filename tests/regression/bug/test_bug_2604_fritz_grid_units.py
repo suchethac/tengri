@@ -276,7 +276,11 @@ def test_fritz_components_disc_and_dust_share_the_conversion():
         assert _native_power_nu(np.asarray(arr), wave) == pytest.approx(L_SUN, rel=1e-6)
     torus = np.asarray(FR.fritz_sed(jnp.asarray(wave), **kw))
     scale = _native_power_nu(torus, wave) / L_SUN
-    np.testing.assert_allclose(np.asarray(comp.dust) * scale, torus, rtol=1e-6, atol=0.0)
+    # ``fritz_components`` reads the stored float32 records, which flush two far-UV nodes
+    # (5e-24 and 8e-19 of the peak) that the float64 torus table keeps.
+    np.testing.assert_allclose(
+        np.asarray(comp.dust) * scale, torus, rtol=1e-6, atol=1e-12 * np.max(torus)
+    )
 
 
 # -- b. shape against CIGALE ---------------------------------------------
