@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
+from tengri.utils.table_log import log_table_f32
 
 # ── Template loading (lazy: no computation at import time) ───────
 
@@ -68,7 +69,8 @@ def _load_nthcomp_templates_impl():
             ktbb_np = np.asarray(f["ktbb_grid"][:], dtype=np.float32)
             nu_np = np.asarray(f["nu_grid"][:], dtype=np.float32)
             table = f["table"][:]
-        table_log_np = np.asarray(np.log(np.maximum(table, 1e-37)), dtype=np.float32)
+        # float64 log rounded once: numpy's float32 log is platform-dependent (#3067).
+        table_log_np = log_table_f32(table, floor=1e-37)
         return gamma_np, kte_np, ktbb_np, nu_np, table_log_np, True
     except Exception as exc:
         warnings.warn(
