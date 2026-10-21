@@ -748,6 +748,7 @@
   thermal continuum on a 0.01 µm–10 mm rest-frame grid, so 70–1000 µm filters read the
   band-averaged closure to 1e-3 instead of zero; the grid ended at 31.6 µm (#2642).
 
+- **The float32 gradient of `loglog_integral` no longer overflows at SED-gradient cotangents (#2767).** On a segment with log-log slope near -1 the quotient `expm1(u) / u` has `u` of order 1e-3, and its VJP formed `cot x y a / u^2` before the cancellation; for an un-normalized `y` and the ~2e14 cotangent of a summed SED that passed the float32 maximum (6383 of 8000 gradient entries non-finite on the new test grid). Below `|u| = 0.05` the integral now uses the Taylor series of the quotient to `u^7`, which has no `1/u` in its derivative; it differs from `expm1(u) / u` by at most 1.1e-16 at the threshold (forward values move by at most 8e-16 relative on random smooth inputs; value and gradient are continuous across it). A latent defect of the log-log normalization of #2919, found through the kubota_done gradient test.
 - The `richards2006` disc template read its L_nu [erg/s/Hz] column as nu*F_nu and divided
   by nu, putting its nu*L_nu peak at 3055 Å instead of the quasar big blue bump near 1260 Å
   and its 1 µm / 10 µm levels +0.57 / +1.57 dex too high. The crossval test applied the
