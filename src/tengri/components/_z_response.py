@@ -217,6 +217,12 @@ def interp_z_table(
 ) -> jnp.ndarray:
     """Read a tabulated response at the evaluation redshift ``z``.
 
+    With ``extrapolate=True`` the continuation past the table is linear in the
+    response, so a response that falls steeply across the edge cell can go
+    negative there. The nebular band path uses a positive exponential
+    continuation instead (``blend_z_nonneg``, #3042); aligning this reader is
+    tracked in #3078.
+
     Parameters
     ----------
     table : mapping

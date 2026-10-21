@@ -94,7 +94,7 @@ from tengri.components.agn.grahsp.balmer import (
     balmer_continuum,
 )
 from tengri.components.agn.grahsp.bbb import XRAY_FLOOR_NM, floor_disc_xray
-from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.components.agn.grahsp.lines import (
     _HBETA_BROAD_RATIO,
     _HBETA_NARROW_RATIO,
@@ -275,7 +275,7 @@ class PublishedLuminosities:
 
         .. math::
 
-           L_{\rm bol}^{\rm BBB} = \int_{91.2\,\mathrm{nm}}^{\infty}
+           L_{\rm bol}^{\rm BBB} = \int_{91.1753\,\mathrm{nm}}^{\infty}
                L_\lambda^{\rm BBB+lines+FeII+Balmer}\,\mathrm{d}\lambda, \qquad
            L_{\rm bol}^{\rm TOR} = \int_0^\infty L_\lambda^{\rm TOR}\,\mathrm{d}\lambda, \qquad
            L_{\rm abs} = \int \left(L_\lambda^{\rm int} - L_\lambda^{\rm att}\right)
@@ -328,6 +328,7 @@ class PublishedLuminosities:
         )
         return {
             "L_agn_bol": self._published_bol(params, templates_state),
+            "L_agn_bol_ionizing": self._published_bol_ionizing(params, templates_state),
             "L_agn_torus": self._published_torus(params, templates_state),
             "L_agn_absorbed": absorbed,
         }
@@ -337,33 +338,43 @@ class PublishedLuminosities:
         return floor_disc_xray(wave_nm, self._disc_raw(wave_nm, params, templates_state))
 
     def _disc_integral(
-        self, params, templates_state, lo_nm: float, weight_fn=None, extra_nm=()
+        self, params, templates_state, lo_nm: float, weight_fn=None, extra_nm=(), hi_nm=None
     ) -> Array:
-        """Integral of the big blue bump above ``lo_nm`` times ``weight_fn`` [erg/s].
+        """Integral of the big blue bump over ``[lo_nm, hi_nm]`` times ``weight_fn`` [erg/s].
 
-        The SBPL runs on a log grid to ``PUBLICATION_HI_NM``; the Netzer disc on its own
-        nodes plus a log grid (it is zero beyond its last node).
+        ``hi_nm`` defaults to the top of the publication grid. The SBPL runs on a log grid;
+        the Netzer disc on its own nodes plus a log grid (it is zero beyond its last node).
         """
         if self.config.disc_model == "netzer":
             nodes = jnp.asarray(templates_state.disc_wave_nm)
-            grid = jnp.asarray(log_breaks(lo_nm, _DISC_GRID_HI_NM, SBPL_PER_DECADE, extra_nm))
-            breaks = jnp.clip(jnp.sort(jnp.concatenate([nodes, grid])), lo_nm, nodes[-1])
+            top = nodes[-1] if hi_nm is None else jnp.minimum(nodes[-1], hi_nm)
+            grid_hi = _DISC_GRID_HI_NM if hi_nm is None else hi_nm
+            grid = jnp.asarray(log_breaks(lo_nm, grid_hi, SBPL_PER_DECADE, extra_nm))
+            breaks = jnp.clip(jnp.sort(jnp.concatenate([nodes, grid])), lo_nm, top)
         else:
-            breaks = jnp.asarray(log_breaks(lo_nm, PUBLICATION_HI_NM, SBPL_PER_DECADE, extra_nm))
+            hi = PUBLICATION_HI_NM if hi_nm is None else hi_nm
+            breaks = jnp.asarray(log_breaks(lo_nm, hi, SBPL_PER_DECADE, extra_nm))
         lam, w = gauss_legendre_segments(breaks)
         value = self._disc_at(lam, params, templates_state)
         return jnp.sum(w * (value if weight_fn is None else value * weight_fn(lam)))
 
-    def _balmer_breaks(self, lo_nm: float, params: Mapping[str, Array]) -> Array:
-        """Breakpoints [nm] of the Balmer continuum: log grid, the 250 nm switch, the edge."""
+    def _balmer_breaks(
+        self, lo_nm: float, params: Mapping[str, Array], hi_nm: float | None = None
+    ) -> Array:
+        """Breakpoints [nm] of the Balmer continuum over ``[lo_nm, hi_nm]``.
+
+        ``hi_nm`` defaults to the Balmer grid's top. The breaks are a log grid, the 250 nm
+        switch and the edge windows.
+        """
+        top = _BALMER_HI_NM if hi_nm is None else hi_nm
         linewidth = jnp.asarray(params["agn_grahsp_linewidth_kms"])
         edge = jnp.asarray([_BALMER_EDGE_NM])
         windows = window_edges(edge, linewidth_sigma_nm(edge, linewidth))
-        fixed = jnp.asarray(log_breaks(lo_nm, _BALMER_HI_NM, BALMER_PER_DECADE))
+        fixed = jnp.asarray(log_breaks(lo_nm, top, BALMER_PER_DECADE))
         breaks = jnp.sort(
             jnp.concatenate([fixed, jnp.asarray([_BC_CONVOLUTION_THRESHOLD_NM]), windows])
         )
-        return jnp.clip(breaks, lo_nm, _BALMER_HI_NM)
+        return jnp.clip(breaks, lo_nm, top)
 
     def _balmer_at(self, wave_nm: Array, params: Mapping[str, Array]) -> Array:
         """Intrinsic Balmer continuum [erg/s/nm] (type 1 only; the caller gates it)."""
@@ -456,22 +467,45 @@ class PublishedLuminosities:
         return pref, jnp.sum(signed) * pref, centers, sigmas
 
     def _published_bol(self, params, templates_state) -> Array:
-        """Intrinsic BBB + lines + FeII + Balmer above the Lyman limit [erg/s]."""
+        """Intrinsic BBB + lines + FeII + Balmer above upstream's cut, 91.1753 nm [erg/s]."""
         cfg = self.config
         type1 = cfg.agn_type == 1
         total = jnp.zeros(())
         if cfg.include_bbb:
-            total = total + self._disc_integral(params, templates_state, LYMAN_LIMIT_NM)
+            total = total + self._disc_integral(params, templates_state, BBB_BOL_CUT_NM)
         if cfg.include_balmer and type1:
-            lam, w = gauss_legendre_segments(self._balmer_breaks(LYMAN_LIMIT_NM, params))
+            lam, w = gauss_legendre_segments(self._balmer_breaks(BBB_BOL_CUT_NM, params))
             total = total + jnp.sum(w * self._balmer_at(lam, params))
         if cfg.include_feii and type1:
             wave, lumin = self._feii_template(templates_state)
             total = total + self._feii_amplitude(params) * jnp.trapezoid(lumin, wave)
         if cfg.include_lines:
             centers, sigmas, amps = self._line_terms(params, templates_state)
-            cut = 0.5 * erfc((LYMAN_LIMIT_NM - centers) / (math.sqrt(2.0) * sigmas))
+            cut = 0.5 * erfc((BBB_BOL_CUT_NM - centers) / (math.sqrt(2.0) * sigmas))
             total = total + jnp.sum(amps * cut)
+        return total
+
+    def _published_bol_ionizing(self, params, templates_state) -> Array:
+        """Intrinsic BBB-side power below upstream's cut, from the X-ray floor [erg/s].
+
+        The complement of :meth:`_published_bol` in the emitted BBB side: the disc and the
+        Balmer continuum integrated over ``[XRAY_FLOOR_NM, BBB_BOL_CUT_NM]``, and each Gaussian
+        line's share below the cut. The FeII template lies above 199 nm, so the forest has no
+        share here. The two published powers add to the emitted BBB-side total.
+        """
+        cfg = self.config
+        lo, hi = XRAY_FLOOR_NM, BBB_BOL_CUT_NM
+        total = jnp.zeros(())
+        if cfg.include_bbb:
+            total = total + self._disc_integral(params, templates_state, lo, hi_nm=hi)
+        if cfg.include_balmer and cfg.agn_type == 1:
+            lam, w = gauss_legendre_segments(self._balmer_breaks(lo, params, hi_nm=hi))
+            total = total + jnp.sum(w * self._balmer_at(lam, params))
+        if cfg.include_lines:
+            centers, sigmas, amps = self._line_terms(params, templates_state)
+            scale = math.sqrt(2.0) * sigmas
+            share = 0.5 * (erfc((lo - centers) / scale) - erfc((hi - centers) / scale))
+            total = total + jnp.sum(amps * share)
         return total
 
     def _published_torus(self, params, templates_state) -> Array:
