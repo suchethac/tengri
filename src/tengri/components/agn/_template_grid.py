@@ -57,6 +57,10 @@ class TorusTemplateGrid(NamedTuple):
         One 1-D coordinate array per leading template axis, ascending.
     wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
+    anisotropy : ndarray, shape (n_ax1, ..., n_axk), optional
+        For a library whose records share one scale per model across inclination: each
+        record's power over its model's mean (``_torus_inclination.anisotropy_values``),
+        computed once at load. ``None`` for a library normalized per sightline.
 
     Notes
     -----
@@ -68,6 +72,7 @@ class TorusTemplateGrid(NamedTuple):
     template: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     wave_grid: jnp.ndarray
+    anisotropy: jnp.ndarray | None = None
 
 
 def float32_safe_template(template, dtype):

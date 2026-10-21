@@ -198,6 +198,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar, age-resolved tensors (hard needs for nebular / dust2c)
     "L_age": "erg/s",
     "lnu_age": "erg/s/Hz",
+    "lnu_interval": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
     "age_weights_surviving": "Msun",
@@ -284,6 +285,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_agn_polar_dust": "dex",
     "log_L_agn_polar_dust_los": "dex",
     "log_L_agn_absorbed": "dex",
+    "log_L_agn_bol_ionizing": "dex",
     "agn_adaf_mdot": "",
     "log_L_agn_adaf_accretion": "dex",
     "L_agn_bol_lsun": "Lsun",
@@ -295,6 +297,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_polar_dust_lsun": "Lsun",
     "L_agn_polar_dust_los_lsun": "Lsun",
     "L_agn_absorbed_lsun": "Lsun",
+    "L_agn_bol_ionizing_lsun": "Lsun",
     "L_agn_adaf_accretion_lsun": "Lsun",
     "L_2500_intrinsic": "erg/s/Hz",
     "L_4400_intrinsic": "erg/s/Hz",
@@ -1027,16 +1030,28 @@ def wire_age_boundaries(components: Iterable[SEDComponent]) -> list[SEDComponent
             f"attenuators in one chain request different age boundaries: {sorted(requests)}"
         )
     ((boundaries, width),) = requests
+    # An attenuator evaluating its age mixture as interval sums
+    # (``age_mixture='grouped'``) reads the stellar component's per-interval
+    # spectra instead of the per-age cube.
+    grouped = any(
+        getattr(getattr(c, "config", None), "age_mixture", "per_node") == "grouped"
+        for c in components
+        if not isinstance(c, StellarSEDComponent)
+    )
     wired = []
     for c in components:
         if isinstance(c, StellarSEDComponent) and (
             tuple(c.config.age_boundaries_yr) != boundaries
             or float(c.config.age_boundary_width_dex) != width
+            or bool(c.config.publish_interval_spectra) != grouped
         ):
             c = replace(
                 c,
                 config=replace(
-                    c.config, age_boundaries_yr=boundaries, age_boundary_width_dex=width
+                    c.config,
+                    age_boundaries_yr=boundaries,
+                    age_boundary_width_dex=width,
+                    publish_interval_spectra=grouped,
                 ),
             )
         wired.append(c)

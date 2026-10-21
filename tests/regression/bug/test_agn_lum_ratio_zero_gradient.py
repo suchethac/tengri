@@ -44,6 +44,13 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: SED at ratio 0.5, log L_bol = 11, log M_BH = 8, float64, on ``_WAVE``. Post-#2733 values
 #: (243acb9a3, the kubota_done corona carries exactly its counted l_hot): the head SED equals
 #: them exactly, and the pre-#2733 SED (b4e2cb526^) is 4.8% lower in sum for kubota_done.
+#: The kubota_done golden carries two attributed changes. (1) #2919 (43020af08): the converged
+#: corona log-log integral, sum 3.8327887527784238e31 -> 3.8327907332299085e31 (+5.2e-7), point 0
+#: +6.35e-6 (see the note at the entry). (2) The owner ruling of 2026-10-20 (#3052): Mdot is
+#: inferred so the disc's total Page-Thorne dissipation equals L_bol (it was L_bol / (eta c^2),
+#: 2-13% larger than that), sum 3.8327907332299085e31 -> 3.9045697300814117e31 (+1.87%); the eight
+#: points move between -1.2% and +4.6%, recomputed from the final model (main with #2919 plus the
+#: ruling).
 #: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
@@ -55,16 +62,16 @@ _GOLDEN = {
     # Only the corona term is rescaled, so the shift is largest where the corona dominates
     # (point 0, the hard end) and vanishes where the disc does (points 4-7).
     "kubota_done": {
-        "sum": 3.8327907332299085e31,
+        "sum": 3.9045697300814117e31,
         "pts": (
-            1.0573097384788504e27,
-            1.9196612031686297e27,
-            1.0550851259728304e28,
-            6.202397816766065e28,
-            6.040546093105991e27,
-            1.97716277437947e26,
-            5.61556392901216e24,
-            1.541633260902528e23,
+            1.0524406625878232e27,
+            1.909944857660813e27,
+            1.0423137254779246e28,
+            6.390821642214103e28,
+            6.303598437612621e27,
+            2.067491256102662e26,
+            5.873925496299859e24,
+            1.6126422255910787e23,
         ),
     },
     "multicolor": {
@@ -171,15 +178,34 @@ def test_ratio_derivative_at_zero_matches_finite_difference(name, dtype):
     )
 
 
+#: Per-point rtol of the float64 goldens. The kubota_done corona-dominated points (indices 0, 137,
+#: 500, 1001) carry the converged corona log-log integral, which differs between Apple ARM (where
+#: the pins were captured; bit-exact) and the CI's Linux x86_64 runners (jax/jaxlib 0.12.0, numpy
+#: 2.5.4) by +4.5e-8, -6.0e-8, +7.4e-8 and +7.2e-9 on main bd9686d76 and +5.5e-8, -6.5e-8,
+#: +7.5e-8 and +8.2e-9 on this model, measured on the runner; the sum by -5.3e-10 and +2.5e-11.
+#: The disc-dominated points (1500-2999) agree to 1e-14 on both platforms and keep 1e-12. The
+#: 5e-7 bound is ~7x the measured spread and ~13x below the smallest model change these pins have
+#: caught (#2919's +6.35e-6 at index 0), so a real change still fails.
+_GOLDEN_RTOL = {
+    "kubota_done": {"pts": (5e-7, 5e-7, 5e-7, 5e-7, 1e-12, 1e-12, 1e-12, 1e-12), "sum": 5e-9},
+    "multicolor": {"pts": (1e-12,) * len(_GOLDEN_IDX), "sum": 1e-12},
+    "adaf": {"pts": (1e-12,) * len(_GOLDEN_IDX), "sum": 1e-12},
+}
+
+
 @pytest.mark.parametrize("name", _MODELS)
 def test_half_ratio_sed_matches_pre_change_golden_in_float64(name):
     with _x64(jnp.float64):
         sed = np.asarray(_sed(name, 0.5, _LOG_LBOL, jnp.float64))
     golden = _GOLDEN[name]
-    np.testing.assert_allclose(
-        sed[list(_GOLDEN_IDX)], np.asarray(golden["pts"]), rtol=1e-12, atol=0.0
+    rtol = _GOLDEN_RTOL[name]
+    got = sed[list(_GOLDEN_IDX)]
+    want = np.asarray(golden["pts"])
+    rel = np.abs(got - want) / np.abs(want)
+    assert np.all(rel <= np.asarray(rtol["pts"])), (
+        f"{name}: relative error per golden point {rel} exceeds {rtol['pts']}"
     )
-    np.testing.assert_allclose(float(sed.sum()), golden["sum"], rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(float(sed.sum()), golden["sum"], rtol=rtol["sum"], atol=0.0)
 
 
 def test_adaf_sed_is_linear_in_ratio_in_float64():

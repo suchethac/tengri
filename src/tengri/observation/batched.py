@@ -13,9 +13,10 @@ Static and traced parts
 The data split into two halves:
 
 * **Traced** (:class:`SpectroBatch`): pixel wavelengths, masks, fluxes, errors,
-  the resolution rows, redshifts, calibration ranges and photometry. Each
-  leaf has a leading batch axis ``B``, so the batch can be mapped with
-  :func:`jax.vmap` or passed as a regular argument to a jitted function.
+  the resolution rows, redshifts, calibration ranges, photometry and, when
+  given, each galaxy's non-parametric SFH bin edges. Each leaf has a leading
+  batch axis ``B``, so the batch can be mapped with :func:`jax.vmap` or passed
+  as a regular argument to a jitted function.
 * **Static** (:class:`SpectroBatchSpec`): the bucketed pixel count ``n_max``,
   the banded diagonal offsets, the grid kind, the spectral-LSF binning and the
   photometry width. These fix array shapes and control flow, so they are part
@@ -78,6 +79,7 @@ _BATCH_FIELDS: tuple[str, ...] = (
     "phot_flux",
     "phot_err",
     "phot_presence",
+    "sfh_bin_edges_gyr",
 )
 
 
@@ -110,6 +112,12 @@ class GalaxySpectrum(NamedTuple):
         with a non-finite flux or error is excluded.
     phot_err : array_like, shape (n_filt,), optional
         1-sigma errors on ``phot_flux`` [erg/s/cm^2/Hz]. Required with ``phot_flux``.
+    sfh_bin_edges_gyr : array_like, shape (n_edges,), optional
+        This galaxy's non-parametric SFH bin edges [Gyr], strictly ascending, for
+        example ``make_agebins_from_zred(zred=z)``. Replaces the template's
+        build-time ladder for this galaxy only, so a bucket can mix galaxies
+        whose ladders differ. ``n_edges`` must equal the template's edge count.
+        ``None`` (default) uses the template's ladder.
     """
 
     wave: Any
@@ -120,6 +128,7 @@ class GalaxySpectrum(NamedTuple):
     mask: Any = None
     phot_flux: Any = None
     phot_err: Any = None
+    sfh_bin_edges_gyr: Any = None
 
     @classmethod
     def from_flambda(
@@ -134,6 +143,7 @@ class GalaxySpectrum(NamedTuple):
         phot_flux_lambda=None,
         phot_err_lambda=None,
         phot_wave_eff=None,
+        sfh_bin_edges_gyr=None,
     ) -> GalaxySpectrum:
         """Build a record from data per wavelength, converting to F_nu.
 
@@ -157,6 +167,8 @@ class GalaxySpectrum(NamedTuple):
         phot_wave_eff : array_like, shape (n_filt,), optional
             Effective wavelength of each filter [Angstrom], the wavelength at
             which the per-wavelength photometry is converted.
+        sfh_bin_edges_gyr : array_like, shape (n_edges,), optional
+            Per-galaxy SFH bin edges [Gyr], as in :class:`GalaxySpectrum`.
 
         Returns
         -------
@@ -202,6 +214,7 @@ class GalaxySpectrum(NamedTuple):
             mask=mask,
             phot_flux=phot_flux,
             phot_err=phot_err,
+            sfh_bin_edges_gyr=sfh_bin_edges_gyr,
         )
 
 
@@ -237,6 +250,9 @@ class SpectroBatchSpec:
         with a template (see :func:`build_spectro_batches`). ``None`` keeps the
         traced-grid fallback, which pads by ``n_max - 1``: exact, but the transforms
         are about three times longer.
+    n_sfh_edges : int
+        Length of the per-galaxy SFH bin ladder the bucket carries; ``0`` (default)
+        when its galaxies use the template's build-time ladder.
 
     Raises
     ------
@@ -259,6 +275,7 @@ class SpectroBatchSpec:
     n_filt: int = 0
     conserving: bool | None = None
     lsf_pad_pixels: int | None = None
+    n_sfh_edges: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -286,6 +303,10 @@ class SpectroBatchSpec:
         pad = self.lsf_pad_pixels
         if pad is not None and (isinstance(pad, bool) or not isinstance(pad, int) or pad < 0):
             raise ValueError(f"lsf_pad_pixels must be None or a non-negative int, got {pad!r}")
+        n_edges = self.n_sfh_edges
+        is_int = isinstance(n_edges, int) and not isinstance(n_edges, bool)
+        if not is_int or n_edges < 0 or n_edges == 1:
+            raise ValueError(f"n_sfh_edges must be 0 or an integer >= 2, got {n_edges!r}")
 
 
 @dataclass(frozen=True)
@@ -316,6 +337,9 @@ class SpectroBatch:
         Photometry; zero-width when the bucket has no photometry.
     phot_presence : ndarray, shape (B, n_filt)
         1.0 where a filter has a finite flux and a positive error, else 0.0.
+    sfh_bin_edges_gyr : ndarray, shape (B, n_sfh_edges)
+        Per-galaxy SFH bin edges [Gyr]; zero-width when the bucket uses the
+        template's ladder (``spec.n_sfh_edges == 0``).
 
     Notes
     -----
@@ -338,6 +362,7 @@ class SpectroBatch:
     phot_flux: jax.Array
     phot_err: jax.Array
     phot_presence: jax.Array
+    sfh_bin_edges_gyr: jax.Array
 
     def galaxy(self, i: int) -> SpectroBatch:
         """Return galaxy ``i`` as an unbatched :class:`SpectroBatch`.
@@ -543,6 +568,20 @@ def _prepare_photometry(g: GalaxySpectrum):
     )
 
 
+def _prepare_sfh_edges(g: GalaxySpectrum) -> np.ndarray:
+    """Return the galaxy's SFH bin edges [Gyr], or a zero-width array when it has none."""
+    if g.sfh_bin_edges_gyr is None:
+        return np.zeros((0,))
+    edges = np.asarray(g.sfh_bin_edges_gyr, dtype=np.float64)
+    if edges.ndim != 1 or edges.size < 2:
+        raise ValueError("sfh_bin_edges_gyr must be 1-D with at least 2 edges")
+    if not np.all(np.isfinite(edges)) or edges[0] < 0.0:
+        raise ValueError("sfh_bin_edges_gyr must be finite and non-negative")
+    if not np.all(np.diff(edges) > 0.0):
+        raise ValueError(f"sfh_bin_edges_gyr must be strictly ascending, got {edges}")
+    return edges
+
+
 @dataclass(frozen=True)
 class TemplatePolicy:
     """What a bucket builder needs to know about the template model.
@@ -722,6 +761,7 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
                 )
 
         has_phot, p_flux, p_err, p_pres = _prepare_photometry(g)
+        sfh_edges = _prepare_sfh_edges(g)
         spec = SpectroBatchSpec(
             n_max=n_max,
             offsets=offsets,
@@ -730,6 +770,7 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
             has_phot=has_phot,
             n_filt=int(p_flux.shape[0]),
             conserving=conserving,
+            n_sfh_edges=int(sfh_edges.shape[0]),
         )
     except ValueError as exc:
         raise ValueError(f"galaxy {index}: {exc}") from exc
@@ -753,6 +794,7 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
         "phot_flux": p_flux,
         "phot_err": p_err,
         "phot_presence": p_pres,
+        "sfh_bin_edges_gyr": sfh_edges,
     }
     return spec, row, n, log_grid
 

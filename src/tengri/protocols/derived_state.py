@@ -96,6 +96,12 @@ class DerivedState:
     #: genuinely emits nothing, ``+inf`` that the input was corrupt (#1527).
     log_L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
+    #: Per-age-interval L_nu [erg/s/Hz], shape (n_interval, n_wave):
+    #: ``sum_a F_j(a) lnu_age(a)`` for the stellar component's
+    #: ``age_boundaries_yr`` (``F_j`` from ``age_boundary_younger_fraction``).
+    #: Published only when an attenuator asks for its grouped age mixture
+    #: (``StellarSEDComponentConfig.publish_interval_spectra``).
+    lnu_interval: jnp.ndarray | None = None
     # DSPS joint (metallicity, age) weights and the total_mass x L_sun scaling,
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
@@ -478,6 +484,9 @@ class DerivedState:
     log_L_agn_polar_dust: jnp.ndarray | None = None
     log_L_agn_polar_dust_los: jnp.ndarray | None = None
     log_L_agn_absorbed: jnp.ndarray | None = None
+    # GRAHSP BBB-side power emitted below upstream's 91.1753 nm cut (the sub-912 A share); with
+    # ``log_L_agn_bol`` it is the whole emitted BBB side [dex re erg/s].
+    log_L_agn_bol_ionizing: jnp.ndarray | None = None
     # The ADAF's accretion side (Mahadevan 1997, Eq. 4), composable AGN with the 'adaf' disc
     # only: ``agn_adaf_mdot`` is mdot = Mdot / Mdot_Edd [dimensionless] derived from the
     # radiated ``agn_log_lbol``, and ``log_L_agn_adaf_accretion`` is log10(mdot L_Edd) =
@@ -496,6 +505,7 @@ class DerivedState:
     L_agn_polar_dust_lsun: jnp.ndarray | None = None
     L_agn_polar_dust_los_lsun: jnp.ndarray | None = None
     L_agn_absorbed_lsun: jnp.ndarray | None = None
+    L_agn_bol_ionizing_lsun: jnp.ndarray | None = None
     L_agn_adaf_accretion_lsun: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];
     # drives X-ray alpha_ox (Just+2007). Published by the composable AGN (#722).

@@ -294,7 +294,7 @@ def test_spectro_batch_is_pytree_with_vmap_and_galaxy_slice():
     assert isinstance(batch, SpectroBatch)
 
     leaves = jax.tree_util.tree_leaves(batch)
-    assert len(leaves) == 12
+    assert len(leaves) == 13
     assert all(isinstance(leaf, jax.Array) for leaf in leaves)
 
     sums = jax.vmap(lambda o: o.flux.sum())(batch)

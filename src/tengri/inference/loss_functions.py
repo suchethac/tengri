@@ -518,14 +518,23 @@ def _build_data_neg_log_likelihood_fn(fitter):
             # line-flux DATA channel, applied to the array compared against
             # the data, never inside ``predict_line_fluxes`` itself.
             model_lf = model_lf * params.get("line_flux_scaling", 1.0)
-            # Score with censored likelihood if limits are present, else chi-squared
+            # Score with the censored likelihood if limits are present, or if the
+            # nebular model error is packed (its ln sigma_eff term is only in the
+            # censored form; the chi-squared below has none). Else chi-squared.
             line_flux_limit_mask = data_args.get("line_flux_limit_mask")
-            if line_flux_limit_mask is not None:
+            line_flux_model_sigma = data_args.get("line_flux_model_sigma_frac")
+            if line_flux_limit_mask is not None or line_flux_model_sigma is not None:
+                if line_flux_limit_mask is None:
+                    # All detections: zeros of the line count, as in build_likelihood_extras.
+                    line_flux_limit_mask = jnp.zeros(
+                        data_args["line_flux_obs"].shape[0], dtype=jnp.int32
+                    )
                 e_lh = e_lh + censored_neg_log_likelihood(
                     data_args["line_flux_obs"],
                     data_args["line_flux_err"],
                     model_lf,
                     line_flux_limit_mask,
+                    model_sigma_frac=line_flux_model_sigma,
                 )
             else:
                 chi2_lines = jnp.sum(

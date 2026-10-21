@@ -136,7 +136,7 @@ def test_fritz_analytic_basic(fritz_grid_path: Path, wavelength_aa: jnp.ndarray)
 
 @pytest.mark.contract
 def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
-    """Output integrated luminosity ≈ agn_torus_frac × L_bol."""
+    """The angle-integrated torus power ≈ agn_torus_frac × L_bol."""
     import h5py
 
     from tengri.components.agn._phys import wavelength_to_nu
@@ -157,26 +157,32 @@ def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jn
     L_bol_lsun = 10.0**log_lbol
     L_bol_erg_s = L_bol_lsun * 3.839e33  # L_sun in erg/s
 
-    L_nu = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=log_lbol,
-        agn_torus_frac=torus_frac,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=1.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,
-    )
-
-    # Integrate over frequency (L_ν has units erg/s/Hz)
     nu = wavelength_to_nu(wavelength_aa)
     idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(L_nu[idx_sort], nu[idx_sort])
+
+    def _power(mu):
+        # Integrate over frequency (L_nu has units erg/s/Hz) along the sightline ``mu``.
+        L_nu = fritz_fn(
+            wavelength_aa,
+            agn_log_lbol=log_lbol,
+            agn_torus_frac=torus_frac,
+            agn_fritz_r_ratio=60.0,
+            agn_fritz_tau=1.0,
+            agn_fritz_beta=-0.5,
+            agn_fritz_gamma=4.0,
+            agn_fritz_oa=60.0,
+            agn_fritz_psy=float(np.degrees(np.arcsin(mu))),
+        )
+        return float(jnp.trapezoid(L_nu[idx_sort], nu[idx_sort]))
+
+    # The torus keeps the library's anisotropy (#2851): agn_torus_frac x L_bol is the
+    # angle-integrated power, the mean over mu = cos i of the sightline powers.
+    mus = np.linspace(0.0, 1.0, 101)
+    integral_nu = np.trapezoid([_power(m) for m in mus], mus)
 
     expected_lum = torus_frac * L_bol_erg_s
     # Allow ~5% tolerance due to grid interpolation and wavelength discretization
-    rel_error = jnp.abs(integral_nu - expected_lum) / expected_lum
+    rel_error = abs(integral_nu - expected_lum) / expected_lum
     assert float(rel_error) < 0.05, f"Normalization error {float(rel_error):.2%}; expected <5%"
 
 

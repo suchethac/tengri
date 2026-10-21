@@ -126,7 +126,12 @@ def test_exactly_zero_power_publishes_minus_inf_in_both_precisions():
         for float32 in (False, True):
             pub, sed = predict(comp, point, float32=float32)
             for out_key, value in pub.items():
-                if out_key.startswith("log_"):
+                if out_key == "log_L_agn_disc_unemitted":
+                    # A torus-only component at zero torus fraction leaves the whole
+                    # accretion power to the disc it does not emit (#2851).
+                    want = point["log_lbol"] + np.log10(L_SUN)
+                    assert value == pytest.approx(want, abs=1e-5), (name, float32, value)
+                elif out_key.startswith("log_"):
                     assert value == -np.inf, (name, float32, out_key, value)
             assert np.all(sed == 0.0), (name, float32)
 

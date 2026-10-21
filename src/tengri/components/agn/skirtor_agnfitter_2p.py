@@ -168,6 +168,12 @@ def skirtor_agnfitter_2p_sed_from_grid(
     AGNfitter-rX [3]_, which averages out clumpiness (p, q) and optical
     depth of the full SKIRTOR parameter space.
     """
+    # Normalized per sightline (#2851): the stored power ratios between inclinations of
+    # AGNfitter-rX SKIRTOR_mean_2p.pickle do not follow the SKIRTOR v3 records (dust_emission x
+    # spectra/norm) averaged the same way (at oa = 10 deg 1.28 against 6.39), so the reduction is
+    # not on SKIRTOR's
+    # radiative-transfer scale. Sightline: 'incl_axis', the inclination from the polar
+    # axis [deg] (0 face-on).
     return torus_lnu_from_grid(
         grid,
         wavelength,
