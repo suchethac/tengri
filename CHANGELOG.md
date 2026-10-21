@@ -738,6 +738,7 @@
   thermal continuum on a 0.01 µm–10 mm rest-frame grid, so 70–1000 µm filters read the
   band-averaged closure to 1e-3 instead of zero; the grid ended at 31.6 µm (#2642).
 
+- **The float32 gradient of `loglog_integral` no longer overflows at SED-gradient cotangents (#2767).** On a segment with log-log slope near -1 the quotient `expm1(u) / u` has `u` of order 1e-3, and its VJP formed `cot x y a / u^2` before the cancellation; with the ~2e14 cotangent of the summed kubota_done SED that passed the float32 maximum and the corona normalization's gradient was NaN, failing `test_kubota_done_gradient_is_finite_and_accurate_in_float32`. Below `|u| = 0.05` the integral now uses the Taylor series of the quotient to `u^7` (double-precision exact, no `1/u` in its derivative). The ledger ruling's `Mdot` shift moved the pins of `test_float32_scale_seam_sweep` (float64 reference, up to 2e-3 relative, 3.6e-2 at the 0.01 A bin of the largest mass) and `test_kubota_nt_emissivity` (the disc dissipation is now `L_bol`, was `1.0191 L_bol`).
 - The `richards2006` disc template read its L_nu [erg/s/Hz] column as nu*F_nu and divided
   by nu, putting its nu*L_nu peak at 3055 Å instead of the quasar big blue bump near 1260 Å
   and its 1 µm / 10 µm levels +0.57 / +1.57 dex too high. The crossval test applied the

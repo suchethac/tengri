@@ -466,27 +466,38 @@ _AGN_MBH_DUST = {
 #: Cause: #2919 runner tie numerator log-log rule (blocks/runner.py ``_disc_integral``). The
 #: trapezoid sat 1.43e-5 low on the disc-dominated first (0.01 A) bin; the other bins move by the
 #: quadrature rule alone. The #2972 SKIRTOR native budget is already in the pins (from main).
+#: Re-captured for the owner ruling of 2026-10-20 (#3052): Mdot is inferred so the disc's total
+#: Page-Thorne dissipation equals L_bol (it was L_bol / (eta c^2), 1.9% larger at spin 0), which
+#: moves T_in, R_hot and the corona. Old -> new, relative, against the pins above:
+#:   log M_BH 6: rest_sed_sum +1.7e-05, rest_sed_0 -2.2e-04, rest_sed_mid +1.8e-05,
+#:               rest_sed_last +9.7e-07; photometry (r, W3, W4) +2.0e-05, +1.8e-07, +5.0e-08
+#:   log M_BH 8: rest_sed_sum +1.5e-03, rest_sed_0 -1.3e-03, rest_sed_mid +2.0e-03,
+#:               rest_sed_last +3.3e-04; photometry +2.0e-03, +6.1e-05, +1.6e-05
+#:   log M_BH 10: rest_sed_sum -1.0e-04, rest_sed_0 -3.6e-02, rest_sed_mid -1.6e-04,
+#:               rest_sed_last +1.4e-03; photometry -1.7e-04, +1.8e-04, +6.1e-05
+#: (rest_sed_0 is the 0.01 A bin, where the corona is ~10 orders below its peak and the pin is
+#: the most ill-conditioned key.) Captured on this tree by ``_F64_REFERENCE_CHILD`` per mass.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593844069605887e32,
-        "rest_sed_0": 107821475354953.55,
-        "rest_sed_mid": 2.8914128315785582e28,
-        "rest_sed_last": 8.773429503059575e21,
-        "photometry": (1.099505339296764e-27, 1.5613862802036946e-27, 1.7704390357838687e-27),
+        "rest_sed_sum": 1.5594106635660487e32,
+        "rest_sed_0": 107797379767304.1,
+        "rest_sed_mid": 2.8914653865344756e28,
+        "rest_sed_last": 8.773438001349959e21,
+        "photometry": (1.099527068736421e-27, 1.5613865677248782e-27, 1.7704391179433187e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6764091339884786e32,
-        "rest_sed_0": 2.6281298837209836e16,
-        "rest_sed_mid": 3.155430043907016e28,
-        "rest_sed_last": 8.836513279836989e21,
-        "photometry": (1.2062029810387692e-27, 1.5634711079489683e-27, 1.77104201211986e-27),
+        "rest_sed_sum": 1.6789229681932187e32,
+        "rest_sed_0": 2.624695376459065e16,
+        "rest_sed_mid": 3.161888044610268e28,
+        "rest_sed_last": 8.839446872961821e21,
+        "photometry": (1.2086542983710622e-27, 1.5635657807579732e-27, 1.7710697344413592e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7034259604001512e32,
-        "rest_sed_0": 1.2918162596663004e16,
-        "rest_sed_mid": 3.196250530436555e28,
-        "rest_sed_last": 9.75476880189074e21,
-        "photometry": (1.215701463900898e-27, 1.5872221876216888e-27, 1.778760182100698e-27),
+        "rest_sed_sum": 1.7032554952206092e32,
+        "rest_sed_0": 1.2449774852481998e16,
+        "rest_sed_mid": 3.19572347826585e28,
+        "rest_sed_last": 9.768530240445937e21,
+        "photometry": (1.2154923004059334e-27, 1.5875125651576988e-27, 1.7788693045472384e-27),
     },
 }
 

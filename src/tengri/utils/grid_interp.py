@@ -2270,6 +2270,10 @@ def resample_template(
     return jnp.where(wave_out > wave_in[-1], right, out)
 
 
+#: ``|u|`` below which :func:`loglog_integral` uses the Taylor series of ``expm1(u) / u``.
+_LOGLOG_SERIES_U = 0.05
+
+
 def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     """Integrate ``y`` over ``x`` treating each segment as a power law.
 
@@ -2321,10 +2325,21 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
 
     a = jnp.log(x1 / x0)
     u = a + jnp.log(y1_safe) - jnp.log(y0_safe)
-    # expm1(u)/u, continued to its finite limit 1 + u/2 as u -> 0.
-    small = jnp.abs(u) < 1e-7
+    # expm1(u)/u = sum_k u^k / (k + 1)!. For |u| < 0.05 the series to u^7 is exact to double
+    # precision (the next term is below 1e-16), and it has no 1 / u in its derivative: the VJP of
+    # ``expm1(u) / u`` forms ``cot * x y / u^2`` before the cancellation, which overflows float32
+    # for a cotangent of ~1e14 at |u| ~ 1e-3 (#2767).
+    small = jnp.abs(u) < _LOGLOG_SERIES_U
     u_safe = jnp.where(small, 1.0, u)
-    ratio = jnp.where(small, 1.0 + 0.5 * u, jnp.expm1(u_safe) / u_safe)
+    series = 1.0 + u * (
+        1.0 / 2.0
+        + u
+        * (
+            1.0 / 6.0
+            + u * (1.0 / 24.0 + u * (1.0 / 120.0 + u * (1.0 / 720.0 + u * (1.0 / 5040.0))))
+        )
+    )
+    ratio = jnp.where(small, series, jnp.expm1(u_safe) / u_safe)
 
     power_law = x0 * y0_safe * a * ratio
     trapezoid = 0.5 * (y0 + y1) * (x1 - x0)
