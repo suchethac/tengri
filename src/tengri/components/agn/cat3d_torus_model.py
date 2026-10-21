@@ -99,8 +99,8 @@ class CAT3DTorus(SEDModelComponent):
     """CAT3D-Wind clumpy-disc-plus-polar-wind AGN torus.
 
     Three-parameter torus model with inclination, clump distribution,
-    and polar-wind mass fraction. Provides C²-continuous gradients via
-    triweight kernel interpolation over the 3D parameter space.
+    and polar-wind mass fraction. Provides C¹-continuous gradients via
+    node-exact PCHIP interpolation over the 3D parameter space.
 
     Attributes
     ----------
@@ -143,7 +143,7 @@ class CAT3DTorus(SEDModelComponent):
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, PCHIP interpolation is C¹ and differentiable
     across the three parameter axes.
 
     **Requires template grid**: The CAT3D-Wind template library must be

@@ -190,6 +190,11 @@ def cat3d_wind_lowfwd_sed_from_grid(
     low-``fwd`` sub-library is a full Cartesian product of the three axes --
     no nearest-neighbor cell filling was needed at build time.
     """
+    # Normalized per sightline (#2851): AGNfitter-rX CAT3D_mean_3p.pickle states no common
+    # scale for its records across inclination (Martinez-Ramirez et al. 2024, Sect. 3.3, says
+    # only that the CAT3D-WIND SEDs were averaged), and the stored powers are not monotonic
+    # in inclination, so the library's anisotropy is not restored. Sightline: cos i,
+    # ascending, axis 0 (from the stored 'incl_axis' in deg, 0 face-on).
     return torus_lnu_from_grid(
         grid,
         wavelength,

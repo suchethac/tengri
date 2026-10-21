@@ -408,15 +408,17 @@ A library whose records share one radiative-transfer scale across inclination is
 ONCE per parameter point, by the sphere mean of its records' powers (Gauss-Legendre on the
 panels between the inclination nodes, in the variable the library is interpolated in), so
 every sightline keeps the library's flux ratio: Fritz et al. 2006 (`dust` times its `norm`
-record), `SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
+record over the model's sphere-mean `norm`, so only the anisotropy enters and every model
+keeps equal weight in the interpolation over the other axes), `SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
 whose scale across inclination is not established stays normalized per sightline, so its
 sightline and angle-integrated powers are equal: `SKIRTOR_mean_2p` and `3p` (their inclination
 ratios do not follow the SKIRTOR v3 records averaged the same way), `CAT3D_mean_3p` (no source
 states the scale of its records across inclination) and Silva et al. 2004 (no inclination
 axis). The standalone `cat3d_wind`, `skirtor_agnfitter` and `silva04` components publish the
-three keys; for the restored libraries, which the composable torus blocks call, the same
-ledger is `torus_ledger_from_grid` in `components/agn/_torus_inclination.py` with the kernel's
-`TORUS_INCLINATION`.
+three keys. The restored libraries are reached through the composable torus blocks, which do
+not publish them yet: the kernel seam is `torus_ledger_from_grid` in
+`components/agn/_torus_inclination.py` with the kernel's `TORUS_INCLINATION`, and the runner
+wiring is #3076.
 
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one

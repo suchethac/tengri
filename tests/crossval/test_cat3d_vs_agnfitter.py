@@ -22,8 +22,8 @@ without overshooting on the nearest-neighbor-filled grid.
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active galaxies.
-   II. From clumpy torus models to a unified model," ApJL 838, L20 (2017).
+.. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei:
+   reconciling observations with models," ApJL 838, L20 (2017).
    arXiv:1703.07781.
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).

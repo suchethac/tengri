@@ -94,3 +94,104 @@ def test_sightline_power_is_the_raw_record_over_its_sphere_mean(fritz, point, mu
         / raw.sphere_mean(point)
     )
     assert emitted == pytest.approx(float(expected), rel=2e-5)
+
+
+#: Off-node points next to the two models on a different source scale (face-on disc x norm
+#: 9.95 and 9.99 times the median of the other 2398), with the axis between their bracketing
+#: nodes: (point, sightline psy [deg], axis index, lower node, upper node).
+_OFF_NODE = (
+    ((100.0, 2.5, -0.75, 6.0, 40.0), 10.1, 1, 2.0, 3.0),
+    ((150.0, 8.0, -1.0, 6.0, 20.0), 80.1, 1, 6.0, 10.0),
+)
+_SHAPE_WAVE = np.geomspace(1.0e3, 1.0e7, 4000)
+
+
+def _unit_shape(fritz, point, psy):
+    """The emitted torus on ``_SHAPE_WAVE`` divided by its own power (shape only)."""
+    mod, grid, _ = fritz
+    keys = ("agn_fritz_r_ratio", "agn_fritz_tau", "agn_fritz_beta", "agn_fritz_gamma")
+    sed = np.asarray(
+        mod.fritz_sed_from_grid(
+            grid,
+            jnp.asarray(_SHAPE_WAVE),
+            agn_fritz_oa=point[4],
+            agn_fritz_psy=psy,
+            **dict(zip(keys, point[:4], strict=True)),
+            **_KW,
+        )
+    )
+    return sed / ln_nu_integral(sed, _SHAPE_WAVE)
+
+
+def _equal_weight_shape(fritz, point, psy):
+    """Shape of the stored unit-power records looked up at ``point`` (no inter-model weight)."""
+    from tengri.utils.grid_interp import interp_nd_pchip
+
+    _, grid, _ = fritz
+    table = interp_nd_pchip(
+        jnp.asarray(grid.dust, dtype=jnp.float64),
+        tuple(jnp.asarray(a) for a in grid.axes),
+        (*point, psy),
+    )
+    wave = np.asarray(grid.wave_grid)
+    l_lam = np.exp(np.interp(np.log(_SHAPE_WAVE), np.log(wave), np.log(np.asarray(table))))
+    lnu = l_lam * _SHAPE_WAVE**2 / 2.99792458e18
+    return lnu / ln_nu_integral(lnu, _SHAPE_WAVE)
+
+
+@pytest.mark.parametrize(("point", "psy", "axis", "lo", "hi"), _OFF_NODE)
+def test_off_node_shape_does_not_follow_the_inter_model_scale(fritz, point, psy, axis, lo, hi):
+    """Between nodes the torus shape is the equal-weight mixture of its neighbors (5 %).
+
+    Only the anisotropy is restored: each model's ``norm`` is divided by its own sphere mean,
+    so the interpolation over r_ratio, tau, beta, gamma and the opening angle mixes records of
+    equal weight. Carrying ``norm`` at its absolute scale weighted the two models on a
+    different source scale 10 to 18 times and moved the shape here by 0.48 to 1.15. The shape
+    also stays within the envelope of the two bracketing nodes' shapes (1 %).
+    """
+    shape = _unit_shape(fritz, point, psy)
+    sig = shape * (2.99792458e18 / _SHAPE_WAVE) > 1.0e-3 * np.max(
+        shape * 2.99792458e18 / _SHAPE_WAVE
+    )
+    ratio = shape[sig] / _equal_weight_shape(fritz, point, psy)[sig]
+    assert ratio.min() > 0.95 and ratio.max() < 1.05, (ratio.min(), ratio.max())
+    bracket = []
+    for node in (lo, hi):
+        p = list(point)
+        p[axis] = node
+        bracket.append(_unit_shape(fritz, tuple(p), psy)[sig])
+    low, high = np.minimum(*bracket), np.maximum(*bracket)
+    assert np.all(shape[sig] >= 0.99 * low) and np.all(shape[sig] <= 1.01 * high)
+
+
+def test_log_sed_gradient_is_finite_in_the_far_ultraviolet(fritz):
+    """In float64 the torus is positive at 1000-1100 A and its log has a finite gradient.
+
+    The emitted table is kept in the active dtype; a float32 copy in float64 mode flushed
+    these nodes (1e-24 of the peak) to exactly zero and made ``grad(log(sed))`` NaN.
+    """
+    import jax
+
+    mod, grid, _ = fritz
+    wave = jnp.asarray(np.geomspace(1000.0, 1100.0, 40))
+
+    def objective(params):
+        sed = mod.fritz_sed_from_grid(
+            grid,
+            wave,
+            agn_log_lbol=11.0,
+            agn_torus_frac=0.5,
+            agn_fritz_r_ratio=params[0],
+            agn_fritz_tau=params[1],
+            agn_fritz_beta=params[2],
+            agn_fritz_gamma=params[3],
+            agn_fritz_oa=40.0,
+            agn_fritz_psy=params[4],
+        )
+        return jnp.sum(jnp.log(sed))
+
+    params = jnp.asarray([60.0, 1.0, -0.5, 4.0, 45.0])
+    sed = mod.fritz_sed_from_grid(grid, wave, agn_fritz_psy=45.0, agn_fritz_oa=40.0, **_KW)
+    assert np.all(np.asarray(sed) > 0.0)
+    grad = np.asarray(jax.grad(objective)(params))
+    assert np.all(np.isfinite(grad)), grad

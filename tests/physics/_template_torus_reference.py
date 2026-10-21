@@ -4,7 +4,8 @@
 ``RawTorus`` reads one library file with ``h5py`` alone (no tengri import, no tengri
 interpolation): the stored records, their native wavelength nodes and the parameter axes. For
 the Fritz (2006) grid it multiplies the ``dust`` records by their ``norm`` (the divisor CIGALE
-took out of each model) and converts :math:`L_\\lambda` to :math:`L_\\nu`. It interpolates with
+took out of each model) over that model's sphere mean of ``norm``, and converts :math:`L_\\lambda`
+to :math:`L_\\nu`. It interpolates with
 SciPy's ``PchipInterpolator`` one axis at a time, the inclination axis last, integrates the
 log-log interpolant in closed form (``loglog_power``), and forms the sphere mean of the power
 as a dense trapezoid in :math:`\\mu = \\cos i`, not the Gauss-Legendre quadrature the
@@ -20,8 +21,6 @@ from scipy.interpolate import PchipInterpolator
 from tests.physics._skirtor_reference import loglog_power
 
 _C_AA = 2.99792458e18
-#: IAU 2015 nominal solar luminosity [erg/s], the value of ``physics_constants.L_SUN``.
-L_SUN_CGS = 3.828e33
 #: Points of the reference trapezoid in ``mu`` over [0, 1].
 MU_POINTS = 4001
 
@@ -84,7 +83,12 @@ class RawTorus:
                 self.wave = np.asarray(g["wavelength_aa"][()], dtype=float)
                 dust = np.asarray(g["dust"][()], dtype=float)
                 norm = np.asarray(g["norm"][()], dtype=float)
-                records = dust * norm[..., None] * self.wave**2 / _C_AA
+                psy = np.asarray(g["psy_axis"][()], dtype=float)
+                # Each model's norm over its own sphere mean (trapezoid in mu = sin psy over
+                # the nodes): the anisotropy, with every model at equal angle-averaged weight.
+                mu = np.sin(np.radians(psy))
+                mean = np.trapezoid(norm, mu, axis=-1) / (mu[-1] - mu[0])
+                records = dust * (norm / mean[..., None])[..., None] * self.wave**2 / _C_AA
             else:
                 self.wave = np.asarray(g["wavelength"][()], dtype=float)
                 records = np.asarray(g["template"][()], dtype=float)

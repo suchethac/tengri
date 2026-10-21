@@ -43,6 +43,10 @@ power over inclination
 (``_torus_inclination.torus_lnu_sphere_normalized``): the
 angle-integrated torus power is ``L_bol * agn_torus_frac`` and each sightline keeps the
 library's own flux relative to the others.
+Between nodes of the other axes the interpolation mixes the records at their own
+power, which varies smoothly with them (the sphere-mean power rises 2.7 times from
+the smallest to the largest opening angle, a covering factor, and is nearly flat in
+tau_V), so the off-node shape is a power-weighted mixture of its neighbors.
 
 References
 ----------
@@ -219,6 +223,13 @@ def nenkova_agnfitter_3p_sed_from_grid(
     averaging only); for the complete five-parameter CLUMPY space, use the
     original library directly.
     """
+    # Anisotropy restored here (#2851). Provenance: AGNfitter-rX NK0_mean_3p.pickle (tag
+    # AGNfitter-rX_v0.1, models/TORUS), field 'SED' per inclination, repackaged in
+    # nenkova_agnfitter_3p_torus_grid.h5 'template'; CLUMPY fluxes are normalized to F_AGN = L / 4
+    # pi D^2 in every
+    # direction (Nenkova et al. 2008, ApJ 685, 160, Sect. 2 and 3.6), so the records share
+    # one scale. Sightline: 'incl_axis' is the inclination i from the polar axis [deg]
+    # (0 face-on), stored here as cos i, ascending, axis 0.
     return torus_lnu_sphere_normalized(
         grid,
         wavelength,

@@ -15,7 +15,7 @@ so the angle-integrated torus power is :math:`f L_{\rm bol}` and every sightline
 library's own flux relative to the others. By symmetry about the equator
 :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta = \int_0^1 P(\mu)\,d\mu`.
 
-The quadrature is Gauss-Legendre of order ``INCLINATION_GL_ORDER`` on each interval between
+The quadrature is Gauss-Legendre of order ``TORUS_GL_ORDER`` on each interval between
 the library's inclination nodes, in the variable the library is interpolated in (each panel
 is one cubic of the interpolant), weighted by :math:`|d\mu/dx|`. The panels run over the
 whole of :math:`\mu \in [0, 1]`; beyond an end node the row is whatever the lookup returns
@@ -24,7 +24,9 @@ such a sightline.
 
 A torus-only component has no disc of its own: the disc share :math:`(1 - f) L_{\rm bol}` is
 published as ``log_L_agn_disc_unemitted`` so the ledger closes on the accretion power,
-``10**agn_log_lbol L_sun`` (NAMING_CONTRACT section 4c, "Template tori").
+``10**agn_log_lbol L_sun`` (NAMING_CONTRACT section 4c, "Template tori"). The standalone
+template tori publish it; the composable torus blocks of the restored libraries do not yet
+(#3076), and :func:`torus_ledger_from_grid` is the seam their runner will call.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._publication import INCLINATION_GL_ORDER, with_lsun_siblings
+from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn._template_grid import (
     TorusTemplateGrid,
     float32_safe_template,
@@ -46,10 +48,11 @@ from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 from tengri.utils.scale import log10_magnitude
 
 __all__ = [
+    "TORUS_GL_ORDER",
     "TORUS_LEDGER_KEYS",
     "TorusInclination",
     "absent_torus_ledger",
-    "inclination_quadrature",
+    "inclination_quadrature_in",
     "sphere_mean_power_at_nodes",
     "torus_ledger",
     "torus_ledger_from_grid",
@@ -67,6 +70,13 @@ _X_RANGE: dict[str, tuple[float, float]] = {
     "incl_deg": (0.0, 90.0),
     "elevation_deg": (0.0, 90.0),
 }
+
+
+#: Gauss-Legendre points per inclination panel. Measured against order 32 of the same
+#: interpolant: the sphere-mean power of every restored library (Fritz at three corners of
+#: the grid, NK0_mean_1p/2p/3p across the opening-angle and tau_V axes, SKIRTOR_mean_1p) is
+#: within 1.3e-11 at order 6 and 2.1e-9 at order 4; order 16 costs 2.7 times as much.
+TORUS_GL_ORDER: int = 6
 
 
 class TorusInclination(NamedTuple):
@@ -101,8 +111,11 @@ def _abs_dmu_dx(x, variable: str):
     raise ValueError(f"unknown inclination variable {variable!r}; expected one of {_X_RANGE}")
 
 
-def inclination_quadrature(x_nodes, variable: str, order: int = INCLINATION_GL_ORDER):
+def inclination_quadrature_in(x_nodes, variable: str, order: int = TORUS_GL_ORDER):
     r"""Points and weights for :math:`\int_0^1 f\,d\mu` in a library's inclination variable.
+
+    The traced, variable-aware sibling of ``_publication.inclination_quadrature`` (host
+    constants, nodes in ``cos i`` only).
 
     Parameters
     ----------
@@ -120,6 +133,12 @@ def inclination_quadrature(x_nodes, variable: str, order: int = INCLINATION_GL_O
     weight : ndarray, shape ((n_inc + 1) * order,)
         Weights [dimensionless], summing to 1.
 
+    Raises
+    ------
+    ValueError
+        If concrete ``x_nodes`` are not strictly ascending (a descending axis would give
+        negative panel widths).
+
     Notes
     -----
     **JIT/vmap-safe**: yes; the panel count is static, so the nodes may be a tracer. The
@@ -128,6 +147,8 @@ def inclination_quadrature(x_nodes, variable: str, order: int = INCLINATION_GL_O
     to 1, so the mean of a constant is that constant to rounding.
     """
     lo, hi = _X_RANGE[variable]
+    if not isinstance(x_nodes, jax.core.Tracer) and np.any(np.diff(np.asarray(x_nodes)) <= 0):
+        raise ValueError(f"inclination nodes must be strictly ascending, got {x_nodes!r}")
     nodes = jnp.asarray(x_nodes)
     ends = jnp.asarray([lo, hi], dtype=nodes.dtype)
     edges = jnp.concatenate([ends[:1], jnp.clip(nodes, lo, hi), ends[1:]])
@@ -183,7 +204,7 @@ def _row_at(rows, x_nodes, x, extrapolate: bool):
 
 def _sphere_mean_power(rows, x_nodes, wave_native, inc: TorusInclination):
     """Sphere-mean frequency integral of the rows, on the native grid [library units]."""
-    x_q, w_q = inclination_quadrature(x_nodes, inc.variable)
+    x_q, w_q = inclination_quadrature_in(x_nodes, inc.variable)
 
     def _power(x):
         return native_bolometric_nu(_row_at(rows, x_nodes, x, inc.extrapolate), wave_native)

@@ -103,8 +103,8 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     """SKIRTOR_mean_3p clumpy AGN torus (AGNfitter-faithful averaging).
 
     Three-parameter torus model with half-opening angle, inclination, and
-    equatorial optical depth. Provides C²-continuous gradients via triweight
-    kernel interpolation over the 3D parameter space.  This is the
+    equatorial optical depth. Provides C¹-continuous gradients via node-exact
+    PCHIP interpolation over the 3D parameter space.  This is the
     **AGNfitter-faithful** variant, differing from the default full-grid
     SKIRTOR in peak wavelength and other properties.
 
@@ -149,7 +149,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, PCHIP interpolation is C¹ and differentiable
     across the three parameter axes.
 
     **Requires template grid**: The SKIRTOR_mean_3p template library must be

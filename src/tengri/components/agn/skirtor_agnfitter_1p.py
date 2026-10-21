@@ -181,6 +181,12 @@ def skirtor_agnfitter_1p_sed_from_grid(
     AGNfitter-rX [3]_, which averages out opening angle, clumpiness
     (p, q), and optical depth of the full SKIRTOR parameter space.
     """
+    # Anisotropy restored here (#2851). Provenance: AGNfitter-rX SKIRTOR_mean_1p.pickle
+    # (tag AGNfitter-rX_v0.1, models/TORUS), field 'SED' per inclination, repackaged in
+    # skirtor_mean1p_torus_grid.h5 'template'; its power ratios between inclinations match
+    # the SKIRTOR v3 records (skirtor_templates_v3.h5 dust_emission x spectra/norm, Stalevski
+    # et al. 2016) averaged over tau, p, q, opening angle and R to 1 %. Sightline: 'incl_axis'
+    # is the inclination i from the polar axis [deg] (0 face-on), ascending, axis 0.
     return torus_lnu_sphere_normalized(
         grid,
         wavelength,

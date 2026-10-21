@@ -260,9 +260,8 @@ def test_gradient_flows_through_cos_inc(cos_inc_val):
 
     The mid-IR is where inclination is visible: at 10 um the SED moves 30%
     between cos_inc = 0.1 and 0.9, giving a logarithmic sensitivity of 0.1-0.3.
-    The bolometric integral moves by 1e-16 (see above), so the version of this
-    test that differentiated it could only ever have measured noise -- and did,
-    passing on a gradient of 8.2e12 against a value of 3.8e31.
+    The mid-IR is the observable checked here; the bolometric power now moves with
+    inclination too (the library's anisotropy, see above).
 
     cos_inc = 0.5 is avoided deliberately: the AGNfitter grid samples
     inclination every 10 degrees, so 0.5 is exactly cos(60 deg), a PCHIP node.

@@ -259,3 +259,53 @@ def test_restored_ledger_is_float32_safe(restored):
     for key, value in pub64.items():
         assert np.isfinite(pub32[key]), (name, key)
         assert relative_error(key, pub32[key], value) < 1e-4, (name, key)
+
+
+#: Public SED entry points of the restored libraries, as the composable torus blocks call
+#: them: (module, function, kwargs placing the sightline at ``mu = cos i``).
+_PUBLIC_SEDS = {
+    "fritz": ("fritz", "fritz_sed", lambda m: {"agn_fritz_psy": float(np.degrees(np.arcsin(m)))}),
+    "nenkova_agnfitter": (
+        "nenkova_agnfitter",
+        "nenkova_agnfitter_sed",
+        lambda m: {"agn_cos_inc": m},
+    ),
+    "nenkova_agnfitter_2p": (
+        "nenkova_agnfitter_2p",
+        "nenkova_agnfitter_2p_sed",
+        lambda m: {"agn_cos_inc": m},
+    ),
+    "nenkova_agnfitter_3p": (
+        "nenkova_agnfitter_3p",
+        "nenkova_agnfitter_3p_sed",
+        lambda m: {"agn_cos_inc": m},
+    ),
+    "skirtor_agnfitter_1p": (
+        "skirtor_agnfitter_1p",
+        "skirtor_agnfitter_1p_sed",
+        lambda m: {"agn_incl_skirtor": float(np.degrees(np.arccos(m)))},
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_PUBLIC_SEDS))
+def test_restored_public_sed_is_angle_normalized_and_anisotropic(name):
+    """C1 through the public SED: the mean over ``mu`` is ``f L_bol``, face-on is brighter.
+
+    Uses only the libraries' public ``*_sed`` entry points (no ledger helper), so the
+    assertion is about the physics: a library normalized per sightline carries ``f L_bol``
+    along every sightline and has a face-on/edge-on power ratio of exactly 1.
+    """
+    module, fn_name, sightline = _PUBLIC_SEDS[name]
+    fn = getattr(importlib.import_module(f"tengri.components.agn.{module}"), fn_name)
+    wave = jnp.asarray(_WIDE)
+    mus = np.linspace(0.0, 1.0, 101)
+    try:
+        powers = np.array(
+            [ln_nu_integral(np.asarray(fn(wave, **_KW, **sightline(m))), _WIDE) for m in mus]
+        )
+    except (FileNotFoundError, OSError) as err:
+        pytest.skip(f"{name}: template data unavailable ({err})")
+    target = 10.0 ** _KW["agn_log_lbol"] * L_SUN * _KW["agn_torus_frac"]
+    assert float(np.trapezoid(powers, mus)) == pytest.approx(target, rel=1e-4), name
+    assert powers[-1] / powers[0] > 1.1, f"{name}: face-on/edge-on {powers[-1] / powers[0]:.3f}"
