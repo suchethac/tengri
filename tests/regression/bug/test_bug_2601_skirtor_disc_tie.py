@@ -706,6 +706,13 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #:   log M_BH 10: -8.03e-05 / -3.63e-02 / -1.33e-04 / +1.14e-03
 #: The same model's pins in ``test_float32_scale_seam_sweep`` move the same way (log M_BH 6:
 #: sum +1.7e-05, first -2.2e-04). Captured per mass in a fresh process on the merged tree.
+#: The move is not uniform, and it is the ruling's geometry, not a rescale: ``Mdot`` falls by 1.84%
+#: (T_in by 0.46%) at every mass, but with ``L_0 = L_bol / h(inf)`` the hot-flow target
+#: ``L_hot / L_0`` rises by 1.9% and ``R_hot / R_isco`` moves from 1.2090 to 1.2106 (log M_BH 6),
+#: 8.080 to 8.443 (log M_BH 8, +4.5%; ``R_warm`` 16.16 to 16.89) and stays at its zone clip of 5
+#: (log M_BH 10). The standalone kubota_done SED at 1e4 A moves +3.6% at log M_BH 8 (the warm
+#: zone moved out) and the corona at 0.01 A moves -1.85% at log M_BH 10 (the clipped corona
+#: carries ``L_0 h(x_clip)``, which follows ``Mdot``).
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
         1.558710938929855e32,
