@@ -145,4 +145,5 @@ def test_truncated_disc_keeps_finite_gradients(powerlaw):
         return jnp.sum(jnp.log(jnp.where(sed > 0, sed, 1.0))) + pub["log_L_agn_disc"]
 
     grads = jax.grad(total, argnums=(0, 1, 2))(base["alpha"], base["T_max"], base["log_lbol"])
-    assert all(np.isfinite(float(g)) for g in grads), grads
+    assert all(np.isfinite(float(g)) for g in grads), f"non-finite gradient: {grads}"
+    assert all(float(g) != 0.0 for g in grads), f"a parameter lost its gradient: {grads}"
