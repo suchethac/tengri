@@ -343,14 +343,13 @@ def _build_corona_filter_table(
                            \, \exp(-h\nu / kT_e)
                            \, \exp(-\nu_{\rm seed} / \nu)
 
-    normalized so :math:`\int {\rm shape}\, d\nu = 1` on the fixed grid of ``_hot_corona_lnu``.
+    normalized so :math:`\int {\rm shape}\, d\nu = 1` on the fixed RELAGN grid.
     This matches ``_hot_corona_lnu`` in ``disc.py`` term for term (including the
     seed-photon rollover, Kubota & Done 2018 Section 2.2), keeping the
     preintegrated photometry consistent with the full-wavelength path.
 
-    The normalization uses the same fixed grid (1e-3 A to 1e10 A) and the same trapezoid
-    in :math:`\ln\nu` as ``_hot_corona_lnu``, making the result independent of the
-    caller's grid.
+    The normalization uses the same fixed [1e-4, 1e4] keV grid as
+    ``_hot_corona_lnu``, making the result independent of the caller's grid.
 
     Parameters
     ----------
@@ -379,10 +378,9 @@ def _build_corona_filter_table(
     n_filters = len(filter_waves)
     table = np.zeros((n_Gamma, n_kT, n_kTbb, n_filters), dtype=np.float64)
 
-    # The fixed normalization grid of ``_hot_corona_lnu`` (the AGN publication range).
-    from tengri.components.agn.disc import _CORONA_NU_GRID
-
-    nu_wide = np.asarray(_CORONA_NU_GRID, dtype=np.float64)
+    # Fixed normalization grid matching _hot_corona_lnu and RELAGN:
+    # [1e-4, 1e4] keV = [2.418e13, 2.418e21] Hz, 2000 log-spaced points.
+    nu_wide = np.geomspace(2.418e13, 2.418e21, 2000)
 
     # Precompute per-filter rest-frame frequencies and bandpass denominators.
     filt_cache = []
@@ -407,9 +405,7 @@ def _build_corona_filter_table(
                 seed_roll = np.exp(-np.clip(nu_seed / nu_wide, 0.0, 700.0))
                 shape = base * seed_roll
 
-                # Trapezoid in ln(nu), as ``_hot_corona_lnu``: the linear-nu trapezoid on a
-                # log-uniform grid overestimates by sinh(h)/h - 1.
-                integral = _np_trapezoid(shape * nu_wide, np.log(nu_wide))
+                integral = _np_trapezoid(shape, nu_wide)
                 if integral <= 0:
                     continue
                 shape_normed = shape / integral
