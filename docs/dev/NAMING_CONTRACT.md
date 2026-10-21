@@ -391,6 +391,32 @@ out-of-range final value representable. The rule these fixes converged on:
   Every published power of an emitted piece equals the integral of that piece of the SED
   (#2745); the unemitted disc is the one published power that is not in the SED.
 
+#### Standalone discs
+
+The standalone disc components (`KD18Disc`, `PowerLawDisc`) follow the same ledger, closing on
+`agn_lum_ratio * 10**agn_log_lbol L_sun` (the disc's share of the accretion power, as SKIRTOR
+closes on `agn_torus_frac`):
+
+| Component | Published | Sphere mean (C1) | Ledger (C2) |
+|---|---|---|---|
+| `KD18Disc` (Kubota & Done 2018) | `log_L_agn_disc`, `log_L_agn_disc_los` (+ `_lsun`) | `L(mu) = 2 mu D + H` is linear in `mu`, so the mean is the power at `cos i = 0.5` | `log_L_agn_disc` is the whole budget; no `_unemitted` piece |
+| `PowerLawDisc` | `log_L_agn_disc` (+ `_lsun`) | isotropic, no `_los` | `log_L_agn_disc` is the whole budget; no `_unemitted` piece |
+
+- Both values are closed forms of the budget, not integrals on a publication grid, and the SED
+  carries them exactly (C3: the dense-grid integral of the emitted SED matches to 1e-12 for
+  KD18 and to rounding for the power law). For KD18, `log_L_agn_disc_los` is
+  `log10(lum_ratio L) + log10(2 cos_inc (1 - f_c) + f_c)`, with `f_c` the corona's share.
+- **KD18 has no unemitted part.** Each zone is normalized on the support it emits over: the
+  outer-disc rings by the Planck integral of the spectra they emit (built from the same
+  `h, k, c`), the warm zone by the exact integral of its template (piecewise linear in `nu`
+  between the template's nodes, zero outside), and the corona by the trapezoid in `ln nu` on a
+  fixed grid spanning 1e-3 A to 1e10 A, which contains the whole Comptonization shape. The
+  corona radiates at most the accretion power: where `f_hard L_Edd` exceeds it (the whole flow
+  hot) the corona carries `L` and the disc zero.
+- **The power-law disc is zero outside 10 A to 1e8 A**, the band it is defined on (its
+  `nu L_nu` does not converge at long wavelength), and its band integral is the whole budget.
+- `tests/contract/test_agn_disc_ledger_closes.py` checks C1 to C4 over the declared prior box.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
 exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a

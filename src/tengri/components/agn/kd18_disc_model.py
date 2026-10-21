@@ -19,6 +19,7 @@ References
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -26,23 +27,18 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import (
-    log10_emitted_bolometric,
-    publication_wave,
-    with_lsun_outputs,
-    with_lsun_siblings,
-)
-
-#: Coarsest log-uniform grid whose emitted-SED integral meets 1e-6 against a 200000-node
-#: reference over 1e-3 A to 1e10 A (measured: 1000 nodes give -7e-8).
-_KD18_PUBLICATION_NODES: int = 1000
-from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
+from tengri.components.agn._publication import with_lsun_outputs, with_lsun_siblings
 from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
+from tengri.utils.physics_constants import L_SUN
+from tengri.utils.scale import log10_magnitude
 
 __all__ = ["KD18Disc"]
+
+#: ``log10(L_sun / (erg/s))`` [dex].
+_LOG10_L_SUN: float = math.log10(L_SUN)
 
 #: Single source of truth for every class-level prior below: the shared
 #: ``agn_*`` declarations in ``_params.py``. Read once at class-definition
@@ -136,8 +132,10 @@ class KD18Disc(SEDModelComponent):
     -----------------------
     log_L_agn_disc, log_L_agn_disc_los : dex
         log10 of the angle-integrated power and of the line-of-sight isotropic-equivalent
-        luminosity [dex re erg/s]: integrals over the full emission range of the emitted SED
-        (all three zones), evaluated on the publication grid.
+        luminosity [dex re erg/s] of the emitted SED (all three zones), in closed form from
+        the zone budget. The sphere-mean power ``log_L_agn_disc`` is the whole budget,
+        ``lum_ratio * 10**log_lbol L_sun``: nothing of the model lies outside the emitted SED,
+        so there is no ``_unemitted`` piece.
 
     Notes
     -----
@@ -333,13 +331,17 @@ class KD18Disc(SEDModelComponent):
 
         ``log_L_agn_disc`` [dex re erg/s] is the log of the angle-integrated emitted power: it
         is independent of ``cos_inc`` and equals ``lum_ratio`` times the accretion power
-        implied by ``log_lbol`` (less the corona's cut tail). ``log_L_agn_disc_los`` is the log
-        of the line-of-sight isotropic-equivalent luminosity of the emitted,
-        inclination-projected SED, a derived output; at :math:`\cos i = 0.5` the two coincide.
-        Both are integrals on a fixed grid of 1e-3 A to 1e10 A, independent of the caller's
-        wavelength grid, and are formed in log space so they are finite and accurate in pure
-        float32, where the erg/s value overflows (NAMING_CONTRACT section 4c). ``-inf`` is an
-        absent disc (``lum_ratio = 0``).
+        implied by ``log_lbol``. ``log_L_agn_disc_los`` is the log of the line-of-sight
+        isotropic-equivalent luminosity of the emitted, inclination-projected SED, a derived
+        output; at :math:`\cos i = 0.5` the two coincide. Both are closed forms of the zone
+        budget (:func:`_published_log_powers`), which the SED carries exactly: the outer-disc
+        rings are normalized by the Planck integral of the spectra they emit, the warm zone by
+        the exact integral of its piecewise-linear template, and the corona by the trapezoid in
+        :math:`\ln\nu` on its fixed grid, which contains the whole shape. The dense-grid
+        integral of the emitted SED matches them to 1e-12. They do not depend on the caller's
+        wavelength grid and are formed in log space, so they are finite in pure float32, where
+        the erg/s value overflows (NAMING_CONTRACT section 4c). ``-inf`` is an absent disc
+        (``lum_ratio = 0``).
 
         **JIT-compatible**: yes.
 
@@ -349,39 +351,68 @@ class KD18Disc(SEDModelComponent):
 
         """
 
-        def _kubota(wave_eval, cos_inc):
-            return _kubota_done_disc_fn(
-                wavelength=wave_eval,
-                agn_log_lbol=p["log_lbol"],
-                agn_lum_ratio=p["lum_ratio"],
-                agn_log_mbh=p["log_mbh"],
-                agn_log_ledd=p["log_ledd"],
-                agn_a_spin=p["a_spin"],
-                agn_cos_inc=cos_inc,
-                agn_f_hard=p["f_hard"],
-                agn_gamma_warm=p["gamma_warm"],
-                agn_kt_warm=p["kt_warm"],
-                agn_gamma_hard=p["gamma_hard"],
-                agn_kt_hot=p["kt_hot"],
-                agn_r_warm_ratio=p["r_warm_ratio"],
-                n_radii=self.config.n_radii,
-                agn_self_consistent_gamma=self.config.self_consistent_gamma,
-            )
-
-        # Published luminosities, integrated on the fixed publication grid (the caller's wave
-        # never enters). The angle-integrated power is the emitted spectrum at 2 cos i = 1,
-        # where the disc and warm zones carry D_nu and the corona H_nu; it does not depend on
-        # the inclination. The line-of-sight value integrates the emitted, projected spectrum.
-        wave_pub = publication_wave(wave.dtype, n_nodes=_KD18_PUBLICATION_NODES)
-        # Both are formed in log space (the erg/s value is ``inf`` in pure float32).
-        log_L_disc = log10_emitted_bolometric(
-            _kubota(wave_pub, COS_INC_ISOTROPIC_REFERENCE), wave_pub
+        sed_disc, _, _, corona_fraction = _kubota_done_disc_fn(
+            wavelength=wave,
+            agn_log_lbol=p["log_lbol"],
+            agn_lum_ratio=p["lum_ratio"],
+            agn_log_mbh=p["log_mbh"],
+            agn_log_ledd=p["log_ledd"],
+            agn_a_spin=p["a_spin"],
+            agn_cos_inc=p["cos_inc"],
+            agn_f_hard=p["f_hard"],
+            agn_gamma_warm=p["gamma_warm"],
+            agn_kt_warm=p["kt_warm"],
+            agn_gamma_hard=p["gamma_hard"],
+            agn_kt_hot=p["kt_hot"],
+            agn_r_warm_ratio=p["r_warm_ratio"],
+            n_radii=self.config.n_radii,
+            agn_self_consistent_gamma=self.config.self_consistent_gamma,
+            _return_parts=True,
         )
-        log_L_disc_los = log10_emitted_bolometric(_kubota(wave_pub, p["cos_inc"]), wave_pub)
-
-        # Add to intrinsic SED
-        sed_out = sed_in + _kubota(wave, p["cos_inc"])
+        log_L_disc, log_L_disc_los = _published_log_powers(
+            p["log_lbol"], p["lum_ratio"], p["cos_inc"], corona_fraction
+        )
+        sed_out = sed_in + sed_disc
 
         return sed_out, with_lsun_siblings(
             {"log_L_agn_disc": log_L_disc, "log_L_agn_disc_los": log_L_disc_los}
         )
+
+
+def _published_log_powers(log_lbol, lum_ratio, cos_inc, corona_fraction):
+    r"""Angle-integrated and line-of-sight power of the emitted K&D18 SED, in closed form.
+
+    The disc and warm zones carry :math:`\int D_\nu\,d\nu = (1-f_c) L` and the corona
+    :math:`\int H_\nu\,d\nu = f_c L`, with :math:`L = r\,10^{\log L_{\rm bol}} L_\odot`
+    and :math:`f_c` the corona fraction; the emitted spectrum is
+    :math:`L_\nu(\mu) = 2\mu D_\nu + H_\nu`, so
+
+    .. math::
+
+        \int_0^1 \!\int L_\nu(\mu)\,d\nu\,d\mu = L ,
+        \qquad
+        \int L_\nu(\mu)\,d\nu = L\,[2\mu(1-f_c) + f_c] .
+
+    Parameters
+    ----------
+    log_lbol : array_like
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)` [dex].
+    lum_ratio : array_like
+        Disc luminosity ratio :math:`r` [dimensionless].
+    cos_inc : array_like
+        :math:`\mu = \cos i` [dimensionless].
+    corona_fraction : array_like
+        :math:`f_c`, the corona's share of the accretion power [dimensionless]; above 1
+        when the hot flow's dissipation exceeds the accretion power, where the disc is
+        floored at zero.
+
+    Returns
+    -------
+    log_disc, log_disc_los : ndarray, shape ()
+        :math:`\log_{10}` of the two powers [dex re erg/s]; ``-inf`` at ``lum_ratio = 0``.
+    """
+    disc_share = jnp.maximum(1.0 - corona_fraction, 0.0)
+    log_scale = log10_magnitude(lum_ratio) + log_lbol + _LOG10_L_SUN
+    log_disc = log_scale + jnp.log10(disc_share + corona_fraction)
+    log_los = log_scale + log10_magnitude(2.0 * cos_inc * disc_share + corona_fraction)
+    return log_disc, log_los
