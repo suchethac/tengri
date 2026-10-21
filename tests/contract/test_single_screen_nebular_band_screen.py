@@ -46,9 +46,13 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
+from tengri.cosmology import age_at_z
 from tengri.inference import Fitter
 
 pytestmark = pytest.mark.contract
+
+#: Age of the universe at the test model's redshift (``Fixed(1.0)``) [Gyr].
+_AGE_AT_Z = float(age_at_z(1.0))
 
 _BARE = "data/fsps_prsc_miles_chabrier.h5"
 _DUST = {
@@ -138,7 +142,7 @@ def m_exact_rest(ssp):
 def p_warm(m_wave):
     """Young, dusty point: age at the young end, tau_v = 2.3, neb_logU = -2.5."""
     p = dict(m_wave.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.05
+    p["sfh_dpl_age_frac"] = 0.05 / _AGE_AT_Z
     p["dust_tau_v"] = 2.3
     p["neb_logU"] = -2.5
     return p

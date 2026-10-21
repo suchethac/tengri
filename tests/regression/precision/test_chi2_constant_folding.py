@@ -281,23 +281,41 @@ def test_the_import_check_accepts_every_legal_import_spelling():
 
 
 def test_a_bare_open_coded_chi2_still_demonstrates_the_hazard():
-    """Negative control: the bug is real and the helper is what avoids it.
+    """Negative control: the open-coded form is either the folded hazard or demonstrably safe.
 
     Without this, every assertion above would pass on a build where XLA simply
     stopped constant-folding, and the helper would look load-bearing when it was
-    not. Pins the hazard the helper exists for.
+    not. The control therefore pins the *relation* between the compiled module and
+    the value, and records which side of it the installed XLA is on:
+
+    * XLA still folds the reciprocal (jaxlib 0.11): one bare ``constant(inf)`` in the
+      module and a NaN value, the hazard ``standardized_residual`` exists for;
+    * XLA no longer folds it (jaxlib 0.12, measured on linux and macOS): no bare
+      ``constant(inf)`` and the correct value 0.0199999, so the open-coded form is
+      safe on that compiler. ``standardized_residual`` stays, because the data
+      dependency is the only form that does not rely on the compiler's choice; the
+      tests above still pin its value, its float64 bit-exactness and its clean HLO.
+
+    The two outcomes are the only consistent ones. A NaN with no folded constant, or a
+    folded constant with a finite value, means the HLO signal the other tests key on
+    has stopped identifying the defect, and fails here.
     """
     with jax.enable_x64(False):
         d, s, mu = _f32_inputs()
         open_coded = jax.jit(lambda m: jnp.sum(((d - m) / s) ** 2))
         bare = float(open_coded(mu))
         folded = _folded_infinities(open_coded.lower(mu).compile().as_text())
-    assert np.isnan(bare), (
-        f"an open-coded ((d-mu)/sigma)**2 now gives {bare} rather than NaN. XLA has "
-        "stopped folding the reciprocal, so standardized_residual may no longer be "
-        "necessary — re-measure before removing it, and update #1535"
-    )
-    assert folded == 1, (
-        f"the open-coded control compiles to {folded} bare constant(inf), not 1 — the "
-        "HLO signal the test above keys on no longer identifies the defect"
-    )
+    if np.isnan(bare):
+        assert folded == 1, (
+            f"the open-coded control is NaN but compiles to {folded} bare constant(inf), "
+            "not 1 - the HLO signal the test above keys on no longer identifies the defect"
+        )
+    else:
+        assert folded == 0, (
+            f"the open-coded control is finite ({bare}) yet compiles to {folded} bare "
+            "constant(inf) - the HLO signal no longer identifies the defect"
+        )
+        assert bare == pytest.approx(_EXPECTED, rel=1e-4), (
+            f"the open-coded control gives {bare}, neither NaN (the folded hazard) nor "
+            f"the expected {_EXPECTED} - finite but wrong"
+        )
