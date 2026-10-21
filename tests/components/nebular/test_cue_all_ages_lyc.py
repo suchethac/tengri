@@ -26,9 +26,12 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
+from tengri.cosmology import age_at_z
 from tests._old_lyc_ssp import FSPS_PRSC, ssp_with_old_lyc
 
 _HALPHA_AA = 6564.61
+#: Age of the universe at the test redshift (z = 0) [Gyr]: the divisor of the ``*_frac`` timing.
+_AGE_Z0_GYR = float(age_at_z(0.0))
 #: Case B, Osterbrock & Ferland (2006) Table 4.4, T = 1e4 K, n_e = 100 cm^-3 [erg per photon].
 _CASE_B_ERG = 1.37e-12
 _MASS = 10.0  # log10(M_formed / Msun)
@@ -90,7 +93,7 @@ def _model(lyc_max_age_yr=None, fesc=0.0, fdust_frac=0.0):
             sfh={
                 "type": "delayed",
                 "tau_gyr": FREE,
-                "age_gyr": FREE,
+                "age_frac": FREE,
                 "log_total_mass": FREE,
                 "all_params": Fixed(DEFAULT),
             },
@@ -107,10 +110,15 @@ def _model(lyc_max_age_yr=None, fesc=0.0, fdust_frac=0.0):
         )
 
 
+def _age_frac(age_gyr):
+    """Onset ``age_gyr`` [Gyr] as the ``*_frac`` fraction of age(z) at the test redshift."""
+    return age_gyr / _AGE_Z0_GYR
+
+
 def _params(tau, age):
     return {
         "sfh_delayed_tau_gyr": jnp.asarray(tau),
-        "sfh_delayed_age_gyr": jnp.asarray(age),
+        "sfh_delayed_age_frac": jnp.asarray(_age_frac(age)),
         "sfh_delayed_log_total_mass": jnp.asarray(_MASS),
     }
 

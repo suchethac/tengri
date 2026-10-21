@@ -22,9 +22,16 @@ import pytest
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar.component import StellarSEDComponent
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+from tengri.cosmology import age_at_z
 from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.regression_bug
+
+#: Registry default of the young quench time, a fraction of age(z).
+TLAST_FRAC_DEFAULT = float(
+    SFH_REGISTRY["psb_flex"].params["sfh_psb_flex_tlast_frac"].default.default
+)
 
 BANDS = ["galex_fuv", "sdss_u", "sdss_r", "2mass_h"]
 #: Round-off bound for two evaluations of one integration in different graphs.
@@ -195,9 +202,27 @@ def test_d_fast_path_matches_exact_forward_for_dsps(ssp, obs):
 FLUX_SCALE = 1e12
 
 
+#: Both quench times are fractions of age(z) (#2748): a Gyr tlast beside a fraction
+#: tflex is mixed units, which the build refuses. At z = 0 the fraction is the Gyr
+#: value over the age of the universe.
+AGE0_GYR = float(age_at_z(0.0))
+
+
 def _tflex_flux(ssp, obs, kernel):
-    model = _model(ssp, obs, kernel, {**PSB, "tflex_frac": Uniform(0.0362663, 0.362663)}, z=0.0)
-    return lambda x: FLUX_SCALE * model.predict_photometry({"sfh_psb_flex_tflex_gyr": x})[2]
+    model = _model(
+        ssp,
+        obs,
+        kernel,
+        {
+            **PSB,
+            "tlast_frac": Fixed(TLAST_FRAC_DEFAULT),
+            "tflex_frac": Uniform(0.0362663, 0.362663),
+        },
+        z=0.0,
+    )
+    return lambda x: (
+        FLUX_SCALE * model.predict_photometry({"sfh_psb_flex_tflex_frac": x / AGE0_GYR})[2]
+    )
 
 
 def test_e_float32_gradient_is_finite_and_nonzero(ssp, obs):

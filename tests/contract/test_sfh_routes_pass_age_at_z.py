@@ -300,9 +300,14 @@ def test_sample_sfh_prior_requires_redshift_for_age_families(family):
 
 
 def test_sample_sfh_prior_other_families_need_no_redshift():
-    """A family with no age anchor is unchanged by the new argument."""
-    _, plain = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3)
-    _, with_z = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3, redshift=_Z)
+    """A family with no age anchor is unchanged by the new argument.
+
+    ``dpl`` is not such a family: its formation age is sampled as a fraction of
+    age(z) (#2748), so the redshift changes its draws. ``dirichlet`` has no
+    timing parameter at all.
+    """
+    _, plain = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3)
+    _, with_z = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3, redshift=_Z)
     np.testing.assert_array_equal(np.asarray(plain), np.asarray(with_z))
 
 

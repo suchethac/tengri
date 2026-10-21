@@ -64,6 +64,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.components.lyc import LYMAN_LIMIT_AA
+from tengri.cosmology import age_at_z
 from tengri.observation.photometry import FilterCurve, lnu_filter_integral
 from tengri.observation.spectroscopy import Spectroscopy
 from tests._data_skip import requires_cue_weights
@@ -186,6 +187,15 @@ def _dust_group(dust: str | None) -> dict:
     raise ValueError(dust)  # pragma: no cover - parametrize controls this
 
 
+#: Delayed-SFH onset [Gyr]; capped at the age of the universe at the model redshift.
+SFH_ONSET_GYR = 3.0
+
+
+def _onset_gyr(z):
+    """The onset, or the age of the universe at ``z`` where that is earlier."""
+    return min(SFH_ONSET_GYR, float(age_at_z(z)))
+
+
 def _build(ssp, z, fesc, dust, igm, filters=None, wave_obs=None, resample="auto"):
     """Build the issue's model shape: delayed SFH, Cue nebular, optional dust/IGM."""
     igm_group = {"type": "none"} if igm is None else {"type": igm, "all_params": Fixed(DEFAULT)}
@@ -200,7 +210,7 @@ def _build(ssp, z, fesc, dust, igm, filters=None, wave_obs=None, resample="auto"
             "type": "delayed",
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
-            "age_gyr": 3.0,
+            "age_gyr": Fixed(_onset_gyr(z)),
             "all_params": Fixed(DEFAULT),
         },
         met={"logzsol": 0.0, "all_params": Fixed(DEFAULT)},
@@ -375,7 +385,7 @@ def test_gradient_wrt_fesc_finite_and_analytic(lyc_ssp):
             "type": "delayed",
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
-            "age_gyr": 3.0,
+            "age_gyr": Fixed(_onset_gyr(z)),
             "all_params": Fixed(DEFAULT),
         },
         met={"logzsol": 0.0, "all_params": Fixed(DEFAULT)},
