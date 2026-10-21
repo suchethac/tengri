@@ -18,10 +18,15 @@ the HDF5, not the pickle.
 
 Runtime normalization
 ---------------------
-The stored template is *shape-only*. At runtime,
-:func:`create_nenkova_agnfitter_from_grid` divides by the trapezoidal
-integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
-matching :mod:`tengri.components.agn.silva04`.
+CLUMPY fluxes are normalized to the bolometric AGN flux ``F_AGN = L / 4 pi D^2`` in
+every direction (Nenkova et al. 2008, ApJ 685, 160, Sect. 2 and 3.6), so the records
+share one scale across inclination; the AGNfitter-rX reductions are linear means on it
+(``NK0_mean_3p`` averaged over its optical-depth axis is ``NK0_mean_2p`` to 5e-4).
+The template is therefore normalized ONCE per parameter point, by the sphere mean of its
+power over inclination
+(:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`): the
+angle-integrated torus power is ``L_bol * agn_torus_frac`` and each sightline keeps the
+library's own flux relative to the others.
 
 References
 ----------
@@ -42,9 +47,19 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._torus_inclination import (
+    TorusInclination,
+    torus_lnu_sphere_normalized,
+)
+
+#: The library's inclination axis: the records share one radiative-transfer scale
+#: across inclination, so the template is normalized once by its sphere-mean power
+#: (:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`).
+TORUS_INCLINATION = TorusInclination(axis=0, variable="cos_inc")
 
 __all__ = [
+    "TORUS_INCLINATION",
     "create_nenkova_agnfitter_from_grid",
     "nenkova_agnfitter_sed",
 ]
@@ -156,13 +171,15 @@ def nenkova_agnfitter_sed_from_grid(
     -----
     .. math::
 
-        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                         \frac{T(\lambda,\,\cos i)}
-                              {\int T(\nu,\,\cos i)\,\mathrm{d}\nu}
+        L_\nu(\lambda;\,\mu) = L_{\rm bol}\,f_{\rm torus}\,
+                               \frac{T(\lambda;\,\mu)}{\bar P}, \qquad
+        \bar P = \int_0^1 \!\! \int T(\nu;\,\mu)\,\mathrm{d}\nu\,\mathrm{d}\mu,
 
-    where :math:`T` is the tabulated template (node-exact at grid points
-    via monotone-cubic interpolation) and the integral is evaluated on
-    the (sorted) frequency grid corresponding to ``wavelength``.
+    where :math:`T` is the tabulated template at the parameter point (node-exact PCHIP),
+    :math:`\mu = \cos i`, and the frequency integral is that of the interpolant on the
+    template's own wavelength nodes. The angle-integrated power is
+    :math:`f_{\rm torus} L_{\rm bol}`; along :math:`\mu` the torus carries
+    :math:`f_{\rm torus} L_{\rm bol}\,P(\mu)/\bar P`.
 
     **JIT-compatible**: yes.
 
@@ -172,10 +189,11 @@ def nenkova_agnfitter_sed_from_grid(
     space (N_0, σ, τ_V, Y, q), use the original CLUMPY library
     directly, not this averaged projection.
     """
-    return torus_lnu_from_grid(
+    return torus_lnu_sphere_normalized(
         grid,
         wavelength,
         (agn_cos_inc,),
+        TORUS_INCLINATION,
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,
     )

@@ -24,7 +24,7 @@ References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active galaxies.
    II. From clumpy torus models to a unified model," ApJL 838, L20 (2017).
-   arXiv:1702.08691.
+   arXiv:1703.07781.
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
    arXiv:2405.12111. DOI: 10.1051/0004-6361/202449329.
@@ -138,7 +138,7 @@ def test_fwd_cat3d_axis_parity(grid, component):
 
     References
     ----------
-    Hönig & Kishimoto 2017, ApJL 838, L20, arXiv:1702.08691.
+    Hönig & Kishimoto 2017, ApJL 838, L20, arXiv:1703.07781.
     Martínez-Ramírez et al. 2024, A&A 688, A46, arXiv:2405.12111.
     """
     # Evaluate at the fwd=1.0 and fwd=2.25 nodes with identical other params
@@ -168,7 +168,7 @@ def test_fwd_cat3d_node_exactness(grid, component):
 
     References
     ----------
-    Hönig & Kishimoto 2017, ApJL 838, L20, arXiv:1702.08691.
+    Hönig & Kishimoto 2017, ApJL 838, L20, arXiv:1703.07781.
     Martínez-Ramírez et al. 2024, A&A 688, A46, arXiv:2405.12111.
     """
     # Test fwd=1.0, 1.75, 2.25 (low, middle, high)

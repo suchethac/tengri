@@ -391,6 +391,33 @@ out-of-range final value representable. The rule these fixes converged on:
   Every published power of an emitted piece equals the integral of that piece of the SED
   (#2745); the unemitted disc is the one published power that is not in the SED.
 
+### Template tori (#2851)
+
+A torus-only template component has no disc of its own. It publishes three powers, each a
+`log_L_agn_*` [dex re erg/s] with its `L_agn_*_lsun` [Lsun] sibling:
+
+- `log_L_agn_torus`: the angle-integrated torus power, `int_0^1 P(mu) dmu`, which is
+  `agn_torus_frac * 10**agn_log_lbol L_sun`;
+- `log_L_agn_torus_los`: the frequency integral of the torus SED emitted along the sightline;
+- `log_L_agn_disc_unemitted`: the disc share `(1 - agn_torus_frac) 10**agn_log_lbol L_sun`
+  that the component does not emit, so `torus + disc_unemitted` is the accretion power to
+  1e-12.
+
+Whether the sightline value differs from the angle-integrated one depends on the library.
+A library whose records share one radiative-transfer scale across inclination is normalized
+ONCE per parameter point, by the sphere mean of its records' powers (Gauss-Legendre on the
+panels between the inclination nodes, in the variable the library is interpolated in), so
+every sightline keeps the library's flux ratio: Fritz et al. 2006 (`dust` times its `norm`
+record), `SKIRTOR_mean_1p` and the CLUMPY reductions `NK0_mean_1p`, `2p` and `3p`. A library
+whose scale across inclination is not established stays normalized per sightline, so its
+sightline and angle-integrated powers are equal: `SKIRTOR_mean_2p` and `3p` (their inclination
+ratios do not follow the SKIRTOR v3 records averaged the same way), `CAT3D_mean_3p` (no source
+states the scale of its records across inclination) and Silva et al. 2004 (no inclination
+axis). The standalone `cat3d_wind`, `skirtor_agnfitter` and `silva04` components publish the
+three keys; for the restored libraries, which the composable torus blocks call, the same
+ledger is `torus_ledger_from_grid` in `components/agn/_torus_inclination.py` with the kernel's
+`TORUS_INCLINATION`.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
 exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a

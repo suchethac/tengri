@@ -20,9 +20,14 @@ Axis semantics
 
 Runtime normalization
 ---------------------
-Template is shape-only. At runtime the module divides by the trapezoidal
-integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
-mirroring :mod:`tengri.components.agn.skirtor_agnfitter`.
+The stored inclination power ratios equal those of the SKIRTOR v3 records (multiplied
+back by their ``norm``) averaged over tau, p, q, opening angle and radius ratio to 1 %,
+so the reduction is on SKIRTOR's radiative-transfer scale (face-on/edge-on 2.12).
+The template is therefore normalized ONCE per parameter point, by the sphere mean of its
+power over inclination
+(:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`): the
+angle-integrated torus power is ``L_bol * agn_torus_frac`` and each sightline keeps the
+library's own flux relative to the others.
 
 References
 ----------
@@ -47,9 +52,19 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._torus_inclination import (
+    TorusInclination,
+    torus_lnu_sphere_normalized,
+)
+
+#: The library's inclination axis: the records share one radiative-transfer scale
+#: across inclination, so the template is normalized once by its sphere-mean power
+#: (:func:`~tengri.components.agn._torus_inclination.torus_lnu_sphere_normalized`).
+TORUS_INCLINATION = TorusInclination(axis=0, variable="incl_deg")
 
 __all__ = [
+    "TORUS_INCLINATION",
     "create_skirtor_agnfitter_1p_from_grid",
     "skirtor_agnfitter_1p_sed",
 ]
@@ -149,10 +164,15 @@ def skirtor_agnfitter_1p_sed_from_grid(
     -----
     .. math::
 
-        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                         \frac{T(\lambda;\,i)}{\int T(\nu;\,i)\,\mathrm{d}\nu}
+        L_\nu(\lambda;\,\mu) = L_{\rm bol}\,f_{\rm torus}\,
+                               \frac{T(\lambda;\,\mu)}{\bar P}, \qquad
+        \bar P = \int_0^1 \!\! \int T(\nu;\,\mu)\,\mathrm{d}\nu\,\mathrm{d}\mu,
 
-    where :math:`i` is the inclination angle.
+    where :math:`T` is the tabulated template at the parameter point (node-exact PCHIP),
+    :math:`\mu = \cos i`, and the frequency integral is that of the interpolant on the
+    template's own wavelength nodes. The angle-integrated power is
+    :math:`f_{\rm torus} L_{\rm bol}`; along :math:`\mu` the torus carries
+    :math:`f_{\rm torus} L_{\rm bol}\,P(\mu)/\bar P`.
 
     **JIT-compatible**: yes.
 
@@ -161,10 +181,11 @@ def skirtor_agnfitter_1p_sed_from_grid(
     AGNfitter-rX [3]_, which averages out opening angle, clumpiness
     (p, q), and optical depth of the full SKIRTOR parameter space.
     """
-    return torus_lnu_from_grid(
+    return torus_lnu_sphere_normalized(
         grid,
         wavelength,
         (agn_incl_skirtor,),
+        TORUS_INCLINATION,
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,
     )

@@ -27,8 +27,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.nenkova_agnfitter_3p import _load_nenkova_agnfitter_3p_arrays
+from tengri.components.agn._torus_inclination import sphere_mean_power_at_nodes
+from tengri.components.agn.nenkova_agnfitter_3p import (
+    TORUS_INCLINATION,
+    _load_nenkova_agnfitter_3p_arrays,
+    load_nenkova_agnfitter_3p_grid,
+)
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -88,7 +92,7 @@ def precompute_nenkova_agnfitter_3p_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
+    integration constant equals L_sun / (sphere-mean native power over inclination). This matches
     the runtime normalization in ``nenkova_agnfitter_3p.py``.
 
     **Grid reordering**: The native inclination axis is stored in degrees
@@ -109,15 +113,11 @@ def precompute_nenkova_agnfitter_3p_photometry(
     cos_inc_axis = cos_inc_axis[order]
     grid_reordered = grid[order]
 
-    n_incl, n_oa, n_tv, _ = grid_reordered.shape
-    lnu_grid = np.empty_like(grid_reordered)
-    for i in range(n_incl):
-        for j in range(n_oa):
-            for k in range(n_tv):
-                template = grid_reordered[i, j, k]
-                integral = native_bolometric_nu_np(template, wave_grid)
-                integral_safe = max(abs(integral), 1e-100)
-                lnu_grid[i, j, k] = _LSUN_ERG * template / integral_safe
+    # One scale per point of the other axes, the sphere-mean power over inclination,
+    # as the runtime path normalizes the records (nenkova_agnfitter_3p.TORUS_INCLINATION).
+    runtime_grid = load_nenkova_agnfitter_3p_grid(grid_path)
+    mean_power = sphere_mean_power_at_nodes(runtime_grid, TORUS_INCLINATION)
+    lnu_grid = _LSUN_ERG * grid_reordered / mean_power[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,
