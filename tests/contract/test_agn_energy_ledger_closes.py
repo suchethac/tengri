@@ -184,7 +184,7 @@ def _ledger_grid(name):
     integral over that band. The band is read from the model, not restated here.
     """
     if name == "powerlaw_disc":
-        band = powerlaw_disc_model._PUBLISHED_BAND_AA
+        band = np.asarray(powerlaw_disc_model._published_band_aa(jnp.float64))
         return np.geomspace(float(band[0]), float(band[-1]), 4 * BUDGET_WAVE.size)
     return _CONVERGED
 
