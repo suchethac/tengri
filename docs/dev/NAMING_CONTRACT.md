@@ -391,6 +391,21 @@ out-of-range final value representable. The rule these fixes converged on:
   Every published power of an emitted piece equals the integral of that piece of the SED
   (#2745); the unemitted disc is the one published power that is not in the SED.
 
+#### Standalone discs
+
+The standalone power-law disc (`PowerLawDisc`) follows the same ledger, closing on
+`agn_lum_ratio * 10**agn_log_lbol L_sun` (the disc's share of the accretion power, as SKIRTOR
+closes on `agn_torus_frac`). It is isotropic, so `log_L_agn_disc` (with `L_agn_disc_lsun`) is
+its sphere mean and there is no `_los` key. Its SED is zero outside 10 A to 1e8 A, the band it
+is defined on (`nu L_nu` does not converge at long wavelength), so nothing of the model lies
+outside the emitted SED and there is no `_unemitted` piece. `log_L_agn_disc` is the
+power-law-between-nodes integral on the normalization's own nodes, the quadrature the
+normalization sets to the budget, so it equals the budget to rounding (C2, 4e-14), and the
+dense-grid integral of the emitted SED matches it to 3.4e-7 (C3; the floor is the
+normalization's interpolant against the smooth cut-off). `KD18Disc` is ruled separately
+(Mdot inferred from the disc's own dissipation integral). Checked over the declared prior box
+by `tests/contract/test_agn_disc_ledger_closes.py`.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
 exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a
