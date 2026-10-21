@@ -106,7 +106,11 @@ def build_z_table(
     zs = jnp.expm1(nodes) if z_values is None else jnp.atleast_1d(jnp.asarray(z_values))
     jitted = jax.jit(fn)
     rows = [jitted(zs[i]) for i in range(zs.shape[0])]
-    values = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *rows)
+    # Stack on the host (#2914): a ``jnp.stack`` per leaf dispatched one XLA
+    # compile each, below the persistent cache's floor; the values are the same.
+    values = jax.tree_util.tree_map(
+        lambda *xs: jnp.asarray(np.stack([np.asarray(x) for x in xs])), *rows
+    )
     return {NODES_KEY: nodes, VALUES_KEY: values}
 
 
