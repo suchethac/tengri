@@ -39,6 +39,7 @@ template-grid HDF5 loading happens on first invocation.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
@@ -46,7 +47,9 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.dust._age_mixture import (
+    contract_intervals,
     interval_fractions,
+    interval_sums,
     mix_intervals,
     nebular_interval_weights,
 )
@@ -220,6 +223,28 @@ def _screen_transmission(
     return f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
 
 
+def _warn_grouped_fallback() -> None:
+    """Warn (once per process) that grouped dust is regrouping the per-age cube itself."""
+    if _GROUPED_FALLBACK_WARNED:
+        return
+    _GROUPED_FALLBACK_WARNED.append(True)
+    warnings.warn(
+        "DustSEDComponent(age_mixture='grouped'): the stellar component did not publish "
+        "'lnu_interval' (StellarSEDComponentConfig.publish_interval_spectra is off: the chain "
+        "was applied component by component, not through tengri.forward.run_components, "
+        "which wires it), so the interval spectra are summed from the per-age cube. The "
+        "result is exact; the speedup is lost.",
+        stacklevel=3,
+    )
+
+
+_GROUPED_FALLBACK_WARNED: list[bool] = []
+
+#: Evaluation orders of the two-component age mixture
+#: (:attr:`DustSEDComponentConfig.age_mixture`).
+AGE_MIXTURES: tuple[str, ...] = ("per_node", "grouped")
+
+
 @dataclass(frozen=True, kw_only=True)
 class DustSEDComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`DustSEDComponent`.
@@ -279,6 +304,17 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Refused together with ``agn_norm="cigale_joint"`` (see the cycle-rule
         check in ``Parameters.__init__``), which already reads that same
         energy balance to normalize the AGN torus.
+    age_mixture : str
+        How the per-node mixture of the two populations' transmissions is
+        evaluated; the same model either way. ``"per_node"`` (default)
+        attenuates every SSP node, ``sum_a L(a) [y(a) T_young + (1 - y(a))
+        T_old]``. ``"grouped"`` takes the sum in the other order, ``T_young
+        L_young + T_old L_old`` with ``L_young = sum_a y(a) L(a)`` and
+        ``L_old = sum_a (1 - y(a)) L(a)`` formed by the stellar component
+        (``lnu_interval``): two attenuated spectra instead of ``n_age``, equal
+        to floating-point reassociation, including the soft boundary and the
+        Lyman-continuum branch. Grammar key ``dust_attenuation={'age_mixture':
+        ...}``. Static; enters ``compile_signature``.
     """
 
     # Defaults are a low-level construction convenience only (component
@@ -401,6 +437,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: ``f_dust``. ``True`` (default, including a component built directly
     #: with no spec to ask) keeps the smooth combine, unchanged.
     fdust_credit_active: bool = True
+    #: ``"per_node"`` or ``"grouped"``: see the class docstring.
+    age_mixture: str = "per_node"
+
+    def __post_init__(self):
+        """Refuse an unknown ``age_mixture``."""
+        if self.age_mixture not in AGE_MIXTURES:
+            raise ValueError(
+                f"DustSEDComponentConfig.age_mixture must be one of {AGE_MIXTURES}; "
+                f"got {self.age_mixture!r}."
+            )
 
     @property
     def age_boundaries_yr(self) -> tuple[float, ...]:
@@ -1240,11 +1286,28 @@ class DustSEDComponent(TemplateThreading):
         bc_kw = {k: jnp.asarray(v) for k, v in bc_law_params.items()}
         diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         t_int = self._interval_transmissions(params, wave, bc_law_params, diff_law_params)
-        transmission = mix_intervals(fractions, t_int)  # (n_age, n_wave), in [0, 1]
 
         # ── 2. Apply transmission per age and aggregate ────────────────
-        sed_attenuated = jnp.sum(lnu_age * transmission, axis=0)
-        sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
+        # ``per_node``: attenuate every node, then sum over ages. ``grouped``:
+        # the same sum regrouped by interval, sum_j T_j L_j, on the stellar
+        # component's interval spectra L_j = sum_a F_j(a) lnu_age(a); exact to
+        # reassociation since T(a) = sum_j F_j(a) T_j (see ``_age_mixture``).
+        grouped = self.config.age_mixture == "grouped"
+        if grouped:
+            lnu_int = state.derived.get("lnu_interval")
+            if lnu_int is None or jnp.shape(lnu_int)[0] != fractions.shape[0]:
+                # A chain whose stellar component was not asked for them (applied
+                # outside run_components, so never wired): same sums from the cube,
+                # exact, but the per-age cube is formed and the speedup is lost.
+                _warn_grouped_fallback()
+                lnu_int = interval_sums(fractions, lnu_age)
+            lnu_int = jnp.asarray(lnu_int)  # (n_interval, n_wave)
+            sed_attenuated = contract_intervals(t_int, lnu_int)
+            sed_intrinsic_stellar = jnp.sum(lnu_int, axis=0)
+        else:
+            transmission = mix_intervals(fractions, t_int)  # (n_age, n_wave), in [0, 1]
+            sed_attenuated = jnp.sum(lnu_age * transmission, axis=0)
+            sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
 
         # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
         # Stellar LyC (λ < 912 Å) is absorbed by the gas that powers the nebular
@@ -1345,10 +1408,14 @@ class DustSEDComponent(TemplateThreading):
                 covered_raw=covered_raw,
                 hole_raw=hole_raw,
             )
-            sed_attenuated = jnp.sum(lnu_age * mix_intervals(fractions, observed_int), axis=0)
-            sed_intrinsic_stellar_eb = jnp.sum(
-                lnu_age * mix_intervals(fractions, intrinsic_int), axis=0
-            )
+            if grouped:
+                sed_attenuated = contract_intervals(observed_int, lnu_int)
+                sed_intrinsic_stellar_eb = contract_intervals(intrinsic_int, lnu_int)
+            else:
+                sed_attenuated = jnp.sum(lnu_age * mix_intervals(fractions, observed_int), axis=0)
+                sed_intrinsic_stellar_eb = jnp.sum(
+                    lnu_age * mix_intervals(fractions, intrinsic_int), axis=0
+                )
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
@@ -1784,10 +1851,12 @@ class DustSEDComponent(TemplateThreading):
         # ── 4. Combine stellar + nebular SEDs (emission handled by components) ─
         # Preserve any non-stellar contribution that may have been added
         # to ``sed_intrinsic`` by an upstream component (e.g. AGN,
-        # Nebular). The stellar contribution at this point equals
-        # ``sum(lnu_age, axis=0)`` exactly (Stellar is the only producer
-        # of ``lnu_age``), so ``state.sed_intrinsic - sed_intrinsic_stellar``
-        # isolates the non-stellar portion. Stellar dust does not attenuate
+        # Nebular). The stellar contribution at this point is what Stellar
+        # published as its SED: ``sum(lnu_age, axis=0)`` under ``per_node``,
+        # ``sum(lnu_interval, axis=0)`` under ``grouped`` (the same sum
+        # regrouped; equal to reassociation). ``sed_intrinsic_stellar`` is
+        # formed the same way in each mode, so ``state.sed_intrinsic -
+        # sed_intrinsic_stellar`` isolates the non-stellar portion. Stellar dust does not attenuate
         # AGN/nebular/radio/xray.
         #
         # IR re-emission is now handled by separate dust emission components
