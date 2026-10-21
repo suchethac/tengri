@@ -120,20 +120,21 @@ def test_agnfitter_reduction_equals_its_own_file(block):
             "in this module's docstring is out of date"
         )
 
-    # ``torus_lnu_from_grid`` returns L_nu [erg/s/Hz]; every registered torus
-    # block converts to the runner's internal L_lambda with C/lambda^2 before
-    # returning, so the reference gets the same conversion and nothing else.
-    expected = (
-        torus_lnu_from_grid(
-            grid,
-            _WAVE,
-            tuple(kwargs[k] for k in coord_keys),
-            agn_log_lbol=12.0,
-            agn_torus_frac=kwargs["agn_torus_frac"],
-        )
-        * C_AA
-        / _WAVE**2
-    )
+    # The engine returns L_nu [erg/s/Hz]; every registered torus block converts to
+    # the runner's internal L_lambda with C/lambda^2 before returning, so the
+    # reference gets the same conversion and nothing else. ``SKIRTOR_mean_1p``
+    # keeps SKIRTOR's anisotropy and is normalized once over the sphere (#2851);
+    # the 2p and 3p reductions are normalized per sightline.
+    coords = tuple(kwargs[k] for k in coord_keys)
+    level = {"agn_log_lbol": 12.0, "agn_torus_frac": kwargs["agn_torus_frac"]}
+    if block == "skirtor_agnfitter_1p":
+        from tengri.components.agn._torus_inclination import torus_lnu_sphere_normalized
+        from tengri.components.agn.skirtor_agnfitter_1p import TORUS_INCLINATION
+
+        lnu = torus_lnu_sphere_normalized(grid, _WAVE, coords, TORUS_INCLINATION, **level)
+    else:
+        lnu = torus_lnu_from_grid(grid, _WAVE, coords, **level)
+    expected = lnu * C_AA / _WAVE**2
     got = resolve_agn_block("torus", block)(
         _WAVE, agn_log_lbol=12.0, l5100_disc=jnp.asarray(1.0e44), templates=None, **kwargs
     )

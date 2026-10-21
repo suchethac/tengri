@@ -7,8 +7,8 @@ torus kernel did, gave every sightline the same torus power and erased the radia
 transfer's result that an edge-on torus radiates less (measured on the shipped grid: the
 equatorial record carries 0.06 to 0.98, median 0.52, of the polar record's dust power). The
 records multiplied by ``norm`` share one scale (the face-on disc power of 98 % of the 2400
-models lies within -0.5 % and +12.5 % of the median), and the kernel now divides them by ONE sphere-mean power per
-parameter point, so the angle-integrated torus power is ``f L_bol`` and every sightline keeps
+models lies within -0.5 % and +12.5 % of the median), and the kernel now divides them by
+ONE sphere-mean power per parameter point, so the angle-integrated torus power is ``f L_bol`` and every sightline keeps
 the library's ratio.
 
 The reference (``tests/physics/_template_torus_reference.py``) reads the file with ``h5py``,

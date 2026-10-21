@@ -221,40 +221,37 @@ def _integrated_power(cos_inc):
     return jnp.trapezoid(_torus_sed(cos_inc), nu)
 
 
-def test_integrated_power_is_independent_of_inclination():
-    """The torus redistributes the AGN's energy; it does not create or destroy it.
+def test_angle_integrated_power_is_the_torus_share_and_face_on_is_brighter():
+    """The torus redistributes the AGN's energy over the sphere; it does not create it.
 
-    Nothing asserted this, and the omission mattered: the gradient test below
-    used to differentiate exactly this quantity and assert the result was
-    non-zero. Measured across cos_inc = 0.1 to 0.9 the frequency-integrated
-    power is -3.828e31 to ten significant figures -- the *correct* answer, and
-    the reason a derivative of it is meaningless. What that test was asserting
-    to be non-zero was float64 rounding noise at the 1e-16 relative level.
+    CLUMPY fluxes share one normalization (``F_AGN``) across inclination (Nenkova et al.
+    2008, ApJ 685, 160, Sect. 2), so the torus keeps the library's anisotropy (#2851): the
+    power along a sightline falls from face-on to edge-on, and its mean over
+    ``mu = cos i`` is ``agn_torus_frac x L_bol`` (1e-4, a 201-point trapezoid in ``mu``).
     """
-    # The template spans 1 A - 1 mm and is normalized over its own native axis, so the power
-    # is the same at every inclination on a grid that covers it. The 256-point grid to 10 um
-    # does not (it holds a different fraction at each inclination: spread 0.52); on this
-    # covering grid the spread is the interpolation quadrature, measured 1.9e-8.
+    # The template spans 1 A - 1 mm and is normalized over its own native axis; this grid
+    # covers it.
     covering = jnp.geomspace(1.0, 1.0e9, 20001)
-    nu = 2.99792458e8 / (covering * 1e-8)
+    nu = 2.99792458e18 / covering
     from tengri.components.agn.nenkova_agnfitter import nenkova_agnfitter_sed
+    from tengri.utils.physics_constants import L_SUN
 
-    powers = [
-        float(
-            jnp.trapezoid(
-                nenkova_agnfitter_sed(
-                    covering, agn_log_lbol=0.0, agn_cos_inc=jnp.asarray(c), agn_torus_frac=1.0
-                ),
-                nu,
+    mus = np.linspace(0.0, 1.0, 201)
+    powers = np.array(
+        [
+            -float(
+                jnp.trapezoid(
+                    nenkova_agnfitter_sed(
+                        covering, agn_log_lbol=0.0, agn_cos_inc=jnp.asarray(m), agn_torus_frac=1.0
+                    ),
+                    nu,
+                )
             )
-        )
-        for c in (0.1, 0.3, 0.5, 0.7, 0.9)
-    ]
-    spread = (max(powers) - min(powers)) / abs(np.mean(powers))
-    assert spread < 1e-6, (
-        f"integrated torus power varies by {spread:.2e} across inclination; "
-        f"an inclination-averaged template set must conserve it."
+            for m in mus
+        ]
     )
+    assert float(np.trapezoid(powers, mus)) == pytest.approx(L_SUN, rel=1e-4)
+    assert powers[-1] / powers[0] > 2.0, "face-on must carry more power than edge-on"
 
 
 @pytest.mark.parametrize("cos_inc_val", [0.2, 0.8])
