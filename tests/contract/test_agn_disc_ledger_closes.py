@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.utils.physics_constants import L_SUN
+from tengri.utils.physics_constants import C_AA, L_SUN
 from tests.physics._agn_published import (
     box_points,
     build_component,
@@ -37,7 +37,6 @@ from tests.physics._agn_published import (
 
 pytestmark = pytest.mark.contract
 
-_C_AA = 2.99792458e18
 
 #: Band the disc is defined on [Angstrom]; nodes at both edges.
 _DENSE = np.geomspace(10.0, 1.0e8, 100_001)
@@ -68,7 +67,7 @@ def _predict64(comp, params, wave):
 
 def _ln_nu_power(sed, wave):
     """Trapezoid in ln(nu) of L_nu nu [erg/s] on ``wave`` [Angstrom]."""
-    nu = _C_AA / np.asarray(wave)
+    nu = C_AA / np.asarray(wave)
     order = np.argsort(nu)
     return float(np.trapezoid((np.asarray(sed) * nu)[order], np.log(nu[order])))
 
