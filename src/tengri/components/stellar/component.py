@@ -594,6 +594,11 @@ def _extend_integrand_to_history(fine_age_yr, tab_lbt_yr, ssp_ages_yr, factor: i
     hi = ssp_ages_yr[-1]
     top = jnp.maximum(jnp.max(tab_lbt_yr), hi)
     tail = 10.0 ** jnp.linspace(jnp.log10(hi), jnp.log10(top), factor + 1)[1:]
+    # #3059: the last node is ``top`` itself. ``10 ** log10(top)`` differs from
+    # ``top`` by up to 28 ulp between platforms, and :func:`_cic_parcels` masks
+    # ages against the same ``top``: an inexact endpoint decides the closed
+    # t_obs endpoint's trapezoid half-panel by rounding alone.
+    tail = tail.at[-1].set(top)
     return jnp.concatenate([fine_age_yr, tail]), top
 
 
@@ -1267,18 +1272,31 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
 
 
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
-    """Shared parcel machinery for the CIC weight builders (#964).
+    r"""Shared parcel machinery for the CIC weight builders (#964).
 
     Returns ``(contrib, idx, f, total_mass, age)``: per-parcel trapezoid
     masses [Msun] on the lookback-0-extended integrand, the lower bracketing
     SSP node index and its log-age interpolation fraction, the #538-contract
     total mass, and the extended age grid [yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: static shapes, pure ``jnp``.
+
+    The mask keeps ages up to and including ``t_obs`` (``<=``) and drops only
+    those strictly beyond the age of the universe. The closed endpoint at
+    ``age = t_obs`` belongs to :math:`\int_0^{t_\mathrm{obs}} \mathrm{SFR}\,dt`:
+    for a constant SFR the trapezoid with the endpoint included gives exactly
+    :math:`\mathrm{SFR}\,t_\mathrm{obs}`, and dropping it loses
+    :math:`\mathrm{SFR}\,d/2` for the last spacing :math:`d` (#3059). The grid
+    builder makes its last node exactly ``t_obs * 1e9``, so this comparison is
+    decided by the same float on every platform.
     """
     # Extend the integrand to lookback 0 holding SFR constant over the
     # first ~0.1 Myr (#538): the [0, age0] mass belongs to the youngest node.
     age = jnp.concatenate([jnp.zeros((1,), age_yr.dtype), age_yr])
     sfr_ext = jnp.concatenate([sfr[:1], sfr])
-    sfr_valid = jnp.where(age < t_obs_gyr * 1e9, sfr_ext, 0.0)
+    sfr_valid = jnp.where(age <= t_obs_gyr * 1e9, sfr_ext, 0.0)
 
     # Trapezoid node masses: dM_i = SFR_i * dt_i with midpoint widths.
     d = jnp.diff(age)
