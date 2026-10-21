@@ -7,13 +7,8 @@ the disc's). At the prior edge ``log_ledd = -0.75``, ``f_hard = 0.05`` the coron
 the power, so the disc share :math:`1 - l_{\rm hot}/L_{\rm bol} = 0.041` amplifies a relative error
 of :math:`\epsilon` in the corona share by :math:`0.959/0.041 = 23.6`.
 
-The accretion rate is inferred so that the disc's total dissipation :math:`L_0 h(\infty)` is
-:math:`L_{\rm bol}` (owner ruling 2026-10-20), so :math:`L_0/L_{\rm bol} = 1/h(\infty)` and the
-share is at most 0.99. Before that ruling :math:`L_0/L_{\rm bol} = 3/(2 \eta r_{\rm isco})` and the
-share read 0.959307742595 at the edge, where the zone clip binds. The invariants are (1) the corona
-share equals the closed form :math:`\min(f_{\rm hard}
-L_{\rm Edd}/L_{\rm bol},\ h_{\rm cap}/h(\infty))`
-(float64, 1e-12), and (2) the
+The invariants are (1) the corona share equals the closed form :math:`\min(f_{\rm hard}
+L_{\rm Edd}/L_{\rm bol},\ 3 h_{\rm cap}/(2 \eta\, r_{\rm isco}))` (float64, 1e-12), and (2) the
 float32 disc spectrum follows float64 to 5e-5 at that edge, where forming the budget from
 ``log10 L_bol`` and ``log10 l_hot`` gave 1.68e-4.
 """
@@ -53,32 +48,22 @@ def _parts(float32):
 
 
 def test_corona_share_is_the_closed_form_in_float64():
-    """At the edge the zone clip binds, so the share is ``h(x_clip) / h(inf)``, to 1e-12.
-
-    The pre-ruling share was ``0.959307742595 = (3 / (2 eta r_isco)) h(x_clip)``; the new one is
-    that over ``L_diss / L_bol = 3 h(inf) / (2 eta r_isco)``, evaluated independently of the code
-    under test.
-    """
+    """The share at the edge is 95.9%, and equals ``L_hot / L_bol`` from the cap, to 1e-12."""
     share = _parts(False)[3]
-    with jax.enable_x64(True):
-        r_rg = disc_module._isco_radius(_EDGE["agn_a_spin"])
-        eta = disc_module._radiative_efficiency(r_rg)
-        h_inf = disc_module._nt_h(jnp.log(disc_module._NT_X_MAX), _EDGE["agn_a_spin"])
-        l_diss_over_bol = float(1.5 * h_inf / (eta * r_rg))
-    assert share == pytest.approx(0.959307742595 / l_diss_over_bol, abs=1e-11)
-    assert share <= 0.99
+    assert share == pytest.approx(0.959307742595, abs=1e-11)
 
 
 def test_hot_flow_fraction_matches_hot_flow_luminosity_in_float64():
-    """The share is ``_hot_flow_luminosity / L_bol`` with ``L_0 = L_bol / h(inf)``."""
+    """The share is ``_hot_flow_luminosity / L_bol`` with ``L_0 = 3 L_bol / (2 eta r)``."""
     with jax.enable_x64(True):
         for log_lbol, log_mbh, f_hard, a_spin in [
             (11.0, 8.0, 0.05, 0.499),
             (9.0, 9.5, 0.02, 0.0),
             (12.5, 8.0, 0.4, 0.998),
         ]:
-            h_inf = float(disc_module._nt_h(jnp.log(disc_module._NT_X_MAX), a_spin))
-            l0 = 10.0**log_lbol / h_inf  # [L_sun]
+            r_rg = disc_module._isco_radius(a_spin)
+            eta = disc_module._radiative_efficiency(r_rg)
+            l0 = 1.5 * 10.0**log_lbol / (eta * r_rg)  # [L_sun]
             log10_ledd = float(disc_module._log10_eddington_luminosity(log_mbh))
             log10_ledd_lsun = log10_ledd - disc_module._LOG10_LSUN_ERG
             expected = (

@@ -44,7 +44,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._nt_emissivity import (
-    H_CEILING_FRACTION as _NT_H_CEILING_FRACTION,
     X_MAX as _NT_X_MAX,
     isco_radius as _isco_radius,
     nt_dh_dlogx as _nt_dh_dlogx,
@@ -1303,7 +1302,6 @@ def _compute_bh_params(
     agn_log_lbol: float,
     agn_a_spin: float,
     float32: bool = False,
-    h_inf: float | None = None,
 ) -> tuple:
     """Compute black hole parameters: radius, ISCO, efficiency, and accretion rate.
 
@@ -1357,10 +1355,6 @@ def _compute_bh_params(
     eta = _radiative_efficiency(r_isco_rg)
 
     log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
-    # Mdot is inferred so that the disc's own total Page-Thorne dissipation, ``L_diss = Mdot c^2
-    # (3 h(inf) / (2 r_isco))``, equals L_bol (owner ruling 2026-10-20); ``eta`` is returned for
-    # callers but no longer sets the accretion rate.
-    diss_per_mdot_c2 = _disc_dissipation_per_mdot_c2(agn_a_spin, h_inf)
     # E fix (#846): derive the accretion rate from the requested L_bol
     # (agn_log_lbol) instead of the now-derived Eddington ratio, so the zone
     # structure (T_in, radii) is self-consistent with L_bol. lambda_Edd is
@@ -1369,10 +1363,10 @@ def _compute_bh_params(
         # Float32 (#1206): the ~1e44 erg/s l_bol_erg intermediate overflows;
         # mdot ~1e24 g/s is representable. Fold L_sun/c^2 (a pre-divided
         # constant ~4e12) so only ``10**log_lbol`` (~1e11) is materialized.
-        mdot = _LSUN_OVER_C2 * 10.0**agn_log_lbol / diss_per_mdot_c2
+        mdot = _LSUN_OVER_C2 * 10.0**agn_log_lbol / eta
     else:
         l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
-        mdot = l_bol_erg / (diss_per_mdot_c2 * _C_LIGHT**2)
+        mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
     return r_g, r_isco_rg, r_isco_cm, eta, log10_l_edd, mdot
 
@@ -1385,12 +1379,11 @@ def _hot_flow_luminosity(
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     x_hot_max: float | None = None,
-    h_inf: float | None = None,
 ) -> float:
     """Hot-flow dissipation ``L_hot = f_hard L_Edd``, limited by what the disc can supply (#2572).
 
-    K&D 2018 (MNRAS 480, 1247) Sec. 5.1, Table 3: "we fix Ldiss,hot = 0.02 LEdd, which defines
-    rhot" (Sec. 2.2, Eq. 2: ``Ldiss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR``). The
+    K&D 2018 (MNRAS 480, 1247) Sec 4.3: "we fix Ldiss,hot = 0.02 LEdd, which defines
+    rhot" (Eq. 2: ``Ldiss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR``). The
     public QSOSED/RELQSO source (``relqso.f``, Hagen & Done) does the same: the
     "disc truncation radius (Rhot) is set by the requirement that the dissipated
     luminosity in the corona Lx_diss=0.02Ledd", and when the integral never reaches it
@@ -1425,7 +1418,7 @@ def _hot_flow_luminosity(
         l_hot = f_hard_safe * (_L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh)
     else:
         l_hot = f_hard_safe * _pow10(log10_l_edd)
-    return jnp.minimum(l_hot, l0 * _hot_flow_h_cap(a_spin, x_hot_max, h_inf))
+    return jnp.minimum(l_hot, l0 * _hot_flow_h_cap(a_spin, x_hot_max))
 
 
 def _radiative_efficiency(r_isco_rg: float) -> float:
@@ -1433,47 +1426,16 @@ def _radiative_efficiency(r_isco_rg: float) -> float:
     return 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
 
 
-def _hot_flow_h_cap(
-    a_spin: float, x_hot_max: float | None = None, h_inf: float | None = None
-) -> float:
+def _hot_flow_h_cap(a_spin: float, x_hot_max: float | None = None) -> float:
     """Largest ``L_diss,hot / L_0`` the disc can supply [dimensionless].
 
     The bisection ceiling ``h_ceiling(a)``, further limited to ``h(x_hot_max)`` when the zone
     clip is given. :func:`_hot_flow_luminosity` caps the corona power at ``L_0`` times this.
     """
-    cap = _nt_h_ceiling(a_spin) if h_inf is None else _NT_H_CEILING_FRACTION * h_inf
+    cap = _nt_h_ceiling(a_spin)
     if x_hot_max is not None:
         cap = jnp.minimum(cap, _nt_h(jnp.log(x_hot_max), a_spin))
     return cap
-
-
-def _disc_dissipation_per_mdot_c2(a_spin: float, h_inf: float | None = None) -> float:
-    r"""Disc dissipation per rest-mass power, :math:`L_{\rm diss} / (\dot M c^2)` [dimensionless].
-
-    The Page & Thorne (1974) dissipation integral over every annulus,
-    :math:`L_{\rm diss} = 2\int_{R_{\rm isco}}^{\infty} \sigma T_{\rm NT}^4\, 2\pi R\,{\rm d}R
-    = L_0 h(\infty)` with :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4 = 3 G M \dot M /
-    (2 R_{\rm isco}) = 3 \dot M c^2 / (2 r_{\rm isco})` (Kubota & Done 2018, Eq. 2 with
-    :math:`R_{\rm hot} \to \infty`), so the ratio is :math:`3 h(\infty) / (2 r_{\rm isco})`. It is
-    :math:`\approx 1.019\,\eta` at zero spin and rises with spin. O(1) in :math:`\dot M c^2` units,
-    so no large power is formed.
-
-    ``h(inf)`` is evaluated at ``X_MAX = 1e4`` :math:`R_{\rm isco}` (:func:`_nt_h`), the same
-    ceiling the :math:`R_{\rm hot}` solve uses. The integrand falls as :math:`x^{-2}`, so the
-    truncated tail is :math:`1/X_{\rm max} = 10^{-4}` of :math:`L_0`, about 4e-4 of
-    :math:`h(\infty)` at zero spin. Mdot is set so that :math:`L_0 h(X_{\rm max}) = L_{\rm bol}`;
-    the integral to infinity exceeds :math:`L_{\rm bol}` by that 4e-4, below any tolerance here.
-
-    Parameters
-    ----------
-    a_spin : float
-        Dimensionless spin [dimensionless].
-    h_inf : float, optional
-        ``h(X_MAX)``, when the caller has it already [dimensionless].
-    """
-    if h_inf is None:
-        h_inf = _nt_h(jnp.log(_NT_X_MAX), a_spin)
-    return 1.5 * h_inf / _isco_radius(a_spin)
 
 
 def _hot_flow_fraction(
@@ -1481,24 +1443,23 @@ def _hot_flow_fraction(
     log10_edd_over_bol: float,
     a_spin: float,
     x_hot_max: float | None = None,
-    h_inf: float | None = None,
 ) -> float:
-    r"""Corona share of the bolometric power, :math:`L_{\rm hot} / L_{\rm bol}` [dimensionless].
+    r"""Corona share of the accretion power, :math:`L_{\rm hot} / L_{\rm bol}` [dimensionless].
 
     The cap of :func:`_hot_flow_luminosity`, :math:`L_{\rm hot} = \min(f_{\rm hard} L_{\rm
-    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 5.1 and Table 3, with
+    Edd},\, L_0 h_{\rm cap})` (Kubota & Done 2018, Sec. 4.2.1 and Table 3, with
     :math:`L_{\rm diss,hot}` of their Eq. 2), divided through by :math:`L_{\rm bol}`
-    analytically. The accretion rate is inferred so that the disc's own total dissipation
-    (Page & Thorne 1974), :math:`L_0 h(\infty)`, equals :math:`L_{\rm bol}` (see
-    :func:`_disc_dissipation_per_mdot_c2`), so
+    analytically. The disc temperature scale is set by the accretion rate,
+    :math:`L_0 = 4\pi R_{\rm isco}^2 \sigma T_{\rm in}^4 = 3 G M \dot M / (2 R_{\rm isco})`,
+    with :math:`\dot M = L_{\rm bol} / (\eta c^2)` and
+    :math:`R_{\rm isco} = r_{\rm isco} G M / c^2`, so
 
     .. math::
 
-        \frac{L_0}{L_{\rm bol}} = \frac{1}{h(\infty)}
+        \frac{L_0}{L_{\rm bol}} = \frac{3}{2\,\eta\, r_{\rm isco}}
 
-    depends on the spin alone and the share is at most :math:`0.99` (the cap is 99% of
-    :math:`h(\infty)`) by construction. Every factor is O(1), so the share carries a few float32
-    ulps instead of the ~1e-6 dex that ``log10 L_hot`` and ``log10 L_bol`` (each ~11 in L_sun)
+    depends on the spin alone. Every factor is O(1), so the share carries a few float32 ulps
+    instead of the ~1e-6 dex that ``log10 L_hot`` and ``log10 L_bol`` (each ~11 in L_sun)
     carry, which a difference of near-equal powers would amplify.
 
     Parameters
@@ -1515,21 +1476,14 @@ def _hot_flow_fraction(
     Returns
     -------
     float
-        ``L_hot / L_bol`` [dimensionless], at most 0.99.
-
-    References
-    ----------
-    .. [1] A. Kubota and C. Done, MNRAS, 480, 1247 (2018), arXiv:1804.00171.
-    .. [2] D. N. Page and K. S. Thorne, ApJ, 191, 499 (1974).
+        ``L_hot / L_bol`` [dimensionless].
     """
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    # One evaluation of ``h(inf)``: the disc's total dissipation and, times 0.99, the cap.
-    if h_inf is None:
-        h_inf = _nt_h(jnp.log(_NT_X_MAX), a_spin)
-    cap = _NT_H_CEILING_FRACTION * h_inf
-    if x_hot_max is not None:
-        cap = jnp.minimum(cap, _nt_h(jnp.log(x_hot_max), a_spin))
-    return jnp.minimum(f_hard_safe * _pow10(log10_edd_over_bol), cap / h_inf)
+    r_isco_rg = _isco_radius(a_spin)
+    l0_over_bol = 1.5 / (_radiative_efficiency(r_isco_rg) * r_isco_rg)
+    return jnp.minimum(
+        f_hard_safe * _pow10(log10_edd_over_bol), l0_over_bol * _hot_flow_h_cap(a_spin, x_hot_max)
+    )
 
 
 def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
@@ -1552,7 +1506,6 @@ def _compute_zone_radii(
     log10_l_edd: float,
     float32: bool = False,
     agn_a_spin: float = 0.0,
-    h_inf: float | None = None,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
 
@@ -1627,7 +1580,6 @@ def _compute_zone_radii(
         float32=float32,
         agn_log_mbh=agn_log_mbh,
         x_hot_max=_hot_zone_x_max(r_isco_rg, r_sg_rg),
-        h_inf=h_inf,
     )
     if float32:
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True, a_spin=agn_a_spin)
@@ -1680,7 +1632,6 @@ def _compute_zone_luminosities(
     agn_log_lbol_shape: float = 0.0,
     agn_a_spin: float = 0.0,
     nthcomp_table=None,
-    h_inf: float | None = None,
 ) -> tuple:
     r"""Compute self-consistent luminosities of the three AGN zones, disc and corona apart.
 
@@ -1751,21 +1702,18 @@ def _compute_zone_luminosities(
     -----
     **JIT-compatible**: yes, uses ``jax.vmap`` for radial integration.
 
-    **Energy conservation**: The accretion rate is inferred so that the disc's own total
-    Page-Thorne dissipation equals ``l_bol`` (:func:`_disc_dissipation_per_mdot_c2`). The
-    corona carries its counted power ``l_hot`` exactly and the disc and warm zones carry
-    ``l_bol - l_hot``, so the total closes on ``l_bol``. The disc power is the radial integral
-    of the zone rings (Gauss-Legendre in ``ln r``, independent of ``n_radii``), and the warm
-    shape is normalized by its own integral, so the spectra integrate to their counted powers on
-    any grid that covers the template band.
+    **Energy conservation**: The corona carries its counted power ``l_hot`` exactly; the
+    disc and warm zones carry ``l_bol - l_hot``. The disc power is the radial integral of the
+    zone rings (Gauss-Legendre in ``ln r``, independent of ``n_radii``), and the warm shape is
+    normalized by its own integral, so the spectra integrate to their counted powers on any
+    grid that covers the template band.
 
     The corona power is :math:`L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}}
-    \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Sec. 2.2, Eq. 2), set to
-    :math:`f_{\rm hard} L_{\rm Edd}` (fixed in Sec. 5.1, Table 3). Its share of
-    :math:`L_{\rm bol}`,
-    :math:`s = L_{\rm hot}/L_{\rm bol}`, is at most 0.99 (:func:`_hot_flow_fraction`), and the
-    disc budget is :math:`L_{\rm bol}(1 - s)`, formed from O(1) numbers, not from two float32
-    logarithms of ~1e11 powers.
+    \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Eq. 2), set to
+    :math:`f_{\rm hard} L_{\rm Edd}` (Sec. 4.2.1, Table 3). The disc budget is the rest of the
+    accretion power, :math:`L_{\rm bol}\,|1 - L_{\rm hot}/L_{\rm bol}|`, with the share formed by
+    :func:`_hot_flow_fraction` so the difference is taken between O(1) numbers, not between two
+    float32 logarithms of ~1e11 powers.
 
     References
     ----------
@@ -1881,7 +1829,6 @@ def _compute_zone_luminosities(
         log10_edd_over_bol,
         agn_a_spin,
         x_hot_max=0.5 * r_out_cm / r_isco_cm,
-        h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * _pow10(log10_bol_shape)
     if float32:
@@ -1952,10 +1899,10 @@ def _compute_zone_luminosities(
     )
     log10_disc_power = math.log10(_TWO_FACES) + log10_weighted_sum(log10_rings, 1.0)
     # The corona carries its counted power exactly, ``l_hot_erg``. The disc and warm zones carry
-    # the rest of the accretion power, ``L_bol - l_hot``, so the disc gets its own scale. A single
-    # scale over both zones would take the corona's share away from its counted power (#2733).
-    # Mdot is inferred so the disc's total Page-Thorne dissipation is L_bol, so the total closes.
-    # The budget is ``L_bol (1 - l_hot / L_bol)``: the share is
+    # the rest of the accretion power, ``L_bol - l_hot``, so the disc gets its own scale. The
+    # Page-Thorne disc-frame dissipation of the disc is 1.019 eta Mdot c^2 (see
+    # ``_nt_emissivity``), so a single scale over both zones would take the corona's share away
+    # from its counted power (#2733). The budget is ``L_bol (1 - l_hot / L_bol)``: the share is
     # formed from O(1) ratios, so it is not a difference of two ~1e11 powers, and no
     # unnormalized ~1e28 spectrum is formed in float32 (#2767).
     # Units: the shape powers (disc, corona) are in the shape's own luminosity units, and
@@ -1963,9 +1910,12 @@ def _compute_zone_luminosities(
     # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude; within the
     # shape, the disc carries ``L_shape - l_hot``. The corona carries ``k * l_hot`` exactly.
     log10_k = jnp.log10(l_bol_erg) - log10_bol_shape
-    # ``(1 - s) L_bol`` with ``s <= 0.99`` the corona's share of L_bol, so
-    # the argument of the log is positive by construction (no abs, no guarded where).
-    log10_disc_share = jnp.log10(1.0 - hot_fraction)
+    # ``|L_bol - l_hot| = L_bol |1 - l_hot / L_bol|``: the share is subtracted from one, so
+    # the near-equal powers (corona 96% of the total at the prior edge) are never differenced.
+    disc_share = jnp.abs(1.0 - hot_fraction)
+    log10_disc_share = jnp.where(
+        disc_share > 0, jnp.log10(jnp.where(disc_share > 0, disc_share, 1.0)), -jnp.inf
+    )
     log10_budget_disc = jnp.maximum(
         log10_bol_shape + log10_disc_share,
         jnp.log10(_representable_denominator(1e-100)),
@@ -2387,10 +2337,8 @@ def kubota_done_disc(
     # downstream (#1206).
     _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
 
-    # h(inf) once per spin: it sets Mdot, the cap and the share.
-    h_inf = _nt_h(jnp.log(_NT_X_MAX), agn_a_spin)
     r_g, r_isco_rg, r_isco_cm, _eta, log10_l_edd, mdot = _compute_bh_params(
-        agn_log_mbh, _lbol_shape, agn_a_spin, float32=_f32, h_inf=h_inf
+        agn_log_mbh, _lbol_shape, agn_a_spin, float32=_f32
     )
 
     # Reference inner-disc temperature T_in (the profile is T_in x^-3/4 Rt^1/4).
@@ -2428,7 +2376,6 @@ def kubota_done_disc(
         log10_l_edd,
         float32=_f32,
         agn_a_spin=agn_a_spin,
-        h_inf=h_inf,
     )
 
     # Normalize at UNIT agn_lum_ratio: the exponent carries agn_log_lbol only (in L_sun on the
@@ -2462,7 +2409,6 @@ def kubota_done_disc(
             agn_log_lbol_shape=_lbol_shape,
             agn_a_spin=agn_a_spin,
             nthcomp_table=_template,
-            h_inf=h_inf,
         )
     )
     l_nu_total = l_nu_total * agn_lum_ratio
