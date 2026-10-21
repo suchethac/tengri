@@ -421,6 +421,15 @@ dimensionless ``m_nu c² / (k_B T_nu)`` ratio in the Komatsu et al. (2011)
 neutrino energy-density fitting formula.
 """
 
+T_CMB_0: float = 2.7255
+"""Present-day CMB temperature T_CMB,0 [K] (Fixsen 2009, ApJ 707, 916).
+
+The one reference value for every CMB-heating and contrast formula (da Cunha
+et al. 2013, Eqs. 12 and 18) and for the Ω_γ h² normalization in
+``tengri.utils.cosmology``. Per-cosmology ``Tcmb0`` entries (e.g. WMAP5's
+2.725 K) are published choices of their own and are not this constant.
+"""
+
 NU_TO_CMB_TEMP_RATIO: float = 0.7137658555036082
 """Neutrino-to-photon temperature ratio T_ν0 / T_cmb0, (4/11)^(1/3).
 

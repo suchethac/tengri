@@ -588,6 +588,35 @@ def _pcigale_fritz(psy, frac=0.3):
     )
 
 
+def _fritz_accretion_power(psy):
+    """CIGALE ``fritz2006``'s ``accretion_power`` per ``agn_power``, from the shipped library.
+
+    ``int AGN1.disk x norm`` of the face-on record (``psy = 89.99``), re-normalized to the
+    record at ``psy`` by ``norm(89.99) / norm(psy)`` and divided by the dust power
+    ``int dust(psy)`` (``pcigale.sed_modules.fritz2006``: ``AGN1.disk *= AGN1.norm /
+    self.fritz2006.norm`` and ``norm = 1 / int dust``; the disc shape factor integrates to one).
+    Reads only the tracked grid, so the test runs without pcigale.
+    """
+    import h5py
+
+    node = (2, 3, 2, 2, 2)  # r_ratio 60, tau 1, beta -0.5, gamma 4, opening angle 60
+    with h5py.File(_FRITZ_FILE, "r") as f:
+        grp = f["fritz2006"]
+        axis = np.asarray(grp["psy_axis"], float)
+        wl = np.asarray(grp["wavelength_aa"], float)
+        disk, dust, norm = (np.asarray(grp[k][node], float) for k in ("disk", "dust", "norm"))
+    i, face_on = int(np.argmin(np.abs(axis - psy))), len(axis) - 1
+    assert abs(axis[i] - psy) < 1e-6, f"psy {psy} is not a library node"
+    intrinsic = disk[face_on] * norm[face_on] / norm[i]
+    return float(np.trapezoid(intrinsic, wl) / np.trapezoid(dust[i], wl))
+
+
+def test_library_accretion_power_matches_pcigale():
+    """The library-derived ``accretion_power`` equals CIGALE's at the nodes used (1e-7)."""
+    for psy in (0.001, 70.1):
+        assert _fritz_accretion_power(psy) == pytest.approx(_pcigale_fritz(psy)[2], rel=1e-7)
+
+
 @pytest.mark.parametrize("psy", [0.001, 20.1, 50.1, 70.1, 89.99])
 def test_fritz_anchor_is_cigale_value_at_every_viewing_angle(psy):
     """Fritz anchor per ``agn_power`` = CIGALE's ``intrin_Lnu_2500A_30deg`` x 0.99951 (2e-5).
@@ -619,26 +648,38 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
     """``int H d nu = f/(1 - f) x P_D,tied`` behind a Fritz torus, ``P_D,tied`` from CIGALE.
 
     The Fritz disc is isotropic, so its 4 pi power is the face-on one: CIGALE's
-    ``accretion_power`` per ``agn_power`` (``int AGN1.disk x norm``, the hemisphere mean is 1).
-    The corona below the library's 10 A edge, where the library ratio vanishes, is
-    ``b H T`` exactly (``T`` the torus screen at the model inclination), and
-    ``b = P_D,tied / ((1 - f) L_acc)`` with ``agn_power`` from the torus the model emits (3e-3,
+    ``accretion_power`` per ``agn_power`` (``int AGN1.disk x norm``, the hemisphere mean is 1),
+    read from the shipped library.
+    Below the library's 10 A edge, where the library ratio vanishes, the tied spectrum is
+    ``b (2 cos i D + H) T`` exactly (``T`` the torus screen at the model inclination, which
+    the tied disc takes too since #2760), and
+    ``b_H = P_D,tied / ((1 - f) L_acc)`` with ``agn_power`` from the torus the model emits (3e-3,
     the torus quadrature on this grid).
     """
-    _, _, accretion = _pcigale_fritz(70.1)
+    accretion = _fritz_accretion_power(70.1)
     kwargs = dict(agn_fritz_oa=60.0, agn_fritz_tau=1.0)
     _, comps = _run("kubota_done", "fritz", mbh=disc_mbh, cos_inc=_cos_of_psy(70.1), **kwargs)
     below = np.asarray(_WAVE) < 9.0
-    _, h_lam = _kubota_parts(_WAVE, disc_mbh)
+    d_lam, h_lam = _kubota_parts(_WAVE, disc_mbh)
+    cos_inc = _cos_of_psy(70.1)
     screen = _fritz_screen(_WAVE, 70.1)
     tied = comps["disc"] * C_AA / np.asarray(_WAVE, float) ** 2
-    b = tied[below] / (h_lam[below] * screen[below])
-    np.testing.assert_allclose(b, b[0], rtol=1e-9)
+    # Below the library edge the tied spectrum is ``T (b_D 2 cos i D + b_H H)``: the corona
+    # takes the screen ``T``, and since #2760 (owner ruling 10) so does the tied disc, whose
+    # library ratio would otherwise vanish there. Two scales, solved from the model's own
+    # spectrum by least squares; the fit is exact to rounding when the form holds.
+    # ``b_D`` differs from ``b_H`` by up to 2e-3 because the disc is tied through the library's
+    # ratio R / R_face-on (the library incl ratio is 1.0022 at psi = 70.1) and its in-library power
+    # fraction, while the corona takes the closed-form share; the corona scale is the one checked.
+    y = tied[below] / screen[below]
+    basis = np.stack([2.0 * cos_inc * d_lam[below], h_lam[below]], axis=1)
+    (b_disc, b_corona), *_ = np.linalg.lstsq(basis / y[:, None], np.ones(y.size), rcond=None)
+    np.testing.assert_allclose(basis @ np.array([b_disc, b_corona]), y, rtol=1e-9)
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
         _WAVE, _LOG_LBOL, agn_log_mbh=disc_mbh
     )
     expected = accretion * _power(comps["torus"]) / ((1.0 - float(f_corona)) * _L_ACC)
-    assert b[0] == pytest.approx(expected, rel=3e-3)
+    assert b_corona == pytest.approx(expected, rel=1e-4)
 
 
 def test_fritz_disc_is_independent_of_agn_log_lbol_under_the_tie():

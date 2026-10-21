@@ -60,6 +60,7 @@ from tengri.utils.physics_constants import (
     NEUTRINO_FERMI_DIRAC_CORRECTION,
     NU_TO_CMB_TEMP_RATIO,
     SIGMA_SB,
+    T_CMB_0,
 )
 
 
@@ -294,8 +295,11 @@ HUBBLE_TIME_GYR_H1: float = MPC_CM / (100.0 * 1.0e5 * JULIAN_YEAR_S * 1.0e9)
 _RHO_CRIT_H2_REF_CGS: float = 3.0 * _H0_PER_H_S**2.0 / (8.0 * math.pi * G_GRAV)
 """Critical density at z=0, divided by h^2 (h-independent), in g/cm^3."""
 
-_T_REF_K: float = 2.7255
-"""Reference CMB temperature [K] (Planck18's Tcmb0) for OMEGA_GAMMA_H2_REF."""
+_T_REF_K: float = T_CMB_0
+"""Reference CMB temperature [K] (Planck18's Tcmb0) for OMEGA_GAMMA_H2_REF.
+
+The one shared CMB reference value, :data:`~tengri.utils.physics_constants.T_CMB_0` (#2806).
+"""
 
 OMEGA_GAMMA_H2_REF: float = (4.0 * SIGMA_SB / C_CGS**3.0) * _T_REF_K**4.0 / _RHO_CRIT_H2_REF_CGS
 """Ω_γ h² at Tcmb0 = :data:`_T_REF_K`, a pure Tcmb0-dependent constant

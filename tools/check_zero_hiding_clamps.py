@@ -234,7 +234,11 @@ from collections.abc import Sequence
 #: ``jnp.maximum(_w_sum, ...)``. The shared ``xray.lmxb_stellar_age_gyr`` helper now selects
 #: its denominator before the division (surviving weights, then formed, then 1 Gyr), so the
 #: clamped denominator is gone rather than moved.
-EXPECTED_SITES = 79
+#:
+#: 79 -> 78 (#2806): the Schreiber CMB boost and the analytic closures now share one
+#: closed-form ``cmb_luminosity_boost``, which takes ``jnp.maximum(T_dust, 1.0)`` once. The
+#: old helper's clamped division is gone; the floor is unchanged.
+EXPECTED_SITES = 78
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

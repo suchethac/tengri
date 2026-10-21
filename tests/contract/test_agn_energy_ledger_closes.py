@@ -29,6 +29,7 @@ from tengri.components.agn._phys import (
 )
 from tengri.components.agn._template_grid import BUDGET_WAVE
 from tengri.components.agn.grahsp import GRAHSPSEDComponent, GRAHSPSEDComponentConfig
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.forward.orchestrator import default_params_dict
 from tengri.protocols.component import ForwardState
 
@@ -255,7 +256,11 @@ def test_grahsp_torus_spectrum_integrates_to_L_agn_torus():
 
 
 def test_grahsp_bbb_spectrum_integrates_to_L_agn_bol():
-    """GRAHSP BBB, lines and FeII above 91.2 nm carry L_agn_bol to 1e-4."""
+    """GRAHSP BBB, lines and FeII above upstream's 91.1753 nm cut carry L_agn_bol to 1e-4.
+
+    The cut is lumBolBBB's (owner ruling 16, 2026-10-13), not the 91.2 nm Lyman limit: the
+    91.1753-91.2 nm sliver alone is 1.2e-4 of L_agn_bol, which the old mask would miss.
+    """
     out = _grahsp(
         _CONVERGED,
         include_torus=False,
@@ -263,7 +268,7 @@ def test_grahsp_bbb_spectrum_integrates_to_L_agn_bol():
         apply_attenuation=False,
     )
     target = float(out.derived["L_agn_bol"])
-    spectrum = _power(out.sed_intrinsic, _CONVERGED, mask=_CONVERGED >= 912.0)
+    spectrum = _power(out.sed_intrinsic, _CONVERGED, mask=_CONVERGED >= 10.0 * BBB_BOL_CUT_NM)
     rel = _rel(spectrum, target)
     assert rel < _LEDGER_RTOL, f"grahsp bbb: spectrum vs L_agn_bol rel {rel:.3e}"
 

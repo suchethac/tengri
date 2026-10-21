@@ -133,7 +133,9 @@ def test_graybody_equals_cmb_corrected_reference_500_1000um(T, beta, lam0):
     nu = c / (wave * 1e-8)
     tg_norm = tg / -np.trapezoid(tg, nu)
 
-    t_cmb = 2.725
+    # #2806 T_CMB0 2.7255 K (was 2.725): the one CMB temperature, Fixsen 2009. Moves the
+    # z = 0 contrast by up to 2.8e-5 relative; the 1e-10 tolerance is unchanged.
+    t_cmb = 2.7255
     t_eff = (T ** (4.0 + beta) + t_cmb ** (4.0 + beta) - t_cmb ** (4.0 + beta)) ** (
         1.0 / (4.0 + beta)
     )

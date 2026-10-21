@@ -29,8 +29,12 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.skirtor_agnfitter_1p import _load_skirtor_agnfitter_1p_arrays
+from tengri.components.agn._torus_inclination import node_power_scale
+from tengri.components.agn.skirtor_agnfitter_1p import (
+    TORUS_INCLINATION,
+    _load_skirtor_agnfitter_1p_arrays,
+    load_skirtor_agnfitter_1p_grid,
+)
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -87,7 +91,7 @@ def precompute_skirtor_agnfitter_1p_photometry(
     **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
+    integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``skirtor_agnfitter_1p.py``.
     """
 
@@ -96,13 +100,11 @@ def precompute_skirtor_agnfitter_1p_photometry(
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
 
-    n_incl, _ = grid.shape
-    lnu_grid = np.empty_like(grid)
-    for i in range(n_incl):
-        template = grid[i]
-        integral = native_bolometric_nu_np(template, wave_grid)
-        integral_safe = max(abs(integral), 1e-100)
-        lnu_grid[i] = _LSUN_ERG * template / integral_safe
+    # Each record at unit power times its anisotropy a / mean a (the scalar table),
+    # as the runtime path normalizes the records (skirtor_agnfitter_1p.TORUS_INCLINATION).
+    runtime_grid = load_skirtor_agnfitter_1p_grid(grid_path)
+    scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
+    lnu_grid = _LSUN_ERG * grid * scale[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,

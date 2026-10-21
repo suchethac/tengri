@@ -25,7 +25,7 @@ import jax.numpy as jnp
 from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._publication import (
-    log10_emitted_bolometric,
+    log10_native_bolometric,
     with_lsun_outputs,
     with_lsun_siblings,
 )
@@ -56,6 +56,9 @@ _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 #: Nodes of the log-uniform grid over the normalization band (10 A to 1e8 A), on which the
 #: published bolometric luminosity is integrated by :func:`loglog_integral`. 8001 nodes agree
 #: with a 160001-node value to 2e-7 for the steep, cut-off shapes; 500 nodes were 4e-5 off.
+#: It is the node set of ``powerlaw_disc``'s own normalization (``_PL_BAND_NODES``), and the
+#: same quadrature (a power law between nodes), so the published value is the normalization's
+#: target, ``lum_ratio * 10**log_lbol L_sun``, to rounding.
 _PUBLISHED_BAND_NODES: int = 8001
 
 
@@ -83,7 +86,8 @@ class PowerLawDiscConfig(SEDComponentConfig):
 class PowerLawDisc(SEDModelComponent):
     """Simple power-law accretion disc with exponential UV cutoff.
 
-    A fast phenomenological disc model: L_ν ∝ ν^α exp(-hν / k_B T_max).
+    A fast phenomenological disc model: L_ν ∝ ν^α exp(-hν / k_B T_max) between 10 A and
+    1e8 A, and zero outside that band.
     Suitable for rapid fitting and when fine spectral details are not required.
 
     Attributes
@@ -110,8 +114,10 @@ class PowerLawDisc(SEDModelComponent):
     -----------------------
     log_L_agn_disc : dex
         log10 of the bolometric luminosity of the disc [dex re erg/s]: the frequency integral
-        of the emitted SED over 10 A - 1e8 A, formed in log space so it is finite and accurate
-        in pure float32 (NAMING_CONTRACT section 4c). ``-inf`` is an absent disc.
+        of the emitted SED, which is zero outside 10 A - 1e8 A, so the value is the whole
+        budget ``lum_ratio * 10**log_lbol L_sun`` (no ``_unemitted`` piece). Formed in log
+        space so it is finite and accurate in pure float32 (NAMING_CONTRACT section 4c).
+        ``-inf`` is an absent disc. The disc has no inclination, so there is no ``_los`` key.
 
     Notes
     -----
@@ -181,7 +187,7 @@ class PowerLawDisc(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        """Pure JAX power-law disc prediction.
+        r"""Pure JAX power-law disc prediction.
 
         Parameters
         ----------
@@ -207,10 +213,26 @@ class PowerLawDisc(SEDModelComponent):
 
             - sed_out: Updated SED (sed_in + disc contribution).
             - published: {"log_L_agn_disc": log10 of the bolometric disc luminosity [dex re
-              erg/s], the integral of the emitted SED over the normalization band
-              10 A - 1e8 A}. The band is part of the
-              definition: the emitted power-law tail (L_nu nu ~ const at long wavelength) does
-              not converge beyond it, so the integral would depend on an arbitrary upper limit.
+              erg/s], the integral of the emitted SED, which is zero outside the
+              normalization band 10 A - 1e8 A}. The band is part of the definition: the
+              power-law tail (L_nu nu ~ const at long wavelength) does not converge beyond
+              it, so the SED is truncated at its edges and its integral is the whole budget.
+
+        Notes
+        -----
+        .. math::
+
+            L_\nu = r\,10^{\log L_{\rm bol}} L_\odot
+                \frac{\nu^\alpha e^{-h\nu/k_B T_{\rm max}}}
+                     {\int_{\nu_1}^{\nu_2} \nu'^\alpha e^{-h\nu'/k_B T_{\rm max}}\,d\nu'}
+                \ \ (\nu_1 \le \nu \le \nu_2), \qquad L_\nu = 0 \ \text{otherwise},
+
+        with :math:`r` = ``lum_ratio`` [dimensionless], :math:`\alpha` [dimensionless],
+        :math:`T_{\rm max}` [K], :math:`\nu` [Hz], :math:`\nu_1 = c/10^8` A and
+        :math:`\nu_2 = c/10` A. **Approximation**: a phenomenological shape with no derivation
+        in the literature; the band edges are part of the model, not physical cut-offs.
+
+        **JIT/grad/vmap-safe**: yes; the truncation is a ``jnp.where`` on the wavelength.
 
         """
 
@@ -228,14 +250,17 @@ class PowerLawDisc(SEDModelComponent):
             )
 
         # Published log_L_agn_disc: the integral of the emitted SED over the band the disc is
-        # normalized on (10 A to 1e8 A). The emitted power-law tail is not integrable beyond
-        # that band (L_nu nu ~ const at long wavelength), so the band is part of the
-        # definition. It is evaluated on a fixed grid, never the caller's wave.
+        # normalized on (10 A to 1e8 A), outside which it emits nothing. It is the power-law-
+        # between-nodes integral on the normalization's own nodes, the quadrature the
+        # normalization sets to the budget, evaluated on a fixed grid, never the caller's wave.
         wave_band = _published_band_aa(wave.dtype)
-        log_L_disc = log10_emitted_bolometric(_powerlaw(wave_band), wave_band) + offset
+        log_L_disc = log10_native_bolometric(_powerlaw(wave_band), wave_band) + offset
 
-        # Add to intrinsic SED
+        # The emitted SED is the band-limited disc: the power law is not defined outside the
+        # band it is normalized on, and its tail there carried up to 1e4 times the budget.
+        in_band = (wave >= _PL_BAND_LO_AA) & (wave <= _PL_BAND_HI_AA)
         disc = _powerlaw(wave)
-        sed_out = sed_in + (rescale(disc, offset) if use_ref else disc)
+        disc = jnp.where(in_band, rescale(disc, offset) if use_ref else disc, 0.0)
+        sed_out = sed_in + disc
 
         return sed_out, with_lsun_siblings({"log_L_agn_disc": log_L_disc})

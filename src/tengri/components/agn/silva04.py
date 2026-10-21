@@ -267,6 +267,8 @@ def silva04_sed_from_grid(
     wave_native = jnp.asarray(grid.wave_grid)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+    # Normalized once (#2851): the Silva et al. (2004) templates have no inclination axis,
+    # so there is no anisotropy to restore and the sightline power is f L_bol.
     return scale_to_lbol_native(template, wave_native, sed, l_scale)
 
 

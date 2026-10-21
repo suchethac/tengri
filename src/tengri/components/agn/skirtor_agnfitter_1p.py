@@ -20,9 +20,17 @@ Axis semantics
 
 Runtime normalization
 ---------------------
-Template is shape-only. At runtime the module divides by the trapezoidal
-integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
-mirroring :mod:`tengri.components.agn.skirtor_agnfitter`.
+SKIRTOR computes every model for one central source luminosity (Stalevski et al. 2016,
+Sect. 2.1), so its records share one scale across inclination. The stored inclination
+power ratios equal those of the SKIRTOR v3 records (multiplied back by their ``norm``)
+averaged over tau, p, q, opening angle and radius ratio to 0.4 % at every node, so the
+reduction is on that scale (face-on/edge-on 2.12).
+The template is therefore emitted as two factors
+(``_torus_inclination.torus_lnu_anisotropic``): the shape of the records normalized to
+unit power and interpolated as before, and the records' own powers over their model's
+mean, a scalar table interpolated with the same node-exact PCHIP. The angle-integrated
+torus power is ``L_bol * agn_torus_frac``, each sightline keeps the library's flux
+relative to the others, and the shape between nodes is the per-sightline one exactly.
 
 References
 ----------
@@ -47,9 +55,20 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._torus_inclination import (
+    TorusInclination,
+    anisotropy_values,
+    torus_lnu_anisotropic,
+)
+
+#: The library's inclination axis: the records share one radiative-transfer scale
+#: across inclination, so the template carries its anisotropy as a scalar factor
+#: (``_torus_inclination.torus_lnu_anisotropic``).
+TORUS_INCLINATION = TorusInclination(axis=0, variable="incl_deg")
 
 __all__ = [
+    "TORUS_INCLINATION",
     "create_skirtor_agnfitter_1p_from_grid",
     "skirtor_agnfitter_1p_sed",
 ]
@@ -112,10 +131,12 @@ def load_skirtor_agnfitter_1p_grid(grid_path: str) -> TorusTemplateGrid:
     pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
+    axes = (np.asarray(raw["incl_axis"]),)
     return TorusTemplateGrid(
         template=np.asarray(raw["template"]),
-        axes=(np.asarray(raw["incl_axis"]),),
+        axes=axes,
         wave_grid=np.asarray(raw["wavelength"]),
+        anisotropy=anisotropy_values(raw["template"], raw["wavelength"], axes, TORUS_INCLINATION),
     )
 
 
@@ -149,10 +170,17 @@ def skirtor_agnfitter_1p_sed_from_grid(
     -----
     .. math::
 
-        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                         \frac{T(\lambda;\,i)}{\int T(\nu;\,i)\,\mathrm{d}\nu}
+        L_\nu(\lambda;\,\mu) = L_{\rm bol}\,f_{\rm torus}\,
+                               \frac{T(\lambda;\,\mu)}{\int T(\nu;\,\mu)\,\mathrm{d}\nu}\,
+                               \frac{a(\mu)}{\bar a}, \qquad
+        \bar a = \int_0^1 a(\mu)\,\mathrm{d}\mu,
 
-    where :math:`i` is the inclination angle.
+    where :math:`T` is the tabulated template at the parameter point (node-exact PCHIP),
+    :math:`\mu = \cos i`, the frequency integral is that of the interpolant on the
+    template's own wavelength nodes, and :math:`a` is each record's own power over its
+    model's mean, interpolated with the same PCHIP. The angle-integrated power is
+    :math:`f_{\rm torus} L_{\rm bol}`; along :math:`\mu` the torus carries
+    :math:`f_{\rm torus} L_{\rm bol}\,a(\mu)/\bar a`.
 
     **JIT-compatible**: yes.
 
@@ -161,10 +189,18 @@ def skirtor_agnfitter_1p_sed_from_grid(
     AGNfitter-rX [3]_, which averages out opening angle, clumpiness
     (p, q), and optical depth of the full SKIRTOR parameter space.
     """
-    return torus_lnu_from_grid(
+    # Anisotropy restored here (#2851). Provenance: AGNfitter-rX SKIRTOR_mean_1p.pickle
+    # (tag AGNfitter-rX_v0.1, models/TORUS), field 'SED' per inclination, repackaged in
+    # skirtor_mean1p_torus_grid.h5 'template'; its power ratios between inclinations match
+    # the SKIRTOR v3 records (the CIGALE-lineage dust_emission x spectra/norm; one central
+    # source luminosity per model, Stalevski et al. 2016 Sect. 2.1) averaged over tau, p,
+    # q, opening angle and R to 0.4 % at every node. Sightline: 'incl_axis' is the
+    # inclination i from the polar axis [deg] (0 face-on), ascending, axis 0.
+    return torus_lnu_anisotropic(
         grid,
         wavelength,
         (agn_incl_skirtor,),
+        TORUS_INCLINATION,
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,
     )
