@@ -87,4 +87,8 @@ def device_table(table) -> jnp.ndarray:
         Device array of the same shape; ``float64`` under x64, ``float32``
         otherwise (integer tables keep their canonical integer width).
     """
-    return jnp.asarray(table, dtype=jax.dtypes.canonicalize_dtype(np.asarray(table).dtype))
+    if not isinstance(table, np.ndarray):
+        # A tracer or an existing device array carries its own dtype and is not subject to
+        # the numpy identity memo: pass it through.
+        return jnp.asarray(table)
+    return jnp.asarray(table, dtype=jax.dtypes.canonicalize_dtype(table.dtype))

@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
+from tengri.utils.host_array import device_table
 from tengri.utils.table_log import log_table_f32
 
 # ── Template loading (lazy: no computation at import time) ───────
@@ -263,7 +264,7 @@ def _interp_with_slopes(
     it, ft = _clamp_interp_index(t, kte_jax)
     ib, fb = _clamp_interp_index(b, ktbb_jax)
 
-    table_jax = jnp.asarray(table.table_log)
+    table_jax = device_table(table.table_log)
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
         """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
