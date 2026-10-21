@@ -1,4 +1,38 @@
 {
+ "SFH_REGISTRY": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sfh.registry",
+   "module_short": "tengri.components.stellar.sfh",
+   "name": "SFH_REGISTRY"
+  }
+ ],
+ "_PEAK_FRAC_HI": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "_PEAK_FRAC_LO": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
  "_color": [
   {
    "is_class": false,
@@ -1434,6 +1468,22 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "Uniform"
+  }
+ ],
+ "tengri.cosmology.age_at_z": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "age_at_z"
   }
  ],
  "tengri.load_ssp": [

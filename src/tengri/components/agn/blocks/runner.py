@@ -79,6 +79,7 @@ from tengri.components.agn.blocks.masking import (
 from tengri.components.agn.blocks.torus_library_transmission import (
     BelowLibraryIndex,
     library_torus_sightline,
+    tied_incl_with_library_edge,
 )
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_BLOCKS,
@@ -144,7 +145,7 @@ _KUBOTA_LEDGER_WAVE = np.unique(
 )
 
 #: Trapezoid nodes the CIGALE tie integrates the disc on over the SKIRTOR library's range.
-_TIE_FINE_NODES = 4001
+_TIE_FINE_NODES = 8001
 
 #: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
 #: and ``fritz2006``).
@@ -1299,14 +1300,25 @@ agn_torus_block, agn_attenuation_block : str
             _disc_part, _corona_part = L_lambda_disc, None
         else:
             _disc_part, _corona_part, _ = _disc_parts(wave)
-        _disc_reweighted = _disc_part * _disc_incl
+        # Below the library's first node the tabulated ratio is zero, which would silence the
+        # tied disc in the X-rays; there it takes the library sightline's absorbed factor, the
+        # same Morrison & McCammon column as the untied path (owner ruling 10, #2760).
+        _tie_sight = _library_sightline()
+        _disc_incl_tied = (
+            _disc_incl
+            if _tie_sight is None
+            else tied_incl_with_library_edge(_disc_incl, wave, _tie_sight, agn_torus_block)
+        )
+        _disc_reweighted = _disc_part * _disc_incl_tied
         if _library_wave is None:
             _disc_integral = jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave)
         else:
             # ``R`` is a ratio of trapezoids over the 136-node library axis, but the disc
             # output is continuous, so its reweighted bolometric is the continuous
             # integral over the library's range: the disc re-evaluated on a fixed fine grid
-            # spanning it (4000 points, ~3e-4 in ln lambda per node).
+            # spanning it (8001 points, 2e-3 in ln lambda per node), integrated log-log:
+            # the trapezoid on 4001 nodes sat 3e-6 high on the Kubota disc, the log-log on
+            # 8001 nodes 4e-7 off the 400000-node value.
             _fine = jnp.geomspace(_tie_wave[0], _tie_wave[-1], _TIE_FINE_NODES)
             if _split_fn is None:
                 _disc_fine = redden_disc(
@@ -1319,7 +1331,7 @@ agn_torus_block, agn_attenuation_block : str
             else:
                 _disc_fine = _disc_parts(_fine)[0]
             _incl_fine = resample_template(_fine, _tie_wave, _tie_incl_native, left=0.0, right=0.0)
-            _disc_integral = jnp.trapezoid(_disc_fine * _incl_fine, _fine)
+            _disc_integral = loglog_integral(_fine, _disc_fine * _incl_fine)
         _disc_int = jnp.maximum(_disc_integral, 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
         if _corona_part is not None:

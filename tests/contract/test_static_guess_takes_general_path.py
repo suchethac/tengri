@@ -75,6 +75,12 @@ ALLOWLIST: dict[str, str] = {
         "catalog -> catalog floor; Fixed -> its value; free -> prior floor (no fixed value used "
         "for a runtime z)"
     ),
+    "components/stellar/component.py::StellarSEDComponent._spectrum_lut_families": (
+        "a traced draw dispersion only skips the equality check against the table's build-time "
+        "sigma_v; the pre-broadened table exists only for a fixed sigma_v (a free one leaves "
+        "lut.sigma_v_kms None and broadens the summed spectrum on the full model grid every "
+        "draw), so no traced dispersion reaches the table route (#2958)"
+    ),
     "forward/sed_model.py::SEDModel.__init__": (
         "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),

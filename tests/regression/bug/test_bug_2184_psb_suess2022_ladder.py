@@ -34,12 +34,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.components.stellar.sfh.nonparametric import (
     PSB_FLEX_DEFAULT_MAX_AGE_GYR,
     PSB_FLEX_DEFAULT_N_FIXED,
 )
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, validate_bin_edges_gyr
+from tengri.utils.cosmology import age_at_z0_host
 
 pytestmark = pytest.mark.regression_bug
 
@@ -351,24 +352,41 @@ def test_a_pinned_crossing_in_the_full_spelling_is_refused_for_psb_flex(syntheti
 def test_a_pinned_value_a_free_prior_can_cross_is_refused_at_build(synthetic_ssp_wide):
     """Pinning one epoch inside the other's prior support is the same crossing.
 
-    ``tflex_gyr`` pinned at 0.7 Gyr with ``tlast_gyr`` free on [0.01, 1.0] draws
-    a crossed ladder for every ``tlast_gyr`` above 0.7, which is 30 % of that
-    prior. Refused for the pair, not for either value on its own, and in either
+    ``tflex`` pinned at 0.7 Gyr with ``tlast`` free on [0.01, 1.0] Gyr draws a
+    crossed ladder for every ``tlast`` above 0.7, which is 30 % of that prior.
+    Refused for the pair, not for either value on its own, and in either
     spelling of the pinned key.
+
+    The epochs are fractions of age(z) (#2748): ``*_gyr`` is a Fixed-only alias
+    and the build-time ordering check only sees explicitly named keys, so the
+    old ``tflex_gyr`` pin with ``all_params: FREE`` stopped raising. The free
+    prior is therefore named on ``tlast_frac``, over the same Gyr range divided
+    by the age of the universe at z=0, and ``tflex_frac`` is pinned at 0.7 Gyr.
     """
+    age0 = float(age_at_z0_host())
+    tlast_free = Uniform(0.01 / age0, 1.0 / age0)
+    tflex_pin = Fixed(0.7 / age0)
     with pytest.raises(ValueError, match="negative width"):
-        _build_psb(synthetic_ssp_wide, tflex_gyr=Fixed(0.7), all_params=FREE)
+        _build_psb(synthetic_ssp_wide, tlast_frac=tlast_free, tflex_frac=tflex_pin)
     with pytest.raises(ValueError, match="negative width"):
-        _build_psb(synthetic_ssp_wide, sfh_psb2022_tflex_gyr=Fixed(0.7), all_params=FREE)
+        _build_psb(
+            synthetic_ssp_wide,
+            sfh_psb2022_tlast_frac=tlast_free,
+            sfh_psb2022_tflex_frac=tflex_pin,
+        )
 
 
 def test_a_pinned_value_the_free_prior_cannot_reach_is_accepted(synthetic_ssp_wide):
     """The check refuses crossings, not mixed dispositions.
 
-    ``tflex_gyr`` pinned at 1.5 Gyr sits above everything ``tlast_gyr``'s prior
-    can draw, so this build is well posed and must go through; so must the
-    default, where both epochs are pinned at their registry values.
+    ``tflex_frac`` pinned at 1.5 Gyr (as a fraction of the age of the universe)
+    sits above everything the wildcard-freed ``tlast_frac`` prior can draw, so
+    this build is well posed and must go through; so must the default, where
+    both epochs are pinned at their registry values.
     """
-    _build_psb(synthetic_ssp_wide, tflex_gyr=Fixed(1.5), all_params=FREE)
+    from tengri.components.stellar.sfh.registry import _AGE_FRAC_PRIORS
+
+    tlast_ceiling = _AGE_FRAC_PRIORS["sfh_psb2022_tlast_frac"].bounds[1]  # 1.0 Gyr / age0
+    _build_psb(synthetic_ssp_wide, tflex_frac=Fixed(1.5 * tlast_ceiling), all_params=FREE)
     _build_psb(synthetic_ssp_wide, all_params=FREE)
     _build_psb(synthetic_ssp_wide, all_params=Fixed(DEFAULT))

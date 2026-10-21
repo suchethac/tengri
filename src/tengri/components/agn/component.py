@@ -61,6 +61,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._term_response import term_band_response
+from tengri.components.agn._ir_frac_window import (
+    PROVISIONAL_TORUS_FRAC,
+    log10_torus_frac_from_window,
+)
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
     reference_evaluation,
@@ -150,6 +154,12 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
+    agn_ir_frac_window : tuple of float
+        CIGALE ``lambda_fracAGN`` window (#2662), ``(lambda_min_um, lambda_max_um)``. ``(0, 0)``
+        (default) is the total-dust case: ``agn_ir_frac`` is the fraction of the total dust
+        luminosity. A window makes ``agn_ir_frac`` the fraction of the light in
+        ``[lambda_min, lambda_max]``; ``lambda_min == lambda_max != 0`` is monochromatic.
+        A static build-time value, not a parameter.
     agn_polar_law : str
         Polar-dust extinction curve: ``"smc"`` (default), ``"calzetti"``,
         ``"gaskell"`` or ``"bongiorno"``. A static string read by the runner.
@@ -175,6 +185,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     agn_attenuation_block: str = "none"
     agn_norm: str = "cigale_joint"
     agn_polar_law: str = "smc"
+    agn_ir_frac_window: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -265,6 +276,11 @@ class AGNSEDComponent(TemplateThreading):
 
     #: The composable sub-blocks whose sum is the SED, in ``emission_terms`` order.
     _TERM_KEYS: ClassVar[tuple[str, ...]] = ("disc", "torus", "lines", "polar")
+
+    #: The term band response carries each term's amplitude at its reference wavelength when
+    #: no amplitude parameter is free (#2987), so the photometry does not re-evaluate the AGN
+    #: on every call. Read by the term-response builder in ``tengri.SEDModel``.
+    FIXED_TERM_AMPLITUDES: ClassVar[bool] = True
 
     def term_response_refusal(self, free: set[str], fixed: Mapping[str, Any]) -> str | None:
         """Why the rank-1 band response must not be built for this AGN, or ``None``.
@@ -422,9 +438,14 @@ class AGNSEDComponent(TemplateThreading):
         mir_logs : tuple of ndarray, scalar
             ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
         """
-        ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
-        amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
-        keys = list(ref)
+        if "amp" in band:
+            # Every amplitude parameter is fixed, so the build evaluated these at the fixed
+            # values: the same numbers this branch would compute (#2987).
+            amps = band["amp"]
+        else:
+            ref = self.emission_terms(params, band["lam_ref"], template_state=template_state)
+            amps = jnp.stack([term[i] for i, term in enumerate(ref.values())]) / band["S_ref"]
+        keys = list(self._TERM_KEYS)
         rows = jnp.asarray([keys.index(k) for k in ("disc", "torus", "polar")])
         mir_lnu = jnp.sum(amps[rows][:, None] * band["S_diag"][rows], axis=0)
         diag = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=mir_lnu.dtype)
@@ -553,6 +574,22 @@ class AGNSEDComponent(TemplateThreading):
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Optional inputs: the dust publications and, under a CIGALE window, the host continuum.
+
+        A window reads the host SED (``sed_intrinsic``), which holds the nebular continuum.
+        Declaring ``sed_nebular`` keeps the fast nebular grid, which zeroes that continuum,
+        from being armed for this chain (#2662).
+        """
+        if self.config.agn_ir_frac_window != (0.0, 0.0):
+            nebular = DerivedKey(
+                "sed_nebular",
+                "erg/s/Hz",
+                "Nebular continuum; read by the CIGALE lambda_fracAGN window (#2662)",
+            )
+            return (nebular, *self._cigale_joint_inputs())
+        return self._cigale_joint_inputs()
+
+    def _cigale_joint_inputs(self) -> tuple[DerivedKey, ...]:
         """Dust publications, when using CIGALE-joint cross-component norm.
 
         When ``agn_norm == "cigale_joint"``, the AGN component reads
@@ -725,67 +762,6 @@ class AGNSEDComponent(TemplateThreading):
 
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
 
-        # CIGALE-faithful cross-component coupling
-        # ────────────────────────────────────────────────────────────
-        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
-        # bookkeeping: the AGN dust-IR power is derived from the
-        # stellar dust-absorbed luminosity via
-        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
-        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
-        # the existing block normalization ``l_scale = L_bol × frac``
-        # produces ``l_scale = agn_power``. This way the torus block
-        # API stays unchanged while the higher-level driver matches
-        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
-        # whole-IR default) is assumed; the alternative wavelength-
-        # window flow is not yet wired.
-        #
-        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
-        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
-        # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
-        # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
-        # torus_frac), with the log branch still finite so its unused-branch
-        # gradient cannot leak (#1206).
-        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
-        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
-        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
-        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
-        # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
-        # stellar+nebular energy the dust screen actually intercepted, not the
-        # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
-        # ``dust_log_L_ir`` override) can scale away from it (#1837/
-        # #2187-series split). The ``log_L_ir`` fallback below covers a chain
-        # built before the split published the new key.
-        _log_L_absorbed = state.derived.get("log_L_absorbed")
-        if _log_L_absorbed is None:
-            _log_L_absorbed = state.derived.get("log_L_ir")
-        if _log_L_absorbed is None and "L_absorbed" in state.derived:
-            _log_L_absorbed = jnp.log10(
-                jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
-            )
-        if _log_L_absorbed is None:
-            # No dust screen published an absorbed luminosity. Construction
-            # refuses an active fracAGN in that case (sed_model._validate_
-            # fracagn_requires_dust), so only the inert Fixed(0) coupling
-            # reaches here, and the user torus fraction is used directly.
-            agn_torus_frac_effective = agn_torus_frac_user
-        else:
-            # log10(agn_power / L_agn_bol)
-            #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
-            _log_torus_frac = (
-                _log_L_absorbed
-                + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
-                - jnp.log10(_one_minus_frac)
-                - agn_log_lbol
-                - _LOG10_L_SUN
-            )
-            agn_torus_frac_effective = jnp.where(
-                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
-            )
-        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
-        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
-        # consumers needing it linearly run in float64.
-        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
-
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
         # so it folds into a JIT trace cleanly. If template_data is
@@ -795,11 +771,13 @@ class AGNSEDComponent(TemplateThreading):
         # Thread the SKIRTOR template as a JIT runtime input
         skirtor_template = None
         block_templates = None
+        band_table = None
         if template_data is not None and isinstance(template_data, dict):
             agn_data = template_data.get("agn")
             if agn_data is not None and isinstance(agn_data, dict):
                 skirtor_template = agn_data.get("skirtor")
                 block_templates = agn_data.get("blocks")
+                band_table = agn_data.get("band_table")
         # Build kwargs, adding _template for SKIRTOR threading if available.
         # The agn_kwargs dict is built in two passes:
         #   1. Explicit defaults for the AGN params the registered models
@@ -808,33 +786,7 @@ class AGNSEDComponent(TemplateThreading):
         #   2. Forward every additional ``agn_*`` key from ``params`` so
         #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
         #      reach the registered function via its ``**kwargs`` tail.
-        agn_kwargs = {
-            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
-            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
-            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
-            # CIGALE-coupled override: see ``agn_torus_frac_effective``
-            # block above. When ``agn_ir_frac > 0`` this carries the
-            # stellar-derived agn_power; otherwise it's the user value.
-            "agn_torus_frac": agn_torus_frac_effective,
-            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
-            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
-            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
-            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-        }
-        # Sweep every remaining ``agn_*`` key in params (skirtor / grahsp /
-        # kubota_done full-disc / cat3d_wind / radiation-physics extras)
-        # through to the model function. ``agn_log_lbol`` is passed
-        # explicitly below and so excluded here.
-        for key, val in params.items():
-            if key.startswith("agn_") and key != "agn_log_lbol" and key not in agn_kwargs:
-                agn_kwargs[key] = jnp.asarray(val)
+        agn_kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", 0.5))
         # Composable-AGN block selectors are static Python strings (not
         # traced JAX values). They live on the config so the runner can
         # close over them at trace-build time and pick the right per-stage
@@ -862,6 +814,110 @@ class AGNSEDComponent(TemplateThreading):
         master_wave = getattr(self._state, "torus_master_wave", None)
         if self.config.model == "composable" and below_index is not None and wave is master_wave:
             agn_kwargs["torus_below_index"] = below_index
+
+        # CIGALE-faithful cross-component coupling
+        # ────────────────────────────────────────────────────────────
+        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
+        # bookkeeping: the AGN dust-IR power is derived from the
+        # stellar dust-absorbed luminosity via
+        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
+        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
+        # the existing block normalization ``l_scale = L_bol × frac``
+        # produces ``l_scale = agn_power``. This way the torus block
+        # API stays unchanged while the higher-level driver matches
+        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's whole-IR default) is the
+        # default; ``agn={'ir_frac_window': ...}`` selects a wavelength window instead (#2662),
+        # which changes only the scale factor of ``agn_power`` (see ``_ir_frac_window``).
+        #
+        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
+        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
+        # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
+        # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
+        # torus_frac), with the log branch still finite so its unused-branch
+        # gradient cannot leak (#1206).
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
+        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
+        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
+        # stellar+nebular energy the dust screen actually intercepted, not the
+        # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
+        # ``dust_log_L_ir`` override) can scale away from it (#1837/
+        # #2187-series split). The ``log_L_ir`` fallback below covers a chain
+        # built before the split published the new key.
+        ir_frac_window = tuple(self.config.agn_ir_frac_window)
+        _log_L_absorbed = state.derived.get("log_L_absorbed")
+        if _log_L_absorbed is None:
+            _log_L_absorbed = state.derived.get("log_L_ir")
+        if _log_L_absorbed is None and "L_absorbed" in state.derived:
+            _log_L_absorbed = jnp.log10(
+                jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
+            )
+        if _log_L_absorbed is None:
+            # No dust screen published an absorbed luminosity. Construction
+            # refuses an active fracAGN in that case (sed_model._validate_
+            # fracagn_requires_dust), so only the inert Fixed(0) coupling
+            # reaches here, and the user torus fraction is used directly.
+            agn_torus_frac_effective = agn_torus_frac_user
+        elif ir_frac_window != (0.0, 0.0):
+            # CIGALE lambda_fracAGN window (#2662): agn_power = f/(1-f) * H * D / W, with H and
+            # W the host and AGN window luminosities and D the AGN dust luminosity. The
+            # AGN shape is set by the cigale_joint tie, so D/W is scale-free: one provisional
+            # evaluation at the user torus fraction gives it, and the final evaluation runs
+            # at the window-derived fraction. Only the scale factor changes; agn_power keeps
+            # its meaning and its place in the ledger.
+            from tengri.config.exceptions import ParameterError
+
+            if self.config.model != "composable":
+                raise ParameterError(
+                    f"agn['ir_frac_window']={ir_frac_window} needs the composable AGN "
+                    f"(model {self.config.model!r} has no disc/torus/polar split to take the "
+                    "dust luminosity from)."
+                )
+            _host = (
+                state.sed_intrinsic if state.sed_intrinsic is not None else jnp.zeros_like(wave)
+            )
+            # Same grid and kwargs as the final evaluation (extended master grid, build-time
+            # below-library index), so the provisional D/W carries the final pass's numerics.
+            _wave_ext, _to_caller, _ = _with_diagnostic_nodes(wave)
+            _prov_kwargs = {**agn_kwargs, "agn_torus_frac": PROVISIONAL_TORUS_FRAC}
+            _L_ext, _, _, _ = agn_fn(
+                _wave_ext,
+                agn_log_lbol=agn_log_lbol,
+                return_l2500=True,
+                return_components=True,
+                **_prov_kwargs,
+            )
+            _L_prov = jnp.take(_L_ext, _to_caller, axis=-1)
+            _log_torus_frac = log10_torus_frac_from_window(
+                wave,
+                _host,
+                _L_prov,
+                agn_ir_frac,
+                ir_frac_window[0] * 1.0e4,
+                ir_frac_window[1] * 1.0e4,
+            )
+            agn_torus_frac_effective = jnp.where(
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            )
+        else:
+            # log10(agn_power / L_agn_bol)
+            #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
+            _log_torus_frac = (
+                _log_L_absorbed
+                + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
+                - jnp.log10(_one_minus_frac)
+                - agn_log_lbol
+                - _LOG10_L_SUN
+            )
+            agn_torus_frac_effective = jnp.where(
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            )
+        agn_kwargs = {**agn_kwargs, "agn_torus_frac": agn_torus_frac_effective}
+        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
+        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
+        # consumers needing it linearly run in float64.
+        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
 
         # Call AGN function. For composable models, request L_2500_intrinsic
         # and L_4400_intrinsic. For monolithic models, both default to 0.0
@@ -1052,14 +1108,38 @@ class AGNSEDComponent(TemplateThreading):
             # dimming. The new helper returns the bare filter-integrated
             # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
-            if term_phot is not None:
-                # Rank-1 fast path (#1118): every sub-block is a fixed shape times its
-                # amplitude, so the filter integral is sum_k A_k R_kf with R_kf built once.
-                agn_phot_lnu_precomp = term_phot[0]
+            if band_table is not None:
+                # The registry table holds this recipe's band fluxes over its free axes at the
+                # model redshift and at z = 0. Reading it replaces the per-filter integrals; the
+                # SED above feeds only the outputs that need it, so a photometry-only graph drops
+                # the SED build as dead code.
+                agn_phot_lnu_precomp, agn_restband_lnu_precomp = self._band_table_phot(
+                    params, band_table
+                )
             else:
-                agn_phot_lnu_precomp = jnp.asarray(
+                if term_phot is not None:
+                    # Rank-1 fast path (#1118): every sub-block is a fixed shape times its
+                    # amplitude, so the filter integral is sum_k A_k R_kf with R_kf built once.
+                    agn_phot_lnu_precomp = term_phot[0]
+                else:
+                    agn_phot_lnu_precomp = jnp.asarray(
+                        [
+                            lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                            for fw, ft in zip(
+                                self._state.filter_waves,
+                                self._state.filter_trans,
+                                strict=False,
+                            )
+                        ]
+                    )
+                # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+                # z=0, so the filter sits in the REST frame and samples the rest SED at
+                # its own pivot, the SAME integral with redshift=0, not the observed-band
+                # value reused. Reusing it is what made the LUT report a different
+                # physical quantity from the exact path (769 % in des_g at z=0.5).
+                agn_restband_lnu_precomp = jnp.asarray(
                     [
-                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
                         for fw, ft in zip(
                             self._state.filter_waves,
                             self._state.filter_trans,
@@ -1068,21 +1148,7 @@ class AGNSEDComponent(TemplateThreading):
                     ]
                 )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
-            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
-            # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot, the SAME integral with redshift=0, not the observed-band
-            # value reused. Reusing it is what made the LUT report a different
-            # physical quantity from the exact path (769 % in des_g at z=0.5).
-            derived_overrides["agn_restband_lnu_precomp"] = jnp.asarray(
-                [
-                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            derived_overrides["agn_restband_lnu_precomp"] = agn_restband_lnu_precomp
 
         # Spectrum LUT family (SpectrumPrecomp): a spectrum pixel is a single
         # wavelength, so point-sampling the rest-frame AGN SED at the pixel
@@ -1099,6 +1165,79 @@ class AGNSEDComponent(TemplateThreading):
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
         )
+
+    @staticmethod
+    def _band_table_phot(
+        params: Mapping[str, Any], table: Mapping[str, Any]
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Band fluxes from the composable registry table at the current parameters.
+
+        Parameters
+        ----------
+        params : mapping
+            Parameters of the model; the table's axes and ``agn_lum_ratio`` are read from it.
+        table : mapping
+            The adapter's table arrays (``template_data["agn"]["band_table"]``).
+
+        Returns
+        -------
+        tuple of ndarray
+            ``(observed-band, rest-band)`` L_nu [erg/s/Hz], each of shape ``(n_filters,)``.
+        """
+        from tengri.forward.precompute import registry
+
+        module = registry.resolve("composable_agn")
+        values = [jnp.asarray(params[name]) for name in sorted(table["axes"])]
+        both = module.lookup_from_table(
+            table, "composable_agn", jnp.asarray(params.get("agn_lum_ratio", 1.0)), *values
+        )
+        n_filters = both.shape[-1] // 2
+        return both[:n_filters], both[n_filters:]
+
+
+def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:
+    """Numeric keyword arguments the registered AGN model is called with.
+
+    Two passes: explicit defaults for the parameters the registered models most commonly read
+    (so a missing key does not break multicolor / skirtor / kubota_done at trace time), then
+    every other ``agn_*`` key in ``params`` forwarded so block-specific parameters (skirtor,
+    grahsp, cat3d_wind, ...) reach the model function through its ``**kwargs`` tail.
+    ``agn_log_lbol`` is passed separately and so excluded.
+
+    Parameters
+    ----------
+    params : mapping
+        Parameters of the model, ``agn_*`` keys among them.
+    agn_torus_frac : float or ndarray
+        The torus fraction the model is called with [dimensionless].
+
+    Returns
+    -------
+    dict
+        ``{name: ndarray}``, shared by the per-call path and the build-time band table so both
+        call the model with the same defaults.
+    """
+    kwargs = {
+        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
+        "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
+        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+        "agn_torus_frac": jnp.asarray(agn_torus_frac),
+        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
+        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
+        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
+        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
+        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+    }
+    for key, val in params.items():
+        if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:
+            kwargs[key] = jnp.asarray(val)
+    return kwargs
 
 
 # Register in the unified component dispatch table so build_components resolves

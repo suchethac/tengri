@@ -616,6 +616,11 @@ def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
         assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
         assert float(grad) != 0.0, f"d{key}/d delta is identically zero"
 
+    # The published angle-integrated disc power (log_L_agn_disc, #2972) is finite too.
+    grad_disc = float(jax.grad(published)(jnp.asarray(0.3), "log_L_agn_disc"))
+    assert bool(jnp.isfinite(grad_disc)), f"d log_L_agn_disc/d delta = {grad_disc}"
+    assert grad_disc != 0.0, "d log_L_agn_disc/d delta is identically zero"
+
 
 def test_skirtor_emitted_sed_independent_of_caller_grid():
     """At delta != 0 the emitted SED at shared probe wavelengths is the same on any caller grid."""

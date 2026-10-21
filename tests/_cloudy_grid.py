@@ -21,6 +21,7 @@ large enough that the young-bin Q_H passes the bare-stellar check in
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import h5py
@@ -63,11 +64,11 @@ _SSP_LGMET = np.array([-4.0, -2.65, -1.3])
 _UV_FLUX_SCALE: float = 1.0e-16
 
 
-def _log_line_luminosity() -> np.ndarray:
+def _log_line_luminosity(log_u: np.ndarray) -> np.ndarray:
     """log10 L_line / Q_H on the (met, age, U, line) grid, smooth in every axis."""
     met = _LOG_MET_AXIS[:, None, None, None]
     age = _LOG_AGE_AXIS[None, :, None, None]
-    logu = _LOG_U_AXIS[None, None, :, None]
+    logu = log_u[None, None, :, None]
     line = np.arange(len(_LINE_WAVE_AA))[None, None, None, :]
     return (
         -12.0
@@ -80,16 +81,18 @@ def _log_line_luminosity() -> np.ndarray:
     )
 
 
-def _log_continuum_luminosity() -> np.ndarray:
+def _log_continuum_luminosity(log_u: np.ndarray) -> np.ndarray:
     """log10 L_nu / Q_H on the (met, age, U, wave) grid, smooth in every axis."""
     met = _LOG_MET_AXIS[:, None, None, None]
     age = _LOG_AGE_AXIS[None, :, None, None]
-    logu = _LOG_U_AXIS[None, None, :, None]
+    logu = log_u[None, None, :, None]
     log_wave = np.log10(_CONT_WAVE_AA)[None, None, None, :]
     return -14.0 - 0.5 * (log_wave - 3.0) + 0.2 * met + 0.1 * (age - 7.0) - 0.3 * (logu + 2.0)
 
 
-def write_synthetic_cloudy_grid(path: str | Path) -> Path:
+def write_synthetic_cloudy_grid(
+    path: str | Path, log_u_axis: Sequence[float] | None = None
+) -> Path:
     """Write a deterministic CLOUDY-format grid to ``path`` and return it.
 
     The file has the datasets ``load_cloudy_grid`` reads: ``lines/`` and
@@ -101,6 +104,10 @@ def write_synthetic_cloudy_grid(path: str | Path) -> Path:
     ----------
     path : str or pathlib.Path
         Destination ``.h5`` file. It is overwritten if it exists.
+    log_u_axis : sequence of float, optional
+        The log10(U) nodes [dex], strictly increasing. Defaults to the module
+        axis, -5 to 0. Pass the real grids' hull, (-4, -3, -2, -1), to test
+        behavior at that hull.
 
     Returns
     -------
@@ -108,8 +115,9 @@ def write_synthetic_cloudy_grid(path: str | Path) -> Path:
         The path written.
     """
     out = Path(path)
-    lines_lum = 10.0 ** _log_line_luminosity()
-    cont_lum = 10.0 ** _log_continuum_luminosity()
+    log_u = _LOG_U_AXIS if log_u_axis is None else np.asarray(log_u_axis, dtype=float)
+    lines_lum = 10.0 ** _log_line_luminosity(log_u)
+    cont_lum = 10.0 ** _log_continuum_luminosity(log_u)
     with h5py.File(out, "w") as f:
         for group, wave, lum in (
             ("lines", _LINE_WAVE_AA, lines_lum),
@@ -121,7 +129,7 @@ def write_synthetic_cloudy_grid(path: str | Path) -> Path:
             axes = grp.create_group("axes")
             axes.create_dataset("log_met", data=_LOG_MET_AXIS)
             axes.create_dataset("log_age_yr", data=_LOG_AGE_AXIS)
-            axes.create_dataset("log_U", data=_LOG_U_AXIS)
+            axes.create_dataset("log_U", data=log_u)
         f.attrs["source"] = "synthetic (tests/_cloudy_grid.py)"
     return out
 

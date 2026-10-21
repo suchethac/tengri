@@ -80,6 +80,7 @@ def test_dpl_signature_lists_expected_params() -> None:
         "beta",
         "tau_gyr",
         "age_gyr",
+        "age_frac",
         "log_total_mass",
     }
     for name, p in sig.parameters.items():
@@ -171,7 +172,7 @@ def test_const_exp_short_names_resolve_correctly() -> None:
         "sfh_cexp_log_total_mass",
         "sfh_cexp_tau_gyr",
         "sfh_cexp_quench_gyr",
-        "sfh_cexp_age_gyr",
+        "sfh_cexp_age_frac",
     }
     assert expected.issubset(set(spec.free_params))
 

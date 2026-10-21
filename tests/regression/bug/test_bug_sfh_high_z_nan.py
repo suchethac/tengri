@@ -26,6 +26,7 @@ import tengri
 from tengri import DEFAULT, Fixed
 from tengri.components.stellar.component import SFHBeforeBigBangWarning
 from tengri.components.stellar.sps.dsps_wrapper import enforce_increasing_cosmic_time
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
@@ -47,10 +48,13 @@ def test_enforce_increasing_fixes_non_monotone_table():
 
 
 def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
+    # The onset is a fraction of the age of the universe at ``redshift``; a value
+    # above 1 places it before the Big Bang.
+    age_frac = age_gyr / float(age_at_z(redshift))
     sfh = {
         "type": "dpl",
         "all_params": Fixed(DEFAULT),
-        "age_gyr": age_gyr,
+        "age_frac": age_frac,
         "tau_gyr": 5.0,
         "alpha": 2.0,
         "beta": 2.0,
