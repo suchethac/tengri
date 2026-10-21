@@ -1,0 +1,19 @@
+# CI-only version pins, applied to every `pip install` in the tests and
+# notebooks workflows through the PIP_CONSTRAINT environment variable. They hold
+# CI to one JAX build so that a new upstream release cannot change compiled
+# numerics between two runs of the same commit. Installs outside CI are
+# unaffected: pyproject.toml still declares only the lower bound.
+#
+# The docs builds (docs.yml, docs-preview.yml) run Python 3.11, for which no
+# jax 0.12 wheel exists (it requires Python >= 3.12), so they do not read this
+# file. They check that documented listings run, not compiled numerics.
+#
+# 0.12.0 is the build CI has resolved since 2026-10-20. The tests whose pins
+# depend on the XLA build were re-measured against it: the chi2 constant-folding
+# control, the GRAHSP ulp and FLOP pins (which keep a baseline per JAX series),
+# and the float32 corona floors.
+#
+# To move CI to a newer JAX, change both lines in one pull request labeled
+# `full-tests`, and re-measure any pin that fails before merging it.
+jax==0.12.0
+jaxlib==0.12.0

@@ -36,6 +36,8 @@ concurrency:
 
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  # Pin JAX for every pip install in this workflow (.github/ci-constraints.txt).
+  PIP_CONSTRAINT: ${{ github.workspace }}/.github/ci-constraints.txt
 
 jobs:
   # Generate the matrix of CI-executable notebooks. The script's --list path
