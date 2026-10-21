@@ -66,13 +66,16 @@ def _published_band_aa(dtype) -> jnp.ndarray:
     """The published normalization band [Angstrom], ascending, built in the trace.
 
     The end points are those of ``powerlaw_disc``'s normalization band, so the published
-    integral and the normalization cover the same range.
+    integral and the normalization cover the same range. They are set exactly: ``exp`` of the
+    log end point rounds to 1.0000000000000002e8 A (float64) or 1.00000032e8 A (float32), past
+    the inclusive band edge where the SED is zero.
     """
-    return jnp.exp(
+    band = jnp.exp(
         jnp.linspace(
             math.log(_PL_BAND_LO_AA), math.log(_PL_BAND_HI_AA), _PUBLISHED_BAND_NODES, dtype=dtype
         )
     )
+    return band.at[0].set(_PL_BAND_LO_AA).at[-1].set(_PL_BAND_HI_AA)
 
 
 @dataclass(frozen=True)
@@ -232,7 +235,11 @@ class PowerLawDisc(SEDModelComponent):
         :math:`\nu_2 = c/10` A. **Approximation**: a phenomenological shape with no derivation
         in the literature; the band edges are part of the model, not physical cut-offs.
 
-        **JIT/grad/vmap-safe**: yes; the truncation is a ``jnp.where`` on the wavelength.
+        **JIT/grad/vmap-safe**: yes; the truncation is the ``jnp.where`` on the wavelength in
+        :func:`~tengri.components.agn.disc.powerlaw_disc`, shared with the composable
+        ``disc='powerlaw'`` block and its lookup table. Nothing is emitted in the radio
+        (> 1e8 A) or hard X-ray (< 10 A) by design: the band is the model's definition, and
+        other components own those regimes.
 
         """
 
@@ -256,11 +263,10 @@ class PowerLawDisc(SEDModelComponent):
         wave_band = _published_band_aa(wave.dtype)
         log_L_disc = log10_native_bolometric(_powerlaw(wave_band), wave_band) + offset
 
-        # The emitted SED is the band-limited disc: the power law is not defined outside the
-        # band it is normalized on, and its tail there carried up to 1e4 times the budget.
-        in_band = (wave >= _PL_BAND_LO_AA) & (wave <= _PL_BAND_HI_AA)
+        # The emitted SED is the band-limited disc: ``powerlaw_disc`` is zero outside the band it
+        # is normalized on (its tail there carried up to 1e4 times the budget).
         disc = _powerlaw(wave)
-        disc = jnp.where(in_band, rescale(disc, offset) if use_ref else disc, 0.0)
+        disc = rescale(disc, offset) if use_ref else disc
         sed_out = sed_in + disc
 
         return sed_out, with_lsun_siblings({"log_L_agn_disc": log_L_disc})

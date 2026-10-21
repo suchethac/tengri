@@ -242,11 +242,12 @@ def powerlaw_disc(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Spectral luminosity density L_ν. [erg/s/Hz]
+        Spectral luminosity density L_ν [erg/s/Hz]; exactly zero outside 10 A - 1e8 A.
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives; the band truncation is a
+    ``jnp.where`` on the wavelength.
 
     The unnormalized spectral shape is:
 
@@ -259,10 +260,17 @@ def powerlaw_disc(
     :math:`T_{\\rm max}` is the cutoff temperature [K].
 
     The normalization constant :math:`C` is computed numerically by integrating
-    the shape over the fixed band 10 A - 1e8 A (2049 log-spaced internal nodes; the
-    caller's wavelength grid plays no part), so that the integral over frequency of the
-    shape over that band equals the target luminosity
+    the shape over the fixed band 10 A - 1e8 A (8001 log-spaced internal nodes, a power law
+    between nodes; the caller's wavelength grid plays no part), so that the integral over
+    frequency of the shape over that band equals the target luminosity
     :math:`L_{\\rm bol} \\cdot f_{\\rm disc}` and the SED is the same on any grid.
+
+    The SED is zero outside that band (both edges inclusive), so its frequency integral is
+    the whole budget :math:`L_{\\rm bol} \\cdot f_{\\rm disc}`. This is by design: the band is
+    the model's definition, the power law does not converge beyond it (:math:`\\nu L_\\nu`
+    is constant at long wavelength for :math:`\\alpha = -1`), and other components own the
+    radio (> 1e8 A) and hard X-ray (< 10 A) regimes. A disc of this type contributes nothing
+    to either.
 
     **Approximation**: This model is a simplified representation of the true
     accretion disc spectrum, which consists of multiple temperature zones
@@ -306,7 +314,13 @@ def powerlaw_disc(
     # (apply_log10_scale factors the O(1) peak of ``shape_unit``); ``10**agn_log_lbol * L_sun``
     # is never formed as a linear intermediate.
     log_scale = agn_log_lbol + _LOG10_LSUN_ERG - log_integral + agn_alpha * jnp.log10(nu_ref)
-    return agn_lum_ratio * apply_log10_scale(shape_unit, log_scale)
+    # The SED is the band-limited disc: zero outside [_PL_BAND_LO_AA, _PL_BAND_HI_AA], the band it
+    # is normalized on (both edges inclusive). Beyond it the power law is not defined and its tail
+    # carried up to 1e4 times the budget, uncounted; every caller (the standalone component, the
+    # composable ``disc='powerlaw'`` block and its lookup table) inherits the truncation here.
+    wave = jnp.asarray(wavelength)
+    in_band = (wave >= _PL_BAND_LO_AA) & (wave <= _PL_BAND_HI_AA)
+    return jnp.where(in_band, agn_lum_ratio * apply_log10_scale(shape_unit, log_scale), 0.0)
 
 
 # ── Model 2: Multi-color disc (Shakura-Sunyaev thin disc) ─────────
