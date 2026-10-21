@@ -67,6 +67,7 @@ from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_L
 from tengri.components.agn._template_grid import TorusTemplateGrid
 from tengri.components.agn._torus_inclination import (
     TorusInclination,
+    anisotropy_values,
     torus_lnu_anisotropic,
 )
 
@@ -163,6 +164,9 @@ def load_nenkova_agnfitter_3p_grid(grid_path: str) -> TorusTemplateGrid:
         template=template_reordered_np,
         axes=(cos_inc_axis_np, oa_np, tv_np),
         wave_grid=wave_np,
+        anisotropy=anisotropy_values(
+            template_reordered_np, wave_np, (cos_inc_axis_np, oa_np, tv_np), TORUS_INCLINATION
+        ),
     )
 
 

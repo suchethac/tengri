@@ -925,8 +925,9 @@ def _load_fritz_components():
 def fritz_sed(*args, **kwargs):
     """Fritz2006 torus SED (auto-loaded from tabulated templates).
 
-    This function uses the tabulated Fritz et al. (2006) template grid
-    with 6D node-exact PCHIP interpolation, normalized once over the sphere.
+    This function uses the tabulated Fritz et al. (2006) template grid: the unit-power
+    records' shape by 6D node-exact PCHIP interpolation, times the scalar anisotropy
+    table (:func:`fritz_anisotropy`) over its sphere mean (see :func:`fritz_sed_from_grid`).
 
     Parameters
     ----------

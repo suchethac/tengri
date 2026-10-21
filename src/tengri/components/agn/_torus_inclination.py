@@ -44,6 +44,7 @@ from tengri.components.agn._template_grid import (
     TorusTemplateGrid,
     float32_safe_template,
     native_bolometric_nu,
+    native_bolometric_nu_np,
     torus_lnu_from_grid,
 )
 from tengri.utils.grid_interp import interp_nd_pchip
@@ -58,6 +59,7 @@ __all__ = [
     "absent_torus_ledger",
     "anisotropy_at_nodes",
     "anisotropy_grid",
+    "anisotropy_values",
     "inclination_quadrature_in",
     "library_anisotropy",
     "log10_anisotropy",
@@ -225,6 +227,32 @@ def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
     )
 
 
+def anisotropy_values(template, wave, axes, inc: TorusInclination) -> np.ndarray:
+    r"""Host (float64) :class:`AnisotropyGrid` values of a library, for caching at load.
+
+    Parameters
+    ----------
+    template : array_like, shape (n_ax1, ..., n_axk, n_wave)
+        Stored records [any common scale per model].
+    wave : array_like, shape (n_wave,)
+        The records' wavelength nodes [Angstrom].
+    axes : tuple of array_like
+        The library's axes.
+    inc : TorusInclination
+        The library's inclination axis.
+
+    Returns
+    -------
+    ndarray, shape (n_ax1, ..., n_axk)
+        Each record's frequency integral (``native_bolometric_nu_np``) over its model's
+        trapezoid mean in :math:`\mu`, O(1) and float32-representable.
+    """
+    t = np.asarray(template, dtype=np.float64)
+    flat = t.reshape(-1, t.shape[-1])
+    powers = np.array([native_bolometric_nu_np(row, wave, floor=0.0) for row in flat])
+    return np.asarray(anisotropy_grid(powers.reshape(t.shape[:-1]), axes, inc).values)
+
+
 def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) -> AnisotropyGrid:
     r"""The :class:`AnisotropyGrid` of a library whose records share one scale per model.
 
@@ -247,6 +275,10 @@ def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) ->
     -----
     **JIT/vmap-safe**: yes; the integrals are evaluated in the graph for a threaded grid.
     """
+    if grid.anisotropy is not None:
+        return AnisotropyGrid(
+            values=jnp.asarray(grid.anisotropy), axes=tuple(jnp.asarray(a) for a in grid.axes)
+        )
     return anisotropy_grid(_record_powers(grid, dtype), grid.axes, inc)
 
 

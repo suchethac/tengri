@@ -191,11 +191,13 @@ def fritz_torus_block(
     r"""Fritz+ 2006 smooth-dust torus block.
 
     Six-dimensional template grid with node-exact PCHIP interpolation on
-    ``(r_ratio, tau, beta, gamma, opening_angle, psy)``. The library records
-    are put back on their common radiative-transfer scale (``dust`` times its
-    ``norm``) and normalized once per parameter point, so the angle-integrated
-    torus power is ``agn_torus_frac × L_bol`` and the sightline keeps the
-    library's own anisotropy (:func:`~tengri.components.agn.fritz.fritz_sed_from_grid`).
+    ``(r_ratio, tau, beta, gamma, opening_angle, psy)``. The emitted torus is
+    the unit-power ``dust`` records' shape, interpolated as for a torus normalized
+    per sightline, times a scalar anisotropy: each record's ``norm`` over its
+    model's mean, interpolated on the same axes and divided by its sphere mean.
+    The angle-integrated torus power is ``agn_torus_frac × L_bol`` and the
+    sightline keeps the library's own anisotropy
+    (:func:`~tengri.components.agn.fritz.fritz_sed_from_grid`).
 
     The model has one inclination, ``agn_cos_inc``; the library's viewing
     elevation above the equatorial plane is derived from it,

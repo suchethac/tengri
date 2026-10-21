@@ -58,6 +58,7 @@ from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._template_grid import TorusTemplateGrid
 from tengri.components.agn._torus_inclination import (
     TorusInclination,
+    anisotropy_values,
     torus_lnu_anisotropic,
 )
 
@@ -130,10 +131,12 @@ def load_skirtor_agnfitter_1p_grid(grid_path: str) -> TorusTemplateGrid:
     pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
+    axes = (np.asarray(raw["incl_axis"]),)
     return TorusTemplateGrid(
         template=np.asarray(raw["template"]),
-        axes=(np.asarray(raw["incl_axis"]),),
+        axes=axes,
         wave_grid=np.asarray(raw["wavelength"]),
+        anisotropy=anisotropy_values(raw["template"], raw["wavelength"], axes, TORUS_INCLINATION),
     )
 
 
