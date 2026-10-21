@@ -34,7 +34,7 @@ References
 ----------
 
 - Mineo, Gilfanov & Sunyaev 2012, MNRAS 419, 2095 (HMXB-SFR).
-- Lehmer et al. 2019, ApJ 878, 122 (combined L_X-SFR-M_star).
+- Lehmer et al. 2019, ApJS 243, 3 (XRB luminosity function scaling relations with M_star and SFR).
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-77
 

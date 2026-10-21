@@ -38,6 +38,7 @@ from tengri import (
     WavePrecomp,
     load_ssp,
 )
+from tengri.cosmology import age_at_z
 from tengri.inference.fitter import Fitter
 from tengri.inference.loss_functions import build_loss_fn
 from tengri.observation.line_flux_data import LineFluxData
@@ -50,13 +51,15 @@ pytestmark = pytest.mark.contract
 BANDS = ["des_g", "des_r", "des_z", "wise_w1", "wise_w2"]
 LINES = ["OII_3726", "Hbeta", "OIII_5007", "Halpha", "SII_6717"]
 Z = 0.1
+#: Age of the universe at ``Z`` [Gyr]; the dpl formation age is sampled as a fraction of it.
+AGE_AT_Z = float(age_at_z(Z))
 
 # A star-forming SFH. A declining 9 Gyr history puts the Balmer lines into stellar
 # ABSORPTION (Halpha ~ -7e-20), and every relative-error assertion taken against a
 # flux that is ~zero passes or fails for reasons unrelated to the code under test.
 TRUTH = {
     "sfh_dpl_log_total_mass": 10.5,
-    "sfh_dpl_age_gyr": 12.0,
+    "sfh_dpl_age_frac": 12.0 / AGE_AT_Z,
     "sfh_dpl_tau_gyr": 11.0,
     "sfh_dpl_alpha": 1.0,
     "sfh_dpl_beta": 3.0,

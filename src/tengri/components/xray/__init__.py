@@ -45,25 +45,25 @@ register_xray_model(
 register_xray_model(
     "simple",
     citation="Yang+2020 / X-CIGALE (MNRAS 491, 740)",
-    short_doc="AGN corona via alpha_ox(L_2500) + Lehmer+16 XRBs + thermal hot gas",
+    short_doc="AGN corona via alpha_ox(L_2500) + Fragos+13 XRBs + thermal hot gas",
 )(xray_total)
 # ``yang20`` is a CIGALE-compatible alias of ``simple``: the underlying
 # tengri X-ray component already implements the Yang+2020 physics
 # (alpha_ox corona + Morrison & McCammon 1983 N_H + Compton scattering +
-# Lehmer+2016 XRBs). The alias closes the discoverability half of #440.
+# Fragos+2013 XRBs). The alias closes the discoverability half of #440.
 register_xray_model(
     "yang20",
-    citation="Yang et al. 2020 (MNRAS 491, 4276)",
+    citation="Yang et al. 2020 (MNRAS 491, 740)",
     short_doc="Alias of 'simple'; use this name for CIGALE pcigale.sed_modules.xray parity",
 )(xray_total)
 # ``lopez24`` ties the AGN corona to the nuclear 12 µm luminosity via the
 # α_IRX relation (Asmus+2015), instead of the disc L_2500 α_ox path: the
 # physically appropriate normalization for obscured / IR-selected AGN. Shares
-# the Lehmer+2016 XRBs + hot gas with yang20. CIGALE pcigale.sed_modules.lopez24.
+# the Fragos+2013 XRBs + hot gas with yang20. CIGALE pcigale.sed_modules.lopez24.
 register_xray_model(
     "lopez24",
     citation="Lopez et al. 2024 (A&A 692, A209); Asmus et al. 2015 (MNRAS 454, 766)",
-    short_doc="IR-tied AGN corona via alpha_IRX(L_12um) + Lehmer+16 XRBs + hot gas",
+    short_doc="IR-tied AGN corona via alpha_IRX(L_12um) + Fragos+13 XRBs + hot gas",
 )(xray_total_lopez24)
 
 __all__ = [

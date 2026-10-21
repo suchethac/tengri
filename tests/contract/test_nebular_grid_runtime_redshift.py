@@ -35,6 +35,7 @@ from tengri import (
 )
 from tengri.components.dust.component import DustAttenuationSEDComponent
 from tengri.components.dust.two_component import DustSEDComponent
+from tengri.cosmology import age_at_z
 from tengri.inference.fitter import fast_nebular_can_engage
 
 pytestmark = [pytest.mark.contract, pytest.mark.slow]
@@ -150,14 +151,20 @@ def data():
     return fnu, 0.05 * fnu
 
 
+#: The dpl onset these parameter draws pin [Gyr], expressed as a fraction of the
+#: age of the universe at the redshift the draws start from.
+_DPL_ONSET_GYR = 0.1
+_Z_PARAMS = 1.0
+
+
 def _params(model):
     values = {k: 0.5 for k in model.spec.free_params}
     values["sfh_dpl_log_total_mass"] = 10.0
-    values["sfh_dpl_age_gyr"] = 0.1
+    values["sfh_dpl_age_frac"] = _DPL_ONSET_GYR / float(age_at_z(_Z_PARAMS))
     if "neb_logU" in model.spec.free_params:
         values["neb_logU"] = -2.7
     if "redshift" in model.spec.free_params:
-        values["redshift"] = 1.0
+        values["redshift"] = _Z_PARAMS
     for key in model.spec.free_params:
         if key.startswith("dust_tau"):
             values[key] = 1.0

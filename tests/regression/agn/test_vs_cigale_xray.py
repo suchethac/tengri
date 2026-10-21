@@ -16,8 +16,8 @@ https://doi.org/10.1086/519990
 Lusso, E., & Risaliti, G. 2016, ApJ, 819, 154.
 https://doi.org/10.3847/0004-637X/819/2/154
 
-Lehmer, B. D., et al. 2016, ApJ, 825, 7.
-https://doi.org/10.3847/0004-637X/825/1/7
+Fragos, T., et al. 2013, ApJ, 776, L31.
+https://doi.org/10.1088/2041-8205/776/2/L31
 """
 
 import jax.numpy as jnp
@@ -144,7 +144,8 @@ def test_xray_anisotropy_polynomial():
     References
     ----------
     Yang, G., et al. 2022, ApJ, 927, 192.
-    CIGALE yang20.py:231–235 (Lehmer et al. 2016 anisotropy normalization).
+    CIGALE yang20.py:231–235: Yang et al. 2022, Eq. 2 (Sect. 2.3), divided by its value at the
+    30-degree reference angle, 1 - 0.13397 a1 - 0.25 a2.
     """
     # Test wavelength grid (arbitrary; anisotropy is geometry-independent)
     wavelength = jnp.array([10.0, 50.0, 100.0])

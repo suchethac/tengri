@@ -687,32 +687,34 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured on the merged tree (fix/float32-numerics on origin/main bc4c183de). Old -> new,
-#: relative, against the pins on origin/main (the file's prior values):
-#:   log M_BH 6: sum +9.20e-06, first +4.39e-02, middle -9.14e-07, last -2.73e-06
-#:   log M_BH 8: sum +8.12e-05, first -7.24e-02, middle +1.66e-04, last -4.07e-05
-#:   log M_BH 10: sum -3.16e-03, first -5.65e-01, middle -3.31e-03, last -2.51e-04
-#: Cause of the mbh 10 move: the #2733 kubota_done corona change on this branch (see the
-#: seam sweep block). #2818 and the #2808 merge are not separated from #2733 by a separate capture.
-#: The identity still closes at 1e-7; only the tabulated reference moved.
+#: Re-captured on the merged tree (origin/main 668348ae7 merged into the #2919 branch). Old -> new,
+#: relative, in (sum, first, middle, last) order, against the pins captured on origin/main (which
+#: already carry #2972's SKIRTOR native budget, so #2972 moves nothing here):
+#:   log M_BH 6: +4.76e-09 / +1.43e-05 / +4.57e-09 / +1.56e-10
+#:   log M_BH 8: +1.78e-07 / +1.43e-05 / +2.11e-07 / +1.63e-08
+#:   log M_BH 10: +1.62e-07 / +1.43e-05 / +1.80e-07 / +1.54e-07
+#: Cause: #2919 runner tie numerator log-log rule (blocks/runner.py ``_disc_integral``, the disc
+#: tie integral moves from a trapezoid on 4001 nodes to a log-log integral on 8001 nodes). The
+#: trapezoid sat 1.43e-5 low on the disc-dominated first bin, the same move this note records for
+#: that rule; the other bins move by the quadrature rule alone.
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
-        1.5586902495503188e32,
-        85034899317424.44,
-        2.8901799287539962e28,
-        8.773302439087775e21,
+        1.558690256968471e32,
+        85036116576310.58,
+        2.8901799419663798e28,
+        8.773302440454935e21,
     ),
     8.0: (
-        1.6508958561152344e32,
-        2.0727111001488856e16,
-        3.098226134579877e28,
-        8.823054902409336e21,
+        1.6508961495700146e32,
+        2.072740689496749e16,
+        3.098226787412647e28,
+        8.823055046580316e21,
     ),
     10.0: (
-        1.6722001219825183e32,
-        1.018808832961018e16,
-        3.1303929653712365e28,
-        9.547258877226544e21,
+        1.6722003924903472e32,
+        1.0188233623266798e16,
+        3.13039352903208e28,
+        9.54726034380585e21,
     ),
 }
 

@@ -57,23 +57,27 @@ class TestRegistryContents:
 class TestResolveSingle:
     """Test resolve_sfh with single models."""
 
-    def test_tsnorm_returns_5_params(self):
+    def test_tsnorm_returns_6_params(self):
+        # 6 registry params: the peak-time fraction and its Gyr alias, width,
+        # skew, trunc, log_total_mass.
         _fn, params, _param_map, _settings = resolve_sfh("tsnorm")
-        assert len(params) == 5
+        assert len(params) == 6
         assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_tsnorm_peak_lbt_gyr" in params
 
-    def test_dpl_returns_5_params(self):
-        # 5 params after #514: alpha, beta, tau, age (formation anchor),
-        # log_total_mass.
+    def test_dpl_returns_6_params(self):
+        # 6 registry params: alpha, beta, tau, the formation anchor in Gyr and
+        # its fraction of age(z) (#2748), log_total_mass.
         _fn, params, _param_map, _settings = resolve_sfh("dpl")
-        assert len(params) == 5
+        assert len(params) == 6
         assert "sfh_dpl_alpha" in params
         assert "sfh_dpl_age_gyr" in params
+        assert "sfh_dpl_age_frac" in params
 
-    def test_const_returns_3_params(self):
+    def test_const_returns_4_params(self):
+        # log_total_mass, start (Gyr alias and fraction), end.
         _fn, params, _param_map, _settings = resolve_sfh("const")
-        assert len(params) == 3
+        assert len(params) == 4
 
     def test_single_string_accepted(self):
         """String input (not list) should work."""
@@ -91,22 +95,22 @@ class TestResolveComposed:
     def test_tsnorm_field_default(self):
         """Default composition: tsnorm + field."""
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "field"])
-        # tsnorm (5) + field (2) = 7
-        assert len(params) == 7
+        # tsnorm (6) + field (2) = 8
+        assert len(params) == 8
         assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_field_psd_sigma" in params
         assert "sfh_field_psd_tau_myr" in params
 
     def test_tsnorm_burst(self):
-        """tsnorm + burst = 8 params."""
+        """tsnorm + burst = 9 params."""
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "burst"])
-        assert len(params) == 8
+        assert len(params) == 9
         assert "sfh_burst_log_fburst" in params
 
     def test_full_stack(self):
-        """tsnorm + burst + field = 10 params."""
+        """tsnorm + burst + field = 11 params."""
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "burst", "field"])
-        assert len(params) == 10
+        assert len(params) == 11
 
     def test_additive_sum_legacy_internal_names(self):
         """Backward compat: passing pre-translated internal kwargs still works.
@@ -184,8 +188,8 @@ class TestResolveComposed:
     def test_no_param_collision(self):
         """All model prefixes are unique so no collisions possible."""
         _fn, params, _, _ = resolve_sfh(["tsnorm", "const"])
-        # 5 + 3 = 8 params
-        assert len(params) == 8
+        # 6 + 4 = 10 params
+        assert len(params) == 10
 
 
 class TestCompositionConstraints:

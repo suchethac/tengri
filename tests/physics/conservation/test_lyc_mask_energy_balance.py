@@ -258,10 +258,18 @@ class TestGoldenValues:
     # at the SSP node ages instead (the grid-dependent answer) gives
     # 5.930341625031011e59, 4.2e-6 low. single_screen and wg00 have no age split
     # and did not move.
+    # Re-pinned (node-exact WG00 lookup, #2890): the WG00 attenuation table was
+    # read with a triweight kernel in tau_V, which smooths across neighboring
+    # tau_V nodes; the lookup is now node-exact PCHIP. The fixture's tau_V = 0.5
+    # is a tabulated node (axis 0.25, 0.5, 0.75, 1, ...), so the model now reads
+    # the published Witt & Gordon (2000) row there exactly (checked to 0.0
+    # relative difference), where the kernel blended in the 0.25 and 0.75 rows.
+    # wg00 7.022833393235165e59 -> 7.015195688643668e59 (-0.109 %). two_component
+    # and single_screen read no tabulated tau_V axis and did not move.
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
         "two_component": 5.93036676326139e59,
         "single_screen": 7.4319301202253715e59,
-        "wg00": 7.022833393235165e59,
+        "wg00": 7.015195688643668e59,
     }
 
     @pytest.mark.parametrize(
