@@ -39,7 +39,7 @@ import pytest
 
 from tengri.components.agn.blocks import _protocol as protocol, runner as runner_module
 from tengri.components.agn.blocks._protocol import LINE_ENERGY_BLOCKS, resolve_agn_block
-from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.blocks.runner import compose_l_nu as _compose_l_nu
 from tengri.components.agn.disc import kubota_done_disc
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import C_AA, L_SUN
@@ -75,6 +75,10 @@ _BASE = dict(
     agn_torus_frac=_TORUS_FRAC,
 )
 
+#: The fixtures share one keyword superset across discs and tori (SKIRTOR geometry, black-hole
+#: mass), as the AGN component does, so the strict unread-key check of ``compose_l_nu`` is off.
+compose_l_nu = functools.partial(_compose_l_nu, strict_keys=False)
+
 
 # ----------------------------------------------------------------------------------
 # helpers
@@ -101,7 +105,7 @@ def _run(
         return_components=True,
         **kwargs,
     )
-    return sed, {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_los"}
+    return sed, {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_direct_los"}
 
 
 def _anchors(disc, torus="skirtor", *, frac=_TORUS_FRAC, cos_inc=_COS30, **overrides):

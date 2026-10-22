@@ -20,13 +20,19 @@ Cross-component publications
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
-- ``state.derived["log_L_agn_los"]`` (dex re erg/s, composable model only):
+- ``state.derived["log_L_agn_direct_los"]`` (dex re erg/s, composable model only):
   :math:`\\log_{10}` of the line-of-sight isotropic-equivalent bolometric luminosity
   of the AGN's direct emission, :math:`\\int L_\\nu(i)\\,d\\nu` with
   :math:`L_\\nu(i) = 2\\cos i\\,D_\\nu + H_\\nu` (disc and warm zones scale with
   :math:`\\cos i`, the corona does not), before the torus screen and the polar dust.
   Compare this key, not ``L_agn_bol``, with a catalog :math:`L_{\\rm bol}` from a
-  bolometric correction.
+  bolometric correction. Until #3076 it was ``log_L_agn_los``.
+- The composable energy ledger (#3076, NAMING_CONTRACT 4c "Composable runner"):
+  ``log_L_agn_los`` (the integral of the emitted ``sed_agn``), the angle-integrated
+  ``log_L_agn_<piece>`` and line-of-sight ``log_L_agn_<piece>_los`` of the disc, torus,
+  lines and polar dust, ``log_L_agn_{disc,torus,lines}_unemitted``, every one with an
+  ``L_agn_*_lsun`` sibling, and ``agn_ledger_closed`` (1 when the pieces add up to the
+  accretion power).
 - ``state.derived["log_L_12um"]``, ``["log_L_6um"]`` (dex re erg/s):
   :math:`\\log_{10}\\nu L_\\nu` at 12 and 6 µm of the AGN's own emission (disc +
   torus + polar dust for the composable model, the whole SED for a monolithic
@@ -74,8 +80,9 @@ from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
+from tengri.components.agn.blocks._ledger import COMPOSABLE_LEDGER_OUTPUTS, ledger_derived_keys
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
+from tengri.components.agn.blocks.runner import DIRECT_LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.blocks.torus_library_transmission import below_library_index
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
@@ -470,13 +477,14 @@ class AGNSEDComponent(TemplateThreading):
                 "(L_agn_bol ~1e46 overflows float32)",
             ),
             DerivedKey(
-                "log_L_agn_los",
+                "log_L_agn_direct_los",
                 "dex",
                 "log10 of the line-of-sight isotropic-equivalent bolometric luminosity "
                 "[dex re erg/s] of the AGN direct emission, int L_nu(i) dnu with "
                 "L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust; "
                 "composable model only. Compare with a catalog L_bol",
             ),
+            *ledger_derived_keys(),
             DerivedKey(
                 "agn_adaf_mdot",
                 "",
@@ -498,9 +506,9 @@ class AGNSEDComponent(TemplateThreading):
                 "10**agn_log_lbol, the AGN accretion power in solar luminosities",
             ),
             DerivedKey(
-                "L_agn_los_lsun",
+                "L_agn_direct_los_lsun",
                 "Lsun",
-                "log_L_agn_los in solar luminosities; composable model only",
+                "log_L_agn_direct_los in solar luminosities; composable model only",
             ),
             DerivedKey(
                 "L_agn_adaf_accretion_lsun",
@@ -944,6 +952,7 @@ class AGNSEDComponent(TemplateThreading):
                 agn_log_lbol=agn_log_lbol,
                 return_l2500=True,
                 return_components=True,
+                return_ledger=True,
                 **agn_kwargs,
             )
             n_ext = wave_ext.shape[0]
@@ -1052,7 +1061,14 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_torus"] = agn_components["torus"]
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
-            derived_overrides["log_L_agn_los"] = agn_components[LOS_LOG_LUMINOSITY_KEY]
+            derived_overrides["log_L_agn_direct_los"] = agn_components[
+                DIRECT_LOS_LOG_LUMINOSITY_KEY
+            ]
+            # The energy ledger (#3076): every piece's angle-integrated and line-of-sight power,
+            # the unemitted powers, their Lsun siblings and the closed flag.
+            derived_overrides.update(
+                {key: agn_components[key] for key in COMPOSABLE_LEDGER_OUTPUTS}
+            )
         if self.config.model == "composable" and self.config.agn_disc_block == "adaf":
             # The ADAF's accretion side (Mahadevan 1997, Eq. 4): ``agn_log_lbol`` is the
             # radiated luminosity Q_ie + delta Q+, so the accretion power is not it.
@@ -1073,7 +1089,11 @@ class AGNSEDComponent(TemplateThreading):
                 for k, v in with_lsun_siblings(
                     {
                         key: derived_overrides[key]
-                        for key in ("log_L_agn_bol", "log_L_agn_los", "log_L_agn_adaf_accretion")
+                        for key in (
+                            "log_L_agn_bol",
+                            "log_L_agn_direct_los",
+                            "log_L_agn_adaf_accretion",
+                        )
                         if key in derived_overrides
                     }
                 ).items()

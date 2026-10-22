@@ -351,7 +351,8 @@ out-of-range final value representable. The rule these fixes converged on:
 
 - **An AGN component publishes an integrated luminosity as `log_L_agn_<piece>` in dex re erg/s
   AND as `L_agn_<piece>_lsun` in solar luminosities** (#2842): `log_L_agn_disc` and
-  `L_agn_disc_lsun`, likewise `torus`, `polar_dust`, `disc_unemitted`, `absorbed`, `bol`, `los`, `adaf_accretion`
+  `L_agn_disc_lsun`, likewise `torus`, `polar_dust`, `lines`, `disc_unemitted`, `torus_unemitted`,
+  `lines_unemitted`, `absorbed`, `bol`, `los`, `direct_los`, `adaf_accretion`
   and the `_los` siblings of the anisotropic emitters. This is the first bullet of this section
   applied, not an exception to the second: an AGN power of 1e8 to 1e14 Lsun is representable in
   float32, so the `Lsun` value exists and is published; the second bullet (no same-named
@@ -433,10 +434,78 @@ sightline and angle-integrated powers are equal: `SKIRTOR_mean_2p` and `3p` (the
 ratios do not follow the SKIRTOR v3 records averaged the same way), `CAT3D_mean_3p` (no source
 states the scale of its records across inclination) and Silva et al. 2004 (no inclination
 axis). The standalone `cat3d_wind`, `skirtor_agnfitter` and `silva04` components publish the
-three keys. The restored libraries are reached through the composable torus blocks, which do
-not publish them yet: the kernel seam is `torus_ledger_from_grid` in
-`components/agn/_torus_inclination.py` with the kernel's `TORUS_INCLINATION`, and the runner
-wiring is #3076.
+three keys. The restored libraries are also reached through the composable torus blocks, whose
+runner publishes them in its own ledger (below).
+
+### Composable runner (#3076)
+
+The composable runner (`components/agn/blocks/runner.py`, ledger in `blocks/_ledger.py`)
+publishes the same ledger for the pieces of the SED it emits. For each piece `<p>` in `disc`
+(with its corona), `torus`, `lines` (NLR + BLR + FeII, the `sed_agn_lines` piece) and
+`polar_dust`, each a `log_L_agn_*` [dex re erg/s] with its `L_agn_*_lsun` [Lsun] sibling:
+
+- `log_L_agn_<p>`: the angle-integrated power, `int_0^1 P_p(mu) dmu`, with `P_p(mu)` the
+  frequency integral of the piece as the runner emits it along `mu = cos i` (C1). It is
+  Gauss-Legendre (16 panels of 3 points in `cos i`) of the runner re-evaluated at those
+  sightlines on a fixed grid (`_publication`'s range at 615 log nodes per decade, and
+  900 A to 3e5 A at 1.2e-4 in ln lambda, which resolves the lines and the ultraviolet edges a
+  reddening cuts), measured within 7e-5 of a 128 x 4 rule. A torus block whose library keeps its flux ratio between sightlines
+  registers its `log10(a/a_bar)` (`register_torus_anisotropy`: `fritz`, `nenkova_agnfitter`,
+  `_2p`, `_3p`, `skirtor_agnfitter_1p`), and its angle-integrated power is the sightline power
+  minus that, exact to the library interpolant;
+- `log_L_agn_<p>_los`: the frequency integral of the piece as emitted along `agn_cos_inc`, the
+  integral of that piece of the SED (C3, to 1e-6);
+- `log_L_agn_disc_unemitted`, `log_L_agn_lines_unemitted`, `log_L_agn_torus_unemitted`: the
+  angle-integrated power the piece carries before any obscuration minus what it emits,
+  floored at zero. For the disc, the light the torus screen hides, the polar dust absorbs, an
+  attenuation block removes and `agn_ebv_disc` reddens away; the torus does not yet re-emit
+  it. The intrinsic disc is the disc block at the reference inclination (`cos i = 0.5`, where
+  a `2 cos i` disc radiates its angle-integrated power), un-reddened, times the runner's debit;
+  under an active `cigale_joint` tie, the face-on library power `agn_power x R_faceon` times the
+  library disc's hemisphere mean, plus the tied corona. A recipe without a disc block carries
+  its debited share of the accretion power here, as a torus-only template does. The lines
+  before obscuration are the line energy of the conserving debit; the torus before an
+  attenuation block (other than `polar_dust`, which does not screen it) is the torus block's
+  own emission.
+
+`log_L_agn_los` is the emitted line-of-sight sum, the integral of `sed_agn` along `agn_cos_inc`.
+Every power is scaled by `agn_lum_ratio` with the SED. `agn_ledger_closed` (dimensionless, 0.0
+or 1.0, so it traces) is 1.0 when the normalization debits every piece from the accretion power,
+so that the angle-integrated pieces plus the unemitted ones are
+`agn_lum_ratio * 10**agn_log_lbol L_sun` (C2): `agn_norm='conserving'`, and `'cigale_joint'`
+without a line block and without an active `agn_ir_frac` tie. It is 0.0 for
+
+- the self-contained quasar templates: the `grahsp`, `grahsp_mn12` and `qsogen` tori, the
+  `grahsp_sbpl` and `grahsp_netzer` discs (their parameter is `l5100`; the sub-912 A share of
+  the GRAHSP big blue bump is `log_L_agn_bol_ionizing`), the `qsogen` disc and the
+  `schartmann2005_skirtor_atten` disc (it removes light inside the block);
+- `agn_norm='independent'` (every piece on its own scale);
+- `'cigale_joint'` with lines (added on top of the disc, as CIGALE adds nebular emission) or with
+  an active `agn_ir_frac` tie (CIGALE's `agn_power` normalization, unchanged for parity);
+- the `polar_dust` block beside a torus whose library keeps its anisotropy (the five registered
+  above): the runner splits the dust budget between the torus and the polar dust on the torus's
+  sightline power rather than its angle-integrated power, so the pieces miss the accretion power
+  by the anisotropy (measured +2.5% for `nenkova_agnfitter` at `cos i = 0.8`). Splitting on the
+  angle-integrated power changes the SED and is not part of this ledger.
+
+The first two kinds also emit a `RecipeWarning` at build naming the reason
+(`validate_block_recipe` rule 10). No piece is rescaled to force a closure. How closely a
+conserving recipe closes is the accuracy of its blocks' own normalization against
+`10**agn_log_lbol L_sun` on the ledger grid: within 3e-6 for `kubota_done`, `adaf`,
+`schartmann2005` and the tori; 7e-5 for `multicolor`, 1.4e-4 for the CIGALE `skirtor` disc,
+3.2e-4 for `slone_netzer` (`tests/contract/test_agn_composable_ledger_closes.py`). C3 holds to
+1e-6 for the torus, the lines and the polar dust. A disc with a hard spectral edge (the
+`multicolor` disc is cut at 30 A) or behind a library torus (whose transmission steps at the
+library's first wavelength node) converges at first order on any fixed grid, so its
+line-of-sight power matches a 16x denser integral only to 1e-5 to 1e-3 of itself, the edge's
+share.
+
+`log_L_agn_direct_los` (with `L_agn_direct_los_lsun`) is the line-of-sight isotropic-equivalent
+power of the direct emission, the disc block's own spectrum at the viewing angle before the
+torus screen, the polar dust, the tie and the energy debits, not scaled by `agn_lum_ratio`. It
+was published as `log_L_agn_los` until #3076: a breaking rename with no alias (§0), since the
+plain name now carries the emitted line-of-sight sum. The X-ray and radio components read
+`log_L_agn_bol` (the accretion power), never either line-of-sight key.
 
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
 and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. There are

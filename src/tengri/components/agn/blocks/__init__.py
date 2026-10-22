@@ -35,6 +35,7 @@ from tengri.components.agn.blocks import (
     qsogen_blocks,
     registry,
     torus,
+    torus_anisotropy,
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,

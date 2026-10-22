@@ -101,7 +101,18 @@ With a SKIRTOR or Fritz torus and `agn_norm="cigale_joint"`, an active `agn_ir_f
 
 Under `agn_norm="conserving"` the emission lines are debited from the disc as the fraction $E_{\rm lines}/L_{\rm acc}$ of its accretion power, $L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot$, which the `kubota_done` and `multicolor` discs report in closed form.
 
-The AGN publishes the line-of-sight isotropic-equivalent bolometric luminosity of its direct emission (before the torus screen and the polar dust) as `log_L_agn_los`, $\log_{10}\int L_\nu(i)\,d\nu$ in dex re erg s$^{-1}$. This is the key to compare with a catalog $L_{\rm bol}$ obtained from a bolometric correction; `L_agn_bol` is $L_{\rm acc}$.
+The AGN publishes the line-of-sight isotropic-equivalent bolometric luminosity of its direct emission (before the torus screen and the polar dust) as `log_L_agn_direct_los`, $\log_{10}\int L_\nu(i)\,d\nu$ in dex re erg s$^{-1}$. This is the key to compare with a catalog $L_{\rm bol}$ obtained from a bolometric correction; `L_agn_bol` is $L_{\rm acc}$.
+
+#### Energy ledger of the composable AGN.
+
+The composable AGN publishes where its power goes. For each piece of the SED, the disc (with its corona), the torus, the emission lines (NLR, BLR and FeII together) and the polar dust, it reports two powers in dex re erg s$^{-1}$, each with a solar-luminosity sibling (`L_agn_<piece>_lsun`):
+
+- `log_L_agn_<piece>`, the power integrated over all directions, $\int_0^1 P(\mu)\,d\mu$ with $P(\mu)$ the frequency integral of the piece as emitted along $\mu = \cos i$;
+- `log_L_agn_<piece>_los`, the frequency integral of the piece as emitted along `agn_cos_inc`, which is the integral of that piece of the SED.
+
+`log_L_agn_los` is the sum of the line-of-sight pieces, the integral of `sed_agn`. The power a piece carries but does not emit, because the torus screen, the polar dust, an attenuation block or the disc reddening removes it, is `log_L_agn_disc_unemitted`, `log_L_agn_lines_unemitted` and `log_L_agn_torus_unemitted` (integrated over all directions). The torus does not re-emit the disc light it hides; that light is in `log_L_agn_disc_unemitted`. All powers are scaled by `agn_lum_ratio` with the SED.
+
+On a recipe whose normalization debits every piece from the accretion power (`agn_norm="conserving"`, or `"cigale_joint"` without line blocks and without an active `agn_ir_frac` tie), the angle-integrated pieces and the unemitted ones add up to `agn_lum_ratio` $\times\,L_{\rm acc}$, and `agn_ledger_closed` is 1. It is 0 for the self-contained quasar templates (`grahsp`, `grahsp_mn12` and `qsogen` tori; the `grahsp_sbpl`, `grahsp_netzer` and `qsogen` discs, whose parameter is their 5100 Å or template scale; the `schartmann2005_skirtor_atten` disc, which removes light inside the block), for `agn_norm="independent"`, for `"cigale_joint"` with lines (added on top of the disc, as CIGALE adds nebular emission) or with an active tie (normalized on $P_{\rm AGN}$, not on $L_{\rm acc}$), and for the `polar_dust` block beside a Fritz, `nenkova_agnfitter` (`_2p`, `_3p`) or `skirtor_agnfitter_1p` torus, whose dust budget is split on the torus's line-of-sight power. Building one of the first two kinds emits a `RecipeWarning` that names the reason. How closely a conserving recipe closes is the accuracy of its blocks' own normalization: $7\times10^{-5}$ for the `multicolor` disc, $3\times10^{-7}$ for `kubota_done`.
 
 
 Translating this model into a fully differentiable JAX pipeline requires replacing several non-differentiable operations with smooth approximations. Table {ref}`1 <tab-kd-approximations>` summarizes the key choices and their accuracy relative to the reference qsosed implementation (Kubota and Done 2019).
