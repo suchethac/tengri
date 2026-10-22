@@ -274,17 +274,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         units="log10(cm^-2)",
     ),
     # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
-    # agn_oa_skirtor with the X-CIGALE skirtor block; inclination here is in
-    # degrees (not cos) and the optical depth axis is tau_V. Defaults match the
-    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, incl 0-90, tv 3-11).
-    ParamDeclaration(
-        "agn_incl_skirtor",
-        Uniform(0.0, 90.0, default=30.0),
-        "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)",
-        lambda lo, hi: lo >= 0 and hi <= 90,
-        "must be in [0, 90]",
-        units="deg",
-    ),
+    # agn_oa_skirtor with the X-CIGALE skirtor block, and its sightline is the
+    # shared agn_cos_inc: the library's inclination axis (0-90 deg from the polar
+    # axis) is keyed at i = arccos(agn_cos_inc), so the model has one inclination
+    # (#2605, #3085). The optical depth axis is tau_V. Defaults match the
+    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, tv 3-11).
     ParamDeclaration(
         "agn_tv_skirtor",
         Uniform(3.0, 11.0, default=7.0),
@@ -1107,11 +1101,14 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "skirtor_mean3p/oa_axis",
         "identity",
     ),
+    # The three SKIRTOR-AGNfitter inclination axes (0-90 deg from the polar
+    # axis) back the shared agn_cos_inc declaration (cos 0-1, matching [0, 1]),
+    # as NK0_mean_2p/3p's do (#3085).
     "skirtor_agnfitter_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean3p_torus_grid.h5",
         "skirtor_mean3p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     "skirtor_agnfitter_tv": (
         "agn_tv_skirtor",
@@ -1157,14 +1154,14 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "nenkova_agnfitter_3p/incl_axis",
         "cos_deg",
     ),
-    # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the shared agn_oa_skirtor /
-    # agn_incl_skirtor declarations already registered above for
-    # SKIRTOR_mean_3p (all three grids agree on both extents).
+    # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the agn_oa_skirtor / agn_cos_inc
+    # declarations registered above for SKIRTOR_mean_3p (all three grids agree
+    # on both extents).
     "skirtor_mean1p_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean1p_torus_grid.h5",
         "skirtor_mean1p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     "skirtor_mean2p_oa": (
         "agn_oa_skirtor",
@@ -1173,10 +1170,10 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "identity",
     ),
     "skirtor_mean2p_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean2p_torus_grid.h5",
         "skirtor_mean2p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     # CAT3D-Wind low-fwd (rows 0-209): its own a/fwd declarations (disjoint
     # from the high-fwd rows-210+ grid's agn_a_cat3d/agn_fwd_cat3d), plus the

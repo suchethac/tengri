@@ -71,6 +71,7 @@ __all__ = [
 ]
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC
+from tengri.components.agn._skirtor_agnfitter_sightline import accepts_retired_incl_skirtor
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
@@ -491,13 +492,14 @@ def silva04_torus_block(
     short_doc="Stalevski et al. 2016 SKIRTOR_mean_3p AGNfitter-rX torus",
     template_loader=load_skirtor_agnfitter_default_grid,
 )
+@accepts_retired_incl_skirtor
 def skirtor_agnfitter_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
     agn_oa_skirtor: float = 40.0,
-    agn_incl_skirtor: float = 30.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_tv_skirtor: float = 7.0,
     agn_torus_frac: float = 0.5,
     templates=None,
@@ -511,6 +513,12 @@ def skirtor_agnfitter_torus_block(
     the averaged library peaks at ~25 um (vs ~40 um) and is reproduced
     node-exactly via monotone-cubic interpolation.
 
+    The sightline is the model's one inclination, ``agn_cos_inc``: the library's
+    inclination from the polar axis is :math:`i = \arccos(\cos i)` [deg]
+    (``_skirtor_agnfitter_sightline.skirtor_incl_from_cos_inc``),
+    so the torus SED, the disc screen and the X-ray corona see one sightline. The
+    retired ``agn_incl_skirtor`` [deg] is translated with a ``DeprecationWarning``.
+
     References
     ----------
     .. [1] Stalevski, M. et al. 2016, MNRAS, 458, 2288.
@@ -522,7 +530,7 @@ def skirtor_agnfitter_torus_block(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_oa_skirtor=agn_oa_skirtor,
-        agn_incl_skirtor=agn_incl_skirtor,
+        agn_cos_inc=agn_cos_inc,
         agn_tv_skirtor=agn_tv_skirtor,
         agn_torus_frac=agn_torus_frac,
         _template=templates,
@@ -538,12 +546,13 @@ def skirtor_agnfitter_torus_block(
     short_doc="Stalevski et al. 2016 SKIRTOR_mean_1p AGNfitter-rX torus",
     template_loader=load_skirtor_agnfitter_1p_default_grid,
 )
+@accepts_retired_incl_skirtor
 def skirtor_agnfitter_1p_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_incl_skirtor: float = 30.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     templates=None,
     **_params,
@@ -555,6 +564,12 @@ def skirtor_agnfitter_1p_torus_block(
     :func:`skirtor_agnfitter_2p_torus_block` and
     :func:`skirtor_agnfitter_torus_block`).
 
+    The sightline is the model's one inclination, ``agn_cos_inc``: the library's
+    inclination from the polar axis is :math:`i = \arccos(\cos i)` [deg]
+    (``_skirtor_agnfitter_sightline.skirtor_incl_from_cos_inc``),
+    so the torus SED, the disc screen and the X-ray corona see one sightline. The
+    retired ``agn_incl_skirtor`` [deg] is translated with a ``DeprecationWarning``.
+
     References
     ----------
     .. [1] Stalevski, M. et al. 2016, MNRAS, 458, 2288.
@@ -565,7 +580,7 @@ def skirtor_agnfitter_1p_torus_block(
     L_nu = skirtor_agnfitter_1p_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
-        agn_incl_skirtor=agn_incl_skirtor,
+        agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
         _template=templates,
     )
@@ -580,13 +595,14 @@ def skirtor_agnfitter_1p_torus_block(
     short_doc="Stalevski et al. 2016 SKIRTOR_mean_2p AGNfitter-rX torus",
     template_loader=load_skirtor_agnfitter_2p_default_grid,
 )
+@accepts_retired_incl_skirtor
 def skirtor_agnfitter_2p_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
     agn_oa_skirtor: float = 40.0,
-    agn_incl_skirtor: float = 30.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     templates=None,
     **_params,
@@ -597,6 +613,12 @@ def skirtor_agnfitter_2p_torus_block(
     between :func:`skirtor_agnfitter_1p_torus_block` (inclination-only)
     and :func:`skirtor_agnfitter_torus_block` (the AGNfitter-faithful
     three-parameter default, which adds equatorial optical depth).
+
+    The sightline is the model's one inclination, ``agn_cos_inc``: the library's
+    inclination from the polar axis is :math:`i = \arccos(\cos i)` [deg]
+    (``_skirtor_agnfitter_sightline.skirtor_incl_from_cos_inc``),
+    so the torus SED, the disc screen and the X-ray corona see one sightline. The
+    retired ``agn_incl_skirtor`` [deg] is translated with a ``DeprecationWarning``.
 
     References
     ----------
@@ -609,7 +631,7 @@ def skirtor_agnfitter_2p_torus_block(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_oa_skirtor=agn_oa_skirtor,
-        agn_incl_skirtor=agn_incl_skirtor,
+        agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
         _template=templates,
     )

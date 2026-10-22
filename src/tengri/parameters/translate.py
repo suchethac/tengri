@@ -620,6 +620,19 @@ def _unknown_param_keys(params, param_map):
     )
 
 
+#: Retired parameter names -> what to write instead. A retired name is unknown to every
+#: live model, so it reaches :func:`_unknown_param_msg`, where a did-you-mean guess would
+#: name an unrelated parameter.
+_RETIRED_PARAM_HINTS: dict[str, str] = {
+    "agn_incl_skirtor": (
+        "retired (#3085): the AGN has one inclination, 'agn_cos_inc' "
+        "= cos(radians(agn_incl_skirtor)), which the SKIRTOR-AGNfitter tori, the disc "
+        "screen and the X-ray corona all read. Build the model with agn={..., 'cos_inc': "
+        "...} and pass 'agn_cos_inc' if it is free."
+    ),
+}
+
+
 def _unknown_param_msg(unrecognized, param_map):
     """Build the ``UnknownParameterError`` message with did-you-mean hints."""
     import difflib
@@ -628,7 +641,9 @@ def _unknown_param_msg(unrecognized, param_map):
     hints = []
     for bad in unrecognized:
         close = difflib.get_close_matches(bad, public, n=3, cutoff=0.6)
-        if close:
+        if bad in _RETIRED_PARAM_HINTS:
+            hints.append(f"  {bad!r} → {_RETIRED_PARAM_HINTS[bad]}")
+        elif close:
             hints.append(f"  {bad!r} → did you mean {close}?")
         else:
             hints.append(f"  {bad!r} → no close match (this param is not in the live model)")

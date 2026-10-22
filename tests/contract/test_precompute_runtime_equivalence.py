@@ -55,6 +55,7 @@ References
 from __future__ import annotations
 
 import importlib
+import itertools
 
 import chex
 import jax
@@ -812,7 +813,9 @@ from tengri.observation.photometry import lnu_filter_integral
 
 def _grid_torus_specs() -> list[dict]:
     """One entry per grid-torus adapter: (name, modules, loader/sed_fn names,
-    grid path, axis kwarg names in ``grid.axes`` order)."""
+    grid path, axis kwarg names in ``grid.axes`` order, and ``deg_axes``: the axes
+    the runtime grid stores as an inclination in degrees while the kwarg is its
+    cosine, ``agn_cos_inc``)."""
     return [
         dict(
             name="nenkova_agnfitter_2p",
@@ -839,7 +842,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_1p_grid",
             sed_fn="skirtor_agnfitter_1p_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean1p_torus_grid.h5",
-            axis_kwargs=("agn_incl_skirtor",),
+            axis_kwargs=("agn_cos_inc",),
+            deg_axes=(0,),
         ),
         dict(
             name="skirtor_agnfitter_2p",
@@ -848,7 +852,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_2p_grid",
             sed_fn="skirtor_agnfitter_2p_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean2p_torus_grid.h5",
-            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor"),
+            axis_kwargs=("agn_oa_skirtor", "agn_cos_inc"),
+            deg_axes=(1,),
         ),
         dict(
             name="cat3d_wind_lowfwd",
@@ -875,7 +880,8 @@ def _grid_torus_specs() -> list[dict]:
             loader="load_skirtor_agnfitter_grid",
             sed_fn="skirtor_agnfitter_sed_from_grid",
             grid_path=_REPO_DATA / "skirtor_mean3p_torus_grid.h5",
-            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor", "agn_tv_skirtor"),
+            axis_kwargs=("agn_oa_skirtor", "agn_cos_inc", "agn_tv_skirtor"),
+            deg_axes=(1,),
         ),
     ]
 
@@ -900,6 +906,14 @@ def _node_and_offnode(grid):
         else:
             offnode_vals.append(float(ax[j]))
     return node_vals, tuple(offnode_vals)
+
+
+def _kwarg_values(spec, values):
+    """Runtime-grid axis values as the kwargs take them: ``cos`` of a degree inclination."""
+    deg_axes = spec.get("deg_axes", ())
+    return tuple(
+        float(np.cos(np.radians(v))) if i in deg_axes else v for i, v in enumerate(values)
+    )
 
 
 def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans):
@@ -976,7 +990,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
         loader = getattr(runtime_mod, spec["loader"])
         sed_fn = getattr(runtime_mod, spec["sed_fn"])
         grid = loader(str(spec["grid_path"]))
-        node_vals, _ = _node_and_offnode(grid)
+        node_vals = _kwarg_values(spec, _node_and_offnode(grid)[0])
         waves, trans = grid_torus_filters
 
         exact = _exact_grid_torus_photometry(
@@ -996,7 +1010,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
         loader = getattr(runtime_mod, spec["loader"])
         sed_fn = getattr(runtime_mod, spec["sed_fn"])
         grid = loader(str(spec["grid_path"]))
-        _, offnode_vals = _node_and_offnode(grid)
+        offnode_vals = _kwarg_values(spec, _node_and_offnode(grid)[1])
         waves, trans = grid_torus_filters
 
         exact = _exact_grid_torus_photometry(
@@ -1036,3 +1050,168 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
                 waves,
                 trans,
             )
+
+
+# ---------------------------------------------------------------------------
+# SKIRTOR-AGNfitter adapters: the inclination is interpolated where the runtime
+# interpolates it (#3085)
+# ---------------------------------------------------------------------------
+#
+# The runtime kernels read the library's inclination axis in degrees from the polar
+# axis, at i = arccos(agn_cos_inc). The precompute adapters must interpolate the same
+# variable: a table re-keyed by cos i is node-exact too, but between nodes it is a
+# different interpolant (measured: up to 2.6e-3 off the degree read for SKIRTOR_mean_1p,
+# 1.3e-2 for SKIRTOR_mean_3p). The single off-node point above cannot see that, so the
+# inclination is swept densely here, three points per interval over all nine intervals,
+# with the other axes at their nodes.
+#
+# Two checks per adapter:
+#
+# * the lookup at agn_cos_inc = cos(i) is the 1-D PCHIP in degrees of the
+#   preintegrated node photometry (SciPy's Fritsch-Carlson PCHIP, an independent
+#   implementation), to 1e-9 on the interior intervals;
+# * the precompute-vs-runtime gap obeys the 5e-2 contract above. Measured maxima over
+#   this sweep (other axes at their middle node, oa = 50 deg, tv = 7), identical to
+#   origin/main: SKIRTOR_mean_1p 1.67e-3 (i = 87.5), SKIRTOR_mean_2p 4.81e-2 (i = 45),
+#   SKIRTOR_mean_3p 3.77e-2 (i = 45). The 2p and 3p values are near-misses of the
+#   contract, and at other opening angles origin/main already exceeds it (2p 1.15e-1 at
+#   oa = 40, i = 75; 3p 1.21e-1 at oa = 40, i = 55, tv = 9): across the type-1/type-2
+#   step at i = 90 - oa, interpolate-then-integrate and integrate-then-interpolate part.
+#   That pre-existing gap is not this test's to close, and the contract is not loosened.
+
+_SKIRTOR_DENSE = {
+    "skirtor_agnfitter_1p": 0,
+    "skirtor_agnfitter_2p": 1,
+    "skirtor_agnfitter": 1,
+}
+_SKIRTOR_DENSE_SPECS = [s for s in _GRID_TORUS_SPECS if s["name"] in _SKIRTOR_DENSE]
+_SKIRTOR_DENSE_IDS = [s["name"] for s in _SKIRTOR_DENSE_SPECS]
+
+
+def _dense_incl_points(spec):
+    """(kwarg values, inclination [deg]) for 3 points per interval, others at nodes."""
+    runtime_mod = importlib.import_module(spec["runtime_mod"])
+    grid = getattr(runtime_mod, spec["loader"])(str(spec["grid_path"]))
+    incl_axis = _SKIRTOR_DENSE[spec["name"]]
+    nodes = np.asarray(grid.axes[incl_axis], dtype=float)
+    incls = [a + (b - a) * f for a, b in itertools.pairwise(nodes) for f in (0.25, 0.5, 0.75)]
+    others = [float(np.asarray(ax)[len(ax) // 2]) for ax in grid.axes]
+    points = []
+    for incl in incls:
+        values = list(others)
+        values[incl_axis] = float(np.cos(np.radians(incl)))
+        points.append((tuple(values), incl))
+    return runtime_mod, grid, points
+
+
+@pytest.mark.parametrize("spec", _SKIRTOR_DENSE_SPECS, ids=_SKIRTOR_DENSE_IDS)
+def test_skirtor_agnfitter_precompute_interpolates_inclination_in_degrees(
+    spec, grid_torus_filters
+):
+    """The lookup at cos(i) is the degree-axis PCHIP of the node photometry (1e-9)."""
+    from scipy.interpolate import PchipInterpolator
+
+    if not spec["grid_path"].exists():
+        pytest.skip(f"{spec['name']}: grid not found at {spec['grid_path']}")
+    precompute_mod = importlib.import_module(spec["precompute_mod"])
+    waves, trans = grid_torus_filters
+    preint = precompute_mod.precompute(
+        list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+    )
+    lookup = precompute_mod.build_lookup(preint)
+    axes = [np.asarray(a, dtype=float) for a in preint["axes"]]
+    incl_axis = _SKIRTOR_DENSE[spec["name"]]
+    np.testing.assert_array_equal(axes[incl_axis], np.arange(0.0, 91.0, 10.0))
+
+    _, _, points = _dense_incl_points(spec)
+    phot = np.asarray(preint["grid_phot"], dtype=float)
+    # The other axes sit at their middle node: index the table there.
+    index = [len(a) // 2 for a in axes]
+    index[incl_axis] = slice(None)
+    profile = phot[tuple(index)]  # (n_incl, n_filters)
+    reference = PchipInterpolator(axes[incl_axis], profile, axis=0)
+    for values, incl in points:
+        if not axes[incl_axis][1] <= incl <= axes[incl_axis][-2]:
+            continue  # end intervals: end-slope conventions differ between PCHIPs
+        kwargs = dict(zip(spec["axis_kwargs"], values, strict=True))
+        got = np.asarray(lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
+        np.testing.assert_allclose(got, reference(incl), rtol=1e-9, err_msg=f"i = {incl}")
+
+
+@pytest.mark.parametrize("spec", _SKIRTOR_DENSE_SPECS, ids=_SKIRTOR_DENSE_IDS)
+def test_skirtor_agnfitter_dense_offnode_inclination_matches_exact(spec, grid_torus_filters):
+    """Dense inclination sweep, precompute against the runtime kernel: the 5e-2 contract."""
+    if not spec["grid_path"].exists():
+        pytest.skip(f"{spec['name']}: grid not found at {spec['grid_path']}")
+    runtime_mod, grid, points = _dense_incl_points(spec)
+    precompute_mod = importlib.import_module(spec["precompute_mod"])
+    sed_fn = getattr(runtime_mod, spec["sed_fn"])
+    waves, trans = grid_torus_filters
+    for values, incl in points:
+        exact = _exact_grid_torus_photometry(
+            sed_fn, grid, spec["axis_kwargs"], values, waves, trans
+        )
+        precomp = _precompute_grid_torus_photometry(
+            precompute_mod, spec["grid_path"], spec["axis_kwargs"], values, waves, trans
+        )
+        _assert_equivalent(precomp, exact, f"{spec['name']} i = {incl:.1f} deg", rtol=5e-2)
+
+
+class _FixedInclination:
+    """The slice of ``Parameters`` that ``collapse_fixed_axes`` reads: a Fixed inclination."""
+
+    free_params = ()
+
+    def __init__(self, cos_inc):
+        self._cos_inc = cos_inc
+
+    def get_fixed_values(self):
+        return {"agn_cos_inc": self._cos_inc}
+
+
+@pytest.mark.parametrize("spec", _SKIRTOR_DENSE_SPECS, ids=_SKIRTOR_DENSE_IDS)
+def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
+    spec, grid_torus_filters
+):
+    """A Fixed ``agn_cos_inc`` collapses the degree axis at ``arccos`` of it (1e-12).
+
+    Read as degrees, cos(55 deg) = 0.574 would collapse the table next to face-on.
+    """
+    if not spec["grid_path"].exists():
+        pytest.skip(f"{spec['name']}: grid not found at {spec['grid_path']}")
+    precompute_mod = importlib.import_module(spec["precompute_mod"])
+    waves, trans = grid_torus_filters
+    cos_inc = float(np.cos(np.radians(55.0)))
+    full = precompute_mod.build_lookup(
+        precompute_mod.precompute(
+            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+        )
+    )
+    collapsed_preint = precompute_mod.precompute(
+        list(waves),
+        list(trans),
+        0.0,
+        _FixedInclination(cos_inc),
+        grid_path=str(spec["grid_path"]),
+    )
+    incl_axis = _SKIRTOR_DENSE[spec["name"]]
+    assert collapsed_preint["_collapsed_axes"] == {incl_axis: pytest.approx(55.0, abs=1e-9)}
+    collapsed = precompute_mod.build_lookup(collapsed_preint)
+    others = {k: v for k, v in (("agn_oa_skirtor", 45.0), ("agn_tv_skirtor", 6.0))}
+    free = [others[k] for k in spec["axis_kwargs"] if k != "agn_cos_inc"]
+    got = np.asarray(collapsed(0.0, *free, agn_torus_frac=1.0))
+
+    def _full_at(cos_value):
+        kwargs = {k: (cos_value if k == "agn_cos_inc" else others[k]) for k in spec["axis_kwargs"]}
+        return np.asarray(full(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
+
+    # The collapse contracts the axis with the shared triweight slice, not the lookup's
+    # PCHIP (a pre-existing, registered mismatch: test_precompute_axis_collapse.py), so
+    # the collapsed table is compared for where it sits, not to round-off: it is the
+    # 55 deg table, not the one at i = cos(55 deg) = 0.574 deg read as degrees.
+    def _gap(want):
+        return float(np.max(np.abs(got / want - 1.0)))
+
+    right = _gap(_full_at(cos_inc))
+    wrong = _gap(_full_at(float(np.cos(np.radians(cos_inc)))))
+    assert right < 0.05 and right < 0.2 * wrong, (right, wrong)

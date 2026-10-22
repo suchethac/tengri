@@ -42,33 +42,38 @@ pytestmark = pytest.mark.regression_bug
 #: 10 A - 1e8 A axis, so no comparison is made across a truncation.
 _WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 3000))
 
+#: ``cos 30 deg``: the fiducial sightline. The blocks read the AGN's one inclination,
+#: ``agn_cos_inc``, and key the library's degree axis at ``arccos`` of it (#3085).
+_COS30 = float(np.cos(np.radians(30.0)))
+
 #: Every ``skirtor_agnfitter*`` torus spelling -> (HDF5 group, axis dataset
-#: names in template-axis order, block kwargs at its fiducial). The kwargs are
-#: spelled out rather than left to the registry defaults so a default change
-#: cannot silently move the pin.
+#: names in template-axis order, block kwargs at its fiducial, the fiducial's
+#: library coordinates in template-axis order). The kwargs are spelled out
+#: rather than left to the registry defaults so a default change cannot
+#: silently move the pin.
 _AGNFITTER_BLOCKS = {
     "skirtor_agnfitter": (
         "skirtor_mean3p",
         ("oa_axis", "incl_axis", "tv_axis"),
         dict(
             agn_oa_skirtor=40.0,
-            agn_incl_skirtor=30.0,
+            agn_cos_inc=_COS30,
             agn_tv_skirtor=7.0,
             agn_torus_frac=0.5,
         ),
-        ("agn_oa_skirtor", "agn_incl_skirtor", "agn_tv_skirtor"),
+        (40.0, 30.0, 7.0),
     ),
     "skirtor_agnfitter_1p": (
         "skirtor_mean1p",
         ("incl_axis",),
-        dict(agn_incl_skirtor=30.0, agn_torus_frac=0.5),
-        ("agn_incl_skirtor",),
+        dict(agn_cos_inc=_COS30, agn_torus_frac=0.5),
+        (30.0,),
     ),
     "skirtor_agnfitter_2p": (
         "skirtor_mean2p",
         ("oa_axis", "incl_axis"),
-        dict(agn_oa_skirtor=40.0, agn_incl_skirtor=30.0, agn_torus_frac=0.5),
-        ("agn_oa_skirtor", "agn_incl_skirtor"),
+        dict(agn_oa_skirtor=40.0, agn_cos_inc=_COS30, agn_torus_frac=0.5),
+        (40.0, 30.0),
     ),
 }
 
@@ -104,7 +109,7 @@ def test_agnfitter_reduction_equals_its_own_file(block):
     from tengri.components.agn.blocks import resolve_agn_block
     from tengri.utils.physics_constants import C_AA
 
-    group, axis_names, kwargs, coord_keys = _AGNFITTER_BLOCKS[block]
+    group, axis_names, kwargs, coords = _AGNFITTER_BLOCKS[block]
     path = _agnfitter_path_or_skip(block)
 
     with h5py.File(path, "r") as f:
@@ -125,7 +130,6 @@ def test_agnfitter_reduction_equals_its_own_file(block):
     # reference gets the same conversion and nothing else. ``SKIRTOR_mean_1p``
     # keeps SKIRTOR's anisotropy as a scalar factor on the per-sightline shape (#2851);
     # the 2p and 3p reductions are normalized per sightline.
-    coords = tuple(kwargs[k] for k in coord_keys)
     level = {"agn_log_lbol": 12.0, "agn_torus_frac": kwargs["agn_torus_frac"]}
     if block == "skirtor_agnfitter_1p":
         from tengri.components.agn._torus_inclination import torus_lnu_anisotropic

@@ -93,7 +93,7 @@ def test_node_exact_matches_independent_reference(grid, reference, component, i_
         component(
             wavelength=jnp.asarray(ref_wave),
             agn_log_lbol=0.0,
-            agn_incl_skirtor=incl_deg,
+            agn_cos_inc=float(np.cos(np.radians(incl_deg))),
             agn_torus_frac=1.0,
         )
     )
@@ -110,13 +110,13 @@ def test_node_exact_matches_independent_reference(grid, reference, component, i_
 
 
 def test_parameter_liveness(grid, component):
-    """agn_incl_skirtor changes the SED by more than 1% across the grid extent."""
+    """agn_cos_inc changes the SED by more than 1% across the grid extent."""
     wave = grid["wavelength"]
     a = np.asarray(
         component(
             wavelength=jnp.asarray(wave),
             agn_log_lbol=0.0,
-            agn_incl_skirtor=float(grid["incl"].min()),
+            agn_cos_inc=float(np.cos(np.radians(float(grid["incl"].min())))),
             agn_torus_frac=1.0,
         )
     )
@@ -124,7 +124,7 @@ def test_parameter_liveness(grid, component):
         component(
             wavelength=jnp.asarray(wave),
             agn_log_lbol=0.0,
-            agn_incl_skirtor=float(grid["incl"].max()),
+            agn_cos_inc=float(np.cos(np.radians(float(grid["incl"].max())))),
             agn_torus_frac=1.0,
         )
     )
@@ -138,10 +138,17 @@ def test_extents_match_h5(grid):
     from tengri.components.agn._params import PARAMS
 
     by_name = {pd.name: pd.prior for pd in PARAMS}
-    incl = by_name["agn_incl_skirtor"]
-    assert (float(incl.lo), float(incl.hi)) == (
-        float(grid["incl"].min()),
-        float(grid["incl"].max()),
+    # The sightline is the AGN's one agn_cos_inc; the library is keyed at
+    # i = arccos(agn_cos_inc), so cos of the 0-90 deg axis spans the declared [0, 1].
+    cos_inc = by_name["agn_cos_inc"]
+    np.testing.assert_allclose(
+        (float(cos_inc.lo), float(cos_inc.hi)),
+        (
+            np.cos(np.radians(float(grid["incl"].max()))),
+            np.cos(np.radians(float(grid["incl"].min()))),
+        ),
+        rtol=0.0,
+        atol=1e-12,
     )
 
 
@@ -176,6 +183,7 @@ def test_composable_wiring_differs_from_sibling_and_gradients_live(synthetic_ssp
                 "type": "composable",
                 "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
                 "torus": {"type": torus_type, "all_params": all_params},
+                "agn_cos_inc": all_params,
                 "all_params": Fixed(DEFAULT),
                 "agn_log_lbol": Fixed(12.0),
                 "norm": "independent",
@@ -193,14 +201,14 @@ def test_composable_wiring_differs_from_sibling_and_gradients_live(synthetic_ssp
 
     m_free = _build("skirtor_agnfitter_1p", FREE)
     free_agn = {p for p in m_free.spec.free_params if p.startswith("agn_")}
-    assert {"agn_incl_skirtor", "agn_torus_frac"} <= free_agn
+    assert {"agn_cos_inc", "agn_torus_frac"} <= free_agn
 
     p0 = dict(m_free.spec.sample(jax.random.PRNGKey(0)))
 
     def obj(pd):
         return jnp.log(jnp.sum(m_free.predict_photometry(pd)) + 1e-300)
 
-    for name in ("agn_incl_skirtor", "agn_torus_frac"):
+    for name in ("agn_cos_inc", "agn_torus_frac"):
         v0 = jnp.asarray(p0[name])
         g = float(jax.grad(lambda v, name=name: obj({**p0, name: v}))(v0))
         assert jnp.isfinite(g), (
