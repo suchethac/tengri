@@ -27,12 +27,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.silva04 import _load_silva04_arrays
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
+from tengri.components.agn._template_power_table import (
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
 )
+from tengri.components.agn.silva04 import _load_silva04_arrays
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -53,9 +53,8 @@ def precompute_silva04_photometry(
     For each log10(N_H) grid point, compute the filter-integrated photometry.
     Returns a dict with ``grid_phot`` and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``silva04.py``) so that ``build_silva04_photometry_lookup`` returns
-    L_ν [erg/s/Hz] per L_sun of bolometric luminosity.
+    The lookup reads the table as L_ν [erg/s/Hz] per L_sun of torus power,
+    normalized as the runtime ``silva04.py`` does.
 
     Parameters
     ----------
@@ -73,8 +72,9 @@ def precompute_silva04_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_nh, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``grid_phot`` : ndarray, shape (n_nh, n_filters + 1)
+            Power-weighted table: raw band L_ν [erg/s/Hz per unit template power]
+            and, last, the raw bolometric power; see Notes.
         ``axes`` : tuple of 1 grid array (jnp.ndarray)
             Grid axis (log10(N_H)).
         ``_preint`` : PreintegratedGrid
@@ -94,42 +94,28 @@ def precompute_silva04_photometry(
     integration via NumPy. The precomputed photometry is grid-independent
     (depends only on filter curves and redshift, not wavelength grid).
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
-    the runtime normalization in ``silva04.py``.
+    **Normalization**: the runtime kernel normalizes the *interpolated* template by
+    its own bolometric integral, so off-node it weights each node by its raw power.
+    The table therefore holds the raw band photometry and, as a last channel, the raw
+    power (``power_weighted_template_photometry`` in ``_template_power_table``); the
+    lookup interpolates both and divides. At a node this is the node-normalized
+    photometry exactly.
     """
-    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
     raw = _load_silva04_arrays(grid_path)
     grid = np.asarray(raw["template"], dtype=np.float64)  # (n_nh, n_wave)
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     log_nh_axis = np.asarray(raw["log_nh_axis"], dtype=np.float64)
 
-    # Normalize each template by its frequency integral.
-    # This matches silva04.py's normalization:
-    #   L_ν = L_bol * torus_frac * template / native_integral(template)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
-    # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
-
-    n_nh, _ = grid.shape
-    lnu_grid = np.empty_like(grid)
-
-    for i in range(n_nh):
-        template = grid[i]
-        integral = native_bolometric_nu_np(template, wave_grid)
-        integral_safe = max(abs(integral), 1e-100)
-        lnu_grid[i] = _LSUN_ERG * template / integral_safe
-
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
+    # The runtime normalizes the interpolated template, so its off-node value is
+    # weighted by each node's raw power: tabulate the raw band photometry and the
+    # raw power and divide after interpolating (_template_power_table).
+    preint = power_weighted_template_photometry(
+        grid,
+        wave_grid,
+        filter_waves,
+        filter_trans,
+        redshift,
         axes=(log_nh_axis,),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
     )
 
     axes_jax = (jnp.asarray(log_nh_axis),)
@@ -195,11 +181,11 @@ def build_silva04_photometry_lookup(precomp: dict):
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
-        # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
+        # grid_phot is power-weighted: the ratio below is L_ν [erg/s/Hz] per L_sun
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         point = (agn_log_nh_silva,)
-        phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
+        phot_per_lsun = lnu_per_lsun_from_power_table(interp_nd_pchip(grid_phot, axes, point))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return silva04_phot
@@ -321,7 +307,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """
         # Same unit convention as build_silva04_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        phot_per_lsun = lnu_per_lsun_from_power_table(
+            interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        )
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return silva04_phot_collapsed
