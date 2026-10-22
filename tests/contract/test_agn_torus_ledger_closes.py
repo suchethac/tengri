@@ -184,11 +184,15 @@ def _kernel_case(name):
     if name == "skirtor_agnfitter_1p":
 
         def sed(g, wave, mu, **kw):
-            incl = jnp.degrees(jnp.arccos(jnp.clip(mu, 0.0, 1.0)))
-            return mod.skirtor_agnfitter_1p_sed_from_grid(g, wave, agn_incl_skirtor=incl, **kw)
+            return mod.skirtor_agnfitter_1p_sed_from_grid(g, wave, agn_cos_inc=mu, **kw)
+
+        from tengri.components.agn._skirtor_agnfitter_sightline import (
+            skirtor_incl_from_cos_inc,
+        )
 
         def coords(mu):
-            return (jnp.degrees(jnp.arccos(jnp.clip(mu, 0.0, 1.0))),)
+            # The kernel's own key, i = arccos(mu), as for Fritz's psi above (#3085).
+            return (skirtor_incl_from_cos_inc(mu),)
 
         return _aniso(grid, mod), sed, coords, mod.TORUS_INCLINATION, grid
     extra = {
@@ -296,7 +300,7 @@ _PUBLIC_SEDS = {
     "skirtor_agnfitter_1p": (
         "skirtor_agnfitter_1p",
         "skirtor_agnfitter_1p_sed",
-        lambda m: {"agn_incl_skirtor": float(np.degrees(np.arccos(m)))},
+        lambda m: {"agn_cos_inc": float(m)},
     ),
 }
 

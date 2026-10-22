@@ -81,7 +81,8 @@ def _sed(ssp, torus: dict) -> np.ndarray:
         # while the grid never did.
         ("silva04", "log_nh_silva", 21.5, 24.45),
         ("skirtor_agnfitter", "oa_skirtor", 20.0, 70.0),
-        ("skirtor_agnfitter", "incl_skirtor", 10.0, 80.0),
+        # The inclination is the AGN's one agn_cos_inc, written at the agn level:
+        # test_skirtor_agnfitter_inclination_is_not_a_noop below.
         ("skirtor_agnfitter", "tv_skirtor", 3.0, 11.0),
     ],
 )
@@ -93,6 +94,36 @@ def test_torus_param_is_not_a_noop(ssp, torus_type, key, v1, v2):
     assert rel > 1e-3, (
         f"{torus_type}.{key} is a no-op via the builder (rel diff {rel:.2e}); "
         "the 5-layer wiring (params/groups/forward) is incomplete."
+    )
+
+
+def _torus_component(ssp, torus_type: str, cos_inc: float) -> np.ndarray:
+    """The torus component of ``model.predict`` with the AGN's one inclination at ``cos_inc``."""
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh=_SFH,
+        dust_attenuation=_DUST,
+        agn=dict(
+            _DISC,
+            torus={"type": torus_type, "all_params": tengri.Fixed(tengri.DEFAULT)},
+            cos_inc=tengri.Fixed(cos_inc),
+        ),
+        redshift=tengri.Fixed(0.05),
+    )
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    return np.asarray(model.predict(p).sed.components["sed_agn_torus"])
+
+
+@pytest.mark.parametrize(
+    "torus_type", ["skirtor_agnfitter", "skirtor_agnfitter_1p", "skirtor_agnfitter_2p"]
+)
+def test_skirtor_agnfitter_inclination_is_not_a_noop(ssp, torus_type):
+    """``agn_cos_inc`` at the agn level moves the SKIRTOR-AGNfitter torus in predict() (#3085)."""
+    face_on = _torus_component(ssp, torus_type, float(np.cos(np.radians(10.0))))
+    edge_on = _torus_component(ssp, torus_type, float(np.cos(np.radians(80.0))))
+    rel = float(np.abs(face_on - edge_on).max() / max(np.abs(face_on).max(), 1e-99))
+    assert rel > 1e-3, (
+        f"{torus_type}: agn_cos_inc does not reach the torus via the builder (rel diff {rel:.2e})"
     )
 
 
@@ -141,7 +172,7 @@ def test_skirtor_agnfitter_runtime_normalized():
             wave,
             agn_log_lbol=12.0,
             agn_oa_skirtor=40.0,
-            agn_incl_skirtor=30.0,
+            agn_cos_inc=float(np.cos(np.radians(30.0))),
             agn_tv_skirtor=7.0,
             agn_torus_frac=1.0,
         )

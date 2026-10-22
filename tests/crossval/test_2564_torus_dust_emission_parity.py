@@ -86,10 +86,10 @@ _TORUS_CASES = [
     ),
     (
         "skirtor_agnfitter",
-        {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0, "agn_tv_skirtor": 7.0},
+        {"agn_oa_skirtor": 40.0, "agn_cos_inc": _COS30, "agn_tv_skirtor": 7.0},
     ),
-    ("skirtor_agnfitter_1p", {"agn_incl_skirtor": 30.0}),
-    ("skirtor_agnfitter_2p", {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0}),
+    ("skirtor_agnfitter_1p", {"agn_cos_inc": _COS30}),
+    ("skirtor_agnfitter_2p", {"agn_oa_skirtor": 40.0, "agn_cos_inc": _COS30}),
     ("cat3d_wind_lowfwd", {"agn_cos_inc": _COS30}),
 ]
 _DUST_CASES = [
