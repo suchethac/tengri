@@ -34,6 +34,7 @@ these variables, so :func:`nt_h` evaluates it by a fixed 128-node Gauss-Legendre
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -173,6 +174,16 @@ def nt_rt(x, a_spin):
     return jnp.where(r_t > 0.0, r_t, 0.0)
 
 
+@jax.jit
+def _gl_tables():
+    """The 128-node rule's nodes and weights on ``[-1, 1]``, one called computation per dtype.
+
+    The ``kubota_done`` graph is traced several times on the tied path; a jitted accessor puts
+    the tables into one shared sub-jaxpr instead of a literal per ``nt_h`` call (#3044).
+    """
+    return device_table(_GL_T), device_table(_GL_W)
+
+
 def nt_h(log_x, a_spin):
     r"""Normalized hot-flow dissipation ``h(x) = int_1^x x'^-2 Rt(x') dx'``.
 
@@ -214,9 +225,10 @@ def nt_h(log_x, a_spin):
     .. [2] D. N. Page and K. S. Thorne, ApJ, 191, 499 (1974).
        https://doi.org/10.1086/152990
     """
-    u = 0.5 * log_x * (device_table(_GL_T) + 1.0)
+    gl_t, gl_w = _gl_tables()
+    u = 0.5 * log_x * (gl_t + 1.0)
     g = nt_rt(jnp.exp(u), a_spin) * jnp.exp(-u)
-    return 0.5 * log_x * jnp.sum(device_table(_GL_W) * g)
+    return 0.5 * log_x * jnp.sum(gl_w * g)
 
 
 def nt_dh_dlogx(log_x, a_spin):
