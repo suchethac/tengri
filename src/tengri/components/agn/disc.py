@@ -1157,6 +1157,23 @@ _RING_GL_ORDER = 64
 _RING_GL_T, _RING_GL_W = np.polynomial.legendre.leggauss(_RING_GL_ORDER)
 
 
+@jax.jit
+def _ring_gl_tables():
+    """The ring rule's nodes and weights on ``[-1, 1]``, one called computation per dtype.
+
+    Every ``kubota_done`` trace on the tied path calls this jitted function, so the tables enter
+    the outer graph once, inside one shared sub-jaxpr, rather than as literals at each of the
+    inlined copies (#3044). The jit cache keys on the x64 state, so the dtype follows the trace.
+    """
+    return device_table(_RING_GL_T), device_table(_RING_GL_W)
+
+
+@jax.jit
+def _warm_norm_grid():
+    """The warm-zone normalization grid [Hz], one called computation per dtype (#3044)."""
+    return device_table(_nthcomp_norm_grid())
+
+
 def _log_r_gauss_legendre(log_lo, log_hi):
     """Gauss-Legendre nodes ``log10 r`` on ``[log_lo, log_hi]`` and their ``d(log10 r)`` weights.
 
@@ -1165,8 +1182,9 @@ def _log_r_gauss_legendre(log_lo, log_hi):
     """
     half = 0.5 * (log_hi - log_lo)
     mid = 0.5 * (log_hi + log_lo)
-    nodes = mid + half * device_table(_RING_GL_T)
-    weights = half * device_table(_RING_GL_W)
+    gl_t, gl_w = _ring_gl_tables()
+    nodes = mid + half * gl_t
+    weights = half * gl_w
     return nodes, weights
 
 
@@ -1842,7 +1860,7 @@ def _compute_zone_luminosities(
     dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
 
-    nu_norm = device_table(_nthcomp_norm_grid())
+    nu_norm = _warm_norm_grid()
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Comptonized L_nu of one warm-zone annulus, in units of the largest ring area."""
