@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Power-weighted photometry tables for the SKIRTOR-AGNfitter ``mean_2p``/``mean_3p`` tori.
 
-The runtime kernel (:func:`tengri.components.agn._template_grid.torus_lnu_from_grid`)
+The runtime kernel (``_template_grid.torus_lnu_from_grid``)
 interpolates the *raw* library templates and then normalizes the interpolated template
 by its own bolometric integral,
 
@@ -86,7 +86,7 @@ def power_weighted_template_photometry(
         channels are :math:`L_\odot\,\Phi_b^{\rm raw}/P_{\rm ref}` [erg/s/Hz per unit
         template power], the last :math:`P^{\rm raw}/P_{\rm ref}` [dimensionless], with
         :math:`P_{\rm ref}` the median node power so both stay of order the
-        node-normalized values. Read it with :func:`lnu_per_lsun_from_power_table`.
+        node-normalized values. Read it with ``lnu_per_lsun_from_power_table``.
     """
     templates = np.asarray(templates, dtype=np.float64)
     wave_rest = np.asarray(wave_rest, dtype=np.float64)
@@ -115,7 +115,7 @@ def lnu_per_lsun_from_power_table(values: jnp.ndarray) -> jnp.ndarray:
     Parameters
     ----------
     values : array_like, shape (n_filters + 1,)
-        A row of :func:`power_weighted_template_photometry`'s ``phot``, interpolated.
+        A row of the ``phot`` of ``power_weighted_template_photometry``, interpolated.
 
     Returns
     -------
