@@ -1062,22 +1062,25 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
 # variable: a table re-keyed by cos i is node-exact too, but between nodes it is a
 # different interpolant (measured: up to 2.6e-3 off the degree read for SKIRTOR_mean_1p,
 # 1.3e-2 for SKIRTOR_mean_3p). The single off-node point above cannot see that, so the
-# inclination is swept densely here, three points per interval over all nine intervals,
-# with the other axes at their nodes.
+# inclination is swept densely here, three points per interval over all nine intervals.
 #
 # Two checks per adapter:
 #
 # * the lookup at agn_cos_inc = cos(i) is the 1-D PCHIP in degrees of the
-#   preintegrated node photometry (SciPy's Fritsch-Carlson PCHIP, an independent
-#   implementation), to 1e-9 on the interior intervals;
-# * the precompute-vs-runtime gap obeys the 5e-2 contract above. Measured maxima over
-#   this sweep (other axes at their middle node, oa = 50 deg, tv = 7), identical to
-#   origin/main: SKIRTOR_mean_1p 1.67e-3 (i = 87.5), SKIRTOR_mean_2p 4.81e-2 (i = 45),
-#   SKIRTOR_mean_3p 3.77e-2 (i = 45). The 2p and 3p values are near-misses of the
-#   contract, and at other opening angles origin/main already exceeds it (2p 1.15e-1 at
-#   oa = 40, i = 75; 3p 1.21e-1 at oa = 40, i = 55, tv = 9): across the type-1/type-2
-#   step at i = 90 - oa, interpolate-then-integrate and integrate-then-interpolate part.
-#   That pre-existing gap is not this test's to close, and the contract is not loosened.
+#   preintegrated node table (SciPy's Fritsch-Carlson PCHIP, an independent
+#   implementation), to 1e-9 on the interior intervals, with the other axes at their
+#   middle node. The mean_2p and mean_3p tables are power-weighted (band channels over
+#   a last bolometric-power channel, divided after interpolating), so their reference is
+#   the same ratio of SciPy PCHIPs;
+# * the precompute-vs-runtime gap obeys the 5e-2 contract above over the full off-node
+#   sweep: the inclination at three points per interval crossed with the midpoint of
+#   every interval of each other axis -- 27 points for mean_1p, 189 for mean_2p (oa) and
+#   756 for mean_3p (oa x tau). That crosses the type-1/type-2 step at i = 90 - oa for
+#   every opening angle. Measured maxima: mean_1p 1.67e-3, mean_2p 2.38e-2, mean_3p
+#   6.4e-3. A table of node-normalized photometry missed the contract there by up to
+#   1.68e-1 (mean_2p) and 2.96e-1 (mean_3p): the runtime normalizes the *interpolated*
+#   template, which weights each node by its raw power, and that power changes by a
+#   large factor across the step.
 
 _SKIRTOR_DENSE = {
     "skirtor_agnfitter_1p": 0,
@@ -1086,6 +1089,19 @@ _SKIRTOR_DENSE = {
 }
 _SKIRTOR_DENSE_SPECS = [s for s in _GRID_TORUS_SPECS if s["name"] in _SKIRTOR_DENSE]
 _SKIRTOR_DENSE_IDS = [s["name"] for s in _SKIRTOR_DENSE_SPECS]
+# Adapters whose table carries a trailing bolometric-power channel.
+_SKIRTOR_POWER_WEIGHTED = frozenset({"skirtor_agnfitter_2p", "skirtor_agnfitter"})
+# Expected sizes of the full off-node sweep, so a shrunken sweep cannot pass quietly.
+_SKIRTOR_SWEEP_SIZE = {
+    "skirtor_agnfitter_1p": 27,
+    "skirtor_agnfitter_2p": 189,
+    "skirtor_agnfitter": 756,
+}
+
+
+def _incl_fractions(nodes):
+    """Three inclinations per interval [deg]."""
+    return [a + (b - a) * f for a, b in itertools.pairwise(nodes) for f in (0.25, 0.5, 0.75)]
 
 
 def _dense_incl_points(spec):
@@ -1093,8 +1109,7 @@ def _dense_incl_points(spec):
     runtime_mod = importlib.import_module(spec["runtime_mod"])
     grid = getattr(runtime_mod, spec["loader"])(str(spec["grid_path"]))
     incl_axis = _SKIRTOR_DENSE[spec["name"]]
-    nodes = np.asarray(grid.axes[incl_axis], dtype=float)
-    incls = [a + (b - a) * f for a, b in itertools.pairwise(nodes) for f in (0.25, 0.5, 0.75)]
+    incls = _incl_fractions(np.asarray(grid.axes[incl_axis], dtype=float))
     others = [float(np.asarray(ax)[len(ax) // 2]) for ax in grid.axes]
     points = []
     for incl in incls:
@@ -1102,6 +1117,20 @@ def _dense_incl_points(spec):
         values[incl_axis] = float(np.cos(np.radians(incl)))
         points.append((tuple(values), incl))
     return runtime_mod, grid, points
+
+
+def _offnode_sweep(spec, grid):
+    """Library-axis points [deg for the inclination]: 3 per inclination interval
+    crossed with every interval midpoint of each other axis."""
+    incl_axis = _SKIRTOR_DENSE[spec["name"]]
+    per_axis = []
+    for k, ax in enumerate(grid.axes):
+        nodes = np.asarray(ax, dtype=float)
+        if k == incl_axis:
+            per_axis.append(_incl_fractions(nodes))
+        else:
+            per_axis.append([(a + b) / 2.0 for a, b in itertools.pairwise(nodes)])
+    return np.array(list(itertools.product(*per_axis)))
 
 
 @pytest.mark.parametrize("spec", _SKIRTOR_DENSE_SPECS, ids=_SKIRTOR_DENSE_IDS)
@@ -1128,8 +1157,16 @@ def test_skirtor_agnfitter_precompute_interpolates_inclination_in_degrees(
     # The other axes sit at their middle node: index the table there.
     index = [len(a) // 2 for a in axes]
     index[incl_axis] = slice(None)
-    profile = phot[tuple(index)]  # (n_incl, n_filters)
-    reference = PchipInterpolator(axes[incl_axis], profile, axis=0)
+    profile = phot[tuple(index)]  # (n_incl, n_channels)
+    pchip = PchipInterpolator(axes[incl_axis], profile, axis=0)
+    if spec["name"] in _SKIRTOR_POWER_WEIGHTED:
+        assert profile.shape[-1] == len(waves) + 1
+
+        def reference(incl):
+            row = pchip(incl)
+            return row[:-1] / row[-1]
+    else:
+        reference = pchip
     for values, incl in points:
         if not axes[incl_axis][1] <= incl <= axes[incl_axis][-2]:
             continue  # end intervals: end-slope conventions differ between PCHIPs
@@ -1139,22 +1176,46 @@ def test_skirtor_agnfitter_precompute_interpolates_inclination_in_degrees(
 
 
 @pytest.mark.parametrize("spec", _SKIRTOR_DENSE_SPECS, ids=_SKIRTOR_DENSE_IDS)
-def test_skirtor_agnfitter_dense_offnode_inclination_matches_exact(spec, grid_torus_filters):
-    """Dense inclination sweep, precompute against the runtime kernel: the 5e-2 contract."""
+def test_skirtor_agnfitter_dense_offnode_sweep_matches_exact(spec, grid_torus_filters):
+    """Full off-node sweep across the type-1/type-2 step, precompute against the runtime
+    kernel: the 5e-2 contract at every point (27 / 189 / 756 points)."""
     if not spec["grid_path"].exists():
         pytest.skip(f"{spec['name']}: grid not found at {spec['grid_path']}")
-    runtime_mod, grid, points = _dense_incl_points(spec)
+    runtime_mod = importlib.import_module(spec["runtime_mod"])
     precompute_mod = importlib.import_module(spec["precompute_mod"])
+    grid = getattr(runtime_mod, spec["loader"])(str(spec["grid_path"]))
     sed_fn = getattr(runtime_mod, spec["sed_fn"])
     waves, trans = grid_torus_filters
-    for values, incl in points:
-        exact = _exact_grid_torus_photometry(
-            sed_fn, grid, spec["axis_kwargs"], values, waves, trans
+    lookup = precompute_mod.build_lookup(
+        precompute_mod.precompute(
+            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
         )
-        precomp = _precompute_grid_torus_photometry(
-            precompute_mod, spec["grid_path"], spec["axis_kwargs"], values, waves, trans
+    )
+    wave_native = jnp.asarray(grid.wave_grid)
+    names = spec["axis_kwargs"]
+
+    def exact(*values):
+        kwargs = dict(zip(names, values, strict=True))
+        lnu = sed_fn(grid, wave_native, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
+        return jnp.stack(
+            [
+                lnu_filter_integral(lnu, wave_native, jnp.asarray(w), jnp.asarray(t), 0.0)
+                for w, t in zip(waves, trans, strict=True)
+            ]
         )
-        _assert_equivalent(precomp, exact, f"{spec['name']} i = {incl:.1f} deg", rtol=5e-2)
+
+    def precomputed(*values):
+        kwargs = dict(zip(names, values, strict=True))
+        return lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
+
+    library = _offnode_sweep(spec, grid)
+    assert library.shape[0] == _SKIRTOR_SWEEP_SIZE[spec["name"]]
+    kwarg_values = np.array([_kwarg_values(spec, tuple(row)) for row in library])
+    columns = [jnp.asarray(kwarg_values[:, k]) for k in range(kwarg_values.shape[1])]
+    want = np.asarray(jax.jit(jax.vmap(exact))(*columns))
+    got = np.asarray(jax.jit(jax.vmap(precomputed))(*columns))
+    for row, g, e in zip(library, got, want, strict=True):
+        _assert_equivalent(g, e, f"{spec['name']} at {dict(zip(names, row))} [deg]", rtol=5e-2)
 
 
 class _FixedInclination:

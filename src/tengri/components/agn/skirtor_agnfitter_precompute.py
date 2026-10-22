@@ -32,23 +32,22 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_power_table import (
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
+)
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     AXIS_TRANSFORMS,
     accepts_retired_incl_skirtor,
     free_incl_position,
     skirtor_incl_from_cos_inc,
 )
-from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
-)
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
 )
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
 # oa (half-opening angle), incl (inclination), tv (optical depth).
@@ -73,9 +72,8 @@ def precompute_skirtor_agnfitter_photometry(
     For each (oa, incl, tv) grid point, compute the filter-integrated photometry.
     Returns a dict with ``grid_phot`` and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``skirtor_agnfitter.py``) so that ``build_skirtor_agnfitter_photometry_lookup``
-    returns L_ν [erg/s/Hz] per L_sun of bolometric luminosity.
+    ``build_skirtor_agnfitter_photometry_lookup`` reads the table as L_ν [erg/s/Hz]
+    per L_sun of torus power, normalized as the runtime ``skirtor_agnfitter.py`` does.
 
     Parameters
     ----------
@@ -93,8 +91,9 @@ def precompute_skirtor_agnfitter_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_oa, n_incl, n_tv, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``grid_phot`` : ndarray, shape (n_oa, n_incl, n_tv, n_filters + 1)
+            Power-weighted table: raw band L_ν [erg/s/Hz per unit template power]
+            and, last, the raw bolometric power; see Notes.
         ``axes`` : tuple of 3 grid arrays (jnp.ndarray)
             Grid axes (oa, incl, tv).
         ``_preint`` : PreintegratedGrid
@@ -117,9 +116,13 @@ def precompute_skirtor_agnfitter_photometry(
     integration via NumPy. The precomputed photometry is grid-independent
     (depends only on filter curves and redshift, not wavelength grid).
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
-    the runtime normalization in ``skirtor_agnfitter.py``.
+    **Normalization**: the runtime kernel normalizes the *interpolated* template by
+    its own bolometric integral, so off-node it weights each node by its raw power.
+    The table therefore holds the raw band photometry and, as a last channel, the raw
+    power (``power_weighted_template_photometry`` in
+    ``_skirtor_agnfitter_power_table``);
+    the lookup interpolates both and divides. At a node this is the node-normalized
+    photometry exactly.
     """
 
     raw = _load_skirtor_agnfitter_arrays(grid_path)
@@ -129,33 +132,16 @@ def precompute_skirtor_agnfitter_photometry(
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
     tv_axis = np.asarray(raw["tv_axis"], dtype=np.float64)
 
-    # Normalize each template by its frequency integral.
-    # This matches skirtor_agnfitter.py's normalization:
-    #   L_ν = L_bol * torus_frac * template / native_integral(template)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
-    # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
-
-    n_oa, n_incl, n_tv, _n_wave = grid.shape
-    lnu_grid = np.empty_like(grid)
-
-    for i_oa in range(n_oa):
-        for i_incl in range(n_incl):
-            for i_tv in range(n_tv):
-                template = grid[i_oa, i_incl, i_tv]
-                integral = native_bolometric_nu_np(template, wave_grid)
-                integral_safe = max(abs(integral), 1e-100)
-                lnu_grid[i_oa, i_incl, i_tv] = _LSUN_ERG * template / integral_safe
-
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
+    # The runtime normalizes the interpolated template, so its off-node value is
+    # weighted by each node's raw power: tabulate the raw band photometry and the
+    # raw power and divide after interpolating (#3093).
+    preint = power_weighted_template_photometry(
+        grid,
+        wave_grid,
+        filter_waves,
+        filter_trans,
+        redshift,
         axes=(oa_axis, incl_axis, tv_axis),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
     )
 
     axes_jax = (
@@ -185,8 +171,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     callable
         ``fn(agn_log_lbol, agn_oa_skirtor, agn_cos_inc, agn_tv_skirtor,
         agn_torus_frac, **_) -> photometry [erg/s/Hz]``.
-        Output has the same shape as ``precomp["grid_phot"][:, :, :, :]``
-        but along the filter axis.
+        Output has shape ``(n_filters,)``.
 
     Notes
     -----
@@ -244,12 +229,9 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
             axes,
             (agn_oa_skirtor, skirtor_incl_from_cos_inc(agn_cos_inc), agn_tv_skirtor),
         )
-        # grid_phot/phot already carries the _LSUN_ERG factor from the
-        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
-        # not multiply it in again here (fix round 1: this double-counted
-        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        # The table's band channels already carry L_sun: the ratio is L_nu per L_sun.
         l_scale = 10.0**agn_log_lbol * agn_torus_frac
-        return l_scale * phot
+        return l_scale * lnu_per_lsun_from_power_table(phot)
 
     return skirtor_agnfitter_photometry
 
@@ -354,12 +336,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
             free_axis_values = list(free_axis_values)  # cos i -> library degrees
             free_axis_values[incl_at] = skirtor_incl_from_cos_inc(free_axis_values[incl_at])
             free_axis_values = tuple(free_axis_values)
-        # grid_phot/phot already carries the _LSUN_ERG factor from the
-        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
-        # not multiply it in again here (fix round 1: this double-counted
-        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        # The table's band channels already carry L_sun: the ratio is L_nu per L_sun.
         l_scale = 10.0**agn_log_lbol * agn_torus_frac
         phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
-        return l_scale * phot
+        return l_scale * lnu_per_lsun_from_power_table(phot)
 
     return skirtor_agnfitter_phot_collapsed
