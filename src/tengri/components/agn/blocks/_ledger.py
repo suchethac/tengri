@@ -228,14 +228,18 @@ def ledger_wave(dtype) -> jnp.ndarray:
     per_dex = (_LEDGER_NODES - 1) / np.log10(PUBLICATION_HI_AA / PUBLICATION_LO_AA)
     n_lo = int(np.ceil(per_dex * np.log10(lo / PUBLICATION_LO_AA))) + 1
     n_hi = int(np.ceil(per_dex * np.log10(PUBLICATION_HI_AA / hi))) + 1
-    nodes = np.concatenate(
+
+    def piece(a: float, b: float, count: int):
+        # Built in the trace from its end points, so no array literal enters the graph.
+        return jnp.exp(jnp.linspace(np.log(a), np.log(b), count, dtype=dtype))
+
+    return jnp.concatenate(
         [
-            np.geomspace(PUBLICATION_LO_AA, lo, n_lo)[:-1],
-            np.geomspace(lo, hi, n),
-            np.geomspace(hi, PUBLICATION_HI_AA, n_hi)[1:],
+            piece(PUBLICATION_LO_AA, lo, n_lo)[:-1],
+            piece(lo, hi, n),
+            piece(hi, PUBLICATION_HI_AA, n_hi)[1:],
         ]
     )
-    return jnp.asarray(nodes, dtype=dtype)
 
 
 def non_conserving_reason(

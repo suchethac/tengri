@@ -365,7 +365,8 @@ def test_float32_ledger_matches_float64():
         # and NaN in float32 for this disc on main as well.
         if key.startswith("log_L_agn_") and key != "log_L_agn_direct_los" and np.isfinite(val):
             assert np.isfinite(c32[key]), key
-            assert float(c32[key]) == pytest.approx(float(val), abs=2e-5), key
+            # 1e-4 dex: the unemitted disc is a difference of two float32 sums (3.8e-5 measured).
+            assert float(c32[key]) == pytest.approx(float(val), abs=1e-4), key
 
 
 @pytest.mark.parametrize("name", sorted(_RECIPES))

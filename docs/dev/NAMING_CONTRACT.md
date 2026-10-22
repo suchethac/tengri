@@ -459,8 +459,9 @@ publishes the same ledger for the pieces of the SED it emits. For each piece `<p
   angle-integrated power the piece carries before any obscuration minus what it emits,
   floored at zero. For the disc, the light the torus screen hides, the polar dust absorbs, an
   attenuation block removes and `agn_ebv_disc` reddens away; the torus does not yet re-emit
-  it. The intrinsic disc is the disc block at the reference inclination (`cos i = 0.5`, where
-  a `2 cos i` disc radiates its angle-integrated power), un-reddened, times the runner's debit;
+  it. The intrinsic disc is the sphere mean of the disc block's own spectrum (un-reddened,
+  before every screen) over the same sightlines, exact for its `2 cos i D + H` or isotropic law,
+  times the runner's debit;
   under an active `cigale_joint` tie, the face-on library power `agn_power x R_faceon` times the
   library disc's hemisphere mean, plus the tied corona. A recipe without a disc block carries
   its debited share of the accretion power here, as a torus-only template does. The lines
