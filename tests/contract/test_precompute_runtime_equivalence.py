@@ -1196,10 +1196,11 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
         kwargs = {k: (cos_value if k == "agn_cos_inc" else others[k]) for k in spec["axis_kwargs"]}
         return np.asarray(full(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
 
-    # The collapse contracts the axis with the shared triweight slice, not the lookup's
-    # PCHIP (a pre-existing, registered mismatch: test_precompute_axis_collapse.py), so
-    # the collapsed table is compared for where it sits, not to round-off: it is the
-    # 55 deg table, not the one at i = cos(55 deg) = 0.574 deg read as degrees.
+    # mean_1p contracts the axis with the shared triweight slice, not the lookup's PCHIP
+    # (a pre-existing, registered mismatch: test_precompute_axis_collapse.py), so the
+    # collapsed table is compared for where it sits, not to round-off: it is the 55 deg
+    # table, not the one at i = cos(55 deg) = 0.574 deg read as degrees. The
+    # power-weighted mean_2p / mean_3p read the whole table there and agree exactly.
     def _gap(want):
         return float(np.max(np.abs(got / want - 1.0)))
 
@@ -1220,10 +1221,12 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
 # interpolating (``_template_power_table``); the anisotropic libraries (Nenkova mean_2p /
 # mean_3p) then multiply by the runtime's own sightline factor a / mean(a).
 #
-# The sweep: three points per interval on the inclination axis (degrees for SKIRTOR,
-# cos i otherwise; the column density for Silva+04) crossed with every interval midpoint
-# of each other axis. Every point must meet the unchanged 5e-2 contract. Measured maxima,
-# node-normalized table -> power-weighted table:
+# The structured sweep: three points per interval on the inclination axis (degrees for
+# SKIRTOR, cos i otherwise; the column density for Silva+04) crossed with every interval
+# midpoint, and the middle node, of each other axis. A seeded uniform sweep over the
+# whole hull adds the points between those lines. Every point must meet the unchanged
+# 5e-2 contract. Measured maxima, node-normalized table -> power-weighted table, over
+# the structured sweep without the node rows:
 #
 #   skirtor_agnfitter_2p   189 points  1.68e-1 -> 2.38e-2
 #   skirtor_agnfitter      756 points  2.96e-1 -> 6.4e-3
@@ -1233,9 +1236,19 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
 #   nenkova_agnfitter_3p  2376 points  3.98e-2 -> 9.7e-3
 #   silva04                177 points  8.1e-3  -> 3.3e-4
 #
-# skirtor_agnfitter_1p (27 points, 1.67e-3) and nenkova_agnfitter (24 points, 6.4e-4)
-# keep their tables: with one axis the two weightings measured identical to four
-# digits. They stay in the sweep.
+# and over 1500 uniform random points of the hull (seed 0), power-weighted, at most
+# 3.78e-2 (cat3d_wind); with five more mid-infrared bands the same library reaches 4.4e-2
+# at cos i = 0.009, the largest gap measured anywhere.
+#
+# skirtor_agnfitter_1p (27 points, 1.67e-3) and nenkova_agnfitter (24 points, 6.4e-4) are
+# power-weighted already, by an identity: with one library axis a is proportional to the
+# record power P, so their tables, records times (a / mean a) / P, hold the raw band
+# photometry over a constant (measured equal to the ratio-of-PCHIPs reference to 1e-15).
+# They stay in the sweeps.
+#
+# A Fixed axis is read off the whole table at its coordinate, not contracted first: the
+# tensor-product PCHIP depends on the order of the axes, and contracting a non-leading
+# axis first read skirtor_agnfitter_2p at a Fixed agn_cos_inc 6.4e-2 off the runtime.
 
 _TORUS_EXTRA_SPECS = [
     dict(
@@ -1259,22 +1272,25 @@ _TORUS_EXTRA_SPECS = [
 ]
 _TORUS_SWEEP_SIZE = {
     "skirtor_agnfitter_1p": 27,
-    "skirtor_agnfitter_2p": 189,
-    "skirtor_agnfitter": 756,
+    "skirtor_agnfitter_2p": 216,
+    "skirtor_agnfitter": 1080,
     "nenkova_agnfitter": 24,
-    "nenkova_agnfitter_2p": 297,
-    "nenkova_agnfitter_3p": 2376,
-    "cat3d_wind_lowfwd": 360,
-    "cat3d_wind": 270,
+    "nenkova_agnfitter_2p": 324,
+    "nenkova_agnfitter_3p": 2916,
+    "cat3d_wind_lowfwd": 540,
+    "cat3d_wind": 432,
     "silva04": 177,
 }
+_TORUS_RANDOM_POINTS = 1500
 _TORUS_SWEEP_SPECS = [
     s for s in _GRID_TORUS_SPECS + _TORUS_EXTRA_SPECS if s["name"] in _TORUS_SWEEP_SIZE
 ]
 _TORUS_SWEEP_IDS = [s["name"] for s in _TORUS_SWEEP_SPECS]
-# Power-weighted tables outside the SKIRTOR degree-axis test above; True marks the
-# anisotropic ones, whose runtime multiplies the shape by a / mean(a).
+# The power-weighted tables; True marks the anisotropic ones, whose runtime multiplies
+# the shape by a / mean(a).
 _POWER_TABLE = {
+    "skirtor_agnfitter_2p": False,
+    "skirtor_agnfitter": False,
     "cat3d_wind_lowfwd": False,
     "cat3d_wind": False,
     "silva04": False,
@@ -1283,6 +1299,13 @@ _POWER_TABLE = {
 }
 _POWER_TABLE_SPECS = [s for s in _TORUS_SWEEP_SPECS if s["name"] in _POWER_TABLE]
 _POWER_TABLE_IDS = [s["name"] for s in _POWER_TABLE_SPECS]
+# (spec, Fixed axis) for every axis of every power-weighted table.
+_FIXED_AXIS_CASES = [
+    (spec, k) for spec in _POWER_TABLE_SPECS for k in range(len(spec["axis_kwargs"]))
+]
+_FIXED_AXIS_IDS = [
+    f"{spec['name']}-fixed-{spec['axis_kwargs'][k]}" for spec, k in _FIXED_AXIS_CASES
+]
 
 
 def _library_axes(grid):
@@ -1297,17 +1320,27 @@ def _sweep_axis(spec):
     return _SKIRTOR_DENSE.get(spec["name"], 0)
 
 
+def _other_axis_values(nodes):
+    """Every interval midpoint of a non-swept axis, and its middle node."""
+    return [(a + b) / 2.0 for a, b in itertools.pairwise(nodes)] + [float(nodes[len(nodes) // 2])]
+
+
 def _torus_sweep(spec, grid):
     """Library-axis points: 3 per interval on the swept axis crossed with every
-    interval midpoint of each other axis."""
+    interval midpoint and the middle node of each other axis."""
     swept = _sweep_axis(spec)
     per_axis = [
-        _incl_fractions(nodes)
-        if k == swept
-        else [(a + b) / 2.0 for a, b in itertools.pairwise(nodes)]
+        _incl_fractions(nodes) if k == swept else _other_axis_values(nodes)
         for k, nodes in enumerate(_library_axes(grid))
     ]
     return np.array(list(itertools.product(*per_axis)))
+
+
+def _random_hull(grid, n, seed=0):
+    """``n`` library-axis points drawn uniformly over the node hull."""
+    axes = _library_axes(grid)
+    rng = np.random.default_rng(seed)
+    return np.column_stack([rng.uniform(a[0], a[-1], n) for a in axes])
 
 
 def _load_torus(spec):
@@ -1320,19 +1353,9 @@ def _load_torus(spec):
     return runtime_mod, precompute_mod, grid
 
 
-@pytest.mark.parametrize("spec", _TORUS_SWEEP_SPECS, ids=_TORUS_SWEEP_IDS)
-def test_torus_table_dense_offnode_sweep_matches_exact(spec, grid_torus_filters):
-    """Every off-node point of the sweep meets the 5e-2 contract against the runtime."""
-    runtime_mod, precompute_mod, grid = _load_torus(spec)
-    sed_fn = getattr(runtime_mod, spec["sed_fn"])
-    waves, trans = grid_torus_filters
-    lookup = precompute_mod.build_lookup(
-        precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
-        )
-    )
+def _exact_photometry_fn(sed_fn, grid, names, waves, trans):
+    """Runtime band photometry at kwarg values, vmappable."""
     wave_native = jnp.asarray(grid.wave_grid)
-    names = spec["axis_kwargs"]
 
     def exact(*values):
         kwargs = dict(zip(names, values, strict=True))
@@ -1344,55 +1367,190 @@ def test_torus_table_dense_offnode_sweep_matches_exact(spec, grid_torus_filters)
             ]
         )
 
-    def precomputed(*values):
-        kwargs = dict(zip(names, values, strict=True))
-        return lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
+    return exact
 
-    library = _torus_sweep(spec, grid)
-    assert library.shape[0] == _TORUS_SWEEP_SIZE[spec["name"]]
+
+def _compare_over(spec, library, lookup_fn, exact_fn, label):
+    """Assert the 5e-2 contract at every library-axis point (rows of ``library``)."""
     kwarg_values = np.array([_kwarg_values(spec, tuple(row)) for row in library])
     columns = [jnp.asarray(kwarg_values[:, k]) for k in range(kwarg_values.shape[1])]
-    want = np.asarray(jax.jit(jax.vmap(exact))(*columns))
-    got = np.asarray(jax.jit(jax.vmap(precomputed))(*columns))
+    want = np.asarray(jax.jit(jax.vmap(exact_fn))(*columns))
+    got = np.asarray(jax.jit(jax.vmap(lookup_fn))(*columns))
+    names = spec["axis_kwargs"]
     for row, g, e in zip(library, got, want, strict=True):
-        _assert_equivalent(g, e, f"{spec['name']} at {dict(zip(names, row))}", rtol=5e-2)
+        _assert_equivalent(g, e, f"{label} at {dict(zip(names, row))}", rtol=5e-2)
+
+
+def _full_lookup(spec, precompute_mod, waves, trans):
+    lookup = precompute_mod.build_lookup(
+        precompute_mod.precompute(
+            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+        )
+    )
+    names = spec["axis_kwargs"]
+
+    def precomputed(*values):
+        return lookup(
+            agn_log_lbol=0.0, agn_torus_frac=1.0, **dict(zip(names, values, strict=True))
+        )
+
+    return precomputed
+
+
+@pytest.mark.parametrize("spec", _TORUS_SWEEP_SPECS, ids=_TORUS_SWEEP_IDS)
+def test_torus_table_dense_offnode_sweep_matches_exact(spec, grid_torus_filters):
+    """Every point of the structured sweep meets the 5e-2 contract against the runtime."""
+    runtime_mod, precompute_mod, grid = _load_torus(spec)
+    waves, trans = grid_torus_filters
+    exact = _exact_photometry_fn(
+        getattr(runtime_mod, spec["sed_fn"]), grid, spec["axis_kwargs"], waves, trans
+    )
+    library = _torus_sweep(spec, grid)
+    assert library.shape[0] == _TORUS_SWEEP_SIZE[spec["name"]]
+    _compare_over(
+        spec, library, _full_lookup(spec, precompute_mod, waves, trans), exact, spec["name"]
+    )
+
+
+@pytest.mark.parametrize("spec", _TORUS_SWEEP_SPECS, ids=_TORUS_SWEEP_IDS)
+def test_torus_table_random_hull_sweep_matches_exact(spec, grid_torus_filters):
+    """1500 seeded uniform points over the node hull meet the 5e-2 contract."""
+    runtime_mod, precompute_mod, grid = _load_torus(spec)
+    waves, trans = grid_torus_filters
+    exact = _exact_photometry_fn(
+        getattr(runtime_mod, spec["sed_fn"]), grid, spec["axis_kwargs"], waves, trans
+    )
+    library = _random_hull(grid, _TORUS_RANDOM_POINTS)
+    _compare_over(
+        spec, library, _full_lookup(spec, precompute_mod, waves, trans), exact, spec["name"]
+    )
+
+
+class _FixedAxes:
+    """The slice of ``Parameters`` that ``collapse_fixed_axes`` reads: Fixed values."""
+
+    free_params = ()
+
+    def __init__(self, values):
+        self._values = dict(values)
+
+    def get_fixed_values(self):
+        return dict(self._values)
+
+
+@pytest.mark.parametrize(("spec", "fixed_axis"), _FIXED_AXIS_CASES, ids=_FIXED_AXIS_IDS)
+def test_torus_table_fixed_axis_lookup_matches_exact(spec, fixed_axis, grid_torus_filters):
+    """With one axis Fixed off-node, the collapsed lookup meets the 5e-2 contract against
+    the runtime off-node on every free axis: three Fixed values per axis, the free axes
+    at every interval midpoint (three per interval on the swept axis)."""
+    runtime_mod, precompute_mod, grid = _load_torus(spec)
+    waves, trans = grid_torus_filters
+    names = spec["axis_kwargs"]
+    exact = _exact_photometry_fn(getattr(runtime_mod, spec["sed_fn"]), grid, names, waves, trans)
+    axes = _library_axes(grid)
+    swept = _sweep_axis(spec)
+    nodes = axes[fixed_axis]
+    picks = [len(nodes) // 4, len(nodes) // 2, (3 * len(nodes)) // 4]
+    fixed_values = sorted({(nodes[i] + nodes[i + 1]) / 2.0 for i in picks if i + 1 < len(nodes)})
+    for fixed_library in fixed_values:
+        fixed_param = _kwarg_values(
+            spec,
+            tuple(fixed_library if k == fixed_axis else float(a[0]) for k, a in enumerate(axes)),
+        )[fixed_axis]
+        preint = precompute_mod.precompute(
+            list(waves),
+            list(trans),
+            0.0,
+            _FixedAxes({names[fixed_axis]: fixed_param}),
+            grid_path=str(spec["grid_path"]),
+        )
+        assert set(preint["_collapsed_axes"]) == {fixed_axis}
+        collapsed = precompute_mod.build_lookup(preint)
+        per_axis = [
+            [fixed_library]
+            if k == fixed_axis
+            else (
+                _incl_fractions(a)
+                if k == swept
+                else [(x + y) / 2.0 for x, y in itertools.pairwise(a)]
+            )
+            for k, a in enumerate(axes)
+        ]
+        library = np.array(list(itertools.product(*per_axis)))
+
+        def read(*values, collapsed=collapsed):
+            free = [v for k, v in enumerate(values) if k != fixed_axis]
+            return collapsed(0.0, *free, agn_torus_frac=1.0)
+
+        label = f"{spec['name']} with {names[fixed_axis]} Fixed at {fixed_param:.4g}"
+        _compare_over(spec, library, read, exact, label)
 
 
 @pytest.mark.parametrize("spec", _POWER_TABLE_SPECS, ids=_POWER_TABLE_IDS)
 def test_torus_table_is_power_weighted(spec, grid_torus_filters):
-    """The lookup is the ratio of the band channels' and the power channel's PCHIPs
-    (SciPy's, an independent implementation), times the runtime's a / mean(a) for an
-    anisotropic library, to 1e-9 along the swept axis with the others at a node."""
+    """The lookup is the power-weighted reading of the raw library records, built here
+    independently: band photometry of every raw record (``lnu_filter_integral``) and
+    its bolometric power (``native_bolometric_nu_np``), SciPy's PCHIP of each along the
+    each axis in turn with the others at a node, their ratio, times the runtime's a / mean(a)
+    for an anisotropic library.
+
+    Tolerance 1e-4, measured: the table builder and ``lnu_filter_integral`` integrate
+    the bands by different quadratures, 3e-5 apart at the nodes. An equal-weight table
+    misses by 1e-2 and more; a wrong power channel by more still.
+    """
     from scipy.interpolate import PchipInterpolator
 
+    from tengri.components.agn._template_grid import native_bolometric_nu_np
     from tengri.components.agn._torus_inclination import library_anisotropy, log10_anisotropy
+    from tengri.utils.physics_constants import L_SUN
 
     runtime_mod, precompute_mod, grid = _load_torus(spec)
     waves, trans = grid_torus_filters
-    preint = precompute_mod.precompute(
-        list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+    lookup = precompute_mod.build_lookup(
+        precompute_mod.precompute(
+            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+        )
     )
-    lookup = precompute_mod.build_lookup(preint)
     axes = _library_axes(grid)
-    swept = _sweep_axis(spec)
-    phot = np.asarray(preint["grid_phot"], dtype=float)
-    assert phot.shape[-1] == len(waves) + 1
-    index = [len(a) // 2 for a in axes]
-    index[swept] = slice(None)
-    pchip = PchipInterpolator(axes[swept], phot[tuple(index)], axis=0)
-    others = [float(a[len(a) // 2]) for a in axes]
-    nodes = axes[swept]
-    for x in _incl_fractions(nodes):
-        if not nodes[1] <= x <= nodes[-2]:
-            continue  # end intervals: end-slope conventions differ between PCHIPs
-        point = list(others)
-        point[swept] = x
-        row = pchip(x)
-        want = row[:-1] / row[-1]
-        if _POWER_TABLE[spec["name"]]:
-            inc = runtime_mod.TORUS_INCLINATION
-            aniso = library_anisotropy(grid, inc, jnp.float64)
-            want = want * 10.0 ** float(log10_anisotropy(aniso, tuple(point), inc))
-        kwargs = dict(zip(spec["axis_kwargs"], point, strict=True))
-        got = np.asarray(lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
-        np.testing.assert_allclose(got, want, rtol=1e-9, err_msg=f"{spec['name']} at {x}")
+    wave_native = np.asarray(grid.wave_grid, dtype=float)
+    for swept in range(len(axes)):
+        index = [len(a) // 2 for a in axes]
+        index[swept] = slice(None)
+        records = np.asarray(grid.template, dtype=float)[tuple(index)]  # (n_swept, n_wave)
+        band = np.array(
+            [
+                [
+                    float(
+                        lnu_filter_integral(
+                            jnp.asarray(r),
+                            jnp.asarray(wave_native),
+                            jnp.asarray(w),
+                            jnp.asarray(t),
+                            0.0,
+                        )
+                    )
+                    for w, t in zip(waves, trans, strict=True)
+                ]
+                for r in records
+            ]
+        )
+        power = np.array([native_bolometric_nu_np(r, wave_native) for r in records])
+        band_pchip = PchipInterpolator(axes[swept], band, axis=0)
+        power_pchip = PchipInterpolator(axes[swept], power)
+        others = [float(a[len(a) // 2]) for a in axes]
+        nodes = axes[swept]
+        for x in _incl_fractions(nodes):
+            if not nodes[1] <= x <= nodes[-2]:
+                continue  # end intervals: end-slope conventions differ between PCHIPs
+            point = list(others)
+            point[swept] = x
+            want = L_SUN * band_pchip(x) / power_pchip(x)
+            if _POWER_TABLE[spec["name"]]:
+                inc = runtime_mod.TORUS_INCLINATION
+                aniso = library_anisotropy(grid, inc, jnp.float64)
+                want = want * 10.0 ** float(log10_anisotropy(aniso, tuple(point), inc))
+            kwargs = dict(zip(spec["axis_kwargs"], _kwarg_values(spec, tuple(point)), strict=True))
+            got = np.asarray(lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
+            np.testing.assert_allclose(
+                got, want, rtol=1e-4, err_msg=f"{spec['name']} axis {swept} at {x}"
+            )

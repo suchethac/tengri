@@ -5,8 +5,9 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the two-parameter (opening-angle, inclination) SKIRTOR-AGNfitter torus
 reduction (Stalevski et al. 2016), as packaged by AGNfitter-rX.
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``.
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
 
 References
 ----------
@@ -27,7 +28,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     AXIS_TRANSFORMS,
@@ -38,6 +38,7 @@ from tengri.components.agn._skirtor_agnfitter_sightline import (
 from tengri.components.agn._template_power_table import (
     lnu_per_lsun_from_power_table,
     power_weighted_template_photometry,
+    read_at_fixed_axes,
 )
 from tengri.components.agn.skirtor_agnfitter_2p import _load_skirtor_agnfitter_2p_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
@@ -112,7 +113,7 @@ def precompute_skirtor_agnfitter_2p_photometry(
     # The runtime normalizes the interpolated template, so its off-node value is
     # weighted by each node's raw power: tabulate the raw band photometry and the
     # raw power and divide after interpolating (#3093).
-    preint = power_weighted_template_photometry(
+    power_table = power_weighted_template_photometry(
         grid,
         wave_grid,
         filter_waves,
@@ -123,9 +124,9 @@ def precompute_skirtor_agnfitter_2p_photometry(
 
     axes_jax = (jnp.asarray(oa_axis), jnp.asarray(incl_axis))
     return {
-        "grid_phot": preint.phot,
+        "grid_phot": power_table.table,
         "axes": axes_jax,
-        "_preint": preint,
+        "_preint": power_table.preint,
     }
 
 
@@ -210,7 +211,7 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build the preintegrated SKIRTOR_mean_2p grid, auto-collapsing Fixed axes.
+    """Build the preintegrated SKIRTOR_mean_2p grid, recording Fixed axes.
 
     Parameters
     ----------
@@ -228,8 +229,9 @@ def precompute(
     Returns
     -------
     dict
-        Same shape as :func:`precompute_skirtor_agnfitter_2p_photometry`,
-        with grid axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+        Same as :func:`precompute_skirtor_agnfitter_2p_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed coordinates.
 
     Notes
     -----
@@ -239,7 +241,7 @@ def precompute(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
     preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+    _, _, fixed = collapse_fixed_axes(
         preint,
         AXIS_PARAMS,
         parameters,
@@ -249,12 +251,10 @@ def precompute(
     if not fixed:
         return result
 
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-    }
+    # The table is kept whole and read at the Fixed coordinates (read_at_fixed_axes):
+    # contracting a Fixed axis first would interpolate in another axis order than
+    # the runtime kernel, and the tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
@@ -262,7 +262,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     When no axes are collapsed, delegates to
     :func:`build_skirtor_agnfitter_2p_photometry_lookup`. When some axes are
-    collapsed (fixed at preintegration time), the returned function expects only
+    Fixed at preintegration time, the returned function expects only
     the remaining free parameter values.
 
     Parameters
@@ -290,6 +290,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    collapsed = preint["_collapsed_axes"]
     incl_at = free_incl_position(1, preint["_collapsed_axes"])
 
     @jax.jit
@@ -301,7 +302,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
             free_axis_values = tuple(free_axis_values)
         # The table's band channels already carry L_sun: the ratio is L_nu per L_sun.
         l_scale = 10.0**agn_log_lbol * agn_torus_frac
-        phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        phot = read_at_fixed_axes(grid_phot, axes, free_axis_values, collapsed)
         return l_scale * lnu_per_lsun_from_power_table(phot)
 
     return skirtor_agnfitter_2p_phot_collapsed

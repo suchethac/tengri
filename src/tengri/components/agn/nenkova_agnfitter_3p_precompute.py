@@ -5,8 +5,9 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the three-parameter (inclination, opening-angle, optical-depth) AGNfitter-rX
 torus reduction, keyed on ``(cos(inclination), opening angle, tau_V)``.
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``.
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
 
 References
 ----------
@@ -26,11 +27,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._template_power_table import (
     full_coords,
     lnu_per_lsun_from_power_table,
     power_weighted_template_photometry,
+    read_at_fixed_axes,
 )
 from tengri.components.agn._torus_inclination import (
     library_anisotropy,
@@ -121,7 +122,7 @@ def precompute_nenkova_agnfitter_3p_photometry(
     # The sightline power a / mean a multiplies the shape, as in the runtime
     # (_torus_inclination.torus_lnu_anisotropic).
     anisotropy = library_anisotropy(runtime_grid, TORUS_INCLINATION, jnp.asarray(0.0).dtype)
-    preint = power_weighted_template_photometry(
+    power_table = power_weighted_template_photometry(
         runtime_grid.template,
         wave_grid,
         filter_waves,
@@ -132,9 +133,9 @@ def precompute_nenkova_agnfitter_3p_photometry(
 
     axes_jax = (jnp.asarray(cos_inc_axis), jnp.asarray(oa_axis), jnp.asarray(tv_axis))
     return {
-        "grid_phot": preint.phot,
+        "grid_phot": power_table.table,
         "axes": axes_jax,
-        "_preint": preint,
+        "_preint": power_table.preint,
         "_anisotropy": anisotropy,
     }
 
@@ -199,7 +200,7 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build preintegrated ``NK0_mean_3p`` grid, auto-collapsing Fixed-parameter axes.
+    """Build preintegrated ``NK0_mean_3p`` grid, recording Fixed axes.
 
     Parameters
     ----------
@@ -217,8 +218,9 @@ def precompute(
     Returns
     -------
     dict
-        Same shape as :func:`precompute_nenkova_agnfitter_3p_photometry` but
-        with grid axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+        Same as :func:`precompute_nenkova_agnfitter_3p_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed coordinates.
 
     Notes
     -----
@@ -228,19 +230,16 @@ def precompute(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
     preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+    _, _, fixed = collapse_fixed_axes(
         preint, AXIS_PARAMS, parameters, origin="nenkova_agnfitter_3p_precompute"
     )
     if not fixed:
         return result
 
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-        "_anisotropy": result["_anisotropy"],
-    }
+    # The table is kept whole and read at the Fixed coordinates (read_at_fixed_axes):
+    # contracting a Fixed axis first would interpolate in another axis order than
+    # the runtime kernel, and the tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
@@ -248,7 +247,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     When no axes are collapsed, delegates to
     :func:`build_nenkova_agnfitter_3p_photometry_lookup`. When some axes are
-    collapsed (fixed at preintegration time), the returned function expects
+    Fixed at preintegration time, the returned function expects
     only the remaining free parameter values.
 
     Parameters
@@ -285,9 +284,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """``NK0_mean_3p`` torus photometry with collapsed (fixed) axes via PCHIP."""
         l_bol_lsun = 10.0**agn_log_lbol
         shape = lnu_per_lsun_from_power_table(
-            interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+            read_at_fixed_axes(grid_phot, axes, free_axis_values, collapsed)
         )
-        point = full_coords(free_axis_values, collapsed, 3)
+        point = full_coords(free_axis_values, collapsed, len(axes))
         phot_per_lsun = shape * pow10(log10_anisotropy(anisotropy, point, TORUS_INCLINATION))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 

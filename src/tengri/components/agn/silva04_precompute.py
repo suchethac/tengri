@@ -5,8 +5,9 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 Silva, Maiolino & Granato (2004) semi-empirical torus model keyed on hydrogen
 column density.
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``.
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
 
 References
 ----------
@@ -26,10 +27,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._template_power_table import (
     lnu_per_lsun_from_power_table,
     power_weighted_template_photometry,
+    read_at_fixed_axes,
 )
 from tengri.components.agn.silva04 import _load_silva04_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
@@ -109,7 +110,7 @@ def precompute_silva04_photometry(
     # The runtime normalizes the interpolated template, so its off-node value is
     # weighted by each node's raw power: tabulate the raw band photometry and the
     # raw power and divide after interpolating (_template_power_table).
-    preint = power_weighted_template_photometry(
+    power_table = power_weighted_template_photometry(
         grid,
         wave_grid,
         filter_waves,
@@ -120,9 +121,9 @@ def precompute_silva04_photometry(
 
     axes_jax = (jnp.asarray(log_nh_axis),)
     return {
-        "grid_phot": preint.phot,
+        "grid_phot": power_table.table,
         "axes": axes_jax,
-        "_preint": preint,
+        "_preint": power_table.preint,
     }
 
 
@@ -202,7 +203,7 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build preintegrated Silva+04 grid, auto-collapsing Fixed-parameter axes.
+    """Build preintegrated Silva+04 grid, recording Fixed axes.
 
     Parameters
     ----------
@@ -220,8 +221,9 @@ def precompute(
     Returns
     -------
     dict
-        Same shape as :func:`precompute_silva04_photometry` but with grid
-        axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+        Same as :func:`precompute_silva04_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed coordinates.
 
     References
     ----------
@@ -237,19 +239,14 @@ def precompute(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
     preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, AXIS_PARAMS, parameters, origin="silva04_precompute"
-    )
+    _, _, fixed = collapse_fixed_axes(preint, AXIS_PARAMS, parameters, origin="silva04_precompute")
     if not fixed:
         return result
 
-    # Rebuild dict view; drop the axes that were collapsed
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-    }
+    # The table is kept whole and read at the Fixed coordinates (read_at_fixed_axes):
+    # contracting a Fixed axis first would interpolate in another axis order than
+    # the runtime kernel, and the tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
@@ -298,6 +295,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: lookup takes (scale, *remaining_axis_values, torus_frac)
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    collapsed = preint["_collapsed_axes"]
 
     @jax.jit
     def silva04_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
@@ -308,7 +306,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         # Same unit convention as build_silva04_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         phot_per_lsun = lnu_per_lsun_from_power_table(
-            interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+            read_at_fixed_axes(grid_phot, axes, free_axis_values, collapsed)
         )
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
