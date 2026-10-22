@@ -29,15 +29,15 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._skirtor_agnfitter_power_table import (
-    lnu_per_lsun_from_power_table,
-    power_weighted_template_photometry,
-)
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     AXIS_TRANSFORMS,
     accepts_retired_incl_skirtor,
     free_incl_position,
     skirtor_incl_from_cos_inc,
+)
+from tengri.components.agn._template_power_table import (
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
 )
 from tengri.components.agn.skirtor_agnfitter_2p import _load_skirtor_agnfitter_2p_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
@@ -98,7 +98,7 @@ def precompute_skirtor_agnfitter_2p_photometry(
     its own bolometric integral, so off-node it weights each node by its raw power.
     The table therefore holds the raw band photometry and, as a last channel, the raw
     power (``power_weighted_template_photometry`` in
-    ``_skirtor_agnfitter_power_table``);
+    ``_template_power_table``);
     the lookup interpolates both and divides. At a node this is the node-normalized
     photometry exactly.
     """

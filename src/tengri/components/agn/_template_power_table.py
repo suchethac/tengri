@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Power-weighted photometry tables for the SKIRTOR-AGNfitter ``mean_2p``/``mean_3p`` tori.
+r"""Power-weighted photometry tables for torus libraries normalized after interpolation.
 
-The runtime kernel (``_template_grid.torus_lnu_from_grid``)
-interpolates the *raw* library templates and then normalizes the interpolated template
-by its own bolometric integral,
+Several torus runtime kernels (``_template_grid.torus_lnu_from_grid`` for the
+SKIRTOR-AGNfitter ``mean_2p``/``mean_3p`` reductions and CAT3D-WIND, and the Silva et al.
+(2004) kernel) interpolate the *raw* library templates and then normalize the
+interpolated template by its own bolometric integral,
 
 .. math::
 
@@ -12,12 +13,17 @@ by its own bolometric integral,
              {\int \mathcal{I}[T](\nu;\,\mathbf{c})\,\mathrm{d}\nu},
 
 where :math:`\mathcal{I}` is the node-exact PCHIP interpolant over the library axes
-:math:`\mathbf{c}` and :math:`T` the stored templates. The raw templates of these two
-reductions differ in bolometric power between nodes by up to a factor of several across
-the type-1/type-2 step at :math:`i = 90^\circ - \theta_{\rm oa}`, so the normalized
-interpolant is weighted by each node's raw power. A table that interpolates
-node-normalized band photometry weights every node equally instead, and off-node it
-departed from the runtime by up to 16.8% (``mean_2p``) and 29.6% (``mean_3p``).
+:math:`\mathbf{c}` and :math:`T` the stored templates. The normalized interpolant is
+therefore weighted by each node's raw power. A table that interpolates node-normalized
+band photometry weights every node equally instead. Where the raw power changes by a
+large factor between nodes (the SKIRTOR-AGNfitter type-1/type-2 step at
+:math:`i = 90^\circ - \theta_{\rm oa}`, the CAT3D-WIND low-inclination cells) the two
+departed off-node by up to 30%.
+
+Libraries whose records are normalized to unit power *before* interpolation (the
+anisotropic ``_torus_inclination.torus_lnu_anisotropic`` path of SKIRTOR ``mean_1p`` and
+the Nenkova reductions) interpolate node-normalized shapes at runtime too, so their
+tables already match and do not use this module.
 
 The table built here carries the same two factors the runtime forms: the band
 photometry of the raw templates and, in one extra trailing channel, their native
@@ -37,8 +43,7 @@ where :math:`R_b` is the filter transmission, :math:`\Phi_b` the band :math:`L_\
 per :math:`L_\odot` of torus power [erg/s/Hz], and :math:`L_\odot` [erg/s]. At a node
 this is the node-normalized photometry exactly; between nodes it commutes with the
 runtime wherever the interpolant is linear in the tabulated values, leaving only the
-data dependence of the PCHIP tangents (measured below 2.4e-2 on the five-filter
-contract set).
+data dependence of the PCHIP tangents.
 """
 
 from __future__ import annotations
@@ -123,3 +128,24 @@ def lnu_per_lsun_from_power_table(values: jnp.ndarray) -> jnp.ndarray:
         Band :math:`L_\nu` per :math:`L_\odot` of torus power [erg/s/Hz].
     """
     return values[..., :-1] / values[..., -1:]
+
+
+def full_coords(free_values: tuple, collapsed: dict[int, float], n_axes: int) -> tuple:
+    """Library coordinates of every axis, the collapsed ones at their fixed values.
+
+    Parameters
+    ----------
+    free_values : tuple
+        Coordinates of the axes left free, in axis order.
+    collapsed : dict of int to float
+        Axis index to the value it was collapsed at.
+    n_axes : int
+        Number of library axes.
+
+    Returns
+    -------
+    tuple
+        One coordinate per library axis, in axis order.
+    """
+    free = iter(free_values)
+    return tuple(collapsed[k] if k in collapsed else next(free) for k in range(n_axes))

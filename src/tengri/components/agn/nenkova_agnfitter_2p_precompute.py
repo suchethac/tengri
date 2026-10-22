@@ -27,20 +27,25 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._torus_inclination import node_power_scale
+from tengri.components.agn._template_power_table import (
+    full_coords,
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
+)
+from tengri.components.agn._torus_inclination import (
+    library_anisotropy,
+    log10_anisotropy,
+)
 from tengri.components.agn.nenkova_agnfitter_2p import (
     TORUS_INCLINATION,
-    _load_nenkova_agnfitter_2p_arrays,
     load_nenkova_agnfitter_2p_grid,
 )
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
-)
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
 )
+from tengri.utils.scale import pow10
 
 # NK0_mean_2p grid parametrized by inclination (as cos) and opening angle.
 AXIS_PARAMS: tuple[str, ...] = ("agn_cos_inc", "agn_oa_nenkova")
@@ -57,10 +62,8 @@ def precompute_nenkova_agnfitter_2p_photometry(
     For each ``(cos_inc, oa)`` grid point, compute the filter-integrated
     photometry. Returns a dict with ``grid_phot`` and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``nenkova_agnfitter_2p.py``) so that
-    ``build_nenkova_agnfitter_2p_photometry_lookup`` returns L_ν [erg/s/Hz]
-    per L_sun of bolometric luminosity.
+    The lookup reads the table as L_ν [erg/s/Hz] per L_sun of torus power,
+    normalized as the runtime ``nenkova_agnfitter_2p.py`` does.
 
     Parameters
     ----------
@@ -78,12 +81,15 @@ def precompute_nenkova_agnfitter_2p_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_incl, n_oa, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``grid_phot`` : ndarray, shape (n_incl, n_oa, n_filters + 1)
+            Power-weighted table: raw band L_ν [erg/s/Hz per unit template power]
+            and, last, the raw bolometric power; see Notes.
         ``axes`` : tuple of 2 grid arrays (jnp.ndarray)
             Grid axes (cos_inc, oa).
         ``_preint`` : PreintegratedGrid
             Internal preintegration data structure.
+        ``_anisotropy`` : AnisotropyGrid
+            The library anisotropy table the lookup reads a / mean(a) from.
 
     Notes
     -----
@@ -93,43 +99,37 @@ def precompute_nenkova_agnfitter_2p_photometry(
     integration via NumPy. The precomputed photometry is grid-independent
     (depends only on filter curves and redshift, not wavelength grid).
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant is L_sun x anisotropy / native_integral(template). This matches
-    the runtime normalization in ``nenkova_agnfitter_2p.py``.
+    **Normalization**: the runtime kernel normalizes the *interpolated* template by
+    its own bolometric integral, so off-node it weights each node by its raw power.
+    The table therefore holds the raw band photometry and, as a last channel, the raw
+    power (``power_weighted_template_photometry`` in ``_template_power_table``); the
+    lookup interpolates both and divides. At a node this is the node-normalized
+    photometry exactly.
+    The sightline factor a / mean(a) is applied after the division, from the
+    library's anisotropy table read as the runtime reads it
+    (``_torus_inclination.log10_anisotropy``); it is returned as ``_anisotropy``.
 
-    **Grid reordering**: The native inclination axis is stored in degrees
-    (ascending). This function converts to cos(incl) and reorders templates
-    to match, mirroring ``nenkova_agnfitter_2p.load_nenkova_agnfitter_2p_grid``.
+    **Grid**: read through the runtime loader
+    ``nenkova_agnfitter_2p.load_nenkova_agnfitter_2p_grid`` (inclination as cos i,
+    ascending), so the table and the runtime share axes and node order.
     """
-    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
-    raw = _load_nenkova_agnfitter_2p_arrays(grid_path)
-    grid = np.asarray(raw["template"], dtype=np.float64)  # (n_incl, n_oa, n_wave)
-    wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
-    incl_deg_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
-    oa_axis = np.asarray(raw["oa_axis"], dtype=np.float64)
-
-    cos_inc_axis = np.cos(np.deg2rad(incl_deg_axis))
-    order = np.argsort(cos_inc_axis)
-    cos_inc_axis = cos_inc_axis[order]
-    grid_reordered = grid[order]
-
-    # Each record at unit power times its anisotropy a / mean a (the scalar table),
-    # as the runtime path normalizes the records (nenkova_agnfitter_2p.TORUS_INCLINATION).
+    # The runtime grid: inclination as cos i, ascending, templates reordered to match.
     runtime_grid = load_nenkova_agnfitter_2p_grid(grid_path)
-    scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
-    lnu_grid = _LSUN_ERG * grid_reordered * scale[..., None]
-
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
+    wave_grid = np.asarray(runtime_grid.wave_grid, dtype=np.float64)
+    cos_inc_axis, oa_axis = (np.asarray(a, dtype=np.float64) for a in runtime_grid.axes)
+    # The runtime normalizes the interpolated template, so its off-node value is
+    # weighted by each node's raw power: tabulate the raw band photometry and the
+    # raw power and divide after interpolating (_template_power_table).
+    # The sightline power a / mean a multiplies the shape, as in the runtime
+    # (_torus_inclination.torus_lnu_anisotropic).
+    anisotropy = library_anisotropy(runtime_grid, TORUS_INCLINATION, jnp.asarray(0.0).dtype)
+    preint = power_weighted_template_photometry(
+        runtime_grid.template,
+        wave_grid,
+        filter_waves,
+        filter_trans,
+        redshift,
         axes=(cos_inc_axis, oa_axis),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
     )
 
     axes_jax = (jnp.asarray(cos_inc_axis), jnp.asarray(oa_axis))
@@ -137,6 +137,7 @@ def precompute_nenkova_agnfitter_2p_photometry(
         "grid_phot": preint.phot,
         "axes": axes_jax,
         "_preint": preint,
+        "_anisotropy": anisotropy,
     }
 
 
@@ -173,6 +174,7 @@ def build_nenkova_agnfitter_2p_photometry_lookup(precomp: dict):
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
+    anisotropy = precomp["_anisotropy"]
 
     @jax.jit
     def nenkova_agnfitter_2p_phot(agn_log_lbol, agn_cos_inc, agn_oa_nenkova, agn_torus_frac):
@@ -182,7 +184,8 @@ def build_nenkova_agnfitter_2p_photometry_lookup(precomp: dict):
         """
         l_bol_lsun = 10.0**agn_log_lbol
         point = (agn_cos_inc, agn_oa_nenkova)
-        phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
+        shape = lnu_per_lsun_from_power_table(interp_nd_pchip(grid_phot, axes, point))
+        phot_per_lsun = shape * pow10(log10_anisotropy(anisotropy, point, TORUS_INCLINATION))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return nenkova_agnfitter_2p_phot
@@ -239,6 +242,7 @@ def precompute(
         "axes": remaining_axes,
         "_preint": collapsed,
         "_collapsed_axes": fixed,
+        "_anisotropy": result["_anisotropy"],
     }
 
 
@@ -276,12 +280,18 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    anisotropy = preint["_anisotropy"]
+    collapsed = preint["_collapsed_axes"]
 
     @jax.jit
     def nenkova_agnfitter_2p_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """``NK0_mean_2p`` torus photometry with collapsed (fixed) axes via PCHIP."""
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        shape = lnu_per_lsun_from_power_table(
+            interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        )
+        point = full_coords(free_axis_values, collapsed, 2)
+        phot_per_lsun = shape * pow10(log10_anisotropy(anisotropy, point, TORUS_INCLINATION))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return nenkova_agnfitter_2p_phot_collapsed
