@@ -58,6 +58,7 @@ from tengri.components.agn._torus_inclination import (
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 from tengri.utils.scale import pow10, representable_denominator
@@ -390,7 +391,7 @@ def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     if grid.norm is None:
         return anisotropy_grid(jnp.ones(jnp.shape(grid.dust)[:-1]), axes, TORUS_INCLINATION)
     return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
@@ -526,7 +527,7 @@ def fritz_sed_from_grid(
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     _refuse_off_grid("agn_fritz_oa", agn_fritz_oa, axes[4])
     _refuse_off_grid("agn_fritz_psy", agn_fritz_psy, axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
     point = (
@@ -544,8 +545,8 @@ def fritz_sed_from_grid(
     # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
     # axis, mu = cos i = sin(psy).
     shape = _interpolate_and_normalize(
-        jnp.asarray(grid.dust),
-        jnp.asarray(grid.wave_grid),
+        device_table(grid.dust),
+        device_table(grid.wave_grid),
         axes,
         wavelength,
         point,
@@ -762,7 +763,7 @@ def fritz_disc_dust_wave(template: FritzGrid | None = None):
         The library's native wavelength axis [Å].
     """
     grid = load_fritz_default_grid() if template is None else template
-    return jnp.asarray(grid.wave_grid)
+    return device_table(grid.wave_grid)
 
 
 def fritz_disc_dust_ratio(
@@ -839,8 +840,8 @@ def fritz_disc_dust_ratio(
     grid = _template if _template is not None and _template.disk is not None else None
     if grid is None:
         grid = load_fritz_default_grid()
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
-    wave_grid = jnp.asarray(grid.wave_grid)
+    axes = tuple(device_table(a) for a in grid.axes)
+    wave_grid = device_table(grid.wave_grid)
 
     def _interp(table, psy):
         point = (
@@ -855,7 +856,7 @@ def fritz_disc_dust_ratio(
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
         return interp_nd_pchip(
-            jnp.asarray(table),
+            device_table(table),
             axes,
             tuple(jnp.asarray(c) for c in point),
             extrapolate=_PSY_EXTRAPOLATE,
