@@ -97,6 +97,7 @@ True
 from __future__ import annotations
 
 import difflib
+import math
 import warnings
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
@@ -150,7 +151,7 @@ from tengri.parameters.agn_ownership import (  # noqa: F401
     cigale_spelling_hint,
 )
 from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
-from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
+from tengri.parameters.priors import Distribution, Fixed, Uniform, _is_default_fixed
 from tengri.parameters.sentinels import (
     DEFAULT,
     FREE,
@@ -4373,6 +4374,23 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # lifetime; ``transition_width_dex`` is the dispersal width of every age
     # edge (age_binned windows included). Refuse them on a type that has no
     # age split rather than drop them silently.
+    # The age-mixture evaluation order is a two_component setting (the one
+    # attenuator whose screen is a two-interval mixture evaluated per node).
+    if "age_mixture" in dust_atten_dict:
+        from tengri.components.dust.two_component import AGE_MIXTURES
+
+        if dust_type != "two_component":
+            raise ValueError(
+                f"dust_attenuation 'age_mixture' is a two_component setting (got "
+                f"type={dust_type!r}); drop 'age_mixture'."
+            )
+        if dust_atten_dict["age_mixture"] not in AGE_MIXTURES:
+            raise ValueError(
+                f"dust_attenuation['age_mixture'] must be one of {AGE_MIXTURES}; "
+                f"got {dust_atten_dict['age_mixture']!r}."
+            )
+        result["dust_age_mixture"] = dust_atten_dict["age_mixture"]
+
     if "t_birth_yr" in dust_atten_dict and dust_type != "two_component":
         raise ValueError(
             f"dust_attenuation 't_birth_yr' is the two_component birth-cloud lifetime "
@@ -5831,6 +5849,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # (birth-cloud-screen types) only -- see
             # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
             "lyc_escape_geometry",
+            # Evaluation order of the two-component age mixture ('per_node' |
+            # 'grouped'); same model either way. Two-component only.
+            "age_mixture",
             # Young/old split: birth-cloud dispersal age [yr] (two_component) and
             # the dispersal width [dex] of every age edge (0 = hard step). Static.
             "t_birth_yr",
@@ -6045,6 +6066,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
+        _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
         # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
         # bc/diff/neb), the Lyman flags and the law keys are emitted by
         # _add_structural_settings / _emit_declared_structural, not by this table.
@@ -7286,6 +7308,64 @@ def _agn_fritz_psy_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: The retired SKIRTOR-AGNfitter inclination (owner ruling #2605, #3085): the
+#: ``skirtor_agnfitter{,_1p,_2p}`` tori were keyed by their own angle in degrees
+#: while the disc screen read ``agn_cos_inc``, so a model saw its torus and its
+#: disc along two sightlines. The library's inclination is derived from the one
+#: inclination, i = arccos(agn_cos_inc).
+_AGN_INCL_SKIRTOR_KEYS: frozenset[str] = frozenset({"agn_incl_skirtor", "incl_skirtor"})
+
+
+def _incl_skirtor_translation(value) -> str:
+    """The closing ``agn_cos_inc`` entry for a retired ``agn_incl_skirtor`` value, when known."""
+
+    def _cos(deg) -> float:
+        return round(math.cos(math.radians(float(deg))), 6)
+
+    if value is FREE:
+        return "'cos_inc': FREE}  # frees the one inclination, for the disc and torus alike"
+    if _is_default_fixed(value):
+        return "'cos_inc': Fixed(DEFAULT)}"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"'cos_inc': Fixed({_cos(value)!r})}}"
+    if isinstance(value, Fixed) and isinstance(value.value, (int, float)):
+        return f"'cos_inc': Fixed({_cos(value.value)!r})}}"
+    if isinstance(value, Uniform):
+        return (
+            f"'cos_inc': Uniform({_cos(value.hi)!r}, {_cos(value.lo)!r})}}  "
+            f"# the same sightlines; a Uniform in cos i is not uniform in degrees"
+        )
+    return "'cos_inc': Fixed(cos(radians(incl)))}"
+
+
+def _agn_incl_skirtor_retired_error(group: str, key: str, value) -> ValueError:
+    """The one message the retired ``agn_incl_skirtor`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.torus'``, ...).
+    key : str
+        The spelling the caller wrote.
+    value : object
+        What the caller wrote for it; a number, ``Fixed`` or ``Uniform`` is translated.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement parameter, the mapping and the translated entry.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) is retired (#3085): the AGN has one "
+        f"inclination, 'agn_cos_inc' (cos i, i from the polar axis), read by the torus, the "
+        f"disc screen and the X-ray corona alike (#2605). The SKIRTOR-AGNfitter tori "
+        f"(skirtor_agnfitter, skirtor_agnfitter_1p, skirtor_agnfitter_2p) key their 0-90 deg "
+        f"inclination axis at i = arccos(agn_cos_inc). Give the inclination at the top of the "
+        f"agn group (a torus-level 'all_params': FREE does not free it):\n"
+        f"  agn={{'type': 'composable', ..., {_incl_skirtor_translation(value)}"
+    )
+
+
 #: The retired absolute Lyman-continuum dust-absorption fraction (owner
 #: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
 #: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
@@ -7458,6 +7538,10 @@ def _check_dict_keys(
         # intercepted in every group; the one inclination is agn_cos_inc.
         if key in _AGN_FRITZ_PSY_KEYS or (key == "psy" and str(group).endswith("torus")):
             raise _agn_fritz_psy_retired_error(group, str(key))
+        # #3085 (owner ruling #2605): the retired SKIRTOR-AGNfitter angle,
+        # likewise intercepted in every group.
+        if key in _AGN_INCL_SKIRTOR_KEYS:
+            raise _agn_incl_skirtor_retired_error(group, str(key), user_dict[key])
         # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
         # before the generic resolver reaches it -- it was always written
         # under the 'neb' group, so no cross-group form is needed here.
@@ -8594,6 +8678,7 @@ def _resolve_value(
             "lyc_reprocessed_by",
             "lyc_in_energy_balance",
             "lyc_escape_geometry",
+            "age_mixture",
             "t_birth_yr",
             "transition_width_dex",
         }

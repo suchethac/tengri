@@ -192,7 +192,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.disc:multicolor_disc",
             "tengri.components.agn.disc:relagn_disc_from_grid",
             "tengri.components.agn.fritz:create_fritz_components_from_grid.fritz_components",
-            "tengri.components.agn.fritz:create_fritz_from_grid.fritz_grid",
             "tengri.components.agn.fritz:fritz_sed_from_grid",
             "tengri.components.agn.grahsp.model:compute_grahsp_sed",
             "tengri.components.agn.kd18_agnfitter:_renormalize",

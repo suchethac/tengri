@@ -203,6 +203,78 @@ def mix_intervals(fractions: jnp.ndarray, per_interval: jnp.ndarray) -> jnp.ndar
     return jnp.sum(f * per_interval[:, None, ...], axis=0)
 
 
+def interval_sums(fractions: jnp.ndarray, per_age: jnp.ndarray) -> jnp.ndarray:
+    r"""Per-interval sum over SSP nodes: ``L_j(...) = sum_a F_j(a) X(a, ...)``.
+
+    .. math::
+
+        L_j(\lambda) = \sum_a F_j(a)\, L_\nu(a, \lambda)
+
+    with :math:`F_j(a)` the formed-mass fraction of node :math:`a` in interval
+    :math:`j` [dimensionless] and :math:`L_\nu(a, \lambda)` the node's spectrum
+    [erg/s/Hz].
+
+    Parameters
+    ----------
+    fractions : ndarray, shape (n_interval, n_age)
+        :func:`interval_fractions` output.
+    per_age : ndarray, shape (n_age, ...)
+        Any per-node quantity (e.g. the per-age L_nu cube [erg/s/Hz]).
+
+    Returns
+    -------
+    ndarray, shape (n_interval, ...)
+        The interval sums.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible.** Exact regrouping of :func:`mix_intervals`:
+    ``sum_a X(a) mix_intervals(F, T)(a) == sum_j T_j interval_sums(F, X)_j`` up to
+    floating-point reassociation. One multiply-and-sum per interval (the interval
+    axis is a static Python loop), for the same XLA CPU reason as
+    :func:`mix_intervals`.
+    """
+    per_age = jnp.asarray(per_age)
+    shape = (fractions.shape[1],) + (1,) * (per_age.ndim - 1)
+    return jnp.stack(
+        [jnp.sum(fractions[j].reshape(shape) * per_age, axis=0) for j in range(fractions.shape[0])]
+    )
+
+
+def contract_intervals(per_interval: jnp.ndarray, interval_spectra: jnp.ndarray) -> jnp.ndarray:
+    r"""``sum_j X_j(...) L_j(...)``: per-interval factors applied to the interval spectra.
+
+    .. math::
+
+        L_{\rm att}(\lambda) = \sum_j T_j(\lambda)\, L_j(\lambda)
+
+    with :math:`T_j` the interval transmission [dimensionless] and :math:`L_j`
+    the :func:`interval_sums` spectrum [erg/s/Hz].
+
+    Parameters
+    ----------
+    per_interval : ndarray, shape (n_interval, ...)
+        Per-interval factor (transmission, gate, ...) [dimensionless].
+    interval_spectra : ndarray, shape (n_interval, ...)
+        :func:`interval_sums` output.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        The sum over intervals.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible.** Explicit multiply-and-add over the static
+    interval axis, not a ``dot_general`` (see :func:`mix_intervals`).
+    """
+    per_interval = jnp.asarray(per_interval)
+    acc = per_interval[0] * interval_spectra[0]
+    for j in range(1, per_interval.shape[0]):
+        acc = acc + per_interval[j] * interval_spectra[j]
+    return acc
+
+
 def weighted_interval_transmission(weights: jnp.ndarray, per_interval: jnp.ndarray) -> jnp.ndarray:
     """``sum_j q_j X_j(...)`` for interval weights ``q`` that do not depend on node.
 

@@ -5,8 +5,9 @@ the SED the component emits.
 Each published luminosity is the integral of the SED the component emits, under the key's
 documented definition (Buchner+ 2024 section 2.1.4-2.1.5, arXiv:2405.19297):
 
-* ``L_agn_bol``: intrinsic BBB + lines + FeII + Balmer continuum above the Lyman limit
-  (91.2 nm), before the bi-attenuation;
+* ``L_agn_bol``: intrinsic BBB + lines + FeII + Balmer continuum above upstream's lumBolBBB
+  cut (91.1753 nm, owner ruling 16), before the bi-attenuation;
+* ``L_agn_bol_ionizing``: the same BBB side below that cut, from the X-ray floor (12.4 nm);
 * ``L_agn_torus``: intrinsic torus continuum + Si feature over its full support;
 * ``L_agn_absorbed``: intrinsic minus attenuated AGN-side power, over the full support.
 
@@ -33,6 +34,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tests.physics._agn_publication import PUB_COARSE, PUB_DENSE, PUB_FILTERS
 from tests.physics._grahsp_reference import (
     CONFIGS,
@@ -132,14 +134,14 @@ def test_sbpl_disc_block_normalization_includes_the_power_law_tail():
     """The SBPL disc block's bolometric normalization holds to 1e-6 at plslope = -1.
 
     With ``agn_grahsp_log_l5100`` unset the block scales its unit spectrum so that the
-    integral above 91.2 nm is ``10**agn_log_lbol`` L_sun. The integral of the block's own
+    integral above 91.1753 nm is ``10**agn_log_lbol`` L_sun. The integral of the block's own
     output, taken to 1e15 nm, must reproduce that target.
     """
     from tengri.components.agn.blocks.grahsp_blocks import grahsp_sbpl_disc_block
     from tengri.utils.physics_constants import L_SUN
 
     n = (20 * 13) + 1
-    breaks = np.geomspace(912.0, 1.0e16, n)  # Angstrom
+    breaks = np.geomspace(10.0 * BBB_BOL_CUT_NM, 1.0e16, n)  # Angstrom, from lumBolBBB's cut
     x, w = np.polynomial.legendre.leggauss(16)
     lo, hi = np.log(breaks[:-1]), np.log(breaks[1:])
     half = 0.5 * (hi - lo)[:, None]
@@ -193,7 +195,7 @@ def test_published_L_identity_at_the_attenuation_and_amplitude_corners():
     }
     bounds = {d.name: d.prior.bounds for d in ref.full.declared_parameters()}
     names = ("agn_grahsp_ebv", "agn_grahsp_ebv_agn", "agn_grahsp_a_feii", "agn_grahsp_a_lines")
-    above_lyman = lam >= 91.2
+    above_lyman = lam >= 91.1753
     worst = {"L_agn_bol": 0.0, "L_agn_absorbed": 0.0}
     for corner in itertools.product(*(bounds[n] for n in names)):
         params = dict(unit)

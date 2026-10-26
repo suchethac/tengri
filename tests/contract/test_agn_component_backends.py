@@ -292,12 +292,16 @@ class TestSilva04TorusContract:
             assert prior.default == canonical.default, attr
 
     def test_silva04_outputs(self):
-        """Silva04Torus publishes log_L_agn_torus [dex]."""
+        """Silva04Torus publishes the torus-only ledger [dex] (NAMING_CONTRACT 4c, #2851)."""
         component = Silva04Torus()
         outputs = component.outputs()
         assert {o.name: o.units for o in outputs} == {
             "log_L_agn_torus": "dex",
             "L_agn_torus_lsun": "Lsun",
+            "log_L_agn_torus_los": "dex",
+            "L_agn_torus_los_lsun": "Lsun",
+            "log_L_agn_disc_unemitted": "dex",
+            "L_agn_disc_unemitted_lsun": "Lsun",
         }
 
     def test_silva04_predict_no_grid(self):
@@ -378,12 +382,16 @@ class TestCAT3DTorusContract:
             assert prior.default == canonical.default, attr
 
     def test_cat3d_outputs(self):
-        """CAT3DTorus publishes log_L_agn_torus [dex]."""
+        """CAT3DTorus publishes the torus-only ledger [dex] (NAMING_CONTRACT 4c, #2851)."""
         component = CAT3DTorus()
         outputs = component.outputs()
         assert {o.name: o.units for o in outputs} == {
             "log_L_agn_torus": "dex",
             "L_agn_torus_lsun": "Lsun",
+            "log_L_agn_torus_los": "dex",
+            "L_agn_torus_los_lsun": "Lsun",
+            "log_L_agn_disc_unemitted": "dex",
+            "L_agn_disc_unemitted_lsun": "Lsun",
         }
 
     def test_cat3d_predict_no_grid(self):
@@ -423,9 +431,9 @@ class TestSKIRTORAgnfitterTorusContract:
         assert _REGISTRY["skirtor_agnfitter"] is SKIRTORAgnfitterTorus
 
     def test_skirtor_agnfitter_bounds_match_canonical_declaration(self):
-        """oa_skirtor/incl_skirtor/tv_skirtor derive from the canonical PARAMS
+        """oa_skirtor/cos_inc/tv_skirtor derive from the canonical PARAMS
         declarations (single source of truth, Task 1/M-A). Numerically equal
-        to ``agn_oa_skirtor``/``agn_incl_skirtor``/``agn_tv_skirtor`` today but
+        to ``agn_oa_skirtor``/``agn_cos_inc``/``agn_tv_skirtor`` today but
         were unprotected literal restatements before this fix round -- fails
         if the class ever restates one of them as a literal again (the same
         way ``CAT3DTorus.fwd_cat3d`` drifted to a stale ``Uniform(0.0, 1.0)``
@@ -440,7 +448,7 @@ class TestSKIRTORAgnfitterTorusContract:
         component = SKIRTORAgnfitterTorus()
         for attr, canonical_name in (
             ("oa_skirtor", "agn_oa_skirtor"),
-            ("incl_skirtor", "agn_incl_skirtor"),
+            ("cos_inc", "agn_cos_inc"),
             ("tv_skirtor", "agn_tv_skirtor"),
             ("log_lbol", "agn_log_lbol"),
             ("torus_frac", "agn_torus_frac"),

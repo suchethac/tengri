@@ -135,9 +135,11 @@ def test_total_energy_at_infinity_is_the_standard_efficiency(a, eta):
 def test_disc_total_dissipation_is_the_page_thorne_one_not_newtonian():
     """(a) The production disc's own dissipation integral, to R = 1e4 R_isco, at a = 0.
 
-    ``kubota_done_disc`` sets ``Mdot = L_bol / (eta c^2)``; its dissipation in the disc frame
-    must then be 1.0191 L_bol (``int 4 pi r F dr`` of Page-Thorne, 1.0191 eta Mdot c^2), not
-    the 1.457 L_bol of the Newtonian zero-torque profile it used before #2572.
+    ``kubota_done_disc`` infers ``Mdot`` so that the Page-Thorne dissipation ``int 4 pi r F dr``
+    (1.0191 eta Mdot c^2 at a = 0) equals L_bol (owner ruling 2026-10-20; it was set to
+    ``L_bol / (eta c^2)``, which gave 1.0191 L_bol), not the 1.457 L_bol of the Newtonian
+    zero-torque profile it used before #2572. The integral is cut at 1e4 R_isco, 1e-4 of ``L_0``
+    short of infinity.
     """
     import jax.numpy as jnp
 
@@ -157,4 +159,4 @@ def test_disc_total_dissipation_is_the_page_thorne_one_not_newtonian():
     ) ** 0.25
     l_bol = 10.0**log_lbol * D._LSUN_ERG
     total = float(D._nt_l_diss_analytic(1.0e4, r_isco, t_in))
-    np.testing.assert_allclose(total / l_bol, 1.0191, rtol=2e-3)
+    np.testing.assert_allclose(total / l_bol, 1.0, rtol=1e-3)

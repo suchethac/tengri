@@ -49,7 +49,7 @@ References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
    observations with models," ApJL 838,
-   L20 (2017). arXiv:1702.08691.
+   L20 (2017). arXiv:1703.07781.
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -203,12 +203,17 @@ def cat3d_wind_sed_from_grid(
     ----------
     .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
        observations with models," ApJL 838,
-       L20 (2017). arXiv:1702.08691.
+       L20 (2017). arXiv:1703.07781.
     .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
        "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
        distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
        DOI: 10.1051/0004-6361/202449329.
     """
+    # Normalized per sightline (#2851): AGNfitter-rX CAT3D_mean_3p.pickle states no common
+    # scale for its records across inclination (Martinez-Ramirez et al. 2024, Sect. 3.3, says
+    # only that the CAT3D-WIND SEDs were averaged), and the stored powers are not monotonic
+    # in inclination, so the library's anisotropy is not restored. Sightline: cos i,
+    # ascending, axis 0 (from the stored 'incl_axis' in deg, 0 face-on).
     return torus_lnu_from_grid(
         grid,
         wavelength,

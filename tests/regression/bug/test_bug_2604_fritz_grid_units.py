@@ -253,7 +253,12 @@ def test_raw_template_converted_as_l_lambda_exactly(node, key):
 
 
 def test_fritz_components_disc_and_dust_share_the_conversion():
-    """Both ``fritz_components`` arrays carry unit power and ``dust`` is ``fritz_sed``."""
+    """Both ``fritz_components`` arrays carry unit power and ``dust`` has ``fritz_sed``'s shape.
+
+    ``fritz_sed`` keeps the library's anisotropy (#2851), so along one sightline it is the
+    same spectrum scaled by ``P(mu) / mean P``; ``fritz_components`` normalizes each array
+    on its own.
+    """
     _require_grid()
     wave = _native_wave_aa()
     kw = {
@@ -269,9 +274,9 @@ def test_fritz_components_disc_and_dust_share_the_conversion():
     comp = FR.fritz_components(jnp.asarray(wave), **kw)
     for arr in (comp.disk, comp.dust):
         assert _native_power_nu(np.asarray(arr), wave) == pytest.approx(L_SUN, rel=1e-6)
-    np.testing.assert_allclose(
-        np.asarray(comp.dust), np.asarray(FR.fritz_sed(jnp.asarray(wave), **kw)), rtol=1e-12
-    )
+    torus = np.asarray(FR.fritz_sed(jnp.asarray(wave), **kw))
+    scale = _native_power_nu(torus, wave) / L_SUN
+    np.testing.assert_allclose(np.asarray(comp.dust) * scale, torus, rtol=1e-12, atol=0.0)
 
 
 # -- b. shape against CIGALE ---------------------------------------------
@@ -409,16 +414,46 @@ def test_model_torus_median_power_wavelength_pinned(node, literal, _torus_states
     assert got == pytest.approx(literal[1], rel=_MEDIAN_RTOL)
 
 
-#: Torus power of the built model, ``integral of sed_agn_torus d(nu)`` [erg/s], at
-#: ``agn_log_lbol = 11``, ``agn_torus_frac = 1``: 1e11 L_sun. The conversion
-#: redistributes the power over wavelength and leaves its total unchanged; the
-#: literal is the total the loader returns when the template is read as L_nu.
+#: Angle-integrated torus power of the built model [erg/s] at ``agn_log_lbol = 11``,
+#: ``agn_torus_frac = 1``: 1e11 L_sun. The conversion redistributes the power over
+#: wavelength and leaves its total unchanged.
 _MODEL_TORUS_POWER_ERG_S = 3.828e44
+
+
+def _model_sightline_power(node):
+    """The power of the torus along the model's sightline [erg/s]: f L P(mu) / mean P.
+
+    The torus keeps the library's anisotropy (#2851); the sightline factor is the
+    kernel's published ``log_L_agn_torus_los`` (its closure on the raw library is
+    ``test_bug_2851_fritz_anisotropy``).
+    """
+    from tengri.components.agn._torus_inclination import torus_ledger_from_grid
+
+    r, tau, beta, gamma, theta, psy = node
+    coords = (
+        r,
+        tau,
+        beta,
+        gamma,
+        _half_angle(theta),
+        FR.fritz_psy_from_cos_inc(float(np.sin(np.radians(psy)))),
+    )
+    ledger = torus_ledger_from_grid(
+        FR.fritz_anisotropy(FR.load_fritz_default_grid()),
+        coords,
+        FR.TORUS_INCLINATION,
+        agn_log_lbol=_MODEL_AGN_LOG_LBOL,
+        agn_torus_frac=1.0,
+    )
+    assert 10.0 ** float(ledger["log_L_agn_torus"]) == pytest.approx(
+        _MODEL_TORUS_POWER_ERG_S, rel=1e-12
+    )
+    return 10.0 ** float(ledger["log_L_agn_torus_los"])
 
 
 @pytest.mark.parametrize("node", _NODES, ids=_NODE_IDS)
 def test_model_torus_power_unchanged(node, _torus_states):
-    """The torus power is the target (a) on a dense grid, (b) on the model grid within its error.
+    """The sightline torus power is the target (a) on a dense grid, (b) on the model grid.
 
     (a) is the physics claim: the model's samples, log-log interpolated onto a grid 10x
     denser, integrate to the target to 1e-6 (measured 2e-8 to 3.3e-8 at the four nodes).
@@ -428,8 +463,9 @@ def test_model_torus_power_unchanged(node, _torus_states):
     wave_aa, lnu = _torus_states[node]
     dense = np.geomspace(wave_aa.min(), wave_aa.max(), 10 * wave_aa.size)
     lnu_dense = np.exp(np.interp(np.log(dense), np.log(wave_aa), np.log(np.maximum(lnu, 1e-300))))
-    assert _power_nu(lnu_dense, dense) == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-6)
-    assert _power_nu(lnu, wave_aa) == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-4)
+    target = _model_sightline_power(node)
+    assert _power_nu(lnu_dense, dense) == pytest.approx(target, rel=1e-6)
+    assert _power_nu(lnu, wave_aa) == pytest.approx(target, rel=1e-4)
 
 
 # -- e. the lookup residual ---------------------------------------------------
@@ -485,7 +521,10 @@ def test_lookup_residual_is_the_triweight_weighting(point, band_dev, median_dev)
             agn_fritz_psy=psy,
         )
     )
+    # The shape is the lookup of the raw table; the scale along this sightline is the
+    # library's anisotropy P(mu) / mean P (#2851), so the shapes are compared.
     want = _lookup_expected_lnu(point, wave_aa) * L_SUN
+    want = want * (np.sum(lnu) / np.sum(want))
     np.testing.assert_allclose(lnu, want, rtol=1e-6, atol=1e-9 * np.max(want))
 
     node = (r, tau, beta, gamma, 180.0 - 2.0 * half, psy)
@@ -505,12 +544,15 @@ def test_lookup_residual_is_the_triweight_weighting(point, band_dev, median_dev)
 
 @pytest.mark.parametrize("node", _NODES, ids=_NODE_IDS)
 def test_torus_power_equals_l_scale(node):
-    """``integral of L_nu d(nu)`` equals ``10**log_lbol * L_sun * frac`` to 1e-6.
+    """``integral of L_nu d(nu)`` on the native nodes is the published sightline power (1e-6).
 
-    The loader normalizes on the template's own native grid, so the integral
-    read at those nodes is the requested luminosity to rounding, whatever grid
-    the caller evaluates on.
+    The loader normalizes on the template's own native grid, so the integral read at
+    those nodes is the requested power along the sightline to rounding, whatever grid
+    the caller evaluates on: ``10**log_lbol * L_sun * frac`` times the library's
+    anisotropy ``P(mu) / mean P`` (#2851), whose sphere mean is the requested power.
     """
+    from tengri.components.agn._torus_inclination import torus_ledger_from_grid
+
     _require_grid()
     r, tau, beta, gamma, theta, psy = node
     wave = _native_wave_aa()
@@ -525,8 +567,18 @@ def test_torus_power_equals_l_scale(node):
         agn_fritz_oa=_half_angle(theta),
         agn_fritz_psy=psy,
     )
+    ledger = torus_ledger_from_grid(
+        FR.fritz_anisotropy(FR.load_fritz_default_grid()),
+        (r, tau, beta, gamma, _half_angle(theta), psy),
+        FR.TORUS_INCLINATION,
+        agn_log_lbol=1.5,
+        agn_torus_frac=0.4,
+    )
+    assert 10.0 ** float(ledger["log_L_agn_torus"]) == pytest.approx(
+        10.0**1.5 * L_SUN * 0.4, rel=1e-12
+    )
     assert _native_power_nu(np.asarray(lnu), wave) == pytest.approx(
-        10.0**1.5 * L_SUN * 0.4, rel=1e-6
+        10.0 ** float(ledger["log_L_agn_torus_los"]), rel=1e-6
     )
 
 

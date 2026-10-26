@@ -711,6 +711,17 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
                 "which covers the photometry/spectroscopy vector only, never "
                 "LineFluxData's own mask"
             ), {}
+        # A nebular model error (#2941) makes the line variance a function of the
+        # predicted flux, sigma_eff(F_model), and its ln term cannot be absorbed
+        # by the closed-form quadratic in the mass amplitude.
+        if fitter._resolved_line_model_sigma() is not None:
+            return (
+                "the measured emission-line fluxes carry a nebular model error "
+                "(line_model_sigma), whose variance depends on the predicted flux: "
+                "sigma_eff(F_model) enters the likelihood through its ln term, which "
+                "the profiled quadratic cannot absorb. Set line_model_sigma=False or "
+                "profile_mass=False"
+            ), {}
         # A free ``line_flux_scaling`` (#2527) multiplies the SAME line-flux
         # block the profiled mass amplitude multiplies: the line-flux term
         # constrains only their PRODUCT, not either alone, exactly the

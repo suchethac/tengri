@@ -289,6 +289,12 @@ CENSUS: dict[str, str] = {
     "components/agn/_template_grid.py": (
         "fitted-ok (cat3d grid cos 6.1e-17 vs prior 0; numerical, see skirtor pattern)",
     ),
+    "components/agn/_torus_inclination.py": (
+        "fitted-ok (the scalar anisotropy lookup on the same axes, hulls and rules as the "
+        "shape lookups of _template_grid and fritz.py: non-inclination axes clamp as there; "
+        "the sightline reuses each library's own inclination rule, NK0_mean_1p's cos gap "
+        "registered as GRID_SUPPORT nenkova_agnfitter, Fritz psy extended)"
+    ),
     "components/agn/cat3d_precompute.py": "fitted-ok (cos 6.1e-17 vs prior 0)",
     "components/agn/cat3d_wind_lowfwd_precompute.py": "fitted-ok (cos 6.1e-17 vs prior 0)",
     "components/agn/silva04.py": "fitted-ok",
@@ -301,6 +307,10 @@ CENSUS: dict[str, str] = {
     "components/agn/skirtor_agnfitter_precompute.py": "fitted-ok",
     "components/agn/skirtor_agnfitter_1p_precompute.py": "fitted-ok",
     "components/agn/skirtor_agnfitter_2p_precompute.py": "fitted-ok",
+    "components/agn/_template_power_table.py": (
+        "fitted-ok (read_at_fixed_axes: the Fixed-axis read of the power-weighted tables "
+        "above, on the same tables, axes and hulls as their full lookups)"
+    ),
     "components/agn/skirtor_precompute.py": "fitted-ok (triweight, grid over prior)",
     "components/agn/disc_precompute.py": "fitted-ok by construction (axes over prior)",
     "components/agn/disc.py": "fitted-physical-registered (GRID_SUPPORT relagn, gap 6.3 spacings)",

@@ -37,6 +37,7 @@ from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import pow10
 
 __all__ = [
+    "blend_z_nonneg",
     "continuum_band_at_z",
     "continuum_band_from_slab",
     "continuum_z_slab",
@@ -312,10 +313,13 @@ def continuum_z_slab(log_table, lnz_grid, redshift):
 def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     """Lower node index and upper-node weight of ``ln(1+z)`` on the grid.
 
-    Weight linear in :math:`\\ln(1+z)` and clipped to [0, 1]: the table is not
-    extrapolated. With ``extrapolate=True`` the edge cell's line continues past
-    the table ends (the shared ``z_bracket`` of the z-response module). A
-    one-node grid returns ``(0, 0.0)``.
+    Weight linear in :math:`\\ln(1+z)`. By default it is clipped to [0, 1], so a
+    redshift outside the table holds the end node. With ``extrapolate=True`` it is
+    the shared ``z_bracket`` weight of the z-response module: the edge cell's
+    weight continues past the table ends for half an end spacing, to
+    :math:`[-0.5, 1.5]`, then holds. A one-node grid returns ``(0, 0.0)``. The
+    band blends that read the weight (:func:`blend_z_nonneg`) keep a band
+    non-negative across the continued cell.
     """
     n_z = lnz_grid.shape[0]
     if n_z == 1:
@@ -335,10 +339,84 @@ def z_bracket(lnz_grid, redshift, *, extrapolate=False):
     return i, w
 
 
+def blend_z_nonneg(b0, b1, weight, log_ratio=None):
+    r"""Blend two non-negative table rows at a bracket weight that may leave [0, 1].
+
+    Inside the cell (:math:`0 \le t \le 1`) this is the linear blend
+    :math:`(1 - t)\,b_0 + t\,b_1`, unchanged to the bit. Past an end node the
+    cell's line would go negative wherever the band falls steeply, so the
+    continuation is exponential in the edge band instead,
+
+    .. math::
+
+        b(t) = b_e \exp\!\left(\left(\frac{b_1 - b_0}{b_e}\right)(t - t_e)\right),
+
+    with :math:`b_e` the edge band and :math:`t_e` its weight (0 below the
+    table, 1 above). The value and the first derivative in :math:`t` are
+    continuous at the node and the value is positive. The slope ratio is
+    :math:`b_1/b_0 - 1` (below) or :math:`1 - b_0/b_1` (above), clipped so the
+    exponent lies in :math:`[-80, 0.5]`: the gradient is nonzero while the
+    continuation stays above :math:`e^{-80}` of the edge value, and zero past
+    that for a very steep cell. A band that is exactly zero at the edge node has
+    no scale to continue: it stays at zero beyond the node (a kink at the node).
+
+    Parameters
+    ----------
+    b0, b1 : ndarray, shape (..., n_filter)
+        Band :math:`L_\nu` at the lower and upper bracketing nodes, non-negative
+        [erg/s/Hz].
+    weight : float or ndarray, shape ()
+        Upper-node weight :math:`t`, in :math:`[-0.5, 1.5]`. [dimensionless]
+    log_ratio : ndarray, shape (..., n_filter), optional
+        :math:`\log_{10}(b_1/b_0)` from the log table. When given, the node ratio
+        is formed from it and never divides one flux by another, so the exponent
+        does not depend on the flux scale (:math:`Q_H`) and its gradient neither
+        overflows nor underflows in float32. [dex]
+
+    Returns
+    -------
+    ndarray, shape (..., n_filter)
+        The blended band [erg/s/Hz], non-negative.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: every branch is evaluated on safe operands, so the
+    gradient is finite where the edge band is zero.
+    """
+    linear = (1.0 - weight) * b0 + weight * b1
+    below = weight < 0.0
+    above = weight > 1.0
+    beyond = below | above
+    edge = jnp.where(below, b0, b1)
+    offset = jnp.where(below, weight, jnp.where(above, weight - 1.0, 0.0))
+    lit = edge > 0.0
+    safe = jnp.where(lit, edge, 1.0)
+    if log_ratio is None:
+        slope = (b1 - b0) / safe
+    else:
+        # Log-space clip, not a flux floor: +-30 dex keeps pow10 finite in float32
+        # (1e30 < 3.4e38) for the ratio of two nodes; real node ratios are far inside.
+        d = jnp.clip(log_ratio, -30.0, 30.0)
+        up = jnp.where(b1 > 0.0, pow10(d), 0.0)  # b1 / b0
+        down = jnp.where(b0 > 0.0, pow10(-d), 0.0)  # b0 / b1
+        slope = jnp.where(below, up - 1.0, 1.0 - down)
+    # Log-space clip on exp's argument, not a flux floor: -80 keeps exp finite and
+    # its VJP free of 0 * inf (e**-80 = 1.8e-35 is representable in float32); the upper
+    # bound 0.5 is the largest value the argument can take over a half-spacing
+    # continuation (slope <= 1, |offset| <= 0.5), so it never binds.
+    exponent = jnp.clip(slope * offset, -80.0, 0.5)
+    # A dark edge node has no scale to continue. There the linear line is never
+    # positive past the node (it is ``t b_1 <= 0`` below, ``(1 - t) b_0 <= 0``
+    # above), so the non-negative continuation is exactly zero.
+    continued = jnp.where(lit, safe * jnp.exp(exponent), jnp.zeros_like(linear))
+    return jnp.where(beyond, continued, linear)
+
+
 def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):
     r"""Blend the two interpolated table rows into the continuum band.
 
-    The blend is linear because the continuum is exactly zero below the 915
+    The blend is linear inside the table (see :func:`blend_z_nonneg` for the
+    continuation past its end nodes) because the continuum is exactly zero below the 915
     Angstrom truncation: interpolating a floored log between a zero and a finite
     node would invent flux at the edge. Exponentiation comes first, so a band
     that is zero at one node stays zero there.
@@ -368,7 +446,7 @@ def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):
         return pow10(jnp.asarray(log_nion) + log_bands[0]) * keep[0]
     keep2 = jax.lax.dynamic_slice_in_dim(keep, lower, 2, axis=0)
     bands = pow10(jnp.asarray(log_nion) + log_bands) * keep2
-    return (1.0 - weight) * bands[0] + weight * bands[1]
+    return blend_z_nonneg(bands[0], bands[1], weight, log_bands[1] - log_bands[0])
 
 
 def continuum_band_at_z(log_nion, log_table, keep, lnz_grid, redshift, node_interp):

@@ -594,6 +594,11 @@ def _extend_integrand_to_history(fine_age_yr, tab_lbt_yr, ssp_ages_yr, factor: i
     hi = ssp_ages_yr[-1]
     top = jnp.maximum(jnp.max(tab_lbt_yr), hi)
     tail = 10.0 ** jnp.linspace(jnp.log10(hi), jnp.log10(top), factor + 1)[1:]
+    # #3059: the last node is ``top`` itself. ``10 ** log10(top)`` differs from
+    # ``top`` by up to 28 ulp between platforms, and :func:`_cic_parcels` masks
+    # ages against the same ``top``: an inexact endpoint decides the closed
+    # t_obs endpoint's trapezoid half-panel by rounding alone.
+    tail = tail.at[-1].set(top)
     return jnp.concatenate([fine_age_yr, tail]), top
 
 
@@ -1267,18 +1272,31 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
 
 
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
-    """Shared parcel machinery for the CIC weight builders (#964).
+    r"""Shared parcel machinery for the CIC weight builders (#964).
 
     Returns ``(contrib, idx, f, total_mass, age)``: per-parcel trapezoid
     masses [Msun] on the lookback-0-extended integrand, the lower bracketing
     SSP node index and its log-age interpolation fraction, the #538-contract
     total mass, and the extended age grid [yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: static shapes, pure ``jnp``.
+
+    The mask keeps ages up to and including ``t_obs`` (``<=``) and drops only
+    those strictly beyond the age of the universe. The closed endpoint at
+    ``age = t_obs`` belongs to :math:`\int_0^{t_\mathrm{obs}} \mathrm{SFR}\,dt`:
+    for a constant SFR the trapezoid with the endpoint included gives exactly
+    :math:`\mathrm{SFR}\,t_\mathrm{obs}`, and dropping it loses
+    :math:`\mathrm{SFR}\,d/2` for the last spacing :math:`d` (#3059). The grid
+    builder makes its last node exactly ``t_obs * 1e9``, so this comparison is
+    decided by the same float on every platform.
     """
     # Extend the integrand to lookback 0 holding SFR constant over the
     # first ~0.1 Myr (#538): the [0, age0] mass belongs to the youngest node.
     age = jnp.concatenate([jnp.zeros((1,), age_yr.dtype), age_yr])
     sfr_ext = jnp.concatenate([sfr[:1], sfr])
-    sfr_valid = jnp.where(age < t_obs_gyr * 1e9, sfr_ext, 0.0)
+    sfr_valid = jnp.where(age <= t_obs_gyr * 1e9, sfr_ext, 0.0)
 
     # Trapezoid node masses: dM_i = SFR_i * dt_i with midpoint widths.
     d = jnp.diff(age)
@@ -2038,6 +2056,16 @@ METALLICITY_TABLE_SOURCE_MESSAGE = (
     "sfh_model='table', so with any other SFH the table must be given here."
 )
 
+#: Parameter key of a per-evaluation non-parametric bin ladder [Gyr], shape
+#: ``(n_edges,)``. Traced like ``sfh_t_gyr`` (#996): the key's presence is
+#: static under ``jit``, its values are not, so galaxies with different ladders
+#: share one compile. Read by :meth:`StellarSEDComponentConfig.bin_edges_sfh_kwarg`.
+#: Not a recognized public key: only internal callers that thread
+#: ``fixed_values`` (the batched spectroscopic stack) can pass it, so a
+#: single-galaxy ``predict`` cannot apply it to the spectrum but not the
+#: properties.
+RUNTIME_SFH_BIN_EDGES_KEY = "sfh_bin_edges_gyr"
+
 
 @dataclass(frozen=True)
 class StellarSEDComponentConfig(SEDComponentConfig):
@@ -2119,6 +2147,14 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     age_boundary_width_dex : float
         Dispersal width [dex] of the survival function at every boundary;
         ``0`` (default) is the hard step.
+    publish_interval_spectra : bool
+        Also publish ``lnu_interval``, shape ``(n_boundary + 1, n_wave)``: the
+        per-age-interval L_nu ``sum_a F_j(a) lnu_age(a)`` [erg/s/Hz], formed in
+        the joint-weight contraction itself (no per-age cube) and projected to
+        the pipeline grid as interval spectra, and take ``sed_intrinsic`` as
+        their sum. Set by the orchestrator for an attenuator with
+        ``age_mixture='grouped'``; requires ``age_boundaries_yr``. Default
+        ``False``: nothing changes.
     """
 
     name: str = "stellar"
@@ -2167,6 +2203,9 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     #: Dispersal width [dex] of the survival function at every boundary; 0 is
     #: the hard step (see :mod:`tengri.components.stellar.age_boundary`).
     age_boundary_width_dex: float = 0.0
+    #: Publish the per-age-interval spectra ``lnu_interval`` (see the class
+    #: docstring). Set by ``wire_age_boundaries`` for a grouped attenuator.
+    publish_interval_spectra: bool = False
 
     def __post_init__(self):
         """Emit deprecation warning for sps_backend and advisory for field=True."""
@@ -2176,6 +2215,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
             "age_boundaries_yr",
             validate_age_boundaries(self.age_boundaries_yr, self.age_boundary_width_dex),
         )
+        if self.publish_interval_spectra and not self.age_boundaries_yr:
+            raise ValueError(
+                "StellarSEDComponentConfig.publish_interval_spectra needs age_boundaries_yr: "
+                "the intervals are the ones those boundaries define."
+            )
 
         self._validate_table_metallicity_source()
 
@@ -2189,7 +2233,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 stacklevel=3,
             )
 
-    def bin_edges_sfh_kwarg(self) -> dict:
+    def bin_edges_sfh_kwarg(self, params: Mapping | None = None) -> dict:
         """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
 
         ``resolve_sfh`` binds these edges with ``functools.partial`` for the
@@ -2198,7 +2242,35 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         user's edges are accepted and silently ignored (#1975). Shared by
         ``apply`` and ``compute_joint_weights`` so the exact forward and the
         precompute fast path cannot read different bins.
+
+        Parameters
+        ----------
+        params : Mapping, optional
+            This evaluation's parameters. A ``sfh_bin_edges_gyr`` entry, shape
+            ``(n_edges,)`` [Gyr], replaces the build-time ladder for this
+            evaluation only; the batched spectroscopic stack supplies one per
+            galaxy. Its length must equal the build-time ladder's, because the
+            declared ratio parameters fix the bin count.
+
+        Raises
+        ------
+        ValueError
+            If a runtime ladder is given for an SFH outside
+            ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``)
+            or with the wrong length.
         """
+        if params is not None and RUNTIME_SFH_BIN_EDGES_KEY in params:
+            from tengri.components.stellar.sfh.registry import runtime_bin_edges_count
+
+            n_edges = runtime_bin_edges_count(self.sfh_model, self.sfh_bin_edges_gyr)
+            edges = jnp.asarray(params[RUNTIME_SFH_BIN_EDGES_KEY])
+            if edges.shape != (n_edges,):
+                raise ValueError(
+                    f"{RUNTIME_SFH_BIN_EDGES_KEY} has shape {edges.shape}, but the "
+                    f"{self.sfh_model!r} model was built with {n_edges} bin edges; a runtime "
+                    f"ladder may move the edges but not change their count."
+                )
+            return {"bin_edges_gyr": edges}
         if self.sfh_bin_edges_gyr is None:
             return {}
         from tengri.components.stellar.sfh.registry import _NONPARAM_NAMES
@@ -2433,6 +2505,12 @@ class StellarSEDComponent:
             DerivedKey("L_age", "erg/s", "Bolometric L per SSP age bin"),
             DerivedKey("log_L_age", "dex", "log10(L per SSP age bin / (erg/s)); float32-safe"),
             DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube, shape (n_age, n_wave)"),
+            DerivedKey(
+                "lnu_interval",
+                "erg/s/Hz",
+                "Per-age-interval L_nu sum_a F_j(a) lnu_age(a), shape (n_interval, n_wave); "
+                "published only for a grouped attenuator (config.publish_interval_spectra)",
+            ),
             DerivedKey(
                 "joint_weights",
                 "",
@@ -2975,7 +3053,7 @@ class StellarSEDComponent:
         resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
         sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
         sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
         # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
@@ -3459,6 +3537,24 @@ class StellarSEDComponent:
         # lnu_age``. (Reverses #394.)
         lnu_age = total_mass * ssp_flux_at_age
         sed_intrinsic = lnu_age.sum(axis=0)
+        # Grouped age mixture (an attenuator with ``age_mixture='grouped'``): the
+        # per-interval spectra ``L_j = sum_a F_j(a) lnu_age(a)`` folded into the
+        # joint-weight contraction, so no (n_age, n_wave) cube is formed for them
+        # (nor its reverse-mode cotangent). The contraction runs over the long
+        # (met, age) axes; the interval axis is a free output axis. The stellar
+        # SED is then their sum, which leaves the per-age cube to the consumers
+        # that ask for it (``lnu_age`` below; pruned by XLA when none does).
+        lnu_interval = None
+        if self.config.publish_interval_spectra and younger_fraction is not None:
+            from tengri.components.dust._age_mixture import interval_fractions
+
+            _fractions = interval_fractions(younger_fraction)  # (n_interval, n_age)
+            lnu_interval = total_mass * jnp.einsum(
+                "jma,maw->jw",
+                _fractions[:, None, :] * joint_weights[None, :, :],
+                ssp_flux_for_csp * LSUN_ERG_PER_S,
+            )
+            sed_intrinsic = jnp.sum(lnu_interval, axis=0)
 
         # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
         # is ~1e42 for a 1e9 Msun galaxy, which overflows float32 (max 3.4e38)
@@ -3664,6 +3760,15 @@ class StellarSEDComponent:
             lnu_age_proj = jnp.where(outside[None, :], 0.0, lnu_age_proj)
             sed_intrinsic = sed_intrinsic_proj
             lnu_age = lnu_age_proj
+            if lnu_interval is not None:
+                # Linear interpolation commutes with the interval sum, so
+                # projecting the n_interval spectra equals summing the projected
+                # nodes (to reassociation).
+                lnu_interval = jnp.where(
+                    outside[None, :],
+                    0.0,
+                    vmap(lambda row: jnp.interp(target, ssp_wave_arr, row))(lnu_interval),
+                )
 
         # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
         # When eager precomputation is enabled and the LUT is available,
@@ -3724,6 +3829,8 @@ class StellarSEDComponent:
             # boundary, shape (n_boundary, n_age): the one young/old split every
             # attenuator reads (see tengri.components.stellar.age_boundary).
             derived_overrides["age_boundary_younger_fraction"] = younger_fraction
+        if lnu_interval is not None:
+            derived_overrides["lnu_interval"] = lnu_interval
 
         if self._state is not None and self._state.ssp_phot_lut is not None:
             # Fixed-z path; LUT built at source's z in precompute()
@@ -4402,7 +4509,7 @@ class StellarSEDComponent:
         # of every ``_AGE_FAMILIES`` member to age(z).
         resolve_timing_fracs(sfh_kwargs, params, sfh_spec.internal_param_map, redshift=z)
         sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
         # knots the exact forward builds, from the single shared helper, so the

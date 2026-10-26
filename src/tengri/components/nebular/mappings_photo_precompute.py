@@ -136,7 +136,8 @@ def precompute(
 
     # Grid axes: (ζ_O, log_age, logU, logn)
     # Convert ζ_O back to absolute log10(Z) for AXIS_PARAMS consistency
-    logZ_axis = np.log10(grid.zo_axis) + _LOG10_ZSUN
+    # float64: the stored axis is float32 and numpy's float32 log10 is platform-dependent (#3067).
+    logZ_axis = np.log10(np.asarray(grid.zo_axis, dtype=np.float64)) + _LOG10_ZSUN
 
     axes_np = (
         logZ_axis,

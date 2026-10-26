@@ -20,7 +20,7 @@ written by a separate, row-by-row reader in
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, ApJL 838, L20 (2017). arXiv:1702.08691.
+.. [1] S. F. Hönig & M. Kishimoto, ApJL 838, L20 (2017). arXiv:1703.07781.
 .. [2] Martínez-Ramírez et al., A&A 688, A46 (2024) (AGNfitter-rX). arXiv:2405.12111.
 """
 

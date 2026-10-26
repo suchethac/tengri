@@ -6,9 +6,9 @@
 
 ## Design Philosophy
 
-Existing SED-fitting codes each cover a subset of AGN physics: X-CIGALE (Yang et al. 2020, 2022) provides an $\alpha_{\rm ox}$ disc--corona bridge, SKIRTOR torus, and polar dust but no AGN-ionized emission lines; BEAGLE-AGN (Vidal-Garcı́a et al. 2024) uses CLOUDY grids to predict NLR emission but fixes nitrogen abundance; AGNfitter-rx (Martı́nez-Ramı́rez et al. 2024) provides flexible torus and radio backends but no nebular emission; Synthesizer (Lovell et al. 2025) introduces an emission-tree architecture but is a forward-modeling code without fitting infrastructure (see Table {ref}`4 <tab-agn-comparison>` for a detailed comparison).
+Existing SED-fitting codes each cover a subset of AGN physics: X-CIGALE (Yang et al. 2020, 2022) provides an $\alpha_{\rm ox}$ disc--corona bridge, SKIRTOR torus, and polar dust but no AGN-ionized emission lines; BEAGLE-AGN (Vidal-Garcı́a et al. 2024) uses CLOUDY grids to predict NLR emission but fixes nitrogen abundance; AGNfitter-rX (Martı́nez-Ramı́rez et al. 2024) provides flexible torus and radio backends but no nebular emission; Synthesizer (Lovell et al. 2025) introduces an emission-tree architecture but is a forward-modeling code without fitting infrastructure (see Table {ref}`4 <tab-agn-comparison>` for a detailed comparison).
 
-tengri's unified AGN framework synthesizes these capabilities into a single, modular, differentiable pipeline. The guiding principle is *causal energy flow with backend-swappable nodes*: the accretion engine ($M_{\rm BH}$, $\dot{m}$) sets the bolometric luminosity, photons propagate outward through successive emission zones, and at each zone the radiation is decomposed into incident, nebular, transmitted, and escaped channels. Every zone is served by an interchangeable backend, and presets wire backends together to reproduce existing codes' configurations. The emission-tree architecture follows Synthesizer (Lovell et al. 2025); disc physics from qsosed/RELAGN (Kubota and Done 2018; Hagen and Done 2023); the $\alpha_{\rm ox}$ bridge and polar dust from X-CIGALE; the CAT3D-Wind torus from AGNfitter-rx; the Feltre NLR grids from BEAGLE-AGN, all reimplemented in pure JAX for differentiability. The novel contributions are: (1) a self-consistent disc$\to$NLR pipeline via the Cue emulator ({ref}`app-agn-nebular`), where NLR line ratios shift with accretion rate; (2) free N/O and C/O abundance ratios enabling BPT-diagram fitting; and (3) full JAX differentiability of $\sim$20 AGN parameters.
+tengri's unified AGN framework synthesizes these capabilities into a single, modular, differentiable pipeline. The guiding principle is *causal energy flow with backend-swappable nodes*: the accretion engine ($M_{\rm BH}$, $\dot{m}$) sets the bolometric luminosity, photons propagate outward through successive emission zones, and at each zone the radiation is decomposed into incident, nebular, transmitted, and escaped channels. Every zone is served by an interchangeable backend, and presets wire backends together to reproduce existing codes' configurations. The emission-tree architecture follows Synthesizer (Lovell et al. 2025); disc physics from qsosed/RELAGN (Kubota and Done 2018; Hagen and Done 2023); the $\alpha_{\rm ox}$ bridge and polar dust from X-CIGALE; the CAT3D-Wind torus from AGNfitter-rX; the Feltre NLR grids from BEAGLE-AGN, all reimplemented in pure JAX for differentiability. The novel contributions are: (1) a self-consistent disc$\to$NLR pipeline via the Cue emulator ({ref}`app-agn-nebular`), where NLR line ratios shift with accretion rate; (2) free N/O and C/O abundance ratios enabling BPT-diagram fitting; and (3) full JAX differentiability of $\sim$20 AGN parameters.
 
 (app-unified-agn)=
 
@@ -181,7 +181,7 @@ Table {ref}`2 <tab-agn-backends>` lists the available backends at each node. Ea
 |  | `adaf_lopez2024` | 1 | CIGALE `skirtor2016` `disk_type = 2` (López et al. 2024) | ADAF-to-thin-disc blend; weight `agn_cigale_adaf_delta` in [0, 1] (0 = ADAF, default), not clipped |
 |  | `qsogen` | 9 | Temple et al. (2021) | Empirical quasar SED with emission lines |
 | Torus | `skirtor_grid` | 7 | Stalevski et al. (2016) | Full RT clumpy torus templates (default) |
-|  | `cat3d_wind` | 3 | AGNfitter-rx | Clumpy disc + polar wind; subsumes polar dust |
+|  | `cat3d_wind` | 3 | AGNfitter-rX | Clumpy disc + polar wind; subsumes polar dust |
 |  | `simple` | 4 | --- | Single-$T$ toy model; deprecated |
 | NLR | `analytic` | 3 | Groves et al. (2004) | Fixed line ratios, fast |
 |  | `feltre` | 5 | Feltre et al. (2016) | CLOUDY grids; $\xi_d$; $\alpha_{\rm pl}$ on 4 tabulated nodes |
@@ -194,7 +194,7 @@ Table {ref}`2 <tab-agn-backends>` lists the available backends at each node. Ea
 |  | `mccheyne2022` | 4 | McCheyne et al. (2022) | $q(M_\star,z)$; alternative calibration |
 |  | \+ free-free | +2 | Murphy et al. (2011) | Thermal bremsstrahlung ($T_e$, $\alpha_{\rm ff}$) |
 |  | \+ AGN simple power law | +2 | --- | Radio-loudness $R$ + $\alpha_{\rm jet}$ |
-|  | \+ AGN double power law | +4 | AGNfitter-rx | \+ turnover $\nu_t$; spectral curvature |
+|  | \+ AGN double power law | +4 | AGNfitter-rX | \+ turnover $\nu_t$; spectral curvature |
 
 : Available backends at each AGN emission-tree node. "Params" gives the number of free parameters beyond the shared engine parameters ($M_{\rm BH}$, $\dot{m}$, $a_\star$, $\cos i$).
 
@@ -218,7 +218,7 @@ Table {ref}`3 <tab-agn-presets>` lists pre-registered configurations that repro
 
 #### Additional presets.
 
-The backend architecture supports additional preset configurations that reproduce the model choices of X-CIGALE (Yang et al. 2022), BEAGLE-AGN (Vidal-Garcı́a et al. 2024), AGNfitter-rx (Martı́nez-Ramı́rez et al. 2024), and full self-consistent disc--corona--NLR chains with RELAGN (Hagen and Done 2023). These will be documented in future code releases as the corresponding backends reach production quality.
+The backend architecture supports additional preset configurations that reproduce the model choices of X-CIGALE (Yang et al. 2022), BEAGLE-AGN (Vidal-Garcı́a et al. 2024), AGNfitter-rX (Martı́nez-Ramı́rez et al. 2024), and full self-consistent disc--corona--NLR chains with RELAGN (Hagen and Done 2023). These will be documented in future code releases as the corresponding backends reach production quality.
 
 #### Comparison with existing codes.
 
@@ -226,7 +226,7 @@ Table {ref}`4 <tab-agn-comparison>` compares tengri's unified AGN framework wit
 
 (tab-agn-comparison)=
 
-| Capability | tengri | X-CIGALE | BEAGLE-AGN | AGNfitter-rx | Synthesizer |
+| Capability | tengri | X-CIGALE | BEAGLE-AGN | AGNfitter-rX | Synthesizer |
 |:---|:--:|:--:|:--:|:--:|:--:|
 | Physical disc (K&D 3-zone) | $\checkmark$ | $\times$ | $\times$ | $\times$ | $\times$ |
 | Self-consistent disc$\to$corona | $\checkmark$ | $\times$ | $\times$ | $\times$ | $\times$ |
@@ -328,7 +328,7 @@ Following Yang et al. (2020), optically thin polar dust along Type 1 sightlines
 $$ (eq-polar-mask)
  with sigmoid sharpness $s = 40$, the reciprocal of a width of 0.025 in $\cos i$. The torus screen of the central engine and the generic tori's visibility mask (`agn_theta_torus`) use the same sigmoid about the same boundary, so the polar Type 1 weight and the screen's Type 2 weight sum to one at every inclination. For Type 2 orientations ($M \approx 0$), polar dust has no effect on the line-of-sight disc; for Type 1 ($M \approx 1$), the disc is attenuated by $A_\lambda = E(B{-}V)\,R_V^{\rm SMC}\,k(\lambda)$ with $R_V^{\rm SMC} = 2.93$. The `law` argument of `tengri.components.agn.polar_dust.polar_dust_extinction` accepts `smc` (Pei 1992, the default), `calzetti` (Calzetti et al. 2000), `gaskell` (Gaskell et al. 2004) or `bongiorno` ($k = 1.39\,\lambda_{\mu\rm m}^{-1.2}$ above 100 nm, Bongiorno et al. 2012, and below it CIGALE's tabulated SMC-mixture shape matched at 100 nm, i.e. CIGALE's `extinction_law = 0`) and raises on any other name; the `calzetti` curve is zero beyond 3.1 $\mu$m, where its polynomial would turn negative.
 
-`agn_cos_inc` is the one inclination of every torus. The polar cone shares the opening angle of the selected torus: `agn_oa_skirtor` for SKIRTOR (the elevation of the torus edge above the equatorial plane, so $i_{\rm crit} = 90^\circ - \texttt{agn\_oa\_skirtor}$), and `agn_fritz_oa` for the Fritz et al. (2006) library, the half-angle of the dust-free polar cone ($i_{\rm crit} = \texttt{agn\_fritz\_oa}$ with $\texttt{agn\_fritz\_oa} \in \{20, 40, 60\}$; the torus's full opening angle is $180^\circ - 2\,\texttt{agn\_fritz\_oa}$). The Fritz library's viewing elevation $\psi = 90^\circ - i$ follows from the inclination. `agn_polar_oa`, when set above zero, overrides the torus's angle for the cone alone. The cone's share of the face-on disc is $g(\Phi) = 7/18 - \sin^2\Phi/6 - 2\sin^3\Phi/9$ for SKIRTOR ($\Phi$ the torus half-opening angle) and the share of the disc luminosity is $1 - \cos\theta_c$ for Fritz ($\theta_c$ the cone half-angle). With `agn_norm='cigale_joint'` and the SKIRTOR torus the polar graybody is part of the AGN dust budget, so the disc and the torus are both divided by $1 + l_{\rm ext}/L_{\rm dust}$.
+`agn_cos_inc` is the one inclination of every torus. The polar cone shares the opening angle of the selected torus: `agn_oa_skirtor` for SKIRTOR (the elevation of the torus edge above the equatorial plane, so $i_{\rm crit} = 90^\circ - \texttt{agn\_oa\_skirtor}$), and `agn_fritz_oa` for the Fritz et al. (2006) library, the half-angle of the dust-free polar cone ($i_{\rm crit} = \texttt{agn\_fritz\_oa}$ with $\texttt{agn\_fritz\_oa} \in \{20, 40, 60\}$; the torus's full opening angle is $180^\circ - 2\,\texttt{agn\_fritz\_oa}$). The Fritz library's viewing elevation $\psi = 90^\circ - i$ follows from the inclination, and so does the inclination axis of the AGNfitter-rX SKIRTOR reductions (`skirtor_agnfitter`, `skirtor_agnfitter_1p`, `skirtor_agnfitter_2p`), tabulated from 0° (face-on) to 90° (edge-on) and read at $i = \arccos(\texttt{agn\_cos\_inc})$. `agn_polar_oa`, when set above zero, overrides the torus's angle for the cone alone. The cone's share of the face-on disc is $g(\Phi) = 7/18 - \sin^2\Phi/6 - 2\sin^3\Phi/9$ for SKIRTOR ($\Phi$ the torus half-opening angle) and the share of the disc luminosity is $1 - \cos\theta_c$ for Fritz ($\theta_c$ the cone half-angle). With `agn_norm='cigale_joint'` and the SKIRTOR torus the polar graybody is part of the AGN dust budget, so the disc and the torus are both divided by $1 + l_{\rm ext}/L_{\rm dust}$.
 
 The absorbed luminosity is reemitted as a modified blackbody: $$L_\nu^{\rm polar} \propto \left[1 - \exp\!\left(-\!\left(\frac{\lambda_0}{\lambda}\right)^{\!\beta}\right)\right] B_\nu(T),
 

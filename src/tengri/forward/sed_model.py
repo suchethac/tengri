@@ -56,13 +56,13 @@ marker lines to jump. In order:
 from __future__ import annotations
 
 import contextlib
-import contextvars
 import dataclasses
 import functools
 import inspect
 import pathlib
 import types
 import warnings
+from collections import OrderedDict
 from collections.abc import Mapping
 from typing import ClassVar
 
@@ -70,12 +70,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri._cache_keys import frozen_dataclass_key
+from tengri._cache_keys import baked, frozen_dataclass_key
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
+    AdvisoryWarning,
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
     FilterCoverageWarning,
@@ -1272,7 +1273,7 @@ def _validate_fracagn_requires_dust(spec) -> None:
         return  # fracAGN is not active, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
-    dust_model = getattr(spec, "dust_model", "off")
+    dust_model = spec.dust_model
 
     # A model with dust_model='off' (dust_attenuation={'type': 'none'} or no dust) is unsafe
     if dust_model == "off":
@@ -1769,7 +1770,7 @@ def _validate_firrc_requires_dust(spec) -> None:
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
-    dust_model = getattr(spec, "dust_model", "off")
+    dust_model = spec.dust_model
 
     # A model with dust_model='off' is unsafe
     if dust_model == "off":
@@ -2251,6 +2252,74 @@ def _state_has_content(state) -> bool:
     return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
 
 
+def _required_fixed_value(fixed, name):
+    """Return the Fixed value of ``name``, refusing when the spec does not carry it."""
+    if name not in fixed:
+        raise ParameterError(
+            f"the energy-balance LUT needs {name!r} as a Fixed value, and the spec "
+            "does not declare it"
+        )
+    return float(fixed[name])
+
+
+def _fixed_redshift_value(redshift_spec):
+    """Return the value of a fixed-mode redshift spec, refusing any other mode."""
+    if redshift_spec.get("mode") != "fixed":
+        raise ParameterError(
+            "the exact IGM fold of a fixed-z LUT needs a fixed redshift spec, "
+            f"got mode {redshift_spec.get('mode')!r}"
+        )
+    return float(redshift_spec["value"])
+
+
+def _z_table_range(cfg, bounds, catalog_range=None):
+    """Return the ``(z_min, z_max)`` a redshift table spans.
+
+    The table covers the redshift prior (``bounds``), or ``catalog_range`` for a
+    catalog model, padded by 1 % of its span (none for a catalog range). ``cfg``
+    overrides either end. A side the prior cannot supply, because it is missing
+    or infinite, must come from ``cfg``; there is no default range.
+
+    Parameters
+    ----------
+    cfg : WavePrecomp or SpectrumPrecomp
+        Table configuration; ``z_min`` and ``z_max`` may be None.
+    bounds : tuple of float or None
+        Declared redshift prior bounds [dimensionless].
+    catalog_range : tuple of float or None
+        Catalog redshift range [dimensionless], which replaces ``bounds``.
+
+    Returns
+    -------
+    tuple of float
+        ``(z_min, z_max)`` [dimensionless].
+
+    Raises
+    ------
+    ParameterError
+        If a side of the table is neither set in ``cfg`` nor a finite prior bound.
+    """
+    if catalog_range is not None:
+        lo, hi = float(catalog_range[0]), float(catalog_range[1])
+        pad = 0.0
+    elif bounds is not None and len(bounds) >= 2:
+        lo, hi = float(bounds[0]), float(bounds[1])
+        pad = 0.01 * (hi - lo) if np.isfinite(hi - lo) else 0.0
+    else:
+        lo, hi, pad = float("nan"), float("nan"), 0.0
+    cfg_min = getattr(cfg, "z_min", None)
+    cfg_max = getattr(cfg, "z_max", None)
+    if (cfg_min is None and not np.isfinite(lo)) or (cfg_max is None and not np.isfinite(hi)):
+        raise ParameterError(
+            f"the redshift prior bounds ({lo:g}, {hi:g}) do not give the redshift table "
+            "a finite range; pass WavePrecomp(z_min=..., z_max=...) (or SpectrumPrecomp) "
+            "to state the range explicitly"
+        )
+    z_min = cfg_min if cfg_min is not None else max(0.001, lo - pad)
+    z_max = cfg_max if cfg_max is not None else hi + pad
+    return float(z_min), float(z_max)
+
+
 def _fold_igm_exact_into_subbands(
     igm_comp,
     stellar_state,
@@ -2352,7 +2421,7 @@ def _fold_igm_exact_into_subbands(
         subband = np.asarray(lut.ssp_subband_phot)
         if subband.shape[-1] <= 0:
             return stellar_state
-        z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
+        z = _fixed_redshift_value(redshift_spec) if redshift_spec else float(lut.redshift)
         fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
         bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
         return _replace(
@@ -2666,21 +2735,84 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     return jnp.asarray(np.where(nearest_dist <= tol_aa, nearest_val, target))
 
 
-#: The ``(spec, ssp_data)`` pair whose #2069 ``agn_log_lbol`` probe already passed,
-#: set by :meth:`SEDModel.with_approx` for the duration of its clone's construction
-#: only (#2914). The clone shares the source's physics and differs only in how the
-#: SED is projected, so it inherits the verdict instead of compiling the forward model
-#: again. Matched by identity: any other build -- nested, or a fresh one of the same
-#: spec -- still probes.
-_AGN_LBOL_PROBE_PASSED: contextvars.ContextVar = contextvars.ContextVar(
-    "_AGN_LBOL_PROBE_PASSED", default=None
-)
+#: Content keys of the builds whose #2069 ``agn_log_lbol`` probe already passed,
+#: oldest first (#2914). The probe evaluates the forward model eagerly at both
+#: prior bounds, so every primitive compiles on its own, below the persistent
+#: cache's floor (about 1,500 compiles and 25 s per probe on a panchromatic
+#: build; measured in #2914). Its verdict depends on the spec's content (every
+#: prior, fixed value and structural setting), the SSP grid, the forward dtype
+#: and the AGN config, and on nothing else: not on the observation, not on the
+#: projector. A later build that agrees on all of them -- the clone
+#: :meth:`SEDModel.with_approx` makes, the same spec rebuilt for another
+#: observation, an equal spec written out again -- inherits the verdict; one that
+#: differs in any of them probes. A failing probe raises and records nothing.
+#:
+#: The dtype rule is one-directional. The probe refuses when the two SEDs agree to
+#: 1e-10 relative; a float64 pass means the direction moves the SED by at least
+#: that much, and float32 can only measure the same physics as a larger
+#: difference (its own rounding is ~1e-7), so a float32 build inherits a float64
+#: pass. A float32 pass says nothing about float64 (a 1e-15 coupling reads as
+#: rounding noise in float32 and as flat in float64), so a float64 build does
+#: not inherit a float32 verdict.
+_AGN_LBOL_PROBE_MEMO: OrderedDict = OrderedDict()
+_AGN_LBOL_PROBE_MEMO_SIZE = 64
+_PROBE_DTYPE_FLOAT64 = "float64"
+_PROBE_DTYPE_FLOAT32 = "float32"
 
 
-def _agn_lbol_probe_inherited(spec, ssp_data) -> bool:
-    """Whether this build is a ``with_approx`` clone of a model that passed the probe."""
-    passed = _AGN_LBOL_PROBE_PASSED.get()
-    return passed is not None and passed[0] is spec and passed[1] is ssp_data
+def _agn_lbol_probe_key(spec, ssp_data, *, forward_dtype, csp_integration, agn_config) -> tuple:
+    """Everything the #2069 probe's verdict depends on, as ``(content, dtype)``.
+
+    The spec enters three ways because ``Parameters.cache_key()`` keys structure
+    only (which names are fixed or free), while the probe sweeps ``agn_log_lbol``
+    over its prior bounds and draws every other free parameter from its prior:
+    the fixed values and each free prior's :meth:`Distribution.jit_cache_key`
+    (bounds and shape constants) are keyed beside it, as ``Fitter`` keys them.
+    The dtype is the canonical one, so a build under ``jax_enable_x64=False`` is
+    keyed as float32 whatever ``forward_dtype`` spells.
+    """
+    from tengri.parameters.priors import hashable_baked_value
+
+    fixed = spec.get_fixed_values()
+    priors = tuple(
+        (name, dist.jit_cache_key() if hasattr(dist, "jit_cache_key") else repr(dist))
+        for name, dist in ((n, spec.get_distribution(n)) for n in sorted(spec.free_params))
+    )
+    content = (
+        spec.cache_key(),
+        tuple((name, hashable_baked_value(fixed[name])) for name in sorted(fixed)),
+        priors,
+        baked(getattr(spec, "mirrors", None) or {}),
+        baked(ssp_data),
+        str(csp_integration),
+        baked(agn_config),
+    )
+    return content, str(jax.dtypes.canonicalize_dtype(jnp.dtype(forward_dtype)))
+
+
+def _agn_lbol_probe_passed(key: tuple) -> bool:
+    """Whether this build inherits a passed probe; refreshes the entry's age.
+
+    Matches the same content at the same dtype, or at float64 when this build
+    is float32 (see the memo's dtype rule above).
+    """
+    content, dtype = key
+    candidates = [key]
+    if dtype == _PROBE_DTYPE_FLOAT32:
+        candidates.append((content, _PROBE_DTYPE_FLOAT64))
+    for candidate in candidates:
+        if candidate in _AGN_LBOL_PROBE_MEMO:
+            _AGN_LBOL_PROBE_MEMO.move_to_end(candidate)
+            return True
+    return False
+
+
+def _remember_agn_lbol_probe(key: tuple) -> None:
+    """Record a passed probe, evicting the oldest key past the memo's size."""
+    _AGN_LBOL_PROBE_MEMO[key] = True
+    _AGN_LBOL_PROBE_MEMO.move_to_end(key)
+    while len(_AGN_LBOL_PROBE_MEMO) > _AGN_LBOL_PROBE_MEMO_SIZE:
+        _AGN_LBOL_PROBE_MEMO.popitem(last=False)
 
 
 @functools.cache
@@ -3185,24 +3317,36 @@ class SEDModel:
         ssp_data,
         filters=None,
         observation=None,
-        precompute=True,
+        precompute=UNSET,
         forward_dtype="float64",
         approx=None,
         csp_integration="trapz",
         wave_chunk_size=None,
         agn_config=None,
-        strategy=None,
+        strategy=UNSET,
         compile=None,
     ):
-        # ``strategy`` is accepted for backwards-compat signature but ignored;
-        # the kernel-selection strategy machinery was removed in 2026-05
-        # (kernel adapters deleted). ``predict_observables_jit`` is the only
-        # forward path now.
-        del strategy
+        # Retired kwargs. Both are still accepted so old call sites keep
+        # running, but neither changes the model: warn when a caller passes one.
+        if precompute is not UNSET:
+            warnings.warn(
+                f"SEDModel(precompute={precompute!r}) has no effect and is "
+                "deprecated: the model is identical either way. For the fast "
+                "photometry path pass approx=WavePrecomp(); for spectroscopy "
+                "pass approx=SpectrumPrecomp(). Omit the argument.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if strategy is not UNSET:
+            warnings.warn(
+                f"SEDModel(strategy={strategy!r}) has no effect and is "
+                "deprecated: the kernel-selection strategy machinery was removed "
+                "in 2026-05, and predict_observables_jit is the only forward path. "
+                "Omit the argument.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._agn_config = agn_config
-        # Read against the arguments as passed: ``_init_observation`` may return
-        # a new ``spec`` object, which would never match the clone's source.
-        agn_lbol_probe_inherited = _agn_lbol_probe_inherited(spec, ssp_data)
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
@@ -3489,10 +3633,8 @@ class SEDModel:
 
         # ── Warm HDF5 grid caches BEFORE any JIT compilation ──────
         # (tracer-leak prevention; formerly the side-effect at the top of the
-        # retired ``_build_precomputed_data``, #620). ``precompute`` is now an
-        # accepted-but-ignored legacy kwarg, the fast path is opt-in via
-        # ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``.
-        del precompute
+        # retired ``_build_precomputed_data``, #620). The fast path is opt-in
+        # via ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``.
         self._warm_grid_caches()
 
         # ── Frozen runtime bundle for kernel layer (built BEFORE kernels) ──
@@ -3634,9 +3776,20 @@ class SEDModel:
         # This check was deferred from _init_agn until after the model is fully
         # constructed and predict_photometry is available. Run it before feature
         # precomp so errors are reported at the top of the build flow.
-        # A ``with_approx`` clone inherits its source's verdict (#2914).
-        if self._needs_agn_lbol_flat_check and not agn_lbol_probe_inherited:
-            self._check_agn_lbol_flat_direction(self.spec)
+        # A build that agrees with an earlier one on everything the probe reads
+        # inherits its verdict (#2914): the clone ``with_approx`` makes, or an
+        # equal spec rebuilt for another observation or projector.
+        if self._needs_agn_lbol_flat_check:
+            probe_key = _agn_lbol_probe_key(
+                self.spec,
+                self.ssp_data,
+                forward_dtype=self._forward_dtype,
+                csp_integration=csp_integration,
+                agn_config=self._agn_config,
+            )
+            if not _agn_lbol_probe_passed(probe_key):
+                self._check_agn_lbol_flat_direction(self.spec)
+                _remember_agn_lbol_probe(probe_key)
 
         # The emission-line precompute, if the astronomer asked for one. Last,
         # because it needs the nebular backend (``_init_nebular``) and the
@@ -3744,7 +3897,14 @@ class SEDModel:
         return float(hi) if hi is not None else 1.0
 
     def _representative_redshift(self) -> float:
-        """A single representative redshift (fixed value or prior midpoint)."""
+        """A single representative redshift (fixed value or prior midpoint).
+
+        In catalog mode the Fixed redshift is a placeholder, so the midpoint of
+        ``catalog_z_range`` stands in for the per-galaxy redshift.
+        """
+        if self._catalog_z_range is not None:
+            z_lo, z_hi = self._catalog_z_range
+            return 0.5 * (float(z_lo) + float(z_hi))
         try:
             d = self.spec.get_distribution("redshift")
         except KeyError:
@@ -4100,7 +4260,7 @@ class SEDModel:
 
     def _init_ssp(self, spec, ssp_data, csp_integration):
         """Set up SSP grid, CSP integration, and log-age grid."""
-        self._met_interp = getattr(spec, "met_interp", "linear")
+        self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
@@ -4205,7 +4365,7 @@ class SEDModel:
         # Return the base param_map delta (built param_map + dust-model selection)
         return _build_param_map(
             spec.mean_sfh_type,
-            dust_model=getattr(spec, "dust_model", "two_component"),
+            dust_model=spec.dust_model,
             dust_screens=getattr(spec, "dust_screens", ()),
             dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
             dust_law_neb=getattr(spec, "dust_law_neb", None),
@@ -4224,7 +4384,7 @@ class SEDModel:
         NotImplementedError
             If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
-        self._met_mode = getattr(spec, "met_mode", "delta")
+        self._met_mode = spec.met_mode
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
 
         from tengri.components.stellar.sfh.met_registry import resolve_met
@@ -4238,7 +4398,7 @@ class SEDModel:
         else:
             delta.update(met_param_map)
 
-        self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
+        self._alpha_fe_evolving = spec.alpha_fe_evolving
         if self._alpha_fe_evolving:
             # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
             # through the stellar component's SED production pipeline. Currently the
@@ -4645,7 +4805,7 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for dust components.
         """
-        self._dust_model = getattr(spec, "dust_model", "two_component")
+        self._dust_model = spec.dust_model
         self._dust_scheme = getattr(spec, "dust_approx", "fast")
 
         # WG00 (dust_type=3) structural selectors, static strings threaded into
@@ -4689,6 +4849,9 @@ class SEDModel:
         self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
         self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
+        # Evaluation order of the two-component age mixture (same model; a
+        # different graph). See DustSEDComponentConfig.age_mixture.
+        self._dust_age_mixture = str(getattr(spec, "dust_age_mixture", "per_node"))
         # Young/old split: birth-cloud dispersal age [yr] and the dispersal width
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
@@ -5192,8 +5355,9 @@ class SEDModel:
         # Eager on purpose (#2914): with the probe parameters traced under
         # ``jax.jit``, build-time paths that need concrete values (the stellar
         # ``_cic_parcels`` boundary split, #2760's below-library index) fail.
-        # The cost is bounded instead by ``with_approx`` clones inheriting the
-        # verdict (``_AGN_LBOL_PROBE_PASSED``).
+        # The cost is bounded instead by the content memo (``_AGN_LBOL_PROBE_MEMO``):
+        # a build that agrees with an earlier one on the spec, SSP grid, dtype and
+        # AGN config inherits the verdict.
         state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
         state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
         sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
@@ -5221,9 +5385,12 @@ class SEDModel:
 
         # Check if SEDs are identical to within machine precision (1e-10 relative).
         # The direction is flat when all SED differences are within this tolerance.
-        norm = jnp.max(jnp.abs(sed_lo.sed)) + 1e-300
-        rel_diff = jnp.max(jnp.abs(sed_hi.sed - sed_lo.sed)) / norm
-        is_flat = rel_diff < 1e-10
+        # Compared without a division: a float32 ``+ 1e-300`` is 0, so two
+        # all-zero SEDs gave 0/0 = NaN and the refusal never fired. Zero against
+        # zero counts as flat.
+        diff_max = jnp.max(jnp.abs(sed_hi.sed - sed_lo.sed))
+        sed_scale = jnp.max(jnp.abs(sed_lo.sed))
+        is_flat = bool(diff_max <= 1e-10 * sed_scale)
 
         if is_flat:
             # Same measurement, two readings of it. R55: a value the user
@@ -5244,7 +5411,8 @@ class SEDModel:
             raise ConfigError(
                 f"{kind}: measured: the predicted SED is identical to within "
                 f"1e-10 relative at agn_log_lbol={lo} and {hi} with "
-                f"agn_ir_frac={frac_mid} (rel_diff={rel_diff:.3e}). With "
+                f"agn_ir_frac={frac_mid} (max abs difference {float(diff_max):.3e} "
+                f"on an SED scale of {float(sed_scale):.3e}). With "
                 f"agn_ir_frac the AGN power is derived from the dust-absorbed "
                 f"stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE "
                 f"skirtor2016 coupling), so {consequence}. Drop one: omit "
@@ -6461,22 +6629,19 @@ class SEDModel:
         if approx is None and observation is None and not self._has_modern_approx():
             return self
         # This model exists, so it passed (or never needed) the #2069 probe; the
-        # clone's physics is the same, so it inherits the verdict (#2914).
-        token = _AGN_LBOL_PROBE_PASSED.set((self.spec, self.ssp_data))
-        try:
-            return SEDModel(
-                self.spec,
-                self.ssp_data,
-                observation=self.observation if observation is None else observation,
-                forward_dtype=str(self._forward_dtype),
-                csp_integration=str(self._csp_integration),
-                wave_chunk_size=self._wave_chunk_size,
-                agn_config=self._agn_config,
-                compile=str(self._compile_mode),
-                approx=approx,
-            )
-        finally:
-            _AGN_LBOL_PROBE_PASSED.reset(token)
+        # clone agrees with it on everything the probe reads, so it inherits the
+        # verdict through the content memo (#2914).
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation if observation is None else observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=approx,
+        )
 
     def with_fixed_redshift(self, redshift):
         """Return a copy of this model built at a different Fixed redshift.
@@ -6793,19 +6958,12 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
-        # Refuse a Fixed key BEFORE _predict_obs_sed's internal free-name
-        # filter (#2296). That filter exists so the internal merged-dict
-        # caller (Prediction._obs_sed_on, which hands in self._params --
-        # fixed+free, deliberately) can drop back to a free-only subset
-        # before delegating to _predict_rest_sed / predict_state; run
-        # against a user-supplied dict here it instead silently discards a
-        # Fixed-key override before any refusal has a chance to see it --
-        # the exact silent-ignore this issue forbids. This public alias is
-        # the only caller that hands _predict_obs_sed a dict that has not
-        # already been through Prediction's one-time refuse-then-merge, so
-        # the check belongs here, not inside _predict_obs_sed itself.
-        refuse_fixed_overrides(self.spec, params)
-        return self._predict_obs_sed(params, wave=wave)
+        # Refuse a Fixed key and merge the Fixed values in, the same seam
+        # Prediction uses (#2296). Without the merge, a Fixed value that the
+        # IGM/DLA reads need (e.g. dla_z) is absent and silently defaults.
+        # ``merge_fixed_params`` refuses a Fixed key before it merges.
+        full = merge_fixed_params(self.spec, params)
+        return self._predict_obs_sed(full, wave=wave)
 
     def _predict_obs_sed(self, params, wave=None):
         """Compute observed-frame SED (redshifted + IGM + DLA transmission).
@@ -6906,6 +7064,25 @@ class SEDModel:
         if self._uses_igm or self._uses_dla:
             from tengri.components.igm.igm import igm_absorption
 
+            # The patchy keys are declared only when igm_patchy is set, and the
+            # DLA keys only when dla is on; a missing key on an active branch
+            # raises rather than defaulting. An inactive branch is never read.
+            igm_patchy = getattr(self, "_igm_patchy", False)
+            dla_kwargs = (
+                {
+                    "dla_z": params["dla_z"],
+                    "dla_log_n_hi": params["dla_log_n_hi"],
+                    "dla_temp": params["dla_temp"],
+                    "dla_b_turb": params["dla_b_turb"],
+                }
+                if self._uses_dla
+                else {}
+            )
+            patchy_kwargs = (
+                {"igm_x_HI": params["igm_x_HI"], "igm_bubble_mpc": params["igm_bubble_mpc"]}
+                if igm_patchy
+                else {}
+            )
             # One flat dispatch: mean-IGM model (or 'none' when only a DLA is
             # requested) plus the optional DLA absorber. This is the same call
             # the IGMSEDComponent projection makes, so predict_obs_sed and
@@ -6914,15 +7091,11 @@ class SEDModel:
             transmission = igm_absorption(
                 wave_obs,
                 z,
-                igm_x_HI=params.get("igm_x_HI", 0.0),
-                igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
-                igm_patchy=getattr(self, "_igm_patchy", False),
+                igm_patchy=igm_patchy,
                 igm_model=self._igm_model if self._uses_igm else "none",
                 use_dla=self._uses_dla,
-                dla_z=params.get("dla_z", 0.0),
-                dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
-                dla_temp=params.get("dla_temp", 1e4),
-                dla_b_turb=params.get("dla_b_turb", 0.0),
+                **patchy_kwargs,
+                **dla_kwargs,
             )
             sed_obs = sed_obs * transmission
         # MW foreground screen (#297), final transformation on the
@@ -7882,6 +8055,105 @@ class SEDModel:
         norm = jnp.trapezoid(profile, offsets)
         weighted = jnp.trapezoid(T_grid * profile[None, :], offsets, axis=1)
         return weighted / norm
+
+    def line_model_sigma_frac(
+        self,
+        target_wavelengths,
+        *,
+        tolerance_aa: float = 5.0,
+    ) -> np.ndarray:
+        """Fractional 1-sigma model error of the predicted line fluxes, per target.
+
+        Host-side NumPy, never traced: the result is data for the likelihood, not
+        a function of the parameters. Each target is matched to the nearest line
+        the nebular backend publishes, within ``tolerance_aa``, and the matched
+        catalog entry's fractional sigma is returned. The same ``cloudyfsps_only``
+        flag as :meth:`predict_line_fluxes` selects the catalog, so the errors
+        align with the lines the model predicts.
+
+        Parameters
+        ----------
+        target_wavelengths : array_like, shape (n_lines,)
+            Rest-frame vacuum wavelengths of the observed lines [Angstrom].
+        tolerance_aa : float, optional
+            Maximum allowed distance from a target to its matched catalog line
+            [Angstrom]. ``None`` disables the check. Default 5.0, as in
+            :meth:`predict_line_fluxes`.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            Fractional 1-sigma model error per target [dimensionless]. Zero where
+            the backend publishes no error, so the likelihood reduces to the
+            observation-only error.
+
+        Raises
+        ------
+        ValueError
+            If a target has no catalog line within ``tolerance_aa``, or the hook
+            returns an array misaligned with ``published_line_wavelengths``.
+
+        Notes
+        -----
+        **Generic hook, not a Cue special case.** A backend may provide
+        ``published_line_model_sigma(*, cloudyfsps_only)`` returning a fractional
+        sigma aligned element-for-element with
+        ``published_line_wavelengths(cloudyfsps_only=...)`` (vacuum Angstrom), or
+        ``None`` when the weights carry no errors. A backend without the hook has
+        no model sigma and yields zeros. If the hook exists but returns ``None``,
+        an :class:`~tengri.config.exceptions.AdvisoryWarning` says the weights need
+        refreshing.
+
+        Only line fluxes take a model sigma. Line ratios and spectral indices do
+        not: the per-line errors are correlated within a sub-network (for example
+        [O III] 4959/5007 is fixed by atomic physics), and upstream publishes no
+        covariance, so propagating them in quadrature would invent errors.
+        """
+        targets = np.asarray(target_wavelengths, dtype=np.float64).reshape(-1)
+        zeros = np.zeros(targets.shape[0], dtype=np.float64)
+        backend = self._nebular_backend
+        hook = getattr(backend, "published_line_model_sigma", None)
+        if hook is None or targets.size == 0:
+            return zeros
+        cloudyfsps_only = not bool(
+            getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+        )
+        sigma = hook(cloudyfsps_only=cloudyfsps_only)
+        if sigma is None:
+            warnings.warn(
+                f"The {type(backend).__name__!r} nebular weights carry no per-line emulator "
+                "errors, so line-flux fits treat the model as exact. Refresh the weights file "
+                "to include the published model sigma.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
+            return zeros
+        catalog_waves = np.asarray(
+            backend.published_line_wavelengths(cloudyfsps_only=cloudyfsps_only),
+            dtype=np.float64,
+        )
+        sigma = np.asarray(sigma, dtype=np.float64)
+        if sigma.shape != catalog_waves.shape:
+            raise ValueError(
+                f"published_line_model_sigma returned shape {sigma.shape}, not the "
+                f"catalog shape {catalog_waves.shape} of published_line_wavelengths."
+            )
+        deltas = np.abs(catalog_waves[None, :] - targets[:, None])
+        indices = np.argmin(deltas, axis=1)
+        min_deltas = deltas[np.arange(targets.shape[0]), indices]
+        if tolerance_aa is not None:
+            bad = min_deltas > float(tolerance_aa)
+            if bad.any():
+                misses = "\n".join(
+                    f"  target={targets[i]:.3f} Aa  closest={catalog_waves[indices[i]]:.3f} Aa"
+                    f"  delta={min_deltas[i]:.3f} Aa"
+                    for i in np.where(bad)[0]
+                )
+                raise ValueError(
+                    f"line_model_sigma_frac: {int(bad.sum())} target line(s) have no match "
+                    f"within tolerance_aa={tolerance_aa} Aa.\n{misses}"
+                )
+        return sigma[indices].astype(np.float64)
 
     def predict_line_fluxes(
         self,
@@ -9376,7 +9648,8 @@ class SEDModel:
         **JIT-compatible**: no, wraps :meth:`predict_sfh_quantities`.
 
         Uses Case B recombination coefficients (Leitherer et al. 1999 [1]_).
-        If SFH computation fails (e.g., invalid params), returns safe fallback of 1 L_sun.
+        Errors from the SFH computation propagate to the caller; there is no
+        fallback value, since a constant 1 Lsun would hide the failure.
 
         See Also
         --------
@@ -9410,17 +9683,9 @@ class SEDModel:
             return float(_L_HBETA_PER_SFR * sfr_10)
         except ParameterError:
             # A Fixed-key override (#2296) or an unknown/missing free
-            # parameter is a caller mistake, not "invalid params" the safe
-            # fallback below is for -- ``ParameterError`` is a ``ValueError``
-            # subclass, so it must be caught and re-raised ahead of the
-            # broad clause, or it would be silently swallowed into a fake
-            # 1 Lsun answer instead of telling the caller what they did wrong.
+            # parameter is a caller mistake; it is re-raised unchanged so the
+            # message names what the caller did wrong.
             raise
-        except (AttributeError, TypeError, ValueError):
-            # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
-            # TypeError: float() conversion failed (JAX tracer or wrong type)
-            # ValueError: invalid params
-            return 1.0  # 1 Lsun safe fallback
 
     def predict_derived(self, params):
         """Deprecated. Use ``model.predict(params).properties``.
@@ -9864,7 +10129,7 @@ class SEDModel:
             compute_mass_weighted_metallicity(
                 weights,
                 self.ssp_ages_yr,
-                p.get("log_z_abs", 0.0),
+                p["log_z_abs"],
                 log_z_initial=p.get("log_z_abs_initial"),
                 log_z_final=p.get("log_z_abs_final"),
             )
@@ -11565,6 +11830,7 @@ class SEDModel:
         if cached != "unset":
             return cached
 
+        from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
         from tengri.components.dust.attenuation import resolve_bc_diff_law_params
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.energy_balance_precompute import (
@@ -11624,7 +11890,7 @@ class SEDModel:
                         dist = self.spec.get_distribution("dust_tau_v")
                         lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
                         return jnp.linspace(lo, hi, 24)
-                    return jnp.asarray([float(fixed.get(name, 0.0))])
+                    return jnp.asarray([_required_fixed_value(fixed, name)])
 
                 tau_v_grid = _grid_single("dust_tau_v")
 
@@ -11732,7 +11998,7 @@ class SEDModel:
                         dist = self.spec.get_distribution(name)
                         lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
                         return jnp.linspace(lo, hi, 24)
-                    return jnp.asarray([float(fixed.get(name, 0.0))])
+                    return jnp.asarray([_required_fixed_value(fixed, name)])
 
                 tau_bc_grid = _grid("dust_tau_bc")
                 tau_diff_grid = _grid("dust_tau_diff")
@@ -11748,7 +12014,9 @@ class SEDModel:
                     params_at_z=_two_params,
                     law_bc=law_bc,
                     law_diff=law_diff,
-                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    f_obscuration=float(
+                        fixed.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+                    ),
                     lyman_cutoff_aa=getattr(dust.config, "lyman_cutoff_aa", 0.0),
                     lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
@@ -11764,7 +12032,9 @@ class SEDModel:
                     jnp.asarray(self.ssp_data.ssp_wave),
                     law_bc=law_bc,
                     law_diff=law_diff,
-                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    f_obscuration=float(
+                        fixed.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+                    ),
                     bc_params={k: float(v) for k, v in bc_params.items()},
                     diff_params={k: float(v) for k, v in diff_params.items()},
                     lyman_cutoff_aa=(
@@ -11859,21 +12129,13 @@ class SEDModel:
             return None
         cfg = self._approx_config_wave or WavePrecomp()
         bounds = getattr(dist, "bounds", None)
-        if self._catalog_z_range is not None:
-            z_lo, z_hi = self._catalog_z_range
-            pad = 0.0
-        elif bounds is None or len(bounds) < 2:
-            z_lo, z_hi, pad = 0.001, 3.0, 0.0
-        else:
-            z_lo, z_hi = float(bounds[0]), float(bounds[1])
-            pad = 0.01 * (z_hi - z_lo)
-        z_min = cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)
-        z_max = cfg.z_max if cfg.z_max is not None else z_hi + pad
+        z_min, z_max = _z_table_range(cfg, bounds, self._catalog_z_range)
         nodes = ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
-        if bounds is not None and len(bounds) >= 2 and self._catalog_z_range is None:
+        prior = self._catalog_z_range if self._catalog_z_range is not None else bounds
+        if prior is not None and len(prior) >= 2:
             from tengri.components._z_response import warn_if_z_table_narrower_than_prior
 
-            warn_if_z_table_narrower_than_prior(nodes, (float(bounds[0]), float(bounds[1])))
+            warn_if_z_table_narrower_than_prior(nodes, (float(prior[0]), float(prior[1])))
         return nodes
 
     def _dust_emission_band_response(self, chain):
@@ -11997,7 +12259,10 @@ class SEDModel:
                 "log-luminosity input was not provided)"
             )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            live_first, ok_first = _probe_at(z_first)
+            # One traced program for the two probe SEDs (#2914): evaluated eagerly,
+            # the template's primitives dispatched ~60 XLA compiles per build, each
+            # below the persistent cache's floor. The verdicts are two booleans.
+            live_first, ok_first = jax.jit(_probe_at)(z_first)
             if not bool(live_first):
                 # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
                 # was never activated, so decline and let the exact integral run.
@@ -12078,9 +12343,12 @@ class SEDModel:
             # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
             # probe is integrated through the filters at z = 0 (#2559). The homogeneity
             # check above already covers the template, so it is not repeated here.
-            rest_values = lnu_filter_integral_batch(
-                _template_at(0.0, 1.0), wave, fw_pad, ft_pad, 0.0
-            )
+            # One traced program (#2914); the grids ride in as arguments so XLA does
+            # not constant-fold the union-grid sort of a baked filter array. Evaluated
+            # eagerly, the template and the per-filter sort dispatched ~60 compiles.
+            rest_values = jax.jit(
+                lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
+            )(wave, fw_pad, ft_pad)
             response = {
                 "ln1pz": built["ln1pz"],
                 "values": built["values"]["R"],
@@ -12668,17 +12936,32 @@ class SEDModel:
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        mid_terms = _terms(z_mid, probes[0])
-        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in mid_terms.items()}
+        # One traced program for the midpoint terms (#2914), then host arithmetic for
+        # the peaks: evaluated eagerly, the X-ray and radio terms dispatched ~40 XLA
+        # compiles per build, each below the persistent cache's floor. The term ORDER
+        # is captured inside the trace and the values returned as a tuple: a jitted
+        # function hands back a dict with its keys sorted, while the table's rows must
+        # follow the emitter's own ``emission_terms`` order, which every consumer pairs
+        # by position (``term_band_response``; tests/contract/test_term_response_order.py).
+        order: list[str] = []
+
+        def _mid_terms(z):
+            terms = _terms(z, probes[0])
+            order.extend(terms)
+            return tuple(terms.values())
+
+        mid_values = jax.jit(_mid_terms)(z_mid)
+        mid_terms = {key: np.asarray(v) for key, v in zip(order, mid_values, strict=True)}
+        peaks = {key: int(np.argmax(np.abs(s_a))) for key, s_a in mid_terms.items()}
         # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
         # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
         # the emitter is then evaluated there on every call. Its amplitude is 0 at any
         # wavelength, so reference it at a live term's peak: the same evaluation point the
         # live term already pays for, and one the emitter supports.
-        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(jnp.max(jnp.abs(s_a))) > 0]
+        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(np.max(np.abs(s_a))) > 0]
         if live_peaks:
             peaks = {
-                k: (peaks[k] if float(jnp.max(jnp.abs(mid_terms[k]))) > 0 else live_peaks[0])
+                k: (peaks[k] if float(np.max(np.abs(mid_terms[k]))) > 0 else live_peaks[0])
                 for k in peaks
             }
         keys = tuple(peaks)
@@ -12687,7 +12970,7 @@ class SEDModel:
         # one more build-time constant and no per-call evaluation is needed for it.
         diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
         # The reference wavelengths as one array, evaluated exactly as the per-call path does.
-        lam_ref = jnp.stack([wave[peaks[key]] for key in keys])
+        lam_ref = jnp.asarray(np.asarray(wave)[[peaks[key] for key in keys]], dtype=wave.dtype)
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
@@ -12958,10 +13241,9 @@ class SEDModel:
         for law in names:
             if law is None:
                 continue
-            try:
-                reads |= set(_law_shape_params(law))
-            except Exception:  # pragma: no cover - law not registered
-                continue
+            # An unregistered law already yields an empty set inside
+            # ``_law_shape_params``, so nothing here needs to be caught.
+            reads |= set(_law_shape_params(law))
 
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
@@ -13235,6 +13517,7 @@ class SEDModel:
             dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
             dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
+            dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
@@ -13380,30 +13663,25 @@ class SEDModel:
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     cfg = self._approx_config or WavePrecomp()
-                    if self._catalog_z_range is not None:
-                        z_lo, z_hi = self._catalog_z_range
-                        pad = 0.0
-                    elif z_bounds is None or len(z_bounds) < 2:
-                        z_lo, z_hi = 0.001, 3.0
-                        pad = 0.0
-                    else:
-                        z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
-                        pad = 0.01 * (z_hi - z_lo)
+                    z_min, z_max = _z_table_range(cfg, z_bounds, self._catalog_z_range)
                     redshift_spec = {
                         "mode": "free",
-                        "z_min": (cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)),
-                        "z_max": cfg.z_max if cfg.z_max is not None else z_hi + pad,
+                        "z_min": z_min,
+                        "z_max": z_max,
                         "n_z": cfg.n_z,
                     }
-                    if self._catalog_z_range is None and z_bounds is not None:
+                    prior = (
+                        self._catalog_z_range if self._catalog_z_range is not None else z_bounds
+                    )
+                    if prior is not None and len(prior) >= 2:
                         from tengri.components._z_response import (
                             ln1pz_nodes,
                             warn_if_z_table_narrower_than_prior,
                         )
 
                         warn_if_z_table_narrower_than_prior(
-                            ln1pz_nodes(redshift_spec["z_min"], redshift_spec["z_max"], cfg.n_z),
-                            (float(z_bounds[0]), float(z_bounds[1])),
+                            ln1pz_nodes(z_min, z_max, cfg.n_z),
+                            (float(prior[0]), float(prior[1])),
                         )
 
             if spec_precomp_enabled:
@@ -13412,24 +13690,11 @@ class SEDModel:
                 # and the photometry spec above must survive (#2858).
                 if runtime_z:
                     cfg = self._approx_config or SpectrumPrecomp()
-                    if self._catalog_z_range is not None:
-                        z_lo, z_hi = self._catalog_z_range
-                        pad = 0.0
-                    elif z_bounds is None or len(z_bounds) < 2:
-                        z_lo, z_hi, pad = 0.001, 3.0, 0.0
-                    else:
-                        z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
-                        pad = 0.01 * (z_hi - z_lo)
+                    z_min, z_max = _z_table_range(cfg, z_bounds, self._catalog_z_range)
                     spec_redshift_spec = {
                         "mode": "free",
-                        "z_min": (
-                            cfg.z_min
-                            if getattr(cfg, "z_min", None) is not None
-                            else max(0.001, z_lo - pad)
-                        ),
-                        "z_max": (
-                            cfg.z_max if getattr(cfg, "z_max", None) is not None else z_hi + pad
-                        ),
+                        "z_min": z_min,
+                        "z_max": z_max,
                         "n_z": getattr(cfg, "n_z", 100),
                     }
                 else:

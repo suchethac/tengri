@@ -58,6 +58,7 @@ _ARRAY_FIELDS = (
     "batched_pca_shift",
     "batched_pca_comp",
     "batched_pca_mean",
+    "line_emul_sigma_frac",
 )
 
 

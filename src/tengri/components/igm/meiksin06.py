@@ -182,10 +182,13 @@ def igm_transmission_meiksin06(
             tau_low.append(a)  # n in 6..9: only the (1/3) branch
     tau_3_9 = jnp.stack(tau_low, axis=0)  # (7, n_wave)
 
-    # n = 10..30: tau_n = tau_n[9] * 720 / (n * (n^2 - 1))
-    # Meiksin 2006 Eq. 4 gives tau_n/tau_9 with no redshift argument; the tail is scaled from
-    # tau_9 evaluated at z_9. Evaluating at z_n instead changes T by <= 9e-4 (z = 3), 6e-3 (z = 5),
-    # 1.3e-2 (z = 6) over rest 700-911 A.
+    # n = 10..30: tau_n = tau_9 * 720 / (n * (n^2 - 1)), with tau_9 at z_9 (#2796).
+    # Meiksin 2006 Eq. 4 gives tau_n/tau_9 with no redshift argument, and the ratio wording
+    # admits reading tau_9 at each line's own z_n instead. We keep z_9, as pcigale does.
+    # Max |dT| between the two readings: 6.1e-4 (z = 3), 8.9e-4 (z = 5), 2.6e-4 (z = 6),
+    # 1.7e-5 (z = 7) on 600 points over 900-9000 A observed; 6.0e-4, 8.6e-4, 2.5e-4, 1.6e-5
+    # on a dense rest 700-911 A grid. Table 2 cannot discriminate: at 1730 A, z = 5 the
+    # readings give 0.0032832 (z_9) and 0.0032830 (z_n).
     tau_9 = tau_3_9[-1]
     n_high = jnp.arange(10, _N_TRANS_MAX, dtype=jnp.float64)
     high_factors = 720.0 / (n_high * (n_high * n_high - 1.0))  # (21,)

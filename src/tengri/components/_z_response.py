@@ -106,7 +106,11 @@ def build_z_table(
     zs = jnp.expm1(nodes) if z_values is None else jnp.atleast_1d(jnp.asarray(z_values))
     jitted = jax.jit(fn)
     rows = [jitted(zs[i]) for i in range(zs.shape[0])]
-    values = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *rows)
+    # Stack on the host (#2914): a ``jnp.stack`` per leaf dispatched one XLA
+    # compile each, below the persistent cache's floor; the values are the same.
+    values = jax.tree_util.tree_map(
+        lambda *xs: jnp.asarray(np.stack([np.asarray(x) for x in xs])), *rows
+    )
     return {NODES_KEY: nodes, VALUES_KEY: values}
 
 
@@ -212,6 +216,12 @@ def interp_z_table(
     table: Mapping[str, jnp.ndarray], z: Any, *, extrapolate: bool = False
 ) -> jnp.ndarray:
     """Read a tabulated response at the evaluation redshift ``z``.
+
+    With ``extrapolate=True`` the continuation past the table is linear in the
+    response, so a response that falls steeply across the edge cell can go
+    negative there. The nebular band path uses a positive exponential
+    continuation instead (``blend_z_nonneg``, #3042); aligning this reader is
+    tracked in #3078.
 
     Parameters
     ----------
