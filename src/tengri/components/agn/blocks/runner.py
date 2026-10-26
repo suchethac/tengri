@@ -556,7 +556,7 @@ agn_torus_block, agn_attenuation_block : str
         _emit(
             f"Composable AGN: the energy ledger does not close on the accretion power: "
             f"{reason}. The published log_L_agn_* pieces are each this recipe's own emission, "
-            "and agn_ledger_closed is 0 (NAMING_CONTRACT 4c, 'Composable runner'). Select "
+            "and agn_ledger_closed is 0 (NAMING_CONTRACT 4c, 'Composable runner'). Choose "
             "agn_norm='conserving' with a disc and torus that are debited from agn_log_lbol "
             "for a closed ledger."
         )
