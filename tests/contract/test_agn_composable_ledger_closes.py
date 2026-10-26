@@ -245,6 +245,35 @@ def _check_c1_torus(sel, params, comps):
 _CONSERVING_TORI = sorted(set(AGN_BLOCKS["torus"]) - NON_CONSERVING_TORI)
 _CONSERVING_DISCS = sorted(set(AGN_BLOCKS["disc"]) - NON_CONSERVING_DISCS)
 
+#: Blocks whose own spectrum is known not to integrate to its nominal power, with the measured
+#: excess (the dense integral of the block alone over its nominal power, minus one). Every other
+#: block must integrate to its nominal power to 1e-6, so C2's closure on the measured power
+#: cannot hide a normalization bug.
+_PINNED_NORMALIZATION = {
+    # #3106: normalized on the log-log integral of its nodes, resampled linearly.
+    ("disc", "richards2006"): 1.220e-4,
+    # #3107: the toy Nenkova torus.
+    ("torus", "nenkova"): 2.091e-4,
+}
+
+_NORMALIZATION_CASES = [("disc", d) for d in _CONSERVING_DISCS] + [
+    ("torus", t) for t in _CONSERVING_TORI
+]
+
+
+@pytest.mark.parametrize(
+    ("category", "block"), _NORMALIZATION_CASES, ids=[f"{c}-{b}" for c, b in _NORMALIZATION_CASES]
+)
+def test_block_integrates_to_its_nominal_power(category, block):
+    """Every conserving block alone integrates to its nominal power (``L_bol``, or ``f L_bol``
+    for a torus) to 1e-6; the pinned exceptions stay at their measured excess."""
+    sel = _selectors(block, "none") if category == "disc" else _selectors("none", block)
+    _skip_without_library(sel)
+    excess = _disc_normalization(block) if category == "disc" else _torus_normalization(block, 0.4)
+    expected = _PINNED_NORMALIZATION.get((category, block), 0.0)
+    assert excess == pytest.approx(expected, abs=_RTOL)
+
+
 #: Disc x torus pairs from the registry: every conserving torus behind the multicolor disc, and
 #: every conserving disc in front of the Fritz torus (a library torus with anisotropy and a
 #: wavelength-dependent sightline screen), at a Type-2-leaning sightline.

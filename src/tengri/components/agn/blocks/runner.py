@@ -2027,7 +2027,8 @@ agn_torus_block, agn_attenuation_block : str
         )
         # One row at a time (``lax.map``), not ``vmap``: in pure float32 the batched multicolor
         # disc behind ``smc_prevot`` differs from the unbatched one at 30-173 A by up to 1e8
-        # (#3105), a 0.15 dex error in its power; mapped rows equal the unbatched evaluation.
+        # (#3105), a 0.15 dex error in its power; mapped rows match the unbatched evaluation to
+        # 5e-7 per node and 2e-8 in power.
         _evals = jax.lax.map(_ledger_eval, jnp.concatenate([_cos_obs[None], _mu_q]))
 
         def _row_mean(key):

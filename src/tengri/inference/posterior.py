@@ -96,20 +96,32 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
             raise KeyError(missing_property_message(name, available=available))
 
+        # A property computed with siblings (``Property.bundle``, the composable AGN's energy
+        # ledger) is evaluated once for every name that shares it, not once per name.
+        entry = model._ensure_property_catalog()[name]
+        names = (
+            (name,)
+            if entry.bundle is None
+            else tuple(
+                k
+                for k, e in model._ensure_property_catalog().items()
+                if e.bundle is entry.bundle and k not in cache
+            )
+        )
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.
-            value = model.predict_properties(post.params, names=(name,))[name]
+            values = model.predict_properties(post.params, names=names)
         else:
             from tengri.utils.batching import vmap_chunked
 
             fn = vmap_chunked(
-                lambda p: model.predict_properties(p, names=(name,))[name],
+                lambda p: model.predict_properties(p, names=names),
                 chunk_size=_PROPERTY_CHUNK,
             )
-            value = fn(post.samples)
-
-        cache[name] = value
-        return value
+            values = fn(post.samples)
+        for key in names:
+            cache[key] = values[key]
+        return cache[name]
 
     def __contains__(self, name: str) -> bool:
         return name in self._model().available_properties
