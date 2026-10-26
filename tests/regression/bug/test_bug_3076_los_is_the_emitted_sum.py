@@ -93,9 +93,22 @@ def ssp():
         pytest.skip(f"SSP grid absent: {exc}")
 
 
-def test_model_publishes_the_ledger_and_the_renamed_key(ssp):
-    """Through ``SEDModel``: every ledger key is published and the two keys keep their meaning."""
-    model = SEDModel.build(
+def _model(ssp, agn_type="composable"):
+    agn = {
+        "type": "composable",
+        "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+        "torus": {
+            "type": "simple",
+            "agn_torus_frac": Fixed(0.4),
+            "all_params": Fixed(DEFAULT),
+        },
+        "atten": {"type": "none"},
+        "norm": "conserving",
+        "agn_log_lbol": Fixed(_LOG_LBOL),
+        "agn_cos_inc": Fixed(_COS_TYPE2),
+        "all_params": Fixed(DEFAULT),
+    }
+    return SEDModel.build(
         ssp_data=ssp,
         sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
@@ -106,29 +119,42 @@ def test_model_publishes_the_ledger_and_the_renamed_key(ssp):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        agn={
-            "type": "composable",
-            "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
-            "torus": {
-                "type": "simple",
-                "agn_torus_frac": Fixed(0.4),
-                "all_params": Fixed(DEFAULT),
-            },
-            "atten": {"type": "none"},
-            "norm": "conserving",
-            "agn_log_lbol": Fixed(_LOG_LBOL),
-            "agn_cos_inc": Fixed(_COS_TYPE2),
-            "all_params": Fixed(DEFAULT),
-        },
+        agn=agn if agn_type == "composable" else {"type": agn_type},
         redshift=Fixed(0.0),
     )
-    derived = model.predict_state({}).derived
-    from tengri.components.agn.blocks._ledger import COMPOSABLE_LEDGER_OUTPUTS
 
-    for key in (*COMPOSABLE_LEDGER_OUTPUTS, "log_L_agn_direct_los", "L_agn_direct_los_lsun"):
-        assert derived.get(key) is not None, key
-    assert float(derived["agn_ledger_closed"]) == 1.0
-    assert float(derived["L_agn_los_lsun"]) == pytest.approx(
-        10.0 ** (float(derived["log_L_agn_los"]) - np.log10(L_SUN)), rel=1e-12
+
+def test_model_computes_the_ledger_on_request(ssp):
+    """Through ``SEDModel``: the ledger is a property surface, not part of the forward pass.
+
+    Every ledger key is listed in ``available_properties`` and absent from the forward state;
+    ``predict_properties``, ``pred.properties[...]`` and ``pred.<key>`` return the same values,
+    and the renamed direct key stays in the forward state.
+    """
+    from tengri.components.agn.blocks._ledger import ledger_property_specs
+
+    model = _model(ssp)
+    keys = tuple(ledger_property_specs())
+    assert set(keys) <= set(model.available_properties)
+    derived = model.predict_state({}).derived
+    for key in keys:
+        assert derived.get(key) is None, key
+    assert derived.get("log_L_agn_direct_los") is not None
+    assert derived.get("L_agn_direct_los_lsun") is not None
+    props = model.predict_properties({}, names=keys)
+    pred = model.predict({})
+    assert float(pred.properties["log_L_agn_los"]) == float(props["log_L_agn_los"])
+    assert float(pred.log_L_agn_disc) == float(props["log_L_agn_disc"])
+    assert float(props["agn_ledger_closed"]) == 1.0
+    assert float(props["L_agn_los_lsun"]) == pytest.approx(
+        10.0 ** (float(props["log_L_agn_los"]) - np.log10(L_SUN)), rel=1e-12
     )
-    assert float(derived["log_L_agn_los"]) < float(derived["log_L_agn_direct_los"])
+    assert float(props["log_L_agn_los"]) < float(derived["log_L_agn_direct_los"])
+
+
+def test_ledger_is_listed_only_with_the_composable_agn(ssp):
+    """A model without the composable AGN does not list the ledger properties."""
+    from tengri.components.agn.blocks._ledger import ledger_property_specs
+
+    model = _model(ssp, agn_type="none")
+    assert not set(ledger_property_specs()) & set(model.available_properties)

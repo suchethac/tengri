@@ -86,6 +86,7 @@ __all__ = [
     "DISC_SPLIT_BLOCKS",
     "DISC_STATE_BLOCKS",
     "LINE_ENERGY_BLOCKS",
+    "SPECTRAL_EDGE_BLOCKS",
     "TORUS_ANISOTROPY_BLOCKS",
     "BlockCategory",
     "collect_block_templates",
@@ -95,6 +96,7 @@ __all__ = [
     "register_disc_split",
     "register_disc_state",
     "register_line_energy",
+    "register_spectral_edges",
     "register_torus_anisotropy",
     "resolve_agn_block",
 ]
@@ -161,6 +163,14 @@ DISC_SPLIT_BLOCKS: dict[str, Callable] = {}
 # the angle-integrated torus power as the sightline power minus this; a torus that registers
 # nothing carries the same power along every sightline.
 TORUS_ANISOTROPY_BLOCKS: dict[str, Callable] = {}
+
+# Spectral edges of a block: (category, name) -> zero-argument callable returning the
+# wavelengths [Angstrom] where the block's spectrum is discontinuous (a band cut, a template's
+# first or last node, a tabulated curve's domain). A fixed-grid integral is first order across a
+# discontinuity and second order once a node sits on each side of it, so the energy ledger puts a
+# node pair at every registered edge of the selected blocks. Host floats; structural (they do not
+# depend on fitted parameters).
+SPECTRAL_EDGE_BLOCKS: dict[tuple[str, str], Callable[[], tuple[float, ...]]] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
@@ -457,6 +467,41 @@ def register_torus_anisotropy(name: str) -> Callable:
         if name in TORUS_ANISOTROPY_BLOCKS:
             raise ValueError(f"Torus anisotropy {name!r} is already registered.")
         TORUS_ANISOTROPY_BLOCKS[name] = fn
+        return fn
+
+    return decorator
+
+
+def register_spectral_edges(category: BlockCategory, name: str) -> Callable:
+    """Decorator factory: register where a block's spectrum is discontinuous.
+
+    Parameters
+    ----------
+    category : str
+        Block category.
+    name : str
+        Block name; the block must be registered separately with :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn() -> tuple[float, ...]``, the edge wavelengths [Angstrom], and returns
+        it unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``(category, name)`` already has registered edges.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration and host values only.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if (category, name) in SPECTRAL_EDGE_BLOCKS:
+            raise ValueError(f"Spectral edges {category}/{name!r} are already registered.")
+        SPECTRAL_EDGE_BLOCKS[(category, name)] = fn
         return fn
 
     return decorator

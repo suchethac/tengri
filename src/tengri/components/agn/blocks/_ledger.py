@@ -13,16 +13,21 @@ with its ``L_agn_<piece>_lsun`` [Lsun] sibling:
 
 ``log_L_agn_los`` is the emitted line-of-sight sum (the integral of ``sed_agn``). The power a
 piece carries but does not emit is published as ``log_L_agn_<piece>_unemitted``: the disc and
-broad-line light the torus screen, the polar dust or an attenuation block removes (D1 publishes
-it; the torus does not yet re-emit it), and the torus light a foreground attenuation block
-removes. On a conserving recipe the sphere-mean pieces plus the unemitted ones add up to the
-accretion power ``agn_lum_ratio * 10**agn_log_lbol L_sun`` (C2), and ``agn_ledger_closed`` is 1.
+broad-line light the torus screen, the polar dust or an attenuation block removes (the torus
+does not yet re-emit it), and the torus light a foreground attenuation block removes. On a
+conserving recipe the sphere-mean pieces plus the unemitted ones add up to the accretion power
+``agn_lum_ratio * 10**agn_log_lbol L_sun`` (C2), and ``agn_ledger_closed`` is 1.
 
 The sphere means are Gauss-Legendre over :math:`\mu`, of the runner's own emitted pieces
 re-evaluated at the quadrature sightlines (one ``vmap``), except the torus of a library that
 keeps its flux ratio between sightlines, whose sphere mean is its sightline power over the
 library's anisotropy :math:`a(\mu)/\bar a` (``TORUS_ANISOTROPY_BLOCKS``), exact to the library
-interpolant.
+interpolant. The frequency integrals are trapezoids in :math:`\ln\nu` on :func:`ledger_wave`,
+which carries a node pair at every spectral edge of the selected blocks
+(``spectral_edges.block_edges``), so they converge at second order.
+
+The ledger is computed on request, as properties of the model (the AGN component's
+``energy_ledger``), never in the forward pass.
 """
 
 from __future__ import annotations
@@ -35,8 +40,10 @@ from tengri.components.agn._publication import (
     PUBLICATION_HI_AA,
     PUBLICATION_LO_AA,
     log10_emitted_bolometric,
+    publication_wave,
     with_lsun_siblings,
 )
+from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import log10_add, log10_weighted_sum
 
 __all__ = [
@@ -46,11 +53,14 @@ __all__ = [
     "LEDGER_PIECES",
     "NON_CONSERVING_DISCS",
     "NON_CONSERVING_TORI",
-    "ledger_derived_keys",
+    "POWER_KEY",
+    "SPHERE_ORDER",
     "ledger_from_evaluations",
     "ledger_policy_closes",
-    "ledger_quadrature",
+    "ledger_property_specs",
+    "ledger_sightlines",
     "ledger_wave",
+    "log10_signed_sphere_mean",
     "non_conserving_reason",
 ]
 
@@ -76,10 +86,14 @@ LEDGER_KEYS: tuple[str, ...] = (
     *(f"log_L_agn_{p}_unemitted" for p in _UNEMITTED_PIECES),
 )
 
+#: The AGN dust power the torus and polar dust are normalized on (CIGALE's ``agn_power``).
+POWER_KEY = "log_L_agn_power"
+
 #: Every key the ledger publishes: the powers, their ``Lsun`` siblings and the flag.
 COMPOSABLE_LEDGER_OUTPUTS: tuple[str, ...] = (
     *LEDGER_KEYS,
-    *(f"{k[len('log_') :]}_lsun" for k in LEDGER_KEYS),
+    POWER_KEY,
+    *(f"{k[len('log_') :]}_lsun" for k in (*LEDGER_KEYS, POWER_KEY)),
     LEDGER_CLOSED_KEY,
 )
 
@@ -114,36 +128,34 @@ def _key_description(key: str) -> str:
     raise KeyError(key)
 
 
-def ledger_derived_keys() -> tuple:
-    """The ledger's published keys as ``DerivedKey`` declarations (composable model only).
+def ledger_property_specs() -> dict[str, tuple[str, str]]:
+    """Units and one-line description of every key the ledger publishes.
 
     Returns
     -------
-    tuple of DerivedKey
-        One per entry of :data:`COMPOSABLE_LEDGER_OUTPUTS`.
+    dict
+        ``{key: (units, doc)}`` for :data:`COMPOSABLE_LEDGER_OUTPUTS`, the order the property
+        catalog lists them in.
     """
-    from tengri.protocols.component import DerivedKey
-
-    keys = [
-        DerivedKey(k, "dex", f"{_key_description(k)}; composable model only (#3076)")
-        for k in LEDGER_KEYS
-    ]
-    keys += [
-        DerivedKey(f"{k[len('log_') :]}_lsun", "Lsun", f"{k} in solar luminosities")
-        for k in LEDGER_KEYS
-    ]
-    keys.append(
-        DerivedKey(
-            LEDGER_CLOSED_KEY,
-            "",
-            "1.0 when the angle-integrated pieces plus the unemitted ones add up to the "
-            "accretion power agn_lum_ratio * 10**agn_log_lbol L_sun, else 0.0 (self-contained "
-            "quasar templates, agn_norm='independent', 'cigale_joint' with lines or an active "
-            "agn_ir_frac tie, polar dust beside a library torus with anisotropy); composable "
-            "model only",
-        )
+    specs: dict[str, tuple[str, str]] = {}
+    for k in LEDGER_KEYS:
+        specs[k] = ("dex", f"{_key_description(k)}; composable AGN only")
+    specs[POWER_KEY] = (
+        "dex",
+        "log10 of the AGN dust power the runner normalizes the torus and the polar dust on "
+        "[dex re erg/s], the torus block's power along agn_cos_inc (CIGALE's agn_power, the "
+        "anchor of the agn_ir_frac tie); composable AGN with a torus only",
     )
-    return tuple(keys)
+    for k in (*LEDGER_KEYS, POWER_KEY):
+        specs[f"{k[len('log_') :]}_lsun"] = ("Lsun", f"{k} in solar luminosities")
+    specs[LEDGER_CLOSED_KEY] = (
+        "",
+        "1.0 when the angle-integrated pieces plus the unemitted ones add up to the "
+        "accretion power agn_lum_ratio * 10**agn_log_lbol L_sun, else 0.0 (self-contained "
+        "quasar templates, agn_norm='independent', 'cigale_joint' with lines or an active "
+        "agn_ir_frac tie, polar dust beside a library torus with anisotropy); composable AGN only",
+    )
+    return specs
 
 
 #: Torus blocks whose single template carries disc, torus and lines together on their own scale
@@ -159,87 +171,109 @@ NON_CONSERVING_DISCS: frozenset[str] = frozenset(
     {"grahsp_sbpl", "grahsp_netzer", "qsogen", "schartmann2005_skirtor_atten"}
 )
 
-#: Gauss-Legendre panels uniform in ``cos i`` and points per panel of the sphere means.
-_SPHERE_PANELS: int = 16
-_SPHERE_ORDER: int = 3
+#: Panels uniform in ``cos i`` the sightline quadrature starts from, and Gauss-Legendre points per
+#: panel. The library's inclination nodes and the Type-1/2 transitions are added as panel edges.
+_SPHERE_BASE_PANELS: int = 8
+SPHERE_ORDER: int = 4
+
+#: Offsets [units of the transition width] of the panel edges laid about each Type-1/2 sigmoid
+#: (``polar_dust.type1_weight``), whose width in ``cos i`` is ``TYPE_TRANSITION_WIDTH``.
+_SIGMOID_PANEL_OFFSETS: tuple[float, ...] = (-8.0, -4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0, 8.0)
 
 #: Log-uniform node count of the ledger grid over the publication range (its spacing outside
 #: the fine window), and the fine window [Angstrom] (1.2e-4 in ln lambda, 35 km/s).
-_LEDGER_NODES: int = 8000
+_LEDGER_NODES: int = 32000
 _FINE_WINDOW_AA: tuple[float, float, int] = (9.0e2, 3.0e5, 48001)
 
-
-def ledger_quadrature(
-    n_panels: int = _SPHERE_PANELS, order: int = _SPHERE_ORDER
-) -> tuple[np.ndarray, np.ndarray]:
-    r"""Points and weights for :math:`\int_0^1 f(\mu)\,d\mu`, composite Gauss-Legendre.
-
-    Parameters
-    ----------
-    n_panels : int, optional
-        Panels of equal width in :math:`\mu = \cos i`.
-    order : int, optional
-        Points per panel.
-
-    Returns
-    -------
-    mu : ndarray, shape (n_panels * order,)
-        Sightlines :math:`\cos i` [dimensionless], within ``(0, 1)``.
-    weight : ndarray, shape (n_panels * order,)
-        Weights [dimensionless], summing to 1.
-
-    Notes
-    -----
-    A host (numpy) constant. No point sits on ``mu = 0`` or ``mu = 1``, where a library's
-    sightline factor can be singular.
-    """
-    x, w = np.polynomial.legendre.leggauss(order)
-    edges = np.linspace(0.0, 1.0, n_panels + 1)
-    lo, hi = edges[:-1, None], edges[1:, None]
-    mu = (0.5 * (hi - lo) * x + 0.5 * (hi + lo)).ravel()
-    weight = (0.5 * (hi - lo) * w).ravel()
-    return mu, weight / weight.sum()
+#: Half-width, relative, of the node pair put on each side of a spectral edge.
+_EDGE_PAIR_REL: float = 1.0e-9
 
 
-def ledger_wave(dtype) -> jnp.ndarray:
+def ledger_wave(dtype, edges_aa=()) -> jnp.ndarray:
     """The fixed wavelength grid [Angstrom] the ledger integrates the emitted pieces on.
 
     Parameters
     ----------
     dtype : dtype
         Floating dtype of the grid.
+    edges_aa : sequence of float, optional
+        Spectral edges of the selected blocks [Angstrom] (``spectral_edges.block_edges``); a
+        node pair ``edge * (1 -/+ 1e-9)`` is put on each.
 
     Returns
     -------
     ndarray, shape (n_ledger,)
-        Ascending wavelengths: log-uniform over the publication range of ``_publication`` at
-        615 nodes per decade, and 1.2e-4 in ln lambda (35 km/s) over 900 A to 3e5 A.
+        ``_publication.publication_wave`` built in the trace: 2460 log nodes per decade, the fine
+        window 900 A to 3e5 A at 1.2e-4 in ln lambda, and the edge pairs.
 
     Notes
     -----
-    The fine window resolves the narrow lines (a 300 km/s line integrates exactly to rounding)
-    and the exponential edges a reddening or screen cuts into the ultraviolet disc (measured:
-    1e-3 on an SMC-screened disc at the publication spacing, 1e-6 on this grid). It is three
-    log-uniform pieces meeting at the window edges, because the line blocks paint each line
-    conserving its flux over the cells of the grid they are given: publication nodes
-    interleaved inside the window moved the line integral by 3e-5.
+    With a node on each side of every discontinuity the trapezoid converges at second order;
+    without, at first order, with an error set by where the step falls between nodes
+    (measured on the multicolor disc's 30 A cut: 6.8e-5 of its power on this grid without the
+    pair, 5e-7 with it). The fine window resolves the narrow lines and the exponential edges a
+    reddening or screen cuts into the ultraviolet disc.
     """
-    lo, hi, n = _FINE_WINDOW_AA
-    per_dex = (_LEDGER_NODES - 1) / np.log10(PUBLICATION_HI_AA / PUBLICATION_LO_AA)
-    n_lo = int(np.ceil(per_dex * np.log10(lo / PUBLICATION_LO_AA))) + 1
-    n_hi = int(np.ceil(per_dex * np.log10(PUBLICATION_HI_AA / hi))) + 1
-
-    def piece(a: float, b: float, count: int):
-        # Built in the trace from its end points, so no array literal enters the graph.
-        return jnp.exp(jnp.linspace(np.log(a), np.log(b), count, dtype=dtype))
-
-    return jnp.concatenate(
-        [
-            piece(PUBLICATION_LO_AA, lo, n_lo)[:-1],
-            piece(lo, hi, n),
-            piece(hi, PUBLICATION_HI_AA, n_hi)[1:],
-        ]
+    edges = np.asarray(edges_aa, dtype=np.float64)
+    edges = edges[(edges > PUBLICATION_LO_AA) & (edges < PUBLICATION_HI_AA)]
+    pairs = np.concatenate([edges * (1.0 - _EDGE_PAIR_REL), edges * (1.0 + _EDGE_PAIR_REL)])
+    return publication_wave(
+        dtype, extra_aa=pairs, n_nodes=_LEDGER_NODES, fine_window=_FINE_WINDOW_AA, traced=True
     )
+
+
+def ledger_sightlines(library_cos_nodes, sigmoid_centers, dtype):
+    r"""Sightlines and weights for the sphere means :math:`\int_0^1 f(\mu)\,d\mu`.
+
+    Parameters
+    ----------
+    library_cos_nodes : array_like, shape (n_lib,)
+        The torus library's inclination nodes in :math:`\cos i` (host values; empty without a
+        library), where its interpolated sightline factors have their panel breaks.
+    sigmoid_centers : sequence of array_like
+        :math:`\cos i` at the center of each active Type-1/2 sigmoid (may be traced).
+    dtype : dtype
+        Evaluation dtype.
+
+    Returns
+    -------
+    mu : ndarray, shape (n_mu,)
+        Sightlines :math:`\cos i` [dimensionless].
+    weight : ndarray, shape (n_mu,)
+        Weights [dimensionless], summing to 1.
+
+    Notes
+    -----
+    ``_torus_inclination.inclination_quadrature_in`` (Gauss-Legendre of ``SPHERE_ORDER`` points
+    on each panel) on the union of uniform panels, the library's nodes and edges laid about each
+    sigmoid, so every panel is a smooth stretch of the integrand. **JIT/vmap-safe**: yes; the
+    panel count is static and the sigmoid edges may be traced.
+    """
+    from tengri.components.agn._torus_inclination import inclination_quadrature_in
+    from tengri.components.agn.polar_dust import TYPE_TRANSITION_WIDTH
+
+    host = np.unique(
+        np.concatenate(
+            [
+                np.linspace(0.0, 1.0, _SPHERE_BASE_PANELS + 1)[1:-1],
+                np.clip(np.asarray(library_cos_nodes, dtype=np.float64), 0.0, 1.0),
+            ]
+        )
+    )
+    host = host[(host > 0.0) & (host < 1.0)]
+    nodes = jnp.asarray(host, dtype=dtype)
+    if sigmoid_centers:
+        offsets = jnp.asarray(_SIGMOID_PANEL_OFFSETS, dtype=dtype) * TYPE_TRANSITION_WIDTH
+        # Edges laid past an end are clipped onto it by the quadrature (an empty panel).
+        laid = [jnp.asarray(c, dtype=dtype) + offsets for c in sigmoid_centers]
+        nodes = jnp.sort(jnp.concatenate([nodes, *laid]))
+    if not isinstance(nodes, jax.core.Tracer):
+        # Coinciding edges (the polar dust follows the torus angle, a laid edge clipped onto an
+        # end) make empty panels of zero weight; concrete nodes drop them, as the quadrature
+        # refuses ties it can see.
+        nodes = np.unique(np.asarray(nodes))
+        nodes = jnp.asarray(nodes[(nodes > 0.0) & (nodes < 1.0)], dtype=dtype)
+    return inclination_quadrature_in(nodes, "cos_inc", SPHERE_ORDER)
 
 
 def non_conserving_reason(
@@ -328,14 +362,46 @@ agn_attenuation_block : str
     return agn_norm == "conserving" or (agn_norm == "cigale_joint" and not has_lines)
 
 
+def log10_signed_sphere_mean(rows, wave, weights):
+    r"""``log10`` of the sphere mean of the power of a signed spectrum, ``-inf`` if not positive.
+
+    Parameters
+    ----------
+    rows : array_like, shape (n_mu, n_ledger)
+        A spectrum per sightline [erg/s/Hz] that may change sign node by node (the intrinsic
+        minus the emitted disc: a library sightline factor ``2 cos i`` exceeds one on the
+        near-face-on rows of an isotropic disc).
+    wave : array_like, shape (n_ledger,)
+        :func:`ledger_wave` [Angstrom].
+    weights : array_like, shape (n_mu,)
+        :func:`ledger_sightlines` weights [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\log_{10}\sum_k w_k \int R_k\,d\nu` [dex re erg/s].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. Peak-factored as ``_publication.log10_emitted_bolometric``
+    (one peak for every row, held under ``stop_gradient``), so no erg/s-scale value forms in
+    float32; the sign survives the sum, unlike a per-row logarithm.
+    """
+    rows = jnp.asarray(rows)
+    nu = C_AA / jnp.asarray(wave)
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(rows), initial=0.0))
+    safe_peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    per_row = -jnp.trapezoid(rows / safe_peak * nu, jnp.log(nu), axis=-1)
+    total = jnp.sum(jnp.asarray(weights, dtype=rows.dtype) * per_row)
+    positive = total > 0
+    return jnp.where(
+        positive, jnp.log10(jnp.where(positive, total, 1.0)) + jnp.log10(safe_peak), -jnp.inf
+    )
+
+
 def _clamped_difference(log_a, log_b):
     """``log10(10**a - 10**b)`` where ``a > b``, else ``-inf`` (nothing left over)."""
     return jnp.where(log_a > log_b, log10_add(log_a, log_b, sign_b=-1.0), -jnp.inf)
-
-
-def _log_power(lnu, wave):
-    """``log10`` of the frequency integral of an emitted ``L_nu`` on ``wave`` [dex re erg/s]."""
-    return log10_emitted_bolometric(lnu, wave)
 
 
 def ledger_from_evaluations(
@@ -345,8 +411,11 @@ def ledger_from_evaluations(
     *,
     log_disc_intrinsic,
     log_lines_intrinsic,
+    log_disc_unemitted=None,
+    log_lines_unemitted=None,
     log_torus_intrinsic=None,
     log_torus_anisotropy=None,
+    log_power=None,
     closed,
 ) -> dict:
     r"""The published ledger from the runner's pieces at the sightline and the quadrature points.
@@ -360,19 +429,26 @@ def ledger_from_evaluations(
     wave : array_like, shape (n_ledger,)
         :func:`ledger_wave` [Angstrom].
     weights : array_like, shape (n_mu,)
-        :func:`ledger_quadrature` weights [dimensionless].
+        :func:`ledger_sightlines` weights [dimensionless].
     log_disc_intrinsic : float
         ``log10`` of the angle-integrated power of the disc before any obscuration [dex re
         erg/s].
     log_lines_intrinsic : float
         ``log10`` of the line power before any obscuration [dex re erg/s]; ``-inf`` without
         lines.
+    log_disc_unemitted, log_lines_unemitted : float, optional
+        ``log10`` of the unemitted disc and lines, integrated from the per-node difference
+        between the intrinsic and the emitted spectra [dex re erg/s]; ``None`` forms them as
+        the difference of the intrinsic and emitted powers.
     log_torus_intrinsic : float, optional
         ``log10`` of the angle-integrated torus power before an attenuation block [dex re
         erg/s]; ``None`` when nothing attenuates the torus.
     log_torus_anisotropy : float, optional
         :math:`\log_{10}(a(\mu)/\bar a)` of a library torus [dex]; ``None`` for a torus that
         carries the same power along every sightline.
+    log_power : float, optional
+        ``log10`` of the AGN dust power the torus and polar dust are normalized on [dex re
+        erg/s]; ``None`` (published ``-inf``) without a torus.
     closed : float
         1.0 when the recipe conserves the accretion power, else 0.0.
 
@@ -399,13 +475,13 @@ def ledger_from_evaluations(
     """
     wave = jnp.asarray(wave)
     w = jnp.asarray(weights, dtype=wave.dtype)
-    row_powers = jax.vmap(_log_power, in_axes=(0, None))
+    row_powers = jax.vmap(log10_emitted_bolometric, in_axes=(0, None))
     logs = {
         piece: row_powers(jnp.asarray(components[key]), wave)
         for piece, key in LEDGER_PIECES.items()
     }
     total_los = sum(jnp.asarray(components[key])[0] for key in LEDGER_PIECES.values())
-    out = {"log_L_agn_los": _log_power(total_los, wave)}
+    out = {"log_L_agn_los": log10_emitted_bolometric(total_los, wave)}
     for piece, row_logs in logs.items():
         out[f"log_L_agn_{piece}_los"] = row_logs[0]
         out[f"log_L_agn_{piece}"] = log10_weighted_sum(row_logs[1:], w)
@@ -416,10 +492,16 @@ def ledger_from_evaluations(
         "lines": log_lines_intrinsic,
         "torus": -jnp.inf if log_torus_intrinsic is None else log_torus_intrinsic,
     }
+    direct = {"disc": log_disc_unemitted, "lines": log_lines_unemitted, "torus": None}
     for piece in _UNEMITTED_PIECES:
-        out[f"log_L_agn_{piece}_unemitted"] = _clamped_difference(
-            jnp.asarray(intrinsic[piece], dtype=wave.dtype), out[f"log_L_agn_{piece}"]
+        out[f"log_L_agn_{piece}_unemitted"] = (
+            _clamped_difference(
+                jnp.asarray(intrinsic[piece], dtype=wave.dtype), out[f"log_L_agn_{piece}"]
+            )
+            if direct[piece] is None
+            else jnp.asarray(direct[piece], dtype=wave.dtype)
         )
+    out[POWER_KEY] = jnp.asarray(-jnp.inf if log_power is None else log_power, dtype=wave.dtype)
     out = with_lsun_siblings(out)
     out[LEDGER_CLOSED_KEY] = jnp.asarray(closed, dtype=wave.dtype)
     return out

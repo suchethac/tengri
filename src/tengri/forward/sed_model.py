@@ -9673,7 +9673,7 @@ class SEDModel:
             if chain is None:
                 chain = self._build_component_chain()
             active_names = {c.name for c in chain}
-            self._property_catalog = assemble_available_properties(active_names)
+            self._property_catalog = assemble_available_properties(active_names, chain)
         return self._property_catalog
 
     def predict_properties(
@@ -9815,11 +9815,15 @@ class SEDModel:
             params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         )
 
-        # Evaluate each property
+        # Evaluate each property; a property computed on request (``bundle``) is evaluated
+        # once for all the names that share it.
         result = {}
+        bundles: dict = {}
         for name in names_to_compute:
             entry = self._property_catalog[name]
-            result[name] = entry.fn(state, params)
+            result[name] = entry.evaluate(
+                state, params, model=self, template_data=template_data, cache=bundles
+            )
 
         return result
 

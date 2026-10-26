@@ -17,7 +17,6 @@ import pytest
 from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.components.agn import component as agn_component
 from tengri.components.agn.blocks import runner
-from tengri.components.agn.blocks._ledger import ledger_wave
 from tengri.components.agn.component import AGNSEDComponent
 from tengri.observation.photometry_config import Photometry
 from tengri.protocols.component import ForwardState
@@ -112,10 +111,6 @@ def _agn_on_grid(model, wave, *, closed_over: bool = False):
     )
 
 
-#: Node count of the composable energy ledger's own grid (#3076).
-_LEDGER_NODES = int(ledger_wave(jnp.float64).shape[0])
-
-
 def test_index_reaches_the_sightline_only_on_the_master_grid(monkeypatch):
     """The master grid gets the build-time index; a same-length explicit grid gets None."""
     model = _model()
@@ -124,10 +119,7 @@ def test_index_reaches_the_sightline_only_on_the_master_grid(monkeypatch):
     original = runner.library_torus_sightline
 
     def spy(*args, **kwargs):
-        # Only the evaluations on the grid under test: the energy ledger (#3076) re-evaluates
-        # the chain on its own fixed grid, where no build-time index applies.
-        if np.shape(args[1])[-1] != _LEDGER_NODES:
-            seen.append(kwargs.get("below_index"))
+        seen.append(kwargs.get("below_index"))
         return original(*args, **kwargs)
 
     monkeypatch.setattr(runner, "library_torus_sightline", spy)

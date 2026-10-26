@@ -28,6 +28,7 @@ import inspect
 from collections.abc import Callable, Mapping
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn import (
     fritz as _fritz,
@@ -49,6 +50,7 @@ from tengri.components.agn.blocks.torus import (
 
 __all__ = [
     "fritz_log10_anisotropy",
+    "library_cos_nodes",
     "nenkova_agnfitter_2p_log10_anisotropy",
     "nenkova_agnfitter_3p_log10_anisotropy",
     "nenkova_agnfitter_log10_anisotropy",
@@ -230,3 +232,69 @@ def skirtor_agnfitter_1p_log10_anisotropy(templates, dtype, **params):
     grid = _template_grid(templates, _sk1.load_skirtor_agnfitter_1p_default_grid)
     coords = (skirtor_incl_from_cos_inc(jnp.asarray(_cos_inc(params))),)
     return _library_log10_anisotropy(grid, _sk1.TORUS_INCLINATION, coords, dtype)
+
+
+def _skirtor_cos_nodes() -> np.ndarray:
+    """``cos i`` nodes of the SKIRTOR disc column (the library sightline's axis 5)."""
+    from tengri.components.agn.skirtor import load_skirtor_disc_atten_grid
+
+    return np.asarray(load_skirtor_disc_atten_grid().axes[5], dtype=np.float64)
+
+
+def _fritz_cos_nodes() -> np.ndarray:
+    """``cos i = sin(psi)`` at the Fritz library's elevation nodes (axis 5)."""
+    psy = np.asarray(_fritz.load_fritz_default_grid().axes[5], dtype=np.float64)
+    return np.sin(np.radians(psy))
+
+
+def _template_cos_nodes(loader, inc) -> np.ndarray:
+    """``cos i`` at a ``TorusTemplateGrid`` library's inclination nodes."""
+    x = np.asarray(loader().axes[inc.axis], dtype=np.float64)
+    if inc.variable == "cos_inc":
+        return x
+    if inc.variable == "incl_deg":
+        return np.cos(np.radians(x))
+    return np.sin(np.radians(x))
+
+
+#: Torus block -> its library's inclination nodes in ``cos i`` (host), where the interpolated
+#: sightline factors (the disc screen of SKIRTOR and Fritz, the anisotropy of the others) break.
+_COS_NODE_LOADERS = {
+    "skirtor": _skirtor_cos_nodes,
+    "fritz": _fritz_cos_nodes,
+    "nenkova_agnfitter": lambda: _template_cos_nodes(
+        _nk1.load_nenkova_agnfitter_default_grid, _nk1.TORUS_INCLINATION
+    ),
+    "nenkova_agnfitter_2p": lambda: _template_cos_nodes(
+        _nk2.load_nenkova_agnfitter_2p_default_grid, _nk2.TORUS_INCLINATION
+    ),
+    "nenkova_agnfitter_3p": lambda: _template_cos_nodes(
+        _nk3.load_nenkova_agnfitter_3p_default_grid, _nk3.TORUS_INCLINATION
+    ),
+    "skirtor_agnfitter_1p": lambda: _template_cos_nodes(
+        _sk1.load_skirtor_agnfitter_1p_default_grid, _sk1.TORUS_INCLINATION
+    ),
+}
+
+
+def library_cos_nodes(torus_block: str) -> np.ndarray:
+    """A torus library's inclination nodes in ``cos i``, or an empty array.
+
+    Parameters
+    ----------
+    torus_block : str
+        Torus selector.
+
+    Returns
+    -------
+    ndarray, shape (n_inc,)
+        Host values in [0, 1]; empty for a torus without an inclination axis that shapes the
+        emitted pieces' angular profile, or whose library file is absent.
+    """
+    loader = _COS_NODE_LOADERS.get(torus_block)
+    if loader is None:
+        return np.zeros(0)
+    try:
+        return loader()
+    except FileNotFoundError:
+        return np.zeros(0)

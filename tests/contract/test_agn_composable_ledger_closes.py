@@ -4,19 +4,23 @@
 NAMING_CONTRACT section 4c, "Composable runner" (#3076). For each piece of the SED (disc,
 torus, lines, polar dust) the runner publishes ``log_L_agn_<piece>`` (angle-integrated) and
 ``log_L_agn_<piece>_los`` (along ``agn_cos_inc``), the ``_unemitted`` powers of the disc, lines
-and torus, ``log_L_agn_los``, every one with an ``L_agn_*_lsun`` sibling, and
-``agn_ledger_closed``. Checked here:
+and torus, ``log_L_agn_los``, ``log_L_agn_power``, every one with an ``L_agn_*_lsun`` sibling,
+and ``agn_ledger_closed``. Checked here, with one tolerance for every block:
 
-* C1: the angle-integrated torus of a library torus is ``f L_bol`` exactly (its library
-  anisotropy), any other torus and the polar dust carry the same power along every sightline,
-  and the disc's sphere mean matches an independent 201-point trapezoid in ``cos i``;
+* C1: the angle-integrated torus of a library torus is ``f L_bol`` (its library anisotropy),
+  any other torus and the polar dust carry the same power along every sightline, and the
+  disc's sphere mean and unemitted share match an independent dense integral over ``cos i``,
+  all to 1e-6;
 * C2: on a conserving recipe the angle-integrated pieces plus the unemitted ones are
-  ``agn_lum_ratio * 10**agn_log_lbol L_sun``, to the accuracy of the blocks' own normalization
-  (measured per block below), and ``agn_ledger_closed`` is 1;
+  ``agn_lum_ratio * 10**agn_log_lbol L_sun`` to 1e-6, once each block's own normalization is
+  measured (the dense integral of the block alone, not a table), and ``agn_ledger_closed``
+  is 1;
 * C3: every ``_los`` key and ``log_L_agn_los`` equal the frequency integral of that piece of the
-  SED on an independent dense grid, to 1e-6;
+  SED on an independent dense grid to 1e-6. Both grids carry a node pair at every spectral
+  edge of the selected blocks (``spectral_edges``), so both converge at second order;
 * C4: the ``Lsun`` siblings are the dex keys in solar luminosities, and the ledger agrees between
-  pure float32 and float64;
+  pure float32 and float64 to 1e-4 dex on several recipes;
+* ``log_L_agn_power`` is the AGN dust power the torus is normalized on;
 * the recipes documented as non-conserving publish ``agn_ledger_closed = 0`` and their build
   emits the rule-10 ``RecipeWarning``; the shipped AGN recipes publish the flag their policy
   implies;
@@ -26,6 +30,7 @@ and torus, ``log_L_agn_los``, every one with an ``L_agn_*_lsun`` sibling, and
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 import jax
@@ -48,6 +53,7 @@ from tengri.components.agn.blocks.runner import (
     composable_agn_l_nu,
     validate_block_recipe,
 )
+from tengri.components.agn.blocks.spectral_edges import block_edges
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.physics_constants import C_AA, L_SUN
 
@@ -58,46 +64,10 @@ _LOG_LSUN = float(np.log10(L_SUN))
 _WAVE = jnp.asarray(np.geomspace(100.0, 1.0e7, 400))
 _PIECES = {"disc": "disc", "torus": "torus", "lines": "lines", "polar_dust": "polar"}
 _UNEMITTED = ("disc", "torus", "lines")
-
-_C3_RTOL = 1.0e-6
-#: Dense reference grid: 16x the ledger's density outside the window, 3x inside it.
-DENSE_PER_DEX = 9840
-DENSE_WINDOW = 144_001
-#: C1: a library torus's angle-integrated power is its sightline power (the ledger-grid
-#: integral, within 3.4e-7 dex of ``f L_bol`` measured) minus its anisotropy.
-_C1_TORUS_ATOL_DEX = 1.0e-6
-#: C2: the pieces add up to the accretion power to the accuracy of the blocks' own
-#: normalization on the ledger grid. Measured, then tripled: kubota_done, adaf, schartmann2005
-#: and the tori within 3e-6; the others below.
-_C2_RTOL = 1.0e-5
-_C2_RTOL_BY_BLOCK = {
-    "multicolor": 2.1e-4,  # 6.8e-5: its spectrum is cut at 30 A
-    "powerlaw": 9.0e-5,  # 2.8e-5
-    "relagn": 2.1e-5,  # 6.7e-6
-    "richards2006": 2.5e-4,  # 8.2e-5
-    "skirtor": 4.1e-4,  # 1.4e-4 (the CIGALE disc)
-    "slone_netzer": 9.7e-4,  # 3.2e-4
-    "kd18_agnfitter": 3.3e-5,  # 1.1e-5
-    "kd18_agnfitter_warmindex": 3.3e-5,  # 1.1e-5
-    "nenkova": 1.3e-4,  # 4.3e-5 beside the multicolor disc's -4.1e-5
-}
-#: C3 for the disc pieces: a disc with a hard spectral edge (the multicolor cut at 30 A and
-#: kink at 82 A; the template discs' grid ends) or a disc behind a library torus (whose
-#: transmission steps at the library's first wavelength node) converges at first order on
-#: any fixed grid, so its line-of-sight power is the dense integral only to the edge's
-#: share. Measured over the sweep (worst sightline), then tripled.
-_C3_DISC_RTOL_BY_BLOCK = {
-    "multicolor": 3.0e-3,  # 6.6e-5 unscreened, 1.0e-3 behind the Fritz torus
-    "relagn": 4.2e-4,  # 1.4e-4
-    "kd18_agnfitter": 3.3e-4,  # 1.1e-4
-    "kd18_agnfitter_warmindex": 3.3e-4,  # 1.1e-4
-    "powerlaw": 1.4e-4,  # 4.7e-5
-    "richards2006": 1.4e-4,  # 4.5e-5
-    "skirtor": 1.2e-4,  # 4.0e-5
-    "slone_netzer": 2.8e-5,  # 9.3e-6
-    "kubota_done": 3.0e-5,  # 1.0e-5 behind the Fritz torus, 9.0e-6 behind SKIRTOR
-    "adaf": 4.0e-6,  # 1.3e-6
-}
+#: The one tolerance of C1, C2 and C3, for every block.
+_RTOL = 1.0e-6
+#: Tori that bundle the disc in one self-normalized template: no debit of the disc.
+_SELF_CONTAINED = ("none", "grahsp", "grahsp_mn12", "qsogen")
 
 
 def _selectors(disc, torus, nlr="none", blr="none", feii="none", atten="none"):
@@ -116,8 +86,9 @@ def _templates(sel):
     return collect_block_templates({k[len("agn_") : -len("_block")]: v for k, v in sel.items()})
 
 
-def _evaluate(wave, sel, params, *, ledger, x64=True):
-    """The runner on ``wave`` (jitted, libraries threaded), as the component calls it."""
+def _evaluate(wave, sel, params, *, ledger, x64=True, strict=True):
+    """The runner on ``wave`` (jitted, libraries threaded); ``strict=False`` as the component
+    calls it, with the full declared parameter set."""
     templates = _templates(sel)
 
     def run(p, ts):
@@ -127,6 +98,7 @@ def _evaluate(wave, sel, params, *, ledger, x64=True):
             return_components=True,
             return_ledger=ledger,
             template_state=ts,
+            strict_keys=strict,
             **sel,
             **p,
         )
@@ -143,21 +115,25 @@ def _evaluate(wave, sel, params, *, ledger, x64=True):
         return np.asarray(sed), {k: np.asarray(v) for k, v in comps.items()}
 
 
-def _dense_wave(per_dex: int = DENSE_PER_DEX, window: int = DENSE_WINDOW) -> jnp.ndarray:
-    """An independent dense grid, uniform in ln lambda on each of three pieces.
+def _edge_pairs(sel):
+    """A node pair at every registered spectral edge of the recipe [A]."""
+    edges = np.asarray(block_edges(sel), dtype=np.float64)
+    edges = edges[(edges > 1.0e-3) & (edges < 1.0e10)]
+    return np.concatenate([edges * (1.0 - 1.0e-9), edges * (1.0 + 1.0e-9)])
 
-    The line blocks conserve each line's flux over the cells they are given, so the window is
-    one uniform piece (interleaving nodes inside it moves the line integral by 3e-6).
-    """
-    lo, hi = 9.0e2, 3.0e5
+
+def _dense_wave(sel, coarse: int = 256_000, window: int = 144_001) -> jnp.ndarray:
+    """An independent dense grid: 8x the ledger's log density outside 900 A - 3e5 A and 3x
+    inside it (one uniform piece: the line blocks conserve each line's flux over the cells they
+    are given), with the edge pairs."""
     nodes = np.concatenate(
         [
-            np.geomspace(1.0e-3, lo, int(per_dex * np.log10(lo / 1.0e-3)) + 1)[:-1],
-            np.geomspace(lo, hi, window),
-            np.geomspace(hi, 1.0e10, int(per_dex * np.log10(1.0e10 / hi)) + 1)[1:],
+            np.geomspace(1.0e-3, 1.0e10, coarse),
+            np.geomspace(9.0e2, 3.0e5, window),
+            _edge_pairs(sel),
         ]
     )
-    return jnp.asarray(nodes)
+    return jnp.asarray(np.unique(nodes))
 
 
 def _power(lnu, wave):
@@ -171,17 +147,6 @@ def _lin(comps, key):
     return float(10.0 ** comps[key])
 
 
-def _has_lines(sel):
-    return any(sel[k] != "none" for k in ("agn_nlr_block", "agn_blr_block", "agn_feii_block"))
-
-
-def _c2_rtol(sel):
-    return max(
-        [_C2_RTOL]
-        + [_C2_RTOL_BY_BLOCK.get(sel[k], 0.0) for k in ("agn_disc_block", "agn_torus_block")]
-    )
-
-
 def _skip_without_library(sel):
     """Skip only when a selected block's library file is absent from this checkout."""
     try:
@@ -190,9 +155,40 @@ def _skip_without_library(sel):
         pytest.skip(f"library data absent: {exc}")
 
 
+@functools.cache
+def _disc_normalization(disc: str) -> float:
+    """The disc block's own power over ``10**agn_log_lbol L_sun``, minus one.
+
+    The dense integral of the disc alone at ``cos i = 1/2``, where ``2 cos i D + H`` (and an
+    isotropic disc) equals its sphere mean.
+    """
+    if disc == "none":
+        return 0.0
+    sel = _selectors(disc, "none")
+    wave = _dense_wave(sel)
+    _, comps = _evaluate(wave, sel, {"agn_norm": "conserving", "agn_cos_inc": 0.5}, ledger=False)
+    return _power(comps["disc"], wave) / 10.0 ** (_LOG_LBOL + _LOG_LSUN) - 1.0
+
+
+@functools.cache
+def _torus_normalization(torus: str, frac: float) -> float:
+    """A torus block's own power over ``f 10**agn_log_lbol L_sun``, minus one.
+
+    Zero for a library torus, whose angle-integrated power is ``f L_bol`` by its anisotropy
+    (C1); the dense integral of the torus alone otherwise (it is isotropic, C1).
+    """
+    if torus in _SELF_CONTAINED or torus in TORUS_ANISOTROPY_BLOCKS:
+        return 0.0
+    sel = _selectors("none", torus)
+    wave = _dense_wave(sel)
+    params = {"agn_norm": "conserving", "agn_cos_inc": 0.5, "agn_torus_frac": frac}
+    _, comps = _evaluate(wave, sel, params, ledger=False)
+    return _power(comps["torus"], wave) / (frac * 10.0 ** (_LOG_LBOL + _LOG_LSUN)) - 1.0
+
+
 def _check_c3(sel, params, comps):
     """C3: each ``_los`` key is the dense-grid integral of its piece of the SED."""
-    dense = _dense_wave()
+    dense = _dense_wave(sel)
     _, dense_comps = _evaluate(dense, sel, params, ledger=False)
     total = 0.0
     for piece, key in _PIECES.items():
@@ -201,21 +197,22 @@ def _check_c3(sel, params, comps):
         if p == 0.0:
             assert comps[f"log_L_agn_{piece}_los"] == -np.inf, piece
             continue
-        rtol = _C3_RTOL
-        if piece == "disc":
-            rtol = _C3_DISC_RTOL_BY_BLOCK.get(sel["agn_disc_block"], _C3_RTOL)
-        assert _lin(comps, f"log_L_agn_{piece}_los") == pytest.approx(p, rel=rtol), piece
-    disc_share = _power(dense_comps["disc"], dense) / total
-    rtol_total = max(_C3_RTOL, disc_share * _C3_DISC_RTOL_BY_BLOCK.get(sel["agn_disc_block"], 0.0))
-    assert _lin(comps, "log_L_agn_los") == pytest.approx(total, rel=rtol_total)
+        assert _lin(comps, f"log_L_agn_{piece}_los") == pytest.approx(p, rel=_RTOL), piece
+    assert _lin(comps, "log_L_agn_los") == pytest.approx(total, rel=_RTOL)
 
 
 def _check_c2(sel, params, comps):
-    """C2: angle-integrated pieces + unemitted = lum_ratio x accretion power."""
+    """C2: angle-integrated pieces + unemitted = lum_ratio x the blocks' accretion power."""
+    frac = float(params.get("agn_torus_frac", 0.0))
+    torus = sel["agn_torus_block"]
+    disc_share = 1.0 if torus in _SELF_CONTAINED else 1.0 - frac
+    excess = disc_share * _disc_normalization(sel["agn_disc_block"])
+    if torus not in _SELF_CONTAINED:
+        excess += frac * _torus_normalization(torus, frac)
     budget = float(params.get("agn_lum_ratio", 1.0)) * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
     total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
     total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
-    assert total / budget - 1.0 == pytest.approx(0.0, abs=_c2_rtol(sel))
+    assert total / budget - 1.0 == pytest.approx(excess, abs=_RTOL)
     assert float(comps["agn_ledger_closed"]) == 1.0
 
 
@@ -229,21 +226,18 @@ def _check_c4_siblings(comps):
 
 def _check_c1_torus(sel, params, comps):
     """C1 for the torus: ``f L_bol`` for a library torus; equal to the sightline otherwise."""
-    if sel["agn_torus_block"] == "none":
-        return
-    if sel["agn_attenuation_block"] != "none":
+    if sel["agn_torus_block"] == "none" or sel["agn_attenuation_block"] != "none":
         return
     if sel["agn_torus_block"] in TORUS_ANISOTROPY_BLOCKS:
         expected = (
-            _LOG_LBOL
-            + _LOG_LSUN
-            + np.log10(float(params["agn_torus_frac"]))
-            + np.log10(float(params.get("agn_lum_ratio", 1.0)))
+            float(params["agn_torus_frac"])
+            * float(params.get("agn_lum_ratio", 1.0))
+            * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
         )
-        assert float(comps["log_L_agn_torus"]) == pytest.approx(expected, abs=_C1_TORUS_ATOL_DEX)
+        assert _lin(comps, "log_L_agn_torus") == pytest.approx(expected, rel=_RTOL)
     else:
-        assert float(comps["log_L_agn_torus"]) == pytest.approx(
-            float(comps["log_L_agn_torus_los"]), abs=1e-6
+        assert _lin(comps, "log_L_agn_torus") == pytest.approx(
+            _lin(comps, "log_L_agn_torus_los"), rel=_RTOL
         )
 
 
@@ -273,7 +267,8 @@ def test_registry_pair_ledger_closes(disc, torus):
 
 
 #: Recipes that exercise the other stages: lines, the polar dust, a foreground attenuation
-#: block, ``cigale_joint`` with its tie inactive, and ``agn_lum_ratio``.
+#: block (with and without the EUV edge of the multicolor disc), ``cigale_joint`` with its tie
+#: inactive, and ``agn_lum_ratio``.
 _RECIPES = {
     "lines": (
         _selectors("kubota_done", "simple", "analytic", "analytic", "boroson_green"),
@@ -290,6 +285,14 @@ _RECIPES = {
     "smc_screen": (
         _selectors("kubota_done", "two_temperature", atten="smc_prevot"),
         {**_BASE, "agn_ebv": 0.3},
+    ),
+    "smc_screen_multicolor": (
+        _selectors("multicolor", "two_temperature", atten="smc_prevot"),
+        {**_BASE, "agn_ebv": 0.3},
+    ),
+    "qsogen_screen": (
+        _selectors("multicolor", "simple", atten="qsogen"),
+        {**_BASE, "agn_ebv": 0.2},
     ),
     "disc_reddening": (
         _selectors("kubota_done", "simple"),
@@ -323,50 +326,127 @@ def test_stage_recipe_ledger_closes(name):
     _check_c4_siblings(comps)
     # The polar dust is re-emitted isotropically: its two powers are one.
     if np.isfinite(comps["log_L_agn_polar_dust"]):
-        assert float(comps["log_L_agn_polar_dust"]) == pytest.approx(
-            float(comps["log_L_agn_polar_dust_los"]), abs=1e-6
+        assert _lin(comps, "log_L_agn_polar_dust") == pytest.approx(
+            _lin(comps, "log_L_agn_polar_dust_los"), rel=_RTOL
         )
 
 
-def test_disc_sphere_mean_matches_an_independent_quadrature():
-    """C1 for the disc: 201-point trapezoid in cos i of the emitted disc, 2e-4."""
-    sel = _selectors("multicolor", "fritz")
-    _skip_without_library(sel)
-    _, comps = _evaluate(_WAVE, sel, _BASE, ledger=True)
-    mus = np.linspace(0.0, 1.0, 201)
-    wave = jnp.asarray(np.geomspace(1.0e-3, 1.0e10, 8000))
+def _richardson_sphere_mean(sel, params, wave, levels=(9, 10)):
+    """The sphere mean of the emitted disc's power: trapezoid on ``2**k + 1`` uniform sightlines,
+    Richardson-extrapolated across the two levels [erg/s]."""
     templates = _templates(sel)
+    nu = jnp.asarray(C_AA / np.asarray(wave))
+    log_nu = jnp.log(nu)
 
-    def disc_power(mu):
+    def disc_power(mu, ts):
         _, c = composable_agn_l_nu(
             wave,
             _LOG_LBOL,
             return_components=True,
-            template_state=templates,
+            template_state=ts,
             **sel,
-            **{**_BASE, "agn_cos_inc": mu},
+            **{**params, "agn_cos_inc": mu},
         )
-        nu = C_AA / wave
-        return -jnp.trapezoid(c["disc"] * nu, jnp.log(nu))
+        return -jnp.trapezoid(c["disc"] * nu, log_nu)
 
-    powers = np.asarray(jax.jit(jax.vmap(disc_power))(jnp.asarray(mus)))
-    expected = np.trapezoid(powers, mus)
-    assert _lin(comps, "log_L_agn_disc") == pytest.approx(expected, rel=2e-4)
+    powers = jax.jit(lambda mus, ts: jax.lax.map(lambda m: disc_power(m, ts), mus, batch_size=16))
+    means = []
+    for k in levels:
+        mus = np.linspace(0.0, 1.0, 2**k + 1)
+        means.append(float(np.trapezoid(np.asarray(powers(jnp.asarray(mus), templates)), mus)))
+    return means[1] + (means[1] - means[0]) / 3.0
 
 
-def test_float32_ledger_matches_float64():
-    """C4: the ledger is finite in pure float32 and agrees with float64."""
-    sel, params = _RECIPES["polar_dust"]
+_LIBRARY_TORI = ("skirtor", "fritz", "nenkova_agnfitter", "skirtor_agnfitter_1p")
+
+
+@pytest.mark.parametrize("torus", _LIBRARY_TORI)
+def test_disc_sphere_mean_matches_a_dense_independent_mu_integral(torus):
+    """C1 for the disc behind each library torus: ``log_L_agn_disc`` and
+    ``log_L_agn_disc_unemitted`` against 1025 uniform sightlines (Richardson), 1e-6.
+
+    The frequency grid is built here (the ledger's density, independently), so the check
+    isolates the sightline quadrature: the library inclination nodes and the Type-1/2 sigmoid
+    are where a uniform quadrature loses its order. The unemitted reference is the disc's own
+    sphere-mean power (its dense integral at ``cos i = 1/2``) debited by ``1 - f``, minus the
+    emitted mean.
+    """
+    sel = _selectors("kubota_done", torus)
+    _skip_without_library(sel)
+    params = {"agn_norm": "conserving", "agn_torus_frac": 0.4}
+    wave = jnp.asarray(
+        np.unique(
+            np.concatenate(
+                [
+                    np.geomspace(1.0e-3, 1.0e10, 32_000),
+                    np.geomspace(9.0e2, 3.0e5, 48_001),
+                    _edge_pairs(sel),
+                ]
+            )
+        )
+    )
+    emitted = _richardson_sphere_mean(sel, params, wave)
+    intrinsic = (1.0 - params["agn_torus_frac"]) * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    intrinsic *= 1.0 + _disc_normalization("kubota_done")
+    _, comps = _evaluate(_WAVE, sel, {**params, "agn_cos_inc": 0.5}, ledger=True)
+    assert _lin(comps, "log_L_agn_disc") == pytest.approx(emitted, rel=_RTOL)
+    assert _lin(comps, "log_L_agn_disc_unemitted") == pytest.approx(intrinsic - emitted, rel=_RTOL)
+
+
+#: Float32 recipes: a library torus behind polar dust, lines behind a screened library torus,
+#: the CIGALE tie, a foreground attenuation block.
+_FLOAT32_RECIPES = ("polar_dust", "lines_fritz", "cigale_joint_tie_on", "smc_screen")
+
+
+def _float32_recipe(name):
+    if name == "lines_fritz":
+        return _selectors("kubota_done", "fritz", "analytic", "analytic"), _BASE
+    if name == "cigale_joint_tie_on":
+        return _selectors("kubota_done", "fritz"), {
+            **_BASE,
+            "agn_norm": "cigale_joint",
+            "agn_ir_frac": 0.3,
+        }
+    return _RECIPES[name]
+
+
+@pytest.mark.parametrize("name", _FLOAT32_RECIPES)
+def test_float32_ledger_matches_float64(name):
+    """C4: the ledger is finite in pure float32 and agrees with float64 to 1e-4 dex.
+
+    Holds where the float32 SED is finite: an anisotropic template torus is not (#3101).
+    """
+    sel, params = _float32_recipe(name)
     _skip_without_library(sel)
     _, c64 = _evaluate(_WAVE, sel, params, ledger=True)
-    _, c32 = _evaluate(_WAVE, sel, params, ledger=True, x64=False)
+    sed32, c32 = _evaluate(_WAVE, sel, params, ledger=True, x64=False)
+    assert np.all(np.isfinite(sed32))
     for key, val in c64.items():
         # ``log_L_agn_direct_los`` is not a ledger key: it is the pre-#3076 value, unchanged,
-        # and NaN in float32 for this disc on main as well.
+        # NaN in float32 for the kubota_done and multicolor discs on main as well (#3104).
         if key.startswith("log_L_agn_") and key != "log_L_agn_direct_los" and np.isfinite(val):
             assert np.isfinite(c32[key]), key
-            # 1e-4 dex: the unemitted disc is a difference of two float32 sums (3.8e-5 measured).
             assert float(c32[key]) == pytest.approx(float(val), abs=1e-4), key
+
+
+def test_power_is_the_torus_normalization():
+    """``log_L_agn_power``: ``f L_bol`` for a conserving torus; under the active CIGALE tie the
+    torus's sightline power, which the emitted torus then carries (no polar dust here)."""
+    sel = _selectors("kubota_done", "simple")
+    _, comps = _evaluate(_WAVE, sel, _BASE, ledger=True)
+    f_lbol = _BASE["agn_torus_frac"] * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    assert _lin(comps, "log_L_agn_power") == pytest.approx(f_lbol, rel=_RTOL)
+    sel = _selectors("multicolor", "skirtor")
+    _skip_without_library(sel)
+    params = {**_BASE, "agn_norm": "cigale_joint", "agn_ir_frac": 0.3}
+    _, tied = _evaluate(_WAVE, sel, params, ledger=True)
+    assert np.isfinite(tied["log_L_agn_power"])
+    assert float(tied["agn_ledger_closed"]) == 0.0
+    assert _lin(tied, "log_L_agn_torus_los") == pytest.approx(
+        _lin(tied, "log_L_agn_power"), rel=_RTOL
+    )
+    _, untied = _evaluate(_WAVE, _selectors("multicolor", "none"), _BASE, ledger=True)
+    assert untied["log_L_agn_power"] == -np.inf
 
 
 @pytest.mark.parametrize("name", sorted(_RECIPES))
@@ -463,7 +543,7 @@ def test_shipped_agn_recipe_ledger(name):
         pytest.skip(f"{name} has no composable AGN")
     sel, params = found
     try:
-        _, comps = _evaluate(_WAVE, sel, params, ledger=True)
+        _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
     except (FileNotFoundError, TengriIOError) as exc:
         pytest.skip(f"library data absent: {exc}")
     closes = ledger_policy_closes(**sel, agn_norm=params["agn_norm"])
@@ -475,4 +555,6 @@ def test_shipped_agn_recipe_ledger(name):
     assert float(comps["agn_ledger_closed"]) == float(closes and not tie_on)
     if closes and not tie_on:
         _check_c2(sel, params, comps)
+    if tie_on:
+        assert np.isfinite(comps["log_L_agn_power"])
     _check_c4_siblings(comps)

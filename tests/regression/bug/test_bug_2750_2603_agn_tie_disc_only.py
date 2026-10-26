@@ -907,9 +907,9 @@ def test_closed_form_power_differs_from_the_grid_integral_by_the_measured_amount
     is the measured one with 20 % headroom.
     """
     if disc == "kubota_done":
-        grid = np.asarray(runner_module._KUBOTA_LEDGER_WAVE)
+        grid = np.asarray(runner_module._KUBOTA_BUDGET_WAVE)
     else:
-        grid = np.asarray(runner_module._LEDGER_WAVE)
+        grid = np.asarray(runner_module._BUDGET_WAVE)
     lam = resolve_agn_block("disc", disc)(
         jnp.asarray(grid), agn_log_lbol=_LOG_LBOL, agn_cos_inc=0.5, agn_log_mbh=8.0
     )

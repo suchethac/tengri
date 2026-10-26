@@ -26,7 +26,13 @@ from tengri.components.agn.blocks._protocol import (
 )
 from tengri.config.exceptions import ParameterError
 
-__all__ = ["PASS_THROUGH_KEYS", "RUNNER_READ_KEYS", "recipe_read_keys", "refuse_unread_keys"]
+__all__ = [
+    "PASS_THROUGH_KEYS",
+    "RUNNER_READ_KEYS",
+    "RUNNER_SUPPLIED_KEYS",
+    "recipe_read_keys",
+    "refuse_unread_keys",
+]
 
 #: Keys the runner itself reads, whatever the blocks: the policy, the shared normalization and
 #: geometry, the CIGALE tie and the polar-dust budget.
@@ -52,6 +58,10 @@ RUNNER_READ_KEYS: frozenset[str] = frozenset(
 PASS_THROUGH_KEYS: frozenset[str] = frozenset(
     {"agn_log_lbol_shape", "templates", "_template", "disc_state"}
 )
+
+#: Block keywords the runner fills itself (the grid, the dtype, the disc's 5100 A
+#: luminosity), never a caller's.
+RUNNER_SUPPLIED_KEYS: frozenset[str] = frozenset({"wavelength", "dtype", "l5100_disc"})
 
 _STAGES: tuple[tuple[str, str], ...] = (
     ("disc", "agn_disc_block"),
@@ -90,7 +100,8 @@ def recipe_read_keys(selectors: Mapping[str, str]) -> frozenset[str]:
         The union of :data:`RUNNER_READ_KEYS`, the recipe's consumed set
         (``_consumes.agn_active_param_set``) and the named keywords of every selected block
         and of the closed forms it registers (disc power, state and split, line energies,
-        torus anisotropy).
+        torus anisotropy), less the keywords the runner fills itself
+        (:data:`RUNNER_SUPPLIED_KEYS`).
     """
     reads = set(RUNNER_READ_KEYS)
     reads |= agn_active_param_set({"agn_model": "composable", **selectors})
@@ -108,7 +119,9 @@ def recipe_read_keys(selectors: Mapping[str, str]) -> frozenset[str]:
                 reads |= _named_keywords(table[name])
         if (category, name) in LINE_ENERGY_BLOCKS:
             reads |= _named_keywords(LINE_ENERGY_BLOCKS[(category, name)])
-    return frozenset(k for k in reads if k.startswith("agn_"))
+    # Every named keyword of the selected blocks, not only the ``agn_*`` ones: the multicolor
+    # disc's ``euv_tail`` is a model switch a caller passes by its own name.
+    return frozenset(reads - RUNNER_SUPPLIED_KEYS)
 
 
 def _spelling_hint(key: str, reads: frozenset[str]) -> str:

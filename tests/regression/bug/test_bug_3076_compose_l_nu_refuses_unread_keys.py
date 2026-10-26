@@ -6,9 +6,10 @@
 path accepted it: ``compose_l_nu(..., agn_disc_block='adaf_lopez2024',
 agn_cigale_disk_delta=0.3)`` returned the default blend, bit-identical to not passing it. The
 keyword path now raises ``ParameterError`` naming the key, the keys the recipe reads, the
-closest one and the CIGALE spelling hint of #2994. ``composable_agn_l_nu``, which the component
-and the presets call with the full declared superset, and the documented pass-through keys keep
-working.
+closest one and the CIGALE spelling hint of #2994. The public ``composable_agn_l_nu`` refuses it
+too; the registry entry the component and the presets call with the full declared superset opts
+out (``strict_keys=False``). The documented pass-through keys and a block's own non-``agn_``
+keyword (the multicolor disc's ``euv_tail``) are accepted.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.agn.blocks.registry import composable
 from tengri.components.agn.blocks.runner import composable_agn_l_nu, compose_l_nu
 from tengri.config.exceptions import ParameterError
 
@@ -63,10 +65,27 @@ def test_pass_through_and_runner_keys_are_accepted():
     )
 
 
+def test_public_entry_refuses_the_unread_key():
+    """``composable_agn_l_nu`` applies the same refusal as ``compose_l_nu`` by default."""
+    with pytest.raises(ParameterError, match="agn_cigale_disk_delta"):
+        composable_agn_l_nu(_WAVE, 10.0, agn_cigale_disk_delta=0.3, **_RECIPE)
+
+
 def test_registry_entry_accepts_the_declared_superset():
-    """``composable_agn_l_nu`` takes keys no block of the recipe reads (the component's call)."""
-    sed = composable_agn_l_nu(_WAVE, 10.0, agn_cigale_disk_delta=0.3, **_RECIPE)
+    """The registry entry takes keys no block of the recipe reads (the component's call)."""
+    sed = composable(_WAVE, 10.0, agn_cigale_disk_delta=0.3, **_RECIPE)
     assert np.all(np.isfinite(np.asarray(sed)))
+    opted = composable_agn_l_nu(
+        _WAVE, 10.0, strict_keys=False, agn_cigale_disk_delta=0.3, **_RECIPE
+    )
+    np.testing.assert_array_equal(np.asarray(sed), np.asarray(opted))
+
+
+def test_a_block_keyword_without_the_agn_prefix_is_accepted():
+    """The multicolor disc's ``euv_tail`` is read by the block, so it is not refused."""
+    recipe = {**_RECIPE, "agn_disc_block": "multicolor"}
+    tail = np.asarray(compose_l_nu(_WAVE, 10.0, euv_tail="wien", **recipe))
+    assert np.all(np.isfinite(tail))
 
 
 def test_unknown_key_is_refused():
