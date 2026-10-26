@@ -512,7 +512,8 @@ active `agn_ir_frac` tie. The ledger closes to 1e-6 on the blocks' own power, th
 integral of each block alone; for every block but two that is the accretion power to 1e-6 (8e-7
 largest). The two are the `richards2006` disc, whose template is normalized on the log-log
 integral of its nodes but resampled linearly, so it carries 1.22e-4 more than
-`10**agn_log_lbol L_sun`, and the toy `nenkova` torus, 2.09e-4 above `f L_bol`. Flag 0.0:
+`10**agn_log_lbol L_sun` (#3106), and the toy `nenkova` torus, 2.09e-4 above `f L_bol`. Flag
+0.0:
 
 - the self-contained quasar templates: the `grahsp`, `grahsp_mn12` and `qsogen` tori, the
   `grahsp_sbpl` and `grahsp_netzer` discs (their parameter is `l5100`; the sub-912 A share of
