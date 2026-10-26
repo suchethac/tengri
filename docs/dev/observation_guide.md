@@ -33,7 +33,7 @@ concatenation, and noise/calibration parameters had to be hand-wired into
   encode instrument knowledge.
 - Observation-driven parameters (calibration coefficients, noise floor) are
   auto-merged into `Parameters` by `SEDModel`.
-- Spectroscopy precomputation is opt-in (`approx=SpectrumPrecomp()`). Fits default to the exact path for spectroscopy (#1688).
+- Spectroscopy precomputation is automatic only where it is exact: `approx="auto"` takes `SpectrumPrecomp()` for point-sampled (or model-grid-resolved) pixels with a fixed `sigma_v_kms` and no banded resolution matrix, and stays exact otherwise (#1688, #2958). `approx=SpectrumPrecomp()` still forces it.
 - `pack_data` / `unpack_prediction` provide validated data concatenation for
   joint fitting.
 
