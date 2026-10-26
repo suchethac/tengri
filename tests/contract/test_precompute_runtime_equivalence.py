@@ -1490,7 +1490,7 @@ def test_torus_table_fixed_axis_lookup_matches_exact(spec, fixed_axis, grid_toru
 def test_torus_table_is_power_weighted(spec, grid_torus_filters):
     """The lookup is the power-weighted reading of the raw library records, built here
     independently: band photometry of every raw record (``lnu_filter_integral``) and
-    its bolometric power (``native_bolometric_nu_np``), SciPy's PCHIP of each along the
+    its bolometric power (``native_bolometric_nu_np``), SciPy's PCHIP of each along
     each axis in turn with the others at a node, their ratio, times the runtime's a / mean(a)
     for an anisotropic library.
 
