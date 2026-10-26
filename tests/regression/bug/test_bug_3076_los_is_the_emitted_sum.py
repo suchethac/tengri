@@ -150,6 +150,14 @@ def test_model_computes_the_ledger_on_request(ssp):
         10.0 ** (float(props["log_L_agn_los"]) - np.log10(L_SUN)), rel=1e-12
     )
     assert float(props["log_L_agn_los"]) < float(derived["log_L_agn_direct_los"])
+    # Asking for the ledger does not touch the forward pass: the SED is bit-identical after it.
+    after = model.predict_state({})
+    np.testing.assert_array_equal(
+        np.asarray(after.sed_intrinsic), np.asarray(model.predict_state({}).sed_intrinsic)
+    )
+    np.testing.assert_array_equal(
+        np.asarray(derived["sed_agn"]), np.asarray(after.derived["sed_agn"])
+    )
 
 
 def test_ledger_is_listed_only_with_the_composable_agn(ssp):

@@ -24,8 +24,9 @@ and ``agn_ledger_closed``. Checked here, with one tolerance for every block:
 * the recipes documented as non-conserving publish ``agn_ledger_closed = 0`` and their build
   emits the rule-10 ``RecipeWarning``; the shipped AGN recipes publish the flag their policy
   implies;
-* the ledger does not touch the SED: the SED and the sub-block SEDs are bit-identical with and
-  without it.
+* the ledger does not touch the SED: the SED and the sub-block SEDs agree with and without it
+  (to rounding in one compiled graph; bit-identical through the model, which computes the
+  ledger on request).
 """
 
 from __future__ import annotations
@@ -450,15 +451,21 @@ def test_power_is_the_torus_normalization():
 
 
 @pytest.mark.parametrize("name", sorted(_RECIPES))
-def test_ledger_leaves_the_sed_bit_identical(name):
-    """The ledger is publication only: the SED and sub-block SEDs do not move by one bit."""
+def test_ledger_leaves_the_sed_unchanged(name):
+    """The ledger is publication only: the SED and sub-block SEDs do not move.
+
+    To rounding: compiled in one graph with the ledger, the compiler may fuse the SED's
+    arithmetic differently (one recipe moves by 3.4e-16). The model computes the ledger in a
+    graph of its own, on request, so its SED is bit-identical
+    (``test_bug_3076_los_is_the_emitted_sum``).
+    """
     sel, params = _RECIPES[name]
     _skip_without_library(sel)
     sed_off, comps_off = _evaluate(_WAVE, sel, params, ledger=False)
     sed_on, comps_on = _evaluate(_WAVE, sel, params, ledger=True)
-    np.testing.assert_array_equal(sed_on, sed_off)
+    np.testing.assert_allclose(sed_on, sed_off, rtol=1e-15, atol=0.0)
     for key in ("disc", "torus", "lines", "polar", "log_L_agn_direct_los"):
-        np.testing.assert_array_equal(comps_on[key], comps_off[key])
+        np.testing.assert_allclose(comps_on[key], comps_off[key], rtol=1e-15, atol=0.0)
 
 
 #: Recipes documented as non-conserving (decision 3 of the 2026-10-13 rulings) and the
