@@ -20,10 +20,10 @@ Cases not compared
 ------------------
 * ``pah_drude``: the building block is rejected as a sole dust emitter
   (``ParameterError``, energy balance); it has no compliant standalone build.
-* X-ray (``simple``), the cat3d_wind and silva04 torus cases, and the shock
-  component: on the real grid at the default luminosity they add less than 5% to every
-  band (measured maxima 1.1e-3, 1.7e-2, 1.9e-3, 4.0e-3). Shock adds nothing to the narrow
-  H-alpha band either, so the band guard excludes it everywhere.
+The X-ray, silva04 and cat3d_wind cases use ``agn_log_lbol=12.0`` (prior 6.42-12.42)
+and compare the mid-IR or X-ray bands they dominate. The shock case uses
+``shock_log_lhalpha=43.0`` under ``norm='lhalpha'`` (prior 30-46); at the top of the
+``shock_frac`` prior (1.0) shock adds only 4% per band, below the guard.
 
 History
 -------
@@ -186,6 +186,98 @@ def test_qsogen_disc_lut_matches_exact(real_ssp):
     _assert_lut_matches_exact(real_ssp, obs, on, off, rtol=5e-14, label="qsogen disc")
 
 
+# ── X-ray, AGN torus and shock, at a raised luminosity ──────────────────────
+
+
+def test_xray_simple_lut_matches_exact(real_ssp):
+    """X-ray emission (simple) at ``agn_log_lbol=12.0``: LUT matches exact.
+
+    The declared prior on ``agn_log_lbol`` is 6.42-12.42. Dominant bands are the 12.4 A
+    and 1.24 A filters (share 7.3 and 1.1); the 124 A band adds 0.9% and is excluded.
+    Measured worst relative difference 3.2e-15; tolerance 1e-14 = 3 x measured, rounded up.
+    """
+    from tengri import Fixed
+
+    obs = _tophat_observation([124.0, 12.4, 1.24], frac=0.18)
+    disc = {"type": "composable", "disc": {"type": "qsogen"}, "agn_log_lbol": Fixed(12.0)}
+    _assert_lut_matches_exact(
+        real_ssp,
+        obs,
+        dict(agn=disc, xray={"type": "simple"}),
+        dict(agn=disc),
+        rtol=1e-14,
+        label="xray simple",
+    )
+
+
+# Measured mid-IR (5, 10, 20 um) at agn_log_lbol=12.0, all three bands dominant.
+_TORUS_TOLERANCE = {
+    # silva04 measured 4.5e-8 -> 3x = 1.4e-7 -> 2e-7
+    "silva04": 2e-7,
+    # cat3d_wind measured 4.7e-8 -> 3x = 1.4e-7 -> 2e-7
+    "cat3d_wind": 2e-7,
+}
+_TORUS_GRID = {"silva04": "silva04_torus_grid.h5", "cat3d_wind": "cat3d_wind_torus_grid.h5"}
+
+
+@pytest.mark.parametrize(
+    "torus",
+    [
+        pytest.param(
+            name,
+            marks=pytest.mark.skipif(
+                not (_REPO_DATA / _TORUS_GRID[name]).exists(),
+                reason=f"{_TORUS_GRID[name]} not present",
+            ),
+        )
+        for name in sorted(_TORUS_TOLERANCE)
+    ],
+)
+def test_torus_lut_matches_exact(real_ssp, torus):
+    """Torus template at ``agn_log_lbol=12.0``: LUT matches exact on mid-IR bands.
+
+    Bands at 5, 10 and 20 um, where the torus dominates the stellar continuum by more
+    than an order of magnitude. Tolerance per torus is in ``_TORUS_TOLERANCE``.
+    """
+    from tengri import Fixed
+
+    obs = _tophat_observation([5e4, 1e5, 2e5], frac=0.18)
+    on = dict(agn={"type": "composable", "torus": {"type": torus}, "agn_log_lbol": Fixed(12.0)})
+    off = dict(agn={"type": "none"})
+    _assert_lut_matches_exact(
+        real_ssp, obs, on, off, rtol=_TORUS_TOLERANCE[torus], label=f"{torus} torus"
+    )
+
+
+@pytest.mark.skipif(
+    not (_REPO_DATA / "mappings_templates.h5").exists(),
+    reason="data/mappings_templates.h5 not present",
+)
+def test_shock_lhalpha_lut_matches_exact(real_ssp):
+    """MAPPINGS shock emission at absolute ``shock_log_lhalpha=43.0``: LUT matches exact.
+
+    ``norm='lhalpha'`` with the declared prior 30-46 on ``shock_log_lhalpha``. Dominant on
+    all five optical bands (share 0.7-11). ``shock_frac`` cannot reach the guard: at its
+    prior maximum of 1.0 shock adds 4% per band.
+    Measured worst relative difference 9.6e-15; tolerance 3e-14 = 3 x measured, rounded up.
+    """
+    from tengri import Fixed
+
+    obs = _tophat_observation([3500.0, 4800.0, 6200.0, 7600.0, 9000.0], frac=0.18)
+    on = dict(
+        neb={"type": "ssp"},
+        shock={
+            "norm": "lhalpha",
+            "log_lhalpha": Fixed(43.0),
+            "velocity": Fixed(300.0),
+            "log_density": Fixed(0.0),
+            "b_over_sqrt_n": Fixed(1.0),
+        },
+    )
+    off = dict(neb={"type": "ssp"}, shock={"type": "none"})
+    _assert_lut_matches_exact(real_ssp, obs, on, off, rtol=3e-14, label="shock lhalpha")
+
+
 # ── Analytic dust-IR emission ─────────────────────────────────────────────
 #
 # Far-IR bands (50, 100, 200 um). At 2-10 um the modified blackbody and graybody add
@@ -337,16 +429,6 @@ def test_dust_ir_emitter_lut_matches_exact(real_ssp, emitter):
 # pah_drude is not compared. Built as the sole dust emitter it raises ParameterError:
 # it carries the aromatic-feature forest with no thermal continuum and fails the
 # energy-balance check. It has no compliant standalone build to test.
-
-
-# ── Dropped cases ─────────────────────────────────────────────────────────
-#
-# X-ray (xray={'type': 'simple'}), the cat3d_wind and silva04 torus cases, and the shock
-# component each have engagement (the LUT engages) but add less than 5% to every band on
-# the real grid at the default luminosity: maxima 1.1e-3 (X-ray), 1.7e-2 (cat3d_wind),
-# 1.9e-3 (silva04), 4.0e-3 (shock). The shock component adds nothing to a narrow
-# H-alpha band either. A case that fails the guard would compare the stellar SED with
-# itself, so none is compared.
 
 
 # ── Grid-torus adapter precompute↔runtime equivalence (fix round 1) ──────

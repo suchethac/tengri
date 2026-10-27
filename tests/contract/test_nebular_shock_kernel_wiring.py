@@ -161,9 +161,6 @@ class TestShockEnabledRuntimeSmoke:
         # (We don't assert a specific minimum, just that the model runs)
 
 
-# The shock precompute-vs-exact equivalence test is not present. The factory above
-# builds no ``approx=`` argument, so the two models it produced were identical exact
-# models and the comparison tested nothing. On the real wNE SSP, WavePrecomp engages for
-# the shock model, but shock adds under 5% to every band (max 4.0e-3 on the broad optical
-# bands, 0 on the narrow H-alpha band), so no band passes the dominance guard. See
-# test_precompute_runtime_equivalence.py for the measurement.
+# The shock precompute-vs-exact equivalence test that stood here compared two identical
+# exact models: the factory above passes no ``approx=`` argument. The LUT-vs-exact shock
+# case is in test_precompute_runtime_equivalence.py, at shock_log_lhalpha=43.0.
