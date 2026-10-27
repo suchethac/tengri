@@ -63,6 +63,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests.contract._heap import release_heap
+
 pytestmark = pytest.mark.contract
 
 
@@ -1370,12 +1372,32 @@ def _exact_photometry_fn(sed_fn, grid, names, waves, trans):
     return exact
 
 
+@pytest.fixture(autouse=True)
+def _release_compiled_tables():
+    """Hand each test's compile memory back (``_heap``): the file compiles one exact and one
+    lookup graph per library and sweep."""
+    yield
+    release_heap()
+
+
+#: Library-axis points per ``lax.map`` step of a sweep.
+_SWEEP_BATCH = 64
+
+
 def _compare_over(spec, library, lookup_fn, exact_fn, label):
     """Assert the 5e-2 contract at every library-axis point (rows of ``library``)."""
     kwarg_values = np.array([_kwarg_values(spec, tuple(row)) for row in library])
-    columns = [jnp.asarray(kwarg_values[:, k]) for k in range(kwarg_values.shape[1])]
-    want = np.asarray(jax.jit(jax.vmap(exact_fn))(*columns))
-    got = np.asarray(jax.jit(jax.vmap(lookup_fn))(*columns))
+    stacked = jnp.asarray(kwarg_values)
+    # ``lax.map`` in batches, not one ``vmap`` over every point: the exact runtime holds the
+    # template on its native grid per point, and 1500 points at once peaked at 9 GB.
+    want = np.asarray(
+        jax.jit(lambda v: jax.lax.map(lambda r: exact_fn(*r), v, batch_size=_SWEEP_BATCH))(stacked)
+    )
+    got = np.asarray(
+        jax.jit(lambda v: jax.lax.map(lambda r: lookup_fn(*r), v, batch_size=_SWEEP_BATCH))(
+            stacked
+        )
+    )
     names = spec["axis_kwargs"]
     for row, g, e in zip(library, got, want, strict=True):
         _assert_equivalent(g, e, f"{label} at {dict(zip(names, row))}", rtol=5e-2)

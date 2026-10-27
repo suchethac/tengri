@@ -57,8 +57,23 @@ from tengri.components.agn.blocks.runner import (
 from tengri.components.agn.blocks.spectral_edges import block_edges
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.physics_constants import C_AA, L_SUN
+from tests.contract._heap import release_heap
 
 pytestmark = pytest.mark.contract
+
+
+@pytest.fixture(autouse=True)
+def _release_compiled_ledgers():
+    """Drop each test's compiled runners and hand their memory back.
+
+    Every recipe compiles its own ledger graph. The compiler's working memory is freed after
+    the compile but kept by the allocator, so a worker running the whole file grew by about
+    0.5 GB per recipe (4.7 GB measured under ``-n 2``) although its live arrays stayed under
+    0.1 GB. Releasing the freed pages after each test keeps the worker near 1 GB.
+    """
+    yield
+    release_heap()
+
 
 _LOG_LBOL = 10.5
 _LOG_LSUN = float(np.log10(L_SUN))
@@ -92,9 +107,9 @@ def _evaluate(wave, sel, params, *, ledger, x64=True, strict=True):
     calls it, with the full declared parameter set."""
     templates = _templates(sel)
 
-    def run(p, ts):
+    def run(w, p, ts):
         return composable_agn_l_nu(
-            wave,
+            w,
             _LOG_LBOL,
             return_components=True,
             return_ledger=ledger,
@@ -111,8 +126,10 @@ def _evaluate(wave, sel, params, *, ledger, x64=True, strict=True):
         # The grid carries the evaluation dtype: the runner picks its float32 reference
         # luminosity off it.
         wave = jnp.asarray(np.asarray(wave), dtype=jnp.float64 if x64 else jnp.float32)
-        fn = jax.jit(lambda q, ts: run({**q, **static}, ts))
-        sed, comps = fn(traced, templates)
+        # The grid is an argument, not a closed-over constant: a dense grid baked into the graph
+        # is copied by the compiler's constant folding (gigabytes on the 400k-node reference).
+        fn = jax.jit(lambda w, q, ts: run(w, {**q, **static}, ts))
+        sed, comps = fn(wave, traced, templates)
         return np.asarray(sed), {k: np.asarray(v) for k, v in comps.items()}
 
 
@@ -365,25 +382,29 @@ def _richardson_sphere_mean(sel, params, wave, levels=(9, 10)):
     """The sphere mean of the emitted disc's power: trapezoid on ``2**k + 1`` uniform sightlines,
     Richardson-extrapolated across the two levels [erg/s]."""
     templates = _templates(sel)
-    nu = jnp.asarray(C_AA / np.asarray(wave))
-    log_nu = jnp.log(nu)
 
-    def disc_power(mu, ts):
+    def disc_power(w, mu, ts):
+        nu = C_AA / w
         _, c = composable_agn_l_nu(
-            wave,
+            w,
             _LOG_LBOL,
             return_components=True,
             template_state=ts,
             **sel,
             **{**params, "agn_cos_inc": mu},
         )
-        return -jnp.trapezoid(c["disc"] * nu, log_nu)
+        return -jnp.trapezoid(c["disc"] * nu, jnp.log(nu))
 
-    powers = jax.jit(lambda mus, ts: jax.lax.map(lambda m: disc_power(m, ts), mus, batch_size=16))
+    # Two sightlines per step: each holds every piece of the runner on the dense grid.
+    powers = jax.jit(
+        lambda w, mus, ts: jax.lax.map(lambda m: disc_power(w, m, ts), mus, batch_size=2)
+    )
     means = []
     for k in levels:
         mus = np.linspace(0.0, 1.0, 2**k + 1)
-        means.append(float(np.trapezoid(np.asarray(powers(jnp.asarray(mus), templates)), mus)))
+        means.append(
+            float(np.trapezoid(np.asarray(powers(wave, jnp.asarray(mus), templates)), mus))
+        )
     return means[1] + (means[1] - means[0]) / 3.0
 
 
