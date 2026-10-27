@@ -220,7 +220,7 @@ class TestRepeatedBuildsJITSafely:
         spec, observation, ssp_data = request.getfixturevalue(fixture_name)
 
         for seed in (42, 123, 999):
-            model = SEDModel(spec, ssp_data, observation=observation, precompute=False)
+            model = SEDModel(spec, ssp_data, observation=observation)
             params = spec.sample(jax.random.PRNGKey(seed))
 
             # The model is captured, not traced. A default argument binds it

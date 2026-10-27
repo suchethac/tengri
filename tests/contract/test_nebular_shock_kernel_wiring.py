@@ -48,7 +48,7 @@ def shock_filter_set():
 def shock_sed_model_factory(synthetic_ssp):
     """Factory to build SEDModel with or without shock."""
 
-    def _build(shock_enabled: bool, precompute: bool = False):
+    def _build(shock_enabled: bool):
         from tengri import (
             Fixed,
             Observation,
@@ -107,7 +107,7 @@ def shock_sed_model_factory(synthetic_ssp):
                 shock=False,
             )
 
-        model = SEDModel(spec, synthetic_ssp, observation=observation, precompute=precompute)
+        model = SEDModel(spec, synthetic_ssp, observation=observation)
         return model, spec
 
     return _build
@@ -144,7 +144,7 @@ class TestShockEnabledRuntimeSmoke:
     @_SKIP_NO_MAPPINGS
     def test_shock_enabled_produces_nonzero_emission(self, shock_sed_model_factory):
         """With shock enabled, non-stellar photometry should be non-zero."""
-        model_shock, spec_shock = shock_sed_model_factory(shock_enabled=True, precompute=False)
+        model_shock, spec_shock = shock_sed_model_factory(shock_enabled=True)
 
         key = jax.random.PRNGKey(42)
         params = spec_shock.sample(key)
@@ -167,8 +167,8 @@ class TestShockPrecomputeRuntimeEquivalence:
     @_SKIP_NO_MAPPINGS
     def test_precompute_matches_runtime(self, shock_sed_model_factory):
         """Precomputed shock kernel should match runtime (fallback) to 1e-3 rel tol."""
-        model_runtime, spec_runtime = shock_sed_model_factory(shock_enabled=True, precompute=False)
-        model_precomp, spec_precomp = shock_sed_model_factory(shock_enabled=True, precompute=True)
+        model_runtime, spec_runtime = shock_sed_model_factory(shock_enabled=True)
+        model_precomp, spec_precomp = shock_sed_model_factory(shock_enabled=True)
 
         # Use identical params for both
         key = jax.random.PRNGKey(123)

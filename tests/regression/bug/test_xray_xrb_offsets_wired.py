@@ -48,7 +48,7 @@ def _xray_observation():
     return Observation(photometry=Photometry(filters=tuple(curves)))
 
 
-def _build(synthetic_ssp, *, xray_model=None, approx=None, precompute=False, **param_overrides):
+def _build(synthetic_ssp, *, xray_model=None, approx=None, **param_overrides):
     """Return ``(model, base_params)`` with every free parameter given a value."""
     kwargs = {
         "mean_sfh_type": "dpl",
@@ -72,7 +72,6 @@ def _build(synthetic_ssp, *, xray_model=None, approx=None, precompute=False, **p
         spec,
         synthetic_ssp,
         observation=_xray_observation(),
-        precompute=precompute,
         approx=approx,
     )
     # Every free parameter needs a value; sample once and override per-test.
@@ -103,17 +102,14 @@ def test_offset_reaches_the_sed(synthetic_ssp, xray_model, param):
 
 
 @pytest.mark.parametrize("xray_model", ["yang20", "lopez24"])
-@pytest.mark.parametrize("accel", ["wave_precomp", "precompute_flag"])
-def test_offset_is_live_on_every_accelerated_path(synthetic_ssp, xray_model, accel):
+def test_offset_is_live_on_every_accelerated_path(synthetic_ssp, xray_model):
     """Every accelerated path must inherit the offsets (#1706).
 
     Fitters resolve ``approx="auto"`` to ``WavePrecomp`` for photometry, so a fix
     that worked only on the exact path would leave real fits sampling a perfectly
-    flat dimension while a ``predict()`` test measured it as fixed. ``precompute=
-    True`` is covered as well because it is the flag that builds the
-    ``PreintegratedGrid`` family in ``xray_precompute.py``.
+    flat dimension while a ``predict()`` test measured it as fixed.
     """
-    kwargs = {"approx": WavePrecomp()} if accel == "wave_precomp" else {"precompute": True}
+    kwargs = {"approx": WavePrecomp()}
     model, base = _build(
         synthetic_ssp,
         xray_model=xray_model,
@@ -125,7 +121,7 @@ def test_offset_is_live_on_every_accelerated_path(synthetic_ssp, xray_model, acc
     phot_h = np.asarray(model.predict_photometry({**base, "xray_det_hmxb": 1.0}))
 
     assert np.any(phot_h != phot_0), (
-        f"xray_det_hmxb is inert under {accel} on xray_model={xray_model!r}"
+        f"xray_det_hmxb is inert on the accelerated path, xray_model={xray_model!r}"
     )
 
 

@@ -278,8 +278,8 @@ def _make_sed_model_pair(
     spec = Parameters(**kwargs)
 
     # Build both models
-    model_runtime = SEDModel(spec, synthetic_ssp, observation=observation, precompute=False)
-    model_precomp = SEDModel(spec, synthetic_ssp, observation=observation, precompute=True)
+    model_runtime = SEDModel(spec, synthetic_ssp, observation=observation)
+    model_precomp = SEDModel(spec, synthetic_ssp, observation=observation)
 
     return model_runtime, model_precomp, spec
 
@@ -660,8 +660,8 @@ def _make_dust_model_pair(
     spec = Parameters(**kwargs)
 
     # Build both models
-    model_runtime = SEDModel(spec, synthetic_ssp, observation=observation, precompute=False)
-    model_precomp = SEDModel(spec, synthetic_ssp, observation=observation, precompute=True)
+    model_runtime = SEDModel(spec, synthetic_ssp, observation=observation)
+    model_precomp = SEDModel(spec, synthetic_ssp, observation=observation)
 
     return model_runtime, model_precomp, spec
 

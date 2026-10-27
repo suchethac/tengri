@@ -55,7 +55,7 @@ def _build(ssp, **kwargs):
     """Construct a model, returning it alongside every warning it raised."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        model = SEDModel(Parameters(**{**BASE, **kwargs}), ssp, precompute=False)
+        model = SEDModel(Parameters(**{**BASE, **kwargs}), ssp)
     return model, caught
 
 
@@ -167,7 +167,6 @@ def test_non_delta_gradient_is_exactly_zero(ssp_data_fsps, mode):
                 met_alpha_fe=Uniform(-0.2, 0.6),
             ),
             ssp_data_fsps,
-            precompute=False,
         )
 
     sed_lo = np.asarray(model.predict({"met_alpha_fe": 0.0}).rest_sed())
@@ -191,7 +190,6 @@ def test_delta_degeneracy_is_bit_exact(ssp_data_fsps):
                 met_alpha_fe=Uniform(-0.2, 0.6),
             ),
             ssp_data_fsps,
-            precompute=False,
         )
 
     logzsol, alpha = -0.3, 0.6
