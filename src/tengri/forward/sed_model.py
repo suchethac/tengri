@@ -59,6 +59,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import math
 import pathlib
 import types
 import warnings
@@ -6349,18 +6350,40 @@ class SEDModel:
         Returns
         -------
         float
-            Reference redshift (>= 0).
+            Reference redshift (>= 0). Under ``resample="auto"`` with no fixed
+            redshift and no finite lower bound on the prior, there is no
+            reference to decide at, so the call raises instead.
+
+        Raises
+        ------
+        ParameterError
+            If ``resample="auto"`` and the redshift is neither fixed nor bounded
+            below by a finite prior ``lo``. Pass ``resample=`` explicitly, or
+            declare a bounded redshift prior.
         """
         try:
             d = self.spec.get_distribution("redshift")
         except (AttributeError, KeyError):
             d = None
-        if d is None:
-            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
-        if getattr(d, "is_fixed", False):
+        if d is not None and getattr(d, "is_fixed", False):
             return max(0.0, float(d.value))
-        lo = getattr(d, "lo", None)
-        return max(0.0, float(lo)) if lo is not None else 0.0
+        fixed_z = getattr(self, "_z_fixed", None)
+        if fixed_z is not None:
+            return max(0.0, float(fixed_z))
+        lo = getattr(d, "lo", None) if d is not None else None
+        if lo is not None and math.isfinite(float(lo)):
+            return max(0.0, float(lo))
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is None or getattr(spectroscopy, "resample", None) != "auto":
+            return 0.0
+        raise ParameterError(
+            'resample="auto" needs a bounded redshift: the redshift is free with no finite '
+            "lower bound (or has no distribution), so there is no redshift at which to decide "
+            "between point sampling and the bin integral. Declare a bounded redshift prior, "
+            'or pass resample= explicitly to Spectroscopy ("point" or "conserving").'
+        )
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
