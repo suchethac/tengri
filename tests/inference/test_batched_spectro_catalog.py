@@ -142,7 +142,7 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
 
 _LINE_PRIOR = 1.0e-14
 _MATCHED_WARMUP = 300
-_MATCHED_N_SAMPLES = 600  # raise once to 1200 if Monte Carlo noise alone bites
+_MATCHED_N_SAMPLES = 6000  # raised once from 600 for Monte Carlo error
 _MATCHED_MASSES = (10.0, 10.3, 9.7)
 _MATCHED_CONTINUUM_SNR = 5.0  # continuum level at 5000 A over the per-pixel noise
 _MATCHED_LINE_SNR = 20.0  # matched-filter S/N of every injected line
@@ -285,7 +285,12 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
 
 
 def test_fitted_lines_posteriors_match_fitter(synthetic_ssp):
-    """Batched and per-galaxy posteriors agree within 5 % of the 16-84 % posterior width."""
+    """Batched and per-galaxy posteriors agree within 5 % of the 16-84 % posterior width.
+
+    Draw count raised once from 600 to 6000: at 600 the Monte Carlo error of a median
+    difference is about 0.05 widths, equal to the criterion, and four of twelve rows sat
+    at 0.05-0.09; at 6000 it is about 0.016, so 0.05 is three standard errors.
+    """
     result = _matched_fitted_lines(
         synthetic_ssp, n_gal=3, n_warmup=_MATCHED_WARMUP, n_samples=_MATCHED_N_SAMPLES
     )
