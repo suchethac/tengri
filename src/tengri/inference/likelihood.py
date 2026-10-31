@@ -391,6 +391,7 @@ def build_base_likelihood(context: InferenceContext):
                     else (_n_phot_split(context), len(context.data))
                 ),
                 design_matrix_builder=builder,
+                prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
             )
         if context.data_type == "spectroscopy":
@@ -556,15 +557,10 @@ def _eline_scalar_resolution(model) -> float:
     median (first-order, R varies slowly across a band). 2000 remains the
     fallback only when the observation declares no resolution at all.
     """
-    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
-    resolution = getattr(spec_cfg, "resolution", None)
-    if resolution is None:
-        return 2000.0
-    if getattr(resolution, "ndim", 0):
-        import numpy as np
+    from tengri.observation.eline_marginalization import eline_scalar_resolution
 
-        return float(np.median(np.asarray(resolution)))
-    return float(resolution)
+    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
+    return eline_scalar_resolution(getattr(spec_cfg, "resolution", None))
 
 
 def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
