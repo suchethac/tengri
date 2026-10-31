@@ -73,7 +73,9 @@ def marginalize_linear_nuisance(
         Prior mean :math:`\mu` of the coefficients [coefficient units]. Default: zeros.
     prior_precision : array_like, shape (k, k), optional
         Prior precision :math:`\Lambda^{-1}` of the coefficients [coefficient units
-        to the power -2]. ``None`` gives a flat prior. Default: None.
+        to the power -2]. ``None`` gives a flat prior for every column. A column whose
+        diagonal entry is zero is flat, and the other columns keep their Gaussian prior.
+        Default: None.
     col_mask : array_like, shape (k,), optional
         Column mask :math:`c \in \{0, 1\}^k`. A masked coefficient is fixed out of the
         model. Default: all ones.
@@ -221,7 +223,8 @@ def marginalize_linear_nuisance(
     if prior_precision is None:
         log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)
     else:
-        prior_unscaled = d_mat @ precision @ d_mat + (eye - d_mat)
+        gaussian = (jnp.diag(precision) > 0).astype(dtype)
+        prior_unscaled = d_mat @ precision @ d_mat + jnp.diag(1.0 - col * gaussian)
         _sign_p, logdet_p = jnp.linalg.slogdet(prior_unscaled)
         log_like = (
             log_like

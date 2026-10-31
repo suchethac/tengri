@@ -373,3 +373,94 @@ class TestTransforms:
         batched = jax.vmap(run)(data, model0, design, sigma)
         looped = jnp.stack([run(data[i], model0[i], design[i], sigma[i]) for i in range(4)])
         np.testing.assert_allclose(np.asarray(batched), np.asarray(looped), rtol=1e-12, atol=0)
+
+
+def _mixed_problem(seed):
+    """Two-column problem: column 0 Gaussian N(0, 1), column 1 flat."""
+    rng = np.random.default_rng(seed)
+    n = 40
+    design = np.stack([rng.uniform(0.5, 1.5, n), rng.uniform(0.2, 1.0, n)], axis=1)
+    sigma = np.full(n, 0.1)
+    model0 = np.zeros(n)
+    data = 0.7 * design[:, 0] + 0.3 * design[:, 1] + rng.normal(0.0, 0.1, n)
+    return data, model0, design, sigma
+
+
+def _mixed_grid_log_evidence(data, model0, design, sigma, a2_center):
+    """Log of the integral over a1 (Gaussian N(0, 1)) and a2 (flat) on a dense grid."""
+    a1 = np.linspace(-8.0, 8.0, 1601)
+    a2 = np.linspace(a2_center - 0.6, a2_center + 0.6, 2401)
+    log_prior_a1 = -0.5 * a1**2 - 0.5 * LOG_2PI
+    rows = []
+    for a1_val, lp in zip(a1, log_prior_a1, strict=True):
+        pred = model0[None, :] + a1_val * design[None, :, 0] + a2[:, None] * design[None, :, 1]
+        resid = (data[None, :] - pred) / sigma[None, :]
+        rows.append(lp - 0.5 * np.sum(resid**2, axis=1))
+    terms = np.concatenate(rows)
+    top = np.max(terms)
+    return top + np.log(np.sum(np.exp(terms - top)))
+
+
+class TestMixedFlatGaussianColumns:
+    """A zero prior precision on a column makes that column flat, alongside Gaussian columns."""
+
+    def test_all_zero_precision_equals_flat_branch(self):
+        """A zero precision matrix is the flat prior: the result equals prior_precision=None."""
+        data, model0, design, sigma = _mixed_problem(seed=3)
+        flat = marginalize_linear_nuisance(
+            jnp.asarray(data),
+            jnp.asarray(model0),
+            jnp.asarray(design),
+            sigma=jnp.asarray(sigma),
+            scale=0.05,
+        )
+        zero = marginalize_linear_nuisance(
+            jnp.asarray(data),
+            jnp.asarray(model0),
+            jnp.asarray(design),
+            sigma=jnp.asarray(sigma),
+            prior_precision=jnp.zeros((2, 2)),
+            scale=0.05,
+        )
+        np.testing.assert_allclose(float(zero.log_like), float(flat.log_like), rtol=1e-12, atol=0)
+        np.testing.assert_allclose(
+            np.asarray(zero.coef_hat), np.asarray(flat.coef_hat), rtol=1e-12
+        )
+
+    def test_mixed_difference_matches_grid_integral(self):
+        """Differences of the mixed log-likelihood across data sets match a dense-grid integral."""
+        precision = jnp.diag(jnp.array([1.0, 0.0]))
+        values = []
+        grid = []
+        for seed in (3, 5):
+            data, model0, design, sigma = _mixed_problem(seed=seed)
+            got = marginalize_linear_nuisance(
+                jnp.asarray(data),
+                jnp.asarray(model0),
+                jnp.asarray(design),
+                sigma=jnp.asarray(sigma),
+                prior_precision=precision,
+                scale=0.05,
+            )
+            values.append(float(got.log_like))
+            a2_center = float(np.linalg.lstsq(design, data, rcond=None)[0][1])
+            grid.append(_mixed_grid_log_evidence(data, model0, design, sigma, a2_center))
+        np.testing.assert_allclose(values[0] - values[1], grid[0] - grid[1], rtol=1e-6, atol=0)
+
+    def test_mixed_result_is_finite_and_scale_invariant(self):
+        """The mixed prior stays finite and independent of the coefficient scale."""
+        data, model0, design, sigma = _mixed_problem(seed=7)
+        precision = jnp.diag(jnp.array([2.0, 0.0]))
+        results = [
+            marginalize_linear_nuisance(
+                jnp.asarray(data),
+                jnp.asarray(model0),
+                jnp.asarray(design),
+                sigma=jnp.asarray(sigma),
+                prior_precision=precision,
+                scale=s,
+            ).log_like
+            for s in (1.0, 1e-3)
+        ]
+        assert np.isfinite(float(results[0]))
+        np.testing.assert_allclose(float(results[0]), float(results[1]), rtol=1e-10, atol=0)
