@@ -148,3 +148,35 @@ def test_galaxy_without_ebmv_matches_a_model_with_no_screen(synthetic_ssp, wave)
     out = np.asarray(make_batched_predict(template, spec)(_stack(params, 1), batch)["spec_fnu"])
     ref = np.asarray(template.predict_spectrum({**params, "redshift": 0.05}))
     np.testing.assert_allclose(out[0], ref, rtol=1e-10, atol=0.0)
+
+
+def test_float32_batched_matches_per_galaxy_and_gradient_is_finite_and_nonzero(
+    synthetic_ssp, wave
+):
+    """Float32 batched equals per-galaxy (rtol 1e-4); gradient finite, nonzero.
+
+    Mass is 4 dex below galaxy scale because the float32 forward is non-finite above
+    log10 M ~ 4.4 (#3149); move back to galaxy masses when that issue closes.
+    """
+    mass, z, ebmv = 4.0, 0.05, 0.1
+    with jax.enable_x64(False):
+        template = _template(synthetic_ssp, wave, foreground={"ebmv_mw": 0.0, "law": _LAW})
+        ref_model = _template(synthetic_ssp, wave, foreground={"ebmv_mw": ebmv, "law": _LAW})
+        record = GalaxySpectrum(
+            wave=wave,
+            flux=np.ones(wave.size),
+            ivar=np.ones(wave.size),
+            resolution=_banded(wave),
+            z=z,
+            ebmv_mw=ebmv,
+        )
+        ((spec, batch, _),) = build_spectro_batches([record], model=template)
+        name = next(n for n in template.spec.free_params if n.endswith("log_total_mass"))
+        predict = make_batched_predict(template, spec)
+        stacked = jnp.asarray([mass], dtype=jnp.float32)
+        out = np.asarray(predict({name: stacked}, batch)["spec_fnu"])[0]
+        ref = np.asarray(ref_model.predict_spectrum({name: mass, "redshift": z}))
+        grad = jax.grad(lambda m: jnp.log(jnp.sum(predict({name: m}, batch)["spec_fnu"])))(stacked)
+    np.testing.assert_allclose(out, ref, rtol=1e-4, atol=0.0)
+    assert np.all(np.isfinite(np.asarray(grad)))
+    assert np.all(np.asarray(grad) != 0.0)

@@ -169,21 +169,35 @@ class TestPhotometricPath:
 
 
 class TestGradient:
-    def test_band_flux_gradient_wrt_log_total_mass_is_finite_and_nonzero(self, ssp):
-        with jax.enable_x64(True):
+    @pytest.mark.parametrize(
+        ("x64", "ssp_fixture", "log_mass"),
+        [(True, "synthetic_ssp_wide", 9.0), (False, "synthetic_ssp", 4.4)],
+    )
+    def test_band_flux_gradient_wrt_log_total_mass_is_finite_and_nonzero(
+        self, request, x64, ssp_fixture, log_mass
+    ):
+        """Gradient of log band flux under the screen is finite and nonzero in both precisions.
+
+        Mass is 4 dex below galaxy scale because the float32 forward is non-finite above
+        log10 M ~ 4.4 (#3149); move back to galaxy masses when that issue closes. The
+        objective is the log of the summed band flux, since a float32 reverse-mode gradient
+        of a flux near 1e-20 underflows to exactly zero.
+        """
+        with jax.enable_x64(x64):
             model = _build(
-                ssp,
+                request.getfixturevalue(ssp_fixture),
                 foreground={"ebmv_mw": _EBMV, "law": "fitzpatrick99", "rv": 3.1},
                 sfh_extra={"log_total_mass": tengri.FREE},
             )
             name = next(n for n in model.spec.free_params if n.endswith("log_total_mass"))
 
-            def band_sum(log_mass):
-                params = {name: log_mass}
+            def log_band_sum(mass):
+                params = {name: mass}
                 state = model.predict_state(params)
                 full = {**params, "redshift": model._get_redshift(params)}
-                return jnp.sum(model.observation.predict(state, full)["phot_fnu"])
+                return jnp.log(jnp.sum(model.observation.predict(state, full)["phot_fnu"]))
 
-            grad = jax.grad(band_sum)(jnp.asarray(9.0))
+            dtype = jnp.float64 if x64 else jnp.float32
+            grad = jax.grad(log_band_sum)(jnp.asarray(log_mass, dtype=dtype))
         assert np.isfinite(float(grad))
         assert float(grad) != 0.0
