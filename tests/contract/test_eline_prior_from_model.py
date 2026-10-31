@@ -40,16 +40,21 @@ def _fine_ssp(ssp):
     )
 
 
-def _model(ssp, nebular_lines):
+_FOREGROUND = {"ebmv_mw": 0.1, "law": "fitzpatrick99", "rv": 3.1}
+
+
+def _model(ssp, nebular_lines, foreground=None):
     spectroscopy = Spectroscopy(
         wave_obs=jnp.asarray(_WAVE),
         resolution=_RESOLUTION,
         nebular_lines=nebular_lines,
     )
+    extra = {} if foreground is None else {"foreground": foreground}
     return SEDModel.build(
         ssp_data=_fine_ssp(ssp),
         observation=Observation(spectroscopy=spectroscopy),
         redshift=Fixed(_Z),
+        **extra,
         sfh={
             "type": "delayed",
             "all_params": Fixed(DEFAULT),
@@ -66,11 +71,11 @@ def _model(ssp, nebular_lines):
     )
 
 
-def test_hbeta_mapping_matches_spectrum_line_flux(synthetic_ssp_wide):
-    """The helper's mu_Hbeta equals the lines-on minus lines-off integral to 1 %."""
+def _hbeta_prior_ratio(ssp, foreground=None):
+    """Projected H-beta line integral divided by the model-centred prior mean."""
     with jax.enable_x64(True):
-        on = _model(synthetic_ssp_wide, True)
-        off = _model(synthetic_ssp_wide, False)
+        on = _model(ssp, True, foreground)
+        off = _model(ssp, False, foreground)
         f_on = np.asarray(on.predict_spectrum(_PARAMS), dtype=np.float64)
         f_off = np.asarray(off.predict_spectrum(_PARAMS), dtype=np.float64)
         derived = on.predict_state(_PARAMS).derived
@@ -87,9 +92,35 @@ def test_hbeta_mapping_matches_spectrum_line_flux(synthetic_ssp_wide):
     sigma_obs = lam_obs / (2.355 * _RESOLUTION)
     win = np.abs(_WAVE - lam_obs) <= 5.0 * sigma_obs
     integral = np.trapezoid((f_on - f_off)[win], _WAVE[win])
-    ratio = integral / mu
-    print(f"mu={mu:.6e} integral={integral:.6e} ratio={ratio:.6f}")
+    return integral / mu
+
+
+def test_hbeta_mapping_matches_spectrum_line_flux(synthetic_ssp_wide):
+    """The helper's mu_Hbeta equals the lines-on minus lines-off integral to 1 %."""
+    ratio = _hbeta_prior_ratio(synthetic_ssp_wide)
+    print(f"ratio={ratio:.6f}")
     assert ratio == pytest.approx(1.0, rel=1e-2)
+
+
+def test_hbeta_mapping_matches_spectrum_line_flux_with_foreground(synthetic_ssp_wide):
+    """Under a Milky Way screen the prior mean equals the screened H-beta line flux to 1 %.
+
+    The screen is the foreground law at E(B-V) = 0.1, so the projected line is attenuated
+    at its observed wavelength and the prior mean has to carry the same factor.
+    """
+    ratio = _hbeta_prior_ratio(synthetic_ssp_wide, _FOREGROUND)
+    print(f"ratio={ratio:.6f}")
+    assert ratio == pytest.approx(1.0, rel=1e-2)
+
+
+def test_model_prior_without_screen_is_unchanged():
+    """With no screen the transmission argument is one: None and ones agree bit for bit."""
+    index, matched = match_model_lines(_CAT, _CAT)
+    args = (jnp.asarray(_LOG_L0), index, matched, _CAT, 0.1, _DL_CM, 0.8, 0.3)
+    plain = model_line_prior(*args)
+    ones = model_line_prior(*args, transmission=jnp.ones(_CAT.size))
+    np.testing.assert_array_equal(np.asarray(plain.prior_mean), np.asarray(ones.prior_mean))
+    np.testing.assert_array_equal(np.asarray(plain.prior_width), np.asarray(ones.prior_width))
 
 
 def _toy_problem(seed=0):
@@ -341,7 +372,7 @@ def _catalog(absent=None):
     return dataclasses.replace(catalog, wavelengths=jnp.asarray(wavelengths))
 
 
-def _btemplate(ssp, *, free_ap=False, catalog=None):
+def _btemplate(ssp, *, free_ap=False, catalog=None, foreground=None):
     """Cue template with marginalized lines under the model-centred prior, free redshift."""
     spectroscopy = Spectroscopy(
         wave_obs=jnp.asarray(_BW),
@@ -354,6 +385,8 @@ def _btemplate(ssp, *, free_ap=False, catalog=None):
         nebular_lines=False,
     )
     extra = {"eline_aperture_frac": Uniform(0.2, 3.0)} if free_ap else {}
+    if foreground is not None:
+        extra["foreground"] = foreground
     model = SEDModel.build(
         ssp_data=_fine_ssp(ssp),
         observation=Observation(spectroscopy=spectroscopy),
@@ -463,12 +496,20 @@ def _joint_class(template, z, flux, sigma, params):
     )
 
 
-def _batch(template, flux_sigma, zs=_BZ):
+def _batch(template, flux_sigma, zs=_BZ, ebmvs=None):
     from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
 
+    ebmvs = (None,) * len(zs) if ebmvs is None else ebmvs
     galaxies = [
-        GalaxySpectrum(wave=_BW, flux=f, ivar=1.0 / s**2, z=z, resolution=_BR)
-        for z, (f, s) in zip(zs, flux_sigma, strict=True)
+        GalaxySpectrum(
+            wave=_BW,
+            flux=f,
+            ivar=1.0 / s**2,
+            z=z,
+            resolution=_BR,
+            **({} if e is None else {"ebmv_mw": e}),
+        )
+        for z, (f, s), e in zip(zs, flux_sigma, ebmvs, strict=True)
     ]
     spec, batch, _ = build_spectro_batches(galaxies, model=template)[0]
     return spec, batch
@@ -505,6 +546,42 @@ def test_batched_equals_per_galaxy_with_model_prior(synthetic_ssp_wide, joint):
         got, expected, batch = _batched_vs_per_galaxy(template, joint, params)
     lm = np.asarray(batch.line_mask)
     assert not np.array_equal(lm[0], lm[1])
+    np.testing.assert_allclose(got, expected, rtol=1e-10, atol=0.0)
+
+
+def _screen(ebmv):
+    return {"ebmv_mw": ebmv, "law": "fitzpatrick99", "rv": 3.1}
+
+
+def _foreground_batched_vs_per_galaxy(ssp, joint, ebmvs):
+    """Batched log-likelihood and per-galaxy references, each galaxy with its own screen."""
+    from tengri.inference.batched_spectro import batched_log_likelihood
+
+    templates = [_btemplate(ssp, foreground=_screen(e)) for e in ebmvs]
+    data = [
+        _galaxy_data(t, z, p, seed=i) for i, (t, z, p) in enumerate(zip(templates, _BZ, _BPARAMS))
+    ]
+    batch_template = _btemplate(ssp, foreground=_screen(0.0))
+    spec, batch = _batch(batch_template, data, ebmvs=ebmvs)
+    kwargs = (
+        {"calibration_marginalize": True, "cal_n_poly": 2, "cal_prior_sigma": 1.0} if joint else {}
+    )
+    loglik = jax.vmap(batched_log_likelihood(batch_template, spec, **kwargs), in_axes=(0, 0))
+    stacked = {k: jnp.asarray([p[k] for p in _BPARAMS]) for k in _BPARAMS[0]}
+    got = np.asarray(loglik(stacked, batch))
+    build = _joint_class if joint else _lines_only_class
+    expected = []
+    for t, z, p, (flux, sigma) in zip(templates, _BZ, _BPARAMS, data):
+        prediction, *_ = _per_galaxy_pieces(t, z, p)
+        expected.append(float(build(t, z, flux, sigma, p).log_prob(prediction, p)))
+    return got, np.asarray(expected)
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_batched_equals_per_galaxy_with_model_prior_and_foreground(synthetic_ssp_wide, joint):
+    """Two galaxies, each with its own Milky Way E(B-V): batched == per-galaxy, both paths."""
+    with jax.enable_x64(True):
+        got, expected = _foreground_batched_vs_per_galaxy(synthetic_ssp_wide, joint, (0.05, 0.3))
     np.testing.assert_allclose(got, expected, rtol=1e-10, atol=0.0)
 
 
