@@ -27,6 +27,7 @@ parameters).
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.observation.eline_catalog import (
     DEFAULT_LINE_NAMES,  # noqa: F401, re-exported for convenience
@@ -495,3 +496,51 @@ def build_line_design_matrix(
     )
 
     return jnp.concatenate([A_narrow, A_broad], axis=1)
+
+
+def eline_scalar_resolution(resolution) -> float:
+    """Return the scalar resolution R that sets the emission-line profile width.
+
+    Parameters
+    ----------
+    resolution : float, array_like or None
+        Spectral resolution R = lambda / delta_lambda [dimensionless]: a scalar,
+        a per-pixel array, or ``None`` when the observation declares none.
+
+    Returns
+    -------
+    float
+        The scalar itself; the median of the array; or 2000.0 for ``None``.
+
+    Notes
+    -----
+    Pure NumPy, evaluated at Python level. An array reduces to its median because
+    the Gaussian design matrix takes one number and R varies slowly across a band.
+    """
+    if resolution is None:
+        return 2000.0
+    if getattr(resolution, "ndim", 0):
+        return float(np.median(np.asarray(resolution)))
+    return float(resolution)
+
+
+def eline_amplitude_names(catalog) -> list[str]:
+    """Return the ``eline_amp_<name>`` parameter names of the independent lines.
+
+    Parameters
+    ----------
+    catalog : LineList
+        Line catalog whose doublet secondaries are not sampled independently.
+
+    Returns
+    -------
+    list of str
+        One name per line that is not a doublet secondary, in catalog order.
+
+    Notes
+    -----
+    Pure Python. The names are the keys of the amplitude priors that the fit
+    adds to the spectroscopic specification.
+    """
+    secondary = {dc.secondary_idx for dc in catalog.doublets}
+    return [f"eline_amp_{nm}" for i, nm in enumerate(catalog.names) if i not in secondary]

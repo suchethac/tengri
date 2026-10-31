@@ -82,11 +82,11 @@ class CalibrationMarginalizedLikelihood:
     **JIT-compatible**: yes, ``n_poly`` is a static argument of the
     underlying primitive.
 
-    Returns the *positive* marginal log-likelihood (data term only;
-    the analytic Gaussian normalization in
-    :func:`marginalize_calibration` is included in its return value
-    by construction). Sign matches the rest of the
-    :class:`Likelihood` cohort (higher = better fit).
+    Returns the marginal log-likelihood, including the Gaussian normalization,
+    from :func:`marginalize_calibration`, which evaluates the closed form of
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` on the
+    Chebyshev design. Sign matches the rest of the :class:`Likelihood` cohort
+    (higher = better fit).
     """
 
     fnu_obs: jnp.ndarray
