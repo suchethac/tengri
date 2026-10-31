@@ -264,7 +264,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, tau_upper),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },
@@ -291,7 +291,7 @@ def config_III(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "type": "delayed",
             "all_params": Fixed(DEFAULT),
             "tau_gyr": Uniform(0.1, 20.0),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },
@@ -392,7 +392,7 @@ def config_V(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             # ruling trades that for the sampler freezing measured above.
             "peak_gyr": Uniform(0.1, age_at_z(z)),
             "width_gyr": Uniform(0.1, 5.0),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },

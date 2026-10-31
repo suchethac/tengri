@@ -99,7 +99,7 @@ def _delayed_sfh(ssp_data: tengri.SSPData, z: float) -> dict:
         "type": "delayed",
         "all_params": Fixed(DEFAULT),
         "tau_gyr": Uniform(0.1, 20.0),
-        "age_gyr": Uniform(1.0, age_at_z(z)),
+        "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
         "log_total_mass": Uniform(8.0, 12.5),
         "met_logzsol": met_prior_for(ssp_data),
     }
@@ -114,7 +114,7 @@ def _dpl_sfh(ssp_data: tengri.SSPData, z: float) -> dict:
         "alpha": Uniform(0.5, 5.0),
         "beta": Uniform(0.3, 3.0),
         "tau_gyr": Uniform(0.5, tau_upper),
-        "age_gyr": Uniform(1.0, age_at_z(z)),
+        "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
         "log_total_mass": Uniform(8.0, 12.5),
         "met_logzsol": met_prior_for(ssp_data),
     }
@@ -127,7 +127,7 @@ def _lnorm_sfh(ssp_data: tengri.SSPData, z: float) -> dict:
         "all_params": Fixed(DEFAULT),
         "peak_gyr": Uniform(0.1, age_at_z(z)),
         "width_gyr": Uniform(0.1, 5.0),
-        "age_gyr": Uniform(1.0, age_at_z(z)),
+        "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
         "log_total_mass": Uniform(8.0, 12.5),
         "met_logzsol": met_prior_for(ssp_data),
     }

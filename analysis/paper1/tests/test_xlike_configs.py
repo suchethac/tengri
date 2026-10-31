@@ -94,7 +94,7 @@ class TestXlikeBuildKwargs:
     """
 
     def test_cigale_like_sfh_structure(self, monkeypatch):
-        """cigale_like has delayed SFH with free tau_gyr, age_gyr; two-component dust."""
+        """cigale_like has delayed SFH with free tau_gyr, age_frac; two-component dust."""
         from unittest.mock import MagicMock
 
         import numpy as np
@@ -157,7 +157,7 @@ class TestXlikeBuildKwargs:
         assert len(ratio_keys) > 0, "continuity SFH should have ratio_* parameters"
 
     def test_bagpipes_like_matches_config_ii_dpl_sfh(self, monkeypatch):
-        """bagpipes_like has dpl SFH with free alpha, beta, tau_gyr, age_gyr.
+        """bagpipes_like has dpl SFH with free alpha, beta, tau_gyr, age_frac.
 
         It must match config_II's dpl SFH exactly: both are meant to be the
         same double-power-law family with the same bounds (age-conditioned
@@ -190,7 +190,7 @@ class TestXlikeBuildKwargs:
         assert "alpha" in sfh
         assert "beta" in sfh
         assert "tau_gyr" in sfh
-        assert "age_gyr" in sfh
+        assert "age_frac" in sfh
 
         # config_II uses the same mocked SEDModel.build, so this second call
         # reuses (and overwrites) captured_kwargs -- read bagpipes_like's sfh

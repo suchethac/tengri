@@ -46,7 +46,7 @@ def test_prefix_is_the_common_prefix_not_the_second_token():
     keys = [
         "sfh_declining_exp_log_total_mass",
         "sfh_declining_exp_tau_gyr",
-        "sfh_declining_exp_age_gyr",
+        "sfh_declining_exp_age_frac",
         "sfh_lookback_time_yr",
         "sfh_sfr_median",
     ]
@@ -69,7 +69,7 @@ def test_prefix_of_a_single_parameter_family():
 def test_audit_flags_a_redefined_configuration(tmp_path):
     """A cell sampling `sfh_const_` under a configuration declaring dirichlet."""
     configs = {"IV": {"sfh_type": "dirichlet"}}
-    _write_cell(tmp_path, 13097, "IV", ["sfh_const_log_total_mass", "sfh_const_start_gyr"])
+    _write_cell(tmp_path, 13097, "IV", ["sfh_const_log_total_mass", "sfh_const_start_frac"])
 
     mismatches, notes = audit(tmp_path, configs)
 

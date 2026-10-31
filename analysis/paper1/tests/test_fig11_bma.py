@@ -689,9 +689,9 @@ def test_flowchart_boxes_fit_inside_figure_and_axes():
         ext = patch.get_window_extent()
         assert ext.x0 >= fig_box.x0 and ext.x1 <= fig_box.x1
         assert ext.x0 >= ax_box.x0 and ext.x1 <= ax_box.x1
-    centre = 0.5 * (boxes[0].get_window_extent().x0 + boxes[-1].get_window_extent().x1)
+    center = 0.5 * (boxes[0].get_window_extent().x0 + boxes[-1].get_window_extent().x1)
     b1_box = ax_b1.get_window_extent()
-    assert centre == pytest.approx(0.5 * (b1_box.x0 + b1_box.x1), abs=2.0)
+    assert center == pytest.approx(0.5 * (b1_box.x0 + b1_box.x1), abs=2.0)
     plt.close(fig)
 
 

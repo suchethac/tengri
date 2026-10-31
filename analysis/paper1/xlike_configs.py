@@ -39,7 +39,7 @@ def cigale_like(ssp_data, observation, z: float) -> SEDModel:
             "type": "delayed",
             "all_params": Fixed(DEFAULT),
             "tau_gyr": Uniform(0.1, 20.0),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },
@@ -121,7 +121,7 @@ def bagpipes_like(ssp_data, observation, z: float) -> SEDModel:
     """BAGPIPES-like: double power law SFH, BC03, calzetti 1-comp, draine_li2007, Cue.
 
     Parameterization follows Pacifici et al. (2023) Table 1 (BAGPIPES row):
-    - SFH: Double power law (alpha, beta, tau_gyr, age_gyr)
+    - SFH: Double power law (alpha, beta, tau_gyr, age_frac)
     - SSP: BC03 2003 (registered grid: bc03_pdva_stelib_chabrier)
     - Attenuation: Single-component Calzetti (birth-cloud term off)
     - Dust IR: Draine & Li 2007 with fixed fiducial qpah, umin, gamma_dl
@@ -145,7 +145,7 @@ def bagpipes_like(ssp_data, observation, z: float) -> SEDModel:
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, tau_upper),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },
@@ -200,7 +200,7 @@ def beagle_like(ssp_data, observation, z: float) -> SEDModel:
             "type": "delayed",
             "all_params": Fixed(DEFAULT),
             "tau_gyr": Uniform(0.1, 20.0),
-            "age_gyr": Uniform(1.0, age_at_z(z)),
+            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },

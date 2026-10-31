@@ -65,7 +65,7 @@ def build_model_and_truth(key):
     spec = ParamSpec(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0402, 0.9645),  # 0.5-12 Gyr at z=0.1
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
