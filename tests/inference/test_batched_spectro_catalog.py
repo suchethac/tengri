@@ -19,6 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Fixed
 from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 from tengri.inference.batched_spectro import (
     _bucket_catalog_inputs,
@@ -148,6 +149,18 @@ _LINE_NOISE = 1.0e-17
 _LINE_MASSES = (10.0, 10.3, 9.7)
 
 
+def _assert_chain_moved(post, names, n_samples, galaxy):
+    """Fail, printing the draws and diagnostics, when a chain froze for any parameter."""
+    for name in names:
+        draws = np.asarray(post.samples[name]).reshape(-1)
+        n_distinct = np.unique(draws).size
+        if not (np.std(draws) > 0.0 and n_distinct > n_samples / 2):
+            print(f"galaxy {galaxy} {name} froze: std {np.std(draws):.3e}, distinct {n_distinct}")
+            print(f"first draws {draws[:5]}")
+            print(f"diagnostics {dict(post.diagnostics)}")
+            raise AssertionError(f"galaxy {galaxy} chain froze for {name}")
+
+
 def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
     """Batched catalog NUTS and per-galaxy Fitter NUTS on the same fitted-line mocks.
 
@@ -174,25 +187,28 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
         ``"rows"``: list of dict, one per galaxy and parameter, with keys ``galaxy``,
         ``param``, ``batched_median``, ``fitter_median``, ``half_width`` (half the
         16-84 % range of the Fitter draws) and ``ratio`` (absolute median difference
-        divided by ``half_width``).
+        divided by ``half_width``). ``"fitter_diagnostics"``: list of dict, one per galaxy,
+        with the acceptance and divergence entries the Fitter run reports.
     """
     wave = _grid(600, 4000.0, 7500.0)
     template = _template(ssp, wave, banded=True, prior=_LINE_PRIOR)
     line_names = eline_amplitude_names(template.observation.spectroscopy.effective_catalog)
     amps = np.asarray([_LINE_AMPS[nm] for nm in line_names])
     rng = np.random.default_rng(seed)
-    records, noises = [], []
+    records, noises, models = [], [], []
     for i in range(n_gal):
         z = 0.10 + 0.01 * i
         mass = _LINE_MASSES[i % len(_LINE_MASSES)]
-        continuum = np.asarray(template.predict_spectrum({_MASS: mass, "redshift": z}))
-        design = np.asarray(_line_design(template, wave, z))
+        model_i = _template(ssp, wave, banded=True, prior=_LINE_PRIOR, redshift=Fixed(z))
+        continuum = np.asarray(model_i.predict_spectrum({_MASS: mass}))
+        design = np.asarray(_line_design(model_i, wave, z))
         flux = continuum + design @ amps + rng.normal(0.0, _LINE_NOISE, wave.size)
         sigma = np.full(wave.size, _LINE_NOISE)
         records.append(
             GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_R)
         )
         noises.append((flux, sigma))
+        models.append(model_i)
     batches = build_spectro_batches(records, quantum=None, model=template)
     batched = fit_spectra_catalog_mcmc(
         template,
@@ -204,9 +220,9 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
         seed=seed,
     )
     names = [_MASS, *line_names]
-    rows = []
-    for i, (flux, sigma) in enumerate(noises):
-        fitter = Fitter(template, data=flux, noise=sigma, data_type="spectroscopy", approx=None)
+    rows, diagnostics = [], []
+    for i, (model_i, (flux, sigma)) in enumerate(zip(models, noises)):
+        fitter = Fitter(model_i, data=flux, noise=sigma, data_type="spectroscopy", approx=None)
         post = fitter.run(
             "mcmc_nuts",
             key=jax.random.PRNGKey(seed + i),
@@ -214,6 +230,10 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
             n_burnin=0,
             n_samples=n_samples,
             verbose=False,
+        )
+        _assert_chain_moved(post, names, n_samples, galaxy=i)
+        diagnostics.append(
+            {k: v for k, v in dict(post.diagnostics).items() if "accept" in k or "diverg" in k}
         )
         for name in names:
             fit_draws = np.asarray(post.samples[name]).reshape(-1)
@@ -230,7 +250,7 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
                     "ratio": abs(batched_median - float(fit_median)) / half_width,
                 }
             )
-    return {"rows": rows}
+    return {"rows": rows, "fitter_diagnostics": diagnostics}
 
 
 def test_fitted_lines_posteriors_match_fitter(synthetic_ssp):
