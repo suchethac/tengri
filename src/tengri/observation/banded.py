@@ -33,6 +33,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from scipy import linalg as scipy_linalg
 
 # Speed of light and Gaussian FWHM conversion, mirror observation/spectrum.py
 # so the banded Gaussian LSF matches apply_lsf exactly.
@@ -455,3 +456,159 @@ def deconvolve_library_lsf(
 
     inv = np.argsort(order)
     return BandedMatrix(offsets=bm.offsets, data=jnp.asarray(out[inv]))
+
+
+def _lower_storage(bm: BandedMatrix) -> np.ndarray:
+    """Lower-band storage ``ab[k, j] = A[j + k, j]`` of a symmetric banded matrix."""
+    offs = np.asarray(bm.offsets).ravel()
+    data = np.asarray(bm.data, dtype=float)
+    n = data.shape[1]
+    half = int(max(-offs.min(), offs.max()))
+    ab = np.zeros((half + 1, n))
+    for k in range(half + 1):
+        if -k in offs:
+            ab[k, : n - k] = data[int(np.where(offs == -k)[0][0]), k:]
+        elif k in offs:
+            ab[k, : n - k] = data[int(np.where(offs == k)[0][0]), : n - k]
+    return ab
+
+
+def banded_cholesky(
+    cov: BandedMatrix | np.ndarray, pix_mask: np.ndarray | None = None
+) -> BandedMatrix:
+    r"""Lower Cholesky factor of a banded covariance, with masked pixels set to identity.
+
+    Factors :math:`C' = M C M + (I - M)` once on the host, where :math:`M` is the
+    diagonal pixel mask. A masked row of the factor is the identity row, so a masked
+    pixel carries no information and no normalization.
+
+    Parameters
+    ----------
+    cov : BandedMatrix or array_like, shape (n, n)
+        Symmetric positive-definite covariance [data units squared]. A dense array is
+        reduced to the banded storage of its nonzero bandwidth.
+    pix_mask : array_like, shape (n,), optional
+        Pixel mask :math:`w \in \{0, 1\}^n`. Default: all ones.
+
+    Returns
+    -------
+    BandedMatrix
+        Lower factor :math:`L` with ``offsets = (0, -1, ..., -p)`` and
+        ``data[k, i] = L[i, i - k]`` [data units], where :math:`p` is the half-bandwidth.
+
+    Raises
+    ------
+    ValueError
+        If the masked covariance is not positive definite.
+
+    Notes
+    -----
+    **JIT-compatible**: no. Build-time NumPy and SciPy routine; call it outside traced
+    code, once per data vector.
+
+    The factor satisfies :math:`C' = L L^\mathsf{T}` with
+
+    .. math::
+
+        L_{ii} = \sqrt{C'_{ii} - \sum_{k=1}^{p} L_{i,i-k}^2}, \qquad
+        L_{ij} = \frac{1}{L_{jj}}\Bigl(C'_{ij} - \sum_{k} L_{i,k} L_{j,k}\Bigr),
+
+    computed by LAPACK band Cholesky (:func:`scipy.linalg.cholesky_banded`). The
+    cost is :math:`O(n p^2)`.
+
+    References
+    ----------
+    .. [1] Golub, G. H. & Van Loan, C. F. 2013, "Matrix Computations", 4th ed.,
+       Johns Hopkins University Press, Section 4.3.6 (band Cholesky).
+    """
+    if isinstance(cov, BandedMatrix):
+        bm = cov
+    else:
+        dense = np.asarray(cov, dtype=float)
+        n_dense = dense.shape[0]
+        i_idx, j_idx = np.nonzero(dense)
+        half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
+        offs = np.arange(-half, half + 1)
+        data = np.zeros((offs.size, n_dense))
+        for k, off in enumerate(offs):
+            rows = np.arange(max(0, -off), min(n_dense, n_dense - off))
+            data[k, rows] = dense[rows, rows + off]
+        bm = BandedMatrix(offsets=jnp.asarray(offs), data=jnp.asarray(data))
+    ab = _lower_storage(bm)
+    half, n = ab.shape[0] - 1, ab.shape[1]
+    if pix_mask is None:
+        mask = np.ones(n)
+    else:
+        mask = np.asarray(pix_mask, dtype=float)
+    for k in range(half + 1):
+        ab[k, : n - k] = ab[k, : n - k] * mask[: n - k] * mask[k:]
+    ab[0] = mask * ab[0] + (1.0 - mask)
+    try:
+        ab_l = scipy_linalg.cholesky_banded(ab, lower=True)
+    except scipy_linalg.LinAlgError as exc:
+        raise ValueError(f"covariance is not positive definite: {exc}") from exc
+    data_l = np.zeros((half + 1, n))
+    for lag in range(half + 1):
+        data_l[lag, lag:] = ab_l[lag, : n - lag]
+    return BandedMatrix(offsets=jnp.asarray(-np.arange(half + 1)), data=jnp.asarray(data_l))
+
+
+def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarray:
+    r"""Solve :math:`L y = r` for a banded lower-triangular factor :math:`L`.
+
+    Parameters
+    ----------
+    chol : BandedMatrix
+        Lower factor from :func:`banded_cholesky`, ``offsets = (0, -1, ..., -p)``,
+        ``data`` shape ``(p + 1, n)``.
+    r : array_like, shape (n,)
+        Right-hand side [data units].
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        :math:`y = L^{-1} r` [data units of ``r`` divided by the factor units].
+
+    Raises
+    ------
+    ValueError
+        If ``chol.offsets`` are not the lower-factor layout ``(0, -1, ..., -p)``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the scan length is ``n`` and the band width comes from the
+    static ``offsets``. **Gradient-safe**: yes, linear in ``r``. **vmap**: yes; ``vmap``
+    over the columns of a matrix gives :math:`L^{-1} X`.
+
+    The recurrence is
+
+    .. math::
+
+        y_i = \frac{1}{L_{ii}}\Bigl(r_i - \sum_{k=1}^{p} L_{i,i-k}\, y_{i-k}\Bigr),
+
+    evaluated with :func:`jax.lax.scan` over pixels with a carry of the last :math:`p`
+    values, costing :math:`O(n p)`. Rows of a masked pixel are identity rows, so
+    :math:`y_i = r_i = 0` there.
+
+    References
+    ----------
+    .. [1] Golub, G. H. & Van Loan, C. F. 2013, "Matrix Computations", 4th ed.,
+       Johns Hopkins University Press, Section 3.1 (triangular systems).
+    """
+    offs = np.asarray(chol.offsets).ravel()
+    half = -int(offs.min())
+    if not np.array_equal(offs, -np.arange(half + 1)):
+        raise ValueError("banded_forward_substitution needs offsets (0, -1, ..., -p)")
+    diag = chol.data[0]
+    coef = chol.data[1:].T
+    if half == 0:
+        return r / diag
+
+    def step(prev, xs):
+        r_i, c_i, d_i = xs
+        y_i = (r_i - jnp.dot(c_i, prev)) / d_i
+        return jnp.concatenate([y_i[None], prev[:-1]]), y_i
+
+    init = jnp.zeros(half, dtype=jnp.result_type(r, diag))
+    _, y = jax.lax.scan(step, init, (r, coef, diag))
+    return y
