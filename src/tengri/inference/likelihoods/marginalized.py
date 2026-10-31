@@ -36,6 +36,7 @@ from tengri.observation.calibration import (
 )
 from tengri.observation.eline_marginalization import (
     marginalize_emission_lines as _marginalize_emission_lines,
+    unit_line_prior,
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.utils.scale import representable_floor as _representable_floor
@@ -184,6 +185,9 @@ class ELineMarginalizedLikelihood:
     prior_variance : ndarray | None, keyword-only
         Per-line prior variance on the amplitude. ``None`` → flat
         (1e10), the original primitive's default.
+    prior_sigma : ndarray | None, keyword-only
+        Per-line prior width on the amplitude, given instead of
+        ``prior_variance`` when the variance would underflow the working precision.
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
@@ -209,6 +213,7 @@ class ELineMarginalizedLikelihood:
     design_matrix: jnp.ndarray | None = None
     design_matrix_builder: Callable[[Mapping[str, jnp.ndarray]], jnp.ndarray] | None = None
     prior_variance: jnp.ndarray | None = None
+    prior_sigma: jnp.ndarray | None = None
     channel: str = "spec_fnu"
     name: str = "eline_marginalized"
     fnu_obs_key: str | None = None
@@ -221,6 +226,10 @@ class ELineMarginalizedLikelihood:
         # must be provided. Both or neither is a usage error.
         has_static = self.design_matrix is not None
         has_builder = self.design_matrix_builder is not None
+        if self.prior_variance is not None and self.prior_sigma is not None:
+            raise ValueError(
+                "ELineMarginalizedLikelihood: provide prior_variance or prior_sigma, not both."
+            )
         if has_static == has_builder:
             raise ValueError(
                 "ELineMarginalizedLikelihood: provide exactly one of "
@@ -262,6 +271,7 @@ class ELineMarginalizedLikelihood:
             noise=fnu_err,
             design_matrix=design_matrix,
             prior_variance=self.prior_variance,
+            prior_sigma=self.prior_sigma,
             pix_mask=pix_mask,
         )
         return ln_l_marg
@@ -294,6 +304,7 @@ _ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
         "it captured)"
     ),
     "prior_variance": content("per-line amplitude prior variance is baked into the marginal"),
+    "prior_sigma": content("per-line amplitude prior width is baked into the marginal"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
@@ -580,7 +591,7 @@ class CalibrationELineMarginalizedLikelihood:
     data_slice: tuple[int, int] | None = None
 
     def _line_prior(self, params: Mapping[str, jnp.ndarray], n_lines: int):
-        """Return the line prior mean and precision for this parameter set."""
+        """Return the line prior mean and width (standard deviation) for this parameter set."""
         if self.eline_prior_type == "cloudy":
             from tengri.observation.eline_priors import cloudy_line_priors
 
@@ -590,11 +601,8 @@ class CalibrationELineMarginalizedLikelihood:
                 line_wavelengths=self.eline_line_wavelengths,
                 prior_width_dex=self.eline_prior_width_dex,
             )
-            return means, jnp.diag(1.0 / sigmas**2)
-        return (
-            jnp.zeros(n_lines),
-            jnp.diag(jnp.full(n_lines, 1.0 / self.eline_prior_sigma**2)),
-        )
+            return means, sigmas
+        return jnp.zeros(n_lines), jnp.full(n_lines, self.eline_prior_sigma)
 
     def log_prob(
         self,
@@ -613,9 +621,13 @@ class CalibrationELineMarginalizedLikelihood:
         )
         sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
         design = jnp.concatenate([model_spec[:, None] * basis, design_lines], axis=1)
-        line_mean, line_precision = self._line_prior(params, n_lines)
-        prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line_mean])
-        prior_precision = block_diag(jnp.eye(self.n_poly) / self.prior_sigma**2, line_precision)
+        line_mean, line_width = self._line_prior(params, n_lines)
+        line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
+        design = jnp.concatenate([model_spec[:, None] * basis, line.design], axis=1)
+        prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line.prior_mean])
+        prior_precision = block_diag(
+            jnp.eye(self.n_poly) / self.prior_sigma**2, line.prior_precision
+        )
         result = marginalize_linear_nuisance(
             fnu_obs,
             model_spec,
@@ -623,6 +635,7 @@ class CalibrationELineMarginalizedLikelihood:
             sigma=sigma,
             prior_mean=prior_mean,
             prior_precision=prior_precision,
+            scale=line.scale,
         )
         n_pix = fnu_obs.shape[0]
         return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))

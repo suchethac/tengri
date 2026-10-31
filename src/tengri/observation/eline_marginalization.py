@@ -26,6 +26,7 @@ parameters).
 """
 
 import math
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -281,6 +282,113 @@ def expand_constrained_amplitudes(
     return a_hat_full, a_cov_full
 
 
+class UnitLinePrior(NamedTuple):
+    """Unit-normal form of a Gaussian line prior, as returned by :func:`unit_line_prior`.
+
+    Attributes
+    ----------
+    design : ndarray, shape (n_pix, n_lines)
+        Design matrix with each column multiplied by its prior width.
+    prior_mean : ndarray, shape (n_lines,)
+        Prior mean of the unit coefficients, ``mu / w``.
+    prior_precision : ndarray, shape (n_lines, n_lines)
+        Identity: the unit coefficients carry a unit normal prior.
+    scale : ndarray, shape ()
+        Coefficient scale that keeps the whitened design at order unity.
+    """
+
+    design: jnp.ndarray
+    prior_mean: jnp.ndarray
+    prior_precision: jnp.ndarray
+    scale: jnp.ndarray
+
+
+def unit_line_prior(
+    design: jnp.ndarray,
+    prior_width: jnp.ndarray,
+    *,
+    noise: jnp.ndarray,
+    pix_mask: jnp.ndarray | None = None,
+    prior_mean: jnp.ndarray | None = None,
+) -> UnitLinePrior:
+    r"""Rewrite a Gaussian line prior as a unit normal on rescaled amplitudes.
+
+    Each line amplitude is written as :math:`a_j = \mu_j + w_j a'_j` with
+    :math:`a'_j \sim \mathcal{N}(0, 1)`. The model :math:`G a` becomes
+    :math:`G\,\mathrm{diag}(w)\, a' + G\mu`, so the design is the column-scaled
+    matrix. The marginal likelihood is invariant under this change of variables.
+    The prior precision :math:`1/w_j^2` is never formed, which matters in float32 at
+    F_nu scale, where :math:`w_j \sim 10^{-21}` makes :math:`1/w_j^2` overflow.
+
+    Parameters
+    ----------
+    design : array_like, shape (n_pix, n_lines)
+        Design matrix :math:`G` [data units per line-amplitude unit].
+    prior_width : scalar or array_like, shape (n_lines,)
+        Prior standard deviation :math:`w_j` of each amplitude [data units]. A scalar
+        applies to every line (the flat-prior case).
+    noise : array_like, shape (n_pix,)
+        Per-pixel noise standard deviation :math:`\sigma_i` [data units]. Sets the
+        scale.
+    pix_mask : array_like, shape (n_pix,), optional
+        Pixel mask :math:`w_i \in \{0, 1\}`. Masked pixels are left out of the scale.
+        Default: all ones.
+    prior_mean : array_like, shape (n_lines,), optional
+        Prior mean :math:`\mu_j` of each amplitude [data units]. Default: zeros.
+
+    Returns
+    -------
+    UnitLinePrior
+        ``(design, prior_mean, prior_precision, scale)`` for
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`. The
+        coefficients it returns are the unit amplitudes :math:`a'`, so the amplitudes
+        are :math:`a = \mu + w\, a'`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp`` operations.
+
+    **Gradient-safe**: yes, with respect to ``design``, ``prior_width``, ``noise`` and
+    ``prior_mean``. The scale is the geometric mean of ``noise`` over the unmasked
+    pixels divided by the largest width, so it is order unity for any prior width.
+
+    **vmap**: yes over any leading batch axis.
+
+    The scale :math:`s` is an exact change of variables: the marginal value does not
+    depend on it, as :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+    documents. The per-galaxy wrapper and the batched path both call this helper, so a
+    line prior is written in one form on both.
+
+    Examples
+    --------
+    ::
+
+        line = unit_line_prior(G, w, noise=sigma, prior_mean=mu)
+        result = marginalize_linear_nuisance(
+            data,
+            model0,
+            line.design,
+            sigma=sigma,
+            prior_mean=line.prior_mean,
+            prior_precision=line.prior_precision,
+            scale=line.scale,
+        )
+        a_hat = width * result.coef_hat  # amplitudes in data units
+
+    """
+    n_lines = design.shape[1]
+    width = jnp.broadcast_to(jnp.atleast_1d(prior_width), (n_lines,))
+    mean = jnp.zeros(n_lines, dtype=design.dtype) if prior_mean is None else prior_mean
+    weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
+    log_noise_mean = jnp.sum(weight * jnp.log(noise)) / jnp.sum(weight)
+    return UnitLinePrior(
+        design=design * width,
+        prior_mean=mean / width,
+        prior_precision=jnp.eye(n_lines, dtype=design.dtype),
+        scale=jnp.exp(log_noise_mean) / jnp.max(width),
+    )
+
+
 def marginalize_emission_lines(
     residual: jnp.ndarray,
     noise: jnp.ndarray,
@@ -290,6 +398,7 @@ def marginalize_emission_lines(
     pix_mask: jnp.ndarray | None = None,
     col_mask: jnp.ndarray | None = None,
     scale: jnp.ndarray | None = None,
+    prior_sigma: jnp.ndarray | None = None,
 ) -> tuple:
     r"""Analytically marginalize emission-line amplitudes under a Gaussian prior.
 
@@ -316,6 +425,11 @@ def marginalize_emission_lines(
     col_mask : array_like, shape (n_lines,), optional
         Line mask :math:`c \in \{0, 1\}`. A masked line is fixed out of the model.
         Default: all ones.
+    prior_sigma : scalar or array_like, shape (n_lines,), optional
+        Prior standard deviation :math:`\sqrt{\Lambda}` of each line amplitude
+        [data units]. Pass this instead of ``prior_variance`` when the variance
+        would underflow the working precision (below about 1e-19 in float32).
+        Exactly one of the two may be given.
     scale : scalar, optional
         Coefficient scale :math:`s` that keeps the whitened design at order unity.
         The value does not depend on :math:`s` in exact arithmetic. Default: the
@@ -367,25 +481,34 @@ def marginalize_emission_lines(
 
     """
     n_lines = design_matrix.shape[1]
-    _pv = jnp.full((n_lines,), 1e10) if prior_variance is None else prior_variance
-    prior_variance = jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,))
+    if prior_sigma is not None and prior_variance is not None:
+        raise ValueError("pass prior_variance or prior_sigma, not both")
+    if prior_sigma is None:
+        _pv = jnp.full((n_lines,), 1e10) if prior_variance is None else prior_variance
+        width = jnp.sqrt(jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,)))
+    else:
+        width = jnp.broadcast_to(jnp.atleast_1d(prior_sigma), (n_lines,))
+    line = unit_line_prior(design_matrix, width, noise=noise, pix_mask=pix_mask)
     weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
     n_eff = jnp.sum(weight)
     log_noise_sum = jnp.sum(weight * jnp.log(noise))
-    coef_scale = jnp.exp(log_noise_sum / n_eff) if scale is None else scale
+    coef_scale = line.scale if scale is None else scale
 
     result = marginalize_linear_nuisance(
         residual,
         jnp.zeros_like(residual),
-        design_matrix,
+        line.design,
         sigma=noise,
         pix_mask=pix_mask,
-        prior_precision=jnp.diag(1.0 / prior_variance),
+        prior_mean=line.prior_mean,
+        prior_precision=line.prior_precision,
         col_mask=col_mask,
         scale=coef_scale,
     )
     ln_l_marg = result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_noise_sum
-    return ln_l_marg, result.coef_hat, result.coef_cov
+    a_hat = width * result.coef_hat
+    a_cov = (width[:, None] * width[None, :]) * result.coef_cov
+    return ln_l_marg, a_hat, a_cov
 
 
 # JIT-compiled version (prior_variance must be traced, not static)

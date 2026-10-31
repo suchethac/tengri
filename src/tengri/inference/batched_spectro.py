@@ -85,7 +85,10 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.observation.calibration import calibration_basis
-from tengri.observation.eline_marginalization import eline_amplitude_names
+from tengri.observation.eline_marginalization import (
+    eline_amplitude_names,
+    unit_line_prior,
+)
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian, Uniform
 
@@ -189,19 +192,18 @@ def _marginal_lines_loglik(
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
-    sigma_p = spectroscopy.eline_prior_sigma
-    # Line amplitudes a = sigma_p * a' carry a unit normal prior: the marginal is invariant
-    # under this change of variables, and the prior precision 1/sigma_p**2 is never formed,
-    # since it overflows float32 at F_nu scale.
-    g_unit = g_eff * sigma_p
-    line_prec = jnp.eye(g_eff.shape[1])
+    line = unit_line_prior(
+        g_eff, spectroscopy.eline_prior_sigma, noise=obs.sigma, pix_mask=obs.pix_mask
+    )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
-        design = jnp.concatenate([model0[:, None] * basis, g_unit], axis=1)
+        design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
         col_mask = jnp.concatenate([jnp.ones(cal_n_poly, dtype=bool), line_cols])
-        precision = block_diag(jnp.eye(cal_n_poly) / cal_prior_sigma**2, line_prec)
+        prior_mean = jnp.concatenate([jnp.zeros(cal_n_poly), line.prior_mean])
+        precision = block_diag(jnp.eye(cal_n_poly) / cal_prior_sigma**2, line.prior_precision)
     else:
-        design, col_mask, precision = g_unit, line_cols, line_prec
+        design, col_mask = line.design, line_cols
+        prior_mean, precision = line.prior_mean, line.prior_precision
     weight = obs.pix_mask
     n_eff = jnp.sum(weight)
     log_sigma_sum = jnp.sum(weight * jnp.log(obs.sigma))
@@ -211,9 +213,10 @@ def _marginal_lines_loglik(
         design,
         sigma=obs.sigma,
         pix_mask=obs.pix_mask,
+        prior_mean=prior_mean,
         prior_precision=precision,
         col_mask=col_mask.astype(design.dtype),
-        scale=jnp.exp(log_sigma_sum / n_eff) / sigma_p,
+        scale=line.scale,
     )
     return result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_sigma_sum
 

@@ -117,7 +117,8 @@ a column mask for lines that land outside the real grid. The line amplitudes are
 rescaled by the prior width, `a = eline_prior_sigma * a'`, so the prior is the unit
 normal. The marginal is invariant under this change of variables, and the prior
 precision `1/eline_prior_sigma**2` is never formed, since it overflows float32 at
-F_nu scale. The joint with calibration uses the design `[spec_fnu * T(x) | G_eff * eline_prior_sigma]`
+F_nu scale. The reparametrization is one shared helper, `unit_line_prior` in
+`observation/eline_marginalization.py`, that the batched path and both per-galaxy classes call. The joint with calibration uses the design `[spec_fnu * T(x) | G_eff * eline_prior_sigma]`
 and the block prior `blockdiag(I / cal_prior_sigma**2, I)`. The per-galaxy classes
 `ELineMarginalizedLikelihood` and `CalibrationELineMarginalizedLikelihood` evaluate
 the same joint, and the two paths agree at rtol 1e-10 for one galaxy.
