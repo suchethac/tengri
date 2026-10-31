@@ -45,6 +45,11 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    "utils/host_array.py::device_table": (
+        "a tracer is returned as jnp.asarray(tracer) in the trace's dtype and never cached; "
+        "a concrete table is cast to the canonical dtype of the current x64 state and held "
+        "once per table and dtype"
+    ),
     "_cache_keys.py::baked": "traced value raises TypeError: a traced value cannot key a cache",
     "components/agn/blocks/runner.py::compose_l_nu": (
         "traced fracAGN goes through jax.lax.cond over both polar branches"
