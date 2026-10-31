@@ -57,12 +57,15 @@ import jax.numpy as jnp
 from tengri.inference.backends.mcmc._shared import (
     _CHEES_JITTER_SCALE,
     _CHEES_LEARNING_RATE,
+    _MEADS_JITTER_SCALE,
+    _MEADS_MIN_CHAINS_PER_FOLD,
     DEFAULT_MAX_NUM_DOUBLINGS,
     _chees_scan,
     _get_flat_logdensity,
     _hmc_full_scan,
     _nuts_full_scan,
     _resolve_chees_ensemble,
+    ghmc_catalog_scan,
 )
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.preconditioning import (
@@ -74,7 +77,7 @@ from tengri.inference.preconditioning import (
     traced_preconditioner,
 )
 
-_SAMPLERS = ("nuts", "hmc", "chees")
+_SAMPLERS = ("nuts", "hmc", "chees", "ghmc")
 
 #: Cache of preconditioned log-densities, keyed by ``(base_fn, strength)``.
 #:
@@ -113,6 +116,68 @@ DEFAULT_MAP_INIT_STEPS = 300
 #: Learning rate for that warm start, in the standardized (N(0,1)-prior) space
 #: the flat vector lives in, so one value suits every parameter.
 DEFAULT_MAP_INIT_LR = 0.05
+
+#: Default number of superchains for the MEADS ("ghmc") catalog sampler.
+#:
+#: Each superchain shares one starting position across its chains, so the chains of
+#: different superchains are independent of one another and nested R-hat can compare
+#: them. Eight superchains of four chains each is the smallest layout that gives a
+#: between-superchain estimate with a usable number of degrees of freedom.
+GHMC_DEFAULT_SUPERCHAINS = 8
+
+#: Default MEADS fold count K for the ("ghmc") catalog sampler, as in ``run_ghmc``.
+GHMC_DEFAULT_FOLDS = 4
+
+
+def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale):
+    """Return the MEADS ensemble's starting positions, one distinct draw per superchain.
+
+    Parameters
+    ----------
+    init_flat : array_like, shape (D,)
+        Seed position in the latent space [dimensionless].
+    key : PRNGKey
+        Split into one key per superchain.
+    n_chains : int
+        Total number of chains, a multiple of ``n_superchains``.
+    n_superchains : int
+        Number of distinct starting positions.
+    jitter_scale : float
+        Dispersion of the starts about ``init_flat`` [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_chains, D)
+        Starts ordered superchain-major: each block of ``n_chains // n_superchains``
+        consecutive rows shares one start.
+
+    Notes
+    -----
+    **JIT/vmap-compatible**: the output shape depends only on the static counts.
+    """
+    keys = jax.random.split(key, n_superchains)
+    draws = jax.vmap(lambda k: jax.random.normal(k, init_flat.shape, dtype=init_flat.dtype))(keys)
+    starts = init_flat[None, :] + jitter_scale * draws
+    return jnp.repeat(starts, n_chains // n_superchains, axis=0)
+
+
+def _check_ghmc_counts(n_chains, n_superchains, n_folds):
+    """Refuse chain counts that do not split evenly into superchains and MEADS folds."""
+    if n_folds < 1:
+        raise ValueError(f"n_folds must be >= 1, got {n_folds}")
+    if n_superchains < 1 or n_chains % n_superchains:
+        raise ValueError(
+            f"n_chains={n_chains} must be a multiple of n_superchains={n_superchains}: every "
+            "superchain shares one start, so each must hold the same number of chains."
+        )
+    if n_chains % n_folds:
+        raise ValueError(f"n_chains={n_chains} must be a multiple of the MEADS n_folds={n_folds}.")
+    if n_chains // n_folds < _MEADS_MIN_CHAINS_PER_FOLD:
+        raise ValueError(
+            f"n_chains={n_chains} gives {n_chains // n_folds} chains per fold across "
+            f"n_folds={n_folds}; MEADS needs at least {_MEADS_MIN_CHAINS_PER_FOLD} per fold "
+            "to estimate its adaptation."
+        )
 
 
 def _make_substitute(template_data_args, thread_redshift: bool, thread_line_fluxes: bool):
@@ -358,8 +423,10 @@ def build_catalog_mcmc_engine(
     thread_redshift: bool = False,
     thread_line_fluxes: bool = False,
     n_chains: int = 1,
+    n_superchains: int = GHMC_DEFAULT_SUPERCHAINS,
+    n_folds: int = GHMC_DEFAULT_FOLDS,
     n_ensemble: int | str = CATALOG_CHEES_ENSEMBLE,
-    ensemble_jitter: float = _CHEES_JITTER_SCALE,
+    ensemble_jitter: float | None = None,
     chain_jitter: float | None = None,
     max_leapfrog_steps: int = 200,
     chees_learning_rate: float = _CHEES_LEARNING_RATE,
@@ -380,8 +447,9 @@ def build_catalog_mcmc_engine(
         ``_jit_inputs`` are captured; per-galaxy ``data``/``noise`` are supplied
         at call time so the compiled program is reused across galaxies. May be
         None when ``flat_logdensity`` is given; it is then never read.
-    sampler : {"nuts", "hmc", "chees"}
-        Which BlackJAX sampler to vectorize.
+    sampler : {"nuts", "hmc", "chees", "ghmc"}
+        Which BlackJAX sampler to vectorize. ``"ghmc"`` runs the MEADS adaptation for a fixed
+        ``n_warmup`` steps; an adaptive stop needs a resumable MEADS step.
     n_warmup : int
         Adaptation steps, run per galaxy. Window adaptation for ``"nuts"`` /
         ``"hmc"``; ChEES adaptation over this galaxy's own chain ensemble for
@@ -416,8 +484,15 @@ def build_catalog_mcmc_engine(
     n_ensemble : int or "auto", default :data:`CATALOG_CHEES_ENSEMBLE`
         ChEES adaptation-ensemble width, **within each galaxy**. Ignored by
         ``"nuts"`` / ``"hmc"``.
-    ensemble_jitter : float
-        Dispersion of that ensemble around the galaxy's seed position.
+    n_superchains : int, default 8
+        ``"ghmc"`` only. Number of distinct starting positions; the ``n_chains`` chains are
+        split evenly among them, and ``n_chains`` must be a multiple of it.
+    n_folds : int, default 4
+        ``"ghmc"`` only. MEADS fold count K; ``n_chains`` must be a multiple of it, with at
+        least four chains per fold.
+    ensemble_jitter : float or None, default None
+        Dispersion of that ensemble around the galaxy's seed position. ``None`` resolves to
+        the ChEES value for ``"chees"`` and to the MEADS value for ``"ghmc"``.
     chain_jitter : float or None, default None
         ``None`` seeds the sampling chains from the ensemble's warmed final
         states. A float seeds them independently and overdispersed, which is
@@ -487,7 +562,7 @@ def build_catalog_mcmc_engine(
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
 
     n_chains = max(1, int(n_chains))
-    if sampler != "chees" and n_chains != 1:
+    if sampler not in ("chees", "ghmc") and n_chains != 1:
         raise ValueError(
             f"sampler={sampler!r} runs exactly one chain per galaxy in the catalog "
             f"path, got n_chains={n_chains}. Window adaptation is per galaxy here, so "
@@ -495,7 +570,13 @@ def build_catalog_mcmc_engine(
             "over an ensemble and can then sample several chains from it. Use "
             "method='mcmc_chees' for a per-galaxy multi-chain R-hat."
         )
+    if sampler == "ghmc":
+        _check_ghmc_counts(n_chains, int(n_superchains), int(n_folds))
     ensemble_size = _resolve_chees_ensemble(n_ensemble, n_chains) if sampler == "chees" else 0
+    if ensemble_jitter is None:
+        ensemble_scale = _MEADS_JITTER_SCALE if sampler == "ghmc" else _CHEES_JITTER_SCALE
+    else:
+        ensemble_scale = ensemble_jitter
 
     if flat_logdensity is not None:
         log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = flat_logdensity
@@ -571,6 +652,30 @@ def build_catalog_mcmc_engine(
             """
             return positions if precond is None else positions @ precond.matrix.T
 
+        if sampler == "ghmc":
+            # MEADS over the sampling chains themselves: the ensemble starts from
+            # superchain-grouped draws and its final states are the chains that sample.
+            starts = ghmc_superchain_starts(
+                sample_init,
+                jax.random.fold_in(gal_key, 1),
+                n_chains,
+                int(n_superchains),
+                float(ensemble_scale),
+            )
+            gh_keys = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
+            positions, divergent, _step_size, _inv_mass, _alpha, _delta = ghmc_catalog_scan(
+                starts,
+                warmup_key,
+                gh_keys,
+                sample_logdensity,
+                sample_args,
+                n_warmup,
+                int(n_folds),
+            )
+            positions = restore(positions[:, n_burnin:])
+            divergent = divergent[:, n_burnin:]
+            return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
+
         if sampler == "chees":
             # This galaxy's OWN ChEES adaptation, over an ensemble of
             # ``ensemble_size`` chains that all target THIS galaxy's posterior.
@@ -594,7 +699,7 @@ def build_catalog_mcmc_engine(
                 ensemble_size,
                 n_chains,
                 n_chain,
-                float(ensemble_jitter),
+                float(ensemble_scale),
                 1.0,  # jitter_amount: BlackJAX's full Halton jitter
                 target_accept_rate,
                 max_leapfrog_steps,
