@@ -148,7 +148,7 @@ def check_template_model(model) -> None:
         if getattr(observation, name, None) is not None:
             raise ValueError(
                 f"template model configures observation.{name}, which the batched "
-                "likelihood does not evaluate"
+                "likelihood does not evaluate; remove it from the template"
             )
     noise = observation.noise
     if noise is not None and (
@@ -156,7 +156,8 @@ def check_template_model(model) -> None:
     ):
         raise ValueError(
             "template model has a Student-t or calibration-floor noise model, which the "
-            "batched Gaussian likelihood does not evaluate"
+            "batched Gaussian likelihood does not evaluate; use diagonal Gaussian noise "
+            "with a zero calibration floor"
         )
 
 
