@@ -88,6 +88,28 @@ class FritzComponents(NamedTuple):
 # ── Template grid interpolation ───────────────────────────────────
 
 
+#: Unit tags the loader's reading of ``dust`` and ``disk`` presumes: CIGALE's
+#: ``model.dust`` / ``model.disk``, :math:`L_\lambda` [W/nm], the dust normalized to
+#: unit integral. A file tagged otherwise (the pre-#3077 tag said ``erg/s/Hz``)
+#: is refused rather than read as the wrong quantity.
+_EXPECTED_UNIT_ATTRS = {"dust_unit": "W/nm", "disk_unit": "W/nm"}
+
+
+def _check_unit_attrs(attrs, grid_path: str) -> None:
+    """Refuse a grid file whose ``dust_unit`` / ``disk_unit`` tags are not W/nm."""
+    for key, expected in _EXPECTED_UNIT_ATTRS.items():
+        tag = attrs.get(key)
+        if isinstance(tag, bytes):
+            tag = tag.decode()
+        if tag is None or not str(tag).startswith(expected):
+            raise TengriIOError(
+                f"Fritz grid {grid_path!r} declares {key}={tag!r}, but the loader reads "
+                f"the records as L_lambda [{expected}] (CIGALE model.dust / model.disk). "
+                "Re-download the grid with scripts/download_fritz2006_templates.py "
+                "--force, or rebuild it with scripts/build_fritz2006_grid.py."
+            )
+
+
 def _load_grid_arrays(grid_path: str):
     """Load raw numpy arrays from a Fritz grid file.
 
@@ -112,6 +134,7 @@ def _load_grid_arrays(grid_path: str):
     import h5py as _h5py
 
     with _h5py.File(grid_path, "r") as f:
+        _check_unit_attrs(f["fritz2006"].attrs, grid_path)
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
         # Read as float64 on the host: the file stores float32, and a few far-UV nodes are
         # float32 subnormals that a device-side conversion would flush to zero.
