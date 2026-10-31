@@ -173,6 +173,7 @@ def test_float32_value_and_gradient_with_log_q_are_finite_and_nonzero(synthetic_
             "cal_log_q": jnp.asarray([0.02, -0.03], dtype=jnp.float32),
         }
         values, grads = jax.vmap(jax.value_and_grad(_loglik(template, spec)))(params, batch32)
+        # grad-assert: finite-only — the value is a log-likelihood, not a gradient
         assert np.all(np.isfinite(np.asarray(values)))
         for name in (_MASS, "cal_log_q"):
             assert np.all(np.isfinite(np.asarray(grads[name])))

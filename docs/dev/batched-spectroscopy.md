@@ -38,6 +38,8 @@ Every entry of `_BATCH_FIELDS` in `observation/batched.py`, in order:
 | `sfh_bin_edges_gyr` | `(B, n_sfh_edges)` | Per-galaxy SFH bin edges [Gyr]; zero-width when the template ladder is used |
 | `line_mask` | `(B, n_lines)` | 1.0 when a catalog line lands on the real grid at the galaxy's redshift; zero-width when the template fits no lines |
 | `eline_resolution` | `(B,)` | Spectral resolution [dimensionless] the line profiles use, per galaxy |
+| `segment` | `(B, n_max)` | Calibration segment id of each pixel, padded with the last real id; zeros when `spec.n_segments == 0` |
+| `cal_scale_center`, `cal_scale_sigma` | `(B,)` | `log10_center` and `sigma_dex` of the galaxy's log-normal prior on the mean calibration multiplier; 0 and 1 when it has none |
 
 The batch carries no line-flux leaves: the line-flux and line-ratio channels are
 refused (see the refusal table).
@@ -152,6 +154,22 @@ a leaf, if it changes a shape or a branch.
   masked against the lines-off likelihood, one compile across masks, padding, and the
   float32 value and gradient at log10 M = 4.0. The slow-tier comparison of batched and
   per-galaxy NUTS medians is in `tests/inference/test_batched_spectro_catalog.py`.
+- 2026-11-01, #3134: per-segment calibration scales, the scale-free coefficient prior and the
+  fiber-fraction prior on both paths. `Spectroscopy(calibration_segments=, cal_prior=,
+  cal_scale_prior=, cal_scale_window=)` and `GalaxySpectrum(segment_ids=, cal_scale_prior=)` feed
+  the leaves above; `SpectroBatchSpec.n_segments` is static and part of the bucket key, so
+  galaxies with different segment counts land in different buckets. The per-galaxy
+  `CalibrationMarginalizedLikelihood`, the joint class and the batched marginal all call
+  `marginalize_calibration_segments`. The mean multiplier over the window is carried as the
+  latent `cal_log_q` (`ln q`): per galaxy a declared observation parameter with the Gaussian
+  prior from `cal_scale_prior`; batched, a latent with a unit-normal template prior whose
+  standardized prior term `batched_neg_log_posterior` replaces by each galaxy's own
+  log-normal. The coefficient block is conditioned on `q` through an orthonormal null-space
+  basis of the window vector, and the value includes the coefficient prior's own marginal of
+  `ln q` (`calibration_q_log_prior`). `tests/contract/test_calibration_segments_scale_prior.py`
+  pins the primitive layer and the quadrature over `ln q`;
+  `tests/contract/test_calibration_segments_batched.py` pins batched against per-galaxy,
+  padding, one compile and float32.
 - 2026-10-31, #3116: calibration marginalization on the batched spectroscopic path.
   `batched_log_likelihood`, `batched_neg_log_posterior`, `fit_spectra_map_vmap` and
   `fit_spectra_catalog_mcmc` take `calibration_marginalize`, `cal_n_poly` and

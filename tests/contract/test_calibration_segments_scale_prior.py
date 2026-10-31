@@ -165,6 +165,7 @@ def test_float32_value_and_gradient_are_finite_and_nonzero():
 
     with jax.enable_x64(False):
         value, grad = jax.value_and_grad(loss)(jnp.float32(math.log(amplitude)))
+        # grad-assert: finite-only — the value is a log-likelihood, not a gradient
         assert np.isfinite(float(value))
         assert np.isfinite(float(grad))
         assert float(grad) != 0.0
