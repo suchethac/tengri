@@ -5659,7 +5659,7 @@ _VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
 #: and applies it unconditionally, so the block is single-curve by construction
 #: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
 #:
-#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: This was validated against ``DUST_LAWS`` (23 entries) with every accepted
 #: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
 #: validated, accepted, and silently given the Prevot SMC curve. Measured: five
 #: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same

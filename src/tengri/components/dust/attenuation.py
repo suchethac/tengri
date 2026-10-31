@@ -869,6 +869,11 @@ def _natural_spline_eval(
     )
 
 
+@register_dust_law(
+    "fitzpatrick99",
+    citation="Fitzpatrick 1999 (PASP 111, 63) MW extinction",
+    short_doc="Fitzpatrick (1999) Milky Way extinction curve, R_V = 3.1 default; FM90 UV + optical/IR spline",
+)
 def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
     r"""Fitzpatrick (1999) Milky Way extinction law, normalized to A(V).
 
