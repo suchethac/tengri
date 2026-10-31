@@ -19,7 +19,7 @@ from jax import Array
 
 from tengri._data_setup import package_or_env_data_path
 
-__all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "load_grahsp_templates"]
+__all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "host_wave_axis", "load_grahsp_templates"]
 
 #: Honors $TENGRI_DATA_DIR before the package's own ``data/`` (#1431).
 DEFAULT_TEMPLATE_PATH: Path = package_or_env_data_path("grahsp/grahsp_templates.h5")
@@ -183,3 +183,27 @@ def load_grahsp_templates(
         disc_a=disc_a,
         disc_mdot=disc_mdot,
     )
+
+
+def host_wave_axis(values, field_name: str) -> np.ndarray:
+    """A template wavelength axis [nm] as a host array, also when the bundle is traced.
+
+    The wavelength axes are fixed per library and set which nodes the normalization
+    integrals use, so they must be concrete when the graph is built. A bundle passed to a
+    jitted model carries tracers; the axis is then read from the cached default bundle.
+
+    Parameters
+    ----------
+    values : array_like
+        The bundle's axis, concrete or traced.
+    field_name : str
+        Name of the :class:`GRAHSPTemplates` field the axis belongs to.
+
+    Returns
+    -------
+    ndarray
+        The axis [nm] as float64.
+    """
+    if isinstance(values, jax.core.Tracer):
+        values = getattr(load_grahsp_templates(), field_name)
+    return np.asarray(values, dtype=float)

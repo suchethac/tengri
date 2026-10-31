@@ -350,8 +350,8 @@ def torus_lnu_from_grid(
     C¹-continuous across every axis.
     """
     template = interp_nd_pchip(
-        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
-        tuple(jnp.asarray(axis) for axis in grid.axes),
+        device_table(float32_safe_template(grid.template, wavelength.dtype)),
+        tuple(device_table(axis) for axis in grid.axes),
         coords,
     )
     wave_native = device_table(grid.wave_grid)

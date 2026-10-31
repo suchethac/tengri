@@ -261,7 +261,7 @@ def silva04_sed_from_grid(
        arXiv:1606.05648.
     """
     template = interp_nd_pchip(
-        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
+        device_table(float32_safe_template(grid.template, wavelength.dtype)),
         (device_table(grid.log_nh_axis),),
         (agn_log_nh_silva,),
     )

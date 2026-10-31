@@ -98,3 +98,38 @@ def test_the_live_tree_has_no_violations_and_a_real_census():
     assert not bad, "\n".join(f"{p}:{ln}: {n} {v}" for p, ln, n, v in bad)
     # Non-vacuity: the guard measured something. 122 uses at the time of writing.
     assert len(rows) > 80, f"census found only {len(rows)} table uses; it has gone blind"
+
+
+_LIBRARY_MODULE = """
+import jax.numpy as jnp
+from tengri.utils.host_array import device_table
+
+def bad_field(grid):
+    return jnp.asarray(grid.template)
+
+def bad_scaled(grid, dtype):
+    return jnp.asarray(float32_safe_template(grid.template, dtype))
+
+def bad_axes(grid):
+    return tuple(jnp.asarray(axis) for axis in grid.axes)
+
+def bad_norm(norm):
+    return jnp.asarray(norm)
+
+def good_device(grid):
+    return device_table(grid.template)
+
+def good_stated_dtype(grid):
+    return jnp.asarray(grid.template, dtype=jnp.float32)
+"""
+
+
+def test_library_conversions_without_a_stated_dtype_are_flagged(tmp_path):
+    path = tmp_path / "agn_module.py"
+    path.write_text(_LIBRARY_MODULE)
+    rows = mod.scan_library_conversions([path])
+    flagged = sorted(line for _, line, _, _ in rows)
+    source_lines = _LIBRARY_MODULE.splitlines()
+    for line in flagged:
+        assert "bad_" in "\n".join(source_lines[max(0, line - 3) : line])
+    assert len(flagged) == 4

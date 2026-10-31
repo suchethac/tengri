@@ -249,7 +249,7 @@ def _require_norm(norm, library: str):
             f"The {library} grid file carries no 'norm' dataset, which the line-of-sight "
             "ratio of its disc needs (the disc is stored divided by the per-record scale)."
         )
-    return jnp.asarray(norm)
+    return device_table(norm)
 
 
 def skirtor_line_of_sight_ratio(

@@ -285,7 +285,7 @@ def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) ->
 
 def _record_powers(grid: TorusTemplateGrid, dtype):
     """Each record's frequency integral on its own wavelength nodes, leading shape."""
-    template = jnp.asarray(float32_safe_template(grid.template, dtype))
+    template = device_table(float32_safe_template(grid.template, dtype))
     wave = device_table(grid.wave_grid)
     flat = template.reshape(-1, template.shape[-1])
     powers = jax.vmap(lambda row: native_bolometric_nu(row, wave, floor=0.0))(flat)

@@ -51,6 +51,11 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src" / "tengri"
 HOST_CALLS = {"len", "float", "int", "tuple", "list", "device_table", "host_array"}
 HOST_ATTRS = {"shape", "size", "dtype", "ndim"}
+#: Names that hold a cached template library (a numpy-backed bundle) in the AGN modules.
+LIBRARY_NAMES = {"grid", "aniso", "templates", "template", "library", "bundle", "table"}
+#: Local names bound to one array read from a library (a stored norm, one axis).
+LIBRARY_ARRAY_NAMES = {"norm", "axis"}
+LIBRARY_DIR = SRC / "components" / "agn"
 
 
 def _table_names(tree: ast.Module) -> set[str]:
@@ -129,6 +134,50 @@ def scan(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
     return rows
 
 
+def _is_library_read(arg: ast.AST) -> bool:
+    """True when ``arg`` reads a field of a template library, or is its scale-safe copy."""
+    for node in ast.walk(arg):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in LIBRARY_NAMES
+        ):
+            return True
+        if isinstance(node, ast.Name) and node.id in LIBRARY_ARRAY_NAMES:
+            return True
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "float32_safe_template":
+            return True
+    return False
+
+
+def scan_library_conversions(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
+    """Bare ``jnp.asarray(library.field)`` conversions in the AGN modules.
+
+    A cached library holds numpy arrays, so a conversion without a stated dtype takes the
+    dtype of the first conversion anywhere in the process (see the module docstring). The
+    dtype must be stated: ``device_table(library.field)`` or ``jnp.asarray(x, dtype=...)``.
+    """
+    rows: list[tuple[Path, int, str, str]] = []
+    for path in paths:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"asarray", "array"}
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "jnp"
+                and len(node.args) == 1
+                and not node.keywords
+            ):
+                continue
+            if _is_library_read(node.args[0]):
+                rows.append(
+                    (path, node.lineno, ast.unparse(node)[:60], "VIOLATION: bare library read")
+                )
+    return rows
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -136,12 +185,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     rows = scan(sorted(SRC.rglob("*.py")))
+    library_rows = scan_library_conversions(sorted(LIBRARY_DIR.rglob("*.py")))
     if args.list:
-        for path, line, name, verdict in rows:
+        for path, line, name, verdict in rows + library_rows:
             print(f"{path.relative_to(REPO)}:{line}: {name:<30} {verdict}")
         print(f"{len(rows)} table uses inside function bodies")
         return 0
-    bad = [r for r in rows if r[3].startswith("VIOLATION")]
+    bad = [r for r in rows if r[3].startswith("VIOLATION")] + library_rows
     if not rows:
         print("check_host_tables: no host tables found under src/tengri (the census is empty)")
         return 1
