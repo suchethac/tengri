@@ -665,15 +665,22 @@ class CalibrationELineMarginalizedLikelihood:
         Calibration polynomial: order and per-coefficient prior σ.
     eline_prior_type : str, keyword-only
         ``"flat"`` (default, Gaussian with per-line variance
-        ``eline_prior_sigma**2``) or ``"cloudy"`` (Cloudy-grid prior
+        ``eline_prior_sigma**2``), ``"cloudy"`` (Cloudy-grid prior
         evaluated at ``params["met_logzsol"]`` /
-        ``params["neb_logU"]``).
+        ``params["neb_logU"]``) or ``"model"`` (Gaussian centred on the
+        model's own attenuated line prediction, see
+        :class:`ModelELineMarginalizedLikelihood`).
     eline_prior_sigma : float, keyword-only
         Per-line prior σ for the flat case [erg/s/cm²/Hz]. Default 1e10.
     eline_line_wavelengths : ndarray | None, keyword-only
         Rest-frame line wavelengths (Cloudy case only) [Å].
     eline_prior_width_dex : float, keyword-only
-        Cloudy prior width [dex]. Default 0.5.
+        Cloudy or model prior width [dex]. Default 0.5.
+    prior_inputs_builder, match_index, matched : keyword-only
+        Model prior only: the closure returning ``(redshift, dl_cm, aperture_frac)``
+        from ``params`` and the static catalog-to-model line map, as in
+        :class:`ModelELineMarginalizedLikelihood`. The prediction must carry
+        ``"log_line_lums_attenuated"`` [dex].
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
@@ -703,6 +710,9 @@ class CalibrationELineMarginalizedLikelihood:
     eline_prior_sigma: float = 1e10
     eline_line_wavelengths: jnp.ndarray | None = None
     eline_prior_width_dex: float = 0.5
+    prior_inputs_builder: Callable[[Mapping[str, jnp.ndarray]], tuple] | None = None
+    match_index: jnp.ndarray | None = None
+    matched: jnp.ndarray | None = None
     channel: str = "spec_fnu"
     name: str = "calibration_eline_marginalized"
     fnu_obs_key: str | None = None
@@ -739,9 +749,22 @@ class CalibrationELineMarginalizedLikelihood:
             self.wavelength, self.wavelength.min(), self.wavelength.max(), self.n_poly
         )
         sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
-        design = jnp.concatenate([model_spec[:, None] * basis, design_lines], axis=1)
-        line_mean, line_width = self._line_prior(params, n_lines)
-        line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
+        if self.eline_prior_type == "model":
+            redshift, dl_cm, aperture_frac = self.prior_inputs_builder(params)
+            model_prior = model_line_prior(
+                prediction["log_line_lums_attenuated"],
+                self.match_index,
+                self.matched,
+                self.eline_line_wavelengths,
+                redshift,
+                dl_cm,
+                aperture_frac,
+                self.eline_prior_width_dex,
+            )
+            line = unit_model_line_prior(design_lines, model_prior, noise=sigma)
+        else:
+            line_mean, line_width = self._line_prior(params, n_lines)
+            line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
         design = jnp.concatenate([model_spec[:, None] * basis, line.design], axis=1)
         prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line.prior_mean])
         prior_precision = block_diag(
@@ -787,6 +810,9 @@ _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
         "content here too for defense in depth: cheap and harmless"
     ),
     "eline_prior_width_dex": content("Cloudy prior width in dex is baked into the marginal"),
+    "prior_inputs_builder": exclude("a closure over the model and fixed values"),
+    "match_index": content("static catalog-to-model map is baked into the prior"),
+    "matched": content("static flat/Gaussian split is baked into the prior"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),

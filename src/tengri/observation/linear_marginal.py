@@ -237,7 +237,7 @@ def marginalize_linear_nuisance(
         log_like = (
             log_like
             + 0.5 * (logdet_p + 2.0 * jnp.sum(col) * jnp.log(coef_scale))
-            - 0.5 * jnp.dot(mean, precision @ mean)
+            - 0.5 * jnp.dot(col * mean, precision @ (col * mean))
         )
 
     return MarginalResult(

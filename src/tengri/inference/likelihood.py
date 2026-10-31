@@ -244,11 +244,6 @@ def build_base_likelihood(context: InferenceContext):
                 "Calibration marginalization requires a configured spectroscopy "
                 "wavelength grid (model.wave_obs)."
             )
-        if context.eline_prior_type == "model":
-            raise ValueError(
-                'eline_prior_type="model" is not yet combined with calibration_marginalize=True; '
-                "use eline_prior_type='flat' or calibration_marginalize=False"
-            )
         builder = _make_eline_design_builder(context)
         if builder is None:
             raise ValueError(
@@ -280,6 +275,7 @@ def build_base_likelihood(context: InferenceContext):
             eline_prior_sigma=context.eline_prior_sigma or 1e10,
             eline_line_wavelengths=context.eline_independent_wavelengths,
             eline_prior_width_dex=context.eline_prior_width_dex,
+            **_model_prior_kwargs(context),
             channel="spec_fnu",
         )
         if context.data_type == "spectroscopy":
@@ -612,21 +608,22 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
 
 
 def _model_line_match(context: InferenceContext):
-    """Static index of the model line matching each independent catalog line.
+    """Static index of the model line matching each independent catalog line."""
+    from tengri.observation.eline_marginalization import model_line_match
 
-    The model's line wavelengths come from the nebular backend's published constants,
-    so the Gaussian/flat split is fixed at build time.
-    """
-    from tengri.observation.eline_marginalization import match_model_lines
+    return model_line_match(context.model, context.eline_independent_wavelengths)
 
-    backend = getattr(context.model, "_nebular_backend", None)
-    if backend is None or not hasattr(backend, "published_line_wavelengths"):
-        raise ValueError(
-            'eline_prior_type="model" needs a nebular backend that publishes a line '
-            "catalog (cue); the model's line wavelengths are read from the backend."
-        )
-    model_waves = backend.published_line_wavelengths()
-    return match_model_lines(model_waves, context.eline_independent_wavelengths)
+
+def _model_prior_kwargs(context: InferenceContext) -> dict:
+    """Constructor keywords of the model-centred line prior, empty for any other prior."""
+    if context.eline_prior_type != "model":
+        return {}
+    match_index, matched = _model_line_match(context)
+    return {
+        "prior_inputs_builder": _model_prior_inputs(context),
+        "match_index": match_index,
+        "matched": matched,
+    }
 
 
 def _model_prior_inputs(context: InferenceContext):

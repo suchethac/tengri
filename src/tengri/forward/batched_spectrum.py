@@ -70,6 +70,7 @@ from tengri.observation.eline_marginalization import (
     apply_doublet_constraints,
     build_eline_design_matrix,
     eline_amplitude_names,
+    model_line_match,
 )
 
 # Prefix of the per-line amplitude parameters of the fitted emission-line mode.
@@ -96,8 +97,8 @@ def check_template_model(model) -> None:
         line fluxes, line ratios, spectral indices, emission lines with a Cloudy
         prior, broad emission lines (``eline_broad``), a spectral covariance or a
         Student-t or calibration-floor noise model. Emission lines with
-        ``eline_mode='fitted'`` or ``'marginalized'`` (flat prior) and
-        ``eline_broad=False`` are accepted.
+        ``eline_mode='fitted'`` or ``'marginalized'`` (flat or model-centred prior)
+        and ``eline_broad=False`` are accepted.
 
     Raises
     ------
@@ -142,12 +143,7 @@ def check_template_model(model) -> None:
             "use eline_prior_type='flat', or eline_mode='fitted' or 'off'"
         )
     if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
-        raise ValueError(
-            "template model marginalizes emission lines with a model-centred prior "
-            "(eline_prior_type='model'), which the batched likelihood does not evaluate yet; "
-            "use eline_prior_type='flat' with the per-galaxy fitter, or eline_mode='fitted' "
-            "or 'off'"
-        )
+        model_line_match(model, batched_line_set(model).independent_wavelengths)
     if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
         raise ValueError(
             "template model fits emission lines with eline_broad=True, which the batched "
@@ -236,6 +232,8 @@ class BatchedLineSet:
         ``eline_amp_<name>`` keys of the independent lines, in column order.
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line centers [Angstrom] of the full catalog.
+    independent_wavelengths : ndarray, shape (n_independent,)
+        Rest-frame vacuum centers [Angstrom] of the independent amplitudes, in column order.
     constraint_matrix : ndarray, shape (n_lines, n_independent)
         Doublet constraint matrix; maps independent amplitudes to all lines.
 
@@ -247,6 +245,7 @@ class BatchedLineSet:
 
     amplitude_names: tuple[str, ...]
     wavelengths: jax.Array
+    independent_wavelengths: np.ndarray
     constraint_matrix: jax.Array
 
 
@@ -286,9 +285,13 @@ def batched_line_set(model) -> BatchedLineSet | None:
         if spectroscopy.eline_fix_doublets
         else jnp.eye(catalog.n_lines)
     )
+    independent = (
+        catalog.independent_wavelengths if spectroscopy.eline_fix_doublets else catalog.wavelengths
+    )
     return BatchedLineSet(
         amplitude_names=tuple(eline_amplitude_names(catalog)),
         wavelengths=jnp.asarray(catalog.wavelengths),
+        independent_wavelengths=np.asarray(independent, dtype=np.float64),
         constraint_matrix=jnp.asarray(constraint),
     )
 
@@ -416,6 +419,10 @@ def predict_batched_observables(
         the line columns enter the likelihood through :func:`batched_eline_design`.
         ``"phot_fnu"`` of
         shape ``(n_filt,)`` when ``spec.has_phot``, otherwise shape ``(0,)``.
+        With ``eline_mode="marginalized"`` and ``eline_prior_type="model"`` the dict also
+        carries ``"log_line_lums_attenuated"``, shape ``(n_model_lines,)``
+        [dex, log10 erg/s], the attenuated line luminosities of the same forward that
+        paints the spectrum.
 
     Raises
     ------
@@ -506,6 +513,11 @@ def predict_batched_observables(
         amps = jnp.asarray([params[nm] for nm in line_set.amplitude_names])
         spec_fnu = spec_fnu + batched_eline_design(line_set, obs, full) @ amps
     out["spec_fnu"] = spec_fnu * obs.pix_mask
+    if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
+        derived = state.derived
+        out["log_line_lums_attenuated"] = derived.get(
+            "log_line_lums_attenuated", derived.get("log_line_lums")
+        )
     return out
 
 

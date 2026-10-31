@@ -403,11 +403,16 @@ class ModelLinePrior(NamedTuple):
         for a flat line, whose unit coefficient carries no prior.
     gaussian : ndarray, shape (n_lines,)
         One where the line has a Gaussian prior, zero where it is flat.
+    unit_mean : ndarray, shape (n_lines,), optional
+        Prior mean in units of the prior width, :math:`\\mu_l/w_l = 1/(10^{\\Delta} - 1)`,
+        formed without dividing two float32-scale amplitudes. When absent the ratio
+        ``prior_mean / prior_width`` is used.
     """
 
     prior_mean: jnp.ndarray
     prior_width: jnp.ndarray
     gaussian: jnp.ndarray
+    unit_mean: jnp.ndarray | None = None
 
 
 def match_model_lines(
@@ -446,6 +451,42 @@ def match_model_lines(
     nearest = np.argmin(separation, axis=1)
     rows = np.arange(catalog.size)
     return nearest.astype(int), separation[rows, nearest] <= tolerance_aa
+
+
+def model_line_match(model, catalog_wavelengths: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Index the lines a model's nebular backend publishes against a catalog.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Model whose nebular backend publishes a discrete line catalog (Cue).
+    catalog_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum wavelengths of the independent catalog lines [Angstrom].
+
+    Returns
+    -------
+    match_index : ndarray, shape (n_lines,), int
+        Index of the nearest published model line for each catalog line.
+    matched : ndarray, shape (n_lines,), bool
+        True where a published line lies within 1 Angstrom of the catalog line.
+
+    Raises
+    ------
+    ValueError
+        If the model has no nebular backend that publishes a line catalog.
+
+    Notes
+    -----
+    Build-time NumPy function, not JIT-compatible. The per-galaxy likelihood and the
+    batched likelihood both call it, so the Gaussian/flat split is one rule.
+    """
+    backend = getattr(model, "_nebular_backend", None)
+    if backend is None or not hasattr(backend, "published_line_wavelengths"):
+        raise ValueError(
+            'eline_prior_type="model" needs a nebular backend that publishes a line '
+            "catalog (cue); the model's line wavelengths are read from the backend."
+        )
+    return match_model_lines(backend.published_line_wavelengths(), catalog_wavelengths)
 
 
 def model_line_prior(
@@ -528,7 +569,8 @@ def model_line_prior(
         0.0,
     )
     width = jnp.where(gaussian > 0, (10.0**width_dex - 1.0) * mu, 1.0)
-    return ModelLinePrior(prior_mean=mu, prior_width=width, gaussian=gaussian)
+    unit_mean = jnp.where(gaussian * (mu > 0) > 0, 1.0 / (10.0**width_dex - 1.0), 0.0)
+    return ModelLinePrior(prior_mean=mu, prior_width=width, gaussian=gaussian, unit_mean=unit_mean)
 
 
 def unit_model_line_prior(
@@ -570,6 +612,9 @@ def unit_model_line_prior(
     width gives a zero mean with a finite gradient.
 
     **Gradient-safe**: yes, with respect to ``design``, ``noise`` and the prior fields.
+    The coefficient scale is an exact change of variables (the marginal does not depend
+    on it), so it is held out of the gradient; its derivative would divide by the squared
+    line width, which overflows in float32 at F_nu scale.
 
     **vmap**: yes over any leading batch axis.
     """
@@ -582,9 +627,13 @@ def unit_model_line_prior(
     scale_width = jnp.where(max_width > 0, max_width, 1.0)
     return UnitLinePrior(
         design=design * width,
-        prior_mean=jnp.where(has_width, prior.prior_mean / safe_width, 0.0),
+        prior_mean=jnp.where(
+            has_width,
+            prior.prior_mean / safe_width if prior.unit_mean is None else prior.unit_mean,
+            0.0,
+        ),
         prior_precision=jnp.diag(prior.gaussian),
-        scale=jnp.exp(log_noise_mean) / scale_width,
+        scale=jax.lax.stop_gradient(jnp.exp(log_noise_mean) / scale_width),
     )
 
 
