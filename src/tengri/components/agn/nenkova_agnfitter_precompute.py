@@ -105,7 +105,6 @@ def precompute_nenkova_agnfitter_photometry(
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_nenkova_agnfitter_arrays(grid_path)
-    grid = np.asarray(raw["template"], dtype=np.float64)  # (n_incl, n_wave)
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     incl_deg_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
 
@@ -114,7 +113,6 @@ def precompute_nenkova_agnfitter_photometry(
     cos_inc_axis = np.cos(np.deg2rad(incl_deg_axis))
     order = np.argsort(cos_inc_axis)
     cos_inc_axis = cos_inc_axis[order]
-    grid_reordered = grid[order]
 
     # Normalize each template by its frequency integral.
     # This matches nenkova_agnfitter.py's normalization:
@@ -124,9 +122,11 @@ def precompute_nenkova_agnfitter_photometry(
 
     # Each record at unit power times its anisotropy a / mean a (the scalar table),
     # as the runtime path normalizes the records (nenkova_agnfitter.TORUS_INCLINATION).
+    # The records are the runtime grid's (the same order), on the scale node_power_scale
+    # measured them at (rescaled to their peak in a float32 process, as stored for threading).
     runtime_grid = load_nenkova_agnfitter_grid(grid_path)
     scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
-    lnu_grid = _LSUN_ERG * grid_reordered * scale[..., None]
+    lnu_grid = _LSUN_ERG * np.asarray(runtime_grid.template, dtype=np.float64) * scale[..., None]
 
     preint = precompute_template_photometry(
         templates=lnu_grid,

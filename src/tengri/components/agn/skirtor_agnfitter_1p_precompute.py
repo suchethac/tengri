@@ -105,13 +105,15 @@ def precompute_skirtor_agnfitter_1p_photometry(
     """
 
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
-    grid = np.asarray(raw["template"], dtype=np.float64)  # (n_incl, n_wave)
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
 
     # Each record at unit power times its anisotropy a / mean a (the scalar table),
     # as the runtime path normalizes the records (skirtor_agnfitter_1p.TORUS_INCLINATION).
+    # The records are the runtime grid's, on the scale node_power_scale measured them at
+    # (rescaled to their peak in a float32 process, as stored for threading).
     runtime_grid = load_skirtor_agnfitter_1p_grid(grid_path)
+    grid = np.asarray(runtime_grid.template, dtype=np.float64)  # (n_incl, n_wave)
     scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
     lnu_grid = _LSUN_ERG * grid * scale[..., None]
 

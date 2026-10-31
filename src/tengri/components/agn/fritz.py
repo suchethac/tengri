@@ -47,8 +47,7 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import L_SUN as _L_SUN
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._template_grid import native_bolometric_nu, scale_by_torus_power
 from tengri.components.agn._torus_inclination import (
     AnisotropyGrid,
     TorusInclination,
@@ -225,7 +224,8 @@ def _interpolate_and_normalize(
     axes: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
-    l_scale: float,
+    agn_log_lbol: float,
+    agn_torus_frac: float,
 ) -> jnp.ndarray:
     r"""Interpolate a template grid and normalize to physical :math:`L_\nu`.
 
@@ -243,7 +243,7 @@ def _interpolate_and_normalize(
     where :math:`\lambda` is wavelength [Angstrom], :math:`c` the speed of
     light [Angstrom/s], :math:`L_\lambda` the tabulated template and
     :math:`L_\nu` the specific luminosity [erg/s/Hz]. The result is scaled so
-    that :math:`\int L_\nu \, d\nu = l_{\rm scale}` over the template's native grid.
+    that :math:`\int L_\nu \, d\nu = f L_{\rm bol}` over the template's native grid.
 
     Parameters
     ----------
@@ -258,8 +258,10 @@ def _interpolate_and_normalize(
         Target wavelength array [Angstrom].
     point : tuple
         (r_ratio, tau, beta, gamma, oa, psy) query point.
-    l_scale : float
-        Luminosity scale factor [erg/s].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
+    agn_torus_frac : float
+        Fraction :math:`f` of :math:`L_{\rm bol}` the template carries [dimensionless].
 
     Returns
     -------
@@ -271,12 +273,14 @@ def _interpolate_and_normalize(
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
 
     The normalization integral is taken over the template's own native
-    wavelength grid, before resampling, so ``l_scale`` is the template's total
+    wavelength grid, before resampling, so :math:`f L_{\rm bol}` is the template's total
     power whatever the requested grid: a grid that stops short of the template
     (one ending at 30 micron holds as little as 15 % of its power) carries
-    only the part of ``l_scale`` that falls inside it.
+    only the part of it that falls inside it. The power is applied by
+    ``_template_grid.scale_by_torus_power``: a linear product in float64, a ``log10``
+    offset in float32, where ``10**agn_log_lbol L_sun`` alone overflows (#3084).
 
-    Each call renormalizes its template to ``l_scale``, so
+    Each call renormalizes its template to :math:`f L_{\rm bol}`, so
     :func:`fritz_components` carries the shape of the disc and of the dust but
     not the library's disc-to-dust ratio.
 
@@ -300,7 +304,7 @@ def _interpolate_and_normalize(
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
     sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
     sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
-    return l_scale * sed_nu / integral_safe
+    return scale_by_torus_power(sed_nu, integral_safe, agn_log_lbol, agn_torus_frac)
 
 
 class FritzGrid(NamedTuple):
@@ -549,7 +553,8 @@ def fritz_sed_from_grid(
         axes,
         wavelength,
         point,
-        10.0**agn_log_lbol * _L_SUN * agn_torus_frac,
+        agn_log_lbol,
+        agn_torus_frac,
     )
     return shape * pow10(log10_anisotropy(fritz_anisotropy(grid), point, TORUS_INCLINATION))
 
@@ -666,7 +671,6 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             Named tuple with ``disk`` and ``dust`` arrays,
             each shape (n_wave,) in [erg s⁻¹ Hz⁻¹].
         """
-        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         point = (
             agn_fritz_r_ratio,
             agn_fritz_tau,
@@ -675,8 +679,9 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
-        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
+        scale = (agn_log_lbol, agn_torus_frac)
+        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, *scale)
+        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, *scale)
         return FritzComponents(disk=disk, dust=dust)
 
     return fritz_components
