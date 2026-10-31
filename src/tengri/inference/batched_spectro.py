@@ -189,14 +189,19 @@ def _marginal_lines_loglik(
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
-    line_prec = jnp.eye(g_eff.shape[1]) / spectroscopy.eline_prior_sigma**2
+    sigma_p = spectroscopy.eline_prior_sigma
+    # Line amplitudes a = sigma_p * a' carry a unit normal prior: the marginal is invariant
+    # under this change of variables, and the prior precision 1/sigma_p**2 is never formed,
+    # since it overflows float32 at F_nu scale.
+    g_unit = g_eff * sigma_p
+    line_prec = jnp.eye(g_eff.shape[1])
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
-        design = jnp.concatenate([model0[:, None] * basis, g_eff], axis=1)
+        design = jnp.concatenate([model0[:, None] * basis, g_unit], axis=1)
         col_mask = jnp.concatenate([jnp.ones(cal_n_poly, dtype=bool), line_cols])
         precision = block_diag(jnp.eye(cal_n_poly) / cal_prior_sigma**2, line_prec)
     else:
-        design, col_mask, precision = g_eff, line_cols, line_prec
+        design, col_mask, precision = g_unit, line_cols, line_prec
     weight = obs.pix_mask
     n_eff = jnp.sum(weight)
     log_sigma_sum = jnp.sum(weight * jnp.log(obs.sigma))
@@ -208,7 +213,7 @@ def _marginal_lines_loglik(
         pix_mask=obs.pix_mask,
         prior_precision=precision,
         col_mask=col_mask.astype(design.dtype),
-        scale=jnp.exp(log_sigma_sum / n_eff),
+        scale=jnp.exp(log_sigma_sum / n_eff) / sigma_p,
     )
     return result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_sigma_sum
 
