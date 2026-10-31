@@ -168,6 +168,14 @@ def marginalize_linear_nuisance(
     term :math:`+\,n_c \ln s`. This fixes the improper constant of the flat prior to
     the same value in every unit system.
 
+    The Gaussian prior's normalization :math:`(2\pi)^{-k/2}` cancels the
+    :math:`(2\pi)^{k/2}` of the Gaussian integral over the coefficients, so the
+    value is the exact log of the marginal over :math:`\beta` of the data term times
+    the prior, up to the constants of the data term. The determinant lemma then gives the
+    prior terms :math:`-\tfrac12\ln\det\Lambda - \tfrac12\ln\det M` as written, so a
+    Gaussian column with a large width :math:`W` differs from a flat column by
+    :math:`-\ln W`.
+
     A masked coefficient contributes exactly nothing: the identity block makes
     :math:`M'` nonsingular without a floor, and the result equals deleting that column,
     provided its prior-mean entries are zero. The constant
