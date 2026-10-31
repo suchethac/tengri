@@ -45,7 +45,8 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.scale import representable_floor as _representable_floor, whiten as _whiten
+from tengri.observation.linear_marginal import marginalize_linear_nuisance
+from tengri.utils.scale import representable_floor as _representable_floor
 
 #: Guard against ``obs_err == 0`` only. Expressed in **sigma**, not variance:
 #: the previous ``maximum(obs_err**2, 1e-30)`` was a floor on the variance and
@@ -164,6 +165,80 @@ def calibration_polynomial(
     return 1.0 + x * b1 - b2
 
 
+@partial(jax.jit, static_argnames=("n_poly", "n_segments"))
+def calibration_basis(
+    wave: jnp.ndarray,
+    wave_min: float,
+    wave_max: float,
+    n_poly: int,
+    segments: jnp.ndarray | None = None,
+    n_segments: int = 0,
+) -> jnp.ndarray:
+    r"""Chebyshev basis T_1 through T_{n_poly}, optionally prefixed by segment indicators.
+
+    Column :math:`k` of the Chebyshev block is :math:`T_k(x)` with
+    :math:`x = (2\lambda - \lambda_\min - \lambda_\max)/(\lambda_\max - \lambda_\min)`,
+    so that :math:`1 + B\,c` equals :func:`calibration_polynomial` for coefficients
+    :math:`c = (a_1, \ldots, a_{n})`.
+
+    With ``segments`` given, the result is :math:`[\mathbb{1}_{s=1}, \ldots,
+    \mathbb{1}_{s=n_\mathrm{seg}}, T_1(x), \ldots, T_{n_\mathrm{poly}}(x)]`: one
+    indicator column per camera segment, so that the calibration multiplier
+    :math:`\sum_s c_s \mathbb{1}_{s} + \sum_j a_j T_j` carries its constant in the
+    segment scales and no implicit unit term.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n,)
+        Wavelength grid [Angstrom].
+    wave_min : float
+        Lower bound of the normalization interval [Angstrom].
+    wave_max : float
+        Upper bound of the normalization interval [Angstrom].
+    n_poly : int
+        Highest Chebyshev order. Zero leaves only the segment indicators when
+        ``segments`` is given. Static under JIT.
+    segments : array_like of int, shape (n,), optional
+        Camera segment id of every pixel, in ``range(n_segments)``. Default: no
+        segment columns.
+    n_segments : int, optional
+        Number of segment columns. Static under JIT. Used only with ``segments``.
+        Default 0.
+
+    Returns
+    -------
+    ndarray, shape (n, n_poly) or (n, n_segments + n_poly)
+        Basis matrix (dimensionless). Without ``segments`` the columns are
+        :math:`[T_1(x), \ldots, T_{n_\mathrm{poly}}(x)]`; with ``segments`` the
+        indicator columns come first.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``n_poly`` and ``n_segments`` are static; the recurrence
+    is a Python loop over ``n_poly``, so no ``lax.scan`` is traced.
+
+    **Gradient-safe**: yes, differentiable with respect to ``wave``, ``wave_min`` and
+    ``wave_max``. The indicator columns carry no gradient.
+
+    The recurrence is :math:`T_0 = 1`, :math:`T_1 = x`,
+    :math:`T_{k+1} = 2x\,T_k - T_{k-1}`.
+
+    """
+    x = 2.0 * (wave - wave_min) / (wave_max - wave_min) - 1.0
+    columns = []
+    if n_poly >= 1:
+        columns.append(x)
+        t_prev, t_curr = jnp.ones_like(x), x
+        for _ in range(n_poly - 1):
+            t_prev, t_curr = t_curr, 2.0 * x * t_curr - t_prev
+            columns.append(t_curr)
+    chebyshev = jnp.stack(columns, axis=-1) if columns else jnp.zeros((x.shape[0], 0), x.dtype)
+    if segments is None:
+        return chebyshev
+    indicator = (segments[:, None] == jnp.arange(n_segments)).astype(x.dtype)
+    return jnp.concatenate([indicator, chebyshev], axis=-1)
+
+
 @partial(jax.jit, static_argnames=("n_poly",))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
@@ -172,8 +247,11 @@ def marginalize_calibration(
     wavelength: jnp.ndarray,
     n_poly: int = 3,
     prior_sigma: float = 1.0,
+    *,
+    pix_mask: jnp.ndarray | None = None,
+    wave_range: tuple[float, float] | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Analytically marginalize over calibration polynomial coefficients.
+    r"""Analytically marginalize over calibration polynomial coefficients.
 
     Given a model SED m(lambda) and observed spectrum d(lambda) with noise
     sigma(lambda), the calibrated model is C(lambda)*m(lambda) where C is
@@ -202,6 +280,12 @@ def marginalize_calibration(
     prior_sigma : float, optional
         Standard deviation of the Gaussian prior on each coefficient.
         Default 1.0.
+    pix_mask : array_like, shape (n_wave,), optional, keyword-only
+        Pixel mask in {0, 1}. Masked pixels are absent from every term. Default: all
+        pixels used.
+    wave_range : tuple of float, optional, keyword-only
+        ``(wave_min, wave_max)`` [Angstrom] that normalize the Chebyshev coordinate.
+        Default: ``(wavelength.min(), wavelength.max())``.
 
     Returns
     -------
@@ -216,106 +300,199 @@ def marginalize_calibration(
     Notes
     -----
     JIT-compatible: yes, `n_poly` is a static argument.
-    Gradient-safe: no, uses matrix inversion (not safe for gradient).
+    Gradient-safe: yes, inherited from
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
 
-    The marginalized log-likelihood integrates the Gaussian likelihood and
-    Gaussian prior on the polynomial coefficients in closed form via the
-    matrix determinant lemma.
+    The calibration polynomial is the nuisance design
+    :math:`X = m(\lambda)\,T(x)` with :math:`T` from :func:`calibration_basis`, and
+    the marginal is :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+    with prior precision :math:`I/\sigma_{\rm prior}^2` and prior mean zero. The
+    sigma floor, :math:`\sigma \ge` ``representable_floor(1e-300)``, is applied here,
+    before whitening; the primitive itself applies no floor.
+
+    ``wave_range=None`` uses the grid extremes. On a monotonic grid these are the
+    first and last wavelengths.
 
     References
     ----------
     Johnson et al. 2021, ApJS, 254, 22 (Prospector).
 
     """
-    wave_min = wavelength[0]
-    wave_max = wavelength[-1]
+    if wave_range is None:
+        wave_min, wave_max = wavelength.min(), wavelength.max()
+    else:
+        wave_min, wave_max = wave_range
 
-    # Normalized coordinate x in [-1, 1]
-    x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
+    basis = calibration_basis(wavelength, wave_min, wave_max, n_poly)
 
-    # Build Chebyshev basis T_1(x) ... T_{n_poly}(x) via recurrence
-    # T_0 = 1, T_1 = x, T_{k+1} = 2x T_k - T_{k-1}
-    def _cheb_step(carry, _k):
-        """Execute one step of the Chebyshev recurrence to build basis functions."""
-        t_prev, t_curr = carry
-        t_next = 2.0 * x * t_curr - t_prev
-        return (t_curr, t_next), t_next
-
-    t0 = jnp.ones_like(x)
-    t1 = x
-    init = (t0, t1)
-
-    # We need T_1 through T_{n_poly}. T_1 = x is already computed.
-    # Scan generates T_2 ... T_{n_poly}.
-    _, higher = jax.lax.scan(_cheb_step, init, jnp.arange(2, n_poly + 1))
-    # basis shape: (n_poly, n_wave), rows are T_1, T_2, ..., T_{n_poly}
-    basis = jnp.concatenate([t1[jnp.newaxis], higher], axis=0)
-
-    # Whitened weights. NEVER form 1/sigma**2 (#1588): it is ~1e59 at a real
-    # flux uncertainty, and the variance-domain floor this replaced
-    # (``maximum(obs_err**2, 1e-30)``) bound on *every pixel of every realistic
-    # spectrum* (sigma < 1e-15 trips it) pinning inv_var to exactly 1e30 in
-    # **float64**. The data term then lost to the prior and the recovered
-    # polynomial collapsed toward zero: c_hat[0] 5.0e-02 -> 7.5e-04 at
-    # F_lambda ~1e-17, and -> 7.6e-26 at F_nu ~1e-28. Guard only against
-    # sigma == 0, in the sigma domain, at the working dtype's smallest normal.
+    # Guard only against sigma == 0, in the sigma domain, at the working dtype's
+    # smallest normal. Never a variance floor (#1588).
     err_safe = jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))
 
-    # Design matrix: D_jk = sum_i [T_j(x_i) * m_i * T_k(x_i) * m_i / sigma_i^2]
-    # = sum_i [(T_j * m/sigma) * (T_k * m/sigma)]
-    weighted_model = _whiten(model_flux, err_safe)  # m / sigma
-    # B_{j,i} = T_j(x_i) * m(x_i) / sigma(x_i)
-    b_matrix = basis * weighted_model[jnp.newaxis, :]  # (n_poly, n_wave)
-
-    # A = B @ B^T + (1/prior_sigma^2) * I
-    a_matrix = b_matrix @ b_matrix.T  # (n_poly, n_poly)
-    prior_precision = 1.0 / (prior_sigma**2)
-    a_matrix = a_matrix + prior_precision * jnp.eye(a_matrix.shape[0])
-
-    # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
-    residual = obs_flux - model_flux
-    # r_j = sum_i [T_j * (m/sigma) * ((d-m)/sigma)], algebraically the same as
-    # T_j * m * (d-m) / sigma^2, without ever forming 1/sigma^2.
-    rhs = jnp.sum(
-        basis * weighted_model[jnp.newaxis, :] * _whiten(residual, err_safe)[jnp.newaxis, :],
-        axis=1,
-    )  # (n_poly,)
-
-    # Solve for MAP coefficients: A c_hat = rhs
-    c_hat = jax.numpy.linalg.solve(a_matrix, rhs)
-
-    # Posterior covariance Sigma_post = A^{-1}
-    # For c_hat_err we need diag(A^{-1}), computed via solve against identity
-    sigma_post = jax.numpy.linalg.solve(a_matrix, jnp.eye(a_matrix.shape[0]))
-    c_hat_err = jnp.sqrt(jnp.maximum(jnp.diag(sigma_post), 0.0))
-
-    # --- Marginalized log-likelihood ---
-
-    # Calibrated model at c_hat
-    cal_poly = 1.0 + jnp.dot(c_hat, basis)  # (n_wave,)
-    model_cal = cal_poly * model_flux
-    chi2 = jnp.sum(_whiten(obs_flux - model_cal, err_safe) ** 2)
-
-    # Prior penalty: c_hat^T Lambda^{-1} c_hat
-    prior_penalty = prior_precision * jnp.dot(c_hat, c_hat)
-
-    # Log-determinant terms
-    # ln|Sigma_post| = -ln|A|, ln|Lambda| = n_poly * ln(prior_sigma^2)
-    _sign_a, logdet_a = jnp.linalg.slogdet(a_matrix)
-    log_det_sigma_post = -logdet_a  # ln|A^{-1}|
-    log_det_lambda = n_poly * jnp.log(prior_sigma**2)
-
-    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i)
-    n_wave = wavelength.shape[0]
-    # ``err_safe``, not ``obs_err``: the same zero the whitening guards would
-    # otherwise make this term -inf while chi2 stayed finite.
-    log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(err_safe))
-
-    log_likelihood_marginal = log_norm - 0.5 * (
-        chi2 + prior_penalty - log_det_sigma_post + log_det_lambda
+    result = marginalize_linear_nuisance(
+        obs_flux,
+        model_flux,
+        model_flux[:, jnp.newaxis] * basis,
+        sigma=err_safe,
+        pix_mask=pix_mask,
+        prior_precision=jnp.eye(n_poly) / prior_sigma**2,
     )
+    c_hat_err = jnp.sqrt(jnp.diag(result.coef_cov))
+    return result.log_like, result.coef_hat, c_hat_err
 
-    return log_likelihood_marginal, c_hat, c_hat_err
+
+@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior"))
+def marginalize_calibration_segments(
+    model_flux: jnp.ndarray,
+    obs_flux: jnp.ndarray,
+    obs_err: jnp.ndarray,
+    wavelength: jnp.ndarray,
+    segments: jnp.ndarray,
+    *,
+    n_segments: int,
+    n_poly: int = 0,
+    prior_sigma: float = 1.0,
+    cal_prior: str = "gaussian",
+    pix_mask: jnp.ndarray | None = None,
+    wave_range: tuple[float, float] | None = None,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    r"""Marginalize per-segment calibration scales and a Chebyshev tilt in closed form.
+
+    The calibrated model of a multi-camera spectrum is
+    :math:`M(\lambda) = \sum_s c_s \mathbb{1}_{\mathrm{seg}(\lambda)=s} + \sum_j a_j T_j(x)`
+    times the model flux, with one free scale :math:`c_s` per camera segment and a
+    shared tilt of order ``n_poly``. Every column is linear in the coefficients, so the
+    data term is :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+    with no fixed offset.
+
+    Parameters
+    ----------
+    model_flux : array_like, shape (n,)
+        Physical model spectrum [data flux units].
+    obs_flux : array_like, shape (n,)
+        Observed spectrum [data flux units].
+    obs_err : array_like, shape (n,)
+        One-sigma uncertainties [data flux units].
+    wavelength : array_like, shape (n,)
+        Wavelength grid [Angstrom]; normalizes the Chebyshev tilt.
+    segments : array_like of int, shape (n,)
+        Camera segment id of every pixel, in ``range(n_segments)``.
+    n_segments : int, keyword-only
+        Number of segment scales. Static under JIT.
+    n_poly : int, keyword-only
+        Order of the shared Chebyshev tilt. Zero keeps only the segment scales.
+        Static under JIT. Default 0.
+    prior_sigma : float, keyword-only
+        Width of the Gaussian prior on each coefficient when ``cal_prior="gaussian"``.
+        Default 1.0.
+    cal_prior : {"gaussian", "scale_free"}, keyword-only
+        ``"gaussian"`` puts :math:`\mathcal{N}(0, \sigma_p^2)` on each segment deviation
+        :math:`u_s = s_s - 1` and on each tilt coefficient, so each segment scale
+        :math:`s_s` has the prior :math:`\mathcal{N}(1, \sigma_p^2)`. ``"scale_free"``
+        puts a flat prior on the coefficients in data-flux units: every calibration
+        column is divided by :math:`a = \sum_i w_i m_i / N_\mathrm{eff}`, the masked
+        mean model flux, and the flat-prior Jacobian :math:`k\ln a` is added, where
+        :math:`k` counts only the calibration columns. Default ``"gaussian"``.
+    pix_mask : array_like, shape (n,), optional, keyword-only
+        Pixel mask in {0, 1}. Masked pixels are absent from every term. Default: all
+        pixels used.
+    wave_range : tuple of float, optional, keyword-only
+        ``(wave_min, wave_max)`` [Angstrom] normalizing the tilt. Default: the grid
+        extremes.
+
+    Returns
+    -------
+    log_likelihood_marginal : ndarray, shape ()
+        Marginal log-likelihood with the calibration coefficients integrated out
+        (dimensionless).
+    coef_hat : ndarray, shape (n_segments + n_poly,)
+        Posterior mean of the coefficients. For ``"gaussian"`` the first ``n_segments``
+        are the segment deviations :math:`u_s`, so the scales are ``1 + coef_hat``, and
+        the rest are the tilt coefficients. For ``"scale_free"`` they are in data-flux
+        units, and the multiplier coefficients are ``coef_hat / a``.
+    coef_err : ndarray, shape (n_segments + n_poly,)
+        Posterior standard deviations of the coefficients, in the units of
+        ``coef_hat``.
+
+    Raises
+    ------
+    ValueError
+        If ``cal_prior`` is neither ``"gaussian"`` nor ``"scale_free"``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``n_segments``, ``n_poly`` and ``cal_prior`` are static.
+
+    **Gradient-safe**: yes, with respect to ``model_flux``, ``obs_flux`` and ``obs_err``,
+    inherited from :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
+    The ``"scale_free"`` branch passes the normalization as the primitive's coefficient
+    scale, so the whitened design stays order unity when the flux is far below unity.
+
+    **vmap**: yes over any leading batch axis.
+
+    The data model is :math:`d = w\,\cdot\,M\,m + \epsilon`, with :math:`\epsilon` drawn
+    from :math:`\mathcal{N}(0, \sigma^2)`. The offset is :math:`m` and the segment
+    columns carry :math:`u_s = s_s - 1`, which is an exact reparametrization of the
+    :math:`\mathcal{N}(1, \sigma_p^2)` prior on :math:`s_s`. Keeping the offset at the
+    model, rather than zero with the scale in the columns, keeps the residual small so
+    float32 does not cancel two large sums of squares. The scale-free Jacobian is the change of
+    variables from the multiplier coefficients :math:`c` to data-flux coefficients
+    :math:`\beta = a\,c`, which contributes :math:`+k\ln a` to the log-density. Under
+    rescaling of the model, data and errors by a common factor :math:`\lambda`, the
+    marginal changes by :math:`(k - N_\mathrm{eff})\ln\lambda`: the density of the
+    data moves with its units and the flat coefficient prior with the calibration
+    columns only.
+
+    """
+    if cal_prior not in ("gaussian", "scale_free"):
+        raise ValueError(f"cal_prior must be 'gaussian' or 'scale_free', got {cal_prior!r}")
+    if wave_range is None:
+        wave_min, wave_max = wavelength.min(), wavelength.max()
+    else:
+        wave_min, wave_max = wave_range
+
+    n_cal = n_segments + n_poly
+    weight = jnp.ones_like(model_flux) if pix_mask is None else pix_mask
+    n_eff = jnp.sum(weight)
+    err_safe = jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))
+    # Whiten by the masked mean sigma before the primitive: the data, model and
+    # sigma are divided by one common unit, and the exact change of the marginal is
+    # added back below. Keeps the whitened design representable at flux scale.
+    unit = jnp.sum(weight * err_safe) / n_eff
+    model_n = model_flux / unit
+    data_n = obs_flux / unit
+    err_n = err_safe / unit
+
+    basis = calibration_basis(
+        wavelength, wave_min, wave_max, n_poly, segments=segments, n_segments=n_segments
+    )
+    design = model_n[:, jnp.newaxis] * basis
+
+    if cal_prior == "gaussian":
+        result = marginalize_linear_nuisance(
+            data_n,
+            model_n,
+            design,
+            sigma=err_n,
+            pix_mask=pix_mask,
+            prior_precision=jnp.eye(n_cal) / prior_sigma**2,
+        )
+        log_like = result.log_like - n_eff * jnp.log(unit)
+        return log_like, result.coef_hat, jnp.sqrt(jnp.diag(result.coef_cov))
+
+    mean_model = jnp.sum(weight * model_n) / n_eff
+    result = marginalize_linear_nuisance(
+        data_n,
+        model_n,
+        design / mean_model,
+        sigma=err_n,
+        pix_mask=pix_mask,
+        scale=mean_model,
+    )
+    log_like = result.log_like + (n_cal - n_eff) * jnp.log(unit)
+    coef_hat = unit * result.coef_hat
+    coef_err = unit * jnp.sqrt(jnp.diag(result.coef_cov))
+    return log_like, coef_hat, coef_err
 
 
 @jax.jit

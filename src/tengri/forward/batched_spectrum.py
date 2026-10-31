@@ -38,6 +38,14 @@ the edge count, since its declared ratio parameters fix the bin count; the
 stellar component refuses a ladder of any other length, and any SFH type
 outside ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``).
 
+Per-galaxy Milky Way foreground
+-------------------------------
+The template fixes the foreground law and R_V; E(B-V) is a traced per-galaxy leaf
+(``ebmv_mw`` of :class:`~tengri.observation.batched.GalaxySpectrum`, a ``(B,)`` array on
+the batch). The screen multiplies the spectrum and the photometry of each galaxy at its own
+observed wavelengths. A bucket whose galaxies carry no ``ebmv_mw`` compiles without the
+screen. A template with a nonzero foreground E(B-V) refuses galaxies that do not carry their own.
+
 Flux-conserving mode
 --------------------
 The resample mode is not a caller choice. :func:`~tengri.observation.batched.build_spectro_batches`
@@ -56,15 +64,28 @@ a :class:`~tengri.observation.batched.SpectroBatchSpec`.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.dust.foreground import (
+    combine_observed_transmission,
+    foreground_rest_transmission,
+)
 from tengri.components.stellar.component import RUNTIME_SFH_BIN_EDGES_KEY
 from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec, require_spec
+from tengri.observation.eline_marginalization import (
+    apply_doublet_constraints,
+    build_eline_design_matrix,
+    eline_amplitude_names,
+)
+
+# Prefix of the per-line amplitude parameters of the fitted emission-line mode.
+_ELINE_AMP_PREFIX = "eline_amp_"
 
 # Observation channels the batched Gaussian likelihood does not evaluate. A template
 # that configures one would be fitted without it, silently, so it is refused.
@@ -84,8 +105,11 @@ def check_template_model(model) -> None:
     model : SEDModel
         Template model. Its redshift must be free, its spectroscopy must be
         configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
-        line fluxes, line ratios, spectral indices, emission-line fitting, a
-        spectral covariance or a Student-t or calibration-floor noise model.
+        line fluxes, line ratios, spectral indices, emission lines with a Cloudy
+        prior, broad emission lines (``eline_broad``), a spectral covariance or a
+        Student-t or calibration-floor noise model. Emission lines with
+        ``eline_mode='fitted'`` or ``'marginalized'`` (flat prior) and
+        ``eline_broad=False`` are accepted.
 
     Raises
     ------
@@ -123,16 +147,22 @@ def check_template_model(model) -> None:
             "template model has a spectral covariance (correlated noise), which the "
             "batched Gaussian likelihood does not evaluate; use diagonal noise"
         )
-    if spectroscopy.eline_mode != "off":
+    if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "cloudy":
         raise ValueError(
-            f"template model fits emission lines (eline_mode={spectroscopy.eline_mode!r}), "
-            "which the batched likelihood does not evaluate; use eline_mode='off'"
+            "template model marginalizes emission lines with a Cloudy prior "
+            "(eline_prior_type='cloudy'), which the batched likelihood does not evaluate; "
+            "use eline_prior_type='flat', or eline_mode='fitted' or 'off'"
+        )
+    if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
+        raise ValueError(
+            "template model fits emission lines with eline_broad=True, which the batched "
+            "likelihood does not evaluate; use eline_broad=False"
         )
     for name in _UNSUPPORTED_CHANNELS:
         if getattr(observation, name, None) is not None:
             raise ValueError(
                 f"template model configures observation.{name}, which the batched "
-                "likelihood does not evaluate"
+                "likelihood does not evaluate; remove it from the template"
             )
     noise = observation.noise
     if noise is not None and (
@@ -140,7 +170,8 @@ def check_template_model(model) -> None:
     ):
         raise ValueError(
             "template model has a Student-t or calibration-floor noise model, which the "
-            "batched Gaussian likelihood does not evaluate"
+            "batched Gaussian likelihood does not evaluate; use diagonal Gaussian noise "
+            "with a zero calibration floor"
         )
 
 
@@ -176,6 +207,12 @@ def require_model_spec(model, spec) -> SpectroBatchSpec:
             "this bucket's resample mode is unresolved (it was built without the "
             "template); rebuild it with build_spectro_batches(..., model=template)"
         )
+    expected_lines = _template_line_count(model)
+    if spec.n_lines != expected_lines:
+        raise ValueError(
+            f"bucket n_lines={spec.n_lines} disagrees with the template model "
+            f"({expected_lines}); rebuild the batch with model=template"
+        )
     template_bins = int(model._lsf_n_bins)
     if spec.lsf_n_bins != template_bins:
         raise ValueError(
@@ -192,6 +229,140 @@ def require_model_spec(model, spec) -> SpectroBatchSpec:
                 f"{int(photometry.n_filters)}"
             )
     return spec
+
+
+@dataclass(frozen=True)
+class BatchedLineSet:
+    """Emission-line data of a template, read once outside the trace.
+
+    Attributes
+    ----------
+    amplitude_names : tuple of str
+        ``eline_amp_<name>`` keys of the independent lines, in column order.
+    wavelengths : ndarray, shape (n_lines,)
+        Rest-frame vacuum line centers [Angstrom] of the full catalog.
+    constraint_matrix : ndarray, shape (n_lines, n_independent)
+        Doublet constraint matrix; maps independent amplitudes to all lines.
+
+    Notes
+    -----
+    Frozen arrays are closed over by the compiled function; they carry no
+    per-galaxy data.
+    """
+
+    amplitude_names: tuple[str, ...]
+    wavelengths: jax.Array
+    constraint_matrix: jax.Array
+
+
+def _template_line_count(model) -> int:
+    """Return the number of catalog lines the template fits, or 0 when lines are off."""
+    spectroscopy = model.observation.spectroscopy
+    if spectroscopy.eline_mode == "off":
+        return 0
+    return int(spectroscopy.effective_catalog.n_lines)
+
+
+def batched_line_set(model) -> BatchedLineSet | None:
+    """Return the template's :class:`BatchedLineSet`, or ``None`` when lines are off.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model (see :func:`check_template_model`).
+
+    Returns
+    -------
+    BatchedLineSet or None
+        ``None`` when ``eline_mode == "off"``.
+
+    Notes
+    -----
+    Build-time Python function, not JIT-compatible: it reads the line catalog.
+    Mirrors ``Fitter._init_eline_arrays`` for the line centers and the constraint
+    matrix.
+    """
+    spectroscopy = model.observation.spectroscopy
+    if spectroscopy.eline_mode == "off":
+        return None
+    catalog = spectroscopy.effective_catalog
+    constraint = (
+        catalog.build_constraint_matrix()
+        if spectroscopy.eline_fix_doublets
+        else jnp.eye(catalog.n_lines)
+    )
+    return BatchedLineSet(
+        amplitude_names=tuple(eline_amplitude_names(catalog)),
+        wavelengths=jnp.asarray(catalog.wavelengths),
+        constraint_matrix=jnp.asarray(constraint),
+    )
+
+
+def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: dict) -> jax.Array:
+    r"""Return the doublet-constrained line design matrix of one galaxy.
+
+    Parameters
+    ----------
+    line_set : BatchedLineSet
+        Template line data from :func:`batched_line_set`.
+    obs : SpectroBatch
+        One galaxy, without the batch axis. Supplies the observed grid ``wave``,
+        the redshift ``z``, the resolution ``eline_resolution``, the pixel mask
+        ``pix_mask`` and the line mask ``line_mask``.
+    params : dict
+        Parameter values; ``eline_sigma_kms`` and ``eline_delta_v_kms`` default
+        to zero when absent.
+
+    Returns
+    -------
+    ndarray, shape (n_max, n_independent)
+        Design matrix :math:`\mathbf{G}_\mathrm{eff} = \mathbf{G}\,\mathbf{C}` with
+        padded pixels and unused lines set to zero.
+
+    Notes
+    -----
+    Each column of :math:`\mathbf{G}` is a unit-area Gaussian profile,
+
+    .. math::
+
+        G_{ij} = m_i\, p_j\, \frac{\exp\left[-\tfrac{1}{2}
+        \left(\frac{\lambda_i - \mu_j}{\sigma_j}\right)^2\right]}
+        {\sqrt{2\pi}\,\sigma_j}, \qquad
+        \mu_j = \lambda_j^{\rm rest}(1+z)\left(1+\frac{\Delta v}{c}\right),
+        \qquad
+        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2.355\,R}\right)^2
+        + \left(\frac{\lambda_j^{\rm obs}\,\sigma_v}{c}\right)^2},
+        \qquad \lambda_j^{\rm obs} = \lambda_j^{\rm rest}(1+z),
+
+    where :math:`\lambda_i` is the observed pixel wavelength [Angstrom],
+    :math:`\lambda_j^{\rm rest}` the rest vacuum line center [Angstrom],
+    :math:`z` the redshift [dimensionless], :math:`R` the spectral resolution
+    [dimensionless], :math:`\sigma_v` the intrinsic broadening
+    ``eline_sigma_kms`` [km/s], :math:`\Delta v` the velocity offset
+    ``eline_delta_v_kms`` [km/s] and :math:`c` the speed of light [km/s].
+    :math:`m_i` is ``pix_mask`` (1 on a good real pixel) and :math:`p_j` is
+    ``line_mask`` (1 when line :math:`j` is redshifted onto the real grid).
+    :math:`\mathbf{C}` is the doublet constraint matrix, so each column of
+    :math:`\mathbf{G}_\mathrm{eff}` is one independent amplitude's profile.
+    The profile is the one of
+    ``tengri.observation.eline_marginalization.build_eline_design_matrix``.
+
+    **JIT-compatible**: yes. The catalog and constraint matrix come from
+    ``line_set`` and are closed over; the per-galaxy arrays are traced.
+    **Gradient-safe**: yes, with respect to ``sigma`` and the redshift. The masks
+    are constants, so a zero mask gives an exactly zero column.
+    **vmap-compatible**: yes, over the galaxy axis.
+    """
+    G = build_eline_design_matrix(
+        obs.wave,
+        line_set.wavelengths,
+        obs.eline_resolution,
+        obs.z,
+        params.get("eline_sigma_kms", 0.0),
+        params.get("eline_delta_v_kms", 0.0),
+    )
+    G = G * obs.line_mask[None, :] * obs.pix_mask[:, None]
+    return apply_doublet_constraints(G, line_set.constraint_matrix)
 
 
 def _resolution_for(model, spec: SpectroBatchSpec, obs: SpectroBatch):
@@ -215,6 +386,7 @@ def predict_batched_observables(
     spec: SpectroBatchSpec,
     *,
     threaded: tuple[Any, Any, Any] | None = None,
+    line_set: BatchedLineSet | None = None,
 ) -> dict[str, jax.Array]:
     """Forward spectrum (and photometry) for one galaxy from its batch slice.
 
@@ -234,13 +406,21 @@ def predict_batched_observables(
     threaded : tuple, optional
         ``(ssp_data, template_data, ztable_data)`` from
         ``model._resolve_threaded_data``. Resolved from the model when ``None``.
+    line_set : BatchedLineSet, optional
+        Template line data from :func:`batched_line_set`. Built from the model
+        when ``None`` and the template fits lines.
 
     Returns
     -------
     dict
         ``"spec_fnu"`` of shape ``(n_max,)``, F_nu [erg/s/cm^2/Hz], zero on padded
-        and masked pixels. ``"phot_fnu"`` of shape ``(n_filt,)`` when ``spec.has_phot``,
-        otherwise shape ``(0,)``.
+        and masked pixels. With ``eline_mode="fitted"`` the line model
+        ``G_eff @ a`` is added to the calibrated continuum before the pixel mask,
+        with ``a`` the ``eline_amp_*`` entries of ``params``. With
+        ``eline_mode="marginalized"`` ``spec_fnu`` is the calibrated continuum alone:
+        the line columns enter the likelihood through :func:`batched_eline_design`.
+        ``"phot_fnu"`` of
+        shape ``(n_filt,)`` when ``spec.has_phot``, otherwise shape ``(0,)``.
 
     Raises
     ------
@@ -275,7 +455,11 @@ def predict_batched_observables(
         threaded = model._resolve_threaded_data(None, None, None)
     ssp_data, template_data, ztable_data = threaded
 
-    free = {k: v for k, v in params.items() if k != "redshift"}
+    if line_set is None:
+        line_set = batched_line_set(model)
+    free = {
+        k: v for k, v in params.items() if k != "redshift" and not k.startswith(_ELINE_AMP_PREFIX)
+    }
     fixed = {**dict(model.spec.get_fixed_values()), "redshift": obs.z}
     if spec.n_sfh_edges:
         fixed[RUNTIME_SFH_BIN_EDGES_KEY] = obs.sfh_bin_edges_gyr
@@ -290,10 +474,21 @@ def predict_batched_observables(
     full = {**fixed, **free}
 
     z = obs.z
+    if spec.has_foreground:
+        screen = foreground_rest_transmission(
+            state.wave,
+            z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
+        )
+        state = state.with_(derived=state.derived.with_(foreground_transmission=screen))
     dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     sed_rest = state.sed_intrinsic
     wave_rest = state.wave
-    igm_trans = state.derived.get("igm_transmission", None) if state.derived is not None else None
+    igm_trans = combine_observed_transmission(
+        state.derived.get("igm_transmission", None), state.derived.get("foreground_transmission")
+    )
 
     out: dict[str, jax.Array] = {}
     if spec.has_phot:
@@ -323,6 +518,9 @@ def predict_batched_observables(
         lsf_pad_pixels=spec.lsf_pad_pixels,
         nebular_lines=spectroscopy.nebular_lines,
     )
+    if line_set is not None and spectroscopy.eline_mode == "fitted":
+        amps = jnp.asarray([params[nm] for nm in line_set.amplitude_names])
+        spec_fnu = spec_fnu + batched_eline_design(line_set, obs, full) @ amps
     out["spec_fnu"] = spec_fnu * obs.pix_mask
     return out
 
@@ -370,8 +568,9 @@ def make_batched_predict(
     check_template_model(model)
     require_model_spec(model, spec)
     threaded = model.threaded_template_inputs()
+    line_set = batched_line_set(model)
 
     def one(p, o):
-        return predict_batched_observables(model, p, o, spec, threaded=threaded)
+        return predict_batched_observables(model, p, o, spec, threaded=threaded, line_set=line_set)
 
     return jax.jit(jax.vmap(one, in_axes=(0, 0)))
