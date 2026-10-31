@@ -41,8 +41,11 @@
 # ## Setup
 #
 # Every model on this page carries nebular emission: tengri uses Cue (Li et al. 2025)
-# at logU = −2, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at the same
-# values. Residuals in every section therefore include the Cue-vs-Cloudy nebular
+# at neb_logU = −2.3535, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at
+# log U = −2. tengri's `neb_logU` is the inner-face ionisation parameter at R = 10^19 cm
+# (Cue's default), while Synthesizer's U = (α_B^(2/3)/c)(3Q n_H/4π)^(1/3) is evaluated at
+# n_H = 100 cm⁻³, so Synthesizer's log U = −2 corresponds to `neb_logU` = −2.3535 here.
+# Residuals in every section therefore include the Cue-vs-Cloudy nebular
 # difference, quantified in §8.
 
 # %%
@@ -102,12 +105,13 @@ AGE_GYR_FIDUCIAL = 5.0
 AV_FIDUCIAL = 1.0
 Z_FIDUCIAL = 0.02  # absolute metallicity (≈ solar on the Synthesizer grid)
 
-# Fiducial nebular configuration (Cue at logU=-2, solar metallicity, f_esc=0).
+# Fiducial nebular configuration (Cue at neb_logU=-2.3535, the Synthesizer log U = -2
+# equivalent; solar metallicity, f_esc=0).
 # Every model carries this nebular emission; residuals include the Cue-vs-Cloudy
 # difference, quantified in §8.
 NEB_FIDUCIAL = {
     "type": "cue",
-    "logU": Fixed(-2.0),
+    "logU": Fixed(-2.3535),
     "logZ_gas": Fixed(0.0),
     "fesc": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
