@@ -145,7 +145,8 @@ print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cach
 # The catalog fitter's default, `approx="auto"`, selects `WavePrecomp` for photometry fits, so
 # the explicit `approx=WavePrecomp(...)` above names the same lookup table with its redshift
 # grid. `approx=None` runs the exact wave-grid path for single, catalog and population fits
-# alike, at about 2 to 6 times the cost per evaluation.
+# alike. On a two-galaxy test fit with 516 free parameters, the lookup table cut a cold HMC
+# run from 145 s to 19 s.
 
 # %% [markdown]
 # ## A mock catalog

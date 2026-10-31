@@ -165,7 +165,7 @@ tengri.list_nebular_backends()
 #
 # Active galactic nucleus (AGN) is built from six orthogonal stages: disc, narrow-line region, broad-line region, FeII, torus, and attenuation. Each stage has its own registry of swappable blocks. The composable blocks are the recommended interface for mixing and matching AGN components. `recipes.agn_panchromatic()` is one stable composition.
 #
-# The GRAHSP model splits its big-blue-bump (BBB) power at 91.1753 nm, upstream GRAHSP's lumBolBBB cut: `log_L_agn_bol` is the power above the cut and `log_L_agn_bol_ionizing` the power below it. Together they are the whole emitted BBB side.
+# The GRAHSP model splits its big-blue-bump (BBB) power at 91.1753 nm, the cut upstream GRAHSP uses for its bolometric BBB power: `log_L_agn_bol` is the power above the cut and `log_L_agn_bol_ionizing` the power below it. Together they are the whole emitted BBB side.
 
 # %%
 tengri.list_agn_models()
