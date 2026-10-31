@@ -86,6 +86,12 @@ def _power(component, wave=_WAVE):
     return float(np.trapezoid(np.asarray(component, dtype=np.float64)[order], nu[order]))
 
 
+def _host(x):
+    """Host float64 copy of a scalar or array; ``pytest.approx`` on 9.2.0 rejects JAX arrays."""
+    arr = np.asarray(x, dtype=np.float64)
+    return float(arr) if arr.ndim == 0 else arr
+
+
 def _run(
     disc, torus="skirtor", *, frac=_TORUS_FRAC, wave=_WAVE, mbh=8.0, cos_inc=_COS30, **overrides
 ):
@@ -315,7 +321,7 @@ def test_tied_corona_carries_the_model_share_of_the_angle_integrated_disc_power(
     expected = (
         a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
     )
-    assert b == pytest.approx(expected, rel=1e-5)
+    assert _host(b) == pytest.approx(_host(expected), rel=1e-5)
 
 
 @pytest.mark.parametrize("i_deg", [0, 20, 30, 40])
@@ -339,7 +345,7 @@ def test_tied_corona_per_unit_intrinsic_disc_power_is_the_same_at_every_type_1_i
     expected = (
         a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
     )
-    assert b == pytest.approx(expected, rel=1e-9)
+    assert _host(b) == pytest.approx(_host(expected), rel=1e-9)
 
 
 def test_type_2_corona_is_screened_like_any_source_behind_the_torus():
@@ -362,7 +368,7 @@ def test_closed_form_corona_share_matches_the_spectrum(mbh):
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
         jnp.asarray(wide), _LOG_LBOL, agn_log_mbh=mbh
     )
-    assert float(f_corona) == pytest.approx(p_h / (p_d + p_h), rel=3e-3)
+    assert float(f_corona) == pytest.approx(_host(p_h / (p_d + p_h)), rel=3e-3)
     assert (p_d + p_h) / _L_ACC == pytest.approx(1.0, abs=2e-3)
 
 
@@ -476,7 +482,7 @@ def test_skirtor_anchor_is_cigale_value_up_to_its_two_quadratures(library):
     r_face_cigale = np.trapezoid(e0.disk, wl_c) * e0.norm / e30.norm / np.trapezoid(e30.dust, wl_c)
     quadrature = library["R_faceon"] / r_face_cigale
     got = l2500 / agn_power / _pcigale_skirtor_anchor(30)
-    assert got == pytest.approx(interpolation * quadrature, rel=5e-4)
+    assert _host(got) == pytest.approx(_host(interpolation * quadrature), rel=5e-4)
 
 
 @pytest.mark.parametrize("i_deg", [30, 40, 60, 70, 80])
@@ -499,11 +505,11 @@ def test_corona_and_anchors_at_fixed_agn_power_rise_with_inclination_as_in_cigal
         l2500, _ = _anchors("schartmann2005", cos_inc=c)
         return l2500 / _power(_run("schartmann2005", cos_inc=c)[1]["torus"])
 
-    assert per_power(i_deg) / per_power(0) == pytest.approx(cigale, rel=tol)
+    assert _host(per_power(i_deg) / per_power(0)) == pytest.approx(_host(cigale), rel=tol)
     if i_deg <= 40:
         _, b, _, _ = _corona_coefficients(8.0, i_deg)
         _, b0, _, _ = _corona_coefficients(8.0, 0)
-        assert b / b0 == pytest.approx(cigale, rel=tol)
+        assert _host(b / b0) == pytest.approx(_host(cigale), rel=tol)
 
 
 def test_fritz_disc_follows_the_fritz_tie():
@@ -551,7 +557,9 @@ def test_fritz_disc_follows_the_fritz_tie():
             **{k: v for k, v in _BASE.items() if k not in ("agn_torus_frac",)},
         )
         got = _power(comps["disc"]) / _power(comps["torus"])
-        assert got == pytest.approx(cigale_ratio, rel=1e-4), f"log_lbol {log_lbol}: {got}"
+        assert _host(got) == pytest.approx(_host(cigale_ratio), rel=1e-4), (
+            f"log_lbol {log_lbol}: {got}"
+        )
 
 
 def _cos_of_psy(psy_deg):
@@ -614,7 +622,9 @@ def _fritz_accretion_power(psy):
 def test_library_accretion_power_matches_pcigale():
     """The library-derived ``accretion_power`` equals CIGALE's at the nodes used (1e-7)."""
     for psy in (0.001, 70.1):
-        assert _fritz_accretion_power(psy) == pytest.approx(_pcigale_fritz(psy)[2], rel=1e-7)
+        assert _host(_fritz_accretion_power(psy)) == pytest.approx(
+            _host(_pcigale_fritz(psy)[2]), rel=1e-7
+        )
 
 
 @pytest.mark.parametrize("psy", [0.001, 20.1, 50.1, 70.1, 89.99])
@@ -640,7 +650,7 @@ def test_fritz_anchor_is_cigale_value_at_every_viewing_angle(psy):
     shape = np.asarray(block(jnp.asarray(wl), agn_log_lbol=_LOG_LBOL, agn_cos_inc=_COS30))
     exact = float(block(jnp.asarray([2500.0]), agn_log_lbol=_LOG_LBOL, agn_cos_inc=_COS30)[0])
     interpolation = exact / float(np.interp(2500.0, wl, shape))
-    assert l2500 / power / anchor_cigale == pytest.approx(interpolation, rel=2e-5)
+    assert _host(l2500 / power / anchor_cigale) == pytest.approx(_host(interpolation), rel=2e-5)
 
 
 @pytest.mark.parametrize("disc_mbh", [6.0, 8.0, 10.0])
@@ -679,7 +689,7 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
         _WAVE, _LOG_LBOL, agn_log_mbh=disc_mbh
     )
     expected = accretion * _power(comps["torus"]) / ((1.0 - float(f_corona)) * _L_ACC)
-    assert b_corona == pytest.approx(expected, rel=1e-4)
+    assert _host(b_corona) == pytest.approx(_host(expected), rel=1e-4)
 
 
 def test_fritz_disc_is_independent_of_agn_log_lbol_under_the_tie():
@@ -877,7 +887,9 @@ def _debit_fraction(disc):
 def test_line_debit_is_lines_over_the_closed_form_disc_power(disc):
     """``1 - disc_sed / disc_block`` = ``E_lines / L_acc`` to 1e-12."""
     assert disc in protocol.DISC_POWER_BLOCKS
-    assert _debit_fraction(disc) == pytest.approx(_line_power(disc) / _L_ACC, rel=1e-12)
+    assert _host(_debit_fraction(disc)) == pytest.approx(
+        _host(_line_power(disc) / _L_ACC), rel=1e-12
+    )
 
 
 @pytest.mark.parametrize(
