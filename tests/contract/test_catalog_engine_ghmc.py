@@ -138,3 +138,66 @@ def test_hard_wall_keeps_adapted_step_size_and_damping_finite():
     assert bool(jnp.all(jnp.abs(positions) < 1.0))
     assert divergent.dtype == jnp.bool_
     assert divergent.shape == (_N_CHAINS, n_chain)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "MEADS in the catalog engine does not adapt to a sigma=1e-3 target: "
+        "step 5e-7, sd 0.4 at 300 warmup (#3135)"
+    ),
+)
+def test_default_recovers_a_sigma_1e3_gaussian():
+    sigma = 1e-3
+
+    def narrow_logdensity(x, data_args):
+        """Gaussian of width ``sigma`` centred on the galaxy's ``mu``."""
+        return -0.5 * jnp.sum((x - data_args["mu"]) ** 2) / sigma**2
+
+    run_one, _unravel = build_catalog_mcmc_engine(
+        None,
+        "ghmc",
+        n_warmup=300,
+        n_burnin=20,
+        n_samples=150,
+        n_chains=_N_CHAINS,
+        n_superchains=_N_SUPERCHAINS,
+        flat_logdensity=_flat(narrow_logdensity),
+        substitute=_substitute,
+    )
+    centre = jnp.array([2.0, 2.0])
+    positions, _divergent = run_one(
+        centre, jax.random.PRNGKey(6), centre, None, None, None, None, None
+    )
+    draws = np.asarray(positions)
+    assert np.all(np.abs(draws.mean(axis=0) - 2.0) <= 0.05 * sigma)
+    sd = draws.std(axis=0)
+    assert np.all(np.abs(sd / sigma - 1.0) <= 0.2)
+
+
+def test_driver_reports_finite_nested_rhat(synthetic_ssp):
+    from tengri.inference.batched_spectro import fit_spectra_catalog_mcmc
+    from tengri.observation.batched import build_spectro_batches
+    from tests.contract.test_batched_spectro_loglik import _mock_catalog, _record
+    from tests.contract.test_batched_spectrum_forward import _banded, _free_z_model
+
+    mock = _mock_catalog(synthetic_ssp)
+    template = _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
+    batches = build_spectro_batches(
+        [_record(mock[i]) for i in (0, 2)], quantum=128, model=template
+    )
+    result = fit_spectra_catalog_mcmc(
+        template,
+        batches,
+        sampler="ghmc",
+        n_warmup=300,
+        n_burnin=0,
+        n_samples=30,
+        init="map",
+        map_steps=60,
+        n_chains=32,
+        n_superchains=8,
+    )
+    rhat = np.asarray(result["nested_rhat"])
+    assert rhat.shape == (2,)
+    assert np.all(np.isfinite(rhat))
