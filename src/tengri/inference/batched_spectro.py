@@ -33,9 +33,13 @@ parameter path; the MAP never samples it.
 v1 scope
 --------
 Gaussian diagonal noise only. Not covered: covariance matrices, Student-t
-noise, calibration marginalization, emission-line channels, spectral indices,
-and stochastic (GP-field) SFH. A stochastic model raises
-:class:`NotImplementedError`.
+noise, emission-line channels, spectral indices, and stochastic (GP-field)
+SFH. A stochastic model raises :class:`NotImplementedError`.
+
+Calibration marginalization is covered: with ``calibration_marginalize=True``
+the spectral term is the closed-form marginal over a Chebyshev calibration
+polynomial, the same :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+primitive that the per-galaxy calibration-marginalized likelihood evaluates.
 
 JIT note
 --------
@@ -55,6 +59,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.config.exceptions import ConfigError
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
@@ -67,6 +72,8 @@ from tengri.inference.loss_functions import (
     standardized_neg_log_prior,
 )
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
+from tengri.observation.calibration import calibration_basis
+from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian
 
 _REDSHIFT = "redshift"
@@ -79,6 +86,41 @@ def _refuse_stochastic(model) -> None:
             "batched spectroscopic fitting does not support stochastic (GP-field) SFH yet; "
             "use a parametric SFH"
         )
+
+
+def _refuse_calibration_order(model) -> None:
+    """Raise :class:`ConfigError` if the template also fits an explicit calibration polynomial."""
+    spectroscopy = getattr(model.observation, "spectroscopy", None)
+    if spectroscopy is not None and spectroscopy.calibration_order > 0:
+        raise ConfigError(
+            "Cannot enable both explicit calibration fitting (calibration_order > 0) "
+            "and analytic calibration marginalization (calibration_marginalize=True). "
+            "This would double-count the calibration polynomial degrees of freedom.\n\n"
+            "Choose one:\n"
+            "  • To fit calibration coefficients as free parameters:\n"
+            "    Set calibration_marginalize=False (default) and keep "
+            "calibration_order > 0.\n"
+            "  • To marginalize calibration analytically:\n"
+            "    Set calibration_order=0 on your spectroscopy and "
+            "enable calibration_marginalize=True."
+        )
+
+
+def _spectral_marginal_loglik(model_flux, obs: SpectroBatch, n_poly: int, prior_sigma: float):
+    """Marginal log-likelihood of one galaxy's spectrum over a Chebyshev calibration.
+
+    The design is ``model_flux[:, None] * T(x)`` on the real grid's extremes, so padded
+    pixels (zero weight through ``obs.pix_mask``) carry no information.
+    """
+    design = model_flux[:, None] * calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, n_poly)
+    return marginalize_linear_nuisance(
+        data=obs.flux,
+        model0=model_flux,
+        design=design,
+        sigma=obs.sigma,
+        pix_mask=obs.pix_mask,
+        prior_precision=jnp.eye(n_poly) / prior_sigma**2,
+    ).log_like
 
 
 def _free_latent_names(model) -> list[str]:
@@ -98,7 +140,12 @@ def _prepare_template(model) -> Any:
 
 
 def batched_log_likelihood(
-    model, spec: SpectroBatchSpec
+    model,
+    spec: SpectroBatchSpec,
+    *,
+    calibration_marginalize: bool = False,
+    cal_n_poly: int = 3,
+    cal_prior_sigma: float = 1.0,
 ) -> Callable[[dict, SpectroBatch], jax.Array]:
     """Return the one-galaxy Gaussian log-likelihood as a pure JAX function.
 
@@ -110,6 +157,16 @@ def batched_log_likelihood(
     spec : SpectroBatchSpec
         Static bucket key of the batch the function will receive. Its
         ``conserving`` flag selects the pixel integral.
+    calibration_marginalize : bool, optional
+        Replace the spectral Gaussian term by the marginal over a Chebyshev
+        calibration polynomial of order ``cal_n_poly``, integrated out under a
+        Gaussian prior. The template must carry ``calibration_order=0``. Default False.
+    cal_n_poly : int, optional
+        Number of calibration coefficients, T_1 through T_``cal_n_poly``. Used only
+        with ``calibration_marginalize``. Default 3.
+    cal_prior_sigma : float, optional
+        Standard deviation of the Gaussian prior on each calibration coefficient.
+        Used only with ``calibration_marginalize``. Default 1.0.
 
     Returns
     -------
@@ -128,6 +185,9 @@ def batched_log_likelihood(
     ValueError
         If the template fails :func:`check_template_model`, or ``spec`` is not a
         :class:`SpectroBatchSpec`.
+    ConfigError
+        If ``calibration_marginalize`` is set and the template's
+        ``calibration_order`` is above zero (the calibration would be counted twice).
 
     Notes
     -----
@@ -135,13 +195,28 @@ def batched_log_likelihood(
     term uses ``presence=obs.pix_mask``, so padded and masked pixels contribute
     exactly zero to the value and to every gradient. The template's component
     chain is built here, outside the trace.
+
+    With ``calibration_marginalize=False`` the spectral term drops the normalization
+    constant :math:`-\\tfrac12 N \\ln 2\\pi - \\sum_i \\ln\\sigma_i` over the real pixels,
+    as :func:`~tengri.inference.likelihoods.gaussian.diag_gaussian_log_prob` does. With
+    ``calibration_marginalize=True`` the spectral term is a marginal likelihood and
+    keeps that constant, as the per-galaxy ``CalibrationMarginalizedLikelihood`` does,
+    so the two settings differ by that constant and by nothing else. The photometric
+    term is unchanged in both.
     """
     threaded = _prepare_template(model)
     require_model_spec(model, spec)
+    if calibration_marginalize:
+        _refuse_calibration_order(model)
 
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
         out = predict_batched_observables(model, params, obs, spec, threaded=threaded)
-        total = diag_gaussian_log_prob(out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask)
+        if calibration_marginalize:
+            total = _spectral_marginal_loglik(out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma)
+        else:
+            total = diag_gaussian_log_prob(
+                out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask
+            )
         if spec.has_phot:
             total = total + diag_gaussian_log_prob(
                 out["phot_fnu"], obs.phot_flux, obs.phot_err, presence=obs.phot_presence
@@ -152,7 +227,12 @@ def batched_log_likelihood(
 
 
 def batched_neg_log_posterior(
-    model, spec: SpectroBatchSpec
+    model,
+    spec: SpectroBatchSpec,
+    *,
+    calibration_marginalize: bool = False,
+    cal_n_poly: int = 3,
+    cal_prior_sigma: float = 1.0,
 ) -> Callable[[dict, SpectroBatch], jax.Array]:
     """Return the one-galaxy negative log-posterior in standardized space.
 
@@ -162,6 +242,8 @@ def batched_neg_log_posterior(
         Template model (see :func:`batched_log_likelihood`).
     spec : SpectroBatchSpec
         Static bucket key of the batch the function will receive.
+    calibration_marginalize, cal_n_poly, cal_prior_sigma
+        Forwarded to :func:`batched_log_likelihood`.
 
     Returns
     -------
@@ -184,7 +266,13 @@ def batched_neg_log_posterior(
     ``_unstandardize_parameters`` (``tengri.inference.loss_functions``), and only
     the free names are passed on, so fixed values never reach the forward pass.
     """
-    loglik = batched_log_likelihood(model, spec)
+    loglik = batched_log_likelihood(
+        model,
+        spec,
+        calibration_marginalize=calibration_marginalize,
+        cal_n_poly=cal_n_poly,
+        cal_prior_sigma=cal_prior_sigma,
+    )
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
 
@@ -291,7 +379,19 @@ def _fit_chunk(nlp, batch, init, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
-def _fit_bucket(model, spec, batch, *, n_steps, learning_rate, key, chunk_size):
+def _fit_bucket(
+    model,
+    spec,
+    batch,
+    *,
+    n_steps,
+    learning_rate,
+    key,
+    chunk_size,
+    calibration_marginalize=False,
+    cal_n_poly=3,
+    cal_prior_sigma=1.0,
+):
     """Run Adam on one bucket, returning final latents, final nlp and the loss trace.
 
     The initial latents are drawn for the whole bucket and then sliced, so the
@@ -299,7 +399,13 @@ def _fit_bucket(model, spec, batch, *, n_steps, learning_rate, key, chunk_size):
     of at most ``chunk_size`` galaxies, which bounds the peak memory of the
     gradient.
     """
-    nlp = batched_neg_log_posterior(model, spec)
+    nlp = batched_neg_log_posterior(
+        model,
+        spec,
+        calibration_marginalize=calibration_marginalize,
+        cal_n_poly=cal_n_poly,
+        cal_prior_sigma=cal_prior_sigma,
+    )
     n_gal = int(batch.z.shape[0])
     init = init_unbounded_batch(model, n_gal, key)
     step = n_gal if chunk_size is None else int(chunk_size)
@@ -329,6 +435,9 @@ def fit_spectra_map_vmap(
     learning_rate: float = 0.05,
     seed: int = 0,
     chunk_size: int | None = None,
+    calibration_marginalize: bool = False,
+    cal_n_poly: int = 3,
+    cal_prior_sigma: float = 1.0,
 ) -> dict[str, Any]:
     """Batched MAP fit of spectra across galaxies, one Adam scan per bucket.
 
@@ -350,6 +459,13 @@ def fit_spectra_map_vmap(
         Galaxies per ``vmap`` call within a bucket. ``None`` (default) maps the
         whole bucket at once. Smaller chunks bound the peak memory of the gradient
         on a device with little of it; the result does not depend on this value.
+    calibration_marginalize : bool, optional
+        Marginalize a Chebyshev calibration polynomial out of the spectral term, as
+        :func:`batched_log_likelihood` does. Default False.
+    cal_n_poly : int, optional
+        Calibration coefficients when ``calibration_marginalize``. Default 3.
+    cal_prior_sigma : float, optional
+        Prior standard deviation of each calibration coefficient. Default 1.0.
 
     Returns
     -------
@@ -370,6 +486,9 @@ def fit_spectra_map_vmap(
     ValueError
         If the template fails :func:`check_template_model`, ``batches`` is empty,
         or ``chunk_size`` is not a positive integer.
+    ConfigError
+        If ``calibration_marginalize`` is set and the template's
+        ``calibration_order`` is above zero.
 
     Notes
     -----
@@ -380,6 +499,8 @@ def fit_spectra_map_vmap(
     """
     _refuse_stochastic(model)
     check_template_model(model)
+    if calibration_marginalize:
+        _refuse_calibration_order(model)
     if not batches:
         raise ValueError("batches is empty; build it with build_spectro_batches")
     if chunk_size is not None and (not isinstance(chunk_size, int) or chunk_size < 1):
@@ -397,6 +518,9 @@ def fit_spectra_map_vmap(
             learning_rate=learning_rate,
             key=key,
             chunk_size=chunk_size,
+            calibration_marginalize=calibration_marginalize,
+            cal_n_poly=cal_n_poly,
+            cal_prior_sigma=cal_prior_sigma,
         )
         buckets.append(
             {
@@ -419,7 +543,9 @@ def fit_spectra_map_vmap(
     }
 
 
-def _bucket_catalog_inputs(model, spec, batch):
+def _bucket_catalog_inputs(
+    model, spec, batch, *, calibration_marginalize=False, cal_n_poly=3, cal_prior_sigma=1.0
+):
     """Flat log-density and per-galaxy substitution for one bucket's catalog sampler.
 
     Parameters
@@ -449,7 +575,13 @@ def _bucket_catalog_inputs(model, spec, batch):
     :func:`jax.flatten_util.ravel_pytree` on one galaxy's latents, which sorts the
     names, so every flat position maps back to the same named latent.
     """
-    nlp = batched_neg_log_posterior(model, spec)
+    nlp = batched_neg_log_posterior(
+        model,
+        spec,
+        calibration_marginalize=calibration_marginalize,
+        cal_n_poly=cal_n_poly,
+        cal_prior_sigma=cal_prior_sigma,
+    )
     init_one = {n: v[0] for n, v in init_unbounded_batch(model, 1, jax.random.PRNGKey(0)).items()}
     init_flat, unravel_fn = ravel_pytree(init_one)
 
@@ -500,6 +632,9 @@ def fit_spectra_catalog_mcmc(
     init: str = "map",
     map_steps: int = 200,
     batch_size: int | None = None,
+    calibration_marginalize: bool = False,
+    cal_n_poly: int = 3,
+    cal_prior_sigma: float = 1.0,
     **engine_kwargs,
 ) -> dict[str, Any]:
     """Sample every galaxy's spectrum posterior with the catalog MCMC engine.
@@ -537,6 +672,14 @@ def fit_spectra_catalog_mcmc(
         ``vmap`` of NUTS trees waits for its deepest tree and costs memory. On a
         GPU a large value is what buys parallel throughput. The draws do not
         depend on this value, up to floating-point reduction order.
+    calibration_marginalize : bool, optional
+        Marginalize a Chebyshev calibration polynomial out of the spectral term, as
+        :func:`batched_log_likelihood` does. Also applies to the MAP warm start.
+        Default False.
+    cal_n_poly : int, optional
+        Calibration coefficients when ``calibration_marginalize``. Default 3.
+    cal_prior_sigma : float, optional
+        Prior standard deviation of each calibration coefficient. Default 1.0.
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
         ``target_accept_rate`` or ``use_dense``.
@@ -579,14 +722,29 @@ def fit_spectra_catalog_mcmc(
 
     map_params = None
     if init == "map":
-        map_params = fit_spectra_map_vmap(model, batches, n_steps=map_steps, seed=seed)["params"]
+        map_params = fit_spectra_map_vmap(
+            model,
+            batches,
+            n_steps=map_steps,
+            seed=seed,
+            calibration_marginalize=calibration_marginalize,
+            cal_n_poly=cal_n_poly,
+            cal_prior_sigma=cal_prior_sigma,
+        )["params"]
 
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
     per_bucket = []
     for (spec, batch, index), bucket_key in zip(batches, bucket_keys):
         index = np.asarray(index, dtype=int)
         n_gal = int(batch.z.shape[0])
-        flat, substitute = _bucket_catalog_inputs(model, spec, batch)
+        flat, substitute = _bucket_catalog_inputs(
+            model,
+            spec,
+            batch,
+            calibration_marginalize=calibration_marginalize,
+            cal_n_poly=cal_n_poly,
+            cal_prior_sigma=cal_prior_sigma,
+        )
         unravel_fn = flat[1]
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
