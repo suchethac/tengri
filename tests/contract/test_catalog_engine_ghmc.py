@@ -35,12 +35,12 @@ _DIM = 2
 
 
 def _gauss_logdensity(x, data_args):
-    """Standard-normal-shaped log-density centred on the galaxy's ``mu``."""
+    """Standard-normal-shaped log-density centered on the galaxy's ``mu``."""
     return -0.5 * jnp.sum((x - data_args["mu"]) ** 2)
 
 
 def _substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
-    """Per-galaxy data_args: the galaxy's centre only."""
+    """Per-galaxy data_args: the galaxy's center only."""
     return {"mu": data}
 
 
@@ -151,7 +151,7 @@ def test_default_recovers_a_sigma_1e3_gaussian():
     sigma = 1e-3
 
     def narrow_logdensity(x, data_args):
-        """Gaussian of width ``sigma`` centred on the galaxy's ``mu``."""
+        """Gaussian of width ``sigma`` centered on the galaxy's ``mu``."""
         return -0.5 * jnp.sum((x - data_args["mu"]) ** 2) / sigma**2
 
     run_one, _unravel = build_catalog_mcmc_engine(
@@ -165,9 +165,9 @@ def test_default_recovers_a_sigma_1e3_gaussian():
         flat_logdensity=_flat(narrow_logdensity),
         substitute=_substitute,
     )
-    centre = jnp.array([2.0, 2.0])
+    center = jnp.array([2.0, 2.0])
     positions, _divergent = run_one(
-        centre, jax.random.PRNGKey(6), centre, None, None, None, None, None
+        center, jax.random.PRNGKey(6), center, None, None, None, None, None
     )
     draws = np.asarray(positions)
     assert np.all(np.abs(draws.mean(axis=0) - 2.0) <= 0.05 * sigma)
