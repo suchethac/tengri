@@ -752,7 +752,8 @@ def tail_ess(draws: np.ndarray) -> float:
         effective sample size, :math:`\min(\mathrm{ESS}_{q_{0.05}},
         \mathrm{ESS}_{q_{0.95}})`. [draws]. Returns ``np.nan`` when an
         indicator is constant on some chain, since its autocorrelation time
-        is then undefined.
+        is then undefined. A NaN therefore means a chain's quantile indicator is constant,
+        which is a chain that has not mixed, not a defect of the diagnostic.
 
     Notes
     -----
