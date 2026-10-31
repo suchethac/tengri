@@ -634,9 +634,9 @@ def pah_drude(
     **Not energy-balanced standalone**; see the summary above; excluded from
     the cross-model energy-balance contract test for this reason.
 
-    The PAH template is a pure shape (no free axes). The adapter in
-    :mod:`~tengri.components.dust.dust_analytic_precompute` is registered in
-    ``forward/precompute/registry.py``; no kernel consumes its lookups today.
+    The PAH template is a pure shape (no free axes), so the exact all-fixed band response
+    serves it. The :mod:`~tengri.components.dust.dust_analytic_precompute` adapter is not
+    registered in ``forward/precompute/registry.py``.
 
     References
     ----------
