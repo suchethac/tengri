@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Young-fraction coordinates for the continuity SFH (stick-breaking from the youngest bin).
 
 The continuity SFH (:func:`~tengri.components.stellar.sfh.nonparametric.continuity`)
