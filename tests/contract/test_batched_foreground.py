@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Batched path: per-galaxy Milky Way E(B-V) on the foreground screen (#3140).
+
+The template fixes the law and R_V; each galaxy carries its own E(B-V). A batch
+of galaxies with different E(B-V) must reproduce, galaxy by galaxy, a per-galaxy
+model built with that E(B-V), and one compiled predict must serve every E(B-V)
+value of the same spec.
+
+Runs on the synthetic narrow SSP (no ``data/ssp_*.h5`` needed).
+"""
+
+from __future__ import annotations
+
+import dataclasses
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform
+from tengri.forward.batched_spectrum import make_batched_predict
+from tengri.observation.banded import gaussian_resolution_bands
+from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+
+pytestmark = pytest.mark.contract
+
+_N_DIAG = 21
+_R_BANDED = 300.0
+_LAW = "fitzpatrick99"
+
+
+def _banded(wave):
+    return gaussian_resolution_bands(jnp.asarray(wave), _R_BANDED, _N_DIAG)
+
+
+def _template(ssp, wave, foreground=None):
+    spectroscopy = Spectroscopy(
+        wave_obs=jnp.asarray(wave),
+        resample="conserving",
+        resolution_matrix=_banded(wave),
+    )
+    kwargs = {} if foreground is None else {"foreground": foreground}
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(spectroscopy=spectroscopy),
+        sfh={
+            "type": "dpl",
+            "all_params": Fixed(DEFAULT),
+            "sfh_dpl_log_total_mass": Uniform(8.0, 12.0),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(0.0, 0.5),
+        **kwargs,
+    )
+
+
+def _stack(params: dict, batch: int) -> dict:
+    return {k: jnp.broadcast_to(jnp.asarray(v), (batch,)) for k, v in params.items()}
+
+
+@pytest.fixture(scope="module")
+def wave():
+    return np.linspace(4000.0, 7000.0, 160)
+
+
+@pytest.fixture(scope="module")
+def template(synthetic_ssp, wave):
+    return _template(synthetic_ssp, wave, foreground={"ebmv_mw": 0.0, "law": _LAW})
+
+
+def test_two_galaxies_with_their_own_ebmv_match_per_galaxy_models(synthetic_ssp, wave, template):
+    ebmv = [0.05, 0.2]
+    redshifts = [0.05, 0.1]
+    records = [
+        GalaxySpectrum(
+            wave=wave,
+            flux=np.ones(wave.size),
+            ivar=np.ones(wave.size),
+            resolution=_banded(wave),
+            z=z,
+            ebmv_mw=e,
+        )
+        for z, e in zip(redshifts, ebmv)
+    ]
+    ((spec, batch, index),) = build_spectro_batches(records, model=template)
+    np.testing.assert_array_equal(index, [0, 1])
+
+    params = dict(template.spec.sample(jax.random.PRNGKey(0)))
+    predict = make_batched_predict(template, spec)
+    out = np.asarray(predict(_stack(params, 2), batch)["spec_fnu"])
+
+    for i, (z, e) in enumerate(zip(redshifts, ebmv)):
+        ref_model = _template(synthetic_ssp, wave, foreground={"ebmv_mw": e, "law": _LAW})
+        ref = np.asarray(ref_model.predict_spectrum({**params, "redshift": z}))
+        np.testing.assert_allclose(out[i], ref, rtol=1e-10, atol=0.0)
+
+
+def test_one_compile_serves_every_ebmv_value_of_the_spec(synthetic_ssp, wave, template):
+    from jax._src import test_util as jtu
+
+    records = [
+        GalaxySpectrum(
+            wave=wave,
+            flux=np.ones(wave.size),
+            ivar=np.ones(wave.size),
+            resolution=_banded(wave),
+            z=0.05,
+            ebmv_mw=e,
+        )
+        for e in (0.05, 0.2)
+    ]
+    ((spec, batch, _),) = build_spectro_batches(records, model=template)
+    params = _stack(dict(template.spec.sample(jax.random.PRNGKey(0))), 2)
+    predict = make_batched_predict(template, spec)
+    predict(params, batch)
+    other = dataclasses.replace(batch, ebmv_mw=jnp.asarray([0.1, 0.3]))
+    with jtu.count_jit_compilation_cache_miss() as counter:
+        predict(params, other)
+    assert counter() == 0
+
+
+def test_template_screen_with_galaxy_without_ebmv_raises(synthetic_ssp, wave):
+    loaded = _template(synthetic_ssp, wave, foreground={"ebmv_mw": 0.1, "law": _LAW})
+    record = GalaxySpectrum(
+        wave=wave,
+        flux=np.ones(wave.size),
+        ivar=np.ones(wave.size),
+        resolution=_banded(wave),
+        z=0.05,
+    )
+    with pytest.raises(ValueError, match="E\\(B-V\\)"):
+        build_spectro_batches([record], model=loaded)
