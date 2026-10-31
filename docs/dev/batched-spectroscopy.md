@@ -163,3 +163,11 @@ a leaf, if it changes a shape or a branch.
   mode (`jax.enable_x64(False)`) returns NaN for this fixture's flux scale on the
   batched forward, for the plain Gaussian term as well as the marginal, so the float32
   test is not yet green.
+- 2026-11-01, #3138: `eline_prior_type="model"` on the per-galaxy line-only marginalized
+  likelihood. Each line has a Gaussian prior centred on the model's attenuated line
+  luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.
+  The mapping is checked against the lines-on minus lines-off spectrum over the H-beta
+  window (ratio 0.991). The batched path refuses this prior type, so a batched fit never
+  silently uses the flat prior. Not yet done: the batched and calibration-joint paths,
+  the `eline_aperture_frac` parameter declaration (the closure reads `params`), and the
+  float32 test for the batched path.
