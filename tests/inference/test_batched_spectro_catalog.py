@@ -139,14 +139,12 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
     assert seen == [None, None]
 
 
-_LINE_AMPS = {
-    "eline_amp_Hbeta": 1.0e-14,
-    "eline_amp_OIII_5007": 2.0e-14,
-    "eline_amp_Halpha": 3.0e-14,
-}
 _LINE_PRIOR = 1.0e-14
-_LINE_NOISE = 1.0e-17
-_LINE_MASSES = (10.0, 10.3, 9.7)
+_MATCHED_WARMUP = 300
+_MATCHED_N_SAMPLES = 600  # raise once to 1200 if Monte Carlo noise alone bites
+_MATCHED_MASSES = (10.0, 10.3, 9.7)
+_MATCHED_CONTINUUM_SNR = 5.0  # continuum level at 5000 A over the per-pixel noise
+_MATCHED_LINE_SNR = 20.0  # matched-filter S/N of every injected line
 
 
 def _assert_chain_moved(post, names, n_samples, galaxy):
@@ -161,12 +159,41 @@ def _assert_chain_moved(post, names, n_samples, galaxy):
             raise AssertionError(f"galaxy {galaxy} chain froze for {name}")
 
 
-def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
-    """Batched catalog NUTS and per-galaxy Fitter NUTS on the same fitted-line mocks.
+def _matched_mock(ssp, template, wave, z, mass, rng):
+    """Template-generated mock at redshift ``z`` with lines at matched-filter S/N 20.
 
-    Each galaxy is the template continuum at its own redshift plus the injected line
-    profiles and Gaussian noise. The batched sampler and one :class:`Fitter` per galaxy
-    draw the same number of warmup and kept samples.
+    The continuum comes from the free-redshift template, the model the batched path
+    evaluates. The noise is the continuum at 5000 A divided by the continuum S/N. Each
+    line amplitude makes its matched-filter S/N ``a_j ||g_j|| / sigma`` equal
+    :data:`_MATCHED_LINE_SNR`, where ``g_j`` is the design column of line ``j``.
+
+    Returns
+    -------
+    flux : ndarray, shape (n_wave,)
+        Mock spectrum, continuum plus lines plus noise.
+    sigma : float
+        Per-pixel noise, same units as the flux.
+    amps : ndarray, shape (n_lines,)
+        Injected line amplitudes, in catalog order of the amplitude names.
+    level : float
+        Continuum flux at 5000 A.
+    """
+    fixed = _template(ssp, wave, banded=True, prior=_LINE_PRIOR, redshift=Fixed(z))
+    continuum = np.asarray(template.predict_spectrum({_MASS: mass, "redshift": z}))
+    design = np.asarray(_line_design(fixed, wave, z))
+    level = float(continuum[np.argmin(np.abs(wave - 5000.0))])
+    sigma = level / _MATCHED_CONTINUUM_SNR
+    amps = _MATCHED_LINE_SNR * sigma / np.linalg.norm(design, axis=0)
+    flux = continuum + design @ amps + rng.normal(0.0, sigma, wave.size)
+    return flux, sigma, amps, level, fixed
+
+
+def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
+    """Batched catalog NUTS and per-galaxy Fitter NUTS on the same template mocks.
+
+    Each mock comes from the free-redshift template at the galaxy's redshift. The batched
+    sampler fits the free-redshift template. Each Fitter fits its own ``Fixed(z)`` build of
+    the template, the model the Fitter can use.
 
     Parameters
     ----------
@@ -185,29 +212,31 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
     -------
     dict
         ``"rows"``: list of dict, one per galaxy and parameter, with keys ``galaxy``,
-        ``param``, ``batched_median``, ``fitter_median``, ``half_width`` (half the
-        16-84 % range of the Fitter draws) and ``ratio`` (absolute median difference
-        divided by ``half_width``). ``"fitter_diagnostics"``: list of dict, one per galaxy,
-        with the acceptance and divergence entries the Fitter run reports.
+        ``param``, ``batched_median``, ``fitter_median``, ``width`` (the full 16-84 %
+        range of the Fitter draws) and ``ratio`` (absolute median difference divided by
+        ``width``). ``"fitter_diagnostics"``: list of dict, one per galaxy, with the
+        acceptance and divergence entries the Fitter run reports.
     """
     wave = _grid(600, 4000.0, 7500.0)
     template = _template(ssp, wave, banded=True, prior=_LINE_PRIOR)
     line_names = eline_amplitude_names(template.observation.spectroscopy.effective_catalog)
-    amps = np.asarray([_LINE_AMPS[nm] for nm in line_names])
     rng = np.random.default_rng(seed)
     records, noises, models = [], [], []
     for i in range(n_gal):
         z = 0.10 + 0.01 * i
-        mass = _LINE_MASSES[i % len(_LINE_MASSES)]
-        model_i = _template(ssp, wave, banded=True, prior=_LINE_PRIOR, redshift=Fixed(z))
-        continuum = np.asarray(model_i.predict_spectrum({_MASS: mass}))
-        design = np.asarray(_line_design(model_i, wave, z))
-        flux = continuum + design @ amps + rng.normal(0.0, _LINE_NOISE, wave.size)
-        sigma = np.full(wave.size, _LINE_NOISE)
-        records.append(
-            GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_R)
+        mass = _MATCHED_MASSES[i % len(_MATCHED_MASSES)]
+        flux, sigma, amps, level, model_i = _matched_mock(ssp, template, wave, z, mass, rng)
+        print(
+            f"galaxy {i} z={z:.4f} mass={mass} continuum(5000 A)={level:.6e} "
+            f"sigma={sigma:.6e} (S/N {_MATCHED_CONTINUUM_SNR:g} per pixel)"
         )
-        noises.append((flux, sigma))
+        for nm, a in zip(line_names, amps):
+            print(f"  {nm} injected {a:.6e} (matched-filter S/N {_MATCHED_LINE_SNR:g})")
+        sigma_vec = np.full(wave.size, sigma)
+        records.append(
+            GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma_vec**2, z=z, resolution=_R)
+        )
+        noises.append((flux, sigma_vec))
         models.append(model_i)
     batches = build_spectro_batches(records, quantum=None, model=template)
     batched = fit_spectra_catalog_mcmc(
@@ -221,8 +250,8 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
     )
     names = [_MASS, *line_names]
     rows, diagnostics = [], []
-    for i, (model_i, (flux, sigma)) in enumerate(zip(models, noises)):
-        fitter = Fitter(model_i, data=flux, noise=sigma, data_type="spectroscopy", approx=None)
+    for i, (model_i, (flux, sigma_vec)) in enumerate(zip(models, noises)):
+        fitter = Fitter(model_i, data=flux, noise=sigma_vec, data_type="spectroscopy", approx=None)
         post = fitter.run(
             "mcmc_nuts",
             key=jax.random.PRNGKey(seed + i),
@@ -238,7 +267,7 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
         for name in names:
             fit_draws = np.asarray(post.samples[name]).reshape(-1)
             lo, fit_median, hi = np.percentile(fit_draws, [16, 50, 84])
-            half_width = 0.5 * float(hi - lo)
+            width = float(hi - lo)
             batched_median = float(np.median(np.asarray(batched["draws"][name])[i]))
             rows.append(
                 {
@@ -246,23 +275,25 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
                     "param": name,
                     "batched_median": batched_median,
                     "fitter_median": float(fit_median),
-                    "half_width": half_width,
-                    "ratio": abs(batched_median - float(fit_median)) / half_width,
+                    "width": width,
+                    "ratio": abs(batched_median - float(fit_median)) / width,
                 }
             )
     return {"rows": rows, "fitter_diagnostics": diagnostics}
 
 
 def test_fitted_lines_posteriors_match_fitter(synthetic_ssp):
-    """Batched and per-galaxy posteriors agree within 5 % of the Fitter half-width."""
-    result = _matched_fitted_lines(synthetic_ssp, n_gal=3, n_warmup=300, n_samples=600)
-    header = f"{'galaxy':>6} {'param':<24} {'batched':>13} {'fitter':>13} {'half_width':>13}"
+    """Batched and per-galaxy posteriors agree within 5 % of the 16-84 % posterior width."""
+    result = _matched_fitted_lines(
+        synthetic_ssp, n_gal=3, n_warmup=_MATCHED_WARMUP, n_samples=_MATCHED_N_SAMPLES
+    )
+    header = f"{'galaxy':>6} {'param':<24} {'batched':>13} {'fitter':>13} {'width':>13}"
     print()
     print(f"{header} {'ratio':>9}")
     for r in result["rows"]:
         print(
             f"{r['galaxy']:>6} {r['param']:<24} {r['batched_median']:>13.6e} "
-            f"{r['fitter_median']:>13.6e} {r['half_width']:>13.6e} {r['ratio']:>9.4f}"
+            f"{r['fitter_median']:>13.6e} {r['width']:>13.6e} {r['ratio']:>9.4f}"
         )
     for r in result["rows"]:
         assert r["ratio"] < 0.05, f"galaxy {r['galaxy']} {r['param']}: ratio {r['ratio']:.4f}"
