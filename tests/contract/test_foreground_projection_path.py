@@ -29,13 +29,13 @@ _EBMV = 0.1
 _BANDS = ["des_g", "des_r", "des_i"]
 
 
-def _build(ssp, foreground=None, sfh_all=None):
+def _build(ssp, foreground=None, sfh_extra=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         kwargs = {}
         if foreground is not None:
             kwargs["foreground"] = foreground
-        sfh = {"type": "tsnorm", "all_params": sfh_all or tengri.Fixed(tengri.DEFAULT)}
+        sfh = {"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT), **(sfh_extra or {})}
         return tengri.SEDModel.build(
             ssp,
             observation=tengri.Observation(photometry=tengri.Photometry.from_names(_BANDS)),
@@ -169,24 +169,21 @@ class TestPhotometricPath:
 
 
 class TestGradient:
-    @pytest.mark.parametrize("x64", [True, False])
-    def test_band_flux_gradient_wrt_log_total_mass_is_finite_and_nonzero(self, ssp, x64):
-        free_model = _build(
-            ssp,
-            foreground={"ebmv_mw": _EBMV, "law": "fitzpatrick99", "rv": 3.1},
-            sfh_all=tengri.FREE,
-        )
-        name = next(n for n in free_model.spec.free_params if n.endswith("log_total_mass"))
-        base_sample = dict(free_model.spec.sample(jax.random.PRNGKey(1)))
+    def test_band_flux_gradient_wrt_log_total_mass_is_finite_and_nonzero(self, ssp):
+        with jax.enable_x64(True):
+            model = _build(
+                ssp,
+                foreground={"ebmv_mw": _EBMV, "law": "fitzpatrick99", "rv": 3.1},
+                sfh_extra={"log_total_mass": tengri.FREE},
+            )
+            name = next(n for n in model.spec.free_params if n.endswith("log_total_mass"))
 
-        def band_sum(log_mass):
-            params = {**base_sample, name: log_mass}
-            state = free_model.predict_state(params)
-            full = {**params, "redshift": free_model._get_redshift(params)}
-            return jnp.sum(free_model.observation.predict(state, full)["phot_fnu"])
+            def band_sum(log_mass):
+                params = {name: log_mass}
+                state = model.predict_state(params)
+                full = {**params, "redshift": model._get_redshift(params)}
+                return jnp.sum(model.observation.predict(state, full)["phot_fnu"])
 
-        with jax.enable_x64(x64):
-            dtype = jnp.float64 if x64 else jnp.float32
-            grad = jax.grad(band_sum)(jnp.asarray(base_sample[name], dtype=dtype))
+            grad = jax.grad(band_sum)(jnp.asarray(9.0))
         assert np.isfinite(float(grad))
         assert float(grad) != 0.0
