@@ -14,7 +14,8 @@ The data split into two halves:
 
 * **Traced** (:class:`SpectroBatch`): pixel wavelengths, masks, fluxes, errors,
   the resolution rows, redshifts, calibration ranges, photometry and, when
-  given, each galaxy's non-parametric SFH bin edges. Each leaf has a leading
+  given, each galaxy's non-parametric SFH bin edges, the emission-line mask and
+  resolution, and each galaxy's Milky Way E(B-V). Each leaf has a leading
   batch axis ``B``, so the batch can be mapped with :func:`jax.vmap` or passed
   as a regular argument to a jitted function.
 * **Static** (:class:`SpectroBatchSpec`): the bucketed pixel count ``n_max``,
@@ -83,6 +84,7 @@ _BATCH_FIELDS: tuple[str, ...] = (
     "sfh_bin_edges_gyr",
     "line_mask",
     "eline_resolution",
+    "ebmv_mw",
 )
 
 
@@ -132,6 +134,7 @@ class GalaxySpectrum(NamedTuple):
     phot_flux: Any = None
     phot_err: Any = None
     sfh_bin_edges_gyr: Any = None
+    ebmv_mw: float | None = None
 
     @classmethod
     def from_flambda(
@@ -147,6 +150,7 @@ class GalaxySpectrum(NamedTuple):
         phot_err_lambda=None,
         phot_wave_eff=None,
         sfh_bin_edges_gyr=None,
+        ebmv_mw=None,
     ) -> GalaxySpectrum:
         """Build a record from data per wavelength, converting to F_nu.
 
@@ -218,6 +222,7 @@ class GalaxySpectrum(NamedTuple):
             phot_flux=phot_flux,
             phot_err=phot_err,
             sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+            ebmv_mw=ebmv_mw,
         )
 
 
@@ -256,6 +261,10 @@ class SpectroBatchSpec:
     n_sfh_edges : int
         Length of the per-galaxy SFH bin ladder the bucket carries; ``0`` (default)
         when its galaxies use the template's build-time ladder.
+    has_foreground : bool
+        Whether the bucket's galaxies carry their own Milky Way E(B-V). ``False``
+        (default) leaves the foreground screen out of the compiled program, so a
+        bucket without it evaluates exactly as a model with no screen.
     n_lines : int
         Number of emission lines in the template's effective catalog when the
         template fits lines (``eline_mode != "off"``); ``0`` otherwise. The count
@@ -284,6 +293,7 @@ class SpectroBatchSpec:
     conserving: bool | None = None
     lsf_pad_pixels: int | None = None
     n_sfh_edges: int = 0
+    has_foreground: bool = False
     n_lines: int = 0
 
     def __post_init__(self) -> None:
@@ -386,6 +396,7 @@ class SpectroBatch:
     sfh_bin_edges_gyr: jax.Array
     line_mask: jax.Array
     eline_resolution: jax.Array
+    ebmv_mw: jax.Array
 
     def galaxy(self, i: int) -> SpectroBatch:
         """Return galaxy ``i`` as an unbatched :class:`SpectroBatch`.
@@ -824,6 +835,7 @@ def _prepare_galaxy(
             n_filt=int(p_flux.shape[0]),
             conserving=conserving,
             n_sfh_edges=int(sfh_edges.shape[0]),
+            has_foreground=g.ebmv_mw is not None,
             n_lines=int(rest_lines.shape[0]),
         )
     except ValueError as exc:
@@ -851,6 +863,7 @@ def _prepare_galaxy(
         "sfh_bin_edges_gyr": sfh_edges,
         "line_mask": line_mask,
         "eline_resolution": np.asarray(eline_r),
+        "ebmv_mw": np.asarray(0.0 if g.ebmv_mw is None else float(g.ebmv_mw)),
     }
     return spec, row, n, log_grid
 
@@ -936,6 +949,39 @@ def _template_eline(model):
     )
 
 
+def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
+    """Refuse scalar or per-pixel resolutions when the template is banded.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model with spectroscopy configured.
+    galaxies : sequence of GalaxySpectrum
+        Records, in catalog order; the index in the message is the position here.
+
+    Raises
+    ------
+    ValueError
+        If the template carries a banded resolution operator and a record's
+        ``resolution`` is not a :class:`~tengri.observation.banded.BandedMatrix`.
+
+    Notes
+    -----
+    Build-time Python check. A scalar or per-pixel record would be fitted with a
+    different line spread function from the one that the template applies.
+    """
+    if not model.observation.spectroscopy.has_resolution_matrix:
+        return
+    for i, g in enumerate(galaxies):
+        if not isinstance(g.resolution, BandedMatrix):
+            raise ValueError(
+                f"galaxy {i} has a scalar or per-pixel resolution, but the template's "
+                "resolution is banded; give each GalaxySpectrum the same banded operator "
+                "(gaussian_resolution_bands or the instrument's R matrix) or build the "
+                "template with a scalar/per-pixel resolution"
+            )
+
+
 def build_spectro_batches(
     galaxies: Sequence[GalaxySpectrum],
     *,
@@ -966,7 +1012,10 @@ def build_spectro_batches(
         from the template's ``resample`` mode with the same rule as
         :meth:`~tengri.observation.observation.Observation.predict`, and every
         padded bucket is checked with :func:`padding_exact`. Without it the
-        buckets carry ``conserving=None`` and cannot be evaluated.
+        buckets carry ``conserving=None`` and cannot be evaluated. When the template's
+        spectroscopy carries a banded resolution operator, the function refuses any
+        galaxy whose ``resolution`` is a scalar or per-pixel array: it would be fitted
+        with a different line spread function from the one that generated the data.
 
     Returns
     -------
@@ -1012,6 +1061,17 @@ def build_spectro_batches(
                 f"({policy.lsf_n_bins}); omit it to take the template's value"
             )
         lsf_n_bins = policy.lsf_n_bins
+        _require_banded_records(model, galaxies)
+        if model.spec.foreground_ebmv_mw > 0.0:
+            missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
+            if missing:
+                raise ValueError(
+                    "the template model carries a Milky Way foreground screen "
+                    f"(foreground_ebmv_mw={model.spec.foreground_ebmv_mw}), so every galaxy "
+                    f"needs its own E(B-V): galaxies {missing} have ebmv_mw=None. Give "
+                    "each GalaxySpectrum an ebmv_mw, or set the template's foreground "
+                    "E(B-V) to 0."
+                )
     elif lsf_n_bins is None:
         lsf_n_bins = 16
 
