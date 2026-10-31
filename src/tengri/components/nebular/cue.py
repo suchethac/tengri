@@ -1114,12 +1114,11 @@ class _BalmerExtension(NamedTuple):
     wavelength: np.ndarray
     ratio: np.ndarray
     sensitivity: np.ndarray
-    merge_order: np.ndarray
     names: tuple
 
 
 def _build_balmer_extension(sorted_wav: np.ndarray, n_max: int | None) -> _BalmerExtension | None:
-    """Locate H-beta in the sorted catalog and fix where the added lines merge in."""
+    """Locate H-beta in the sorted catalog and tabulate the lines appended after it."""
     if n_max is None or n_max < BALMER_SERIES_N_FIRST:
         return None
     hbeta_index = int(np.argmin(np.abs(sorted_wav - HBETA_VACUUM_AA)))
@@ -1129,13 +1128,11 @@ def _build_balmer_extension(sorted_wav: np.ndarray, n_max: int | None) -> _Balme
             f"(nearest {float(sorted_wav[hbeta_index])} A); cannot anchor the Balmer series."
         )
     n_upper, wavelength, ratio, sensitivity = balmer_series_arrays(n_max)
-    merge_order = np.argsort(np.concatenate([sorted_wav, wavelength]), kind="stable")
     return _BalmerExtension(
         hbeta_index,
         wavelength,
         ratio,
         sensitivity,
-        merge_order,
         tuple(f"H{int(n)}" for n in n_upper),
     )
 
@@ -1178,7 +1175,8 @@ class CueBackend:
     :math:`L(\\mathrm{H}n) = R_n\\,L(\\mathrm{H}\\beta)` with :math:`R_n` the
     Case-B emissivity ratio of Storey & Hummer (1995) at 10^4 K and 10^2 cm^-3,
     taken from H-beta after the escape and dust factors so the added lines carry
-    them too. Approximation: fixed :math:`(T_e, n_e)`; the ratios change by up to
+    them too. They follow the native lines of the full catalog in order of ``n``,
+    so every native index (``line_old_idx``) is unchanged. Approximation: fixed :math:`(T_e, n_e)`; the ratios change by up to
     6.7% for :math:`n \\le 24` and 27% at :math:`n = 50` over 5000-20000 K and
     :math:`n_e` = 10^2-10^3 cm^-3 (:mod:`tengri.components.nebular._balmer_series`).
 
@@ -1686,9 +1684,9 @@ class CueBackend:
         if ext is None:
             return wav, lum
         added = lum[ext.hbeta_index] * jnp.asarray(ext.ratio, dtype=lum.dtype)
-        lum_all = jnp.concatenate([lum, added])[ext.merge_order]
+        lum_all = jnp.concatenate([lum, added])
         xp = np if isinstance(wav, np.ndarray) else jnp
-        wav_all = xp.concatenate([wav, ext.wavelength])[ext.merge_order]
+        wav_all = xp.concatenate([wav, ext.wavelength])
         return wav_all, lum_all
 
     @property
@@ -1746,7 +1744,7 @@ class CueBackend:
         ext = self._balmer
         if ext is None:
             return wav_sorted
-        return np.concatenate([wav_sorted, ext.wavelength])[ext.merge_order]
+        return np.concatenate([wav_sorted, ext.wavelength])
 
     def published_line_model_sigma(self, *, cloudyfsps_only: bool) -> np.ndarray | None:
         """Fractional 1-sigma emulator error per published line, without a forward pass.
@@ -1798,7 +1796,7 @@ class CueBackend:
         if ext is None:
             return sigma
         added = balmer_series_sigma_frac(float(sigma[ext.hbeta_index]), ext.sensitivity)
-        return np.concatenate([sigma, added.astype(np.float32)])[ext.merge_order]
+        return np.concatenate([sigma, added.astype(np.float32)])
 
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""

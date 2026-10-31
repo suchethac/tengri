@@ -107,9 +107,9 @@ def test_added_lines_are_ratio_times_hbeta(on, off):
     np.testing.assert_array_equal(l_on[~added], l_off)
     hb = l_off[_hbeta(w_off)]
     expect = np.array([r for _, _, r in BALMER_CASE_B_RATIOS_TO_HBETA]) * hb
-    order = np.argsort(w_on[added])[::-1]
-    np.testing.assert_allclose(l_on[added][order], expect, rtol=1e-12, atol=0.0)
-    assert np.all(np.diff(w_on) > 0.0)
+    np.testing.assert_allclose(l_on[added], expect, rtol=1e-12, atol=0.0)
+    np.testing.assert_array_equal(w_on[added], _ADDED_WAVE)
+    assert np.flatnonzero(added)[0] == w_off.shape[0]
 
 
 def test_added_lines_carry_the_escape_and_dust_factors(on, off):
@@ -123,8 +123,7 @@ def test_added_lines_carry_the_escape_and_dust_factors(on, off):
     _, _, l_free = off.predict_nebular_split(ssp_wave=_WAVE, **_KW)
     assert hb_k < 0.999 * np.asarray(l_free)[_hbeta(w_off)]
     expect = np.array([r for _, _, r in BALMER_CASE_B_RATIOS_TO_HBETA]) * hb_k
-    order = np.argsort(w_on[added])[::-1]
-    np.testing.assert_allclose(l_on[added][order], expect, rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(l_on[added], expect, rtol=1e-12, atol=0.0)
 
 
 def test_sed_gains_exactly_the_added_luminosity_and_nothing_above_3800(on, off):
@@ -180,7 +179,7 @@ def test_published_catalog_wavelengths_sigma_and_names_align(on, off):
     added = _is_added(waves)
     assert on.balmer_series_line_names == tuple(f"H{n}" for n in range(11, 51))
     hb_sigma = off.published_line_model_sigma(cloudyfsps_only=False)[_hbeta(waves[~added])]
-    s_n = np.array([s for _, s in BALMER_RATIO_SENSITIVITY])[::-1]
+    s_n = np.array([s for _, s in BALMER_RATIO_SENSITIVITY])
     np.testing.assert_allclose(
         sigma[added], np.sqrt(hb_sigma.astype(np.float64) ** 2 + s_n**2), rtol=1e-6
     )
@@ -240,9 +239,7 @@ def test_extension_survives_weights_threaded_as_a_jit_argument(on):
     lum = np.asarray(lum)
     ratios = np.array([r for _, _, r in BALMER_CASE_B_RATIOS_TO_HBETA])
     hb = lum[_hbeta(eager_wav)]
-    np.testing.assert_allclose(
-        lum[added][np.argsort(eager_wav[added])[::-1]], ratios * hb, rtol=1e-9
-    )
+    np.testing.assert_allclose(lum[added], ratios * hb, rtol=1e-9)
 
 
 def test_grammar_option_reaches_the_published_catalog(synthetic_ssp_wide):
@@ -275,6 +272,6 @@ def test_grammar_option_reaches_the_published_catalog(synthetic_ssp_wide):
     hb = l_off[_hbeta(w_off)]
     added = _is_added(w_20)
     r = np.array([row[2] for row in BALMER_CASE_B_RATIOS_TO_HBETA[:10]])
-    np.testing.assert_allclose(np.sort(l_20[added])[::-1], r * hb, rtol=1e-9)
+    np.testing.assert_allclose(l_20[added], r * hb, rtol=1e-9)
     with pytest.raises(Exception, match="balmer_series_n_max"):
         published({"type": "cloudy", "balmer_series_n_max": 20})
