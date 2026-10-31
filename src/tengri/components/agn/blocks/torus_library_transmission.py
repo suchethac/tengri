@@ -379,7 +379,7 @@ def _skirtor_disc_grid(library) -> SKIRTORDiscAttenGrid | None:
     dd = library.disc_dust
     if dd is None:
         return None
-    axes = tuple(jnp.asarray(a) for a in dd.axes)
+    axes = tuple(device_table(a) for a in dd.axes)
     return SKIRTORDiscAttenGrid(
         disk=device_table(dd.disk),
         wave_grid=device_table(dd.wave_grid),
