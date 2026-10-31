@@ -1275,6 +1275,20 @@ _SYN_GRID_DIR = os.environ.get(
 BH_MASS = 1e8  # Msun
 BH_EDD = 0.5  # Eddington ratio
 BH_INC = 30.0  # degrees
+
+
+def _disc_block(disc_type):
+    """Disc sub-block that carries the §9 black-hole mass only if the type reads it.
+
+    The declared key set comes from the same table the composable refusal checks
+    against, so a disc that ignores ``agn_log_mbh`` is built without it.
+    """
+    from tengri.parameters.agn_ownership import _agn_subblock_declared_params
+
+    block = {"type": disc_type}
+    if "agn_log_mbh" in (_agn_subblock_declared_params("disc", disc_type) or ()):
+        block["agn_log_mbh"] = Fixed(float(np.log10(BH_MASS)))
+    return block
 BH_Z = 0.01  # absolute gas metallicity
 THETA_TORUS = 30.0  # degrees
 CF = 0.1  # NLR/BLR covering fraction
@@ -1331,10 +1345,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             # derived from agn_log_lbol and agn_log_mbh, #846, not a separate knob).
             # Leaving agn_log_mbh at tengri's default (1e7 M⊙) ran a hotter, fainter
             # disc (0.75x); pinning it to the §9 BH gives a ~0.98x match.
-            "disc": {
-                "type": disc,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block(disc),
             "torus": {
                 "type": torus,
                 "agn_theta_torus": Fixed(THETA_TORUS),
@@ -1393,10 +1404,7 @@ for disc_type, _ in _disc_models:
             # Match the §9 BH so the kubota_done disc temperature profile matches
             # Synthesizer's qsosed (ignored by the power-law disc). Without this the
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
-            "disc": {
-                "type": disc_type,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block(disc_type),
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
@@ -1859,10 +1867,7 @@ def _unified_phot(approx):
         },
         agn={
             "type": "composable",
-            "disc": {
-                "type": "kubota_done",
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block("kubota_done"),
             "torus": {
                 "type": "simple",
                 "agn_theta_torus": Fixed(THETA_TORUS),
