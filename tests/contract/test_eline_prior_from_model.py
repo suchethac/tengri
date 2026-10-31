@@ -176,3 +176,141 @@ def test_aperture_fraction_gradient_is_finite_and_nonzero():
     grad = float(jax.grad(value)(jnp.asarray(0.7)))
     assert np.isfinite(grad)
     assert grad != 0.0
+
+
+_DL_CM = 1.0e26
+_CAT = np.array([4900.0, 5100.0])
+_LOG_L0 = np.log10(np.array([3.0e40, 1.5e40]))
+_N_PIX = 60
+
+
+def _class_setup(data, sigma, matched_mask, dl_cm=_DL_CM):
+    """Class-level model-prior likelihood on the toy grid, with a given catalog match."""
+    from tengri.inference.likelihoods.marginalized import ModelELineMarginalizedLikelihood
+
+    waves = np.linspace(4800.0, 5400.0, _N_PIX)
+    design = np.asarray(
+        build_eline_design_matrix(jnp.asarray(waves), jnp.asarray(_CAT), 500.0, 0.0)
+    )
+    index, _ = match_model_lines(_CAT, _CAT)
+    return design, ModelELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(data),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix_builder=lambda params: jnp.asarray(design),
+        prior_inputs_builder=lambda params: (0.0, dl_cm, params.get("ap", 1.0)),
+        match_index=index,
+        matched=np.asarray(matched_mask),
+        line_wavelengths=_CAT,
+        prior_width_dex=5.0,
+        channel="spec_fnu",
+    )
+
+
+def _prediction(theta):
+    """Continuum and attenuated line luminosities, both scaled by 10**(theta - 4) dex."""
+    cont = jnp.full(_N_PIX, 1.0e-25) * 10.0 ** (theta - 4.0)
+    return {"spec_fnu": cont, "log_line_lums_attenuated": jnp.asarray(_LOG_L0 + theta)}
+
+
+def test_three_point_differences_track_flat_up_to_log_width():
+    """Model-minus-flat differences over +-0.1 dex equal -sum_l d ln W_l, to rtol 1e-6."""
+    sigma = np.full(_N_PIX, 1.0e-25)
+    index, matched = match_model_lines(_CAT, _CAT)
+    mu_true = np.asarray(
+        model_line_prior(
+            jnp.asarray(_LOG_L0 + 4.0), index, matched, _CAT, 0.0, _DL_CM, 1.0, 5.0
+        ).prior_mean
+    )
+    design, _ = _class_setup(np.zeros(_N_PIX), sigma, matched)
+    data = np.asarray(_prediction(4.0)["spec_fnu"]) + design @ mu_true
+    _, model_lk = _class_setup(data, sigma, matched)
+    _, flat_lk = _class_setup(data, sigma, np.zeros(2, dtype=bool))
+
+    def log_pair(theta):
+        pred = _prediction(theta)
+        return float(model_lk.log_prob(pred, {})), float(flat_lk.log_prob(pred, {}))
+
+    lo, mid, hi = log_pair(3.9), log_pair(4.0), log_pair(4.1)
+    d_model = hi[0] - lo[0]
+    d_flat = hi[1] - lo[1]
+    expected = -2.0 * 0.2 * np.log(10.0)
+    np.testing.assert_allclose(d_model - d_flat, expected, rtol=1e-6, atol=1e-8)
+    assert np.isfinite(mid[0])
+
+
+def test_narrow_width_recovers_model_amplitudes_and_beats_flat():
+    """With 0.05 dex the amplitudes of model-consistent lines come back within 2 %."""
+    import dataclasses
+
+    from tengri.observation.eline_marginalization import unit_model_line_prior
+    from tengri.observation.linear_marginal import marginalize_linear_nuisance
+
+    sigma = np.full(_N_PIX, 1.0e-25)
+    index, matched = match_model_lines(_CAT, _CAT)
+    mu = np.asarray(
+        model_line_prior(
+            jnp.asarray(_LOG_L0 + 4.0), index, matched, _CAT, 0.0, _DL_CM, 1.0, 0.05
+        ).prior_mean
+    )
+    design, _ = _class_setup(np.zeros(_N_PIX), sigma, matched)
+    rng = np.random.default_rng(1)
+    noise = rng.normal(0.0, 1e-27, _N_PIX)
+    data = np.asarray(_prediction(4.0)["spec_fnu"]) + design @ mu + noise
+    prior = model_line_prior(
+        jnp.asarray(_LOG_L0 + 4.0), index, matched, _CAT, 0.0, _DL_CM, 1.0, 0.05
+    )
+    unit = unit_model_line_prior(jnp.asarray(design), prior, noise=jnp.asarray(sigma))
+    result = marginalize_linear_nuisance(
+        jnp.asarray(data),
+        jnp.asarray(_prediction(4.0)["spec_fnu"]),
+        unit.design,
+        sigma=jnp.asarray(sigma),
+        prior_mean=unit.prior_mean,
+        prior_precision=unit.prior_precision,
+        scale=unit.scale,
+    )
+    amplitudes = np.asarray(prior.prior_width * result.coef_hat)
+    np.testing.assert_allclose(amplitudes, mu, rtol=2e-2)
+    _, narrow = _class_setup(data, sigma, matched)
+    narrow = dataclasses.replace(narrow, prior_width_dex=0.05)
+    _, flat = _class_setup(data, sigma, np.zeros(2, dtype=bool))
+    pred = _prediction(4.0)
+    assert float(narrow.log_prob(pred, {})) > float(flat.log_prob(pred, {}))
+
+
+def test_class_aperture_gradient_is_finite_and_nonzero():
+    """d(log-likelihood)/d(aperture_frac) through the class is finite and nonzero."""
+    sigma = np.full(_N_PIX, 1.0e-25)
+    _, matched = match_model_lines(_CAT, _CAT)
+    design, lk = _class_setup(np.zeros(_N_PIX), sigma, matched)
+    data = np.asarray(_prediction(4.0)["spec_fnu"]) + design @ np.array([1.0e-25, 5.0e-26])
+    _, lk = _class_setup(data, sigma, matched)
+    pred = _prediction(4.0)
+
+    def value(ap):
+        return lk.log_prob(pred, {"ap": ap})
+
+    grad = float(jax.grad(value)(jnp.asarray(0.8)))
+    assert np.isfinite(grad)
+    assert grad != 0.0
+
+
+def test_class_float32_scaled_data_finite_and_nonzero_gradient():
+    """Float32 at scaled data: the value is finite and d/d(aperture) is finite and nonzero."""
+    scale = 1.0e25
+    sigma = np.full(_N_PIX, 1.0e-25 * scale)
+    _, matched = match_model_lines(_CAT, _CAT)
+    design, _ = _class_setup(np.zeros(_N_PIX), sigma, matched)
+    data = (
+        np.asarray(_prediction(4.0)["spec_fnu"]) + design @ np.array([1.0e-25, 5.0e-26])
+    ) * scale
+    dl_scaled = _DL_CM / np.sqrt(scale)
+    with jax.enable_x64(False):
+        lk = _class_setup(data, sigma, matched, dl_cm=dl_scaled)[1]
+        pred = {k: jnp.asarray(v, jnp.float32) for k, v in _prediction(4.0).items()}
+        pred["spec_fnu"] = pred["spec_fnu"] * scale
+        value = float(lk.log_prob(pred, {"ap": jnp.float32(0.8)}))
+        grad = float(jax.grad(lambda ap: lk.log_prob(pred, {"ap": ap}))(jnp.float32(0.8)))
+    assert np.isfinite(value)
+    assert np.isfinite(grad)
+    assert grad != 0.0
