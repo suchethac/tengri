@@ -6,6 +6,7 @@ r"""The shipped Fritz torus grid declares the unit its records are stored in (#3
 wavelength in nm. The file's ``dust_unit`` and ``disk_unit`` attributes said
 ``erg/s/Hz``, the wrong quantity by a factor :math:`\lambda^2/c` in every spectral
 point. The loader reads the records as :math:`L_\lambda`, so the tags must say so,
+the exact legacy tag ``erg/s/Hz`` (the hosted copy) is read as W/nm with a warning,
 and a file tagged otherwise is refused.
 
 References
@@ -18,6 +19,7 @@ References
 from __future__ import annotations
 
 import shutil
+import warnings
 from pathlib import Path
 
 import h5py
@@ -59,12 +61,51 @@ def test_loader_reading_matches_the_declared_unit() -> None:
     np.testing.assert_array_equal(raw["dust"], stored)
 
 
-@pytest.mark.parametrize("key", ["dust_unit", "disk_unit"])
-def test_loader_refuses_a_mismatched_unit_tag(key: str, tmp_path: Path) -> None:
-    _require_grid()
-    bad = tmp_path / "fritz_bad_unit.h5"
+def _retagged(tmp_path: Path, key: str, tag: str) -> Path:
+    bad = tmp_path / f"fritz_{key}.h5"
     shutil.copyfile(_GRID, bad)
     with h5py.File(bad, "r+") as f:
-        f["fritz2006"].attrs[key] = "erg/s/Hz (accretion-disk normalized, pre-interpolation)"
+        f["fritz2006"].attrs[key] = tag
+    return bad
+
+
+def test_shipped_file_loads_without_warning() -> None:
+    _require_grid()
+    FR._warn_legacy_unit_tag.cache_clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        FR._load_grid_arrays(str(_GRID))
+
+
+@pytest.mark.parametrize("key", ["dust_unit", "disk_unit"])
+def test_legacy_tag_loads_with_warning_and_identical_arrays(key: str, tmp_path: Path) -> None:
+    """The hosted copy still says erg/s/Hz over the same W/nm data: read it, say so once."""
+    _require_grid()
+    legacy = _retagged(tmp_path, key, "erg/s/Hz (accretion-disk normalized, pre-interpolation)")
+    ref = FR._load_grid_arrays(str(_GRID))
+    FR._warn_legacy_unit_tag.cache_clear()
+    with pytest.warns(UserWarning, match=rf"{key}.*download_fritz2006_templates") as rec:
+        got = FR._load_grid_arrays(str(legacy))
+        FR._load_grid_arrays(str(legacy))
+    assert len([w for w in rec if key in str(w.message)]) == 1
+    for name in ("wave", "dust", "disk", "norm"):
+        np.testing.assert_array_equal(got[name], ref[name])
+
+
+@pytest.mark.parametrize("key", ["dust_unit", "disk_unit"])
+@pytest.mark.parametrize("tag", ["erg/s/A", "Lsun", ""])
+def test_loader_refuses_any_other_unit_tag(key: str, tag: str, tmp_path: Path) -> None:
+    _require_grid()
+    bad = _retagged(tmp_path, key, tag)
     with pytest.raises(TengriIOError, match=key):
+        FR._load_grid_arrays(str(bad))
+
+
+def test_loader_refuses_a_missing_unit_tag(tmp_path: Path) -> None:
+    _require_grid()
+    bad = tmp_path / "fritz_untagged.h5"
+    shutil.copyfile(_GRID, bad)
+    with h5py.File(bad, "r+") as f:
+        del f["fritz2006"].attrs["dust_unit"]
+    with pytest.raises(TengriIOError, match="dust_unit"):
         FR._load_grid_arrays(str(bad))
