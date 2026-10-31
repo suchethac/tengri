@@ -1271,12 +1271,14 @@ class CueBackend:
         ssp_flux_np = np.array(ssp_data.ssp_flux)
         self._alpha_fe_table_node = None
         if ssp_flux_np.ndim == 4:
-            # A 4D ([alpha/Fe]-axis) library (#226): the ionizing-parameter tables are fitted per (Z, age) from ONE
-            # [alpha/Fe] slab, the node nearest solar, so the nebular ionizing spectrum is that of the solar-scaled
-            # templates whatever met_alpha_fe is sampled. The Lyman-continuum shape of the young, hot stars that set
-            # Q_H and the ionizing slopes depends weakly on [alpha/Fe] next to its dependence on Z and age; the
-            # stellar continuum and lines of the 4D cube are still interpolated at met_alpha_fe by the stellar
-            # component. Recorded in ``_alpha_fe_table_node`` so a record can state the approximation.
+            # A 4D ([alpha/Fe]-axis) library (#226): the ionizing-parameter tables are fitted per
+            # (Z, age) from ONE [alpha/Fe] slab, the node nearest solar, so the nebular ionizing
+            # spectrum is that of the solar-scaled templates whatever met_alpha_fe is sampled. The
+            # Lyman-continuum shape of the young, hot stars that set Q_H and the ionizing slopes
+            # depends weakly on [alpha/Fe] next to its dependence on Z and age; the stellar
+            # continuum and lines of the 4D cube are still interpolated at met_alpha_fe by the
+            # stellar component. Recorded in ``_alpha_fe_table_node`` so a record can state the
+            # approximation.
             alpha_nodes = np.array(ssp_data.ssp_alpha_fe)
             k = int(np.argmin(np.abs(alpha_nodes)))
             ssp_flux_np = ssp_flux_np[:, k]

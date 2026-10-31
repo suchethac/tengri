@@ -144,7 +144,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     effective_metallicity,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
-    interpolate_alpha_only,
 )
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
@@ -3140,15 +3139,19 @@ class StellarSEDComponent:
         # ``ssp_flux`` that DSPS sees differs.
         _alpha_collapse_active = has_alpha_grid(ssp)
         if _alpha_collapse_active:
-            # Do NOT materialize the collapsed cube here: under vmap over samples (K chains) and reverse-mode AD a
-            # per-sample (n_met, n_age, n_wave) copy is what runs a 128-chain gradient out of GPU memory (26.75 GiB
-            # at 12 x 107 x 10824 float64). The CSP einsums below contract the 4D cube over metallicity per
-            # [alpha/Fe] node and interpolate the small (n_alpha, n_age, n_wave) result with these weights instead;
-            # the cube stays a shared constant.
+            # Do NOT materialize the collapsed cube here: under vmap over samples (K chains) and
+            # reverse-mode AD a per-sample (n_met, n_age, n_wave) copy is what runs a 128-chain
+            # gradient out of GPU memory (26.75 GiB at 12 x 107 x 10824 float64). The CSP einsums
+            # below contract the 4D cube over metallicity per [alpha/Fe] node and interpolate the
+            # small (n_alpha, n_age, n_wave) result with these weights instead; the cube stays a
+            # shared constant.
             from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket
+
             _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
             _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
-            ssp_flux_for_csp = ssp.ssp_flux  # 4D (n_met, n_alpha, n_age, n_wave); collapsed after each contraction
+            ssp_flux_for_csp = (
+                ssp.ssp_flux
+            )  # 4D (n_met, n_alpha, n_age, n_wave); collapsed after each contraction
         else:
             ssp_flux_for_csp = ssp.ssp_flux
 
@@ -3160,10 +3163,14 @@ class StellarSEDComponent:
         # On a 4D [alpha/Fe] grid ``ssp_flux_for_csp`` stays uncollapsed (see
         # above); the ratio is computed from the first alpha slab, and a free
         # AGB weight on a 4D grid is refused below.
-        _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp_flux_for_csp[:, 0] if _alpha_collapse_active else ssp_flux_for_csp)
+        _agb_dust_cube = self._agb_dust_cube_ratio(
+            params, ssp_flux_for_csp[:, 0] if _alpha_collapse_active else ssp_flux_for_csp
+        )
         if _agb_dust_cube is not None:
             if _alpha_collapse_active:
-                raise NotImplementedError("a free AGB dust-shell weight on a 4D [alpha/Fe] SSP grid is not supported yet")
+                raise NotImplementedError(
+                    "a free AGB dust-shell weight on a 4D [alpha/Fe] SSP grid is not supported yet"
+                )
             ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
@@ -3516,9 +3523,15 @@ class StellarSEDComponent:
         # SSP (~3.8e18), both representable. Identical in float64 (#1206).
         if _alpha_collapse_active:
             from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
-            ssp_flux_at_age = collapse_alpha_axis(
-                jnp.einsum("ma,mkaw->kaw", joint_weights, ssp_flux_for_csp), _alpha_ia, _alpha_fa
-            ) * LSUN_ERG_PER_S
+
+            ssp_flux_at_age = (
+                collapse_alpha_axis(
+                    jnp.einsum("ma,mkaw->kaw", joint_weights, ssp_flux_for_csp),
+                    _alpha_ia,
+                    _alpha_fa,
+                )
+                * LSUN_ERG_PER_S
+            )
         else:
             ssp_flux_at_age = jnp.einsum(
                 "ma,maw->aw", joint_weights, ssp_flux_for_csp * LSUN_ERG_PER_S
@@ -3564,9 +3577,20 @@ class StellarSEDComponent:
             _fractions = interval_fractions(younger_fraction)  # (n_interval, n_age)
             if _alpha_collapse_active:
                 from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
-                lnu_interval = total_mass * LSUN_ERG_PER_S * collapse_alpha_axis(
-                    jnp.einsum("jma,mkaw->jkw", _fractions[:, None, :] * joint_weights[None, :, :], ssp_flux_for_csp),
-                    _alpha_ia, _alpha_fa, axis=1,
+
+                lnu_interval = (
+                    total_mass
+                    * LSUN_ERG_PER_S
+                    * collapse_alpha_axis(
+                        jnp.einsum(
+                            "jma,mkaw->jkw",
+                            _fractions[:, None, :] * joint_weights[None, :, :],
+                            ssp_flux_for_csp,
+                        ),
+                        _alpha_ia,
+                        _alpha_fa,
+                        axis=1,
+                    )
                 )
             else:
                 lnu_interval = total_mass * jnp.einsum(
@@ -3700,8 +3724,11 @@ class StellarSEDComponent:
             # FeaturePrecomp graph.
             if _alpha_collapse_active:
                 from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
                 _lnu_age_ion = collapse_alpha_axis(
-                    jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_for_csp[:, :, :, :_n_ion]), _alpha_ia, _alpha_fa
+                    jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_for_csp[:, :, :, :_n_ion]),
+                    _alpha_ia,
+                    _alpha_fa,
                 )  # shape (n_age, n_ion), per-Msun
             else:
                 _lnu_age_ion = jnp.einsum(
@@ -4282,11 +4309,13 @@ class StellarSEDComponent:
             }
 
         if ssp_flux_for_csp.ndim == 4:
-            # A 4D [alpha/Fe] grid reaches here uncollapsed (the CSP einsums contract it over metallicity per alpha
-            # node, then interpolate; see ``apply``). The per-draw families below sum a 3D cube, so the free-redshift
-            # table and the unbroadened fixed-redshift LUT do not support a 4D grid yet (``cube_modified`` is True).
+            # A 4D [alpha/Fe] grid reaches here uncollapsed (the CSP einsums contract it over
+            # metallicity per alpha node, then interpolate; see ``apply``). The per-draw families
+            # below sum a 3D cube, so the free-redshift table and the unbroadened fixed-redshift
+            # LUT do not support a 4D grid yet (``cube_modified`` is True).
             raise NotImplementedError(
-                "the per-draw spectrum LUT / free-redshift table path does not support a 4D [alpha/Fe] SSP grid yet"
+                "the per-draw spectrum LUT / free-redshift table path does not support a 4D "
+                "[alpha/Fe] SSP grid yet"
             )
         if lut is not None:
             spec_eff = jnp.asarray(lut.wave_rest_pixels)
