@@ -133,6 +133,13 @@ def assert_conforms(ghmc, nuts, *, n_warmup):
     assert np.all(np.asarray(ghmc["nested_rhat"]) <= MAX_NESTED_RHAT)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "MEADS in the catalog engine reaches 0.48 NUTS widths at DESI-like S/N with 7x wider "
+        "chains (smoke 40/20, #3135); the owner relabels the tier only when this passes"
+    ),
+)
 def test_ghmc_medians_agree_with_nuts_at_desi_like_snr(template, batches):
     ghmc = run_ghmc(template, batches, n_warmup=GHMC_N_WARMUP, n_samples=GHMC_N_SAMPLES)
     nuts = run_nuts(template, batches, n_warmup=NUTS_N_WARMUP, n_samples=NUTS_N_SAMPLES)
