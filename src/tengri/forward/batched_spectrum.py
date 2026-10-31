@@ -38,6 +38,14 @@ the edge count, since its declared ratio parameters fix the bin count; the
 stellar component refuses a ladder of any other length, and any SFH type
 outside ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``).
 
+Per-galaxy Milky Way foreground
+-------------------------------
+The template fixes the foreground law and R_V; E(B-V) is a traced per-galaxy leaf
+(``ebmv_mw`` of :class:`~tengri.observation.batched.GalaxySpectrum`, a ``(B,)`` array on
+the batch). The screen multiplies the spectrum and the photometry of each galaxy at its own
+observed wavelengths, and E(B-V) = 0 leaves a galaxy unchanged. A template with a nonzero
+foreground E(B-V) refuses galaxies that do not carry their own.
+
 Flux-conserving mode
 --------------------
 The resample mode is not a caller choice. :func:`~tengri.observation.batched.build_spectro_batches`

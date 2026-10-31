@@ -559,17 +559,18 @@ agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 
 **Structural keys:**
 - `'ebmv_mw'`: Milky Way E(B-V) reddening (mag). Typically 0.01–0.2.
-- `'law'`: Dust law: `'mw_rv31'` (Fitzpatrick 1999, default), `'ccm89'` (CCM89), etc.
-- `'rv'`: Dust RV parameter override (law-dependent).
+- `'law'`: `'cardelli'` (Cardelli, Clayton & Mathis 1989, default) or `'fitzpatrick99'` (Fitzpatrick 1999). Multiply a Schlegel et al. (1998) map E(B-V) by 0.86 (Schlafly & Finkbeiner 2011) before using it with `'fitzpatrick99'`; the code applies the E(B-V) it is given.
+- `'rv'`: Total-to-selective extinction ratio R_V (default 3.1).
 
 **Minimal example:**
 ```python
-foreground={'ebmv_mw': 0.05, 'law': 'mw_rv31'}
+foreground={'ebmv_mw': 0.05, 'law': 'fitzpatrick99'}
 ```
 
 **Gotchas:**
 - Foreground reddening is applied **in addition to** any dust attenuation in the model.
-- It is a **source reddening**, not observer-frame extinction.
+- The screen is applied once on the observed-frame projection path, so the spectrum and the photometry are reddened by the same transmission.
+- On the batched spectroscopic path the law and R_V come from the template and E(B-V) is per galaxy: give each `GalaxySpectrum` its `ebmv_mw` (a template with a nonzero foreground E(B-V) refuses galaxies without one).
 - No free parameters by default (use Fixed() if you need to pin values precisely).
 
 ### Redshift: `redshift`
