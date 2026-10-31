@@ -147,6 +147,9 @@ ALLOWLIST: dict[str, str] = {
     "observation/spectrum.py::velocity_broaden": (
         "traced grid -> piecewise general path of broaden_velocity_only (#2847)"
     ),
+    "utils/host_array.py::device_table": (
+        "tracer -> passed through unchanged (its dtype is already the trace's)"
+    ),
     "utils/interpolation.py::concrete_canonical_numpy": (
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
     ),

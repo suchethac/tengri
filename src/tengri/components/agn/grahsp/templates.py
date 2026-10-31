@@ -8,11 +8,12 @@ table, torus wave grid).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from functools import lru_cache
 from pathlib import Path
 
 import h5py
+import jax
 import numpy as np
 from jax import Array
 
@@ -92,6 +93,16 @@ class GRAHSPTemplates:
     disc_m: tuple[str, ...] | None = field(default=None, repr=False)
     disc_a: tuple[str, ...] | None = field(default=None, repr=False)
     disc_mdot: tuple[str, ...] | None = field(default=None, repr=False)
+
+
+# The bundle is a pytree so the AGN runner can pass it to the jitted forward model as an
+# argument. The arrays are children; the label tuples are static metadata.
+_STATIC_FIELDS = ("line_names", "disc_m", "disc_a", "disc_mdot")
+jax.tree_util.register_dataclass(
+    GRAHSPTemplates,
+    data_fields=[f.name for f in fields(GRAHSPTemplates) if f.name not in _STATIC_FIELDS],
+    meta_fields=list(_STATIC_FIELDS),
+)
 
 
 @lru_cache(maxsize=4)
