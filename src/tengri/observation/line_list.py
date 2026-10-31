@@ -6,7 +6,8 @@ identifiers, doublet relationships, and line classifications. The catalog
 determines the static array shapes for the design matrix and amplitude vectors
 used in emission line marginalization.
 
-The default catalog includes ~40 optical/NIR lines matching FastSpecFit (DESI),
+The default catalog includes ~50 optical/NIR lines (the FastSpecFit DESI set plus the
+high-order Balmer lines, He I 3889 and [Ne III] 3968),
 with the option to load all ~166 lines from CLOUDY grids for comprehensive
 UV-to-IR coverage.
 
@@ -45,7 +46,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
     # [SII] 6717/6731 is similarly density-sensitive and is also left unconstrained.
 }
 
-# ── Default ~40 line catalog (rest-frame vacuum wavelengths in Angstrom)
+# ── Default ~50 line catalog (rest-frame vacuum wavelengths in Angstrom)
 # Tuple layout: (name, wavelength_angstrom, species, is_balmer, is_broad_candidate,
 #                is_strong, plot_group)
 # is_strong and plot_group match FastSpecFit emlines.ecsv (Moustakas+2023).
@@ -67,9 +68,25 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("NeV_3346", 3347.78, "Ne5", False, False, False, "nev_3346"),
     ("NeV_3426", 3427.94, "Ne5", False, False, False, "nev_3426"),
     # Optical lines (3700-6800 Å)
+    ("H14", 3723.00, "H1", True, False, False, "balmer_high_order"),
     ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
     ("OII_3729", 3729.88, "O2", False, False, True, "oii_3726_29"),
+    # High-order Balmer lines. Hydrogen: vacuum Ritz wavelengths 1e8 / (E_n - E_2) from the
+    # NIST ASD H I energy levels (fetched 2026-10-31), tabulated in
+    # components/nebular/_balmer_series.py; they agree with Cue's catalog to 0.004 A for
+    # H8-H10. Plot group 'balmer_high_order' holds H9-H14.
+    ("H13", 3735.43, "H1", True, False, False, "balmer_high_order"),
+    ("H12", 3751.22, "H1", True, False, False, "balmer_high_order"),
+    ("H11", 3771.70, "H1", True, False, False, "balmer_high_order"),
+    ("H10", 3798.98, "H1", True, False, False, "balmer_high_order"),
+    ("H9", 3836.47, "H1", True, False, False, "balmer_high_order"),
     ("NeIII_3869", 3870.16, "Ne3", False, False, False, "neiii_3869_h6"),
+    # HeI_3889 (3889.74 A, Cue catalog line, Cloudy label in vacuum) and H8 (3890.15 A, NIST
+    # Ritz) lie 0.41 A apart: a blend candidate at DESI resolution, left unconstrained.
+    ("HeI_3889", 3889.74, "He1", False, False, False, "hei_3889_h8"),
+    ("H8", 3890.15, "H1", True, False, False, "hei_3889_h8"),
+    # [Ne III] 3968.59 A: Cue catalog line (Cloudy label, vacuum); 2.6 A blueward of Hepsilon.
+    ("NeIII_3968", 3968.59, "Ne3", False, False, False, "hepsilon"),
     ("Hepsilon", 3971.20, "H1", True, True, False, "hepsilon"),
     ("Hdelta", 4102.89, "H1", True, True, False, "hdelta"),
     ("Hgamma", 4341.68, "H1", True, True, True, "hgamma_oiii_4363"),
@@ -334,12 +351,12 @@ class LineList:
 
     @classmethod
     def default_optical(cls) -> LineList:
-        r"""FastSpecFit-equivalent ~40-line catalog for optical/NIR spectroscopy.
+        r"""FastSpecFit-equivalent ~50-line catalog for optical/NIR spectroscopy.
 
         Returns
         -------
         LineList
-            Catalog of ~40 lines sorted by wavelength [Angstrom] with
+            Catalog of ~50 lines sorted by wavelength [Angstrom] with
             doublet constraints auto-detected.
 
         Notes
