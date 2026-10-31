@@ -341,10 +341,12 @@ def _float32_torus_power(linear, sed, integral, agn_log_lbol, agn_torus_frac):
     stays finite and contributes a zero, not a NaN, to the gradient.
     """
     log_lbol = jnp.asarray(agn_log_lbol)
-    low, high = jnp.minimum(log_lbol, 0.0), jnp.maximum(log_lbol, 0.0)
+    above_zero = log_lbol > 0.0
+    low = jnp.where(above_zero, 0.0, log_lbol)
+    high = jnp.where(above_zero, log_lbol, 0.0)
     below = linear(10.0**low * _LSUN_ERG * agn_torus_frac)
     above = apply_log10_scale(agn_torus_frac * sed, high - jnp.log10(integral)) * _LSUN_ERG
-    return jnp.where(log_lbol <= 0.0, below, above)
+    return jnp.where(above_zero, above, below)
 
 
 def scale_by_torus_power(sed, integral, agn_log_lbol, agn_torus_frac):
