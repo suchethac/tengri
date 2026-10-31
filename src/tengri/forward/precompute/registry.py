@@ -33,19 +33,16 @@ _REGISTRY: dict[str, str] = {
     "feltre_nlr": "tengri.components.nebular.feltre_precompute",
     # MAPPINGS shock
     "mappings_shock": "tengri.components.nebular.mappings_shock_precompute",
-    # Dust IR emission, template-based models
-    "dl07": "tengri.components.dust.dust_emission_precompute",
-    "draine_li2007": "tengri.components.dust.dust_emission_precompute",
+    # Dust IR emission, template-based models. Only dale2014 has a free-shape gap table
+    # (its adapter is read through ``EmissionComponent.precompute_key``). The other template
+    # models (DL07, DL14, astrodust, BOSA, THEMIS) were registered as duplicates of the exact
+    # all-fixed band response and had no gap-filling consumer, so they are not registered.
     "dale2014": "tengri.components.dust.dust_emission_precompute",
-    "draine_li2014": "tengri.components.dust.dust_emission_precompute",
-    "astrodust": "tengri.components.dust.dust_emission_precompute",
-    "bosa": "tengri.components.dust.dust_emission_precompute",
-    "themis": "tengri.components.dust.dust_emission_precompute",
-    # Dust IR emission, analytic models
+    # Dust IR emission, analytic models. casey2012 (no gap table: its 4-D lookup missed the
+    # 1e-3 contract and ran slower than the per-call integral) and pah_drude (no free shape, so
+    # the exact band response always applies) are not registered for the same reason.
     "modified_blackbody": "tengri.components.dust.dust_analytic_precompute",
-    "casey2012": "tengri.components.dust.dust_analytic_precompute",
     "graybody": "tengri.components.dust.dust_analytic_precompute",
-    "pah_drude": "tengri.components.dust.dust_analytic_precompute",
     # AGN torus templates
     "skirtor": "tengri.components.agn.skirtor_precompute",
     "skirtor_agnfitter": "tengri.components.agn.skirtor_agnfitter_precompute",

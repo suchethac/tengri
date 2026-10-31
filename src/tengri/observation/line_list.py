@@ -64,12 +64,12 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     # constrained secondary of MgII_2803
     ("MgII_2796", 2796.35, "Mg2", False, False, True, "mgii_2796_2803"),
     ("MgII_2803", 2803.53, "Mg2", False, False, True, "mgii_2796_2803"),
-    ("NeV_3346", 3347.78, "Ne5", False, False, False, "nev_3346"),
-    ("NeV_3426", 3427.94, "Ne5", False, False, False, "nev_3426"),
+    ("NeV_3346", 3346.79, "Ne5", False, False, False, "nev_3346"),
+    ("NeV_3426", 3426.85, "Ne5", False, False, False, "nev_3426"),
     # Optical lines (3700-6800 Å)
     ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
     ("OII_3729", 3729.88, "O2", False, False, True, "oii_3726_29"),
-    ("NeIII_3869", 3870.16, "Ne3", False, False, False, "neiii_3869_h6"),
+    ("NeIII_3869", 3869.86, "Ne3", False, False, False, "neiii_3869_h6"),
     ("Hepsilon", 3971.20, "H1", True, True, False, "hepsilon"),
     ("Hdelta", 4102.89, "H1", True, True, False, "hdelta"),
     ("Hgamma", 4341.68, "H1", True, True, True, "hgamma_oiii_4363"),
