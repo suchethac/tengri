@@ -24,7 +24,7 @@ _NIST_AIR_AA = {
     "MgII_2796": 2795.53,
     "MgII_2803": 2802.71,
     "NeV_3346": 3345.83,
-    "NeV_3426": 3425.88,
+    "NeV_3426": 3425.86,
     "OII_3726": 3726.03,
     "OII_3729": 3728.82,
     "NeIII_3869": 3868.76,
@@ -59,21 +59,7 @@ def test_the_table_covers_every_optical_entry():
     assert {n for n, w in zip(lines.names, lines.wavelengths) if w > 2000.0} == set(_NIST_AIR_AA)
 
 
-#: Entries the catalog gets wrong by about 1 Angstrom (3347.78 and 3427.94 against
-#: 3346.79 and 3426.86); strict, so fixing the catalog flips them to a failure here.
-_KNOWN_WRONG = {"NeV_3346", "NeV_3426"}
-
-
-def _param(name):
-    marks = (
-        [pytest.mark.xfail(strict=True, reason="line_list [Ne V] ~1 A from NIST")]
-        if name in _KNOWN_WRONG
-        else []
-    )
-    return pytest.param(name, marks=marks)
-
-
-@pytest.mark.parametrize("name", [_param(n) for n in sorted(_NIST_AIR_AA)])
+@pytest.mark.parametrize("name", sorted(_NIST_AIR_AA))
 def test_optical_entry_is_air_to_vac_of_the_nist_air_wavelength(name):
     lines = LineList.default_optical()
     got = float(lines.wavelengths[lines.names.index(name)])

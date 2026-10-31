@@ -65,6 +65,7 @@ _CUE_COUNTERPARTS = {
 
 #: PyNeb integer label of the Flury+2024 grids -> line-list line it rounds.
 _ROUNDED_COUNTERPARTS = {
+    "Ne5_3426A": "NeV_3426",
     "O2_3726A": "OII_3726",
     "O2_3729A": "OII_3729",
     "H1r_4102A": "Hdelta",
