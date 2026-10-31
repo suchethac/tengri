@@ -207,9 +207,6 @@ def _refusal_cases(ssp):
             spectro_kw={"resolution": 1000.0},
             kw={"approx": WavePrecomp(catalog_z_range=(0.05, 0.5))},
         ),
-        "covariance": lambda: _model(
-            ssp, wave, spectro_kw={"resolution": 1000.0, "covariance": jnp.eye(100) * 1e-3}
-        ),
         "student_t_noise": lambda: _model(
             ssp, wave, obs_kw={"noise": NoiseModel(student_t_dof=4.0)}
         ),
@@ -222,7 +219,7 @@ def _refusal_cases(ssp):
 
 @pytest.mark.parametrize(
     "case",
-    ["catalog_z_range", "covariance", "student_t_noise", "calibration_floor", "line_fluxes"],
+    ["catalog_z_range", "student_t_noise", "calibration_floor", "line_fluxes"],
 )
 def test_template_with_unsupported_setting_is_refused(synthetic_ssp, case):
     template = _refusal_cases(synthetic_ssp)[case]()

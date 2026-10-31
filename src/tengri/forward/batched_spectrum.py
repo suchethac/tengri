@@ -94,10 +94,12 @@ def check_template_model(model) -> None:
         Template model. Its redshift must be free, its spectroscopy must be
         configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
         line fluxes, line ratios, spectral indices, emission lines with a Cloudy
-        prior, broad emission lines (``eline_broad``), a spectral covariance or a
+        prior, broad emission lines (``eline_broad``) or a
         Student-t or calibration-floor noise model. Emission lines with
         ``eline_mode='fitted'`` or ``'marginalized'`` (flat prior) and
-        ``eline_broad=False`` are accepted.
+        ``eline_broad=False`` are accepted. A pixel covariance is a per-galaxy input
+        (:class:`~tengri.observation.batched.GalaxySpectrum`), never read from the
+        template's spectroscopy.
 
     Raises
     ------
@@ -130,11 +132,6 @@ def check_template_model(model) -> None:
             "observation grid; build it with spectrum_precomp off"
         )
     spectroscopy = observation.spectroscopy
-    if spectroscopy.covariance is not None:
-        raise ValueError(
-            "template model has a spectral covariance (correlated noise), which the "
-            "batched Gaussian likelihood does not evaluate; use diagonal noise"
-        )
     if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "cloudy":
         raise ValueError(
             "template model marginalizes emission lines with a Cloudy prior "
