@@ -32,10 +32,13 @@ parameter path; the MAP never samples it.
 
 v1 scope
 --------
-Gaussian diagonal noise only. Not covered: covariance matrices, Student-t
-noise, calibration marginalization, emission-line channels, spectral indices,
-and stochastic (GP-field) SFH. A stochastic model raises
-:class:`NotImplementedError`.
+Gaussian diagonal noise only. Emission lines are covered with
+``eline_mode="fitted"``: each independent line amplitude is a latent with the
+prior of the non-batched fitter, and the returned ``params`` carry the
+``eline_amp_*`` entries next to the physical parameters. Not covered:
+marginalized lines (``eline_mode="marginalized"``), covariance matrices,
+Student-t noise, calibration marginalization, spectral indices, and stochastic
+(GP-field) SFH. A stochastic model raises :class:`NotImplementedError`.
 
 JIT note
 --------
@@ -67,7 +70,8 @@ from tengri.inference.loss_functions import (
     standardized_neg_log_prior,
 )
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
-from tengri.parameters.priors import Gaussian
+from tengri.observation.eline_marginalization import eline_amplitude_names
+from tengri.parameters.priors import Gaussian, Uniform
 
 _REDSHIFT = "redshift"
 
@@ -81,9 +85,24 @@ def _refuse_stochastic(model) -> None:
         )
 
 
+def _latent_spec(model):
+    """Return the spec whose free parameters are the latents the fit samples.
+
+    With emission lines off this is ``model.spec``. With ``eline_mode`` set, each
+    independent ``eline_amp_<name>`` gets the prior ``Uniform(-b, b)`` with
+    ``b = 10 * eline_prior_sigma``, the same prior as ``Fitter._init_eline_arrays``.
+    """
+    spectroscopy = model.observation.spectroscopy
+    if spectroscopy.eline_mode == "off":
+        return model.spec
+    names = eline_amplitude_names(spectroscopy.effective_catalog)
+    bound = 10.0 * spectroscopy.eline_prior_sigma
+    return model.spec.merge_observation_params(**{nm: Uniform(-bound, bound) for nm in names})
+
+
 def _free_latent_names(model) -> list[str]:
     """Free parameter names that the MAP fits, with the redshift removed."""
-    return [n for n in model.spec.free_params if n != _REDSHIFT]
+    return [n for n in _latent_spec(model).free_params if n != _REDSHIFT]
 
 
 def _prepare_template(model) -> Any:
@@ -187,10 +206,11 @@ def batched_neg_log_posterior(
     loglik = batched_log_likelihood(model, spec)
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
+    latent_spec = _latent_spec(model)
 
     def nlp(params_unbounded: dict, obs: SpectroBatch) -> jax.Array:
         physical = _unstandardize_parameters(
-            params_unbounded, model.spec, free_names, fixed_values, stochastic=False
+            params_unbounded, latent_spec, free_names, fixed_values, stochastic=False
         )
         phys_free = {n: physical[n] for n in free_names}
         prior = standardized_neg_log_prior(params_unbounded, free_names, stochastic=False)
@@ -214,8 +234,9 @@ def init_unbounded_batch(model, n_galaxies: int, key) -> dict:
     Returns
     -------
     dict of str to ndarray
-        Each free parameter name other than redshift maps to an array of shape
-        ``(B,)``.
+        Each free parameter name other than redshift, including the
+        ``eline_amp_*`` amplitudes when the template fits lines, maps to an array
+        of shape ``(B,)``.
 
     Raises
     ------
@@ -233,8 +254,9 @@ def init_unbounded_batch(model, n_galaxies: int, key) -> dict:
     **JIT-compatible**: yes under :func:`jax.vmap`; this is a setup helper.
     """
     _refuse_stochastic(model)
-    names = list(model.spec.free_params)
-    dists = {n: model.spec.get_distribution(n) for n in names}
+    latent_spec = _latent_spec(model)
+    names = list(latent_spec.free_params)
+    dists = {n: latent_spec.get_distribution(n) for n in names}
 
     def init_one(galaxy_key):
         keys = jax.random.split(galaxy_key, len(names) + 1)
@@ -256,10 +278,11 @@ def _to_physical(model, params_unbounded_batch: dict) -> dict:
     """Map batched standardized latents to batched physical free parameters."""
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
+    latent_spec = _latent_spec(model)
 
     def one(p):
         physical = _unstandardize_parameters(
-            p, model.spec, free_names, fixed_values, stochastic=False
+            p, latent_spec, free_names, fixed_values, stochastic=False
         )
         return {n: physical[n] for n in free_names}
 
@@ -356,7 +379,8 @@ def fit_spectra_map_vmap(
     dict
         ``"params"``: dict of str to ndarray, shape ``(N,)``. The MAP physical
         value of each free parameter other than redshift, for every galaxy in
-        the original catalog order (``N`` is the total galaxy count).
+        the original catalog order (``N`` is the total galaxy count). With
+        ``eline_mode="fitted"`` the ``eline_amp_*`` line amplitudes are included.
         ``"nlp"``: ndarray, shape ``(N,)``. The final negative log-posterior of
         each galaxy, in the same order.
         ``"loss_history"``: list of ndarray, one per bucket in ``batches`` order,
@@ -477,8 +501,9 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     prior_rows = _flat_rows(init_unbounded_batch(model, n_gal, key))
     if map_params is None:
         return prior_rows
+    latent_spec = _latent_spec(model)
     mapped = {
-        n: model.spec.get_distribution(n).standardize(
+        n: latent_spec.get_distribution(n).standardize(
             jnp.asarray(np.asarray(map_params[n])[index])
         )
         for n in _free_latent_names(model)
@@ -546,7 +571,8 @@ def fit_spectra_catalog_mcmc(
     dict
         ``"draws"``: dict of str to ndarray, shape ``(N, n_draws)``. The physical
         posterior draws of each free parameter other than redshift, in the
-        original catalog order (``N`` is the total galaxy count).
+        original catalog order (``N`` is the total galaxy count). With
+        ``eline_mode="fitted"`` the ``eline_amp_*`` line amplitudes are included.
         ``"divergences"``: ndarray of int, shape ``(N,)``. Divergent transitions
         per galaxy, in the same order.
 
