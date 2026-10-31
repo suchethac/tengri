@@ -142,6 +142,12 @@ print(f"Free parameters ({model.spec.n_free}): {', '.join(model.spec.free_params
 print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cached on re-runs)")
 
 # %% [markdown]
+# The catalog fitter's default, `approx="auto"`, selects `WavePrecomp` for photometry fits, so
+# the explicit `approx=WavePrecomp(...)` above names the same lookup table with its redshift
+# grid. `approx=None` runs the exact wave-grid path for single, catalog and population fits
+# alike, at about 2 to 6 times the cost per evaluation.
+
+# %% [markdown]
 # ## A mock catalog
 #
 # `N` galaxies spread across redshift and stellar mass, each a noisy realization
