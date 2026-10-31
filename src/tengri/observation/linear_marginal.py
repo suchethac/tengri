@@ -48,6 +48,7 @@ def marginalize_linear_nuisance(
     prior_precision: jnp.ndarray | None = None,
     col_mask: jnp.ndarray | None = None,
     scale: float | None = None,
+    flat_mask: jnp.ndarray | None = None,
 ) -> MarginalResult:
     r"""Integrate linear nuisance coefficients out of a Gaussian data model in closed form.
 
@@ -81,6 +82,12 @@ def marginalize_linear_nuisance(
         Scalar :math:`s` that rescales the coefficients so that the whitened design
         stays representable in float32 when the raw design is at flux scale. The
         value is independent of :math:`s` in exact arithmetic. Default: 1.
+    flat_mask : array_like, shape (k,), optional
+        Mask :math:`f \in \{0, 1\}^k` of columns whose prior is flat, used with a
+        ``prior_precision`` whose rows and columns are zero there. A flat column
+        contributes the Jacobian :math:`+\ln s` and no prior determinant, exactly as
+        the all-flat branch does, so a block of flat columns can sit beside a proper
+        Gaussian block. Default: no flat columns.
 
     Returns
     -------
@@ -221,7 +228,10 @@ def marginalize_linear_nuisance(
     if prior_precision is None:
         log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)
     else:
-        prior_unscaled = d_mat @ precision @ d_mat + (eye - d_mat)
+        flat = (
+            jnp.zeros(n_col, dtype=dtype) if flat_mask is None else jnp.asarray(flat_mask, dtype)
+        )
+        prior_unscaled = d_mat @ precision @ d_mat + (eye - d_mat) + jnp.diag(flat)
         _sign_p, logdet_p = jnp.linalg.slogdet(prior_unscaled)
         log_like = (
             log_like
