@@ -21,6 +21,7 @@ from tengri.inference.likelihoods.marginalized import (
     CloudyELineMarginalizedLikelihood,
     ELineFittedLikelihood,
     ELineMarginalizedLikelihood,
+    ModelELineMarginalizedLikelihood,
 )
 from tengri.inference.likelihoods.protocol import (
     CensoredLikelihood,
@@ -37,6 +38,7 @@ __all__ = [
     "ELineFittedLikelihood",
     "ELineMarginalizedLikelihood",
     "GaussianLikelihood",
+    "ModelELineMarginalizedLikelihood",
     "MultivariateGaussianLikelihood",
     "StudentTLikelihood",
     "diag_gaussian_chi2",

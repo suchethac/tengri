@@ -154,6 +154,7 @@ def _build_prediction(
     measured_line_defs=None,
     jit_inputs=None,
     threaded_impl=None,
+    needs_line_lums=False,
 ):
     """Forward-model prediction in one place.
 
@@ -264,7 +265,9 @@ def _build_prediction(
     # than sharing one ``predict_state`` with the photometry channel. Measured on a
     # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
-    needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
+    needs_state = (
+        has_line_ratios or has_indices or (has_line_fluxes and not fast_lines) or needs_line_lums
+    )
     if not needs_state:
         feature_state = None
     elif jit_inputs is not None:
@@ -279,6 +282,11 @@ def _build_prediction(
         )
     else:
         feature_state = model.predict_state(free_params)
+    if needs_line_lums:
+        derived = feature_state.derived
+        prediction["log_line_lums_attenuated"] = derived.get(
+            "log_line_lums_attenuated", derived["log_line_lums"]
+        )
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
@@ -374,6 +382,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
+    needs_line_lums = getattr(fitter, "_eline_prior_type", None) == "model"
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
     # Build-time signature check: the internal adapter cohort accepts
@@ -441,6 +450,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             use_components=use_components,
             has_line_ratios=has_line_ratios,
             measured_line_defs=measured_line_defs,
+            needs_line_lums=needs_line_lums,
         )
         _channels = (
             user_likelihood.likelihoods
@@ -467,6 +477,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             measured_line_defs=measured_line_defs,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=_threaded_impl,
+            needs_line_lums=needs_line_lums,
         )
 
         # Auto-built / user-supplied Likelihood adapter handles the data

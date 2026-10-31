@@ -141,6 +141,13 @@ def check_template_model(model) -> None:
             "(eline_prior_type='cloudy'), which the batched likelihood does not evaluate; "
             "use eline_prior_type='flat', or eline_mode='fitted' or 'off'"
         )
+    if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
+        raise ValueError(
+            "template model marginalizes emission lines with a model-centred prior "
+            "(eline_prior_type='model'), which the batched likelihood does not evaluate yet; "
+            "use eline_prior_type='flat' with the per-galaxy fitter, or eline_mode='fitted' "
+            "or 'off'"
+        )
     if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
         raise ValueError(
             "template model fits emission lines with eline_broad=True, which the batched "

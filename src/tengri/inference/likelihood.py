@@ -81,6 +81,7 @@ def build_base_likelihood(context: InferenceContext):
         CloudyELineMarginalizedLikelihood,
         ELineFittedLikelihood,
         ELineMarginalizedLikelihood,
+        ModelELineMarginalizedLikelihood,
         MultivariateGaussianLikelihood,
         StudentTLikelihood,
     )
@@ -379,6 +380,26 @@ def build_base_likelihood(context: InferenceContext):
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
             )
+        elif context.eline_prior_type == "model":
+            match_index, matched = _model_line_match(context)
+            eline_lk = ModelELineMarginalizedLikelihood(
+                fnu_obs=spec_obs,
+                fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
+                design_matrix_builder=builder,
+                prior_inputs_builder=_model_prior_inputs(context),
+                match_index=match_index,
+                matched=matched,
+                line_wavelengths=context.eline_independent_wavelengths,
+                prior_width_dex=context.eline_prior_width_dex,
+                channel="spec_fnu",
+            )
         else:
             eline_lk = ELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
@@ -583,6 +604,44 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
         eline_delta_v_kms=delta_v,
     )
     return apply_doublet_constraints(G, constraint_matrix)
+
+
+def _model_line_match(context: InferenceContext):
+    """Static index of the model line matching each independent catalog line.
+
+    The model's line wavelengths come from the nebular backend's published constants,
+    so the Gaussian/flat split is fixed at build time.
+    """
+    from tengri.observation.eline_marginalization import match_model_lines
+
+    backend = getattr(context.model, "_nebular_backend", None)
+    if backend is None or not hasattr(backend, "published_line_wavelengths"):
+        raise ValueError(
+            'eline_prior_type="model" needs a nebular backend that publishes a line '
+            "catalog (cue); the model's line wavelengths are read from the backend."
+        )
+    model_waves = backend.published_line_wavelengths()
+    return match_model_lines(model_waves, context.eline_independent_wavelengths)
+
+
+def _model_prior_inputs(context: InferenceContext):
+    """Closure returning ``(redshift, dl_cm, aperture_frac)`` for the model line prior.
+
+    The redshift and distance follow the forward pass's resolution order, and the
+    aperture fraction is read from ``params`` with ``Fixed(1.0)`` as the default.
+    """
+    model = context.model
+    fixed_values = context.fixed_values
+
+    def inputs(params):
+        redshift = model._get_redshift(params, fixed_values)
+        dl_cm = model._get_dl_cm(params, fixed_values)
+        aperture_frac = params.get(
+            "eline_aperture_frac", fixed_values.get("eline_aperture_frac", 1.0)
+        )
+        return redshift, dl_cm, aperture_frac
+
+    return inputs
 
 
 def _make_eline_design_builder(context: InferenceContext):
