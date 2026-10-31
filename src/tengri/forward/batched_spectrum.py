@@ -43,8 +43,8 @@ Per-galaxy Milky Way foreground
 The template fixes the foreground law and R_V; E(B-V) is a traced per-galaxy leaf
 (``ebmv_mw`` of :class:`~tengri.observation.batched.GalaxySpectrum`, a ``(B,)`` array on
 the batch). The screen multiplies the spectrum and the photometry of each galaxy at its own
-observed wavelengths, and E(B-V) = 0 leaves a galaxy unchanged. A template with a nonzero
-foreground E(B-V) refuses galaxies that do not carry their own.
+observed wavelengths. A bucket whose galaxies carry no ``ebmv_mw`` compiles without the
+screen. A template with a nonzero foreground E(B-V) refuses galaxies that do not carry their own.
 
 Flux-conserving mode
 --------------------
@@ -70,6 +70,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.dust.foreground import (
+    combine_observed_transmission,
+    foreground_rest_transmission,
+)
 from tengri.components.stellar.component import RUNTIME_SFH_BIN_EDGES_KEY
 from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec, require_spec
@@ -298,22 +302,15 @@ def predict_batched_observables(
     full = {**fixed, **free}
 
     z = obs.z
-    # The template fixes the law and R_V; E(B-V) is this galaxy's own (#3140), so the
-    # screen replaces whatever the template published and is applied for every galaxy.
-    # E(B-V) = 0 gives T = 1 exactly, so an unreddened galaxy is unchanged.
-    from tengri.components.dust.foreground import (
-        combine_observed_transmission,
-        foreground_rest_transmission,
-    )
-
-    screen = foreground_rest_transmission(
-        state.wave,
-        z,
-        obs.ebmv_mw,
-        model.spec.foreground_rv,
-        model.spec.foreground_law,
-    )
-    state = state.with_(derived=state.derived.with_(foreground_transmission=screen))
+    if spec.has_foreground:
+        screen = foreground_rest_transmission(
+            state.wave,
+            z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
+        )
+        state = state.with_(derived=state.derived.with_(foreground_transmission=screen))
     dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     sed_rest = state.sed_intrinsic
     wave_rest = state.wave

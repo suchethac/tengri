@@ -257,6 +257,10 @@ class SpectroBatchSpec:
     n_sfh_edges : int
         Length of the per-galaxy SFH bin ladder the bucket carries; ``0`` (default)
         when its galaxies use the template's build-time ladder.
+    has_foreground : bool
+        Whether the bucket's galaxies carry their own Milky Way E(B-V). ``False``
+        (default) leaves the foreground screen out of the compiled program, so a
+        bucket without it evaluates exactly as a model with no screen.
 
     Raises
     ------
@@ -280,6 +284,7 @@ class SpectroBatchSpec:
     conserving: bool | None = None
     lsf_pad_pixels: int | None = None
     n_sfh_edges: int = 0
+    has_foreground: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -776,6 +781,7 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
             n_filt=int(p_flux.shape[0]),
             conserving=conserving,
             n_sfh_edges=int(sfh_edges.shape[0]),
+            has_foreground=g.ebmv_mw is not None,
         )
     except ValueError as exc:
         raise ValueError(f"galaxy {index}: {exc}") from exc

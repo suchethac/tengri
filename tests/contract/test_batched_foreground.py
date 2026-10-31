@@ -131,3 +131,20 @@ def test_template_screen_with_galaxy_without_ebmv_raises(synthetic_ssp, wave):
     )
     with pytest.raises(ValueError, match="E\\(B-V\\)"):
         build_spectro_batches([record], model=loaded)
+
+
+def test_galaxy_without_ebmv_matches_a_model_with_no_screen(synthetic_ssp, wave):
+    template = _template(synthetic_ssp, wave)
+    record = GalaxySpectrum(
+        wave=wave,
+        flux=np.ones(wave.size),
+        ivar=np.ones(wave.size),
+        resolution=_banded(wave),
+        z=0.05,
+    )
+    ((spec, batch, _),) = build_spectro_batches([record], model=template)
+    assert not spec.has_foreground
+    params = dict(template.spec.sample(jax.random.PRNGKey(0)))
+    out = np.asarray(make_batched_predict(template, spec)(_stack(params, 1), batch)["spec_fnu"])
+    ref = np.asarray(template.predict_spectrum({**params, "redshift": 0.05}))
+    np.testing.assert_allclose(out[0], ref, rtol=1e-10, atol=0.0)
