@@ -207,3 +207,128 @@ def test_per_galaxy_fitter_declares_log_q_and_scores_the_same_marginal(template,
     ids = np.repeat([0, 1], [135, 165])
     reference = _per_galaxy_log_prob(g, ids, jnp.asarray(0.05), jnp.asarray(10.02))
     np.testing.assert_allclose(float(value), float(reference), rtol=1e-8)
+
+
+# ── (e2) the joint with lines, segments and the ln q latent ─────────────────
+
+_J_WAVE = np.linspace(4000.0, 7500.0, 160)
+_J_R = 300.0
+_J_SIGMA_KMS = 120.0
+_J_PRIOR_SIGMA = 1.0e-15
+_J_Z = (0.1, 0.145)
+_J_CUTS = (0.4, 0.65)
+_J_CENTERS = (0.0, 0.08)
+_J_SIGMA_DEX = 0.3
+_J_WINDOW = (4600.0, 6000.0)
+_J_LOG_Q = (0.05, -0.1)
+_J_LINES = ("Hbeta", "Halpha")
+
+
+def _joint_template(ssp, cal_prior):
+    from tengri.observation.line_list import LineList
+
+    n = _J_WAVE.size
+    spectroscopy = Spectroscopy(
+        wave_obs=jnp.asarray(_J_WAVE),
+        resolution=_J_R,
+        resample="conserving",
+        eline_mode="marginalized",
+        eline_catalog=LineList.from_names(list(_J_LINES)),
+        eline_prior_sigma=_J_PRIOR_SIGMA,
+        eline_prior_type="flat",
+        eline_broad=False,
+        calibration_segments=(int(_J_CUTS[0] * n), n - int(_J_CUTS[0] * n)),
+        cal_prior=cal_prior,
+        cal_scale_prior=(0.0, _J_SIGMA_DEX),
+        cal_scale_window=_J_WINDOW,
+    )
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(spectroscopy=spectroscopy),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), _MASS: Uniform(8.0, 12.0)},
+        neb={"type": "none"},
+        redshift=Uniform(0.0, 0.5),
+    )
+    spec = model.spec.with_fixed_value("eline_sigma_kms", float(_J_SIGMA_KMS))
+    return SEDModel(spec, model.ssp_data, observation=model.observation)
+
+
+def _joint_line_design(model, z):
+    from tengri.observation.eline_marginalization import (
+        apply_doublet_constraints,
+        build_eline_design_matrix,
+    )
+
+    catalog = model.observation.spectroscopy.effective_catalog
+    g = build_eline_design_matrix(
+        jnp.asarray(_J_WAVE), jnp.asarray(catalog.wavelengths), _J_R, z, _J_SIGMA_KMS, 0.0
+    )
+    return apply_doublet_constraints(g, catalog.build_constraint_matrix())
+
+
+@pytest.mark.parametrize("cal_prior", ["gaussian", "scale_free"])
+def test_batched_joint_with_segments_lines_and_log_q_equals_per_galaxy(synthetic_ssp, cal_prior):
+    from tengri.inference.batched_spectro import _log_q_log_normal
+    from tengri.inference.likelihoods.marginalized import CalibrationELineMarginalizedLikelihood
+    from tengri.observation.batched import GalaxySpectrum
+
+    model = _joint_template(synthetic_ssp, cal_prior)
+    n = _J_WAVE.size
+    rng = np.random.default_rng(3)
+    flux = rng.normal(1.3e-15, 0.1e-15, n)
+    sigma = np.full(n, 0.1e-15)
+    cuts = [int(c * n) for c in _J_CUTS]
+    records = [
+        GalaxySpectrum(
+            wave=_J_WAVE,
+            flux=flux,
+            ivar=1.0 / sigma**2,
+            z=z,
+            resolution=_J_R,
+            segment_ids=np.repeat([0, 1], [cut, n - cut]),
+            cal_scale_prior=(center, _J_SIGMA_DEX),
+        )
+        for z, cut, center in zip(_J_Z, cuts, _J_CENTERS)
+    ]
+    [(spec, batch, _)] = build_spectro_batches(records, model=model)
+    assert not np.array_equal(np.asarray(batch.line_mask[0]), np.asarray(batch.line_mask[1]))
+
+    masses = jnp.asarray([10.0, 10.1])
+    log_q = jnp.asarray(_J_LOG_Q)
+    loglik = batched_log_likelihood(
+        model, spec, calibration_marginalize=True, cal_n_poly=2, cal_prior_sigma=1.0
+    )
+    values = np.asarray(jax.vmap(loglik)({_MASS: masses, CAL_LOG_Q: log_q}, batch))
+    window = ((_J_WINDOW[0] <= _J_WAVE) & (_J_WINDOW[1] >= _J_WAVE)).astype(float)
+    for i, (z, cut) in enumerate(zip(_J_Z, cuts)):
+        on_grid = np.asarray(batch.line_mask[i]) > 0
+        design = _joint_line_design(model, z)[:, on_grid]
+        reference = CalibrationELineMarginalizedLikelihood(
+            fnu_obs=jnp.asarray(flux),
+            fnu_err=jnp.asarray(sigma),
+            wavelength=jnp.asarray(_J_WAVE),
+            design_matrix_builder=lambda _p, design=design: design,
+            n_poly=2,
+            prior_sigma=1.0,
+            eline_prior_type="flat",
+            eline_prior_sigma=_J_PRIOR_SIGMA,
+            segments=jnp.asarray(np.repeat([0, 1], [cut, n - cut])),
+            n_segments=2,
+            cal_prior=cal_prior,
+            q_window=jnp.asarray(window),
+            has_q=True,
+        )
+        model_flux = model.predict_spectrum({_MASS: masses[i], "redshift": z, CAL_LOG_Q: log_q[i]})
+        expected = reference.log_prob({"spec_fnu": model_flux}, params={CAL_LOG_Q: log_q[i]})
+        np.testing.assert_allclose(values[i], float(expected), rtol=1e-10)
+
+        per_galaxy = Spectroscopy(
+            wave_obs=jnp.asarray(_J_WAVE),
+            cal_scale_prior=(_J_CENTERS[i], _J_SIGMA_DEX),
+            cal_scale_window=_J_WINDOW,
+        ).get_calibration_params()[CAL_LOG_Q]
+        np.testing.assert_allclose(
+            float(_log_q_log_normal(batch.galaxy(i), log_q[i])),
+            float(per_galaxy.log_prob(log_q[i])),
+            rtol=1e-9,
+        )
