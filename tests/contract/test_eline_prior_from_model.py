@@ -314,3 +314,304 @@ def test_class_float32_scaled_data_finite_and_nonzero_gradient():
     assert np.isfinite(value)
     assert np.isfinite(grad)
     assert grad != 0.0
+
+
+# ── Batched path, calibration joint and the declared aperture (#3138) ─────────
+
+_BW = np.linspace(4000.0, 7500.0, 400)
+_BR = 1000.0
+_BSIG_KMS = 120.0
+_BLINES = ("Hbeta", "OIII_5007", "Halpha")
+_BWIDTH = 0.3
+_BZ = (0.05, 0.2)
+_BPARAMS = ({"sfh_delayed_log_total_mass": 10.0}, {"sfh_delayed_log_total_mass": 10.2})
+
+
+def _catalog(absent=None):
+    """The test catalog; ``absent`` moves one line to a wavelength the model does not predict."""
+    import dataclasses
+
+    from tengri.observation.line_list import LineList
+
+    catalog = LineList.from_names(list(_BLINES))
+    if absent is None:
+        return catalog
+    wavelengths = np.asarray(catalog.wavelengths).copy()
+    wavelengths[catalog.names.index(absent)] = 5577.34
+    return dataclasses.replace(catalog, wavelengths=jnp.asarray(wavelengths))
+
+
+def _btemplate(ssp, *, free_ap=False, catalog=None):
+    """Cue template with marginalized lines under the model-centred prior, free redshift."""
+    spectroscopy = Spectroscopy(
+        wave_obs=jnp.asarray(_BW),
+        resolution=_BR,
+        resample="conserving",
+        eline_mode="marginalized",
+        eline_catalog=_catalog() if catalog is None else catalog,
+        eline_prior_type="model",
+        eline_prior_width_dex=_BWIDTH,
+        nebular_lines=False,
+    )
+    extra = {"eline_aperture_frac": Uniform(0.2, 3.0)} if free_ap else {}
+    model = SEDModel.build(
+        ssp_data=_fine_ssp(ssp),
+        observation=Observation(spectroscopy=spectroscopy),
+        redshift=Uniform(0.0, 0.5),
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "publish_line_fraction": True},
+        **extra,
+    )
+    spec = model.spec.with_fixed_value("eline_sigma_kms", float(_BSIG_KMS))
+    return SEDModel(spec, model.ssp_data, observation=model.observation)
+
+
+def _per_galaxy_pieces(template, z, params):
+    """Prediction dict, design matrix, independent wavelengths and match map at redshift ``z``."""
+    from tengri.observation.eline_marginalization import (
+        apply_doublet_constraints,
+        model_line_match,
+    )
+
+    catalog = template.observation.spectroscopy.effective_catalog
+    full = {**params, "redshift": z}
+    prediction = {
+        "spec_fnu": template.predict_spectrum(full),
+        "log_line_lums_attenuated": template.predict_state(full).derived[
+            "log_line_lums_attenuated"
+        ],
+    }
+    design = apply_doublet_constraints(
+        build_eline_design_matrix(
+            jnp.asarray(_BW), jnp.asarray(catalog.wavelengths), _BR, z, _BSIG_KMS, 0.0
+        ),
+        catalog.build_constraint_matrix(),
+    )
+    independent = np.asarray(catalog.independent_wavelengths)
+    index, matched = model_line_match(template, independent)
+    return prediction, design, independent, index, matched
+
+
+def _galaxy_data(template, z, params, seed):
+    """Continuum plus lines at 1.3 times the model prior mean, with 50 % noise."""
+    prediction, design, independent, index, matched = _per_galaxy_pieces(template, z, params)
+    prior = model_line_prior(
+        prediction["log_line_lums_attenuated"],
+        index,
+        matched,
+        independent,
+        z,
+        float(luminosity_distance(z)),
+        params.get("eline_aperture_frac", 1.0),
+        _BWIDTH,
+    )
+    continuum = np.asarray(prediction["spec_fnu"])
+    sigma = np.full(_BW.size, 0.5 * np.median(continuum))
+    rng = np.random.default_rng(seed)
+    lines = np.asarray(design) @ (1.3 * np.asarray(prior.prior_mean))
+    return continuum + lines + sigma * rng.standard_normal(_BW.size), sigma
+
+
+def _prior_inputs(z):
+    return lambda params: (z, luminosity_distance(z), params.get("eline_aperture_frac", 1.0))
+
+
+def _lines_only_class(template, z, flux, sigma, params):
+    from tengri.inference.likelihoods.marginalized import ModelELineMarginalizedLikelihood
+
+    _, design, independent, index, matched = _per_galaxy_pieces(template, z, params)
+    return ModelELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(flux),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix_builder=lambda params: design,
+        prior_inputs_builder=_prior_inputs(z),
+        match_index=index,
+        matched=matched,
+        line_wavelengths=independent,
+        prior_width_dex=_BWIDTH,
+    )
+
+
+def _joint_class(template, z, flux, sigma, params):
+    from tengri.inference.likelihoods.marginalized import CalibrationELineMarginalizedLikelihood
+
+    _, design, independent, index, matched = _per_galaxy_pieces(template, z, params)
+    return CalibrationELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(flux),
+        fnu_err=jnp.asarray(sigma),
+        wavelength=jnp.asarray(_BW),
+        design_matrix_builder=lambda params: design,
+        n_poly=2,
+        prior_sigma=1.0,
+        eline_prior_type="model",
+        eline_line_wavelengths=independent,
+        eline_prior_width_dex=_BWIDTH,
+        prior_inputs_builder=_prior_inputs(z),
+        match_index=index,
+        matched=matched,
+    )
+
+
+def _batch(template, flux_sigma, zs=_BZ):
+    from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+
+    galaxies = [
+        GalaxySpectrum(wave=_BW, flux=f, ivar=1.0 / s**2, z=z, resolution=_BR)
+        for z, (f, s) in zip(zs, flux_sigma, strict=True)
+    ]
+    spec, batch, _ = build_spectro_batches(galaxies, model=template)[0]
+    return spec, batch
+
+
+def _batched_vs_per_galaxy(template, joint, params_list):
+    from tengri.inference.batched_spectro import batched_log_likelihood
+
+    data = [_galaxy_data(template, z, p, seed=i) for i, (z, p) in enumerate(zip(_BZ, params_list))]
+    spec, batch = _batch(template, data)
+    kwargs = (
+        {"calibration_marginalize": True, "cal_n_poly": 2, "cal_prior_sigma": 1.0} if joint else {}
+    )
+    loglik = jax.vmap(batched_log_likelihood(template, spec, **kwargs), in_axes=(0, 0))
+    stacked = {k: jnp.asarray([p[k] for p in params_list]) for k in params_list[0]}
+    got = np.asarray(loglik(stacked, batch))
+    build = _joint_class if joint else _lines_only_class
+    expected = []
+    for z, p, (flux, sigma) in zip(_BZ, params_list, data):
+        prediction, *_ = _per_galaxy_pieces(template, z, p)
+        expected.append(float(build(template, z, flux, sigma, p).log_prob(prediction, p)))
+    return got, np.asarray(expected), batch
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_batched_equals_per_galaxy_with_model_prior(synthetic_ssp_wide, joint):
+    """Two galaxies at different z (one with H-alpha off the grid): batched == per-galaxy."""
+    with jax.enable_x64(True):
+        template = _btemplate(synthetic_ssp_wide, free_ap=True)
+        params = [
+            {**_BPARAMS[0], "eline_aperture_frac": 0.8},
+            {**_BPARAMS[1], "eline_aperture_frac": 1.4},
+        ]
+        got, expected, batch = _batched_vs_per_galaxy(template, joint, params)
+    lm = np.asarray(batch.line_mask)
+    assert not np.array_equal(lm[0], lm[1])
+    np.testing.assert_allclose(got, expected, rtol=1e-10, atol=0.0)
+
+
+def test_batched_unmatched_catalog_line_is_flat_on_both_paths(synthetic_ssp_wide):
+    """A catalog line the model does not predict is flat: batched == per-galaxy, joint too."""
+    from tengri.observation.eline_marginalization import model_line_match
+
+    with jax.enable_x64(True):
+        template = _btemplate(synthetic_ssp_wide, catalog=_catalog(absent="OIII_5007"))
+        catalog = template.observation.spectroscopy.effective_catalog
+        _, matched = model_line_match(template, np.asarray(catalog.independent_wavelengths))
+        assert list(matched) == [True, False, True]
+        for joint in (False, True):
+            got, expected, _ = _batched_vs_per_galaxy(template, joint, list(_BPARAMS))
+            np.testing.assert_allclose(got, expected, rtol=1e-10, atol=0.0)
+
+
+def test_flat_column_ignores_the_model_line_it_points_to():
+    """Class level: an unmatched column's value does not move with the luminosity at its index."""
+    sigma = np.full(_N_PIX, 1.0e-25)
+    matched = np.array([True, False])
+    design, _ = _class_setup(np.zeros(_N_PIX), sigma, matched)
+    data = np.asarray(_prediction(4.0)["spec_fnu"]) + design @ np.array([1.0e-25, 5.0e-26])
+    _, lk = _class_setup(data, sigma, matched)
+    base = _prediction(4.0)
+    lums = base["log_line_lums_attenuated"]
+    moved_flat = {**base, "log_line_lums_attenuated": lums.at[1].add(1.5)}
+    moved_gaussian = {**base, "log_line_lums_attenuated": lums.at[0].add(1.5)}
+    assert float(lk.log_prob(base, {})) == float(lk.log_prob(moved_flat, {}))
+    assert float(lk.log_prob(base, {})) != float(lk.log_prob(moved_gaussian, {}))
+
+
+def test_one_compile_per_spec_with_model_prior(synthetic_ssp_wide):
+    """A second batch of the same spec (other z, other line masks) triggers no compile."""
+    from jax._src import test_util as jtu
+
+    from tengri.inference.batched_spectro import batched_log_likelihood
+
+    with jax.enable_x64(True):
+        template = _btemplate(synthetic_ssp_wide)
+        data = [_galaxy_data(template, _BZ[0], _BPARAMS[0], seed=i) for i in range(2)]
+        spec_a, batch_a = _batch(template, data, _BZ)
+        spec_b, batch_b = _batch(template, data, (0.2, 0.08))
+        assert spec_a == spec_b
+        assert not np.array_equal(np.asarray(batch_a.line_mask), np.asarray(batch_b.line_mask))
+        loglik = jax.jit(jax.vmap(batched_log_likelihood(template, spec_a), in_axes=(0, 0)))
+        params = {"sfh_delayed_log_total_mass": jnp.full((2,), 10.0)}
+        jax.block_until_ready(loglik(params, batch_a))
+        with jtu.count_jit_compilation_cache_miss() as counter:
+            jax.block_until_ready(loglik(params, batch_b))
+    assert counter() == 0
+
+
+def test_batched_float32_gradients_wrt_aperture_and_mass(synthetic_ssp_wide):
+    """Float32 at log10 M = 4.0 with scaled data: finite value, finite nonzero gradients."""
+    from tengri.inference.batched_spectro import batched_log_likelihood
+
+    scale = 1.0e-6
+    with jax.enable_x64(False):
+        template = _btemplate(synthetic_ssp_wide, free_ap=True)
+        rng = np.random.default_rng(0)
+        flux = rng.normal(1.3e-15, 0.1e-15, _BW.size) * scale
+        sigma = np.full(_BW.size, 0.1e-15 * scale)
+        spec, batch = _batch(template, [(flux, sigma), (flux, sigma)])
+        loglik = batched_log_likelihood(template, spec)
+        obs = batch.galaxy(0)
+        params = {"sfh_delayed_log_total_mass": 4.0, "eline_aperture_frac": 0.9}
+        value = float(loglik(params, obs))
+        grad = jax.grad(lambda p: loglik(p, obs))(params)
+        g_mass = float(grad["sfh_delayed_log_total_mass"])
+        g_ap = float(grad["eline_aperture_frac"])
+    assert np.isfinite(value)
+    assert np.isfinite(g_mass)
+    assert g_mass != 0.0
+    assert np.isfinite(g_ap)
+    assert g_ap != 0.0
+
+
+def test_aperture_round_trips_through_the_grammar_and_both_paths(synthetic_ssp_wide):
+    """A freed aperture survives to_groups -> build, and is a latent on the batched path."""
+    from tengri.inference.batched_spectro import _free_latent_names
+
+    with jax.enable_x64(True):
+        template = _btemplate(synthetic_ssp_wide, free_ap=True)
+        rebuilt = SEDModel.build(
+            ssp_data=template.ssp_data,
+            observation=template.observation,
+            **template.spec.to_groups(),
+        )
+        pinned = _btemplate(synthetic_ssp_wide)
+    assert "eline_aperture_frac" in rebuilt.spec.free_params
+    assert rebuilt.spec.free_params == template.spec.free_params
+    assert "eline_aperture_frac" in _free_latent_names(template)
+    assert "eline_aperture_frac" not in pinned.spec.free_params
+    assert pinned.spec.get_fixed_values()["eline_aperture_frac"] == 1.0
+
+
+def test_one_forward_serves_the_spectrum_and_the_line_luminosities(synthetic_ssp_wide):
+    """The threaded kernel returns the spectrum and the attenuated lines of one forward."""
+    with jax.enable_x64(True):
+        template = _btemplate(synthetic_ssp_wide)
+        params = {**_BPARAMS[0], "redshift": _BZ[0]}
+        kernel = template._get_or_build_predict_observables_lines_jit()
+        threaded = template._resolve_threaded_data(None, None, None)
+        observables, lums = kernel(params, template.spec.get_fixed_values(), *threaded)
+        reference = template.predict_state(params).derived["log_line_lums_attenuated"]
+        spectrum = template.predict_spectrum(params)
+    np.testing.assert_allclose(np.asarray(lums), np.asarray(reference), rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(observables.spec_fnu), np.asarray(spectrum), rtol=1e-10)
+    assert float(jnp.max(lums)) > 30.0

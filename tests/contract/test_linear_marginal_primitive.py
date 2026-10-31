@@ -464,3 +464,31 @@ class TestMixedFlatGaussianColumns:
         ]
         assert np.isfinite(float(results[0]))
         np.testing.assert_allclose(float(results[0]), float(results[1]), rtol=1e-10, atol=0)
+
+
+def test_masked_column_with_nonzero_prior_mean_equals_deleting_it():
+    """A masked column leaves no trace, whatever the prior mean of the masked coefficient."""
+    rng = np.random.default_rng(0)
+    n_pix = 30
+    design = rng.normal(size=(n_pix, 3))
+    data = rng.normal(size=n_pix)
+    sigma = np.full(n_pix, 0.3)
+    mean = jnp.array([0.5, -0.2, 3.0])
+    masked = marginalize_linear_nuisance(
+        jnp.asarray(data),
+        jnp.zeros(n_pix),
+        jnp.asarray(design),
+        sigma=jnp.asarray(sigma),
+        prior_mean=mean,
+        prior_precision=jnp.eye(3),
+        col_mask=jnp.array([1.0, 1.0, 0.0]),
+    )
+    deleted = marginalize_linear_nuisance(
+        jnp.asarray(data),
+        jnp.zeros(n_pix),
+        jnp.asarray(design[:, :2]),
+        sigma=jnp.asarray(sigma),
+        prior_mean=mean[:2],
+        prior_precision=jnp.eye(2),
+    )
+    np.testing.assert_allclose(float(masked.log_like), float(deleted.log_like), rtol=1e-12)
