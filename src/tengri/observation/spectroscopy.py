@@ -102,6 +102,15 @@ class Spectroscopy:
         Enable broad component for AGN candidate lines. Default: False.
     eline_broad_fwhm_min_kms : float
         Minimum FWHM for the broad component [km/s]. Default: 500.0.
+    nebular_lines : bool
+        Whether the predicted spectrum carries the nebular emission lines.
+        ``True`` (default) projects the full ``sed_nebular``. ``False`` drops
+        the lines from ``spec_fnu`` and keeps the nebular continuum, for a
+        likelihood that models the lines itself; photometry is unchanged.
+        Needs a Cue nebular component built with
+        ``neb={"type": "cue", "publish_line_fraction": True}`` and dust that
+        republishes the reddened ``sed_nebular`` (``two_component``,
+        ``age_binned``, or no dust). Default: True.
     covariance : jnp.ndarray or None
         Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
         When provided, the likelihood uses ``diff @ C^{-1} @ diff``
@@ -141,6 +150,8 @@ class Spectroscopy:
         Whether broad AGN component is enabled.
     eline_broad_fwhm_min_kms : float
         Minimum broad component FWHM [km/s].
+    nebular_lines : bool
+        Whether ``spec_fnu`` carries the nebular emission lines.
     covariance : ndarray, shape (n_pix, n_pix) or None
         Spectral covariance matrix.
     covariance_inv : ndarray, shape (n_pix, n_pix) or None
@@ -204,6 +215,7 @@ class Spectroscopy:
     eline_fix_doublets: bool = True
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
+    nebular_lines: bool = True
     covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
     wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
@@ -1192,6 +1204,7 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     "eline_fix_doublets": content("doublet ratio constraints affect the likelihood"),
     "eline_broad": content("broad component option affects line fitting model"),
     "eline_broad_fwhm_min_kms": content("minimum broad FWHM affects the fit model"),
+    "nebular_lines": content("dropping the nebular lines changes the predicted spectrum"),
     "covariance": shape(
         "per-galaxy data: only its shape fixes the program; values are a runtime input"
     ),

@@ -356,6 +356,11 @@ def build_components(
     # a defensive fallback for direct callers of this function; the grammar
     # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
+    # When ``True`` and ``nebular_backend == "cue"``, the nebular component
+    # publishes ``nebular_line_frac`` (the line share of ``sed_nebular``) for
+    # ``Spectroscopy(nebular_lines=False)``. Resolved from
+    # ``Parameters.cue_publish_line_fraction`` on the grammar path.
+    cue_publish_line_fraction: bool = False,
     # When ``True`` (spec has ``neb_dig_frac`` free or fixed nonzero),
     # both HII and DIG nebular components are evaluated and mixed (#2262).
     # When ``False`` (spec pins ``neb_dig_frac`` at the default 0.0),
@@ -780,6 +785,7 @@ def build_components(
                     backend=nebular_backend,
                     cue_full_catalog=cue_full_catalog,
                     dig_active=dig_active,
+                    publish_line_fraction=cue_publish_line_fraction,
                 ),
                 backend=nebular_backend_instance,
             )
