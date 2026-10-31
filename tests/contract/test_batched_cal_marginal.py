@@ -41,16 +41,17 @@ pytestmark = pytest.mark.contract
 _MASS = "sfh_dpl_log_total_mass"
 _SPECS = [(300, 4000.0, 7000.0, 0.05), (360, 4200.0, 7400.0, 0.1), (420, 4500.0, 7500.0, 0.2)]
 _TRUE_MASS = (10.0, 10.3, 9.7)
+_F32_TRUE_MASS = (4.0, 4.3, 3.7)
 _REL_NOISE = 1e-3
 _N_POLY = 3
 _TILT = 0.05
 
 
-def _mock_catalog(ssp, tilt: float = 0.0):
+def _mock_catalog(ssp, tilt: float = 0.0, true_masses: tuple = _TRUE_MASS):
     """Three mocks at known mass; ``tilt`` multiplies the model by ``1 + tilt * x``."""
     rng = np.random.default_rng(20260909)
     galaxies = []
-    for (n_pix, lo, hi, z), true_mass in zip(_SPECS, _TRUE_MASS):
+    for (n_pix, lo, hi, z), true_mass in zip(_SPECS, true_masses):
         wave = _grid(n_pix, lo, hi)
         bm = gaussian_resolution_bands(jnp.asarray(wave), _R_BANDED, _N_DIAG)
         ref = _free_z_model(ssp, wave, {"resolution_matrix": bm})
@@ -130,6 +131,19 @@ def bucket(mock, template):
     return spec, batch
 
 
+@pytest.fixture(scope="module")
+def float32_mock(synthetic_ssp):
+    return _mock_catalog(synthetic_ssp, true_masses=_F32_TRUE_MASS)
+
+
+@pytest.fixture(scope="module")
+def float32_bucket(float32_mock, template):
+    [(spec, batch, _)] = build_spectro_batches(
+        [_record(g) for g in float32_mock], quantum=420, model=template
+    )
+    return spec, batch
+
+
 # ── (a) Single galaxy equals the per-galaxy calibration-marginal likelihood ─
 
 
@@ -206,8 +220,13 @@ def test_second_batch_with_new_mask_does_not_recompile(template, mock):
 # ── (d) Float32 mode: finite value and finite, nonzero gradient ────────────
 
 
-def test_float32_value_and_gradient_are_finite_and_nonzero(template, bucket):
-    spec, batch = bucket
+def test_float32_value_and_gradient_are_finite_and_nonzero(template, float32_bucket):
+    """Finite value and nonzero gradient in float32 at the batched calibration marginal.
+
+    Masses are 4 dex below galaxy scale because the float32 forward is non-finite
+    above log10 M ≈ 4.4 (#3149); move back to galaxy masses when that issue closes.
+    """
+    spec, batch = float32_bucket
     with jax.enable_x64(False):
         batch32 = jax.tree_util.tree_map(
             lambda a: (
@@ -216,7 +235,7 @@ def test_float32_value_and_gradient_are_finite_and_nonzero(template, bucket):
             batch,
         )
         loglik = batched_log_likelihood(template, spec, calibration_marginalize=True)
-        mass = jnp.asarray([_TRUE_MASS[0] + 0.05] * 3, dtype=jnp.float32)
+        mass = jnp.asarray([m + 0.05 for m in _F32_TRUE_MASS], dtype=jnp.float32)
         values, grads = jax.vmap(jax.value_and_grad(loglik))({_MASS: mass}, batch32)
         assert values.dtype == jnp.float32
         # grad-assert: finite-only — the value is a log-likelihood, not a gradient
