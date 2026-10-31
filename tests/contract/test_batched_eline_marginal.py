@@ -467,3 +467,146 @@ def test_fitted_lines_with_calibration_marginal_are_refused(synthetic_ssp):
     spec, _, _ = build_spectro_batches([_marg_galaxy(0.1)], model=model)[0]
     with pytest.raises(NotImplementedError, match="fitted"):
         batched_log_likelihood(model, spec, calibration_marginalize=True)
+
+
+# Per-galaxy marginalized classes in float32 at the batched test's point (#3117, #3149).
+#
+# The flux, noise and prior width are the 1e-6 multiples of the double-precision fixture
+# (prior width 1e-21), and the stellar mass is log10 M = 4.0, where the float32 forward is
+# finite (#3149). The old formula formed 1/sigma_p**2 and was non-finite here.
+
+_F32_SCALE = 1.0e-6
+
+
+def _per_galaxy_classes(template, z, *, flux, sigma, prior_sigma):
+    """Lines-only and joint per-galaxy likelihoods at the given data, prior and redshift."""
+    from tengri.inference.likelihoods.marginalized import (
+        CalibrationELineMarginalizedLikelihood,
+        ELineMarginalizedLikelihood,
+    )
+
+    lines = ELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(flux),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix=_marg_line_design(template, z),
+        prior_sigma=prior_sigma,
+    )
+    joint = CalibrationELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(flux),
+        fnu_err=jnp.asarray(sigma),
+        wavelength=jnp.asarray(_MARG_WAVE),
+        design_matrix_builder=lambda _p: _marg_line_design(template, z),
+        n_poly=2,
+        prior_sigma=1.0,
+        eline_prior_type="flat",
+        eline_prior_sigma=prior_sigma,
+        channel="spec_fnu",
+    )
+    return lines, joint
+
+
+def test_per_galaxy_marginal_classes_are_finite_and_match_float64_in_float32(synthetic_ssp):
+    """Lines-only and joint per-galaxy marginals are finite in float32 and match float64.
+
+    At log10 M = 4.0 with the scaled data and prior width 1e-21, the old 1/sigma_p**2 form
+    is non-finite in float32. The float32 values must agree with the float64 values to
+    rtol 2e-5. The prediction is the float64 model cast to float32, so the comparison
+    isolates the marginal; the float32 forward is covered by the batched float32 test.
+    """
+    z = 0.1
+    params = {"sfh_dpl_log_total_mass": 4.0}
+    flux, sigma = _marg_data()
+    prior_sigma = _MARG_PRIOR_SIGMA * _F32_SCALE
+    template64 = _marg_template(synthetic_ssp)
+    m64 = jnp.asarray(template64.predict_spectrum({**params, "redshift": z}))
+    lines64, joint64 = _per_galaxy_classes(
+        template64,
+        z,
+        flux=flux * _F32_SCALE,
+        sigma=sigma * _F32_SCALE,
+        prior_sigma=prior_sigma,
+    )
+    expected_lines = float(lines64.log_prob({"spec_fnu": m64}))
+    expected_joint = float(joint64.log_prob({"spec_fnu": m64}, params={}))
+
+    with jax.enable_x64(False):
+        template32 = _marg_template(synthetic_ssp, prior_sigma=prior_sigma)
+        m32 = jnp.asarray(m64)
+        lines32, joint32 = _per_galaxy_classes(
+            template32,
+            z,
+            flux=flux * _F32_SCALE,
+            sigma=sigma * _F32_SCALE,
+            prior_sigma=prior_sigma,
+        )
+        got_lines = float(lines32.log_prob({"spec_fnu": m32}))
+        got_joint = float(joint32.log_prob({"spec_fnu": m32}, params={}))
+
+    assert np.isfinite(got_lines)
+    assert np.isfinite(got_joint)
+    np.testing.assert_allclose(got_lines, expected_lines, rtol=2e-5)
+    np.testing.assert_allclose(got_joint, expected_joint, rtol=2e-5)
+
+
+def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthetic_ssp):
+    """The lines-only and joint per-galaxy marginals have finite, nonzero gradients in float32."""
+    z = 0.1
+    flux, sigma = _marg_data()
+    prior_sigma = _MARG_PRIOR_SIGMA * _F32_SCALE
+    with jax.enable_x64(False):
+        template32 = _marg_template(synthetic_ssp, prior_sigma=prior_sigma)
+        lines32, joint32 = _per_galaxy_classes(
+            template32,
+            z,
+            flux=flux * _F32_SCALE,
+            sigma=sigma * _F32_SCALE,
+            prior_sigma=prior_sigma,
+        )
+
+        def value(logm, cls, joint):
+            m = jnp.asarray(
+                template32.predict_spectrum({"sfh_dpl_log_total_mass": logm, "redshift": z})
+            )
+            if joint:
+                return cls.log_prob({"spec_fnu": m}, params={})
+            return cls.log_prob({"spec_fnu": m})
+
+        for cls, joint in ((lines32, False), (joint32, True)):
+            grad = float(jax.grad(value)(jnp.asarray(4.0), cls, joint))
+            assert np.isfinite(grad)
+            assert grad != 0.0
+
+
+def test_per_galaxy_and_batched_marginals_both_call_the_one_helper(synthetic_ssp, monkeypatch):
+    """Replacing the shared line-prior helper makes both paths raise, so there is one helper."""
+    import tengri.inference.batched_spectro as batched_spectro
+    import tengri.inference.likelihoods.marginalized as marginalized
+    import tengri.observation.eline_marginalization as eline_marginalization
+    from tengri.inference.batched_spectro import batched_log_likelihood
+    from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+
+    def _refuse(*_args, **_kwargs):
+        raise RuntimeError("shared line-prior helper called")
+
+    z = 0.1
+    template = _marg_template(synthetic_ssp)
+    flux, sigma = _marg_data()
+    gal = GalaxySpectrum(wave=_MARG_WAVE, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_MARG_R)
+    spec, batch, _ = build_spectro_batches([gal], model=template)[0]
+    params = {"sfh_dpl_log_total_mass": 10.0}
+    m_single = template.predict_spectrum({**params, "redshift": z})
+    lines, joint = _per_galaxy_classes(
+        template, z, flux=flux, sigma=sigma, prior_sigma=_MARG_PRIOR_SIGMA
+    )
+    loglik = batched_log_likelihood(template, spec)
+
+    monkeypatch.setattr(eline_marginalization, "unit_line_prior", _refuse)
+    monkeypatch.setattr(marginalized, "unit_line_prior", _refuse)
+    monkeypatch.setattr(batched_spectro, "unit_line_prior", _refuse)
+    jax.clear_caches()
+    with pytest.raises(RuntimeError, match="shared line-prior helper"):
+        lines.log_prob({"spec_fnu": m_single})
+    with pytest.raises(RuntimeError, match="shared line-prior helper"):
+        joint.log_prob({"spec_fnu": m_single}, params={})
+    with pytest.raises(RuntimeError, match="shared line-prior helper"):
+        loglik(params, batch.galaxy(0))
