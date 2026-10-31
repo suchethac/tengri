@@ -290,10 +290,28 @@ def predict_batched_observables(
     full = {**fixed, **free}
 
     z = obs.z
+    # The template fixes the law and R_V; E(B-V) is this galaxy's own (#3140), so the
+    # screen replaces whatever the template published and is applied for every galaxy.
+    # E(B-V) = 0 gives T = 1 exactly, so an unreddened galaxy is unchanged.
+    from tengri.components.dust.foreground import (
+        combine_observed_transmission,
+        foreground_rest_transmission,
+    )
+
+    screen = foreground_rest_transmission(
+        state.wave,
+        z,
+        obs.ebmv_mw,
+        model.spec.foreground_rv,
+        model.spec.foreground_law,
+    )
+    state = state.with_(derived=state.derived.with_(foreground_transmission=screen))
     dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     sed_rest = state.sed_intrinsic
     wave_rest = state.wave
-    igm_trans = state.derived.get("igm_transmission", None) if state.derived is not None else None
+    igm_trans = combine_observed_transmission(
+        state.derived.get("igm_transmission", None), state.derived.get("foreground_transmission")
+    )
 
     out: dict[str, jax.Array] = {}
     if spec.has_phot:

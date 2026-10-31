@@ -5648,7 +5648,7 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_
 #: laws that take a single ``R_V`` parameter are usable as a foreground
 #: screen: host-dust laws with two free knobs (slope, bump, ...) would
 #: collide with the host ``dust`` block's parameter prefix.
-_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
 
 #: Laws the AGN attenuation-stage block actually implements. One entry, and that
 #: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``

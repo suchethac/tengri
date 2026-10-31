@@ -80,6 +80,7 @@ _BATCH_FIELDS: tuple[str, ...] = (
     "phot_err",
     "phot_presence",
     "sfh_bin_edges_gyr",
+    "ebmv_mw",
 )
 
 
@@ -129,6 +130,7 @@ class GalaxySpectrum(NamedTuple):
     phot_flux: Any = None
     phot_err: Any = None
     sfh_bin_edges_gyr: Any = None
+    ebmv_mw: float | None = None
 
     @classmethod
     def from_flambda(
@@ -144,6 +146,7 @@ class GalaxySpectrum(NamedTuple):
         phot_err_lambda=None,
         phot_wave_eff=None,
         sfh_bin_edges_gyr=None,
+        ebmv_mw=None,
     ) -> GalaxySpectrum:
         """Build a record from data per wavelength, converting to F_nu.
 
@@ -215,6 +218,7 @@ class GalaxySpectrum(NamedTuple):
             phot_flux=phot_flux,
             phot_err=phot_err,
             sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+            ebmv_mw=ebmv_mw,
         )
 
 
@@ -363,6 +367,7 @@ class SpectroBatch:
     phot_err: jax.Array
     phot_presence: jax.Array
     sfh_bin_edges_gyr: jax.Array
+    ebmv_mw: jax.Array
 
     def galaxy(self, i: int) -> SpectroBatch:
         """Return galaxy ``i`` as an unbatched :class:`SpectroBatch`.
@@ -795,6 +800,7 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
         "phot_err": p_err,
         "phot_presence": p_pres,
         "sfh_bin_edges_gyr": sfh_edges,
+        "ebmv_mw": np.asarray(0.0 if g.ebmv_mw is None else float(g.ebmv_mw)),
     }
     return spec, row, n, log_grid
 
@@ -933,6 +939,16 @@ def build_spectro_batches(
                 f"({policy.lsf_n_bins}); omit it to take the template's value"
             )
         lsf_n_bins = policy.lsf_n_bins
+        if model.spec.foreground_ebmv_mw > 0.0:
+            missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
+            if missing:
+                raise ValueError(
+                    "the template model carries a Milky Way foreground screen "
+                    f"(foreground_ebmv_mw={model.spec.foreground_ebmv_mw}), so every galaxy "
+                    f"needs its own E(B-V): galaxies {missing} have ebmv_mw=None. Give "
+                    "each GalaxySpectrum an ebmv_mw, or set the template's foreground "
+                    "E(B-V) to 0."
+                )
     elif lsf_n_bins is None:
         lsf_n_bins = 16
 

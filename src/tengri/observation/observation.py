@@ -1555,8 +1555,16 @@ class Observation:
         #
         # The rest-frame-photometry block does NOT use it either (#1115): the IGM is a
         # line-of-sight absorber, not part of the galaxy's rest-frame SED. See there.
-        igm_trans = (
-            state.derived.get("igm_transmission", None) if state.derived is not None else None
+        # The Milky Way foreground screen (#3140) is an observed-frame transmission
+        # too, so it joins the IGM factor here; the photometric block reads it
+        # inside ``project_photometry``.
+        from tengri.components.dust.foreground import combine_observed_transmission
+
+        igm_trans = combine_observed_transmission(
+            state.derived.get("igm_transmission", None) if state.derived is not None else None,
+            state.derived.get("foreground_transmission", None)
+            if state.derived is not None
+            else None,
         )
 
         out: dict[str, jnp.ndarray] = {}
@@ -2323,8 +2331,17 @@ class Observation:
         # live, defeating the dead-code elimination that is the entire WavePrecomp
         # speedup: 108 us -> 1764 us since #932. Bit-identical at the z-nodes; a
         # fixed-z model has a single node and is exact.
-        igm_factor = state.derived.get("igm_phot_factor")
-        igm_trans = state.derived.get("igm_transmission")
+        # A foreground screen (#3140) depends on the SED's wavelength grid only through
+        # the transmission itself, so the z-tabulated IGM band factor cannot carry it.
+        # With a screen present the dense transmission is used, the same path the
+        # patchy/DLA fallback takes.
+        from tengri.components.dust.foreground import combine_observed_transmission
+
+        foreground_trans = state.derived.get("foreground_transmission")
+        igm_trans = combine_observed_transmission(
+            state.derived.get("igm_transmission"), foreground_trans
+        )
+        igm_factor = None if foreground_trans is not None else state.derived.get("igm_phot_factor")
         eff_waves = state.derived.get("filter_eff_waves")
         fw_pad = ft_pad = None
         from_dense_curve = igm_factor is None
