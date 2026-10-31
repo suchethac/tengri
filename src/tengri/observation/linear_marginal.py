@@ -12,7 +12,10 @@ from __future__ import annotations
 import math
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
+
+from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 
 _LOG_2PI = math.log(2.0 * math.pi)
 
@@ -42,7 +45,8 @@ def marginalize_linear_nuisance(
     model0: jnp.ndarray,
     design: jnp.ndarray,
     *,
-    sigma: jnp.ndarray,
+    sigma: jnp.ndarray | None = None,
+    chol_lower: BandedMatrix | None = None,
     pix_mask: jnp.ndarray | None = None,
     prior_mean: jnp.ndarray | None = None,
     prior_precision: jnp.ndarray | None = None,
@@ -63,9 +67,15 @@ def marginalize_linear_nuisance(
         Fixed model offset :math:`m_0` [data units].
     design : array_like, shape (n, k)
         Design matrix :math:`X` [data units per coefficient unit].
-    sigma : array_like, shape (n,)
+    sigma : array_like, shape (n,), optional
         One-sigma uncertainty of each datum [data units]. Must be strictly positive
-        wherever ``pix_mask`` is nonzero.
+        wherever ``pix_mask`` is nonzero. Exactly one of ``sigma`` and ``chol_lower``
+        is given.
+    chol_lower : BandedMatrix, optional
+        Lower Cholesky factor :math:`L` of the pixel covariance, as returned by
+        :func:`~tengri.observation.banded.banded_cholesky` with the same ``pix_mask``.
+        The whitening is then :math:`L^{-1}` instead of :math:`\mathrm{diag}(\sigma)^{-1}`.
+        Exactly one of ``sigma`` and ``chol_lower`` is given.
     pix_mask : array_like, shape (n,), optional
         Pixel mask :math:`w \in \{0, 1\}^n`. Masked pixels contribute nothing to any
         term. Default: all ones.
@@ -198,8 +208,20 @@ def marginalize_linear_nuisance(
     )
     d_mat = jnp.diag(col)
 
-    resid = weight * (data - model0) / sigma
-    design_w = (weight / sigma)[:, None] * design * coef_scale
+    if (sigma is None) == (chol_lower is None):
+        raise ValueError("exactly one of sigma and chol_lower must be given")
+    if chol_lower is None:
+        resid = weight * (data - model0) / sigma
+        design_w = (weight / sigma)[:, None] * design * coef_scale
+        log_norm = jnp.sum(weight * jnp.log(sigma))
+    else:
+        resid = banded_forward_substitution(chol_lower, weight * (data - model0))
+        design_w = jax.vmap(
+            lambda column: banded_forward_substitution(chol_lower, column),
+            in_axes=1,
+            out_axes=1,
+        )(weight[:, None] * design * coef_scale)
+        log_norm = jnp.sum(jnp.log(chol_lower.data[0]))
     prior_s = precision * coef_scale**2
 
     gram = design_w.T @ design_w + prior_s
@@ -213,7 +235,7 @@ def marginalize_linear_nuisance(
 
     log_like = (
         -0.5 * jnp.sum(weight) * _LOG_2PI
-        - jnp.sum(weight * jnp.log(sigma))
+        - log_norm
         - 0.5 * jnp.dot(resid, resid)
         + 0.5 * jnp.dot(rhs_m, beta_s)
         - 0.5 * logdet_m
