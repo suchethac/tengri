@@ -450,6 +450,12 @@ def build_catalog_mcmc_engine(
     sampler : {"nuts", "hmc", "chees", "ghmc"}
         Which BlackJAX sampler to vectorize. ``"ghmc"`` runs the MEADS adaptation for a fixed
         ``n_warmup`` steps; an adaptive stop needs a resumable MEADS step.
+        On a sigma = 1e-3 Gaussian in standardized units, MEADS with 300 warmup steps from an
+        ensemble jitter of 0.5 does not adapt (step 5e-7, chain sd 0.4); with the analytic
+        preconditioner at strength 0.5 or 1.0 the chains freeze with every transition
+        divergent (measured 2026-11-01, #3135). At DESI-like S/N on the catalog mock the
+        median gap to NUTS is 0.48 full widths with chains 7x wider. The per-galaxy
+        backend's tier stays broken.
     n_warmup : int
         Adaptation steps, run per galaxy. Window adaptation for ``"nuts"`` /
         ``"hmc"``; ChEES adaptation over this galaxy's own chain ensemble for
