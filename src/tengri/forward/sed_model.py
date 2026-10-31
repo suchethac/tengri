@@ -7194,15 +7194,14 @@ class SEDModel:
         # at observed-frame wavelengths so it works for any source
         # redshift. Skipped when ebmv_mw=0 (the default).
         if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
-            from tengri.components.dust.attenuation import cardelli
+            from tengri.components.dust.foreground import foreground_transmission
 
-            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
-            rv = jnp.asarray(self.spec.foreground_rv)
-            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
-            # T(λ) = 10^(-0.4 * A_V * k(λ))
-            k_lambda = cardelli(wave_obs, dust_Rv=rv)
-            a_v = rv * ebmv
-            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
+            sed_obs = sed_obs * foreground_transmission(
+                wave_obs,
+                jnp.asarray(self.spec.foreground_ebmv_mw),
+                jnp.asarray(self.spec.foreground_rv),
+                self.spec.foreground_law,
+            )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -11095,6 +11094,20 @@ class SEDModel:
                     spec_sigma_v_kms=jnp.asarray(self._get_sigma_v_kms(full_params))
                 )
             )
+        if self.spec.foreground_ebmv_mw > 0.0:
+            from tengri.components.dust.foreground import foreground_rest_transmission
+
+            state0 = state0.with_(
+                derived=state0.derived.with_(
+                    foreground_transmission=foreground_rest_transmission(
+                        state0.wave,
+                        self._get_redshift(full_params),
+                        jnp.asarray(self.spec.foreground_ebmv_mw),
+                        jnp.asarray(self.spec.foreground_rv),
+                        self.spec.foreground_law,
+                    )
+                )
+            )
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
         # closure-captured copies (self.ssp_data / internal templates / z-tables).
@@ -11306,7 +11319,7 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+        def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
             # so a zeroed sed_nebular is invisible to it by construction.
@@ -11351,7 +11364,7 @@ class SEDModel:
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
                 avail = {k: v for k, v in out.items() if k in observables_type._fields}
-                return observables_type(**avail)
+                return observables_type(**avail), state
             if observation.can_do_spectroscopy:
                 # Per-wavelength SSP library LSF curve (#2518): read off the
                 # *runtime* ssp_data argument, not the closure-captured
@@ -11366,7 +11379,7 @@ class SEDModel:
                 # branch on a traced value.
                 curve_kms = ssp_data.ssp_resolution_kms
                 sigma_lib_curve = (ssp_data.ssp_wave, curve_kms) if curve_kms is not None else None
-                return observation.predict(
+                obs = observation.predict(
                     state,
                     full,
                     wave_obs=wave_obs,
@@ -11380,11 +11393,21 @@ class SEDModel:
                     window_z=window_z,
                     observables_type=observables_type,
                 )
+                return obs, state
             if use_lut:
-                return observation.predict_via_precomp(
+                obs = observation.predict_via_precomp(
                     state, full, observables_type=observables_type
                 )
-            return observation.predict(state, full, observables_type=observables_type)
+                return obs, state
+            return observation.predict(state, full, observables_type=observables_type), state
+
+        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+            return _forward(params, fixed_values, ssp_data, template_data, ztable_data)[0]
+
+        def _impl_with_lines(params, fixed_values, ssp_data, template_data, ztable_data):
+            obs, state = _forward(params, fixed_values, ssp_data, template_data, ztable_data)
+            derived = state.derived
+            return obs, derived.get("log_line_lums_attenuated", derived.get("log_line_lums"))
 
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
@@ -11392,7 +11415,21 @@ class SEDModel:
         # the IDENTICAL forward+projection logic eagerly (no XLA compile) without
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
+        cache["predict_observables_lines_jit"] = jax.jit(_impl_with_lines)
         return jit_fn
+
+    def _get_or_build_predict_observables_lines_jit(self):
+        """Return the cached kernel that returns ``(observables, log_line_lums_attenuated)``.
+
+        The line luminosities [dex, log10 erg/s], shape ``(n_lines,)`` (``None`` when the
+        model publishes no line catalog), come out of the same forward that paints the
+        observables.
+        """
+        from tengri.inference._model_cache import _default_owner
+
+        self._get_or_build_predict_observables_jit()
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        return cache["predict_observables_lines_jit"]
 
     def threaded_template_inputs(self):
         """Return ``(ssp_data, template_data, ztable_data)`` for a traced per-galaxy forward.

@@ -93,9 +93,10 @@ class Spectroscopy:
         FastSpecFit parity. Default: None.
     eline_prior_type : str
         Prior type for line amplitudes. One of ``"flat"`` (uninformative) or
-        ``"cloudy"`` (CLOUDY-grid-interpolated). Default: ``"flat"``.
+        ``"cloudy"`` (CLOUDY-grid-interpolated), or ``"model"`` (a Gaussian centred on the
+        model's own attenuated line luminosity, per-galaxy path only). Default: ``"flat"``.
     eline_prior_width_dex : float
-        Prior scatter in dex for the ``"cloudy"`` prior. Default: 0.3.
+        Prior scatter in dex for the ``"cloudy"`` and ``"model"`` priors. Default: 0.3.
     eline_fix_doublets : bool
         Enforce atomic physics doublet ratios. Default: True.
     eline_broad : bool

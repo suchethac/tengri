@@ -154,6 +154,7 @@ def _build_prediction(
     measured_line_defs=None,
     jit_inputs=None,
     threaded_impl=None,
+    needs_line_lums=False,
 ):
     """Forward-model prediction in one place.
 
@@ -201,6 +202,7 @@ def _build_prediction(
     # ``model.predict_*`` accessors (which closure-capture the SSP grid, so
     # this path bakes it; acceptable for the non-inference / dummy-model uses).
     _obs = None
+    _threaded_lums = None
     if threaded_impl is not None and jit_inputs is not None and not use_components:
         _obs = threaded_impl(
             params,
@@ -209,6 +211,8 @@ def _build_prediction(
             jit_inputs["template_data"],
             jit_inputs.get("ztable_data"),
         )
+        if needs_line_lums:
+            _obs, _threaded_lums = _obs
 
     if data_type == "photometry":
         if _obs is not None:
@@ -264,7 +268,12 @@ def _build_prediction(
     # than sharing one ``predict_state`` with the photometry channel. Measured on a
     # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
-    needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
+    needs_state = (
+        has_line_ratios
+        or has_indices
+        or (has_line_fluxes and not fast_lines)
+        or (needs_line_lums and _threaded_lums is None)
+    )
     if not needs_state:
         feature_state = None
     elif jit_inputs is not None:
@@ -279,6 +288,13 @@ def _build_prediction(
         )
     else:
         feature_state = model.predict_state(free_params)
+    if needs_line_lums and _threaded_lums is not None:
+        prediction["log_line_lums_attenuated"] = _threaded_lums
+    elif needs_line_lums:
+        derived = feature_state.derived
+        prediction["log_line_lums_attenuated"] = derived.get(
+            "log_line_lums_attenuated", derived["log_line_lums"]
+        )
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
@@ -374,6 +390,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
+    needs_line_lums = getattr(fitter, "_eline_prior_type", None) == "model"
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
     # Build-time signature check: the internal adapter cohort accepts
@@ -400,9 +417,11 @@ def _build_data_neg_log_likelihood_fn(fitter):
     # the fast path just never reached them). ``_build_prediction`` reads the
     # threaded arrays out of ``data_args["_jit_inputs"]`` at call time.
     _threaded_impl = (
-        model._get_or_build_predict_observables_jit()
-        if not use_components and hasattr(model, "_get_or_build_predict_observables_jit")
-        else None
+        None
+        if use_components or not hasattr(model, "_get_or_build_predict_observables_jit")
+        else model._get_or_build_predict_observables_lines_jit()
+        if needs_line_lums
+        else model._get_or_build_predict_observables_jit()
     )
 
     # Eager channel-scale pre-check (#1495): evaluate every likelihood channel
@@ -441,6 +460,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             use_components=use_components,
             has_line_ratios=has_line_ratios,
             measured_line_defs=measured_line_defs,
+            needs_line_lums=needs_line_lums,
         )
         _channels = (
             user_likelihood.likelihoods
@@ -467,6 +487,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             measured_line_defs=measured_line_defs,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=_threaded_impl,
+            needs_line_lums=needs_line_lums,
         )
 
         # Auto-built / user-supplied Likelihood adapter handles the data

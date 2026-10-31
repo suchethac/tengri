@@ -928,6 +928,9 @@ _TOP_LEVEL_SETTINGS = {
     # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
     # ``Spectroscopy`` observation so it need not be set twice (#653).
     "eline_mode",
+    # Line aperture factor of the model-centred emission-line prior; registered with
+    # ``eline_mode`` and freed or pinned here (``FREE``, ``Fixed(...)``, a prior).
+    "eline_aperture_frac",
 }
 
 #: Top-level kwargs that are SEDModel-only settings (silently ignored here).
@@ -5652,14 +5655,14 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_
 #: laws that take a single ``R_V`` parameter are usable as a foreground
 #: screen: host-dust laws with two free knobs (slope, bump, ...) would
 #: collide with the host ``dust`` block's parameter prefix.
-_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
 
 #: Laws the AGN attenuation-stage block actually implements. One entry, and that
 #: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
 #: and applies it unconditionally, so the block is single-curve by construction
 #: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
 #:
-#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: This was validated against ``DUST_LAWS`` (23 entries) with every accepted
 #: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
 #: validated, accepted, and silently given the Prevot SMC curve. Measured: five
 #: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same
@@ -8455,7 +8458,7 @@ def _partition_by_group(
     partition = {}
 
     for name in all_param_names:
-        if name == "redshift" or name == "apply_igm":
+        if name in ("redshift", "apply_igm", "eline_aperture_frac"):
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
             if agn_flat:
@@ -9342,6 +9345,11 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # the second switch was redundant.
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
+
+    if "eline_aperture_frac" in spec.all_params:
+        aperture = spec.get_distribution("eline_aperture_frac")
+        if not (aperture.is_fixed and aperture.value == 1.0):
+            result["eline_aperture_frac"] = aperture
 
     if spec.n_grid != 256:
         # Only include if non-default
