@@ -55,12 +55,16 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
     require_model_spec,
 )
-from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+from tengri.inference.backends.mcmc.catalog import (
+    GHMC_DEFAULT_SUPERCHAINS,
+    build_catalog_mcmc_engine,
+)
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
@@ -488,6 +492,31 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     return jnp.where(keep, map_rows, prior_rows)
 
 
+#: Chains per galaxy the driver uses for the MEADS sampler when none are given.
+_GHMC_DRIVER_CHAINS = 32
+
+
+def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
+    """Largest nested R-hat over the coordinates of one galaxy's chains.
+
+    Parameters
+    ----------
+    chains : ndarray, shape (n_chains, n_samples, D)
+        Draws of one galaxy, chain-major, in the latent space [dimensionless].
+    n_superchains : int
+        Number of superchains the chains are grouped into.
+
+    Returns
+    -------
+    float
+        Maximum over the D coordinates of the nested R-hat of each coordinate's chains.
+    """
+    return max(
+        float(nested_rhat(jnp.asarray(chains[:, :, d]), n_superchains))
+        for d in range(chains.shape[-1])
+    )
+
+
 def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
@@ -512,7 +541,7 @@ def fit_spectra_catalog_mcmc(
     batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
         Output of :func:`~tengri.observation.batched.build_spectro_batches` built
         with ``model=model``.
-    sampler : {"nuts", "hmc", "chees"}, optional
+    sampler : {"nuts", "hmc", "chees", "ghmc"}, optional
         Sampler handed to
         :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`.
         Default ``"nuts"``.
@@ -539,7 +568,9 @@ def fit_spectra_catalog_mcmc(
         depend on this value, up to floating-point reduction order.
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
-        ``target_accept_rate`` or ``use_dense``.
+        ``target_accept_rate`` or ``use_dense``. With ``sampler="ghmc"`` the defaults are
+        ``n_chains=32`` and ``n_superchains=8``; ``n_chains`` must be a multiple of
+        ``n_superchains``.
 
     Returns
     -------
@@ -549,6 +580,12 @@ def fit_spectra_catalog_mcmc(
         original catalog order (``N`` is the total galaxy count).
         ``"divergences"``: ndarray of int, shape ``(N,)``. Divergent transitions
         per galaxy, in the same order.
+        ``"n_warmup_used"``: ndarray of int, shape ``(N,)``. Adaptation steps each galaxy
+        ran. The warmup is fixed-length, so this is ``n_warmup`` for every galaxy.
+        ``"nested_rhat"``: ndarray of float, shape ``(N,)``, or None. For
+        ``sampler="ghmc"``, the per-coordinate maximum nested R-hat over the
+        ``n_superchains`` superchains of each galaxy's latent draws. None for the other
+        samplers.
 
     Raises
     ------
@@ -581,6 +618,12 @@ def fit_spectra_catalog_mcmc(
     if init == "map":
         map_params = fit_spectra_map_vmap(model, batches, n_steps=map_steps, seed=seed)["params"]
 
+    options = dict(engine_kwargs)
+    if sampler == "ghmc":
+        options.setdefault("n_chains", _GHMC_DRIVER_CHAINS)
+    n_chains = int(options.get("n_chains", 1))
+    n_superchains = int(options.get("n_superchains", GHMC_DEFAULT_SUPERCHAINS))
+
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
     per_bucket = []
     for (spec, batch, index), bucket_key in zip(batches, bucket_keys):
@@ -598,7 +641,7 @@ def fit_spectra_catalog_mcmc(
             n_samples=n_samples,
             flat_logdensity=flat,
             substitute=substitute,
-            **engine_kwargs,
+            **options,
         )
 
         def one_galaxy(xs, run_one=run_one):
@@ -611,6 +654,11 @@ def fit_spectra_catalog_mcmc(
             batch_size=batch_size,
         )
         n_draws = positions.shape[1]
+        latent_draws = np.asarray(positions)
+        rhat = None
+        if sampler == "ghmc":
+            per_chain = latent_draws.reshape(n_gal, n_chains, n_draws // n_chains, -1)
+            rhat = [_nested_rhat_max(per_chain[g], n_superchains) for g in range(n_gal)]
         latents = jax.vmap(unravel_fn)(positions.reshape(-1, positions.shape[-1]))
         physical = _to_physical(model, latents)
         per_bucket.append(
@@ -618,6 +666,7 @@ def fit_spectra_catalog_mcmc(
                 "index": index,
                 "draws": {n: np.asarray(v).reshape(n_gal, n_draws) for n, v in physical.items()},
                 "divergences": np.asarray(divergent).sum(axis=1),
+                "nested_rhat": rhat,
             }
         )
 
@@ -626,4 +675,14 @@ def fit_spectra_catalog_mcmc(
     names = _free_latent_names(model)
     draws = {n: np.concatenate([b["draws"][n] for b in per_bucket], axis=0)[order] for n in names}
     divergences = np.concatenate([b["divergences"] for b in per_bucket])[order]
-    return {"draws": draws, "divergences": divergences}
+    n_warmup_used = np.full(catalog_index.shape[0], int(n_warmup), dtype=int)
+    rhat_out = None
+    if sampler == "ghmc":
+        flat_rhat = [r for b in per_bucket for r in b["nested_rhat"]]
+        rhat_out = np.asarray(flat_rhat, dtype=float)[order]
+    return {
+        "draws": draws,
+        "divergences": divergences,
+        "n_warmup_used": n_warmup_used,
+        "nested_rhat": rhat_out,
+    }
