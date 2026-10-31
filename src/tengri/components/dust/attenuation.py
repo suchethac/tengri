@@ -856,7 +856,7 @@ def _natural_spline_eval(
 ) -> jnp.ndarray:
     """Evaluate the fixed-knot natural cubic spline at x [1/um]."""
     n = _F99_KNOT_X.shape[0]
-    knots = jnp.asarray(_F99_KNOT_X)
+    knots = device_table(_F99_KNOT_X)
     idx = jnp.clip(jnp.searchsorted(knots, x, side="right") - 1, 0, n - 2)
     x_lo = knots[idx]
     h = knots[idx + 1] - x_lo
@@ -910,7 +910,7 @@ def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jn
     in Angstrom, :math:`R_V` is dimensionless,
     :math:`c_2 = -0.824 + 4.717/R_V` and :math:`c_1 = 2.030 - 3.007\,c_2`
     are dimensionless, :math:`x_0 = 4.596\,\mu\mathrm{m}^{-1}` and
-    :math:`\gamma = 0.99\,\mu\mathrm{m}^{-1}` are the bump centre and width, and
+    :math:`\gamma = 0.99\,\mu\mathrm{m}^{-1}` are the bump center and width, and
     :math:`c_3 = 3.23`, :math:`c_4 = 0.41` are the bump and far-UV strengths.
     At longer wavelengths the natural cubic spline in :math:`x` through the
     nine anchors replaces the expression.
@@ -948,7 +948,7 @@ def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jn
     rv = jnp.asarray(dust_Rv)
     x = 1.0 / (jnp.asarray(wave_obs) / 1.0e4)
     anchors = _fitzpatrick99_anchors(rv)
-    curvature = jnp.asarray(_F99_CURVATURE_OPERATOR) @ anchors
+    curvature = device_table(_F99_CURVATURE_OPERATOR) @ anchors
     spline = _natural_spline_eval(x, anchors, curvature)
     uv = _fm90_uv_extinction(x, rv)
     a_ebv = jnp.where(x >= _F99_X_JOINT, uv, spline)
