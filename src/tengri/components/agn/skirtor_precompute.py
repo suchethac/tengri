@@ -1,13 +1,36 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Precompute adapter for SKIRTOR AGN torus templates.
+r"""Precompute adapter for SKIRTOR AGN torus templates.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
-SKIRTOR's 5D torus template grid: (tau, p, q, oa, cos_inc).
+SKIRTOR's 5-D torus template grid: (tau, p, q, oa, cos_inc), with the radius
+ratio pinned at its R = 20 node.
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``: e.g., a
-user who pins ``agn_tau_skirtor`` and ``agn_p_skirtor`` gets a 3D runtime grid
-instead of the full 5D one, for free.
+The lookup returns the band photometry of the torus SED that
+:func:`~tengri.components.agn.skirtor.skirtor_sed` emits (the ``model='skirtor'``
+runtime, ``skirtor._skirtor_grid_sed``). It reads the
+same template cube (``skirtor._torus_template_cube``,
+the v3 dust emission), interpolates it the same way (node-exact PCHIP, ``cos_inc``
+extended past its end node), and emits it through the runtime's own normalization
+and log-log resampling (``skirtor._emit_normalized_lnu``).
+The saving is the wavelength range: the table holds only the template wavelengths
+the filters read, and the SED is emitted only on the filter quadrature grid.
+
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
+
+References
+----------
+.. [1] M. Stalevski, J. Fritz, M. Baes, T. Nakos, and L. C. Popovic,
+   "3D radiative transfer modelling of the dusty tori around active galactic
+   nuclei as a clumpy two-phase medium," MNRAS, 420, 2756 (2012). arXiv:1109.1286.
+   https://doi.org/10.1111/j.1365-2966.2011.19775.x
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
+.. [3] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
+   SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
 """
 
 from __future__ import annotations
@@ -18,16 +41,20 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._phys import C_LIGHT as _C_CGS
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    library_lookup,
-    loglog_integral,
-    preintegrate_grid,
-    slice_fixed_axes,
+from tengri.components.agn._phys import L_SUN as _L_SUN
+from tengri.components.agn._template_power_table import read_at_fixed_axes
+from tengri.components.agn.skirtor import (
+    _cos_inc_extrapolate,
+    _emit_normalized_lnu,
+    _load_grid_arrays,
+    _torus_template_cube,
 )
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.forward.precompute.templates import (
+    collapse_fixed_axes,
+    precompute_template_photometry,
+)
+from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral
 
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
 AXIS_PARAMS: tuple[str, ...] = (
@@ -38,6 +65,102 @@ AXIS_PARAMS: tuple[str, ...] = (
     "agn_cos_inc",
 )
 
+#: The radius-ratio node the 5-D table is sliced at: the runtime's default
+#: ``agn_radius_ratio`` (CIGALE's R = 20).
+PINNED_RADIUS_RATIO: float = 20.0
+
+#: Records evaluated per batch when the node photometry is built.
+_NODE_BATCH: int = 64
+
+
+def _torus_cube_at_pinned_radius(grid_path: str) -> tuple[np.ndarray, np.ndarray, tuple]:
+    """The runtime's torus template cube, its wavelengths and its 5 axes, at R = 20.
+
+    Raises
+    ------
+    ValueError
+        If the grid has a radius-ratio axis without an R = 20 node, where a slice
+        could not reproduce the runtime at its default radius ratio.
+    """
+    raw = _load_grid_arrays(grid_path)
+    cube = np.asarray(_torus_template_cube(raw), dtype=np.float64)
+    axes = tuple(np.asarray(ax, dtype=np.float64) for ax in raw["axes"])
+    # ``_load_grid_arrays`` returns the R axis at position 4 on 6-axis grids.
+    if len(axes) == 6:
+        r_axis = axes[4]
+        r_idx = int(np.argmin(np.abs(r_axis - PINNED_RADIUS_RATIO)))
+        if not np.isclose(r_axis[r_idx], PINNED_RADIUS_RATIO, rtol=0.0, atol=1e-9):
+            raise ValueError(
+                f"SKIRTOR grid {grid_path!r} has radius-ratio nodes {r_axis.tolist()} and no "
+                f"R = {PINNED_RADIUS_RATIO:g} node; the 5-D photometry table is a node slice "
+                "at the runtime's default radius ratio."
+            )
+        cube = cube[:, :, :, :, r_idx, :]
+        axes = axes[:4] + axes[5:]
+    return cube, np.asarray(raw["wave"], dtype=np.float64), axes
+
+
+def _quadrature_grid(
+    wave: np.ndarray, filter_waves: list, redshift: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Template wavelengths the filters read, and the rest-frame quadrature grid.
+
+    Returns the indices of the template nodes that bracket any filter's rest-frame
+    support, and the union of those nodes with every filter node in the rest frame.
+    Every quadrature point then lies between two adjacent kept nodes, so the log-log
+    resampling over the kept nodes equals the runtime's over the whole template.
+    """
+    n_wave = wave.shape[0]
+    keep = np.zeros(n_wave, dtype=bool)
+    rest = [np.asarray(fw, dtype=np.float64) / (1.0 + redshift) for fw in filter_waves]
+    for fw in rest:
+        lo = max(int(np.searchsorted(wave, fw[0], side="right")) - 1, 0)
+        hi = min(int(np.searchsorted(wave, fw[-1], side="left")), n_wave - 1)
+        keep[lo : max(hi, lo + 1) + 1] = True
+    read = np.flatnonzero(keep)
+    return read, np.unique(np.concatenate([wave[read], *rest]))
+
+
+def _band_fold(
+    wave_quad: np.ndarray, filter_waves: list, filter_trans: list, redshift: float
+) -> jnp.ndarray:
+    """The runtime's filter quadrature on ``wave_quad`` as a matrix, shape (n_quad, n_filters).
+
+    ``lnu_filter_integral`` is linear in the SED, so its Jacobian is the quadrature.
+    """
+    wq = jnp.asarray(wave_quad)
+
+    def bands(lnu):
+        return jnp.stack(
+            [
+                lnu_filter_integral(lnu, wq, jnp.asarray(fw), jnp.asarray(ft), redshift)
+                for fw, ft in zip(filter_waves, filter_trans, strict=True)
+            ]
+        )
+
+    return jax.jacrev(bands)(jnp.zeros_like(wq)).T
+
+
+def _record_power(cube: np.ndarray, wave: np.ndarray) -> np.ndarray:
+    """Bolometric integral of every record, as the runtime normalizes it; validated."""
+    flat = jnp.asarray(cube.reshape(-1, cube.shape[-1]))
+    wave_j = jnp.asarray(wave)
+    power = np.asarray(jax.vmap(lambda t: loglog_integral(wave_j, t))(flat), dtype=np.float64)
+    power = power.reshape(cube.shape[:-1])
+    bad = ~(np.isfinite(power) & (power > 0.0))
+    if bad.any():
+        raise ValueError(
+            f"{int(bad.sum())} SKIRTOR torus record(s) have non-positive or non-finite "
+            f"bolometric power (first at grid index {np.argwhere(bad)[0].tolist()}); the "
+            "table divides by that power and cannot represent them."
+        )
+    return power
+
+
+def _emit_lsun(row, wave_read, wave_quad) -> jnp.ndarray:
+    """The SED of one interpolated table row on the quadrature grid, per L_sun [erg/s/Hz]."""
+    return _emit_normalized_lnu(row[:-1], wave_read, wave_quad, _L_SUN, row[-1])
+
 
 def precompute_skirtor_photometry(
     grid_path: str,
@@ -45,249 +168,157 @@ def precompute_skirtor_photometry(
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
 ) -> dict:
-    """Pre-integrate SKIRTOR templates through filter curves.
-
-    For each 5D grid point (tau, p, q, oa, cos_inc), compute the
-    filter-integrated photometry.  Returns a dict with ``grid_phot``
-    and ``axes``.
-
-    Templates are wavelength-normalized and converted L_λ → L_ν (matching the
-    runtime normalization in ``skirtor.py`` after issue #459) so that
-    ``build_skirtor_photometry_lookup`` returns L_ν [erg/s/Hz] per L_sun of
-    bolometric luminosity, consistent with the full-wavelength ``agn_emission``
-    path.
+    r"""Tabulate the SKIRTOR torus templates the filters read, with their quadrature.
 
     Parameters
     ----------
     grid_path : str
-        Path to ``skirtor_templates.npz`` or ``.h5``.
-    filter_waves : list[ndarray]
-        Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Transmission per filter (0–1).
+        Path to ``skirtor_templates_v3.h5`` (or a v2 ``.h5`` / ``.npz`` grid).
+    filter_waves : list of array_like
+        Wavelength grid per filter [Angstrom], observed frame, ascending.
+    filter_trans : list of array_like
+        Transmission per filter [dimensionless].
     redshift : float, optional
-        Source redshift. Used to shift rest-frame templates into the
-        observed frame before integrating against observed-frame filters.
-        Default 0.0.
+        Source redshift [dimensionless]. Shifts the rest-frame templates into the
+        observed frame of the filters. Default 0.0.
 
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
-            Grid axes (tau, p, q, oa, cos_inc).
+        ``grid_phot`` : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_read + 1)
+            The template :math:`T_\lambda` at the ``n_read`` wavelengths the filters
+            read, over :math:`P_{\rm ref}` [per Angstrom per unit template power],
+            then the record power :math:`P/P_{\rm ref}` [dimensionless]; see Notes.
+        ``wave_read`` : ndarray, shape (n_read,)
+            Those template wavelengths [Angstrom].
+        ``wave_quad`` : ndarray, shape (n_quad,)
+            Rest-frame quadrature grid [Angstrom].
+        ``fold`` : ndarray, shape (n_quad, n_filters)
+            The runtime's filter quadrature on ``wave_quad`` [dimensionless].
+        ``axes`` : tuple of 5 ndarray
+            Grid axes (tau, p, q, oa, cos_inc), ascending.
         ``_preint`` : PreintegratedGrid
-            Internal preintegration data structure.
+            The band photometry at every node, :math:`L_\nu` per :math:`L_\odot`
+            [erg/s/Hz], for the Fixed-axis bookkeeping of ``collapse_fixed_axes``.
 
-    References
-    ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
-           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-    .. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
-       "The dust covering factor in active galactic nuclei," MNRAS, 458,
-       2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
-       https://doi.org/10.1093/mnras/stw444
+    Raises
+    ------
+    ValueError
+        If the grid has a radius-ratio axis without an R = 20 node, or a record with
+        non-positive bolometric power.
 
     Notes
     -----
-    **JIT-compatible**: no, this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function.
 
-    **Build-time operation**: This function performs frequency-domain
-    integration via NumPy. The precomputed photometry is grid-independent
-    (depends only on filter curves and redshift, not wavelength grid).
+    **What the lookup computes.** The runtime emits, at a parameter point
+    :math:`\mathbf{c}`,
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / trapz(template, nu). This matches
-    the runtime normalization in ``skirtor.py`` where user luminosity is
-    multiplied by the precomputed template per filter.
+    .. math::
 
-    **Redshift handling**: Redshift shifts rest-frame templates into
-    observed frame before integrating against observed-frame filters.
-    For dust-only templates (no redshift effects on the template shape),
-    this is the standard flux-scaling convention.
+        L_\nu(\lambda;\,\mathbf{c}) = L_{\rm bol}\,f_{\rm torus}\,L_\odot\,
+            \frac{\mathcal{R}\big[\mathcal{I}[T_\lambda](\mathbf{c})\big](\lambda)}
+                 {\int \mathcal{I}[T_\lambda](\lambda';\,\mathbf{c})\,d\lambda'}\,
+            \frac{\lambda^2}{c},
+
+    where :math:`T_\lambda` is the stored L_lambda-like cube, :math:`\mathcal{I}` the
+    node-exact PCHIP over the axes (Fritsch & Carlson [3]_), :math:`\mathcal{R}` the
+    log-log resampling, :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}` [L_sun],
+    :math:`f_{\rm torus}` = ``agn_torus_frac`` [dimensionless], :math:`\lambda`
+    [Angstrom] and :math:`c` [Angstrom/s]; the integral is the log-log one. The lookup
+    interpolates :math:`T_\lambda` at the wavelengths the filters read exactly as the
+    runtime does (PCHIP acts on each wavelength separately), resamples it onto the
+    filter quadrature grid with the runtime's resampling and applies the runtime's
+    quadrature (``fold``). Only the power in the denominator is interpolated as a
+    channel of its own: at a node it is the record's own, so the lookup is the
+    runtime's photometry there to rounding; between nodes the PCHIP of the power
+    stands in for the power of the PCHIP.
+
+    **Why the SED and not its band fluxes.** The runtime's band flux is the integral
+    of the log-log resampled SED, a nonlinear function of the template values; and
+    the PCHIP tangents of a band flux are not those of the wavelengths inside it. A
+    table of band fluxes is therefore off the runtime between nodes (7 % at 1500 A
+    near edge-on), and a band integral taken by linear interpolation between the
+    template's own wavelengths (spaced :math:`R \sim 7`) is off at the nodes (a
+    factor 177 at 1500 A).
+
+    **Radius ratio.** The table is 5-D, sliced at the R = 20 node, the runtime's
+    default ``agn_radius_ratio``. A model with another radius ratio is not
+    represented; the exact path interpolates R (#772).
     """
-    from tengri.components.agn.skirtor import _load_grid_arrays
+    cube, wave, axes = _torus_cube_at_pinned_radius(grid_path)
+    read, wave_quad = _quadrature_grid(wave, filter_waves, redshift)
+    power = _record_power(cube, wave)
+    p_ref = float(np.median(power))
+    table = jnp.asarray(
+        np.concatenate([cube[..., read] / p_ref, (power / p_ref)[..., None]], axis=-1)
+    )
+    wave_read = jnp.asarray(wave[read])
+    wq = jnp.asarray(wave_quad)
+    fold = _band_fold(wave_quad, filter_waves, filter_trans, redshift)
 
-    raw = _load_grid_arrays(grid_path)
-    grid = np.asarray(raw["total"], dtype=np.float64)
-    wave_grid = np.asarray(raw["wave"], dtype=np.float64)
-    axes_np = tuple(np.asarray(ax) for ax in raw["axes"])
-
-    # The photometry precompute pins the SKIRTOR radius ratio R to the CIGALE
-    # default (R=20) and stays 5-D (tau, p, q, oa, cos_inc). It is an opt-in
-    # speed approximation; the exact spectral path interpolates R fully (#772).
-    # ``_load_grid_arrays`` always returns the R axis at position 4 (a degenerate
-    # length-1 axis for legacy grids), so this node-exact slice is safe.
-    if len(axes_np) == 6:
-        r_idx = int(np.argmin(np.abs(axes_np[4] - 20.0)))
-        grid = grid[:, :, :, :, r_idx, :]
-        axes_np = axes_np[:4] + axes_np[5:]
-
-    # Convert raw L_λ-like templates to L_ν [erg/s/Hz per L_sun of L_bol].
-    # SKIRTOR v3 templates are stored as L_λ-like (issue #459), so the
-    # bolometric normalization must be taken in the *wavelength* variable and
-    # the result converted L_λ → L_ν = L_λ × λ²/c at the end: exactly as the
-    # runtime path in ``skirtor.py:_interpolate_and_normalize`` does. The
-    # previous frequency-integral here treated the L_λ array as L_ν and left
-    # the precomputed LUT with the wrong dimensionality (the WavePrecomp path
-    # missed the #459 fix that landed in skirtor.py).
-    #   Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, λ) × λ²/c
-    #   Runtime:     l_bol_lsun * torus_frac * lnu_per_lsun  →  L_ν [erg/s/Hz]
-    c_aa_per_s = _C_CGS * 1e8  # cm/s → Å/s
-
-    *grid_dims, n_wave = grid.shape
-    n_pts = int(np.prod(grid_dims)) if grid_dims else 1
-    grid_flat = np.array(grid, dtype=np.float64).reshape(n_pts, n_wave)
-    lnu_flat = np.empty_like(grid_flat)
-
-    # ``wave_grid`` is monotonically ascending (set in ``_load_grid_arrays``). The integral is the
-    # log-log one of the interpolant ``skirtor.py:_interpolate_and_normalize`` resamples with, so
-    # the table integrates to ``LSUN`` on the runtime path too (a trapezoid over these nodes was
-    # 0.9 % off on the disk row).
-    wave_j = jnp.asarray(wave_grid)
-    integrals = np.asarray(jax.vmap(lambda t: loglog_integral(wave_j, t))(jnp.asarray(grid_flat)))
-    for i in range(n_pts):
-        template = grid_flat[i]
-        integral_lam = integrals[i]
-        integral_safe = max(abs(integral_lam), 1e-100)
-        template_lam = _LSUN_ERG * template / integral_safe  # erg/s/Å per L_sun
-        lnu_flat[i] = template_lam * wave_grid**2 / c_aa_per_s  # L_λ → L_ν
-
-    lnu_grid = lnu_flat.reshape(*grid_dims, n_wave)
-
-    preint = preintegrate_grid(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
+    rows = table.reshape(-1, table.shape[-1])
+    node_sed = jax.jit(
+        lambda r: jax.lax.map(lambda x: _emit_lsun(x, wave_read, wq), r, batch_size=_NODE_BATCH)
+    )(rows)
+    preint = precompute_template_photometry(
+        templates=np.asarray(node_sed, dtype=np.float64).reshape(*table.shape[:-1], -1),
+        wave_rest=wave_quad,
         filter_waves=[np.asarray(fw) for fw in filter_waves],
         filter_trans=[np.asarray(ft) for ft in filter_trans],
+        axes=axes,
         redshift=redshift,
         dl_cm=1.0,
-        axes=axes_np,
-        energy_normalize=False,  # templates already normalized per L_sun
+        energy_normalize=False,
     )
-
-    axes_jax = tuple(jnp.asarray(ax) for ax in axes_np)
     return {
-        "grid_phot": preint.phot,
-        "axes": axes_jax,
+        "grid_phot": table,
+        "wave_read": wave_read,
+        "wave_quad": wq,
+        "fold": fold,
+        "axes": tuple(jnp.asarray(ax) for ax in axes),
         "_preint": preint,
     }
+
+
+def _phot_per_lsun(row, precomp_arrays) -> jnp.ndarray:
+    """Band L_nu per L_sun of torus power from one interpolated row [erg/s/Hz]."""
+    wave_read, wave_quad, fold = precomp_arrays
+    return _emit_lsun(row, wave_read, wave_quad) @ fold
+
+
+def _quadrature_arrays(precomp: dict) -> tuple:
+    return precomp["wave_read"], precomp["wave_quad"], precomp["fold"]
 
 
 def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | None = None):
     """Build a JIT-compiled SKIRTOR torus photometry function.
 
-    Uses triweight interpolation for C²-continuous gradients.
-
     Parameters
     ----------
     precomp : dict
-        Output of :func:`precompute_skirtor_photometry` or :func:`precompute`
-        (the Protocol-shaped entry point).
+        Output of :func:`precompute_skirtor_photometry` or :func:`precompute`.
     grid_arrays_traced : tuple or None, optional
-        Tuple of (grid_phot, axes) to pass as JIT-traced arguments instead of
-        capturing them in closure. When None (default), captures from precomp
-        for backward compatibility. Threading these as kwargs avoids closure-
-        captured XLA constants. Default: None.
+        ``(grid_phot, axes)`` passed to the compiled function as traced arguments
+        instead of closure-captured constants (smaller HLO). Default None.
 
     Returns
     -------
     callable
-        Function with signature::
-
-            fn(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
-               agn_q_skirtor, agn_oa_skirtor, agn_cos_inc,
-               agn_torus_frac, *grid_arrays_traced) -> ndarray, shape (n_filters,)
-
-        When grid_arrays_traced is provided, the returned function expects
-        (grid_phot, axes) as additional positional arguments.
-
-        Returns torus L_ν [erg/s/Hz].  Caller applies
-        ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
-
-    References
-    ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
-           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+        ``fn(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
+        agn_oa_skirtor, agn_cos_inc, agn_torus_frac) -> ndarray, shape (n_filters,)``,
+        the torus band L_nu [erg/s/Hz]. The caller applies
+        ``(1 + z) / (4 pi d_L^2)`` for a flux density.
 
     Notes
     -----
-    **JIT-compatible**: yes, the returned function uses ``jnp`` and
-    triweight interpolation, which are JAX-native.
+    **JIT-compatible**: yes.
 
-    **Gradient-safe**: yes, triweight kernel is fully differentiable.
-
-    **Interpolation kernel**: Triweight kernel provides C²-continuous
-    gradients for autodiff, unlike nearest-neighbor or linear interpolation.
-    This is important for robust inference when SKIRTOR parameters are
-    fitted via gradient descent.
-
-    **Compile-time performance**: Passing grid_arrays_traced avoids closure-
-    captured constants in XLA, reducing HLO size and compile time.
+    **Gradient-safe**: yes, node-exact PCHIP is C1 on every axis; ``cos_inc``
+    continues its end cubic past the stored ``cos(90 deg) = 6e-17`` node, as the
+    runtime does, so ``cos_inc = 0`` keeps a nonzero gradient.
     """
-    grid_phot = precomp["grid_phot"]
-    axes = precomp["axes"]
 
-    if grid_arrays_traced is not None:
-        # Runtime-passed arrays (JIT-traced): no closure capture
-        @jax.jit
-        def skirtor_phot(
-            agn_log_lbol,
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_cos_inc,
-            agn_torus_frac,
-            grid_phot_traced,
-            axes_traced,
-        ):
-            """Compute SKIRTOR torus photometry via triweight interpolation on 5D grid.
-
-            Returns filter-integrated L_nu [erg/s/Hz] at runtime.
-            """
-            l_bol_lsun = 10.0**agn_log_lbol
-            point = (
-                agn_tau_skirtor,
-                agn_p_skirtor,
-                agn_q_skirtor,
-                agn_oa_skirtor,
-                agn_cos_inc,
-            )
-            # ``index_space_interp=True`` to match the runtime spectral path
-            # (#1911); leaving it off here would make precompute and runtime
-            # disagree on the non-uniform cos_inclination axis.
-            phot_per_lsun = library_lookup(grid_phot_traced, axes_traced, point)
-            return l_bol_lsun * agn_torus_frac * phot_per_lsun
-
-        # Return wrapper that inserts traced arrays
-        def wrapper(
-            agn_log_lbol,
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_cos_inc,
-            agn_torus_frac,
-        ):
-            return skirtor_phot(
-                agn_log_lbol,
-                agn_tau_skirtor,
-                agn_p_skirtor,
-                agn_q_skirtor,
-                agn_oa_skirtor,
-                agn_cos_inc,
-                agn_torus_frac,
-                grid_arrays_traced[0],
-                grid_arrays_traced[1],
-            )
-
-        return wrapper
-
-    # Backward-compatibility: closure-captured (original behavior)
     @jax.jit
     def skirtor_phot(
         agn_log_lbol,
@@ -297,26 +328,44 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
         agn_oa_skirtor,
         agn_cos_inc,
         agn_torus_frac,
+        table,
+        axes,
+        quadrature,
     ):
-        """Compute SKIRTOR torus photometry via triweight interpolation on 5D grid.
+        """Torus band L_nu [erg/s/Hz] at one parameter point."""
+        point = (agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, agn_cos_inc)
+        row = interp_nd_pchip(table, axes, point, extrapolate=_cos_inc_extrapolate(axes))
+        return 10.0**agn_log_lbol * agn_torus_frac * _phot_per_lsun(row, quadrature)
 
-        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
-        """
-        # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
-        # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
-        l_bol_lsun = 10.0**agn_log_lbol
-        point = (
+    if grid_arrays_traced is not None:
+        table, axes = grid_arrays_traced
+    else:
+        table, axes = precomp["grid_phot"], precomp["axes"]
+    quadrature = _quadrature_arrays(precomp)
+
+    def lookup(
+        agn_log_lbol,
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_cos_inc,
+        agn_torus_frac,
+    ):
+        return skirtor_phot(
+            agn_log_lbol,
             agn_tau_skirtor,
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
             agn_cos_inc,
+            agn_torus_frac,
+            table,
+            axes,
+            quadrature,
         )
-        # Matches the traced branch above and the runtime spectral path (#1911).
-        phot_per_lsun = library_lookup(grid_phot, axes, point)
-        return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
-    return skirtor_phot
+    return lookup
 
 
 # ── Protocol-shaped entry points ──────────────────────────────────
@@ -330,117 +379,84 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build preintegrated SKIRTOR grid, auto-collapsing Fixed-parameter axes.
+    """Build the SKIRTOR photometry table, recording Fixed-parameter axes.
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
-        Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Transmission per filter (0–1).
+    filter_waves : list of array_like
+        Wavelength grid per filter [Angstrom], observed frame, ascending.
+    filter_trans : list of array_like
+        Transmission per filter [dimensionless].
     redshift : float
-        Source redshift. [dimensionless]
-    parameters : Parameters | None
+        Source redshift [dimensionless].
+    parameters : Parameters or None
         Parameters spec, used to detect Fixed-axis parameters.
     grid_path : str, keyword-only
-        Path to ``skirtor_templates.npz`` or ``.h5``.
+        Path to ``skirtor_templates_v3.h5`` (or a v2 ``.h5`` / ``.npz`` grid).
 
     Returns
     -------
     dict
-        Same shape as :func:`precompute_skirtor_photometry` but with grid
-        axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
-
-    References
-    ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
-           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+        Same as :func:`precompute_skirtor_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed
+        coordinates.
 
     Notes
     -----
-    **JIT-compatible**: no, this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function.
     """
     result = precompute_skirtor_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
-    if parameters is None:
-        return result
-
-    preint: PreintegratedGrid = result["_preint"]
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if parameters.is_fixed(pname):
-            fixed[i] = float(parameters.fixed_value(pname))
+    _, _, fixed = collapse_fixed_axes(
+        result["_preint"], AXIS_PARAMS, parameters, origin="skirtor_precompute"
+    )
     if not fixed:
         return result
-
-    collapsed = slice_fixed_axes(preint, fixed)
-    # Rebuild dict view; drop the axes that were collapsed
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-    }
+    # Kept whole and read at the Fixed coordinates (read_at_fixed_axes): contracting a
+    # Fixed axis first would interpolate in another axis order than the runtime, and the
+    # tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
     """Build the runtime SKIRTOR photometry lookup from a preintegrated dict.
 
-    When no axes are collapsed, delegates to
-    :func:`build_skirtor_photometry_lookup`.  When some axes are collapsed
-    (fixed at preintegration time), the returned function expects only the
-    remaining free parameter values.
-
     Parameters
     ----------
     preint : dict
-        Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
-        and optionally ``"_collapsed_axes"`` and ``"_preint"``.
+        Output of :func:`precompute`.
     free_param_names : tuple of str or None, optional
-        Names of remaining free axes in the collapsed case.
-        Not used in the default (no-collapse) case.
+        Unused; accepted for Protocol uniformity.
 
     Returns
     -------
     callable
-        JIT-compiled photometry lookup function with signature::
-
-            fn(agn_log_lbol, *free_axis_values, agn_torus_frac)
-                -> ndarray, shape (n_filters,)
-
-        Returns torus L_ν [erg/s/Hz].
-
-    References
-    ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
-           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+        Without Fixed axes, :func:`build_skirtor_photometry_lookup`. With Fixed
+        axes, ``fn(agn_log_lbol, *free_axis_values, agn_torus_frac)``, the free
+        coordinates in :data:`AXIS_PARAMS` order. Both return the torus band L_nu
+        [erg/s/Hz], shape (n_filters,).
 
     Notes
     -----
-    **JIT-compatible**: yes, the returned function is fully JAX-native.
+    **JIT-compatible**: yes.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C1 on every axis.
     """
-    if not preint.get("_collapsed_axes"):
+    collapsed = preint.get("_collapsed_axes")
+    if not collapsed:
         return build_skirtor_photometry_lookup(preint)
 
-    # Collapsed case: lookup takes (scale, *remaining_axis_values, torus_frac)
-    grid_phot = preint["grid_phot"]
+    table = preint["grid_phot"]
     axes = preint["axes"]
+    quadrature = _quadrature_arrays(preint)
+    extrapolate = _cos_inc_extrapolate(axes)
 
     @jax.jit
     def skirtor_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
-        """Compute SKIRTOR torus photometry with collapsed (fixed) axes via triweight interp.
-
-        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
-        """
-        # Same unit convention as build_skirtor_photometry_lookup: L_ν [erg/s/Hz]
-        l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
-        return l_bol_lsun * agn_torus_frac * phot_per_lsun
+        """Torus band L_nu [erg/s/Hz] with the Fixed axes read at their values."""
+        row = read_at_fixed_axes(table, axes, free_axis_values, collapsed, extrapolate=extrapolate)
+        return 10.0**agn_log_lbol * agn_torus_frac * _phot_per_lsun(row, quadrature)
 
     return skirtor_phot_collapsed
