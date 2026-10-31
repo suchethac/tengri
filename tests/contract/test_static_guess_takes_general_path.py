@@ -45,6 +45,11 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    "utils/host_array.py::device_table": (
+        "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
+        "held once per table and dtype; a concrete device array is cast to the canonical dtype "
+        "on every call and never held"
+    ),
     "_cache_keys.py::baked": "traced value raises TypeError: a traced value cannot key a cache",
     "components/agn/blocks/runner.py::compose_l_nu": (
         "traced fracAGN goes through jax.lax.cond over both polar branches"
@@ -146,9 +151,6 @@ ALLOWLIST: dict[str, str] = {
     ),
     "observation/spectrum.py::velocity_broaden": (
         "traced grid -> piecewise general path of broaden_velocity_only (#2847)"
-    ),
-    "utils/host_array.py::device_table": (
-        "tracer -> passed through unchanged (its dtype is already the trace's)"
     ),
     "utils/interpolation.py::concrete_canonical_numpy": (
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"

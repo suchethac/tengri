@@ -224,7 +224,7 @@ def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
     mean = jnp.trapezoid(powers, mu, axis=inc.axis) / (mu[-1] - mu[0])
     return AnisotropyGrid(
         values=powers / jnp.expand_dims(mean, inc.axis),
-        axes=tuple(jnp.asarray(a) for a in axes),
+        axes=tuple(device_table(a) for a in axes),
     )
 
 
