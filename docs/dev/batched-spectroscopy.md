@@ -70,6 +70,7 @@ batch is evaluated. Each refusal below is raised as a `ValueError` unless noted.
 | Fixed redshift | The batch's `obs.z` must be the only redshift | Build with a free redshift |
 | `catalog_z_range` | A per-galaxy redshift window in `WavePrecomp` | Build with a free redshift and without `catalog_z_range` |
 | `SpectrumPrecomp` spectrum LUT | The LUT bakes the observation grid | Build with `spectrum_precomp` off |
+| A template `Spectroscopy.covariance` | The batched path reads each galaxy's own covariance; a template covariance would be ignored | Build the template without one and give every `GalaxySpectrum` its `covariance=BandedMatrix` (carried by the `chol_data` leaf) |
 | `eline_mode='marginalized'` with `eline_prior_type='cloudy'` | The Cloudy-prior line marginal is not evaluated in batch | Use `eline_prior_type='flat'`, or `eline_mode='fitted'` or `'off'` |
 | `eline_broad=True` with lines | Broad-line profiles are not evaluated in batch | Use `eline_broad=False` |
 | `line_fluxes`, `line_ratios`, `spectral_indices`, `lines` | Not evaluated in batch | Remove them from the template |
@@ -151,7 +152,7 @@ a leaf, if it changes a shape or a branch.
   `marginalize_linear_nuisance(chol_lower=...)` or `banded_forward_substitution`, so a
   masked or padded pixel contributes nothing. The Gaussian term drops the normalization
   constant, as the diagonal term and the per-galaxy `MultivariateGaussianLikelihood`
-  do. A template's own `Spectroscopy.covariance` is not read on this path.
+  do. A template's own `Spectroscopy.covariance` is refused.
   `tests/contract/test_batched_banded_covariance.py` pins the batched value against the
   per-galaxy dense covariance with masked pixels deleted, the marginals against the
   per-galaxy classes, padding at `rtol=1e-12`, one compile across covariances, the

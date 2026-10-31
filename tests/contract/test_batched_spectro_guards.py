@@ -207,6 +207,9 @@ def _refusal_cases(ssp):
             spectro_kw={"resolution": 1000.0},
             kw={"approx": WavePrecomp(catalog_z_range=(0.05, 0.5))},
         ),
+        "covariance": lambda: _model(
+            ssp, wave, spectro_kw={"resolution": 1000.0, "covariance": jnp.eye(100) * 1e-3}
+        ),
         "student_t_noise": lambda: _model(
             ssp, wave, obs_kw={"noise": NoiseModel(student_t_dof=4.0)}
         ),
@@ -219,12 +222,19 @@ def _refusal_cases(ssp):
 
 @pytest.mark.parametrize(
     "case",
-    ["catalog_z_range", "student_t_noise", "calibration_floor", "line_fluxes"],
+    ["catalog_z_range", "covariance", "student_t_noise", "calibration_floor", "line_fluxes"],
 )
 def test_template_with_unsupported_setting_is_refused(synthetic_ssp, case):
     template = _refusal_cases(synthetic_ssp)[case]()
     with pytest.raises(ValueError):
         check_template_model(template)
+
+
+def test_template_covariance_refusal_names_the_per_galaxy_leaf(synthetic_ssp):
+    template = _refusal_cases(synthetic_ssp)["covariance"]()
+    with pytest.raises(ValueError, match="template model carries a spectral covariance") as err:
+        check_template_model(template)
+    assert "give every record its BandedMatrix" in str(err.value)
 
 
 def test_plain_free_redshift_template_is_accepted(synthetic_ssp):
