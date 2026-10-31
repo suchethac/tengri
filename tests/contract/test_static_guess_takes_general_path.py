@@ -55,6 +55,14 @@ ALLOWLIST: dict[str, str] = {
         "exact general path; the static index set is only an optimization for a concrete build "
         "grid."
     ),
+    "components/agn/_skirtor_agnfitter_sightline.py::_is_concrete": (
+        "read only for the retired agn_incl_skirtor alias (#3085); the sightline itself is "
+        "always the traced jnp path (cos(radians(.)) then arccos, no branch). A traced alias "
+        "alone is translated on that path with the warning text omitting its value; a traced "
+        "alias given beside agn_cos_inc raises ValueError, since their agreement cannot be "
+        "checked under trace, and the model path never carries the alias (the grammar and "
+        "model.predict refuse it at build)"
+    ),
     "components/agn/blr.py::_fe2_is_concrete_narrow": (
         "traced FWHM takes the band-limited path, valid for FWHM >= 500 km/s only; a traced "
         "narrower width returns NaN by design (#2768, pinned by its regression test), and the "

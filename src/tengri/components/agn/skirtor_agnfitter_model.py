@@ -50,15 +50,15 @@ from tengri.protocols.component import SEDComponentConfig, SEDComponentState, de
 
 __all__ = ["SKIRTORAgnfitterTorus"]
 
-#: Single source of truth for ``oa_skirtor``/``incl_skirtor``/``tv_skirtor``'s
-#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_incl_skirtor`` /
+#: Single source of truth for ``oa_skirtor``/``cos_inc``/``tv_skirtor``'s
+#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_cos_inc`` /
 #: ``agn_tv_skirtor`` declarations in ``_params.py``. Read once at class-
 #: definition time so the class attributes below cannot drift from them the
 #: way ``CAT3DTorus``/``Silva04Torus`` did before Task 1 -- these three were
 #: numerically equal to the canonical declaration but were still an
 #: unprotected literal restatement (Task 1 fix round 1, finding 1).
 _OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
-_INCL_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_incl_skirtor")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
 _TV_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tv_skirtor")
 #: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
 #: canonical 10.0) -- found by ``tools/check_param_restatements.py``
@@ -100,7 +100,7 @@ class SKIRTORAgnfitterTorusState(SEDComponentState):
 
 @dataclass(frozen=True)
 class SKIRTORAgnfitterTorus(SEDModelComponent):
-    """SKIRTOR_mean_3p clumpy AGN torus (AGNfitter-faithful averaging).
+    r"""SKIRTOR_mean_3p clumpy AGN torus (AGNfitter-faithful averaging).
 
     Three-parameter torus model with half-opening angle, inclination, and
     equatorial optical depth. Provides C¹-continuous gradients via node-exact
@@ -123,8 +123,10 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         log₁₀(L_bol / L_sun). [dex, 8–14]
     oa_skirtor : Uniform
         Half-opening angle [deg]. [deg, 10–80]
-    incl_skirtor : Uniform
-        Inclination angle measured from pole [deg]. [deg, 0–90]
+    cos_inc : Uniform
+        Cosine of the inclination from the polar axis, the AGN's one inclination
+        (1 = face-on). [dimensionless, 0–1] The library is keyed at
+        :math:`i = \arccos(\cos i)` [deg] on its 0–90 deg axis.
     tv_skirtor : Uniform
         Equatorial optical depth τ_9.7. [dimensionless, 3–11]
     torus_frac : Uniform
@@ -209,12 +211,12 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         units="deg",
         default=_OA_SKIRTOR_PRIOR.default,
     )
-    incl_skirtor = Uniform(
-        _INCL_SKIRTOR_PRIOR.lo,
-        _INCL_SKIRTOR_PRIOR.hi,
-        description="Inclination angle (Stalevski et al.)",
-        units="deg",
-        default=_INCL_SKIRTOR_PRIOR.default,
+    cos_inc = Uniform(
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
+        description="Cosine of inclination (1 = face-on)",
+        units="dimensionless",
+        default=_COS_INC_PRIOR.default,
     )
     tv_skirtor = Uniform(
         _TV_SKIRTOR_PRIOR.lo,
@@ -278,7 +280,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
             - log_lbol: log₁₀(L_bol / L_sun)
             - oa_skirtor: half-opening angle [deg]
-            - incl_skirtor: inclination [deg]
+            - cos_inc: cosine of the inclination from the polar axis
             - tv_skirtor: equatorial optical depth
             - torus_frac: torus luminosity fraction
 
@@ -311,7 +313,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
                 wavelength=wave_eval,
                 agn_log_lbol=log_lbol_eval,
                 agn_oa_skirtor=p["oa_skirtor"],
-                agn_incl_skirtor=p["incl_skirtor"],
+                agn_cos_inc=p["cos_inc"],
                 agn_tv_skirtor=p["tv_skirtor"],
                 agn_torus_frac=p["torus_frac"],
             )

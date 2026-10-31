@@ -47,8 +47,8 @@ _TORI = sorted(set(AGN_BLOCKS["torus"]) - set(_SELF_CONTAINED_TORI))
 
 #: Tori whose library keeps its inclination anisotropy -> (the block's sightline parameter, the
 #: block parameters giving the library point on its other axes, in the axis order of
-#: ``tests/physics/_template_torus_reference.py``). ``skirtor_agnfitter_1p`` is keyed by its own
-#: ``agn_incl_skirtor`` [deg], not by ``agn_cos_inc``.
+#: ``tests/physics/_template_torus_reference.py``). Every one reads the AGN's one inclination,
+#: ``agn_cos_inc``, which the disc reads too.
 _ANISOTROPIC_TORI = {
     "fritz": (
         "agn_cos_inc",
@@ -63,7 +63,7 @@ _ANISOTROPIC_TORI = {
     "nenkova_agnfitter": ("agn_cos_inc", ()),
     "nenkova_agnfitter_2p": ("agn_cos_inc", ("agn_oa_nenkova",)),
     "nenkova_agnfitter_3p": ("agn_cos_inc", ("agn_oa_nenkova", "agn_tv_nenkova")),
-    "skirtor_agnfitter_1p": ("agn_incl_skirtor", ()),
+    "skirtor_agnfitter_1p": ("agn_cos_inc", ()),
 }
 
 #: Gauss-Legendre order of the sphere mean in ``mu = cos i`` over [0, 1]. The anisotropy is a
@@ -109,16 +109,12 @@ def _block_default(torus, name):
 
 
 def _sightline_kwargs(torus, mu):
-    """The block keyword placing the observer at ``mu = cos i``."""
-    if _ANISOTROPIC_TORI[torus][0] == "agn_incl_skirtor":
-        return {"agn_incl_skirtor": float(np.degrees(np.arccos(mu)))}
-    return {"agn_cos_inc": float(mu)}
+    """The keyword placing the observer at ``mu = cos i``, for the torus and the disc alike."""
+    return {_ANISOTROPIC_TORI[torus][0]: float(mu)}
 
 
 def _default_mu(torus):
     """``cos i`` of the sightline a call without a sightline keyword is seen along."""
-    if _ANISOTROPIC_TORI[torus][0] == "agn_incl_skirtor":
-        return float(np.cos(np.radians(_block_default(torus, "agn_incl_skirtor"))))
     return float(DEFAULT_AGN_COS_INC)
 
 

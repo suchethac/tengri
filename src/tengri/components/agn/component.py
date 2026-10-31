@@ -672,10 +672,10 @@ class AGNSEDComponent(TemplateThreading):
                 # interpolation closure: arrays thread through jax.jit as a
                 # runtime input; a closure cannot (#1198).
                 skirtor_templates = _load_skirtor_default_grid()
-            except Exception:
-                # If SKIRTOR template loading fails (file not found),
-                # gracefully continue without threading. The apply() path
-                # will fall back to lazy loading.
+            except FileNotFoundError:
+                # No SKIRTOR grid on disk: continue without threading. The
+                # apply() path lazy-loads and raises the clear not-found error
+                # itself. Any other failure (a corrupt grid) propagates.
                 pass
 
         # Composable-block template libraries. Driven by the block recipe, NOT
@@ -1034,15 +1034,12 @@ class AGNSEDComponent(TemplateThreading):
             # (yang20.py: cosi = cos(agn.i) for SKIRTOR, sin(psy) for
             # Fritz); publish cos(i) so the X-ray block shares this
             # sightline at every inclination, not only the 30° anchor
-            # (#980). The shared ``agn_cos_inc`` knob wins; the
-            # AGNfitter-style SKIRTOR block carries degrees instead;
-            # models with neither publish the Yang+2020 anchor
+            # (#980). Every torus reads the one ``agn_cos_inc`` (#2605,
+            # #3085); models without it publish the Yang+2020 anchor
             # (anisotropy factor exactly 1).
             agn_cos_inc=(
                 jnp.asarray(params["agn_cos_inc"])
                 if "agn_cos_inc" in params
-                else jnp.cos(jnp.deg2rad(jnp.asarray(params["agn_incl_skirtor"])))
-                if "agn_incl_skirtor" in params
                 else jnp.asarray(_XRAY_COS_INC_REF_30DEG)
             ),
         )

@@ -5,8 +5,9 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the SKIRTOR_mean_3p three-parameter clumpy torus model (Stalevski et al. 2016)
 as packaged by AGNfitter-rX.
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``.
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
 
 References
 ----------
@@ -30,25 +31,33 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    AXIS_TRANSFORMS,
+    accepts_retired_incl_skirtor,
+    free_incl_position,
+    skirtor_incl_from_cos_inc,
 )
+from tengri.components.agn._template_power_table import (
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
+    read_at_fixed_axes,
+)
+from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
 )
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
 # oa (half-opening angle), incl (inclination), tv (optical depth).
+# The inclination axis is tabulated in degrees from the polar axis, as the runtime
+# kernel reads it, and governed by the model's one inclination agn_cos_inc: lookups
+# and the Fixed-axis collapse read it at i = arccos(agn_cos_inc) (AXIS_TRANSFORMS).
 AXIS_PARAMS: tuple[str, ...] = (
     "agn_oa_skirtor",
-    "agn_incl_skirtor",
+    "agn_cos_inc",
     "agn_tv_skirtor",
 )
 
@@ -64,9 +73,8 @@ def precompute_skirtor_agnfitter_photometry(
     For each (oa, incl, tv) grid point, compute the filter-integrated photometry.
     Returns a dict with ``grid_phot`` and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``skirtor_agnfitter.py``) so that ``build_skirtor_agnfitter_photometry_lookup``
-    returns L_ν [erg/s/Hz] per L_sun of bolometric luminosity.
+    ``build_skirtor_agnfitter_photometry_lookup`` reads the table as L_ν [erg/s/Hz]
+    per L_sun of torus power, normalized as the runtime ``skirtor_agnfitter.py`` does.
 
     Parameters
     ----------
@@ -84,8 +92,9 @@ def precompute_skirtor_agnfitter_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_oa, n_incl, n_tv, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``grid_phot`` : ndarray, shape (n_oa, n_incl, n_tv, n_filters + 1)
+            Power-weighted table: raw band L_ν [erg/s/Hz per unit template power]
+            and, last, the raw bolometric power; see Notes.
         ``axes`` : tuple of 3 grid arrays (jnp.ndarray)
             Grid axes (oa, incl, tv).
         ``_preint`` : PreintegratedGrid
@@ -108,9 +117,13 @@ def precompute_skirtor_agnfitter_photometry(
     integration via NumPy. The precomputed photometry is grid-independent
     (depends only on filter curves and redshift, not wavelength grid).
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
-    the runtime normalization in ``skirtor_agnfitter.py``.
+    **Normalization**: the runtime kernel normalizes the *interpolated* template by
+    its own bolometric integral, so off-node it weights each node by its raw power.
+    The table therefore holds the raw band photometry and, as a last channel, the raw
+    power (``power_weighted_template_photometry`` in
+    ``_template_power_table``);
+    the lookup interpolates both and divides. At a node this is the node-normalized
+    photometry exactly.
     """
 
     raw = _load_skirtor_agnfitter_arrays(grid_path)
@@ -120,33 +133,16 @@ def precompute_skirtor_agnfitter_photometry(
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
     tv_axis = np.asarray(raw["tv_axis"], dtype=np.float64)
 
-    # Normalize each template by its frequency integral.
-    # This matches skirtor_agnfitter.py's normalization:
-    #   L_ν = L_bol * torus_frac * template / native_integral(template)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
-    # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
-
-    n_oa, n_incl, n_tv, _n_wave = grid.shape
-    lnu_grid = np.empty_like(grid)
-
-    for i_oa in range(n_oa):
-        for i_incl in range(n_incl):
-            for i_tv in range(n_tv):
-                template = grid[i_oa, i_incl, i_tv]
-                integral = native_bolometric_nu_np(template, wave_grid)
-                integral_safe = max(abs(integral), 1e-100)
-                lnu_grid[i_oa, i_incl, i_tv] = _LSUN_ERG * template / integral_safe
-
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
+    # The runtime normalizes the interpolated template, so its off-node value is
+    # weighted by each node's raw power: tabulate the raw band photometry and the
+    # raw power and divide after interpolating (#3093).
+    power_table = power_weighted_template_photometry(
+        grid,
+        wave_grid,
+        filter_waves,
+        filter_trans,
+        redshift,
         axes=(oa_axis, incl_axis, tv_axis),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
     )
 
     axes_jax = (
@@ -155,9 +151,9 @@ def precompute_skirtor_agnfitter_photometry(
         jnp.asarray(tv_axis),
     )
     return {
-        "grid_phot": preint.phot,
+        "grid_phot": power_table.table,
         "axes": axes_jax,
-        "_preint": preint,
+        "_preint": power_table.preint,
     }
 
 
@@ -174,10 +170,9 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``fn(agn_log_lbol, agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor,
+        ``fn(agn_log_lbol, agn_oa_skirtor, agn_cos_inc, agn_tv_skirtor,
         agn_torus_frac, **_) -> photometry [erg/s/Hz]``.
-        Output has the same shape as ``precomp["grid_phot"][:, :, :, :]``
-        but along the filter axis.
+        Output has shape ``(n_filters,)``.
 
     Notes
     -----
@@ -188,10 +183,11 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     grid_jax = jnp.asarray(grid_phot)
 
+    @accepts_retired_incl_skirtor
     def skirtor_agnfitter_photometry(
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_oa_skirtor: float = 40.0,
-        agn_incl_skirtor: float = 30.0,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_tv_skirtor: float = 7.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -204,8 +200,11 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
             ``log10(L_bol / L_sun)``. Default 11.0.
         agn_oa_skirtor : float
             Half-opening angle [deg]. Default 40.0.
-        agn_incl_skirtor : float
-            Inclination [deg]. Default 30.0.
+        agn_cos_inc : float
+            :math:`\cos i`, the model's one inclination (1 = face-on)
+            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis
+            is in degrees from the polar axis and is read at
+            :math:`i = \arccos(\cos i)`, as the runtime kernel reads it.
         agn_tv_skirtor : float
             Equatorial optical depth τ_9.7. Default 7.0.
         agn_torus_frac : float
@@ -229,14 +228,11 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         phot = interp_nd_pchip(
             grid_jax,
             axes,
-            (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
+            (agn_oa_skirtor, skirtor_incl_from_cos_inc(agn_cos_inc), agn_tv_skirtor),
         )
-        # grid_phot/phot already carries the _LSUN_ERG factor from the
-        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
-        # not multiply it in again here (fix round 1: this double-counted
-        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        # The table's band channels already carry L_sun: the ratio is L_nu per L_sun.
         l_scale = 10.0**agn_log_lbol * agn_torus_frac
-        return l_scale * phot
+        return l_scale * lnu_per_lsun_from_power_table(phot)
 
     return skirtor_agnfitter_photometry
 
@@ -252,7 +248,7 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build the preintegrated SKIRTOR_mean_3p grid, auto-collapsing Fixed axes.
+    """Build the preintegrated SKIRTOR_mean_3p grid, recording Fixed axes.
 
     Parameters
     ----------
@@ -270,8 +266,9 @@ def precompute(
     Returns
     -------
     dict
-        Same shape as :func:`precompute_skirtor_agnfitter_photometry`, with grid
-        axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+        Same as :func:`precompute_skirtor_agnfitter_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed coordinates.
 
     Notes
     -----
@@ -281,18 +278,20 @@ def precompute(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
     preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, AXIS_PARAMS, parameters, origin="skirtor_agnfitter_precompute"
+    _, _, fixed = collapse_fixed_axes(
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        axis_transforms=AXIS_TRANSFORMS,
+        origin="skirtor_agnfitter_precompute",
     )
     if not fixed:
         return result
 
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-    }
+    # The table is kept whole and read at the Fixed coordinates (read_at_fixed_axes):
+    # contracting a Fixed axis first would interpolate in another axis order than
+    # the runtime kernel, and the tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
@@ -300,7 +299,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     When no axes are collapsed, delegates to
     :func:`build_skirtor_agnfitter_photometry_lookup`. When some axes are
-    collapsed (fixed at preintegration time), the returned function expects only
+    Fixed at preintegration time, the returned function expects only
     the remaining free parameter values.
 
     Parameters
@@ -328,16 +327,19 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    collapsed = preint["_collapsed_axes"]
+    incl_at = free_incl_position(1, preint["_collapsed_axes"])
 
     @jax.jit
     def skirtor_agnfitter_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_3p torus photometry with collapsed (fixed) axes via PCHIP."""
-        # grid_phot/phot already carries the _LSUN_ERG factor from the
-        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
-        # not multiply it in again here (fix round 1: this double-counted
-        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        if incl_at is not None:
+            free_axis_values = list(free_axis_values)  # cos i -> library degrees
+            free_axis_values[incl_at] = skirtor_incl_from_cos_inc(free_axis_values[incl_at])
+            free_axis_values = tuple(free_axis_values)
+        # The table's band channels already carry L_sun: the ratio is L_nu per L_sun.
         l_scale = 10.0**agn_log_lbol * agn_torus_frac
-        phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
-        return l_scale * phot
+        phot = read_at_fixed_axes(grid_phot, axes, free_axis_values, collapsed)
+        return l_scale * lnu_per_lsun_from_power_table(phot)
 
     return skirtor_agnfitter_phot_collapsed

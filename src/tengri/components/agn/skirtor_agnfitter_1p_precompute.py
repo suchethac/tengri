@@ -28,7 +28,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    AXIS_TRANSFORMS,
+    accepts_retired_incl_skirtor,
+    free_incl_position,
+    skirtor_incl_from_cos_inc,
+)
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.skirtor_agnfitter_1p import (
     TORUS_INCLINATION,
@@ -45,8 +51,11 @@ from tengri.utils.grid_interp import (
 )
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
-# SKIRTOR_mean_1p grid parametrized by inclination only (degrees).
-AXIS_PARAMS: tuple[str, ...] = ("agn_incl_skirtor",)
+# SKIRTOR_mean_1p grid parametrized by inclination only.
+# The inclination axis is tabulated in degrees from the polar axis, as the runtime
+# kernel reads it, and governed by the model's one inclination agn_cos_inc: lookups
+# and the Fixed-axis collapse read it at i = arccos(agn_cos_inc) (AXIS_TRANSFORMS).
+AXIS_PARAMS: tuple[str, ...] = ("agn_cos_inc",)
 
 
 def precompute_skirtor_agnfitter_1p_photometry(
@@ -139,7 +148,7 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``fn(agn_log_lbol, agn_incl_skirtor, agn_torus_frac, **_)
+        ``fn(agn_log_lbol, agn_cos_inc, agn_torus_frac, **_)
         -> photometry [erg/s/Hz]``.
 
     Notes
@@ -151,9 +160,10 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
 
     grid_jax = jnp.asarray(grid_phot)
 
+    @accepts_retired_incl_skirtor
     def skirtor_agnfitter_1p_photometry(
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_incl_skirtor: float = 30.0,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -163,8 +173,11 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
         ----------
         agn_log_lbol : float
             ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_incl_skirtor : float
-            Inclination [deg]. Default 30.0.
+        agn_cos_inc : float
+            :math:`\cos i`, the model's one inclination (1 = face-on)
+            [dimensionless]. Default ``cos(30 deg)``. The grid's inclination axis
+            is in degrees from the polar axis and is read at
+            :math:`i = \arccos(\cos i)`, as the runtime kernel reads it.
         agn_torus_frac : float
             Torus reprocessing fraction. Default 0.5.
 
@@ -179,7 +192,7 @@ def build_skirtor_agnfitter_1p_photometry_lookup(precomp: dict):
 
         **Gradient-safe**: yes, node-exact PCHIP is C¹ differentiable.
         """
-        phot = interp_nd_pchip(grid_jax, axes, (agn_incl_skirtor,))
+        phot = interp_nd_pchip(grid_jax, axes, (skirtor_incl_from_cos_inc(agn_cos_inc),))
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
         # not multiply it in again here (fix round 1: this double-counted
@@ -231,7 +244,11 @@ def precompute(
     )
     preint: PreintegratedGrid = result["_preint"]
     collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, AXIS_PARAMS, parameters, origin="skirtor_agnfitter_1p_precompute"
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        axis_transforms=AXIS_TRANSFORMS,
+        origin="skirtor_agnfitter_1p_precompute",
     )
     if not fixed:
         return result
@@ -278,10 +295,15 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    incl_at = free_incl_position(0, preint["_collapsed_axes"])
 
     @jax.jit
     def skirtor_agnfitter_1p_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_1p torus photometry with collapsed (fixed) axis via PCHIP."""
+        if incl_at is not None:
+            free_axis_values = list(free_axis_values)  # cos i -> library degrees
+            free_axis_values[incl_at] = skirtor_incl_from_cos_inc(free_axis_values[incl_at])
+            free_axis_values = tuple(free_axis_values)
         # grid_phot/phot already carries the _LSUN_ERG factor from the
         # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
         # not multiply it in again here (fix round 1: this double-counted

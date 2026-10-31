@@ -186,7 +186,7 @@ class TestAlphaFeForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        return SEDModel(spec, ssp, precompute=False)
+        return SEDModel(spec, ssp)
 
     def test_alpha_zero_matches_no_alpha(self, model_with_alpha, ssp_data_fsps):
         """alpha_fe=0 gives bit-exact match the no-α path.
@@ -216,7 +216,7 @@ class TestAlphaFeForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        model_no = SEDModel(spec_no, ssp, precompute=False)
+        model_no = SEDModel(spec_no, ssp)
         sed_no = model_no.predict_rest_sed({}).sed
         assert_allclose(sed_alpha0, sed_no, rtol=1e-12)
 

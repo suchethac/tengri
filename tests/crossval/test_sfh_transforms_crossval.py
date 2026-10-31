@@ -293,9 +293,9 @@ class TestPrecomputeCrossval:
             )
 
             # With precomputation (default)
-            model_pre = SEDModel(spec, ssp, precompute=True)
+            model_pre = SEDModel(spec, ssp)
             # Without
-            model_dir = SEDModel(spec, ssp, precompute=False)
+            model_dir = SEDModel(spec, ssp)
 
             params = spec.sample(jax.random.PRNGKey(0))
 

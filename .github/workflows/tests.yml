@@ -1001,7 +1001,7 @@ jobs:
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
       # Grid-backed AGN priors (agn_log_nh_silva, agn_a_cat3d, agn_fwd_cat3d,
-      # agn_cos_inc via cat3d, agn_oa_skirtor/agn_incl_skirtor/agn_tv_skirtor)
+      # agn_cos_inc via cat3d and the SKIRTOR-AGNfitter tori, agn_oa_skirtor/agn_tv_skirtor)
       # must declare exactly the vendored HDF5 grid's own axis extent (#2050
       # Task 1, M-A). Needs only h5py + numpy (installed above), not a JIT
       # trace, so it lives beside the other declaration guards rather than in

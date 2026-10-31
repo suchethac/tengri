@@ -61,7 +61,7 @@ def synthetic_ssp():
 @pytest.fixture(scope="module")
 def minimal_model(minimal_spec, synthetic_ssp):
     """Build minimal SEDModel with state attribute."""
-    return SEDModel(minimal_spec, synthetic_ssp, precompute=False, filters=None)
+    return SEDModel(minimal_spec, synthetic_ssp, filters=None)
 
 
 @pytest.mark.unit
