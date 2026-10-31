@@ -126,11 +126,9 @@ def _feii_unit(feii_block: str, params, templates) -> Array:
     if feii_block == "grahsp_veroncetty":
         fn = grahsp_veroncetty_feii_block
         twave, tlumin = templates.feii_vc04_wave_nm, templates.feii_vc04_lumin
-        field = "feii_vc04_wave_nm"
     else:
         fn = grahsp_feii_block
         twave, tlumin = templates.feii_wave_nm, templates.feii_lumin
-        field = "feii_wave_nm"
     if _kw(fn, "agn_type", params) != AGN_TYPE_BL:
         return jnp.asarray(0.0)
     return feii_forest_unit_power(
@@ -138,7 +136,6 @@ def _feii_unit(feii_block: str, params, templates) -> Array:
         tlumin,
         a_feii=_kw(fn, "agn_grahsp_a_feii", params),
         a_lines=_kw(fn, "agn_grahsp_a_lines", params),
-        wave_field=field,
     )
 
 

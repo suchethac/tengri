@@ -45,7 +45,6 @@ from tengri.components.agn.grahsp.lines import (
     AGN_TYPE_LINER,
 )
 from tengri.components.agn.grahsp.publication import bolometric_unit_nm
-from tengri.components.agn.grahsp.templates import host_wave_axis
 from tengri.utils.host_array import device_table
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -118,7 +117,7 @@ def _netzer_unit_nm(params: GRAHSPParams, templates: GRAHSPTemplates):
         a=params.disc_a,
         mdot=params.disc_mdot,
     )
-    disc_wave = host_wave_axis(templates.disc_wave_nm, "disc_wave_nm")
+    disc_wave = np.asarray(templates.disc_wave_nm, dtype=float)
     disc_lumin = device_table(templates.disc_lumin[idx])
 
     def unit_fn(wave_nm):
@@ -218,12 +217,11 @@ def line_unit_power(params: GRAHSPParams, templates: GRAHSPTemplates) -> Array:
 
 
 def feii_forest_unit_power(
-    template_wave_nm: Array,
+    template_wave_nm: np.ndarray,
     template_lumin: Array,
     *,
     a_feii: float,
     a_lines: float,
-    wave_field: str = "feii_wave_nm",
 ) -> Array:
     """Unit-``l5100`` FeII forest power above the lumBolBBB cut [erg/s] of one template.
 
@@ -231,7 +229,7 @@ def feii_forest_unit_power(
     its support. Its integral is the linear trapezoid on the template's own nodes above
     the cut (plus the cut itself when the template crosses it), exact for that interpolant.
     """
-    twave = host_wave_axis(template_wave_nm, wave_field)
+    twave = np.asarray(template_wave_nm, dtype=float)
     nodes = _retained_nodes(twave)
     values = jnp.interp(
         jnp.asarray(nodes),
@@ -249,16 +247,10 @@ def feii_unit_power(params: GRAHSPParams, templates: GRAHSPTemplates) -> Array:
     if params.agn_type != AGN_TYPE_BL:
         return jnp.asarray(0.0)
     if params.feii_template == "veroncetty2004":
-        twave, tlumin, field = (
-            templates.feii_vc04_wave_nm,
-            templates.feii_vc04_lumin,
-            "feii_vc04_wave_nm",
-        )
+        twave, tlumin = templates.feii_vc04_wave_nm, templates.feii_vc04_lumin
     else:
-        twave, tlumin, field = templates.feii_wave_nm, templates.feii_lumin, "feii_wave_nm"
-    return feii_forest_unit_power(
-        twave, tlumin, a_feii=params.a_feii, a_lines=params.a_lines, wave_field=field
-    )
+        twave, tlumin = templates.feii_wave_nm, templates.feii_lumin
+    return feii_forest_unit_power(twave, tlumin, a_feii=params.a_feii, a_lines=params.a_lines)
 
 
 def balmer_continuum_unit_power(*, a_bc: float, linewidth_kms: float) -> Array:

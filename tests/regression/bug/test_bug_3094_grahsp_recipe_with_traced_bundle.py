@@ -3,10 +3,11 @@
 
 ``disc/grahsp_netzer`` declares ``load_grahsp_templates`` as its ``template_loader``, so the
 bundle reaches the block as a traced argument. The normalization integrals need the template
-wavelength nodes on the host (they pick which nodes lie above the lumBolBBB cut), so those
-axes are read from the cached bundle when the argument is traced.
+wavelength nodes on the host (they pick which nodes lie above the lumBolBBB cut), so the disc
+and FeII wavelength axes are static aux data of the bundle pytree and stay concrete in ``jit``.
 """
 
+import dataclasses
 import warnings
 
 import jax
@@ -41,6 +42,17 @@ def test_recipe_normalization_under_jit_with_a_traced_bundle(feii_block):
     traced = float(jax.jit(lambda t: _log_l5100(t, feii_block))(templates))
     assert np.isfinite(traced)
     np.testing.assert_allclose(traced, eager, rtol=1e-6)
+
+
+def test_a_custom_axis_is_used_under_jit_not_the_default_one():
+    """A bundle with a shifted disc axis normalizes on its own nodes, jitted or eager."""
+    default = load_grahsp_templates()
+    custom = dataclasses.replace(default, disc_wave_nm=np.asarray(default.disc_wave_nm) * 1.07)
+    eager_default = float(_log_l5100(default, "grahsp"))
+    eager_custom = float(_log_l5100(custom, "grahsp"))
+    assert abs(eager_custom - eager_default) > 1e-4  # the axis matters to the result
+    traced_custom = float(jax.jit(lambda t: _log_l5100(t, "grahsp"))(custom))
+    np.testing.assert_allclose(traced_custom, eager_custom, rtol=1e-9)
 
 
 def test_composable_model_with_unset_l5100_predicts_with_the_bundle_threaded(

@@ -45,9 +45,6 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
-    "components/agn/grahsp/templates.py::host_wave_axis": (
-        "tracer -> the axis is read from the cached default bundle (axes are fixed per library)"
-    ),
     "utils/host_array.py::device_table": (
         "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
         "held once per table and dtype; a concrete device array is cast to the canonical dtype "

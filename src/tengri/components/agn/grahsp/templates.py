@@ -19,7 +19,7 @@ from jax import Array
 
 from tengri._data_setup import package_or_env_data_path
 
-__all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "host_wave_axis", "load_grahsp_templates"]
+__all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "load_grahsp_templates"]
 
 #: Honors $TENGRI_DATA_DIR before the package's own ``data/`` (#1431).
 DEFAULT_TEMPLATE_PATH: Path = package_or_env_data_path("grahsp/grahsp_templates.h5")
@@ -95,14 +95,62 @@ class GRAHSPTemplates:
     disc_mdot: tuple[str, ...] | None = field(default=None, repr=False)
 
 
-# The bundle is a pytree so the AGN runner can pass it to the jitted forward model as an
-# argument. The arrays are children; the label tuples are static metadata.
-_STATIC_FIELDS = ("line_names", "disc_m", "disc_a", "disc_mdot")
-jax.tree_util.register_dataclass(
-    GRAHSPTemplates,
-    data_fields=[f.name for f in fields(GRAHSPTemplates) if f.name not in _STATIC_FIELDS],
-    meta_fields=list(_STATIC_FIELDS),
+class _StaticAxis:
+    """A host wavelength axis held as pytree aux data: hashable and comparable by value.
+
+    The normalization integrals choose their nodes on the host, so these axes must be
+    concrete inside ``jit``. Aux data has to hash and compare equal for a jit cache hit; the
+    wrapper does both on the axis bytes.
+    """
+
+    __slots__ = ("_key", "array")
+
+    def __init__(self, array: np.ndarray):
+        self.array = array
+        self._key = (array.shape, array.dtype.str, array.tobytes())
+
+    def __hash__(self) -> int:
+        return hash(self._key)
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _StaticAxis) and self._key == other._key
+
+
+#: Fields read on the host by the normalization (node selection); static in the pytree.
+_STATIC_AXES = ("disc_wave_nm", "feii_wave_nm", "feii_vc04_wave_nm")
+_LABEL_FIELDS = ("line_names", "disc_m", "disc_a", "disc_mdot")
+_CHILD_FIELDS = tuple(
+    f.name for f in fields(GRAHSPTemplates) if f.name not in _STATIC_AXES + _LABEL_FIELDS
 )
+
+
+def _flatten_templates(bundle: GRAHSPTemplates):
+    children = tuple(getattr(bundle, name) for name in _CHILD_FIELDS)
+    axes = tuple(
+        None if getattr(bundle, name) is None else _StaticAxis(np.asarray(getattr(bundle, name)))
+        for name in _STATIC_AXES
+    )
+    labels = tuple(getattr(bundle, name) for name in _LABEL_FIELDS)
+    return children, (axes, labels)
+
+
+def _unflatten_templates(aux, children) -> GRAHSPTemplates:
+    axes, labels = aux
+    values = dict(zip(_CHILD_FIELDS, children, strict=True))
+    values.update(
+        {
+            name: None if ax is None else ax.array
+            for name, ax in zip(_STATIC_AXES, axes, strict=True)
+        }
+    )
+    values.update(dict(zip(_LABEL_FIELDS, labels, strict=True)))
+    return GRAHSPTemplates(**values)
+
+
+# The bundle is a pytree so the AGN runner can pass it to the jitted forward model as an
+# argument. The tables are children; the label tuples and the wavelength axes the
+# normalization reads on the host are static aux data.
+jax.tree_util.register_pytree_node(GRAHSPTemplates, _flatten_templates, _unflatten_templates)
 
 
 @lru_cache(maxsize=4)
@@ -183,27 +231,3 @@ def load_grahsp_templates(
         disc_a=disc_a,
         disc_mdot=disc_mdot,
     )
-
-
-def host_wave_axis(values, field_name: str) -> np.ndarray:
-    """A template wavelength axis [nm] as a host array, also when the bundle is traced.
-
-    The wavelength axes are fixed per library and set which nodes the normalization
-    integrals use, so they must be concrete when the graph is built. A bundle passed to a
-    jitted model carries tracers; the axis is then read from the cached default bundle.
-
-    Parameters
-    ----------
-    values : array_like
-        The bundle's axis, concrete or traced.
-    field_name : str
-        Name of the :class:`GRAHSPTemplates` field the axis belongs to.
-
-    Returns
-    -------
-    ndarray
-        The axis [nm] as float64.
-    """
-    if isinstance(values, jax.core.Tracer):
-        values = getattr(load_grahsp_templates(), field_name)
-    return np.asarray(values, dtype=float)
