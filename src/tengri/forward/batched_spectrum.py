@@ -440,9 +440,7 @@ def predict_batched_observables(
     if line_set is None:
         line_set = batched_line_set(model)
     free = {
-        k: v
-        for k, v in params.items()
-        if k != "redshift" and not k.startswith(_ELINE_AMP_PREFIX)
+        k: v for k, v in params.items() if k != "redshift" and not k.startswith(_ELINE_AMP_PREFIX)
     }
     fixed = {**dict(model.spec.get_fixed_values()), "redshift": obs.z}
     if spec.n_sfh_edges:
@@ -543,8 +541,6 @@ def make_batched_predict(
     line_set = batched_line_set(model)
 
     def one(p, o):
-        return predict_batched_observables(
-            model, p, o, spec, threaded=threaded, line_set=line_set
-        )
+        return predict_batched_observables(model, p, o, spec, threaded=threaded, line_set=line_set)
 
     return jax.jit(jax.vmap(one, in_axes=(0, 0)))
