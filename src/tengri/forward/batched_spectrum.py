@@ -38,6 +38,14 @@ the edge count, since its declared ratio parameters fix the bin count; the
 stellar component refuses a ladder of any other length, and any SFH type
 outside ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``).
 
+Per-galaxy Milky Way foreground
+-------------------------------
+The template fixes the foreground law and R_V; E(B-V) is a traced per-galaxy leaf
+(``ebmv_mw`` of :class:`~tengri.observation.batched.GalaxySpectrum`, a ``(B,)`` array on
+the batch). The screen multiplies the spectrum and the photometry of each galaxy at its own
+observed wavelengths. A bucket whose galaxies carry no ``ebmv_mw`` compiles without the
+screen. A template with a nonzero foreground E(B-V) refuses galaxies that do not carry their own.
+
 Flux-conserving mode
 --------------------
 The resample mode is not a caller choice. :func:`~tengri.observation.batched.build_spectro_batches`
@@ -63,6 +71,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.dust.foreground import (
+    combine_observed_transmission,
+    foreground_rest_transmission,
+)
 from tengri.components.stellar.component import RUNTIME_SFH_BIN_EDGES_KEY
 from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec, require_spec
@@ -457,10 +469,21 @@ def predict_batched_observables(
     full = {**fixed, **free}
 
     z = obs.z
+    if spec.has_foreground:
+        screen = foreground_rest_transmission(
+            state.wave,
+            z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
+        )
+        state = state.with_(derived=state.derived.with_(foreground_transmission=screen))
     dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     sed_rest = state.sed_intrinsic
     wave_rest = state.wave
-    igm_trans = state.derived.get("igm_transmission", None) if state.derived is not None else None
+    igm_trans = combine_observed_transmission(
+        state.derived.get("igm_transmission", None), state.derived.get("foreground_transmission")
+    )
 
     out: dict[str, jax.Array] = {}
     if spec.has_phot:
