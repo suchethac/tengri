@@ -80,8 +80,10 @@ def device_table(table) -> jnp.ndarray:
 
     Parameters
     ----------
-    table : ndarray
-        A :func:`host_array` (or any numpy array).
+    table : ndarray, list, tuple or scalar
+        A :func:`host_array` or any numpy array; a list, tuple, Python scalar or
+        numpy scalar is converted to a temporary numpy array first. A concrete
+        device array is cast to the canonical dtype; a tracer passes through.
 
     Returns
     -------
@@ -92,6 +94,10 @@ def device_table(table) -> jnp.ndarray:
     if isinstance(table, jax.core.Tracer):
         # A tracer's dtype is already the trace's. Never cached: a cached tracer leaks.
         return jnp.asarray(table)
+    if not isinstance(table, np.ndarray) and not hasattr(table, "dtype"):
+        # A list, tuple or Python scalar: a temporary host array, never memoized.
+        temporary = np.asarray(table)
+        return jnp.asarray(temporary, dtype=jax.dtypes.canonicalize_dtype(temporary.dtype))
     dtype = jax.dtypes.canonicalize_dtype(table.dtype)
     if isinstance(table, np.ndarray):
         return _memoized_device_copy(table, dtype)

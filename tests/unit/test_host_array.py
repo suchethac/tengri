@@ -103,3 +103,44 @@ def test_the_same_table_retraced_under_the_other_x64_state_has_that_states_dtype
             out = jax.jit(body)(jnp.linspace(0.7, 6.9, 5))
             want = jnp.float64 if x64 else jnp.float32
             assert out.dtype == want, f"{form} {order}: x64={x64} gave {out.dtype}"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [[1.5, 2.5], (1.5, 2.5), 1.5, np.float64(1.5)],
+    ids=["list", "tuple", "python_float", "numpy_scalar"],
+)
+def test_temporary_inputs_convert_to_the_canonical_dtype_and_are_not_memoized(value):
+    from tengri.utils import host_array as module
+
+    with jax.enable_x64(False):
+        before = len(module._DEVICE_MEMO)
+        out = device_table(value)
+        assert isinstance(out, jax.Array)
+        assert out.dtype == jnp.float32
+        assert len(module._DEVICE_MEMO) == before
+
+
+def test_a_numpy_table_is_memoized_once_per_dtype_as_before():
+    from tengri.utils import host_array as module
+
+    table = host_array(np.arange(4.0))
+    with jax.enable_x64(True):
+        first = device_table(table)
+        assert device_table(table) is first
+    with jax.enable_x64(False):
+        second = device_table(table)
+        assert second.dtype == jnp.float32
+        assert device_table(table) is second
+    assert id(table) in module._DEVICE_MEMO
+
+
+def test_a_zero_d_numpy_array_is_canonical_and_still_memoized():
+    from tengri.utils import host_array as module
+
+    value = np.array(1.5)
+    with jax.enable_x64(False):
+        out = device_table(value)
+        assert out.dtype == jnp.float32
+        assert out.shape == ()
+        assert id(value) in module._DEVICE_MEMO
