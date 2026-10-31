@@ -158,6 +158,10 @@ from tengri.components.nebular.ionizing_spectrum import (
     LYC_ALL_AGES,
     MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,  # noqa: F401  (re-exported for importers)
     clamp_ionspec_straight_through,
+    composite_log_ionizing_flux,
+    euv_log_flux_table,
+    fit_composite_ionizing_shape,
+    ionizing_layout,
     lyc_max_log_age,
     validate_lyc_max_age_yr,
 )
@@ -1229,6 +1233,11 @@ class CueBackend:
         self._seglum_table = None
         self._ssp_lgmet = None
         self._ssp_log_age_yr = None
+        self._euv_layout = None
+        self._euv_counted_idx = None
+        self._euv_log_flux = None
+        self._euv_composite = None
+        self._euv_fit = None
         if ssp_data is not None:
             self._precompute_ionizing_params(ssp_data)
 
@@ -1280,6 +1289,32 @@ class CueBackend:
         self._seglum_table = jnp.array(result["seglum_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
+
+        # Composite ionizing spectrum: SSP flux on the ionizing pixels, over exactly
+        # the age bins Q_H counts (all ages, or those up to lyc_max_age_yr). Size
+        # n_met x n_counted_age x n_pix, float64 NumPy then jnp; with a dense age
+        # grid and no cut this is the largest table the backend holds.
+        ages_np = np.asarray(ssp_data.ssp_lg_age_gyr) + 9.0
+        if self._lyc_max_log_age is None:
+            counted = np.ones(ages_np.shape, dtype=bool)
+        else:
+            counted = ages_np <= self._lyc_max_log_age
+        self._euv_counted_idx = np.flatnonzero(counted).astype(np.int32)
+        self._euv_layout = ionizing_layout(np.array(ssp_data.ssp_wave))
+        self._euv_log_flux = jnp.asarray(
+            euv_log_flux_table(
+                np.array(ssp_data.ssp_flux)[:, self._euv_counted_idx, :],
+                self._euv_layout,
+            )
+        )
+        # Compiled once per backend: the Newton solves re-trace on every eager call.
+        self._euv_composite = jax.jit(composite_log_ionizing_flux)
+        layout = self._euv_layout
+        self._euv_fit = jax.jit(
+            lambda log_flux, alpha_start: fit_composite_ionizing_shape(
+                log_flux, layout, alpha_start
+            )
+        )
 
         self._warn_if_shape_outside_trained_box(result)
 
@@ -1763,6 +1798,10 @@ class CueBackend:
     ) -> dict:
         """Derive Cue parameters from SSP weights, shape clamped to the trained box.
 
+        ``ssp_weights`` and ``ssp_log_ages_yr`` must be on the SSP age grid of the
+        backend's ``ssp_data`` (one entry per SSP age node, same order); other grids
+        raise ``ValueError``.
+
         Runs :meth:`_weighted_cue_params_raw` and moves the seven ionizing-shape
         parameters onto the Cue training range (``ionizing_spectrum._CLIP_RANGES``, the Cue
         reference code's range) with a straight-through clamp, so the
@@ -1781,6 +1820,74 @@ class CueBackend:
         i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
         return {**gas, **out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
 
+    def _fit_composite_shape(
+        self,
+        ssp_weights: jnp.ndarray,
+        log_z: float,
+        alpha_start: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """Ionizing shape of the composite spectrum of an SSP-weighted population.
+
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_ssp_age,)
+            Mass weights per SSP age bin [Msun], zero outside the bins to count.
+        log_z : float
+            Stellar metallicity, ``log10(Z)`` absolute.
+        alpha_start : array, shape (4,)
+            Starting slope of each segment [dimensionless].
+
+        Returns
+        -------
+        i7 : jnp.ndarray, shape (7,)
+            Unclipped ``[index1..4, logLratio1..3]``.
+        coeff : jnp.ndarray, shape (4, 2)
+            ``[slope, log10 amplitude]`` per segment.
+        log_seglum : jnp.ndarray, shape (4,)
+            log10 integrated luminosity per segment [log10(erg/s)].
+
+        Notes
+        -----
+        The composite is built over the counted bins only (``self._euv_counted_idx``),
+        the same bins Q_H sums. See
+        :func:`~tengri.components.nebular.ionizing_spectrum.fit_composite_ionizing_shape`.
+        JIT/grad/vmap safe; differentiable in ``ssp_weights``.
+        """
+        w_comp = jnp.asarray(ssp_weights)[self._euv_counted_idx]
+        log_comp = self._euv_composite(self._euv_log_flux, self._ssp_lgmet, log_z, w_comp)
+        return self._euv_fit(log_comp, alpha_start)
+
+    def _check_weights_on_ssp_grid(self, ssp_weights, ssp_log_ages_yr) -> None:
+        """Raise unless the weights and ages are on the SSP age grid.
+
+        The composite fit gathers the SSP rows by static index, and JAX clamps an
+        out-of-range gather silently, so a grid of another length would be read
+        wrong without a message. Shapes are static under jit, so this check runs at
+        trace time and costs nothing per call.
+
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_ssp_age,)
+            Mass weights per age bin [Msun].
+        ssp_log_ages_yr : array, shape (n_ssp_age,)
+            log10(age/yr) of the age bins.
+
+        Raises
+        ------
+        ValueError
+            If either array's length differs from the SSP age grid length.
+        """
+        n_grid = int(self._ssp_log_age_yr.shape[0])
+        n_w = int(jnp.shape(ssp_weights)[0])
+        n_a = int(jnp.shape(ssp_log_ages_yr)[0])
+        if n_w != n_grid or n_a != n_grid:
+            raise ValueError(
+                f"CueBackend: ssp_weights has {n_w} entries and ssp_log_ages_yr has "
+                f"{n_a}, but the SSP age grid has {n_grid} nodes. The weights must be "
+                "on the SSP age grid (one entry per SSP age node, same order); "
+                "other age grids are not supported."
+            )
+
     def _weighted_cue_params_raw(
         self,
         ssp_weights: jnp.ndarray,
@@ -1791,15 +1898,19 @@ class CueBackend:
         """Derive Cue parameters from SSP weights.
 
         Computes total Q_H by summing mass-weighted per-Msun Q_H over every
-        SSP age bin (or those up to ``lyc_max_age_yr``), and the ionizing-spectrum
-        shape as the luminosity-weighted combination of the same bins.
+        SSP age bin (or those up to ``lyc_max_age_yr``). The ionizing-spectrum
+        shape is the four-segment power-law fit of the composite ionizing spectrum
+        of the same bins (``fit_composite_ionizing_shape`` in
+        ``ionizing_spectrum``), differentiable in ``ssp_weights``.
 
         Parameters
         ----------
-        ssp_weights : array (n_age,)
-            CSP mass weights (Msun per age bin).
-        ssp_log_ages_yr : array (n_age,)
-            log10(age/yr) of SSP age bins.
+        ssp_weights : array, shape (n_ssp_age,)
+            CSP mass weights (Msun per age bin). Must be on the SSP age grid of the
+            backend's ``ssp_data``: one entry per SSP age node, in the same order.
+            Weights on any other age grid raise ``ValueError``.
+        ssp_log_ages_yr : array, shape (n_ssp_age,)
+            log10(age/yr) of the SSP age nodes, the same grid as ``ssp_weights``.
         log_z : float
             Stellar metallicity log10(Z) (absolute).
         neb_logZ_gas : float or None
@@ -1816,6 +1927,8 @@ class CueBackend:
                 "CueBackend requires ssp_data at init for the high-level "
                 "interface.  Pass ssp_data= to the constructor."
             )
+
+        self._check_weights_on_ssp_grid(ssp_weights, ssp_log_ages_yr)
 
         # Vectorized, JIT-safe computation over all age bins.
         # Use jnp.where masks instead of boolean fancy indexing.
@@ -1862,29 +1975,12 @@ class CueBackend:
         any_valid = jnp.any(valid)
         total_logqion = jnp.where(any_valid, lse / LN10, -99.0)
 
-        # ── Effective ionizing-spectrum shape via per-segment max-offset (#1018) ──
-        # Cue is trained on the *time-averaged* ionizing spectrum of the whole
-        # population (see the module header), so the shape must combine every
-        # ionizing age bin: not the single argmax-dominant one. The old
-        # ``i7 = ionspec_all[jnp.argmax(weighted_qh)]`` made the forward
-        # DISCONTINUOUS in metallicity and SFH (the dominant bin flips → [OIII]
-        # steps ~33 %) and, because ``argmax`` has no gradient and ``ionspec_all``
-        # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0:
-        # silently starving gradient-based inference.
-        #
-        # Combine the way the physics does, now in log-domain for float32 safety.
-        # The 7 params describe a 4-segment broken power law: 4 slopes + 3 log-
-        # ratios of the INTEGRATED segment luminosities. Across populations:
-        #   * segment luminosities ADD linearly     → L_k = Σ_a w_a L_k,a
-        #   * the slope of a sum of power laws is the per-segment luminosity-
-        #     weighted mean          → α_k = Σ_a (w_a L_k,a / L_k) · α_k,a
-        #   * the log-ratios follow as diff(log10 L_k)
-        # Averaging the log-ratios directly (a geometric mean where an arithmetic
-        # one is required) biases [OIII] by ~12 %: worse than the argmax it would
-        # replace. This rule is smooth and differentiable but approximates
-        # re-fitting the composite spectrum: for a delayed-tau (300 Myr) population
-        # at 100 Myr, Z = 0.02, indices 1-4 differ from a refit by 1-2 units and
-        # [O III]/H-beta by 10-15 %.
+        # ── Effective ionizing-spectrum shape: power-law fit of the composite ──
+        # Cue is trained on the *time-averaged* ionizing spectrum of the population
+        # (see the module header), so the shape is the four-segment power-law fit of
+        # the composite spectrum sum_a w_a f_a(lambda) over exactly the counted, valid
+        # bins (the bins Q_H sums). The per-segment luminosity-weighted slope below only
+        # starts each segment's solve; the fit itself is differentiable in ssp_weights.
         log_seglum_all = jax.vmap(
             lambda log_age_yr: interpolate_ionizing_seglum(
                 self._seglum_table,
@@ -1897,9 +1993,8 @@ class CueBackend:
 
         # Per-segment max-offset scaling for log-domain arithmetic (#1206).
         # For segment k: seg_w[a,k] = w_a * 10**log_seglum[a,k]. Factor out
-        # the per-segment peak m_k so 10**(log_seg_w - m_k) stays O(<=1);
-        # alpha (a ratio) is m_k-invariant, and log10(seg_tot_k) = m_k +
-        # log10(sum 10**(log_seg_w - m_k)).
+        # the per-segment peak m_k so 10**(log_seg_w - m_k) stays O(<=1); the
+        # slope ratio is m_k-invariant.
         w_pos = ssp_weights > 0  # (n_age,)
         log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
         finite_seg = jnp.isfinite(log_seglum_all)  # (n_age,4)
@@ -1912,14 +2007,13 @@ class CueBackend:
         seg_w_scaled = pow10(log_seg_w - m_safe[None, :])  # (n_age,4); pow10(-inf)=0
         seg_tot_scaled = jnp.sum(seg_w_scaled, axis=0)  # (4,)
         seg_pos = seg_tot_scaled > 0
-        alpha_eff = jnp.sum(seg_w_scaled * ionspec_all[:, :4], axis=0) / jnp.where(
+        alpha_start = jnp.sum(seg_w_scaled * ionspec_all[:, :4], axis=0) / jnp.where(
             seg_pos, seg_tot_scaled, 1.0
         )  # (4,): m_k cancels in the ratio
-        log_seg_tot = jnp.where(
-            seg_pos, m_safe + jnp.log10(jnp.where(seg_pos, seg_tot_scaled, 1.0)), -jnp.inf
-        )  # (4,)
-        logLratio_eff = jnp.diff(log_seg_tot)  # (3,)
-        i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
+
+        # Same valid mask and weights as the Q_H sum; zero weight outside it.
+        w_fit = jnp.where(valid, ssp_weights, 0.0)  # (n_age,)
+        i7_weighted, _, _ = self._fit_composite_shape(w_fit, log_z, alpha_start)
 
         # Empty population (no counted bin with weight and a finite Q_H): dominant-bin
         # fallback, picked in LOG space so the index selection never materializes
@@ -2429,6 +2523,21 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
     "default_gas_logqion": content("default ionizing-photon normalization"),
     "nitrogen": content("meaning of gas_logno (absolute [N/O] or offset from a relation)"),
     "lyc_max_age_yr": content("oldest stellar age whose ionizing photons are counted"),
+    "_euv_log_flux": exclude(
+        "SSP flux on the ionizing pixels over the counted ages, from ssp_data "
+        "(content-keyed at the model level); deterministic function of an "
+        "already-keyed input"
+    ),
+    "_euv_layout": exclude(
+        "pixel layout of ssp_data.ssp_wave (content-keyed at the model level); "
+        "deterministic function of an already-keyed input"
+    ),
+    "_euv_counted_idx": exclude(
+        "counted-age indices of ssp_data ages (content-keyed at the model level); "
+        "deterministic function of an already-keyed input"
+    ),
+    "_euv_composite": exclude("jitted view of a module function; holds no state"),
+    "_euv_fit": exclude("jitted view of a module function over _euv_layout; holds no state"),
     "_lyc_max_log_age": exclude("log10 of lyc_max_age_yr, which is already content-keyed"),
     "_line_sort_idx": exclude("argsort of weights.nn_line_wav; weights is already content-keyed"),
     "_cont_sort_idx": exclude("argsort of weights.cont_wav; weights is already content-keyed"),

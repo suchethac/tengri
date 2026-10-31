@@ -508,7 +508,75 @@ def _snap_axis_to_nodes(lo, hi, n, nodes):
     merge_within = _SNAP_MERGE_FRAC * (hi - lo) / max(n - 1, 1)
     keep = np.min(np.abs(uniform[:, None] - interior[None, :]), axis=1) > merge_within
     keep[0] = keep[-1] = True  # lo/hi are not nodes' to consume
-    return np.sort(np.concatenate([uniform[keep], interior]))
+    axis = np.sort(np.concatenate([uniform[keep], interior]))
+    axis = _cap_gaps(axis, (hi - lo) / max(n - 1, 1))
+    return _cell_midpoints(axis, np.concatenate([interior, [lo, hi]]), tol)
+
+
+def _cell_midpoints(axis, marks, tol):
+    """Insert the midpoint of every cell whose two ends are both nodes or range bounds.
+
+    A cell between two metallicity nodes is where the interpolated quantity is most
+    curved, and a linear interpolant's error there is largest at the center. A knot-free
+    cell of that kind therefore gets its midpoint.
+
+    Parameters
+    ----------
+    axis : ndarray, shape (n,)
+        Strictly ascending grid.
+    marks : array_like, shape (m,)
+        Node and range-bound values [log10(Z/Zsun)].
+    tol : float
+        Two values closer than ``tol`` are the same point.
+
+    Returns
+    -------
+    ndarray, shape (>= n,)
+        Strictly ascending grid containing every point of ``axis``.
+    """
+    marks = np.asarray(marks, dtype=float)
+
+    def _is_mark(x):
+        return bool(np.min(np.abs(marks - x)) <= tol)
+
+    filled = [axis[0]]
+    for a, b in itertools.pairwise(axis):
+        if _is_mark(a) and _is_mark(b):
+            filled.append(0.5 * (a + b))
+        filled.append(b)
+    return np.asarray(filled, dtype=float)
+
+
+def _cap_gaps(axis, h):
+    """Insert midpoints, recursively, until no gap of ``axis`` exceeds ``h``.
+
+    A node that consumes a uniform point can leave the gap on that side wider than the
+    uniform spacing, so the axis is refined back below ``h`` wherever that happens.
+    Existing points are never removed.
+
+    Parameters
+    ----------
+    axis : ndarray, shape (n,)
+        Strictly ascending grid.
+    h : float
+        Largest permitted gap, in the units of ``axis``.
+
+    Returns
+    -------
+    ndarray, shape (>= n,)
+        Strictly ascending grid containing every point of ``axis``.
+    """
+
+    def _fill(a, b):
+        if b - a <= h * (1.0 + 1e-9):
+            return [b]
+        mid = 0.5 * (a + b)
+        return _fill(a, mid) + _fill(mid, b)
+
+    filled = [axis[0]]
+    for a, b in itertools.pairwise(axis):
+        filled.extend(_fill(a, b))
+    return np.asarray(filled, dtype=float)
 
 
 def _finite_prior_bounds(dist):
