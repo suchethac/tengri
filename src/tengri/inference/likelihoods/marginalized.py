@@ -19,20 +19,26 @@ distinct *math types* (not just channel renames).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
+from jax.scipy.linalg import block_diag
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude, shape
 from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
 from tengri.inference.likelihoods.protocol import resolve_channel_data
 from tengri.observation.calibration import (
+    _ERR_FLOOR,
+    calibration_basis,
     marginalize_calibration as _marginalize_calibration,
 )
 from tengri.observation.eline_marginalization import (
     marginalize_emission_lines as _marginalize_emission_lines,
 )
+from tengri.observation.linear_marginal import marginalize_linear_nuisance
+from tengri.utils.scale import representable_floor as _representable_floor
 
 __all__ = [
     "CalibrationMarginalizedLikelihood",
@@ -82,11 +88,11 @@ class CalibrationMarginalizedLikelihood:
     **JIT-compatible**: yes, ``n_poly`` is a static argument of the
     underlying primitive.
 
-    Returns the *positive* marginal log-likelihood (data term only;
-    the analytic Gaussian normalization in
-    :func:`marginalize_calibration` is included in its return value
-    by construction). Sign matches the rest of the
-    :class:`Likelihood` cohort (higher = better fit).
+    Returns the marginal log-likelihood, including the Gaussian normalization,
+    from :func:`marginalize_calibration`, which evaluates the closed form of
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` on the
+    Chebyshev design. Sign matches the rest of the :class:`Likelihood` cohort
+    (higher = better fit).
     """
 
     fnu_obs: jnp.ndarray
@@ -189,6 +195,12 @@ class ELineMarginalizedLikelihood:
     (:attr:`prediction[channel]`) is the model SED *without* lines;
     the residual ``data - model`` is what the design matrix is fit
     to. Returns the marginal log-likelihood directly.
+
+    The value is the exact marginal likelihood of the residual under the Gaussian
+    line prior, with the normalization of
+    :func:`~tengri.observation.eline_marginalization.marginalize_emission_lines`.
+    When ``presence_key`` names an entry of ``data_args``, that entry is a pixel
+    mask (sliced by ``data_slice``) and a masked pixel is absent from every term.
     """
 
     fnu_obs: jnp.ndarray
@@ -202,6 +214,7 @@ class ELineMarginalizedLikelihood:
     fnu_obs_key: str | None = None
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    presence_key: str | None = None
 
     def __post_init__(self) -> None:
         # Exactly one of (static design matrix) | (per-call builder)
@@ -235,11 +248,21 @@ class ELineMarginalizedLikelihood:
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         residual = fnu_obs - prediction[self.channel]
+        pix_mask = None
+        if (
+            data_args is not None
+            and self.presence_key is not None
+            and self.presence_key in data_args
+        ):
+            pix_mask = data_args[self.presence_key]
+            if self.data_slice is not None:
+                pix_mask = pix_mask[self.data_slice[0] : self.data_slice[1]]
         ln_l_marg, _a_hat, _a_cov = _marginalize_emission_lines(
             residual=residual,
             noise=fnu_err,
             design_matrix=design_matrix,
             prior_variance=self.prior_variance,
+            pix_mask=pix_mask,
         )
         return ln_l_marg
 
@@ -488,41 +511,15 @@ _ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 
 @dataclass(frozen=True)
 class CalibrationELineMarginalizedLikelihood:
-    r"""Spectroscopy likelihood with calibration polynomial marginalized
-    and emission-line amplitudes handled via plug-in point estimate.
+    r"""Spectroscopy likelihood with the calibration polynomial and the emission-line
+    amplitudes marginalized jointly and exactly.
 
-    Covers the most common galaxy spectroscopy configuration
-    (Prospector-style joint cal-poly + line fitting). The two blocks are
-    composed sequentially: the emission-line block uses a point estimate
-    (not a full marginalization), and its log-determinant volume term is
-    discarded. This means the likelihood understates the uncertainty
-    contribution from the line amplitudes, in a data-dependent manner.
-
-    An exact composition exists in principle — condition one block on the
-    other and integrate in the right order, at the cost of a solve per
-    node — but is not implemented; #2354 tracks that decision. The exact
-    pieces are :func:`marginalize_emission_lines`
-    (:mod:`tengri.observation.eline_marginalization`) and
-    :func:`marginalize_calibration` (:mod:`tengri.observation.calibration`);
-    this class skips the line-block's log-determinant term after solving
-    for the MAP amplitudes â under the chosen prior.
-
-    Sequential composition:
-
-    1. Build the line design matrix ``G`` via ``design_matrix_builder``.
-    2. Solve for the line amplitudes ``â`` under the chosen prior
-       (flat Gaussian or Cloudy). This is a profile-likelihood step:
-       we use the MAP amplitudes, not the marginal log-likelihood,
-       because the cal-marg step in (4) needs the line-augmented
-       prediction. The marginal log-likelihood term (containing the
-       log-determinant of the line-amplitude posterior covariance) is
-       discarded.
-    3. Augment the model: ``m'(λ) = m(λ) + G â``.
-    4. Run cal-poly marginalization on ``m'`` against the observed
-       spectrum, returning the marginal log-likelihood.
-
-    Both flat and Cloudy line-amplitude priors are supported via
-    ``eline_prior_type``.
+    The calibrated model is
+    :math:`m(\lambda)\,[1 + \sum_k c_k T_k(\lambda)] + \sum_j a_j G_j(\lambda)`.
+    The calibration block multiplies the model and the line block adds to it, so
+    both blocks are jointly linear in :math:`(c, a)`. The value is the marginal
+    likelihood of the observed spectrum with every coefficient integrated out under
+    its Gaussian prior, and every log-determinant term of the joint is kept.
 
     Parameters
     ----------
@@ -555,9 +552,14 @@ class CalibrationELineMarginalizedLikelihood:
     **JIT-compatible**: yes; ``eline_prior_type`` is static at
     construction time.
 
-    Discards the eline marginal log-likelihood (uses the plug-in
-    ``â``). This matches the legacy χ² composition in
-    :func:`tengri.inference.loss_functions.build_loss_fn` exactly.
+    The joint marginal is one call to
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` with the
+    design :math:`X = [m\,T \mid G]`, where :math:`T` is the calibration basis, the
+    model offset :math:`m_0 = m`, and the block prior precision
+    :math:`\mathrm{blockdiag}(I/\sigma_{\rm prior}^2,\ \Lambda^{-1})`. For the Cloudy
+    prior the line block carries the Cloudy-shifted prior means. The value omits the
+    constant :math:`-\tfrac12 N \ln 2\pi` and :math:`-\sum_i \ln\sigma_i` of the
+    normalized Gaussian, as :class:`ELineMarginalizedLikelihood` does.
     """
 
     fnu_obs: jnp.ndarray
@@ -577,57 +579,53 @@ class CalibrationELineMarginalizedLikelihood:
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
 
+    def _line_prior(self, params: Mapping[str, jnp.ndarray], n_lines: int):
+        """Return the line prior mean and precision for this parameter set."""
+        if self.eline_prior_type == "cloudy":
+            from tengri.observation.eline_priors import cloudy_line_priors
+
+            means, sigmas = cloudy_line_priors(
+                log_z=params.get("met_logzsol", 0.0),
+                neb_logU=params.get("neb_logU", -3.0),
+                line_wavelengths=self.eline_line_wavelengths,
+                prior_width_dex=self.eline_prior_width_dex,
+            )
+            return means, jnp.diag(1.0 / sigmas**2)
+        return (
+            jnp.zeros(n_lines),
+            jnp.diag(jnp.full(n_lines, 1.0 / self.eline_prior_sigma**2)),
+        )
+
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
-        from tengri.observation.eline_marginalization import (
-            marginalize_emission_lines as _marginalize_flat,
-        )
-
         params = params or {}
-        design_matrix = self.design_matrix_builder(params)
         model_spec = prediction[self.channel]
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        residual = fnu_obs - model_spec
-
-        if self.eline_prior_type == "cloudy":
-            from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
-
-            log_z = params.get("met_logzsol", 0.0)
-            neb_logU = params.get("neb_logU", -3.0)
-            _ln_l, a_hat, _a_err = marginalize_emission_lines_cloudy(
-                residual,
-                fnu_err,
-                design_matrix,
-                log_z=log_z,
-                neb_logU=neb_logU,
-                line_wavelengths=self.eline_line_wavelengths,
-                prior_width_dex=self.eline_prior_width_dex,
-            )
-        else:
-            prior_var = jnp.full(design_matrix.shape[1], self.eline_prior_sigma**2)
-            _ln_l, a_hat, _a_err = _marginalize_flat(
-                residual, fnu_err, design_matrix, prior_variance=prior_var
-            )
-
-        pred_with_lines = model_spec + design_matrix @ a_hat
-        log_lik, _c_hat, _c_err = _marginalize_calibration(
-            model_flux=pred_with_lines,
-            obs_flux=resolve_channel_data(
-                self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args
-            ),
-            obs_err=resolve_channel_data(
-                self.fnu_err, self.fnu_err_key, self.data_slice, data_args
-            ),
-            wavelength=self.wavelength,
-            n_poly=self.n_poly,
-            prior_sigma=self.prior_sigma,
+        design_lines = self.design_matrix_builder(params)
+        n_lines = design_lines.shape[1]
+        basis = calibration_basis(
+            self.wavelength, self.wavelength.min(), self.wavelength.max(), self.n_poly
         )
-        return log_lik
+        sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
+        design = jnp.concatenate([model_spec[:, None] * basis, design_lines], axis=1)
+        line_mean, line_precision = self._line_prior(params, n_lines)
+        prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line_mean])
+        prior_precision = block_diag(jnp.eye(self.n_poly) / self.prior_sigma**2, line_precision)
+        result = marginalize_linear_nuisance(
+            fnu_obs,
+            model_spec,
+            design,
+            sigma=sigma,
+            prior_mean=prior_mean,
+            prior_precision=prior_precision,
+        )
+        n_pix = fnu_obs.shape[0]
+        return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))
 
     def declared_parameters(self):
         return []

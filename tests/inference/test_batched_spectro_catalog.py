@@ -132,3 +132,106 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
     seen.clear()
     fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
     assert seen == [None, None]
+
+
+# ── Joint calibration + emission-line marginalization: batched vs per-galaxy NUTS (#3117) ──
+
+_JOINT_Z = (0.10, 0.12, 0.14)
+_JOINT_MASS = (9.8, 10.0, 10.2)
+
+
+def _joint_draws() -> int:
+    """NUTS draws per run; ``TENGRI_JOINT_DRAWS`` shortens it for a smoke run."""
+    import os
+
+    return int(os.environ.get("TENGRI_JOINT_DRAWS", "200"))
+
+
+def _joint_galaxies(template):
+    """Three mocks drawn from the template itself, with noise at 5% of the median flux."""
+    from tengri.observation.batched import GalaxySpectrum
+    from tests.contract.test_batched_eline_marginal import _MARG_WAVE
+
+    banded = template.observation.spectroscopy.resolution_matrix
+    galaxies = []
+    for k, (z, mass) in enumerate(zip(_JOINT_Z, _JOINT_MASS, strict=True)):
+        clean = np.asarray(
+            template.predict_spectrum({"sfh_dpl_log_total_mass": mass, "redshift": z})
+        )
+        sigma = 0.05 * float(np.median(np.abs(clean)))
+        flux = clean + sigma * np.random.default_rng(k).standard_normal(clean.size)
+        galaxies.append(
+            GalaxySpectrum(
+                wave=_MARG_WAVE,
+                flux=flux,
+                ivar=np.full(clean.size, 1.0 / sigma**2),
+                z=z,
+                resolution=banded,
+            )
+        )
+    return galaxies
+
+
+def _batched_mass_draws(template, galaxies, n_draws: int) -> np.ndarray:
+    from tengri.inference.batched_spectro import fit_spectra_catalog_mcmc
+    from tengri.observation.batched import build_spectro_batches
+
+    batches = build_spectro_batches(galaxies, quantum=128, model=template)
+    result = fit_spectra_catalog_mcmc(
+        template,
+        batches,
+        sampler="nuts",
+        n_warmup=n_draws,
+        n_burnin=0,
+        n_samples=n_draws,
+        init="map",
+        map_steps=100,
+        calibration_marginalize=True,
+        cal_n_poly=2,
+    )
+    return np.asarray(result["draws"][_MASS])
+
+
+def _per_galaxy_mass_draws(ssp, galaxy, n_draws: int) -> np.ndarray:
+    import jax
+
+    from tengri.inference.fitter import Fitter
+    from tests.contract.test_batched_eline_marginal import _marg_template
+
+    model = _marg_template(ssp, banded=True, fixed_z=galaxy.z)
+    fitter = Fitter(
+        model,
+        data=galaxy.flux,
+        noise=1.0 / np.sqrt(np.asarray(galaxy.ivar)),
+        data_type="spectroscopy",
+        calibration_marginalize=True,
+        cal_n_poly=2,
+        eline_marginalize=True,
+        approx=None,
+    )
+    post = fitter.run(
+        "mcmc_nuts",
+        key=jax.random.PRNGKey(0),
+        n_warmup=n_draws,
+        n_burnin=0,
+        n_samples=n_draws,
+        n_chains=1,
+    )
+    return np.asarray(post.samples[_MASS]).reshape(-1)
+
+
+def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
+    """Batched and per-galaxy NUTS medians agree within 0.05 widths for every galaxy."""
+    from tests.contract.test_batched_eline_marginal import _marg_template
+
+    n_draws = _joint_draws()
+    template = _marg_template(synthetic_ssp, banded=True)
+    galaxies = _joint_galaxies(template)
+    batched = _batched_mass_draws(template, galaxies, n_draws)
+    assert batched.shape == (len(galaxies), n_draws)
+    assert np.all(np.isfinite(batched))
+    for row, galaxy in enumerate(galaxies):
+        per_galaxy = _per_galaxy_mass_draws(synthetic_ssp, galaxy, n_draws)
+        width = float(np.std(per_galaxy))
+        gap = abs(float(np.median(batched[row])) - float(np.median(per_galaxy)))
+        assert gap < 0.05 * width, (row, gap, width)
