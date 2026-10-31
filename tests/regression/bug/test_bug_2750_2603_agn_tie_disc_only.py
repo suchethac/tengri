@@ -312,7 +312,7 @@ def test_tied_corona_carries_the_model_share_of_the_angle_integrated_disc_power(
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](_WAVE, _LOG_LBOL, agn_log_mbh=mbh)
     i_d = _fine_integral(lib, lambda w: _kubota_parts(w, mbh)[0])
     ratio = _tie_ratio(lib, lambda w: _kubota_parts(w, mbh)[0])
-    expected = (
+    expected = float(
         a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
     )
     assert b == pytest.approx(expected, rel=1e-5)
@@ -336,7 +336,7 @@ def test_tied_corona_per_unit_intrinsic_disc_power_is_the_same_at_every_type_1_i
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](_WAVE, _LOG_LBOL, agn_log_mbh=8.0)
     i_d = _fine_integral(lib, lambda w: _kubota_parts(w, 8.0)[0])
     ratio = _tie_ratio(lib, lambda w: _kubota_parts(w, 8.0)[0])
-    expected = (
+    expected = float(
         a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
     )
     assert b == pytest.approx(expected, rel=1e-9)
