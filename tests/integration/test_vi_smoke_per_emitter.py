@@ -205,8 +205,8 @@ def test_vi_smoke_fit(
     # ── Build parameter spec ────────────────────────────────────────
     spec = Parameters(**spec_kwargs)
 
-    # ── Build SEDModel with precompute=True ──────────────────────────
-    model = SEDModel(spec, synthetic_ssp, filters=simple_filters, precompute=True)
+    # ── Build SEDModel ──────────────────────────────────────────────
+    model = SEDModel(spec, synthetic_ssp, filters=simple_filters)
 
     # ── Generate mock observation from fiducial ─────────────────────
     # Fiducial prediction + 5% Gaussian noise

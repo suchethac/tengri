@@ -72,7 +72,7 @@ _POINTS = {
         "defaults": {},
         "perturbed": {
             "oa_skirtor": 20.0,
-            "incl_skirtor": 60.0,
+            "cos_inc": 0.5,
             "tv_skirtor": 5.0,
             "torus_frac": 0.3,
         },

@@ -70,11 +70,7 @@ def library(request):
 
 
 def _emitted_power(name, mod, grid, mu):
-    kwargs = dict(_RESTORED[name][1], **_KW)
-    if name == "skirtor_agnfitter_1p":
-        kwargs["agn_incl_skirtor"] = float(np.degrees(np.arccos(mu)))
-    else:
-        kwargs["agn_cos_inc"] = mu
+    kwargs = dict(_RESTORED[name][1], **_KW, agn_cos_inc=mu)
     sed = getattr(mod, f"{name}_sed_from_grid")(grid, jnp.asarray(_WIDE), **kwargs)
     return ln_nu_integral(np.asarray(sed), _WIDE)
 
@@ -98,12 +94,11 @@ def test_restored_shape_is_the_per_sightline_shape(library, mu):
     from tengri.components.agn._template_grid import torus_lnu_from_grid
 
     name, mod, grid, _ = library
-    kwargs = dict(_RESTORED[name][1], **_KW)
+    kwargs = dict(_RESTORED[name][1], **_KW, agn_cos_inc=mu)
     if name == "skirtor_agnfitter_1p":
-        kwargs["agn_incl_skirtor"] = float(np.degrees(np.arccos(mu)))
-        coords = (kwargs["agn_incl_skirtor"],)
+        # The library's axis is the inclination from the polar axis [deg] (#3085).
+        coords = (float(np.degrees(np.arccos(mu))),)
     else:
-        kwargs["agn_cos_inc"] = mu
         coords = (mu, *_RESTORED[name][1].values())
     wave = jnp.asarray(_WIDE)
     sed = np.asarray(getattr(mod, f"{name}_sed_from_grid")(grid, wave, **kwargs))
@@ -174,6 +169,6 @@ def test_kept_skirtor_reductions_carry_f_lbol_along_every_sightline(name, kwargs
     }
     grid = getattr(mod, f"load_{name}_grid")(_path(files[name]))
     sed = getattr(mod, f"{name}_sed_from_grid")(
-        grid, jnp.asarray(_WIDE), agn_incl_skirtor=incl, **kwargs, **_KW
+        grid, jnp.asarray(_WIDE), agn_cos_inc=float(np.cos(np.radians(incl))), **kwargs, **_KW
     )
     assert ln_nu_integral(np.asarray(sed), _WIDE) == pytest.approx(_L_TORUS, rel=1e-6)

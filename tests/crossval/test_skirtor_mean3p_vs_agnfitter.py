@@ -81,7 +81,7 @@ def test_peak_is_agnfitter_averaged_not_full_grid(grid, component):
             wavelength=jnp.asarray(wave),
             agn_log_lbol=0.0,
             agn_oa_skirtor=40.0,
-            agn_incl_skirtor=30.0,
+            agn_cos_inc=float(np.cos(np.radians(30.0))),
             agn_tv_skirtor=7.0,
             agn_torus_frac=1.0,
         )
@@ -103,7 +103,7 @@ def test_node_shape_matches_grid(grid, component, i_oa, j_incl, k_tv):
             wavelength=jnp.asarray(wave),
             agn_log_lbol=0.0,
             agn_oa_skirtor=float(grid["oa"][i_oa]),
-            agn_incl_skirtor=float(grid["incl"][j_incl]),
+            agn_cos_inc=float(np.cos(np.radians(float(grid["incl"][j_incl])))),
             agn_tv_skirtor=float(grid["tv"][k_tv]),
             agn_torus_frac=1.0,
         )
@@ -128,5 +128,5 @@ def test_parameter_bounds():
 
     c = SKIRTORAgnfitterTorus()
     assert (c.oa_skirtor.lo, c.oa_skirtor.hi) == (10.0, 80.0)
-    assert (c.incl_skirtor.lo, c.incl_skirtor.hi) == (0.0, 90.0)
+    assert (c.cos_inc.lo, c.cos_inc.hi) == (0.0, 1.0)
     assert (c.tv_skirtor.lo, c.tv_skirtor.hi) == (3.0, 11.0)

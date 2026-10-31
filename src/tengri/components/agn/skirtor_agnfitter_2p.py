@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR-averaged (mean_2p) clumpy torus library (Stalevski et al. 2016).
+r"""SKIRTOR-averaged (mean_2p) clumpy torus library (Stalevski et al. 2016).
 
 Two-parameter torus library interpolated differentiably in
-``(agn_oa_skirtor, agn_incl_skirtor)`` over a precomputed HDF5 grid derived
+``(agn_oa_skirtor, agn_cos_inc)`` over a precomputed HDF5 grid derived
 from AGNfitter-rX's ``SKIRTOR_mean_2p.pickle``.
 
 Sits between :mod:`tengri.components.agn.skirtor_agnfitter_1p`
@@ -16,9 +16,11 @@ Axis semantics
 --------------
 ``agn_oa_skirtor``
     Half-opening angle of the torus [deg]. Range: 10-80 deg.
-``agn_incl_skirtor``
-    Inclination angle measured from the pole [deg]. Range: 0-90 deg.
-    0 = face-on, 90 = edge-on.
+``incl_axis``
+    Inclination angle :math:`i` measured from the polar axis [deg]. Range: 0-90 deg.
+    0 = face-on, 90 = edge-on. Keyed by ``agn_cos_inc`` (:math:`\cos i`) through
+    ``_skirtor_agnfitter_sightline.skirtor_incl_from_cos_inc``,
+    :math:`i = \arccos(\cos i)`.
 
 Runtime normalization
 ---------------------
@@ -48,7 +50,11 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    accepts_retired_incl_skirtor,
+    skirtor_incl_from_cos_inc,
+)
 from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
 
 __all__ = [
@@ -121,12 +127,13 @@ def load_skirtor_agnfitter_2p_grid(grid_path: str) -> TorusTemplateGrid:
     )
 
 
+@accepts_retired_incl_skirtor
 def skirtor_agnfitter_2p_sed_from_grid(
     grid: TorusTemplateGrid,
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_oa_skirtor: float = 40.0,
-    agn_incl_skirtor: float = 30.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -140,8 +147,12 @@ def skirtor_agnfitter_2p_sed_from_grid(
         ``log10(L_bol / L_sun)``. Default 11.0.
     agn_oa_skirtor : float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor : float, optional
-        Inclination angle [deg]. Default 30.0.
+    agn_cos_inc : float, optional
+        :math:`\cos i`, the model's one inclination, :math:`i` from the polar axis
+        (1 = face-on) [dimensionless]. Default ``cos(30 deg)``, the declared
+        ``agn_cos_inc`` default. The library is keyed at :math:`i = \arccos(\cos i)`
+        [deg]; the retired ``agn_incl_skirtor`` [deg] is translated with a
+        ``DeprecationWarning``.
     agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
@@ -177,7 +188,7 @@ def skirtor_agnfitter_2p_sed_from_grid(
     return torus_lnu_from_grid(
         grid,
         wavelength,
-        (agn_oa_skirtor, agn_incl_skirtor),
+        (agn_oa_skirtor, skirtor_incl_from_cos_inc(agn_cos_inc)),
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,
     )
@@ -242,7 +253,7 @@ def _load_skirtor_agnfitter_2p_default() -> Callable:
 def skirtor_agnfitter_2p_sed(
     *args, _template: TorusTemplateGrid | None = None, **kwargs
 ) -> jnp.ndarray:
-    """``SKIRTOR_mean_2p`` torus (auto-loaded from the packaged HDF5 grid).
+    r"""``SKIRTOR_mean_2p`` torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters
     ----------
@@ -252,8 +263,12 @@ def skirtor_agnfitter_2p_sed(
         ``log10(L_bol / L_sun)``. Default 11.0.
     agn_oa_skirtor : float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor : float, optional
-        Inclination angle [deg]. Default 30.0.
+    agn_cos_inc : float, optional
+        :math:`\cos i`, the model's one inclination, :math:`i` from the polar axis
+        (1 = face-on) [dimensionless]. Default ``cos(30 deg)``, the declared
+        ``agn_cos_inc`` default. The library is keyed at :math:`i = \arccos(\cos i)`
+        [deg]; the retired ``agn_incl_skirtor`` [deg] is translated with a
+        ``DeprecationWarning``.
     agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs

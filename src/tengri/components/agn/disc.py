@@ -242,11 +242,12 @@ def powerlaw_disc(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Spectral luminosity density L_ν. [erg/s/Hz]
+        Spectral luminosity density L_ν [erg/s/Hz]; exactly zero outside 10 A - 1e8 A.
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives; the band truncation is a
+    ``jnp.where`` on the wavelength.
 
     The unnormalized spectral shape is:
 
@@ -259,10 +260,17 @@ def powerlaw_disc(
     :math:`T_{\\rm max}` is the cutoff temperature [K].
 
     The normalization constant :math:`C` is computed numerically by integrating
-    the shape over the fixed band 10 A - 1e8 A (2049 log-spaced internal nodes; the
-    caller's wavelength grid plays no part), so that the integral over frequency of the
-    shape over that band equals the target luminosity
+    the shape over the fixed band 10 A - 1e8 A (8001 log-spaced internal nodes, a power law
+    between nodes; the caller's wavelength grid plays no part), so that the integral over
+    frequency of the shape over that band equals the target luminosity
     :math:`L_{\\rm bol} \\cdot f_{\\rm disc}` and the SED is the same on any grid.
+
+    The SED is zero outside that band (both edges inclusive), so its frequency integral is
+    the whole budget :math:`L_{\\rm bol} \\cdot f_{\\rm disc}`. This is by design: the band is
+    the model's definition, the power law does not converge beyond it (:math:`\\nu L_\\nu`
+    is constant at long wavelength for :math:`\\alpha = -1`), and other components own the
+    radio (> 1e8 A) and hard X-ray (< 10 A) regimes. A disc of this type contributes nothing
+    to either.
 
     **Approximation**: This model is a simplified representation of the true
     accretion disc spectrum, which consists of multiple temperature zones
@@ -306,7 +314,13 @@ def powerlaw_disc(
     # (apply_log10_scale factors the O(1) peak of ``shape_unit``); ``10**agn_log_lbol * L_sun``
     # is never formed as a linear intermediate.
     log_scale = agn_log_lbol + _LOG10_LSUN_ERG - log_integral + agn_alpha * jnp.log10(nu_ref)
-    return agn_lum_ratio * apply_log10_scale(shape_unit, log_scale)
+    # The SED is the band-limited disc: zero outside [_PL_BAND_LO_AA, _PL_BAND_HI_AA], the band it
+    # is normalized on (both edges inclusive). Beyond it the power law is not defined and its tail
+    # carried up to 1e4 times the budget, uncounted; every caller (the standalone component, the
+    # composable ``disc='powerlaw'`` block and its lookup table) inherits the truncation here.
+    wave = jnp.asarray(wavelength)
+    in_band = (wave >= _PL_BAND_LO_AA) & (wave <= _PL_BAND_HI_AA)
+    return jnp.where(in_band, agn_lum_ratio * apply_log10_scale(shape_unit, log_scale), 0.0)
 
 
 # ── Model 2: Multi-color disc (Shakura-Sunyaev thin disc) ─────────
@@ -1143,6 +1157,23 @@ _RING_GL_ORDER = 64
 _RING_GL_T, _RING_GL_W = np.polynomial.legendre.leggauss(_RING_GL_ORDER)
 
 
+@jax.jit
+def _ring_gl_tables():
+    """The ring rule's nodes and weights on ``[-1, 1]``, one called computation per dtype.
+
+    Every ``kubota_done`` trace on the tied path calls this jitted function, so the tables enter
+    the outer graph once, inside one shared sub-jaxpr, rather than as literals at each of the
+    inlined copies (#3044). The jit cache keys on the x64 state, so the dtype follows the trace.
+    """
+    return device_table(_RING_GL_T), device_table(_RING_GL_W)
+
+
+@jax.jit
+def _warm_norm_grid():
+    """The warm-zone normalization grid [Hz], one called computation per dtype (#3044)."""
+    return device_table(_nthcomp_norm_grid())
+
+
 def _log_r_gauss_legendre(log_lo, log_hi):
     """Gauss-Legendre nodes ``log10 r`` on ``[log_lo, log_hi]`` and their ``d(log10 r)`` weights.
 
@@ -1151,8 +1182,9 @@ def _log_r_gauss_legendre(log_lo, log_hi):
     """
     half = 0.5 * (log_hi - log_lo)
     mid = 0.5 * (log_hi + log_lo)
-    nodes = mid + half * device_table(_RING_GL_T)
-    weights = half * device_table(_RING_GL_W)
+    gl_t, gl_w = _ring_gl_tables()
+    nodes = mid + half * gl_t
+    weights = half * gl_w
     return nodes, weights
 
 
@@ -1828,7 +1860,7 @@ def _compute_zone_luminosities(
     dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
 
-    nu_norm = device_table(_nthcomp_norm_grid())
+    nu_norm = _warm_norm_grid()
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Comptonized L_nu of one warm-zone annulus, in units of the largest ring area."""

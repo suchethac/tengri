@@ -1034,15 +1034,12 @@ class AGNSEDComponent(TemplateThreading):
             # (yang20.py: cosi = cos(agn.i) for SKIRTOR, sin(psy) for
             # Fritz); publish cos(i) so the X-ray block shares this
             # sightline at every inclination, not only the 30° anchor
-            # (#980). The shared ``agn_cos_inc`` knob wins; the
-            # AGNfitter-style SKIRTOR block carries degrees instead;
-            # models with neither publish the Yang+2020 anchor
+            # (#980). Every torus reads the one ``agn_cos_inc`` (#2605,
+            # #3085); models without it publish the Yang+2020 anchor
             # (anisotropy factor exactly 1).
             agn_cos_inc=(
                 jnp.asarray(params["agn_cos_inc"])
                 if "agn_cos_inc" in params
-                else jnp.cos(jnp.deg2rad(jnp.asarray(params["agn_incl_skirtor"])))
-                if "agn_incl_skirtor" in params
                 else jnp.asarray(_XRAY_COS_INC_REF_30DEG)
             ),
         )

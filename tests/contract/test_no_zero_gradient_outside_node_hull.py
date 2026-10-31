@@ -307,6 +307,10 @@ CENSUS: dict[str, str] = {
     "components/agn/skirtor_agnfitter_precompute.py": "fitted-ok",
     "components/agn/skirtor_agnfitter_1p_precompute.py": "fitted-ok",
     "components/agn/skirtor_agnfitter_2p_precompute.py": "fitted-ok",
+    "components/agn/_template_power_table.py": (
+        "fitted-ok (read_at_fixed_axes: the Fixed-axis read of the power-weighted tables "
+        "above, on the same tables, axes and hulls as their full lookups)"
+    ),
     "components/agn/skirtor_precompute.py": "fitted-ok (triweight, grid over prior)",
     "components/agn/disc_precompute.py": "fitted-ok by construction (axes over prior)",
     "components/agn/disc.py": "fitted-physical-registered (GRID_SUPPORT relagn, gap 6.3 spacings)",

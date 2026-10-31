@@ -47,7 +47,8 @@ pytestmark = pytest.mark.contract
 #:   physics module already documented: ``cat3d_{cos_inc,a,fwd}`` ->
 #:   ``agn_{cos_inc,a_cat3d,fwd_cat3d}``, ``silva04_log_NH`` ->
 #:   ``agn_log_nh_silva``, ``nenkova_agnfitter_cos_inc`` -> ``agn_cos_inc``,
-#:   ``skirtor_agnfitter_{oa,incl,tv}`` -> ``agn_{oa_skirtor,incl_skirtor,tv_skirtor}``.
+#:   ``skirtor_agnfitter_{oa,incl,tv}`` -> ``agn_{oa_skirtor,cos_inc,tv_skirtor}``
+#:   (the inclination re-keyed by ``cos i``, #3085).
 #:
 #: What remains is the third cause, which a rename cannot fix: an internal
 #: grid-axis label that was never a user parameter at all. ``cb19``'s seven,
