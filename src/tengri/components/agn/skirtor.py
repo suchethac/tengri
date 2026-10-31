@@ -47,6 +47,7 @@ from tengri.utils.grid_interp import (
     loglog_integral,
     resample_template,
 )
+from tengri.utils.host_array import device_table
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -1817,9 +1818,9 @@ def skirtor_disc_attenuation_from_grid(
     if grid is None:
         return jnp.ones_like(jnp.asarray(wavelength))
 
-    disk_grid = jnp.asarray(grid.disk)
-    wave_grid = jnp.asarray(grid.wave_grid)
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    disk_grid = device_table(grid.disk)
+    wave_grid = device_table(grid.wave_grid)
+    axes = tuple(device_table(a) for a in grid.axes)
 
     point_i = (
         agn_tau_skirtor,

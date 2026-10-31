@@ -2098,6 +2098,28 @@ def interpolate_alpha_only(
     return (1.0 - fa) * ssp_flux[:, ia] + fa * ssp_flux[:, ia + 1]
 
 
+def alpha_bracket(ssp_alpha_fe: jnp.ndarray, alpha_fe: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Bracketing node index ``ia`` and fraction ``fa`` of ``alpha_fe`` on the [alpha/Fe] axis.
+
+    The index and fraction are clipped to the grid. They are the linear weights
+    :func:`interpolate_alpha_only` uses, exposed so a consumer can contract a 4D cube over
+    metallicity and age first and interpolate the small per-node result (no per-sample copy of
+    the cube)."""
+    afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+    last = ssp_alpha_fe.shape[0] - 2
+    idx = jnp.searchsorted(ssp_alpha_fe, afe) - 1
+    ia = jnp.where(idx < 0, 0, jnp.where(idx > last, last, idx))
+    fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+    return ia, fa
+
+
+def collapse_alpha_axis(x: jnp.ndarray, ia, fa, axis: int = 0) -> jnp.ndarray:
+    """Linear interpolation of ``x`` along its [alpha/Fe] node ``axis``.
+
+    Uses the :func:`alpha_bracket` weights."""
+    return (1.0 - fa) * jnp.take(x, ia, axis=axis) + fa * jnp.take(x, ia + 1, axis=axis)
+
+
 @jax.jit
 def interpolate_met_alpha(
     ssp_flux: jnp.ndarray,
