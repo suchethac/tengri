@@ -18,11 +18,11 @@ photometry, not a reconstruction of the table.
 
 Measured on ``data/skirtor_templates_v3.h5`` with the ten filters below:
 
-* nodes, all 6400: below 1e-10 relative. The runtime interpolates the stored float32
-  cube in float32, so at the most edge-on nodes it flushes the far UV (below 1e-38 of
-  the record's peak) to zero where the table keeps the stored value: a 2.7e-3
-  relative difference in a band 1e-38 of the point's brightest, held to an absolute
-  floor here and checked against a float64 reference in the piece test.
+* nodes, all 6400: 1.1e-14 relative against the runtime with its cube held in float64,
+  every band, no floor. The runtime itself interpolates the stored float32 cube in
+  float32, so at the most edge-on nodes it flushes the far UV (below 1e-38 of the
+  record's peak) to zero where the table keeps the stored value (2.7e-3 relative in a
+  band 1e-38 of the point's brightest); a separate test pins that storage effect.
 * dense off-node sweep (6804 points: every interval midpoint, three per ``cos_inc``
   interval): 1.3e-2. Seeded random hull (1500 points): 1.6e-2. The residual is the
   interpolated power channel; the SED is interpolated exactly as the runtime does.
@@ -47,11 +47,8 @@ pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 OFFNODE_RTOL = 5e-2
 #: Node equality, against a measured 5e-12.
 NODE_RTOL = 1e-10
-#: Bands fainter than this fraction of the point's brightest are below the float32 range
-#: the runtime's stored cube is interpolated in.
-FLOAT32_FLOOR = 1e-25
 #: Lookups per batch: bounds the peak memory of the runtime reference.
-BATCH = 64
+BATCH = 32
 
 _CENTERS = (1500.0, 3000.0, 5500.0, 1.2e4, 2.2e4, 5.0e4, 1.0e5, 2.4e5, 7.0e5, 1.6e6)
 
@@ -94,15 +91,26 @@ def setup():
     runtime = skirtor.create_skirtor_from_grid(path)
     names = skirtor_precompute.AXIS_PARAMS
 
-    def exact(v):
-        lnu = runtime(
-            wave_ref,
-            agn_log_lbol=0.0,
-            agn_torus_frac=1.0,
-            agn_radius_ratio=20.0,
-            **{k: v[i] for i, k in enumerate(names)},
-        )
-        return _bands(lnu, wave_ref, waves, trans)
+    # The runtime interpolates the cube in its float32 storage dtype; the same runtime
+    # with the cube held in float64 is the reference at the nodes.
+    grid32 = skirtor._load_skirtor_grid_data(path)
+    grid64 = grid32._replace(grid=jnp.asarray(np.asarray(grid32.grid), dtype=jnp.float64))
+
+    def _runtime_bands(sed_fn):
+        def bands(v):
+            lnu = sed_fn(
+                wave_ref,
+                agn_log_lbol=0.0,
+                agn_torus_frac=1.0,
+                agn_radius_ratio=20.0,
+                **{k: v[i] for i, k in enumerate(names)},
+            )
+            return _bands(lnu, wave_ref, waves, trans)
+
+        return bands
+
+    exact = _runtime_bands(runtime)
+    exact64 = _runtime_bands(lambda w, **kw: skirtor._skirtor_grid_sed(w, grid64, **kw))
 
     precomp = skirtor_precompute.precompute(waves, trans, 0.0, None, grid_path=path)
     lookup = skirtor_precompute.build_lookup(precomp)
@@ -115,6 +123,7 @@ def setup():
         "trans": trans,
         "wave_ref": wave_ref,
         "exact": exact,
+        "exact64": exact64,
         "precomp": precomp,
         "lookup": lookup,
         "axes": axes,
@@ -149,27 +158,27 @@ def _worst(got, want, points):
 
 
 def test_table_matches_runtime_at_every_node(setup):
-    """All 6400 nodes, every band, to 1e-10 (measured 5e-12)."""
+    """All 6400 nodes, every band, to 1e-10 against the runtime with its cube held in
+    float64 (measured 1.1e-14), with no floor."""
     points = np.array(list(itertools.product(*setup["axes"])))
     assert points.shape == (6400, 5)
-    want = _over(points, setup["exact"])
+    want = _over(points, setup["exact64"])
     assert np.all(want > 0.0)
-    got = _over(points, _full(setup))
-    # The runtime interpolates the cube in its float32 storage dtype, which flushes the
-    # UV of the most edge-on records (below 1e-38 of their own peak) to zero; the table
-    # holds those stored values. A band that faint is held to an absolute floor of 1e-25
-    # of the point's brightest band; ``test_table_holds_the_dust_piece_and_no_disc``
-    # checks the table there against a float64 reference instead.
-    floor = FLOAT32_FLOOR * want.max(axis=1, keepdims=True)
-    excess = np.abs(got - want) - NODE_RTOL * np.abs(want) - floor
-    i = int(np.unravel_index(np.argmax(excess), excess.shape)[0])
-    assert excess.max() <= 0.0, (
-        f"node photometry off the runtime at {points[i].tolist()}: "
-        f"{got[i].tolist()} vs {want[i].tolist()}"
-    )
-    bright = want > 1e-20 * want.max(axis=1, keepdims=True)
-    worst = float(np.max(np.abs(got / want - 1.0)[bright]))
-    assert worst < NODE_RTOL, f"node photometry off the runtime by {worst:.3e}"
+    worst, where = _worst(_over(points, _full(setup)), want, points)
+    assert worst < NODE_RTOL, f"node photometry off the runtime by {worst:.3e} at {where}"
+
+
+def test_runtime_float32_storage_flushes_the_far_uv_at_edge_on(setup):
+    """The runtime interpolates its float32-stored cube in float32, which flushes the far UV
+    of the most edge-on records (below 1e-38 of their peak) to zero. Its 1500 A band there
+    departs from the float64-cube runtime, while every band brighter than 1e-6 of the
+    point's brightest agrees to 1e-6."""
+    edge_on = np.array([[9.0, 1.0, 0.0, 80.0, float(setup["axes"][4][0])]])
+    f32 = _over(edge_on, setup["exact"])[0]
+    f64 = _over(edge_on, setup["exact64"])[0]
+    assert abs(f32[0] / f64[0] - 1.0) > 1e-4, "the far-UV flush is no longer there"
+    bright = f64 > 1e-6 * f64.max()
+    np.testing.assert_allclose(f32[bright], f64[bright], rtol=1e-6)
 
 
 @pytest.mark.parametrize(
