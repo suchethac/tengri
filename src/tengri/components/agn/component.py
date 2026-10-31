@@ -674,10 +674,10 @@ class AGNSEDComponent(TemplateThreading):
                 # interpolation closure: arrays thread through jax.jit as a
                 # runtime input; a closure cannot (#1198).
                 skirtor_templates = _load_skirtor_default_grid()
-            except Exception:
-                # If SKIRTOR template loading fails (file not found),
-                # gracefully continue without threading. The apply() path
-                # will fall back to lazy loading.
+            except FileNotFoundError:
+                # No SKIRTOR grid on disk: continue without threading. The
+                # apply() path lazy-loads and raises the clear not-found error
+                # itself. Any other failure (a corrupt grid) propagates.
                 pass
 
         # Composable-block template libraries. Driven by the block recipe, NOT

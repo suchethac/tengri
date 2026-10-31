@@ -318,6 +318,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # standard; discrete line/continuum primitives are Lsun per the
     # 2026-05-17 convention).
     "sed_nebular": "erg/s/Hz",
+    "nebular_line_frac": "",
     "sed_shock": "erg/s/Hz",
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
