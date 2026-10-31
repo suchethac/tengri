@@ -168,3 +168,71 @@ def test_float32_value_and_gradient_are_finite_and_nonzero():
         assert np.isfinite(float(value))
         assert np.isfinite(float(grad))
         assert float(grad) != 0.0
+
+
+# ── Configuration and batch leaves ──────────────────────────────────────────
+
+
+def test_spectroscopy_accepts_sizes_or_ids_and_validates_layout():
+    from tengri import Spectroscopy
+
+    wave = np.linspace(4000.0, 7000.0, 200)
+    by_sizes = Spectroscopy(wave_obs=wave, calibration_segments=(120, 80))
+    ids = np.repeat([0, 1], [120, 80])
+    by_ids = Spectroscopy(wave_obs=wave, calibration_segments=ids)
+    np.testing.assert_array_equal(by_sizes.segment_ids, by_ids.segment_ids)
+    assert by_sizes.n_cal_segments == 2
+    assert Spectroscopy(wave_obs=wave).n_cal_segments == 0
+
+    with pytest.raises(ValueError, match="sum"):
+        Spectroscopy(wave_obs=wave, calibration_segments=(120, 70))
+    with pytest.raises(ValueError, match="contiguous"):
+        Spectroscopy(wave_obs=wave, calibration_segments=np.repeat([0, 2], [120, 80]))
+    with pytest.raises(ValueError, match="cal_prior"):
+        Spectroscopy(wave_obs=wave, cal_prior="flat")
+    with pytest.raises(ValueError, match="leaves the wavelength grid"):
+        Spectroscopy(wave_obs=wave, cal_scale_prior=(0.0, 0.3), cal_scale_window=(3000.0, 5000.0))
+    with pytest.raises(ValueError, match="needs cal_scale_prior"):
+        Spectroscopy(wave_obs=wave, cal_scale_window=(4500.0, 5000.0))
+
+
+def test_spectroscopy_cache_key_tracks_calibration_options():
+    from tengri import Spectroscopy
+
+    wave = np.linspace(4000.0, 7000.0, 200)
+    base = Spectroscopy(wave_obs=wave, calibration_segments=(120, 80))
+    same = Spectroscopy(wave_obs=wave, calibration_segments=(120, 80))
+    other = Spectroscopy(wave_obs=wave, calibration_segments=(100, 100))
+    free = Spectroscopy(wave_obs=wave, calibration_segments=(120, 80), cal_prior="scale_free")
+    assert base.cache_key() == same.cache_key()
+    assert base.cache_key() != other.cache_key()
+    assert base.cache_key() != free.cache_key()
+
+
+def test_batch_carries_segment_and_prior_leaves_and_buckets_by_count():
+    from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+
+    def galaxy(n, ids, prior):
+        wave = np.linspace(4000.0, 7000.0, n)
+        return GalaxySpectrum(
+            wave=wave,
+            flux=np.ones(n),
+            ivar=np.full(n, 4.0),
+            resolution=3000.0,
+            z=0.1,
+            segment_ids=ids,
+            cal_scale_prior=prior,
+        )
+
+    a = galaxy(100, np.repeat([0, 1], 50), (0.0, 0.3))
+    b = galaxy(100, np.repeat([0, 1, 2], [30, 40, 30]), (0.1, 0.2))
+    c = galaxy(100, None, None)
+    buckets = build_spectro_batches([a, b, c], quantum=128)
+    by_count = {spec.n_segments: (batch, idx) for spec, batch, idx in buckets}
+    assert set(by_count) == {0, 2, 3}
+    batch2, _ = by_count[2]
+    assert batch2.segment.shape == (1, 128)
+    np.testing.assert_array_equal(np.asarray(batch2.segment[0, 98:]), np.ones(30, dtype=int))
+    np.testing.assert_allclose(np.asarray(batch2.cal_scale_center), [0.0])
+    np.testing.assert_allclose(np.asarray(by_count[3][0].cal_scale_sigma), [0.2])
+    np.testing.assert_allclose(np.asarray(by_count[0][0].cal_scale_sigma), [1.0])

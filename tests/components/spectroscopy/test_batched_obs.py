@@ -290,13 +290,14 @@ def test_bad_galaxy_error_names_index():
 
 
 def test_spectro_batch_is_pytree_with_vmap_and_galaxy_slice():
-    """The batch has 16 traced leaves: the 13 base fields, then line_mask and
-    eline_resolution (emission-line fit) and ebmv_mw (Milky Way foreground)."""
+    """The batch has 19 traced leaves: the 13 base fields, then line_mask and
+    eline_resolution (emission-line fit), ebmv_mw (Milky Way foreground), and the
+    segment, cal_scale_center and cal_scale_sigma leaves (calibration segments)."""
     [(spec, batch, _)] = build_spectro_batches([_galaxy(300), _galaxy(300, z=0.2)])
     assert isinstance(batch, SpectroBatch)
 
     leaves = jax.tree_util.tree_leaves(batch)
-    assert len(leaves) == 16
+    assert len(leaves) == 19
     assert all(isinstance(leaf, jax.Array) for leaf in leaves)
 
     sums = jax.vmap(lambda o: o.flux.sum())(batch)
