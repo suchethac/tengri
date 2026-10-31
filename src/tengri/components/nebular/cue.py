@@ -1176,7 +1176,8 @@ class CueBackend:
     Case-B emissivity ratio of Storey & Hummer (1995) at 10^4 K and 10^2 cm^-3,
     taken from H-beta after the escape and dust factors so the added lines carry
     them too. They follow the native lines of the full catalog in order of ``n``,
-    so every native index (``line_old_idx``) is unchanged. Approximation: fixed :math:`(T_e, n_e)`; the ratios change by up to
+    so every native index (``line_old_idx``) is unchanged. Approximation: fixed
+    :math:`(T_e, n_e)`; the ratios change by up to
     6.7% for :math:`n \\le 24` and 27% at :math:`n = 50` over 5000-20000 K and
     :math:`n_e` = 10^2-10^3 cm^-3 (:mod:`tengri.components.nebular._balmer_series`).
 
