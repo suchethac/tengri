@@ -27,6 +27,7 @@ from tengri.inference.batched_spectro import (
     fit_spectra_catalog_mcmc,
 )
 from tengri.inference.fitter import Fitter
+from tengri.observation.banded import gaussian_resolution_bands
 from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
 from tengri.observation.eline_marginalization import eline_amplitude_names
 from tests.contract.test_batched_elines import _R, _grid, _line_design, _template
@@ -221,6 +222,7 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
     template = _template(ssp, wave, banded=True, prior=_LINE_PRIOR)
     line_names = eline_amplitude_names(template.observation.spectroscopy.effective_catalog)
     rng = np.random.default_rng(seed)
+    bands = gaussian_resolution_bands(jnp.asarray(wave), _R, 21)
     records, noises, models = [], [], []
     for i in range(n_gal):
         z = 0.10 + 0.01 * i
@@ -234,7 +236,7 @@ def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
             print(f"  {nm} injected {a:.6e} (matched-filter S/N {_MATCHED_LINE_SNR:g})")
         sigma_vec = np.full(wave.size, sigma)
         records.append(
-            GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma_vec**2, z=z, resolution=_R)
+            GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma_vec**2, z=z, resolution=bands)
         )
         noises.append((flux, sigma_vec))
         models.append(model_i)
