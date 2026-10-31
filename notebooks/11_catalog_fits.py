@@ -110,6 +110,12 @@ print(f"{phot_obs.n_filters} bands: {', '.join(phot_obs.names)}")
 # a redshift grid, so a free-redshift fit just interpolates the table (nebular
 # lines and all) instead of re-integrating the SSP × filter product on every
 # sampler step. One `WavePrecomp()` build is shared by every galaxy in the catalog.
+#
+# The catalog fitter's default, `approx="auto"`, selects `WavePrecomp` for photometry fits, so
+# the explicit `approx=WavePrecomp(...)` in the model build below names the same lookup table
+# with its redshift grid. `approx=None` runs the exact wave-grid path for single, catalog and
+# population fits alike. On a two-galaxy test fit with 516 free parameters, the lookup table cut
+# a cold HMC run from 145 s to 19 s.
 
 # %%
 Z_PRIOR = (0.05, 1.5)
@@ -140,13 +146,6 @@ model = build_model()
 build_wall = time.perf_counter() - t0
 print(f"Free parameters ({model.spec.n_free}): {', '.join(model.spec.free_params)}")
 print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cached on re-runs)")
-
-# %% [markdown]
-# The catalog fitter's default, `approx="auto"`, selects `WavePrecomp` for photometry fits, so
-# the explicit `approx=WavePrecomp(...)` above names the same lookup table with its redshift
-# grid. `approx=None` runs the exact wave-grid path for single, catalog and population fits
-# alike. On a two-galaxy test fit with 516 free parameters, the lookup table cut a cold HMC
-# run from 145 s to 19 s.
 
 # %% [markdown]
 # ## A mock catalog
