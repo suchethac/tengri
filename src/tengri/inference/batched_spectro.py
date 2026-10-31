@@ -49,7 +49,8 @@ primitive that the per-galaxy calibration-marginalized likelihood evaluates.
 
 Emission lines marginalized analytically (``eline_mode="marginalized"`` with a flat
 prior) are covered, jointly with the calibration polynomial when
-``calibration_marginalize=True``. Not covered: Cloudy-prior line marginalization
+``calibration_marginalize=True``. Emission lines fitted as free amplitudes
+(``eline_mode="fitted"``) are covered too. Not covered: Cloudy-prior line marginalization
 (``eline_prior_type="cloudy"``), Student-t and
 calibration-floor noise, spectral indices, and stochastic (GP-field) SFH. A
 stochastic model raises :class:`NotImplementedError`.

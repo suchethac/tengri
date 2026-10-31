@@ -51,9 +51,20 @@ def _grid(n_pix: int, lo: float, hi: float) -> np.ndarray:
 
 
 def _template(
-    ssp, wave, *, eline_mode="fitted", eline_broad=False, lines=_LINES, banded=False, prior=None
+    ssp,
+    wave,
+    *,
+    eline_mode="fitted",
+    eline_broad=False,
+    lines=_LINES,
+    banded=False,
+    prior=None,
+    redshift=None,
 ):
-    """Free-redshift template with lines; the stellar mass is the only physical latent.
+    """Template with lines; the stellar mass is the only physical latent.
+
+    The redshift is free on ``Uniform(0, 0.5)`` unless ``redshift`` names a prior or a
+    ``Fixed`` value.
 
     ``banded`` swaps the Gaussian line-spread function for a banded resolution matrix
     (padding-exact) and keeps ``resolution=_R`` as the scalar the line profile uses.
@@ -82,7 +93,7 @@ def _template(
             "sfh_dpl_log_total_mass": Uniform(8.0, 12.0),
         },
         neb={"type": "none"},
-        redshift=Uniform(0.0, 0.5),
+        redshift=Uniform(0.0, 0.5) if redshift is None else redshift,
     )
     return model if eline_mode == "off" else _with_width(model, _SIGMA_KMS)
 
