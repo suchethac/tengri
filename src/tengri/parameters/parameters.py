@@ -1078,6 +1078,9 @@ class Parameters:
         self.cue_balmer_series_n_max = validate_balmer_series_n_max(
             kwargs.pop("cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT)
         )
+        # Opt-in publish of the Cue line share (``nebular_line_frac``), read by
+        # ``Spectroscopy(nebular_lines=False)``; off by default.
+        self.cue_publish_line_fraction = bool(kwargs.pop("cue_publish_line_fraction", False))
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -3180,6 +3183,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "chem_evol": content("chemical evolution model determines parameters"),
     "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
+    "cue_publish_line_fraction": content(
+        "publishing the Cue line share changes what the nebular component computes"
+    ),
     "cue_nitrogen": content(
         "CUE gas_logno meaning (relation offset or absolute) changes the forward"
     ),

@@ -167,6 +167,40 @@ def _instrument_only_rest_sed(state) -> jnp.ndarray:
     )
 
 
+#: The one wording of the refusal, raised at build time (``SEDModel``) and at
+#: projection time (a direct :func:`project_spectrum_kernel_split` caller).
+NEBULAR_LINES_OFF_NEEDS_FRACTION = (
+    "Spectroscopy(nebular_lines=False) needs a cue nebular component with "
+    "publish_line_fraction=True"
+)
+
+
+def _nebular_lines_rest_sed(state) -> jnp.ndarray:
+    """Attenuated rest-frame nebular line light, ``sed_nebular * nebular_line_frac``.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output; reads ``state.derived["sed_nebular"]`` and
+        ``["nebular_line_frac"]``.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Line light [erg/s/Hz], pre-IGM.
+
+    Raises
+    ------
+    ValueError
+        If ``nebular_line_frac`` was not published.
+    """
+    derived = getattr(state, "derived", None)
+    frac = None if derived is None else derived.get("nebular_line_frac")
+    if frac is None:
+        raise ValueError(NEBULAR_LINES_OFF_NEEDS_FRACTION + ".")
+    return jnp.asarray(derived["sed_nebular"]) * jnp.asarray(frac)
+
+
 def _split_stellar_and_instrument_only_sed(
     state, sed_spec: jnp.ndarray, igm_trans: jnp.ndarray | None
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -342,6 +376,7 @@ def project_spectrum_kernel_split(
     resolution_matrix: object | None = None,
     window_z: float | None = None,
     lsf_pad_pixels: int | None = None,
+    nebular_lines: bool = True,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -505,6 +540,16 @@ def project_spectrum_kernel_split(
         observed window (#2832). It must equal ``redshift`` at run time: the caller
         asserts this, because a traced ``redshift`` cannot be checked here. ``None``
         (or a traced grid) keeps the full-grid pass.
+    nebular_lines : bool, default True
+        ``False`` drops the nebular emission lines from the spectrum
+        (``Spectroscopy(nebular_lines=False)``): the attenuated line light
+        :math:`f\,S_{\rm neb}` is subtracted from the instrument-only group,
+        where :math:`f` is ``state.derived["nebular_line_frac"]`` and
+        :math:`S_{\rm neb}` the dust-republished ``sed_nebular``. The stellar
+        piece is computed as before, so the stellar light is untouched. Exact
+        because the dust components that republish ``sed_nebular`` multiply it
+        by one transmission, so the line share is the same before and after
+        the screen. A Python flag, fixed at build time.
 
     Returns
     -------
@@ -571,6 +616,8 @@ def project_spectrum_kernel_split(
     # straddling model cell as that step, as photometry does (#2447).
     derived = getattr(state, "derived", None)
     has_lyc_edge = derived is not None and derived.get("lyc_transmission") is not None
+    # Rest-frame line light to drop from the instrument-only group (None keeps the lines).
+    lines_rest = None if nebular_lines else _nebular_lines_rest_sed(state)
 
     if igm_trans is None:
         # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
@@ -581,6 +628,8 @@ def project_spectrum_kernel_split(
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
                 state, sed_atten, igm_trans
             )
+            if lines_rest is not None:
+                sed_instrument_only = sed_instrument_only - lines_rest
             flux_stellar = project_spectrum(
                 sed_stellar,
                 wave_rest,
@@ -616,7 +665,7 @@ def project_spectrum_kernel_split(
             flux = flux_stellar + flux_instrument_only
         elif resolution is None:
             flux = project_spectrum(
-                sed_atten,
+                sed_atten if lines_rest is None else sed_atten - lines_rest,
                 wave_rest,
                 wave_obs,
                 redshift,
@@ -634,6 +683,8 @@ def project_spectrum_kernel_split(
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
                 state, sed_atten, igm_trans
             )
+            if lines_rest is not None:
+                sed_instrument_only = sed_instrument_only - lines_rest
             resolution_scaled = resolution / lsf_scale
             flux_stellar = project_spectrum(
                 sed_stellar,
@@ -690,6 +741,8 @@ def project_spectrum_kernel_split(
             )
         sed_stellar = sed_stellar_v * igm_trans
         sed_instrument_only = sed_instrument_only_rest * igm_trans
+        if lines_rest is not None:
+            sed_instrument_only = sed_instrument_only - lines_rest * igm_trans
 
         if resolution_matrix is not None:
             flux_stellar = project_spectrum(
@@ -1609,6 +1662,7 @@ class Observation:
                 conserving=conserving,
                 resolution_matrix=self.spectroscopy.resolution_matrix,
                 window_z=window_z,
+                nebular_lines=self.spectroscopy.nebular_lines,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.

@@ -321,6 +321,7 @@ def predict_batched_observables(
         conserving=conserving,
         resolution_matrix=_banded_operator(spec, obs),
         lsf_pad_pixels=spec.lsf_pad_pixels,
+        nebular_lines=spectroscopy.nebular_lines,
     )
     out["spec_fnu"] = spec_fnu * obs.pix_mask
     return out

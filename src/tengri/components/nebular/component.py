@@ -28,6 +28,7 @@ import numpy as np
 
 from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._shared import render_nebular_lines
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
     mix_dig_emission,
@@ -176,6 +177,21 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         predict time) is not honored on this path: this field is fixed once
         at build time and does not re-read a later runtime value (#2296)
         (#2262).
+    publish_line_fraction : bool
+        For the ``"cue"`` backend on the exact path only. When ``True``, build
+        ``sed_nebular`` from :meth:`CueBackend.predict_nebular_split` as
+        continuum plus rendered lines (the same arithmetic as
+        ``predict_nebular_sed``, so ``sed_nebular`` is unchanged) and publish
+        ``state.derived["nebular_line_frac"]``, the line share of it, which
+        ``Spectroscopy(nebular_lines=False)`` reads to drop the lines from the
+        spectrum only. Needs DIG inactive (the split has no DIG mix).
+        Default ``False``.
+
+    Raises
+    ------
+    ValueError
+        If ``publish_line_fraction`` is set with a backend other than
+        ``"cue"`` or with DIG active.
     """
 
     name: str = "nebular"
@@ -183,6 +199,19 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     suppress_baked_in_warning: bool = True
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT
     dig_active: bool = True
+    publish_line_fraction: bool = False
+
+    def __post_init__(self) -> None:
+        if self.publish_line_fraction and self.backend != "cue":
+            raise ValueError(
+                f"publish_line_fraction is only available for the 'cue' nebular backend "
+                f"(got {self.backend!r})."
+            )
+        if self.publish_line_fraction and self.dig_active:
+            raise ValueError(
+                "publish_line_fraction needs DIG inactive: the continuum + line split it "
+                "publishes has no DIG mix. Pin neb_dig_frac at Fixed(0.0)."
+            )
 
 
 @dataclass(frozen=True)
@@ -404,6 +433,11 @@ class NebularSEDComponent(TemplateThreading):
         """
         outs = [
             DerivedKey("sed_nebular", "erg/s/Hz", "Photoionized continuum + lines"),
+            DerivedKey(
+                "nebular_line_frac",
+                "",
+                "Nebular line share of sed_nebular (spectrum line removal)",
+            ),
             DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
             DerivedKey("log_line_lums", "dex", "log10(line luminosities / (erg/s)); float32-safe"),
@@ -988,8 +1022,30 @@ class NebularSEDComponent(TemplateThreading):
                 **({"gas_logz": jnp.asarray(params["gas_logz"])} if "gas_logz" in params else {}),
             )
 
+        line_frac = None
         if use_grid:
             nebular_sed = zeros
+        elif self.config.backend == "cue" and self.config.publish_line_fraction:
+            # Continuum + rendered lines, the arithmetic of CueBackend.predict_nebular_sed
+            # (HII only, DIG inactive by the config check), kept as two halves so the line
+            # share can be published for the spectrum-only line removal.
+            cue_call_kwargs, cue_extras = self._cue_call_kwargs(state, params, common_kwargs)
+            split_kwargs = dict(cue_call_kwargs)
+            line_sigma_aa = split_kwargs.pop("line_sigma_aa", 0.0)
+            line_sigma_kms = split_kwargs.pop("line_sigma_kms", 0.0)
+            cont_lsun, line_wav, line_lum = self.backend.predict_nebular_split(
+                **split_kwargs, **cue_extras, template_data=template_data
+            )
+            lines_lsun = render_nebular_lines(
+                line_wav, line_lum, split_kwargs["ssp_wave"], line_sigma_aa, line_sigma_kms
+            )
+            total_lsun = cont_lsun + lines_lsun
+            # CueBackend.lsun_erg: the L_sun the network was trained on, the
+            # constant predict_nebular_sed converts with.
+            nebular_sed = total_lsun * self.backend.lsun_erg
+            line_frac = jnp.where(
+                total_lsun > 0, lines_lsun / jnp.where(total_lsun > 0, total_lsun, 1.0), 0.0
+            )
         elif self.config.backend == "cue":
             cue_call_kwargs, cue_extras = self._cue_call_kwargs(state, params, common_kwargs)
             nebular_sed = mix_dig_emission(
@@ -1126,6 +1182,8 @@ class NebularSEDComponent(TemplateThreading):
         # Filter-integrate the nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
+        if line_frac is not None:
+            derived_overrides["nebular_line_frac"] = line_frac
         if cue_log_no is not None:
             derived_overrides["neb_log_no"] = cue_log_no
         grid = self.grid_table

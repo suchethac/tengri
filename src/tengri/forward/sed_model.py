@@ -1233,6 +1233,67 @@ def _warn_agn_dust_double_count(spec) -> None:
         )
 
 
+#: Dust models that republish ``sed_nebular`` multiplied by their nebular
+#: transmission, plus the dust-free model. ``single_component`` and ``wg00``
+#: attenuate ``sed_intrinsic`` as a whole and leave ``derived["sed_nebular"]``
+#: intrinsic, so ``nebular_line_frac * sed_nebular`` would be the unattenuated
+#: line light, not the light in the spectrum.
+_DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
+
+
+def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
+    """Refuse a line-free spectrum the model cannot produce exactly.
+
+    ``Spectroscopy(nebular_lines=False)`` subtracts
+    ``nebular_line_frac * sed_nebular`` from the spectrum. That is the
+    attenuated line light only when the Cue component publishes the fraction
+    (``neb={"type": "cue", "publish_line_fraction": True}``, DIG inactive) and
+    the dust republishes the reddened ``sed_nebular``. Run by
+    :meth:`SEDModel.__init__` so both :meth:`SEDModel.build` and direct
+    construction refuse it.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter spec.
+    observation : Observation or None
+        The model's observation; only its spectroscopy is read.
+
+    Raises
+    ------
+    ValueError
+        If ``publish_line_fraction`` is set with DIG active, or
+        ``nebular_lines=False`` is requested without the Cue fraction or with a
+        dust model that leaves ``sed_nebular`` unattenuated.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+    from tengri.observation.observation import NEBULAR_LINES_OFF_NEEDS_FRACTION
+
+    publishes = bool(getattr(spec, "cue_publish_line_fraction", False))
+    if publishes and _dig_may_be_active(spec):
+        raise ValueError(
+            "neb publish_line_fraction needs DIG inactive: the continuum + line split it "
+            "publishes has no DIG mix. Pin neb_dig_frac at Fixed(0.0)."
+        )
+    spectro = getattr(observation, "spectroscopy", None)
+    if spectro is None or spectro.nebular_lines:
+        return
+    if getattr(spec, "nebular_mode", None) != "cue" or not publishes:
+        raise ValueError(
+            NEBULAR_LINES_OFF_NEEDS_FRACTION
+            + f" (got neb type {getattr(spec, 'nebular_mode', None)!r}, "
+            f"publish_line_fraction={publishes})."
+        )
+    dust_model = getattr(spec, "dust_model", None)
+    if dust_model not in _DUST_MODELS_REPUBLISHING_SED_NEBULAR:
+        raise ValueError(
+            f"Spectroscopy(nebular_lines=False) needs dust_attenuation type 'two_component' "
+            f"or 'age_binned', or no dust (got {dust_model!r}): those republish "
+            "derived['sed_nebular'] attenuated, while the others leave it unattenuated, so "
+            "the line light removed from the spectrum would not match the light in it."
+        )
+
+
 def _validate_fracagn_requires_dust(spec) -> None:
     """Raise if AGN has fracAGN enabled without a dust component (#944).
 
@@ -3202,6 +3263,12 @@ class SEDModel:
         resolution-matrix fallback). Shared by the single-object and composite paths (#610).
         """
         spectro = getattr(observation, "spectroscopy", None)
+        if spectro is not None and not spectro.nebular_lines:
+            raise ValueError(
+                "approx=SpectrumPrecomp() cannot drop the nebular lines from the spectrum: "
+                "the per-pixel lookup table carries the nebular family whole. Use the exact "
+                "path (approx=None) with Spectroscopy(nebular_lines=False)."
+            )
         if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
             # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
             # model takes the exact path and says so (#2958).
@@ -3352,6 +3419,7 @@ class SEDModel:
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
         _validate_ir_frac_window_has_fraction(spec)
+        _validate_nebular_lines_in_spectrum(spec, observation)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -7761,6 +7829,7 @@ class SEDModel:
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
         cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        nebular_lines = spectroscopy.nebular_lines if spectroscopy is not None else True
         sigma_v_getter = self._get_sigma_v_kms
         lsf_scale_getter = self._get_lsf_scale
 
@@ -7810,6 +7879,7 @@ class SEDModel:
                 cal_wave_range=cal_wave_range,
                 conserving=conserving,
                 resolution_matrix=resolution_matrix,
+                nebular_lines=nebular_lines,
             )
 
         if traced_grid:
@@ -13522,6 +13592,7 @@ class SEDModel:
                 getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
             ),
             dig_active=_dig_may_be_active(self.spec),
+            cue_publish_line_fraction=bool(getattr(self.spec, "cue_publish_line_fraction", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),

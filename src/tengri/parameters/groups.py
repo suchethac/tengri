@@ -5143,6 +5143,10 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             result["cue_balmer_series_n_max"] = validate_balmer_series_n_max(
                 neb_dict["balmer_series_n_max"]
             )
+        # Opt-in: publish the line share of the Cue SED, so a spectrum can be
+        # predicted without the nebular lines (Spectroscopy(nebular_lines=False)).
+        if "publish_line_fraction" in neb_dict:
+            result["cue_publish_line_fraction"] = bool(neb_dict["publish_line_fraction"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -5964,7 +5968,9 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
-    "cue": frozenset({"nitrogen", "lyc_max_age_yr", "balmer_series_n_max"}),
+    "cue": frozenset(
+        {"nitrogen", "lyc_max_age_yr", "balmer_series_n_max", "publish_line_fraction"}
+    ),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -6111,6 +6117,9 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
             "cue_balmer_series_n_max",
             BALMER_SERIES_N_MAX_DEFAULT,
             only_types=("cue",),
+        ),
+        _Structural(
+            "publish_line_fraction", "cue_publish_line_fraction", False, only_types=("cue",)
         ),
         _Structural(
             "grid",
@@ -6922,6 +6931,16 @@ def _validate_user_keys(
                     f"neb 'balmer_series_n_max' is only available for type 'cue' (got "
                     f"{neb_type!r}): it sets the highest Balmer level appended above Cue's "
                     "last native line, H10, and the grid backends carry their own catalogs."
+                )
+
+            if (
+                "publish_line_fraction" in top_val
+                and "publish_line_fraction" not in neb_type_specific_keys
+            ):
+                raise ConfigError(
+                    f"neb 'publish_line_fraction' is only available for type 'cue' "
+                    f"(got {neb_type!r}): it publishes the line share of the Cue "
+                    "continuum + line split."
                 )
 
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
