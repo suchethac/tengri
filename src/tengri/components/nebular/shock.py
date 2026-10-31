@@ -43,12 +43,17 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
 from tengri.utils.grid_interp import library_lookup as _library_lookup
 from tengri.utils.host_array import device_table, host_array
+
+#: The 3MdB template labels are integer names, some set by hand up to 1.4 Angstrom
+#: from the air wavelength (Hg 4341, [Ar III] 7135, [S III] 9532); its 7320 and
+#: 7330 labels name the whole [O II] blend.
+_HAND_SET_LABEL_HALF_WIDTH_AA = 1.5
 
 # ── Legacy hardcoded fallback: Allen+2008 Table 5 (solar, n=1 cm⁻³)
 
@@ -301,7 +306,12 @@ def _load_mappings_grids() -> dict | None:
                 # 3MdB/MAPPINGS V line labels are PyNeb-style air labels (6563,
                 # 5007, ...); ingested once here, so every consumer sees vacuum.
                 "line_wavelengths_aa": jnp.array(
-                    catalog_air_to_vacuum(g["line_wavelengths_aa"][:]), dtype=jnp.float32
+                    rounded_labels_to_vacuum(
+                        g["line_wavelengths_aa"][:],
+                        half_width_aa=_HAND_SET_LABEL_HALF_WIDTH_AA,
+                        blends=True,
+                    ),
+                    dtype=jnp.float32,
                 ),
                 # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
                 "shock_ratios": shock_ratios,

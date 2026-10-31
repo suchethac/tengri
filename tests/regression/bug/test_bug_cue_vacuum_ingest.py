@@ -103,9 +103,13 @@ def test_cue_weights_arrays_are_the_vacuum_conversion_of_the_stored_air_labels()
     # 12.8101 micron, [C II] 157.636 micron), so the converted window is the Cloudy one, not the
     # 1e4 A optical one.
     optical = (raw >= 2000.0) & (raw <= _line_ingest.CLOUDY_LABEL_AIR_MAX_AA)
+    # The [O II] 7320/7330 blend labels (7323, 7332, 7332.15) name blends, not air
+    # wavelengths; they take the line list's vacuum blend centers (#3113, own test file).
+    blend = np.isin(raw, list(_line_ingest.CLOUDY_BLEND_LABEL_LINES))
+    optical = optical & ~blend
     assert optical.sum() > 50
     np.testing.assert_allclose(w.nn_line_wav[optical], air_to_vac(raw[optical]), rtol=0, atol=1e-9)
-    np.testing.assert_array_equal(w.nn_line_wav[~optical], raw[~optical])
+    np.testing.assert_array_equal(w.nn_line_wav[~optical & ~blend], raw[~optical & ~blend])
     assert np.all(w.nn_line_wav[optical] - raw[optical] > 0.5)  # vacuum is longer than air
 
 
