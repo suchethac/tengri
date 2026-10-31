@@ -144,7 +144,7 @@ def _joint_draws() -> int:
     """NUTS draws per run; ``TENGRI_JOINT_DRAWS`` shortens it for a smoke run."""
     import os
 
-    return int(os.environ.get("TENGRI_JOINT_DRAWS", "200"))
+    return int(os.environ.get("TENGRI_JOINT_DRAWS", "2000"))
 
 
 def _joint_galaxies(template):
@@ -221,7 +221,12 @@ def _per_galaxy_mass_draws(ssp, galaxy, n_draws: int) -> np.ndarray:
 
 
 def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
-    """Batched and per-galaxy NUTS medians agree within 0.05 widths for every galaxy."""
+    """Batched and per-galaxy NUTS medians agree within 0.05 widths for every galaxy.
+
+    Draw count raised once from 200 to 2000 because at 200 the median difference's
+    Monte Carlo error (about 0.09 widths) exceeds the 0.05-width criterion; at 2000
+    it is about 0.03.
+    """
     from tests.contract.test_batched_eline_marginal import _marg_template
 
     n_draws = _joint_draws()
