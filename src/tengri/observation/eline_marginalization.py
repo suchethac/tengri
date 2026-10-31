@@ -315,12 +315,16 @@ def unit_line_prior(
 ) -> UnitLinePrior:
     r"""Rewrite a Gaussian line prior as a unit normal on rescaled amplitudes.
 
-    Each line amplitude is written as :math:`a_j = \mu_j + w_j a'_j` with
-    :math:`a'_j \sim \mathcal{N}(0, 1)`. The model :math:`G a` becomes
-    :math:`G\,\mathrm{diag}(w)\, a' + G\mu`, so the design is the column-scaled
-    matrix. The marginal likelihood is invariant under this change of variables.
-    The prior precision :math:`1/w_j^2` is never formed, which matters in float32 at
-    F_nu scale, where :math:`w_j \sim 10^{-21}` makes :math:`1/w_j^2` overflow.
+    Each line amplitude is written as :math:`a_j = w_j\, a''_j` with
+    :math:`a''_j \sim \mathcal{N}(\mu_j / w_j, 1)`. The line model :math:`G a` becomes
+    :math:`G\,\mathrm{diag}(w)\, a''`, with no separate :math:`G\mu` term, so the design
+    is the column-scaled matrix and the prior mean is carried by ``prior_mean``. By the
+    determinant lemma, the marginal over :math:`a''` under this unit-normal prior equals
+    the marginal over :math:`a` under :math:`\mathcal{N}(\mu, \mathrm{diag}(w^2))`
+    exactly, and the normalization offset of that marginal is
+    :math:`-\sum_j \ln w_j`. The prior precision :math:`1/w_j^2` is never formed,
+    which matters in float32 at F_nu scale, where :math:`w_j \sim 10^{-21}` makes
+    :math:`1/w_j^2` overflow.
 
     Parameters
     ----------
@@ -343,8 +347,11 @@ def unit_line_prior(
     UnitLinePrior
         ``(design, prior_mean, prior_precision, scale)`` for
         :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`. The
-        coefficients it returns are the unit amplitudes :math:`a'`, so the amplitudes
-        are :math:`a = \mu + w\, a'`.
+        design is :math:`G\,\mathrm{diag}(w)`, and the prior is on the width-scaled
+        coefficients :math:`a''_j = a_j / w_j`: the mean is :math:`\mu_j / w_j` and the
+        precision is one, so :math:`E[a''_j] = \mu_j / w_j` and
+        :math:`\mathrm{Var}[a''_j] = 1`. The primitive's ``coef_hat`` is :math:`a''`,
+        and the amplitudes are :math:`a = w\, a''`.
 
     Notes
     -----
