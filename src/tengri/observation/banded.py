@@ -612,3 +612,55 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     init = jnp.zeros(half, dtype=jnp.result_type(r, diag))
     _, y = jax.lax.scan(step, init, (r, coef, diag))
     return y
+
+
+def dense_to_banded(dense: np.ndarray, rtol: float = 1e-12) -> BandedMatrix | None:
+    r"""Reduce a dense symmetric matrix to banded storage when it is banded.
+
+    Parameters
+    ----------
+    dense : array_like, shape (n, n)
+        Symmetric matrix [data units squared].
+    rtol : float, optional
+        Entries with :math:`|A_{ij}| \le` ``rtol`` :math:`\max_k |A_{kk}|` count as zero.
+        Default: 1e-12.
+
+    Returns
+    -------
+    BandedMatrix or None
+        Symmetric banded storage with ``offsets = (-p, ..., p)``, or ``None`` when the
+        half-bandwidth :math:`p` reaches a quarter of the matrix size, where banded
+        storage saves nothing.
+
+    Notes
+    -----
+    **JIT-compatible**: no. Build-time NumPy routine.
+
+    Entries beyond the half-bandwidth are dropped, so the stored matrix differs from
+    ``dense`` by at most ``rtol`` times the largest diagonal entry per element.
+    """
+    a = np.asarray(dense, dtype=float)
+    n = a.shape[0]
+    cutoff = rtol * np.max(np.abs(np.diag(a)))
+    i_idx, j_idx = np.nonzero(np.abs(a) > cutoff)
+    half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
+    if 4 * half >= n:
+        return None
+    offs = np.arange(-half, half + 1)
+    data = np.zeros((offs.size, n))
+    for k, off in enumerate(offs):
+        rows = np.arange(max(0, -off), min(n, n - off))
+        data[k, rows] = a[rows, rows + off]
+    return BandedMatrix(offsets=offs, data=jnp.asarray(data))
+
+
+def banded_to_dense(bm: BandedMatrix) -> np.ndarray:
+    """Dense ``(n, n)`` matrix of a banded matrix, with ``A[i, i + offsets[k]] = data[k, i]``."""
+    offs = np.asarray(bm.offsets).ravel()
+    data = np.asarray(bm.data, dtype=float)
+    n = data.shape[1]
+    out = np.zeros((n, n))
+    for k, off in enumerate(offs):
+        rows = np.arange(max(0, -off), min(n, n - off))
+        out[rows, rows + off] = data[k, rows]
+    return out

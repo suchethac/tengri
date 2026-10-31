@@ -441,6 +441,7 @@ class MultivariateGaussianLikelihood:
     _: KW_ONLY
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
+    chol_key: str | None = None
     channel: str = "spec_fnu"
     name: str = "mvn_gaussian"
     obs_key: str | None = None
@@ -463,7 +464,8 @@ class MultivariateGaussianLikelihood:
         if self.chol_data is None:
             return -0.5 * (diff @ self.cov_inv @ diff)
         factor = BandedMatrix(
-            offsets=np.asarray(self.chol_offsets, dtype=int), data=self.chol_data
+            offsets=np.asarray(self.chol_offsets, dtype=int),
+            data=resolve_channel_data(self.chol_data, self.chol_key, None, data_args),
         )
         whitened = banded_forward_substitution(factor, diff)
         return -0.5 * jnp.dot(whitened, whitened)
@@ -490,6 +492,7 @@ _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
+    "chol_key": content("data_args routing key changes which traced input is read"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "obs_key": content("data_args routing key changes which traced input is read"),

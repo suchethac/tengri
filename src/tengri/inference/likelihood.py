@@ -172,11 +172,21 @@ def build_base_likelihood(context: InferenceContext):
             )
 
     # ── Spec covariance (correlated noise on spectroscopy) ──────
-    if "spec_cov_inv" in context.data_args:
-        cov_inv = context.data_args["spec_cov_inv"]
+    # A banded covariance enters as its Cholesky factor, read through data_args; the
+    # marginalized classes whiten with it, the plain case uses the correlated Gaussian.
+    chol_kw = {}
+    if "spec_chol_data" in context.data_args:
+        chol_kw = {
+            "chol_data": context.data_args["spec_chol_data"],
+            "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
+            "chol_key": "spec_chol_data",
+        }
+    marginalizes = context.calibration_marginalize or context.eline_marginalize
+    if "spec_cov_inv" in context.data_args or (chol_kw and not marginalizes):
+        cov_inv = context.data_args.get("spec_cov_inv")
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data"
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **chol_kw
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
@@ -192,6 +202,7 @@ def build_base_likelihood(context: InferenceContext):
                     channel="spec_fnu",
                     obs_key="data",
                     data_slice=(n_phot, len(context.data)),
+                    **chol_kw,
                 ),
             )
 
@@ -275,6 +286,7 @@ def build_base_likelihood(context: InferenceContext):
             eline_line_wavelengths=context.eline_independent_wavelengths,
             eline_prior_width_dex=context.eline_prior_width_dex,
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_eline_lk
@@ -313,6 +325,7 @@ def build_base_likelihood(context: InferenceContext):
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_lk
@@ -378,6 +391,7 @@ def build_base_likelihood(context: InferenceContext):
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
+                **chol_kw,
             )
         else:
             eline_lk = ELineMarginalizedLikelihood(
@@ -393,6 +407,7 @@ def build_base_likelihood(context: InferenceContext):
                 design_matrix_builder=builder,
                 prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
+                **chol_kw,
             )
         if context.data_type == "spectroscopy":
             return eline_lk
