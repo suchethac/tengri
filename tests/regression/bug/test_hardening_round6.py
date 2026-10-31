@@ -19,12 +19,20 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import jax
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.regression_bug
 
+from tengri import DEFAULT, Fixed, Observation, Spectroscopy, Uniform
 from tengri.config.exceptions import ParameterError
-from tengri.forward.sed_model import SEDModel
+from tengri.forward.forward_model import ForwardModel
+from tengri.forward.population_sed_model import PopulationSEDModel
+from tengri.forward.sed_model import SEDModel, SpectrumPrecomp, WavePrecomp
+from tengri.inference.batched_spectro import batched_log_likelihood, fit_spectra_map_vmap
+from tengri.observation.banded import gaussian_resolution_bands
+from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
 
 
 def _redshift_model(distribution, *, fixed_z=None, resample="auto", spectroscopy=True):
@@ -114,3 +122,141 @@ def test_skirtor_template_load_propagates_non_missing_errors(monkeypatch):
     object.__setattr__(component, "config", SimpleNamespace(model="skirtor"))
     with pytest.raises(RuntimeError, match="corrupt SKIRTOR grid"):
         AGNSEDComponent.precompute(component, wave_grid=None)
+
+
+# ── Real models under the default resample="auto" ─────────────────────
+#
+# The stand-ins above pin the decision rule. These build real spectroscopic
+# models on the synthetic wide SSP (no data/ grid needed) and assert that
+# nothing legitimate raises. Each one is a reviewer-facing claim: a free
+# bounded redshift, a catalog runtime redshift, the batched per-galaxy path,
+# the population caller of ``_predict_observation``, and a fixed redshift.
+
+_WAVE = np.linspace(4000.0, 7000.0, 300)
+
+
+def _build_model(ssp, redshift, *, approx=None):
+    """Real spectroscopic SEDModel with the default ``resample="auto"``."""
+    kwargs = {} if approx is None else {"approx": approx}
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(spectroscopy=Spectroscopy(wave_obs=_WAVE, resolution=2000.0)),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+        neb={"type": "none"},
+        redshift=redshift,
+        **kwargs,
+    )
+
+
+def test_real_free_bounded_redshift_decides_at_prior_lower_bound(synthetic_ssp_wide):
+    """(a) Free z in [0.5, 2.0] under the default auto: decides at lo=0.5 and predicts.
+
+    The spectrum is a flux density, so it must be finite and non-negative.
+    """
+    model = _build_model(synthetic_ssp_wide, Uniform(0.5, 2.0))
+    assert model.observation.spectroscopy.resample == "auto"
+    assert _ref(model) == pytest.approx(0.5)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    spectrum = np.asarray(model.predict_spectrum(params))
+    assert spectrum.shape == _WAVE.shape
+    assert np.all(np.isfinite(spectrum))
+    assert np.all(spectrum >= 0.0)
+
+
+def test_real_catalog_model_predicts_at_runtime_redshift(synthetic_ssp_wide):
+    """(b) ``catalog_z_range`` model: the redshift is supplied at runtime.
+
+    A free prior bounded by the catalog range builds and predicts the spectrum
+    at a runtime z of 0.3 without raising. A ``Fixed`` placeholder is not used
+    here: call-time overrides of a Fixed parameter are refused (#2296), and the
+    per-galaxy Fitter route for that case is covered by test_bug_2858.
+    """
+    approx = (WavePrecomp(catalog_z_range=(0.01, 1.0)), SpectrumPrecomp())
+    model = _build_model(synthetic_ssp_wide, Uniform(0.01, 1.0), approx=approx)
+    assert model._catalog_z_range == (0.01, 1.0)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    params["redshift"] = 0.3
+    spectrum = np.asarray(model.predict_spectrum(params))
+    assert spectrum.shape == _WAVE.shape
+    assert np.all(np.isfinite(spectrum))
+    assert np.all(spectrum >= 0.0)
+
+
+def test_real_batched_spectroscopy_per_galaxy_redshift_runs(synthetic_ssp_wide):
+    """(c) Batched per-galaxy redshifts under the default auto: no raise end to end.
+
+    Three galaxies at distinct redshifts go through ``build_spectro_batches``,
+    ``batched_log_likelihood`` and a short batched MAP fit. The Gaussian
+    log-likelihood is a sum of ``-0.5 r^2`` terms, so it is never positive.
+    """
+    specs = [(300, 4000.0, 7000.0, 0.05), (360, 4200.0, 7400.0, 0.1), (420, 4500.0, 7500.0, 0.2)]
+    records = []
+    for n_pix, lo, hi, z in specs:
+        wave = np.linspace(lo, hi, n_pix)
+        bm = gaussian_resolution_bands(wave, 2000.0, 3)
+        records.append(
+            GalaxySpectrum(
+                wave=wave,
+                flux=np.full(n_pix, 1e-3),
+                ivar=np.full(n_pix, 1e6),
+                resolution=bm,
+                z=z,
+            )
+        )
+    template = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=Observation(spectroscopy=Spectroscopy(wave_obs=_WAVE, resolution=2000.0)),
+        sfh={
+            "type": "dpl",
+            "all_params": Fixed(DEFAULT),
+            "sfh_dpl_log_total_mass": Uniform(8.0, 12.0),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(0.0, 0.5),
+    )
+    buckets = build_spectro_batches(records, quantum=420, model=template)
+    spec, batch, index = buckets[0]
+    np.testing.assert_array_equal(index, [0, 1, 2])
+    loglik = batched_log_likelihood(template, spec)
+    values = np.asarray(jax.vmap(loglik)({"sfh_dpl_log_total_mass": np.full(3, 10.0)}, batch))
+    assert np.all(np.isfinite(values))
+    assert np.all(values <= 0.0)
+    fit = fit_spectra_map_vmap(template, buckets, n_steps=2)
+    assert np.all(np.isfinite(np.asarray(fit["nlp"])))
+
+
+def test_real_population_caller_reaches_predict_observation(synthetic_ssp_wide):
+    """(d) ``ForwardModel.build`` with a population: the ``_predict_observation`` caller.
+
+    A population publishes ``batched_axes={"galaxy": 0}``, which routes through the
+    ``_resample_z_ref`` call at forward_model.py ~1476. The free bounded redshift
+    decides at its lower bound, and the batched spectrum is finite and non-negative.
+    """
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=_WAVE, resolution=2000.0))
+    sed = _build_model(synthetic_ssp_wide, Uniform(0.5, 2.0))
+    galaxy = {"flux_obs": np.zeros(_WAVE.size), "noise": np.ones(_WAVE.size)}
+    population = PopulationSEDModel(sed=sed, galaxies=[galaxy, galaxy], data_type="spectroscopy")
+    assert population.batched_axes == {"galaxy": 0}
+    forward = ForwardModel.build(population=population, observation=obs)
+    params = {
+        k: np.broadcast_to(np.asarray(v), (2,))
+        for k, v in sed.spec.sample(jax.random.PRNGKey(0)).items()
+    }
+    prediction = forward.predict_observables(params)
+    spectrum = np.asarray(prediction["spec_fnu"])
+    assert spectrum.shape[-1] == _WAVE.size
+    assert np.all(np.isfinite(spectrum))
+    assert np.all(spectrum >= 0.0)
+    assert sed._resample_z_ref() == pytest.approx(0.5)
+
+
+def test_real_fixed_redshift_is_unchanged(synthetic_ssp_wide):
+    """(e) Fixed z keeps its value under the default auto, and predicts finite flux."""
+    model = _build_model(synthetic_ssp_wide, Fixed(0.3))
+    assert _ref(model) == pytest.approx(0.3)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    spectrum = np.asarray(model.predict_spectrum(params))
+    assert spectrum.shape == _WAVE.shape
+    assert np.all(np.isfinite(spectrum))
+    assert np.all(spectrum >= 0.0)
