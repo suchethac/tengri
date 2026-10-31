@@ -167,7 +167,10 @@ a leaf, if it changes a shape or a branch.
   likelihood. Each line has a Gaussian prior centred on the model's attenuated line
   luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.
   The mapping is checked against the lines-on minus lines-off spectrum over the H-beta
-  window (ratio 0.991). The batched path evaluates the same prior through the same
+  window (ratio 0.991). The prior mean carries the Milky Way foreground screen at each
+  line's observed wavelength on both paths; the intergalactic transmission is left out,
+  since every catalog line lies above 1216 Angstrom, where it transmits exactly one.
+  The batched path evaluates the same prior through the same
   helpers (`model_line_prior`, `unit_model_line_prior`), with the attenuated line
   luminosities returned by `predict_batched_observables` and the catalog-to-model line
   map fixed at build time; the calibration joint takes the block prior
