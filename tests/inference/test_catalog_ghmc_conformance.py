@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""MEADS ("ghmc") catalog posteriors against the NUTS catalog run, on the batched mock.
+"""MEADS ("ghmc") catalog posteriors against the NUTS catalog run at DESI-like S/N.
 
-Two galaxies of the synthetic catalog are fitted twice: once by the catalog NUTS sampler
-and once by the MEADS sampler with 32 chains in 8 superchains. The posterior medians of
-every free parameter must agree within one tenth of the NUTS 16-84 % width, and the
-sampler's divergence counts must be finite non-negative integers.
+Two galaxies of the batched mock are fitted by the catalog NUTS sampler and by the MEADS
+sampler with 32 chains in 8 superchains. Each galaxy's clean spectrum is the mock model at
+its true mass, with Gaussian pixel noise of sigma = continuum(5000 A) / 5, a signal-to-noise
+ratio of 5 per pixel. The posterior medians of every free parameter must agree with the
+NUTS medians within a tenth of the NUTS full 16-84 % width, and the MEADS nested R-hat must
+be at most 1.05.
 
-The draw counts are the module constants below. The conformance run is the same helper
-at smaller counts in the smoke tier.
+The draw counts are the module constants below.
 """
 
 from __future__ import annotations
@@ -16,14 +17,23 @@ import numpy as np
 import pytest
 
 from tengri.inference.batched_spectro import fit_spectra_catalog_mcmc
-from tengri.observation.batched import build_spectro_batches
-from tests.contract.test_batched_spectro_loglik import _mock_catalog, _record
+from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+from tests.contract.test_batched_spectro_loglik import _MASS, _mock_catalog
 from tests.contract.test_batched_spectrum_forward import _banded, _free_z_model
 
 pytestmark = pytest.mark.contract
 
 #: Galaxies of the synthetic catalog used here, in record order.
 CONFORMANCE_RECORDS = (0, 2)
+
+#: Pixel signal-to-noise at 5000 Angstrom, the DESI-like regime.
+CONTINUUM_SNR = 5.0
+
+#: Wavelength at which the continuum level sets the pixel noise [Angstrom].
+NOISE_REFERENCE_WAVE = 5000.0
+
+#: Noise seed for the clean spectra.
+NOISE_SEED = 20260930
 
 #: Full-run counts for the MEADS sampler (32 chains, 8 superchains).
 GHMC_CHAINS = 32
@@ -38,8 +48,11 @@ NUTS_N_SAMPLES = 150
 #: MAP warm-start steps for both samplers.
 MAP_STEPS = 150
 
-#: Tolerance on the median gap, as a fraction of the NUTS 16-84 % width.
+#: Tolerance on the median gap, as a fraction of the NUTS full 16-84 % width.
 MEDIAN_TOLERANCE_WIDTHS = 0.1
+
+#: Largest nested R-hat accepted for the MEADS draws.
+MAX_NESTED_RHAT = 1.05
 
 
 @pytest.fixture(scope="module")
@@ -52,9 +65,25 @@ def template(synthetic_ssp, mock):
     return _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
 
 
+def desi_like_record(g, rng) -> GalaxySpectrum:
+    """One galaxy's record: the clean mock spectrum plus pixel noise at CONTINUUM_SNR."""
+    clean = np.asarray(g["ref"].predict_spectrum({_MASS: g["true_mass"], "redshift": g["z"]}))
+    level = float(clean[np.argmin(np.abs(g["wave"] - NOISE_REFERENCE_WAVE))])
+    sigma = level / CONTINUUM_SNR
+    flux = clean + sigma * rng.standard_normal(clean.shape[0])
+    return GalaxySpectrum(
+        wave=g["wave"],
+        flux=flux,
+        ivar=np.full(clean.shape[0], 1.0 / sigma**2),
+        resolution=g["bm"],
+        z=g["z"],
+    )
+
+
 @pytest.fixture(scope="module")
 def batches(mock, template):
-    records = [_record(mock[i]) for i in CONFORMANCE_RECORDS]
+    rng = np.random.default_rng(NOISE_SEED)
+    records = [desi_like_record(mock[i], rng) for i in CONFORMANCE_RECORDS]
     return build_spectro_batches(records, quantum=128, model=template)
 
 
@@ -89,7 +118,7 @@ def run_nuts(template, batches, *, n_warmup, n_samples):
 
 
 def assert_conforms(ghmc, nuts, *, n_warmup):
-    """Medians within the tolerance of the NUTS width, with well-formed side outputs."""
+    """Medians within the tolerance of the NUTS full width, nested R-hat within bound."""
     assert set(ghmc["draws"]) == set(nuts["draws"])
     for name in ghmc["draws"]:
         g = np.asarray(ghmc["draws"][name])
@@ -99,11 +128,12 @@ def assert_conforms(ghmc, nuts, *, n_warmup):
         assert np.all(gap <= MEDIAN_TOLERANCE_WIDTHS * (hi - lo)), (name, gap, hi - lo)
     divergences = np.asarray(ghmc["divergences"])
     assert np.issubdtype(divergences.dtype, np.integer)
-    assert np.all(np.isfinite(divergences)) and np.all(divergences >= 0)
+    assert np.all(divergences >= 0)
     assert np.all(np.asarray(ghmc["n_warmup_used"]) == n_warmup)
+    assert np.all(np.asarray(ghmc["nested_rhat"]) <= MAX_NESTED_RHAT)
 
 
-def test_ghmc_medians_agree_with_nuts_within_a_tenth_of_width(template, batches):
+def test_ghmc_medians_agree_with_nuts_at_desi_like_snr(template, batches):
     ghmc = run_ghmc(template, batches, n_warmup=GHMC_N_WARMUP, n_samples=GHMC_N_SAMPLES)
     nuts = run_nuts(template, batches, n_warmup=NUTS_N_WARMUP, n_samples=NUTS_N_SAMPLES)
     assert_conforms(ghmc, nuts, n_warmup=GHMC_N_WARMUP)
