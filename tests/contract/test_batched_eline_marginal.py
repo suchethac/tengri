@@ -68,3 +68,56 @@ def test_fix_is_exactly_the_prior_penalty_the_old_formula_double_counted():
     old_value, a_old = _old_closed_form(residual, sigma, design, prior_variance)
     penalty = np.sum(a_old**2 / prior_variance)
     assert np.isclose(float(ln_l) - old_value, penalty, rtol=1e-10, atol=0.0)
+
+
+def test_presence_mask_drops_masked_pixels_exactly():
+    """A masked pixel is absent from every term: the value equals the class run without it."""
+    import jax.numpy as jnp
+
+    from tengri.inference.likelihoods.marginalized import ELineMarginalizedLikelihood
+
+    residual, sigma, design = _toy()
+    prior_variance = np.full(3, 0.5)
+    mask = np.ones_like(residual)
+    mask[5] = 0.0
+    keep = mask > 0
+    masked_lk = ELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(residual),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix=jnp.asarray(design),
+        prior_variance=jnp.asarray(prior_variance),
+        presence_key="presence",
+    )
+    actual = float(
+        masked_lk.log_prob(
+            {"spec_fnu": jnp.zeros_like(jnp.asarray(residual))},
+            data_args={"presence": jnp.asarray(mask)},
+        )
+    )
+    dropped_lk = ELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(residual[keep]),
+        fnu_err=jnp.asarray(sigma[keep]),
+        design_matrix=jnp.asarray(design[keep]),
+        prior_variance=jnp.asarray(prior_variance),
+    )
+    expected = float(dropped_lk.log_prob({"spec_fnu": jnp.zeros(int(keep.sum()))}))
+    assert np.isclose(actual, expected, rtol=1e-10, atol=0.0)
+
+
+@pytest.mark.parametrize("prior_sigma", [0.5, 5.0])
+def test_lines_only_prior_width_is_the_eline_prior_sigma(prior_sigma):
+    """The line prior variance is the knob: the value equals the dense marginal at that width."""
+    import jax.numpy as jnp
+
+    from tengri.inference.likelihoods.marginalized import ELineMarginalizedLikelihood
+
+    residual, sigma, design = _toy()
+    lk = ELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(residual),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix=jnp.asarray(design),
+        prior_variance=prior_sigma**2,
+    )
+    actual = float(lk.log_prob({"spec_fnu": jnp.zeros_like(jnp.asarray(residual))}))
+    expected = _dense_marginal(residual, sigma, design, np.full(3, prior_sigma**2))
+    assert np.isclose(actual, expected, rtol=1e-10, atol=0.0)

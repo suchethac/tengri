@@ -391,6 +391,7 @@ def build_base_likelihood(context: InferenceContext):
                     else (_n_phot_split(context), len(context.data))
                 ),
                 design_matrix_builder=builder,
+                prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
             )
         if context.data_type == "spectroscopy":

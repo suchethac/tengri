@@ -28,6 +28,7 @@ For each adapter:
 
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.inference.composite_likelihood import CompositeLikelihood
@@ -305,73 +306,105 @@ def test_full_cohort_composes_in_one_composite():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase II-2.3 — equivalence test for combined cal+eline adapter
+# Phase II-2.3 — the exact joint of calibration and emission lines (#2354)
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.unit
-def test_calibration_eline_marginalized_matches_deleted_legacy_sequential():
-    """``CalibrationELineMarginalizedLikelihood.log_prob(...)`` must match
-    the deleted legacy sequential composition bit-for-bit:
+def _log_sum_exp(x):
+    m = np.max(x)
+    return m + np.log(np.sum(np.exp(x - m)))
 
-        marginalize_emission_lines → augment prediction → marginalize_calibration
 
-    This pins the new adapter to the math the legacy χ² switch
-    encoded in lines 248-297 of pre-II-2.3 ``loss_functions.py``.
+def _gauss_hermite_joint(obs, err, model, basis_col, g_mat, prior_sigma, eline_sigma, nodes=40):
+    """Marginal log-likelihood over (c, a_1, a_2) by Gauss-Hermite quadrature.
+
+    The value carries the normalization of the adapters: the constant
+    -1/2 N ln 2pi and the -sum ln sigma of the Gaussian are left out.
     """
-    import jax.numpy as jnp
+    z, w = np.polynomial.hermite_e.hermegauss(nodes)
+    log_w = np.log(w / np.sqrt(2.0 * np.pi))
+    c_nodes = prior_sigma * z
+    a_nodes = eline_sigma * z
+    log_weight = log_w[:, None, None] + log_w[None, :, None] + log_w[None, None, :]
+    cc = c_nodes[:, None, None, None]
+    a1 = a_nodes[None, :, None, None]
+    a2 = a_nodes[None, None, :, None]
+    resid = (
+        (obs - model)[None, None, None, :]
+        - cc * basis_col[None, None, None, :]
+        - a1 * g_mat[None, None, None, :, 0]
+        - a2 * g_mat[None, None, None, :, 1]
+    )
+    n_pix = obs.shape[0]
+    loglik = (
+        -0.5 * np.sum((resid / err) ** 2, axis=-1)
+        - np.sum(np.log(err))
+        - 0.5 * n_pix * np.log(2.0 * np.pi)
+    )
+    full = _log_sum_exp((loglik + log_weight).ravel())
+    return full + 0.5 * n_pix * np.log(2.0 * np.pi) + np.sum(np.log(err))
 
+
+def _joint_toy():
+    n_pix = 12
+    wavelength = np.linspace(4500.0, 6700.0, n_pix)
+    x = np.linspace(0.0, 1.0, n_pix)
+    model = 1.0 + 0.2 * x
+    centers = np.array([5000.0, 6000.0])
+    g_mat = np.exp(-0.5 * ((wavelength[:, None] - centers[None, :]) / 400.0) ** 2)
+    obs = model * (1.0 + 0.1 * x) + 0.6 * g_mat[:, 0] - 0.4 * g_mat[:, 1]
+    obs = obs + 0.3 * np.sin(7.0 * x)
+    err = np.full(n_pix, 2.0)
+    return wavelength, obs, err, model, g_mat
+
+
+@pytest.mark.unit
+def test_calibration_eline_joint_matches_primitive_and_quadrature():
+    """The adapter is the exact joint marginal of the calibration and the line columns.
+
+    The reference is the primitive applied to ``X = [m * basis | G]`` with the block
+    prior precision, and an independent Gauss-Hermite quadrature over
+    ``(c, a_1, a_2)`` with 40 nodes per dimension.
+    """
     from tengri.inference.likelihoods.marginalized import (
         CalibrationELineMarginalizedLikelihood,
     )
-    from tengri.observation.calibration import marginalize_calibration
-    from tengri.observation.eline_marginalization import marginalize_emission_lines
+    from tengri.observation.calibration import calibration_basis
+    from tengri.observation.linear_marginal import marginalize_linear_nuisance
 
-    # Tiny synthetic spec: 8 wavelength pixels, 2 emission lines.
-    rng = jnp.linspace(0.0, 1.0, 8)
-    fnu_obs = 1.0 + 0.1 * jnp.cos(2 * jnp.pi * rng)
-    fnu_err = jnp.full(8, 0.05)
-    wavelength = jnp.linspace(4500.0, 6700.0, 8)
-    model_spec = 1.0 + 0.05 * rng  # smooth model continuum (no lines)
-    # Two narrow lines: design matrix columns are Gaussian profiles.
-    line_centers = jnp.array([5000.0, 6500.0])
-    sigma = 30.0
-    design_matrix = jnp.stack(
-        [jnp.exp(-0.5 * ((wavelength - lc) / sigma) ** 2) for lc in line_centers],
-        axis=1,
+    wavelength, obs, err, model, g_mat = _joint_toy()
+    prior_sigma = 1.0
+    eline_sigma = 2.0
+    basis = np.asarray(calibration_basis(wavelength, wavelength.min(), wavelength.max(), 1))
+    design = np.concatenate([(model[:, None] * basis), g_mat], axis=1)
+    precision = np.diag([1.0 / prior_sigma**2, 1.0 / eline_sigma**2, 1.0 / eline_sigma**2])
+    primitive = marginalize_linear_nuisance(
+        obs,
+        model,
+        design,
+        sigma=err,
+        prior_precision=precision,
     )
-    prior_sigma_eline = 0.5  # per-line amplitude prior σ
-    prior_var_eline = jnp.full(2, prior_sigma_eline**2)
-
-    # ── Path A: deleted legacy sequential composition ──
-    residual = fnu_obs - model_spec
-    _, a_hat, _ = marginalize_emission_lines(
-        residual, fnu_err, design_matrix, prior_variance=prior_var_eline
+    n_pix = obs.shape[0]
+    expected_primitive = (
+        float(primitive.log_like) + 0.5 * n_pix * np.log(2.0 * np.pi) + np.sum(np.log(err))
     )
-    pred_with_lines = model_spec + design_matrix @ a_hat
-    expected_log_lik, _, _ = marginalize_calibration(
-        model_flux=pred_with_lines,
-        obs_flux=fnu_obs,
-        obs_err=fnu_err,
-        wavelength=wavelength,
-        n_poly=3,
-        prior_sigma=1.0,
+    expected_quadrature = _gauss_hermite_joint(
+        obs, err, model, model * basis[:, 0], g_mat, prior_sigma, eline_sigma
     )
 
-    # ── Path B: new adapter ──
     adapter = CalibrationELineMarginalizedLikelihood(
-        fnu_obs=fnu_obs,
-        fnu_err=fnu_err,
-        wavelength=wavelength,
-        design_matrix_builder=lambda _params: design_matrix,
-        n_poly=3,
-        prior_sigma=1.0,
+        fnu_obs=jnp.asarray(obs),
+        fnu_err=jnp.asarray(err),
+        wavelength=jnp.asarray(wavelength),
+        design_matrix_builder=lambda _params: jnp.asarray(g_mat),
+        n_poly=1,
+        prior_sigma=prior_sigma,
         eline_prior_type="flat",
-        eline_prior_sigma=prior_sigma_eline,
+        eline_prior_sigma=eline_sigma,
         channel="spec_fnu",
     )
-    actual = adapter.log_prob({"spec_fnu": model_spec}, params={})
+    actual = float(adapter.log_prob({"spec_fnu": jnp.asarray(model)}, params={}))
 
-    # Bit-for-bit (within FP rounding) — both paths share the underlying
-    # primitives, so the difference should be machine ε.
-    assert float(actual) == pytest.approx(float(expected_log_lik), rel=1e-12, abs=1e-12)
+    assert actual == pytest.approx(expected_primitive, rel=1e-10)
+    assert actual == pytest.approx(expected_quadrature, rel=1e-8)
