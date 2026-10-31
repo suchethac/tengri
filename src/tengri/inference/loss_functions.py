@@ -202,6 +202,7 @@ def _build_prediction(
     # ``model.predict_*`` accessors (which closure-capture the SSP grid, so
     # this path bakes it; acceptable for the non-inference / dummy-model uses).
     _obs = None
+    _threaded_lums = None
     if threaded_impl is not None and jit_inputs is not None and not use_components:
         _obs = threaded_impl(
             params,
@@ -210,6 +211,8 @@ def _build_prediction(
             jit_inputs["template_data"],
             jit_inputs.get("ztable_data"),
         )
+        if needs_line_lums:
+            _obs, _threaded_lums = _obs
 
     if data_type == "photometry":
         if _obs is not None:
@@ -266,7 +269,10 @@ def _build_prediction(
     # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
     needs_state = (
-        has_line_ratios or has_indices or (has_line_fluxes and not fast_lines) or needs_line_lums
+        has_line_ratios
+        or has_indices
+        or (has_line_fluxes and not fast_lines)
+        or (needs_line_lums and _threaded_lums is None)
     )
     if not needs_state:
         feature_state = None
@@ -282,7 +288,9 @@ def _build_prediction(
         )
     else:
         feature_state = model.predict_state(free_params)
-    if needs_line_lums:
+    if needs_line_lums and _threaded_lums is not None:
+        prediction["log_line_lums_attenuated"] = _threaded_lums
+    elif needs_line_lums:
         derived = feature_state.derived
         prediction["log_line_lums_attenuated"] = derived.get(
             "log_line_lums_attenuated", derived["log_line_lums"]
@@ -409,9 +417,11 @@ def _build_data_neg_log_likelihood_fn(fitter):
     # the fast path just never reached them). ``_build_prediction`` reads the
     # threaded arrays out of ``data_args["_jit_inputs"]`` at call time.
     _threaded_impl = (
-        model._get_or_build_predict_observables_jit()
-        if not use_components and hasattr(model, "_get_or_build_predict_observables_jit")
-        else None
+        None
+        if use_components or not hasattr(model, "_get_or_build_predict_observables_jit")
+        else model._get_or_build_predict_observables_lines_jit()
+        if needs_line_lums
+        else model._get_or_build_predict_observables_jit()
     )
 
     # Eager channel-scale pre-check (#1495): evaluate every likelihood channel
