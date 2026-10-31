@@ -44,6 +44,9 @@ STAIRCASE = 4.0
 WATCH = 2.0
 #: Teeth fall roughly 20 Myr apart near this age on a log-spaced grid.
 AGES = np.linspace(1.30, 1.50, 201)
+#: Redshift of the sweep and the age of the universe there [Gyr]; the age
+#: parameters are fractions of it, so AGES [Gyr] is divided by this.
+SWEEP_Z = 1.0
 PROBE_BANDS = ["sdss_g", "sdss_r", "sdss_i", "2mass_j"]
 DEFAULT_SSP = "fsps_mist_c3k_a_chabrier"
 
@@ -76,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{exc}\n\nPass --ssp with a library this machine has.", file=sys.stderr)
         return 2
     observation = tengri.Observation(photometry=tengri.Photometry.from_names(PROBE_BANDS))
+    z_age_gyr = float(tengri.utils.cosmology.age_at_z(SWEEP_Z))
     specs = getattr(reg, "SFH_REGISTRY", {})
     names = sorted(specs)
     print(f"{len(names)} registry forms, swept in their own age parameter\n")
@@ -84,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     findings = []
     for name in names:
         params = list(getattr(specs[name], "params", {}) or {})
-        age_param = next((p for p in params if p.endswith("_age_gyr")), None)
+        age_param = next((p for p in params if p.endswith("_age_frac")), None)
         if age_param is None:
             print(f"{name:<26}{'-':>18}  no age parameter: no moving onset")
             continue
@@ -94,8 +98,12 @@ def main(argv: list[str] | None = None) -> int:
                 ssp_data=ssp,
                 observation=observation,
                 neb={"type": "none"},
-                sfh={"type": name, "all_params": Fixed(DEFAULT), short: Uniform(0.5, 3.0)},
-                redshift=Fixed(1.0),
+                sfh={
+                    "type": name,
+                    "all_params": Fixed(DEFAULT),
+                    short: Uniform(0.5 / z_age_gyr, 3.0 / z_age_gyr),
+                },
+                redshift=Fixed(SWEEP_Z),
                 approx=None,
             )
             # Bound as defaults, not captured: a closure over the loop
@@ -105,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             predict = jax.jit(
                 lambda a, _m=model, _p=age_param: sum(_m.predict_photometry({_p: a}))
             )
-            values = np.array([float(predict(float(a))) for a in AGES])
+            values = np.array([float(predict(float(a) / z_age_gyr)) for a in AGES])
         except Exception as exc:
             detail = f": {type(exc).__name__}" + (f" {exc}"[:60] if args.verbose else "")
             print(f"{name:<26}{'-':>18}  could not build{detail}")

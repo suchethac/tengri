@@ -164,7 +164,7 @@ with warnings.catch_warnings():
 
     spec_tsn = ParamSpec(
         sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0804, 0.9645),  # 1-12 Gyr at z=0.1
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
@@ -196,7 +196,7 @@ with warnings.catch_warnings():
 
     spec_tsn_stoch = ParamSpec(
         sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0804, 0.9645),  # 1-12 Gyr at z=0.1
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),

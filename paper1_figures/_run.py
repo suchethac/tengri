@@ -37,13 +37,37 @@ def repo_root(start: Path | None = None) -> Path:
     return here
 
 
+def _exit_status(code: object) -> int:
+    """Map a ``SystemExit.code`` onto an integer status, as the interpreter does.
+
+    ``None`` is success, an int is itself, and anything else (a message) is
+    printed to stderr and counts as failure.
+    """
+    if code is None:
+        return 0
+    if isinstance(code, int):
+        return code
+    print(code, file=sys.stderr)
+    return 1
+
+
 def run_figure(module_name: str, argv: list[str]) -> int:
     """Run ``analysis.paper1.<module_name>`` as if from the command line.
 
     Returns the script's exit status. A non-zero status is returned rather than
     raised so a notebook can report several figures and still finish; the
-    caller decides what a failure means.
+    caller decides what a failure means. A script's ``sys.exit(...)`` is the
+    same thing spelled differently, so ``SystemExit`` is caught and its code
+    returned: left to propagate it would kill the calling notebook.
     """
+    try:
+        return _run_figure(module_name, argv)
+    except SystemExit as exc:
+        return _exit_status(exc.code)
+
+
+def _run_figure(module_name: str, argv: list[str]) -> int:
+    """Import and call the script's entry point; see :func:`run_figure`."""
     dotted = f"analysis.paper1.{module_name}"
 
     # sys.argv is set BEFORE the import, not around the main() call. One script
