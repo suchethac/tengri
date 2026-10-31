@@ -1570,15 +1570,16 @@ jobs:
         # regression-a (before #2908's split) at 18m40s vs 40m00s with coverage on the same SHA).
         # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
-          # 70, not 50, for the same reason as the test job's contract row
-          # above: pool congestion alone moved the same-SHA contract shard
-          # ~25m -> 40m34s (2026-09-05), and this copy carries `--cov` on
-          # top. The per-test `--timeout=600` still catches real hangs.
+          # The test job's contract budget (180), for the same reason as its row
+          # in the shard table: `test (contract)` completed in 154 min on main
+          # b4035f64f (2026-10-30), and this copy, which carries `--cov` on top,
+          # was cut at its old 105 min budget on every nightly 2026-10-23..30.
+          # The per-test `--timeout=600` still catches real hangs.
           - shard: contract
             paths: tests/contract
             nproc: 2
-            budget: 70
-            coverage_budget: 105
+            budget: 180
+            coverage_budget: 270
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
@@ -1635,7 +1636,10 @@ jobs:
             nproc: 1
             budget: 70
             coverage_budget: 105
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # Budgets match the test job's regression-b rows (120): over the
+          # 2026-10-23..30 nightlies these coverage shards were cut at their old
+          # 75 min on 13 of 24 runs, and the ones that completed took 56-75 min.
+          # bug/ has no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
@@ -1644,20 +1648,20 @@ jobs:
             paths: ""
             bug_half: "1"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-b3
             paths: ""
             bug_half: "3"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
@@ -1772,10 +1776,14 @@ jobs:
             part: 2
             of: 3
             timeout: 45
+          # Leg 3 was cut at 45 min on every nightly 2026-10-23..30 (legs 1 and
+          # 2 took 20-25 and 4-9 min), so it has never printed its
+          # `--durations`. 120 lets it complete once; rebalance the legs from
+          # that measurement and bring the budget back down.
           - suite: inference
             part: 3
             of: 3
-            timeout: 45
+            timeout: 120
           - suite: integration
             timeout: 180
           # Every other @pytest.mark.slow test outside the two trees above.
