@@ -69,7 +69,7 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     # Optical lines (3700-6800 Å)
     ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
     ("OII_3729", 3729.88, "O2", False, False, True, "oii_3726_29"),
-    ("NeIII_3869", 3870.16, "Ne3", False, False, False, "neiii_3869_h6"),
+    ("NeIII_3869", 3869.86, "Ne3", False, False, False, "neiii_3869_h6"),
     ("Hepsilon", 3971.20, "H1", True, True, False, "hepsilon"),
     ("Hdelta", 4102.89, "H1", True, True, False, "hdelta"),
     ("Hgamma", 4341.68, "H1", True, True, True, "hgamma_oiii_4363"),
