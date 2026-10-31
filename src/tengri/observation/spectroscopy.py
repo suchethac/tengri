@@ -9,6 +9,7 @@ marginalization. Includes factory methods for common instruments.
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import jax
 import jax.numpy as jnp
@@ -690,7 +691,9 @@ class Spectroscopy:
         -------
         dict[str, Distribution]
             Mapping of calibration coefficient names (``cal_c1``, ..., ``cal_cN``)
-            to ``Gaussian(0, 0.1)`` priors. Empty dict if ``calibration_order == 0``.
+            to ``Gaussian(0, 0.1)`` priors, plus ``cal_log_q`` (the log of the mean
+            multiplier, a Gaussian from ``cal_scale_prior``) when that is set. Empty
+            dict if ``calibration_order == 0`` and ``cal_scale_prior`` is None.
 
         Notes
         -----
@@ -699,9 +702,11 @@ class Spectroscopy:
         Gaussian prior centered at 0 in log space (unity in linear space).
 
         """
-        if self.calibration_order == 0:
-            return {}
-        return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        params = {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        if self.cal_scale_prior is not None:
+            center, sigma_dex = self.cal_scale_prior
+            params["cal_log_q"] = Gaussian(math.log(10.0) * center, math.log(10.0) * sigma_dex)
+        return params
 
     def calibration_coeffs(self, params) -> jnp.ndarray | None:
         """Extract calibration coefficients from parameter dict.

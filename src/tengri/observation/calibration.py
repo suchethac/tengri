@@ -424,7 +424,7 @@ def calibration_q_log_prior(
     return -0.5 * ((q - 1.0) ** 2 / var + jnp.log(2.0 * jnp.pi * var)) + log_q
 
 
-@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior"))
+@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior", "q_prior"))
 def marginalize_calibration_segments(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -442,6 +442,7 @@ def marginalize_calibration_segments(
     line_col_mask: jnp.ndarray | None = None,
     log_q: jnp.ndarray | None = None,
     q_window: jnp.ndarray | None = None,
+    q_prior: bool = False,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     r"""Marginalize per-segment calibration scales and a Chebyshev tilt in closed form.
 
@@ -501,6 +502,10 @@ def marginalize_calibration_segments(
     q_window : array_like, shape (n,), optional, keyword-only
         Window :math:`W_i \in \{0, 1\}` over which :math:`q` is the mean. Default:
         every unmasked pixel.
+    q_prior : bool, keyword-only
+        Static. With ``log_q`` given, add :func:`calibration_q_log_prior`, so the value is
+        the log density of :math:`\ln q` under the coefficient prior times the data
+        likelihood, up to the user's own prior on :math:`\ln q`. Default False.
 
     Returns
     -------
@@ -628,6 +633,10 @@ def marginalize_calibration_segments(
         flat_mask=flat_mask,
     )
     log_like = result.log_like - n_eff * jnp.log(unit)
+    if log_q is not None and q_prior:
+        log_like = log_like + calibration_q_log_prior(
+            log_q, v, prior_sigma=prior_sigma, cal_prior=cal_prior
+        )
     if free:
         log_like = log_like + k_cal * jnp.log(unit)
 

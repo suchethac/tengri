@@ -33,6 +33,7 @@ from tengri.observation.calibration import (
     _ERR_FLOOR,
     calibration_basis,
     marginalize_calibration as _marginalize_calibration,
+    marginalize_calibration_segments,
 )
 from tengri.observation.eline_marginalization import (
     marginalize_emission_lines as _marginalize_emission_lines,
@@ -83,6 +84,18 @@ class CalibrationMarginalizedLikelihood:
         Default 1.0.
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
+    segments, n_segments : keyword-only
+        Per-pixel camera segment id and the segment count; with them the calibration
+        multiplier carries one free scale per segment. Default: none.
+    cal_prior : {"gaussian", "scale_free"}, keyword-only
+        Prior on the calibration coefficients (see
+        :func:`~tengri.observation.calibration.marginalize_calibration_segments`).
+    q_window : ndarray, shape (n_pixels,), keyword-only
+        0/1 window of the mean multiplier ``q`` when ``has_q``.
+    has_q : bool, keyword-only
+        Condition on ``q = exp(params["cal_log_q"])``; the value then includes the
+        coefficient prior's own marginal of ``ln q``. The log-normal prior on
+        ``ln q`` is the declared prior of ``cal_log_q``. Default False.
 
     Notes
     -----
@@ -107,6 +120,11 @@ class CalibrationMarginalizedLikelihood:
     fnu_obs_key: str | None = None
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    segments: jnp.ndarray | None = None
+    n_segments: int = 0
+    cal_prior: str = "gaussian"
+    q_window: jnp.ndarray | None = None
+    has_q: bool = False
 
     def log_prob(
         self,
@@ -114,15 +132,27 @@ class CalibrationMarginalizedLikelihood:
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
-        del params
+        obs_flux = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        obs_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        if self.n_segments > 0 or self.cal_prior != "gaussian" or self.has_q:
+            return marginalize_calibration_segments(
+                prediction[self.channel],
+                obs_flux,
+                obs_err,
+                self.wavelength,
+                _segments_or_zeros(self.segments, self.wavelength),
+                n_segments=self.n_segments,
+                n_poly=self.n_poly,
+                prior_sigma=self.prior_sigma,
+                cal_prior=self.cal_prior,
+                log_q=params["cal_log_q"] if self.has_q else None,
+                q_window=self.q_window,
+                q_prior=True,
+            )[0]
         log_lik, _c_hat, _c_err = _marginalize_calibration(
             model_flux=prediction[self.channel],
-            obs_flux=resolve_channel_data(
-                self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args
-            ),
-            obs_err=resolve_channel_data(
-                self.fnu_err, self.fnu_err_key, self.data_slice, data_args
-            ),
+            obs_flux=obs_flux,
+            obs_err=obs_err,
             wavelength=self.wavelength,
             n_poly=self.n_poly,
             prior_sigma=self.prior_sigma,
@@ -152,7 +182,17 @@ _CALIBRATION_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
     "fnu_err_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
+    "segments": content("segment ids add calibration columns to the marginal"),
+    "n_segments": content("segment count changes the design matrix shape"),
+    "cal_prior": content("scale-free vs Gaussian coefficient prior changes the likelihood"),
+    "q_window": content("the window sets which pixels define the mean multiplier"),
+    "has_q": content("the fiber-fraction latent conditions the calibration block"),
 }
+
+
+def _segments_or_zeros(segments, wavelength):
+    """Return the segment ids, or an all-zero id array when the grid has no segments."""
+    return jnp.zeros(wavelength.shape[0], dtype=int) if segments is None else segments
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -557,6 +597,18 @@ class CalibrationELineMarginalizedLikelihood:
         Cloudy prior width [dex]. Default 0.5.
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
+    segments, n_segments : keyword-only
+        Per-pixel camera segment id and the segment count; with them the calibration
+        multiplier carries one free scale per segment. Default: none.
+    cal_prior : {"gaussian", "scale_free"}, keyword-only
+        Prior on the calibration coefficients (see
+        :func:`~tengri.observation.calibration.marginalize_calibration_segments`).
+    q_window : ndarray, shape (n_pixels,), keyword-only
+        0/1 window of the mean multiplier ``q`` when ``has_q``.
+    has_q : bool, keyword-only
+        Condition on ``q = exp(params["cal_log_q"])``; the value then includes the
+        coefficient prior's own marginal of ``ln q``. The log-normal prior on
+        ``ln q`` is the declared prior of ``cal_log_q``. Default False.
 
     Notes
     -----
@@ -589,6 +641,11 @@ class CalibrationELineMarginalizedLikelihood:
     fnu_obs_key: str | None = None
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    segments: jnp.ndarray | None = None
+    n_segments: int = 0
+    cal_prior: str = "gaussian"
+    q_window: jnp.ndarray | None = None
+    has_q: bool = False
 
     def _line_prior(self, params: Mapping[str, jnp.ndarray], n_lines: int):
         """Return the line prior mean and width (standard deviation) for this parameter set."""
@@ -616,6 +673,8 @@ class CalibrationELineMarginalizedLikelihood:
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         design_lines = self.design_matrix_builder(params)
         n_lines = design_lines.shape[1]
+        if self.n_segments > 0 or self.cal_prior != "gaussian" or self.has_q:
+            return self._segment_log_prob(model_spec, fnu_obs, fnu_err, design_lines, params)
         basis = calibration_basis(
             self.wavelength, self.wavelength.min(), self.wavelength.max(), self.n_poly
         )
@@ -639,6 +698,29 @@ class CalibrationELineMarginalizedLikelihood:
         )
         n_pix = fnu_obs.shape[0]
         return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))
+
+    def _segment_log_prob(self, model_spec, fnu_obs, fnu_err, design_lines, params):
+        """Joint marginal with segment scales, a scale-free prior or the fiber-fraction latent."""
+        sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
+        line_mean, line_width = self._line_prior(params, design_lines.shape[1])
+        line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
+        marginal = marginalize_calibration_segments(
+            model_spec,
+            fnu_obs,
+            sigma,
+            self.wavelength,
+            _segments_or_zeros(self.segments, self.wavelength),
+            n_segments=self.n_segments,
+            n_poly=self.n_poly,
+            prior_sigma=self.prior_sigma,
+            cal_prior=self.cal_prior,
+            lines=line,
+            log_q=params["cal_log_q"] if self.has_q else None,
+            q_window=self.q_window,
+            q_prior=True,
+        )[0]
+        n_pix = fnu_obs.shape[0]
+        return marginal + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))
 
     def declared_parameters(self):
         return []
@@ -673,4 +755,9 @@ _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
     "fnu_err_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
+    "segments": content("segment ids add calibration columns to the marginal"),
+    "n_segments": content("segment count changes the design matrix shape"),
+    "cal_prior": content("scale-free vs Gaussian coefficient prior changes the likelihood"),
+    "q_window": content("the window sets which pixels define the mean multiplier"),
+    "has_q": content("the fiber-fraction latent conditions the calibration block"),
 }
