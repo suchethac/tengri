@@ -968,12 +968,12 @@ def fitzpatrick99_unnormalized(
     citation="Fitzpatrick 1999 (PASP 111, 63) MW extinction",
     short_doc="Fitzpatrick (1999) Milky Way extinction curve, R_V = 3.1 default; FM90 UV + optical/IR spline",
 )
-def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
+def fitzpatrick99(wavelength: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
     r"""Fitzpatrick (1999) Milky Way extinction curve, normalized to k(5500 A) = 1.
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Observed wavelength grid. [Angstrom]
     dust_Rv : float
         Total-to-selective extinction ratio R_V. [dimensionless]
@@ -987,14 +987,14 @@ def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jn
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes, with respect to ``wave_obs``
+    **JIT-compatible**: yes. **Gradient-safe**: yes, with respect to ``wavelength``
     and ``dust_Rv``. **Vmap-safe**: yes.
 
     Divides :func:`fitzpatrick99_unnormalized` by its own value at 5500 Angstrom,
     which is the V-band convention every registered dust law follows (cardelli
     normalizes the same way). The foreground screen does not use this form.
     """
-    k_lambda = fitzpatrick99_unnormalized(wave_obs, dust_Rv)
+    k_lambda = fitzpatrick99_unnormalized(wavelength, dust_Rv)
     k_v = fitzpatrick99_unnormalized(jnp.asarray([V_BAND_ANGSTROM]), dust_Rv)[0]
     return k_lambda / k_v
 
