@@ -1371,7 +1371,9 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
         return _continuity_flex_edges_yr(sfh_kwargs)
     if fn is psb_continuity_flex:
         return _psb_flex_edges_yr(sfh_kwargs)
-    if fn is continuity or fn is dirichlet:
+    from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
+
+    if fn is continuity or fn is dirichlet or fn is continuity_young_fraction:
         bin_edges_gyr = sfh_kwargs.get("bin_edges_gyr")
         if bin_edges_gyr is None:
             return device_table(DEFAULT_BIN_EDGES_GYR) * 1e9

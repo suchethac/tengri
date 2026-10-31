@@ -236,7 +236,12 @@ class InferenceContext:
         stochastic = spec.stochastic
         field_centering = float(getattr(spec, "field_centering", 1.0))
 
+        from tengri.components.stellar.sfh.young_fraction import (
+            young_fraction_prior_for_spec,
+        )
         from tengri.inference.loss_functions import standardized_neg_log_prior
+
+        young_fraction = young_fraction_prior_for_spec(spec)
 
         def log_prior(params_unbounded):
             """log p(xi) = -0.5 * sum(xi^2) for the standardized N(0,I) prior.
@@ -259,6 +264,7 @@ class InferenceContext:
                 stochastic=stochastic,
                 centering=field_centering,
                 psd_sigma_dex=psd_sigma_dex,
+                young_fraction=young_fraction,
             )
 
         return log_prior
