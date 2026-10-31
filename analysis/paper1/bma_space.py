@@ -43,6 +43,11 @@ from .configs import (
 LOG10_ZSUN = -1.848
 MET_EDGE_INSET_DEX = 0.02
 
+#: Reference redshift of the batched factorial build: the top of the CANDELS z~1
+#: sample (z = 1.012-1.097), so no shared time bound exceeds any galaxy's age of the
+#: universe. Used as ``z`` and ``prior_z`` of the one model a batch fits.
+Z_REF_FACTORIAL = 1.10
+
 
 def _calzetti_single_component() -> dict:
     """Calzetti single-screen attenuation (from config_II)."""
@@ -159,6 +164,9 @@ def build_model(
     ssp_data: tengri.SSPData,
     observation: tengri.Observation,
     z: float,
+    *,
+    catalog_z_range: tuple[float, float] | None = None,
+    prior_z: float | None = None,
 ) -> SEDModel:
     """Build a SEDModel from component names.
 
@@ -167,7 +175,11 @@ def build_model(
             "nebular" keys (all required for factorial models).
         ssp_data: Preloaded SSP data.
         observation: Observation with photometry.
-        z: Redshift.
+        z: Redshift (the model's ``Fixed`` redshift).
+        catalog_z_range: ``(z_lo, z_hi)`` for a runtime per-galaxy redshift, passed
+            to ``WavePrecomp(catalog_z_range=...)``. None keeps ``WavePrecomp()``.
+        prior_z: Redshift at which the SFH builders evaluate their z-dependent
+            priors. None uses ``z``.
 
     Returns:
         Compiled SEDModel ready for inference.
@@ -192,7 +204,7 @@ def build_model(
         raise ValueError(f"Only {NEBULAR!r} nebular is supported; got {neb_type!r}")
 
     sfh_builder = _SFH_BUILDERS[sfh_type]
-    sfh = sfh_builder(ssp_data, z)
+    sfh = sfh_builder(ssp_data, z if prior_z is None else prior_z)
 
     att_builder = _ATTENUATION_BUILDERS[att_type]
     dust_attenuation = att_builder()
@@ -209,5 +221,9 @@ def build_model(
         neb=neb,
         redshift=Fixed(z),
         igm={"type": "inoue"},
-        approx=WavePrecomp(),
+        approx=(
+            WavePrecomp()
+            if catalog_z_range is None
+            else WavePrecomp(catalog_z_range=catalog_z_range)
+        ),
     )

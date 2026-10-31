@@ -62,6 +62,7 @@ from paper1._bma_keys import (
     ssp_entry,
     ssp_grid_for_config,
 )
+from paper1._grid_completeness import load_expected_galaxy_ids
 from paper1.candels_io import load_candels_z1, photometry_for_row
 from paper1.config_metadata import XLIKE_CONFIGS
 
@@ -72,6 +73,13 @@ from paper1.config_metadata import XLIKE_CONFIGS
 logger = logging.getLogger(__name__)
 
 _SYSTEMATIC_FLOOR_FRAC = 0.05
+
+#: Per-galaxy redshift span of a batch's one compiled model (``catalog_z_range``):
+#: the CANDELS z~1 sample, z = 1.012-1.097, padded on both sides.
+BATCH_CATALOG_Z_RANGE = (1.00, 1.11)
+
+#: The locked 20-galaxy sample a ``--batch-model`` run fits by default.
+SAMPLE_SELECTION = Path(__file__).resolve().parent / "results" / "selected_galaxies_20.json"
 
 ROUTES = ("laplace", "nss")
 DEFAULT_OUT = {
@@ -436,14 +444,17 @@ def write_cell(out_dir: Path, result: dict, npz_data: dict | None) -> tuple[Path
     return json_path, written_npz
 
 
-def _fit_laplace(forward, data, n_restarts, seed, cell_key, stage_times):
+def _fit_laplace(forward, data, n_restarts, seed, cell_key, stage_times, fit_kwargs=None):
     """MAP with ``n_restarts`` then Laplace about the best restart.
 
     Returns ``(fields, posterior)``: ``fields`` are the ``build_cell_result`` keywords
     describing the fit (MAP loss, restart count and spread, or the error), and
     ``posterior`` is the Laplace posterior, or ``None`` when the fit failed.
+    ``fit_kwargs`` (e.g. ``params``, ``presence``) is passed to every ``forward.fit``.
     """
     import jax
+
+    extra = dict(fit_kwargs or {})
 
     # MAP with n_restarts: run multiple times and track losses
     # Note: profile_mass=False because evidence must integrate log_total_mass under
@@ -475,7 +486,7 @@ def _fit_laplace(forward, data, n_restarts, seed, cell_key, stage_times):
             key = jax.random.PRNGKey(restart_seed)
             # Use ForwardModel.fit like fit_one.py (line 1086)
             # profile_mass=False: evidence integrates all parameters under their priors
-            posterior = forward.fit(data, key=key, method="map", profile_mass=False)
+            posterior = forward.fit(data, key=key, method="map", profile_mass=False, **extra)
             loss = float(posterior.diagnostics.get("final_loss", np.inf))
             map_losses.append(loss)
             if loss < best_loss:
@@ -508,7 +519,12 @@ def _fit_laplace(forward, data, n_restarts, seed, cell_key, stage_times):
     try:
         key = jax.random.PRNGKey(seed + n_restarts)
         posterior = forward.fit(
-            data, key=key, method="laplace", init_from=best_map_posterior, profile_mass=False
+            data,
+            key=key,
+            method="laplace",
+            init_from=best_map_posterior,
+            profile_mass=False,
+            **extra,
         )
     except Exception as e:
         stage_times["laplace_s"] = time.perf_counter() - t0
@@ -555,6 +571,203 @@ def _fit_nss(forward, data, seed, cell_key, stage_times):
     return {}, posterior
 
 
+def _make_observation(band_names):
+    """The photometry-only ``Observation`` on ``band_names`` (data passed separately)."""
+    from tengri import Observation, Photometry
+
+    return Observation(photometry=Photometry.from_names(band_names))
+
+
+def _props_fn(sed_model, names, redshift=None):
+    """One draw -> the ``names`` properties, at ``redshift`` when given.
+
+    With ``redshift=None`` this is ``predict_properties`` itself. A runtime
+    per-galaxy redshift cannot ride ``predict_properties``: it takes no
+    ``fixed_values`` and refuses a ``redshift`` key on a Fixed-redshift model
+    (#2296). So the same body runs with the redshift threaded through
+    ``predict_state(fixed_values=...)``, as the bug-2748 regression test does.
+    """
+    if redshift is None:
+
+        def one(sample, _sed_model=sed_model):
+            return _sed_model.predict_properties(sample, names=names)
+
+        return one
+
+    fixed = {**sed_model.spec.get_fixed_values(), "redshift": float(redshift)}
+
+    def one_at_z(sample, _sed_model=sed_model):
+        _sed_model._ensure_property_catalog()
+        state = _sed_model.predict_state(sample, fixed_values=fixed)
+        return {n: _sed_model._property_catalog[n].fn(state, sample) for n in names}
+
+    return one_at_z
+
+
+def _derived_npz(sed_model, posterior, cell_key, *, redshift=None):
+    """The derived-quantity NPZ arrays of a posterior, or ``None`` on failure.
+
+    Free parameters only (the NSS posterior carries Fixed ones too), at most
+    ``_MAX_DERIVED_DRAWS`` draws, evaluated at ``redshift`` when given. A failure
+    is logged and leaves the cell without its NPZ, as before.
+    """
+    if posterior.samples is None:
+        return None
+    try:
+        free = set(sed_model.spec.free_params)
+        samples = {k: v for k, v in posterior.samples.items() if k in free}
+        idx = _draw_indices(samples, _MAX_DERIVED_DRAWS)
+        wanted = ("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr")
+        available = tuple(n for n in wanted if n in sed_model.available_properties)
+        got = (
+            _chunked_vmap(_props_fn(sed_model, available, redshift), samples, idx)
+            if available
+            else {}
+        )
+        props = {
+            n: np.asarray(got[n], dtype=float) if n in got else np.full(idx.shape[0], np.nan)
+            for n in wanted
+        }
+        return {
+            "log_stellar_mass_formed": np.log10(props["stellar_mass"]),
+            "log_stellar_mass_survived": np.log10(props["stellar_mass_surviving"]),
+            "log_sfr_100myr": np.log10(props["sfr_100myr"]),
+            "log_sfr_10myr": np.log10(props["sfr_10myr"]),
+        }
+    except Exception as e:
+        logger.warning(f"{cell_key} Failed to compute derived quantities: {e}")
+        return None
+
+
+def _union_bands(band_lists) -> list[str]:
+    """Every band name across ``band_lists``, in order of first appearance."""
+    ordered: dict[str, None] = {}
+    for names in band_lists:
+        for name in names:
+            ordered.setdefault(name, None)
+    return list(ordered)
+
+
+def _place_on_union(union, names, fnu, sigma):
+    """A galaxy's fluxes and errors on the union band order, with its presence mask.
+
+    Absent bands get flux 0, error 1 and presence 0 (neutral under the presence mask).
+    """
+    flux = np.zeros(len(union))
+    err = np.ones(len(union))
+    presence = np.zeros(len(union))
+    for name, f, s in zip(names, fnu, sigma, strict=True):
+        col = union.index(name)
+        flux[col] = f
+        err[col] = s
+        presence[col] = 1.0
+    return flux, err, presence
+
+
+def fit_model_over_galaxies(
+    model_dict: dict[str, str],
+    galaxies: list[int],
+    *,
+    n_restarts: int,
+    seed: int,
+    out_dir: Path,
+    force: bool = False,
+) -> dict[int, Path]:
+    """Laplace evidence of one factorial model over many galaxies, one compile.
+
+    Builds and compiles the model ONCE at ``Z_REF_FACTORIAL`` with a runtime
+    per-galaxy redshift (``catalog_z_range=BATCH_CATALOG_Z_RANGE``), on the union of
+    every galaxy's bands in order of first appearance across ``galaxies``. Each
+    galaxy is then fit with the same MAP x ``n_restarts`` + Laplace sequence as
+    ``route="laplace"``, its redshift passed as ``params={"redshift": z}`` and its
+    band mask as ``presence``. Cells go to ``out_dir/<gid>/<model_key>.json|.npz``,
+    with each galaxy's own ``z`` and a ``batch`` block. A galaxy whose cell exists is
+    skipped unless ``force``; if every cell exists nothing is built.
+
+    Returns
+    -------
+    dict
+        Galaxy id -> JSON path of each cell written.
+    """
+    import jax
+    from paper1.bma_space import Z_REF_FACTORIAL, build_model
+    from paper1.configs import load_ssp_for
+    from paper1.fit_one import apply_systematic_error_floor
+
+    from tengri import Data, ForwardModel
+
+    if "config" in model_dict:
+        raise ValueError("fit_model_over_galaxies takes a factorial model, not a named config")
+    jax.config.update("jax_enable_x64", True)
+
+    model_key = make_model_key(model_dict)
+    out_dir = Path(out_dir)
+    written: dict[int, Path] = {}
+    todo = [g for g in galaxies if force or not (out_dir / str(g) / f"{model_key}.json").exists()]
+    if not todo:
+        logger.info("%s: every galaxy's cell exists, nothing built", model_key)
+        return written
+
+    loaded = {g: get_galaxy_data(g) for g in galaxies}
+    union = _union_bands(loaded[g][1]["names"] for g in galaxies)
+    obs = _make_observation(union)
+    ssp_data = load_ssp_for(ssp_entry(model_dict["ssp"]).config)
+    sed_model = build_model(
+        model_dict,
+        ssp_data,
+        obs,
+        z=Z_REF_FACTORIAL,
+        catalog_z_range=BATCH_CATALOG_Z_RANGE,
+        prior_z=Z_REF_FACTORIAL,
+    )
+    forward = ForwardModel.build(sed=sed_model)
+    n_free = len(sed_model.spec.free_params)
+
+    for gid in todo:
+        started = time.time()
+        stage_times: dict[str, object] = {}
+        z, phot_dict, fnu, sigma = loaded[gid]
+        cell_key = f"{gid}_{model_key}"
+        sigma_floor = apply_systematic_error_floor(sigma, fnu, floor_frac=_SYSTEMATIC_FLOOR_FRAC)
+        flux, err, presence = _place_on_union(union, phot_dict["names"], fnu, sigma_floor)
+        data = Data(photometry=(flux, err))
+        fit_kwargs = {"params": {"redshift": z}, "presence": presence}
+
+        fit_fields, posterior = _fit_laplace(
+            forward, data, n_restarts, seed, cell_key, stage_times, fit_kwargs=fit_kwargs
+        )
+        npz_data = None
+        if posterior is not None:
+            t0 = time.perf_counter()
+            npz_data = _derived_npz(sed_model, posterior, cell_key, redshift=z)
+            stage_times["derived_draws_s"] = time.perf_counter() - t0
+        result = build_cell_result(
+            galaxy_id=gid,
+            z=z,
+            model_dict=model_dict,
+            components=model_dict.copy(),
+            laplace=posterior,
+            n_free=n_free,
+            started=started,
+            stage_times=stage_times,
+            seed=seed,
+            route="laplace",
+            **fit_fields,
+        )
+        result["batch"] = {
+            "union_bands": list(union),
+            "presence": [float(p) for p in presence],
+            "catalog_z_range": list(BATCH_CATALOG_Z_RANGE),
+            "prior_z": Z_REF_FACTORIAL,
+        }
+        cell_dir = out_dir / str(gid)
+        cell_dir.mkdir(parents=True, exist_ok=True)
+        json_path, _ = write_cell(cell_dir, result, npz_data)
+        written[gid] = json_path
+        logger.info("%s: wrote %s", cell_key, json_path)
+    return written
+
+
 def fit_one_model(
     galaxy_id: int,
     model_dict: dict[str, str],
@@ -580,11 +793,11 @@ def fit_one_model(
         On error, result_dict has error field set and valid=False.
     """
     import jax
-    from paper1.bma_space import build_model
+    from paper1.bma_space import Z_REF_FACTORIAL, build_model
     from paper1.configs import CONFIGS, load_ssp_for
     from paper1.fit_one import apply_systematic_error_floor
 
-    from tengri import Data, ForwardModel, Observation, Photometry
+    from tengri import Data, ForwardModel
 
     if route not in ROUTES:
         raise ValueError(f"route must be one of {ROUTES}; got {route!r}")
@@ -645,12 +858,12 @@ def fit_one_model(
             components_to_report = model_dict.copy()
 
         # Create observation (filter list only; data passed separately)
-        photometry = Photometry.from_names(phot_dict["names"])
-        obs = Observation(photometry=photometry)
+        obs = _make_observation(phot_dict["names"])
 
         # Build the model
         if builder is None:
-            sed_model = build_model(model_dict, ssp_data, obs, z)
+            # Factorial priors are shared across galaxies (as in the batched build).
+            sed_model = build_model(model_dict, ssp_data, obs, z, prior_z=Z_REF_FACTORIAL)
         else:
             sed_model = builder(ssp_data, obs, z)
 
@@ -696,43 +909,8 @@ def fit_one_model(
         # 1253.5s outside MAP+Laplace, and an eager per-draw Python loop
         # calling predict_properties 500 times separately -- never batched
         # through one compiled program -- was one of the named suspects.
-        npz_data = None
         t0 = time.perf_counter()
-        if posterior.samples is not None:
-            try:
-                # The NSS posterior carries every Fixed parameter beside the free
-                # ones, and predict_properties refuses a call-time override of a
-                # Fixed parameter; evaluate on the free parameters only.
-                free = set(sed_model.spec.free_params)
-                samples = {k: v for k, v in posterior.samples.items() if k in free}
-                idx = _draw_indices(samples, _MAX_DERIVED_DRAWS)
-                wanted = ("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr")
-                available = tuple(n for n in wanted if n in sed_model.available_properties)
-
-                # sed_model is passed as a default arg, not closed over directly:
-                # `del sed_model` below (end-of-fit cleanup) makes ruff/pyflakes
-                # treat any closure that references it by name as possibly
-                # unbound, even though this closure runs (via _chunked_vmap,
-                # a few lines down) well before that del executes.
-                def one(sample, _sed_model=sed_model):
-                    return _sed_model.predict_properties(sample, names=available)
-
-                got = _chunked_vmap(one, samples, idx) if available else {}
-                props = {
-                    n: np.asarray(got[n], dtype=float)
-                    if n in got
-                    else np.full(idx.shape[0], np.nan)
-                    for n in wanted
-                }
-
-                npz_data = {
-                    "log_stellar_mass_formed": np.log10(props["stellar_mass"]),
-                    "log_stellar_mass_survived": np.log10(props["stellar_mass_surviving"]),
-                    "log_sfr_100myr": np.log10(props["sfr_100myr"]),
-                    "log_sfr_10myr": np.log10(props["sfr_10myr"]),
-                }
-            except Exception as e:
-                logger.warning(f"{cell_key} Failed to compute derived quantities: {e}")
+        npz_data = _derived_npz(sed_model, posterior, cell_key)
         stage_times["derived_draws_s"] = time.perf_counter() - t0
         logger.info("%s derived draws: %.2fs", cell_key, stage_times["derived_draws_s"])
 
@@ -767,12 +945,37 @@ def fit_one_model(
         ), None
 
 
+def _run_batch(parser, args) -> int:
+    """``--batch-model``: the factorial model ``args.batch_model`` over the galaxies."""
+    if args.route != "laplace":
+        parser.error("--batch-model fits the laplace route only; drop --route nss")
+    if args.set != "factorial":
+        parser.error("--batch-model fits the factorial set only; drop --set")
+    matches = [m for m in enumerate_factorial() if make_model_key(m) == args.batch_model]
+    if not matches:
+        parser.error(f"--batch-model: {args.batch_model!r} is not a factorial model key")
+    if args.galaxies:
+        galaxies = [int(g) for g in args.galaxies.split(",") if g.strip()]
+    else:
+        galaxies = load_expected_galaxy_ids(SAMPLE_SELECTION)
+    written = fit_model_over_galaxies(
+        matches[0],
+        galaxies,
+        n_restarts=args.n_restarts,
+        seed=args.seed,
+        out_dir=Path(args.out),
+        force=args.force,
+    )
+    print(f"Batch {args.batch_model}: {len(written)} of {len(galaxies)} cells written", flush=True)
+    return 0
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Compute evidence (Laplace or NSS) for BMA models"
     )
-    parser.add_argument("--galaxy", type=int, required=True, help="Galaxy ID")
+    parser.add_argument("--galaxy", type=int, help="Galaxy ID (required without --batch-model)")
     parser.add_argument(
         "--set",
         choices=["factorial", "named_grid", "named_all"],
@@ -809,6 +1012,17 @@ def main():
         action="store_true",
         help="Run exactly one model (the first in the set), print its stage_times_s, and stop",
     )
+    parser.add_argument(
+        "--batch-model",
+        metavar="MODEL_KEY",
+        help="Fit one factorial model over many galaxies with ONE compiled model "
+        "(laplace route, factorial set only). --galaxy is not used.",
+    )
+    parser.add_argument(
+        "--galaxies",
+        help="Comma-separated galaxy ids for --batch-model (default: the locked 20-galaxy "
+        "sample in results/selected_galaxies_20.json)",
+    )
 
     args = parser.parse_args()
     if args.out is None:
@@ -818,6 +1032,11 @@ def main():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    if args.batch_model:
+        return _run_batch(parser, args)
+    if args.galaxy is None:
+        parser.error("--galaxy is required unless --batch-model is given")
 
     # Resolve max_models (prefer --max-models over --limit)
     max_models = getattr(args, "max_models", None) or getattr(args, "limit", None)

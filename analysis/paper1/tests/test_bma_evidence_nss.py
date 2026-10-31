@@ -217,6 +217,30 @@ def test_laplace_route_is_unchanged(fakes):
     assert npz is not None and npz["log_stellar_mass_formed"].shape == (500,)
 
 
+@pytest.mark.parametrize("route", ["laplace", "nss"])
+def test_factorial_cell_evaluates_sfh_priors_at_the_shared_reference_redshift(
+    fakes, monkeypatch, route
+):
+    """A factorial cell uses the same SFH priors whatever the galaxy's redshift.
+
+    The model itself stays at the galaxy's ``z``; only the z-dependent SFH priors
+    are evaluated at ``Z_REF_FACTORIAL``, as in the batched factorial build.
+    """
+    import paper1.bma_space as bma_space
+
+    calls = []
+
+    def record(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakeSED()
+
+    monkeypatch.setattr(bma_space, "build_model", record)
+    _run(route)
+    ((args, kwargs),) = calls
+    assert args[3] == 1.0  # the galaxy's own redshift (_run passes z = 1.0)
+    assert kwargs.get("prior_z") == bma_space.Z_REF_FACTORIAL
+
+
 def test_default_output_dirs_are_separate_per_route():
     assert be.DEFAULT_OUT["laplace"].endswith("results/bma_evidence")
     assert be.DEFAULT_OUT["nss"].endswith("results/bma_evidence_nss")
