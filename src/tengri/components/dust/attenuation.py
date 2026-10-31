@@ -894,6 +894,27 @@ def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jn
 
     Notes
     -----
+    The returned curve follows
+
+    .. math::
+
+        \frac{A(\lambda)}{A(V)} = \frac{E(\lambda - V)/E(B-V) + R_V}{R_V},
+        \qquad
+        \frac{E(\lambda - V)}{E(B-V)} = c_1 + c_2 x + c_3 D(x) + c_4 F(x)
+
+    for :math:`x \ge 1/0.27\,\mu\mathrm{m}^{-1}`, with the Drude profile
+    :math:`D(x) = x^2 / [(x^2 - x_0^2)^2 + x^2 \gamma^2]` and the far-UV term
+    :math:`F(x) = 0.5392\,(x - 5.9)^2 + 0.05644\,(x - 5.9)^3` for
+    :math:`x \ge 5.9\,\mu\mathrm{m}^{-1}` (zero below). Here
+    :math:`x = 10^4/\lambda` [:math:`\mu\mathrm{m}^{-1}`] with :math:`\lambda`
+    in Angstrom, :math:`R_V` is dimensionless,
+    :math:`c_2 = -0.824 + 4.717/R_V` and :math:`c_1 = 2.030 - 3.007\,c_2`
+    are dimensionless, :math:`x_0 = 4.596\,\mu\mathrm{m}^{-1}` and
+    :math:`\gamma = 0.99\,\mu\mathrm{m}^{-1}` are the bump centre and width, and
+    :math:`c_3 = 3.23`, :math:`c_4 = 0.41` are the bump and far-UV strengths.
+    At longer wavelengths the natural cubic spline in :math:`x` through the
+    nine anchors replaces the expression.
+
     **JIT-compatible**: yes, fixed knots and jnp primitives. The spline
     curvature matrix is computed once on the host at import.
     **Gradient-safe**: yes; both branches are finite for every wavelength in
