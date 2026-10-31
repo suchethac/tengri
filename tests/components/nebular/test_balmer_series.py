@@ -225,6 +225,26 @@ def test_added_luminosity_has_a_live_gradient_in_logu(on):
     assert bool(jnp.all(jnp.isfinite(vals))) and bool(jnp.all(vals > 0.0))
 
 
+def test_extension_survives_weights_threaded_as_a_jit_argument(on):
+    """With the weights passed as a traced jit argument, the added lines are still R_n L(Hb)."""
+    eager_wav = np.asarray(on.predict_nebular_split(ssp_wave=_WAVE, **_KW)[1])
+
+    @jax.jit
+    def run(weights):
+        _, wav, lum = on.predict_nebular_split(ssp_wave=_WAVE, template_data=weights, **_KW)
+        return wav, lum
+
+    wav, lum = run(on.weights)
+    np.testing.assert_allclose(np.asarray(wav), eager_wav, rtol=0.0, atol=1e-9)
+    added = _is_added(eager_wav)
+    lum = np.asarray(lum)
+    ratios = np.array([r for _, _, r in BALMER_CASE_B_RATIOS_TO_HBETA])
+    hb = lum[_hbeta(eager_wav)]
+    np.testing.assert_allclose(
+        lum[added][np.argsort(eager_wav[added])[::-1]], ratios * hb, rtol=1e-9
+    )
+
+
 def test_grammar_option_reaches_the_published_catalog(synthetic_ssp_wide):
     """``neb={'type': 'cue', 'balmer_series_n_max': 20}`` publishes H11 to H20 in line_lums."""
     from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel

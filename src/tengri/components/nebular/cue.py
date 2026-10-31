@@ -1687,7 +1687,8 @@ class CueBackend:
             return wav, lum
         added = lum[ext.hbeta_index] * jnp.asarray(ext.ratio, dtype=lum.dtype)
         lum_all = jnp.concatenate([lum, added])[ext.merge_order]
-        wav_all = np.concatenate([np.asarray(wav), ext.wavelength])[ext.merge_order]
+        xp = np if isinstance(wav, np.ndarray) else jnp
+        wav_all = xp.concatenate([wav, ext.wavelength])[ext.merge_order]
         return wav_all, lum_all
 
     @property
