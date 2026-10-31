@@ -11,6 +11,7 @@ from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation.eline_marginalization import (
     ModelLinePrior,
     build_eline_design_matrix,
+    line_foreground_transmission,
     match_model_lines,
     model_line_prior,
     unit_model_line_prior,
@@ -83,8 +84,25 @@ def _hbeta_prior_ratio(ssp, foreground=None):
         log_att = jnp.asarray(derived["log_line_lums_attenuated"], dtype=jnp.float64)
         dl_cm = float(luminosity_distance(_Z))
         index, matched = match_model_lines(waves, [_HBETA_REST_AA])
+        transmission = None
+        if foreground is not None:
+            transmission = line_foreground_transmission(
+                np.array([_HBETA_REST_AA]),
+                _Z,
+                foreground["ebmv_mw"],
+                foreground["rv"],
+                foreground["law"],
+            )
         prior = model_line_prior(
-            log_att, index, matched, np.array([_HBETA_REST_AA]), _Z, dl_cm, 1.0, 0.3
+            log_att,
+            index,
+            matched,
+            np.array([_HBETA_REST_AA]),
+            _Z,
+            dl_cm,
+            1.0,
+            0.3,
+            transmission=transmission,
         )
     assert bool(matched[0])
     mu = float(prior.prior_mean[0])
@@ -228,7 +246,12 @@ def _class_setup(data, sigma, matched_mask, dl_cm=_DL_CM):
         fnu_obs=jnp.asarray(data),
         fnu_err=jnp.asarray(sigma),
         design_matrix_builder=lambda params: jnp.asarray(design),
-        prior_inputs_builder=lambda params: (0.0, dl_cm, params.get("ap", 1.0)),
+        prior_inputs_builder=lambda params: (
+            0.0,
+            dl_cm,
+            params.get("ap", 1.0),
+            jnp.ones(_CAT.shape[0]),
+        ),
         match_index=index,
         matched=np.asarray(matched_mask),
         line_wavelengths=_CAT,
@@ -456,8 +479,26 @@ def _galaxy_data(template, z, params, seed):
     return continuum + lines + sigma * rng.standard_normal(_BW.size), sigma
 
 
-def _prior_inputs(z):
-    return lambda params: (z, luminosity_distance(z), params.get("eline_aperture_frac", 1.0))
+def _template_transmission(template, z, wavelengths):
+    """Screen transmission at the catalog lines, as the model's own foreground defines it."""
+    from tengri.observation.eline_marginalization import line_foreground_transmission
+
+    spec = template.spec
+    if spec.foreground_ebmv_mw > 0.0:
+        return line_foreground_transmission(
+            wavelengths, z, spec.foreground_ebmv_mw, spec.foreground_rv, spec.foreground_law
+        )
+    return jnp.ones(wavelengths.shape[0])
+
+
+def _prior_inputs(template, z, wavelengths):
+    transmission = _template_transmission(template, z, wavelengths)
+    return lambda params: (
+        z,
+        luminosity_distance(z),
+        params.get("eline_aperture_frac", 1.0),
+        transmission,
+    )
 
 
 def _lines_only_class(template, z, flux, sigma, params):
@@ -468,7 +509,7 @@ def _lines_only_class(template, z, flux, sigma, params):
         fnu_obs=jnp.asarray(flux),
         fnu_err=jnp.asarray(sigma),
         design_matrix_builder=lambda params: design,
-        prior_inputs_builder=_prior_inputs(z),
+        prior_inputs_builder=_prior_inputs(template, z, independent),
         match_index=index,
         matched=matched,
         line_wavelengths=independent,
@@ -490,7 +531,7 @@ def _joint_class(template, z, flux, sigma, params):
         eline_prior_type="model",
         eline_line_wavelengths=independent,
         eline_prior_width_dex=_BWIDTH,
-        prior_inputs_builder=_prior_inputs(z),
+        prior_inputs_builder=_prior_inputs(template, z, independent),
         match_index=index,
         matched=matched,
     )

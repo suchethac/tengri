@@ -89,6 +89,7 @@ from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.observation.calibration import calibration_basis
 from tengri.observation.eline_marginalization import (
     eline_amplitude_names,
+    line_foreground_transmission,
     model_line_match,
     model_line_prior,
     unit_line_prior,
@@ -175,12 +176,27 @@ def _prepare_template(model) -> Any:
     return model.threaded_template_inputs()
 
 
-def _line_unit_prior(model, line_set, out: dict, full: dict, g_eff, obs: SpectroBatch, match):
-    """Unit-normal form of the line prior: flat, or centred on the model's own lines."""
+def _line_unit_prior(
+    model, line_set, out: dict, full: dict, g_eff, obs: SpectroBatch, match, has_foreground
+):
+    """Unit-normal form of the line prior: flat, or centred on the model's own lines.
+
+    With a foreground screen the model-centred mean is screened at each line's observed
+    wavelength with the galaxy's own E(B-V), as the projected spectrum is.
+    """
     spectroscopy = model.observation.spectroscopy
     if match is None:
         return unit_line_prior(
             g_eff, spectroscopy.eline_prior_sigma, noise=obs.sigma, pix_mask=obs.pix_mask
+        )
+    transmission = None
+    if has_foreground:
+        transmission = line_foreground_transmission(
+            line_set.independent_wavelengths,
+            obs.z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
         )
     prior = model_line_prior(
         out["log_line_lums_attenuated"],
@@ -191,6 +207,7 @@ def _line_unit_prior(model, line_set, out: dict, full: dict, g_eff, obs: Spectro
         jnp.asarray(luminosity_distance(obs.z)).reshape(()),
         full.get("eline_aperture_frac", 1.0),
         spectroscopy.eline_prior_width_dex,
+        transmission=transmission,
     )
     return unit_model_line_prior(g_eff, prior, noise=obs.sigma, pix_mask=obs.pix_mask)
 
@@ -206,6 +223,7 @@ def _marginal_lines_loglik(
     calibration_marginalize: bool,
     cal_n_poly: int,
     cal_prior_sigma: float,
+    has_foreground: bool,
 ) -> jax.Array:
     """Marginal log-likelihood over the line amplitudes, jointly with the calibration.
 
@@ -220,7 +238,7 @@ def _marginal_lines_loglik(
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
-    line = _line_unit_prior(model, line_set, out, full, g_eff, obs, match)
+    line = _line_unit_prior(model, line_set, out, full, g_eff, obs, match, has_foreground)
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
         design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
@@ -349,6 +367,7 @@ def batched_log_likelihood(
                 calibration_marginalize=calibration_marginalize,
                 cal_n_poly=cal_n_poly,
                 cal_prior_sigma=cal_prior_sigma,
+                has_foreground=spec.has_foreground,
             )
         elif calibration_marginalize:
             total = _spectral_marginal_loglik(out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma)

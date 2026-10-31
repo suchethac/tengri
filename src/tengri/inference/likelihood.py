@@ -627,10 +627,11 @@ def _model_prior_kwargs(context: InferenceContext) -> dict:
 
 
 def _model_prior_inputs(context: InferenceContext):
-    """Closure returning ``(redshift, dl_cm, aperture_frac)`` for the model line prior.
+    """Closure returning ``(redshift, dl_cm, aperture_frac, transmission)`` for the prior.
 
     The redshift and distance follow the forward pass's resolution order, and the
-    aperture fraction is read from ``params`` with ``Fixed(1.0)`` as the default.
+    aperture fraction is read from ``params`` with ``Fixed(1.0)`` as the default. The
+    transmission is the model's Milky Way screen at each catalog line, ones without one.
     """
     model = context.model
     fixed_values = context.fixed_values
@@ -641,9 +642,29 @@ def _model_prior_inputs(context: InferenceContext):
         aperture_frac = params.get(
             "eline_aperture_frac", fixed_values.get("eline_aperture_frac", 1.0)
         )
-        return redshift, dl_cm, aperture_frac
+        transmission = _catalog_foreground(context, redshift)
+        return redshift, dl_cm, aperture_frac, transmission
 
     return inputs
+
+
+def _catalog_foreground(context: InferenceContext, redshift):
+    """Milky Way transmission at the independent catalog lines; ones without a screen."""
+    import jax.numpy as jnp
+
+    from tengri.observation.eline_marginalization import line_foreground_transmission
+
+    spec = context.model.spec
+    wavelengths = context.eline_independent_wavelengths
+    if getattr(spec, "foreground_ebmv_mw", 0.0) > 0.0:
+        return line_foreground_transmission(
+            wavelengths,
+            redshift,
+            spec.foreground_ebmv_mw,
+            spec.foreground_rv,
+            spec.foreground_law,
+        )
+    return jnp.ones(jnp.shape(wavelengths)[0])
 
 
 def _make_eline_design_builder(context: InferenceContext):

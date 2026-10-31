@@ -443,8 +443,8 @@ class ModelELineMarginalizedLikelihood:
     design_matrix_builder : callable, keyword-only
         Closure returning the ``(n_pixels, n_lines)`` design matrix from ``params``.
     prior_inputs_builder : callable, keyword-only
-        Closure returning ``(redshift, dl_cm, aperture_frac)`` from ``params``
-        [dimensionless, cm, dimensionless].
+        Closure returning ``(redshift, dl_cm, aperture_frac, transmission)`` from
+        ``params`` [dimensionless, cm, dimensionless, dimensionless].
     match_index, matched : ndarray, shape (n_lines,), keyword-only
         Static catalog-to-model line map from
         :func:`~tengri.observation.eline_marginalization.match_model_lines`.
@@ -490,7 +490,7 @@ class ModelELineMarginalizedLikelihood:
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         model_spec = prediction[self.channel]
-        redshift, dl_cm, aperture_frac = self.prior_inputs_builder(params)
+        redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
         prior = model_line_prior(
             prediction["log_line_lums_attenuated"],
             self.match_index,
@@ -500,6 +500,7 @@ class ModelELineMarginalizedLikelihood:
             dl_cm,
             aperture_frac,
             self.prior_width_dex,
+            transmission=transmission,
         )
         unit = unit_model_line_prior(design, prior, noise=fnu_err)
         result = marginalize_linear_nuisance(
@@ -677,8 +678,9 @@ class CalibrationELineMarginalizedLikelihood:
     eline_prior_width_dex : float, keyword-only
         Cloudy or model prior width [dex]. Default 0.5.
     prior_inputs_builder, match_index, matched : keyword-only
-        Model prior only: the closure returning ``(redshift, dl_cm, aperture_frac)``
-        from ``params`` and the static catalog-to-model line map, as in
+        Model prior only: the closure returning
+        ``(redshift, dl_cm, aperture_frac, transmission)`` from ``params`` and the static
+        catalog-to-model line map, as in
         :class:`ModelELineMarginalizedLikelihood`. The prediction must carry
         ``"log_line_lums_attenuated"`` [dex].
     channel : str, keyword-only
@@ -750,7 +752,7 @@ class CalibrationELineMarginalizedLikelihood:
         )
         sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
         if self.eline_prior_type == "model":
-            redshift, dl_cm, aperture_frac = self.prior_inputs_builder(params)
+            redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
             model_prior = model_line_prior(
                 prediction["log_line_lums_attenuated"],
                 self.match_index,
@@ -760,6 +762,7 @@ class CalibrationELineMarginalizedLikelihood:
                 dl_cm,
                 aperture_frac,
                 self.eline_prior_width_dex,
+                transmission=transmission,
             )
             line = unit_model_line_prior(design_lines, model_prior, noise=sigma)
         else:

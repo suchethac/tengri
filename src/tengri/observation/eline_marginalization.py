@@ -489,6 +489,41 @@ def model_line_match(model, catalog_wavelengths: np.ndarray) -> tuple[np.ndarray
     return match_model_lines(backend.published_line_wavelengths(), catalog_wavelengths)
 
 
+def line_foreground_transmission(
+    catalog_wavelengths, redshift: float, ebmv_mw, rv, law: str
+) -> jnp.ndarray:
+    r"""Observed-frame Milky Way transmission at each catalog line.
+
+    Parameters
+    ----------
+    catalog_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum wavelengths of the catalog lines [Angstrom].
+    redshift : float
+        Source redshift [dimensionless].
+    ebmv_mw : float or array_like
+        Foreground reddening E(B-V) [mag].
+    rv : float or array_like
+        Total-to-selective extinction ratio R_V [dimensionless].
+    law : str
+        Foreground law, a key of
+        :data:`~tengri.components.dust.foreground.FOREGROUND_LAWS`.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        Transmission :math:`T_l` of the screen at :math:`\lambda_l (1+z)` [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``law`` is static. **Gradient-safe**: yes, with respect to
+    ``ebmv_mw`` and ``rv``. **Vmap-safe**: yes over ``ebmv_mw``.
+    """
+    from tengri.components.dust.foreground import foreground_transmission
+
+    lam_obs = jnp.asarray(catalog_wavelengths) * (1.0 + redshift)
+    return foreground_transmission(lam_obs, ebmv_mw, rv, law)
+
+
 def model_line_prior(
     log_line_lums: jnp.ndarray,
     match_index: np.ndarray,
@@ -498,6 +533,7 @@ def model_line_prior(
     dl_cm: float,
     aperture_frac: float,
     width_dex: float,
+    transmission: jnp.ndarray | None = None,
 ) -> ModelLinePrior:
     r"""Line amplitude prior centred on the model's attenuated line luminosity.
 
@@ -510,13 +546,15 @@ def model_line_prior(
 
     .. math::
 
-        \mu_l = f_\mathrm{ap}\,\frac{L_l\,\lambda_{l,\rm obs}^2}{4\pi d_L^2\, c},
+        \mu_l = f_\mathrm{ap}\,T_l\,\frac{L_l\,\lambda_{l,\rm obs}^2}{4\pi d_L^2\, c},
         \qquad
         w_l = (10^{\,\Delta} - 1)\,\mu_l,
 
-    with :math:`f_\mathrm{ap}` the line aperture fraction, :math:`\lambda_{l,\rm obs} =
-    \lambda_l (1+z)` the observed line wavelength [Angstrom], :math:`c` the speed of
-    light [Angstrom/s] and :math:`\Delta` the prior width [dex]. A line the model does
+    with :math:`f_\mathrm{ap}` the line aperture fraction, :math:`T_l` the observed-frame
+    transmission of the Milky Way foreground screen at the line [dimensionless],
+    :math:`\lambda_{l,\rm obs} = \lambda_l (1+z)` the observed line wavelength
+    [Angstrom], :math:`c` the speed of light [Angstrom/s] and :math:`\Delta` the prior
+    width [dex]. :math:`T_l = 1` when no transmission is given. A line the model does
     not predict has :math:`\mu_l = 0` and is flat.
 
     Parameters
@@ -540,6 +578,11 @@ def model_line_prior(
         line light that the fiber collects.
     width_dex : float
         Prior width :math:`\Delta` [dex].
+    transmission : array_like, shape (n_lines,), optional
+        Observed-frame transmission :math:`T_l` of each catalog line [dimensionless], at
+        :math:`\lambda_l (1+z)`. The per-galaxy path passes the model's Milky Way screen
+        (:func:`line_foreground_transmission`); the batched path passes the galaxy's own
+        ``ebmv_mw``. Default: no screen, :math:`T_l = 1`.
 
     Returns
     -------
@@ -557,6 +600,11 @@ def model_line_prior(
     logarithm of an unmatched line is replaced by zero before the exponential.
 
     **vmap**: yes over any leading batch axis of ``log_line_lums``.
+
+    The transmission is the Milky Way foreground screen only. The intergalactic
+    transmission is not included: every catalog line lies at rest wavelength above
+    1216 Angstrom, where the shipped IGM models transmit exactly one, so the foreground
+    is the only observed-frame transmission a line sees.
     """
     catalog = jnp.asarray(catalog_wavelengths)
     lam_obs = catalog * (1.0 + redshift)
@@ -568,6 +616,8 @@ def model_line_prior(
         aperture_frac * 10.0 ** (safe_log + log_projection),
         0.0,
     )
+    if transmission is not None:
+        mu = mu * jnp.asarray(transmission)
     width = jnp.where(gaussian > 0, (10.0**width_dex - 1.0) * mu, 1.0)
     unit_mean = jnp.where(gaussian * (mu > 0) > 0, 1.0 / (10.0**width_dex - 1.0), 0.0)
     return ModelLinePrior(prior_mean=mu, prior_width=width, gaussian=gaussian, unit_mean=unit_mean)
