@@ -165,16 +165,6 @@ kitchen_sink = dict(
 model = SEDModel.build(ssp_data=ssp, observation=obs, **kitchen_sink)
 print(model.summary())
 
-# AGN powers come from the Prediction API. Each `log_*` key is log10 of a power in erg/s,
-# safe in float32, with an `L_*_lsun` sibling in solar luminosities. `log_L_agn_bol` is the
-# accretion power that `agn_log_lbol` sets; `log_L_agn_los` is the line-of-sight
-# isotropic-equivalent value, derived from the inclination-projected emitted SED.
-pred = model.predict(model.spec.sample(jax.random.PRNGKey(0)))
-props = pred.properties
-print(f"log_L_agn_bol = {props['log_L_agn_bol']:.3f} dex re erg/s")
-print(f"L_agn_bol_lsun = {props['L_agn_bol_lsun']:.3e} Lsun")
-print(f"log_L_agn_los = {props['log_L_agn_los']:.3f} dex re erg/s")
-
 # %% [markdown]
 # ## Citations from the assembled model
 
