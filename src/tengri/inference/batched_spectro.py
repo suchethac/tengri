@@ -55,12 +55,12 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
     require_model_spec,
 )
-from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.inference.backends.mcmc.catalog import (
     GHMC_DEFAULT_SUPERCHAINS,
     build_catalog_mcmc_engine,
@@ -509,7 +509,7 @@ def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     Returns
     -------
     float
-        Maximum over the D coordinates of :func:`~tengri.analysis.diagnostics.autocorrelation.nested_rhat`.
+        Maximum over the D coordinates of the nested R-hat of each coordinate's chains.
     """
     return max(
         float(nested_rhat(jnp.asarray(chains[:, :, d]), n_superchains))
