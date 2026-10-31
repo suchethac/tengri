@@ -36,6 +36,8 @@ So the contract has two halves, both mechanical:
 
 from __future__ import annotations
 
+import weakref
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -87,4 +89,39 @@ def device_table(table) -> jnp.ndarray:
         Device array of the same shape; ``float64`` under x64, ``float32``
         otherwise (integer tables keep their canonical integer width).
     """
-    return jnp.asarray(table, dtype=jax.dtypes.canonicalize_dtype(np.asarray(table).dtype))
+    if isinstance(table, jax.core.Tracer):
+        # A tracer's dtype is already the trace's. Never cached: a cached tracer leaks.
+        return jnp.asarray(table)
+    dtype = jax.dtypes.canonicalize_dtype(table.dtype)
+    if isinstance(table, np.ndarray):
+        return _memoized_device_copy(table, dtype)
+    # A concrete device array made under the other x64 state: cast it, never cache it.
+    return jnp.asarray(table, dtype=dtype)
+
+
+# id(host table) -> (weakref to that table, {canonical dtype: device array}). The
+# weakref callback removes the entry when the table is collected, so a recycled id
+# never returns another table's copy. One device constant per table per dtype keeps
+# a jaxpr from counting the same table twice.
+_DEVICE_MEMO: dict[int, tuple[weakref.ref, dict]] = {}
+
+
+def _memoized_device_copy(table: np.ndarray, dtype) -> jax.Array:
+    """The device copy of a numpy table in ``dtype``, made once per table and dtype."""
+    key = id(table)
+    entry = _DEVICE_MEMO.get(key)
+    if entry is None or entry[0]() is not table:
+
+        def _evict(ref: weakref.ref, key: int = key) -> None:
+            current = _DEVICE_MEMO.get(key)
+            if current is not None and current[0] is ref:
+                del _DEVICE_MEMO[key]
+
+        entry = (weakref.ref(table, _evict), {})
+        _DEVICE_MEMO[key] = entry
+    per_dtype = entry[1]
+    if dtype not in per_dtype:
+        # Under a trace jnp.asarray stages a tracer; a cached tracer leaks (#1462).
+        with jax.ensure_compile_time_eval():
+            per_dtype[dtype] = jnp.asarray(table, dtype=dtype)
+    return per_dtype[dtype]

@@ -28,6 +28,7 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -353,7 +354,7 @@ def torus_lnu_from_grid(
         tuple(jnp.asarray(axis) for axis in grid.axes),
         coords,
     )
-    wave_native = jnp.asarray(grid.wave_grid)
+    wave_native = device_table(grid.wave_grid)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
     return scale_to_lbol_native(template, wave_native, sed, l_scale)
