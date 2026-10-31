@@ -37,6 +37,8 @@ from tengri.observation.eline_catalog import (
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
+from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import log10_four_pi_dl2
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -386,6 +388,203 @@ def unit_line_prior(
         prior_mean=mean / width,
         prior_precision=jnp.eye(n_lines, dtype=design.dtype),
         scale=jnp.exp(log_noise_mean) / jnp.max(width),
+    )
+
+
+class ModelLinePrior(NamedTuple):
+    """Gaussian line prior centred on the model's own line prediction.
+
+    Attributes
+    ----------
+    prior_mean : ndarray, shape (n_lines,)
+        Model line amplitude :math:`\\mu_l` [data units]; zero for flat lines.
+    prior_width : ndarray, shape (n_lines,)
+        Prior standard deviation :math:`w\\,\\mu_l` [data units] of a Gaussian line; one
+        for a flat line, whose unit coefficient carries no prior.
+    gaussian : ndarray, shape (n_lines,)
+        One where the line has a Gaussian prior, zero where it is flat.
+    """
+
+    prior_mean: jnp.ndarray
+    prior_width: jnp.ndarray
+    gaussian: jnp.ndarray
+
+
+def match_model_lines(
+    model_wavelengths: np.ndarray,
+    catalog_wavelengths: np.ndarray,
+    tolerance_aa: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Index the model line matching each catalog line by vacuum wavelength.
+
+    Parameters
+    ----------
+    model_wavelengths : array_like, shape (n_model,)
+        Rest-frame vacuum wavelengths of the model's discrete line catalog [Angstrom].
+    catalog_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum wavelengths of the emission-line catalog [Angstrom].
+    tolerance_aa : float, optional
+        Largest wavelength separation that counts as a match [Angstrom]. Default 1.0.
+
+    Returns
+    -------
+    match_index : ndarray, shape (n_lines,), int
+        Index of the nearest model line for each catalog line (zero where unmatched).
+    matched : ndarray, shape (n_lines,), bool
+        True where a model line lies within ``tolerance_aa`` of the catalog line.
+
+    Notes
+    -----
+    Runs in NumPy at build time. The result is a static map, so the Gaussian/flat split
+    of the line prior is fixed by the catalog and is not a traced quantity.
+    """
+    model = np.asarray(model_wavelengths, dtype=np.float64).reshape(-1)
+    catalog = np.asarray(catalog_wavelengths, dtype=np.float64).reshape(-1)
+    if model.size == 0:
+        return np.zeros(catalog.size, dtype=int), np.zeros(catalog.size, dtype=bool)
+    separation = np.abs(catalog[:, None] - model[None, :])
+    nearest = np.argmin(separation, axis=1)
+    rows = np.arange(catalog.size)
+    return nearest.astype(int), separation[rows, nearest] <= tolerance_aa
+
+
+def model_line_prior(
+    log_line_lums: jnp.ndarray,
+    match_index: np.ndarray,
+    matched: np.ndarray,
+    catalog_wavelengths: np.ndarray,
+    redshift: float,
+    dl_cm: float,
+    aperture_frac: float,
+    width_dex: float,
+) -> ModelLinePrior:
+    r"""Line amplitude prior centred on the model's attenuated line luminosity.
+
+    The model's line luminosity :math:`L_l` [erg/s] is projected onto the spectrum's
+    flux-density scale with the factor that the spectral projection applies to a line.
+    The integrated observed flux of a line is :math:`L_l/(4\pi d_L^2)` [erg/s/cm^2], and
+    :math:`\int F_\nu\,d\lambda = F_l\,\lambda_{\rm obs}^2/c` converts it to the
+    amplitude of a unit-integral profile in data units [F_nu Angstrom]. The prior mean
+    and width are then
+
+    .. math::
+
+        \mu_l = f_\mathrm{ap}\,\frac{L_l\,\lambda_{l,\rm obs}^2}{4\pi d_L^2\, c},
+        \qquad
+        w_l = (10^{\,\Delta} - 1)\,\mu_l,
+
+    with :math:`f_\mathrm{ap}` the line aperture fraction, :math:`\lambda_{l,\rm obs} =
+    \lambda_l (1+z)` the observed line wavelength [Angstrom], :math:`c` the speed of
+    light [Angstrom/s] and :math:`\Delta` the prior width [dex]. A line the model does
+    not predict has :math:`\mu_l = 0` and is flat.
+
+    Parameters
+    ----------
+    log_line_lums : array_like, shape (n_model,)
+        Attenuated model line luminosities :math:`\log_{10}(L_l / \mathrm{erg\,s^{-1}})`
+        [dex], as published by the dust component
+        (``state.derived["log_line_lums_attenuated"]``).
+    match_index : ndarray, shape (n_lines,), int
+        Model-line index of each catalog line, from :func:`match_model_lines`.
+    matched : ndarray, shape (n_lines,), bool
+        Whether each catalog line has a model counterpart, from :func:`match_model_lines`.
+    catalog_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum wavelengths of the catalog lines [Angstrom].
+    redshift : float
+        Source redshift [dimensionless].
+    dl_cm : float
+        Luminosity distance [cm].
+    aperture_frac : float or scalar array
+        Line aperture fraction :math:`f_\mathrm{ap}` [dimensionless]; the share of the
+        line light that the fiber collects.
+    width_dex : float
+        Prior width :math:`\Delta` [dex].
+
+    Returns
+    -------
+    ModelLinePrior
+        Prior mean :math:`\mu_l` [data units], width :math:`w_l` [data units] and the
+        Gaussian indicator of each line.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``match_index`` and ``matched`` are static, and the
+    logarithmic form keeps :math:`\lambda^2/(4\pi d_L^2 c)` representable in float32.
+
+    **Gradient-safe**: yes, with respect to ``log_line_lums``, ``aperture_frac``,
+    ``redshift`` and ``dl_cm``. Unmatched entries are selected, not floored: the
+    logarithm of an unmatched line is replaced by zero before the exponential.
+
+    **vmap**: yes over any leading batch axis of ``log_line_lums``.
+    """
+    catalog = jnp.asarray(catalog_wavelengths)
+    lam_obs = catalog * (1.0 + redshift)
+    log_projection = jnp.log10(lam_obs**2 / C_AA) - log10_four_pi_dl2(dl_cm)
+    gaussian = jnp.asarray(matched, dtype=log_line_lums.dtype)
+    safe_log = jnp.where(gaussian > 0, jnp.asarray(log_line_lums)[match_index], 0.0)
+    mu = jnp.where(
+        gaussian > 0,
+        aperture_frac * 10.0 ** (safe_log + log_projection),
+        0.0,
+    )
+    width = jnp.where(gaussian > 0, (10.0**width_dex - 1.0) * mu, 1.0)
+    return ModelLinePrior(prior_mean=mu, prior_width=width, gaussian=gaussian)
+
+
+def unit_model_line_prior(
+    design: jnp.ndarray,
+    prior: ModelLinePrior,
+    *,
+    noise: jnp.ndarray,
+    pix_mask: jnp.ndarray | None = None,
+) -> UnitLinePrior:
+    r"""Rewrite a model-centred line prior as a unit-normal form for the linear primitive.
+
+    Each amplitude is :math:`a_l = \mu_l + w_l\,a'_l`. A Gaussian line has
+    :math:`a'_l \sim \mathcal{N}(0,1)`, and a flat line has no prior on :math:`a'_l`,
+    which is marked by a zero entry of ``prior_precision``. A line with
+    :math:`\mu_l = 0` has a zero design column and a unit prior, which contributes
+    exactly nothing to the marginal, so it equals deleting the column.
+
+    Parameters
+    ----------
+    design : array_like, shape (n_pix, n_lines)
+        Design matrix :math:`G` [data units per line-amplitude unit].
+    prior : ModelLinePrior
+        Output of :func:`model_line_prior`.
+    noise : array_like, shape (n_pix,)
+        Per-pixel noise standard deviation :math:`\sigma_i` [data units].
+    pix_mask : array_like, shape (n_pix,), optional
+        Pixel mask. Default: all ones.
+
+    Returns
+    -------
+    UnitLinePrior
+        ``(design, prior_mean, prior_precision, scale)`` for
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`, where
+        ``prior_precision`` is diagonal, one for Gaussian lines and zero for flat lines.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Denominators are selected with ``jnp.where`` so a zero
+    width gives a zero mean with a finite gradient.
+
+    **Gradient-safe**: yes, with respect to ``design``, ``noise`` and the prior fields.
+
+    **vmap**: yes over any leading batch axis.
+    """
+    width = prior.prior_width
+    has_width = width > 0
+    safe_width = jnp.where(has_width, width, 1.0)
+    weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
+    log_noise_mean = jnp.sum(weight * jnp.log(noise)) / jnp.sum(weight)
+    max_width = jnp.max(width)
+    scale_width = jnp.where(max_width > 0, max_width, 1.0)
+    return UnitLinePrior(
+        design=design * width,
+        prior_mean=jnp.where(has_width, prior.prior_mean / safe_width, 0.0),
+        prior_precision=jnp.diag(prior.gaussian),
+        scale=jnp.exp(log_noise_mean) / scale_width,
     )
 
 
