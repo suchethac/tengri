@@ -552,6 +552,11 @@ class DerivedState:
 
     # Nebular
     sed_nebular: jnp.ndarray | None = None
+    #: Line share of ``sed_nebular``, ``lines / (continuum + lines)`` on the rest
+    #: grid (0 where the nebular SED is 0), shape (n_wave,). Published by the Cue
+    #: component when built with ``publish_line_fraction=True``; read by
+    #: ``Spectroscopy(nebular_lines=False)`` to drop the lines from the spectrum.
+    nebular_line_frac: jnp.ndarray | None = None
     sed_shock: jnp.ndarray | None = None
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
