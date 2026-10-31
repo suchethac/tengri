@@ -60,6 +60,7 @@ from tengri.forward.batched_spectrum import (
     predict_batched_observables,
     require_model_spec,
 )
+from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.inference.backends.mcmc.catalog import (
     GHMC_DEFAULT_SUPERCHAINS,
     build_catalog_mcmc_engine,
@@ -495,28 +496,25 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
 _GHMC_DRIVER_CHAINS = 32
 
 
-def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float | None:
-    """Per-coordinate maximum nested R-hat of one galaxy, or None while it is unavailable.
+def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
+    """Largest nested R-hat over the coordinates of one galaxy's chains.
 
     Parameters
     ----------
     chains : ndarray, shape (n_chains, n_samples, D)
-        Draws of one galaxy, chain-major, in the latent space.
+        Draws of one galaxy, chain-major, in the latent space [dimensionless].
     n_superchains : int
         Number of superchains the chains are grouped into.
 
     Returns
     -------
-    float or None
-        Largest nested R-hat over the D coordinates, or None when the diagnostic is not
-        available in this installation.
+    float
+        Maximum over the D coordinates of :func:`~tengri.analysis.diagnostics.autocorrelation.nested_rhat`.
     """
-    from tengri.analysis.diagnostics import autocorrelation
-
-    nested_rhat = getattr(autocorrelation, "nested_rhat", None)
-    if nested_rhat is None:
-        return None
-    return float(np.max(np.asarray(nested_rhat(chains, n_superchains))))
+    return max(
+        float(nested_rhat(jnp.asarray(chains[:, :, d]), n_superchains))
+        for d in range(chains.shape[-1])
+    )
 
 
 def fit_spectra_catalog_mcmc(
@@ -587,7 +585,7 @@ def fit_spectra_catalog_mcmc(
         ``"nested_rhat"``: ndarray of float, shape ``(N,)``, or None. For
         ``sampler="ghmc"``, the per-coordinate maximum nested R-hat over the
         ``n_superchains`` superchains of each galaxy's latent draws. None for the other
-        samplers, and None for ``"ghmc"`` while the nested R-hat diagnostic is unavailable.
+        samplers.
 
     Raises
     ------
@@ -657,7 +655,7 @@ def fit_spectra_catalog_mcmc(
         )
         n_draws = positions.shape[1]
         latent_draws = np.asarray(positions)
-        rhat = [None] * n_gal
+        rhat = None
         if sampler == "ghmc":
             per_chain = latent_draws.reshape(n_gal, n_chains, n_draws // n_chains, -1)
             rhat = [_nested_rhat_max(per_chain[g], n_superchains) for g in range(n_gal)]
@@ -678,13 +676,13 @@ def fit_spectra_catalog_mcmc(
     draws = {n: np.concatenate([b["draws"][n] for b in per_bucket], axis=0)[order] for n in names}
     divergences = np.concatenate([b["divergences"] for b in per_bucket])[order]
     n_warmup_used = np.full(catalog_index.shape[0], int(n_warmup), dtype=int)
-    nested_rhat = None
-    if sampler == "ghmc" and all(None not in b["nested_rhat"] for b in per_bucket):
+    rhat_out = None
+    if sampler == "ghmc":
         flat_rhat = [r for b in per_bucket for r in b["nested_rhat"]]
-        nested_rhat = np.asarray(flat_rhat, dtype=float)[order]
+        rhat_out = np.asarray(flat_rhat, dtype=float)[order]
     return {
         "draws": draws,
         "divergences": divergences,
         "n_warmup_used": n_warmup_used,
-        "nested_rhat": nested_rhat,
+        "nested_rhat": rhat_out,
     }
