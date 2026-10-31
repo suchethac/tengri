@@ -224,8 +224,7 @@ def _interpolate_and_normalize(
     axes: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
-    agn_log_lbol: float,
-    agn_torus_frac: float,
+    l_scale: float,
 ) -> jnp.ndarray:
     r"""Interpolate a template grid and normalize to physical :math:`L_\nu`.
 
@@ -243,7 +242,7 @@ def _interpolate_and_normalize(
     where :math:`\lambda` is wavelength [Angstrom], :math:`c` the speed of
     light [Angstrom/s], :math:`L_\lambda` the tabulated template and
     :math:`L_\nu` the specific luminosity [erg/s/Hz]. The result is scaled so
-    that :math:`\int L_\nu \, d\nu = f L_{\rm bol}` over the template's native grid.
+    that :math:`\int L_\nu \, d\nu = l_{\rm scale}` over the template's native grid.
 
     Parameters
     ----------
@@ -258,10 +257,8 @@ def _interpolate_and_normalize(
         Target wavelength array [Angstrom].
     point : tuple
         (r_ratio, tau, beta, gamma, oa, psy) query point.
-    agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
-    agn_torus_frac : float
-        Fraction :math:`f` of :math:`L_{\rm bol}` the template carries [dimensionless].
+    l_scale : float
+        Luminosity scale factor [erg/s].
 
     Returns
     -------
@@ -273,14 +270,12 @@ def _interpolate_and_normalize(
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
 
     The normalization integral is taken over the template's own native
-    wavelength grid, before resampling, so :math:`f L_{\rm bol}` is the template's total
+    wavelength grid, before resampling, so ``l_scale`` is the template's total
     power whatever the requested grid: a grid that stops short of the template
     (one ending at 30 micron holds as little as 15 % of its power) carries
-    only the part of it that falls inside it. The power is applied by
-    ``_template_grid.scale_by_torus_power``: a linear product in float64, a ``log10``
-    offset in float32, where ``10**agn_log_lbol L_sun`` alone overflows (#3084).
+    only the part of ``l_scale`` that falls inside it.
 
-    Each call renormalizes its template to :math:`f L_{\rm bol}`, so
+    Each call renormalizes its template to ``l_scale``, so
     :func:`fritz_components` carries the shape of the disc and of the dust but
     not the library's disc-to-dust ratio.
 
@@ -296,6 +291,12 @@ def _interpolate_and_normalize(
     """
     # The torus library is a tabulated radiative-transfer result, so the lookup is a
     # node-exact PCHIP interpolant rather than the triweight smoother (#2606).
+    sed_nu, integral_safe = _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point)
+    return l_scale * sed_nu / integral_safe
+
+
+def _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point):
+    """The interpolated template as :math:`L_\\nu` [template units] and its native integral."""
     _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
     _refuse_off_grid("agn_fritz_psy", point[5], axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
     template = interp_nd_pchip(grid_jax, axes, point, extrapolate=_PSY_EXTRAPOLATE)
@@ -303,8 +304,36 @@ def _interpolate_and_normalize(
     # result does not depend on the caller's wavelength sampling or range.
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
     sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
-    return scale_by_torus_power(sed_nu, integral_safe, agn_log_lbol, agn_torus_frac)
+    return sed_lam * wavelength**2 / _C_AA_PER_S, integral_safe
+
+
+def _interpolate_to_power(grid_jax, wave_grid, axes, wavelength, point, agn_log_lbol, frac):
+    r""":func:`_interpolate_and_normalize` at :math:`f\,10^{\rm agn\_log\_lbol} L_\odot`.
+
+    Parameters
+    ----------
+    grid_jax, wave_grid, axes, wavelength, point
+        As for :func:`_interpolate_and_normalize`.
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
+    frac : float
+        Fraction :math:`f` of :math:`L_{\rm bol}` the template carries [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Specific luminosity :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The power is applied by
+    ``_template_grid.scale_by_torus_power``: in float64 the linear product
+    ``10**agn_log_lbol * L_sun * f * sed / integral`` of :func:`_interpolate_and_normalize`
+    (bit for bit), in float32 as a ``log10`` offset, since ``10**agn_log_lbol L_sun`` alone
+    overflows there beyond ``agn_log_lbol`` of about 4.9 (#3084).
+    """
+    sed_nu, integral_safe = _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point)
+    return scale_by_torus_power(sed_nu, integral_safe, agn_log_lbol, frac)
 
 
 class FritzGrid(NamedTuple):
@@ -547,7 +576,7 @@ def fritz_sed_from_grid(
     # scalar on the six axes; the shape is the unit-power ``fritz2006/dust`` records as
     # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
     # axis, mu = cos i = sin(psy).
-    shape = _interpolate_and_normalize(
+    shape = _interpolate_to_power(
         jnp.asarray(grid.dust),
         jnp.asarray(grid.wave_grid),
         axes,
@@ -679,9 +708,9 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        scale = (agn_log_lbol, agn_torus_frac)
-        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, *scale)
-        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, *scale)
+        power = (agn_log_lbol, agn_torus_frac)
+        disk = _interpolate_to_power(disk_jax, wave_grid, axes, wavelength, point, *power)
+        dust = _interpolate_to_power(dust_jax, wave_grid, axes, wavelength, point, *power)
         return FritzComponents(disk=disk, dust=dust)
 
     return fritz_components
