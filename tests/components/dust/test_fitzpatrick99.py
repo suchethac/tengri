@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.dust.attenuation import fitzpatrick99
+from tengri.components.dust.attenuation import fitzpatrick99, fitzpatrick99_unnormalized
 
 pytestmark = pytest.mark.regression_paper
 
@@ -29,8 +29,18 @@ _TABLE3_A_OVER_EBV = np.array([0.265, 0.829, 2.688, 3.055, 3.806, 4.315, 6.265, 
 
 
 def _a_over_ebv(wave_a: np.ndarray, rv: float) -> np.ndarray:
-    """Convert the A(V)-normalized output to A(lambda)/E(B-V) for comparison with the tables."""
-    return np.asarray(fitzpatrick99(jnp.asarray(wave_a), dust_Rv=rv)) * rv
+    """Paper-convention A(lambda)/E(B-V): the unnormalized curve times R_V."""
+    return np.asarray(fitzpatrick99_unnormalized(jnp.asarray(wave_a), dust_Rv=rv)) * rv
+
+
+def test_registered_law_is_unity_at_v_band_and_is_the_paper_curve_renormalized():
+    """The registry contract is k(5500 A) = 1; the shape is the paper's curve over its V value."""
+    wave_a = np.array([26500.0, 6000.0, 4110.0, 2600.0])
+    v_value = float(np.asarray(fitzpatrick99_unnormalized(jnp.asarray([5500.0]), dust_Rv=3.1))[0])
+    registered = np.asarray(fitzpatrick99(jnp.asarray(np.r_[wave_a, 5500.0]), dust_Rv=3.1))
+    assert registered[-1] == pytest.approx(1.0, abs=1e-12)
+    paper = np.asarray(fitzpatrick99_unnormalized(jnp.asarray(wave_a), dust_Rv=3.1))
+    np.testing.assert_allclose(registered[:-1], paper / v_value, rtol=1e-12)
 
 
 def test_table3_anchors_at_r31_to_one_percent():

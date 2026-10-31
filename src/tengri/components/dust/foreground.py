@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.components.dust.attenuation import cardelli, fitzpatrick99
+from tengri.components.dust.attenuation import cardelli, fitzpatrick99_unnormalized
 
 #: Laws usable as a foreground screen, keyed by the ``foreground={'law': ...}`` name.
-#: Each takes ``(wave_obs, dust_Rv=...)`` and returns A(lambda)/A(V).
-FOREGROUND_LAWS = {"cardelli": cardelli, "fitzpatrick99": fitzpatrick99}
+#: Each takes ``(wave_obs, dust_Rv=...)`` and returns A(lambda)/A(V). Fitzpatrick (1999)
+#: enters in its paper convention (A(V) = R_V E(B-V) from the spline, no renormalization),
+#: so the transmission matches the tabulated A(lambda)/E(B-V). The registered dust law
+#: ``fitzpatrick99`` is the same curve normalized to k(5500 A) = 1; both come from one
+#: implementation.
+FOREGROUND_LAWS = {"cardelli": cardelli, "fitzpatrick99": fitzpatrick99_unnormalized}
 
 
 def foreground_transmission(wave_obs, ebmv_mw, rv, law):

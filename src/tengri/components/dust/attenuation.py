@@ -869,13 +869,16 @@ def _natural_spline_eval(
     )
 
 
-@register_dust_law(
-    "fitzpatrick99",
-    citation="Fitzpatrick 1999 (PASP 111, 63) MW extinction",
-    short_doc="Fitzpatrick (1999) Milky Way extinction curve, R_V = 3.1 default; FM90 UV + optical/IR spline",
-)
-def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
-    r"""Fitzpatrick (1999) Milky Way extinction law, normalized to A(V).
+def fitzpatrick99_unnormalized(
+    wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV
+) -> jnp.ndarray:
+    r"""Fitzpatrick (1999) Milky Way extinction law in the paper's own convention.
+
+    Returns :math:`A(\lambda)/A(V)` with :math:`A(V) = R_V\,E(B-V)` taken from the
+    paper's spline, without renormalizing at 5500 Angstrom. The foreground screen
+    uses this form, so its transmission is the tabulated :math:`A(\lambda)/E(B-V)`
+    times :math:`E(B-V)`. The registered dust law :func:`fitzpatrick99` divides
+    this curve by its own value at 5500 Angstrom.
 
     Optical and infrared from a natural cubic spline through the paper's
     anchor points; ultraviolet (lambda at or below 2700 Angstrom) from the
@@ -958,6 +961,42 @@ def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jn
     uv = _fm90_uv_extinction(x, rv)
     a_ebv = jnp.where(x >= _F99_X_JOINT, uv, spline)
     return a_ebv / rv
+
+
+@register_dust_law(
+    "fitzpatrick99",
+    citation="Fitzpatrick 1999 (PASP 111, 63) MW extinction",
+    short_doc="Fitzpatrick (1999) Milky Way extinction curve, R_V = 3.1 default; FM90 UV + optical/IR spline",
+)
+def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
+    r"""Fitzpatrick (1999) Milky Way extinction curve, normalized to k(5500 A) = 1.
+
+    Parameters
+    ----------
+    wave_obs : array_like, shape (n_wave,)
+        Observed wavelength grid. [Angstrom]
+    dust_Rv : float
+        Total-to-selective extinction ratio R_V. [dimensionless]
+        Default: 3.1.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Extinction curve k(lambda) = A(lambda)/A(5500 A), normalized so that
+        k(5500 A) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, with respect to ``wave_obs``
+    and ``dust_Rv``. **Vmap-safe**: yes.
+
+    Divides :func:`fitzpatrick99_unnormalized` by its own value at 5500 Angstrom,
+    which is the V-band convention every registered dust law follows (cardelli
+    normalizes the same way). The foreground screen does not use this form.
+    """
+    k_lambda = fitzpatrick99_unnormalized(wave_obs, dust_Rv)
+    k_v = fitzpatrick99_unnormalized(jnp.asarray([V_BAND_ANGSTROM]), dust_Rv)[0]
+    return k_lambda / k_v
 
 
 def _ccm89_far_uv_ab(x: jnp.ndarray, x_cap: float) -> tuple[jnp.ndarray, jnp.ndarray]:
