@@ -76,6 +76,7 @@ from tengri.components.agn.skirtor import (
 from tengri.components.xray.xray import wabs_cross_section
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import library_lookup, resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import HC_KEV_ANGSTROM
 from tengri.utils.scale import representable_floor
@@ -286,7 +287,7 @@ def skirtor_line_of_sight_ratio(
     TengriIOError
         If the grid has no ``norm``.
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     log_disk = _log_table(grid.disk)
     log_norm = _log_table(_require_norm(grid.norm, "SKIRTOR"))
     geometry = (tau, p, q, oa, radius)
@@ -339,7 +340,7 @@ def fritz_line_of_sight_ratio(
     TengriIOError
         If the grid has no ``norm``.
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     log_disk = _log_table(grid.disk)
     log_norm = _log_table(_require_norm(grid.norm, "Fritz (2006)"))
     geometry = (r_ratio, tau, beta, gamma, oa)
@@ -378,13 +379,13 @@ def _skirtor_disc_grid(library) -> SKIRTORDiscAttenGrid | None:
     dd = library.disc_dust
     if dd is None:
         return None
-    axes = tuple(jnp.asarray(a) for a in dd.axes)
+    axes = tuple(device_table(a) for a in dd.axes)
     return SKIRTORDiscAttenGrid(
-        disk=jnp.asarray(dd.disk),
-        wave_grid=jnp.asarray(dd.wave_grid),
+        disk=device_table(dd.disk),
+        wave_grid=device_table(dd.wave_grid),
         axes=axes,
         edges=tuple(edges_for_grid(a) for a in axes),
-        norm=None if dd.norm is None else jnp.asarray(dd.norm),
+        norm=None if dd.norm is None else device_table(dd.norm),
     )
 
 
@@ -440,7 +441,7 @@ def _library_sightline(
         grid = _skirtor_disc_grid(library)
         if grid is None:
             return None
-        wave_min = jnp.asarray(grid.wave_grid)[0]
+        wave_min = device_table(grid.wave_grid)[0]
         ratio, live = skirtor_line_of_sight_ratio(
             grid,
             wavelength,
@@ -457,7 +458,7 @@ def _library_sightline(
         fgrid = _fritz_disk_grid(library)
         if fgrid is None:
             return None
-        wave_min = jnp.asarray(fgrid.wave_grid)[0]
+        wave_min = device_table(fgrid.wave_grid)[0]
         ratio, live = fritz_line_of_sight_ratio(
             fgrid,
             wavelength,
