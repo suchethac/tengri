@@ -14,6 +14,7 @@ Runs on the synthetic SSP (no ``data/ssp_*.h5``). Auto-marked ``slow``.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -24,7 +25,10 @@ from tengri.inference.batched_spectro import (
     batched_neg_log_posterior,
     fit_spectra_catalog_mcmc,
 )
-from tengri.observation.batched import build_spectro_batches
+from tengri.inference.fitter import Fitter
+from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+from tengri.observation.eline_marginalization import eline_amplitude_names
+from tests.contract.test_batched_elines import _R, _grid, _line_design, _template
 from tests.contract.test_batched_spectro_loglik import (
     _MASS,
     _mock_catalog,
@@ -132,3 +136,113 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
     seen.clear()
     fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
     assert seen == [None, None]
+
+
+_LINE_AMPS = {
+    "eline_amp_Hbeta": 1.0e-14,
+    "eline_amp_OIII_5007": 2.0e-14,
+    "eline_amp_Halpha": 3.0e-14,
+}
+_LINE_PRIOR = 1.0e-14
+_LINE_NOISE = 1.0e-17
+_LINE_MASSES = (10.0, 10.3, 9.7)
+
+
+def _matched_fitted_lines(ssp, n_gal, n_warmup, n_samples, seed=0):
+    """Batched catalog NUTS and per-galaxy Fitter NUTS on the same fitted-line mocks.
+
+    Each galaxy is the template continuum at its own redshift plus the injected line
+    profiles and Gaussian noise. The batched sampler and one :class:`Fitter` per galaxy
+    draw the same number of warmup and kept samples.
+
+    Parameters
+    ----------
+    ssp : SSPData
+        Synthetic SSP the template is built on.
+    n_gal : int
+        Number of mock galaxies.
+    n_warmup : int
+        Warmup steps per galaxy, for both samplers.
+    n_samples : int
+        Draws kept per galaxy, for both samplers.
+    seed : int, optional
+        Seed for the noise, the batched sampler and the Fitter keys. Default 0.
+
+    Returns
+    -------
+    dict
+        ``"rows"``: list of dict, one per galaxy and parameter, with keys ``galaxy``,
+        ``param``, ``batched_median``, ``fitter_median``, ``half_width`` (half the
+        16-84 % range of the Fitter draws) and ``ratio`` (absolute median difference
+        divided by ``half_width``).
+    """
+    wave = _grid(600, 4000.0, 7500.0)
+    template = _template(ssp, wave, banded=True, prior=_LINE_PRIOR)
+    line_names = eline_amplitude_names(template.observation.spectroscopy.effective_catalog)
+    amps = np.asarray([_LINE_AMPS[nm] for nm in line_names])
+    rng = np.random.default_rng(seed)
+    records, noises = [], []
+    for i in range(n_gal):
+        z = 0.10 + 0.01 * i
+        mass = _LINE_MASSES[i % len(_LINE_MASSES)]
+        continuum = np.asarray(template.predict_spectrum({_MASS: mass, "redshift": z}))
+        design = np.asarray(_line_design(template, wave, z))
+        flux = continuum + design @ amps + rng.normal(0.0, _LINE_NOISE, wave.size)
+        sigma = np.full(wave.size, _LINE_NOISE)
+        records.append(
+            GalaxySpectrum(wave=wave, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_R)
+        )
+        noises.append((flux, sigma))
+    batches = build_spectro_batches(records, quantum=None, model=template)
+    batched = fit_spectra_catalog_mcmc(
+        template,
+        batches,
+        sampler="nuts",
+        n_warmup=n_warmup,
+        n_burnin=0,
+        n_samples=n_samples,
+        seed=seed,
+    )
+    names = [_MASS, *line_names]
+    rows = []
+    for i, (flux, sigma) in enumerate(noises):
+        fitter = Fitter(template, data=flux, noise=sigma, data_type="spectroscopy", approx=None)
+        post = fitter.run(
+            "mcmc_nuts",
+            key=jax.random.PRNGKey(seed + i),
+            n_warmup=n_warmup,
+            n_burnin=0,
+            n_samples=n_samples,
+            verbose=False,
+        )
+        for name in names:
+            fit_draws = np.asarray(post.samples[name]).reshape(-1)
+            lo, fit_median, hi = np.percentile(fit_draws, [16, 50, 84])
+            half_width = 0.5 * float(hi - lo)
+            batched_median = float(np.median(np.asarray(batched["draws"][name])[i]))
+            rows.append(
+                {
+                    "galaxy": i,
+                    "param": name,
+                    "batched_median": batched_median,
+                    "fitter_median": float(fit_median),
+                    "half_width": half_width,
+                    "ratio": abs(batched_median - float(fit_median)) / half_width,
+                }
+            )
+    return {"rows": rows}
+
+
+def test_fitted_lines_posteriors_match_fitter(synthetic_ssp):
+    """Batched and per-galaxy posteriors agree within 5 % of the Fitter half-width."""
+    result = _matched_fitted_lines(synthetic_ssp, n_gal=3, n_warmup=300, n_samples=600)
+    header = f"{'galaxy':>6} {'param':<24} {'batched':>13} {'fitter':>13} {'half_width':>13}"
+    print()
+    print(f"{header} {'ratio':>9}")
+    for r in result["rows"]:
+        print(
+            f"{r['galaxy']:>6} {r['param']:<24} {r['batched_median']:>13.6e} "
+            f"{r['fitter_median']:>13.6e} {r['half_width']:>13.6e} {r['ratio']:>9.4f}"
+        )
+    for r in result["rows"]:
+        assert r["ratio"] < 0.05, f"galaxy {r['galaxy']} {r['param']}: ratio {r['ratio']:.4f}"
