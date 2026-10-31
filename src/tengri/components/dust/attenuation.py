@@ -781,6 +781,180 @@ def prevot_smc(
     return k_norm * ramp_factor
 
 
+#: Fitzpatrick (1999) Table 3 anchor wavelengths [Angstrom], IR to UV. The lambda = infinity
+#: anchor (x = 0) is fixed at zero extinction, so it is prepended to these eight.
+_F99_ANCHOR_WAVE_A = (26500.0, 12200.0, 6000.0, 5470.0, 4670.0, 4110.0, 2700.0, 2600.0)
+#: Fitzpatrick (1999) Table 3 IR anchors at R_V = 3.1, A(lambda)/E(B-V); scaled by R_V/3.1.
+_F99_IR_ANCHOR_VALUES = (0.265, 0.829)
+#: Fitzpatrick (1999) Eq. (2) bump parameters, Appendix values: x0 and gamma in 1/um, c3, c4.
+_F99_X0 = 4.596
+_F99_GAMMA = 0.99
+_F99_C3 = 3.23
+_F99_C4 = 0.41
+#: Fitzpatrick & Massa (1990) Eq. (4) far-UV onset [1/um] and quadratic and cubic coefficients.
+_FM90_X_FUV = 5.9
+_FM90_FUV_QUAD = 0.5392
+_FM90_FUV_CUBIC = 0.05644
+#: x = 1/lambda [1/um] at 2700 Angstrom: the spline/FM90 joint. FM90 is used for x at or above it.
+_F99_X_JOINT = 1.0e4 / 2700.0
+
+
+def _natural_spline_curvature_operator(x_knots: np.ndarray) -> np.ndarray:
+    """Return the (n, n) matrix mapping knot values to natural-spline second derivatives."""
+    n = x_knots.shape[0]
+    h = np.diff(x_knots)
+    lhs = np.zeros((n, n))
+    rhs = np.zeros((n, n))
+    lhs[0, 0] = 1.0
+    lhs[-1, -1] = 1.0
+    for i in range(1, n - 1):
+        lhs[i, i - 1] = h[i - 1]
+        lhs[i, i] = 2.0 * (h[i - 1] + h[i])
+        lhs[i, i + 1] = h[i]
+        rhs[i, i - 1] = 6.0 / h[i - 1]
+        rhs[i, i] = -6.0 / h[i - 1] - 6.0 / h[i]
+        rhs[i, i + 1] = 6.0 / h[i]
+    return np.linalg.solve(lhs, rhs)
+
+
+_F99_KNOT_X = np.concatenate([[0.0], 1.0e4 / np.asarray(_F99_ANCHOR_WAVE_A)])
+_F99_CURVATURE_OPERATOR = _natural_spline_curvature_operator(_F99_KNOT_X)
+
+
+def _fm90_uv_extinction(x: jnp.ndarray, rv: jnp.ndarray) -> jnp.ndarray:
+    """Return A(lambda)/E(B-V) from the FM90 form, Eqs. (2)-(4), at x [1/um]."""
+    c2 = -0.824 + 4.717 / rv
+    c1 = 2.030 - 3.007 * c2
+    drude = x**2 / ((x**2 - _F99_X0**2) ** 2 + (x * _F99_GAMMA) ** 2)
+    y_fuv = jnp.where(x >= _FM90_X_FUV, x - _FM90_X_FUV, 0.0)
+    far_uv = _FM90_FUV_QUAD * y_fuv**2 + _FM90_FUV_CUBIC * y_fuv**3
+    return c1 + c2 * x + _F99_C3 * drude + _F99_C4 * far_uv + rv
+
+
+def _fitzpatrick99_anchors(rv: jnp.ndarray) -> jnp.ndarray:
+    """Return the nine spline values A(lambda)/E(B-V) for R_V, shape (9,)."""
+    zero = jnp.zeros_like(rv)
+    ir_scale = rv / 3.1
+    uv = _fm90_uv_extinction(jnp.asarray(1.0e4 / np.asarray(_F99_ANCHOR_WAVE_A[-2:])), rv)
+    return jnp.stack(
+        [
+            zero,
+            _F99_IR_ANCHOR_VALUES[0] * ir_scale,
+            _F99_IR_ANCHOR_VALUES[1] * ir_scale,
+            -0.426 + 1.0044 * rv,
+            -0.050 + 1.0016 * rv,
+            0.701 + 1.0016 * rv,
+            1.208 + 1.0032 * rv - 0.00033 * rv**2,
+            uv[0],
+            uv[1],
+        ]
+    )
+
+
+def _natural_spline_eval(
+    x: jnp.ndarray, values: jnp.ndarray, curvature: jnp.ndarray
+) -> jnp.ndarray:
+    """Evaluate the fixed-knot natural cubic spline at x [1/um]."""
+    n = _F99_KNOT_X.shape[0]
+    knots = device_table(_F99_KNOT_X)
+    idx = jnp.clip(jnp.searchsorted(knots, x, side="right") - 1, 0, n - 2)
+    x_lo = knots[idx]
+    h = knots[idx + 1] - x_lo
+    a = (knots[idx + 1] - x) / h
+    b = (x - x_lo) / h
+    return (
+        a * values[idx]
+        + b * values[idx + 1]
+        + ((a**3 - a) * curvature[idx] + (b**3 - b) * curvature[idx + 1]) * h**2 / 6.0
+    )
+
+
+def fitzpatrick99(wave_obs: jnp.ndarray, dust_Rv: float = DEFAULT_DUST_RV) -> jnp.ndarray:
+    r"""Fitzpatrick (1999) Milky Way extinction law, normalized to A(V).
+
+    Optical and infrared from a natural cubic spline through the paper's
+    anchor points; ultraviolet (lambda at or below 2700 Angstrom) from the
+    Fitzpatrick & Massa (1990) parameterization. Both branches meet at 2700
+    Angstrom.
+
+    Parameters
+    ----------
+    wave_obs : array_like, shape (n_wave,)
+        Observed wavelength grid. [Angstrom]
+    dust_Rv : float
+        Total-to-selective extinction ratio R_V = A(V)/E(B-V). [dimensionless]
+        Default: 3.1.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Extinction curve A(lambda)/A(V) = (E(lambda-V)/E(B-V) + R_V) / R_V.
+        [dimensionless]. Table 3 of Fitzpatrick (1999) gives A(lambda)/E(B-V), so
+        the tabulated values equal this output multiplied by R_V.
+
+    Notes
+    -----
+    The returned curve follows
+
+    .. math::
+
+        \frac{A(\lambda)}{A(V)} = \frac{E(\lambda - V)/E(B-V) + R_V}{R_V},
+        \qquad
+        \frac{E(\lambda - V)}{E(B-V)} = c_1 + c_2 x + c_3 D(x) + c_4 F(x)
+
+    for :math:`x \ge 1/0.27\,\mu\mathrm{m}^{-1}`, with the Drude profile
+    :math:`D(x) = x^2 / [(x^2 - x_0^2)^2 + x^2 \gamma^2]` and the far-UV term
+    :math:`F(x) = 0.5392\,(x - 5.9)^2 + 0.05644\,(x - 5.9)^3` for
+    :math:`x \ge 5.9\,\mu\mathrm{m}^{-1}` (zero below). Here
+    :math:`x = 10^4/\lambda` [:math:`\mu\mathrm{m}^{-1}`] with :math:`\lambda`
+    in Angstrom, :math:`R_V` is dimensionless,
+    :math:`c_2 = -0.824 + 4.717/R_V` and :math:`c_1 = 2.030 - 3.007\,c_2`
+    are dimensionless, :math:`x_0 = 4.596\,\mu\mathrm{m}^{-1}` and
+    :math:`\gamma = 0.99\,\mu\mathrm{m}^{-1}` are the bump center and width, and
+    :math:`c_3 = 3.23`, :math:`c_4 = 0.41` are the bump and far-UV strengths.
+    At longer wavelengths the natural cubic spline in :math:`x` through the
+    nine anchors replaces the expression.
+
+    **JIT-compatible**: yes, fixed knots and jnp primitives. The spline
+    curvature matrix is computed once on the host at import.
+    **Gradient-safe**: yes; both branches are finite for every wavelength in
+    the optical to far-UV range, and the gradient with respect to ``dust_Rv``
+    is nonzero.
+    **Vmap-safe**: yes, no Python branching on traced values.
+
+    The optical and infrared anchors follow Table 3 at R_V = 3.1, and Table 4
+    gives the R_V dependence of the optical anchors. The infrared anchors
+    scale with R_V / 3.1. The 2700 and 2600 Angstrom anchors are the FM90
+    curve. The spline uses natural boundary conditions, which the paper does
+    not specify.
+
+    The far-UV term F(x) is FM90 Eq. (4) as printed. None of the tabulated
+    anchors lies at x >= 5.9 1/um, so the tables do not test its coefficients.
+    The paper's mean values are x0 = 4.596 1/um, gamma = 0.99 1/um, c3 = 3.23
+    and c4 = 0.41; c2 and c1 follow from R_V through Eqs. (A1)-(A2).
+
+    Use with the Schlafly & Finkbeiner (2011) recalibration of the
+    Schlegel et al. (1998) dust map by multiplying the map E(B-V) by 0.86
+    before it enters this law. This function applies the E(B-V) it is given.
+
+    References
+    ----------
+    .. [1] E. L. Fitzpatrick, "Correcting for the Effects of Interstellar
+       Extinction," PASP, 111, 63 (1999). https://doi.org/10.1086/316293
+    .. [2] E. L. Fitzpatrick and D. Massa, "An Analysis of the Shapes of
+       Ultraviolet Extinction Curves. III - an Atlas of Ultraviolet Extinction
+       Curves," ApJS, 72, 163 (1990). https://doi.org/10.1086/191413
+    """
+    rv = jnp.asarray(dust_Rv)
+    x = 1.0 / (jnp.asarray(wave_obs) / 1.0e4)
+    anchors = _fitzpatrick99_anchors(rv)
+    curvature = device_table(_F99_CURVATURE_OPERATOR) @ anchors
+    spline = _natural_spline_eval(x, anchors, curvature)
+    uv = _fm90_uv_extinction(x, rv)
+    a_ebv = jnp.where(x >= _F99_X_JOINT, uv, spline)
+    return a_ebv / rv
+
+
 def _ccm89_far_uv_ab(x: jnp.ndarray, x_cap: float) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""CCM89 far-UV cubic polynomial a(x), b(x), held constant beyond ``x_cap``.
 
