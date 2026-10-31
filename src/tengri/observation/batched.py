@@ -936,6 +936,39 @@ def _template_eline(model):
     )
 
 
+def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
+    """Refuse scalar or per-pixel resolutions when the template is banded.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model with spectroscopy configured.
+    galaxies : sequence of GalaxySpectrum
+        Records, in catalog order; the index in the message is the position here.
+
+    Raises
+    ------
+    ValueError
+        If the template carries a banded resolution operator and a record's
+        ``resolution`` is not a :class:`~tengri.observation.banded.BandedMatrix`.
+
+    Notes
+    -----
+    Build-time Python check. A scalar or per-pixel record would be fitted with a
+    different line spread function from the one that the template applies.
+    """
+    if not model.observation.spectroscopy.has_resolution_matrix:
+        return
+    for i, g in enumerate(galaxies):
+        if not isinstance(g.resolution, BandedMatrix):
+            raise ValueError(
+                f"galaxy {i} has a scalar or per-pixel resolution, but the template's "
+                "resolution is banded; give each GalaxySpectrum the same banded operator "
+                "(gaussian_resolution_bands or the instrument's R matrix) or build the "
+                "template with a scalar/per-pixel resolution"
+            )
+
+
 def build_spectro_batches(
     galaxies: Sequence[GalaxySpectrum],
     *,
@@ -966,7 +999,10 @@ def build_spectro_batches(
         from the template's ``resample`` mode with the same rule as
         :meth:`~tengri.observation.observation.Observation.predict`, and every
         padded bucket is checked with :func:`padding_exact`. Without it the
-        buckets carry ``conserving=None`` and cannot be evaluated.
+        buckets carry ``conserving=None`` and cannot be evaluated. When the template's
+        spectroscopy carries a banded resolution operator, the function refuses any
+        galaxy whose ``resolution`` is a scalar or per-pixel array: it would be fitted
+        with a different line spread function from the one that generated the data.
 
     Returns
     -------
@@ -1012,6 +1048,7 @@ def build_spectro_batches(
                 f"({policy.lsf_n_bins}); omit it to take the template's value"
             )
         lsf_n_bins = policy.lsf_n_bins
+        _require_banded_records(model, galaxies)
     elif lsf_n_bins is None:
         lsf_n_bins = 16
 
