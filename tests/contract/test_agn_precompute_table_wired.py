@@ -195,6 +195,42 @@ def _band_table(model) -> dict | None:
     return data.get("agn", {}).get("band_table")
 
 
+#: Built models shared by the tests of this module, keyed by (role, case). A build (for the
+#: kubota_done families, a 129-node table plus its cell-center check) dominates the run time, and
+#: most tests only read a model, so each is built once per worker. Tests that observe the build
+#: itself (``resolve_spy``) or the first trace of a predict (``integral_spy``) build their own.
+_SHARED: dict = {}
+
+
+def _shared(role: str, case, build):
+    """The model for ``(role, case)``, built once per worker by ``build()``.
+
+    A ``"per_call"`` role drops the table after the build, so the model runs the per-call
+    WavePrecomp integral the table replaces.
+    """
+    if (role, case) not in _SHARED:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = build()
+        if role == "per_call":
+            model._agn_band_table_cache = None
+        _SHARED[(role, case)] = model
+    return _SHARED[(role, case)]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _release_shared_models():
+    """Free the shared models when the module ends; hosted runners have 7 GB."""
+    yield
+    _SHARED.clear()
+
+
+def _family_model(role: str, key: str):
+    """A FAMILIES model: ``"table"`` and ``"per_call"`` under WavePrecomp, ``"exact"`` without."""
+    approx = None if role == "exact" else _wavepre()
+    return _shared(role, key, lambda: _model(FAMILIES[key], approx))
+
+
 # The comparisons below read the AGN band fluxes, never the total photometry. In this fixture
 # the synthetic stellar population outshines the AGN by ~1e11 (doubling the table read moves
 # the total by <= 2e-11), so a total-photometry comparison passes whatever the table returns.
@@ -266,12 +302,8 @@ def test_table_is_built_through_the_registry_and_predict_does_not_integrate(
 @pytest.mark.parametrize("key", _wired())
 def test_photometry_graph_drops_the_sed_build(key):
     """Nothing in a photometry predict consumes the SED, so the compiled graph no longer has it."""
-    family = FAMILIES[key]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table_model = _model(family, _wavepre())
-        per_call = _model(family, _wavepre())
-    per_call._agn_band_table_cache = None
+    table_model = _family_model("table", key)
+    per_call = _family_model("per_call", key)
     params = dict(table_model.spec.sample(jax.random.PRNGKey(0)))
 
     def flops(model):
@@ -284,10 +316,8 @@ def test_photometry_graph_drops_the_sed_build(key):
 @pytest.mark.parametrize("key", _wired())
 def test_table_matches_exact_and_has_finite_gradients(key):
     family = FAMILIES[key]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table_model = _model(family, _wavepre())
-        exact_model = _model(family, None)
+    table_model = _family_model("table", key)
+    exact_model = _family_model("exact", key)
     assert _band_table(table_model) is not None, table_model._agn_band_table_decline
     for seed in (11, 12, 13):
         params = dict(exact_model.spec.sample(jax.random.PRNGKey(seed)))
@@ -320,9 +350,9 @@ def test_agn_axis_grids_sets_the_table_axes():
     """The grids a user gives reach the table (#2471); a grid short of the prior is refused."""
     family = FAMILIES["kubota_done+skirtor/lbol>10.5"]
     nodes = np.linspace(10.5, 14.0, 193)
+    default = _family_model("table", "kubota_done+skirtor/lbol>10.5")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        default = _model(family, _wavepre())
         gridded = _model(family, _wavepre(), axis_grids={"agn_log_lbol": nodes})
     default_axis = np.asarray(_band_table(default)["axes"]["agn_log_lbol"])
     gridded_axis = np.asarray(_band_table(gridded)["axes"]["agn_log_lbol"])
@@ -355,12 +385,8 @@ def test_table_matches_the_per_call_integral_path(key):
     ``_AGN_RTOL`` at the cell centers (measured at a random draw: 2.5e-7 for kubota_done over
     lbol (10.5, 14), 1.2e-8 for powerlaw+simple with E(B-V)).
     """
-    family = FAMILIES[key]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table = _model(family, _wavepre())
-        per_call = _model(family, _wavepre())
-    per_call._agn_band_table_cache = None
+    table = _family_model("table", key)
+    per_call = _family_model("per_call", key)
     assert _band_table(table) is not None, table._agn_band_table_decline
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     np.testing.assert_allclose(
@@ -412,9 +438,7 @@ def test_family_is_engaged_unless_recorded_unwired(key):
     disc over its whole luminosity prior) and a step (SKIRTOR's inclination) must be refused with
     the measured error, and the smooth families beside them must be kept.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        model = _model(FAMILIES[key], _wavepre())
+    model = _family_model("table", key)
     if key in UNWIRED:
         prefix, why = UNWIRED[key]
         assert _band_table(model) is None, f"{key} is recorded as unwired: {why}"
@@ -466,9 +490,11 @@ def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
     extra = {"agn_lum_ratio": Fixed(lum_ratio)} if lum_ratio != 1.0 else None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        # Built here, not shared: the spy must see this model's first predict.
         table = _fixed_model(_wavepre(), agn_extra=extra)
-        per_call = _fixed_model(_wavepre(), agn_extra=extra)
-    per_call._agn_band_table_cache = None
+    per_call = _shared(
+        "per_call", ("fixed", lum_ratio), lambda: _fixed_model(_wavepre(), agn_extra=extra)
+    )
     assert _band_table(table) is not None, table._agn_band_table_decline
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     before = len(integral_spy)
@@ -481,11 +507,8 @@ def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
 
 def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
     """The compiled photometry of a fully Fixed AGN has no AGN SED build (flops, not a spy)."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table = _fixed_model(_wavepre())
-        per_call = _fixed_model(_wavepre())
-    per_call._agn_band_table_cache = None
+    table = _shared("table", "fixed", lambda: _fixed_model(_wavepre()))
+    per_call = _shared("per_call", ("fixed", 1.0), lambda: _fixed_model(_wavepre()))
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
 
     def flops(model):
