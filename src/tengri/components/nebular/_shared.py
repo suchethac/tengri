@@ -1310,8 +1310,10 @@ def compute_analytic_nebular_continuum(
        Chapter 4: Nebular Continuum and Line Emission.
     .. [2] H. Nussbaumer and W. Schmutz, "The two-photon continuum of HeII and
        the He+ f-value problem," A&A, 138, 495 (1984).
-    .. [3] P. J. Storey and D. G. Hummer, "Recombination coefficients for H II and
-       HeII," MNRAS, 272, 41 (1995). https://doi.org/10.1093/mnras/272.1.41
+    .. [3] P. J. Storey and D. G. Hummer, "Recombination line intensities for hydrogenic
+       ions - IV. Total recombination coefficients and machine-readable
+       tables for Z = 1 to 8," MNRAS, 272, 41 (1995).
+       https://doi.org/10.1093/mnras/272.1.41
     .. [4] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
        (Princeton University Press, 2011). Section 10.4: Gaunt factors.
     .. [5] V. Luridiana, C. Morisset, and R. A. Shaw, "PyNeb: A Python Package

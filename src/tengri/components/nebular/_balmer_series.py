@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Case-B Balmer series H11-H50 relative to H-beta, for the lines Cue's catalog lacks.
 
 Cue's trained catalog ends at H10 (3798.98 A vacuum); the upper levels of the
@@ -71,8 +72,7 @@ fine-structure components, whose shift against the bare Rydberg formula is
 about 1e-5 relative (0.03 A at H10); the bare Rydberg constant
 109677.583 cm\ :sup:`-1` sits 0.035 A off at :math:`n \ge 13`, which is why the NIST limit
 is the anchor. Validation: the H3 to H10 wavelengths agree with Cue's catalog
-(Cloudy air labels converted by
-:func:`tengri.components.nebular._line_ingest.catalog_air_to_vacuum`, which
+(Cloudy air labels converted by ``catalog_air_to_vacuum``, which
 calls :func:`tengri.utils.air_vacuum.air_to_vac`) to 0.0041 A at most, and the H-alpha
 to H8 wavelengths agree with FastSpecFit's ``emlines.ecsv`` to 0.0295 A.
 

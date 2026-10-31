@@ -1175,7 +1175,7 @@ class CueBackend:
     so every native index (``line_old_idx``) is unchanged. Approximation: fixed
     :math:`(T_e, n_e)`; the ratios change by up to
     6.7% for :math:`n \\le 24` and 27% at :math:`n = 50` over 5000-20000 K and
-    :math:`n_e` = 10^2-10^3 cm^-3 (:mod:`tengri.components.nebular._balmer_series`).
+    :math:`n_e` = 10^2-10^3 cm^-3 (``tengri.components.nebular._balmer_series``).
 
     **Precomputation**: If ``ssp_data`` is provided, ionizing spectrum
     parameters are precomputed once at init time via
