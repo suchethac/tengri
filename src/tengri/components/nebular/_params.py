@@ -276,6 +276,20 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         # a neighboring feature.
         free_prior=Uniform(-1000.0, 1000.0, "Line velocity offset", units="km/s", default=0.0),
     ),
+    ParamDeclaration(
+        "eline_aperture_frac",
+        Fixed(1.0),  # Default: the fiber takes the same share of line light as of the model
+        "Fiber share of the model's line light relative to its share of the stellar light "
+        "(centres the model-based line amplitude prior, eline_prior_type='model')",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+        # Strictly positive: a vanishing share erases the prior mean rather than
+        # describing a fiber. H II regions are more concentrated than the stars, so
+        # the line share can sit on either side of 1; the interval spans a factor of
+        # 50 around it, the range over which the Gaussian prior still ties the lines
+        # to the model within its own width (0.3 dex by default).
+        free_prior=Uniform(0.1, 5.0, "Line aperture factor", default=1.0),
+    ),
 )
 
 # Broad emission line component (AGN), eline_broad=True.

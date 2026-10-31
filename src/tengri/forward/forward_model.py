@@ -251,6 +251,7 @@ class ForwardModel:
         "_has_line_catalog",
         "measure_line_fluxes",
         "_get_or_build_predict_observables_jit",
+        "_get_or_build_predict_observables_lines_jit",
         "_photometry_via_state",
         "_spectrum_via_state",
         "_predict_derived",

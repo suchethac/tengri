@@ -928,6 +928,9 @@ _TOP_LEVEL_SETTINGS = {
     # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
     # ``Spectroscopy`` observation so it need not be set twice (#653).
     "eline_mode",
+    # Line aperture factor of the model-centred emission-line prior; registered with
+    # ``eline_mode`` and freed or pinned here (``FREE``, ``Fixed(...)``, a prior).
+    "eline_aperture_frac",
 }
 
 #: Top-level kwargs that are SEDModel-only settings (silently ignored here).
@@ -8455,7 +8458,7 @@ def _partition_by_group(
     partition = {}
 
     for name in all_param_names:
-        if name == "redshift" or name == "apply_igm":
+        if name in ("redshift", "apply_igm", "eline_aperture_frac"):
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
             if agn_flat:
@@ -9342,6 +9345,11 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # the second switch was redundant.
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
+
+    if "eline_aperture_frac" in spec.all_params:
+        aperture = spec.get_distribution("eline_aperture_frac")
+        if not (aperture.is_fixed and aperture.value == 1.0):
+            result["eline_aperture_frac"] = aperture
 
     if spec.n_grid != 256:
         # Only include if non-default
