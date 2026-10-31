@@ -244,6 +244,11 @@ def build_base_likelihood(context: InferenceContext):
                 "Calibration marginalization requires a configured spectroscopy "
                 "wavelength grid (model.wave_obs)."
             )
+        if context.eline_prior_type == "model":
+            raise ValueError(
+                'eline_prior_type="model" is not yet combined with calibration_marginalize=True; '
+                "use eline_prior_type='flat' or calibration_marginalize=False"
+            )
         builder = _make_eline_design_builder(context)
         if builder is None:
             raise ValueError(
