@@ -2106,7 +2106,9 @@ def alpha_bracket(ssp_alpha_fe: jnp.ndarray, alpha_fe: float) -> tuple[jnp.ndarr
     metallicity and age first and interpolate the small per-node result (no per-sample copy of
     the cube)."""
     afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
-    ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe) - 1, 0, ssp_alpha_fe.shape[0] - 2)
+    last = ssp_alpha_fe.shape[0] - 2
+    idx = jnp.searchsorted(ssp_alpha_fe, afe) - 1
+    ia = jnp.where(idx < 0, 0, jnp.where(idx > last, last, idx))
     fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
     return ia, fa
 

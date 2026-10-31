@@ -129,6 +129,7 @@ def test_alpha_moves_the_spectrum_with_a_correct_gradient(ssp4d, observation):
     g = float(jax.grad(mgb)(0.25))
     h = 1e-3
     fd = float((mgb(0.25 + h) - mgb(0.25 - h)) / (2 * h))
-    assert g != 0.0
+    assert np.all(np.isfinite(g)), "a non-finite d(prediction)/d(met_alpha_fe) on the 4D grid"
+    assert np.any(g != 0.0), "an identically zero d(prediction)/d(met_alpha_fe) on the 4D grid"
     np.testing.assert_allclose(g, fd, rtol=1e-4)
     assert float(mgb(0.6)) < float(mgb(-0.2))  # deeper trough with alpha, as the fixture is built
