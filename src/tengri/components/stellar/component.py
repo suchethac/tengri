@@ -3166,12 +3166,21 @@ class StellarSEDComponent:
         _agb_dust_cube = self._agb_dust_cube_ratio(
             params, ssp_flux_for_csp[:, 0] if _alpha_collapse_active else ssp_flux_for_csp
         )
+        # The AGB ratio has no [alpha/Fe] axis and the alpha interpolation is linear, so a free
+        # weight on a 4D grid collapses alpha first and the CSP continues on a 3D cube, as it did
+        # before the per-node contraction. That cube is a per-sample copy, as for every free-weight
+        # 3D model; a Fixed weight or no AGB shell keeps the shared 4D constant.
+        _csp_cube_is_4d = _alpha_collapse_active and _agb_dust_cube is None
         if _agb_dust_cube is not None:
             if _alpha_collapse_active:
-                raise NotImplementedError(
-                    "a free AGB dust-shell weight on a 4D [alpha/Fe] SSP grid is not supported yet"
+                from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
+
+                ssp_flux_for_csp = (
+                    interpolate_alpha_only(ssp.ssp_flux, ssp.ssp_alpha_fe, _alpha_fe_value)
+                    * _agb_dust_cube
                 )
-            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
+            else:
+                ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
@@ -3521,7 +3530,7 @@ class StellarSEDComponent:
         # finite). With L_sun carried on the zero-gradient SSP constant, the only
         # Jacobians autodiff forms are ``total_mass`` (~1e10) and the erg-scaled
         # SSP (~3.8e18), both representable. Identical in float64 (#1206).
-        if _alpha_collapse_active:
+        if _csp_cube_is_4d:
             from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
             ssp_flux_at_age = (
@@ -3575,7 +3584,7 @@ class StellarSEDComponent:
             from tengri.components.dust._age_mixture import interval_fractions
 
             _fractions = interval_fractions(younger_fraction)  # (n_interval, n_age)
-            if _alpha_collapse_active:
+            if _csp_cube_is_4d:
                 from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
                 lnu_interval = (
@@ -3722,7 +3731,7 @@ class StellarSEDComponent:
             # nebular/dust components can use log10_age_sum_lyc to combine
             # ages without dragging the full stellar SED into the
             # FeaturePrecomp graph.
-            if _alpha_collapse_active:
+            if _csp_cube_is_4d:
                 from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
                 _lnu_age_ion = collapse_alpha_axis(
@@ -4771,10 +4780,23 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
-        agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
-        if agb_dust_cube is not None:
-            ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
+        agb_dust_cube = self._agb_dust_cube_ratio(
+            params, ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux
+        )
+        if agb_dust_cube is not None and has_alpha_grid(ssp):
+            from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
+
+            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+            ssp_flux_ion = (
+                interpolate_alpha_only(ssp.ssp_flux, ssp.ssp_alpha_fe, _alpha_fe_value)[
+                    ..., :n_ion
+                ]
+                * agb_dust_cube[..., :n_ion]
+            )
+        else:
+            ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
+            if agb_dust_cube is not None:
+                ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
         sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
