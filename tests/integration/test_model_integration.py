@@ -571,7 +571,7 @@ class TestDustEmissionForwardModel:
             mean_sfh_type="dpl",
             dust_emission="modified_blackbody",
         )
-        model = SEDModel(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters)
         params_em = {"dust_T": 35.0}
 
         spec_no = Parameters(
@@ -586,7 +586,7 @@ class TestDustEmissionForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
+        model_no = SEDModel(spec_no, ssp, filters=filters)
 
         em = model.predict_rest_sed(params_em)
         no = model_no.predict_rest_sed({})
@@ -634,7 +634,7 @@ class TestDustEmissionForwardModel:
             mean_sfh_type="dpl",
             dust_emission="modified_blackbody",
         )
-        model = SEDModel(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters)
 
         def loss(T):
             return model.predict_photometry({"dust_T": T})[0]

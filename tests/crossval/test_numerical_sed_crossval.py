@@ -90,7 +90,7 @@ class TestSSPAbsoluteNormalization:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        model = SEDModel(spec, ssp, precompute=False)
+        model = SEDModel(spec, ssp)
         result = model.predict_rest_sed({})
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -139,8 +139,8 @@ class TestSSPAbsoluteNormalization:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        m_sf = SEDModel(spec_sf, ssp, precompute=False)
-        m_q = SEDModel(spec_q, ssp, precompute=False)
+        m_sf = SEDModel(spec_sf, ssp)
+        m_q = SEDModel(spec_q, ssp)
 
         wave = np.asarray(m_sf.predict_rest_sed({}).wavelength)
         sed_sf = np.asarray(m_sf.predict_rest_sed({}).sed)
@@ -174,7 +174,7 @@ class TestSSPAbsoluteNormalization:
                 dust_tau_diff=Fixed(0.0),
                 redshift=0.001,
             )
-            model = SEDModel(spec, ssp, precompute=False)
+            model = SEDModel(spec, ssp)
             r = model.predict_rest_sed({})
             wave = np.asarray(r.wavelength)
             sed = np.asarray(r.sed)
@@ -227,8 +227,8 @@ class TestDustAttenuationAbsolute:
             dust_tau_diff=Fixed(1.0),
             redshift=0.001,
         )
-        m_clean = SEDModel(spec_clean, ssp, precompute=False)
-        m_dusty = SEDModel(spec_dusty, ssp, precompute=False)
+        m_clean = SEDModel(spec_clean, ssp)
+        m_dusty = SEDModel(spec_dusty, ssp)
 
         wave = np.asarray(m_clean.predict_rest_sed({}).wavelength)
         sed_clean = np.asarray(m_clean.predict_rest_sed({}).sed)
@@ -269,8 +269,8 @@ class TestDustAttenuationAbsolute:
             dust_tau_diff=Fixed(1.0),
             redshift=0.001,
         )
-        m_clean = SEDModel(spec_clean, ssp, precompute=False)
-        m_dusty = SEDModel(spec_dusty, ssp, precompute=False)
+        m_clean = SEDModel(spec_clean, ssp)
+        m_dusty = SEDModel(spec_dusty, ssp)
 
         wave = np.asarray(m_clean.predict_rest_sed({}).wavelength)
         sed_clean = np.asarray(m_clean.predict_rest_sed({}).sed)
@@ -323,7 +323,7 @@ class TestSFRLuminosityCalibrations:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        model = SEDModel(spec, ssp, precompute=False)
+        model = SEDModel(spec, ssp)
         r = model.predict_rest_sed({})
         wave = np.asarray(r.wavelength)
         sed = np.asarray(r.sed)
@@ -374,7 +374,7 @@ class TestAbsoluteMagnitudes:
             dust_tau_diff=Fixed(0.2),
             redshift=0.01,
         )
-        model = SEDModel(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters)
         phot = model.predict_photometry({})
         m_app = float(ab_mag_from_flux(phot)[0])
 
@@ -408,7 +408,7 @@ class TestAbsoluteMagnitudes:
                 dust_tau_diff=Fixed(0.0),
                 redshift=0.01,
             )
-            model = SEDModel(spec, ssp, filters=filters, precompute=False)
+            model = SEDModel(spec, ssp, filters=filters)
             return float(model.predict_photometry({})[0])
 
         f_low = _make(-0.5)  # SFR = 0.3
@@ -446,7 +446,7 @@ class TestDustLawComparison:
                 dust_law_diff=law,
                 redshift=0.001,
             )
-            model = SEDModel(spec, ssp, precompute=False)
+            model = SEDModel(spec, ssp)
             r = model.predict_rest_sed({})
             wave = np.asarray(r.wavelength)
             sed = np.asarray(r.sed)
@@ -495,7 +495,7 @@ class TestRedshiftEffects:
                 dust_tau_diff=Fixed(0.0),
                 redshift=z,
             )
-            model = SEDModel(spec, ssp, filters=filters, precompute=False)
+            model = SEDModel(spec, ssp, filters=filters)
             return float(model.predict_photometry({})[0])
 
         f_01 = _flux(0.1)
@@ -530,7 +530,7 @@ class TestRedshiftEffects:
             dust_tau_diff=Fixed(0.0),
             redshift=3.0,
         )
-        model = SEDModel(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters)
         phot = model.predict_photometry({})
 
         f_u, f_g, f_r = float(phot[0]), float(phot[1]), float(phot[2])
