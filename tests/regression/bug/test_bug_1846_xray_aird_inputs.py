@@ -14,7 +14,7 @@ took their defaults:
 - age_weights, ssp_ages_yr → 0.0 (fallback injections), so stellar age computation broke
 
 Measured before the fix: ``sed_xray`` was **unchanged** by:
-1. SFR: L_X should scale ~1:1 with SFR (Lehmer+2016), but was fixed at 1.0 Msun/yr
+1. SFR: L_X should scale ~1:1 with SFR (Fragos+2013), but was fixed at 1.0 Msun/yr
 2. Stellar age: LMXB term is a steep quartic in age; L_X should drop ~50% when evolved
 3. AGN: L_X_corona should be zero when no AGN, but corona was independent of L_2500
 
@@ -23,8 +23,8 @@ not declared), #1755 (metallicity not wired), now #1846 (four SFR/stellar/AGN re
 
 References
 ----------
-.. [1] Lehmer et al. 2016, ApJ 825, 7 — X-ray binary scaling with SFR and age.
-.. [2] Yang et al. 2020, ApJ 927, 192 — AGN coronal luminosity.
+.. [1] Fragos et al. 2013, ApJ 776, L31 — X-ray binary scaling with SFR and age.
+.. [2] Yang et al. 2022, ApJ 927, 192 — AGN coronal luminosity.
 .. [3] Just et al. 2007, ApJ 665, 1004 — α_OX relation.
 """
 
@@ -91,7 +91,7 @@ def obs():
 
 
 def test_xray_aird_hmxb_scales_with_sfr(ssp_data_wne, obs):
-    """HMXB luminosity tracks SFR (Lehmer+2016).
+    """HMXB luminosity tracks SFR (Fragos+2013).
 
     Before fix: L_X was always for sfr=1.0 Msun/yr regardless of input.
     After fix: L_X should scale ~linearly with sfr_100myr.
@@ -128,7 +128,7 @@ def test_xray_aird_hmxb_scales_with_sfr(ssp_data_wne, obs):
     l_xray_low = np.sum(np.abs(pub_low["sed_xray"]))
     l_xray_high = np.sum(np.abs(pub_high["sed_xray"]))
 
-    # Lehmer+2016: the SFR-driven part (HMXB + hot gas) is linear in SFR. The
+    # Fragos+2013: the SFR-driven part (HMXB + hot gas) is linear in SFR. The
     # total is not — LMXB (mass-driven) is constant across scenarios — so the
     # linearity check must be on the sfr=0-differenced part.
     sfr_part_low = l_xray_low - l_xray_zero
@@ -141,7 +141,7 @@ def test_xray_aird_hmxb_scales_with_sfr(ssp_data_wne, obs):
         rtol=0.05,
         err_msg=(
             f"SFR-driven L_X part scaled by {ratio:.3f} for a 10x SFR increase; "
-            "Lehmer+2016 HMXB + hot gas are linear in SFR. "
+            "Fragos+2013 HMXB + hot gas are linear in SFR. "
             "Regression signature: before #1846 the ratio was exactly 1.0 (sfr undeclared)."
         ),
     )
@@ -151,7 +151,7 @@ def test_xray_aird_hmxb_scales_with_sfr(ssp_data_wne, obs):
 
 
 def test_xray_aird_lmxb_scales_with_stellar_age(ssp_data_wne, obs):
-    """LMXB luminosity responds to stellar age (Lehmer+2016 quartic).
+    """LMXB luminosity responds to stellar age (Fragos+2013 quartic).
 
     Before fix: L_X was always for stellar_age_gyr=1.0 Gyr regardless of input.
     After fix: L_X should change when age_weights/ssp_ages_yr are provided.
@@ -193,7 +193,7 @@ def test_xray_aird_lmxb_scales_with_stellar_age(ssp_data_wne, obs):
     l_xray_young = np.sum(np.abs(pub_young["sed_xray"]))
     l_xray_old = np.sum(np.abs(pub_old["sed_xray"]))
 
-    # LMXB drops with stellar age (Lehmer+2016 Eq. 16 quartic)
+    # LMXB drops with stellar age (Fragos+2013 Eq. 4 quartic)
     # Expected ratio: (age_old/age_young)^4 ~ (8/1)^4 ≈ 4000 but that's unrealistic
     # In practice with more moderate ages, ratio should be > 1.0
     ratio = l_xray_old / l_xray_young if l_xray_young > 0 else 1.0
@@ -366,3 +366,56 @@ def test_xray_aird_absent_publisher_semantics():
         f"L_X(published fiducial) = {l_published:.3e} — the pre-#1846 behavior was a "
         "phantom 1 Msun/yr, 1e10 Msun galaxy regardless of the model."
     )
+
+
+# ── Test: one LMXB age for both X-ray components ─────────────────────────────
+
+
+def test_aird_and_yang20_read_the_same_lmxb_age():
+    """Both X-ray components get the same surviving-mass-weighted LMXB age.
+
+    ``XRayAirdSEDComponent`` kept the formed-mass weighting after
+    ``XRaySEDComponent`` moved to the surviving mass the LMXB luminosity
+    multiplies (Fragos+2013 Eq. 4), so the same galaxy had two LMXB ages. The
+    two now share ``lmxb_stellar_age_gyr``. With sfr = 0 and no AGN the SED is
+    the LMXB term alone, so the age shows up as the LMXB amplitude.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.xray.component import XRaySEDComponent
+    from tengri.components.xray.xray import xray_xrb_terms
+    from tengri.components.xray.xray_model import XRayAirdSEDComponent
+
+    ssp_ages = np.array([1.0e9, 4.0e9, 9.0e9])
+    formed = np.array([6.0e9, 3.0e9, 1.0e9])
+    surviving = np.array([3.0e9, 2.4e9, 0.9e9])  # old bins lose less mass
+    age_surviving = float(np.sum(surviving * ssp_ages) / np.sum(surviving) / 1e9)
+    age_formed = float(np.sum(formed * ssp_ages) / np.sum(formed) / 1e9)
+    assert age_surviving != pytest.approx(age_formed, rel=0.05)
+
+    wave = np.logspace(0, 2, 400)
+    gamma_lmxb = 1.56
+    reference = np.asarray(
+        xray_xrb_terms(
+            jnp.asarray(wave), 0.0, 1e10, stellar_age_gyr=age_surviving, gamma_lmxb=gamma_lmxb
+        )["lmxb"]
+    )
+
+    published = {
+        "age_weights": formed,
+        "age_weights_surviving": surviving,
+        "ssp_ages_yr": ssp_ages,
+        "sfr": np.array(0.0),
+        "log_mstar": np.array(10.0),
+    }
+    aird_params = {
+        "gamma_hmxb": np.array(2.0),
+        "gamma_lmxb": np.array(gamma_lmxb),
+        "gamma_agn": np.array(1.8),
+        "log_nh": np.array(20.0),
+    }
+    _, pub = XRayAirdSEDComponent().predict(aird_params, np.zeros_like(wave), wave, **published)
+    np.testing.assert_allclose(np.asarray(pub["sed_xray"]), reference, rtol=1e-10)
+
+    inputs = XRaySEDComponent().emitter_inputs(published)
+    assert float(inputs["stellar_age_gyr"]) == pytest.approx(age_surviving, rel=1e-12)

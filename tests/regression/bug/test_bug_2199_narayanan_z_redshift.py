@@ -52,7 +52,9 @@ from tengri import (
     Uniform,
     WavePrecomp,
 )
+from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
 from tengri.observation.photometry import FilterCurve
+from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
@@ -97,34 +99,40 @@ def _filter_fixture_warnings() -> None:
 #: figures on this fixture's wavelength-separable synthetic SSP, i.e. a
 #: shape-preserving mass renormalization, not a new approximation). rtol is
 #: unchanged at 1e-12.
+#:
+#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
+#: integrated from the SFH instead of held at SFR(age0), which moves these
+#: values by about 1.5e-9 relative (continuum <= 2e-6 on the default models).
+#: The invariant itself -- ``redshift`` never reaches a law that does not
+#: declare it -- is pinned ulp-free by the resolver test below.
 _UNTOUCHED_LAW_PHOTOMETRY: dict[tuple[str, str], tuple[float, ...]] = {
     ("single_component", "calzetti"): (
-        2.0575538240416306e-13,
-        1.9399471893663044e-13,
-        1.4326872248843876e-13,
-        7.996951032238666e-14,
-        5.165045664785074e-14,
+        2.05755382704491e-13,
+        1.939947192197928e-13,
+        1.4326872269755943e-13,
+        7.996951043911334e-14,
+        5.1650456723241795e-14,
     ),
     ("single_component", "kriek_conroy"): (
-        2.0607500072210218e-13,
-        1.934707917464008e-13,
-        1.3935335068100254e-13,
-        7.934589381984924e-14,
-        5.160837953159269e-14,
+        2.0607500102289744e-13,
+        1.9347079202879839e-13,
+        1.3935335088440816e-13,
+        7.934589393566451e-14,
+        5.1608379606922155e-14,
     ),
     ("two_component", "calzetti"): (
-        2.0575538240416306e-13,
-        1.9399471893663044e-13,
-        1.4326872248843876e-13,
-        7.996951032238668e-14,
-        5.165045664785074e-14,
+        2.05755382704491e-13,
+        1.939947192197928e-13,
+        1.4326872269755943e-13,
+        7.996951043911334e-14,
+        5.1650456723241795e-14,
     ),
     ("two_component", "kriek_conroy"): (
-        2.0607500072210218e-13,
-        1.934707917464008e-13,
-        1.3935335068100254e-13,
-        7.934589381984924e-14,
-        5.160837953159269e-14,
+        2.060750010228974e-13,
+        1.9347079202879839e-13,
+        1.393533508844082e-13,
+        7.934589393566451e-14,
+        5.1608379606922155e-14,
     ),
 }
 
@@ -170,14 +178,14 @@ def _dust_group(screen: str, law: str, **shape) -> dict:
     return group
 
 
-def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, **shape):
+def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, sfh_extra=None, **shape):
     """One model, one screen, one law, at a pinned or freed redshift."""
     with warnings.catch_warnings():
         _filter_fixture_warnings()
         return SEDModel.build(
             ssp_data=uv_ssp,
             observation=uv_obs,
-            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT), **(sfh_extra or {})},
             dust_attenuation=_dust_group(screen, law, **shape),
             redshift=redshift,
             approx=approx,
@@ -200,9 +208,11 @@ def _params(model, screen: str, tau: float = _TAU) -> dict:
 
 
 def _photometry(
-    uv_ssp, uv_obs, screen: str, law: str, z: float, approx=None, **shape
+    uv_ssp, uv_obs, screen: str, law: str, z: float, approx=None, sfh_extra=None, **shape
 ) -> np.ndarray:
-    model = _build(uv_ssp, uv_obs, screen, law, Fixed(z), approx=approx, **shape)
+    model = _build(
+        uv_ssp, uv_obs, screen, law, Fixed(z), approx=approx, sfh_extra=sfh_extra, **shape
+    )
     with warnings.catch_warnings():
         _filter_fixture_warnings()
         return np.asarray(model.predict_photometry(_params(model, screen)))
@@ -741,7 +751,14 @@ def test_a_law_that_does_not_read_redshift_is_unchanged_to_ulp(screen, law, uv_s
     below, which is ulp-free.
     """
     reference = np.asarray(_UNTOUCHED_LAW_PHOTOMETRY[(screen, law)])
-    measured = _photometry(uv_ssp, uv_obs, screen, law, 0.5)
+    # The references were taken with the DPL onset at the registry's former
+    # absolute default (_AGE_UNIV_GYR Gyr). The onset is now a fraction of
+    # age(z) whose default is 1.0, so state the old absolute age explicitly.
+    z = 0.5
+    onset_frac = float(_AGE_UNIV_GYR / age_at_z(z))
+    measured = _photometry(
+        uv_ssp, uv_obs, screen, law, z, sfh_extra={"age_frac": Fixed(onset_frac)}
+    )
     np.testing.assert_allclose(
         measured,
         reference,

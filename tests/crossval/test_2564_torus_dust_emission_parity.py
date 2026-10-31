@@ -86,10 +86,10 @@ _TORUS_CASES = [
     ),
     (
         "skirtor_agnfitter",
-        {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0, "agn_tv_skirtor": 7.0},
+        {"agn_oa_skirtor": 40.0, "agn_cos_inc": _COS30, "agn_tv_skirtor": 7.0},
     ),
-    ("skirtor_agnfitter_1p", {"agn_incl_skirtor": 30.0}),
-    ("skirtor_agnfitter_2p", {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0}),
+    ("skirtor_agnfitter_1p", {"agn_cos_inc": _COS30}),
+    ("skirtor_agnfitter_2p", {"agn_oa_skirtor": 40.0, "agn_cos_inc": _COS30}),
     ("cat3d_wind_lowfwd", {"agn_cos_inc": _COS30}),
 ]
 _DUST_CASES = [
@@ -405,9 +405,9 @@ def test_disc_sedmodel_conserves_energy_and_level(ssp, disc):
     bol_m = float(np.trapezoid(lam_m, w_m))
     bol_d = float(np.trapezoid(lam_d, w_d))
     if disc != "schartmann2005_skirtor_atten":
-        # kubota_done integrates to 0.99876 L_bol on a 1e-3 A - 1e10 A grid by its own
-        # construction (not the grid).
-        tol = 2.0e-3 if disc == "kubota_done" else _DISC_TOL
+        # kubota_done integrates to 1.000014 L_bol on a 1e-3 A - 1e10 A grid (measured on #2733,
+        # once the corona carries its counted power and the disc its complement; was 0.99876).
+        tol = 2.0e-5 if disc == "kubota_done" else _DISC_TOL
         assert bol_m == pytest.approx(_DISC_LBOL, rel=tol), (
             f"{disc}: bolometric / L_bol = {bol_m / _DISC_LBOL:.5f}"
         )

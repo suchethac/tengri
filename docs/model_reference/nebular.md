@@ -11,6 +11,14 @@ All nebular models require the hydrogen-ionizing photon production rate $Q_{\rm 
 $$ (eq-qh)
  where $L_\nu$ is the CSP luminosity density. This integral is evaluated per SSP age bin and metallicity, then cached as a precomputed table $Q_{\rm H}(Z, t_{\rm age})$ to avoid recomputation during inference.
 
+## Emission-Line Physics
+
+Line luminosities assume Case B recombination at $T_e = 10^4$ K, with $\alpha_B = 2.58\times10^{-19}\,\mathrm{m^3\,s^{-1}}$ (Ferland 1980). The Case B cascade sets every Balmer and Lyman line relative to the ionizing photon rate.
+
+The escape parameter `neb_fesc` multiplies the line and continuum amplitudes by one common factor, $k = (1 - f_{\rm esc} - f_{\rm dust})\,/\,[1 + 0.597\,(f_{\rm esc} + f_{\rm dust})]$, where $f_{\rm dust}$ is `neb_fdust_frac` $\times\,(1 - f_{\rm esc})$. Because the factor is shared, `neb_fesc` leaves line ratios unchanged. A Balmer decrement that is not Case B, as expected for density-bounded gas, therefore cannot be produced by `neb_fesc`; the data's decrement is absorbed by dust reddening. If you suspect density-bounded gas, treat `dust_tau_bc` as covariant with the nebular escape parameters when you interpret the fit.
+
+The stellar metallicity `met` and the gas-phase metallicity `neb={'logZ_gas': ...}` are independent. `met` selects the stellar templates; `logZ_gas` alone sets the metallicity of the emitting gas, so set both when they differ.
+
 ## BakedIn Backend
 
 When SSP templates already include nebular emission (e.g., FSPS "wNE" files with fixed $\log U$ and $\log Z_{\rm gas}$), the `BakedIn` backend is a no-op: it returns zero additional nebular contribution since the emission is already part of the SSP flux arrays. This is the default when no CLOUDY grid is specified.
@@ -30,7 +38,7 @@ A model with `Cue` nebular emission and no radio block declares wavelength nodes
 For a given CSP with mass weights $w_j$ at SSP ages $t_j$: $$\begin{aligned}
 L_{\rm line} = {} & (1 - f_{\rm esc}) \sum_{j} w_j \, Q_{\rm H}(Z, t_j) \nonumber \\
   & \times \ell_{\rm grid}(\log Z_{\rm gas}, \log t_j, \log U),
-\end{aligned}$$ where $\ell_{\rm grid}$ is the trilinearly interpolated grid luminosity per $Q_{\rm H}$, and $f_{\rm esc}$ is the ionizing photon escape fraction. Only young SSP bins ($\log_{10}(t_{\rm age}/{\rm yr}) < 8.0$) contribute, reducing the sum from $\mathord{\sim}90$ to $\mathord{\sim}10$ terms.
+\end{aligned}$$ where $\ell_{\rm grid}$ is the grid luminosity per $Q_{\rm H}$ interpolated at $(\log Z_{\rm gas}, \log t_j, \log U)$, and $f_{\rm esc}$ is the ionizing photon escape fraction. The default interpolant is the node-exact, shape-preserving monotone cubic (PCHIP, Fritsch and Carlson 1980) applied to $\log_{10}\ell_{\rm grid}$ over the three log axes, the same interpolant the library-template lookups use (owner ruling 2026-10-11). It returns the tabulated value at every node and never overshoots between nodes. The lookup clamps to the tabulated hull on every axis; the declared prior $\log U \in [-5, 0]$ reaches two node spacings past the grid's $[-4, -1]$, a support mismatch that the build-time grid-support check narrows or warns on, and the metallicity prior lies inside the hull. `grid_interp="linear"` selects the earlier trilinear lookup and `grid_interp="triweight"` the smoothing kernel; both remain available. Only young SSP bins ($\log_{10}(t_{\rm age}/{\rm yr}) < 8.0$) contribute, reducing the sum from $\mathord{\sim}90$ to $\mathord{\sim}10$ terms.
 
 Ly-$\alpha$ ($\lambda = 1215.67$ Å) receives a separate escape fraction $f_{\rm esc,Ly\alpha}$ to account for resonant scattering: $$L_{\rm Ly\alpha} \to L_{\rm Ly\alpha} \cdot \frac{1 - f_{\rm esc,Ly\alpha}}{1 - f_{\rm esc}}.$$
 
@@ -84,6 +92,12 @@ Cue uses the Speculator architecture (Alsing et al. 2020), with 14 sub-networks 
 #### Accuracy.
 
 Hydrogen recombination lines are predicted to $<1\%$ accuracy. Of lines contributing $>1\%$ of the total line flux, 93% have $<5\%$ error relative to CLOUDY. Three high-ionization lines (\Ne [iv\] $\lambda 4720$, \Ar [iv\] $\lambda 7331$, \S [iv\] $10.5\,\mu$m) have $\sim$20% errors due to their sensitivity to the hardest ionizing photons. The $\sim$5% typical accuracy is comparable to differences between CLOUDY versions (Li et al. 2025), and is well below typical spectroscopic calibration uncertainties.
+
+#### Which stellar ages are counted.
+
+In the high-level mode $Q_H$ and the ionizing-spectrum shape are combined over every age bin of the SSP, weighted by the population's mass: segment luminosities add linearly across ages and each slope is the luminosity-weighted mean of the bins'. Old bins (post-AGB and extreme horizontal-branch stars) therefore contribute, and a quiescent galaxy has nebular emission at about the case-B H$\alpha$ per ionizing photon. `neb={'type': 'cue', 'lyc_max_age_yr': 1e8}` limits the sum to ages below 100 Myr. Cue's forbidden-line ratios for old (post-AGB) ionizing shapes are not validated against CLOUDY.
+
+The stellar SED must give up the LyC of every age Cue re-emits, so with Cue counting every age the dust key `lyc_reprocessed_by` defaults to `'all'` (it defaults to `'young'` for the other backends, and for Cue with a finite `lyc_max_age_yr`, where the stellar SED keeps the LyC of the ages Cue does not count). `'young'` removes only the LyC of ages below `t_birth_yr` from the stellar SED, so pairing it with Cue counting older ages would create the older ages' energy twice (94-96% of the old LyC energy of a quiescent galaxy, about 0.2% of its bolometric luminosity); that pairing raises an error. Set `lyc_max_age_yr` <= `t_birth_yr` to use `'young'` with Cue. `'all'` with a finite `lyc_max_age_yr` is refused: it would remove the LyC of the uncounted ages from the SED and re-emit none of it. The former 100 Myr cut with `'young'` leaves a small gap (ages between `t_birth_yr` and 100 Myr keep their LyC in the SED while Cue re-emits it) and warns once.
 
 #### Two calling modes.
 
@@ -184,6 +198,31 @@ For stellar grids, the line luminosity is: $$L_{\rm line} = \sum_i w_i \cdot Q_{
 | `agn_logedd` | $-1.0$ | $[-2, -1]$ | $\log_{10}(L/L_{\rm Edd})$ |
 
 : MAPPINGS V photoionization parameters.
+
+## Parameter support
+
+A template-backed backend interpolates over the axes of its grid, and the lookup clips outside them. A value past the edge is therefore bit-identical to the edge node, with a zero gradient, so the parameter silently does nothing. The build applies four rules to every installed grid:
+
+1. A `Fixed` value outside the backend's support is **refused** at build, naming the parameter, value, component and extent.
+2. A `FREE` parameter whose prior is declared by the registry **resolves to the selected backend's support**: the prior is the backend's full extent, even where that is wider than the declaration. The parameter summary reads `[resolved to <backend> grid: lo..hi]`. The declaration remains the prior only for a backend with no registered support.
+3. An explicit prior that extends beyond the support is **refused**, naming the extent.
+4. An explicit prior inside the support is unchanged.
+
+Cue is the exception. It is a neural emulator, so it extrapolates past its trained range rather than clipping. Out-of-footprint values **warn** and never raise.
+
+Gas-phase and stellar metallicity are independent knobs. `neb={'type': 'cloudy', 'logZ_gas': FREE}` infers the gas-phase metallicity, and its prior spans the grid's `neb_logZ_gas` support whatever `met_logzsol` is.
+
+The installed extents, read from the grid files by `grid_support('neb', <backend>)`:
+
+| Backend | Data file | `neb_logU` | `neb_logZ_gas` |
+|---|---|---|---|
+| `cloudy` | `cloudy_grid_{mist,prsc,pdva,bpss}.h5` | [-4, -1] | [-1.98, 0.2] |
+| `cb19` | `cb19_templates.h5` | [-4, -1.5] | [-3.84, -1.36] |
+| `mappings` | `flury2024_grids.h5` (`sb99/cpr`) | [-4, -0.5] | not registered (see below) |
+| `mappings_agn` | `flury2024_grids.h5` (`agn_oxaf/cpr`) | [-3.5, -0.5] | not registered (see below) |
+| `cue` | `cue_weights.npz` (trained range, Li et al. 2025, Table 1) | [-4, -1] (extrapolating) | [-2.2, 0.5] (extrapolating) |
+
+`neb_logZ_gas` is log10(Z/Zsun). The `cb19` extent is its 12+log(O/H) axis converted with the backend's solar oxygen abundance. The CB19 nebular grid ships without data, so a `cb19` build refuses before any lookup (see the known limitations page); the extents above are its axes. The MAPPINGS backends take no gas-metallicity key, so `neb_logZ_gas` has no knob there.
 
 ## Differences from CIGALE's Nebular Module
 

@@ -34,7 +34,15 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._publication import (
+    template_sed_and_log_power,
+    with_lsun_outputs,
+)
+from tengri.components.agn._torus_inclination import (
+    TORUS_LEDGER_KEYS,
+    absent_torus_ledger,
+    torus_ledger,
+)
 from tengri.components.agn.skirtor_agnfitter import create_skirtor_agnfitter_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -42,15 +50,15 @@ from tengri.protocols.component import SEDComponentConfig, SEDComponentState, de
 
 __all__ = ["SKIRTORAgnfitterTorus"]
 
-#: Single source of truth for ``oa_skirtor``/``incl_skirtor``/``tv_skirtor``'s
-#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_incl_skirtor`` /
+#: Single source of truth for ``oa_skirtor``/``cos_inc``/``tv_skirtor``'s
+#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_cos_inc`` /
 #: ``agn_tv_skirtor`` declarations in ``_params.py``. Read once at class-
 #: definition time so the class attributes below cannot drift from them the
 #: way ``CAT3DTorus``/``Silva04Torus`` did before Task 1 -- these three were
 #: numerically equal to the canonical declaration but were still an
 #: unprotected literal restatement (Task 1 fix round 1, finding 1).
 _OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
-_INCL_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_incl_skirtor")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
 _TV_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tv_skirtor")
 #: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
 #: canonical 10.0) -- found by ``tools/check_param_restatements.py``
@@ -92,11 +100,11 @@ class SKIRTORAgnfitterTorusState(SEDComponentState):
 
 @dataclass(frozen=True)
 class SKIRTORAgnfitterTorus(SEDModelComponent):
-    """SKIRTOR_mean_3p clumpy AGN torus (AGNfitter-faithful averaging).
+    r"""SKIRTOR_mean_3p clumpy AGN torus (AGNfitter-faithful averaging).
 
     Three-parameter torus model with half-opening angle, inclination, and
-    equatorial optical depth. Provides C²-continuous gradients via triweight
-    kernel interpolation over the 3D parameter space.  This is the
+    equatorial optical depth. Provides C¹-continuous gradients via node-exact
+    PCHIP interpolation over the 3D parameter space.  This is the
     **AGNfitter-faithful** variant, differing from the default full-grid
     SKIRTOR in peak wavelength and other properties.
 
@@ -115,8 +123,10 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         log₁₀(L_bol / L_sun). [dex, 8–14]
     oa_skirtor : Uniform
         Half-opening angle [deg]. [deg, 10–80]
-    incl_skirtor : Uniform
-        Inclination angle measured from pole [deg]. [deg, 0–90]
+    cos_inc : Uniform
+        Cosine of the inclination from the polar axis, the AGN's one inclination
+        (1 = face-on). [dimensionless, 0–1] The library is keyed at
+        :math:`i = \arccos(\cos i)` [deg] on its 0–90 deg axis.
     tv_skirtor : Uniform
         Equatorial optical depth τ_9.7. [dimensionless, 3–11]
     torus_frac : Uniform
@@ -124,14 +134,24 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_torus : erg/s
-        Bolometric luminosity contribution from torus emission.
+    log_L_agn_torus, log_L_agn_torus_los, log_L_agn_disc_unemitted : dex
+        The torus-only energy ledger [dex re erg/s] (NAMING_CONTRACT section 4c,
+        "Template tori"): the angle-integrated torus power ``f L_bol``
+        (``f = torus_frac``), the frequency integral of the torus SED emitted along
+        the sightline, and the disc share ``(1 - f) L_bol`` this component does not
+        emit, so the first and last add up to ``10**log_lbol L_sun``. Here the first
+        two are equal: the AGNfitter-rX ``SKIRTOR_mean_3p`` records are not on SKIRTOR's
+        radiative-transfer scale: their inclination power ratios scatter 0.2 to 3.9 about 1
+        and do not follow the norm-restored SKIRTOR v3 library averaged the same way (3.26
+        at oa = 40 deg, tau = 7), so each sightline is normalized on its own. Each has an
+        ``L_agn_*_lsun`` [Lsun] sibling; ``-inf``
+        is an absent piece.
 
     Notes
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, PCHIP interpolation is C¹ and differentiable
     across the three parameter axes.
 
     **Requires template grid**: The SKIRTOR_mean_3p template library must be
@@ -191,12 +211,12 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         units="deg",
         default=_OA_SKIRTOR_PRIOR.default,
     )
-    incl_skirtor = Uniform(
-        _INCL_SKIRTOR_PRIOR.lo,
-        _INCL_SKIRTOR_PRIOR.hi,
-        description="Inclination angle (Stalevski et al.)",
-        units="deg",
-        default=_INCL_SKIRTOR_PRIOR.default,
+    cos_inc = Uniform(
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
+        description="Cosine of inclination (1 = face-on)",
+        units="dimensionless",
+        default=_COS_INC_PRIOR.default,
     )
     tv_skirtor = Uniform(
         _TV_SKIRTOR_PRIOR.lo,
@@ -214,7 +234,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"L_agn_torus": "erg/s"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(dict.fromkeys(TORUS_LEDGER_KEYS, "dex"))
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load SKIRTOR_mean_3p template grid if available.
@@ -260,7 +280,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
             - log_lbol: log₁₀(L_bol / L_sun)
             - oa_skirtor: half-opening angle [deg]
-            - incl_skirtor: inclination [deg]
+            - cos_inc: cosine of the inclination from the polar axis
             - tv_skirtor: equatorial optical depth
             - torus_frac: torus luminosity fraction
 
@@ -277,31 +297,32 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + torus contribution).
-            - published: {"L_agn_torus": bolometric torus luminosity [erg/s]}.
+            - published: ``log_L_agn_torus``, ``log_L_agn_torus_los`` and
+              ``log_L_agn_disc_unemitted`` [dex re erg/s] with their ``_lsun`` siblings
+              (see Cross-component outputs).
 
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"L_agn_torus": jnp.array(0.0)}
+            return sed_in, absent_torus_ledger()
 
         skirtor_agnfitter_fn = self.data
 
-        def _torus(wave_eval):
+        def _torus(wave_eval, log_lbol_eval):
             return skirtor_agnfitter_fn(
                 wavelength=wave_eval,
-                agn_log_lbol=p["log_lbol"],
+                agn_log_lbol=log_lbol_eval,
                 agn_oa_skirtor=p["oa_skirtor"],
-                agn_incl_skirtor=p["incl_skirtor"],
+                agn_cos_inc=p["cos_inc"],
                 agn_tv_skirtor=p["tv_skirtor"],
                 agn_torus_frac=p["torus_frac"],
             )
 
-        # Published L_agn_torus: the exact integral of the emitted torus SED. The template is
-        # a log-log power law between its native nodes, so the integral is closed form on them.
-        native = jnp.asarray(skirtor_agnfitter_fn.native_wave, dtype=wave.dtype)
-        L_torus = native_bolometric_nu(_torus(native), native)
+        # Published log_L_agn_torus: the exact integral of the emitted torus SED, in log space.
+        # The template is a log-log power law between its native nodes, so the integral is
+        # closed form on them.
+        torus, log_L_torus = template_sed_and_log_power(
+            _torus, skirtor_agnfitter_fn.native_wave, wave, p["log_lbol"]
+        )
 
-        # Add to intrinsic SED
-        sed_out = sed_in + _torus(wave)
-
-        return sed_out, {"L_agn_torus": L_torus}
+        return sed_in + torus, torus_ledger(p["log_lbol"], p["torus_frac"], log_L_torus)

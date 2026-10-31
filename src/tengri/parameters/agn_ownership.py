@@ -92,8 +92,8 @@ _AGN_PARTITION = {
     "agn_q_skirtor": "agn.torus",
     "agn_oa_skirtor": "agn.torus",
     "agn_radius_ratio": "agn.torus",
-    # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
-    "agn_incl_skirtor": "agn.torus",
+    # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus; its sightline is the
+    # shared agn_cos_inc (#3085)
     "agn_tv_skirtor": "agn.torus",
     # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
     "agn_a_cat3d": "agn.torus",
@@ -187,6 +187,7 @@ _AGN_PARTITION = {
     "agn_astar": "agn.disc",  # relagn black-hole spin
     "agn_log_mdot": "agn.disc",  # relagn accretion rate
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
+    "agn_cigale_adaf_delta": "agn.disc",  # adaf_lopez2024 ADAF-to-thin-disc blend weight
     "agn_grahsp_cutoff_nm": "agn.disc",
     "agn_grahsp_log_l5100": "agn.disc",
     "agn_grahsp_netzer_log_mbh": "agn.disc",
@@ -784,6 +785,50 @@ _AGN_IR_FRAC_SPELLINGS = frozenset({"agn_ir_frac", "ir_frac", "agn_fracAGN", "fr
 #: resolves the canonical name's own two spellings; these two it does not, so
 #: they are scanned separately across the same locations.
 _AGN_IR_FRAC_LEGACY_SPELLINGS: tuple[str, ...] = ("agn_fracAGN", "fracAGN")
+
+#: CIGALE (pcigale) AGN key -> one-line tengri hint. A refused key found here
+#: gets ``"CIGALE's <key>: <hint>"`` appended to its refusal, so a CIGALE user is
+#: pointed at the tengri key that does the same job (or told there is none yet).
+#: One table for every refusal path; see :func:`cigale_spelling_hint`.
+CIGALE_AGN_SPELLINGS: dict[str, str] = {
+    "disk_type": (
+        "tengri chooses the disc with agn={'disc': {'type': ...}}: 0 -> 'skirtor', "
+        "1 -> 'schartmann2005', 2 -> 'adaf_lopez2024'."
+    ),
+    "delta": (
+        "on agn.disc the disc slope modulator is agn_cigale_disk_delta (disc type "
+        "'skirtor' or 'schartmann2005'), and the ADAF blend weight is "
+        "agn_cigale_adaf_delta (disc type 'adaf_lopez2024'). The torus parameter "
+        "agn_delta is a different quantity that no composable torus block reads."
+    ),
+    "lambda_fracAGN": (
+        "write agn={'ir_frac_window': (lambda_min_um, lambda_max_um)} together with "
+        "agn_ir_frac; (0, 0) is the total-dust case, and the string '5/20' is the same "
+        "window."
+    ),
+    "fracAGN": (
+        "the same parameter as agn_ir_frac (the '0/0' case); write agn_ir_frac, "
+        "at the top level of agn."
+    ),
+}
+
+
+def cigale_spelling_hint(key: str) -> str:
+    """The CIGALE hint to append to a refusal of ``key``, or ``""``.
+
+    Parameters
+    ----------
+    key : str
+        The key as the user wrote it.
+
+    Returns
+    -------
+    str
+        ``" CIGALE's <key>: <hint>"`` (leading space included) when ``key`` is in
+        :data:`CIGALE_AGN_SPELLINGS`, else the empty string.
+    """
+    hint = CIGALE_AGN_SPELLINGS.get(key)
+    return f" CIGALE's {key}: {hint}" if hint else ""
 
 
 def _fracagn_value_is_active(value: object) -> bool:

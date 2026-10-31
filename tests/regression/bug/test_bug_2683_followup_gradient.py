@@ -23,11 +23,22 @@ import pytest
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar import component as stellar_component
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
 BANDS = ["galex_fuv", "sdss_u", "sdss_r", "2mass_h"]
 TRUTH_FACTOR = 256
+#: Build redshift of the zero-redshift cases; the fractions are of age(0) there.
+AGE0_GYR = float(age_at_z(0.0))
+#: Registry defaults of the psb_flex quench times, fractions of age(z).
+TLAST_FRAC_DEFAULT = float(
+    SFH_REGISTRY["psb_flex"].params["sfh_psb_flex_tlast_frac"].default.default
+)
+TFLEX_FRAC_DEFAULT = float(
+    SFH_REGISTRY["psb_flex"].params["sfh_psb_flex_tflex_frac"].default.default
+)
 
 #: psb_flex with every ratio non-zero, so the flexible-zone edges carry real steps
 #: (all-zero ratios make the history flat and its tflex derivative physically ~0).
@@ -92,12 +103,26 @@ def _truth_fd(monkeypatch, ssp, obs, z, sfh, key, x, h):
 def test_a_psb_flex_edge_gradient_is_nonzero_and_converged(
     monkeypatch, ssp, obs, key, sweep, points, h
 ):
-    """tflex/tlast gradient: was identically 0; now within 0.5 % of the converged one."""
-    short = key.removeprefix("sfh_psb_flex_")
-    model = _model(ssp, obs, "dsps", 0.0, {**PSB, short: sweep})
+    """tflex/tlast gradient: was identically 0; now within 0.5 % of the converged one.
+
+    The sweep is over the fraction of age(0) (#2748); the other quench time is pinned
+    as a fraction too, since the two must be given in the same units. The gradient
+    and the finite-difference step are taken in fraction units, so the relative
+    comparison is unchanged.
+    """
+    short = key.removeprefix("sfh_psb_flex_").replace("_gyr", "_frac")
+    frac_key = f"sfh_psb_flex_{short}"
+    lo, hi = sweep.bounds
+    sweep_frac = Uniform(lo / AGE0_GYR, hi / AGE0_GYR)
+    if short == "tflex_frac":
+        pinned = {"tlast_frac": Fixed(TLAST_FRAC_DEFAULT)}
+    else:
+        pinned = {"tflex_frac": Fixed(TFLEX_FRAC_DEFAULT)}
+    sfh = {**PSB, **pinned, short: sweep_frac}
+    model = _model(ssp, obs, "dsps", 0.0, sfh)
     for x in points:
-        g = _grad(model, key, x)
-        truth = _truth_fd(monkeypatch, ssp, obs, 0.0, {**PSB, short: sweep}, key, x, h)
+        g = _grad(model, frac_key, x / AGE0_GYR)
+        truth = _truth_fd(monkeypatch, ssp, obs, 0.0, sfh, frac_key, x / AGE0_GYR, h / AGE0_GYR)
         assert np.all(np.isfinite(g)) and float(np.max(np.abs(g))) > 0.0
         rel = np.abs(g / truth - 1.0)
         assert np.all(rel <= 0.005), f"{key}={x}: |grad/truth-1| = {np.round(rel * 100, 2)} %"
@@ -121,12 +146,15 @@ def test_b_onset_gradient_matches_converged(
     monkeypatch, ssp, obs, family, key, sfh, z, points, bound
 ):
     """Onset gradient between SSP nodes: was 1-5 % off in every band; now within 2.1 %."""
-    full = {**sfh, "age_gyr": Uniform(1.0, 10.0)}
+    full = {**sfh, "age_frac": Uniform(0.0725327, 0.725327)}
     model = _model(ssp, obs, "dsps", z, full)
+    # The onset is swept in Gyr and passed as the fraction of age(z) the build reads.
+    frac_key = key.replace("_gyr", "_frac")
+    scale = float(age_at_z(z))
     worst = 0.0
     for x in points:
-        g = _grad(model, key, x)
-        truth = _truth_fd(monkeypatch, ssp, obs, z, full, key, x, 1e-4)
+        g = _grad(model, frac_key, x / scale)
+        truth = _truth_fd(monkeypatch, ssp, obs, z, full, frac_key, x / scale, 1e-4 / scale)
         assert np.all(np.isfinite(g)) and float(np.max(np.abs(g))) > 0.0
         worst = max(worst, float(np.max(np.abs(g / truth - 1.0))))
     assert worst <= bound, f"{family}: worst |grad/truth-1| = {worst * 100:.2f} %"
@@ -138,15 +166,19 @@ def test_c_onset_flux_has_no_row_staircase(ssp, obs):
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
         "log_total_mass": Fixed(10.0),
-        "age_gyr": Uniform(1.0, 10.0),
+        "age_frac": Uniform(0.0725327, 0.725327),
     }
     models = {k: _model(ssp, obs, k, 0.0, full) for k in ("cic", "dsps")}
     xs = np.linspace(5.0, 5.04, 81)
     ratio = np.array(
         [
             float(
-                models["dsps"].predict_photometry({"sfh_delayed_age_gyr": jnp.asarray(x)})[2]
-                / models["cic"].predict_photometry({"sfh_delayed_age_gyr": jnp.asarray(x)})[2]
+                models["dsps"].predict_photometry(
+                    {"sfh_delayed_age_frac": jnp.asarray(x / AGE0_GYR)}
+                )[2]
+                / models["cic"].predict_photometry(
+                    {"sfh_delayed_age_frac": jnp.asarray(x / AGE0_GYR)}
+                )[2]
             )
             for x in xs
         ]

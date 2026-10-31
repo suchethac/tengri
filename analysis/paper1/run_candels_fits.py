@@ -973,6 +973,7 @@ def main(argv: list[str] | None = None):
         max_jobs=args.jobs,
         only_missing=args.only_missing,
         profile_mass=args.profile_mass,
+        retune_attempts=args.retune_attempts,
     )
 
     # Print summary table

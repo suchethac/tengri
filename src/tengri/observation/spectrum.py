@@ -151,12 +151,12 @@ def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
 def _is_log_uniform(wave) -> bool:
     r"""Whether ``wave`` is uniform in :math:`\ln\lambda`, so one pixel scale serves.
 
-    ``True`` for a tracer: a traced grid has no values to inspect at trace time.
-    The gap is the one :func:`_require_log_uniform_grid` documents, and narrow for
-    the same reason, a spectroscopic wavelength grid is normally a fixed
-    instrument array closed over by the jitted function, not an argument traced
-    through it. Answering ``True`` keeps the single-FFT path, which is what such a
-    grid got before #1791.
+    ``False`` for a tracer: a traced grid has no values to inspect at trace time,
+    so its log-uniformity is unknown. An unknown takes the general (piecewise)
+    path, which carries a per-bin pixel scale and is correct on any grid. Answering
+    ``True`` here sent a linear traced grid down the constant-R FFT path (#2847).
+    A grid known to be log-uniform is passed concretely, closed over by the jitted
+    function.
 
     Parameters
     ----------
@@ -175,7 +175,7 @@ def _is_log_uniform(wave) -> bool:
     evaluation.
     """
     if isinstance(wave, jax.core.Tracer):
-        return True
+        return False  # unknown: take the general path (#2847)
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return True  # not a grid this helper can speak about; let the caller fail
@@ -1293,6 +1293,89 @@ def project_spectrum(
     return flux
 
 
+def instrument_stage_on_pixels(
+    stellar_pix: jnp.ndarray,
+    nebular_pix: jnp.ndarray,
+    *,
+    wave_obs: jnp.ndarray,
+    resolution: jnp.ndarray | float,
+    sigma_lib_kms: jnp.ndarray | float,
+    lsf_scale: jnp.ndarray | float = 1.0,
+    n_bins: int = 16,
+    lsf_pad_pixels: int | None = None,
+) -> jnp.ndarray:
+    r"""Apply the instrument stage of the kernel split to resampled pixel fluxes (#2958).
+
+    Stage 3 of :func:`~tengri.observation.observation.project_spectrum_kernel_split`,
+    factored out so the exact path and the spectrum LUT share one implementation.
+    The stellar piece is convolved with
+
+    .. math::
+
+        \sigma_{\rm eff}(\lambda) = \sqrt{\sigma_{\rm inst}(\lambda)^2\,
+        s^2 - \sigma_{\rm lib}(\lambda)^2}, \qquad s = {\rm lsf\_scale},
+
+    and the nebular/shock/AGN-line piece with :math:`\sigma_{\rm inst}\,s` alone.
+    The galaxy's velocity dispersion is not added here: it was applied on the model
+    grid before the IGM (stage 1), so the stellar piece must not receive it twice.
+
+    Parameters
+    ----------
+    stellar_pix : ndarray, shape (n_pix,)
+        Stellar-kernel piece, already resampled to ``wave_obs`` and multiplied by the
+        IGM transmission [erg/s/cm^2/Hz].
+    nebular_pix : ndarray, shape (n_pix,)
+        Instrument-only piece, resampled to ``wave_obs`` and multiplied by the IGM
+        transmission [erg/s/cm^2/Hz].
+    wave_obs : ndarray, shape (n_pix,)
+        Observed-frame pixel wavelength grid [Angstrom].
+    resolution : float or ndarray, shape (n_pix,)
+        Spectral resolution :math:`R(\lambda)` (the instrument, before ``lsf_scale``).
+    sigma_lib_kms : float or ndarray, shape (n_pix,)
+        SSP library resolution [km/s] subtracted from the stellar piece only.
+    lsf_scale : float or traced scalar, default 1.0
+        Multiplicative scale on :math:`\sigma_{\rm inst}` (#2526).
+    n_bins : int, default 16
+        Piecewise-constant LSF bin count.
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] for the observed-grid LSF (see
+        :func:`apply_lsf`); ``None`` derives it from the grid.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Observed spectral flux density [erg/s/cm^2/Hz], before calibration.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the Gaussian LSF is an FFT convolution with a
+    static pad, and ``lsf_scale`` may be traced.
+
+    Approximation of the instrument response as a Gaussian of width
+    :math:`\sigma_{\rm inst}(\lambda)` in velocity, as in :func:`apply_lsf`.
+    """
+    resolution_scaled = resolution / lsf_scale
+    flux_stellar = apply_lsf(
+        stellar_pix,
+        wave_obs,
+        resolution_scaled,
+        sigma_lib_kms=sigma_lib_kms,
+        n_bins=n_bins,
+        sigma_v_kms=0.0,
+        pad_pixels=lsf_pad_pixels,
+    )
+    flux_instrument_only = apply_lsf(
+        nebular_pix,
+        wave_obs,
+        resolution_scaled,
+        sigma_lib_kms=0.0,
+        n_bins=n_bins,
+        sigma_v_kms=0.0,
+        pad_pixels=lsf_pad_pixels,
+    )
+    return flux_stellar + flux_instrument_only
+
+
 @partial(jax.jit, static_argnames=("has_lyc_edge",))
 def compute_spectrum(
     sed_rest: jnp.ndarray,
@@ -1586,10 +1669,9 @@ _LOG_UNIFORM_RTOL = 1e-6
 def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
-    A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time. That is a real gap rather than a safe default; it is narrow
-    because a spectroscopic wavelength grid is normally a fixed instrument array
-    closed over by the jitted function, not an argument traced through it.
+    The caller routes a traced grid elsewhere before calling this, because a traced
+    grid has no values to inspect at trace time (#2847). This helper only sees
+    concrete grids.
 
     Parameters
     ----------
@@ -1599,8 +1681,6 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
         Function name, quoted in the error so the message names the API the user
         actually called.
     """
-    if isinstance(wave, jax.core.Tracer):
-        return
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
@@ -1657,8 +1737,8 @@ def velocity_broaden(
     Raises
     ------
     ValueError
-        If ``wave`` is not uniform in ``ln(lambda)`` and is concrete at trace
-        time. Resample onto a log grid first.
+        If ``wave`` is concrete and not uniform in ``ln(lambda)``. Resample onto a
+        log grid first.
 
     Notes
     -----
@@ -1685,9 +1765,12 @@ def velocity_broaden(
     instead, on the reasoning recorded in :mod:`tengri.forward.approx_policy`:
     a silently-defaulting read is worse than a loud failure.
 
-    The check is skipped when ``wave`` is a tracer, since a traced grid cannot
-    be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
-    grid (the usual case for a fixed instrument grid) it still fires.
+    A traced ``wave`` cannot be inspected at trace time, so it takes the piecewise
+    path of :func:`broaden_velocity_only` instead, which reads the pixel scale per
+    pixel and so is correct on any increasing grid. On a log-uniform grid that path
+    equals the single FFT (the piecewise bins share one sigma). Under ``jax.jit``
+    with a concrete (closed-over) grid, the usual case for a fixed instrument grid,
+    the check still fires.
 
     Examples
     --------
@@ -1700,6 +1783,8 @@ def velocity_broaden(
     True
 
     """
+    if isinstance(wave, jax.core.Tracer):
+        return broaden_velocity_only(flux, wave, sigma_km_s)
     _require_log_uniform_grid(wave, "velocity_broaden")
     sigma_bound = _lsf_sigma_bound_kms(sigma_v_kms=sigma_km_s)
     pad = _lsf_pad_pixels(wave, flux.shape[0], sigma_bound)

@@ -18,10 +18,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import jax.numpy as jnp
+
 from tengri.components._z_response import interp_z_table
 
 #: Key under which each emitter's namespace carries its term band response.
 TERM_BAND_RESPONSE_KEY = "term_band_response"
+
+#: Optional per-node tables, read alongside ``R`` and ``S_ref`` when the emitter declares them:
+#: the term shapes at its diagnostic nodes (``S_diag``) and the term amplitudes at ``lam_ref``
+#: when no amplitude parameter is free (``amp``, #2987).
+_OPTIONAL_NODE_KEYS = ("S_diag", "amp")
 
 
 def term_band_response(
@@ -51,8 +58,10 @@ def term_band_response(
     -------
     mapping or None
         ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``
-        at the evaluation redshift, or ``None`` when no response was built: in
-        which case the caller must keep the exact per-call dense filter integral.
+        at the evaluation redshift (plus ``"S_diag": (n_terms, n_nodes)``, the term shapes at
+        the emitter's ``EMITTER_DIAGNOSTIC_NODES``, when it declares any), or ``None`` when no
+        response was built: in which case the caller must keep the exact per-call dense
+        filter integral.
         Term order matches the emitter's ``emission_terms`` dict order.
 
     Notes
@@ -69,12 +78,71 @@ def term_band_response(
         return None
     nodes = table["ln1pz"]
     if nodes.shape[0] == 1:
-        return {"R": table["R"][0], "lam_ref": table["lam_ref"], "S_ref": table["S_ref"][0]}
+        out = {"R": table["R"][0], "lam_ref": table["lam_ref"], "S_ref": table["S_ref"][0]}
+        for key in _OPTIONAL_NODE_KEYS:
+            if key in table:
+                out[key] = table[key][0]
+        return out
     from tengri.parameters.resolve import require_redshift
 
     z = require_redshift(params or {}, f"components.{name}.term_band_response")
-    return {
-        "R": interp_z_table({"ln1pz": nodes, "values": table["R"]}, z),
+    out = {
+        "R": interp_z_table({"ln1pz": nodes, "values": table["R"]}, z, extrapolate=True),
         "lam_ref": table["lam_ref"],
-        "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z),
+        "S_ref": interp_z_table({"ln1pz": nodes, "values": table["S_ref"]}, z, extrapolate=True),
     }
+    for key in _OPTIONAL_NODE_KEYS:
+        if key in table:
+            out[key] = interp_z_table({"ln1pz": nodes, "values": table[key]}, z, extrapolate=True)
+    return out
+
+
+def term_shape_response(
+    template_data: Any, name: str, params: Mapping[str, Any], terms: tuple[str, ...]
+) -> Mapping[str, Any] | None:
+    """Read an emitter's shape-only term tables at its current shape parameters.
+
+    The fallback when no exact band response exists (a shape parameter is free). Each term's
+    table gives the band flux of that term's shape, normalized at the term's ``lam_ref``, so the
+    component multiplies it by the term evaluated at ``lam_ref``, which carries the amplitude
+    exactly. See ``tengri.components._term_shape_table``.
+
+    Parameters
+    ----------
+    template_data : Any
+        The threaded template data; any non-mapping value yields ``None``.
+    name : str
+        Emitter namespace: ``"xray"`` or ``"radio"``.
+    params : mapping
+        The emitter's params, carrying the free shape parameters the tables read.
+    terms : tuple of str
+        Term keys in the emitter's ``emission_terms`` order.
+
+    Returns
+    -------
+    mapping or None
+        ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,)}``, or ``None`` when any term has no
+        table (the caller keeps the dense per-call integral for the whole emitter).
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    from tengri.components._term_shape_table import (
+        TERM_SHAPE_TABLE_KEY,
+        lookup_term_shape,
+    )
+
+    if not isinstance(template_data, Mapping):
+        return None
+    namespace = template_data.get(name)
+    if not isinstance(namespace, Mapping):
+        return None
+    tables = namespace.get(TERM_SHAPE_TABLE_KEY)
+    if tables is None:
+        return None
+    if any(tables.get(term) is None for term in terms):
+        return None
+    rows = [lookup_term_shape(tables[term], params) for term in terms]
+    lam_ref = [tables[term]["lam_ref"] for term in terms]
+    return {"R": jnp.stack(rows), "lam_ref": jnp.stack(lam_ref)}

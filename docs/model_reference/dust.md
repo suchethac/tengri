@@ -139,6 +139,8 @@ The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and
 
 (app-dust-emission-details)=
 
+**UV crossover.** The Leitherer et al. (2002) far-UV extension, used by `leitherer02`, `noll09` and `salim_sbl18` below 1800 Å, joins the Calzetti curve at 1800 Å.
+
 ## Dust Emission Models
 
 Dust emission models span parametric (modified blackbody, Casey (2012)) and tabulated (Dale et al. (2014), Draine and Li (2007), Draine and Li (2014), Hensley and Draine (2023), Jones et al. (2017), da Cunha et al. (2008), Boquien and Salim (2021)) approaches. Tabulated models are loaded lazily from pre-computed template grids at first use; the templates are interpolated in the model parameters via JAX-compatible routines and are fully differentiable. All models are normalized by an energy-balance constraint.
@@ -161,7 +163,11 @@ The optically thin modified blackbody (2--3 parameters: $T_{\rm dust}$, $\beta_{
 At high redshift the CMB sets a temperature floor on dust grains. Following da Cunha et al. (2013): $$T_{\rm eff} = \bigl(T_{\rm dust}^{\,n} + T_{\rm CMB}(z)^{\,n} - T_{\rm CMB,0}^{\,n}\bigr)^{1/n},
 
 $$ (eq-cmb-temperature)
- where $n \equiv 4 + \beta_{\rm IR}$, $T_{\rm CMB}(z) = 2.725\,(1+z)$ K, and $T_{\rm CMB,0} = 2.725$ K.
+ where $n \equiv 4 + \beta_{\rm IR}$, $T_{\rm CMB}(z) = T_{\rm CMB,0}\,(1+z)$, and $T_{\rm CMB,0} = 2.7255$ K (Fixsen 2009, `T_CMB_0`, #2806).
+
+#### CMB luminosity boost.
+
+The dust absorbs the CMB as well as the starlight, so its emitted total grows with the heated temperature. Following da Cunha et al. (2013, Sect. 2.2, Eqs. 11 and 17), the spectrum before the contrast integrates to $\int L_\nu^{\rm emit}\,d\nu = \eta\,L_{\rm abs}\,[T_{\rm eff}/T_{\rm dust}]^{n}$ at $z > 0$, and to $\eta\,L_{\rm abs}$ at $z = 0$. The excess is CMB power the dust absorbs (#2806).
 
 #### CMB contrast factor.
 
@@ -238,7 +244,7 @@ The template file `data/schreiber2016_templates.h5` is required: the model raise
 
 **Contrast, all tabulated models.** The emission is multiplied by Eq. 18 of da Cunha et al. (2013),
 $$C_\nu = 1 - \frac{B_\nu\bigl(T_{\rm CMB}(z)\bigr)}{B_\nu\bigl(T_{\rm d}(z)\bigr)}, \qquad T_{\rm CMB}(z) = T_{\rm CMB,0}(1+z),$$ (eq-cmb-contrast-tabulated)
-with $T_{\rm CMB,0} = 2.725$ K, the value used by the analytic models. It is evaluated at rest-frame frequency.
+with $T_{\rm CMB,0} = 2.7255$ K (Fixsen 2009), the one CMB temperature every CMB formula uses (`T_CMB_0` in `tengri.utils.physics_constants`, #2806). It is evaluated at rest-frame frequency.
 
 **Heating, single-temperature libraries only.** `schreiber2016` and `schreiber2018` have a dust temperature parameter, so the template is read at the heated temperature of Eq. 12,
 $$T_{\rm d}(z) = \Bigl[T_{\rm d,0}^{\,4+\beta} + T_{\rm CMB,0}^{\,4+\beta}\bigl((1+z)^{4+\beta} - 1\bigr)\Bigr]^{1/(4+\beta)},$$ (eq-cmb-heating-tabulated)
@@ -248,9 +254,9 @@ before the contrast. The boost is the CMB energy the dust absorbs; the contrast 
 
 **Why only contrast for the radiation-field libraries.** Draine and Li, Dale et al., THEMIS, Astrodust, Dale and Helou/Chary and Elbaz and BOSA have no dust temperature: a spectrum is a mixture of grains whose temperatures are set by a starlight intensity, plus stochastically heated PAH and small-grain emission that the CMB does not heat at all. There is no single shift of such a template that is the CMB's effect, so the spectrum is left as tabulated and only the contrast is applied. Its dust temperature is read off the template, as the temperature of the $\nu^{\beta}B_\nu$ spectrum with the same mean frequency over $\lambda \ge 50\,\mu$m (a few K above the temperature of the cold grains, because the warm emission longward of 50 $\mu$m is included), and heated by Eq. 12 so that it stays above $T_{\rm CMB}(z)$. This is an approximation: it is exact for a single-temperature modified blackbody, but for a two-temperature mixture the mean-frequency temperature leans to the hot component while the CMB penalty is set by the cold one, so the detected flux is overestimated by about 5--15 % at $z = 4$ and 20--100 % at $z = 6$ when a 20--25 K cold component carries a large share (2--8 % when it is a 5 % hot component). It also does not reproduce the heating of the cold grains. Where the cold grains matter at $z \gtrsim 6$, prefer `schreiber2016` or an analytic model.
 
-**Luminosity boost.** The Schreiber libraries follow Sect. 2.2 of da Cunha et al. (2013) and include the heated-dust luminosity boost $[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}$. The default-on analytic models (`modified_blackbody`, `graybody`, `casey2012`) omit it, which under-predicts their emission by up to about 1.8 times for 20 K dust at $z = 6$ (1.03 times for 35 K).
+**Luminosity boost.** The Schreiber libraries follow Sect. 2.2 of da Cunha et al. (2013) and include the heated-dust luminosity boost $[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}$. The analytic models (`modified_blackbody`, `graybody`, `casey2012`) apply the same boost whenever $z > 0$, since their CMB heating is always on (#2806; before that they omitted it and under-predicted their emission by up to about 1.8 times for 20 K dust at $z = 6$). For `casey2012`, $\beta$ is the emissivity index of its graybody term; the boost multiplies the whole normalized spectrum, mid-IR power law included.
 
-**Normalization.** With `cmb=True` the frequency integral of `sed_dust_ir` is no longer exactly $L_{\rm IR}$: the contrast removes the undetectable part by construction. This differs from the analytic models, which renormalize to $L_{\rm IR}$ at the heated temperature and then apply the contrast, so they detect less than $L_{\rm IR}$ at high redshift.
+**Normalization.** Every model with CMB heating emits $L_{\rm IR}\,[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}$ before the contrast, where $L_{\rm IR}$ is the stellar-absorbed (energy-balance) luminosity. The published `sed_dust_ir` is that spectrum times the contrast, so its frequency integral is not $L_{\rm IR}$ at $z > 0$: the contrast removes the undetectable part by construction, and the rest of the boost is the CMB energy the dust absorbs.
 
 ## References
 

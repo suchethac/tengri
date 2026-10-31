@@ -24,8 +24,19 @@ The script reads:
     - lineList_wav.npy            (line wavelengths)
     - lineList_replaceblnd_name.npy  (line names)
     - FSPSlam.dat                 (continuum wavelength grid)
+    - nn_stats_v0.pkl             (per-line emulator S/N, dill pickle)
 
 And writes everything to a single flat-dict npz file.
+
+Per-line emulator error (``line_emul_sigma_frac``)
+--------------------------------------------------
+Shape (138,), float32, in the same order as ``sorted_line_wavelength`` and
+``sorted_line_name`` (catalog order, not network order). Provenance: upstream
+Cue ``nn_stats_v0.pkl``, with ``sigma = 1 / SN_quantile[1]`` per line, the same
+convention as upstream ``cue.utils.sigma_line_for_fsps``. It is a fractional
+(dimensionless) 1-sigma emulator error on each line flux. The stats entries are
+matched to the catalog by ``name`` string equality, and the script asserts that
+the stored wavelengths agree with ``lineList_wav`` to within 0.01 Angstrom.
 
 Wavelength convention: the npz stores Cloudy's AIR line wavelengths exactly as
 upstream ships them (``lineList_wav``, ``nn_line_wavelength``,
@@ -39,6 +50,7 @@ References
 """
 
 import argparse
+import importlib
 import pickle
 import sys
 from pathlib import Path
@@ -131,6 +143,109 @@ def _load_pickle_with_stubs(filepath: str):
 
     with open(filepath, "rb") as f:
         return _DillStubUnpickler(f).load()
+
+
+# ---------------------------------------------------------------------------
+# Per-line emulator error: nn_stats_v0.pkl (allowlisted unpickler)
+#
+# Unlike the speculator pickles, this file is read with an ALLOWLIST: only
+# numpy array reconstruction and dill's array constructor are resolvable, and
+# any other global raises. Stubbing arbitrary classes would be unsafe here.
+# ---------------------------------------------------------------------------
+
+try:  # NumPy 2 exposes the array reconstructor under numpy._core
+    from numpy._core.multiarray import _reconstruct as _NP_RECONSTRUCT
+except ImportError:  # NumPy 1.x
+    from numpy.core.multiarray import _reconstruct as _NP_RECONSTRUCT
+
+N_LINES = 138  # catalog size of the Cue release (lineList_wav.npy)
+
+_NN_STATS_ALLOWED = frozenset(
+    {
+        ("numpy.core.multiarray", "_reconstruct"),
+        ("numpy._core.multiarray", "_reconstruct"),
+        ("numpy", "ndarray"),
+        ("numpy", "dtype"),
+        ("numpy.core.multiarray", "scalar"),
+        ("numpy._core.multiarray", "scalar"),
+    }
+)
+
+
+def _nn_stats_array(f, args, state, npdict=None):
+    """Rebuild a numpy array from dill's ``_create_array`` record.
+
+    Raises if the constructor is not numpy's ``_reconstruct`` or if dill
+    attached extra ``__dict__`` state, since neither occurs in the upstream file.
+    """
+    if f is not _NP_RECONSTRUCT:
+        raise pickle.UnpicklingError("nn_stats_v0.pkl: unexpected array constructor")
+    if npdict:
+        raise pickle.UnpicklingError("nn_stats_v0.pkl: unexpected array __dict__ state")
+    array = f(*args)
+    array.__setstate__(state)
+    return array
+
+
+class _NNStatsUnpickler(pickle.Unpickler):
+    """Resolve only the allowlisted globals in ``nn_stats_v0.pkl``."""
+
+    def find_class(self, module, name):
+        if (module, name) == ("dill._dill", "_create_array"):
+            return _nn_stats_array
+        if (module, name) in _NN_STATS_ALLOWED:
+            return getattr(importlib.import_module(module), name)
+        raise pickle.UnpicklingError(f"nn_stats_v0.pkl: blocked global {module}.{name}")
+
+
+def _line_emul_sigma_frac(cue_dir: Path, sorted_lam: np.ndarray, sorted_name: np.ndarray):
+    """Fractional 1-sigma emulator error per line, in the catalog (sorted) order.
+
+    Reads ``nn_stats_v0.pkl`` and returns ``1 / SN_quantile[1]`` (the same
+    convention as upstream ``cue.utils.sigma_line_for_fsps``), reordered to
+    match ``sorted_lam`` / ``sorted_name`` by name string equality.
+
+    Raises
+    ------
+    SystemExit
+        If the file is missing.
+    ValueError
+        If any catalog line is unmatched, a name is duplicated, a wavelength
+        disagrees by more than 0.01 Angstrom, or a sigma is not finite and positive.
+    """
+    stats_path = cue_dir / "nn_stats_v0.pkl"
+    if not stats_path.exists():
+        sys.exit(f"ERROR: {stats_path} not found (needed for line_emul_sigma_frac)")
+
+    with open(stats_path, "rb") as f:
+        stats = _NNStatsUnpickler(f, encoding="latin1").load()
+
+    stat_names = [str(n) for n in stats["name"]]
+    if len(set(stat_names)) != len(stat_names):
+        raise ValueError("nn_stats_v0.pkl: duplicate line names")
+    index = {n: i for i, n in enumerate(stat_names)}
+
+    catalog_names = [str(n) for n in sorted_name]
+    if len(catalog_names) != N_LINES:
+        raise ValueError(f"catalog has {len(catalog_names)} lines, expected {N_LINES}")
+    unmatched = [n for n in catalog_names if n not in index]
+    if unmatched:
+        raise ValueError(
+            f"nn_stats_v0.pkl: {len(unmatched)} catalog lines unmatched, e.g. {unmatched[:3]}"
+        )
+    take = np.array([index[n] for n in catalog_names], dtype=np.int64)
+
+    max_dwav = float(np.max(np.abs(np.asarray(stats["wav"], dtype=np.float64)[take] - sorted_lam)))
+    if max_dwav > 0.01:
+        raise ValueError(
+            f"nn_stats_v0.pkl: wavelength mismatch up to {max_dwav:.4f} A (limit 0.01)"
+        )
+
+    sn_q1 = np.asarray(stats["SN_quantile"], dtype=np.float64)[1][take]
+    sigma = (1.0 / sn_q1).astype(np.float32)
+    if not (np.all(np.isfinite(sigma)) and np.all(sigma > 0)):
+        raise ValueError("nn_stats_v0.pkl: sigma not finite and positive for all lines")
+    return sigma
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +564,7 @@ def convert(cue_dir: str, output_path: str) -> None:
         npz["sorted_line_wavelength"] = np.asarray(sorted_lam, dtype=np.float64)
         npz["sorted_line_name"] = sorted_name
         npz["line_sort_idx"] = np.asarray(sorted_idx, dtype=np.int32)
+        npz["line_emul_sigma_frac"] = _line_emul_sigma_frac(cue_dir, sorted_lam, sorted_name)
 
     # ------------------------------------------------------------------
     # Save

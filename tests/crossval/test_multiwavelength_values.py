@@ -223,7 +223,7 @@ class TestXrayAbsoluteValues:
     """X-ray luminosities in erg/s against published scaling relations."""
 
     def test_lehmer2016_hmxb_2_10kev(self):
-        r"""Lehmer+2016 Eq. 15: L_X(HMXB, 2-10 keV) per unit SFR at the default Z.
+        r"""Fragos+2013 Eq. 3: L_X(HMXB, 2-10 keV) per unit SFR at the default Z.
 
         .. math::
 
@@ -236,7 +236,7 @@ class TestXrayAbsoluteValues:
         This test used to assert **2.6e39**, taken from the docstring's
         parenthetical claim that the equation "yields ~2.6e39 at Z=0.02,
         consistent with Grimm et al. 2003". That claim is arithmetically false —
-        the polynomial gives 1.78e39 there, a factor of 1.46 — and Lehmer+2016
+        the polynomial gives 1.78e39 there, a factor of 1.46 — and Fragos+2013
         and Grimm+2003/Mineo+2012 genuinely differ by ~30-45% in this band
         rather than agreeing (#1755). Asserting the equation, not the prose.
 
@@ -269,14 +269,14 @@ class TestXrayAbsoluteValues:
             l_band,
             expected,
             rtol=0.10,
-            err_msg=f"HMXB L_X = {l_band:.3e}, Lehmer+2016 at Z={z_default} gives {expected:.3e}",
+            err_msg=f"HMXB L_X = {l_band:.3e}, Fragos+2013 at Z={z_default} gives {expected:.3e}",
         )
 
     def test_lmxb_matches_gilfanov_for_an_old_population(self):
         """LMXB traces stellar mass, and its normalization is age-dependent.
 
         Gilfanov 2004 quotes L_X(LMXB) = 9.2e28 x M*, i.e. 9.2e38 at 1e10 Msun,
-        for an **old** population. Lehmer+2016 — what tengri implements — is a
+        for an **old** population. Fragos+2013 Eq. 4 — what tengri implements — is a
         function of stellar age, and reproduces that at ~10 Gyr (8.15e38). At
         the module default of 1 Gyr it is 1.89e40, a factor of 23 higher.
 

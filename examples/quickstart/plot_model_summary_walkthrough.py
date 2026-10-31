@@ -51,9 +51,11 @@ summary_out = model.spec.summary_str()
 # Create a sample parameter dict for the SED prediction
 key = jax.random.PRNGKey(0)
 params = dict(model.spec.sample(key))
-# Override a few to show variability
+# Override a few to show variability. The peak is sampled as a fraction of the age of
+# the universe at the model redshift, so a peak 3 Gyr ago is 3 / age(z) of it.
+age_z = float(tengri.cosmology.age_at_z(0.05))  # Gyr
 params["sfh_tsnorm_log_total_mass"] = jnp.float64(11.5)
-params["sfh_tsnorm_peak_lbt_gyr"] = jnp.float64(3.0)
+params["sfh_tsnorm_peak_lbt_frac"] = jnp.float64(3.0 / age_z)
 params["sfh_tsnorm_skew"] = jnp.float64(-0.2)
 
 # Predict rest-frame SED

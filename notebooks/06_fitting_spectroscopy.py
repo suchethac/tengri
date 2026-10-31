@@ -106,7 +106,7 @@ sed_model = SEDModel.build(
     observation=obs,
     approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(
-        all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+        all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_frac=FREE, width_gyr=FREE
     ),
     dust_attenuation=builders.dust.two_component(
         all_params=Fixed(DEFAULT),
@@ -236,7 +236,7 @@ labels = {
     "dust_tau_bc": r"$\tau_{\rm bc}$",
     "dust_tau_diff": r"$\tau_{\rm diff}$",
     "sfh_tsnorm_log_total_mass": r"$\log M_\star$",
-    "sfh_tsnorm_peak_lbt_gyr": r"$t_{\rm peak}$",
+    "sfh_tsnorm_peak_lbt_frac": r"$t_{\rm peak}/t_{\rm age}$",
     "sfh_tsnorm_width_gyr": r"$\sigma_t$",
 }
 fig_corner = posterior.plot_corner(truths=truth, color=C_POST)

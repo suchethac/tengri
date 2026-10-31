@@ -58,10 +58,10 @@ from tengri.observation.spectral_indices import (
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tengri.utils.scale import apply_log10_scale
 
-#: Sigmoid edge width [Å] of the emission-line flux windows. The hard-window ruling
-#: of #2637 covers the Lick / break / EW spectral indices; line-flux windows keep
-#: their 1 Å soft edge until they are audited separately.
-LINE_WINDOW_EDGE_WIDTH = 1.0
+#: Edge width [Å] of the emission-line flux windows. ``0`` is the hard window: the
+#: exact integral over the band, shared with the spectral indices (#2637). A 1 Å
+#: sigmoid edge leaked about an angstrom past each band edge (#2802).
+LINE_WINDOW_EDGE_WIDTH = 0.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -204,7 +204,7 @@ class LineWindowPrecomputation:
     Attributes
     ----------
     window_integrals : ndarray, shape (n_met, n_age, n_window)
-        Soft-window SSP integrals [erg/s/Hz/Msun · Å], deduplicated windows.
+        Hard-window SSP integrals [erg/s/Hz/Msun · Å], deduplicated windows.
     window_norms : ndarray, shape (n_window,)
         Window normalizations (``mean = integral / norm``).
     window_centers : ndarray, shape (n_window,)
@@ -239,8 +239,8 @@ def precompute_line_windows(
         SSP spectra [erg/s/Hz/Msun].
     line_defs : sequence of LineDef
         Lines to precompute.
-    edge_width : float, default ``LINE_WINDOW_EDGE_WIDTH`` (1.0)
-        Sigmoid edge width [Å], MUST match the width the exact line-flux path uses.
+    edge_width : float, default ``LINE_WINDOW_EDGE_WIDTH`` (0.0, hard)
+        Window edge width [Å], MUST match the width the exact line-flux path uses.
 
     Returns
     -------

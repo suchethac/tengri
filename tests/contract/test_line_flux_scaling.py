@@ -145,7 +145,13 @@ def test_gradient_matches_the_analytic_value(ssp, observation, truth_and_lines):
     phot_truth = dict(model_free.spec.sample(jax.random.PRNGKey(1)))
     phot = np.asarray(model_free.predict_photometry(phot_truth))
     noise = 0.05 * np.abs(phot)
-    fitter = Fitter(model_free, data=jnp.asarray(phot), noise=jnp.asarray(noise))
+    # Observation-only algebra pinned here; model error: tests/contract/test_line_model_sigma.py
+    fitter = Fitter(
+        model_free,
+        data=jnp.asarray(phot),
+        noise=jnp.asarray(noise),
+        line_model_sigma=False,
+    )
     ll = build_loglikelihood_fn(fitter)
 
     free_names = set(model_free.spec.free_params)
@@ -249,7 +255,13 @@ def test_joint_fit_scales_only_the_line_channel(ssp, observation, truth_and_line
     phot_truth = dict(model_free.spec.sample(jax.random.PRNGKey(2)))
     phot = np.asarray(model_free.predict_photometry(phot_truth))
     noise = 0.05 * np.abs(phot)
-    fitter = Fitter(model_free, data=jnp.asarray(phot), noise=jnp.asarray(noise))
+    # Observation-only algebra pinned here; model error: tests/contract/test_line_model_sigma.py
+    fitter = Fitter(
+        model_free,
+        data=jnp.asarray(phot),
+        noise=jnp.asarray(noise),
+        line_model_sigma=False,
+    )
     ll = build_loglikelihood_fn(fitter)
 
     free_names = set(model_free.spec.free_params)

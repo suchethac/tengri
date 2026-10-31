@@ -51,7 +51,7 @@ and that these columns measurably carry.
 | `cb19_templates.h5` | Charlot & Bruzual 2019 (CB19) | upstream CB19 release | Not redistributed at the upstream — request from authors; cite Charlot & Bruzual 2003, 2019. **Do not redistribute as part of tengri sdist/wheel.** |
 | `fsps_prsc_miles_chabrier.h5` | FSPS with PARSEC isochrones and the MILES library, Chabrier IMF — the default grid (`DEFAULT_SSP`) | generated from upstream FSPS / python-fsps | FSPS itself MIT; python-fsps MIT; SSP grid derived under those terms |
 | `ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` | The same PARSEC / MILES / Chabrier grid with FSPS nebular emission switched on (log U = -3.0, log Z_gas = 0.0) | generated from upstream FSPS / python-fsps | as above |
-| `bpss_stars_c3k_a_chabrier.h5` | BPASS binary population synthesis with the C3K alpha-enhanced library, Chabrier IMF | generated from upstream BPASS | Paper-published data; cite Eldridge, Stanway et al. 2017 (PASA 34, e058) |
+| `bpss_stars_c3k_a_chabrier.h5` | BPASS v2.2.1 binary populations, `imf_chab300` (Chabrier, 0.1-300 Msun), 13 Z, 51 ages; BPASS supplies its own stellar atmospheres, and the `c3k_a` token in the file name does not describe a BPASS library | repackaged from ProSpect's `BPASS_St_Ch300.fits` (Robotham et al. 2020) by `scripts/convert_bpass_to_h5.py`, which reproduces it to float32 round-off | Paper-published data; cite Eldridge et al. 2017 (PASA 34, e058), Stanway & Eldridge 2018 (MNRAS 479, 75) and Robotham et al. 2020 (MNRAS 495, 905) |
 
 SSP filenames follow `<code>_<isochrone>_<library>_<imf>`. The token tables that
 turn each field into a citation live in
@@ -65,7 +65,7 @@ its own isochrones internally.
 
 | File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `cue_weights.npz` | Cue nebular emulator — Li et al. 2025 (ApJ 986, 9; arXiv:2405.04598) | `scripts/convert_cue_weights.py` converts the trained Speculator pickles shipped with upstream Cue (github.com/yi-jia-li/cue) | Upstream Cue is MIT; redistributed here with attribution — cite Li+ 2025 |
+| `cue_weights.npz` | Cue nebular emulator — Li et al. 2025 (ApJ 986, 9; arXiv:2405.04598). Also carries the per-line emulator error (`line_emul_sigma_frac`, from upstream `nn_stats_v0.pkl`) | `scripts/convert_cue_weights.py` converts the trained Speculator pickles and `nn_stats_v0.pkl` shipped with upstream Cue (github.com/yi-jia-li/cue) | Upstream Cue is MIT; redistributed here with attribution — cite Li+ 2025 |
 | `neogal/AGN_NLR_nebular_feltre16` (+ `.tar.gz`) | Feltre et al. 2016 NLR grid | NEOGAL distribution at www.iap.fr/neogal | Paper-published grid; cite Feltre+ 2016; NEOGAL distributes for scientific use |
 | `neogal/nebular_emission_gutkin16.tar.gz`, `neogal/nebular_emission_Z*.txt` | Gutkin et al. 2016 nebular grid | NEOGAL distribution | Paper-published grid; cite Gutkin+ 2016 |
 | `cloudy_raw/emlines_info.dat` | Cloudy default emission-line database | upstream Cloudy 17+ | Cloudy is open source (GPL-compatible); the line list is reference data, cite Ferland+ 2017 |

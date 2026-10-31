@@ -70,9 +70,21 @@ def test_precision_env_is_applied_before_jax_is_imported() -> None:
     )
 
 
+def _isolate_precision_env(monkeypatch, *names: str) -> None:
+    """Clear ``names`` and make the original state come back at teardown.
+
+    ``monkeypatch.delenv(name, raising=False)`` on a variable that is not set records
+    nothing to undo, so a value the code under test then writes would outlive the test
+    and reach every later test (and subprocess) in the worker. Setting the variable
+    first records the undo; deleting it then leaves the test the clean slate it wants.
+    """
+    for name in names:
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
+
+
 def test_apply_precision_env_sets_the_variables_for_f32(bench, monkeypatch) -> None:
-    monkeypatch.delenv("JAX_ENABLE_X64", raising=False)
-    monkeypatch.delenv("JAX_DEFAULT_MATMUL_PRECISION", raising=False)
+    _isolate_precision_env(monkeypatch, "JAX_ENABLE_X64", "JAX_DEFAULT_MATMUL_PRECISION")
     assert bench._apply_precision_env(["--dtype", "f32"]) == "f32"
     import os
 
@@ -82,7 +94,8 @@ def test_apply_precision_env_sets_the_variables_for_f32(bench, monkeypatch) -> N
 
 
 def test_apply_precision_env_leaves_f64_alone(bench, monkeypatch) -> None:
-    monkeypatch.delenv("JAX_ENABLE_X64", raising=False)
+    # The last call below asks for f32, which writes both variables.
+    _isolate_precision_env(monkeypatch, "JAX_ENABLE_X64", "JAX_DEFAULT_MATMUL_PRECISION")
     assert bench._apply_precision_env(["--dtype", "f64"]) == "f64"
     import os
 

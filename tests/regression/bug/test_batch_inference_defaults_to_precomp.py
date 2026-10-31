@@ -46,13 +46,22 @@ class _StubModel:
         spectrum_precomp=False,
         via_with_approx=False,
         features_tabulate=False,
+        spectrum_serves_exactly=False,
     ):
         self.spec = _StubSpec()
         self.approx = _StubApprox(wave_precomp, spectrum_precomp)
+        self.observation = None
+        self._spectrum_serves_exactly = spectrum_serves_exactly
         self.approx_configs = ()
         self.via_with_approx = via_with_approx
         self.features_tabulate = features_tabulate
         self.received_cfg = None
+
+    def _spectrum_lut_serves_exactly(self, observation):
+        return self._spectrum_serves_exactly
+
+    def _fixed_sigma_v_kms(self):
+        return None if not self._spectrum_serves_exactly else 150.0
 
     def with_approx(self, cfg):
         from tengri.forward.sed_model import FeaturePrecomp
@@ -114,13 +123,23 @@ def test_a_model_already_carrying_the_lut_is_not_rewrapped():
     assert not model.via_with_approx
 
 
-def test_spectroscopy_resolves_to_the_spectrum_lut():
-    """``data_type="spectroscopy"`` -> SpectrumPrecomp, mirroring Fitter's auto map."""
-    fitter = _fitter(lambda **kw: _StubModel(), data_type="spectroscopy")
+def test_spectroscopy_stays_exact_where_the_lut_cannot_serve_it():
+    """Spectroscopy stays exact under "auto" where the LUT cannot serve it (#1688, #2958)."""
+    fitter = _fitter(
+        lambda **kw: _StubModel(spectrum_serves_exactly=False), data_type="spectroscopy"
+    )
+    model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+    assert not model.via_with_approx
+
+
+def test_spectroscopy_takes_the_spectrum_lut_where_it_serves_exactly():
+    """Where the LUT serves the pixels exactly, "auto" routes the batch fit through it (#2958)."""
+    fitter = _fitter(
+        lambda **kw: _StubModel(spectrum_serves_exactly=True), data_type="spectroscopy"
+    )
     model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
     assert model.via_with_approx
-    cfgs = model.received_cfg if isinstance(model.received_cfg, tuple) else (model.received_cfg,)
-    assert any(isinstance(c, SpectrumPrecomp) for c in cfgs)
+    assert isinstance(model.received_cfg, SpectrumPrecomp)
 
 
 def test_the_spec_template_stays_raw():

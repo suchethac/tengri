@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 import tengri
+from tengri.cosmology import age_at_z
 from tengri.igm import igm_transmission_madau
 
 pytestmark = [pytest.mark.physics]
@@ -149,7 +150,7 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "neb_logU": -2.5,
             "neb_fesc": 0.0,
-            "neb_fesc_lya": 0.0,
+            "neb_fesc_lya": 1.0,
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -318,8 +319,10 @@ def test_sed_additivity():
     # restating it here used to be harmless (it matched the pin exactly)
     # but is now a refused presence override regardless of value (#2296) --
     # every predict() call below self-merges each model's own Fixed 0.5.
+    # The peak is a fraction of age(z) at the model redshift, z = 0.05 (#2748).
+    peak_lbt_gyr = 3.0
     params.update(
-        sfh_tsnorm_peak_lbt_gyr=3.0,
+        sfh_tsnorm_peak_lbt_frac=peak_lbt_gyr / float(age_at_z(0.05)),
         sfh_tsnorm_width_gyr=2.0,
         sfh_tsnorm_log_total_mass=10.5,
         sfh_tsnorm_skew=0.3,

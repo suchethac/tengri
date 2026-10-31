@@ -139,7 +139,7 @@ class TestLegacyCompat:
             spec = Parameters(
                 mean_sfh_type="const",
                 dust_emission="schreiber2018",
-                dust_tdust=Uniform(15.0, 99.0),
+                dust_tdust=Uniform(15.0, 60.0),
                 dust_fpah=Uniform(0.0, 1.0),
             )
         assert "dust_T" in spec.free_params
@@ -176,6 +176,14 @@ class TestValidation:
         )
         with pytest.raises(ValueError, match="outside bounds"):
             spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(5.0)})
+
+    def test_validate_nan_raises(self):
+        spec = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
+        )
+        with pytest.raises(ValueError, match="outside bounds"):
+            spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(jnp.nan)})
 
 
 class TestProperties:
@@ -334,7 +342,7 @@ class TestSampleSubstreamStability:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_age_gyr=Uniform(0.5, 13.5),
+            sfh_dpl_age_frac=Uniform(0.0362663, 0.979191),
             sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
@@ -350,7 +358,8 @@ class TestSampleSubstreamStability:
         This is the #548/#563 regression: spec_b enables ``dust_emission``,
         which adds free ``dust_T``/``dust_beta_ir``. Under positional key
         splitting this shifted the shared ``sfh_dpl_*`` draws (notably
-        ``sfh_dpl_age_gyr``: 13.62 vs 13.08); per-name substreams keep them
+        ``sfh_dpl_age_gyr``: 13.62 vs 13.08, since renamed
+        ``sfh_dpl_age_frac``); per-name substreams keep them
         identical.
         """
         key = jax.random.PRNGKey(0)
@@ -368,7 +377,7 @@ class TestSampleSubstreamStability:
         )
         # Every param free in BOTH must draw identically.
         shared_free = set(spec_a.free_params) & set(spec_b.free_params)
-        assert "sfh_dpl_age_gyr" in shared_free, "age_gyr must be free in both"
+        assert "sfh_dpl_age_frac" in shared_free, "age_frac must be free in both"
         for name in shared_free:
             np.testing.assert_allclose(
                 np.asarray(a[name]),

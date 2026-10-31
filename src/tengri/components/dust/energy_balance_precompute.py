@@ -257,15 +257,18 @@ def build_energy_balance_lut(
     # below is the SSP cube contracted with one quadrature-weight vector; the
     # weights are read off the rule itself (its gradient), so they cannot drift
     # from it. ``quad`` folds in the LyC mask.
-    quad = mask * jax.grad(
-        lambda y: edge_trapezoid(y, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-    )(jnp.ones(ssp_wave.shape, dtype=jnp.result_type(ssp_flux, ssp_wave)))
+    def quadrature():
+        """The masked trapezoid weights, read off the rule itself (its gradient)."""
+        ones = jnp.ones(ssp_wave.shape, dtype=jnp.result_type(ssp_flux, ssp_wave))
+        return mask * jax.grad(
+            lambda y: edge_trapezoid(y, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+        )(ones)
 
-    def integrate(weights):
+    def integrate(weights, flux, quad):
         """``∫ ssp · mask · w`` for weights of shape (..., n_wave) -> (n_met, n_age, ...)."""
-        return jnp.tensordot(ssp_flux, weights * quad, axes=([-1], [-1]))
+        return jnp.tensordot(flux, weights * quad, axes=([-1], [-1]))
 
-    def family(population):
+    def family(population, flux, quad):
         i0, i1 = intrinsic(population)
 
         # The observed weights at every (tau_bc, tau_diff) node in one jitted
@@ -283,18 +286,28 @@ def build_energy_balance_lut(
         w = jax.jit(jax.vmap(jax.vmap(weights_at)))(tb_nodes, td_nodes)
         ntb, ntd, k, n_wave = w.shape  # k = 1, or 2 with an fesc family
         intrinsic_w = jnp.stack([i0] if i1 is None else [i0, i1])
-        cols = integrate(jnp.concatenate([intrinsic_w, w.reshape(ntb * ntd * k, n_wave)]))
+        cols = integrate(
+            jnp.concatenate([intrinsic_w, w.reshape(ntb * ntd * k, n_wave)]), flux, quad
+        )
         b = cols[..., :k]
         g = cols[..., k:].reshape(*cols.shape[:-1], ntb, ntd, k)
         if i1 is None:
             return b[..., 0], g[..., 0], None, None
         return b[..., 0], g[..., 0], b[..., 1], g[..., 1]
 
-    B, G, B_fesc, G_fesc = family(0)
-    if single_population:
-        B_old = G_old = B_fesc_old = G_fesc_old = None
-    else:
-        B_old, G_old, B_fesc_old, G_fesc_old = family(1)
+    # One traced program for every family (#2914): evaluated eagerly, the quadrature
+    # weights, the stacked transmissions and the SSP contraction dispatched about
+    # ninety XLA programs per build, each below the persistent cache's floor. The
+    # SSP cube rides in as an argument, not as a constant baked into the program.
+    def _families(flux):
+        quad = quadrature()
+        young = family(0, flux, quad)
+        old = (None, None, None, None) if single_population else family(1, flux, quad)
+        return young, old
+
+    (B, G, B_fesc, G_fesc), (B_old, G_old, B_fesc_old, G_fesc_old) = jax.jit(_families)(
+        jnp.asarray(ssp_flux)
+    )
     return EnergyBalanceLUT(
         B=B,
         G=G,
@@ -467,7 +480,7 @@ def _contract_bg(
             )
         from tengri.components._z_response import z_bracket
 
-        k0, w_z = z_bracket(ln1pz, redshift)  # (), (2,)
+        k0, w_z = z_bracket(ln1pz, redshift, extrapolate=True)  # (), (2,)
         g_sub = jax.lax.dynamic_slice(
             G,
             (k0, zero, zero, i0, j0),

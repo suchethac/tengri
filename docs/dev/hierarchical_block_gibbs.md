@@ -46,7 +46,7 @@ Three blocks per outer iteration, ordered by importance:
 - `evi_step_full` in `fitter.py` already supports `constants_mask` and `pe_mask`
 - `BlockSchedule.hierarchical()` in `vi_config.py` defines the blocks
 - `HierarchicalFitter._run_evi_jit` has a flat-array JIT engine
-- `fitter.fit_batch(galaxies)` for batch fitting (default method: `native_geovi`)
+- `fitter.fit_batch(galaxies)` for batch fitting (default method: `mcmc_nuts_fast`)
 - (Removed) `OptimizationSchedule` in `vi_config.py` — deleted as dead code in #1293; nothing consumed it and no `schedule=` parameter exists.
 - `_simple_cg` is a module-level function for catalog engine
 

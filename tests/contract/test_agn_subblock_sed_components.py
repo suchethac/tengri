@@ -363,6 +363,14 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     ``L tau'(0)``: the polar term is ``6.861926e+33`` and the ``skirtor`` torus term
     ``-1.551373e+33`` (``-7.756859e+32`` before), each twice its old value.
 
+    **Re-pin (#2606, commit 712fab431).** The torus template is looked up node-exact
+    (PCHIP) instead of with the triweight smoother, at ``cos_inc = 0.6``, which is
+    off the inclination nodes (0.5 and 0.643). The move is the lookup change alone:
+    the same three values reproduce at the parent of 712fab431. Old -> new:
+    live ``ebv = 0.1`` gradient ``2.211796e+33 -> 2.213808e+33`` (+0.09 %);
+    ``d(sum torus)/d E(B-V)`` at zero ``-1.551373e+33 -> -1.546500e+33`` (-0.31 %);
+    ``skirtor`` degenerate-point gradient ``5.310558e+33 -> 5.315494e+33`` (+0.10 %).
+
     The values are the gradient of the node sum of the polar and torus
     components on this file's 500 A - 1e8 A, 400-node grid. The polar absorbed
     power is measured on the runner's fixed budget grid (1e-3 A - 1e10 A), so it
@@ -384,8 +392,8 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     torus). ``torus='none'`` has no torus term and does not move.
 
     Away from the degenerate point nothing moves: at ``ebv = 0.1`` both forms
-    give ``2.211796e+33``. A fit that starts a sampler at zero polar
-    reddening -- the registry default -- took a NaN gradient on step one.
+    give ``2.211796e+33`` (``2.213808e+33`` after the #2606 re-pin). A fit that starts a
+    sampler at zero polar reddening -- the registry default -- took a NaN gradient on step one.
     """
 
     _EBV_DEGENERATE = 0.0
@@ -441,7 +449,7 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
             "derivative everywhere would satisfy the assertion above while leaving "
             "the sampler exactly as stuck as the nan did. The class docstring pins "
-            "the selected-denominator answer for torus='skirtor': 5.310558e+33."
+            "the selected-denominator answer for torus='skirtor': 5.315494e+33."
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -464,7 +472,11 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         # non-zero value pinned exactly on the next line.
         assert np.isfinite(grad)
         if torus_block == "skirtor":
-            assert grad == pytest.approx(2.211796e33, rel=1e-5, abs=0.0), (
+            # Re-pinned on the #2919 tree (origin/main 668348ae7 merged in). Cause: #2919 runner
+            # tie numerator log-log rule (blocks/runner.py). origin/main passes the old pin, so
+            # the move is this branch's. Old -> new: 2.214519871592393e33 -> 2.2145438354311484e33,
+            # +1.08e-5 relative.
+            assert grad == pytest.approx(2.2145438354311484e33, rel=1e-5, abs=0.0), (
                 "the live E(B-V) gradient moved; the selection must only change the "
                 f"degenerate point, got {grad:.6e}"
             )
@@ -486,9 +498,11 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
                 jnp.asarray(self._EBV_DEGENERATE)
             )
         )
-        assert grad == pytest.approx(-1.551373e33, rel=1e-5, abs=0.0), (
+        # Re-pinned on the #2919 tree (cause: #2919 runner tie numerator log-log rule; origin/main
+        # passes the old pin). Old -> new: -1.546500e33 -> -1.546518471523536e33, +1.19e-5.
+        assert grad == pytest.approx(-1.546518471523536e33, rel=1e-5, abs=0.0), (
             f"d(sum torus)/d(E(B-V)) at E(B-V)=0 is {grad:.6e}; the torus loses power to "
-            "the polar graybody, so it must be negative (-1.551373e+33)"
+            "the polar graybody, so it must be negative (-1.546518e+33)"
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -592,9 +606,11 @@ class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
             assert np.isfinite(grad) and grad == 0.0 and fd == 0.0
             return
         assert np.isfinite(grad) and grad != 0.0
-        assert grad == pytest.approx(5.310558e33, rel=1e-5, abs=0.0), (
+        # Re-pinned on the #2919 tree (cause: #2919 runner tie numerator log-log rule; origin/main
+        # passes the old pin). Old -> new: 5.315431e33 -> 5.31549386381648e33, +1.18e-5 relative.
+        assert grad == pytest.approx(5.31549386381648e33, rel=1e-5, abs=0.0), (
             f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
-            "(pinned 5.310558e+33) -- the NaN-visibility fix must change only the "
+            "(pinned 5.315494e+33) -- the NaN-visibility fix must change only the "
             "NaN-input forward value, not this selected-denominator gradient."
         )
         assert grad == pytest.approx(fd, rel=5e-3), "AD against the one-sided difference"

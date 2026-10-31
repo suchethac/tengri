@@ -57,7 +57,7 @@ from tengri.components.dust.wg00_model import (
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
-from tengri.components.nebular._models import nebular_backend_carries_freefree
+from tengri.components.nebular._models import nebular_carries_freefree
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
@@ -292,7 +292,7 @@ class XRayQuantities(NamedTuple):
     luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
     - ``l_x_xrb`` (Lsun), 2-10 keV luminosity of the emitted HMXB + LMXB terms
-      (Lehmer 2016; SFR averaged over the last 100 Myr).
+      (Fragos et al. 2013; SFR averaged over the last 100 Myr).
     - ``l_x_agn`` (Lsun), 2-10 keV luminosity of the emitted AGN corona; zero
       without an AGN.
     - ``l_x_total`` (Lsun), sum of the two.
@@ -390,6 +390,7 @@ def build_components(
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
     agn_polar_law: str = "smc",
+    agn_ir_frac_window: tuple = (0.0, 0.0),
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -408,6 +409,8 @@ def build_components(
     dust_lyc_reprocessed_by: str = "young",
     dust_lyc_in_energy_balance: bool = False,
     dust_lyc_escape_geometry: str = "screened",
+    # Evaluation order of the two-component age mixture ("per_node" | "grouped").
+    dust_age_mixture: str = "per_node",
     # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,
@@ -465,7 +468,9 @@ def build_components(
     radio_include_freefree: bool | None = None,
     radio_ir_window: str | None = None,
     radio_sf_nu_ref: float | None = None,
+    radio_agn_loudness_ref: str = "4400",
     xray_model: str = "yang20",
+    xray_alpha_ox_mode: str = "delta",
     use_xray: bool = False,
     use_igm: bool = False,
     igm_model: str = "inoue",
@@ -561,6 +566,10 @@ def build_components(
         Frequency [Hz] at which ``radio_q_ir`` anchors the ``bell2003`` synchrotron
         (grammar key ``radio.sf.nu_ref``). ``None`` keeps Bell (2003)'s 1.4 GHz;
         ``"21cm"`` in the grammar gives CIGALE's 1.42758 GHz (#2762).
+    radio_agn_loudness_ref : str
+        AGN radio-loudness reference (grammar key ``radio.agn.loudness_ref``): ``"4400"``
+        (default, the 4400 A disc luminosity) or ``"2500_30deg"`` (CIGALE's 2500 A at
+        30 deg). The latter needs ``agn_model="composable"`` (#2663).
     radio_include_freefree : bool or None
         Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
         ``False`` when the declared nebular backend carries a free-free continuum
@@ -665,6 +674,7 @@ def build_components(
                 transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,
+                age_mixture=dust_age_mixture,
             )
 
     # 1. Stellar (always required, it publishes the cross-component
@@ -683,6 +693,9 @@ def build_components(
                 met_bin_edges_log_yr=met_bin_edges_log_yr,
                 age_boundaries_yr=tuple(getattr(atten_config, "age_boundaries_yr", ())),
                 age_boundary_width_dex=float(getattr(atten_config, "age_boundary_width_dex", 0.0)),
+                publish_interval_spectra=(
+                    getattr(atten_config, "age_mixture", "per_node") == "grouped"
+                ),
             ),
             ssp_data=ssp_data,
             agb_dust_ratio=agb_dust_ratio,
@@ -828,6 +841,7 @@ def build_components(
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
                     agn_polar_law=agn_polar_law,
+                    agn_ir_frac_window=agn_ir_frac_window,
                 ),
             )
         )
@@ -843,23 +857,33 @@ def build_components(
         # (#2574).
         include_freefree = radio_include_freefree
         freefree_wave_min = None
+        # One predicate for both radio thermal gates (#2962): the declared backend
+        # name, or a backend object whose analytic tier supplies the free-free.
+        nebular_carries_ff = nebular_carries_freefree(nebular_backend, nebular_backend_instance)
         if include_freefree is None:
-            if nebular_backend_carries_freefree(nebular_backend):
+            if nebular_carries_ff:
                 include_freefree = False
-            elif (
-                getattr(ssp_data, "nebular", "unknown") == "included"
-                and radio_sfr_mode != "bell2003_split"
-            ):
+            elif getattr(ssp_data, "nebular", "unknown") == "included":
                 # A nebular-included SSP holds the nebular continuum inside its
                 # flux up to the SSP grid edge, so the radio thermal term starts
                 # at the edge: one thermal term below it, and the radio term
-                # alone beyond, where the SSP has no flux (#2574).
+                # alone beyond, where the SSP has no flux (#2574). The
+                # bell2003_split thermal law takes the same window (#2962).
                 # The ``nebular`` stamp is the declaration Cue and CloudyGrid
                 # read (#1014); the declared backend name cannot tell, because
                 # ``neb={'type': 'none'}`` also builds a baked-in backend. An
                 # unstamped grid keeps the term over its whole range.
                 freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
+        if radio_agn_loudness_ref != "4400" and agn_model != "composable":
+            from tengri.config.exceptions import ConfigError
+
+            raise ConfigError(
+                f"radio: loudness_ref={radio_agn_loudness_ref!r} reads the composable AGN's "
+                "2500 A disc luminosity, which a monolithic AGN does not publish (it would "
+                "fall back silently to the L_bol correction). Use agn={'type': 'composable', ...} "
+                "or leave loudness_ref at its '4400' default."
+            )
         radio_config = RadioSEDComponentConfig(
             sfr_mode=radio_sfr_mode,
             agn_radio_model=radio_agn_model,
@@ -871,11 +895,9 @@ def build_components(
             ir_window=radio_ir_window,
             # One owner of the thermal emission: the split's own 10 % law
             # gives way to a nebular continuum that carries free-free (#2764).
-            split_thermal=not (
-                radio_sfr_mode == "bell2003_split"
-                and nebular_backend_carries_freefree(nebular_backend)
-            ),
+            split_thermal=not (radio_sfr_mode == "bell2003_split" and nebular_carries_ff),
             **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
+            agn_loudness_ref=radio_agn_loudness_ref,
         )
         if (
             radio_ir_window is None
@@ -930,7 +952,9 @@ def build_components(
                 _resolve_registry_component(
                     "xray",
                     "xray",
-                    config=XRaySEDComponentConfig(model=xray_model),
+                    config=XRaySEDComponentConfig(
+                        model=xray_model, alpha_ox_mode=xray_alpha_ox_mode
+                    ),
                 )
             )
     if use_igm or use_dla:
@@ -966,8 +990,38 @@ def build_components(
     # dead code (the sort guarantees publisher-before-consumer);
     # the remaining checks are duplicate-publish and units mismatch.
     validate_pipeline(components)
+    _warn_unfed_optional_pair(components)
 
     return components
+
+
+def _warn_unfed_optional_pair(components: Sequence[SEDComponent]) -> None:
+    """Warn when a component reads ``L_ir`` and ``L_agn_bol`` and neither is published.
+
+    The optional-read fallback is 0.0, so a radio component with no dust
+    (energy-balance L_ir) and no AGN (L_agn_bol) in the chain silently emits
+    zero. The fallback is correct for the pipelines that legitimately omit both,
+    so this is an advisory at build time rather than an error.
+    """
+    import warnings
+
+    from tengri.config.exceptions import AdvisoryWarning
+    from tengri.forward.orchestrator import _optional_inputs, _outputs
+
+    pair = {"L_ir", "L_agn_bol"}
+    published = {key.name for c in components for key in _outputs(c)}
+    if pair & published:
+        return
+    for component in components:
+        read = {key.name for key in _optional_inputs(component)}
+        if pair <= read:
+            warnings.warn(
+                f"{type(component).__name__}: neither L_ir (dust) nor L_agn_bol (AGN) is "
+                "in this chain, so the radio output is zero (both fall back to 0.0). "
+                "Add a dust_attenuation/dust_emission block or an AGN block, or drop radio.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
 
 
 def chain_summary(components: Sequence[SEDComponent]) -> str:

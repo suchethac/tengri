@@ -59,7 +59,7 @@ class TestDPLTauGradientBeyondAge:
             sfh={
                 "type": "dpl",
                 "log_total_mass": Uniform(1.0, 15.0),
-                "age_gyr": Uniform(0.01, 20.0),
+                "age_frac": Uniform(0.000725327, 1),
                 "alpha": Uniform(0.01, 10.0),
                 "beta": Uniform(0.01, 10.0),
                 "tau_gyr": Uniform(0.01, 20.0),
@@ -74,7 +74,7 @@ class TestDPLTauGradientBeyondAge:
         # Define a base parameter set
         params_base = {
             "sfh_dpl_log_total_mass": 9.0,
-            "sfh_dpl_age_gyr": cosmic_age_gyr - 0.5,
+            "sfh_dpl_age_frac": (cosmic_age_gyr - 0.5) / cosmic_age_gyr,
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
         }
@@ -148,7 +148,7 @@ class TestDPLTauGradientBeyondAge:
             sfh={
                 "type": "dpl",
                 "log_total_mass": Uniform(1.0, 15.0),
-                "age_gyr": Uniform(0.01, 20.0),
+                "age_frac": Uniform(0.000725327, 1),
                 "alpha": Uniform(0.01, 10.0),
                 "beta": Uniform(0.01, 10.0),
                 "tau_gyr": Uniform(0.01, 20.0),
@@ -162,7 +162,7 @@ class TestDPLTauGradientBeyondAge:
 
         params_base = {
             "sfh_dpl_log_total_mass": 9.0,
-            "sfh_dpl_age_gyr": cosmic_age_gyr - 0.5,
+            "sfh_dpl_age_frac": (cosmic_age_gyr - 0.5) / cosmic_age_gyr,
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
         }

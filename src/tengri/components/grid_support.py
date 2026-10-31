@@ -50,6 +50,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping
 
+import numpy as np
+
 #: A component's grid support: ``() -> {param_name: (lo, hi)}``.
 GridSupportFn = Callable[[], dict[str, tuple[float, float]]]
 
@@ -161,31 +163,42 @@ def _cloudy_grid_support() -> dict[str, tuple[float, float]]:
 
 
 def _cb19_grid_support() -> dict[str, tuple[float, float]]:
-    """Read CB_19's default template grid's log U axis (#2460).
+    """Read CB_19's default template grid's log U and log Z_gas support (#2460, #2244).
 
     ``CB19Backend`` clips ``neb_logU`` onto its grid axis exactly like
     ``CloudyGridBackend`` (``cloudy_cb19.py``'s ``_frac_idx``:
     ``jnp.clip(val, grid[0], grid[-1])``), so it shares the #1586 mechanism
-    and belongs in this registry. Only ``neb_logU`` is registered: the grid's
-    metallicity axis is ``log_OH_total`` (12 + log10(O/H)), not
-    log10(Z/Zsun), and converting between the two abundance scales exactly
-    is out of scope here -- ``neb_logZ_gas`` keeps its declared support on
-    this backend.
+    and belongs in this registry.
+
+    ``neb_logZ_gas`` is the public log10(Z/Zsun). ``component.py`` adds
+    ``LOG10_ZSUN`` to reach the backend's absolute log10(Z), and
+    ``cloudy_cb19.py`` adds ``_LOG_OH_OFFSET = _LOG_OH_SOLAR - LOG10_ZSUN``, so
+    the lookup's ``log_OH_total`` is the public value plus ``_LOG_OH_SOLAR``
+    (-3.07). The support in public units is therefore the two ends of the
+    ``log_OH_total`` axis minus ``_LOG_OH_SOLAR``, about [-1.99, 0.49] (#2969).
     """
     import h5py
 
     from tengri._data_setup import package_or_env_data_path
+    from tengri.components.nebular._constants import _LOG_OH_SOLAR
 
     grid_path = package_or_env_data_path("cb19_templates.h5")
     if not grid_path.exists():
         raise FileNotFoundError(f"CB_19 grid not found: {grid_path}")
 
     with h5py.File(grid_path, "r") as f:
-        if "axes/log_U" not in f:
-            raise FileNotFoundError(f"Grid {grid_path} missing axes/log_U")
+        if "axes/log_U" not in f or "axes/log_OH_total" not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing axes/log_U or axes/log_OH_total")
         log_U = f["axes/log_U"][:]
+        log_OH = f["axes/log_OH_total"][:]
 
-    return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
+    return {
+        "neb_logU": (float(log_U.min()), float(log_U.max())),
+        "neb_logZ_gas": (
+            float(log_OH.min()) - _LOG_OH_SOLAR,
+            float(log_OH.max()) - _LOG_OH_SOLAR,
+        ),
+    }
 
 
 def _mappings_stellar_grid_support() -> dict[str, tuple[float, float]]:
@@ -284,7 +297,60 @@ def _cue_grid_support() -> dict[str, tuple[float, float]]:
 #: ``"dust.emission"``). Only template-backed components appear; a component
 #: absent from this table is unconstrained, which is the correct default for
 #: every closed-form model.
+def _h5_axis_support(
+    filename: str,
+    dataset: str,
+    pname: str,
+    transform: Callable[[np.ndarray], np.ndarray] | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Extent of one stored grid axis, read from the grid file itself (#2862).
+
+    Returns ``{}`` when the grid file is not installed, the same as every other
+    accessor here. ``transform`` maps the stored axis to the parameter the
+    component is queried in (for example ``cos`` of a stored inclination).
+    """
+    from tengri._data_setup import find_data
+
+    path = find_data(filename)
+    if path is None:
+        return {}
+    import h5py
+
+    with h5py.File(path, "r") as f:
+        axis = np.asarray(f[dataset][:], dtype=np.float64)
+    if transform is not None:
+        axis = transform(axis)
+    return {pname: (float(axis.min()), float(axis.max()))}
+
+
+def _nenkova_agnfitter_support() -> dict[str, tuple[float, float]]:
+    """Nenkova AGNfitter torus: ``agn_cos_inc`` over the stored inclination axis.
+
+    The stored axis is 10..90 deg, so ``cos i`` reaches only 0.98481 at its top
+    (a physical 10 deg gap to the prior's ``cos i = 1``).
+    """
+    return _h5_axis_support(
+        "nenkova_agnfitter_torus_grid.h5",
+        "nenkova_agnfitter/incl_axis",
+        "agn_cos_inc",
+        transform=lambda incl: np.cos(np.radians(incl)),
+    )
+
+
+def _relagn_support() -> dict[str, tuple[float, float]]:
+    """Relagn disc: ``agn_log_mbh`` over the stored mass axis (7..10 dex)."""
+    return _h5_axis_support("relagn_disc_grid.h5", "log_mbh", "agn_log_mbh")
+
+
+def _wg00_support() -> dict[str, tuple[float, float]]:
+    """WG00 attenuation: ``dust_tau_v`` over the stored optical-depth axis (0.25..10)."""
+    return _h5_axis_support("wg00_attenuation_grid.h5", "wg00/tau_v_axis", "dust_tau_v")
+
+
 GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
+    ("agn.torus", "nenkova_agnfitter"): _nenkova_agnfitter_support,
+    ("agn.disc", "relagn"): _relagn_support,
+    ("dust.attenuation", "wg00"): _wg00_support,
     ("agn.disc", "slone_netzer"): _slone_netzer_support,
     ("agn.disc", "kd18_agnfitter"): _kd18_agnfitter_support,
     ("agn.disc", "kd18_agnfitter_warmindex"): _kd18_agnfitter_warmindex_support,
@@ -588,6 +654,46 @@ def support_shift(
     return (0.0, 0.0) if fn is None else fn(param_support, settings)
 
 
+def grid_refusal_message(
+    selector: str,
+    name: str,
+    pname: str,
+    detail: str,
+    extent: tuple[float, float],
+) -> str:
+    """The build-time error for a value or prior that a grid cannot evaluate.
+
+    Parameters
+    ----------
+    selector : str
+        Dotted selector path, e.g. ``'neb'``.
+    name : str
+        Component name, e.g. ``'cloudy'``.
+    pname : str
+        Parameter name, e.g. ``'neb_logZ_gas'``.
+    detail : str
+        The :func:`describe_clipping` clause naming the value or range and the
+        extent it overhangs.
+    extent : tuple of float
+        ``(lo, hi)`` the component's grid covers.
+
+    Returns
+    -------
+    message : str
+        Names the parameter, the component, the value or range and the extent,
+        and the remedy.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    g_lo, g_hi = extent
+    return (
+        f"{selector}={name!r}: {pname}: {detail}. Refused at build rather than "
+        f"clipped onto an edge node; narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+    )
+
+
 def check_grid_support(
     selected: Iterable[tuple[str, str]],
     param_support: Mapping[str, tuple[float, float]],
@@ -648,6 +754,7 @@ __all__ = [
     "GridSupportFn",
     "check_grid_support",
     "describe_clipping",
+    "grid_refusal_message",
     "grid_support",
     "is_contained",
     "live_fraction",

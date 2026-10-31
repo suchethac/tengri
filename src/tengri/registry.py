@@ -22,6 +22,7 @@ in a notebook or REPL; no need to wrap them in `pprint`.
 from __future__ import annotations
 
 import functools
+import logging
 import re
 from typing import Any
 
@@ -649,6 +650,8 @@ def _component_entry(name: str, *, kind: str) -> dict:
 # ──────────────────────────────────────────────────────────────────
 # Menu filtering
 # ──────────────────────────────────────────────────────────────────
+
+_log = logging.getLogger(__name__)
 
 #: The word for "do not filter". Every menu accepts it, because it is what a
 #: reader types first and because ``status='all'`` used to return nothing at all,
@@ -1284,7 +1287,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     """List all registered X-ray emission models.
 
     The X-ray group composes the AGN corona (Yang+2020 ``alpha_ox(L_2500)``
-    relation), the Lehmer+2016 high- and low-mass X-ray binary fits,
+    relation), the Fragos+2013 high- and low-mass X-ray binary scalings,
     and optional thermal hot-gas emission. The ``'none'`` entry disables
     the whole block.
 
@@ -1526,7 +1529,19 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
     "bins": {"short_doc": "Per-bin metallicities (pairs with continuity SFH)"},
     "bins_continuity": {"short_doc": "Cumulative delta-log-Z steps"},
     "chem_evol": {"short_doc": "Gas-regulator model (Z derived from SFH)"},
-    "table": {"short_doc": "User-provided Z(t)"},
+    # Standalone ``met={'type': 'table'}`` refuses at build (#2425): the grammar
+    # cannot pin the table, and the runtime ``met_history`` channel needs
+    # ``sfh={'type': 'table'}``. Not production; the use string is not a call.
+    "table": {
+        "short_doc": (
+            "User-provided Z(t) [not builder-available: refuses at build without a Z(t) source]"
+        ),
+        "status": "experimental",
+        "use": (
+            "not builder-available: met={'type': 'table'} needs a Z(t) source; "
+            "use sfh={'type': 'table'} with params['met_history']"
+        ),
+    },
     "massmap_lin": {"short_doc": "Linear metallicity tied to cumulative mass formed"},
     "massmap_box": {"short_doc": "Closed-box metallicity tied to cumulative mass formed"},
 }
@@ -1573,7 +1588,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
             "status": meta.get("status", "production"),
             "citation": meta.get("citation", ""),
             "short_doc": meta.get("short_doc", ""),
-            "use": _usage_hint(name, "metallicity_mode"),
+            "use": meta.get("use") or _usage_hint(name, "metallicity_mode"),
         }
         params = tuple(getattr(MET_REGISTRY[name], "params", {}) or ())
         if params:
@@ -2123,6 +2138,7 @@ def print_components_bibtex(obj=None) -> None:
                     seen_keys.add(bibkey)
                     emitted = True
             except Exception:
+                _log.debug("Citation lookup failed for %s", bibkey, exc_info=True)
                 continue
         if emitted:
             continue
@@ -2492,6 +2508,7 @@ def _every_menu_lister() -> tuple:
         try:
             rows = fn()
         except Exception:
+            _log.debug("Menu lister %s failed; skipped in sweep", attr, exc_info=True)
             continue
         if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
             seen[attr] = fn
@@ -2656,6 +2673,7 @@ def list_recipes() -> _RegistryTable:
         try:
             data_status = _recipe_data_status(fn())
         except Exception:
+            _log.debug("Recipe %s data status unknown", name, exc_info=True)
             data_status = "unknown"
         out.append(
             {
@@ -2724,6 +2742,7 @@ def _recipe_data_status(kwargs: dict) -> str:
         try:
             _resolve_synthesizer_grid(kind)
         except Exception:
+            _log.debug("Synthesizer grid %s unavailable", kind, exc_info=True)
             missing.append(kind)
     if not missing:
         return "ready"

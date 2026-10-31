@@ -153,12 +153,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
         Uniform(0.05, 0.5, default=0.3),
         "ADAF viscosity parameter alpha",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_adaf_beta",
         # Gas-to-total pressure ratio (magnetic fraction is 1-beta).
         Uniform(0.1, 0.9, default=0.5),
         "ADAF gas-to-total pressure ratio beta",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]: the magnetic fraction is 1 - beta",
     ),
     ParamDeclaration(
         "agn_adaf_delta",
@@ -171,6 +175,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.001, 0.5, default=0.1),
         "ADAF electron viscous-heating fraction delta "
         "(default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)",
+        lambda lo, hi: lo > 0 and hi <= 1.0,
+        "must be in (0, 1]",
     ),
     ParamDeclaration(
         "agn_astar",
@@ -268,17 +274,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         units="log10(cm^-2)",
     ),
     # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
-    # agn_oa_skirtor with the X-CIGALE skirtor block; inclination here is in
-    # degrees (not cos) and the optical depth axis is tau_V. Defaults match the
-    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, incl 0-90, tv 3-11).
-    ParamDeclaration(
-        "agn_incl_skirtor",
-        Uniform(0.0, 90.0, default=30.0),
-        "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)",
-        lambda lo, hi: lo >= 0 and hi <= 90,
-        "must be in [0, 90]",
-        units="deg",
-    ),
+    # agn_oa_skirtor with the X-CIGALE skirtor block, and its sightline is the
+    # shared agn_cos_inc: the library's inclination axis (0-90 deg from the polar
+    # axis) is keyed at i = arccos(agn_cos_inc), so the model has one inclination
+    # (#2605, #3085). The optical depth axis is tau_V. Defaults match the
+    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, tv 3-11).
     ParamDeclaration(
         "agn_tv_skirtor",
         Uniform(3.0, 11.0, default=7.0),
@@ -838,17 +838,25 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         ),
     ),
     # CIGALE skirtor2016 disc-shape modulator (Boquien+2019). The skirtor2016
-    # grid samples delta in [-0.5, 0.5]; for the adaf_lopez2024 block it is a
-    # blend weight that the block itself clamps to [0, 1].
+    # grid samples delta in [-0.5, 0.5]. The adaf_lopez2024 blend weight is a
+    # different quantity and has its own key (agn_cigale_adaf_delta).
     ParamDeclaration(
         "agn_cigale_disk_delta",
         Uniform(-0.5, 0.5, default=0.0),
         "CIGALE skirtor2016 disc slope modulator (paper delta). "
         "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
         "power-law index alpha from its nominal value by -delta (positive "
-        "delta -> shallower optical slope). For 'adaf_lopez2024' block: "
-        "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
-        "thin disc (1).",
+        "delta -> shallower optical slope).",
+    ),
+    # CIGALE skirtor2016 disk_type=2 ADAF-to-thin-disc blend weight (paper delta).
+    # Unclipped in pcigale 2025.1 (skirtor2016.py:218-226); the declared [0, 1] is the range.
+    ParamDeclaration(
+        "agn_cigale_adaf_delta",
+        Uniform(0.0, 1.0, default=0.0),
+        "CIGALE skirtor2016 disk_type=2 blend weight (paper delta): 0 = pure ADAF, "
+        "1 = pure thin disc (Lopez et al. 2024). Read only by the 'adaf_lopez2024' disc.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
     ),
     # CIGALE skirtor2016 cross-component AGN power coupling
     ParamDeclaration(
@@ -864,7 +872,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "
         "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
-        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used.",
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used. With "
+        "``agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}`` the fraction is "
+        "that of the light in the window (CIGALE ``lambda_fracAGN``), not of the dust.",
         lambda lo, hi: lo >= 0 and hi < 1.0,
         "must be in [0, 1)",
     ),
@@ -978,6 +988,17 @@ DEFAULT_AGN_LOG_LEDD = declared_default(PARAMS, "agn_log_ledd")
 #: which is why the declaration moved and these call sites must follow.
 DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
 
+#: Default torus half-opening angle [deg] for the generic Type-1/2 mask, read off
+#: the declaration rather than repeated in the AGN blocks (ADR-0011).
+DEFAULT_AGN_THETA_TORUS = declared_default(PARAMS, "agn_theta_torus")
+
+#: Default SKIRTOR and AGNfitter-CLUMPY torus half-opening angles [deg].
+DEFAULT_AGN_OA_SKIRTOR = declared_default(PARAMS, "agn_oa_skirtor")
+DEFAULT_AGN_OA_NENKOVA = declared_default(PARAMS, "agn_oa_nenkova")
+
+#: Default SKIRTOR 9.7 um optical depth.
+DEFAULT_AGN_TAU_SKIRTOR = declared_default(PARAMS, "agn_tau_skirtor")
+
 #: Default AGN-to-stellar luminosity ratio. 1.0 means "use the configured AGN at
 #: full strength", so a wildcard ``'all_params': Fixed(DEFAULT)`` yields a working AGN
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
@@ -1080,11 +1101,14 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "skirtor_mean3p/oa_axis",
         "identity",
     ),
+    # The three SKIRTOR-AGNfitter inclination axes (0-90 deg from the polar
+    # axis) back the shared agn_cos_inc declaration (cos 0-1, matching [0, 1]),
+    # as NK0_mean_2p/3p's do (#3085).
     "skirtor_agnfitter_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean3p_torus_grid.h5",
         "skirtor_mean3p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     "skirtor_agnfitter_tv": (
         "agn_tv_skirtor",
@@ -1130,14 +1154,14 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "nenkova_agnfitter_3p/incl_axis",
         "cos_deg",
     ),
-    # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the shared agn_oa_skirtor /
-    # agn_incl_skirtor declarations already registered above for
-    # SKIRTOR_mean_3p (all three grids agree on both extents).
+    # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the agn_oa_skirtor / agn_cos_inc
+    # declarations registered above for SKIRTOR_mean_3p (all three grids agree
+    # on both extents).
     "skirtor_mean1p_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean1p_torus_grid.h5",
         "skirtor_mean1p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     "skirtor_mean2p_oa": (
         "agn_oa_skirtor",
@@ -1146,10 +1170,10 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "identity",
     ),
     "skirtor_mean2p_incl": (
-        "agn_incl_skirtor",
+        "agn_cos_inc",
         "data/skirtor_mean2p_torus_grid.h5",
         "skirtor_mean2p/incl_axis",
-        "identity",
+        "cos_deg",
     ),
     # CAT3D-Wind low-fwd (rows 0-209): its own a/fwd declarations (disjoint
     # from the high-fwd rows-210+ grid's agn_a_cat3d/agn_fwd_cat3d), plus the
@@ -1262,6 +1286,10 @@ __all__ = [
     "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
+    "DEFAULT_AGN_OA_NENKOVA",
+    "DEFAULT_AGN_OA_SKIRTOR",
+    "DEFAULT_AGN_TAU_SKIRTOR",
+    "DEFAULT_AGN_THETA_TORUS",
     "GRID_EXTENT_SOURCES",
     "PARAMS",
 ]

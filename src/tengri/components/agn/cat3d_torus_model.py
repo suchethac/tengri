@@ -13,7 +13,7 @@ References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
    observations with models," ApJL 838,
-   L20 (2017). arXiv:1702.08691.
+   L20 (2017). arXiv:1703.07781.
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -28,7 +28,15 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._publication import (
+    template_sed_and_log_power,
+    with_lsun_outputs,
+)
+from tengri.components.agn._torus_inclination import (
+    TORUS_LEDGER_KEYS,
+    absent_torus_ledger,
+    torus_ledger,
+)
 from tengri.components.agn.cat3d_wind import create_cat3d_wind_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -91,8 +99,8 @@ class CAT3DTorus(SEDModelComponent):
     """CAT3D-Wind clumpy-disc-plus-polar-wind AGN torus.
 
     Three-parameter torus model with inclination, clump distribution,
-    and polar-wind mass fraction. Provides C²-continuous gradients via
-    triweight kernel interpolation over the 3D parameter space.
+    and polar-wind mass fraction. Provides C¹-continuous gradients via
+    node-exact PCHIP interpolation over the 3D parameter space.
 
     Attributes
     ----------
@@ -118,14 +126,24 @@ class CAT3DTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_torus : erg/s
-        Bolometric luminosity contribution from torus emission.
+    log_L_agn_torus, log_L_agn_torus_los, log_L_agn_disc_unemitted : dex
+        The torus-only energy ledger [dex re erg/s] (NAMING_CONTRACT section 4c,
+        "Template tori"): the angle-integrated torus power ``f L_bol``
+        (``f = torus_frac``), the frequency integral of the torus SED emitted along
+        the sightline, and the disc share ``(1 - f) L_bol`` this component does not
+        emit, so the first and last add up to ``10**log_lbol L_sun``. Here the first
+        two are equal: the AGNfitter-rX ``CAT3D_mean_3p`` records do not carry a documented
+        common scale across inclination (neither Martinez-Ramirez et al. 2024, Sect. 3.3,
+        nor the upstream pickle states one, and the stored powers are not monotonic in
+        inclination), so each sightline is normalized on its own. Each has an
+        ``L_agn_*_lsun`` [Lsun] sibling; ``-inf``
+        is an absent piece.
 
     Notes
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, PCHIP interpolation is C¹ and differentiable
     across the three parameter axes.
 
     **Requires template grid**: The CAT3D-Wind template library must be
@@ -198,7 +216,7 @@ class CAT3DTorus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"L_agn_torus": "erg/s"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(dict.fromkeys(TORUS_LEDGER_KEYS, "dex"))
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load CAT3D-Wind template grid if available.
@@ -261,31 +279,32 @@ class CAT3DTorus(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + torus contribution).
-            - published: {"L_agn_torus": bolometric torus luminosity [erg/s]}.
+            - published: ``log_L_agn_torus``, ``log_L_agn_torus_los`` and
+              ``log_L_agn_disc_unemitted`` [dex re erg/s] with their ``_lsun`` siblings
+              (see Cross-component outputs).
 
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"L_agn_torus": jnp.array(0.0)}
+            return sed_in, absent_torus_ledger()
 
         cat3d_fn = self.data
 
-        def _torus(wave_eval):
+        def _torus(wave_eval, log_lbol_eval):
             return cat3d_fn(
                 wavelength=wave_eval,
-                agn_log_lbol=p["log_lbol"],
+                agn_log_lbol=log_lbol_eval,
                 agn_cos_inc=p["cos_inc"],
                 agn_a_cat3d=p["a_cat3d"],
                 agn_fwd_cat3d=p["fwd_cat3d"],
                 agn_torus_frac=p["torus_frac"],
             )
 
-        # Published L_agn_torus: the exact integral of the emitted torus SED. The template is
-        # a log-log power law between its native nodes, so the integral is closed form on them.
-        native = jnp.asarray(cat3d_fn.native_wave, dtype=wave.dtype)
-        L_torus = native_bolometric_nu(_torus(native), native)
+        # Published log_L_agn_torus: the exact integral of the emitted torus SED, in log space.
+        # The template is a log-log power law between its native nodes, so the integral is
+        # closed form on them.
+        torus, log_L_torus = template_sed_and_log_power(
+            _torus, cat3d_fn.native_wave, wave, p["log_lbol"]
+        )
 
-        # Add to intrinsic SED
-        sed_out = sed_in + _torus(wave)
-
-        return sed_out, {"L_agn_torus": L_torus}
+        return sed_in + torus, torus_ledger(p["log_lbol"], p["torus_frac"], log_L_torus)

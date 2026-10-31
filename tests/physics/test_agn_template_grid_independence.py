@@ -21,6 +21,8 @@ the output.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -277,7 +279,10 @@ def _publisher(comp, params, key):
     def fn(wave):
         w = jnp.asarray(wave)
         _, published = comp.predict(params, jnp.zeros_like(w), w)
-        return float(published[key])
+        value = float(published[key])
+        # The luminosities are published as log10 [dex re erg/s] (#2842); the identities below
+        # compare linear integrals.
+        return 10.0**value if key.startswith("log_") else value
 
     return fn
 
@@ -295,44 +300,44 @@ def _emitter(comp, params):
 
 # Single-component classes: (module, class, config, grid file, key, parameter overrides).
 _SINGLE = {
-    "silva04_torus.L_agn_torus": (
+    "silva04_torus.log_L_agn_torus": (
         "silva04_model",
         "Silva04Torus",
         "Silva04TorusConfig",
         "silva04_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"log_nh_silva": 22.5, "torus_frac": 0.3, "log_lbol": 11.2}),
     ),
-    "cat3d_torus.L_agn_torus": (
+    "cat3d_torus.log_L_agn_torus": (
         "cat3d_torus_model",
         "CAT3DTorus",
         "CAT3DTorusConfig",
         "cat3d_wind_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"cos_inc": 0.3, "torus_frac": 0.3}),
     ),
-    "skirtor_agnfitter_torus.L_agn_torus": (
+    "skirtor_agnfitter_torus.log_L_agn_torus": (
         "skirtor_agnfitter_model",
         "SKIRTORAgnfitterTorus",
         "SKIRTORAgnfitterTorusConfig",
         "skirtor_mean3p_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"torus_frac": 0.3}),
     ),
-    "powerlaw_disc.L_agn_disc": (
+    "powerlaw_disc.log_L_agn_disc": (
         "powerlaw_disc_model",
         "PowerLawDisc",
         "PowerLawDiscConfig",
         None,
-        "L_agn_disc",
+        "log_L_agn_disc",
         ({}, {"lum_ratio": 0.3}),
     ),
-    "kd18_disc.L_agn_disc": (
+    "kd18_disc.log_L_agn_disc_los": (
         "kd18_disc_model",
         "KD18Disc",
         "KD18DiscConfig",
         None,
-        "L_agn_disc_los",
+        "log_L_agn_disc_los",
         ({}, {"cos_inc": 0.2}),
     ),
 }
@@ -369,9 +374,9 @@ def test_single_published_independent_of_caller_grid(single_case):
             assert err < _RTOL, f"{single_case['name']} {label}: rel diff {err:.3e}"
 
 
-@pytest.mark.parametrize("name", ["powerlaw_disc.L_agn_disc", "kd18_disc.L_agn_disc"])
+@pytest.mark.parametrize("name", ["powerlaw_disc.log_L_agn_disc", "kd18_disc.log_L_agn_disc_los"])
 def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
-    """``apply`` on the real pipeline path, given only declared parameters, publishes L_agn_disc.
+    """``apply`` on the real pipeline path, given only declared parameters, publishes the log key.
 
     The disc's luminosity fraction is ``lum_ratio``; a read of an undeclared ``frac`` raised
     ``KeyError`` here, which the contract tests (they pass only ``lum_ratio`` to ``predict``)
@@ -386,7 +391,7 @@ def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
     state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave), derived={})
     out = comp.apply(state, {prefix + k: v for k, v in params.items()})
     published = float(out.derived[key])
-    direct = _publisher(comp, params, key)(_PUB_DENSE)
+    direct = np.log10(_publisher(comp, params, key)(_PUB_DENSE))
     assert np.isfinite(published) and published > 0.0
     assert published == pytest.approx(direct, rel=1e-12)
 
@@ -397,19 +402,20 @@ def _kd18_with(**overrides):
 
 def _kd18_published(comp, params, wave):
     _, pub = comp.predict(params, jnp.zeros_like(wave), wave)
-    return float(pub["L_agn_disc"]), float(pub["L_agn_disc_los"])
+    # Published as log10 [dex re erg/s]; the identities below are on the linear power [erg/s].
+    return 10.0 ** float(pub["log_L_agn_disc"]), 10.0 ** float(pub["log_L_agn_disc_los"])
 
 
 def test_kd18_angle_integrated_disc_power_is_independent_of_inclination():
-    """L_agn_disc is the angle-integrated power: the same at cos i = 0.1, 0.5 and 0.95."""
+    """log_L_agn_disc is the angle-integrated power: the same at cos i = 0.1, 0.5 and 0.95."""
     wave = jnp.asarray(_PUB_COARSE)
     values = [_kd18_published(*_kd18_with(cos_inc=c), wave)[0] for c in (0.1, 0.5, 0.95)]
     for v in values[1:]:
-        assert abs(v / values[0] - 1.0) < 1e-10, f"L_agn_disc moved with inclination: {values}"
+        assert abs(v / values[0] - 1.0) < 1e-10, f"log_L_agn_disc moved with inclination: {values}"
 
 
 def test_kd18_line_of_sight_power_is_the_integral_of_the_emitted_sed():
-    """L_agn_disc_los equals the dense integral of the emitted, projected SED (1e-6)."""
+    """log_L_agn_disc_los equals the dense integral of the emitted, projected SED (1e-6)."""
     for cos_inc in (0.1, 0.5, 0.95):
         comp, params = _kd18_with(cos_inc=cos_inc)
         _, los = _kd18_published(comp, params, jnp.asarray(_PUB_COARSE))
@@ -428,7 +434,7 @@ def test_kd18_los_to_angle_integrated_ratio_is_two_cos_i_for_the_disc():
 
 
 def test_kd18_angle_integrated_power_matches_the_accretion_power():
-    """L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut tail."""
+    """log_L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut."""
     l_sun = 3.828e33
     wave = jnp.asarray(_PUB_COARSE)
     for lum_ratio in (1.0, 0.4):
@@ -439,7 +445,7 @@ def test_kd18_angle_integrated_power_matches_the_accretion_power():
 
 
 def test_kd18_float32_frac_zero_is_zero_not_nan():
-    """KD18 at lum_ratio = 0 publishes exactly 0.0 in float32; no corner gives NaN."""
+    """KD18 at lum_ratio = 0 publishes exactly -inf dex (zero power) in float32; no NaN."""
     with jax.enable_x64(False):
         comp, params = _load_component("kd18_disc_model", "KD18Disc", "KD18DiscConfig")
         for log_lbol, lum_ratio in ((8.0, 0.0), (14.0, 0.0), (8.0, 0.2), (14.0, 1.0)):
@@ -448,11 +454,13 @@ def test_kd18_float32_frac_zero_is_zero_not_nan():
             p["lum_ratio"] = jnp.asarray(lum_ratio, dtype=jnp.float32)
             w = jnp.asarray(_PUB_COARSE, dtype=jnp.float32)
             sed, pub = comp.predict(p, jnp.zeros_like(w), w)
-            value = float(pub["L_agn_disc"])
+            value = float(pub["log_L_agn_disc"])
             assert not np.isnan(value), f"NaN at log_lbol={log_lbol}, lum_ratio={lum_ratio}"
             assert not np.any(np.isnan(np.asarray(sed))), "NaN in the emitted SED"
             if lum_ratio == 0.0:
-                assert value == 0.0, f"L_agn_disc={value} at lum_ratio=0 (log_lbol={log_lbol})"
+                assert value == -np.inf, f"log_L_agn_disc={value} at lum_ratio=0"
+            else:
+                assert np.isfinite(value), f"log_L_agn_disc={value} (log_lbol={log_lbol})"
 
 
 def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
@@ -471,12 +479,12 @@ def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
         pieces = _skirtor_emitted_pieces(comp, params, _WIDE)
         pub = {
             key: _publisher(comp, params, key)(_PUB_DENSE)
-            for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+            for key in ("log_L_agn_disc_los", "log_L_agn_torus_los", "log_L_agn_polar_dust_los")
         }
         for key, wide in (
-            ("L_agn_disc", pieces["disc"]),
-            ("L_agn_torus", pieces["dust"]),
-            ("L_agn_polar_dust", pieces["polar"]),
+            ("log_L_agn_disc_los", pieces["disc"]),
+            ("log_L_agn_torus_los", pieces["dust"]),
+            ("log_L_agn_polar_dust_los", pieces["polar"]),
         ):
             emitted = _ln_nu_integral(wide, _WIDE)
             err = abs(pub[key] / emitted - 1.0)
@@ -518,73 +526,52 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
     comp, params = _skirtor_with_disk_type(disk_type, overrides)
     pub = {
         key: _publisher(comp, params, key)(_PUB_COARSE)
-        for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+        for key in ("log_L_agn_disc_los", "log_L_agn_torus_los", "log_L_agn_polar_dust_los")
     }
     pieces = _skirtor_emitted_pieces(comp, params, _WIDE, disk_type=disk_type)
-    for key, piece in (("L_agn_disc", "disc"), ("L_agn_torus", "dust")):
+    for key, piece in (("log_L_agn_disc_los", "disc"), ("log_L_agn_torus_los", "dust")):
         err = abs(pub[key] / _ln_nu_integral(pieces[piece], _WIDE) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} {key}: rel {err:.3e}"
     sed = _emitter(comp, params)(_WIDE)
     total = _ln_nu_integral(sed, _WIDE)
     if float(params["polar_ebv"]) == 0.0:
-        err = abs(total / (pub["L_agn_disc"] + pub["L_agn_torus"]) - 1.0)
+        err = abs(total / (pub["log_L_agn_disc_los"] + pub["log_L_agn_torus_los"]) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} SED total: rel {err:.3e}"
-        assert pub["L_agn_polar_dust"] == 0.0
+        assert pub["log_L_agn_polar_dust_los"] == 0.0
     else:
-        err = abs(pub["L_agn_polar_dust"] / pieces["polar_absorbed"] - 1.0)
+        err = abs(pub["log_L_agn_polar_dust_los"] / pieces["polar_absorbed"] - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} polar absorbed: rel {err:.3e}"
 
 
 def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
-    """Emitted SKIRTOR disc, dust and polar-reemission SEDs, from the component's own functions.
+    """Emitted SKIRTOR disc, dust and polar-reemission SEDs, rebuilt from the raw library.
 
-    The disc is re-tilted by the CIGALE shape ratio and renormalized by the ratio of two
-    integrals over the analytic disc's support, on a wide grid, so it matches the component's
-    publication-grid factor to the quadrature error of that grid.
+    The disc and dust are those along ``cos_inc``, the disc after the polar dust's Type-1
+    attenuation, as the component emits it. The polar re-emission is the graybody that carries
+    the power the polar dust absorbs from the disc light emitted into the cone, taken here as an
+    independent Gauss-Legendre integral over the sphere with the Type-1 weight
+    (``_skirtor_reference``), so it does not depend on ``cos_inc``.
     """
-    from tengri.components.agn.disc_cigale import (
-        adaf_disk_spectrum,
-        schartmann2005_disk_spectrum,
-        skirtor_disk_spectrum,
-    )
-    from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
+    from tengri.components.agn.polar_dust import polar_dust_emission
+    from tests.physics._skirtor_reference import RawSkirtor, cone_absorbed, emitted_pieces
 
-    p = {k: float(v) for k, v in params.items()}
-    w = jnp.asarray(wave)
-    comps = comp.data(
-        wavelength=w,
-        agn_log_lbol=p["log_lbol"],
-        agn_tau_skirtor=p["tau_skirtor"],
-        agn_p_skirtor=p["p_skirtor"],
-        agn_q_skirtor=p["q_skirtor"],
-        agn_oa_skirtor=p["oa_skirtor"],
-        agn_radius_ratio=p["radius_ratio"],
-        agn_cos_inc=p["cos_inc"],
-        frac_agn=p["torus_frac"],
-    )
-    wave_nm = w / 10.0
-    shape_fn = (skirtor_disk_spectrum, schartmann2005_disk_spectrum, adaf_disk_spectrum)[disk_type]
-    shape_sel = shape_fn(wave_nm, delta=p["delta"])
-    shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
-    retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
-    support = (shape_ref > 0.0).astype(w.dtype)
-    raw = comps.disk
-    k = _ln_nu_integral(np.asarray(raw * support), wave) / _ln_nu_integral(
-        np.asarray(raw * retilt * support), wave
-    )
-    disc = raw * retilt * k
-    _, l_abs = polar_dust_extinction(
-        disc, w, p["cos_inc"], p["oa_skirtor"], p["polar_ebv"], law="smc"
-    )
-    l_abs_total = _ln_nu_integral(np.asarray(l_abs), wave)
+    raw = RawSkirtor(comp.config.grid_path)
+    los = emitted_pieces(raw, params, wave, disk_type)
+    ebv = float(params["polar_ebv"])
+    cone = cone_absorbed(raw, params, wave, disk_type, order=16) if ebv > 0.0 else 0.0
+    # The graybody normalization of the polar re-emission is the implementation's own function.
     polar = polar_dust_emission(
-        l_abs_total, w, temperature=p["polar_T"], beta=p["polar_beta"], lambda_0=2e6
+        cone,
+        jnp.asarray(wave),
+        temperature=float(params["polar_T"]),
+        beta=float(params["polar_beta"]),
+        lambda_0=2e6,
     )
     return {
-        "disc": np.asarray(disc),
-        "dust": np.asarray(comps.dust),
+        "disc": los["disc_attenuated"],
+        "dust": los["dust"],
         "polar": np.asarray(polar),
-        "polar_absorbed": l_abs_total,
+        "polar_absorbed": cone,
     }
 
 
@@ -624,10 +611,15 @@ def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
         _, pub = comp.predict(p, jnp.zeros_like(wave), wave)
         return pub[key]
 
-    for key in ("L_agn_disc", "L_agn_polar_dust"):
+    for key in ("log_L_agn_disc_los", "log_L_agn_polar_dust_los"):
         grad = jax.grad(published)(jnp.asarray(0.3), key)
         assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
         assert float(grad) != 0.0, f"d{key}/d delta is identically zero"
+
+    # The published angle-integrated disc power (log_L_agn_disc, #2972) is finite too.
+    grad_disc = float(jax.grad(published)(jnp.asarray(0.3), "log_L_agn_disc"))
+    assert bool(jnp.isfinite(grad_disc)), f"d log_L_agn_disc/d delta = {grad_disc}"
+    assert grad_disc != 0.0, "d log_L_agn_disc/d delta is identically zero"
 
 
 def test_skirtor_emitted_sed_independent_of_caller_grid():
@@ -648,3 +640,225 @@ def test_skirtor_emitted_sed_independent_of_caller_grid():
         seds.append(np.asarray(sed)[np.searchsorted(grid, probes)])
     err = float(np.max(np.abs(seds[0] / seds[1] - 1.0)))
     assert err < _RTOL, f"SKIRTOR emitted SED rel diff across caller grids {err:.3e}"
+
+
+# -- published L_* diagnostics of the SEDModelComponent classes -----------------
+#
+# Each component publishes its bolometric luminosities from a fixed budget grid, so the
+# value must not move with how the caller samples wavelength. A coarse caller grid (60
+# log points over 0.1-1000 um, the span a catalog fit uses) and a fine one (6000 points)
+# must publish the same L_* to 1e-6.
+
+_L_COARSE = np.geomspace(1.0e3, 1.0e7, 60)  # 0.1-1000 um [A]
+_L_FINE = np.geomspace(1.0e3, 1.0e7, 6000)
+
+_DATA = Path(__file__).resolve().parents[2] / "data"
+
+
+def _make_published_component(name):
+    """Build one SEDModelComponent that reads its template library from ``data/``."""
+    from tengri.components.agn.cat3d_torus_model import CAT3DTorus, CAT3DTorusConfig
+    from tengri.components.agn.kd18_disc_model import KD18Disc
+    from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
+    from tengri.components.agn.silva04_model import Silva04Torus, Silva04TorusConfig
+    from tengri.components.agn.skirtor_agnfitter_model import (
+        SKIRTORAgnfitterTorus,
+        SKIRTORAgnfitterTorusConfig,
+    )
+    from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+
+    makers = {
+        "cat3d_wind": lambda: CAT3DTorus(
+            config=CAT3DTorusConfig(grid_path=str(_DATA / "cat3d_wind_torus_grid.h5"))
+        ),
+        "kd18_disc": KD18Disc,
+        "powerlaw_disc": PowerLawDisc,
+        "silva04": lambda: Silva04Torus(
+            config=Silva04TorusConfig(grid_path=str(_DATA / "silva04_torus_grid.h5"))
+        ),
+        "skirtor_agnfitter": lambda: SKIRTORAgnfitterTorus(
+            config=SKIRTORAgnfitterTorusConfig(
+                grid_path=str(_DATA / "skirtor_mean3p_torus_grid.h5")
+            )
+        ),
+        "skirtor": lambda: SKIRTORTorus(
+            config=SKIRTORTorusConfig(grid_path=str(_DATA / "skirtor_templates_v3.h5"))
+        ),
+    }
+    return makers[name]()
+
+
+def _grahsp_published(wave):
+    """GRAHSP publishes through the ForwardState adapter, at its fiducial parameters."""
+    from tengri.components.agn.grahsp import GRAHSPSEDComponent
+    from tengri.protocols.component import ForwardState
+
+    comp = GRAHSPSEDComponent()
+    params = {
+        "agn_grahsp_l5100": jnp.array(1.0e44),
+        "agn_grahsp_uvslope": jnp.array(0.0),
+        "agn_grahsp_plslope": jnp.array(-1.7),
+        "agn_grahsp_plbendloc_nm": jnp.array(100.0),
+        "agn_grahsp_plbendwidth": jnp.array(1.0),
+        "agn_grahsp_cutoff_nm": jnp.array(10000.0),
+        "agn_grahsp_a_lines": jnp.array(1.0),
+        "agn_grahsp_a_feii": jnp.array(5.0),
+        "agn_grahsp_linewidth_kms": jnp.array(5000.0),
+        "agn_grahsp_fcov": jnp.array(0.4),
+        "agn_grahsp_si": jnp.array(0.0),
+        "agn_grahsp_cool_lam_um": jnp.array(17.0),
+        "agn_grahsp_cool_width": jnp.array(0.45),
+        "agn_grahsp_hot_lam_um": jnp.array(2.0),
+        "agn_grahsp_hot_width": jnp.array(0.5),
+        "agn_grahsp_hot_fcov": jnp.array(1.0),
+        "agn_grahsp_ebv": jnp.array(0.05),
+        "agn_grahsp_ebv_agn": jnp.array(0.05),
+    }
+    out = comp.apply(ForwardState(wave=jnp.asarray(wave)), params)
+    return {k: float(np.asarray(v)) for k, v in out.derived.items() if k.startswith("L_")}
+
+
+def _published_luminosities(name, wave):
+    """The L_* dict a component publishes on ``wave``, at its declared default parameters."""
+    from tengri.forward.orchestrator import default_params_dict
+
+    if name == "grahsp":
+        return _grahsp_published(wave)
+    comp = _make_published_component(name)
+    wave = jnp.asarray(wave)
+    try:
+        data = comp.load(wave)
+    except (FileNotFoundError, OSError) as err:
+        pytest.skip(f"{name}: template data unavailable ({err})")
+    object.__setattr__(comp, "data", data)
+    prefix = comp.parameter_prefix
+    p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
+    _, published = comp.predict(p, jnp.zeros_like(wave), wave)
+    return {k: float(np.asarray(v)) for k, v in published.items() if k.startswith("L_")}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "cat3d_wind",
+        "kd18_disc",
+        "powerlaw_disc",
+        "silva04",
+        "skirtor_agnfitter",
+        "skirtor",
+        "grahsp",
+    ],
+)
+def test_published_L_star_is_independent_of_caller_grid(name):
+    """Published L_* on a coarse caller grid equals the value on a fine grid to 1e-6."""
+    coarse = _published_luminosities(name, _L_COARSE)
+    fine = _published_luminosities(name, _L_FINE)
+    assert fine, f"{name}: publishes no L_* luminosity"
+    for key, ref in fine.items():
+        assert ref > 0.0, f"{name}.{key}: non-positive reference {ref:.3e}"
+        rel = abs(coarse[key] / ref - 1.0)
+        assert rel < _RTOL, f"{name}.{key}: coarse-vs-fine L_* rel diff {rel:.3e}"
+
+
+# -- SKIRTOR torus carries its normalized power after resampling (#2319) ----------
+
+#: Caller grid of the reproducer: 0.1-1000 um, 2000 log points, resampled off the
+#: 136-node SKIRTOR template axis.
+_SKIRTOR_CALLER = np.geomspace(1.0e3, 1.0e7, 2000)
+
+
+@pytest.mark.parametrize("cos_inc", [1.0, float(np.cos(np.pi / 4.0)), 0.0])
+def test_skirtor_torus_integral_equals_its_target_on_caller_grid(cos_inc):
+    """The resampled torus integrates, on the caller grid, to the raw record's power (1e-4).
+
+    The target is read from the file with ``h5py`` and SciPy (``RawSkirtor``): the dust power
+    of the record along ``cos_inc`` times the one scale that sets the sphere-mean native budget
+    to ``10**log_lbol * L_sun * frac_agn``. The integral is taken on the caller grid, the way a
+    downstream consumer would integrate the SED.
+    """
+    from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
+    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+    from tests.physics._skirtor_reference import RawSkirtor
+
+    grid = _DATA / "skirtor_templates_v3.h5"
+    if not grid.is_file():
+        pytest.skip(f"SKIRTOR v3 template grid unavailable ({grid})")
+    components = create_skirtor_components_from_grid(str(grid))
+    wave = jnp.asarray(_SKIRTOR_CALLER)
+    out = components(wave, agn_log_lbol=10.0, agn_cos_inc=cos_inc, frac_agn=0.5)
+    raw = RawSkirtor(str(grid))
+    point = (7.0, 1.0, 1.0, 40.0, 20.0)  # the defaults of the components function
+    keys = ("tau_skirtor", "p_skirtor", "q_skirtor", "oa_skirtor", "radius_ratio")
+    scale = raw.scale({**dict(zip(keys, point, strict=True)), "log_lbol": 10.0, "torus_frac": 0.5})
+    target = scale * raw.power("dust", point, cos_inc)
+    nu = wavelength_to_nu(wave)
+    # The disc is hot and extends below this grid's 1000 A start, so only the torus
+    # dust, which the caller grid covers, is checked here.
+    power = float(np.asarray(jnp.abs(bolometric_integral_nu(out.dust, nu))))
+    rel = abs(power / target - 1.0)
+    assert rel < 1.0e-4, f"cos_inc={cos_inc:.3f} torus dust: rel error {rel:.3e}"
+
+
+# -- SKIRTOR polar-dust absorbed reference is the converged integral (#2322) -------
+
+
+def _fiducial_polar_templates():
+    """The face-on disc, the i=30 dust and the norm ratio at the fiducial node, from the file."""
+    import h5py
+
+    from tengri.components.agn.skirtor import _find_skirtor_grid
+
+    with h5py.File(_find_skirtor_grid(), "r") as f:
+        wl = np.asarray(f["wavelength"][:])
+        axes = {
+            "tau": np.asarray(f["grid/tau_97"][:]),
+            "p": np.asarray(f["grid/p"][:]),
+            "q": np.asarray(f["grid/q"][:]),
+            "oa": np.asarray(f["grid/opening_angle"][:]),
+            "R": np.asarray(f["grid/radius_ratio"][:]),
+            "cos_inc": np.asarray(f["grid/cos_inclination"][:]),
+        }
+        idx = (
+            int(np.argmin(np.abs(axes["tau"] - 7.0))),
+            int(np.argmin(np.abs(axes["p"] - 1.0))),
+            int(np.argmin(np.abs(axes["q"] - 1.0))),
+            int(np.argmin(np.abs(axes["oa"] - 40.0))),
+            int(np.argmin(np.abs(axes["R"] - 20.0))),
+        )
+        j_0 = int(np.argmin(np.abs(axes["cos_inc"] - 1.0)))
+        j_i = int(np.argmin(np.abs(axes["cos_inc"] - np.cos(np.deg2rad(30.0)))))
+        disk0 = np.asarray(f["spectra/disk_emission"][(*idx, j_0)])
+        dust_i = np.asarray(f["spectra/dust_emission"][(*idx, j_i)])
+        norm = np.asarray(f["spectra/norm"][idx])
+    return wl, disk0, dust_i, float(norm[j_0] / norm[j_i])
+
+
+def test_skirtor_polar_reference_matches_converged_integral():
+    """R_faceon equals a 40000-node integral of the same templates to 1e-6.
+
+    The reference resamples the file's own templates onto 40000 log nodes and
+    integrates them with the trapezoid rule, the converged value of the integrand the
+    polar reference is defined by. The 136-node trapezoid it replaces is 6e-5 off.
+    """
+    from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+    from tengri.utils.grid_interp import resample_template
+
+    wl, disk0, dust_i, ratio = _fiducial_polar_templates()
+    fine = np.geomspace(wl[0], wl[-1], 40000)
+
+    def _on_fine(y):
+        return np.asarray(
+            resample_template(
+                jnp.asarray(fine), jnp.asarray(wl), jnp.asarray(y), left=0.0, right=0.0
+            )
+        )
+
+    ref = np.trapezoid(_on_fine(disk0), fine) * ratio / np.trapezoid(_on_fine(dust_i), fine)
+    wave = jnp.asarray(np.geomspace(1.0e2, 1.0e8, 3000))
+    got = float(
+        skirtor_disc_dust_ratio(
+            wave, jnp.ones_like(wave), jnp.ones_like(wave), agn_cos_inc=np.cos(np.deg2rad(30.0))
+        ).R_faceon
+    )
+    rel = abs(got / ref - 1.0)
+    assert rel < 1.0e-6, f"R_faceon(i=30) rel error vs 40000-node reference {rel:.3e}"

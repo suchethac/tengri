@@ -57,8 +57,17 @@ _BAKED_BUDGET_MB = 1.0
 # multiple. A kubota_done disc behind a Fritz torus with the analytic NLR measures 0.196 MB
 # without the disc tie, 0.481 MB when the tie evaluated the 13001-node budget grid twice
 # as graph literals, and 0.283 MB with that grid built once inside the trace; the budget
-# sits 0.07 MB above the measurement.
-_FRITZ_TIED_BUDGET_MB = 0.35
+# sat 0.07 MB above the measurement. The kubota_done graph is traced nine times on this path
+# (the tie, the band response and the normalizations), and since the float32 rewrite of
+# kubota_done (#2774) and #3009 each trace carried its own 128-node and 64-node Gauss-Legendre
+# ring rules and the 4000-node warm-zone normalization grid as literals. #3044 removed the
+# redundancy: the tables come from jitted nullary accessors, so the nine traces call one
+# cached sub-jaxpr and the tables are counted once (the 4000-node grid 0.032 MB, the 128-node
+# and 64-node rules 0.004 MB). The measurement depends on the SSP, because the test takes the
+# first data/ssp_*.h5 by sorted name: with prsc_miles the graph went from 0.614 MB to 0.215 MB,
+# with mist_c3k from 0.505 MB to 0.106 MB. The budget sits 0.085 MB above the larger figure
+# (0.215 MB) and still catches one extra copy of the 13001-node budget grid (+0.104 MB).
+_FRITZ_TIED_BUDGET_MB = 0.30
 
 # ``none`` is the no-op selector present in every category.
 _SKIP_BLOCKS = frozenset({"none"})

@@ -34,6 +34,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+from tengri.cosmology import age_at_z
 from tengri import (
     Fixed,
     ForwardModel,
@@ -100,7 +101,7 @@ print(
 # Define the parameter specification
 spec_param = Parameters(
     sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
     sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -149,7 +150,7 @@ true_params_param = spec_param.sample(key)
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)
 true_params_param = {**true_params_param}
 true_params_param["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
-true_params_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_params_param["sfh_tsnorm_peak_lbt_frac"] = jnp.array(3.0 / age_at_z(0.1))
 true_params_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params_param["sfh_tsnorm_trunc"] = jnp.array(2.0)
@@ -430,7 +431,7 @@ for name, res, t in [
 # Define the stochastic parameter specification
 spec_stoch = Parameters(
     sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
     sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -460,7 +461,7 @@ true_params_stoch = spec_stoch.sample(key)
 # Override to a typical star-forming galaxy with dramatic burstiness
 true_params_stoch = {**true_params_stoch}
 true_params_stoch["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
-true_params_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_params_stoch["sfh_tsnorm_peak_lbt_frac"] = jnp.array(3.0 / age_at_z(0.1))
 true_params_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params_stoch["sfh_tsnorm_trunc"] = jnp.array(2.0)

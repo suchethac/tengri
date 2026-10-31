@@ -62,6 +62,7 @@ from tengri.parameters._aliases import (
     find_short_param,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
+from tengri.parameters.timing import alias_gyr_timings, gyr_supplies_fraction
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -401,6 +402,47 @@ def _build_param_map(
 # (find_short_param moved to _aliases.py: imported at top)
 
 
+def _apply_timing_frac(internal, params, param_map, spec):
+    """Resolve ``*_frac`` timings to Gyr in ``internal`` (#2748).
+
+    A timing the spec holds Fixed is not in ``params`` (free parameters only),
+    so it is read from the spec: a Fixed ``*_gyr`` alias stands as given and a
+    Fixed ``*_frac`` is converted at its own value. A fraction absent from both
+    is its registry default; a fraction and its Gyr name both present is
+    refused.
+    """
+    from tengri.config.exceptions import ConfigError
+    from tengri.parameters.timing import resolve_timing_fracs, timing_frac_params
+
+    pairs = timing_frac_params(param_map)
+    view = dict(params)
+    for frac_name, gyr_name in pairs.items():
+        for name, twin in ((gyr_name, frac_name), (frac_name, gyr_name)):
+            if name in view or twin in view or name not in param_map:
+                continue
+            fixed = _spec_fixed_value(spec, name)
+            if fixed is not None:
+                view[name] = fixed
+    for frac_name, gyr_name in pairs.items():
+        if frac_name in param_map and frac_name in params and gyr_name in params:
+            raise ConfigError(
+                f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
+            )
+    resolve_timing_fracs(internal, view, param_map, redshift=internal.get("redshift"))
+
+
+def _spec_fixed_value(spec, name):
+    """The numeric Fixed value ``spec`` holds for ``name``, or None."""
+    try:
+        dist = spec.get_distribution(name)
+    except KeyError:
+        return None
+    if not dist.is_fixed:
+        return None
+    value = dist.bounds[0]
+    return value if isinstance(value, (int, float)) else None
+
+
 def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_params: bool = True):
     """Translate a public parameter dict to internal names with unit conversion.
 
@@ -443,6 +485,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         unrecognized keys (typos, deleted params, or params from a component
         that isn't active in this spec).
     """
+    params = alias_gyr_timings(params, param_map, spec)
     internal = {}
     # Per-spec SFH params (sfh_X_*) are *also* preserved under their public name so
     # the composer in resolve_sfh can dispatch per-component without collisions
@@ -527,6 +570,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         elif "psd_xi" in params:
             internal["xi"] = params["psd_xi"]
 
+    _apply_timing_frac(internal, params, param_map, spec)
     # Raise/warn about unrecognized keys (silent bugs when wrong names used)
     unrecognized = _unknown_param_keys(params, param_map)
     if unrecognized:
@@ -551,6 +595,11 @@ def _recognized_param_keys(param_map):
     recognized.update(_REVERSE_ALIASES.keys())
     recognized.update({"sfh_field_xi", "psd_xi"})
     recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
+    # Optional runtime scalars for the tabulated SFH (#2621): an age cut and
+    # a declared formed mass, both read directly from ``params`` like
+    # ``sfh_t_gyr``/``sfh_sfr`` above (the "table" family has no declared
+    # registry params -- the table IS the SFH).
+    recognized.update({"sfh_table_age_gyr", "sfh_table_log_total_mass"})
     recognized.update(int_name for _, (int_name, _, _) in param_map.items())
     return recognized
 
@@ -571,6 +620,19 @@ def _unknown_param_keys(params, param_map):
     )
 
 
+#: Retired parameter names -> what to write instead. A retired name is unknown to every
+#: live model, so it reaches :func:`_unknown_param_msg`, where a did-you-mean guess would
+#: name an unrelated parameter.
+_RETIRED_PARAM_HINTS: dict[str, str] = {
+    "agn_incl_skirtor": (
+        "retired (#3085): the AGN has one inclination, 'agn_cos_inc' "
+        "= cos(radians(agn_incl_skirtor)), which the SKIRTOR-AGNfitter tori, the disc "
+        "screen and the X-ray corona all read. Build the model with agn={..., 'cos_inc': "
+        "...} and pass 'agn_cos_inc' if it is free."
+    ),
+}
+
+
 def _unknown_param_msg(unrecognized, param_map):
     """Build the ``UnknownParameterError`` message with did-you-mean hints."""
     import difflib
@@ -579,7 +641,9 @@ def _unknown_param_msg(unrecognized, param_map):
     hints = []
     for bad in unrecognized:
         close = difflib.get_close_matches(bad, public, n=3, cutoff=0.6)
-        if close:
+        if bad in _RETIRED_PARAM_HINTS:
+            hints.append(f"  {bad!r} → {_RETIRED_PARAM_HINTS[bad]}")
+        elif close:
             hints.append(f"  {bad!r} → did you mean {close}?")
         else:
             hints.append(f"  {bad!r} → no close match (this param is not in the live model)")
@@ -669,6 +733,8 @@ def check_missing_free_params(params, spec, param_map=None):
         if legacy_flat_spec and pub_name.startswith(("agn_", "radio_", "xray_", "igm_")):
             continue
         if pub_name == "sfh_field_xi" and "psd_xi" in params:
+            continue
+        if gyr_supplies_fraction(pub_name, params):
             continue
         if find_short_param(params, pub_name) is not None:
             continue

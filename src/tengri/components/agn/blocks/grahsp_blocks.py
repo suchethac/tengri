@@ -33,13 +33,8 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
-from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
-from tengri.components.agn.grahsp.publication import (
-    PUBLICATION_HI_NM,
-    gauss_legendre_segments,
-    publication_breakpoints,
-)
+from tengri.components.agn.grahsp.publication import bolometric_unit_nm
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import (
     si_feature,
@@ -57,33 +52,64 @@ _LOG10_LSUN_ERG: float = _math.log10(LSUN_ERG)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Shared disc normalization helper
+# Unit-l5100 disc spectra (shared with the recipe-level normalization)
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _bolometric_unit_nm(unit_fn, node_arrays=()) -> Array:
-    r"""Bolometric integral above the Lyman limit of a unit-l5100 disc spectrum.
+def sbpl_unit_fn(
+    *,
+    uvslope: float,
+    plslope: float,
+    plbendloc_nm: float,
+    plbendwidth: float,
+    cutoff_nm: float,
+):
+    """Unit-l5100 SBPL disc, X-ray floored, as ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]``."""
 
-    Integrated on the component's own publication grid (segmented Gauss-Legendre in
-    ln lambda between the template nodes in ``node_arrays``), never on the caller's
-    wavelength array, so the normalization does not depend on how the caller samples
-    wavelength.
+    def unit_fn(w_nm):
+        # GRAHSP has no X-ray physics: floor the disc below the alpha_ox corona's blue edge
+        # so this composable disc block does not double-count with the corona (#1168).
+        spec = sbpl_bbb(
+            wave_nm=w_nm,
+            l5100=1.0,
+            uvslope=uvslope,
+            plslope=plslope,
+            plbendloc_nm=plbendloc_nm,
+            plbendwidth=plbendwidth,
+            cutoff_nm=cutoff_nm,
+        )
+        return floor_disc_xray(w_nm, spec)
 
-    Parameters
-    ----------
-    unit_fn : callable
-        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
-    node_arrays : sequence of array_like, optional
-        Template wavelength nodes [nm] that the spectrum is interpolated on.
+    return unit_fn
 
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int_{91.2\,\mathrm{nm}}^{\infty} L_\lambda\,\mathrm{d}\lambda` [erg/s].
-    """
-    breaks = publication_breakpoints(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, (), node_arrays)
-    lam_nm, weight_nm = gauss_legendre_segments(breaks)
-    return jnp.sum(weight_nm * unit_fn(lam_nm))
+
+def netzer_unit_fn(templates, *, log_mbh: float, spin: float, log_mdot: float):
+    """Unit-l5100 Netzer disc at (log M, a, log Mdot), X-ray floored, as a ``unit_fn``."""
+    from tengri.components.agn.grahsp.disc import netzer_disc_interp
+
+    def unit_fn(w_nm):
+        # Interpolated disc at the given mass, spin, Eddington ratio, normalized to
+        # lambda*L_lambda(5100 A) = 1 erg/s, with the X-ray floor (#1168).
+        spec = netzer_disc_interp(
+            wave_nm=w_nm,
+            l5100=1.0,
+            disc_wave_nm=templates.disc_wave_nm,
+            disc_lumin=templates.disc_lumin,
+            disc_m=templates.disc_m,
+            disc_a=templates.disc_a,
+            disc_mdot=templates.disc_mdot,
+            log_mbh=log_mbh,
+            spin=spin,
+            log_mdot=log_mdot,
+        )
+        return floor_disc_xray(w_nm, spec)
+
+    return unit_fn
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Shared disc normalization helper
+# ──────────────────────────────────────────────────────────────────────
 
 
 def _disc_log_l5100(
@@ -119,7 +145,7 @@ def _disc_log_l5100(
     """
     if agn_grahsp_log_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
-        l_bol_unit = _bolometric_unit_nm(unit_fn, node_arrays)
+        l_bol_unit = bolometric_unit_nm(unit_fn, node_arrays)
         # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
         # log10(target) - log10(l_bol_unit). Never materializes the linear
         # target (~1e42-1e47, #1206 §D).
@@ -203,20 +229,13 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
 
-    def unit_fn(w_nm):
-        # Unit-l5100 SBPL. GRAHSP has no X-ray physics: floor the disc below the
-        # alpha_ox corona's blue edge so this composable disc block does not
-        # double-count with the corona (#1168). Below the >=91.2 nm window.
-        spec = sbpl_bbb(
-            wave_nm=w_nm,
-            l5100=1.0,
-            uvslope=agn_grahsp_uvslope,
-            plslope=agn_grahsp_plslope,
-            plbendloc_nm=agn_grahsp_plbendloc_nm,
-            plbendwidth=agn_grahsp_plbendwidth,
-            cutoff_nm=agn_grahsp_cutoff_nm,
-        )
-        return floor_disc_xray(w_nm, spec)
+    unit_fn = sbpl_unit_fn(
+        uvslope=agn_grahsp_uvslope,
+        plslope=agn_grahsp_plslope,
+        plbendloc_nm=agn_grahsp_plbendloc_nm,
+        plbendwidth=agn_grahsp_plbendwidth,
+        cutoff_nm=agn_grahsp_cutoff_nm,
+    )
 
     L_lambda_unit_nm = unit_fn(wave_nm)
     # Normalization integral on the component's own grid (the analytic BBB has no nodes).
@@ -300,8 +319,6 @@ def grahsp_netzer_disc_block(
     L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
     """
-    from tengri.components.agn.grahsp.disc import netzer_disc_interp
-
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
 
@@ -312,22 +329,12 @@ def grahsp_netzer_disc_block(
             "GRAHSP template bundle lacks disc_wave_nm; regenerate with tools/build_grahsp_hdf5.py"
         )
 
-    def unit_fn(w_nm):
-        # Interpolated disc at the given mass, spin, Eddington ratio, normalized to
-        # lambda*L_lambda(5100 A) = 1 erg/s, with the X-ray floor (#1168).
-        spec = netzer_disc_interp(
-            wave_nm=w_nm,
-            l5100=1.0,
-            disc_wave_nm=templates.disc_wave_nm,
-            disc_lumin=templates.disc_lumin,
-            disc_m=templates.disc_m,
-            disc_a=templates.disc_a,
-            disc_mdot=templates.disc_mdot,
-            log_mbh=agn_grahsp_netzer_log_mbh,
-            spin=agn_grahsp_netzer_spin,
-            log_mdot=agn_grahsp_netzer_log_mdot,
-        )
-        return floor_disc_xray(w_nm, spec)
+    unit_fn = netzer_unit_fn(
+        templates,
+        log_mbh=agn_grahsp_netzer_log_mbh,
+        spin=agn_grahsp_netzer_spin,
+        log_mdot=agn_grahsp_netzer_log_mdot,
+    )
 
     spec_unit_nm = unit_fn(wave_nm)
     # Normalization integral on the disc's own template nodes (never the caller's grid).

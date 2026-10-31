@@ -13,6 +13,7 @@ from pathlib import Path
 import jax
 import pytest
 
+from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.fitter import Fitter
@@ -61,7 +62,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_log_total_mass": 10.0,
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
-        "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
+        "sfh_dpl_age_gyr": _AGE_UNIV_GYR,
         "met_logzsol": -0.3,
         "dust_tau_bc": 1.0,
     }

@@ -17,7 +17,7 @@ consistent under the Precompute Protocol.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -27,7 +27,7 @@ from tengri.config.exceptions import DeadPrecomputeAxisWarning
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
-    interp_nd_triweight,
+    library_lookup,
     preintegrate_grid,
     slice_fixed_axes,
 )
@@ -44,6 +44,7 @@ def collapse_fixed_axes(
     *,
     defaults: Mapping[str, float] | None = None,
     internal_axes: frozenset[str] | None = None,
+    axis_transforms: Mapping[str, Callable[[float], float]] | None = None,
     origin: str = "precompute",
 ) -> tuple[PreintegratedGrid | PreintegratedLines, tuple[Any, ...], dict[int, float]]:
     """Collapse every grid axis whose governing parameter is Fixed.
@@ -77,6 +78,12 @@ def collapse_fixed_axes(
         warning, never collapsed). Used for grid axes like ``log_age`` in
         CLOUDY adapters or ``HbFrac`` in CB19 that are internal bookkeeping
         and not meant to be user parameters. Default: None. See issue #1827.
+    axis_transforms : mapping of str to callable, optional
+        Parameter value -> grid-axis coordinate, for an axis tabulated in another
+        variable than its governing parameter: the SKIRTOR-AGNfitter tori store the
+        inclination in degrees and are governed by ``agn_cos_inc``, so their
+        adapters pass ``{"agn_cos_inc": skirtor_incl_from_cos_inc}`` (#3085).
+        Names absent from the mapping collapse at the parameter value itself.
     origin : str, optional
         Module or component name, used only in the ``DeadPrecomputeAxisWarning``
         message so the report names the declaration that needs fixing.
@@ -132,12 +139,17 @@ def collapse_fixed_axes(
     defaults = defaults or {}
     internal_axes = internal_axes or frozenset()
 
+    axis_transforms = axis_transforms or {}
     collapsed_at: dict[int, float] = {}
     for i, pname in enumerate(axis_params):
         if pname in fixed_values:
-            collapsed_at[i] = float(fixed_values[pname])
+            value = fixed_values[pname]
         elif pname not in free_names and pname in defaults:
-            collapsed_at[i] = float(defaults[pname])
+            value = defaults[pname]
+        else:
+            continue
+        to_axis = axis_transforms.get(pname)
+        collapsed_at[i] = float(to_axis(value) if to_axis is not None else value)
 
     # Warn once per dead name (not a valid parameter, not internal, not in defaults).
     # This replaces the old logic that warned only when nothing collapsed AND every
@@ -297,7 +309,6 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
     """
     phot = preint.phot
     axes = preint.axes
-    edges = preint.edges
 
     @jax.jit
     def lookup(scale, *grid_params):
@@ -319,7 +330,7 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
         -----
         **JIT-compatible**: yes, uses ``jnp`` and ``interp_nd_triweight`` primitives.
         """
-        normed = interp_nd_triweight(phot, axes, edges, grid_params)
+        normed = library_lookup(phot, axes, grid_params)
         return scale * normed
 
     return lookup

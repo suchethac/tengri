@@ -47,7 +47,7 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._template_grid import float32_safe_template, scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -260,15 +260,16 @@ def silva04_sed_from_grid(
        arXiv:1606.05648.
     """
     template = interp_nd_pchip(
-        jnp.asarray(grid.template),
+        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
         (jnp.asarray(grid.log_nh_axis),),
         (agn_log_nh_silva,),
     )
     wave_native = jnp.asarray(grid.wave_grid)
-    integral_safe = native_bolometric_nu(template, wave_native)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-    return l_scale * sed / integral_safe
+    # Normalized once (#2851): the Silva et al. (2004) templates have no inclination axis,
+    # so there is no anisotropy to restore and the sightline power is f L_bol.
+    return scale_to_lbol_native(template, wave_native, sed, l_scale)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (

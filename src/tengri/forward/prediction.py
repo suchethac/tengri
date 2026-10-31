@@ -254,7 +254,7 @@ class SEDQuantities(NamedTuple):
     nuv_flux_intrinsic : jnp.ndarray
         Dust-free NUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
     rest_uv_color : jnp.ndarray
-        Rest-frame U-V color [AB magnitudes].
+        U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu [AB magnitudes].
     luminosity_weighted_age_gyr : jnp.ndarray
         Luminosity-weighted age [Gyr].
     luminosity_weighted_metallicity : jnp.ndarray
@@ -711,7 +711,7 @@ class SEDProperties(_CachedBase):
     nuv_flux_intrinsic : property
         Dust-free NUV flux [erg/s/Hz].
     rest_uv_color : property
-        Rest-frame U-V color [AB magnitudes].
+        U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu [AB magnitudes].
     luminosity_weighted_age_gyr : property
         Luminosity-weighted age [Gyr].
     luminosity_weighted_metallicity : property
@@ -993,7 +993,9 @@ class SEDProperties(_CachedBase):
 
     @property
     def rest_uv_color(self):
-        """Rest-frame U-V color.
+        """U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu.
+
+        Not FUV−NUV and not f_1500 − f_2300.
 
         Returns
         -------
@@ -1591,7 +1593,7 @@ class XRayProperties(_CachedBase):
     """Lazy property accessor for X-ray derived quantities.
 
     The 2-10 keV luminosities of the X-ray terms the model emits: the HMXB +
-    LMXB terms (Lehmer et al. 2016, SFR averaged over 100 Myr) and the AGN
+    LMXB terms (Fragos et al. 2013, SFR averaged over 100 Myr) and the AGN
     corona, published by the X-ray component (``log_L_x_xrb_2_10``,
     ``log_L_x_agn_2_10``).
 
@@ -2116,7 +2118,7 @@ class Prediction:
         # ``model.age_yr <= 1e8`` still align.
         sfh_grid = jnp.asarray(derived["sfh_grid_lbt_yr"])
         sfr_history = jnp.asarray(derived["sfr_history"])
-        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history)
+        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history, right=0.0)
         self._cache.update(
             {
                 "p": p,
@@ -2209,6 +2211,7 @@ class Prediction:
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)
+            self._cache["log_q_h_total"] = jnp.array(jnp.nan)
             return
 
         # Pull the catalog from the orchestrator's NebularSEDComponent
@@ -2258,22 +2261,25 @@ class Prediction:
             and hasattr(backend, "_qh_table")
             and backend._qh_table is not None
         ):
+            from tengri.components.nebular._shared import log_q_h_total
+            from tengri.utils.scale import pow10
+
             log_z = jnp.asarray(log_z_history)[0]
-            young_idx = backend._young_idx
-            young_ages = model.ssp_log_ages_yr[young_idx]
-            young_weights = jnp.asarray(weights_orch)[young_idx]
-
-            def _qh_one_bin(log_age_i, w_i):
-                """Ionizing photon production rate for one age bin."""
-                return w_i * backend._get_qh_at(log_z, log_age_i)
-
-            import jax
-
-            q_h_per_bin = jax.vmap(_qh_one_bin)(young_ages, young_weights)
             neb_fesc = jnp.asarray(self._params.get("neb_fesc", 0.0))
-            self._cache["q_h_total"] = jnp.sum(q_h_per_bin) * (1.0 - neb_fesc)
+            # Summed in the log domain (#2853): a linear Q_H is ~1e47 photons/s per
+            # Msun and overflows float32 once multiplied by the mass weight.
+            log_total = log_q_h_total(
+                backend,
+                model.ssp_log_ages_yr,
+                jnp.asarray(weights_orch),
+                log_z,
+                neb_fesc,
+            )
+            self._cache["log_q_h_total"] = log_total
+            self._cache["q_h_total"] = pow10(log_total)
         else:
             self._cache["q_h_total"] = jnp.array(jnp.nan)
+            self._cache["log_q_h_total"] = jnp.array(jnp.nan)
 
     @property
     def sed_array(self):
@@ -3023,7 +3029,10 @@ class Prediction:
 
     @property
     def rest_uv_color(self):
-        """Rest-frame UV color (f_1500 − f_2300). Same as ``pred.sed.rest_uv_color``."""
+        """U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å.
+
+        Same as ``pred.sed.rest_uv_color``.
+        """
         return self.sed.rest_uv_color
 
     @property

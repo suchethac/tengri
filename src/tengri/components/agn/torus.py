@@ -40,8 +40,7 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.components.agn._template_grid import analytic_bolometric_nu, native_bolometric_nu
-from tengri.utils.grid_interp import interp_nd_triweight, resample_template
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.grid_interp import library_lookup, resample_template
 
 # ── Physical constants (CGS) ──────────────────────────────────────
 
@@ -332,7 +331,6 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         grid_jax = jnp.asarray(raw["template"])
         wave_grid = jnp.asarray(raw["wavelength"])
         tau_axis = jnp.asarray(raw["tau_axis"])
-        edges = (edges_for_grid(tau_axis),)
 
     def nenkova_grid(
         wavelength: jnp.ndarray,
@@ -378,9 +376,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         """
         # Nenkova tau axis is non-uniform (I6 fix #1851).
         # Use index-space interpolation for correct gradients throughout the range.
-        template = interp_nd_triweight(
-            grid_jax, (tau_axis,), edges, (agn_tau,), index_space_interp=True
-        )
+        template = library_lookup(grid_jax, (tau_axis,), (agn_tau,))
         # Normalize on the template's native grid, before resampling: the
         # result must not depend on the caller's wavelength sampling or range.
         integral_safe = native_bolometric_nu(template, wave_grid)

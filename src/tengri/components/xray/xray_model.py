@@ -23,7 +23,8 @@ Notes
 -----
 **JIT-compatible**: yes.
 
-**Models**: Lehmer et al. (2010, 2016) for X-ray binaries + Lusso &
+**Models**: Fragos et al. (2013) metallicity and age scalings for X-ray
+binaries (benchmarked against Lehmer et al. 2010, 2016) + Lusso &
 Risaliti (2016) for AGN X-ray corona. Both are analytic scalings with
 no grid dependence.
 
@@ -36,6 +37,7 @@ References
 .. [2] Lehmer et al. 2016, ApJ, 825, 7
 .. [3] Lusso & Risaliti 2016, ApJ, 819, 154
 .. [4] Aird et al. 2017, MNRAS, 465, 3390
+.. [5] Fragos et al. 2013, ApJ, 776, L31
 """
 
 from __future__ import annotations
@@ -47,7 +49,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
-from tengri.components.xray.xray import metallicity_from_history, xray_total
+from tengri.components.xray.xray import (
+    lmxb_stellar_age_gyr,
+    metallicity_from_history,
+    xray_total,
+)
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
@@ -71,10 +77,10 @@ class XRayAirdSEDComponentConfig(SEDComponentConfig):
 
 
 class XRayAirdSEDComponent(SEDModelComponent):
-    """SEDComponent for X-ray emission (Lehmer+2016 / Yang+2020 canonical).
+    """SEDComponent for X-ray emission (Fragos+2013 / Yang+2020 canonical).
 
     Computes total X-ray continuum from X-ray binaries (HMXB + LMXB),
-    hot gas, and AGN corona. Implements Lehmer et al. 2016 (metallicity-
+    hot gas, and AGN corona. Implements Fragos et al. 2013 (metallicity-
     and age-dependent XRB scaling), Yang et al. 2020 (hot gas and AGN
     anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
@@ -116,8 +122,8 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
     **Models**:
 
-    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
-    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - HMXB: Fragos+2013 metallicity quartic (Eq. 3), scaling with SFR
+    - LMXB: Fragos+2013 age quartic (Eq. 4), scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020 α_OX, scaling with L_2500
 
@@ -143,6 +149,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         "sfr": "Msun/yr",
         "log_mstar": "dex",
         "L_2500_30deg": "erg/s/Hz",
+        "age_weights_surviving": "Msun",
         "age_weights": "Msun",
         "ssp_ages_yr": "yr",
         "log_metallicity_history": "dex",
@@ -196,7 +203,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         description=(
             "Deviation from expected HMXB log L_X (Yang+2020 [1]_). "
             "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-            "around the Lehmer+2016 SFR relation."
+            "around the Fragos+2013 L_X/SFR relation (Eq. 3)."
         ),
         units="dex",
         default=0.0,
@@ -207,7 +214,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         description=(
             "Deviation from expected LMXB log L_X (Yang+2020 [1]_). "
             "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
-            "around the Lehmer+2016 age/mass relation."
+            "around the Fragos+2013 L_X/M* age relation (Eq. 4)."
         ),
         units="dex",
         default=0.0,
@@ -238,7 +245,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        """Predict X-ray SED via Lehmer+Yang canonical path.
+        """Predict X-ray SED via Fragos+Yang canonical path.
 
         Parameters
         ----------
@@ -260,13 +267,14 @@ class XRayAirdSEDComponent(SEDModelComponent):
               used in practice since X-ray requires stellar component).
             - L_2500_30deg [erg/s/Hz], when AGN publishes L_2500, reads it;
               when absent, injected 0.0 (no AGN → no corona).
-            - age_weights [Msun], mass weights on SSP grid. Uses zero-sum check:
-              if sum > 0, computes mass-weighted stellar age; if sum == 0 (absent
-              or truly zero-weighted), falls back to 1.0 Gyr.
+            - age_weights_surviving [Msun], surviving mass per SSP age bin; the
+              weights of the LMXB age. age_weights [Msun], the formed-mass
+              fallback. Zero-sum check: if a sum is 0 (absent or truly
+              zero-weighted) the next source is used, then 1.0 Gyr.
             - ssp_ages_yr [yr]; SSP age grid; paired with age_weights.
             - log_metallicity_history [dex, absolute log10(Z)]: stellar's SFH-
               indexed metallicity history. Present-day bin (index 0) drives the
-              Lehmer+2016 HMXB quartic; if absent, metallicity_from_history()
+              Fragos+2013 HMXB quartic; if absent, metallicity_from_history()
               returns Z_SUN (0.0142).
 
         Returns
@@ -301,20 +309,15 @@ class XRayAirdSEDComponent(SEDModelComponent):
         # that nothing publishes, so the fallback was the only value ever seen.
         metallicity_z = metallicity_from_history(inputs.get("log_metallicity_history"))
 
-        # Stellar age [Gyr]: computed from age_weights and ssp_ages_yr when both
-        # are published (age_weights sum > 0), else falls back to 1.0 Gyr.
-        # This mirrors yang20's emitter_inputs logic (component.py:374-388).
-        # The base apply() injects 0.0 when these keys are absent; we distinguish
-        # that from published zeros by checking the weight sum.
-        age_weights = jnp.asarray(inputs.get("age_weights", 0.0))
-        ssp_ages_yr = jnp.asarray(inputs.get("ssp_ages_yr", 0.0))
-        _w_sum = jnp.sum(age_weights)
-        # Use where-safe denominator to avoid subnormal floor + where-grad hazard
-        w_sum_safe = jnp.where(_w_sum > 0.0, _w_sum, 1.0)
-        stellar_age_gyr = jnp.where(
-            _w_sum > 0.0,
-            jnp.sum(age_weights * ssp_ages_yr) / w_sum_safe / 1.0e9,
-            1.0,
+        # Stellar age [Gyr]: the surviving-mass-weighted age, through the same
+        # helper as XRaySEDComponent so the two cannot disagree (Fragos+2013
+        # Eq. 4). The base apply() injects 0.0 for an absent key; the helper reads
+        # a zero weight sum as "not published", falls back to the formed weights,
+        # then to 1.0 Gyr.
+        stellar_age_gyr = lmxb_stellar_age_gyr(
+            inputs.get("age_weights_surviving", 0.0),
+            inputs.get("age_weights", 0.0),
+            inputs.get("ssp_ages_yr", 0.0),
         )
 
         # AGN UV luminosity [erg/s/Hz]: read when AGN publishes, else 0.0

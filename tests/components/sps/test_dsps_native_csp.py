@@ -487,3 +487,40 @@ def test_model_accepts_dsps_met_table():
     assert model._csp_integration == "dsps_met_table"
     assert model._csp_age_dt is None
     assert model._csp_matrix is None
+
+
+# ── csp_age_dt "trapz": numpy build-time path must equal the jnp formula ──
+
+
+def _csp_age_dt_trapz_reference(a):
+    return jnp.concatenate(
+        [
+            jnp.array([0.5 * (a[1] - a[0])]),
+            0.5 * (a[2:] - a[:-2]),
+            jnp.array([0.5 * (a[-1] - a[-2])]),
+        ]
+    )
+
+
+class TestCspAgeDtTrapzNumpyExact:
+    @pytest.mark.parametrize("dtype", [np.float64, np.float32])
+    @pytest.mark.parametrize("n", [2, 3, 50])
+    def test_matches_jnp_formula_exactly(self, dtype, n):
+        from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
+
+        rng = np.random.default_rng(4000 + n)
+        ages = np.sort(rng.uniform(1e6, 1e10, size=n)).astype(dtype)
+        expected = _csp_age_dt_trapz_reference(jnp.asarray(ages))
+        got = csp_age_dt(ages, method="trapz")
+        np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+        assert got.dtype == expected.dtype
+
+    @pytest.mark.parametrize("n", [2, 3, 50])
+    def test_traced_path_under_jit_matches(self, n):
+        from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
+
+        rng = np.random.default_rng(5000 + n)
+        ages = np.sort(rng.uniform(1e6, 1e10, size=n))
+        expected = _csp_age_dt_trapz_reference(jnp.asarray(ages))
+        got = jax.jit(lambda a: csp_age_dt(a, method="trapz"))(jnp.asarray(ages))
+        np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))

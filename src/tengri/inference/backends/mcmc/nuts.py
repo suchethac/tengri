@@ -344,6 +344,11 @@ def resolve_dense_mass_gate(
     return False
 
 
+def mass_matrix_label(use_dense: bool) -> str:
+    """Name the metric a NUTS run adapted: ``"dense"`` or ``"diag"`` (#2484)."""
+    return "dense" if use_dense else "diag"
+
+
 def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> None:
     """Warn before NUTS warmup OOMs at D >= 8 with dense mass matrix (#319).
 
@@ -1041,6 +1046,10 @@ def run_nuts(
             # and ``divergent_mask`` so the three can be joined row-wise.
             "energy": jnp.asarray(energy),
             **_ebfmi_record,
+            # The metric the adaptation actually used, after the #319 policy and
+            # the D cap. ``dense_mass_matrix`` is what was requested; this is
+            # what ran (#2484), so a diagonal fallback is visible in the record.
+            "mass_matrix": mass_matrix_label(use_dense),
             "dense_mass_step_backoffs": dense_mass_backoffs,
             # Gradient counts, the unit bench/reports compare samplers on:
             # adaptation (0 when a cached adaptation was reused), the kept

@@ -4,7 +4,7 @@
 Tests verify:
 1. Default behavior (shock=False) reproduces baseline SED exactly (bit-identical)
 2. Shock enabled runtime produces finite, non-zero contributions
-3. Precompute and runtime paths agree to 1e-3 relative tolerance
+The precompute-vs-exact check for shock was removed; see the note at the end of this file.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def shock_filter_set():
 def shock_sed_model_factory(synthetic_ssp):
     """Factory to build SEDModel with or without shock."""
 
-    def _build(shock_enabled: bool, precompute: bool = False):
+    def _build(shock_enabled: bool):
         from tengri import (
             Fixed,
             Observation,
@@ -107,7 +107,7 @@ def shock_sed_model_factory(synthetic_ssp):
                 shock=False,
             )
 
-        model = SEDModel(spec, synthetic_ssp, observation=observation, precompute=precompute)
+        model = SEDModel(spec, synthetic_ssp, observation=observation)
         return model, spec
 
     return _build
@@ -144,7 +144,7 @@ class TestShockEnabledRuntimeSmoke:
     @_SKIP_NO_MAPPINGS
     def test_shock_enabled_produces_nonzero_emission(self, shock_sed_model_factory):
         """With shock enabled, non-stellar photometry should be non-zero."""
-        model_shock, spec_shock = shock_sed_model_factory(shock_enabled=True, precompute=False)
+        model_shock, spec_shock = shock_sed_model_factory(shock_enabled=True)
 
         key = jax.random.PRNGKey(42)
         params = spec_shock.sample(key)
@@ -161,37 +161,6 @@ class TestShockEnabledRuntimeSmoke:
         # (We don't assert a specific minimum, just that the model runs)
 
 
-class TestShockPrecomputeRuntimeEquivalence:
-    """Verify precompute and runtime paths agree to 1e-3 relative tolerance."""
-
-    @_SKIP_NO_MAPPINGS
-    def test_precompute_matches_runtime(self, shock_sed_model_factory):
-        """Precomputed shock kernel should match runtime (fallback) to 1e-3 rel tol."""
-        model_runtime, spec_runtime = shock_sed_model_factory(shock_enabled=True, precompute=False)
-        model_precomp, spec_precomp = shock_sed_model_factory(shock_enabled=True, precompute=True)
-
-        # Use identical params for both
-        key = jax.random.PRNGKey(123)
-        params_runtime = spec_runtime.sample(key)
-
-        # Manually construct identical params dict for precompute model
-        # (both specs are identical, so sample() should produce the same values)
-        params_precomp = spec_precomp.sample(key)
-
-        # Predict with both models
-        sed_runtime = model_runtime.predict_photometry(params_runtime)
-        sed_precomp = model_precomp.predict_photometry(params_precomp)
-
-        # Ensure both are finite
-        chex.assert_tree_all_finite(sed_runtime)
-        chex.assert_tree_all_finite(sed_precomp)
-        # Compute relative error (avoid division by zero with max(|val|, 1e-30))
-        rel_err = np.abs(sed_precomp - sed_runtime) / np.maximum(np.abs(sed_runtime), 1e-30)
-
-        max_rel_err = float(np.max(rel_err))
-        print(f"Max relative error (shock precompute vs runtime): {max_rel_err:.2e}")
-
-        # Assert to 1e-3 relative tolerance
-        assert max_rel_err < 1e-3, (
-            f"Shock precompute ↔ runtime equivalence failed: max rel err = {max_rel_err:.2e}"
-        )
+# The shock precompute-vs-exact equivalence test that stood here compared two identical
+# exact models: the factory above passes no ``approx=`` argument. The LUT-vs-exact shock
+# case is in test_precompute_runtime_equivalence.py, at shock_log_lhalpha=43.0.

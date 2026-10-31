@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
+from tengri.utils.table_log import log_table_f32
 
 # ── Template loading (lazy: no computation at import time) ───────
 
@@ -59,14 +60,18 @@ def _load_nthcomp_templates_impl():
         return None, None, None, None, None, False
 
     try:
+        # Host float32 numpy only: this cache lives for the whole process, so a
+        # jnp array built here would be a tracer if the first load ran under jit
+        # (#2827). The device copies are made per call in _get_nthcomp_templates.
         with h5py.File(fpath, "r") as f:
-            gamma_jax = jnp.array(f["gamma_grid"][:], dtype=jnp.float32)
-            kte_jax = jnp.array(f["kte_grid"][:], dtype=jnp.float32)
-            ktbb_jax = jnp.array(f["ktbb_grid"][:], dtype=jnp.float32)
-            nu_jax = jnp.array(f["nu_grid"][:], dtype=jnp.float32)
+            gamma_np = np.asarray(f["gamma_grid"][:], dtype=np.float32)
+            kte_np = np.asarray(f["kte_grid"][:], dtype=np.float32)
+            ktbb_np = np.asarray(f["ktbb_grid"][:], dtype=np.float32)
+            nu_np = np.asarray(f["nu_grid"][:], dtype=np.float32)
             table = f["table"][:]
-        table_log_jax = jnp.array(np.log(np.maximum(table, 1e-37)), dtype=jnp.float32)
-        return gamma_jax, kte_jax, ktbb_jax, nu_jax, table_log_jax, True
+        # float64 log rounded once: numpy's float32 log is platform-dependent (#3067).
+        table_log_np = log_table_f32(table, floor=1e-37)
+        return gamma_np, kte_np, ktbb_np, nu_np, table_log_np, True
     except Exception as exc:
         warnings.warn(
             f"Failed to load nthcomp templates from {fpath}: {exc}. "
@@ -77,9 +82,12 @@ def _load_nthcomp_templates_impl():
 
 
 def _get_nthcomp_templates():
-    """Get cached nthcomp templates, loading on first call."""
+    """Get nthcomp templates as float32 device arrays, loading on first call."""
     gamma, kte, ktbb, nu, table_log, available = _load_nthcomp_templates_impl()
-    return gamma, kte, ktbb, nu, table_log, available
+    if not available:
+        return gamma, kte, ktbb, nu, table_log, available
+    device = tuple(jnp.asarray(a, dtype=jnp.float32) for a in (gamma, kte, ktbb, nu, table_log))
+    return (*device, available)
 
 
 #: Backward-compat global accessors (for interpolation functions below)
@@ -104,6 +112,18 @@ def _get_ktbb_jax():
 def _get_nu_jax():
     """Return frequency grid from cached nthcomp templates."""
     _, _, _, nu, _, _ = _get_nthcomp_templates()
+    return nu
+
+
+def _get_nu_host() -> np.ndarray:
+    """Return the template frequency grid as host float32 numpy (never a tracer).
+
+    Host-side consumers (``np.geomspace`` bounds, static grids) must read this, not
+    ``_get_nu_jax``: under ``jax.jit`` the latter's ``jnp.asarray`` yields a tracer.
+    """
+    _, _, _, nu, _, available = _load_nthcomp_templates_impl()
+    if not available:
+        raise RuntimeError("nthcomp templates are not available; cannot build the norm grid")
     return nu
 
 
@@ -337,13 +357,14 @@ def _nthcomp_lnu_interp_impl(
     return jnp.maximum(lnu, 0.0).astype(out_dtype)
 
 
-@jax.custom_jvp
+@functools.partial(jax.custom_jvp, nondiff_argnums=(5,))
 def _nthcomp_interp(
     table: NthcompTable,
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
+    unit: float,
 ) -> jnp.ndarray:
     """Return the normalized nthcomp L_nu shape via trilinear interpolation.
 
@@ -365,11 +386,14 @@ def _nthcomp_interp(
         Electron temperature [keV].  Clamped to grid range.
     kTbb_keV : scalar jnp array
         Seed temperature [keV].  Clamped to grid range.
+    unit : float
+        Static divisor of the returned shape [dimensionless]; see
+        :func:`nthcomp_lnu_interp`.
 
     Returns
     -------
     lnu_shape : jnp.ndarray, shape (len(nu),)
-        Non-negative spectral shape (integrates to ~1 over nu).
+        Non-negative spectral shape (integrates to ~1 over nu), divided by ``unit``.
 
     Notes
     -----
@@ -401,11 +425,11 @@ def _nthcomp_interp(
        dominance in the torus emission," MNRAS, 283, 193 (1996).
        https://doi.org/10.1093/mnras/283.1.193
     """
-    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
+    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table) / unit
 
 
 @_nthcomp_interp.defjvp
-def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
+def _nthcomp_interp_jvp(unit: float, primals: tuple, tangents: tuple) -> tuple:
     """Forward-mode rule: exact interpolant slopes in ``gamma``, ``kTe`` and ``kTbb``.
 
     Parameters
@@ -455,7 +479,7 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     _, _, d_gamma, d_kTe, d_kTbb = tangents
 
     _, slopes = _interp_with_slopes(nu, gamma, kTe_keV, kTbb_keV, table)
-    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
+    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table) / unit
 
     # The tangent dtype must MATCH the primal's, exactly -- a ``custom_jvp``
     # contract. ``nu`` sets the primal dtype while the operand tangents set the
@@ -468,7 +492,10 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     # and ``inf`` in float32 (#1822). Casting only the finished sum would put the
     # float32 ceiling back into the transpose.
     dt = primal_out.dtype
-    slopes = slopes.astype(dt)
+    # ``unit`` is divided into the slopes themselves, not into the finished tangent: the
+    # transposed (reverse-mode) product then multiplies the incoming cotangent by an O(1-1e2)
+    # slope instead of first forming ``cotangent / unit`` (~1e17 times larger, #2767).
+    slopes = slopes.astype(dt) / unit
     tangent_out = (
         slopes[0] * jnp.asarray(d_gamma, dtype=dt)
         + slopes[1] * jnp.asarray(d_kTe, dtype=dt)
@@ -477,12 +504,24 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     return primal_out, tangent_out
 
 
+def nthcomp_norm_grid(n_points: int = 4000) -> np.ndarray:
+    """Log-spaced frequency grid spanning the full band of the nthcomp templates [Hz].
+
+    The template shape is normalized by its own integral over this band (the band is where
+    the template is defined, and its tails are negligible), so the warm zone carries exactly
+    its counted power, whatever the (Gamma, kTe, kTbb) of the ring.
+    """
+    nu = np.asarray(_get_nu_host(), dtype=float)
+    return np.geomspace(nu[0], nu[-1], n_points)
+
+
 def nthcomp_lnu_interp(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
     _template: NthcompTable | None = None,
+    unit: float = 1.0,
 ) -> jnp.ndarray:
     """Normalized nthcomp :math:`L_\\nu` shape via trilinear interpolation.
 
@@ -500,11 +539,16 @@ def nthcomp_lnu_interp(
         Pre-loaded templates, threaded in as a JIT argument by the forward
         model. ``None`` (default) reads the module-level cache, which: under
         trace: bakes ~15 MB into the graph as constants.
+    unit : float, optional
+        Static divisor [dimensionless]. The shape integrates to 1 over ``nu``, so it is
+        ~1e-17 per Hz; a caller that multiplies it by a ~1e47 ring factor in float32 passes
+        the shape's own scale here and carries that scale as an exponent, so neither the
+        product nor its reverse-mode cotangent leaves range. Default ``1.0``.
 
     Returns
     -------
     ndarray, shape (n_nu,)
-        Non-negative spectral shape.
+        Non-negative spectral shape, divided by ``unit``.
 
     Notes
     -----
@@ -517,4 +561,4 @@ def nthcomp_lnu_interp(
         raise RuntimeError(
             "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
         )
-    return _nthcomp_interp(table, nu, gamma, kTe_keV, kTbb_keV)
+    return _nthcomp_interp(table, nu, gamma, kTe_keV, kTbb_keV, float(unit))

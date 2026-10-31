@@ -85,11 +85,11 @@ class TestRadioCrossval:
             err_msg=f"Spectral index: measured={measured_alpha:.3f}, expected={alpha}",
         )
 
-    def test_radio_zero_below_1mm(self):
-        """Radio emission should be zero at wavelengths < 1mm (optical/IR)."""
+    def test_radio_zero_below_100um(self):
+        """Star-formation synchrotron is zero at wavelengths < 100 um (optical/near-IR)."""
         from tengri.components.radio import radio_star_forming
 
-        wave = jnp.array([5000.0, 10000.0, 1e6, 5e6])  # optical to mid-IR
+        wave = jnp.array([5000.0, 10000.0, 5e5, 9.9e5])  # optical to mid-IR
         l_nu = np.asarray(radio_star_forming(wave, 1e10))
         assert np.all(l_nu == 0), "Radio should be zero at optical/IR wavelengths"
 
@@ -145,9 +145,9 @@ class TestXrayCrossval:
         np.testing.assert_allclose(l2 / l1, 2.0, rtol=0.01)
 
     def test_grimm_relation_integrated(self):
-        r"""HMXB integrated 2-10 keV L_X matches the implemented Lehmer+2016 relation.
+        r"""HMXB integrated 2-10 keV L_X matches the implemented Fragos+2013 relation.
 
-        tengri implements Lehmer+2016 Eq. 15, which is metallicity-dependent:
+        tengri implements Fragos+2013 Eq. 3, which is metallicity-dependent:
 
         .. math::
 
@@ -156,7 +156,7 @@ class TestXrayCrossval:
 
         At the module default that is 3.22e39, not the 2.6e39 this test used to
         assert. The 2.6e39 comes from Grimm+2003/Mineo+2012, which genuinely
-        differ from Lehmer+2016 by ~30-45% in this band — the `xray.py`
+        differ from Fragos+2013 by ~30-45% in this band — the `xray.py`
         docstring claimed the two agree, which is arithmetically false (#1755).
 
         The default is ``Z_SUN`` = 0.0142 (Asplund 2009), the project-wide
@@ -193,7 +193,7 @@ class TestXrayCrossval:
             expected,
             rtol=0.10,
             err_msg=(
-                f"HMXB 2-10 keV L_X = {l_band:.3e}; Lehmer+2016 at Z={z_default} gives "
+                f"HMXB 2-10 keV L_X = {l_band:.3e}; Fragos+2013 at Z={z_default} gives "
                 f"{expected:.3e} erg/s per Msun/yr"
             ),
         )

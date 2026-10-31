@@ -9,6 +9,7 @@ Measures:
 
 import time
 import tracemalloc
+import zlib
 from pathlib import Path
 
 import jax
@@ -17,6 +18,7 @@ import numpy as np
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
 from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.cosmology import age_at_z
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -106,7 +108,7 @@ def create_simple_params(redshift):
     return Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.5 / float(age_at_z(redshift)), 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -147,7 +149,7 @@ def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwarg
     print(f"\nWarmup runs (n={n_warmup}, should be fast - no recompilation)...")
     runtimes = []
     for i in range(n_warmup):
-        key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
+        key_i = jax.random.fold_in(rng_key, zlib.crc32(f"warmup_{i}".encode()) % (2**31))
         t_start = time.perf_counter()
         _ = fitter.run(method, key=key_i, **kwargs)
         t_runtime = time.perf_counter() - t_start
@@ -193,7 +195,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(redshift)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
                 "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
@@ -206,7 +208,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(redshift)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
                 "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
@@ -222,7 +224,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(redshift)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
                 "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
@@ -239,7 +241,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             {
                 "mean_sfh_type": "tsnorm",
                 "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
-                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_peak_lbt_frac": Uniform(0.5 / float(age_at_z(redshift)), 1.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
                 "sfh_tsnorm_trunc": Uniform(1.0, 10.0),

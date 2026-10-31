@@ -33,6 +33,7 @@ from tengri.components.dust._params import (
 from tengri.components.dust.emission._physics import (
     cmb_contrast_factor,
     cmb_corrected_temperature,
+    cmb_luminosity_boost,
     planck_bnu,
 )
 from tengri.utils.physics_constants import (
@@ -41,6 +42,7 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
 )
+from tengri.utils.scale import safe_ratio
 
 # x = h*nu/(k_B*T) ceiling.  A plain constant, not a dtype-dependent one: the
 # denominator below is ``-expm1(-x)`` in (0, 1], so nothing here can overflow
@@ -55,6 +57,7 @@ _X_MAX: float = 500.0
 # ``utils.blackbody._X_MIN``, which the sibling Planck closure has always
 # carried; this one clipped at 0.0 and could reach the pole (#1439).
 _X_MIN: float = 1e-10
+
 
 # casey2012 emission lower bound, a convention that follows the 1 um - 1 mm
 # range of CIGALE's casey2012 template. Casey (2012) sets no blue limit; the
@@ -71,7 +74,7 @@ def modified_blackbody(
     dust_epsilon_mbb: float = DEFAULT_DUST_EPSILON_MBB,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Optically-thin modified blackbody dust emission.
+    r"""Optically-thin modified blackbody dust emission.
 
     The unnormalized spectrum is::
 
@@ -121,6 +124,24 @@ def modified_blackbody(
 
     **Gradient-safe**: yes, differentiable everywhere.
 
+    **CMB heating and contrast (#2806).** With ``redshift > 0`` the dust
+    temperature is heated to :math:`T_{\rm d}(z)` (da Cunha et al. 2013, Eq. 12;
+    ``cmb_corrected_temperature``).
+    The emitted total is then :math:`L_{\rm absorbed}` times the heated-dust
+    luminosity boost of Sect. 2.2 (Eqs. 11 and 17), so that
+
+    .. math::
+
+        \int L_\nu^{\rm emit}\, d\nu
+        = L_{\rm absorbed}\left[\frac{T_{\rm d}(z)}{T_{\rm d}^{z=0}}\right]^{4+\beta},
+
+    where :math:`L_\nu^{\rm emit}` is the spectrum before the contrast,
+    :math:`T_{\rm d}^{z=0}` = ``dust_T`` [K] and :math:`\beta` = ``dust_beta_ir``
+    [dimensionless]. The excess over :math:`L_{\rm absorbed}` is CMB power the
+    dust absorbs. The returned spectrum is then multiplied by the contrast of
+    Eq. 18, so its frequency integral is not :math:`L_{\rm absorbed}` at
+    :math:`z > 0`. At :math:`z = 0` the boost is exactly 1.
+
     References
     ----------
     .. [1] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
@@ -157,9 +178,10 @@ def modified_blackbody(
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
-    result = norm * shape
+    # da Cunha CMB luminosity boost (#2806): the emitted total is L_absorbed x boost.
+    result = norm * shape * cmb_luminosity_boost(dust_T, redshift, dust_beta_ir)
 
     # CMB contrast: suppresses flux where dust is observed against CMB
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
@@ -237,6 +259,28 @@ def graybody(
 
     **Gradient-safe**: yes, differentiable everywhere.
 
+    **CMB heating and contrast (#2806).** With ``redshift > 0`` the dust
+    temperature is heated to :math:`T_{\rm d}(z)` (da Cunha et al. 2013, Eq. 12;
+    ``cmb_corrected_temperature``).
+    The emitted total is then :math:`L_{\rm absorbed}` times the heated-dust
+    luminosity boost of Sect. 2.2 (Eqs. 11 and 17), so that
+
+    .. math::
+
+        \int L_\nu^{\rm emit}\, d\nu
+        = L_{\rm absorbed}\left[\frac{T_{\rm d}(z)}{T_{\rm d}^{z=0}}\right]^{4+\beta},
+
+    where :math:`L_\nu^{\rm emit}` is the spectrum before the contrast,
+    :math:`T_{\rm d}^{z=0}` = ``dust_T`` [K] and :math:`\beta` = ``dust_beta_ir``
+    [dimensionless]. The excess over :math:`L_{\rm absorbed}` is CMB power the
+    dust absorbs. The returned spectrum is then multiplied by the contrast of
+    Eq. 18, so its frequency integral is not :math:`L_{\rm absorbed}` at
+    :math:`z > 0`. At :math:`z = 0` the boost is exactly 1.
+
+    For ``graybody`` :math:`\beta` is the emissivity index of the opacity factor
+    above. The spectrum is the normalized graybody, so the boost is the same as
+    for ``modified_blackbody``.
+
     References
     ----------
     .. [1] Boquien, M., Burgarella, D., Roehlly, Y., et al. 2019,
@@ -277,9 +321,10 @@ def graybody(
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
-    result = norm * shape
+    # da Cunha CMB luminosity boost (#2806): the emitted total is L_absorbed x boost.
+    result = norm * shape * cmb_luminosity_boost(dust_T, redshift, dust_beta_ir)
 
     # CMB contrast: suppresses flux where dust is observed against CMB
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
@@ -475,6 +520,30 @@ def casey2012(
 
     **Gradient-safe**: yes, differentiable everywhere.
 
+    **CMB heating and contrast (#2806).** With ``redshift > 0`` the dust
+    temperature is heated to :math:`T_{\rm d}(z)` (da Cunha et al. 2013, Eq. 12;
+    ``cmb_corrected_temperature``).
+    The emitted total is then :math:`L_{\rm absorbed}` times the heated-dust
+    luminosity boost of Sect. 2.2 (Eqs. 11 and 17), so that
+
+    .. math::
+
+        \int L_\nu^{\rm emit}\, d\nu
+        = L_{\rm absorbed}\left[\frac{T_{\rm d}(z)}{T_{\rm d}^{z=0}}\right]^{4+\beta},
+
+    where :math:`L_\nu^{\rm emit}` is the spectrum before the contrast,
+    :math:`T_{\rm d}^{z=0}` = ``dust_T`` [K] and :math:`\beta` = ``dust_beta_ir``
+    [dimensionless]. The excess over :math:`L_{\rm absorbed}` is CMB power the
+    dust absorbs. The returned spectrum is then multiplied by the contrast of
+    Eq. 18, so its frequency integral is not :math:`L_{\rm absorbed}` at
+    :math:`z > 0`. At :math:`z = 0` the boost is exactly 1.
+
+    For ``casey2012`` :math:`\beta` is the emissivity index of the graybody term
+    (Eq. 1), the only thermal term that :math:`\beta` appears in. The mid-IR power
+    law (Eq. 2) is not a thermal term and carries no boost of its own: the boost
+    multiplies the whole normalized spectrum, so the emitted total is
+    :math:`L_{\rm absorbed}` times the boost for both terms together.
+
     References
     ----------
     .. [1] Casey, C. M., 2012, MNRAS, 425, 3094, Eqs. 1-2, 11-12.
@@ -511,9 +580,10 @@ def casey2012(
     # Normalize so integral over frequency = L_absorbed on the supplied grid
     # nu is descending (wave ascending), negate for positive integral
     integral = -jnp.trapezoid(shape, nu)
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+    norm = safe_ratio(L_absorbed, integral)
 
-    result = norm * shape
+    # da Cunha CMB luminosity boost (#2806): the emitted total is L_absorbed x boost.
+    result = norm * shape * cmb_luminosity_boost(dust_T, redshift, dust_beta_ir)
 
     # CMB contrast suppression
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)

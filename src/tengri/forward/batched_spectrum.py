@@ -14,8 +14,8 @@ and control flow: the padded pixel count, the banded offsets, the grid kind
 and the LSF binning. The batch arrays (wavelength, mask, resolution rows,
 redshift, calibration range, photometry) are traced. The resolution path is
 chosen from the static grid kind, never from a traced grid: under a trace
-``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``True``, which
-would send a linear grid down the single-FFT constant-R path.
+``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``False`` (unknown),
+which sends the grid down the general path (#2847).
 
 Why the redshift is free in the template
 ----------------------------------------
@@ -24,6 +24,19 @@ into the model's luminosity distance and into the stellar redshift
 interpolation, so a per-galaxy ``obs.z`` could not reach them. The per-galaxy
 redshift enters through the parameter dictionary instead, and any ``redshift``
 key in ``params`` is ignored in favor of ``obs.z``.
+
+Per-galaxy SFH bin edges
+------------------------
+A non-parametric SFH's bin ladder is part of the model, so a template carries
+one ladder for every galaxy. A ladder that follows each galaxy's redshift (for
+example ``make_agebins_from_zred(zred=z)``) enters the same way the redshift
+does: :class:`~tengri.observation.batched.GalaxySpectrum` takes it as
+``sfh_bin_edges_gyr``, the batch carries it as a traced leaf, and this module
+passes it to the stellar component as the ``sfh_bin_edges_gyr`` value of the
+parameter dictionary, in place of the template's ladder. The template fixes
+the edge count, since its declared ratio parameters fix the bin count; the
+stellar component refuses a ladder of any other length, and any SFH type
+outside ``RUNTIME_BIN_EDGE_TYPES`` (``tengri.components.stellar.sfh.registry``).
 
 Flux-conserving mode
 --------------------
@@ -49,6 +62,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.stellar.component import RUNTIME_SFH_BIN_EDGES_KEY
 from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec, require_spec
 
@@ -233,7 +247,9 @@ def predict_batched_observables(
     ValueError
         If ``spec`` is not a :class:`SpectroBatchSpec`, was built for a different
         template (see :func:`require_model_spec`), or carries photometry the
-        template does not have.
+        template does not have. Raised at trace time if ``obs`` carries SFH bin
+        edges and the template's SFH type does not take a per-galaxy ladder, or
+        the ladder's length differs from the template's.
 
     Notes
     -----
@@ -242,8 +258,9 @@ def predict_batched_observables(
     **Gradient-compatible**: yes, with respect to ``params`` and the real pixel data.
     Mirrors the spectral block of :meth:`Observation.predict` and the
     closed-over path of ``predict_observables_jit``; the only substitutions are the
-    wavelength grid, the resolution operator, the redshift and the calibration range,
-    which come from ``obs``.
+    wavelength grid, the resolution operator, the redshift, the calibration range
+    and, when ``spec.n_sfh_edges`` is nonzero, the SFH bin edges, which come from
+    ``obs``.
     """
     from tengri.cosmology import luminosity_distance
     from tengri.observation.observation import project_spectrum_kernel_split
@@ -260,6 +277,8 @@ def predict_batched_observables(
 
     free = {k: v for k, v in params.items() if k != "redshift"}
     fixed = {**dict(model.spec.get_fixed_values()), "redshift": obs.z}
+    if spec.n_sfh_edges:
+        fixed[RUNTIME_SFH_BIN_EDGES_KEY] = obs.sfh_bin_edges_gyr
     state = model.predict_state(
         free,
         fixed_values=fixed,

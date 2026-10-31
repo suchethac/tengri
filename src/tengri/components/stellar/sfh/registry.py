@@ -96,6 +96,66 @@ from tengri.utils.cosmology import age_at_z0_host
 # override this with ``cosmology.age_at_z(z)`` at the source redshift.
 _AGE_UNIV_GYR = round(age_at_z0_host(), 3)
 
+#: Unrounded age of the universe at z=0 [Gyr]: the divisor of every ``*_frac``
+#: timing parameter (#2748). ``_AGE_UNIV_GYR`` is rounded, so it is not used.
+_AGE_UNIV_GYR_EXACT = float(age_at_z0_host())
+
+#: Lower bound of the delayed_bq main age [Gyr]; defined with its family below.
+_DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
+
+#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 3), and therefore
+#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
+#: priors must not overlap or their joint support contains ladders whose
+#: flexible zone has negative width. Shared with the fraction priors below.
+_PSB_TLAST_CEIL_GYR = 1.0
+_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
+
+
+def _age_frac(gyr):
+    """Fraction of the age of the universe at z=0 for an absolute Gyr timing (#2748).
+
+    The value divides by the unrounded age and is capped at 1. ``_AGE_UNIV_GYR``
+    (the rounded age) and anything older map to exactly 1.0.
+    """
+    return 1.0 if gyr >= _AGE_UNIV_GYR else gyr / _AGE_UNIV_GYR_EXACT
+
+
+def _age_frac_prior(lo_gyr, hi_gyr, default_gyr=None):
+    """Uniform prior on a ``*_frac`` timing from the absolute Gyr bounds it replaces (#2748)."""
+    default = None if default_gyr is None else _age_frac(default_gyr)
+    return Uniform(_age_frac(lo_gyr), _age_frac(hi_gyr), default=default)
+
+
+#: Free priors of the ``*_frac`` timing parameters, keyed by public name. Each is
+#: the absolute-Gyr prior of its ``*_gyr`` twin divided by the unrounded age of
+#: the universe and capped at 1. ``all_params: FREE`` does not free these; a
+#: fraction is freed by an explicit Uniform on it.
+_AGE_FRAC_PRIORS = {
+    "sfh_dpl_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_dpl_lookback_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_lnorm_age_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, _AGE_UNIV_GYR),
+    "sfh_const_start_frac": _age_frac_prior(0.01, _AGE_UNIV_GYR, AGEMAX_YR / 1e9),
+    "sfh_exp_start_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, 5.0),
+    "sfh_dexp_start_frac": _age_frac_prior(0.5, _AGE_UNIV_GYR, 5.0),
+    "sfh_declining_exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_trunc_exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_delayed_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_cexp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_sfh2exp_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_delayed_bq_age_main_frac": _age_frac_prior(_DELAYED_BQ_AGE_MAIN_FLOOR_GYR, 13.0, 5.0),
+    "sfh_periodic_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_psb_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_tsnorm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_snorm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_snorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_tsnorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_norm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_psb2022_tlast_frac": _age_frac_prior(0.01, _PSB_TLAST_CEIL_GYR, 0.1),
+    "sfh_psb2022_tflex_frac": _age_frac_prior(_PSB_TFLEX_FLOOR_GYR, 5.0, 2.0),
+    "sfh_psb_flex_tlast_frac": _age_frac_prior(0.01, _PSB_TLAST_CEIL_GYR, 0.2),
+    "sfh_psb_flex_tflex_frac": _age_frac_prior(_PSB_TFLEX_FLOOR_GYR, 5.0, 2.0),
+}
+
 # ── Data structures ───────────────────────────────────────────────
 
 
@@ -166,27 +226,11 @@ class ParamDef(NamedTuple):
     -----
     **JIT-compatible**: no; Python dataclass for registry initialization.
 
-    z_capped_onset : bool, optional
-        Marks this parameter as a star-formation onset/age/peak-time lookback
-        time: its :attr:`free_prior` ceiling is only ever correct at z=0, and
-        ``parameters/groups.py``'s ``_narrow_free_priors_to_z`` caps it at
-        ``age_at_z(z_floor)`` at parse time for whatever build declares it.
-        Derived, not hand-listed (#2521): that function iterates every
-        ``ParamDef`` across :data:`SFH_REGISTRY` with this flag set, so a new
-        SFH family cannot reintroduce the gap by omission the way the old
-        3-entry ``_Z_CAPPED_ONSET_PARAMS`` tuple did (18 of 21 such params
-        were missing from it). Default ``False``.
-
-        The ``z_floor`` cap only ever binds the LOWEST redshift a free
-        ``redshift`` prior admits, since that is the only end common to
-        every build. A wide free ``redshift`` prior can therefore still
-        admit a draw near its upper (younger-universe) end whose
-        cosmologically valid onset window is narrower than this parameter's
-        z_floor-capped ceiling; ``groups.py``'s
-        ``_warn_free_redshift_onset_ceiling`` reports that case with a
-        :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning` at
-        build time, since the forward model itself only truncates and
-        conserves mass there without raising or (under ``jax.jit``) warning.
+    gyr_twin : str, optional
+        For a fractional timing parameter (#2748), the absolute-Gyr parameter it
+        replaces: the fraction's value times the age of the universe at the
+        galaxy's redshift is then that Gyr value. Read by
+        :func:`~tengri.parameters.timing.timing_frac_params`. Default ``None``.
     """
 
     description: str
@@ -194,7 +238,7 @@ class ParamDef(NamedTuple):
     bound_error: str
     default: Distribution
     free_prior: Distribution | None = None
-    z_capped_onset: bool = False
+    gyr_twin: str | None = None
 
 
 class SFHModelSpec(NamedTuple):
@@ -333,8 +377,14 @@ _tsnorm_spec = SFHModelSpec(
             "Peak lookback time (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0, default=5.0),
-            z_capped_onset=True,
+            Fixed(5.0),
+        ),
+        "sfh_tsnorm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_tsnorm_peak_lbt_frac"],
+            gyr_twin="sfh_tsnorm_peak_lbt_gyr",
         ),
         "sfh_tsnorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -354,6 +404,7 @@ _tsnorm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_tsnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_peak_lbt_frac": ("sfh_tsnorm_peak_lbt_frac", 1.0, 0.0),
         "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
         "sfh_tsnorm_trunc": ("trunc", 1.0, 0.0),
@@ -381,8 +432,14 @@ _snorm_spec = SFHModelSpec(
             "Peak lookback time (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0, default=5.0),
-            z_capped_onset=True,
+            Fixed(5.0),
+        ),
+        "sfh_snorm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_snorm_peak_lbt_frac"],
+            gyr_twin="sfh_snorm_peak_lbt_gyr",
         ),
         "sfh_snorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -396,6 +453,7 @@ _snorm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_snorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_peak_lbt_frac": ("sfh_snorm_peak_lbt_frac", 1.0, 0.0),
         "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_skew": ("skew", 1.0, 0.0),
     },
@@ -421,8 +479,14 @@ _snorm_burst_spec = SFHModelSpec(
             "Peak lookback time (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0, default=5.0),
-            z_capped_onset=True,
+            Fixed(5.0),
+        ),
+        "sfh_snorm_burst_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_snorm_burst_peak_lbt_frac"],
+            gyr_twin="sfh_snorm_burst_peak_lbt_gyr",
         ),
         "sfh_snorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -484,6 +548,7 @@ _snorm_burst_spec = SFHModelSpec(
     internal_param_map={
         "sfh_snorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_burst_peak_lbt_frac": ("sfh_snorm_burst_peak_lbt_frac", 1.0, 0.0),
         "sfh_snorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_burst_skew": ("skew", 1.0, 0.0),
         "sfh_snorm_burst_burst_sfr": ("burst_sfr", 1.0, 0.0),
@@ -511,8 +576,14 @@ _tsnorm_burst_spec = SFHModelSpec(
             "Peak lookback time (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0, default=5.0),
-            z_capped_onset=True,
+            Fixed(5.0),
+        ),
+        "sfh_tsnorm_burst_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_tsnorm_burst_peak_lbt_frac"],
+            gyr_twin="sfh_tsnorm_burst_peak_lbt_gyr",
         ),
         "sfh_tsnorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -562,6 +633,7 @@ _tsnorm_burst_spec = SFHModelSpec(
     internal_param_map={
         "sfh_tsnorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_burst_peak_lbt_frac": ("sfh_tsnorm_burst_peak_lbt_frac", 1.0, 0.0),
         "sfh_tsnorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_burst_skew": ("skew", 1.0, 0.0),
         "sfh_tsnorm_burst_trunc": ("trunc", 1.0, 0.0),
@@ -590,8 +662,14 @@ _norm_spec = SFHModelSpec(
             "Peak lookback time (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0, default=5.0),
-            z_capped_onset=True,
+            Fixed(5.0),
+        ),
+        "sfh_norm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_norm_peak_lbt_frac"],
+            gyr_twin="sfh_norm_peak_lbt_gyr",
         ),
         "sfh_norm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -604,6 +682,7 @@ _norm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_norm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_norm_peak_lbt_frac": ("sfh_norm_peak_lbt_frac", 1.0, 0.0),
         "sfh_norm_width_gyr": ("width", 1e9, 0.0),
     },
     composition_type="additive",
@@ -638,8 +717,14 @@ _lnorm_spec = SFHModelSpec(
             "set to age_of_universe(z) for BAGPIPES direction",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
-            z_capped_onset=True,
+            Fixed(_AGE_UNIV_GYR),
+        ),
+        "sfh_lnorm_age_frac": ParamDef(
+            "Onset as a fraction of age(z) (formation time)",
+            _lo_positive,
+            "must have lo > 0",
+            _AGE_FRAC_PRIORS["sfh_lnorm_age_frac"],
+            gyr_twin="sfh_lnorm_age_gyr",
         ),
     },
     settings={},
@@ -648,6 +733,7 @@ _lnorm_spec = SFHModelSpec(
         "sfh_lnorm_peak_gyr": ("peak", 1e9, 0.0),
         "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
         "sfh_lnorm_age_gyr": ("age", 1e9, 0.0),
+        "sfh_lnorm_age_frac": ("sfh_lnorm_age_frac", 1.0, 0.0),
     },
     composition_type="additive",
 )
@@ -684,8 +770,19 @@ _register(
                 "set to age_of_universe(z) for BAGPIPES parity",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
-                z_capped_onset=True,
+                Fixed(_AGE_UNIV_GYR),
+            ),
+            # Fraction of age(z) (#2748). Bounds are the Gyr prior divided by
+            # the unrounded age of the universe, capped at 1; a Gyr value of
+            # _AGE_UNIV_GYR maps to exactly 1. ``free_prior=None`` keeps
+            # ``all_params: FREE`` from freeing this beside the Gyr name; the
+            # fraction is freed by an explicit ``Uniform`` on it.
+            "sfh_dpl_age_frac": ParamDef(
+                "Cosmic time for SF as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_dpl_age_frac"],
+                gyr_twin="sfh_dpl_age_gyr",
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -701,6 +798,7 @@ _register(
             "sfh_dpl_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dpl_age_gyr": ("age", 1e9, 0.0),
+            "sfh_dpl_age_frac": ("sfh_dpl_age_frac", 1.0, 0.0),
             "sfh_dpl_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
         composition_type="additive",
@@ -745,8 +843,14 @@ _register(
                 "set to age_of_universe(z) for a galaxy forming at the Big Bang",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
-                z_capped_onset=True,
+                Fixed(_AGE_UNIV_GYR),
+            ),
+            "sfh_dpl_lookback_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_dpl_lookback_age_frac"],
+                gyr_twin="sfh_dpl_lookback_age_gyr",
             ),
             "sfh_dpl_lookback_end_gyr": ParamDef(
                 "Younger truncation lookback time (Gyr) "
@@ -774,6 +878,7 @@ _register(
             "sfh_dpl_lookback_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_lookback_peak_gyr": ("peak", 1e9, 0.0),
             "sfh_dpl_lookback_age_gyr": ("age", 1e9, 0.0),
+            "sfh_dpl_lookback_age_frac": ("sfh_dpl_lookback_age_frac", 1.0, 0.0),
             "sfh_dpl_lookback_end_gyr": ("end", 1e9, 0.0),
             "sfh_dpl_lookback_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
@@ -808,11 +913,7 @@ _register(
                 # 0), AND Parameters._validate_orderings requires this
                 # parameter's floor to exceed sfh_const_end_gyr's Fixed(0.0)
                 # ceiling (g_lo > l_hi) -- so lo must be strictly positive.
-                # Upper bound is today's cosmic age (_AGE_UNIV_GYR);
-                # parameters/groups.py's _narrow_free_priors_to_z narrows it to
-                # age_at_z(z) at parse time whenever the build's redshift floor
-                # is knowable -- same mechanism and rationale as
-                # sfh_exp_start_gyr below.
+                # The free prior is the fraction sfh_const_start_frac (#2748).
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
@@ -824,7 +925,13 @@ _register(
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
-                z_capped_onset=True,
+            ),
+            "sfh_const_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_const_start_frac"],
+                gyr_twin="sfh_const_start_gyr",
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -852,6 +959,7 @@ _register(
             # User's "start" (when SF began) = older lookback = internal "end"
             # User's "end" (when SF stopped) = younger lookback = internal "start"
             "sfh_const_start_gyr": ("end", 1e9, 0.0),
+            "sfh_const_start_frac": ("sfh_const_start_frac", 1.0, 0.0),
             "sfh_const_end_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
@@ -885,15 +993,8 @@ _register(
             # below); ``const``'s onset is unrelated (a flat window, not this
             # declining shape) and keeps its own separate declaration.
             #
-            # The static declaration below uses today's cosmic age
-            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
-            # is ever correct, since a declaration cannot know the source
-            # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
-            # then narrows it to ``age_at_z(z)`` at parse time whenever the
-            # build's redshift floor is knowable, closing exactly the gap a
-            # static-only declaration could not: any bound generous enough for
-            # z~0 admits draws at z=2 where star formation never happens,
-            # giving a zero-mass galaxy and zero flux.
+            # The free prior is the fraction of age(z) (#2748), which cannot
+            # reach past the Big Bang at any redshift.
             #
             # Measured, not argued: declaring Uniform(0, 14) with no narrowing
             # made test_bug_1031_dense_basis_composite::
@@ -914,8 +1015,14 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_exp_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_exp_start_frac"],
+                gyr_twin="sfh_exp_start_gyr",
             ),
         },
         settings={},
@@ -923,6 +1030,7 @@ _register(
             "sfh_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_exp_start_gyr": ("start", 1e9, 0.0),
+            "sfh_exp_start_frac": ("sfh_exp_start_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -955,8 +1063,14 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_dexp_start_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_dexp_start_frac"],
+                gyr_twin="sfh_dexp_start_gyr",
             ),
         },
         settings={},
@@ -964,6 +1078,7 @@ _register(
             "sfh_dexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_dexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
+            "sfh_dexp_start_frac": ("sfh_dexp_start_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1010,8 +1125,14 @@ _register(
                 "Galaxy age / lookback time of formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_declining_exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_declining_exp_age_frac"],
+                gyr_twin="sfh_declining_exp_age_gyr",
             ),
         },
         settings={},
@@ -1019,6 +1140,7 @@ _register(
             "sfh_declining_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_declining_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_declining_exp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_declining_exp_age_frac": ("sfh_declining_exp_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1060,8 +1182,14 @@ _register(
                 "Galaxy age / lookback time of formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_trunc_exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_trunc_exp_age_frac"],
+                gyr_twin="sfh_trunc_exp_age_gyr",
             ),
             "sfh_trunc_exp_end_gyr": ParamDef(
                 "Lookback time at which SF ceases (Gyr) (0 = still forming stars)",
@@ -1079,6 +1207,7 @@ _register(
             "sfh_trunc_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_trunc_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_trunc_exp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_trunc_exp_age_frac": ("sfh_trunc_exp_age_frac", 1.0, 0.0),
             "sfh_trunc_exp_end_gyr": ("end", 1e9, 0.0),
         },
         composition_type="additive",
@@ -1113,8 +1242,14 @@ _register(
                 "Galaxy age / lookback time of formation (Gyr); must be > τ",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_delayed_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_delayed_age_frac"],
+                gyr_twin="sfh_delayed_age_gyr",
             ),
         },
         settings={},
@@ -1122,6 +1257,7 @@ _register(
             "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+            "sfh_delayed_age_frac": ("sfh_delayed_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1157,8 +1293,14 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_cexp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_cexp_age_frac"],
+                gyr_twin="sfh_cexp_age_gyr",
             ),
         },
         settings={},
@@ -1167,6 +1309,7 @@ _register(
             "sfh_cexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_cexp_quench_gyr": ("quench_age", 1e9, 0.0),
             "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_cexp_age_frac": ("sfh_cexp_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1209,8 +1352,14 @@ _register(
                 "Age of main population / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_sfh2exp_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_sfh2exp_age_frac"],
+                gyr_twin="sfh_sfh2exp_age_gyr",
             ),
             "sfh_sfh2exp_burst_age_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
@@ -1226,6 +1375,7 @@ _register(
             "sfh_sfh2exp_tau_burst_gyr": ("tau_burst_yr", 1e9, 0.0),
             "sfh_sfh2exp_f_burst": ("f_burst", 1.0, 0.0),
             "sfh_sfh2exp_age_gyr": ("age_yr", 1e9, 0.0),
+            "sfh_sfh2exp_age_frac": ("sfh_sfh2exp_age_frac", 1.0, 0.0),
             "sfh_sfh2exp_burst_age_gyr": ("burst_age_yr", 1e9, 0.0),
         },
         composition_type="additive",
@@ -1233,6 +1383,16 @@ _register(
     short_doc="Double declining exponential: main + recent burst (CIGALE sfh2exp)",
 )
 
+
+#: Floor of the ``age_main_gyr`` prior [Gyr] below (Ciesla+2017 convention), and
+#: therefore the ceiling of the ``age_bq_gyr`` prior: the burst/quench onset
+#: must be reachable from EVERY ``age_main_gyr`` draw a user leaves free, i.e.
+#: ``age_bq_gyr <= age_main_gyr`` even for the smallest ``age_main_gyr`` the
+#: prior allows (#2644; "quench after formation", mirroring CIGALE's
+#: ``sfhdelayedbq`` requirement). The free prior of ``age_main`` is its fraction of age(z)
+#: (#2748), so this static peg stays valid at any redshift. Same technique as
+#: ``_PSB_TFLEX_FLOOR_GYR`` above.
+_DELAYED_BQ_AGE_BQ_CEIL_GYR = _DELAYED_BQ_AGE_MAIN_FLOOR_GYR
 
 # --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---
 _register(
@@ -1256,20 +1416,28 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_delayed_bq_age_main_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_delayed_bq_age_main_frac"],
+                gyr_twin="sfh_delayed_bq_age_main_gyr",
             ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
-                "Lookback time of burst/quench onset (Gyr)",
+                "Lookback time of burst/quench onset (Gyr); prior ceiling equals "
+                "the age_main_gyr floor so quench-before-formation (#2644) is "
+                "unreachable by default",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 5.0, default=0.5),
+                Uniform(0.01, _DELAYED_BQ_AGE_BQ_CEIL_GYR, default=0.3),
             ),
             "sfh_delayed_bq_r_sfr": ParamDef(
-                "SFR ratio after/before burst/quench",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 10.0, default=1.0),
+                "SFR ratio after/before burst/quench (0 = full quench, #2623)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Uniform(0.0, 10.0, default=1.0),
             ),
         },
         settings={},
@@ -1277,6 +1445,7 @@ _register(
             "sfh_delayed_bq_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_bq_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_main_gyr": ("age_main_yr", 1e9, 0.0),
+            "sfh_delayed_bq_age_main_frac": ("sfh_delayed_bq_age_main_frac", 1.0, 0.0),
             "sfh_delayed_bq_age_bq_gyr": ("age_bq_yr", 1e9, 0.0),
             "sfh_delayed_bq_r_sfr": ("r_sfr", 1.0, 0.0),
         },
@@ -1326,8 +1495,14 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_periodic_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_periodic_age_frac"],
+                gyr_twin="sfh_periodic_age_gyr",
             ),
         },
         settings={},
@@ -1337,6 +1512,7 @@ _register(
             "sfh_periodic_tau_bursts_gyr": ("tau_bursts_yr", 1e9, 0.0),
             "sfh_periodic_burst_type": ("burst_type", 1.0, 0.0),
             "sfh_periodic_age_gyr": ("age_yr", 1e9, 0.0),
+            "sfh_periodic_age_frac": ("sfh_periodic_age_frac", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -1398,8 +1574,14 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
-                z_capped_onset=True,
+                Fixed(5.0),
+            ),
+            "sfh_psb_age_frac": ParamDef(
+                "Onset as a fraction of age(z) (formation time)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_psb_age_frac"],
+                gyr_twin="sfh_psb_age_gyr",
             ),
             "sfh_psb_tau_gyr": ParamDef(
                 "Old-component e-folding timescale (Gyr)",
@@ -1436,6 +1618,7 @@ _register(
         internal_param_map={
             "sfh_psb_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_age_gyr": ("age", 1e9, 0.0),
+            "sfh_psb_age_frac": ("sfh_psb_age_frac", 1.0, 0.0),
             "sfh_psb_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_psb_burstage_gyr": ("burstage", 1e9, 0.0),
             "sfh_psb_alpha": ("alpha", 1.0, 0.0),
@@ -1779,7 +1962,7 @@ _register(
 #
 # Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
 # bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
-# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 1 sets tlast
+# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 3 sets tlast
 # uniform in [0.01, 1.0] Gyr and a Student-t on every SFR ratio, here
 # StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(1.0, 5.0).
 #
@@ -1818,13 +2001,6 @@ _register(
 #     between fixed bins `i-1` and `i` (oldest fixed bin = reference, 0).
 _N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 
-#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
-#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
-#: priors must not overlap or their joint support contains ladders whose
-#: flexible zone has negative width.
-_PSB_TLAST_CEIL_GYR = 1.0
-_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
-
 _register(
     SFHModelSpec(
         name="psb_suess2022",
@@ -1840,15 +2016,28 @@ _register(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.1),
+                Fixed(0.1),
+            ),
+            "sfh_psb2022_tlast_frac": ParamDef(
+                "Quenching-onset lookback time (youngest-bin width) as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_psb2022_tlast_frac"],
+                gyr_twin="sfh_psb2022_tlast_gyr",
             ),
             "sfh_psb2022_tflex_gyr": ParamDef(
                 "Upper boundary of the flexible quenching zone (Gyr); prior floor "
                 "equals the tlast_gyr ceiling so the zone can never have negative width",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
-                z_capped_onset=True,
+                Fixed(2.0),
+            ),
+            "sfh_psb2022_tflex_frac": ParamDef(
+                "Upper boundary of the flexible quenching zone as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_psb2022_tflex_frac"],
+                gyr_twin="sfh_psb2022_tflex_gyr",
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -1875,6 +2064,8 @@ _register(
             "sfh_psb2022_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb2022_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
             "sfh_psb2022_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb2022_tlast_frac": ("sfh_psb2022_tlast_frac", 1.0, 0.0),
+            "sfh_psb2022_tflex_frac": ("sfh_psb2022_tflex_frac", 1.0, 0.0),
             "sfh_psb2022_ratio_young": ("ratio_young", 1.0, 0.0),
             **{
                 f"sfh_psb2022_ratio_old_{i}": (f"ratio_old_{i}", 1.0, 0.0)
@@ -1940,15 +2131,28 @@ _register(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.2),
+                Fixed(0.2),
+            ),
+            "sfh_psb_flex_tlast_frac": ParamDef(
+                "Quenching-onset lookback time (youngest-bin width) as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_psb_flex_tlast_frac"],
+                gyr_twin="sfh_psb_flex_tlast_gyr",
             ),
             "sfh_psb_flex_tflex_gyr": ParamDef(
                 "Upper boundary of the flexible quenching zone (Gyr); prior floor "
                 "equals the tlast_gyr ceiling so the zone can never have negative width",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
-                z_capped_onset=True,
+                Fixed(2.0),
+            ),
+            "sfh_psb_flex_tflex_frac": ParamDef(
+                "Upper boundary of the flexible quenching zone as a fraction of age(z)",
+                _lo_positive,
+                "must have lo > 0",
+                _AGE_FRAC_PRIORS["sfh_psb_flex_tflex_frac"],
+                gyr_twin="sfh_psb_flex_tflex_gyr",
             ),
             "sfh_psb_flex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex_0); large positive = recent burst",
@@ -1984,6 +2188,8 @@ _register(
             "sfh_psb_flex_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_flex_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
             "sfh_psb_flex_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb_flex_tlast_frac": ("sfh_psb_flex_tlast_frac", 1.0, 0.0),
+            "sfh_psb_flex_tflex_frac": ("sfh_psb_flex_tflex_frac", 1.0, 0.0),
             "sfh_psb_flex_ratio_young": ("ratio_young", 1.0, 0.0),
             # The shape function counts its flexible bins off the ``flex_*``
             # kwarg names, so the internal name has to be exactly ``flex_i``.
@@ -2451,6 +2657,48 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         return
 
 
+#: SFH families whose bin edges may differ per evaluation, arriving as a traced
+#: ``sfh_bin_edges_gyr`` array instead of the build-time ladder (the batched
+#: spectroscopic stack gives each galaxy its own). Their shape function reads the
+#: whole ladder (:func:`continuity`, :func:`dirichlet`) and no declared prior
+#: depends on where the edges sit. ``bursty_continuity`` is excluded because its
+#: per-ratio prior scales are set from the default ladder; the post-starburst and
+#: ``continuity_flex`` families derive their edges from other parameters.
+RUNTIME_BIN_EDGE_TYPES = frozenset({"continuity", "prospector_beta", "dirichlet"})
+
+
+def runtime_bin_edges_count(sfh_type, configured_edges) -> int:
+    """Edge count a runtime ``sfh_bin_edges_gyr`` array must have for this SFH.
+
+    Parameters
+    ----------
+    sfh_type : str or list of str
+        Registry name of the model's SFH (a list for a composite SFH).
+    configured_edges : array_like, shape (n_edges,), or None
+        The build-time bin edges [Gyr]; ``None`` means ``DEFAULT_BIN_EDGES_GYR``.
+
+    Returns
+    -------
+    int
+        ``n_edges`` of the build-time ladder. The declared ratio (or ``z_frac``)
+        parameters fix the bin count, so a runtime ladder may move the edges but
+        not add or remove one.
+
+    Raises
+    ------
+    ValueError
+        If ``sfh_type`` is not in :data:`RUNTIME_BIN_EDGE_TYPES` (composite SFHs
+        included): the edges would reach no bin, or would disagree with a prior.
+    """
+    if not isinstance(sfh_type, str) or sfh_type not in RUNTIME_BIN_EDGE_TYPES:
+        raise ValueError(
+            f"per-evaluation sfh_bin_edges_gyr applies only to the SFH types "
+            f"{sorted(RUNTIME_BIN_EDGE_TYPES)}, not {sfh_type!r}."
+        )
+    edges = DEFAULT_BIN_EDGES_GYR if configured_edges is None else configured_edges
+    return len(edges)
+
+
 #: SFH families whose flexible zone spans ``[tlast_gyr, tflex_gyr]`` and which
 #: therefore need those two ordered.
 _PSB_QUENCH_TYPES = frozenset({"psb_suess2022", "psb_flex"})
@@ -2483,6 +2731,26 @@ def psb_quench_param_names(sfh_type) -> tuple[str, str] | None:
         return None
     prefix = _spec_public_prefix(spec)
     return f"{prefix}tlast_gyr", f"{prefix}tflex_gyr"
+
+
+def psb_quench_frac_names(sfh_type) -> tuple[str, str] | None:
+    """The fraction twins of :func:`psb_quench_param_names` (#2748).
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of an SFH.
+
+    Returns
+    -------
+    tuple of str, or None
+        ``(tlast_frac, tflex_frac)`` fully prefixed, or ``None`` for any SFH
+        that has no flexible quenching zone.
+    """
+    gyr_names = psb_quench_param_names(sfh_type)
+    if gyr_names is None:
+        return None
+    return tuple(name[: -len("_gyr")] + "_frac" for name in gyr_names)
 
 
 def _reachable_range(spec, public_name, given):
@@ -2519,7 +2787,122 @@ def _reachable_range(spec, public_name, given):
     return None
 
 
-def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
+def _is_named_gyr(value) -> bool:
+    """True when a Gyr quench time is given for the build, not left to its default."""
+    from tengri.parameters.priors import _is_default_fixed
+    from tengri.parameters.sentinels import DEFAULT
+
+    return value is not None and value is not DEFAULT and not _is_default_fixed(value)
+
+
+def _is_named_frac(value) -> bool:
+    """True when a quench fraction is given for the build.
+
+    The Fixed(1) shim of an unsampled fraction is not a named value: the Gyr
+    timing it shadows stands, as in :func:`route_timing_fracs`.
+    """
+    from tengri.parameters.priors import Fixed
+
+    if not _is_named_gyr(value):
+        return False
+    return not (isinstance(value, Fixed) and value.value == 1.0)
+
+
+def _describe_quench_range(name, rng) -> str:
+    if rng[0] == rng[1]:
+        return f"{name}={rng[0]:g} (pinned)"
+    return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
+
+
+def _refuse_quench_crossing(sfh_type, names, given, labels, unit) -> None:
+    """Raise if some reachable lower quench time exceeds some reachable upper one.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH being built.
+    names : tuple of str
+        Full parameter names of ``(tlast, tflex)`` in the registry.
+    given : tuple
+        What the grammar resolved for each of ``names``.
+    labels : tuple of str
+        Short names used in the message, e.g. ``("tlast_gyr", "tflex_gyr")``.
+    unit : str
+        Unit suffix for the values in the message, e.g. ``" Gyr"``.
+
+    Raises
+    ------
+    ValueError
+        If the zone ``[tlast, tflex]`` can have negative width.
+    """
+    spec = SFH_REGISTRY[sfh_type]
+    last = _reachable_range(spec, names[0], given[0])
+    flex = _reachable_range(spec, names[1], given[1])
+    _refuse_crossed_ranges(sfh_type, last, flex, labels, unit)
+
+
+def _refuse_crossed_ranges(sfh_type, last, flex, labels, unit) -> None:
+    """Raise ``ValueError`` when ``last`` can exceed ``flex``; ``None`` ranges pass.
+
+    ``last`` and ``flex`` are ``(lo, hi)`` pairs in one unit, or ``None`` for a
+    form that cannot be read (never turned into a refusal).
+    """
+    if last is None or flex is None or last[1] <= flex[0]:
+        return
+    lo_label, hi_label = labels
+    raise ValueError(
+        f"sfh type={sfh_type!r} would put the flexible quenching zone "
+        f"[{lo_label}, {hi_label}] at negative width: "
+        f"{_describe_quench_range(lo_label, last)} reaches "
+        f"{last[1]:g}{unit}, above {_describe_quench_range(hi_label, flex)} at "
+        f"{flex[0]:g}{unit}. The zone starts at {lo_label} and ends at {hi_label}, so "
+        f"{lo_label} must stay at or below {hi_label} everywhere the build can "
+        f"reach; a crossing annihilates the flexible bin and lets the youngest "
+        f"bin overrun it, with the mass still closing and nothing raised. Raise "
+        f"{hi_label} above {last[1]:g}{unit}, or pin {lo_label} at or below "
+        f"{flex[0]:g}{unit}."
+    )
+
+
+def _redshift_age_range_gyr(redshift):
+    """Smallest and largest age(z) [Gyr] a build's redshift can give, or None.
+
+    ``redshift`` is the resolved redshift ``Distribution`` (a ``Fixed`` gives a
+    single age). ``None`` is returned for anything unreadable, so a fraction of
+    age(z) is then left unconverted rather than guessed at.
+    """
+    from tengri.cosmology import age_at_z
+
+    if isinstance(redshift, Fixed):
+        z_lo = z_hi = redshift.value
+    elif isinstance(redshift, Distribution):
+        z_lo, z_hi = redshift.bounds
+    else:
+        return None
+    if not (isinstance(z_lo, (int, float)) and isinstance(z_hi, (int, float))):
+        return None
+    if not (math.isfinite(z_lo) and math.isfinite(z_hi)):
+        return None
+    return float(age_at_z(z_hi)), float(age_at_z(z_lo))
+
+
+def _quench_time_choice(gyr_name, frac_name, resolved, user_named):
+    """The name and unit under which one quench time survives in ``resolved``.
+
+    After the grammar settles each ``*_gyr`` / ``*_frac`` pair exactly one of
+    the two remains; if both are present the user-named one wins, then the
+    fraction. ``None`` when neither is present.
+    """
+    has_gyr = gyr_name in resolved
+    has_frac = frac_name in resolved
+    if has_gyr and (not has_frac or gyr_name in user_named):
+        return gyr_name, "gyr"
+    if has_frac:
+        return frac_name, "frac"
+    return None
+
+
+def validate_psb_quench_ordering(sfh_type, resolved, *, user_named=(), redshift=None) -> None:
     """Refuse a post-starburst build whose flexible zone could have negative width.
 
     Parameters
@@ -2527,31 +2910,57 @@ def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
     sfh_type : str
         Registry name of the SFH being built. Any family other than a
         post-starburst one returns immediately.
-    tlast : Distribution or float or None
-        What the build grammar resolved for ``tlast_gyr``: a ``Fixed``, a free
-        ``Distribution``, the ``FREE`` sentinel, or ``None`` when the parameter
-        was not named (which pins it at the registry default).
-    tflex : Distribution or float or None
-        The same for ``tflex_gyr``.
+    resolved : mapping of str to Distribution
+        The build's resolved priors, keyed by full public name, as they stand
+        after wildcard expansion and after each ``*_gyr`` / ``*_frac`` pair has
+        been settled to one member. A name the wildcard freed or pinned is
+        read exactly like one the user wrote; a pair with neither member
+        present (the SFH is not part of the build) passes.
+    user_named : iterable of str, optional
+        Full names the user wrote explicitly, as opposed to ones a wildcard or
+        a default supplied. Only these can make a mixed-units build an error.
+    redshift : Distribution or None, optional
+        The resolved redshift. Needed only to compare a fraction of age(z)
+        with a time in Gyr; without it such a pair is not ordered.
 
     Raises
     ------
+    ConfigError
+        If the user wrote the two quench times in mixed units, a fraction for
+        one and Gyr for the other.
     ValueError
-        If some ``tlast_gyr`` the build can reach is strictly greater than some
-        ``tflex_gyr`` it can reach.
+        If some ``tlast`` the build can reach is strictly greater than some
+        ``tflex`` it can reach.
 
     Notes
     -----
-    The flexible zone is ``[tlast_gyr, tflex_gyr]``. The declared priors cannot
-    cross, because ``tflex_gyr``'s floor is ``tlast_gyr``'s ceiling, but a
-    pinned value bypasses its prior, so a build can still ask for
-    ``tlast_gyr > tflex_gyr``. Nothing downstream raises there: the ladder stops
-    ascending, the flexible bin takes a negative width, the youngest bin
-    overruns it, and the total mass still closes, because the same signed widths
-    that build the history also normalize it. Measured at ``tlast_gyr = 1.0,
-    tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass
-    1.000128 of the declared total. Silent, so it is refused here rather than
-    left to a mass-closure test that cannot see it.
+    The flexible zone is ``[tlast, tflex]``, the middle part of the three-part
+    history of Suess et al. (2022, ApJ 935, 146; arXiv:2207.02883, Sect. 3.1.4):
+    ``tlast`` is the width of the last time bin, uniform on [0.01, 1.0] Gyr
+    (their Table 3), and the fixed old bins end ``tflex`` before the
+    observation (2 Gyr in the paper). The declared priors cannot cross,
+    because ``tflex``'s floor is ``tlast``'s ceiling, but a pinned value
+    bypasses its prior, so a build can still ask for ``tlast > tflex``.
+    Nothing downstream raises there: the ladder stops ascending, the flexible
+    bin takes a negative width, the youngest bin overruns it, and the total
+    mass still closes, because the same signed widths that build the history
+    also normalize it. Measured at
+    ``tlast_gyr = 1.0, tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3,
+    13.7]``, integrated mass 1.000128 of the declared total. Silent, so it is
+    refused here rather than left to a mass-closure test that cannot see it.
+
+    The check reads ``resolved``, not the user's dict, because ``all_params:
+    FREE`` frees the ``*_frac`` timings the user never wrote, and a ``*_gyr``
+    pin beside one of those is a crossing the user's keys alone do not show.
+
+    Two times in the same unit are ordered in that unit. Two fractions need no
+    redshift: both scale with the same age(z), so ``tlast <= tflex`` as
+    fractions is ``tlast <= tflex`` in Gyr at any z. A fraction beside a Gyr
+    time that no one wrote as a fraction (a wildcard or default supplied it) is
+    converted to Gyr over the ages the build's redshift can give,
+    ``[frac_lo * age(z_max), frac_hi * age(z_min)]``. The Gyr end is a constant
+    pin, so only the fraction end depends on the redshift and this range is
+    exactly the set of values the build can reach: the conversion is exact.
 
     Equality is legal, and is the single point the two priors share. Measured at
     ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
@@ -2561,34 +2970,55 @@ def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
 
     **JIT-compatible**: not applicable; a build-time check on Python objects.
     """
-    names = psb_quench_param_names(sfh_type)
-    if names is None:
+    from tengri.config.exceptions import ConfigError
+
+    gyr_names = psb_quench_param_names(sfh_type)
+    if gyr_names is None:
         return
+    frac_names = psb_quench_frac_names(sfh_type)
+    user_named = frozenset(user_named)
     spec = SFH_REGISTRY[sfh_type]
-    last = _reachable_range(spec, names[0], tlast)
-    flex = _reachable_range(spec, names[1], tflex)
+    chosen = [
+        _quench_time_choice(g, f, resolved, user_named) for g, f in zip(gyr_names, frac_names)
+    ]
+    if None in chosen:
+        return
+    (last_name, last_unit), (flex_name, flex_unit) = chosen
+    last = _reachable_range(spec, last_name, resolved[last_name])
+    flex = _reachable_range(spec, flex_name, resolved[flex_name])
+    prefix = _spec_public_prefix(spec)
+    labels = (last_name[len(prefix) :], flex_name[len(prefix) :])
+    if last_unit == flex_unit:
+        unit = " of age(z)" if last_unit == "frac" else " Gyr"
+        _refuse_crossed_ranges(sfh_type, last, flex, labels, unit)
+        return
+    frac_name = last_name if last_unit == "frac" else flex_name
+    if frac_name in user_named:
+        raise ConfigError(
+            f"sfh type={sfh_type!r} gives the two quench times in mixed units: "
+            "tlast and tflex must both be fractions of age(z) (tlast_frac, "
+            "tflex_frac), or both in Gyr (tlast_gyr, tflex_gyr). A fraction of "
+            "age(z) cannot be ordered against a time in Gyr without the "
+            "redshift."
+        )
+    ages = _redshift_age_range_gyr(redshift)
+    if ages is None:
+        raise ConfigError(
+            f"sfh type={sfh_type!r} gives the two quench times in mixed units "
+            f"({last_name!r} as {last_unit}, {flex_name!r} as {flex_unit}) and the "
+            "redshift is missing or unreadable, so a fraction of age(z) cannot be "
+            "converted to Gyr to order them. Pass the resolved redshift, or give "
+            "both times in the same unit."
+        )
     if last is None or flex is None:
         return
-    if last[1] <= flex[0]:
-        return
-
-    def _describe(name, rng):
-        if rng[0] == rng[1]:
-            return f"{name}={rng[0]:g} (pinned)"
-        return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
-
-    raise ValueError(
-        f"sfh type={sfh_type!r} would put the flexible quenching zone "
-        f"[tlast_gyr, tflex_gyr] at negative width: "
-        f"{_describe('tlast_gyr', last)} reaches "
-        f"{last[1]:g} Gyr, above {_describe('tflex_gyr', flex)} at "
-        f"{flex[0]:g} Gyr. The zone starts at tlast_gyr and ends at tflex_gyr, so "
-        f"tlast_gyr must stay at or below tflex_gyr everywhere the build can "
-        f"reach; a crossing annihilates the flexible bin and lets the youngest "
-        f"bin overrun it, with the mass still closing and nothing raised. Raise "
-        f"tflex_gyr above {last[1]:g} Gyr, or pin tlast_gyr at or below "
-        f"{flex[0]:g} Gyr."
-    )
+    if last_unit == "frac":
+        last = (last[0] * ages[0], last[1] * ages[1])
+        labels = (f"{labels[0]} x age(z)", labels[1])
+    else:
+        flex = (flex[0] * ages[0], flex[1] * ages[1])
+        labels = (labels[0], f"{labels[1]} x age(z)")
+    _refuse_crossed_ranges(sfh_type, last, flex, labels, " Gyr")
 
 
 def _spec_public_prefix(spec) -> str:
@@ -2972,6 +3402,14 @@ def resolve_sfh(
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
+            if fn_i is psb_continuity_flex and "age_universe_yr" not in kw:
+                # No silent 13.7 Gyr fallback on the registry route (#2645): the
+                # fixed old bins must end at age(z), which only the caller knows.
+                raise ValueError(
+                    "psb_continuity_flex (psb_flex, psb_suess2022) needs age_universe_yr: "
+                    "the age of the universe at the evaluation redshift [yr]; the "
+                    "registry route does not fall back to a constant 13.7 Gyr (#2645)"
+                )
             if fn_i in (psb_wild2020, psb_continuity_flex, dense_basis, dense_basis_pure) and (
                 "age_universe_yr" in kw
             ):

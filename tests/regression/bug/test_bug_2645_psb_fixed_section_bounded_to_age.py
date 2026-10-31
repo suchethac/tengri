@@ -12,11 +12,11 @@ lookback, 4.7 Gyr older than the universe.
 The fix bounds the fixed section to ``[tflex_gyr, age_universe_yr]``, the
 same ``age_universe_yr`` injection :func:`psb_wild2020` already receives
 (component.py's ``apply``/``compute_joint_weights``), for a fixed redshift at
-build time. A free redshift is served by the ceiling convention #2567
-documents (:class:`NonparametricBinEdgesAtRedshiftCeilingWarning` for the
-other z-scaled nonparametric ladders) through the same ``age_at_z``-based
-injection, since the injected ``age_universe_yr`` already tracks
-``t_obs_gyr`` per draw at eager-forward time.
+build time. Under a free redshift the injected ``age_universe_yr`` is traced
+and follows ``t_obs_gyr`` on every draw, so the bound is exact per draw; these
+two families do not use the prior-ceiling convention of the z-scaled
+nonparametric ladders and emit no
+:class:`NonparametricBinEdgesAtRedshiftCeilingWarning`.
 
 References: Suess et al. 2022, ApJ 935, 146, §3.1.4; Wild et al. 2020 Eq. 5
 (psb_wild2020's own age_universe_yr injection); issue #2567 (the z-ceiling
@@ -43,20 +43,27 @@ PSB_FAMILIES = ["psb_flex", "psb_suess2022"]
 AGE_KERNELS = ["cic", "dsps"]
 
 
+#: Quench times as fractions of age(z) (#2748): both are fractions, so they are mixed
+#: units with neither. The free range is 1 to 5 Gyr of age(0), converted once.
+AGE0_GYR = float(age_at_z(0.0))
+TLAST_FRAC = 0.02
+TFLEX_FRAC = 0.25
+
+
 def _build(ssp, sfh_type, redshift, *, age_kernel="cic", tflex_free=False):
     sfh_group = {
         "type": sfh_type,
         "all_params": Fixed(DEFAULT),
         "log_total_mass": Fixed(10.0),
-        "tlast_gyr": Fixed(0.2),
+        "tlast_frac": Fixed(TLAST_FRAC),
         "age_kernel": age_kernel,
     }
     if tflex_free:
         from tengri import Uniform
 
-        sfh_group["tflex_gyr"] = Uniform(1.0, 5.0, default=2.0)
+        sfh_group["tflex_frac"] = Uniform(1.0 / AGE0_GYR, 5.0 / AGE0_GYR, default=TFLEX_FRAC)
     else:
-        sfh_group["tflex_gyr"] = Fixed(2.0)
+        sfh_group["tflex_frac"] = Fixed(TFLEX_FRAC)
     return SEDModel.build(
         ssp_data=ssp,
         redshift=Fixed(redshift),
@@ -160,7 +167,7 @@ def test_gradient_wrt_tflex_is_finite(synthetic_ssp_wide, sfh_type, age_kernel):
     """
     m = _build(synthetic_ssp_wide, sfh_type, 0.5, age_kernel=age_kernel, tflex_free=True)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    tflex_key = next(k for k in p if k.endswith("tflex_gyr"))
+    tflex_key = next(k for k in p if k.endswith("tflex_frac"))
 
     def loss(pp):
         return jnp.sum(m.predict_state(pp).sed_intrinsic)

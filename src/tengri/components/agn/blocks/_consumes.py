@@ -58,7 +58,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "adaf"): frozenset(
         {"agn_log_mbh", "agn_adaf_alpha", "agn_adaf_beta", "agn_adaf_delta"}
     ),
-    ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_disk_delta"}),
+    ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_adaf_delta"}),
     ("disc", "grahsp_sbpl"): frozenset(
         {
             "agn_grahsp_cutoff_nm",
@@ -266,17 +266,17 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "skirtor_agnfitter"): frozenset(
         {
             "agn_oa_skirtor",
-            "agn_incl_skirtor",
+            "agn_cos_inc",
             "agn_tv_skirtor",
             "agn_torus_frac",
             "agn_theta_torus",
         }
     ),
     ("torus", "skirtor_agnfitter_1p"): frozenset(
-        {"agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
+        {"agn_cos_inc", "agn_torus_frac", "agn_theta_torus"}
     ),
     ("torus", "skirtor_agnfitter_2p"): frozenset(
-        {"agn_oa_skirtor", "agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
+        {"agn_oa_skirtor", "agn_cos_inc", "agn_torus_frac", "agn_theta_torus"}
     ),
     ("torus", "two_temperature"): frozenset(
         {

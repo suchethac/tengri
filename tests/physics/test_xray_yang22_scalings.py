@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Physics tests for the Yang+22 / Lehmer+2016 X-ray scalings.
+"""Physics tests for the Yang+22 / Fragos+2013 X-ray scalings.
 
 Verifies the CIGALE ``yang20`` upgrade:
 
 * ``regression_paper`` — HMXB and LMXB integrated 2–10 keV luminosities
-  match the Lehmer+19 / Lehmer+14 polynomial fits at canonical (Z, age).
+  match the Fragos+13 (Eqs. 3-4) polynomial fits at canonical (Z, age).
 * ``regression_paper`` — diffuse hot-gas 0.5–2 keV integral matches
   Mineo+2012 / Yang+22 normalization ``8.3 × 10³⁸ · SFR`` erg/s.
 * ``regression_bug`` — ``xray_anisotropy`` denominator is now present
@@ -47,9 +47,9 @@ def _band_integral(
 # ---------------------------------------------------------------- HMXB / LMXB
 @pytest.mark.regression_paper
 def test_hmxb_band_integral_matches_lehmer19_solar() -> None:
-    """HMXB 2–10 keV integral matches Yang+22 / Lehmer+19 at Z=Z_sun, SFR=1.
+    """HMXB 2–10 keV integral matches Yang+22 / Fragos+13 Eq. 3 at Z=Z_sun, SFR=1.
 
-    Reference (Yang+22 yang20.py:207–214, Lehmer+19 polynomial):
+    Reference (Yang+22 yang20.py:207–214, Fragos+13 Eq. 3 polynomial):
         log L_HMXB(2–10) [W] = 33.28 − 62.12 Z + 569.44 Z² − 1833.8 Z³
                               + 1968.33 Z⁴ + log SFR
     At Z = 0.02, SFR = 1: log L = 32.250 W → L ≈ 1.78×10³⁹ erg/s.
@@ -71,9 +71,9 @@ def test_hmxb_band_integral_matches_lehmer19_solar() -> None:
 
 @pytest.mark.regression_paper
 def test_lmxb_band_integral_matches_lehmer14_age10gyr() -> None:
-    """LMXB 2–10 keV integral matches Yang+22 / Lehmer+14 at age=10 Gyr.
+    """LMXB 2–10 keV integral matches Yang+22 / Fragos+13 Eq. 4 at age=10 Gyr.
 
-    Reference (Yang+22 yang20.py:217–224, Lehmer+14 quartic in logT):
+    Reference (Yang+22 yang20.py:217–224, Fragos+13 Eq. 4 quartic in logT):
         log L_LMXB(2–10) [W/(M*/1e10)] = 33.276 − 1.503 logT − 0.423 logT²
                                         + 0.425 logT³ + 0.136 logT⁴
     At logT = 1 (age 10 Gyr): log L = 31.911 W per 1e10 Msun
@@ -111,7 +111,7 @@ def test_hmxb_metallicity_dependence_positive_everywhere() -> None:
 def test_hmxb_smooth_in_metallicity() -> None:
     """d L_HMXB / dZ finite and well-behaved at Z = Z_sun.
 
-    Lehmer+19 quartic is C∞ in Z; ensures upstream stellar metallicity
+    Fragos+13 Eq. 3 quartic is C∞ in Z; ensures upstream stellar metallicity
     can be optimized against X-ray data without gradient pathologies.
     """
     wave = jnp.array([4.0])
@@ -204,21 +204,17 @@ def test_xray_total_sums_three_components() -> None:
     xray_total must equal the sum of the three components computed
     independently, to numerical tolerance.
 
-    Note: xray_total currently passes its E_cut (set by the AGN
-    corona, default 300 keV) to xray_xrb, so the standalone XRB
-    call must match that to compare exactly. A follow-up could split
-    XRB and AGN E_cuts.
+    The XRB terms use their own fixed 100 keV cutoff (Yang+2020 Sect. 2.2.2),
+    not ``xray_total``'s ``E_cut`` (the AGN corona's, 300 keV here), so the
+    standalone ``xray_xrb`` call at its default cutoff must match exactly.
     """
     from tengri.components.xray.xray import xray_agn_corona
 
     wave = jnp.logspace(np.log10(0.1), np.log10(124.0), 2000)
     L_2500 = 1e44 / (5.15 * 1.199e15)  # Hopkins+2007 BC_2500 → erg/s/Hz
 
-    # Match xray_total's internal kwargs exactly. xray_total currently:
-    #   * passes its own E_cut (300 keV, AGN default) to xray_xrb — so the
-    #     XRB cutoff differs from xray_xrb's standalone default of 100 keV;
-    #   * calls xray_hotgas(..., gamma=1.0, E_cut=1.0).
-    # Splitting XRB and AGN E_cuts is tracked in the plan file.
+    # Match xray_total's internal kwargs exactly: xray_xrb at its own default
+    # cutoff, and xray_hotgas(..., gamma=1.0, E_cut=1.0).
     total = xray_total(
         wave,
         sfr=2.0,
@@ -235,7 +231,6 @@ def test_xray_total_sums_three_components() -> None:
         stellar_mass=3e10,
         metallicity_z=0.02,
         stellar_age_gyr=5.0,
-        E_cut=300.0,  # ← xray_total passes its own (AGN) E_cut here
     )
     hot = xray_hotgas(wave, sfr=2.0, gamma=1.0, E_cut=1.0)
     agn = xray_agn_corona(wave, l_2500_30deg_erg_hz=L_2500, apply_anisotropy=False)

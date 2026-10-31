@@ -823,6 +823,61 @@ class _CatalogFitterOriginal:
             return MCMC_VMAPPED
         return SEQUENTIAL
 
+    def _refuse_unknown_kwargs(self, resolved: str, kwargs: dict) -> None:
+        """Refuse a ``**kwargs`` name the batched engine about to run does not take.
+
+        The sequential engine validates inside ``Fitter.run``, before its
+        runner is called. The two batched engines receive ``kwargs`` as
+        explicit keywords, so an unknown name surfaced as a ``TypeError``
+        naming ``_run_native_mcmc`` -- an internal function the caller never
+        chose (#1469). This validates against the batched engine's own
+        signature, because its knobs differ from the registry runner's
+        (``n_ensemble``, ``map_init_steps``, ``devices``...), through the same
+        validator ``Fitter.run`` uses.
+
+        Parameters
+        ----------
+        resolved : str
+            The resolved method name, as returned by ``resolve_method``.
+        kwargs : dict
+            The ``**kwargs`` the caller passed to :meth:`run`.
+
+        Raises
+        ------
+        TypeError
+            If ``kwargs`` carries a name the batched engine cannot accept.
+        """
+        import dataclasses
+        import inspect
+
+        from tengri.inference._backend_registry import (
+            CALLER_CONSUMED_KWARGS,
+            check_unknown_kwargs,
+            get_backend,
+        )
+        from tengri.inference.fitter import fit_surface_ctor_names
+
+        engine = {
+            NATIVE_VI: type(self)._run_native,
+            MCMC_VMAPPED: type(self)._run_native_mcmc,
+        }.get(self._engine_kind(resolved))
+        if engine is None:
+            return  # sequential: Fitter.run validates before its runner is called
+        entry = dataclasses.replace(get_backend(resolved), runner=engine)
+        # Names ``run`` consumes itself (chunking, store, fallback...) never reach
+        # kwargs; listing them only sharpens the suggestion for a near-miss.
+        run_names = frozenset(inspect.signature(self.run).parameters)
+        # ``init_from`` reaches the batched engines through ``**kwargs`` (``run`` has no
+        # parameter of that name); the engine takes it when its signature does. The MCMC
+        # engine does; native_vi does not, so it still refuses it.
+        runner_takes = CALLER_CONSUMED_KWARGS & frozenset(inspect.signature(engine).parameters)
+        check_unknown_kwargs(
+            entry,
+            kwargs,
+            also_accepted=run_names | fit_surface_ctor_names(),
+            runner_takes=runner_takes,
+        )
+
     def _refuse_unsupported_channels(self, resolved: str) -> None:
         """Refuse per-galaxy channels the chosen engine cannot carry.
 
@@ -1066,6 +1121,8 @@ class _CatalogFitterOriginal:
             see :meth:`_run_native_mcmc`). It is silently ignored by the
             sequential engine's methods that do not accept it, so check the
             backend's ``accepts_precondition`` before assuming it applied.
+            A name the chosen method does not accept raises ``TypeError``
+            listing the names it does accept (#1469).
 
         Returns
         -------
@@ -1079,6 +1136,8 @@ class _CatalogFitterOriginal:
         BackendError
             If ``method`` is registered ``tier="broken"`` and
             ``allow_unvalidated`` is False.
+        TypeError
+            If ``**kwargs`` carries a name the chosen method does not accept.
         UserWarning
             If ``forward_chunk_size > 1`` is passed for a method that does not
             batch (ignored).
@@ -1130,6 +1189,11 @@ class _CatalogFitterOriginal:
                     [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
                 )
             except Exception:
+                logging.getLogger(__name__).warning(
+                    "LUT-bias advisory skipped: galaxy flux/noise arrays could not be "
+                    "concatenated.",
+                    exc_info=True,
+                )
                 all_flux = all_noise = None
             if all_flux is not None:
                 _warn_if_lut_bias_amplified(
@@ -1165,6 +1229,7 @@ class _CatalogFitterOriginal:
         # backend module, so without this call `check_usable` is not on the path
         # and a tier="broken" method runs silently (#1394).
         refuse_if_broken(resolved, allow_unvalidated=allow_unvalidated)
+        self._refuse_unknown_kwargs(resolved, kwargs)
         # Refusal precedes advice: warning about NUTS warmup memory for a method
         # that is about to be refused would be noise.
         #
@@ -1595,6 +1660,9 @@ class _CatalogFitterOriginal:
         # but must have the same number of data points for vmap.
         all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        from tengri.inference.fitter import _reject_non_finite_data
+
+        _reject_non_finite_data(all_data_orig, all_noise_orig, None)
 
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
@@ -2026,6 +2094,12 @@ class _CatalogFitterOriginal:
                 jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
                 for g in self.galaxies
             ]
+        )
+        from tengri.inference.fitter import _refuse_uncovered_bands, _reject_non_finite_data
+
+        _reject_non_finite_data(all_data_orig, all_noise_orig, all_presence_orig)
+        _refuse_uncovered_bands(
+            self.model, all_data_orig, all_noise_orig, all_presence_orig, self.data_type
         )
         # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
         if per_galaxy_z:

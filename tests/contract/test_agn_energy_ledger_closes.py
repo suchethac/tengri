@@ -1,0 +1,289 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""The AGN energy ledger closes: each published luminosity is the power of its spectrum.
+
+Every AGN component that publishes an ``L_*`` integrates the same SED it emits, on a
+fixed budget grid, so the value depends on the component's parameters and not on the
+caller's wavelength array. Two contracts follow and both are checked here:
+
+(a) the spectrum integrated on a converged grid (four times the budget density) equals
+    the published luminosity it describes, to 1e-4;
+(b) the published luminosity is the same on a coarse and a fine caller grid, to 1e-6.
+
+The composable-runner discs (kubota_done, ADAF) are not in this module: their
+luminosities come from the runner's ledger, which is checked there.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from tengri.components.agn import powerlaw_disc_model
+from tengri.components.agn._phys import (
+    COS_INC_ISOTROPIC_REFERENCE,
+    bolometric_integral_nu,
+    wavelength_to_nu,
+)
+from tengri.components.agn._template_grid import BUDGET_WAVE
+from tengri.components.agn.grahsp import GRAHSPSEDComponent, GRAHSPSEDComponentConfig
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
+from tengri.forward.orchestrator import default_params_dict
+from tengri.protocols.component import ForwardState
+
+pytestmark = pytest.mark.contract
+
+_LEDGER_RTOL = 1.0e-4
+_GRID_RTOL = 1.0e-6
+
+#: Converged own grid: four times the density of the budget grid [Angstrom].
+_CONVERGED = np.geomspace(BUDGET_WAVE[0], BUDGET_WAVE[-1], 4 * BUDGET_WAVE.size)
+_L_COARSE = np.geomspace(1.0e3, 1.0e7, 60)  # 0.1-1000 um [Angstrom]
+_L_FINE = np.geomspace(1.0e3, 1.0e7, 6000)
+
+_DATA = Path(__file__).resolve().parents[2] / "data"
+
+_TORUS_KEYS = ("L_agn_torus",)
+
+
+def _linear_luminosities(published):
+    """Published ``L_*`` [erg/s] as floats: the erg/s keys and the ``log_L_*`` keys as 10**dex.
+
+    The components publish powers as ``log10`` [dex re erg/s] (NAMING_CONTRACT 4c); the ledger
+    compares them to integrals in erg/s, in float64. An absent piece (``-inf`` dex) is dropped.
+    """
+    out = {
+        k: float(np.asarray(v))
+        for k, v in published.items()
+        if k.startswith("L_") and not k.endswith("_lsun")
+    }
+    for k, v in published.items():
+        if k.startswith("log_L_") and np.isfinite(float(np.asarray(v))):
+            out[k[len("log_") :]] = 10.0 ** float(np.asarray(v))
+    return out
+
+
+#: Component -> (published keys whose sum the spectrum integrates to). The keys are the
+#: definitions of agn_log_lbol (owner ruling #2678): L_agn_disc is the angle-integrated
+#: accretion power, and the line-of-sight disc luminosity is the derived L_agn_disc_los
+#: (#2848). The inclined spectrum of KD18 therefore integrates to L_agn_disc_los, and its
+#: angle-integrated power is checked separately below. PowerLaw has no inclination; its
+#: L_agn_disc is the integral over its normalization band (#2848).
+_SEDMODEL_LEDGER = {
+    "cat3d_wind": _TORUS_KEYS,
+    "kd18_disc": ("L_agn_disc_los",),
+    "powerlaw_disc": ("L_agn_disc",),
+    "silva04": _TORUS_KEYS,
+    "skirtor_agnfitter": _TORUS_KEYS,
+    # The spectrum along cos_inc is the attenuated disc plus torus plus polar re-emission:
+    # the three emitted pieces, each at its line-of-sight key. The unemitted disc is not in
+    # the spectrum.
+    "skirtor": ("L_agn_disc_los", "L_agn_torus_los", "L_agn_polar_dust"),
+}
+
+_GRAHSP_PARAMS = {
+    "agn_grahsp_l5100": jnp.array(1.0e44),
+    "agn_grahsp_uvslope": jnp.array(0.0),
+    "agn_grahsp_plslope": jnp.array(-1.7),
+    "agn_grahsp_plbendloc_nm": jnp.array(100.0),
+    "agn_grahsp_plbendwidth": jnp.array(1.0),
+    "agn_grahsp_cutoff_nm": jnp.array(10000.0),
+    "agn_grahsp_a_lines": jnp.array(1.0),
+    "agn_grahsp_a_feii": jnp.array(5.0),
+    "agn_grahsp_linewidth_kms": jnp.array(5000.0),
+    "agn_grahsp_fcov": jnp.array(0.4),
+    "agn_grahsp_si": jnp.array(0.0),
+    "agn_grahsp_cool_lam_um": jnp.array(17.0),
+    "agn_grahsp_cool_width": jnp.array(0.45),
+    "agn_grahsp_hot_lam_um": jnp.array(2.0),
+    "agn_grahsp_hot_width": jnp.array(0.5),
+    "agn_grahsp_hot_fcov": jnp.array(1.0),
+    "agn_grahsp_ebv": jnp.array(0.05),
+    "agn_grahsp_ebv_agn": jnp.array(0.05),
+}
+
+
+def _make_component(name):
+    """Build one SEDModelComponent that reads its template library from ``data/``."""
+    from tengri.components.agn.cat3d_torus_model import CAT3DTorus, CAT3DTorusConfig
+    from tengri.components.agn.kd18_disc_model import KD18Disc
+    from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
+    from tengri.components.agn.silva04_model import Silva04Torus, Silva04TorusConfig
+    from tengri.components.agn.skirtor_agnfitter_model import (
+        SKIRTORAgnfitterTorus,
+        SKIRTORAgnfitterTorusConfig,
+    )
+    from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+
+    makers = {
+        "cat3d_wind": lambda: CAT3DTorus(
+            config=CAT3DTorusConfig(grid_path=str(_DATA / "cat3d_wind_torus_grid.h5"))
+        ),
+        "kd18_disc": KD18Disc,
+        "powerlaw_disc": PowerLawDisc,
+        "silva04": lambda: Silva04Torus(
+            config=Silva04TorusConfig(grid_path=str(_DATA / "silva04_torus_grid.h5"))
+        ),
+        "skirtor_agnfitter": lambda: SKIRTORAgnfitterTorus(
+            config=SKIRTORAgnfitterTorusConfig(
+                grid_path=str(_DATA / "skirtor_mean3p_torus_grid.h5")
+            )
+        ),
+        "skirtor": lambda: SKIRTORTorus(
+            config=SKIRTORTorusConfig(grid_path=str(_DATA / "skirtor_templates_v3.h5"))
+        ),
+    }
+    return makers[name]()
+
+
+def _predict(name, wave, overrides=None):
+    """Spectrum and published L_* of one SEDModelComponent on ``wave``, at defaults.
+
+    ``overrides`` replaces named parameters (bare names, without the component prefix).
+    """
+    comp = _make_component(name)
+    wave = jnp.asarray(wave)
+    try:
+        data = comp.load(wave)
+    except (FileNotFoundError, OSError) as err:
+        pytest.skip(f"{name}: template data unavailable ({err})")
+    object.__setattr__(comp, "data", data)
+    prefix = comp.parameter_prefix
+    p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
+    for key, value in (overrides or {}).items():
+        p[key] = jnp.asarray(value, dtype=wave.dtype)
+    sed, published = comp.predict(p, jnp.zeros_like(wave), wave)
+    return sed, _linear_luminosities(published)
+
+
+def _grahsp(wave, **config):
+    """GRAHSP output on rest-frame ``wave`` [Angstrom] for one configuration."""
+    comp = GRAHSPSEDComponent(config=GRAHSPSEDComponentConfig(**config))
+    out = comp.apply(ForwardState(wave=jnp.asarray(wave)), _GRAHSP_PARAMS)
+    return out
+
+
+def _power(sed, wave, mask=None):
+    """Bolometric power |int L_nu dnu| [erg/s] of ``sed`` on ``wave``, optionally masked."""
+    w = jnp.asarray(wave)
+    s = jnp.asarray(sed)
+    if mask is not None:
+        s = jnp.where(jnp.asarray(mask), s, 0.0)
+    return float(np.abs(np.asarray(bolometric_integral_nu(s, wavelength_to_nu(w)))))
+
+
+def _rel(a, b):
+    return abs(a / b - 1.0)
+
+
+def _ledger_grid(name):
+    """Grid on which the spectrum of ``name`` is integrated for its ledger key.
+
+    PowerLaw's emitted tail diverges beyond its normalization band, so its ledger is the
+    integral over that band. The band is read from the model, not restated here.
+    """
+    if name == "powerlaw_disc":
+        band = np.asarray(powerlaw_disc_model._published_band_aa(jnp.float64))
+        return np.geomspace(float(band[0]), float(band[-1]), 4 * BUDGET_WAVE.size)
+    return _CONVERGED
+
+
+@pytest.mark.parametrize("name", sorted(_SEDMODEL_LEDGER))
+def test_spectrum_integrates_to_its_published_luminosity(name):
+    """The spectrum on its ledger grid carries the key's own published power to 1e-4."""
+    keys = _SEDMODEL_LEDGER[name]
+    grid = _ledger_grid(name)
+    sed, published = _predict(name, grid)
+    target = sum(published[k] for k in keys)
+    assert target > 0.0, f"{name}: non-positive published target {target:.3e}"
+    spectrum = _power(sed, grid)
+    rel = _rel(spectrum, target)
+    assert rel < _LEDGER_RTOL, (
+        f"{name}: spectrum {spectrum:.9e} erg/s vs {' + '.join(keys)} = {target:.9e} erg/s, "
+        f"rel {rel:.3e}"
+    )
+
+
+def test_kd18_angle_integrated_disc_power_is_the_emitted_spectrum_at_half_cos_i():
+    """L_agn_disc (angle-integrated, #2678) is the spectrum at 2 cos i = 1 (#2848).
+
+    At cos i = 0.5 the inclined spectrum is the angle-integrated emission, so its power on
+    the converged grid equals the published angle-integrated L_agn_disc to 1e-4. The
+    published value does not depend on cos i, so the reference inclination is the one the
+    model defines.
+    """
+    sed, published = _predict(
+        "kd18_disc", _CONVERGED, overrides={"cos_inc": COS_INC_ISOTROPIC_REFERENCE}
+    )
+    target = published["L_agn_disc"]
+    assert target > 0.0, f"kd18_disc: non-positive L_agn_disc {target:.3e}"
+    spectrum = _power(sed, _CONVERGED)
+    rel = _rel(spectrum, target)
+    assert rel < _LEDGER_RTOL, (
+        f"kd18_disc at cos i = 0.5: spectrum {spectrum:.9e} erg/s vs L_agn_disc "
+        f"{target:.9e} erg/s, rel {rel:.3e}"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(_SEDMODEL_LEDGER))
+def test_published_luminosity_is_grid_independent(name):
+    """The published L_* on a coarse caller grid equals the fine-grid value to 1e-6."""
+    _, coarse = _predict(name, _L_COARSE)
+    _, fine = _predict(name, _L_FINE)
+    assert fine, f"{name}: publishes no L_* luminosity"
+    for key, ref in fine.items():
+        assert ref > 0.0, f"{name}.{key}: non-positive reference {ref:.3e}"
+        rel = _rel(coarse[key], ref)
+        assert rel < _GRID_RTOL, f"{name}.{key}: coarse-vs-fine rel diff {rel:.3e}"
+
+
+def test_grahsp_torus_spectrum_integrates_to_L_agn_torus():
+    """GRAHSP torus alone (lines, FeII and Balmer off) carries L_agn_torus to 1e-4."""
+    out = _grahsp(
+        _CONVERGED,
+        include_bbb=False,
+        include_lines=False,
+        include_feii=False,
+        include_balmer=False,
+        apply_attenuation=False,
+    )
+    target = 10.0 ** float(out.derived["log_L_agn_torus"])
+    spectrum = _power(out.sed_intrinsic, _CONVERGED)
+    rel = _rel(spectrum, target)
+    assert rel < _LEDGER_RTOL, f"grahsp torus: spectrum vs L_agn_torus rel {rel:.3e}"
+
+
+def test_grahsp_bbb_spectrum_integrates_to_L_agn_bol():
+    """GRAHSP BBB, lines and FeII above upstream's 91.1753 nm cut carry L_agn_bol to 1e-4.
+
+    The cut is lumBolBBB's (owner ruling 16, 2026-10-13), not the 91.2 nm Lyman limit: the
+    91.1753-91.2 nm sliver alone is 1.2e-4 of L_agn_bol, which the old mask would miss.
+    """
+    out = _grahsp(
+        _CONVERGED,
+        include_torus=False,
+        include_si=False,
+        apply_attenuation=False,
+    )
+    target = float(out.derived["L_agn_bol"])
+    spectrum = _power(out.sed_intrinsic, _CONVERGED, mask=_CONVERGED >= 10.0 * BBB_BOL_CUT_NM)
+    rel = _rel(spectrum, target)
+    assert rel < _LEDGER_RTOL, f"grahsp bbb: spectrum vs L_agn_bol rel {rel:.3e}"
+
+
+def test_grahsp_published_luminosity_is_grid_independent():
+    """GRAHSP L_* on a coarse caller grid equals the fine-grid value to 1e-6."""
+
+    def _published(wave):
+        out = _grahsp(wave)
+        return _linear_luminosities(out.derived)
+
+    coarse = _published(_L_COARSE)
+    fine = _published(_L_FINE)
+    assert fine, "grahsp publishes no L_* luminosity"
+    for key, ref in fine.items():
+        assert ref > 0.0, f"grahsp.{key}: non-positive reference {ref:.3e}"
+        rel = _rel(coarse[key], ref)
+        assert rel < _GRID_RTOL, f"grahsp.{key}: coarse-vs-fine rel diff {rel:.3e}"

@@ -24,7 +24,9 @@ def build_test_model(use_waveprecomp=False):
     from tengri import FREE
     from tengri.forward.sed_model import WavePrecomp
 
-    wave = jnp.linspace(3000.0, 10000.0, 60)
+    # Rest [1000, 12000] A: the observed-frame axis covers the bands at both ends of
+    # the redshift range the tests use, so the coverage refusal (#2620) does not fire.
+    wave = jnp.linspace(1000.0, 12000.0, 60)
     ages = jnp.linspace(-1.0, 1.14, 12)
     lgmet = jnp.array([-1.5, -0.5, 0.0])
     flux_grid = jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5

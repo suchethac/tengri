@@ -39,6 +39,7 @@ from tengri.components.stellar.component import (
 from tengri.components.stellar.sfh import sample_sfh_prior
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
 from tengri.utils.grid import interpolate_to_linear_time
+from tests._cosmic_time import assert_grid_ends_at_age_of_universe
 
 pytestmark = pytest.mark.contract
 
@@ -132,29 +133,50 @@ def test_predict_sfh_native_equals_component_history(family, synthetic_ssp_wide)
 
 @pytest.mark.parametrize("family", _BUILDABLE)
 def test_predict_sfh_linear_grid_equals_component_history(family, synthetic_ssp_wide):
-    """The linear-time grid of ``predict_sfh`` is the component history, resampled alike."""
+    """The linear grid is the component's published history, resampled alike and cut at age(z).
+
+    The linear time axis is redshift-independent (so posterior draws at
+    different z stack on one axis) and the history is zero at every output node
+    older than the universe. A comparison with the uncut resampling of the
+    component history therefore cannot hold beyond age(z): there the published
+    grid is bounded by cosmic time and the resampler applies the same cut
+    (``age_at_z_gyr``). Inside the support, where both interpolations use model
+    nodes younger than age(z), the two agree to rounding.
+    """
+    from tengri.cosmology import age_at_z
+
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
     out = model.predict_sfh({})
-    _, ref = interpolate_to_linear_time(model.log_age_grid, _component_history(model, {}), 1000)
+    age_gyr = float(age_at_z(_Z))
+    t_lin, ref = interpolate_to_linear_time(
+        model.log_age_grid, _component_history(model, {}), 1000, age_at_z_gyr=age_gyr
+    )
+    sfr = np.asarray(out["sfr_mean"])
+    t_lin = np.asarray(t_lin)
+    np.testing.assert_allclose(np.asarray(out["t_gyr"]), t_lin, rtol=1e-12)
 
-    np.testing.assert_allclose(np.asarray(out["sfr_mean"]), np.asarray(ref), rtol=_RTOL, atol=0.0)
+    nodes_gyr = np.asarray(model.age_yr) / 1e9
+    last_inside = nodes_gyr[nodes_gyr <= age_gyr].max()
+    inside = t_lin <= last_inside
+    assert inside.sum() > 10
+    np.testing.assert_allclose(sfr[inside], np.asarray(ref)[inside], rtol=_RTOL, atol=0.0)
+    assert np.all(sfr[t_lin > age_gyr] == 0.0)
 
 
 @pytest.mark.parametrize("family", _BUILDABLE)
 def test_predict_sfh_vanishes_beyond_age_at_z(family, synthetic_ssp_wide):
-    """No star formation at lookback beyond age(z): the grid is bounded by cosmic time."""
+    """No star formation at lookback beyond age(z): the grid is bounded by cosmic time.
+
+    The native grid ends AT age(z) (older nodes collapse onto it with zero-width
+    cells), so the statement is: no node beyond age(z), and no SFR integrated
+    beyond it. ``psb`` carries a ~1e-19 truncated-exponential floor in its raw
+    SFR; the published history has none of it beyond the Big Bang.
+    """
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
-    lbt_yr = np.asarray(out["t_gyr"]) * 1e9
     sfr = np.asarray(out["sfr_mean"])
-    beyond = lbt_yr > _age_yr(_Z)
-
-    assert beyond.any()
-    # dense_basis is exactly zero there; psb carries a numerical floor ~1e-19
-    # Msun/yr from its truncated exponential, ~1e-19 of the peak.
-    assert float(np.max(np.abs(sfr[beyond]))) <= _BEYOND_AGE_FLOOR * float(np.max(sfr)), (
-        f"{family}: SFR beyond age(z={_Z}) = {_age_yr(_Z) / 1e9:.3f} Gyr"
-    )
+    assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
+    assert np.any(sfr > 0.0)
 
 
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -195,14 +217,16 @@ def test_burst_composite_equals_component_history(synthetic_ssp_wide):
 
 
 def test_field_composite_mean_vanishes_beyond_age_at_z(synthetic_ssp_wide):
-    """The smooth part of a field composite is bounded by age(z), as the bare family is."""
+    """The smooth part of a field composite is bounded by cosmic time, as the bare family is.
+
+    The mean is published through the same bounded history as the full SFR: a
+    node at age(z), nodes beyond it collapsed onto it, zero area beyond.
+    """
     model = _build(synthetic_ssp_wide, ["dense_basis", "field"], Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
     sfr = np.asarray(out["sfr_mean"])
-    beyond = np.asarray(out["t_gyr"]) * 1e9 > _age_yr(_Z)
-
+    assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
     assert np.any(sfr > 0.0)
-    assert float(np.max(np.abs(sfr[beyond]))) == 0.0
 
 
 @pytest.mark.parametrize("family", _AGE_FAMILIES)
@@ -276,7 +300,76 @@ def test_sample_sfh_prior_requires_redshift_for_age_families(family):
 
 
 def test_sample_sfh_prior_other_families_need_no_redshift():
-    """A family with no age anchor is unchanged by the new argument."""
-    _, plain = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3)
-    _, with_z = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3, redshift=_Z)
+    """A family with no age anchor is unchanged by the new argument.
+
+    ``dpl`` is not such a family: its formation age is sampled as a fraction of
+    age(z) (#2748), so the redshift changes its draws. ``dirichlet`` has no
+    timing parameter at all.
+    """
+    _, plain = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3)
+    _, with_z = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3, redshift=_Z)
     np.testing.assert_array_equal(np.asarray(plain), np.asarray(with_z))
+
+
+def _support_end_gyr(t_gyr, sfr) -> float:
+    """Largest lookback [Gyr] whose SFR exceeds the relative floor of the peak.
+
+    ``psb`` carries a ~1e-19 truncated-exponential floor (see the note above
+    ``test_predict_sfh_vanishes_beyond_age_at_z``); a relative floor of
+    ``_BEYOND_AGE_FLOOR`` leaves it out of the support.
+    """
+    t = np.asarray(t_gyr, dtype=float)
+    s = np.asarray(sfr, dtype=float)
+    positive = s > _BEYOND_AGE_FLOOR * np.max(s)
+    assert positive.any(), "route returned no star formation"
+    return float(t[positive].max())
+
+
+def _spacing_at_gyr(t_gyr, x_gyr) -> float:
+    """Spacing of the sorted grid ``t_gyr`` in the cell that contains ``x_gyr``."""
+    t = np.sort(np.asarray(t_gyr, dtype=float))
+    i = int(np.clip(np.searchsorted(t, x_gyr), 1, t.size - 1))
+    return float(t[i] - t[i - 1])
+
+
+@pytest.mark.parametrize("family", _BUILDABLE)
+def test_model_routes_end_where_the_component_ends(family, synthetic_ssp_wide):
+    """Every model-level SFH route ends at the component support end, not past age(z).
+
+    The routes are the composed-function call of :meth:`SEDModel._compute_sfr`
+    (the site ``profiling/pipeline.py`` times), and both ``predict_sfh`` grids.
+    The component's own history is the reference. A route that lost the age
+    injection would evaluate the 13.7 Gyr fallback and run past age(z) at z = 2.
+    """
+    model = _build(synthetic_ssp_wide, family, Fixed(_Z))
+    state = model.predict_state({})
+    comp_t = np.asarray(state.derived["sfh_grid_lbt_yr"]) / 1e9
+    comp_end = _support_end_gyr(comp_t, state.derived["sfr_history"])
+    age_gyr = _age_yr(_Z) / 1e9
+
+    native = model.predict_sfh({}, grid="native")
+    linear = model.predict_sfh({})
+    routes = {
+        "_compute_sfr": (
+            np.asarray(model.age_yr) / 1e9,
+            model._compute_sfr(model._get_internal_params({})),
+        ),
+        "predict_sfh native": (np.asarray(native["t_gyr"]), native["sfr_mean"]),
+        "predict_sfh linear": (np.asarray(linear["t_gyr"]), linear["sfr_mean"]),
+    }
+    for name, (t_gyr, sfr) in routes.items():
+        end = _support_end_gyr(t_gyr, sfr)
+        assert end <= age_gyr + 1e-6, f"{family} {name}: support to {end:.4f} Gyr > age(z)"
+        cell = _spacing_at_gyr(t_gyr, comp_end)
+        assert abs(end - comp_end) <= cell, (
+            f"{family} {name}: support ends at {end:.4f} Gyr, component at {comp_end:.4f} Gyr"
+        )
+
+
+@pytest.mark.parametrize("family", [*_SUPPORT_ENDS_AT_AGE, "psb_suess2022", "psb_flex"])
+def test_prior_draws_end_within_age_at_z(family):
+    """Every prior draw of an age-anchored family ends at or before age(z), per draw (#2645)."""
+    age_yr, curves = sample_sfh_prior(family, jax.random.PRNGKey(5), n=6, redshift=_Z)
+    t_gyr = np.asarray(age_yr) / 1e9
+    for curve in np.asarray(curves):
+        assert _support_end_gyr(t_gyr, curve) <= _age_yr(_Z) / 1e9 + 1e-6

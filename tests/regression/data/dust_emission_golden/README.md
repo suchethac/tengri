@@ -63,3 +63,27 @@ component goldens `astrodust.npy` (0.99%) and `draine2021_pah_ir.npy`
 ## Removed 2026-10-06 (schreiber2016 is the tabulated library)
 
 `schreiber2016.npy` captured the analytic modified-blackbody plus Drude stand-in, which no longer exists: `schreiber2016` is the tabulated Schreiber et al. (2018) library, whose expected values are mixed in the tests from the template arrays instead of frozen from the model's own output.
+
+## Regenerated 2026-10-11 (schreiber2018, guarded)
+
+`schreiber2018.npy` is re-frozen from the current component and is read by
+`TestSchreiber2018GridPort` in `test_dust_emission_grid_components.py`. The dust
+normalization is the evaluation-grid integral (owner ruling 2026-10-11), so the
+change from the previous file is the template data alone:
+`data/schreiber2018_templates.h5` changed after this golden was frozen (#2291,
+2026-09-12). Against the previous file the new values differ by at most
+6.0e-4 of the peak (up to 1.35 % at individual nodes), and the node-by-node
+ratio is not a constant (0.987 to 1.014), so no normalization constant is
+involved.
+
+## Re-frozen 2026-10-21 (#2806 T_CMB0 2.7255 K, was 2.725)
+
+`casey2012.npy`, `graybody.npy` and `modified_blackbody.npy` are re-frozen at
+z = 0 only, for #2806 T_CMB0 2.7255 K (was 2.725): the one CMB temperature now
+shared by the dust CMB formulas and cosmology. At z = 0 the CMB enters only
+through the contrast factor, so the z = 0 luminosity boost is exactly 1 and
+the change is the T_CMB0 change alone. Verified by holding T_CMB0 at 2.725 K,
+which reproduces the previous files to the bit. Against the previous files the
+largest node-by-node relative change is 2.5e-6 (casey2012, graybody) and
+3.1e-6 (modified_blackbody), 1.5e-8 of the peak at most; no node moved between
+zero and non-zero. The other eight golden files are unchanged.

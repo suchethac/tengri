@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fitter, Parameters, SEDModel
+from tengri.components.stellar.sfh.registry import _AGE_UNIV_GYR
 from tengri.inference._backend_registry import get_backend
 from tengri.parameters.priors import Uniform
 
@@ -55,9 +56,7 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 #: The value the forward used to substitute for a free ``sfh_dpl_age_gyr`` before
 #: the missing-parameter guard landed. Stating it keeps these fits unchanged (#1021).
-_DPL_AGE_DEFAULT = float(
-    Parameters(mean_sfh_type="dpl").get_distribution("sfh_dpl_age_gyr").default
-)
+_DPL_AGE_DEFAULT = _AGE_UNIV_GYR
 
 # ── Test cases: (name, spec_kwargs, fiducial_params_dict, free_params, skip_reason) ───
 #: VI iterations for the smoke fits. Sized to exercise each emitter's forward
@@ -206,8 +205,8 @@ def test_vi_smoke_fit(
     # ── Build parameter spec ────────────────────────────────────────
     spec = Parameters(**spec_kwargs)
 
-    # ── Build SEDModel with precompute=True ──────────────────────────
-    model = SEDModel(spec, synthetic_ssp, filters=simple_filters, precompute=True)
+    # ── Build SEDModel ──────────────────────────────────────────────
+    model = SEDModel(spec, synthetic_ssp, filters=simple_filters)
 
     # ── Generate mock observation from fiducial ─────────────────────
     # Fiducial prediction + 5% Gaussian noise

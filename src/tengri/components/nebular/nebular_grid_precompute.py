@@ -74,10 +74,11 @@ from tengri.components.nebular.nebular_grid_dust_build import (
 )
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
-from tengri.utils.scale import apply_log10_scale, pow10
+from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -1265,7 +1266,10 @@ def precompute_nebular_grid(
             stacklevel=2,
         )
 
-    wavelengths = jnp.asarray(wavelengths)
+    # Through numpy first: a float64 device array (LineFluxData builds its wavelengths
+    # under x64) stays float64 under jnp.asarray even with x64 off, and the IGM line
+    # transmission then carries that float64 into a float32 build (#2914).
+    wavelengths = jnp.asarray(np.asarray(wavelengths))
     caller_z = None
     if ref_params is None:
         ref_params = dict(spec.sample(jax.random.PRNGKey(0)))
@@ -1281,6 +1285,10 @@ def precompute_nebular_grid(
     # tabulated over redshift.
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
     ref_params["redshift"] = ref_z
+    # A timing fraction converts to Gyr at ref_z, so the reference onset would differ
+    # between a catalog build (lower bound 0.01) and a plain one (0.1). Written in the
+    # z = 0 frame, it is the same absolute onset at every reference redshift (#2748).
+    ref_params = reference_timing_fracs(spec, ref_params, ref_z)
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),
@@ -1356,18 +1364,6 @@ def precompute_nebular_grid(
     collect_sed = n_subbands is not None or (
         dust_component is not None and eb_tau_grids is not None
     )
-    wave_sink: dict = {}
-
-    def _row(point_values):
-        """(line, phot|None, restband|None) at one grid point: one eager Cue forward.
-
-        Kept for the single reference evaluation below (photometry-channel probe +
-        vmap sanity check); the full grid is built vmapped, not by looping this.
-        """
-        row = jnp.asarray([float(v) for v in point_values])
-        line, phot, rest, _, _ = _row_traced(row, want_phot=True, wave_sink=wave_sink)
-        return line, (None if phot is None else phot), (None if rest is None else rest)
-
     neb_comp = _nebular_component(model)
     neb_state = getattr(neb_comp, "_state", None)
     filter_waves = getattr(neb_state, "filter_waves", None)
@@ -1389,7 +1385,7 @@ def precompute_nebular_grid(
             jnp.maximum(log_lum + neg_log_qh, _LOG_DARK_LINE),
         )
 
-    def _row_traced(row, *, want_phot, want_split=False, wave_sink=None):
+    def _row_traced(row, *, want_phot, want_split=False):
         """Per-Q_H line (and optionally phot) vector at one grid point, tracer-safe.
 
         ``row`` is a ``(n_axes,)`` array so this vmaps: ``predict_state`` compiles
@@ -1413,8 +1409,6 @@ def precompute_nebular_grid(
             # channels) depends on them.
             p.update({k: jnp.zeros(()) for k in _DUST_TAU_NAMES if k in p})
         state = model.predict_state(p, fixed_values={})
-        if wave_sink is not None:
-            wave_sink["wave"] = np.asarray(state.wave)
         # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
         # ``inv_qh`` is then exactly 0. The reciprocal is only ever used as a
         # divisor, so take it as a log offset instead and it never materializes
@@ -1474,11 +1468,17 @@ def precompute_nebular_grid(
         grid_shape = tuple(len(a) for a in axes)
         points = list(itertools.product(*[list(a) for a in axes]))
 
-    # One eager reference forward: detects the photometry channel (line-only grids
-    # have none) and anchors the vmap sanity check below.
-    ref_line, ref_phot, ref_rest = _row(points[0])
-    has_phot = ref_phot is not None
-    if has_phot and ref_rest is None:
+    pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
+
+    # Channel structure from the tracer-safe row's ABSTRACT output: jax.eval_shape
+    # traces the forward without compiling or running it. Whether a channel is None
+    # is a Python-level decision (``state.derived.get``), so it survives the trace
+    # as a None leaf; the arrays come back as ShapeDtypeStructs (#2914).
+    _, phot_struct, rest_struct, _, _ = jax.eval_shape(
+        lambda row: _row_traced(row, want_phot=True), pts_arr[0]
+    )
+    has_phot = phot_struct is not None
+    if has_phot and rest_struct is None:
         # The exact path publishes the observed band and its rest-frame twin
         # together, so a reference model that emits one without the other is a
         # contract break upstream, not a grid variant. Refuse at BUILD time:
@@ -1490,8 +1490,6 @@ def precompute_nebular_grid(
             "band silently drops the nebular contribution from every rest-frame "
             "band. Refusing to build a half-grid."
         )
-
-    pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
 
     def _in_chunks(fn, pts, n_out):
         """Run the vmapped ``fn`` over ``pts`` in batches of ``_BUILD_CHUNK_NODES``.
@@ -1554,22 +1552,10 @@ def precompute_nebular_grid(
         rest_all = None
         sed_all = neg_log_qh_all = None
 
-    # Sanity: the vmapped first node must reproduce the eager reference forward.
-    # The tolerance follows the working dtype: 1e-5 is the historical float64
-    # bar and sits above float32's accumulated rounding on CPU, but a CUDA
-    # float32 build differs from the eager forward by up to 1.2e-5 (measured,
-    # reduction order), so float32 gets 256 ulp (3.1e-5). A vmap/tracer
-    # regression is orders of magnitude away from either.
-    parity_rtol = max(1e-5, 256.0 * float(jnp.finfo(line_all.dtype).eps))
-    if not bool(jnp.allclose(line_all[0], ref_line, rtol=parity_rtol, atol=0.0)):
-        raise RuntimeError(
-            "nebular fast grid: vmapped build disagrees with the eager reference "
-            "forward at the first node: a tracer/vmap regression, not a rounding gap."
-        )
-
     def _stack_log(arr) -> jnp.ndarray:
         # log space: nebular luminosities span decades across the ionization grid
-        return jnp.log10(jnp.maximum(arr, 1e-300)).reshape(*grid_shape, arr.shape[-1])
+        floor = representable_floor(1e-300)
+        return jnp.log10(jnp.maximum(arr, floor)).reshape(*grid_shape, arr.shape[-1])
 
     log_line = _stack_log(line_all)
     log_phot = None if phot_all is None else _stack_log(phot_all)
@@ -1578,11 +1564,12 @@ def precompute_nebular_grid(
     split_fields = {}
     if split_all is not None:
         cont_all, sed_wave_all, sed_log_all = split_all
-        state0 = model.predict_state(_params_at(points[0]), fixed_values={})
         request = nebular_z_request(model) if redshift_range == "auto" else redshift_range
         split_fields = _split_band_fields(
             params0=_params_at(points[0]),
-            wave=state0.wave,
+            # ``predict_state`` puts exactly this array in ``ForwardState.wave`` and
+            # no component rewrites it: read it, not a whole eager forward (#2914).
+            wave=model._rest_wavelength,
             cont_nodes=cont_all,
             sed_line_waves=sed_wave_all[0],
             log_sed_lines=sed_log_all,
@@ -1600,7 +1587,7 @@ def precompute_nebular_grid(
         rest_all=rest_all,
         sed_all=sed_all,
         neg_log_qh_all=neg_log_qh_all,
-        wave_rest=wave_sink.get("wave"),
+        wave_rest=np.asarray(model._rest_wavelength),
         ref_params=ref_params,
         dust_component=dust_component,
         eb_tau_grids=eb_tau_grids,
@@ -2028,14 +2015,29 @@ def nebular_subband_decomposition(packed, redshift, table):
     **JIT-compatible / gradient-safe**: yes.
     """
     lines, cont = packed[:-1], packed[-1]
-    i, w = z_bracket(table.cont_lnz, redshift)
+    i, w = z_bracket(table.cont_lnz, redshift, extrapolate=True)
     frac_t, lam_t = table.cont_subband_frac, table.cont_subband_waves_rest
     if table.cont_lnz.shape[0] == 1:
         frac, lam_c = frac_t[0], lam_t[0]
     else:
         f2 = jax.lax.dynamic_slice_in_dim(frac_t, i, 2, axis=0)
         l2 = jax.lax.dynamic_slice_in_dim(lam_t, i, 2, axis=0)
-        frac = (1.0 - w) * f2[0] + w * f2[1]
+        # Chunk fractions are a partition of the band. Past the table the edge cell's
+        # line can drive one negative, so there (only) floor at zero and renormalize;
+        # inside the table the convex blend is already a partition and is untouched.
+        linear = (1.0 - w) * f2[0] + w * f2[1]
+        # The 0.0 floor is a physical non-negativity floor on a partition weight. Its
+        # result is used only where ``beyond`` (w outside [0, 1]) holds. Inside the
+        # table ``linear`` is a convex blend of non-negative fractions, so it is >= 0
+        # and the floor is never selected (tests/regression/bug/
+        # test_bug_3042_nebular_z_extrapolation_positive.py checks 9 redshifts across
+        # the table against the plain blend). Past the table it binds only when the
+        # edge cell's line drives a chunk below zero, which no positive extrapolation
+        # can: the chunks that stay positive are returned unchanged up to renormalizing.
+        floored = jnp.maximum(linear, 0.0)
+        total = jnp.sum(floored, axis=-1, keepdims=True)
+        beyond = ((w < 0.0) | (w > 1.0)) & (total > 0.0)
+        frac = jnp.where(beyond, floored / jnp.where(total > 0.0, total, 1.0), linear)
         lam_c = (1.0 - w) * l2[0] + w * l2[1]
     n_filt = cont.shape[0]
     # Each line is spread over its rendered profile: a few points weighted by the

@@ -7,14 +7,15 @@ clumpy-disc-plus-polar-wind torus model (rows 0-209 of AGNfitter-rX's
 ``CAT3D_mean_3p.pickle``; see
 :mod:`tengri.components.agn.cat3d_wind_lowfwd`).
 
-Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``.
+Records any axis whose corresponding parameter is
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` and reads the
+table there, keeping the table whole so it is interpolated in the runtime's axis order.
 
 References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
    observations with models," ApJL 838,
-   L20 (2017). arXiv:1702.08691. https://doi.org/10.3847/2041-8213/aa6838
+   L20 (2017). arXiv:1703.07781. https://doi.org/10.3847/2041-8213/aa6838
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -29,13 +30,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.components.agn.cat3d_wind_lowfwd import _load_cat3d_lowfwd_arrays
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
+from tengri.components.agn._template_power_table import (
+    lnu_per_lsun_from_power_table,
+    power_weighted_template_photometry,
+    read_at_fixed_axes,
 )
+from tengri.components.agn.cat3d_wind_lowfwd import _load_cat3d_lowfwd_arrays
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -57,10 +58,8 @@ def precompute_cat3d_wind_lowfwd_photometry(
     For each (cos_inc, a, fwd) grid point, compute the filter-integrated
     photometry. Returns a dict with ``grid_phot`` and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``cat3d_wind_lowfwd.py``) so that
-    ``build_cat3d_wind_lowfwd_photometry_lookup`` returns L_ν [erg/s/Hz] per
-    L_sun of bolometric luminosity.
+    The lookup reads the table as L_ν [erg/s/Hz] per L_sun of torus power,
+    normalized as the runtime ``cat3d_wind_lowfwd.py`` does.
 
     Parameters
     ----------
@@ -76,8 +75,9 @@ def precompute_cat3d_wind_lowfwd_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_cos_inc, n_a, n_fwd, n_filters)
-            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``grid_phot`` : ndarray, shape (n_cos_inc, n_a, n_fwd, n_filters + 1)
+            Power-weighted table: raw band L_ν [erg/s/Hz per unit template power]
+            and, last, the raw bolometric power; see Notes.
         ``axes`` : tuple of 3 grid arrays (jnp.ndarray)
             Grid axes (cos_inc, a, fwd).
         ``_preint`` : PreintegratedGrid
@@ -87,17 +87,18 @@ def precompute_cat3d_wind_lowfwd_photometry(
     -----
     **JIT-compatible**: no, this is a build-time function using NumPy.
 
-    **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / native_integral(template). This matches
-    the runtime normalization in ``cat3d_wind_lowfwd.py``.
+    **Normalization**: the runtime kernel normalizes the *interpolated* template by
+    its own bolometric integral, so off-node it weights each node by its raw power.
+    The table therefore holds the raw band photometry and, as a last channel, the raw
+    power (``power_weighted_template_photometry`` in ``_template_power_table``); the
+    lookup interpolates both and divides. At a node this is the node-normalized
+    photometry exactly.
 
     **Grid reordering**: The native inclination axis is stored in degrees
     (ascending). This function converts to cos(incl) and reorders templates
     to match, mirroring
     ``cat3d_wind_lowfwd.load_cat3d_wind_lowfwd_grid``.
     """
-    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
     raw = _load_cat3d_lowfwd_arrays(grid_path)
 
     incl_deg = raw["incl_axis"]
@@ -111,33 +112,23 @@ def precompute_cat3d_wind_lowfwd_photometry(
     a_axis = np.asarray(raw["a_axis"], dtype=np.float64)
     fwd_axis = np.asarray(raw["fwd_axis"], dtype=np.float64)
 
-    n_cos_inc, n_a, n_fwd, _ = grid.shape
-    lnu_grid = np.empty_like(grid)
-    for i in range(n_cos_inc):
-        for j in range(n_a):
-            for k in range(n_fwd):
-                template = grid[i, j, k]
-                integral = native_bolometric_nu_np(template, wave_grid)
-                integral_safe = max(abs(integral), 1e-100)
-                lnu_grid[i, j, k] = _LSUN_ERG * template / integral_safe
-
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
+    # The runtime normalizes the interpolated template, so its off-node value is
+    # weighted by each node's raw power: tabulate the raw band photometry and the
+    # raw power and divide after interpolating (_template_power_table).
+    power_table = power_weighted_template_photometry(
+        grid,
+        wave_grid,
+        filter_waves,
+        filter_trans,
+        redshift,
         axes=(cos_inc_axis, a_axis, fwd_axis),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
     )
 
     axes_jax = (jnp.asarray(cos_inc_axis), jnp.asarray(a_axis), jnp.asarray(fwd_axis))
     return {
-        "grid_phot": preint.phot,
+        "grid_phot": power_table.table,
         "axes": axes_jax,
-        "_preint": preint,
+        "_preint": power_table.preint,
     }
 
 
@@ -187,7 +178,7 @@ def build_cat3d_wind_lowfwd_photometry_lookup(precomp: dict):
         """
         l_bol_lsun = 10.0**agn_log_lbol
         point = (agn_cos_inc, agn_a_cat3d_lowfwd, agn_fwd_cat3d_lowfwd)
-        phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
+        phot_per_lsun = lnu_per_lsun_from_power_table(interp_nd_pchip(grid_phot, axes, point))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return cat3d_wind_lowfwd_phot
@@ -204,7 +195,7 @@ def precompute(
     *,
     grid_path: str,
 ) -> dict:
-    """Build preintegrated CAT3D-Wind low-fwd grid, auto-collapsing Fixed-parameter axes.
+    """Build preintegrated CAT3D-Wind low-fwd grid, recording Fixed axes.
 
     Parameters
     ----------
@@ -222,8 +213,9 @@ def precompute(
     Returns
     -------
     dict
-        Same shape as :func:`precompute_cat3d_wind_lowfwd_photometry` but with
-        grid axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+        Same as :func:`precompute_cat3d_wind_lowfwd_photometry`, plus ``_collapsed_axes``
+        (axis index to its Fixed coordinate) when any :data:`AXIS_PARAMS` entry is
+        Fixed. The table is not contracted: the lookup reads it at the Fixed coordinates.
 
     Notes
     -----
@@ -234,18 +226,16 @@ def precompute(
     )
 
     preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+    _, _, fixed = collapse_fixed_axes(
         preint, AXIS_PARAMS, parameters, origin="cat3d_wind_lowfwd_precompute"
     )
     if not fixed:
         return result
 
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
-    }
+    # The table is kept whole and read at the Fixed coordinates (read_at_fixed_axes):
+    # contracting a Fixed axis first would interpolate in another axis order than
+    # the runtime kernel, and the tensor-product PCHIP depends on that order.
+    return {**result, "_collapsed_axes": fixed}
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
@@ -253,7 +243,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     When no axes are collapsed, delegates to
     :func:`build_cat3d_wind_lowfwd_photometry_lookup`. When some axes are
-    collapsed (fixed at preintegration time), the returned function expects
+    Fixed at preintegration time, the returned function expects
     only the remaining free parameter values.
 
     Parameters
@@ -282,12 +272,15 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
+    collapsed = preint["_collapsed_axes"]
 
     @jax.jit
     def cat3d_wind_lowfwd_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """CAT3D-Wind low-fwd torus photometry with collapsed (fixed) axes via PCHIP interp."""
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
+        phot_per_lsun = lnu_per_lsun_from_power_table(
+            read_at_fixed_axes(grid_phot, axes, free_axis_values, collapsed)
+        )
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return cat3d_wind_lowfwd_phot_collapsed

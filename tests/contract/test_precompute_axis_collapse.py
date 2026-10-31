@@ -395,60 +395,57 @@ def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
 #: a decision, not a dismissal -- ``test_every_adapter_with_axes_is_listed``
 #: fails when a new adapter appears in neither this map nor ``_CASES``.
 _UNCOVERED: dict[str, str] = {
-    "cat3d_precompute": "signature-driven collapse mismatches; cause not decidable from here",
-    # Fix round 2: run through the same Silva04-shaped harness this round
-    # (grid_path kwarg, agn_torus_frac keyword, PCHIP collapse) -- it mismatches
-    # the same way cat3d_precompute does (measured ~0.1-1.5% at each of its
-    # three axes, non-zero, not an exception), so it gets the same honest
-    # reason rather than the untested "no collapse test written" placeholder.
-    "cat3d_wind_lowfwd_precompute": (
-        "signature-driven collapse mismatches; cause not decidable from here"
-    ),
     "disc_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "qsogen_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "nenkova_agnfitter_precompute": "signature-driven collapse mismatches; not diagnosed",
-    # Fix round 2: both siblings mismatch the same way when run through the
-    # same harness (measured ~0.05-0.2% at each axis, non-zero, not an
-    # exception) -- registered with their sibling's exact reason.
-    "nenkova_agnfitter_2p_precompute": "signature-driven collapse mismatches; not diagnosed",
-    "nenkova_agnfitter_3p_precompute": "signature-driven collapse mismatches; not diagnosed",
     "skirtor_precompute": "5 axes; no collapse test written",
-    "skirtor_agnfitter_precompute": "3 axes; no collapse test written",
-    # Fix round 2: unlike the 3p sibling above (never tested), both of these
-    # WERE run through the harness this round and measured to mismatch
-    # (~0.06-2.2% at each axis, non-zero, not an exception) -- the same
-    # signature-driven-mismatch finding as cat3d_precompute/nenkova_agnfitter_precompute
-    # above, so they get that honest reason rather than "no collapse test
-    # written" (which their own testing this round has made untrue).
+    # Fix round 2: measured to mismatch through this harness (~0.06-2.2% at each axis):
+    # the shared collapse contracts the axis with triweight, the lookup reads PCHIP.
     "skirtor_agnfitter_1p_precompute": (
         "signature-driven collapse mismatches; cause not decidable from here"
     ),
-    "skirtor_agnfitter_2p_precompute": (
-        "signature-driven collapse mismatches; cause not decidable from here"
+    # The power-weighted torus tables (#3093) record a Fixed axis and read the whole
+    # table at its coordinate, in the runtime's axis order, so the triweight-contraction
+    # mismatch this harness measured for them (0.05-2.2% per axis; 5.19e-05 for silva04
+    # at a node) no longer applies. Their Fixed-axis lookups are checked against the
+    # runtime itself, off-node on every free axis, in the test named below.
+    "cat3d_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
     ),
-    # Task 16 (AGNfitter-rX parity plan, item 14): WAS in _CASES until Task 3
-    # (RULING R11) migrated this adapter's runtime lookup kernel from
-    # triweight to node-exact PCHIP without also updating the shared
-    # collapse machinery it calls (collapse_fixed_axes -> slice_fixed_axes,
-    # forward/precompute/templates.py / utils/grid_interp.py), which always
-    # collapses via triweight regardless of the calling adapter's own
-    # runtime kernel. Measured: pinning the single agn_log_nh_silva axis at
-    # an EXACT grid node (test's own `a[len(a) // 2]`, a genuine tabulated
-    # value, not an interpolated midpoint) still gives a max relative
-    # mismatch of 5.19e-05 between the collapsed (triweight-collapsed then
-    # evaluated) and full (direct PCHIP) lookups -- non-zero, reproducible,
-    # not floating-point noise, and not fixable by pinning at a different
-    # node or by reordering axes (there is only one axis). A real fix means
-    # threading a kernel choice through the shared collapse utility for
-    # every one of the ~11 adapters that call it, out of scope for a
-    # AGN-parameter-ownership/wildcard-scope/grammar task.
+    "cat3d_wind_lowfwd_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
+    ),
+    "nenkova_agnfitter_2p_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
+    ),
+    "nenkova_agnfitter_3p_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
+    ),
+    "skirtor_agnfitter_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
+    ),
+    "skirtor_agnfitter_2p_precompute": (
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
+    ),
     "silva04_precompute": (
-        "triweight-collapse vs PCHIP-runtime kernel mismatch (Task 3 R11 migrated the "
-        "runtime kernel, not the shared collapse machinery); measured 5.19e-05 max rel "
-        "diff pinned exactly at a grid node"
+        "Fixed axes read off the whole power-weighted table, not contracted; collapsed lookup vs "
+        "runtime covered by test_precompute_runtime_equivalence.py::"
+        "test_torus_table_fixed_axis_lookup_matches_exact"
     ),
     "cloudy_precompute": "3 axes; needs the untracked CLOUDY MIST grid",
-    "feltre_precompute": "4 axes; no collapse test written",
+    "feltre_precompute": "5 axes; no collapse test written",
     "mappings_photo_precompute": "4 axes; no collapse test written",
     "mappings_shock_precompute": "3 axes; no collapse test written",
     "dust_emission_precompute": "8 models with axes; no collapse test written",

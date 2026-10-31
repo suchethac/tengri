@@ -129,6 +129,7 @@ from tengri.components.nebular._shared import (
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
 )
+from tengri.config.exceptions import CueIonizingShapeWarning
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.utils.host_array import device_table, host_array
 
@@ -148,12 +149,21 @@ _LOG_LSUN = host_array(math.log10(_LSUN_ERG))
 _LOG_4PI = host_array(math.log10(4.0 * math.pi))
 _LOG_C = host_array(math.log10(_C_CGS))
 
-# Maximum SSP age contributing to nebular emission. Re-exported from
-# ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
-# and the downstream forward filter (here) share one source of truth.
+# 100 Myr, the cutoff ``lyc_max_age_yr=1e8`` selects. Kept importable from here; the
+# precompute lives in ionizing_spectrum, and the age mask below reads the same cutoff
+# from the backend, so the table and the forward filter cannot disagree.
 from tengri.components.nebular.ionizing_spectrum import (
-    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,
+    _CLIP_RANGES,
+    IONSPEC_NAMES,
+    LYC_ALL_AGES,
+    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,  # noqa: F401  (re-exported for importers)
+    clamp_ionspec_straight_through,
+    lyc_max_log_age,
+    validate_lyc_max_age_yr,
 )
+
+# SSP fingerprints whose young-composite shape has been checked against Cue's range.
+_SHAPE_CHECKED: dict[int, dict] = {}
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
@@ -333,6 +343,12 @@ class CueWeights(NamedTuple):
         Actual number of output lines per sub-network.
     batched_sort_idx : ndarray, shape (n_total_lines,)
         Wavelength sort indices for line ordering.
+    line_emul_sigma_frac : ndarray, shape (n_lines_total,), float32, or None
+        Fractional 1-sigma emulator error per line [dimensionless], in the
+        catalog (sorted) order of ``sorted_line_wav``. Provenance: upstream
+        Cue ``nn_stats_v0.pkl``, ``1 / SN_quantile[1]`` per line (the convention
+        of upstream ``cue.utils.sigma_line_for_fsps``). ``None`` when the
+        weights file predates this key.
 
     Notes
     -----
@@ -365,6 +381,7 @@ class CueWeights(NamedTuple):
     batched_spec_shift: jnp.ndarray = None  # (16, max_lines)
     batched_n_lines: tuple = None  # tuple of int (actual n_lines per net)
     batched_sort_idx: jnp.ndarray = None  # (n_total_lines,) wavelength sort
+    line_emul_sigma_frac: jnp.ndarray = None  # (n_lines_total,) float32 fractional 1-sigma
 
 
 # ── Weight loading ────────────────────────────────────────────────
@@ -582,7 +599,27 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         batched_spec_shift=np.stack([_pad1d(n.log_spec_shift, max_lines) for n in nets]),
         batched_n_lines=tuple(n.pca_components.shape[1] for n in nets),
         batched_sort_idx=np.argsort(nn_line_wav),
+        line_emul_sigma_frac=_load_line_emul_sigma(npz),
     )
+
+
+def _load_line_emul_sigma(npz: dict) -> np.ndarray | None:
+    """Read the per-line emulator error, or ``None`` for a pre-#2941 weights file.
+
+    Parameters
+    ----------
+    npz : dict
+        Loaded npz contents, keyed by array name.
+
+    Returns
+    -------
+    ndarray or None
+        Float32 array, shape (n_lines_total,), in ``sorted_line_wav`` order, or
+        ``None`` when the key is absent.
+    """
+    if "line_emul_sigma_frac" not in npz:
+        return None
+    return np.asarray(npz["line_emul_sigma_frac"], dtype=np.float32)
 
 
 # ── Neural network forward pass (pure JAX, JIT-compatible) ────────
@@ -1113,7 +1150,22 @@ class CueBackend:
     for nearby star formation histories). A flat [O III]/H-beta against
     ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
     wiring is guarded by ``tests/components/nebular/test_cue_logu_response.py``.
-    Values outside the trained range are passed to the network unclipped.
+    Values of the gas-property inputs outside the trained range are passed to the
+    network unclipped.
+
+    **Ionizing-shape range and SSP requirement**: the 7 ionizing-shape inputs
+    (``ionspec_index1..4``, ``ionspec_logLratio1..3``) were trained inside the
+    box held in ``ionizing_spectrum._CLIP_RANGES`` (the Cue reference code's
+    range, which differs from Li et al. 2025, arXiv:2405.04598, Table 1 in two
+    floors; see the comment there). The shape tengri derives from the SSP
+    is clamped to that box (a straight-through clamp: value equal to the input
+    and gradient unchanged wherever the shape is inside it) before the network,
+    and :class:`~tengri.config.exceptions.CueIonizingShapeWarning` is issued at
+    build when a constant-SFR young composite of the SSP leaves it. Use an SSP
+    whose Lyman continuum below 912 Å is densely sampled (for example
+    ``fsps_mist_c3k_a_chabrier`` or ``fsps_prsc_miles_chabrier``); the
+    ionizing-shape fit needs points in each of the four segments
+    (1-228, 228-353, 353-504 and 504-912 Å).
 
     **Calling conventions**: Two modes are supported:
 
@@ -1143,12 +1195,18 @@ class CueBackend:
         ssp_data=None,
         default_gas_logqion: float = 49.1,
         nitrogen: str = "absolute",
+        lyc_max_age_yr: str | float = LYC_ALL_AGES,
     ) -> None:
         if nitrogen not in CUE_NITROGEN_MODES:
             raise ValueError(
                 f"CueBackend nitrogen={nitrogen!r}: expected one of {CUE_NITROGEN_MODES}."
             )
         self.nitrogen = nitrogen
+        # Oldest stellar age whose ionizing photons are counted: 'all' or an age [yr].
+        # The table below is built under the same cutoff and the age mask in
+        # ``_compute_weighted_cue_params`` reads it, so the two cannot drift apart.
+        self.lyc_max_age_yr = validate_lyc_max_age_yr(lyc_max_age_yr)
+        self._lyc_max_log_age = lyc_max_log_age(self.lyc_max_age_yr)
         self.name = "cue"
         self.has_free_params = True
         self.has_continuum = True
@@ -1215,12 +1273,15 @@ class CueBackend:
             np.array(ssp_data.ssp_flux),
             np.array(ssp_data.ssp_lgmet),
             ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
+            max_log_age=self._lyc_max_log_age,
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
         self._seglum_table = jnp.array(result["seglum_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
+
+        self._warn_if_shape_outside_trained_box(result)
 
         # wNE SSP detection: young stellar populations (< 10 Myr) in a bare SSP
         # produce log10(Q_H) ~ 47–50.  If the maximum across all metallicities for
@@ -1266,6 +1327,69 @@ class CueBackend:
                     warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
                 else:
                     raise CueWNESSPError(msg)
+
+    def _warn_if_shape_outside_trained_box(self, table: dict) -> None:
+        """Warn once per SSP when its young-population shape leaves Cue's range.
+
+        Builds a constant-star-formation composite over the bins that feed Cue
+        (every age, or those up to ``lyc_max_age_yr``) at each SSP metallicity (one vectorized
+        call), combines the SSP shapes exactly as the forward model does, and
+        compares the unclamped result to ``_CLIP_RANGES`` (the Cue reference
+        code's training range). Individual old or extreme nodes of a dense grid
+        saturate routinely and carry no weight, so the composite, not the node
+        table, is what is checked. The verdict is memoized per SSP (keyed on the
+        process-wide memoized ionizing table, which is one object per SSP fingerprint),
+        so a repeated build neither recomputes nor repeats the warning.
+        """
+        if id(table) in _SHAPE_CHECKED:
+            return
+        _SHAPE_CHECKED[id(table)] = table  # holding the table keeps its id unique
+        ages = np.asarray(self._ssp_log_age_yr)
+        young = (
+            np.ones(ages.shape, dtype=bool)
+            if self._lyc_max_log_age is None
+            else ages <= self._lyc_max_log_age
+        )
+        if not young.any():
+            return
+        w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
+        lgmet = jnp.asarray(self._ssp_lgmet)
+        # One traced program (#2914): the bare vmap dispatched its ~130 primitives as
+        # separate XLA compiles, each below the persistent cache's floor.
+        composite = jax.jit(
+            jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))
+        )
+        raw = composite(lgmet)
+        lgmet_np = np.asarray(lgmet)
+        worst: dict[str, tuple[float, float]] = {}
+        for name in IONSPEC_NAMES:
+            lo, hi = _CLIP_RANGES[name]
+            v = np.asarray(raw[name], dtype=np.float64)
+            miss = np.where(np.isfinite(v), np.maximum(lo - v, v - hi), 0.0)
+            if (miss > 0).any():
+                i = int(np.argmax(miss))
+                worst[name] = (float(v[i]), float(lgmet_np[i]))
+        if not worst:
+            return
+        lines = "\n".join(
+            f"  {name} = {v:.3g} at log10(Z) = {z:.2f}; trained range "
+            f"[{_CLIP_RANGES[name][0]:g}, {_CLIP_RANGES[name][1]:g}]"
+            for name, (v, z) in worst.items()
+        )
+        warnings.warn(
+            "The ionizing shape fitted to this SSP lies outside the range Cue was "
+            "trained on (Cue reference code bounds; Li et al. 2025, "
+            "arXiv:2405.04598) for a constant-SFR young population:\n"
+            f"{lines}\n"
+            "The parameter is clamped to the nearest trained bound before the "
+            "network, so the emulator is not extrapolated, but the nebular "
+            "emission then reflects the clamped shape, not the SSP's. Use an SSP "
+            "with a densely sampled Lyman continuum below 912 A, e.g. "
+            "fsps_mist_c3k_a_chabrier or fsps_prsc_miles_chabrier, or pass "
+            "explicit ionspec_* values.",
+            CueIonizingShapeWarning,
+            stacklevel=3,
+        )
 
     def get_ionizing_params_at(
         self,
@@ -1454,7 +1578,7 @@ class CueBackend:
         # default below.
         cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
         neb_fesc=0.0,
-        neb_fesc_lya=0.0,
+        neb_fesc_lya=1.0,
         neb_fdust_frac=0.0,
         template_data=None,
     ):
@@ -1494,7 +1618,7 @@ class CueBackend:
         k = lyc_dust_escape_factor(neb_fesc, _f_dust)
         lum = lum * k
         # Apply Lyα-specific resonant scattering escape via the shared helper.
-        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        # This multiplies Lyα by neb_fesc_lya after k_factor was already applied.
         lum = apply_lya_escape(lum, wav, neb_fesc_lya)
         if cloudyfsps_only:
             old_idx = weights.line_old_idx
@@ -1550,6 +1674,54 @@ class CueBackend:
             return wav_sorted[np.asarray(weights.line_old_idx)]
         return wav_sorted
 
+    def published_line_model_sigma(self, *, cloudyfsps_only: bool) -> np.ndarray | None:
+        """Fractional 1-sigma emulator error per published line, without a forward pass.
+
+        Optional generic backend hook: other nebular backends may implement a
+        method of this name later, and callers reach it with ``getattr``.
+
+        Parameters
+        ----------
+        cloudyfsps_only : bool
+            Select the legacy 128-line CLOUDY/FSPS-matched subset, as in
+            :meth:`published_line_wavelengths`. Pass the same value to both
+            methods so the arrays align line by line.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,), float32, or None
+            Dimensionless fractional 1-sigma error on each line, in the same
+            order and length as ``published_line_wavelengths(cloudyfsps_only=...)``.
+            ``None`` when the weights carry no sigma (a weights file written
+            before ``line_emul_sigma_frac`` existed).
+
+        Raises
+        ------
+        ValueError
+            If the stored sigma does not have one entry per sorted line.
+
+        Notes
+        -----
+        **Trace-safe by construction**: like :meth:`published_line_wavelengths`,
+        every array here is plain ``numpy`` loaded from the weights file. The
+        stored array is already in the ``sorted_line_wav`` order, which is the
+        order :meth:`published_line_wavelengths` returns, so no reordering is
+        needed; the 128-line subset indexes it with ``line_old_idx``, the same
+        index the wavelengths use.
+        """
+        weights = self.weights
+        if weights.line_emul_sigma_frac is None:
+            return None
+        sigma = np.asarray(weights.line_emul_sigma_frac, dtype=np.float32)
+        if sigma.shape != np.shape(weights.sorted_line_wav):
+            raise ValueError(
+                f"line_emul_sigma_frac has shape {sigma.shape}, expected "
+                f"{np.shape(weights.sorted_line_wav)} (one entry per sorted line)"
+            )
+        if cloudyfsps_only:
+            return sigma[np.asarray(weights.line_old_idx)]
+        return sigma
+
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
@@ -1589,11 +1761,38 @@ class CueBackend:
         gas_logno: float = 0.0,
         gas_logco: float = 0.0,
     ) -> dict:
+        """Derive Cue parameters from SSP weights, shape clamped to the trained box.
+
+        Runs :meth:`_weighted_cue_params_raw` and moves the seven ionizing-shape
+        parameters onto the Cue training range (``ionizing_spectrum._CLIP_RANGES``, the Cue
+        reference code's range) with a straight-through clamp, so the
+        emulator is never queried outside the range it was trained on. In-range
+        values and their gradients pass through bit-identically; out of range the
+        value is the bound and the gradient is the identity (not zeroed).
+
+        ``neb_logU``, ``gas_logn``, ``gas_logno`` and ``gas_logco`` pass through to the
+        returned dict unchanged (``gas_logu`` is ``neb_logU``); the SSP-derived
+        quantities and the other parameters are those of :meth:`_weighted_cue_params_raw`.
+        """
+        out = self._weighted_cue_params_raw(
+            ssp_weights, ssp_log_ages_yr, log_z, neb_logZ_gas=neb_logZ_gas
+        )
+        gas = dict(gas_logu=neb_logU, gas_logn=gas_logn, gas_logno=gas_logno, gas_logco=gas_logco)
+        i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
+        return {**gas, **out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
+
+    def _weighted_cue_params_raw(
+        self,
+        ssp_weights: jnp.ndarray,
+        ssp_log_ages_yr: jnp.ndarray,
+        log_z: float,
+        neb_logZ_gas: float | None = None,
+    ) -> dict:
         """Derive Cue parameters from SSP weights.
 
-        Computes total Q_H by summing mass-weighted per-Msun Q_H over
-        young age bins, and picks the ionizing spectrum shape from the
-        dominant (highest Q_H × weight) age bin.
+        Computes total Q_H by summing mass-weighted per-Msun Q_H over every
+        SSP age bin (or those up to ``lyc_max_age_yr``), and the ionizing-spectrum
+        shape as the luminosity-weighted combination of the same bins.
 
         Parameters
         ----------
@@ -1603,14 +1802,8 @@ class CueBackend:
             log10(age/yr) of SSP age bins.
         log_z : float
             Stellar metallicity log10(Z) (absolute).
-        neb_logU : float
-            Ionization parameter log10(U).
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        gas_logn, gas_logno, gas_logco : float
-            Cue gas properties (defaults match Cue paper). ``gas_logno`` is
-            Cue's absolute [N/O], or under a ``nitrogen`` relation the offset
-            from that relation at the gas metallicity (0 = the relation; #2693).
 
         Returns
         -------
@@ -1626,7 +1819,12 @@ class CueBackend:
 
         # Vectorized, JIT-safe computation over all age bins.
         # Use jnp.where masks instead of boolean fancy indexing.
-        young_mask = ssp_log_ages_yr <= _MAX_NEB_LOG_AGE  # (n_age,) bool
+        # Which age bins count: all of them by default, those up to ``lyc_max_age_yr``
+        # otherwise (1e8 yr is the former 100 Myr cut, the same comparison as before).
+        if self._lyc_max_log_age is None:
+            counted_mask = jnp.ones(ssp_log_ages_yr.shape, dtype=bool)  # (n_age,) bool
+        else:
+            counted_mask = ssp_log_ages_yr <= self._lyc_max_log_age
 
         # Vectorize interpolate_ionizing_params over all ages at once.
         # ionspec_table is (n_met, n_age, 7), logqion_table is (n_met, n_age).
@@ -1657,7 +1855,7 @@ class CueBackend:
         # #1001 defense: non-finite table rows are sanitized (replaced with 0.0 log)
         # so they don't poison the exponent (0*exp(nan) is still nan).
         finite_q = jnp.isfinite(logqion_all)  # (n_age,)
-        valid = young_mask & (ssp_weights > 0) & finite_q  # (n_age,) bool
+        valid = counted_mask & (ssp_weights > 0) & finite_q  # (n_age,) bool
         logq_safe = jnp.where(finite_q, logqion_all, 0.0)
         w_valid = jnp.where(valid, ssp_weights, 0.0)
         lse = logsumexp(LN10 * logq_safe, b=w_valid)  # ln( sum w*10**logqion )
@@ -1705,7 +1903,7 @@ class CueBackend:
         w_pos = ssp_weights > 0  # (n_age,)
         log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
         finite_seg = jnp.isfinite(log_seglum_all)  # (n_age,4)
-        seg_valid = young_mask[:, None] & w_pos[:, None] & finite_seg
+        seg_valid = counted_mask[:, None] & w_pos[:, None] & finite_seg
         log_seg_w = jnp.where(
             seg_valid, log_w[:, None] + jnp.where(finite_seg, log_seglum_all, 0.0), -jnp.inf
         )  # (n_age,4)
@@ -1723,8 +1921,9 @@ class CueBackend:
         logLratio_eff = jnp.diff(log_seg_tot)  # (3,)
         i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
 
-        # Degenerate (no valid ionizing bin): dominant-bin fallback, picked in LOG
-        # space so the index selection never materializes 10**logqion.
+        # Empty population (no counted bin with weight and a finite Q_H): dominant-bin
+        # fallback, picked in LOG space so the index selection never materializes
+        # 10**logqion.
         # total_logqion == -99 already zeros emission.
         log_terms = jnp.where(valid, logq_safe + log_w, -jnp.inf)  # (n_age,)
         i7 = jnp.where(any_valid, i7_weighted, ionspec_all[jnp.argmax(log_terms)])
@@ -1734,11 +1933,7 @@ class CueBackend:
         gas_logz_rel = gas_logz - _LOG10_ZSUN
 
         return dict(
-            gas_logu=neb_logU,
-            gas_logn=gas_logn,
             gas_logz=gas_logz_rel,
-            gas_logno=gas_logno,
-            gas_logco=gas_logco,
             gas_logqion=total_logqion,
             ionspec_index1=i7[0],
             ionspec_index2=i7[1],
@@ -1757,7 +1952,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
@@ -1853,7 +2048,7 @@ class CueBackend:
         ``ionspec_*`` are specified explicitly, they take precedence
         over SSP-derived values. Useful for direct parameter fitting.
 
-        **Escape fraction**: When ``neb_fesc > 0`` or ``neb_fesc_lya > 0``,
+        **Escape fraction**: When ``neb_fesc > 0`` or ``neb_fesc_lya < 1``,
         line luminosities are suppressed proportionally. This approximation
         assumes optically thin escape (energy-conserving).
 
@@ -2008,7 +2203,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
@@ -2078,7 +2273,7 @@ class CueBackend:
         absorbs, #2436). Both reduce nebular emission (lines + continuum) via
         the CIGALE k-factor (Inoue 2011), accounting for the recombination
         coefficient ratio (alpha_1 / alpha_B).
-        ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
+        ``neb_fesc_lya`` applies additional Ly-alpha-specific scaling.
 
         """
         # One split (lines + continuum from the same resolved params, so no double
@@ -2118,7 +2313,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **neb_params,
@@ -2232,6 +2427,9 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "trained Speculator network weights define the emitted nebular lines + continuum"
     ),
     "default_gas_logqion": content("default ionizing-photon normalization"),
+    "nitrogen": content("meaning of gas_logno (absolute [N/O] or offset from a relation)"),
+    "lyc_max_age_yr": content("oldest stellar age whose ionizing photons are counted"),
+    "_lyc_max_log_age": exclude("log10 of lyc_max_age_yr, which is already content-keyed"),
     "_line_sort_idx": exclude("argsort of weights.nn_line_wav; weights is already content-keyed"),
     "_cont_sort_idx": exclude("argsort of weights.cont_wav; weights is already content-keyed"),
     "_ionspec_table": exclude(
@@ -2366,6 +2564,8 @@ def _cue_weights_flatten(cw):
         # cache lookup, because aux equality compares with ``==`` which
         # returns an array on ndarray inputs. See issue #464.
         cw.line_wav_selections,
+        # Optional per-line emulator error (None for pre-#2941 weights files).
+        cw.line_emul_sigma_frac,
     )
     # Non-array aux: strings and int tuples only.
     aux_data = (cw.line_names, cw.batched_n_lines)
@@ -2397,6 +2597,7 @@ def _cue_weights_unflatten(aux_data, children):
         b_ssh,
         b_si,
         line_wav_selections,
+        line_emul_sigma_frac,
     ) = children
     line_names, batched_n_lines = aux_data
     return CueWeights(
@@ -2424,6 +2625,7 @@ def _cue_weights_unflatten(aux_data, children):
         batched_spec_shift=b_ssh,
         batched_n_lines=batched_n_lines,
         batched_sort_idx=b_si,
+        line_emul_sigma_frac=line_emul_sigma_frac,
     )
 
 

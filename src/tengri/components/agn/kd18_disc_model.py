@@ -26,7 +26,12 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import emitted_bolometric, publication_wave
+from tengri.components.agn._publication import (
+    log10_emitted_bolometric,
+    publication_wave,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 
 #: Coarsest log-uniform grid whose emitted-SED integral meets 1e-6 against a 200000-node
 #: reference over 1e-3 A to 1e10 A (measured: 1000 nodes give -7e-8).
@@ -129,8 +134,9 @@ class KD18Disc(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_disc : erg/s
-        Integral over the full emission range of the emitted, inclination-projected SED
+    log_L_agn_disc, log_L_agn_disc_los : dex
+        log10 of the angle-integrated power and of the line-of-sight isotropic-equivalent
+        luminosity [dex re erg/s]: integrals over the full emission range of the emitted SED
         (all three zones), evaluated on the publication grid.
 
     Notes
@@ -255,7 +261,9 @@ class KD18Disc(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"L_agn_disc": "erg/s", "L_agn_disc_los": "erg/s"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(
+        {"log_L_agn_disc": "dex", "log_L_agn_disc_los": "dex"}
+    )
 
     def predict(
         self,
@@ -297,7 +305,8 @@ class KD18Disc(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + disc contribution).
-            - published: ``L_agn_disc`` and ``L_agn_disc_los`` [erg/s], defined below.
+            - published: ``log_L_agn_disc`` and ``log_L_agn_disc_los`` [dex re erg/s], defined
+              below.
 
         Notes
         -----
@@ -322,12 +331,15 @@ class KD18Disc(SEDModelComponent):
             \qquad
             L_{\rm agn\_disc\_los} = \int L_\nu(i)\,d\nu .
 
-        ``L_agn_disc`` [erg/s] is the angle-integrated emitted power: it is independent of
-        ``cos_inc`` and equals ``lum_ratio`` times the accretion power implied by ``log_lbol``
-        (less the corona's cut tail). ``L_agn_disc_los`` [erg/s] is the line-of-sight
-        isotropic-equivalent luminosity of the emitted, inclination-projected SED, a derived
-        output; at :math:`\cos i = 0.5` the two coincide. Both are integrals on a fixed grid
-        of 1e-3 A to 1e10 A, independent of the caller's wavelength grid.
+        ``log_L_agn_disc`` [dex re erg/s] is the log of the angle-integrated emitted power: it
+        is independent of ``cos_inc`` and equals ``lum_ratio`` times the accretion power
+        implied by ``log_lbol`` (less the corona's cut tail). ``log_L_agn_disc_los`` is the log
+        of the line-of-sight isotropic-equivalent luminosity of the emitted,
+        inclination-projected SED, a derived output; at :math:`\cos i = 0.5` the two coincide.
+        Both are integrals on a fixed grid of 1e-3 A to 1e10 A, independent of the caller's
+        wavelength grid, and are formed in log space so they are finite and accurate in pure
+        float32, where the erg/s value overflows (NAMING_CONTRACT section 4c). ``-inf`` is an
+        absent disc (``lum_ratio = 0``).
 
         **JIT-compatible**: yes.
 
@@ -361,10 +373,15 @@ class KD18Disc(SEDModelComponent):
         # where the disc and warm zones carry D_nu and the corona H_nu; it does not depend on
         # the inclination. The line-of-sight value integrates the emitted, projected spectrum.
         wave_pub = publication_wave(wave.dtype, n_nodes=_KD18_PUBLICATION_NODES)
-        L_disc = emitted_bolometric(_kubota(wave_pub, COS_INC_ISOTROPIC_REFERENCE), wave_pub)
-        L_disc_los = emitted_bolometric(_kubota(wave_pub, p["cos_inc"]), wave_pub)
+        # Both are formed in log space (the erg/s value is ``inf`` in pure float32).
+        log_L_disc = log10_emitted_bolometric(
+            _kubota(wave_pub, COS_INC_ISOTROPIC_REFERENCE), wave_pub
+        )
+        log_L_disc_los = log10_emitted_bolometric(_kubota(wave_pub, p["cos_inc"]), wave_pub)
 
         # Add to intrinsic SED
         sed_out = sed_in + _kubota(wave, p["cos_inc"])
 
-        return sed_out, {"L_agn_disc": L_disc, "L_agn_disc_los": L_disc_los}
+        return sed_out, with_lsun_siblings(
+            {"log_L_agn_disc": log_L_disc, "log_L_agn_disc_los": log_L_disc_los}
+        )

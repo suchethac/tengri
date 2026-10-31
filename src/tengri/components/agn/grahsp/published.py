@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Published ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed`` of the GRAHSP component.
+r"""Bolometric, torus and absorbed powers of the GRAHSP component (``log_L_agn_*`` keys).
 
-Every published luminosity is :math:`\int L_\lambda\,\mathrm{d}\lambda` [erg/s] of the emitted
+The component publishes ``log_L_agn_bol``, ``log_L_agn_torus`` and ``log_L_agn_absorbed``
+[dex re erg/s] and their ``L_agn_*_lsun`` [Lsun] siblings. They are formed from the three
+linear powers this module returns, which are internal values at the evaluation scale of the
+component (keys ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` of an internal dict, erg/s,
+never published as such).
+
+Every such power is :math:`\int L_\lambda\,\mathrm{d}\lambda` [erg/s] of the emitted
 AGN-side spectrum, with :math:`\lambda` in nm, computed on a grid the component owns and never
 on the caller's wavelength array. Each piece of the spectrum has its own rule, chosen by the
 piece and not by the other options of the configuration, so swapping the torus model, the disc
@@ -10,7 +16,7 @@ or the FeII template changes only the rule of the piece that was swapped:
 1. **Unit-area Gaussian** (lines, Si feature). For :math:`G(\lambda;c,s)=
    (\sqrt{2\pi}\,s)^{-1}\exp[-(\lambda-c)^2/(2s^2)]`, :math:`\int G\,\mathrm{d}\lambda = 1` and
    :math:`\int_a^\infty G\,\mathrm{d}\lambda = \tfrac12\,\mathrm{erfc}[(a-c)/(\sqrt2\,s)]`, which
-   is the Lyman-limit cut of the lines in ``L_agn_bol``. With a weight :math:`h`,
+   is the Lyman-limit cut of the lines in the bolometric power. With a weight :math:`h`,
    :math:`\int G h\,\mathrm{d}\lambda = \mathbb{E}_{\lambda\sim N(c,s^2)}[h]`. The Si features,
    far from the kink of :math:`h`, use Gauss-Hermite quadrature with nodes
    :math:`c+\sqrt2\,s\,x_i`; the lines, some of which sit within a few sigma of the 1100 nm
@@ -88,7 +94,7 @@ from tengri.components.agn.grahsp.balmer import (
     balmer_continuum,
 )
 from tengri.components.agn.grahsp.bbb import XRAY_FLOOR_NM, floor_disc_xray
-from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
+from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.components.agn.grahsp.lines import (
     _HBETA_BROAD_RATIO,
     _HBETA_NARROW_RATIO,
@@ -223,24 +229,53 @@ def _sign_change_roots(fn, lo: Array, hi: Array, iterations: int = 4) -> Array:
 class PublishedLuminosities:
     r"""Mixin of :class:`~tengri.components.agn.grahsp.component.GRAHSPSEDComponent`.
 
-    Holds the methods that publish ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed``. It
+    Holds the methods that compute the bolometric, torus and absorbed powers the component
+    publishes as ``log_L_agn_bol``, ``log_L_agn_torus`` and ``log_L_agn_absorbed``. It
     reads ``self.config``, ``self._disc_raw``, ``self._torus_at``, ``self._feii_template`` and
-    ``self._attenuation`` of the component and defines no state of its own.
+    ``self._attenuation`` of the component and defines no state of its own. The four hooks are
+    declared below as stubs so the contract is visible on the mixin; the component overrides
+    each of them.
     """
+
+    def _feii_template(self, templates_state: GRAHSPSEDComponentState) -> tuple[Array, Array]:
+        """Selected FeII template: wave [nm], L_lambda per unit amplitude (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _feii_template")
+
+    def _disc_raw(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> Array:
+        """Big blue bump L_lambda [erg/s/nm] before the X-ray floor (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _disc_raw")
+
+    def _torus_at(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array]:
+        """Torus and Si feature L_lambda [erg/s/nm] before the clip (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _torus_at")
+
+    def _attenuation(self, wave_nm: Array, params: Mapping[str, Array]) -> Array | None:
+        """AGN-side attenuation factor [dimensionless], or None (component hook)."""
+        raise NotImplementedError("GRAHSPSEDComponent implements _attenuation")
 
     def _published_luminosities(
         self,
         params: Mapping[str, Array],
         templates_state: GRAHSPSEDComponentState,
     ) -> dict[str, Array]:
-        r"""Published ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s].
+        r"""Bolometric, torus and absorbed powers, internal dict ``L_agn_bol`` etc. [erg/s].
 
         Each is the integral of the emitted AGN-side SED under its documented definition, on
         the component's own grid, so it does not depend on the caller's wavelength array:
 
         .. math::
 
-           L_{\rm bol}^{\rm BBB} = \int_{91.2\,\mathrm{nm}}^{\infty}
+           L_{\rm bol}^{\rm BBB} = \int_{91.1753\,\mathrm{nm}}^{\infty}
                L_\lambda^{\rm BBB+lines+FeII+Balmer}\,\mathrm{d}\lambda, \qquad
            L_{\rm bol}^{\rm TOR} = \int_0^\infty L_\lambda^{\rm TOR}\,\mathrm{d}\lambda, \qquad
            L_{\rm abs} = \int \left(L_\lambda^{\rm int} - L_\lambda^{\rm att}\right)
@@ -260,7 +295,12 @@ class PublishedLuminosities:
         Returns
         -------
         dict
-            ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars.
+            Internal keys ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars,
+            at the scale ``params["agn_grahsp_l5100"]`` carries.
+            ``GRAHSPSEDComponent.apply`` calls this with the evaluation-scale ``l5100`` (the
+            true value in float64, the reference 1e10 erg/s in float32) and publishes the
+            ``log10`` of each, plus the offset, as ``log_L_agn_bol`` / ``log_L_agn_torus`` /
+            ``log_L_agn_absorbed``: every value here is linear in ``l5100``.
 
         Notes
         -----
@@ -288,6 +328,7 @@ class PublishedLuminosities:
         )
         return {
             "L_agn_bol": self._published_bol(params, templates_state),
+            "L_agn_bol_ionizing": self._published_bol_ionizing(params, templates_state),
             "L_agn_torus": self._published_torus(params, templates_state),
             "L_agn_absorbed": absorbed,
         }
@@ -297,33 +338,43 @@ class PublishedLuminosities:
         return floor_disc_xray(wave_nm, self._disc_raw(wave_nm, params, templates_state))
 
     def _disc_integral(
-        self, params, templates_state, lo_nm: float, weight_fn=None, extra_nm=()
+        self, params, templates_state, lo_nm: float, weight_fn=None, extra_nm=(), hi_nm=None
     ) -> Array:
-        """Integral of the big blue bump above ``lo_nm`` times ``weight_fn`` [erg/s].
+        """Integral of the big blue bump over ``[lo_nm, hi_nm]`` times ``weight_fn`` [erg/s].
 
-        The SBPL runs on a log grid to ``PUBLICATION_HI_NM``; the Netzer disc on its own
-        nodes plus a log grid (it is zero beyond its last node).
+        ``hi_nm`` defaults to the top of the publication grid. The SBPL runs on a log grid;
+        the Netzer disc on its own nodes plus a log grid (it is zero beyond its last node).
         """
         if self.config.disc_model == "netzer":
             nodes = jnp.asarray(templates_state.disc_wave_nm)
-            grid = jnp.asarray(log_breaks(lo_nm, _DISC_GRID_HI_NM, SBPL_PER_DECADE, extra_nm))
-            breaks = jnp.clip(jnp.sort(jnp.concatenate([nodes, grid])), lo_nm, nodes[-1])
+            top = nodes[-1] if hi_nm is None else jnp.minimum(nodes[-1], hi_nm)
+            grid_hi = _DISC_GRID_HI_NM if hi_nm is None else hi_nm
+            grid = jnp.asarray(log_breaks(lo_nm, grid_hi, SBPL_PER_DECADE, extra_nm))
+            breaks = jnp.clip(jnp.sort(jnp.concatenate([nodes, grid])), lo_nm, top)
         else:
-            breaks = jnp.asarray(log_breaks(lo_nm, PUBLICATION_HI_NM, SBPL_PER_DECADE, extra_nm))
+            hi = PUBLICATION_HI_NM if hi_nm is None else hi_nm
+            breaks = jnp.asarray(log_breaks(lo_nm, hi, SBPL_PER_DECADE, extra_nm))
         lam, w = gauss_legendre_segments(breaks)
         value = self._disc_at(lam, params, templates_state)
         return jnp.sum(w * (value if weight_fn is None else value * weight_fn(lam)))
 
-    def _balmer_breaks(self, lo_nm: float, params: Mapping[str, Array]) -> Array:
-        """Breakpoints [nm] of the Balmer continuum: log grid, the 250 nm switch, the edge."""
+    def _balmer_breaks(
+        self, lo_nm: float, params: Mapping[str, Array], hi_nm: float | None = None
+    ) -> Array:
+        """Breakpoints [nm] of the Balmer continuum over ``[lo_nm, hi_nm]``.
+
+        ``hi_nm`` defaults to the Balmer grid's top. The breaks are a log grid, the 250 nm
+        switch and the edge windows.
+        """
+        top = _BALMER_HI_NM if hi_nm is None else hi_nm
         linewidth = jnp.asarray(params["agn_grahsp_linewidth_kms"])
         edge = jnp.asarray([_BALMER_EDGE_NM])
         windows = window_edges(edge, linewidth_sigma_nm(edge, linewidth))
-        fixed = jnp.asarray(log_breaks(lo_nm, _BALMER_HI_NM, BALMER_PER_DECADE))
+        fixed = jnp.asarray(log_breaks(lo_nm, top, BALMER_PER_DECADE))
         breaks = jnp.sort(
             jnp.concatenate([fixed, jnp.asarray([_BC_CONVOLUTION_THRESHOLD_NM]), windows])
         )
-        return jnp.clip(breaks, lo_nm, _BALMER_HI_NM)
+        return jnp.clip(breaks, lo_nm, top)
 
     def _balmer_at(self, wave_nm: Array, params: Mapping[str, Array]) -> Array:
         """Intrinsic Balmer continuum [erg/s/nm] (type 1 only; the caller gates it)."""
@@ -416,22 +467,45 @@ class PublishedLuminosities:
         return pref, jnp.sum(signed) * pref, centers, sigmas
 
     def _published_bol(self, params, templates_state) -> Array:
-        """Intrinsic BBB + lines + FeII + Balmer above the Lyman limit [erg/s]."""
+        """Intrinsic BBB + lines + FeII + Balmer above upstream's cut, 91.1753 nm [erg/s]."""
         cfg = self.config
         type1 = cfg.agn_type == 1
         total = jnp.zeros(())
         if cfg.include_bbb:
-            total = total + self._disc_integral(params, templates_state, LYMAN_LIMIT_NM)
+            total = total + self._disc_integral(params, templates_state, BBB_BOL_CUT_NM)
         if cfg.include_balmer and type1:
-            lam, w = gauss_legendre_segments(self._balmer_breaks(LYMAN_LIMIT_NM, params))
+            lam, w = gauss_legendre_segments(self._balmer_breaks(BBB_BOL_CUT_NM, params))
             total = total + jnp.sum(w * self._balmer_at(lam, params))
         if cfg.include_feii and type1:
             wave, lumin = self._feii_template(templates_state)
             total = total + self._feii_amplitude(params) * jnp.trapezoid(lumin, wave)
         if cfg.include_lines:
             centers, sigmas, amps = self._line_terms(params, templates_state)
-            cut = 0.5 * erfc((LYMAN_LIMIT_NM - centers) / (math.sqrt(2.0) * sigmas))
+            cut = 0.5 * erfc((BBB_BOL_CUT_NM - centers) / (math.sqrt(2.0) * sigmas))
             total = total + jnp.sum(amps * cut)
+        return total
+
+    def _published_bol_ionizing(self, params, templates_state) -> Array:
+        """Intrinsic BBB-side power below upstream's cut, from the X-ray floor [erg/s].
+
+        The complement of :meth:`_published_bol` in the emitted BBB side: the disc and the
+        Balmer continuum integrated over ``[XRAY_FLOOR_NM, BBB_BOL_CUT_NM]``, and each Gaussian
+        line's share below the cut. The FeII template lies above 199 nm, so the forest has no
+        share here. The two published powers add to the emitted BBB-side total.
+        """
+        cfg = self.config
+        lo, hi = XRAY_FLOOR_NM, BBB_BOL_CUT_NM
+        total = jnp.zeros(())
+        if cfg.include_bbb:
+            total = total + self._disc_integral(params, templates_state, lo, hi_nm=hi)
+        if cfg.include_balmer and cfg.agn_type == 1:
+            lam, w = gauss_legendre_segments(self._balmer_breaks(lo, params, hi_nm=hi))
+            total = total + jnp.sum(w * self._balmer_at(lam, params))
+        if cfg.include_lines:
+            centers, sigmas, amps = self._line_terms(params, templates_state)
+            scale = math.sqrt(2.0) * sigmas
+            share = 0.5 * (erfc((lo - centers) / scale) - erfc((hi - centers) / scale))
+            total = total + jnp.sum(amps * share)
         return total
 
     def _published_torus(self, params, templates_state) -> Array:

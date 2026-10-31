@@ -25,7 +25,7 @@ import jax.numpy as jnp
 from tengri.components._z_response import interp_z_table
 from tengri.components.dust.emission._cmb import (
     CMB_TEMPLATE_BETA_IR,
-    cmb_heating_luminosity_boost,
+    cmb_luminosity_boost,
     cmb_observed_emission,
     template_far_ir_temperature,
 )
@@ -46,6 +46,7 @@ __all__ = ["EmissionComponent"]
 #: Produced by ``_apply_photometry_precomp`` / ``_apply_spectrum_precomp``.
 _PRECOMP_UNITS: dict[str, str] = {
     "dust_emission_phot_lnu_precomp": "erg/s/Hz",
+    "dust_emission_restband_lnu_precomp": "erg/s/Hz",
     "dust_emission_spec_lnu_precomp": "erg/s/Hz",
 }
 
@@ -239,6 +240,15 @@ class EmissionComponent(SEDModelComponent):
     #: silently wrong SED rather than an obviously broken one.
     factors_l_ir: ClassVar[bool] = True
 
+    #: Registry key (``forward/precompute/registry.py``) of the precompute adapter that
+    #: tabulates this model's band fluxes over its shape axes; ``None`` for a model with no
+    #: adapter. Read when shape parameters are free and no exact band-response table exists.
+    precompute_key: ClassVar[str | None] = None
+
+    #: Free parameters (full names) that scale the emission without changing its shape, handled
+    #: by :meth:`lookup_amplitude` instead of a table axis.
+    lookup_amplitude_params: ClassVar[tuple[str, ...]] = ()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         own_predict = cls.__dict__.get("predict")
@@ -296,7 +306,7 @@ class EmissionComponent(SEDModelComponent):
             T_dust = p["T"]
             T_eff = cmb_corrected_temperature(T_dust, z, CMB_TEMPLATE_BETA_IR)
             emission, published = inner(self, {**p, "T": T_eff}, zeros, wave, **inputs)
-            emission = emission * cmb_heating_luminosity_boost(T_dust, T_eff, CMB_TEMPLATE_BETA_IR)
+            emission = emission * cmb_luminosity_boost(T_dust, z, CMB_TEMPLATE_BETA_IR)
         else:
             emission, published = inner(self, p, zeros, wave, **inputs)
             T_eff = cmb_corrected_temperature(
@@ -615,7 +625,8 @@ class EmissionComponent(SEDModelComponent):
         Returns
         -------
         mapping[str, ndarray]
-            Published dict with dust_emission_phot_lnu_precomp key.
+            Published dict with dust_emission_phot_lnu_precomp and
+            dust_emission_restband_lnu_precomp keys.
         """
         # ``sed_ir`` is the full-grid emission, computed ONCE by apply() and shared with
         # the spectrum branch and with sed_intrinsic. Recomputing it per branch was three
@@ -625,10 +636,12 @@ class EmissionComponent(SEDModelComponent):
 
         # Try to get band response (exact for linear models)
         band_response = None
+        shape_table = None
         if isinstance(template_data, dict):
             _dir = template_data.get("dust_ir")
             if isinstance(_dir, dict):
                 band_response = _dir.get("emission_band_response")
+                shape_table = _dir.get("emission_shape_table")
 
         # Project emission onto filters
         if band_response is not None:
@@ -644,8 +657,13 @@ class EmissionComponent(SEDModelComponent):
                     require_redshift(
                         p, "components.dust.emission._component_base._apply_photometry_precomp"
                     ),
+                    extrapolate=True,
                 )
             phot_lnu = L_ir * response
+        elif shape_table is not None and self.precompute_key is not None:
+            # Free shape parameters: the registry adapter tabulated the band fluxes over the
+            # shape axes at build, so the per-call filter integral is replaced by a lookup.
+            phot_lnu = self._shape_table_phot(p, shape_table, L_ir)
         elif getattr(self, "fast_emission", False):
             # Approximate path: sample at effective wavelength
             phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
@@ -666,7 +684,108 @@ class EmissionComponent(SEDModelComponent):
                 # Fallback: effective wavelength sample (no padded curves)
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
 
-        return {"dust_emission_phot_lnu_precomp": phot_lnu}
+        if band_response is None and shape_table is not None and self.precompute_key is not None:
+            # Free shape: the rest band is read from the same adapter table at z = 0, so no
+            # per-call filter integral remains (#2559 publishes it beside the photometry).
+            restband_lnu = self._shape_table_phot(p, shape_table, L_ir, rest=True)
+        else:
+            restband_lnu = self._restband_phot_lnu(
+                sed_ir, state, band_response, L_ir, filter_eff_waves
+            )
+        return {
+            "dust_emission_phot_lnu_precomp": phot_lnu,
+            "dust_emission_restband_lnu_precomp": restband_lnu,
+        }
+
+    @staticmethod
+    def _restband_phot_lnu(
+        sed_ir: jnp.ndarray,
+        state: ForwardState,
+        band_response: Mapping[str, Any] | None,
+        L_ir: jnp.ndarray,
+        filter_eff_waves: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Dust IR emission integrated through the rest band (#2559).
+
+        ``phot_rest_fnu`` is the SED at z = 0, so the rest band is the unit-luminosity
+        integral at redshift 0, not the observed-band value. Three sources, in order:
+        the band-response table's ``rest_values``, the padded-filter integral at z = 0,
+        and an effective-wavelength sample at the rest-band pivots.
+
+        Returns
+        -------
+        ndarray, shape (n_filter,)
+            Rest-band luminosity [erg/s/Hz].
+        """
+        table = None if band_response is None else band_response.get("rest_values")
+        if table is not None:
+            return L_ir * table
+        fw_pad = state.derived.get("phot_filter_waves_padded")
+        ft_pad = state.derived.get("phot_filter_trans_padded")
+        if fw_pad is not None:
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
+            return lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, 0.0)
+        rest_eff = state.derived.get("filter_restband_eff_waves")
+        if rest_eff is None:
+            rest_eff = filter_eff_waves
+        return jnp.interp(rest_eff, state.wave, sed_ir)
+
+    def lookup_amplitude(self, p: Mapping[str, jnp.ndarray]) -> jnp.ndarray:
+        """Factor the registry table does not carry, multiplying ``L_ir`` (1 by default).
+
+        The table is built at the closure's default for every parameter that is not a shape
+        axis; a component whose emission is linear in such a parameter returns its ratio to
+        that default here.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+
+        Returns
+        -------
+        ndarray
+            Dimensionless multiplier.
+        """
+        return jnp.asarray(1.0)
+
+    def _shape_table_phot(
+        self,
+        p: Mapping[str, jnp.ndarray],
+        table: Mapping[str, Any],
+        L_ir: jnp.ndarray,
+        *,
+        rest: bool = False,
+    ) -> jnp.ndarray:
+        """Band fluxes from the registry adapter's table at the current shape parameters.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        table : mapping
+            The adapter's table arrays (``dust_ir["emission_shape_table"]``).
+        L_ir : ndarray
+            Amplitude the exact band-response branch multiplies [erg/s, or 1 when factored].
+        rest : bool, optional
+            Read the z = 0 rest-band table (``table["rest"]``) instead of the observed-frame one.
+
+        Returns
+        -------
+        ndarray, shape (n_filter,)
+            Photometric L_nu [erg/s/Hz].
+        """
+        from tengri.forward.precompute import registry
+
+        module = registry.resolve(self.precompute_key)
+        prefix_len = len(self.parameter_prefix)
+        names = [n for n in module.AXIS_PARAMS[self.precompute_key] if n in table["axes"]]
+        values = [p[n[prefix_len:]] for n in names]
+        band = table["rest"] if rest else table
+        return module.lookup_from_table(
+            band, self.precompute_key, L_ir * self.lookup_amplitude(p), *values
+        )
 
     def _apply_spectrum_precomp(
         self,

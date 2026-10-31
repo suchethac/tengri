@@ -28,7 +28,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn.blocks._protocol import register_agn_block, register_disc_power
 from tengri.components.agn.disc import powerlaw_disc
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
@@ -75,7 +75,17 @@ def powerlaw_disc_block(
     Returns
     -------
     L_lambda : ndarray, shape (n_wave,)
-        Disc :math:`L_\lambda` [erg/s/Å].
+        Disc :math:`L_\lambda` [erg/s/Å], exactly zero outside 10 Å - 1e8 Å.
+
+    Notes
+    -----
+    The SED is :func:`~tengri.components.agn.disc.powerlaw_disc` with ``agn_lum_ratio = 1``,
+    so it is zero outside the band it is normalized on and its frequency integral is the whole
+    budget :math:`10^{\rm agn\_log\_lbol} L_\odot`. That is by design: the band is the
+    model's definition, and the radio (> 1e8 Å) and hard X-ray (< 10 Å) belong to other
+    components, so this disc contributes nothing there.
+
+    **JIT/grad/vmap-safe**: yes.
     """
     wave_aa = jnp.asarray(wavelength)
     L_nu = powerlaw_disc(
@@ -87,6 +97,37 @@ def powerlaw_disc_block(
     )
     # L_nu [erg/s/Hz] -> L_lambda [erg/s/Å]: L_lambda = L_nu * c / lambda^2.
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_disc_power("powerlaw")
+def powerlaw_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of :func:`powerlaw_disc_block`, in units of ``L_acc``.
+
+    The block is normalized so that its frequency integral over the band it is defined on,
+    10 Å - 1e8 Å, is :math:`L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot`, and it is
+    zero outside that band, so its power is exactly :math:`L_{\rm acc}`. The disc has no
+    inclination, so the reference ``cos i = 0.5`` of :func:`register_disc_power` changes
+    nothing.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
+        fraction does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. On the 13001-node
+        budget grid the trapezoid of the block gives up to 1 + 1.2e-3 of it (``agn_alpha = -2``),
+        half a cell of the step at 1e8 Å: a quadrature artifact the closed form avoids.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
 
 
 # ──────────────────────────────────────────────────────────────────────

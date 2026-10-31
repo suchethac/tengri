@@ -327,6 +327,8 @@ def censored_neg_log_likelihood(
     mask: jnp.ndarray,
     f_cal: float | jnp.ndarray = 0.0,
     dof: float | None = None,
+    *,
+    model_sigma_frac: float | jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Negative log-likelihood with per-band censoring.
 
@@ -357,6 +359,14 @@ def censored_neg_log_likelihood(
     dof : float or None
         Student-t degrees of freedom for detected bands. None = Gaussian
         (default).
+    model_sigma_frac : float, array of shape (n_bands,), or None, keyword-only
+        Fractional 1-sigma error of the MODEL prediction, per band
+        [dimensionless], e.g. a nebular emulator's published error on each
+        line flux. ``None`` (default) means the model is exact and the result
+        is bit-identical to the call without this argument. A scalar applies
+        to every band. The error applies to detections and to limits alike:
+        it is a property of the model, not of the measurement's detection
+        status. ``f_cal`` still enters detected bands only.
 
     Returns
     -------
@@ -375,6 +385,14 @@ def censored_neg_log_likelihood(
       ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``.
     - **Upper limit** (mask=1): ``ln L = ln Phi((f_upper - m) / sigma_obs)``.
     - **Lower limit** (mask=-1): ``ln L = ln Phi((m - f_lower) / sigma_obs)``.
+
+    **Model error** (``model_sigma_frac = s``, opt-in). With
+    ``sigma_model = hypot(f_cal * |m|, s * |m|)``, detections use
+    ``sigma_eff = hypot(sigma_obs, sigma_model)`` and limits use
+    ``sigma_lim = hypot(sigma_obs, s * |m|)`` in the CDF. Because
+    ``sigma_eff`` depends on the model flux, the ``ln sigma_eff`` term is
+    kept: without it the fit could inflate ``m`` to inflate its own error.
+    Limits carry no ``f_cal`` term, as above.
 
     where ``Phi`` is the standard normal CDF. A limit is scored with the
     Gaussian CDF at its own ``sigma_obs`` (Boquien et al. 2019 [1]_, Eq. 15,
@@ -402,7 +420,17 @@ def censored_neg_log_likelihood(
        Code Investigating GALaxy Emission. arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
+    if model_sigma_frac is None:
+        sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
+        sigma_lim = noise_obs
+    else:
+        # hypot of the two flux-proportional terms first, then with sigma_obs:
+        # the same underflow guard as compute_effective_noise. The model term
+        # is a function of the traced prediction, so its ln is kept below.
+        model_term = jnp.abs(predicted)
+        sigma_model = jnp.hypot(f_cal * model_term, model_sigma_frac * model_term)
+        sigma_eff = jnp.hypot(noise_obs, sigma_model)
+        sigma_lim = jnp.hypot(noise_obs, model_sigma_frac * model_term)
 
     # --- Detected band energy ---
     r = (data - predicted) / sigma_eff
@@ -411,12 +439,12 @@ def censored_neg_log_likelihood(
     else:
         e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
 
-    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_obs) ---
-    z_upper = (data - predicted) / noise_obs
+    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_lim) ---
+    z_upper = (data - predicted) / sigma_lim
     e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
 
-    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_obs) ---
-    z_lower = (predicted - data) / noise_obs
+    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_lim) ---
+    z_lower = (predicted - data) / sigma_lim
     e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
 
     # Apply the noise model band by band

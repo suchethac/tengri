@@ -13,7 +13,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | *Continued on next page* |  |  |  |  |  |
 |  |  |  |  |  |  |
 | `sfh_tsnorm_log_peak_sfr` | $\log \dot{M}_\star^{\rm peak}$ | Uniform | $[-1, 3]$ | $\log(M_\odot\,{\rm yr}^{-1})$ | Peak SFR |
-| `sfh_tsnorm_peak_lbt_gyr` | $t_{\rm peak}$ | Uniform | $[0.5, 13]$ | Gyr | Lookback time of peak |
+| `sfh_tsnorm_peak_lbt_frac` | $t_{\rm peak}/t_{\rm age}$ | Uniform | $[0.036, 0.870]$ | --- | Lookback time of peak, as a fraction of the age of the universe at $z$ |
 | `sfh_tsnorm_width_gyr` | $w$ | Uniform | $[0.1, 8]$ | Gyr | Width of SFH kernel |
 | `sfh_tsnorm_skew` | $\gamma$ | Uniform | $[-3, 10]$ | --- | Skewness parameter |
 | `sfh_tsnorm_trunc` | $\alpha_t$ | Uniform | $[0, 3]$ | --- | Truncation steepness |
@@ -27,7 +27,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `sfh_burst_width_dex` | $\Delta_b$ | Uniform | $[0.1, 1.0]$ | dex | Burst width in log-age |
 | *Metallicity* |  |  |  |  |  |
 | `met_logzsol` | $\log(Z/Z_\odot)$ | Gaussian | $[-2.0, 0.2]$ | dex | Log solar metallicity |
-| *Alpha-Element Enhancement (opt-in; requires 4D SSP grid or fallback mode)* |  |  |  |  |  |
+| *Alpha-Element Enhancement (acts only on a grid with an [α/Fe] axis; no shipped grid has one, so leave at default)* |  |  |  |  |  |
 | `met_alpha_fe` | $[\alpha/\mathrm{Fe}]$ | Uniform | $[-0.2, 0.6]$ | dex | Alpha-to-iron ratio (uniform mode) |
 | `met_alpha_fe_old` | $[\alpha/\mathrm{Fe}]_{\rm old}$ | Uniform | $[0.0, 0.6]$ | dex | Alpha enhancement at old ages (time-evolving mode) |
 | `met_alpha_fe_young` | $[\alpha/\mathrm{Fe}]_{\rm young}$ | Fixed(0) | $[-0.2, 0.4]$ | dex | Alpha enhancement at young ages (typically fixed at 0) |

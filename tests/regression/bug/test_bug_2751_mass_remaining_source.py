@@ -128,7 +128,8 @@ def test_prsc_chabrier_registered_grids_take_the_companion_not_the_embedded_tabl
         tmp_path / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5", age - 9.0, logz
     )
     for p in (path, wne):
-        ssp = _load_ssp_data(str(p))
+        # top_z="raw": the clip is tested in test_bug_2822; this checks the table source only.
+        ssp = _load_ssp_data(str(p), top_z="raw")
         assert ssp.mass_remaining_source == "companion:mass_remaining_prsc_chabrier.h5"
         np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0)
 
@@ -160,9 +161,32 @@ def test_prsc_grid_resolves_to_the_companion_not_its_embedded_table():
     from tengri.components.stellar.sps.mass_remaining_tables import load_companion_table
 
     comp = load_companion_table("mass_remaining_prsc_chabrier.h5", "prsc", "chabrier")
-    ssp = _load_ssp_data(str(PRSC_GRID))
+    # top_z="raw": the clip is tested in test_bug_2822; this checks the table source only.
+    ssp = _load_ssp_data(str(PRSC_GRID), top_z="raw")
     assert ssp.mass_remaining_source == "companion:mass_remaining_prsc_chabrier.h5"
     np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), comp.table, rtol=1e-12, atol=0)
+
+
+def test_default_clip_leaves_other_rows_and_old_ages_on_the_companion():
+    """With the default clip, only the top Z node at log age <= 7.20 may differ (#2822).
+
+    The clip rewrites the young top-metallicity node; every other Z row, and every age
+    past the taper (log age > 7.20 yr), must still equal the companion table exactly.
+    """
+    if not PRSC_GRID.exists():
+        pytest.skip(f"{PRSC_GRID.name} is not present")
+    from tengri.components.stellar.sps.mass_remaining_tables import load_companion_table
+
+    comp = load_companion_table("mass_remaining_prsc_chabrier.h5", "prsc", "chabrier")
+    ssp = _load_ssp_data(str(PRSC_GRID))
+    top = int(np.argmax(comp.log_z_abs))
+    rows = np.arange(comp.table.shape[0]) != top
+    old = np.asarray(comp.log_age_yr) > 7.20
+    keep = rows[:, None] & old[None, :]
+    assert keep.any()
+    np.testing.assert_allclose(
+        np.asarray(ssp.ssp_mass_remaining)[keep], comp.table[keep], rtol=1e-12, atol=0
+    )
 
 
 # ---------------------------------------------------------------------------

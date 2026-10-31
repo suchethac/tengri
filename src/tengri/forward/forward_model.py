@@ -438,6 +438,14 @@ class ForwardModel:
             params, target_wavelengths=target_wavelengths, **kwargs
         )
 
+    def line_model_sigma_frac(self, target_wavelengths, **kwargs):
+        """Delegate to :meth:`SEDModel.line_model_sigma_frac` on the inner SED.
+
+        Without this, a Fitter built on a ForwardModel would find no model error
+        and silently score line fluxes as if the nebular model were exact (#2941).
+        """
+        return self._inner_sed_for_delegation().line_model_sigma_frac(target_wavelengths, **kwargs)
+
     def predict_line_ratios(self, params, line_ratio_data, **kwargs):
         """Delegate to :meth:`SEDModel.predict_line_ratios` on the inner SED."""
         return self._inner_sed_for_delegation().predict_line_ratios(
@@ -1098,7 +1106,7 @@ class ForwardModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``. Must be ``None`` if
             ``data`` is a :class:`Data` record.
-        method : str, default ``"vi"``
+        method : str, default ``"mcmc_nuts_fast"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).

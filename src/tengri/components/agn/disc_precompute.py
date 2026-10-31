@@ -46,6 +46,8 @@ import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
 from tengri.components.agn.disc import (
+    _PL_BAND_HI_AA,
+    _PL_BAND_LO_AA,
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
 )
@@ -82,6 +84,32 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Relative offset of the zero-valued node placed just outside each band edge.
+_POWERLAW_EDGE_EPS: float = 1.0e-9
+
+#: Rest-frame grid of the powerlaw_disc template [Angstrom]: the disc's band, 10 A to 1e8 A
+#: (``_PL_BAND_LO_AA`` to ``_PL_BAND_HI_AA``), with both edges as nodes, plus one node a
+#: relative 1e-9 outside each edge where ``powerlaw_disc`` is zero. The filter fold interpolates
+#: the template linearly onto the union of these nodes and the filter's, so the step at each
+#: edge is resolved within 1e-9 of its position: a filter straddling an edge integrates the
+#: in-band part only, as the band-limited SED does. About 250 nodes per decade from 100 A to
+#: 1e8 A (below 1e5 A the nodes of the earlier 10 A - 1e5 A table, so a band inside that range
+#: reads the same values), and 10000 per decade from 10 A to 100 A, where the exponential cutoff
+#: (``h nu / k T_max`` up to 144 at 10 A for ``T_max = 1e5`` K) changes the template by a
+#: factor e per 0.0035 dex; linear interpolation there is within 1.4e-4 of the shape.
+_POWERLAW_UV_TO_FIR_AA = np.logspace(1, 5, 1000, dtype=np.float64)
+_POWERLAW_UV_TO_FIR_AA = _POWERLAW_UV_TO_FIR_AA[_POWERLAW_UV_TO_FIR_AA >= 100.0]
+_POWERLAW_REST_WAVE_AA = np.concatenate(
+    [
+        [_PL_BAND_LO_AA * (1.0 - _POWERLAW_EDGE_EPS)],
+        np.geomspace(_PL_BAND_LO_AA, _POWERLAW_UV_TO_FIR_AA[0], 10001, dtype=np.float64)[:-1],
+        _POWERLAW_UV_TO_FIR_AA,
+        np.logspace(5, 8, 751, dtype=np.float64)[1:],
+        [_PL_BAND_HI_AA * (1.0 + _POWERLAW_EDGE_EPS)],
+    ]
+)
+
+
 def _build_grid_powerlaw(
     filter_waves: list,
     filter_trans: list,
@@ -114,9 +142,7 @@ def _build_grid_powerlaw(
     """
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
 
-    # Standard rest-frame wavelength grid for integration
-    # (covers ~10 Angstrom to ~1 mm with fine sampling)
-    wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
+    wave_rest = _POWERLAW_REST_WAVE_AA
 
     # Precompute L_nu for each alpha value
     phot_grid = []
@@ -147,6 +173,18 @@ def _build_grid_powerlaw(
         energy_normalize=False,  # per L_sun by construction (agn_log_lbol = 0 above)
         units="lnu",
     )
+
+
+# Rest-frame grid of the ss_disc template [Angstrom], spanning the disc's full bolometric support.
+_SS_REST_WAVE_AA = np.unique(
+    np.concatenate(
+        [
+            np.logspace(-2, 3, 400, dtype=np.float64),  # X-ray / EUV tail of a hot disc
+            np.logspace(3, 5.5, 6000, dtype=np.float64),  # bands: dense, so linear interp is exact
+            np.logspace(5.5, 9, 400, dtype=np.float64),  # far-IR tail of a cold disc
+        ]
+    )
+)
 
 
 def _build_grid_ss(
@@ -193,7 +231,12 @@ def _build_grid_ss(
     n_mbh = len(mbh_grid)
     n_lbol = len(lbol_grid)
 
-    wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
+    # Rest grid wide and dense enough to hold the whole disc: the energy normalization below is
+    # the integral over this grid, so disc power outside it is lost from every node. At the
+    # corners of the declared box that was 22 % (hot discs above the X-ray end, cold discs
+    # beyond the far-IR end), and a 1000-point grid also mis-integrates the steep cold tail by a
+    # further ~6 % in the optical (#2810). The rest-frame support is captured to 1e-4 by this grid.
+    wave_rest = _SS_REST_WAVE_AA
 
     phot_grid = []
     for mbh in mbh_grid:
@@ -306,12 +349,13 @@ def _build_grid_cigale(
 
 
 # Node counts per axis at the declared prior range. The alpha axis keeps the spacing
-# (2 / 14) of the first literal grid; the ss_disc log axes take 0.25 dex spacing, the
-# density at which the node-exact PCHIP holds 2e-3 off-node (9-13 nodes give 3e-2).
+# (2 / 14) of the first literal grid. The ss_disc agn_log_mbh axis takes 0.125 dex (#2810): at
+# 0.25 dex the cold corner of the box (mbh near 10, lbol near 8) is 5-7 % off-node, because the
+# band flux there changes by that much across one M_BH cell. The lbol axis holds 0.25 dex.
 # Accuracy is stated with :func:`build_lookup`.
 _DEFAULT_NODES: dict[str, int] = {
     "agn_alpha": 15,
-    "agn_log_mbh": 17,
+    "agn_log_mbh": 33,
     "agn_log_lbol": 25,
     "agn_cigale_disk_delta": 9,
 }
@@ -380,7 +424,7 @@ def precompute(
         Grid for agn_alpha (powerlaw_disc only). If None, the declared prior [-2, 0] with
         15 nodes, extended to the parameter's reach (``Fixed`` value or finite prior bounds).
     mbh_grid : ndarray, optional
-        Grid for agn_log_mbh (ss_disc only). If None, the declared prior [6, 10] with 17 nodes,
+        Grid for agn_log_mbh (ss_disc only). If None, the declared prior [6, 10] with 33 nodes,
         extended to the reach.
     lbol_grid : ndarray, optional
         Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, the declared prior
@@ -514,10 +558,13 @@ def build_lookup(
     **Accuracy**: at the default nodes, against the exact closure at 40 seeded random
     off-node points of the reach (``agn_alpha`` in [-3, 0.5], ``agn_log_lbol`` in [8, 14]),
     band-averaged over 1400-1600, 4000-5000, 8000-9000 and 60000-90000 A: ``powerlaw_disc``
-    at most 1.6e-2 relative (1.5e-2 in the far-IR band). ``ss_disc`` at off-node
-    ``agn_log_mbh`` in [6, 10]: 6-9e-2 relative; the floor is set by the energy normalization
-    of the template on its own rest-frame grid, not by the node density (9 and 17 mbh nodes
-    give the same error).
+    at most 1.6e-2 relative (1.5e-2 in the far-IR band). ``ss_disc`` at nine points spanning
+    the declared box (corners included; ``agn_log_mbh`` in [6, 10], ``agn_log_lbol`` in
+    [8, 14]): at most 6e-3 relative against the exact closure converged on its own rest grid
+    (see ``tests/regression/bug/test_bug_2810_ss_disc_exact_closure.py``). The earlier 6-9e-2
+    floor (#2810) had two causes, both now removed: the template was energy-normalized on a
+    rest grid that clipped the disc's hot and cold tails, and the 0.25 dex M_BH node spacing
+    was too coarse at the cold corner.
 
     The leading argument is ``agn_log_lbol = log10(L_bol / L_sun)``. See
     :mod:`~tengri.forward.precompute.protocol` for the unified AGN adapter

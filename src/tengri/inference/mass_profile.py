@@ -101,6 +101,7 @@ import math
 import os
 import re
 import warnings
+import zlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -116,6 +117,11 @@ if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
     from tengri.inference.posterior import Posterior
     from tengri.parameters.priors import Distribution
+
+#: PRNG salt for the profiled-mass draw. A fixed crc32, not ``hash(str)``: string
+#: hashing is salted per process (``PYTHONHASHSEED``), so the same key drew
+#: different masses in different runs.
+_PROFILE_MASS_SALT = zlib.crc32(b"tengri.profile_mass") & 0x7FFFFFFF
 
 __all__ = [
     "build_profiled_loglikelihood_fn",
@@ -704,6 +710,17 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
                 "censored-data guard above cannot catch this: it reads fitter.data_mask, "
                 "which covers the photometry/spectroscopy vector only, never "
                 "LineFluxData's own mask"
+            ), {}
+        # A nebular model error (#2941) makes the line variance a function of the
+        # predicted flux, sigma_eff(F_model), and its ln term cannot be absorbed
+        # by the closed-form quadratic in the mass amplitude.
+        if fitter._resolved_line_model_sigma() is not None:
+            return (
+                "the measured emission-line fluxes carry a nebular model error "
+                "(line_model_sigma), whose variance depends on the predicted flux: "
+                "sigma_eff(F_model) enters the likelihood through its ln term, which "
+                "the profiled quadratic cannot absorb. Set line_model_sigma=False or "
+                "profile_mass=False"
             ), {}
         # A free ``line_flux_scaling`` (#2527) multiplies the SAME line-flux
         # block the profiled mass amplitude multiplies: the line-flux term
@@ -2124,7 +2141,7 @@ def reinsert_profiled_mass(
     if posterior.samples is not None:
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
         n_draws = next(iter(samples_no_mass.values())).shape[0]
-        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
+        mass_key = jax.random.fold_in(key, _PROFILE_MASS_SALT)
         draw_keys = jax.random.split(mass_key, n_draws)
         with _reinsertion_lock():
             ell_samples = _reinsert_mass_fn(fitter)(

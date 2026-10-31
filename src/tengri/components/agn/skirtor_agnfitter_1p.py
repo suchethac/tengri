@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR-averaged (mean_1p) clumpy torus library (Stalevski et al. 2016).
+r"""SKIRTOR-averaged (mean_1p) clumpy torus library (Stalevski et al. 2016).
 
-One-parameter torus library interpolated differentiably in
-``agn_incl_skirtor`` (inclination, degrees) over a precomputed HDF5 grid
-derived from AGNfitter-rX's ``SKIRTOR_mean_1p.pickle``.
+One-parameter torus library interpolated differentiably in inclination over a
+precomputed HDF5 grid derived from AGNfitter-rX's ``SKIRTOR_mean_1p.pickle``. The
+sightline is the model's one inclination, ``agn_cos_inc``.
 
 This is the coarsest of the three SKIRTOR-AGNfitter reductions tengri ships:
 :mod:`tengri.components.agn.skirtor_agnfitter` (``SKIRTOR_mean_3p``, three
@@ -14,15 +14,25 @@ share the same inclination axis convention and extent (0-90 deg).
 
 Axis semantics
 --------------
-``agn_incl_skirtor``
-    Inclination angle measured from the pole [deg]. Range: 0-90 deg.
-    0 = face-on, 90 = edge-on.
+``incl_axis``
+    Inclination angle :math:`i` measured from the polar axis [deg]. Range: 0-90 deg.
+    0 = face-on, 90 = edge-on. Keyed by ``agn_cos_inc`` (:math:`\cos i`) through
+    ``_skirtor_agnfitter_sightline.skirtor_incl_from_cos_inc``,
+    :math:`i = \arccos(\cos i)`.
 
 Runtime normalization
 ---------------------
-Template is shape-only. At runtime the module divides by the trapezoidal
-integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
-mirroring :mod:`tengri.components.agn.skirtor_agnfitter`.
+SKIRTOR computes every model for one central source luminosity (Stalevski et al. 2016,
+Sect. 2.1), so its records share one scale across inclination. The stored inclination
+power ratios equal those of the SKIRTOR v3 records (multiplied back by their ``norm``)
+averaged over tau, p, q, opening angle and radius ratio to 0.4 % at every node, so the
+reduction is on that scale (face-on/edge-on 2.12).
+The template is therefore emitted as two factors
+(``_torus_inclination.torus_lnu_anisotropic``): the shape of the records normalized to
+unit power and interpolated as before, and the records' own powers over their model's
+mean, a scalar table interpolated with the same node-exact PCHIP. The angle-integrated
+torus power is ``L_bol * agn_torus_frac``, each sightline keeps the library's flux
+relative to the others, and the shape between nodes is the per-sightline one exactly.
 
 References
 ----------
@@ -46,10 +56,25 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._skirtor_agnfitter_sightline import (
+    accepts_retired_incl_skirtor,
+    skirtor_incl_from_cos_inc,
+)
+from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._torus_inclination import (
+    TorusInclination,
+    anisotropy_values,
+    torus_lnu_anisotropic,
+)
+
+#: The library's inclination axis: the records share one radiative-transfer scale
+#: across inclination, so the template carries its anisotropy as a scalar factor
+#: (``_torus_inclination.torus_lnu_anisotropic``).
+TORUS_INCLINATION = TorusInclination(axis=0, variable="incl_deg")
 
 __all__ = [
+    "TORUS_INCLINATION",
     "create_skirtor_agnfitter_1p_from_grid",
     "skirtor_agnfitter_1p_sed",
 ]
@@ -112,18 +137,21 @@ def load_skirtor_agnfitter_1p_grid(grid_path: str) -> TorusTemplateGrid:
     pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
+    axes = (np.asarray(raw["incl_axis"]),)
     return TorusTemplateGrid(
         template=np.asarray(raw["template"]),
-        axes=(np.asarray(raw["incl_axis"]),),
+        axes=axes,
         wave_grid=np.asarray(raw["wavelength"]),
+        anisotropy=anisotropy_values(raw["template"], raw["wavelength"], axes, TORUS_INCLINATION),
     )
 
 
+@accepts_retired_incl_skirtor
 def skirtor_agnfitter_1p_sed_from_grid(
     grid: TorusTemplateGrid,
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_incl_skirtor: float = 30.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -135,8 +163,12 @@ def skirtor_agnfitter_1p_sed_from_grid(
         Rest-frame wavelength grid. [Å]
     agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_incl_skirtor : float, optional
-        Inclination angle [deg]. Default 30.0.
+    agn_cos_inc : float, optional
+        :math:`\cos i`, the model's one inclination, :math:`i` from the polar axis
+        (1 = face-on) [dimensionless]. Defaults to the declared ``agn_cos_inc`` default,
+        ``cos(30 deg)``. The library is keyed at :math:`i = \arccos(\cos i)` [deg].
+        The retired ``agn_incl_skirtor`` [deg] is translated with a
+        ``DeprecationWarning``.
     agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
@@ -149,10 +181,17 @@ def skirtor_agnfitter_1p_sed_from_grid(
     -----
     .. math::
 
-        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                         \frac{T(\lambda;\,i)}{\int T(\nu;\,i)\,\mathrm{d}\nu}
+        L_\nu(\lambda;\,\mu) = L_{\rm bol}\,f_{\rm torus}\,
+                               \frac{T(\lambda;\,\mu)}{\int T(\nu;\,\mu)\,\mathrm{d}\nu}\,
+                               \frac{a(\mu)}{\bar a}, \qquad
+        \bar a = \int_0^1 a(\mu)\,\mathrm{d}\mu,
 
-    where :math:`i` is the inclination angle.
+    where :math:`T` is the tabulated template at the parameter point (node-exact PCHIP),
+    :math:`\mu = \cos i`, the frequency integral is that of the interpolant on the
+    template's own wavelength nodes, and :math:`a` is each record's own power over its
+    model's mean, interpolated with the same PCHIP. The angle-integrated power is
+    :math:`f_{\rm torus} L_{\rm bol}`; along :math:`\mu` the torus carries
+    :math:`f_{\rm torus} L_{\rm bol}\,a(\mu)/\bar a`.
 
     **JIT-compatible**: yes.
 
@@ -161,10 +200,18 @@ def skirtor_agnfitter_1p_sed_from_grid(
     AGNfitter-rX [3]_, which averages out opening angle, clumpiness
     (p, q), and optical depth of the full SKIRTOR parameter space.
     """
-    return torus_lnu_from_grid(
+    # Anisotropy restored here (#2851). Provenance: AGNfitter-rX SKIRTOR_mean_1p.pickle
+    # (tag AGNfitter-rX_v0.1, models/TORUS), field 'SED' per inclination, repackaged in
+    # skirtor_mean1p_torus_grid.h5 'template'; its power ratios between inclinations match
+    # the SKIRTOR v3 records (the CIGALE-lineage dust_emission x spectra/norm; one central
+    # source luminosity per model, Stalevski et al. 2016 Sect. 2.1) averaged over tau, p,
+    # q, opening angle and R to 0.4 % at every node. Sightline: 'incl_axis' is the
+    # inclination i from the polar axis [deg] (0 face-on), ascending, axis 0.
+    return torus_lnu_anisotropic(
         grid,
         wavelength,
-        (agn_incl_skirtor,),
+        (skirtor_incl_from_cos_inc(agn_cos_inc),),
+        TORUS_INCLINATION,
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,
     )
@@ -229,16 +276,17 @@ def _load_skirtor_agnfitter_1p_default() -> Callable:
 def skirtor_agnfitter_1p_sed(
     *args, _template: TorusTemplateGrid | None = None, **kwargs
 ) -> jnp.ndarray:
-    """``SKIRTOR_mean_1p`` torus (auto-loaded from the packaged HDF5 grid).
+    r"""``SKIRTOR_mean_1p`` torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_incl_skirtor : float, optional
-        Inclination angle [deg]. Default 30.0.
+        ``log10(L_bol / L_sun)``. Default 10.0.
+    agn_cos_inc : float, optional
+        :math:`\cos i`, the model's one inclination (1 = face-on) [dimensionless].
+        Default ``cos(30 deg)``.
     agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs

@@ -203,12 +203,14 @@ def _joint_energy(kind, scale):
         **{k: jnp.asarray(v) for k, v in _KIND_FLAGS[kind].items()},
     )
     model = build(lfd)
+    # Observation-only algebra pinned here; model error: tests/contract/test_line_model_sigma.py
     fitter = Fitter(
         model,
         data=data,
         noise=0.05 * np.abs(data),
         data_type="joint",
         data_mask=np.zeros(data.size, int),
+        line_model_sigma=False,
     )
     loss_fn = fitter._get_or_build_loss_fn()
     data_args = fitter._build_data_args(model)

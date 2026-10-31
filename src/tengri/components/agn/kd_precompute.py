@@ -33,7 +33,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._nt_emissivity import nt_rt as _nt_rt
+from tengri.components.agn._nt_emissivity import (
+    X_MAX as _NT_X_MAX,
+    nt_h as _nt_h,
+    nt_rt as _nt_rt,
+)
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
     DEFAULT_AGN_LOG_MBH,
@@ -791,6 +795,7 @@ def _compute_bh_and_radii(
     _G_GRAV: float,
     _MSUN_G: float,
     _SIGMA_SB: float,
+    h_inf: float | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, float]:
     """Compute black hole parameters and zone radii for K&D disc.
 
@@ -830,6 +835,7 @@ def _compute_bh_and_radii(
         efficiency [all in CGS units].
     """
     from tengri.components.agn.disc import (
+        _disc_dissipation_per_mdot_c2,
         _gravitational_radius,
         _hot_flow_luminosity,
         _hot_zone_x_max,
@@ -850,7 +856,8 @@ def _compute_bh_and_radii(
     # ``_eddington_luminosity`` product never reappears here.
     l_bol_erg = 10.0**agn_log_lbol * L_SUN
     l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN - log10_l_edd), 1e-10, 1.0)
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+    # Mdot such that the disc's total Page-Thorne dissipation equals L_bol (as in ``disc.py``).
+    mdot = l_bol_erg / (_disc_dissipation_per_mdot_c2(agn_a_spin, h_inf) * _C_LIGHT**2)
 
     t_in = (
         3.0
@@ -872,6 +879,7 @@ def _compute_bh_and_radii(
         _nt_l0(r_isco_cm, t_in),
         agn_a_spin,
         x_hot_max=_hot_zone_x_max(r_isco_rg, r_sg_rg),
+        h_inf=h_inf,
     )
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, a_spin=agn_a_spin)
 
@@ -1114,11 +1122,10 @@ def kubota_done_disc_preintegrated(
     """
     from tengri.components.agn.disc import (
         _gravitational_radius,
-        _hot_flow_luminosity,
+        _hot_flow_fraction,
         _isco_radius,
         _l_seed_geometric,
         _log10_eddington_luminosity,
-        _nt_l0,
         beloborodov_gamma_hot,
     )
     from tengri.utils.physics_constants import (
@@ -1137,6 +1144,8 @@ def kubota_done_disc_preintegrated(
     log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): L_bol is the knob; Eddington ratio derived (see runtime path).
 
+    # h(inf) once: it sets Mdot, the hot-flow cap and the corona share.
+    h_inf = _nt_h(jnp.log(_NT_X_MAX), agn_a_spin)
     r_hot_cm, r_warm_cm, r_out_cm, t_in, _eta = _compute_bh_and_radii(
         agn_log_mbh,
         agn_a_spin,
@@ -1148,6 +1157,7 @@ def kubota_done_disc_preintegrated(
         _G_GRAV,
         _MSUN_G,
         _SIGMA_SB,
+        h_inf,
     )
 
     # ── Zone 1: Outer standard disc ──
@@ -1180,13 +1190,18 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    l_hot_erg = _hot_flow_luminosity(
+    # The corona's share ``s = L_hot / L_bol`` (``s <= 0.99``), as in ``disc.py``
+    # (``_hot_flow_fraction``): the corona carries ``L_hot`` and the disc and warm zones
+    # carry ``(1 - s) L_bol`` (#2733).
+    l_bol_unit = 10.0**agn_log_lbol * L_SUN
+    hot_fraction = _hot_flow_fraction(
         agn_f_hard,
-        log10_l_edd,
-        _nt_l0(r_isco_cm, t_in),
+        log10_l_edd - (agn_log_lbol + _LOG10_LSUN),
         agn_a_spin,
         x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        h_inf=h_inf,
     )
+    l_hot_erg = hot_fraction * l_bol_unit
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, a_spin=agn_a_spin)
@@ -1223,12 +1238,18 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
-    l_bol_unnorm = _TWO_FACES * (outer_bol + warm_bol) + l_hot_erg
-    l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
-    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, representable_denominator(1e-100))
+    # The disc and warm zones carry ``(1 - s) L_bol`` and the corona
+    # ``s L_bol = L_hot``, with ``s`` the hot flow's share of L_bol (``s <= 0.99``), as in the
+    # full-wavelength path; the output scales linearly with ``agn_lum_ratio``.
+    l_disc_unnorm = _TWO_FACES * (outer_bol + warm_bol)
+    scale_disc = (
+        l_bol_unit
+        * (1.0 - hot_fraction)
+        / jnp.maximum(l_disc_unnorm, representable_denominator(1e-100))
+    )
 
-    total_phot = outer_phot + warm_phot + hot_phot
-    return total_phot * scale
+    total_phot = (outer_phot + warm_phot) * scale_disc + hot_phot
+    return total_phot * agn_lum_ratio
 
 
 # ───────────────────────────────────────────────────────────────────

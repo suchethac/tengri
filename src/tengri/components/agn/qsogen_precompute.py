@@ -45,7 +45,6 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import PreintegratedGrid
-from tengri.utils.interpolation import edges_for_grid
 
 # ── Axis definitions ──────────────────────────────────────
 
@@ -329,10 +328,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: return a wrapped lookup that takes remaining free params
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    if axes:
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    else:
-        edges = ()
 
     @jax.jit
     def qsogen_phot_collapsed(agn_log_lbol, *free_axis_values):
@@ -341,9 +336,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         l_bol_lsun = 10.0**agn_log_lbol
-        normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
+        normed = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_bol_lsun * normed
 
     return qsogen_phot_collapsed

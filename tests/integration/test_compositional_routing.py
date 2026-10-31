@@ -71,7 +71,7 @@ class TestEvolvingZRouting:
         return Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -136,7 +136,7 @@ class TestChemEvolRouting:
         return Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -284,6 +284,8 @@ class TestTabularSFHRouting:
         delayed = SFH_REGISTRY["delayed"]
         kw = {}
         for public, (internal, scale, offset) in delayed.internal_param_map.items():
+            if public.endswith("_frac"):
+                continue  # the Gyr twin carries this onset into the registry fn
             val = {
                 "sfh_delayed_log_total_mass": 10.0,
                 "sfh_delayed_tau_gyr": 2.0,
