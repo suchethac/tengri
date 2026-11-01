@@ -116,7 +116,8 @@ _NEOGAL_TAG = "Gutkin+2016 NEOGAL star-forming nebular tables"
 # Labels at or above 2000 A carry NIST air wavelengths (converted once below);
 # the rest are vacuum values as stored.
 _LINES: tuple[tuple[str, float, float, bool], ...] = (
-    ("[OII]3727", 3727.0, 3727.09, True),  # [OII] doublet blend
+    # [O II] 3726 component (NEOGAL's label names the doublet); NIST air 3726.032 A.
+    ("[OII]3727", 3727.0, 3726.032, True),
     ("Hbeta", 4861.0, 4861.33, True),
     ("[OIII]4959", 4959.0, 4958.91, True),
     ("[OIII]5007", 5007.0, 5006.84, True),

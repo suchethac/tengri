@@ -31,6 +31,8 @@ import h5py
 import numpy as np
 import pytest
 
+from tengri.observation.eline_catalog import EMISSION_LINES
+
 pytestmark = pytest.mark.regression_paper
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -63,6 +65,20 @@ _UV_LABEL_VACUUM = {
     "[SiIII]1883": 1882.71,
     "SiIII]1888": 1892.03,
     "CIII]1908": 1908.73,
+}
+
+
+#: Converted optical labels and their catalog rows (vacuum, tengri.observation.eline_catalog).
+_OPTICAL_LABEL_CATALOG = {
+    "[OII]3727": "OII3726",
+    "Hbeta": "Hbeta",
+    "[OIII]4959": "OIII4959",
+    "[OIII]5007": "OIII5007",
+    "[NII]6548": "NII6548",
+    "Halpha": "Halpha",
+    "[NII]6584": "NII6583",
+    "[SII]6717": "SII6716",
+    "[SII]6731": "SII6731",
 }
 
 
@@ -196,6 +212,10 @@ def test_hbeta_vacuum_is_4862p68_and_uv_labels_unchanged(tracked):
     names = [n.decode() if isinstance(n, bytes) else str(n) for n in tracked["line_names"]]
     assert names[1] == "Hbeta"
     assert wave[1] == pytest.approx(4862.68, abs=0.01)
+    assert wave[names.index("[OII]3727")] == pytest.approx(3727.09, abs=0.05)
+    for name, catalog_name in _OPTICAL_LABEL_CATALOG.items():
+        idx = names.index(name)
+        assert wave[idx] == pytest.approx(EMISSION_LINES[catalog_name][0], abs=0.05), name
     for name, expected in _UV_LABEL_VACUUM.items():
         idx = names.index(name)
         assert wave[idx] == pytest.approx(expected, abs=1e-9), name
