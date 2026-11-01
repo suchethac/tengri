@@ -47,6 +47,9 @@ SFH_CITATIONS: dict[str, list[str]] = {
     "continuity_flex": ["leja2019"],
     "dirichlet": ["leja2019"],
     "dense_basis": ["iyer2020"],
+    # Current-episode types (#3177): the BEAGLE parameterization of the episode.
+    "recent": ["chevallard2016"],
+    "recent_ssfr": ["chevallard2016"],
     # The SFH shape is Leja+2019; the Wang+2024 prior paper has no bundled
     # BibTeX entry yet, so only the half that exists is claimed.
     "prospector_beta": ["leja2019"],

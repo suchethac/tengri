@@ -612,6 +612,9 @@ def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
         "short_doc": getattr(entry, "short_doc", ""),
         "use": _usage_hint(name, kind),
     }
+    doc = getattr(entry, "doc", "")
+    if doc:
+        out["doc"] = doc
     params = _extract_params(entry, kind)
     if params:
         out["params"] = params
@@ -1248,6 +1251,10 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
         if ctype in ("mixture", "modulator"):
             m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
+        # A current episode (#3177) is spliced over a smooth member, so its
+        # composed form names ``delayed`` beside it.
+        elif ctype == "current":
+            m["use"] = f"SEDModel.build(..., sfh={{'type': ['delayed', '{m['name']}']}})"
     out = _filter_menu(out, "status", status, listing="list_sfh_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
