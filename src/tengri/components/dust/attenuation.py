@@ -259,6 +259,105 @@ def vw07_diff(
     return (wavelength / V_BAND_ANGSTROM) ** (-0.7)
 
 
+# ── Chevallard+2013 optical-depth-dependent ISM curve ─────────────
+
+_C13_NV_AMPLITUDE = 2.8
+_C13_NV_SQRT_COEFF = 3.0
+_C13_B_INTERCEPT = 0.3
+_C13_B_SLOPE = 0.05
+_C13_LAMBDA_MIN_UM = 0.1
+_C13_LAMBDA_MAX_UM = 2.5
+_C13_PIVOT_UM = 0.55
+
+
+@register_dust_law(
+    "chevallard13",
+    citation="Chevallard et al. 2013 (MNRAS 432, 2061)",
+    short_doc="Chevallard+13 optical-depth-dependent diffuse ISM curve",
+)
+def chevallard13(
+    wavelength: jnp.ndarray,
+    tau_v: float = 1.0,
+) -> jnp.ndarray:
+    r"""Chevallard+2013 quasi-universal diffuse-ISM attenuation curve.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,) [Angstrom]
+        Wavelength grid.
+    tau_v : float [dimensionless]
+        Diffuse-ISM V-band optical depth :math:`\hat\tau_V^{\rm ISM}` of the
+        screen the curve is applied to. Default 1.0, so the registry's
+        one-argument sweeps evaluate the curve at tau_V = 1.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve :math:`k(\lambda, \tau_V)`, where
+        :math:`k(5500\,\text{\AA}) = 1` for every :math:`\tau_V`. [dimensionless]
+        The attenuation optical depth of the screen is
+        :math:`\hat\tau_\lambda = \tau_V \, k(\lambda, \tau_V)`; the screen
+        multiplies by its own depth.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes (:math:`\sqrt{\tau_V}` is floored at
+    :math:`10^{-10}`, so the gradient with respect to :math:`\tau_V` is finite at
+    :math:`\tau_V = 0`).
+
+    **Approximation**: the index is held at its 0.1 and 2.5 µm values outside the
+    range fitted by Chevallard et al. (2013) [1]_.
+
+    The curve is set by the V-band index :math:`n_V(\tau_V)` and a
+    wavelength-dependent index :math:`n(\lambda, \tau_V)`:
+
+    .. math::
+
+        n_V(\tau_V) = \frac{2.8}{1 + 3\sqrt{\tau_V}}, \qquad
+        b(\tau_V) = 0.3 - 0.05\,\tau_V
+
+    .. math::
+
+        n(\lambda, \tau_V) = n_V(\tau_V) + b(\tau_V)\,(\lambda/\mu\text{m} - 0.55)
+
+    .. math::
+
+        k(\lambda, \tau_V) = \left(\frac{\lambda}{5500\,\text{\AA}}\right)^{-n(\lambda, \tau_V)}
+
+    Here :math:`\lambda` is the wavelength in Å, and :math:`\tau_V` is the
+    dimensionless V-band optical depth. This is Eqs. 9-11 of Chevallard et al.
+    (2013) [1]_, restated as Eqs. 2.11-2.14 of Chevallard & Charlot (2016) [2]_.
+    The fit is valid for :math:`0.1 \le \lambda \le 2.5\,\mu\text{m}`; the
+    index :math:`n` uses :math:`\lambda` clipped to that range.
+
+    This law needs the screen's own depth (``tau_v``). The birth-cloud screen is
+    not part of this law. Plumbing ``tau_v`` through the two-component screens is
+    a later change.
+
+    Implements the ``ccww13_universal`` attenuation option of BEAGLE (Chevallard
+    & Charlot 2016 [2]_), as published; validated against the equations.
+
+    References
+    ----------
+    .. [1] S. Chevallard, S. Charlot, B. Wandelt, and V. Wild, "Insights into the
+       content and spatial distribution of dust from the integrated spectral
+       properties of galaxies," MNRAS, 432, 2061 (2013).
+       https://doi.org/10.1093/mnras/stt523 (arXiv:1303.6631)
+
+    .. [2] J. Chevallard and S. Charlot, "Modelling and interpreting spectral
+       energy distributions of galaxies with BEAGLE," MNRAS, 462, 1415 (2016).
+       https://doi.org/10.1093/mnras/stw1756 (arXiv:1603.03037)
+    """
+    sqrt_tau = jnp.sqrt(jnp.maximum(tau_v, 1e-10))
+    n_v = _C13_NV_AMPLITUDE / (1.0 + _C13_NV_SQRT_COEFF * sqrt_tau)
+    b = _C13_B_INTERCEPT - _C13_B_SLOPE * tau_v
+    lam_um = jnp.clip(wavelength / 1.0e4, _C13_LAMBDA_MIN_UM, _C13_LAMBDA_MAX_UM)
+    n = n_v + b * (lam_um - _C13_PIVOT_UM)
+    return (wavelength / V_BAND_ANGSTROM) ** (-n)
+
+
 @register_dust_law(
     "calzetti",
     citation="Calzetti et al. 2000 (ApJ 533, 682)",
