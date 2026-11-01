@@ -901,7 +901,8 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
     UserWarning
         When the grid does not span 1600 A (see the cases above), naming the
         grid range and the method used. Emitted when ``wave`` is concrete;
-        under a JAX trace the grid coverage is not decided (see Notes).
+        under a JAX trace no warning is raised, and the same three cases are
+        selected from the traced grid (see Notes).
 
     Notes
     -----
@@ -914,16 +915,25 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
     covered portion is used. The fit weights depend only on the grid, so
     gradients with respect to the SED are finite and exact for the linear fit.
 
-    **Coverage is static.** For a concrete ``wave`` the branch is taken in
-    Python, so the unused branch is never traced. Under a JAX trace (a
-    ``wave`` threaded through ``jax.jit`` as an argument) the grid cannot be
-    inspected, so the value is NaN where ``wave`` does not span 1600 A. The
-    shipped SSP grids all span it.
+    **Coverage under a trace.** For a concrete ``wave`` the branch is taken in
+    Python, so the unused branch is never traced. Under a JAX trace (a ``wave``
+    threaded through ``jax.jit`` as an argument) the three cases are selected
+    with ``jnp.where`` on the traced coverage, and the values match the
+    concrete path: the in-grid interpolation where the grid spans 1600 A, the
+    power-law extrapolation otherwise when two window points exist, and the
+    nearest edge value otherwise. The power-law weights are the same weighted
+    least-squares fit, written with masked sums so the shapes stay static.
+    No branch divides by or takes the log of an unselected value, so the
+    gradient is finite in every case. **A traced call cannot warn**: the
+    coverage warnings of the concrete path are not emitted under a trace.
 
-    **JIT/grad/vmap-compatible**: yes for a concrete grid (the usual case).
-    Under a trace, yes, with the NaN rule above.
+    **JIT/grad/vmap-compatible**: yes, concrete or traced ``wave``; float32
+    safe for the log form (see :func:`compute_log_uv_luminosity_1600`).
     """
     mode, weights = _uv_anchor_plan(wave)
+    nu_1600 = C_AA / 1600.0
+    if mode == "traced":
+        return nu_1600 * _traced_l_nu_1600(sed, wave)
     if mode == "extrapolate":
         log_l_nu = jnp.log10(jnp.maximum(sed, representable_floor(_LOG_L_NU_FLOOR)))
         l_nu_1600 = jnp.power(10.0, jnp.dot(weights, log_l_nu))
@@ -931,8 +941,54 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
         l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed)
     else:
         l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed, left=jnp.nan, right=jnp.nan)
-    nu_1600 = C_AA / 1600.0
     return nu_1600 * l_nu_1600
+
+
+def _calzetti_window_mask_traced(wave: jnp.ndarray) -> jnp.ndarray:
+    """True where a traced grid point lies in one of the Calzetti 1994 UV windows."""
+    in_window = jnp.zeros(wave.shape, dtype=bool)
+    for lo, hi in CALZETTI94_WINDOWS_AA:
+        in_window = in_window | ((wave >= lo) & (wave <= hi))
+    return in_window
+
+
+def _traced_uv_candidates(sed: jnp.ndarray, wave: jnp.ndarray):
+    """The traced-path candidates: ``(use_fit, log10_l_fit, l_edge_or_in_grid)``.
+
+    ``use_fit`` is True where the grid stops short of 1600 A and has at least
+    two Calzetti-window points. ``log10_l_fit`` is the power-law extrapolation
+    in ``log10 L_nu`` (weighted least squares of ``log10 L_nu`` on
+    ``log10 lambda`` over the window points, evaluated at 1600 A, with
+    centered abscissae so the normal equations stay well conditioned).
+    ``l_edge_or_in_grid`` is the clamped linear interpolation: the in-grid value
+    where the grid spans 1600 A, and the nearest edge value otherwise.
+
+    Every denominator is replaced by a safe value where it would be zero, and
+    every log argument is floored, so all three are finite for any input.
+    """
+    spans = _grid_spans_1600(wave)
+    fit = _calzetti_window_mask_traced(wave)
+    n_fit = jnp.sum(fit)
+    use_fit = (~spans) & (n_fit >= _UV_MIN_FIT_POINTS)
+    n_safe = jnp.where(n_fit >= _UV_MIN_FIT_POINTS, n_fit, 1).astype(wave.dtype)
+    x = jnp.where(fit, jnp.log10(jnp.where(fit, wave, 1.0)), 0.0)
+    x_mean = jnp.sum(x) / n_safe
+    u = jnp.where(fit, x - x_mean, 0.0)
+    suu = jnp.sum(u * u)
+    suu_safe = jnp.where(suu > 0.0, suu, 1.0)
+    x0 = jnp.log10(jnp.asarray(UV_ANCHOR_AA, dtype=wave.dtype))
+    weights = jnp.where(fit, 1.0 / n_safe + (x0 - x_mean) * u / suu_safe, 0.0)
+    log_l_nu = jnp.log10(jnp.maximum(sed, representable_floor(_LOG_L_NU_FLOOR)))
+    log_fit = jnp.dot(weights, log_l_nu)
+    l_interp = jnp.interp(UV_ANCHOR_AA, wave, sed)
+    return use_fit, log_fit, l_interp
+
+
+def _traced_l_nu_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """``L_nu(1600 A)`` under a trace: the traced selection of the three cases."""
+    use_fit, log_fit, l_interp = _traced_uv_candidates(sed, wave)
+    l_fit = pow10(jnp.where(use_fit, log_fit, 0.0))
+    return jnp.where(use_fit, l_fit, l_interp)
 
 
 #: ``log10(c / 1600 A)`` [dex re Hz]: the 1600 A pivot frequency, kept in the
@@ -987,13 +1043,17 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
     Valid when the UV continuum is a power law between the covered window and
     1600 A.
 
-    **JIT/grad/vmap-compatible**: yes for a concrete grid. Equal to
+    **JIT/grad/vmap-compatible**: yes for a concrete or traced grid; under a
+    trace the coverage cases are selected with ``jnp.where`` and no warning is
+    raised (see :func:`compute_uv_luminosity_1600`). Equal to
     ``log10(compute_uv_luminosity_1600(...))`` to ~1e-15 relative in float64,
     and finite in float32 wherever :math:`L_\nu` itself is. The extrapolated
     branch takes the log of :math:`L_\nu` under a representable floor, so a
     zero :math:`L_\nu` at a fit point is finite (very negative), not ``-inf``.
     """
     mode, weights = _uv_anchor_plan(wave)
+    if mode == "traced":
+        return _traced_log_uv_1600(sed, wave)
     if mode == "extrapolate":
         log_l_nu = jnp.log10(jnp.maximum(sed, representable_floor(_LOG_L_NU_FLOOR)))
         return jnp.dot(weights, log_l_nu) + LOG10_NU_1600
@@ -1001,10 +1061,20 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
         l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed)
         return log10_magnitude(l_nu_1600) + LOG10_NU_1600
     l_nu_1600 = jnp.interp(UV_ANCHOR_AA, wave, sed, left=jnp.nan, right=jnp.nan)
-    log_in_grid = log10_magnitude(l_nu_1600) + LOG10_NU_1600
-    if mode == "traced":
-        return jnp.where(_grid_spans_1600(wave), log_in_grid, jnp.nan)
-    return log_in_grid
+    return log10_magnitude(l_nu_1600) + LOG10_NU_1600
+
+
+def _traced_log_uv_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """``log10(nu L_nu)`` at 1600 A under a trace: the traced selection of the three cases.
+
+    The in-grid and edge cases share ``log10_magnitude`` of the clamped
+    interpolation, so ``-inf`` for an exactly zero value is kept. The log is
+    taken of a safe ``1.0`` where the power-law case is selected, so no branch
+    carries an infinity into the gradient.
+    """
+    use_fit, log_fit, l_interp = _traced_uv_candidates(sed, wave)
+    log_interp = log10_magnitude(jnp.where(use_fit, 1.0, l_interp))
+    return jnp.where(use_fit, log_fit, log_interp) + LOG10_NU_1600
 
 
 def _grid_spans_1600(wave: jnp.ndarray) -> jnp.ndarray:
