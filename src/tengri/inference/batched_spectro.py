@@ -965,7 +965,7 @@ def fit_spectra_catalog_mcmc(
     seed: int = 0,
     init: str = "map",
     map_steps: int = 200,
-    batch_size: int | str | None = None,
+    batch_size: int | str | None = AUTO,
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
@@ -1001,8 +1001,11 @@ def fit_spectra_catalog_mcmc(
         Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
     batch_size : int, None or ``"auto"``, optional
         Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
-        (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the
-        galaxies one at a time. ``"auto"`` sizes each bucket to
+        (passed as ``batch_size`` to ``lax.map``). The default ``"auto"`` follows
+        :class:`~tengri.inference.catalog_fitter.CatalogFitter`'s rule (#1189): one
+        galaxy per dispatch is the anti-pattern, so each bucket is sized as below.
+        ``None`` is the explicit way back to one galaxy per step (a ``lax.map``
+        scan), and an integer is used as given. ``"auto"`` sizes each bucket to
         ``K = floor(B / ((32 MiB + n_data * 4 KiB) * n_chains))``, clipped to
         ``[1, n_gal]``, where ``B`` is the budget in bytes, ``n_data`` the bucket's
         largest spectrum, and ``n_chains`` the live chains per galaxy (the ChEES
