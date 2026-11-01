@@ -103,6 +103,7 @@ from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
+from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 from tengri.config.exceptions import (
     AdvisoryWarning,
     ConfigError,
@@ -5180,6 +5181,13 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
 
             result["cue_lyc_max_age_yr"] = validate_lyc_max_age_yr(neb_dict["lyc_max_age_yr"])
+        # Highest Balmer level appended above Cue's last native line (H10): None or 10-50.
+        if "balmer_series_n_max" in neb_dict:
+            from tengri.components.nebular._balmer_series import validate_balmer_series_n_max
+
+            result["cue_balmer_series_n_max"] = validate_balmer_series_n_max(
+                neb_dict["balmer_series_n_max"]
+            )
         # Opt-in: publish the line share of the Cue SED, so a spectrum can be
         # predicted without the nebular lines (Spectroscopy(nebular_lines=False)).
         if "publish_line_fraction" in neb_dict:
@@ -6013,7 +6021,9 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
-    "cue": frozenset({"nitrogen", "lyc_max_age_yr", "publish_line_fraction"}),
+    "cue": frozenset(
+        {"nitrogen", "lyc_max_age_yr", "balmer_series_n_max", "publish_line_fraction"}
+    ),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -6155,6 +6165,12 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
         _Structural("lyc_max_age_yr", "cue_lyc_max_age_yr", "all", only_types=("cue",)),
+        _Structural(
+            "balmer_series_n_max",
+            "cue_balmer_series_n_max",
+            BALMER_SERIES_N_MAX_DEFAULT,
+            only_types=("cue",),
+        ),
         _Structural(
             "publish_line_fraction", "cue_publish_line_fraction", False, only_types=("cue",)
         ),
@@ -6958,6 +6974,16 @@ def _validate_user_keys(
                     f"neb 'lyc_max_age_yr' is only available for type 'cue' (got {neb_type!r}): "
                     "it sets the oldest stellar age whose ionizing photons Cue counts, and "
                     "the other backends read a fixed age range from their own grids."
+                )
+
+            if (
+                "balmer_series_n_max" in top_val
+                and "balmer_series_n_max" not in neb_type_specific_keys
+            ):
+                raise ConfigError(
+                    f"neb 'balmer_series_n_max' is only available for type 'cue' (got "
+                    f"{neb_type!r}): it sets the highest Balmer level appended above Cue's "
+                    "last native line, H10, and the grid backends carry their own catalogs."
                 )
 
             if (

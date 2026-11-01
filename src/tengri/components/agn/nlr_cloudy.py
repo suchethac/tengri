@@ -378,7 +378,9 @@ def get_cue_agn_backend(weights_path: str | None = None):
         from tengri.components.nebular.cue import CueBackend
 
         with _eager_construction():
-            _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
+            _CUE_AGN_BACKEND = CueBackend(
+                weights_path or _DEFAULT_CUE_WEIGHTS_PATH, balmer_series_n_max=None
+            )
     return _CUE_AGN_BACKEND
 
 
