@@ -285,11 +285,10 @@ def test_padding_quantum_leaves_loglik_unchanged_with_lines(synthetic_ssp):
 
 
 def test_refusals_marginalized_broad_and_line_count(synthetic_ssp):
-    """(e): marginalized lines, eline_broad and a different line count are refused."""
+    """(e): eline_broad and a different line count are refused; flat marginalized lines pass."""
     wave = _grid(160, 4000.0, 7500.0)
     marginalized = _template(synthetic_ssp, wave, eline_mode="marginalized")
-    with pytest.raises(ValueError, match="marginalizes emission lines"):
-        check_template_model(marginalized)
+    check_template_model(marginalized)
 
     broad = _template(synthetic_ssp, wave, eline_broad=True)
     with pytest.raises(ValueError, match="eline_broad=False"):
