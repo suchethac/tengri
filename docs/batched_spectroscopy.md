@@ -320,11 +320,8 @@ not an estimate.
 
 ## Float32
 
-Float32 is a supported mode. The stack's tests check that the float32 gradients are finite and
-nonzero at log10 M = 4.0, with the data scaled to the working range. The per-galaxy spectroscopic
-forward itself is not finite in pure float32 at every mass. On the fixture of
-[#3149](https://github.com/suchethac/tengri/issues/3149) it is non-finite above log10 M of about 5.25.
-Check the fit output for finite values before using a float32 catalog fit.
+Float32 is a supported mode. The stack's tests check that the float32 likelihoods and their
+gradients are finite and nonzero for a galaxy of 10^10 Msun on a physically normalized SSP.
 
 ## What the stack does not do
 

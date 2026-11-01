@@ -319,13 +319,18 @@ def test_chunk_size_splits_the_bucket_into_vmapped_chunks(synthetic_ssp, monkeyp
     template = _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
     batches = build_spectro_batches([_record(g) for g in mock], quantum=420, model=template)
     calls = []
-    original = module._fit_chunk
 
-    def counting(*args, **kwargs):
-        calls.append(int(args[1].z.shape[0]))
-        return original(*args, **kwargs)
+    def counted(name):
+        original = getattr(module, name)
 
-    monkeypatch.setattr(module, "_fit_chunk", counting)
+        def counting(*args, **kwargs):
+            calls.append(int(args[1].z.shape[0]))
+            return original(*args, **kwargs)
+
+        return counting
+
+    monkeypatch.setattr(module, "_lbfgs_chunk", counted("_lbfgs_chunk"))
+    monkeypatch.setattr(module, "_fit_chunk", counted("_fit_chunk"))
     fit_spectra_map_vmap(template, batches, n_steps=2, chunk_size=1)
     assert calls == [1, 1, 1]
     calls.clear()

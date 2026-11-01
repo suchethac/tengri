@@ -92,6 +92,7 @@ from tengri.components.agn.blocks.runner import (
 from tengri.components.agn.blocks.torus_library_transmission import below_library_index
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
+    preset_overrides,
     resolve_agn_model,
 )
 from tengri.components.template_threading import TemplateThreading
@@ -726,6 +727,29 @@ class AGNSEDComponent(TemplateThreading):
             "torus": self.config.agn_torus_block,
             "attenuation": self.config.agn_attenuation_block,
         }
+
+    def resolved_recipe(self) -> dict[str, str]:
+        """The block selectors and normalization the AGN model actually evaluates with.
+
+        For a deprecated preset (``agn={'type': 'skirtor'}``) the preset's selectors and norm
+        override the config, as they do in :func:`resolve_agn_model`; :meth:`block_recipe`
+        returns the config, which holds the grammar's ``"none"`` selectors for a preset. For a
+        ``composable`` model the two agree.
+
+        Returns
+        -------
+        dict of str to str
+            The six stages of :meth:`block_recipe`, plus ``"norm"`` (``agn_norm``) and
+            ``"polar_law"`` (``agn_polar_law``).
+        """
+        overrides = preset_overrides(self.config.model)
+        resolved = {
+            stage: overrides.get(f"agn_{stage}_block", block)
+            for stage, block in self.block_recipe().items()
+        }
+        resolved["norm"] = overrides.get("agn_norm", self.config.agn_norm)
+        resolved["polar_law"] = overrides.get("agn_polar_law", self.config.agn_polar_law)
+        return resolved
 
     def _agn_call_kwargs(self, params, template_data, wave) -> dict:
         """The keyword arguments the AGN model function is called with, before the coupling.

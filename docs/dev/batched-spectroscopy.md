@@ -200,6 +200,21 @@ a leaf, if it changes a shape or a branch.
   mode (`jax.enable_x64(False)`) returns NaN for this fixture's flux scale on the
   batched forward, for the plain Gaussian term as well as the marginal, so the float32
   test is not yet green.
+
+- 2026-11-01, #3193: the batched MAP and the catalog warm start run L-BFGS to gradient
+  tolerance, as the per-galaxy Fitter does. `fit_spectra_map_vmap(optimizer="lbfgs")` is
+  the default: `optax.lbfgs` with a zoom line search, one `while_loop` per galaxy under
+  `vmap`, stopping when the largest standardized gradient entry is below `gtol` (1e-5) or
+  at `n_steps` iterations. `optimizer="adam"` keeps the previous driver. `init="map"` in
+  `fit_spectra_catalog_mcmc` uses the same default. On twelve mocks (all-DPL SFH, mass
+  free, 10 to 10.6 dex truth) the Adam 300-step MAP is within 0.0017 dex of truth and the
+  L-BFGS MAP within 9e-5 dex; the per-galaxy Fitter MAP agrees with L-BFGS to 6e-4 dex.
+  Wall time with compile included: 4.2 s per galaxy for Adam (300 steps), 1.0 s for L-BFGS.
+  `tests/contract/test_batched_map_lbfgs.py` compares every standardized parameter with
+  the Fitter MAP where the Fitter's point is stationary (Newton decrement below 1e-8 nats,
+  as in `tests/inference/test_profile_mass.py`), and requires the batched point to be no
+  higher in the negative log-posterior where it is not; the Adam driver is pinned.
+
 - 2026-11-01, #3138: `eline_prior_type="model"` on the per-galaxy line-only marginalized
   likelihood. Each line has a Gaussian prior centered on the model's attenuated line
   luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.

@@ -445,6 +445,31 @@ def map_with_shared(fn, xs, shared, *, batch_size):
     return mapped(shared, xs)
 
 
+def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) -> int:
+    """Chains one galaxy carries through the catalog engine, the width its budget divides by.
+
+    ChEES vmaps its resolved adaptation ensemble, a superset of the sampling chains,
+    so its live width is the ensemble. Every other sampler vmaps ``n_chains``.
+
+    Parameters
+    ----------
+    sampler : str
+        Catalog sampler tag, one of ``"nuts"``, ``"hmc"``, ``"chees"`` or ``"ghmc"``.
+    n_chains : int
+        Requested sampling chains per galaxy.
+    n_ensemble : int or ``"auto"``
+        ChEES adaptation ensemble; ignored by the other samplers.
+
+    Returns
+    -------
+    int
+        Live chains per galaxy, ``>= 1``.
+    """
+    if sampler == "chees":
+        return _resolve_chees_ensemble(n_ensemble, n_chains)
+    return max(1, int(n_chains))
+
+
 def build_catalog_mcmc_engine(
     fitter,
     sampler: str,

@@ -494,6 +494,39 @@ def real_ssp_only():
             pytest.skip("only the synthetic SSP fixture is present (#613); needs the real grid")
 
 
+def _renormalize_to_physical_peak(ssp, peak=1e-12):
+    """Return ``ssp`` with its flux scaled so ``max(ssp_flux) == peak``.
+
+    ``peak`` is in Lsun/Hz/Msun. A real FSPS SSP (``fsps_prsc_miles_chabrier``)
+    peaks at ~9.3e-13 Lsun/Hz/Msun, so 1e-12 sits at that scale; a float32
+    forward on the raw synthetic flux overflows at masses where a real SSP does not.
+    """
+    scale = peak / float(jnp.max(ssp.ssp_flux))
+    return ssp._replace(ssp_flux=ssp.ssp_flux * scale)
+
+
+@pytest.fixture(scope="session")
+def synthetic_ssp_physical(synthetic_ssp):
+    """:func:`synthetic_ssp` renormalized to a physical peak of 1e-12 Lsun/Hz/Msun.
+
+    Matches the peak of ``fsps_prsc_miles_chabrier`` (~9.3e-13), so a float32
+    forward at a realistic mass is in range (#3149). The wavelength and age
+    grids are those of :func:`synthetic_ssp`.
+    """
+    return _renormalize_to_physical_peak(synthetic_ssp)
+
+
+@pytest.fixture(scope="session")
+def synthetic_ssp_wide_physical(synthetic_ssp_wide):
+    """:func:`synthetic_ssp_wide` renormalized to a physical peak of 1e-12 Lsun/Hz/Msun.
+
+    Matches the peak of ``fsps_prsc_miles_chabrier`` (~9.3e-13), so a float32
+    forward at a realistic mass is in range (#3149). The wavelength and age
+    grids are those of :func:`synthetic_ssp_wide`.
+    """
+    return _renormalize_to_physical_peak(synthetic_ssp_wide)
+
+
 @pytest.fixture(scope="session")
 def sdss_filters():
     """Load SDSS ugriz filters once per session."""
@@ -515,6 +548,9 @@ def synthetic_ssp():
     ``ssp_lgmet`` is absolute log10(Z), as in ``SSPData``: the nodes are
     ``logzsol = [-1.5, -0.5, 0.0]`` shifted by ``LOG10_ZSUN``, so the grid spans
     ``logzsol`` -1.5 to 0.0 and the declared ``met_logzsol`` prior lies inside it.
+
+    Its flux is not physically normalized, so any float32 test must use
+    :func:`synthetic_ssp_physical`.
     """
     n_met, n_age, n_wave = 3, 20, 100
     wave = jnp.linspace(3000.0, 10000.0, n_wave)
@@ -538,6 +574,9 @@ def synthetic_ssp_wide():
     the gitignored ``data/ssp_*.h5`` grids, instead of silently skipping (which
     is how #629/#617 regressions reached main). Use with :func:`synthetic_tophat_obs`.
     Physics-value tests (crossval, regression_paper) still need real SSPs.
+
+    Its flux is not physically normalized, so any float32 test must use
+    :func:`synthetic_ssp_wide_physical`.
     """
     n_met, n_age = 3, 25
     wave = jnp.logspace(2.0, 7.0, 1600)  # 100 Å – 1 mm (1e7 Å)

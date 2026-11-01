@@ -49,6 +49,7 @@ from tengri.components.nebular._shared import render_nebular_lines as _place_lin
 # Physical constants
 from tengri.utils.grid_interp import library_lookup as _library_lookup
 from tengri.utils.host_array import device_table, host_array
+from tengri.utils.scale import representable_floor
 
 #: The 3MdB template labels are integer names, some set by hand up to 1.4 Angstrom
 #: from the air wavelength (Hg 4341, [Ar III] 7135, [S III] 9532); its 7320 and
@@ -664,6 +665,79 @@ def shock_line_ratios(
         "SII_6716A": r_sii / 2.0,
         "SII_6731A": r_sii / 2.0,
     }
+
+
+#: Reference Hα luminosity the float32 shock path carries the shock shape at, as
+#: log10 of erg/s (#1206). The shock SED is exactly linear in L_Hα, so any split
+#: of the scale is exact; the split point decides whether float32 survives. A
+#: unit-Hα reference puts ~41 dex on one log10 offset, whose Jacobian is inf in
+#: float32 while the forward stays finite. At 1e30 the carried array and its
+#: derivative both sit well inside float32.
+SHOCK_LHA_LOG_REF: float = 30.0
+
+
+def factored_l_bol(sed, nu):
+    r"""Bolometric ``-trapz(sed, nu)`` as a power-of-two mantissa and exponent.
+
+    Returns ``(hat, exponent)`` with ``-trapz(sed, nu) == ldexp(hat, exponent)``.
+    The integral is taken of ``sed`` divided by ``2**exponent``, where the
+    exponent is the binary exponent of the peak of ``|sed|``, so the quadrature
+    runs on values of order one. A power of two is exact in binary floating
+    point, so the restored value is the unfactored integral to the last bit in
+    float64. The peak is a ``stop_gradient`` factorization constant; the
+    derivative runs through ``sed`` alone.
+
+    Parameters
+    ----------
+    sed : ndarray, shape (n_wave,)
+        Rest-frame SED [erg/s/Hz].
+    nu : ndarray, shape (n_wave,)
+        Frequency grid [Hz], ascending.
+
+    Returns
+    -------
+    hat : ndarray, scalar
+        Mantissa integral, dimensionless. An all-zero SED gives exponent 0.
+    exponent : ndarray, scalar, int32
+        Binary exponent of the peak [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The integrated bolometric luminosity of a 1e10 Msun
+    galaxy is ~1e46 erg/s, past the float32 ceiling of 3.4e38, so the linear
+    integral cannot be formed in float32 at all.
+    """
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
+    exponent = jnp.frexp(peak)[1]
+    hat = -jnp.trapezoid(jnp.ldexp(sed, -exponent), nu)
+    return hat, exponent
+
+
+def shock_log10_halpha_anchor(hat, exponent, frac):
+    r"""``log10`` of the shock H-alpha anchor from a factored bolometric integral.
+
+    The anchor is :math:`f\,\max(10^{-3} L_\mathrm{bol}, 10^{-30})` [erg/s], as
+    the shock template is normalized to a fraction of the galaxy's approximate
+    H-alpha. It is returned in log10 so that a ~1e41 erg/s value is never formed
+    in float32.
+
+    Parameters
+    ----------
+    hat, exponent
+        Output of :func:`factored_l_bol`.
+    frac : float or ndarray
+        Fraction of H-alpha channeled into shocks [dimensionless].
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the anchor [dex, erg/s].
+    """
+    log_l_bol = jnp.log10(jnp.maximum(hat, representable_floor(1e-30))) + exponent * _LOG10_2
+    return jnp.log10(jnp.maximum(frac, representable_floor(1e-30))) + log_l_bol - 3.0
+
+
+_LOG10_2 = float(jnp.log10(2.0))
 
 
 def _shock_line_arrays(
