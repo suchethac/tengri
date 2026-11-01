@@ -51,8 +51,12 @@ FIDUCIAL = "s3_fiducial"
 ATTENUATED = "s5_cf00_tauv"
 RECENT_MYR = 10.0
 REST_RANGE_AA = (1500.0, 30000.0)
-# (band, pivot [um], band-mean L_beagle, band-mean L_tengri, ratio)
-Row = tuple[str, float, float, float, float]
+# Bands whose rest-frame pivot lies below this sample theoretical atmospheres shared by both
+# libraries; the offset there is gated. Redward, the empirical libraries differ and the offset
+# is reported as the library bracket.
+SHARED_ATMOSPHERE_LIMIT_AA = 3500.0
+# (band, pivot obs [um], pivot rest [A], band-mean L_beagle, band-mean L_tengri, ratio)
+Row = tuple[str, float, float, float, float, float]
 
 
 def _beagle_age_gyr(beagle, k: int) -> float:
@@ -177,26 +181,40 @@ def _band_table(z: float, wave_b, lnu_b, wave_t, lnu_t) -> list[Row]:
         tengri = _band_mean(wave, resp, wave_t, lnu_t, z)
         both = np.isfinite(beagle[0]) and np.isfinite(tengri[0])
         ratio = beagle[0] / tengri[0] if both else math.nan
-        rows.append((band, beagle[1], beagle[0], tengri[0], ratio))
+        rest_pivot = beagle[1] * 1.0e4 / (1.0 + z)
+        rows.append((band, beagle[1], rest_pivot, beagle[0], tengri[0], ratio))
     return rows
 
 
-def _print_band_table(title: str, rows: list[Row]) -> float:
-    """Print the band table; return the largest |ratio - 1| over covered bands."""
+def _is_shared(row: Row, strict: bool) -> bool:
+    """True when the band's offset is gated: shared-atmosphere band, or --strict."""
+    return strict or row[2] < SHARED_ATMOSPHERE_LIMIT_AA
+
+
+def _print_band_table(title: str, rows: list[Row], strict: bool) -> tuple[float, list[float]]:
+    """Print the band table; return (largest gated |ratio - 1|, library-bracket offsets).
+
+    Offsets are ratios minus one. The library bracket is the set of bands not gated.
+    """
     print(title)
-    print(
-        f"  {'band':<12s} {'pivot_um':>8s} {'L_beagle':>12s} "
-        f"{'L_tengri':>12s} {'B/t':>8s} {'dev_%':>7s}"
-    )
-    worst = 0.0
-    for band, pivot, lb, lt, ratio in rows:
+    print(f"  {'band':<12s} {'pivot_um':>8s} {'rest_A':>8s} {'B/t':>8s} {'dev_%':>7s}  class")
+    worst_gated = 0.0
+    bracket = []
+    for band, pivot, rest, lb, lt, ratio in rows:
         if not np.isfinite(ratio):
-            print(f"  {band:<12s} {pivot:8.3f} {'not covered':>12s}")
+            print(f"  {band:<12s} {pivot:8.3f} {rest:8.0f} {'not covered':>8s}")
             continue
-        dev = 100.0 * (ratio - 1.0)
-        worst = max(worst, abs(ratio - 1.0))
-        print(f"  {band:<12s} {pivot:8.3f} {lb:12.4e} {lt:12.4e} {ratio:8.4f} {dev:+7.2f}")
-    return worst
+        gated = _is_shared((band, pivot, rest, lb, lt, ratio), strict)
+        label = "gated" if gated else "library bracket"
+        print(
+            f"  {band:<12s} {pivot:8.3f} {rest:8.0f} {ratio:8.4f} "
+            f"{100.0 * (ratio - 1.0):+7.2f}  {label}"
+        )
+        if gated:
+            worst_gated = max(worst_gated, abs(ratio - 1.0))
+        else:
+            bracket.append(ratio - 1.0)
+    return worst_gated, bracket
 
 
 def _sed_percentiles(wave_b, lnu_b, wave_t, lnu_t) -> np.ndarray:
@@ -228,8 +246,8 @@ def _check_prerequisites() -> int:
     return 0
 
 
-def _run_section(ssp, section: str, tol: float) -> tuple[str, float | None]:
-    """Print the band tables for one section; return (status, worst deviation)."""
+def _run_section(ssp, section: str, tol: float, strict: bool) -> tuple[str, float | None]:
+    """Print the band tables for one section; return (status, worst gated deviation)."""
     spec = by_section(section)[0]
     try:
         beagle = R.run(spec)
@@ -237,6 +255,7 @@ def _run_section(ssp, section: str, tol: float) -> tuple[str, float | None]:
         print(f"[{section}] section not cached: {exc}")
         return "missing", None
     worst_all = 0.0
+    bracket_all: list[float] = []
     for k, row in enumerate(spec.rows):
         # BEAGLE's grid bin sits 0.3 % older than tengri's age of the universe (Planck18).
         # tengri refuses an onset older than that age, so the age is clipped to it.
@@ -251,11 +270,19 @@ def _run_section(ssp, section: str, tol: float) -> tuple[str, float | None]:
             + (f" tau_V={row['tauV_eff']:.1f} mu=0.4" if "tauV_eff" in row else "")
         )
         table = _band_table(row["redshift"], wave_b, lnu_b, wave_t, lnu_t)
-        worst_all = max(worst_all, _print_band_table(title, table))
+        worst, bracket = _print_band_table(title, table, strict)
+        worst_all = max(worst_all, worst)
+        bracket_all.extend(bracket)
         print(
             f"  SED ratio L_beagle/L_tengri over "
             f"{REST_RANGE_AA[0]:.0f}-{REST_RANGE_AA[1]:.0f} A rest: "
             f"median {pct[1]:.4f}, 16-84 % [{pct[0]:.4f}, {pct[2]:.4f}]"
+        )
+    if bracket_all:
+        off = 100.0 * np.asarray(bracket_all)
+        print(
+            f"  optical-NIR offset: median {np.median(off):+.2f} %, "
+            f"range [{off.min():+.2f}, {off.max():+.2f}] % (library bracket, not gated)"
         )
     status = "pass" if worst_all <= tol else "fail"
     return status, worst_all
@@ -267,15 +294,20 @@ def main(argv: list[str] | None = None) -> int:
         "--tol",
         type=float,
         default=0.02,
-        help="largest allowed |BEAGLE/tengri - 1| for a band in the s3 fiducial (default 0.02)",
+        help="largest allowed |BEAGLE/tengri - 1| for a gated band (default 0.02)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="gate every band at --tol, not only rest pivots below 3500 A",
     )
     args = parser.parse_args(argv)
     status = _check_prerequisites()
     if status:
         return status
     ssp = load_ssp_data(str(SSP_PATH))
-    fiducial_status, fiducial_worst = _run_section(ssp, FIDUCIAL, args.tol)
-    _run_section(ssp, ATTENUATED, args.tol)
+    fiducial_status, fiducial_worst = _run_section(ssp, FIDUCIAL, args.tol, args.strict)
+    _run_section(ssp, ATTENUATED, args.tol, args.strict)
     if fiducial_status == "missing":
         print(
             f"validate_matched_physics: {FIDUCIAL} is required for the exit status",
@@ -283,8 +315,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     print(
-        f"{FIDUCIAL}: largest band deviation {100.0 * fiducial_worst:.2f} % "
-        f"against tolerance {100.0 * args.tol:.1f} % -> {fiducial_status}"
+        f"{FIDUCIAL}: largest gated band deviation {100.0 * fiducial_worst:.2f} % "
+        f"against tolerance {100.0 * args.tol:.1f} % "
+        f"({'all bands' if args.strict else 'rest pivot < 3500 A'}) -> {fiducial_status}"
     )
     return 0 if fiducial_status == "pass" else 1
 

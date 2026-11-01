@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from reproduction.beagle import validate_matched_physics as validator
 
 pytestmark = pytest.mark.contract
 
@@ -98,6 +99,33 @@ def test_validator_help_runs() -> None:
     proc = _run_validator("--help")
     assert proc.returncode == 0, proc.stderr
     assert "--tol" in proc.stdout
+
+
+def _band(band: str, rest_aa: float, ratio: float) -> tuple:
+    """A validator table row at z = 1 with the given rest-frame pivot and BEAGLE/tengri ratio."""
+    pivot_obs_um = 2.0 * rest_aa / 1.0e4  # z = 1: observed pivot is twice the rest pivot
+    return (band, pivot_obs_um, rest_aa, 1.0, 1.0, ratio)
+
+
+def _exit_code(rows: list, tol: float, strict: bool) -> int:
+    """Gate status the way the validator's main() derives it from one table."""
+    worst, _ = validator._print_band_table("fabricated", rows, strict)
+    return 0 if worst <= tol else 1
+
+
+def test_gate_passes_with_nir_offset_and_clean_uv(capsys) -> None:
+    rows = [_band("uv", 2165.0, 0.995), _band("nir", 7685.0, 0.97)]
+    assert _exit_code(rows, tol=0.02, strict=False) == 0
+
+
+def test_gate_fails_on_uv_offset(capsys) -> None:
+    rows = [_band("uv", 2165.0, 0.97), _band("nir", 7685.0, 0.99)]
+    assert _exit_code(rows, tol=0.02, strict=False) == 1
+
+
+def test_strict_gates_nir_offset(capsys) -> None:
+    rows = [_band("uv", 2165.0, 0.995), _band("nir", 7685.0, 0.97)]
+    assert _exit_code(rows, tol=0.02, strict=True) == 1
 
 
 def test_validator_exits_2_without_workdir() -> None:

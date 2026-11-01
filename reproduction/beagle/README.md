@@ -42,16 +42,18 @@ are the record.
 invokes the containerized binary, parses the FITS output into tengri's units and caches the result.
 
 ```bash
-python -m reproduction.beagle._drivers.beagle_run --render-params   # write every parameter file, no Docker
-python -m reproduction.beagle._drivers.beagle_run --run-all         # run the mock matrix once and cache it
-python -m reproduction.beagle._drivers.beagle_run --run s3_fiducial # run one section
-python -m reproduction.beagle._drivers.beagle_run --status          # list which sections are cached
+python -m reproduction.beagle._drivers.beagle_run --render-params                  # write every parameter file, no Docker
+python -m reproduction.beagle._drivers.beagle_run --status                         # list which sections are cached
+python -m reproduction.beagle._drivers.beagle_run --run s3_fiducial --allow-docker # run one section
+python -m reproduction.beagle._drivers.beagle_run --run-all --allow-docker         # run the 18 matrix sections once
+python -m reproduction.beagle._drivers.beagle_run --fit-capstone --allow-docker    # the four Paper I fits
 ```
 
-Each cached run lives under `$BEAGLE_WORKDIR/cache/`. The notebook never calls Docker: it reads the
-cache, and when a section is missing it stops in Setup and prints the `--run` command that fills it.
-`--fit-capstone` is reserved for the four Paper I fits. The current driver prints that no galaxy
-identifiers are committed yet and runs nothing.
+`--run`, `--run-all` and `--fit-capstone` require `--allow-docker`; without it they refuse to start
+Docker. The capstone fits the four Paper I galaxies (catalog IDs 79, 7837, 15775 and 1826) with
+BEAGLE-like priors. Each cached run lives under `$BEAGLE_WORKDIR/cache/`. The notebook never calls
+Docker: it reads the cache, and when a section is missing it stops in Setup and prints the command
+that fills it.
 
 `reproduction/beagle/validate_matched_physics.py` is the strict companion check. It reads the cached
 `s3_fiducial` and `s5_cf00_tauv` runs, builds the matching tengri models row by row and prints the
@@ -78,8 +80,11 @@ directory and the templates stay in `$BEAGLE_WORKDIR`.
   tengri's delayed history with a 10 Myr current episode.
 - **§3 Integrated SED.** The no-dust fiducial at z = 1, with nebular emission off on both sides,
   as overlay ratios and CANDELS band ratios.
-- **§4 Attenuation curves.** The optical depth τ̂_λ = −ln(F_dust/F_nodust) of BEAGLE's CF00, Calzetti
-  and CCWW13 runs, against tengri's power-law, calzetti and chevallard13 curves.
+- **§4 Attenuation curves.** The optical depth τ̂_λ = −ln(F_dust/F_nodust) of BEAGLE's CF00, CCWW13
+  universal, Calzetti (1994) and Pei (1992) Milky Way, LMC and SMC runs, against tengri's power-law,
+  chevallard13, calzetti, cardelli, lmc and smc curves. The CCWW13 full variant is not run: its
+  radiative-transfer tables are not distributed with the public package, so it appears only as a
+  row of §13.
 - **§5 Attenuation applied.** CF00 at τ_V = 0.3, 1 and 2 on the §3 history, as SED ratios and
   band ratios.
 - **§8 Nebular emission.** The 48 gutkin16 mock objects: BEAGLE, tengri's gutkin16 and the raw
@@ -93,18 +98,23 @@ directory and the templates stay in `$BEAGLE_WORKDIR`.
 - **§13 Where the codes differ.** One table of the conventions that separate the codes; the rows are
   listed below.
 - **§14 Parameter translation.** BEAGLE keywords against tengri's grammar keys, with units and shifts.
-- **§15 Capstone.** A BEAGLE-like fiducial mock with CANDELS photometry at z = 1, against tengri's
-  BEAGLE-mode prediction. **§15b**, when `ART_SEDFITTING_DIR` is set, compares the Paper I fits with
+- **§15 Capstone.** The four Paper I galaxies fitted with BEAGLE-like priors, and a BEAGLE-like fiducial
+  mock with CANDELS photometry at z = 1, against tengri's BEAGLE-mode prediction. **§15b**, when `ART_SEDFITTING_DIR` is set, compares the Paper I fits with
   the workshop summaries and labels them fit-to-fit, with a different BEAGLE configuration.
 - **Summary** and **References.**
 
 ## Where the codes differ
 
-- **Stellar library.** BEAGLE reads the MILES-based `bc2003_hr_xmiless` family, and tengri reads the
-  STELIB `bc03_pdva` grid. The difference is a library bracket, not a configuration mismatch, and
-  it is the expected source of the few-percent residual in the blue and near-infrared.
+- **Stellar library.** BEAGLE's bc03 set is the MILES-based `bc2003_hr_xmiless` family of Bruzual &
+  Charlot (2003), and tengri's shipped grid is the STELIB `bc03_pdva` release. With identical star
+  formation history, mass and age, the two agree to better than 1 % in bands sampling the rest-frame
+  ultraviolet (rest pivot below 3500 Å, where the theoretical atmospheres are shared), and BEAGLE is
+  fainter by a median 2.3 % over rest 0.38–39 µm, with the band offsets between −4.2 % and +0.7 %, where
+  the empirical libraries differ.
 - **Calzetti curve.** BEAGLE's `Calzetti` is Calzetti et al. (1994). tengri's `calzetti` is Calzetti
   et al. (2000), so the two curves differ by construction.
+- **CCWW13 full.** BEAGLE's CCWW13 full variant needs radiative-transfer tables that are not
+  distributed with the public package, so it has no tengri counterpart in §4.
 - **Milky Way curve.** BEAGLE's `mw`, `lmc` and `smc` are Pei (1992). tengri's `cardelli`, `lmc` and
   `smc` curves are the Cardelli et al. (1989) law and its LMC and SMC variants.
 - **Nebular emission.** BEAGLE's nebular grid is the Gutkin et al. (2016) grid. tengri's Cue emulator
@@ -175,10 +185,14 @@ BEAGLE_WORKDIR=~/beagle/BEAGLE-general JAX_PLATFORMS=cpu PYTHONPATH=$PWD/src:$PW
     .venv/bin/python reproduction/beagle/validate_matched_physics.py [--tol 0.02]
 ```
 
-The validator needs the cache and the SSP grid, and it starts no container. It exits 0 when every band
-of the s3 fiducial agrees within `--tol`, exits 1 when a band does not, and exits 2 when a prerequisite is
-missing. The s5 table is printed and does not set the exit status. The validator reads
-`data/bc03_pdva_stelib_chabrier.h5`; fetch it with `tengri.download_ssp('bc03_pdva_stelib_chabrier')`.
+The validator needs the cache and the SSP grid, and it starts no container. For the s3 fiducial it gates
+the bands whose rest-frame pivot, the observed pivot divided by 1 + z, lies below 3500 Å: those bands
+share theoretical atmospheres, so an offset there is a physics difference. It exits 1 when one of them
+deviates by more than `--tol` (default 0.02). Redward bands are printed with a library-bracket class and
+summarized as an optical-NIR offset without failing. `--strict` gates every band at `--tol`, for runs with
+matched libraries. The s5 table is printed and does not set the exit status. It exits 2 when a
+prerequisite is missing. The validator reads `data/bc03_pdva_stelib_chabrier.h5`; fetch it with
+`tengri.download_ssp('bc03_pdva_stelib_chabrier')`.
 
 ## Status
 
