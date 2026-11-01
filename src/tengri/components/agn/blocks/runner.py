@@ -1435,8 +1435,11 @@ agn_torus_block, agn_attenuation_block : str
             # fraction, which the runner publishes (``TORUS_FRAC_APPLIED_KEY``).
             _torus_frac = jnp.minimum(_torus_frac, jnp.maximum(1.0 - _line_fraction, 0.0))
             params = {**params, "agn_torus_frac": _torus_frac}
-            L_lambda_disc = _disc_intrinsic * (1.0 - _torus_frac - _line_fraction)
-            _disc_scalar = 1.0 - _torus_frac - _line_fraction
+            # Lines brighter than the disc (E_lines > E_disc, reachable with an NLR and a BLR
+            # near their prior maxima) leave the disc nothing: its share stops at 0, the pieces
+            # exceed the accretion power, and the ledger publishes agn_ledger_closed = 0.
+            _disc_scalar = jnp.maximum(1.0 - _torus_frac - _line_fraction, 0.0)
+            L_lambda_disc = _disc_intrinsic * _disc_scalar
         else:
             L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
             _disc_scalar = _disc_scalar - _line_fraction

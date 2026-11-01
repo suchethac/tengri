@@ -39,9 +39,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.components.agn._ir_frac_window import _window_q
-from tengri.config.exceptions import ConfigError
+from tengri.config.exceptions import AdvisoryWarning, ConfigError
 from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -200,24 +200,100 @@ def test_screened_agn_with_fracagn_is_refused(synthetic_ssp_wide):
     assert model.spec.agn_norm == "conserving"
 
 
-@pytest.mark.parametrize("norm", ["conserving", "independent"])
-def test_screened_fracagn_is_refused_on_the_flat_path(norm):
-    """The flat ``Parameters`` path refuses the same pairing, under every policy it admits."""
+def _flat(norm, screen, **extra):
     from tengri.parameters.parameters import Parameters
-    from tengri.parameters.priors import Fixed as _Fixed
 
-    kwargs = dict(
+    return Parameters(
         agn_model="composable",
         agn_disc_block="schartmann2005",
         agn_torus_block="skirtor",
         agn_norm=norm,
-        dust_agn_screen="diffuse",
+        dust_agn_screen=screen,
+        **extra,
     )
+
+
+@pytest.mark.parametrize("norm", ["conserving", "independent"])
+@pytest.mark.parametrize(
+    "ir_frac", [Fixed(0.3), Uniform(0.0, 0.5)], ids=["fixed-0.3", "narrowed-prior"]
+)
+def test_flat_screened_explicit_fracagn_is_refused(norm, ir_frac):
+    """Flat path: an agn_ir_frac the caller set beside a screened AGN raises (no fallback)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
-            Parameters(**kwargs, agn_ir_frac=_Fixed(0.3))
-        Parameters(**kwargs, agn_ir_frac=_Fixed(0.0))
+            _flat(norm, "diffuse", agn_ir_frac=ir_frac)
+        assert "agn_ir_frac" not in _flat(norm, "diffuse", agn_ir_frac=Fixed(0.0)).free_params
+
+
+@pytest.mark.parametrize("norm", ["conserving", "independent"])
+def test_flat_screened_default_fracagn_warns_and_is_dropped(norm):
+    """Flat path: an agn_ir_frac freed only by its declared prior would be dead beside a screen;
+    it is fixed at 0.0 with a warning naming it."""
+    with pytest.warns(AdvisoryWarning, match="agn_ir_frac is free only through its declared"):
+        spec = _flat(norm, "diffuse")
+    assert "agn_ir_frac" not in spec.free_params
+    assert float(spec.get_fixed_values()["agn_ir_frac"]) == 0.0
+
+
+@pytest.mark.parametrize("norm", ["conserving", "independent"])
+def test_flat_unscreened_fracagn_is_unchanged(norm):
+    """Flat path without a screen: the default-prior agn_ir_frac stays free, no warning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", AdvisoryWarning)
+        spec = _flat(norm, "none")
+    assert "agn_ir_frac" in spec.free_params
+
+
+def test_build_screened_wildcard_fracagn_warns_and_is_dropped(synthetic_ssp_wide):
+    """Build path: an ``all_params: FREE`` wildcard frees agn_ir_frac only by its declared prior;
+    beside a screen it is fixed at 0.0 with a warning, and the build succeeds."""
+    with pytest.warns(AdvisoryWarning, match="agn_ir_frac is free only through its declared"):
+        model = SEDModel.build(
+            synthetic_ssp_wide,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+                "agn_screen": "diffuse",
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "composable",
+                "norm": "conserving",
+                "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                "all_params": FREE,
+            },
+            redshift=Fixed(0.05),
+        )
+    assert "agn_ir_frac" not in model.spec.free_params
+
+
+def test_build_unscreened_wildcard_fracagn_is_unchanged(synthetic_ssp_wide):
+    """Build path without a screen: the wildcard leaves agn_ir_frac free."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            synthetic_ssp_wide,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "composable",
+                "norm": "conserving",
+                "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                "all_params": FREE,
+            },
+            redshift=Fixed(0.05),
+        )
+    assert "agn_ir_frac" in model.spec.free_params
 
 
 # ── the realized fraction ──────────────────────────────────────────────────

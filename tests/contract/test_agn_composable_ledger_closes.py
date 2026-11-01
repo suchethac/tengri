@@ -388,6 +388,35 @@ def test_line_bound_closes_the_ledger_near_full_cover(torus_frac):
     )
 
 
+#: An analytic NLR and BLR near their prior maxima (covering fraction and line efficiency 0.9,
+#: inside the declared [0, 1]) radiate more than the disc carries: E_lines/E_disc > 1.
+_BRIGHT_LINES = {
+    "agn_nlr_cf": 0.9,
+    "agn_nlr_line_efficiency": 0.9,
+    "agn_blr_cf": 0.9,
+    "agn_blr_line_efficiency": 0.9,
+}
+
+
+@pytest.mark.parametrize("torus_frac", (0.0, 0.5))
+def test_lines_brighter_than_the_disc_open_the_ledger(torus_frac):
+    """E_lines > E_disc: the disc and torus shares stop at 0 (never negative) and the ledger
+    publishes ``agn_ledger_closed = 0``."""
+    sel = _selectors("schartmann2005", "skirtor", nlr="analytic", blr="analytic")
+    _skip_without_library(sel)
+    params = {**_BASE, **_BRIGHT_LINES, "agn_torus_frac": torus_frac}
+    _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
+    budget = 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    assert _lin(comps, "log_L_agn_lines") / budget > 1.0
+    assert float(comps["agn_torus_frac_applied"]) == 0.0
+    for piece in (*_PIECES, *(f"{p}_unemitted" for p in _UNEMITTED)):
+        value = float(comps[f"log_L_agn_{piece}"])
+        assert not np.isnan(value), piece
+    assert _lin(comps, "log_L_agn_disc") == 0.0
+    assert _lin(comps, "log_L_agn_torus") == 0.0
+    assert float(comps["agn_ledger_closed"]) == 0.0
+
+
 def test_flag_is_zero_where_the_pieces_do_not_close():
     """The flag measures the closure: a block whose own spectrum misses its nominal power by
     more than 1e-6 publishes 0 even under a closing policy (the Nenkova torus, 2.1e-4)."""

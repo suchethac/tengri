@@ -55,6 +55,7 @@ from __future__ import annotations
 import copy
 import logging
 import types
+import warnings
 import zlib
 
 import jax
@@ -62,7 +63,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
-from tengri.config.exceptions import ConfigError, ParameterError
+from tengri.config.exceptions import AdvisoryWarning, ConfigError, ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -1011,20 +1012,18 @@ class Parameters:
 
         # A screened AGN runs before the dust, so an active fracAGN would read an absorbed power
         # that does not exist yet and fall back to the user agn_torus_frac without a word. The
-        # 'cigale_joint' pairing is refused above; every other policy is refused here. A flat
-        # spec that leaves agn_ir_frac at its prior frees it, which is active. The structural
-        # spec parse_groups validates keys against carries registry defaults, not a model, and
-        # is exempt.
+        # 'cigale_joint' pairing is refused above. Under every other policy an agn_ir_frac the
+        # caller set (a value above 0, or a prior other than the declared one) is refused; one
+        # freed only by its declared prior (a flat spec that does not name it, an all_params
+        # wildcard) would be a dead parameter, so it is fixed at 0.0 with a warning. The
+        # structural spec parse_groups validates keys against carries registry defaults, not a
+        # model, and is exempt.
         if (
             not timing_keep_all
             and self.agn_model not in (None, "none")
             and self.dust_agn_screen != "none"
         ):
-            _ir_frac_dist = self._distributions.get("agn_ir_frac")
-            if _ir_frac_dist is not None and (
-                not _ir_frac_dist.is_fixed or float(_ir_frac_dist.value) > 0.0
-            ):
-                raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
+            self._settle_screened_ir_frac()
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
         # DERIVE the Eddington ratio from agn_log_lbol + agn_log_mbh, so
@@ -2166,6 +2165,47 @@ class Parameters:
             (free_params + fixed_params).
         """
         return sorted(self._distributions.keys())
+
+    def _settle_screened_ir_frac(self) -> None:
+        """Refuse a caller-set fracAGN beside a screened AGN; fix a default-freed one at 0.0.
+
+        Raises
+        ------
+        ConfigError
+            If ``agn_ir_frac`` is Fixed above 0, or free with a prior other than its declared
+            one.
+
+        Warns
+        -----
+        AdvisoryWarning
+            If ``agn_ir_frac`` is free only through its declared prior; it is fixed at 0.0.
+        """
+        dist = self._distributions.get("agn_ir_frac")
+        if dist is None:
+            return
+        if dist.is_fixed:
+            if float(dist.value) > 0.0:
+                raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
+            return
+        default = self._defaults.get("agn_ir_frac")
+        same_as_declared = (
+            default is not None
+            and not default.is_fixed
+            and type(dist) is type(default)
+            and tuple(dist.bounds) == tuple(default.bounds)
+        )
+        if not same_as_declared:
+            raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
+        warnings.warn(
+            f"agn_ir_frac is free only through its declared prior, but dust_agn_screen="
+            f"{self.dust_agn_screen!r} puts the AGN before the dust, so the fracAGN coupling "
+            "has no absorbed power to read and agn_ir_frac would change nothing. It is fixed "
+            "at 0.0 and dropped from the free parameters. To keep the coupling, drop the screen "
+            "(dust_attenuation={'agn_screen': 'none'}); to state the torus, use agn_torus_frac.",
+            AdvisoryWarning,
+            stacklevel=3,
+        )
+        self._distributions["agn_ir_frac"] = Fixed(0.0)
 
     @property
     def free_params(self) -> list[str]:
