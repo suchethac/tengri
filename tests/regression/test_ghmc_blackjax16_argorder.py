@@ -25,7 +25,7 @@ from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
 
-_CENTRE = np.asarray([1.0, -2.0])
+_CENTER = np.asarray([1.0, -2.0])
 _N_DRAWS = 3000
 
 
@@ -51,7 +51,7 @@ def test_ghmc_scan_reproduces_a_unit_gaussian():
         init_key,
         jax.random.split(chain_key, _N_DRAWS),
         _logdensity,
-        jnp.asarray(_CENTRE),
+        jnp.asarray(_CENTER),
         300,
         0.8,
         0.5,
@@ -61,7 +61,7 @@ def test_ghmc_scan_reproduces_a_unit_gaussian():
     assert np.isfinite(float(step_size))
     assert np.all(np.isfinite(np.asarray(inv_mass)))
     assert not np.any(np.asarray(divergent))
-    assert draws.mean(axis=0) == pytest.approx(_CENTRE, abs=0.25)
+    assert draws.mean(axis=0) == pytest.approx(_CENTER, abs=0.25)
     assert draws.var(axis=0) == pytest.approx(np.ones(2), abs=0.3)
 
 

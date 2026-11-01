@@ -349,7 +349,7 @@ def test_a_free_noise_model_with_an_all_detected_mask_is_not_refused(ssp, truth)
 
 
 def _free_noise_primals(fitter, z):
-    """Latent position ``z`` for the mass and 0 (the prior centre) for every other free name."""
+    """Latent position ``z`` for the mass and 0 (the prior center) for every other free name."""
     return {name: (z if name == _NAME else jnp.asarray(0.0)) for name in fitter._free_names}
 
 
