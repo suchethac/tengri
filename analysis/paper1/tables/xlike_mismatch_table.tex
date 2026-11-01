@@ -14,10 +14,10 @@ BAGPIPES & Yes & Star formation history & Flex. & \parbox[t]{5.4cm}{\raggedright
  &  & Dust attenuation & Multiple & \parbox[t]{5.4cm}{\raggedright \citet{Calzetti_2000}, single screen} \\
  &  & Dust emission & Single & \parbox[t]{5.4cm}{\raggedright \citet{Draine_2007}} \\
 \midrule
-BEAGLE & No & Star formation history & Flex. param. & \parbox[t]{5.4cm}{\raggedright Delayed-$\tau$} \\
+BEAGLE & No & Star formation history & Flex. param. & \parbox[t]{5.4cm}{\raggedright Delayed-$\tau$ plus recent 10~Myr episode} \\
  &  & Stellar library & BC03(16) & \parbox[t]{5.4cm}{\raggedright \citet{Bruzual_2003} with STELIB spectra, \citet{Chabrier_2003} IMF} \\
- &  & Nebular emission & C13 & \parbox[t]{5.4cm}{\raggedright \textsc{Cue} \citep{Li_2025}} \\
- &  & Dust attenuation & 2 comp. & \parbox[t]{5.4cm}{\raggedright \citet{Charlot_2000}, birth-cloud and diffuse screens} \\
+ &  & Nebular emission & C13 & \parbox[t]{5.4cm}{\raggedright Gutkin et al. (2016) grids, Cloudy~13} \\
+ &  & Dust attenuation & 2 comp. & \parbox[t]{5.4cm}{\raggedright \citet{Charlot_2000}, birth-cloud and diffuse screens, parameterized by $(\tau_V, \mu)$} \\
  &  & Dust emission & No & \parbox[t]{5.4cm}{\raggedright None} \\
 \midrule
 CIGALE & Yes & Star formation history & Flex. & \parbox[t]{5.4cm}{\raggedright Delayed-$\tau$} \\
@@ -57,10 +57,10 @@ BAGPIPES & \parbox[t]{9.6cm}{\raggedright Stellar library configuration: BC03 wi
  & \parbox[t]{9.6cm}{\raggedright Single dust screen (Calzetti et al. 2000), as in the parity reproduction, which switches the birth-cloud term off; the workshop run's dust configuration is not recorded} & \parbox[t]{4.6cm}{\raggedright tengri reproduction notebook (BAGPIPES)} \\
 \midrule
 BEAGLE & \parbox[t]{9.6cm}{\raggedright No reproduction notebook available; parity check against BEAGLE was not performed} & \parbox[t]{4.6cm}{\raggedright this work} \\
- & \parbox[t]{9.6cm}{\raggedright BC03 library: registered BC03 (Padova 1994 isochrones, STELIB spectra, Chabrier IMF) versus the BC03(16) entry of Table 1 for BEAGLE} & \parbox[t]{4.6cm}{\raggedright \citet{Pacifici_2023}, Table~1} \\
- & \parbox[t]{9.6cm}{\raggedright Nebular emission models: Cue photoionization emulator (trained on Cloudy 22.00) versus BEAGLE Cloudy 13 grids} & \parbox[t]{4.6cm}{\raggedright \citet{Pacifici_2023}, Table~1; \citet{Li_2025}} \\
- & \parbox[t]{9.6cm}{\raggedright Two-component Charlot and Fall (2000) attenuation parametrized by (birth-cloud, diffuse) optical depths in place of BEAGLE's ($\tau_V$, $\mu$); the number of free parameters is the same} & \parbox[t]{4.6cm}{\raggedright BEAGLE workshop catalog (\texttt{tauV\_eff} and \texttt{mu} outputs) \citep{Pacifici_2023}; this work} \\
- & \parbox[t]{9.6cm}{\raggedright Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded} & \parbox[t]{4.6cm}{\raggedright this work} \\
+ & \parbox[t]{9.6cm}{\raggedright Stellar library: registered BC03 (Padova 1994 isochrones, STELIB spectra, Chabrier IMF) versus BEAGLE's BC03(16), the 2016 Charlot and Bruzual update, which has not been publicly released} & \parbox[t]{4.6cm}{\raggedright \citet{Pacifici_2023}, Table~1} \\
+ & \parbox[t]{9.6cm}{\raggedright Nebular emission: the gas-phase metallicity of the grid is held at the nebular default rather than tied to the stellar metallicity, as BEAGLE ties it} & \parbox[t]{4.6cm}{\raggedright Chevallard \& Charlot (2016), Section~2.4; this work} \\
+ & \parbox[t]{9.6cm}{\raggedright The recent-episode prior on log sSFR is uniform on [-12, -7.3]; BEAGLE's ceiling of -7 is the pole of the sSFR-to-SFR conversion for a 10 Myr episode, and every sSFR published for the sample lies below -8} & \parbox[t]{4.6cm}{\raggedright Chevallard \& Charlot (2016), Table~2; this work} \\
+ & \parbox[t]{9.6cm}{\raggedright The delayed-tau timescale is log-uniform from 0.01 to 20 Gyr, whereas BEAGLE's prior extends to 31.6 Gyr (10.5 in log10 years); the two are indistinguishable over the age of a z \textasciitilde{} 1 galaxy} & \parbox[t]{4.6cm}{\raggedright BEAGLE example parameter files; this work} \\
 \midrule
 CIGALE & \parbox[t]{9.6cm}{\raggedright The CIGALE-like configuration uses tengri's registered BC03 grid (Padova 1994 tracks, STELIB spectra, Chabrier IMF) rather than the CIGALE-bundled BC03 grid used in the parity reproduction} & \parbox[t]{4.6cm}{\raggedright this work; tengri reproduction notebook (CIGALE)} \\
  & \parbox[t]{9.6cm}{\raggedright CIGALE's modified-starburst attenuation applies one Calzetti and Leitherer et al. (2002) screen to all stars, with continuum $E(B{-}V)$ = 0.44 times the line $E(B{-}V)$; the CIGALE-like configuration fits two screens with free birth-cloud and diffuse optical depths (the parity reproduction sets the birth-cloud depth to zero). Which attenuation module the workshop run used is not recorded} & \parbox[t]{4.6cm}{\raggedright CIGALE source code \citep{Boquien_2019}; tengri reproduction notebook (CIGALE); \citet{Pacifici_2023}, Table~1} \\

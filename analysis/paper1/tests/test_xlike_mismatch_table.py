@@ -629,8 +629,13 @@ class TestSourcesSupportOnlyTheirClaims:
         assert checked >= 10
 
     def test_beagle_dust_row_cites_catalog_columns(self):
+        # The mu = 0.4 match is a documented note, so its source sits in notes_sources.
         cfg = XLIKE_CONFIGS["beagle_like"]
-        srcs = [s for s in cfg["mismatch_sources"] if "BEAGLE_summary_catalogue" in s]
+        srcs = [
+            s
+            for s in (*cfg["mismatch_sources"], *cfg.get("notes_sources", []))
+            if "BEAGLE_summary_catalogue" in s
+        ]
         assert srcs and "tauV_eff" in srcs[0] and "mu" in srcs[0]
 
     def test_cloudy_version_no_17_02(self):
@@ -711,10 +716,15 @@ class TestTablesFollowEachCodesOwnSource:
         assert "continuously" in rows[0]
 
     def test_only_cigale_has_a_metallicity_row(self):
+        # The one BEAGLE-like exception is its nebular gas-phase row, which is not a
+        # stellar metallicity-grid claim; it must be the only BEAGLE row that uses the word.
         for key, cfg in XLIKE_CONFIGS.items():
-            if key != "cigale_like":
-                for text in cfg["mismatches_text"]:
-                    assert "metallicit" not in text.lower(), (key, text)
+            if key == "cigale_like":
+                continue
+            for text in cfg["mismatches_text"]:
+                if key == "beagle_like" and "gas-phase" in text:
+                    continue
+                assert "metallicit" not in text.lower(), (key, text)
 
     def test_no_prospector_sfh_prior_difference_row(self):
         for text in XLIKE_CONFIGS["prospector_like"]["mismatches_text"]:
@@ -736,12 +746,32 @@ class TestTablesFollowEachCodesOwnSource:
                 if _COLUMN_LIST_SOURCE in src:
                     assert "not record" in note, note
 
-    def test_beagle_dust_row_is_a_reparametrization(self):
-        rows = _rows_matching("beagle_like", "Charlot")
+    def test_beagle_sfr_ceiling_row(self):
+        rows = _rows_matching("beagle_like", "pole")
         assert len(rows) == 1
-        assert "in place of BEAGLE's (tau_V, mu)" in rows[0]
-        assert "same" in rows[0]
-        assert r"($\tau_V$, $\mu$)" in render_latex()
+        assert "-7.3" in rows[0]
+
+    def test_beagle_tau_ceiling_row(self):
+        rows = _rows_matching("beagle_like", "20 Gyr")
+        assert len(rows) == 1
+        assert "31.6 Gyr" in rows[0]
+
+    def test_beagle_gas_phase_metallicity_row(self):
+        rows = _rows_matching("beagle_like", "gas-phase")
+        assert len(rows) == 1
+        assert "metallicity" in rows[0] and "rather than tied" in rows[0]
+
+    def test_beagle_rows_drop_the_old_cue_and_age_rows(self):
+        cfg = XLIKE_CONFIGS["beagle_like"]
+        for text in (*cfg["mismatches"], *cfg["mismatches_text"], *cfg.get("notes", [])):
+            assert "Cue" not in text, text
+            assert "1 Gyr" not in text, text
+
+    def test_beagle_mu_match_cites_catalog_in_notes(self):
+        cfg = XLIKE_CONFIGS["beagle_like"]
+        assert any("mu = 0.4" in note for note in cfg["notes"])
+        catalog = "art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1.fits HDU3 columns tauV_eff, mu"
+        assert any(src.startswith(catalog) for src in cfg["notes_sources"])
 
     def test_bagpipes_nebular_row_states_both_cloudy_versions(self):
         rows = _rows_matching("bagpipes_like", "Cloudy")
@@ -808,7 +838,7 @@ class TestCueTrainingVersion:
             if "trained on" in text:
                 assert "Li et al. 2025" in src and "2405.04598" in src, (key, src)
                 assert r"\citet{Li_2025}" in source_display(src)[0], (key, src)
-        assert seen >= 10  # five configurations, two wordings each
+        assert seen >= 8  # four configurations that name a training version, two wordings each
 
     def test_cue_version_is_not_sourced_to_the_cigale_notebook(self):
         for key, _, _, src in _all_rows():

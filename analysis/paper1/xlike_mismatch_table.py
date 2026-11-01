@@ -53,6 +53,7 @@ def _escape_latex(text: str) -> str:
 _TENGRI_DISPLAY = {
     "sfh": {
         "delayed-tau": r"Delayed-$\tau$",
+        "delayed-tau + recent 10 Myr episode": r"Delayed-$\tau$ plus recent 10~Myr episode",
         "double power law": "Double power law",
         "continuity, 7 bins": "Continuity, seven age bins",
         "dense basis quantiles": r"Dense Basis quantile form \citep{Iyer_2019}",
@@ -65,12 +66,19 @@ _TENGRI_DISPLAY = {
             r"FSPS with MIST isochrones and MILES spectra, \citet{Chabrier_2003} IMF"
         ),
     },
-    "nebular": {"Cue": r"\textsc{Cue} \citep{Li_2025}"},
+    "nebular": {
+        "Cue": r"\textsc{Cue} \citep{Li_2025}",
+        "Gutkin+16 (Cloudy 13)": r"Gutkin et al. (2016) grids, Cloudy~13",
+    },
     "attenuation": {
         "Calzetti, 1-comp": r"\citet{Calzetti_2000}, single screen",
         "Calzetti, 2-comp": r"\citet{Calzetti_2000}, birth-cloud and diffuse screens",
         "Leitherer+02, 2-comp": r"\citet{Leitherer_2002}, birth-cloud and diffuse screens",
         "Charlot+Fall 2000, 2-comp": r"\citet{Charlot_2000}, birth-cloud and diffuse screens",
+        "Charlot+Fall 2000, 2-comp, (tau_V, mu)": (
+            r"\citet{Charlot_2000}, birth-cloud and diffuse screens, parameterized by "
+            r"$(\tau_V, \mu)$"
+        ),
     },
     "dust_ir": {
         "Draine+2007": r"\citet{Draine_2007}",
@@ -100,6 +108,21 @@ _SOURCE_RULES = (
         r"BEAGLE workshop catalog (\texttt{tauV\_eff} and \texttt{mu} outputs) "
         r"\citep{Pacifici_2023}",
         "BEAGLE workshop catalog (tauV_eff and mu outputs), Pacifici et al. (2023)",
+    ),
+    (
+        r"^Chevallard & Charlot \(2016\), MNRAS",
+        r"Chevallard \& Charlot (2016), Section~2.4",
+        "Chevallard & Charlot (2016), Section 2.4",
+    ),
+    (
+        r"^Chevallard & Charlot \(2016\) Table 2",
+        r"Chevallard \& Charlot (2016), Table~2",
+        "Chevallard & Charlot (2016), Table 2",
+    ),
+    (
+        r"^BEAGLE example parameter files",
+        "BEAGLE example parameter files",
+        "BEAGLE example parameter files",
     ),
     (
         r"^art_sedfitting/code_outputs/header",
