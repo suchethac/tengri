@@ -41,9 +41,11 @@
 # ## Setup
 #
 # Every model on this page carries nebular emission: tengri uses Cue (Li et al. 2025)
-# at logU = −2, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at the same
-# values. Residuals in every section therefore include the Cue-vs-Cloudy nebular
-# difference, quantified in §8.
+# at Z_gas = Z☉, f_esc = 0, and Synthesizer uses its Cloudy grid at log U = −2
+# (volume-averaged, n_H = 100 cm⁻³). The two ionization parameters are different
+# quantities, so Cue runs at the inner-face log U = −2.35 at R = 10¹⁹ cm, the value
+# that gives the same ionizing photon rate Q. Residuals in every section therefore
+# include the Cue-vs-Cloudy nebular difference, quantified in §8.
 
 # %%
 import os
@@ -60,6 +62,7 @@ from reproduction.synthesizer._drivers import (
     synthesizer_ssp_to_dsps as REPACK,
     units as U,
 )
+from synthesizer.photoionisation import calculate_Q_from_U
 
 import tengri
 from tengri import (
@@ -72,6 +75,10 @@ from tengri import (
     Uniform,
     WavePrecomp,
     load_ssp_data,
+)
+from tengri.parameters.groups import (
+    _agn_registered_block_types,
+    _agn_subblock_declared_params,
 )
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -102,12 +109,21 @@ AGE_GYR_FIDUCIAL = 5.0
 AV_FIDUCIAL = 1.0
 Z_FIDUCIAL = 0.02  # absolute metallicity (≈ solar on the Synthesizer grid)
 
-# Fiducial nebular configuration (Cue at logU=-2, solar metallicity, f_esc=0).
+# Matched Cue ionization parameter: the inner-face log U at R = 10¹⁹ cm that gives the
+# same ionizing photon rate as Synthesizer's grid at its log U = −2 (n_H = 100 cm⁻³).
+LOGU_CUE_FIDUCIAL = S.cue_logu_from_synthesizer_u(0.01)
+print(
+    f"Synthesizer log U = -2 (volume-averaged, n_H = 100 cm^-3) -> "
+    f"Cue inner-face log U = {LOGU_CUE_FIDUCIAL:.3f} at R = 10^19 cm "
+    f"(Q = {calculate_Q_from_U(0.01, 100.0):.3e} s^-1)"
+)
+
+# Fiducial nebular configuration (Cue at the matched log U, solar metallicity, f_esc=0).
 # Every model carries this nebular emission; residuals include the Cue-vs-Cloudy
 # difference, quantified in §8.
 NEB_FIDUCIAL = {
     "type": "cue",
-    "logU": Fixed(-2.0),
+    "logU": Fixed(LOGU_CUE_FIDUCIAL),
     "logZ_gas": Fixed(0.0),
     "fesc": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
@@ -1038,6 +1054,15 @@ save_fig("synthesizer_07_panchromatic.png")
 # uses Cue (Li et al. 2025), a neural emulator on a different Cloudy version,
 # so lines differ accordingly. The panel reports integrated, continuum-subtracted
 # line luminosity (width- and grid-independent).
+#
+# **Caveat:** the ionization parameters are different quantities. Synthesizer's U
+# (`calculate_U_from_Q`) is the volume-averaged value, three times the Strömgren-
+# radius parameter U_S of Gutkin et al. (2016) eq. 7. Cue's `neb_logU` is the
+# inner-face value at R = 10¹⁹ cm, U = Q / (4π R² n_H c). At n_H = 100 cm⁻³ the grid's
+# log U = −2 is Q = 1.67 × 10⁴⁹ s⁻¹, which gives Cue log U = −2.35 at R = 10¹⁹ cm (the
+# matched value in the Setup cell). The grid fixes U and n_H, so Q is fixed and the
+# mapping is one constant on this page. Cue at log U = −2 would be a different
+# ionizing rate, so the matched value is the one compared here.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
@@ -1083,7 +1108,7 @@ L_neb_t = np.asarray(s_neb.derived["sed_nebular"])
 # Unified AGN model in §9.)
 _w_t = np.asarray(s_neb.wave)
 print("§8 integrated line luminosity (tengri Cue / Synthesizer Cloudy; test grid, ±30 Å):")
-for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ"), (3727.0, "[O II]")]:
     _ls = U.line_lum(w_neb_s, L_neb_s, _c, half=30.0)
     _lt = U.line_lum(_w_t, L_neb_t, _c, half=30.0)
     if _ls > 0:
@@ -1107,8 +1132,14 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # not respond to `f_esc` there (it only redirects the escaping continuum),
 # so the absolute Hβ column carries that difference while the line-ratio
 # columns do not. Worst absolute departure printed below.
+#
+# The sweep has four Cue nodes. The matched node, `LOGU_CUE_FIDUCIAL` (log U = −2.35 at
+# R = 10¹⁹ cm), is the value that gives the grid's own log U = −2 (volume-averaged,
+# n_H = 100 cm⁻³); it is the row that answers the question on this page. The other
+# nodes bracket it: −3.0, −2.0 (the un-mapped value, kept to show the offset), and −1.5.
 
 # %%
+LOGU_SWEEP = (-3.0, LOGU_CUE_FIDUCIAL, -2.0, -1.5)
 wave_grid_aa, ages_grid_yr, mets_grid = S.ssp_grid_axes()
 print(
     f"§8b Synthesizer test grid axes: {ages_grid_yr.shape[0]} ages, "
@@ -1135,7 +1166,7 @@ for Z_node in (0.004, 0.02):
     L_s8 = np.clip(L_s8, 0.0, None)
     ha_hb_s, o3_hb_s, o2_hb_s, hb_s = _neb_ratios(w_s8, L_s8)
     for fesc_node in (0.0, 0.5):
-        for logU_node in (-3.0, -2.0, -1.5):
+        for logU_node in LOGU_SWEEP:
             m8 = SEDModel.build(
                 ssp_data=ssp,
                 sfh={
@@ -1174,20 +1205,20 @@ print(
 _worst_hb_ratio = 1.0
 for Z_snap, fesc_node, logU_node, ha_t, ha_s, o3_t, o3_s, o2_t, o2_s, hb_t, hb_s in _neb8b_rows:
     print(
-        f"  {Z_snap:>6.3f} {fesc_node:>5.1f} {logU_node:>6.1f} {ha_t:>8.2f} {ha_s:>8.2f} "
+        f"  {Z_snap:>6.3f} {fesc_node:>5.1f} {logU_node:>6.2f} {ha_t:>8.2f} {ha_s:>8.2f} "
         f"{o3_t:>10.2f} {o3_s:>10.2f} {o2_t:>9.2f} {o2_s:>9.2f} {hb_t:>11.2e}"
     )
     if hb_s > 0:
         _worst_hb_ratio = max(_worst_hb_ratio, abs(hb_t / hb_s - 1.0) + 1.0)
 print("  f_esc = 0.5 halves tengri's Hβ (Cue scales the nebular budget by 1-f_esc directly)")
 
-# Visual sweep: 3 logU nodes at the Z = 0.02, f_esc = 0 fiducial against the
+# Visual sweep: the logU nodes at the Z = 0.02, f_esc = 0 fiducial against the
 # ONE Synthesizer curve the grid can produce there (no logU axis to move).
 _neb8b_cases = []
 _Z_vis = float(mets_grid[np.argmin(np.abs(mets_grid - 0.02))])
 w_s8b, L_s8b = S.nebular_sed(age_gyr=NEB_AGE, metallicity=_Z_vis, log_mass=NEB_LOGMASS)
 L_s8b = np.clip(L_s8b, 0.0, None)
-for logU_node in (-3.0, -2.0, -1.5):
+for logU_node in LOGU_SWEEP:
     m8b = SEDModel.build(
         ssp_data=ssp,
         sfh={
@@ -1215,7 +1246,13 @@ for logU_node in (-3.0, -2.0, -1.5):
     )
     s8b = m8b.predict_state({})
     _neb8b_cases.append(
-        (f"logU={logU_node:g}", w_s8b, L_s8b, np.asarray(s8b.wave), np.asarray(s8b.derived["sed_nebular"]))
+        (
+            f"logU={logU_node:.2f}" + (" (matched)" if logU_node == LOGU_CUE_FIDUCIAL else ""),
+            w_s8b,
+            L_s8b,
+            np.asarray(s8b.wave),
+            np.asarray(s8b.derived["sed_nebular"]),
+        )
     )
 
 for _label, _w_ref, _L_ref, _w_t, _L_t in _neb8b_cases:
@@ -1229,7 +1266,7 @@ fig, (ax, ax_r), _ = V.sweep_fig(
     logy=True,
     ratio_ylim=(0.0, 3.0),
     cmap="Oranges",
-    values=[-3.0, -2.0, -1.5],
+    values=list(LOGU_SWEEP),
     param_label="log U",
 )
 save_fig("synthesizer_08b_neb_logu_z_fesc.png")
@@ -1301,6 +1338,40 @@ BH_COS_INC = float(np.cos(np.radians(BH_INC)))
 _TORUS_FRAC = THETA_TORUS / 90.0
 
 
+# Block types that read each key, from the parameter registry. The composable grammar
+# refuses a key the selected type does not read (guard introduced by commit 2f891d207,
+# #985 / #2834), so each key is set only for these types.
+def _readers(category, key):
+    return frozenset(
+        t
+        for t in _agn_registered_block_types(category)
+        if key in (_agn_subblock_declared_params(category, t, selection=None) or frozenset())
+    )
+
+
+_DISC_READS_LOG_MBH = _readers("disc", "agn_log_mbh")
+
+_TORUS_READS_THETA = _readers("torus", "agn_theta_torus")
+_TORUS_READS_FRAC = _readers("torus", "agn_torus_frac")
+
+
+def _disc_keys(disc_type):
+    """The disc block's ``agn_log_mbh`` entry, present only where the type reads it."""
+    if disc_type not in _DISC_READS_LOG_MBH:
+        return {}
+    return {"agn_log_mbh": Fixed(float(np.log10(BH_MASS)))}
+
+
+def _torus_keys(torus_type):
+    """The torus block's theta and fraction entries, each present only where read."""
+    keys = {}
+    if torus_type in _TORUS_READS_THETA:
+        keys["agn_theta_torus"] = Fixed(THETA_TORUS)
+    if torus_type in _TORUS_READS_FRAC:
+        keys["agn_torus_frac"] = Fixed(_TORUS_FRAC)
+    return keys
+
+
 def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos_inc=BH_COS_INC):
     """Build a composable AGN via the public API; return (wave, L_nu of sed_agn)."""
     m = SEDModel.build(
@@ -1327,15 +1398,8 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             # derived from agn_log_lbol and agn_log_mbh, #846, not a separate knob).
             # Leaving agn_log_mbh at tengri's default (1e7 M⊙) ran a hotter, fainter
             # disc (0.75x); pinning it to the §9 BH gives a ~0.98x match.
-            "disc": {
-                "type": disc,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
-            "torus": {
-                "type": torus,
-                "agn_theta_torus": Fixed(THETA_TORUS),
-                "agn_torus_frac": Fixed(_TORUS_FRAC),
-            },
+            "disc": {"type": disc, **_disc_keys(disc)},
+            "torus": {"type": torus, **_torus_keys(torus)},
             "nlr": {"type": nlr},
             "blr": {"type": blr},
             "agn_log_lbol": Fixed(agn_log_lbol),
@@ -1389,10 +1453,7 @@ for disc_type, _ in _disc_models:
             # Match the §9 BH so the kubota_done disc temperature profile matches
             # Synthesizer's qsosed (ignored by the power-law disc). Without this the
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
-            "disc": {
-                "type": disc_type,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": {"type": disc_type, **_disc_keys(disc_type)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
@@ -1495,8 +1556,8 @@ w_nlr_s, L_nlr_s = agn["nlr"]
 # tengri's NLR through the *public* grammar, reading the same /spectra/nebular
 # array as UnifiedAGN. No torus, so subtracting the disc isolates the NLR.
 _wave_nlr, _L_with_nlr = _agn_grammar(torus="none", nlr="synthesizer_spectra")
-_, _L_disc_only = _agn_grammar(torus="none")
-L_nlr_t = _L_with_nlr - _L_disc_only
+_w_disc_only, _L_disc_only = _agn_grammar(torus="none")
+L_nlr_t = _L_with_nlr - np.interp(_wave_nlr, _w_disc_only, _L_disc_only)
 
 # Same physical product on a shared y-axis → overlay (not two independent panels).
 fig, ax = plt.subplots(figsize=(9, 4.5))
@@ -1546,8 +1607,8 @@ w_blr_s, L_blr_s = agn["blr"]
 # tengri's BLR through the *public* grammar, reading the same /spectra/nebular
 # array as UnifiedAGN's blr component (isotropic, cos=0.5).
 _wave_blr, _L_with_blr = _agn_grammar(torus="none", blr="synthesizer_spectra")
-_, _L_disc_only2 = _agn_grammar(torus="none")
-L_blr_t = _L_with_blr - _L_disc_only2
+_w_disc_only2, _L_disc_only2 = _agn_grammar(torus="none")
+L_blr_t = _L_with_blr - np.interp(_wave_blr, _w_disc_only2, _L_disc_only2)
 fig, ax = plt.subplots(figsize=(9, 4.5))
 ax.plot(w_blr_s, L_blr_s, "C0-", lw=1.2, label="Synthesizer  UnifiedAGN BLR  (/spectra/nebular)")
 ax.plot(_wave_blr, L_blr_t, "C1-", lw=1.0, alpha=0.85, label="tengri  blr_synthesizer_spectra")
@@ -1666,11 +1727,17 @@ w_t, L_tot_t = _agn_grammar(nlr="synthesizer_spectra", blr="synthesizer_spectra"
 # Decompose it for the component panel, every piece through the same grammar:
 # disc-only and torus-only as standalone builds; the line regions as the
 # difference each makes on top of the disc+torus continuum.
-_, L_disc_t = _agn_grammar(torus="none")
-_, L_torus_t = _agn_grammar(disc="none")
-_, _L_cont = _agn_grammar()  # disc + torus, no lines
-L_nlr_t = _agn_grammar(nlr="synthesizer_spectra")[1] - _L_cont
-L_blr_t = _agn_grammar(blr="synthesizer_spectra")[1] - _L_cont
+# Every build keeps its own wavelength grid (line nodes change its length), so each
+# component is interpolated onto the total build's grid ``w_t`` before it is added.
+_w_disc_t, _L_disc_raw = _agn_grammar(torus="none")
+_w_tor_t, _L_torus_raw = _agn_grammar(disc="none")
+_w_cont, _L_cont = _agn_grammar()  # disc + torus, no lines
+_w_nlr_t, _L_nlr_raw = _agn_grammar(nlr="synthesizer_spectra")
+_w_blr_t, _L_blr_raw = _agn_grammar(blr="synthesizer_spectra")
+L_disc_t = np.interp(w_t, _w_disc_t, _L_disc_raw)
+L_torus_t = np.interp(w_t, _w_tor_t, _L_torus_raw)
+L_nlr_t = np.interp(w_t, _w_nlr_t, _L_nlr_raw) - np.interp(w_t, _w_cont, _L_cont)
+L_blr_t = np.interp(w_t, _w_blr_t, _L_blr_raw) - np.interp(w_t, _w_cont, _L_cont)
 
 fig = plt.figure(figsize=(13, 9))
 gs = fig.add_gridspec(2, 2, height_ratios=[3, 2])
@@ -2149,6 +2216,18 @@ print(
 # unit transmission at z=5 and vanishes elsewhere. Window deviations |ΔT| in per cent
 # of unit transmission over 850–1210 Å, clear of the Lyα step at 1215.67 Å, where the
 # same wavelength-convention offset is larger. Worst deviation printed below.
+#
+# **Caveat:** the 21 % at z = 5 sits on the Lyβ band edge. tengri cuts at 1025.72(1+z) Å;
+# Synthesizer's `Madau96` cuts at the paper's rounded 1026(1+z) Å (6154.3 Å against
+# 6156.0 Å at z = 5). The same rounding shifts the Lyα edge. Away from the edges the two
+# codes agree to 1–3 %: at rest 1100, 980 and 950 Å at z = 5, tengri gives 0.2770, 0.2059
+# and 0.1411 against Synthesizer's 0.2856, 0.2112 and 0.1437. Synthesizer's `Madau96`
+# anchors the photoelectric term at 950 Å rather than the 912 Å Lyman limit (eq. 16 and
+# its footnote 3), sums Lyα to Lyγ only (Lyδ is dropped) and omits the eq. 13 metal-line
+# term. tengri follows eqs. 12–16 to better than 0.001 away from the edges. It carries 17
+# Lyman lines, as the paper's own calculation does ("plus 13 higher order members"); the
+# paper prints A_j for Lyα–Lyδ only, and the higher-order coefficients are FSPS's tabulation
+# (`igm_absorb.f90`).
 
 # %%
 _wave_rest_igm = np.linspace(700.0, 1300.0, 800)
