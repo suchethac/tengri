@@ -189,6 +189,7 @@ def test_eline_marginalize_auto_builds_eline_likelihood_with_builder():
     )
     fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
+    fitter._eline_prior_sigma = 100.0
     fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
