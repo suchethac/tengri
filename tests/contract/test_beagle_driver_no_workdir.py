@@ -142,3 +142,83 @@ def test_igm_sections_differ_only_in_the_igm_keyword() -> None:
         return {line for line in run.param_text().splitlines() if not line.startswith(skip)}
 
     assert stripped(inoue) ^ stripped(none) == {"IGM ABSORPTION = Inoue"}
+
+
+def test_ccww13_full_is_not_run() -> None:
+    assert all(run.section != "s4_ccww13_full" for run in M.RUN_MATRIX)
+    assert all(run.dust != "CCWW13_full" for run in M.RUN_MATRIX)
+
+
+@pytest.mark.parametrize(
+    ("section", "law"),
+    [
+        ("s4_cf00", "CF00"),
+        ("s4_calzetti", "Calzetti"),
+        ("s4_ccww13_universal", "CCWW13_universal"),
+        ("s4_mw", "mw"),
+        ("s4_lmc", "lmc"),
+        ("s4_smc", "smc"),
+    ],
+)
+def test_attenuation_sections_carry_their_law_and_tauv(section: str, law: str) -> None:
+    run = M.by_section(section)[0]
+    text = run.param_text()
+    assert len(run.rows) == 1
+    assert f"PARAMETER = name:attenuation_type mock:type:fixed char_value:{law}" in text
+    assert "PARAMETER = name:tauV_eff mock:type:fixed value:1.0" in text
+
+
+@pytest.mark.parametrize("section", ["s4_cf00", "s4_ccww13_universal"])
+def test_mu_is_set_where_the_manual_requires_it(section: str) -> None:
+    assert "PARAMETER = name:mu mock:type:fixed value:0.4" in M.by_section(section)[0].param_text()
+
+
+@pytest.mark.parametrize("section", ["s4_calzetti", "s4_mw", "s4_lmc", "s4_smc"])
+def test_mu_is_omitted_where_the_manual_does_not_require_it(section: str) -> None:
+    assert "name:mu" not in M.by_section(section)[0].param_text()
+
+
+def test_capstone_renders_without_docker_and_names_the_four_galaxies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reproduction.beagle._drivers import beagle_capstone as C
+
+    monkeypatch.delenv("BEAGLE_WORKDIR", raising=False)
+    run = C.capstone_run()
+    text = run.param_text()
+    assert "# objects: 79 7837 15775 1826" in text
+    assert len(run.catalog_table) == 4
+    assert len(run.filters) == 17
+    assert "TEMPLATES NEBULAR = " in text
+    assert "PRIORS CATALOGUE = " in text
+    assert (
+        "PARAMETER = name:redshift type:fitted prior:distribution:dirac prior:colName:zz" in text
+    )
+    for line in (
+        "PRINT SPECTRUM = T",
+        "PRINT PHOTOMETRY = T",
+        "PRINT LINE FLUXES = T",
+        "PRINT CONTINUUM = T",
+    ):
+        assert line in text
+    assert "PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_example.param" in text
+
+
+def test_run_commands_need_the_allow_docker_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    from reproduction.beagle._drivers import beagle_run as R
+
+    assert R.main(["--run", "s1_ssp_bc03"]) == 1
+    assert "--allow-docker" in capsys.readouterr().err
+    assert R.main(["--fit-capstone"]) == 0
+    assert "--allow-docker" in capsys.readouterr().out
+
+
+def test_capstone_throughputs_are_dimensionless_and_nonnegative() -> None:
+    from reproduction.beagle._drivers import beagle_capstone as C
+
+    run = C.capstone_run()
+    for spec in run.filters:
+        assert np.all(spec.transmission >= 0.0)
+        assert spec.transmission.max() <= 1.0
+    k_band = next(f for f in run.filters if f.name == "ISAAC_KS")
+    assert 0.0 < k_band.transmission.max() < 1.0
