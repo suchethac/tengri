@@ -12670,8 +12670,15 @@ class SEDModel:
         return table
 
     def _agn_band_table_gate(self, chain):
-        """Reason the composable AGN band table cannot represent this model, or ``None``."""
+        """Reason the composable AGN band table cannot represent this model, or ``None``.
+
+        A ``composable`` model and a deprecated preset (``agn={'type': 'skirtor'}``) both run
+        the composable runner, so both are eligible. The selectors and norm are read from
+        :meth:`AGNSEDComponent.resolved_recipe`, not the config, which holds the grammar's
+        defaults for a preset. A self-contained model is declined as not composable.
+        """
         from tengri.components.agn.component import AGNSEDComponent
+        from tengri.components.agn.unified import is_composable_recipe
 
         agn = next((c for c in chain if isinstance(c, AGNSEDComponent)), None)
         stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
@@ -12681,16 +12688,21 @@ class SEDModel:
         free = sorted(p for p in self.spec.free_params if p.startswith("agn_"))
         axes = [p for p in free if p != "agn_lum_ratio"]
 
-        if agn is None or getattr(agn.config, "model", None) != "composable":
+        if agn is None or not is_composable_recipe(getattr(agn.config, "model", None)):
             return "the AGN is not a composable recipe"
+        recipe = agn.resolved_recipe()
         if not self._approx.get("wave_precomp"):
             return "WavePrecomp is off"
         if getattr(st, "phot_fw_padded", None) is None:
             return "no padded filter curves"
         if self._response_z_nodes() is not None:
             return "the registry adapter is built at one redshift and the redshift is not Fixed"
-        if self._agn_norm != "cigale_joint" or self._agn_polar_law != "smc":
-            return "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc'"
+        if recipe["norm"] != "cigale_joint" or recipe["polar_law"] != "smc":
+            return (
+                "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc' "
+                f"(this AGN resolves to norm={recipe['norm']!r}, "
+                f"polar_law={recipe['polar_law']!r})"
+            )
         if ir_frac is None or float(ir_frac) != 0.0:
             return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
         if len(axes) > max(self._AGN_TABLE_NODES):
@@ -12705,15 +12717,8 @@ class SEDModel:
         unwired = [p for p in axes if p in UNWIRED_AXES]
         if unwired:
             return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
-        for category, attr in (
-            ("disc", "agn_disc_block"),
-            ("nlr", "agn_nlr_block"),
-            ("blr", "agn_blr_block"),
-            ("feii", "agn_feii_block"),
-            ("torus", "agn_torus_block"),
-            ("attenuation", "agn_attenuation_block"),
-        ):
-            key = f"{category}/{getattr(agn.config, attr, 'none')}"
+        for category in ("disc", "nlr", "blr", "feii", "torus", "attenuation"):
+            key = f"{category}/{recipe[category]}"
             if key in UNWIRED_BLOCKS:
                 return f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
         unbounded = [
@@ -12733,9 +12738,10 @@ class SEDModel:
     def _build_agn_band_table(self, chain):
         """Run the ``composable_agn`` adapter over the free axes; ``(table, reason)``."""
         from tengri.components.agn.blocks.recipe import Recipe
-        from tengri.components.agn.component import numeric_agn_kwargs
+        from tengri.components.agn.component import AGNSEDComponent, numeric_agn_kwargs
         from tengri.forward.precompute import reach_axes, registry
 
+        agn = next(c for c in chain if isinstance(c, AGNSEDComponent))
         module = registry.resolve("composable_agn")
         fixed = self.spec.get_fixed_values()
         axes_names = sorted(
@@ -12777,8 +12783,15 @@ class SEDModel:
             lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
             axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
             fixed_values.pop("agn_log_lbol", None)
-        recipe = Recipe.from_parameters(
-            self.spec, axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names)
+        selectors = agn.resolved_recipe()
+        recipe = Recipe.from_selectors(
+            disc=selectors["disc"],
+            nlr=selectors["nlr"],
+            blr=selectors["blr"],
+            feii=selectors["feii"],
+            torus=selectors["torus"],
+            attenuation=selectors["attenuation"],
+            axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names),
         )
 
         def _tabulate(grids):
