@@ -37,7 +37,7 @@ pytestmark = pytest.mark.contract
 _MASS = "sfh_dpl_log_total_mass"
 _SPECS = [(300, 4000.0, 7000.0, 0.05), (360, 4200.0, 7400.0, 0.1), (420, 4500.0, 7500.0, 0.2)]
 _TRUE_MASS = (10.0, 10.3, 9.7)
-_F32_MASS = (4.0, 4.3, 3.7)
+_F32_MASS = (10.0, 10.3, 9.7)
 _HALF_BAND = 3
 _REL_NOISE = 1e-3
 _MASKED = ((40, 55), (120, 130), (200, 215))
@@ -229,15 +229,21 @@ def test_galaxies_with_different_covariance_offsets_are_refused(template, mock):
 # ── (g) Float32: finite value, finite nonzero gradient ────────────────────
 
 
-def test_float32_value_and_gradient_are_finite_and_nonzero(synthetic_ssp, template):
-    """Finite value and nonzero gradient in float32 at log10 M = 4.0 with scaled data.
+def test_float32_value_and_gradient_are_finite_and_nonzero(synthetic_ssp_physical):
+    """Finite value and nonzero gradient in float32 at galaxy-scale log10 M = 10.
 
-    Masses are 4 dex below galaxy scale because the float32 forward is non-finite
-    above log10 M of about 4.4 (#3149).
+    The SSP is physically normalized (see ``synthetic_ssp_physical``), so the float32
+    forward is in range at a realistic mass (#3149).
     """
-    galaxies = _mock_catalog(synthetic_ssp, masses=_F32_MASS)
+    galaxies = _mock_catalog(synthetic_ssp_physical, masses=_F32_MASS)
+    template32 = _calibrated_template(
+        synthetic_ssp_physical,
+        galaxies[0]["wave"],
+        _banded(galaxies[0]["wave"]),
+        calibration_order=0,
+    )
     [(spec, batch, _)] = build_spectro_batches(
-        [_record(g) for g in galaxies], quantum=420, model=template
+        [_record(g) for g in galaxies], quantum=420, model=template32
     )
     with jax.enable_x64(False):
         batch32 = jax.tree_util.tree_map(
@@ -248,7 +254,7 @@ def test_float32_value_and_gradient_are_finite_and_nonzero(synthetic_ssp, templa
         )
         mass = jnp.asarray([m + 0.05 for m in _F32_MASS], dtype=jnp.float32)
         for marginalize in (False, True):
-            loglik = batched_log_likelihood(template, spec, calibration_marginalize=marginalize)
+            loglik = batched_log_likelihood(template32, spec, calibration_marginalize=marginalize)
             values, grads = jax.vmap(jax.value_and_grad(loglik))({_MASS: mass}, batch32)
             assert values.dtype == jnp.float32
             # grad-assert: finite-only — the value is a log-likelihood, not a gradient
