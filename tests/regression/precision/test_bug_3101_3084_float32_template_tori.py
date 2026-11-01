@@ -18,11 +18,21 @@ Each case is measured in float32 against float64 *inside the test*
 (``jax.enable_x64(False)``), with every grid built fresh in its own mode, over
 ``agn_log_lbol`` in {6, 8, 10, 12, 14} and several sightlines: the eager kernel, the kernel
 jitted with its grid threaded as an argument, forward and reverse derivatives, and the
-precompute photometry lookup. The float64 output is pinned bit for bit to the composition
-the kernels had before the fix.
+precompute photometry lookup. The float32 power switches from a linear product to a
+``log10`` offset at ``agn_log_lbol = -12`` (``_template_grid._FLOAT32_LINEAR_MAX_LOG_LBOL``);
+values and both derivative modes are checked on either side of it, and at the reference
+luminosity the runner evaluates at. The float64 output is pinned bit for bit to a reference
+frozen on main before the fix (``fixtures/float64_template_tori_reference.npz``, written by
+the script beside it, which records the commit).
+
+One torus per scaling code path runs in the PR tier: CAT3D-Wind (``torus_lnu_from_grid``),
+Nenkova 2p (``torus_lnu_anisotropic``), Fritz (``scale_by_torus_power``) and Silva+04
+(``scale_to_torus_power_native``). The other libraries run in the ``slow`` tier.
 """
 
 import importlib
+import importlib.util
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -219,7 +229,14 @@ def _peak_relative(a, b):
     return np.max(np.abs(a - b), axis=axes) / np.max(np.abs(b), axis=axes)
 
 
-@pytest.fixture(scope="module", params=sorted(_CASES))
+#: One torus per scaling code path: the PR tier. The rest run in the ``slow`` tier.
+_PR_TIER = ("cat3d_wind", "fritz", "nenkova_agnfitter_2p", "silva04")
+_TIERED = [*_PR_TIER] + [
+    pytest.param(name, marks=pytest.mark.slow) for name in sorted(_CASES) if name not in _PR_TIER
+]
+
+
+@pytest.fixture(scope="module", params=_TIERED)
 def measured(request):
     name = request.param
     return name, _evaluate(name, True), _evaluate(name, False)
@@ -266,49 +283,126 @@ def test_float32_derivatives_are_finite(measured):
     assert err.max() <= _RTOL_SED, f"{name} d/d agn_log_lbol off by {err.max():.2e}"
 
 
-@pytest.mark.parametrize("name", ["cat3d_wind", "nenkova_agnfitter_2p", "skirtor_agnfitter"])
-def test_float64_shape_kernel_is_the_linear_product_bit_for_bit(name):
-    """Float64 ``torus_lnu_from_grid`` is the pre-fix linear composition, to the bit."""
-    from tengri.components.agn._template_grid import scale_to_lbol_native, torus_lnu_from_grid
-    from tengri.utils.grid_interp import interp_nd_pchip, resample_template
-    from tengri.utils.physics_constants import L_SUN
+#: ``agn_log_lbol`` either side of the float32 linear/offset switch at -12, through the band
+#: (-7, 0] where the linear product's forward derivative used to overflow, and the
+#: reference luminosity the composable runner evaluates at (``_AGN_LBOL_REF`` ~ -23.58).
+_SWITCH_LBOLS = (-23.582971929104808, -16.0, -12.5, -12.0, -11.999, -11.5, -8.0, -4.0, -1.0,
+                 0.0, 0.5)  # fmt: skip
+#: Float32 vs float64 for a derivative, ``max|Delta| / max|d|``. Measured maximum over these
+#: points 1.4e-5 (Silva+04, d/d log N_H); the linear branch's overflow gave ``inf``, and its
+#: reverse-mode error was 2.8x, so the bound separates the two by five decades.
+_RTOL_DERIV = 5e-5
 
-    mod_name, loader, finder, *_ = _CASES[name]
+
+def _switch_evaluate(name, x64, cotangents=None):
+    """SED, jacfwd and grad at ``_SWITCH_LBOLS``, in one precision mode, as float64 NumPy.
+
+    The reverse-mode cotangent is matched to the SED's scale (``1 / max|L_nu|`` of the
+    float64 arm, ``cotangents``) so that ``cotangent x L_nu`` is O(1) at every luminosity,
+    as a likelihood's is; a fixed cotangent would underflow at the faint points.
+    """
+    mod_name, loader, finder, kernel, key, sights, extra, _ = _CASES[name]
     mod = _module(mod_name)
-    try:
-        grid = getattr(mod, loader)(getattr(mod, finder)())
-    except FileNotFoundError as exc:
-        pytest.skip(f"{name} grid not on disk: {exc}")
-    wave = jnp.asarray(_WAVE)
-    coords = tuple(0.5 * (np.asarray(a)[0] + np.asarray(a)[-1]) for a in grid.axes)
-    for lbol in _LBOLS:
-        new = torus_lnu_from_grid(grid, wave, coords, agn_log_lbol=lbol, agn_torus_frac=_FRAC)
-        template = interp_nd_pchip(
-            jnp.asarray(grid.template), tuple(jnp.asarray(a) for a in grid.axes), coords
+    with jax.enable_x64(x64):
+        _clear_caches(mod)
+        dtype = jnp.float64 if x64 else jnp.float32
+        try:
+            grid = getattr(mod, loader)(getattr(mod, finder)())
+        except FileNotFoundError as exc:
+            pytest.skip(f"{name} grid not on disk: {exc}")
+        fn = getattr(mod, kernel)
+        wave = jnp.asarray(_WAVE, dtype=dtype)
+        sight = jnp.asarray(sights[1], dtype=dtype)
+
+        def sed(g, lbol, s):
+            return fn(g, wave, **{key: s, "agn_log_lbol": lbol, "agn_torus_frac": _FRAC, **extra})
+
+        value = jax.jit(sed)
+        jac = jax.jit(jax.jacfwd(sed, (1, 2)))
+        grad = jax.jit(jax.grad(lambda g, a, b, c: jnp.sum(sed(g, a, b)) * c, (1, 2)))
+        out = {"sed": [], "jac": [], "grad": []}
+        for i, lb in enumerate(_SWITCH_LBOLS):
+            lbol = jnp.asarray(lb, dtype=dtype)
+            l_nu = np.asarray(value(grid, lbol, sight), np.float64)
+            c = 1.0 / np.max(np.abs(l_nu)) if cotangents is None else cotangents[i]
+            out["sed"].append(l_nu)
+            out["jac"].append(
+                np.stack([np.asarray(j, np.float64) for j in jac(grid, lbol, sight)])
+            )
+            out["grad"].append(
+                np.array([float(g) for g in grad(grid, lbol, sight, jnp.asarray(c, dtype))])
+            )
+        _clear_caches(mod)
+    out = {k: np.stack(v) for k, v in out.items()}
+    out["cotangents"] = 1.0 / np.max(np.abs(out["sed"]), axis=-1)
+    return out
+
+
+@pytest.mark.parametrize("name", _PR_TIER)
+def test_float32_derivatives_match_float64_across_the_linear_switch(name):
+    """Values, jacfwd and grad either side of the switch at -12 and at the reference point."""
+    f64 = _switch_evaluate(name, True)
+    f32 = _switch_evaluate(name, False, cotangents=f64["cotangents"])
+    for kind in ("sed", "jac", "grad"):
+        values = f32[kind]
+        assert np.all(np.isfinite(values)), f"{name} {kind}: non-finite in float32"
+        # d L_nu / d agn_log_lbol = ln(10) L_nu: an all-zero row is an underflowed derivative.
+        assert np.any(values != 0.0), f"{name} {kind}: identically zero in float32"
+        rows = values.reshape(values.shape[0], -1)
+        # grad-assert: nonzero-only — finiteness of the same array is asserted just above.
+        assert np.all(np.any(rows != 0.0, axis=-1)), f"{name} {kind}: a point is all zero"
+    err = _peak_relative(f32["sed"], f64["sed"])
+    assert err.max() <= _RTOL_SED, f"{name} SED off float64 by {err.max():.2e}"
+    for col, label in ((0, "agn_log_lbol"), (1, "sightline")):
+        err = _peak_relative(f32["jac"][:, col], f64["jac"][:, col])
+        worst = _SWITCH_LBOLS[int(np.argmax(err))]
+        assert err.max() <= _RTOL_DERIV, (
+            f"{name} jacfwd d/d {label} off float64 by {err.max():.2e} at agn_log_lbol {worst}"
         )
-        native = jnp.asarray(grid.wave_grid)
-        sed = resample_template(wave, native, template, left=0.0, right=0.0)
-        old = scale_to_lbol_native(template, native, sed, 10.0**lbol * L_SUN * _FRAC)
-        np.testing.assert_array_equal(np.asarray(new), np.asarray(old))
+    err = np.max(np.abs(f32["grad"] - f64["grad"]) / np.abs(f64["grad"]), axis=-1)
+    worst = _SWITCH_LBOLS[int(np.argmax(err))]
+    assert err.max() <= _RTOL_DERIV, (
+        f"{name} grad off float64 by {err.max():.2e} at agn_log_lbol {worst}"
+    )
 
 
-@pytest.mark.parametrize("name", ["nenkova_agnfitter_3p", "skirtor_agnfitter_1p"])
-def test_float64_anisotropy_table_is_unchanged_bit_for_bit(name):
-    """Float64 ``anisotropy_values`` is the in-graph ``anisotropy_grid`` ratio, to the bit."""
-    from tengri.components.agn._template_grid import native_bolometric_nu_np
-    from tengri.components.agn._torus_inclination import anisotropy_grid, anisotropy_values
+def _frozen_reference():
+    """The reference arrays frozen on main, and the generator that wrote them."""
+    here = Path(__file__).parent / "fixtures"
+    spec = importlib.util.spec_from_file_location(
+        "make_float64_template_tori_reference", here / "make_float64_template_tori_reference.py"
+    )
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    with np.load(here / "float64_template_tori_reference.npz") as frozen:
+        return generator, {k: frozen[k] for k in frozen.files}
 
-    mod_name, loader, finder, *_ = _CASES[name]
-    mod = _module(mod_name)
+
+_FROZEN_LIBRARIES = (
+    "cat3d_wind", "nenkova_agnfitter_2p", "skirtor_agnfitter", "fritz", "silva04",
+    "nenkova_agnfitter_3p", "skirtor_agnfitter_1p",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("name", _FROZEN_LIBRARIES)
+def test_float64_matches_the_reference_frozen_on_main_bit_for_bit(name):
+    """Float64 SEDs, their jacfwd, and the anisotropy tables equal main's, to the bit."""
+    generator, frozen = _frozen_reference()
+    assert set(generator.KERNELS) | set(generator.ANISOTROPY) == set(_FROZEN_LIBRARIES)
+    np.testing.assert_array_equal(frozen["wave"], generator.WAVE)
+    np.testing.assert_array_equal(frozen["lbols"], np.asarray(generator.LBOLS))
     try:
-        grid = getattr(mod, loader)(getattr(mod, finder)())
+        current = generator.library_arrays(name)
     except FileNotFoundError as exc:
         pytest.skip(f"{name} grid not on disk: {exc}")
-    inc = mod.TORUS_INCLINATION
-    template = np.asarray(grid.template)
-    flat = template.reshape(-1, template.shape[-1])
-    powers = np.array([native_bolometric_nu_np(r, grid.wave_grid, floor=0.0) for r in flat])
-    old = anisotropy_grid(powers.reshape(template.shape[:-1]), grid.axes, inc).values
-    new = anisotropy_values(template, grid.wave_grid, grid.axes, inc)
-    np.testing.assert_array_equal(new, np.asarray(old))
-    np.testing.assert_array_equal(np.asarray(grid.anisotropy), new)
+    assert current, name
+    for key, value in current.items():
+        if key.endswith("_sha256"):
+            assert str(value) == str(frozen[key]), (
+                f"{key}: float64 table differs from main ({frozen['generated_on']})"
+            )
+            continue
+        assert value.dtype == np.float64, (key, value.dtype)
+        np.testing.assert_array_equal(
+            value, frozen[key], err_msg=f"{key} differs from main ({frozen['generated_on']})"
+        )

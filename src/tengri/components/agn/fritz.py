@@ -47,7 +47,11 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import native_bolometric_nu, scale_by_torus_power
+from tengri.components.agn._template_grid import (
+    cache_per_float_dtype,
+    native_bolometric_nu,
+    scale_by_torus_power,
+)
 from tengri.components.agn._torus_inclination import (
     AnisotropyGrid,
     TorusInclination,
@@ -478,7 +482,7 @@ def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
     return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_fritz_grid(grid_path: str) -> FritzGrid:
     """Load a Fritz+2006 grid HDF5 into a :class:`FritzGrid` pytree.
 
@@ -496,9 +500,12 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace.
 
     ``jax.ensure_compile_time_eval`` keeps the derived edge arrays concrete
-    even when this first runs inside a trace; without it the
-    ``functools.cache`` would immortalize ``DynamicJaxprTracer`` values that
-    leak out of the trace scope.
+    even when this first runs inside a trace; without it the cache would
+    immortalize ``DynamicJaxprTracer`` values that leak out of the trace scope.
+    The cache is keyed on the process float dtype as well as the path
+    (:func:`~tengri.components.agn._template_grid.cache_per_float_dtype`): the
+    arrays take the dtype of the mode they are built in, so a path-only key
+    handed a float32 load to every later float64 run.
     """
     raw = _load_grid_arrays(grid_path)
     if "norm" not in raw:
@@ -662,7 +669,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes, the returned function is pure JAX.
-    Grid loading is cached via ``@functools.cache``.
+    Grid loading is cached per path and process float dtype.
 
     References
     ----------
@@ -702,7 +709,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes, the returned function is pure JAX.
-    Grid loading is cached via ``@functools.cache``.
+    Grid loading is cached per path and process float dtype.
 
     **Gradient-safe**: yes, PCHIP interpolation is C1 in every coordinate.
 
@@ -992,13 +999,13 @@ def fritz_disc_dust_ratio(
     )
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_fritz_default():
     """Load Fritz2006 template grid from file (dust-only, the torus component)."""
     return create_fritz_from_grid(_find_fritz_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_fritz_components():
     """Load Fritz2006 template grid with separate components."""
     path = _find_fritz_grid()

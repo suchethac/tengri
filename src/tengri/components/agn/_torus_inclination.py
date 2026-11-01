@@ -46,6 +46,7 @@ from tengri.components.agn._template_grid import (
     float32_safe_template,
     native_bolometric_nu,
     native_bolometric_nu_np,
+    process_float_dtype,
     torus_lnu_from_grid,
 )
 from tengri.utils.grid_interp import interp_nd_pchip
@@ -268,7 +269,7 @@ def anisotropy_values(template, wave, axes, inc: TorusInclination) -> np.ndarray
     was 0/0 (#3101).
     """
     powers = _host_record_powers(template, wave)
-    if jnp.result_type(float) == jnp.float64:
+    if process_float_dtype() == np.float64:
         return np.asarray(anisotropy_grid(powers, axes, inc).values)
     mu = np.asarray(_mu_of(np.asarray(axes[inc.axis], dtype=np.float64), inc.variable))
     mean = np.trapezoid(powers, mu, axis=inc.axis) / (mu[-1] - mu[0])
@@ -420,7 +421,7 @@ def node_power_scale(grid: TorusTemplateGrid, inc: TorusInclination) -> np.ndarr
     are taken with ``native_bolometric_nu_np`` in float64, since the in-graph integral would
     flush them to zero and the table to ``inf`` (#3101).
     """
-    if jnp.result_type(float) == jnp.float64:
+    if process_float_dtype() == np.float64:
         powers = np.asarray(_record_powers(grid, jnp.float64))
     else:
         powers = _host_record_powers(grid.template, grid.wave_grid)
