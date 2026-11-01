@@ -60,7 +60,7 @@ JIT note
 :func:`batched_log_likelihood` and :func:`batched_neg_log_posterior` return
 pure JAX functions, safe under :func:`jax.vmap`, :func:`jax.grad` and
 :func:`jax.jit`. :func:`fit_spectra_map_vmap` is a Python driver: it compiles
-one Adam scan per bucket, and the bucket spec is the compile signature.
+one optimizer run per bucket, and the bucket spec is the compile signature.
 """
 
 from __future__ import annotations
@@ -661,6 +661,67 @@ def _fit_chunk(nlp, batch, init, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
+def _max_abs(tree) -> jax.Array:
+    """Largest absolute entry over every leaf of a pytree."""
+    return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
+
+
+def _lbfgs_one(nlp, obs, init, *, n_steps, gtol):
+    """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
+    import optax
+
+    optimizer = optax.lbfgs()
+
+    def value_fn(params):
+        return nlp(params, obs)
+
+    value_and_grad = optax.value_and_grad_from_state(value_fn)
+    state = optimizer.init(init)
+    value, grad = value_and_grad(init, state=state)
+
+    def not_converged(carry):
+        _, _, _, grad_now, it, _ = carry
+        return (it < n_steps) & jnp.logical_not(_max_abs(grad_now) < gtol)
+
+    def advance(carry):
+        params, opt_state, value_now, grad_now, it, trace = carry
+        trace = trace.at[it].set(value_now)
+        updates, opt_state = optimizer.update(
+            grad_now, opt_state, params, value=value_now, grad=grad_now, value_fn=value_fn
+        )
+        params = optax.apply_updates(params, updates)
+        value_next, grad_next = value_and_grad(params, state=opt_state)
+        return params, opt_state, value_next, grad_next, it + 1, trace
+
+    carry = (init, state, value, grad, jnp.asarray(0), jnp.zeros((n_steps,), dtype=value.dtype))
+    params, _, value, _, n_done, trace = jax.lax.while_loop(not_converged, advance, carry)
+    trace = jnp.where(jnp.arange(n_steps) < n_done, trace, value)
+    return params, value, trace
+
+
+def _lbfgs_chunk(nlp, batch, init, *, n_steps, gtol):
+    """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
+
+    The chunk is one ``vmap`` of per-galaxy ``while_loop`` runs. JAX keeps a
+    converged galaxy's state fixed while the slowest galaxy of the chunk iterates.
+    The loss trace is ``(n_steps, B)`` as for Adam; after a galaxy stops, its
+    trace holds the final value.
+    """
+
+    def one(obs, init_one):
+        return _lbfgs_one(nlp, obs, init_one, n_steps=n_steps, gtol=gtol)
+
+    params_final, final_nlp, trace = jax.vmap(one)(batch, init)
+    return params_final, final_nlp, trace.T
+
+
+def _run_chunk(nlp, batch, init, *, optimizer, n_steps, learning_rate, gtol):
+    """Dispatch one chunk to the optimizer named by ``optimizer``."""
+    if optimizer == "adam":
+        return _fit_chunk(nlp, batch, init, n_steps=n_steps, learning_rate=learning_rate)
+    return _lbfgs_chunk(nlp, batch, init, n_steps=n_steps, gtol=gtol)
+
+
 def _fit_bucket(
     model,
     spec,
@@ -673,8 +734,10 @@ def _fit_bucket(
     calibration_marginalize=False,
     cal_n_poly=3,
     cal_prior_sigma=1.0,
+    optimizer="lbfgs",
+    gtol=1e-5,
 ):
-    """Run Adam on one bucket, returning final latents, final nlp and the loss trace.
+    """Run one optimizer on one bucket, returning final latents, final nlp and the loss trace.
 
     The initial latents are drawn for the whole bucket and then sliced, so the
     result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
@@ -695,12 +758,14 @@ def _fit_bucket(
     for start in range(0, n_gal, step):
         stop = min(start + step, n_gal)
         parts.append(
-            _fit_chunk(
+            _run_chunk(
                 nlp,
                 _slice_tree(batch, start, stop),
                 _slice_tree(init, start, stop),
+                optimizer=optimizer,
                 n_steps=n_steps,
                 learning_rate=learning_rate,
+                gtol=gtol,
             )
         )
     params_final = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs), *[p[0] for p in parts])
@@ -720,8 +785,10 @@ def fit_spectra_map_vmap(
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
+    optimizer: str = "lbfgs",
+    gtol: float = 1e-5,
 ) -> dict[str, Any]:
-    """Batched MAP fit of spectra across galaxies, one Adam scan per bucket.
+    """Batched MAP fit of spectra across galaxies, one vmapped optimizer run per bucket.
 
     Parameters
     ----------
@@ -732,9 +799,10 @@ def fit_spectra_map_vmap(
         Output of :func:`~tengri.observation.batched.build_spectro_batches` built
         with ``model=model``.
     n_steps : int, optional
-        Adam iterations per bucket. Default 500.
+        Iteration cap per bucket: L-BFGS iterations, or Adam steps when
+        ``optimizer="adam"``. Default 500.
     learning_rate : float, optional
-        Adam learning rate in standardized space. Default 0.05.
+        Adam learning rate in standardized space; unused by L-BFGS. Default 0.05.
     seed : int, optional
         PRNG seed for the initial latents. Default 0.
     chunk_size : int, optional
@@ -748,6 +816,14 @@ def fit_spectra_map_vmap(
         Calibration coefficients when ``calibration_marginalize``. Default 3.
     cal_prior_sigma : float, optional
         Prior standard deviation of each calibration coefficient. Default 1.0.
+    optimizer : {"lbfgs", "adam"}, optional
+        ``"lbfgs"`` (default) runs ``optax.lbfgs`` with a zoom line search on each
+        galaxy until its gradient infinity-norm, in standardized space, is below
+        ``gtol``, as the per-galaxy Fitter does. ``"adam"`` runs ``n_steps`` Adam
+        steps with ``learning_rate``.
+    gtol : float, optional
+        Gradient infinity-norm tolerance [standardized units] for ``"lbfgs"``.
+        Default 1e-5.
 
     Returns
     -------
@@ -760,7 +836,8 @@ def fit_spectra_map_vmap(
         each galaxy, in the same order.
         ``"loss_history"``: list of ndarray, one per bucket in ``batches`` order,
         each of shape ``(n_steps, B_bucket)``: the negative log-posterior at
-        each step before that step's update.
+        each iteration before that iteration's update. For L-BFGS a galaxy that has
+        converged holds its final value for the remaining rows.
 
     Raises
     ------
@@ -788,6 +865,8 @@ def fit_spectra_map_vmap(
         raise ValueError("batches is empty; build it with build_spectro_batches")
     if chunk_size is not None and (not isinstance(chunk_size, int) or chunk_size < 1):
         raise ValueError(f"chunk_size must be a positive integer or None, got {chunk_size!r}")
+    if optimizer not in ("lbfgs", "adam"):
+        raise ValueError(f"optimizer must be 'lbfgs' or 'adam', got {optimizer!r}")
 
     base_key = jax.random.PRNGKey(seed)
     bucket_keys = jax.random.split(base_key, len(batches))
@@ -804,6 +883,8 @@ def fit_spectra_map_vmap(
             calibration_marginalize=calibration_marginalize,
             cal_n_poly=cal_n_poly,
             cal_prior_sigma=cal_prior_sigma,
+            optimizer=optimizer,
+            gtol=gtol,
         )
         buckets.append(
             {
@@ -973,7 +1054,8 @@ def fit_spectra_catalog_mcmc(
         ``"prior"`` draws starts from :func:`init_unbounded_batch`. Default
         ``"map"``.
     map_steps : int, optional
-        Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
+        Iterations of the MAP warm start (L-BFGS, as in :func:`fit_spectra_map_vmap`).
+        Ignored when ``init="prior"``. Default 200.
     batch_size : int, optional
         Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
         (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the
