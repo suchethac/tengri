@@ -835,6 +835,7 @@ def _compute_bh_and_radii(
         efficiency [all in CGS units].
     """
     from tengri.components.agn.disc import (
+        _clip_zone_radii,
         _disc_dissipation_per_mdot_c2,
         _gravitational_radius,
         _hot_flow_luminosity,
@@ -886,8 +887,7 @@ def _compute_bh_and_radii(
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
 
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
+    r_hot_cm, r_warm_cm = _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm)
 
     return r_hot_cm, r_warm_cm, r_out_cm, t_in, eta
 
@@ -1198,7 +1198,7 @@ def kubota_done_disc_preintegrated(
         agn_f_hard,
         log10_l_edd - (agn_log_lbol + _LOG10_LSUN),
         agn_a_spin,
-        x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        x_hot_max=r_out_cm / r_isco_cm,
         h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * l_bol_unit

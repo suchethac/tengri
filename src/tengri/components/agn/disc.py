@@ -1433,7 +1433,7 @@ def _hot_flow_luminosity(
 
     tengri cannot drop zones (static shapes), so the unreachable case is represented by
     saturating: ``L_hot`` is limited to what the annuli inside the largest admissible
-    ``R_hot`` dissipate, ``L0 h(x_hot_max)`` with ``x_hot_max = 0.5 R_out / R_isco`` (the zone
+    ``R_hot`` dissipate, ``L0 h(x_hot_max)`` with ``x_hot_max = R_out / R_isco`` (the zone
     clip of :func:`_compute_zone_radii`), and never above ``L0 h_ceiling(a)`` (99% of the
     disc's total dissipation ``L0 h(inf)``, the bisection's own ceiling). The corona then
     radiates exactly the power the hot flow dissipates inside ``R_hot``:
@@ -1444,7 +1444,7 @@ def _hot_flow_luminosity(
     Parameters
     ----------
     x_hot_max : float, optional
-        ``0.5 R_out / R_isco``, the largest ``R_hot / R_isco`` the zone clip allows
+        ``R_out / R_isco``, the largest ``R_hot / R_isco`` the zone clip allows
         [dimensionless]. Omitted, only the bisection's ceiling applies.
 
     Both ``R_hot`` (the zone radii) and the corona normalization (the SED) use THIS
@@ -1542,7 +1542,7 @@ def _hot_flow_fraction(
     a_spin : float
         Dimensionless black hole spin [dimensionless].
     x_hot_max : float, optional
-        ``0.5 R_out / R_isco`` zone clip [dimensionless].
+        ``R_out / R_isco`` zone clip [dimensionless].
 
     Returns
     -------
@@ -1565,11 +1565,12 @@ def _hot_flow_fraction(
 
 
 def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
-    """Largest admissible ``R_hot / R_isco``: the zone clip ``0.5 R_out`` in units of ``R_isco``.
+    """Largest admissible ``R_hot / R_isco``: the outer radius ``R_out`` in units of ``R_isco``.
 
     ``R_out = max(r_sg, 10 R_isco)`` (both in ``R_g``), so the ratio needs no physical constants.
+    The clip of :func:`_clip_zone_radii` admits ``R_hot`` up to ``R_out``.
     """
-    return 0.5 * jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
+    return jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
 
 
 def _compute_zone_radii(
@@ -1650,7 +1651,7 @@ def _compute_zone_radii(
     r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
 
     # R_hot is solved from the SAME L_hot the corona radiates (#2572), limited to what the
-    # annuli inside the zone clip (0.5 R_out) dissipate.
+    # annuli inside the outer radius R_out dissipate.
     l_hot_target = _hot_flow_luminosity(
         agn_f_hard,
         log10_l_edd,
@@ -1669,10 +1670,39 @@ def _compute_zone_radii(
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
 
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
-
+    r_hot_cm, r_warm_cm = _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm)
     return r_hot_cm, r_warm_cm, r_out_cm
+
+
+def _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm):
+    r"""Clip ``R_hot`` and ``R_warm`` into their ordered ranges, shared by every disc path.
+
+    .. math::
+
+        R_{\rm ISCO} < R_{\rm hot} \le R_{\rm out}, \qquad
+        R_{\rm hot} < R_{\rm warm} \le R_{\rm out}
+
+    The upper bounds are the outer radius itself, as in K&D 2018 (Sec. 2.2, ``r_warm = r_out``
+    is their "entire outer disc" geometry) and the RELQSO source, which sets
+    ``r_h = r_out`` when the dissipation never reaches ``f_hard L_Edd``.
+
+    Parameters
+    ----------
+    r_hot_cm, r_warm_cm : float
+        Unclipped hot-flow and warm-zone radii [cm].
+    r_isco_cm : float
+        ISCO radius [cm].
+    r_out_cm : float
+        Outer disc radius [cm].
+
+    Returns
+    -------
+    tuple
+        ``(r_hot_cm, r_warm_cm)`` clipped [cm].
+    """
+    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm)
+    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm)
+    return r_hot_cm, r_warm_cm
 
 
 def _ring_area_relative(r_cm, dr_cm, cos_inc, r_ref_cm, dr_ref_cm):
@@ -1912,7 +1942,7 @@ def _compute_zone_luminosities(
         agn_f_hard,
         log10_edd_over_bol,
         agn_a_spin,
-        x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        x_hot_max=r_out_cm / r_isco_cm,
         h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * _pow10(log10_bol_shape)
@@ -2235,6 +2265,17 @@ def kubota_done_disc(
     - **R_warm**: Parameterized as a multiple of R_hot (default 2, per K&D).
     - **R_out**: Set to the Laor & Netzer (1989) self-gravity (Toomre) radius,
       beyond which the disc becomes unstable and fragments.
+
+    The radii obey :math:`R_{\\rm ISCO} < R_{\\rm hot} \\le R_{\\rm out}` and
+    :math:`R_{\\rm hot} < R_{\\rm warm} \\le R_{\\rm out}`. Where the disc cannot dissipate
+    :math:`f_{\\rm hard} L_{\\rm Edd}` inside :math:`R_{\\rm out}`,
+    :math:`R_{\\rm hot} = R_{\\rm out}` and the whole flow is hot, as in the RELQSO source
+    of Hagen & Done (see
+    :func:`_clip_zone_radii`). The corona power then saturates at the disc's dissipation
+    inside :math:`R_{\\rm out}`, which gives a slope change in :math:`L_{\\rm hot}` at
+    :math:`f_{\\rm hard}/\\lambda_{\\rm Edd} = h(R_{\\rm out}/R_{\\rm ISCO})/h(\\infty)`
+    (about 0.93); the steep optical disc share just above that point is the corona taking
+    most of :math:`L_{\\rm bol}`.
 
     The hard X-ray photon index Γ_hot is derived self-consistently from the
     Beloborodov (1999) energy-balance relation if requested; otherwise uses
