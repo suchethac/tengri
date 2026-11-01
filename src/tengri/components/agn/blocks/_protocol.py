@@ -86,6 +86,8 @@ __all__ = [
     "DISC_SPLIT_BLOCKS",
     "DISC_STATE_BLOCKS",
     "LINE_ENERGY_BLOCKS",
+    "SPECTRAL_EDGE_BLOCKS",
+    "TORUS_ANISOTROPY_BLOCKS",
     "BlockCategory",
     "collect_block_templates",
     "disc_emits_xray",
@@ -94,6 +96,8 @@ __all__ = [
     "register_disc_split",
     "register_disc_state",
     "register_line_energy",
+    "register_spectral_edges",
+    "register_torus_anisotropy",
     "resolve_agn_block",
 ]
 
@@ -151,6 +155,22 @@ DISC_STATE_BLOCKS: dict[str, Callable] = {}
 # own output; ``corona_fraction`` is ``P_H / (P_D + P_H)`` of the angle-integrated powers, in
 # closed form. A disc with no corona registers nothing: the runner treats it as all disc.
 DISC_SPLIT_BLOCKS: dict[str, Callable] = {}
+
+# Library anisotropy of a torus block: torus name -> callable
+# ``fn(templates, dtype, **params) -> log10(a(mu) / a_bar)`` [dex], the torus power along the
+# model's sightline over its sphere mean (``_torus_inclination.log10_anisotropy``). A torus whose
+# library keeps its flux ratio between sightlines registers it here, so the energy ledger takes
+# the angle-integrated torus power as the sightline power minus this; a torus that registers
+# nothing carries the same power along every sightline.
+TORUS_ANISOTROPY_BLOCKS: dict[str, Callable] = {}
+
+# Spectral edges of a block: (category, name) -> zero-argument callable returning the
+# wavelengths [Angstrom] where the block's spectrum is discontinuous (a band cut, a template's
+# first or last node, a tabulated curve's domain). A fixed-grid integral is first order across a
+# discontinuity and second order once a node sits on each side of it, so the energy ledger puts a
+# node pair at every registered edge of the selected blocks. Host floats; structural (they do not
+# depend on fitted parameters).
+SPECTRAL_EDGE_BLOCKS: dict[tuple[str, str], Callable[[], tuple[float, ...]]] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
@@ -412,6 +432,76 @@ def register_disc_split(name: str) -> Callable:
         if name in DISC_SPLIT_BLOCKS:
             raise ValueError(f"Disc split {name!r} is already registered.")
         DISC_SPLIT_BLOCKS[name] = fn
+        return fn
+
+    return decorator
+
+
+def register_torus_anisotropy(name: str) -> Callable:
+    """Decorator factory: register the library anisotropy of a torus block.
+
+    Parameters
+    ----------
+    name : str
+        Torus block name; the block must be registered separately with
+        :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn(templates, dtype, **params) -> log10(a/a_bar)`` [dex], the block's torus
+        power along ``agn_cos_inc`` over its angle-integrated power, and returns it unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` already has a registered anisotropy.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration only; the registered function must be
+    pure ``jnp`` and traceable.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if name in TORUS_ANISOTROPY_BLOCKS:
+            raise ValueError(f"Torus anisotropy {name!r} is already registered.")
+        TORUS_ANISOTROPY_BLOCKS[name] = fn
+        return fn
+
+    return decorator
+
+
+def register_spectral_edges(category: BlockCategory, name: str) -> Callable:
+    """Decorator factory: register where a block's spectrum is discontinuous.
+
+    Parameters
+    ----------
+    category : str
+        Block category.
+    name : str
+        Block name; the block must be registered separately with :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn() -> tuple[float, ...]``, the edge wavelengths [Angstrom], and returns
+        it unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``(category, name)`` already has registered edges.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration and host values only.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if (category, name) in SPECTRAL_EDGE_BLOCKS:
+            raise ValueError(f"Spectral edges {category}/{name!r} are already registered.")
+        SPECTRAL_EDGE_BLOCKS[(category, name)] = fn
         return fn
 
     return decorator

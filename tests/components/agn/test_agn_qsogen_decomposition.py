@@ -49,6 +49,7 @@ def test_qsogen_blocks_sum_to_monolithic(params):
         agn_feii_block="qsogen_balmer",
         agn_torus_block="qsogen",
         agn_attenuation_block="qsogen_smc",
+        strict_keys=False,  # the monolithic call's parameter set, as the presets pass it
         **params,
     )
     np.testing.assert_allclose(

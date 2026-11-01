@@ -61,11 +61,21 @@ from tengri.components.agn._lbol_reference import (
     rescale,
 )
 from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
+from tengri.components.agn._publication import log10_emitted_bolometric
 from tengri.components.agn._skirtor_agnfitter_sightline import resolve_retired_incl_skirtor
 from tengri.components.agn.blocks._grahsp_recipe import grahsp_recipe_log_l5100
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     describe_clipping,
+)
+from tengri.components.agn.blocks._ledger import (
+    LEDGER_CLOSED_KEY,
+    ledger_from_evaluations,
+    ledger_policy_closes,
+    ledger_sightlines,
+    ledger_wave,
+    log10_signed_sphere_mean,
+    non_conserving_reason,
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
@@ -73,12 +83,16 @@ from tengri.components.agn.blocks._protocol import (
     DISC_SPLIT_BLOCKS,
     DISC_STATE_BLOCKS,
     LINE_ENERGY_BLOCKS,
+    TORUS_ANISOTROPY_BLOCKS,
     resolve_agn_block,
 )
+from tengri.components.agn.blocks._unread_keys import refuse_unread_keys
 from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
     split_lines_result,
 )
+from tengri.components.agn.blocks.spectral_edges import block_edges
+from tengri.components.agn.blocks.torus_anisotropy import library_cos_nodes
 from tengri.components.agn.blocks.torus_library_transmission import (
     BelowLibraryIndex,
     library_torus_sightline,
@@ -105,7 +119,12 @@ from tengri.components.agn.skirtor import (
 )
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
-from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.scale import (
+    log10_magnitude,
+    log10_weighted_sum,
+    representable_denominator,
+    representable_floor,
+)
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -116,19 +135,24 @@ from tengri.utils.scale import representable_denominator, representable_floor
 _SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp", "grahsp_mn12"})
 
 #: Fixed wavelength grids [A] on which the runner measures the bolometric integrals
-#: that tie and debit its components (the conserving line ledger, the polar-dust
-#: budget). They never depend on the caller's wavelength array, so the budgets do
-#: not move with where that grid starts or how it is sampled. ``_LEDGER_WAVE``
+#: that tie and debit its components (the conserving line debit, the polar-dust
+#: budget; the energy ledger integrates on its own grid, ``_ledger.ledger_wave``).
+#: They never depend on the caller's wavelength array, so the budgets do not move with
+#: where that grid starts or how it is sampled. ``_BUDGET_WAVE``
 #: spans every disc/torus/graybody support (1000 points per decade of log
-#: spacing is the resolution the budgets are defined at); ``_LINE_LEDGER_WAVE``
+#: spacing is the resolution the budgets are defined at); ``_LINE_BUDGET_WAVE``
 #: resolves the emission lines (about 2e-4 in ln lambda, finer than a 300 km/s
 #: Gaussian sigma) over the range they occupy, for a line block that registers no
 #: closed-form power (``LINE_ENERGY_BLOCKS``).
-_LEDGER_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
+_BUDGET_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
 #: Key of the ``components`` dict that carries :math:`\log_{10}` of the line-of-sight
-#: isotropic-equivalent bolometric luminosity [erg/s] of the direct emission: a scalar, not an SED.
+#: isotropic-equivalent bolometric luminosity [erg/s] of the DIRECT emission (the disc block's own
+#: spectrum at the viewing angle, before the torus screen, the polar dust, the tie and the energy
+#: debits): a scalar, not an SED. Until #3076 it was published as ``log_L_agn_los``.
+DIRECT_LOS_LOG_LUMINOSITY_KEY = "log_L_agn_direct_los"
+#: Key of the ledger's emitted line-of-sight sum, the integral of ``sed_agn`` (#3076).
 LOS_LOG_LUMINOSITY_KEY = "log_L_agn_los"
-_LINE_LEDGER_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
+_LINE_BUDGET_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
 
 
 def _closed_templates(fn, templates) -> dict:
@@ -143,11 +167,11 @@ def _closed_templates(fn, templates) -> dict:
 
 #: The Kubota & Done disc is evaluated 4e3 FLOP per node (gradient), so its budget grid
 #: carries the 1000 points per decade only over 1e-2 - 1e6 A, where the trapezoid error of
-#: the whole 13 001-node ledger comes from, and 100 per decade in the tails: those hold
+#: the whole 13 001-node budget grid comes from, and 100 per decade in the tails: those hold
 #: <= 9e-7 of the disc energy (measured over log M 6 - 10, L_bol, spin and f_hard), so
 #: their coarser sampling changes the integral by ~1e-10. 8501 nodes reproduce the
 #: 13 001-node integrals to 8.9e-7 against a 4e5-node reference, the same error.
-_KUBOTA_LEDGER_WAVE = np.unique(
+_KUBOTA_BUDGET_WAVE = np.unique(
     np.concatenate(
         [
             np.geomspace(1.0e-3, 1.0e-2, 101),
@@ -198,6 +222,7 @@ __all__ = [
     "BLOCK_SELECTOR_KEYS",
     "C_AA_PER_S",
     "DEFAULT_BLOCK_SELECTORS",
+    "DIRECT_LOS_LOG_LUMINOSITY_KEY",
     "LOS_LOG_LUMINOSITY_KEY",
     "RecipeWarning",
     "composable_agn_l_nu",
@@ -400,6 +425,11 @@ def validate_block_recipe(
        and the grid extent. See
        ``tengri.components.agn.blocks._grid_support`` for why this cannot
        be expressed on the parameter declaration itself (#1586).
+    10. **Energy ledger not closed**: a self-contained quasar template torus
+        (``grahsp``, ``grahsp_mn12``, ``qsogen``), a disc normalized off
+        ``agn_log_lbol`` (``grahsp_sbpl``, ``grahsp_netzer``, ``qsogen``,
+        ``schartmann2005_skirtor_atten``) or ``agn_norm='independent'``. The
+        published ``agn_ledger_closed`` is 0 for these (#3076); the note says why.
 
     Parameters
     ----------
@@ -407,12 +437,10 @@ def validate_block_recipe(
 agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
     agn_norm : str, optional
-        Cross-block normalization policy (``"independent"`` or
-        ``"cigale_joint"``, see :attr:`AGNSEDComponentConfig.agn_norm`).
-        Consumed by Rule 3 so the disc-anchoring check can become
-        policy-aware if a future policy changes which blocks read
-        ``l5100_disc``; measured at this HEAD, none does (see Rule 3).
-        ``None`` (default) is treated the same as either policy.
+        Cross-block normalization policy (``"cigale_joint"``, ``"conserving"``
+        or ``"independent"``, see :attr:`AGNSEDComponentConfig.agn_norm`).
+        Read by Rule 10 (``"independent"`` does not close the energy ledger);
+        ``None`` (default) leaves that half of Rule 10 out.
     params : dict, optional
         Concrete parameter values, used by Rule 7 to surface a no-op
         ``agn_polar_ebv``. Values may legitimately be absent or traced.
@@ -469,7 +497,6 @@ agn_torus_block, agn_attenuation_block : str
     # here would be a false advisory (R48 -- the prior version named every
     # active torus block regardless). ``agn_norm`` is accepted for a future
     # policy-aware check but does not change any block's anchoring today.
-    del agn_norm  # unused: measured, no registered agn_norm policy changes anchoring
     anchored_active = [
         f"{cat}={selectors[cat]!r}"
         for cat in ("nlr", "blr", "feii", "torus")
@@ -518,6 +545,21 @@ agn_torus_block, agn_attenuation_block : str
                 "agn_polar_ebv=0 (no extinction applied). Either set "
                 "agn_polar_ebv > 0 or pick agn_attenuation_block='none'."
             )
+
+    # Rule 10: a recipe documented as non-conserving (decision 3 of the 2026-10-13 rulings).
+    # Its published ``agn_ledger_closed`` is 0 and the sphere-mean pieces do not add up to the
+    # accretion power; say so once, at build, rather than leave the flag to be found.
+    reason = non_conserving_reason(
+        agn_disc_block=selectors["disc"], agn_torus_block=selectors["torus"], agn_norm=agn_norm
+    )
+    if reason is not None:
+        _emit(
+            f"Composable AGN: the energy ledger does not close on the accretion power: "
+            f"{reason}. The published log_L_agn_* pieces are each this recipe's own emission, "
+            "and agn_ledger_closed is 0 (NAMING_CONTRACT 4c, 'Composable runner'). Choose "
+            "agn_norm='conserving' with a disc and torus that are debited from agn_log_lbol "
+            "for a closed ledger."
+        )
 
     # (Rule 8, the adaf-deprecation steer, was removed once the faithful
     # Mahadevan 1997 ADAF rewrite landed in #898, the block is now production.)
@@ -633,8 +675,8 @@ def _agn_sed_components(
 def _los_budget_wave(compact: bool, dtype) -> Array:
     """The disc's fixed budget grid [A], built in the trace from scalar end points.
 
-    Reproduces ``_KUBOTA_LEDGER_WAVE`` (``compact``: three geometric pieces, the shared end
-    points kept once) or ``_LEDGER_WAVE`` without an array literal entering the graph.
+    Reproduces ``_KUBOTA_BUDGET_WAVE`` (``compact``: three geometric pieces, the shared end
+    points kept once) or ``_BUDGET_WAVE`` without an array literal entering the graph.
     """
 
     def piece(lo: float, hi: float, n: int) -> Array:
@@ -648,7 +690,7 @@ def _los_budget_wave(compact: bool, dtype) -> Array:
                 piece(1.0e6, 1.0e10, 401)[1:],
             ]
         )
-    return piece(float(_LEDGER_WAVE[0]), float(_LEDGER_WAVE[-1]), _LEDGER_WAVE.size)
+    return piece(float(_BUDGET_WAVE[0]), float(_BUDGET_WAVE[-1]), _BUDGET_WAVE.size)
 
 
 def compose_l_nu(
@@ -665,6 +707,10 @@ def compose_l_nu(
     return_l2500: bool = False,
     return_components: bool = False,
     torus_below_index: BelowLibraryIndex | None = None,
+    return_ledger: bool = False,
+    strict_keys: bool = True,
+    _ledger_row: bool = False,
+    _l5100_disc: Array | None = None,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
@@ -707,10 +753,28 @@ agn_torus_block, agn_attenuation_block : str
         ``sed_agn_polar`` by :class:`~tengri.components.agn.component.AGNSEDComponent`).
         The four arrays sum to ``L_nu`` (to floating-point reassociation).
         Combines orthogonally with ``return_l2500``: the ``components`` dict
-        is always the LAST element of the returned tuple. Default: False.
+        is always the LAST element of the returned tuple. It also carries the
+        scalar ``log_L_agn_direct_los`` (see Notes). Default: False.
+    torus_below_index : BelowLibraryIndex, optional
+        Build-time index of the library torus's below-grid absorption on this ``wavelength``;
+        ``None`` takes the dense traced path.
+    return_ledger : bool, optional
+        With ``return_components``, add the energy ledger to the ``components`` dict
+        (``_ledger.ledger_from_evaluations``): ``log_L_agn_los``, the angle-integrated
+        ``log_L_agn_<piece>`` and line-of-sight ``log_L_agn_<piece>_los`` of the disc, torus,
+        lines and polar dust, the ``log_L_agn_<piece>_unemitted`` powers, their
+        ``L_agn_*_lsun`` siblings and ``agn_ledger_closed`` (NAMING_CONTRACT 4c, "Composable
+        runner"). It re-evaluates the chain on a fixed grid at the sightline and at the
+        quadrature sightlines, so only the component's final evaluation asks for it.
+        Default: False.
+    strict_keys : bool, optional
+        Refuse a keyword no selected block and not the runner reads
+        (``_unread_keys.refuse_unread_keys``). The AGN component and the presets call through
+        :func:`composable_agn_l_nu`, which passes the full declared ``agn_*`` superset (already
+        checked by the grammar, #2994) and turns this off. Default: True.
     **params
         Per-impl free parameters. Each block consumes the keys it
-        recognizes and ignores the rest.
+        recognizes; a key none of them reads is refused (``strict_keys``).
 
     Returns
     -------
@@ -744,11 +808,34 @@ agn_torus_block, agn_attenuation_block : str
     implementations (e.g. ``multicolor`` vs ``richards2006``) at the same
     ``agn_log_lbol``, enabling disc-shape-dependent downstream physics
     (e.g. α_ox in X-ray corona).
+
+    ``log_L_agn_direct_los`` (``components``) is :math:`\log_{10}` of the line-of-sight
+    isotropic-equivalent power of the direct emission, the disc block's own spectrum at the
+    viewing angle before the torus screen, the polar dust, the tie and the energy debits
+    [dex re erg/s]; ``log_L_agn_los`` (ledger) is the integral of the emitted SED.
+
+    Raises
+    ------
+    ParameterError
+        With ``strict_keys``, for a keyword the recipe does not read.
     """
     wave = jnp.asarray(wavelength)
+    _selectors = {
+        "agn_disc_block": agn_disc_block,
+        "agn_nlr_block": agn_nlr_block,
+        "agn_blr_block": agn_blr_block,
+        "agn_feii_block": agn_feii_block,
+        "agn_torus_block": agn_torus_block,
+        "agn_attenuation_block": agn_attenuation_block,
+    }
     # One inclination for every block (#2605): a retired SKIRTOR-AGNfitter angle becomes
     # agn_cos_inc here, before the disc mask and the torus read it (#3085).
     params = resolve_retired_incl_skirtor(params, caller="compose_l_nu()")
+    if strict_keys:
+        refuse_unread_keys(_selectors, params)
+    # The model's own parameters, before the runner adds its internal hand-offs; the ledger
+    # re-evaluates the chain from these.
+    _params_in = params
 
     # Apply float32 reference evaluation guard (#1206, #2321): when operating
     # in pure float32, pass a reference luminosity to blocks to avoid overflow,
@@ -836,6 +923,9 @@ agn_torus_block, agn_attenuation_block : str
         templates=disc_templates,
         **params,
     )
+    # The disc block's own spectrum along the sightline, before any reddening, screen or debit:
+    # a ledger row publishes it, and its mean over the sightlines is the intrinsic disc.
+    _disc_block_lambda = L_lambda_disc
     # Disc dust obscuration (agn_ebv_disc, Prévot SMC). Applied on the composable
     # path so every disc block respects it: previously only the monolithic
     # forward models reddened, so composable-routed presets (adaf, kubota_done_full)
@@ -880,11 +970,16 @@ agn_torus_block, agn_attenuation_block : str
     # The anchors are the disc evaluated AT 2500 and 4400 A, not interpolated
     # from the caller's grid, whose node spacing would then enter the value.
     _anchor_wave = jnp.asarray([2500.0, 4400.0], dtype=wave.dtype)
-    _anchor_lambda = disc_fn(
-        _anchor_wave,
-        agn_log_lbol=agn_log_lbol_eval,
-        templates=disc_templates,
-        **{**params, "agn_cos_inc": _COS_30DEG},
+    # A ledger row (``_ledger_row``) reads no anchor, so it does not evaluate them.
+    _anchor_lambda = (
+        jnp.zeros_like(_anchor_wave)
+        if _ledger_row
+        else disc_fn(
+            _anchor_wave,
+            agn_log_lbol=agn_log_lbol_eval,
+            templates=disc_templates,
+            **{**params, "agn_cos_inc": _COS_30DEG},
+        )
     )
 
     # R22 (ONE polar-dust mechanism): before this fix, polar-dust LOS
@@ -942,6 +1037,10 @@ agn_torus_block, agn_attenuation_block : str
     _tie_wave = None
     _tie_disc = None
     _tie_incl_native = None
+    # The ledger's unobscured angle-integrated disc under the tie, and the polar-dust share the
+    # tie takes off the disc (set below; only the ledger reads them).
+    _tie_intrinsic = None
+    _ledger_polar_norm = 1.0
     _tie_active = _agn_norm == "cigale_joint" and agn_torus_block in _TIE_TORI
     # A disc with a corona registers its disc/corona split; the tie normalizes the disc part
     # and carries the corona on top (see ``_disc_parts``). A corona-less disc takes the
@@ -1045,8 +1144,12 @@ agn_torus_block, agn_attenuation_block : str
     # angle-integrated power (``cos i = 0.5``): taking the line-of-sight value would carry
     # the disc's own ``2 cos i`` into them, a second inclination factor on isotropic emission.
     _wave_5100 = jnp.asarray([5100.0], dtype=wave.dtype)
+    # A ledger row takes the composition's own value: it does not depend on the sightline or on
+    # the wavelength grid.
     l5100_disc = (
-        redden_disc(
+        _l5100_disc
+        if _l5100_disc is not None
+        else redden_disc(
             _wave_5100,
             disc_fn(
                 _wave_5100,
@@ -1102,30 +1205,30 @@ agn_torus_block, agn_attenuation_block : str
         L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
         _disc_scalar = 1.0 - _torus_frac
 
-    _ledger_cache: dict = {}
+    _budget_cache: dict = {}
 
-    def _ledger_wave():
+    def _budget_wave():
         """The fixed budget grid, built once so the graph carries one constant."""
-        if "wave" not in _ledger_cache:
-            _ledger_cache["wave"] = _los_budget_wave(False, wave.dtype)
-        return _ledger_cache["wave"]
+        if "wave" not in _budget_cache:
+            _budget_cache["wave"] = _los_budget_wave(False, wave.dtype)
+        return _budget_cache["wave"]
 
-    def _disc_ledger_wave():
+    def _disc_budget_wave():
         """The fixed budget grid of the disc: compact for the Kubota & Done disc."""
         if agn_disc_block == "kubota_done":
-            return jnp.asarray(_KUBOTA_LEDGER_WAVE, dtype=wave.dtype)
-        return _ledger_wave()
+            return jnp.asarray(_KUBOTA_BUDGET_WAVE, dtype=wave.dtype)
+        return _budget_wave()
 
-    def _disc_on_ledger():
+    def _disc_on_budget():
         """The intrinsic (pre-debit) disc on its fixed budget grid, built once.
 
         Taken at the reference inclination where a ``2 cos i`` disc radiates its angle-integrated
         power (``agn_log_lbol``): the budgets it feeds (the polar dust's absorbed power, the line
         debit) do not depend on where the observer stands.
         """
-        if "disc" not in _ledger_cache:
-            _w = _disc_ledger_wave()
-            _ledger_cache["disc"] = redden_disc(
+        if "disc" not in _budget_cache:
+            _w = _disc_budget_wave()
+            _budget_cache["disc"] = redden_disc(
                 _w,
                 disc_fn(
                     _w,
@@ -1135,23 +1238,23 @@ agn_torus_block, agn_attenuation_block : str
                 ),
                 jnp.asarray(params.get("agn_ebv_disc", 0.0)),
             )
-        return _ledger_cache["disc"]
+        return _budget_cache["disc"]
 
-    def _disc_power_on_ledger():
+    def _disc_power_on_budget():
         """Bolometric power of the intrinsic disc [erg/s] on its fixed budget grid."""
-        return jnp.trapezoid(_disc_on_ledger(), _disc_ledger_wave())
+        return jnp.trapezoid(_disc_on_budget(), _disc_budget_wave())
 
-    def _torus_on_ledger():
+    def _torus_on_budget():
         """The torus block on the fixed budget grid, built once."""
-        if "torus" not in _ledger_cache:
-            _ledger_cache["torus"] = torus_fn(
-                _ledger_wave(),
+        if "torus" not in _budget_cache:
+            _budget_cache["torus"] = torus_fn(
+                _budget_wave(),
                 agn_log_lbol=agn_log_lbol_eval,
                 l5100_disc=l5100_disc,
                 templates=_templates_for("torus", agn_torus_block),
                 **params,
             )
-        return _ledger_cache["torus"]
+        return _budget_cache["torus"]
 
     def _torus_native_wave():
         """The torus template's own wavelength axis [A], or ``None`` without a library."""
@@ -1167,17 +1270,17 @@ agn_torus_block, agn_attenuation_block : str
         _axis = getattr(_grid, "wave_grid", None)
         return None if _axis is None else jnp.asarray(_axis, dtype=wave.dtype)
 
-    def _torus_power_on_ledger():
+    def _torus_power_on_budget():
         """Torus bolometric power [erg/s], independent of the caller's grid.
 
         With a template library the torus is a piecewise power law between the
         library's nodes, so its integral is exact on those nodes
         (``loglog_integral``); other tori are integrated on the fixed budget grid.
         """
-        if "torus_power" not in _ledger_cache:
+        if "torus_power" not in _budget_cache:
             _axis = _torus_native_wave()
             if _axis is None:
-                _power = jnp.abs(jnp.trapezoid(_torus_on_ledger(), _ledger_wave()))
+                _power = jnp.abs(jnp.trapezoid(_torus_on_budget(), _budget_wave()))
             else:
                 _on_axis = torus_fn(
                     _axis,
@@ -1187,8 +1290,8 @@ agn_torus_block, agn_attenuation_block : str
                     **params,
                 )
                 _power = jnp.abs(loglog_integral(_axis, _on_axis))
-            _ledger_cache["torus_power"] = _power
-        return _ledger_cache["torus_power"]
+            _budget_cache["torus_power"] = _power
+        return _budget_cache["torus_power"]
 
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
@@ -1241,51 +1344,74 @@ agn_torus_block, agn_attenuation_block : str
     # With no line block selected the debit is exactly zero, so the disc energy is not
     # measured at all.
     _has_lines = any(b != "none" for b in (agn_nlr_block, agn_blr_block, agn_feii_block))
+
+    def _line_energy(in_trace_grid: bool = False):
+        """Bolometric power of the NLR + BLR + FeII before any obscuration [erg/s], built once.
+
+        From the blocks' closed forms when they register one (``LINE_ENERGY_BLOCKS``:
+        unit-integral Gaussians, so the power is set by the normalization); only a block
+        without one is evaluated, on the fixed line grid and never on the caller's. The ledger
+        asks for it built in the trace from the grid's end points (``in_trace_grid``) when the
+        debit has not already evaluated it, so no 30 001-node literal enters the graph.
+        """
+        _key = "lines_in_trace" if in_trace_grid else "lines"
+        if _key not in _budget_cache:
+            _e_lines = 0.0
+            for _kind, _name, _fn, _tuple in (
+                ("nlr", agn_nlr_block, nlr_fn, True),
+                ("blr", agn_blr_block, blr_fn, True),
+                ("feii", agn_feii_block, feii_fn, False),
+            ):
+                if _name == "none":
+                    continue
+                _closed = LINE_ENERGY_BLOCKS.get((_kind, _name))
+                if _closed is not None:
+                    _e_lines = _e_lines + _closed(
+                        agn_log_lbol_eval,
+                        l5100_disc,
+                        **_closed_templates(_closed, _templates_for(_kind, _name)),
+                        **params,
+                    )
+                    continue
+                _w_lines = (
+                    jnp.exp(
+                        jnp.linspace(
+                            np.log(_LINE_BUDGET_WAVE[0]),
+                            np.log(_LINE_BUDGET_WAVE[-1]),
+                            _LINE_BUDGET_WAVE.size,
+                            dtype=wave.dtype,
+                        )
+                    )
+                    if in_trace_grid
+                    else jnp.asarray(_LINE_BUDGET_WAVE, dtype=wave.dtype)
+                )
+                _on_grid = _fn(
+                    _w_lines,
+                    agn_log_lbol=agn_log_lbol_eval,
+                    l5100_disc=l5100_disc,
+                    templates=_templates_for(_kind, _name),
+                    **params,
+                )
+                if _tuple:
+                    _on_grid = sum(split_lines_result(_on_grid))
+                _e_lines = _e_lines + jnp.trapezoid(_on_grid, _w_lines)
+            _budget_cache[_key] = _e_lines
+        return _budget_cache[_key]
+
     if (
         _agn_norm == "conserving"
         and agn_torus_block not in ("grahsp", "grahsp_mn12", "qsogen")
         and _has_lines
     ):
-        # The line power comes from the blocks' closed forms when they register one
-        # (``LINE_ENERGY_BLOCKS``: unit-integral Gaussians, so the power is set by the
-        # normalization); only a block without one is evaluated, on the fixed line grid and
-        # never on the caller's. The disc energy is measured on the fixed budget grid. The
-        # debit is a ratio of bolometric integrals and must not move with where the
-        # caller's grid starts.
-        _e_lines = 0.0
-        for _kind, _name, _fn, _tuple in (
-            ("nlr", agn_nlr_block, nlr_fn, True),
-            ("blr", agn_blr_block, blr_fn, True),
-            ("feii", agn_feii_block, feii_fn, False),
-        ):
-            if _name == "none":
-                continue
-            _closed = LINE_ENERGY_BLOCKS.get((_kind, _name))
-            if _closed is not None:
-                _e_lines = _e_lines + _closed(
-                    agn_log_lbol_eval,
-                    l5100_disc,
-                    **_closed_templates(_closed, _templates_for(_kind, _name)),
-                    **params,
-                )
-                continue
-            _w_lines = jnp.asarray(_LINE_LEDGER_WAVE, dtype=wave.dtype)
-            _on_grid = _fn(
-                _w_lines,
-                agn_log_lbol=agn_log_lbol_eval,
-                l5100_disc=l5100_disc,
-                templates=_templates_for(_kind, _name),
-                **params,
-            )
-            if _tuple:
-                _on_grid = sum(split_lines_result(_on_grid))
-            _e_lines = _e_lines + jnp.trapezoid(_on_grid, _w_lines)
+        # The disc energy is measured on the fixed budget grid. The debit is a ratio of
+        # bolometric integrals and must not move with where the caller's grid starts.
+        _e_lines = _line_energy()
         # The disc's bolometric power is the accretion power for a disc that registers it in
         # closed form (``DISC_POWER_BLOCKS``); any other disc is integrated on the fixed
         # budget grid.
         _closed_disc = DISC_POWER_BLOCKS.get(agn_disc_block)
         _e_disc = jnp.maximum(
-            _disc_power_on_ledger()
+            _disc_power_on_budget()
             if _closed_disc is None
             else _closed_disc(
                 agn_log_lbol_eval,
@@ -1334,7 +1460,7 @@ agn_torus_block, agn_attenuation_block : str
         #     is 0.9963 of ``agn_torus_frac x L_bol``, so no closed form is assumed);
         #   * the disc's reweighted bolometric is ``int disc x disk(i)/disk(0)`` over the
         #     library's range, the disc evaluated there on a fixed fine grid.
-        _agn_power = _torus_power_on_ledger()
+        _agn_power = _torus_power_on_budget()
         # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
         # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
         # so the disc spectrum is inclination-correct, then renormalize the
@@ -1410,6 +1536,16 @@ agn_torus_block, agn_attenuation_block : str
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
         # Where the tie is inactive (fracAGN = 0) the disc is the debited one.
         _disc_scalar = 1.0 - _torus_frac
+        if return_ledger:
+            # The tied disc before the torus hides any of it, integrated over all directions:
+            # the face-on library power ``agn_power x R_faceon`` times the library disc's
+            # hemisphere mean (7/18 for SKIRTOR's eta(i), 1 for the isotropic Fritz disc), plus
+            # the corona at its tied power (isotropic).
+            _tie_intrinsic = _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
+            if _corona_part is not None:
+                _tie_intrinsic = _tie_intrinsic + (
+                    _corona_fraction * (10.0**agn_log_lbol_eval * L_SUN_ERG) * _corona_scale
+                )
 
         # The anchors are those of the disc as normalized in the model. Under the tie the
         # disc's own angular law is replaced by the library's, so the 30 degree reference is
@@ -1419,7 +1555,9 @@ agn_torus_block, agn_attenuation_block : str
         # power ``agn_power x R_faceon``. The corona, when the disc has one, is scaled as in
         # the model. They follow ``agn_power``, hence fracAGN, and do not follow the viewing
         # angle or the screen.
-        if _split_fn is None:
+        if _ledger_row:
+            _a_disc, _a_corona = jnp.zeros_like(_anchor_wave), None
+        elif _split_fn is None:
             _a_disc = disc_fn(
                 _anchor_wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
             )
@@ -1625,8 +1763,8 @@ agn_torus_block, agn_attenuation_block : str
         def _polar_bolometric():
             return polar_dust_reemission_lnu(
                 wave,
-                _disc_on_ledger() * _disc_scalar,
-                l_in_wavelength=_disc_ledger_wave(),
+                _disc_on_budget() * _disc_scalar,
+                l_in_wavelength=_disc_budget_wave(),
                 agn_polar_reference="bolometric",
                 return_absorbed=True,
                 **_polar_params,
@@ -1696,13 +1834,13 @@ agn_torus_block, agn_attenuation_block : str
             # (exact on its library axis when it has one, else on the budget grid) and
             # the polar power, the absorbed power the graybody is normalized to.
             if _torus_native_wave() is None:
-                _w_budget = _ledger_wave()
+                _w_budget = _budget_wave()
                 _nu_budget = C_AA_PER_S / _w_budget
                 _agn_dust_budget = jnp.abs(
-                    jnp.trapezoid(_torus_on_ledger() * _w_budget**2 / C_AA_PER_S, _nu_budget)
+                    jnp.trapezoid(_torus_on_budget() * _w_budget**2 / C_AA_PER_S, _nu_budget)
                 )
             else:
-                _agn_dust_budget = _torus_power_on_ledger()
+                _agn_dust_budget = _torus_power_on_budget()
             _polar_power = jnp.abs(_l_absorbed)
             # Degenerate case: BOTH budgets are zero -- no torus emission and
             # no polar re-emission on this grid (agn_polar_ebv = 0 with a
@@ -1764,12 +1902,16 @@ agn_torus_block, agn_attenuation_block : str
                     L_lambda_disc * _disc_mask
                 )
                 L_lambda_disc = L_lambda_disc * _disc_polar_norm
+                _ledger_polar_norm = _disc_polar_norm
         else:
             _torus_factor = 1.0
         L_lambda_total = L_lambda_central * factor + L_lambda_torus * _torus_factor
+        # The torus before any screen: the polar dust does not screen it.
+        _torus_pre_screen = L_lambda_torus * _torus_factor
     else:
         L_nu_reemit = jnp.zeros_like(wave)
         _torus_factor = factor
+        _torus_pre_screen = L_lambda_torus
         L_lambda_total = (L_lambda_central + L_lambda_torus) * factor
 
     L_nu_atten = L_lambda_total * _conv
@@ -1795,6 +1937,21 @@ agn_torus_block, agn_attenuation_block : str
         if return_components
         else None
     )
+    if _ledger_row:
+        # What each piece carries before any mask, screen or attenuation, along this row's
+        # sightline (the ledger's intrinsic powers are their row means), and what of it the
+        # emitted piece lacks, node by node: the unemitted powers integrate this difference
+        # rather than differencing two integrals, which in float32 cancels.
+        _disc_raw = _disc_block_lambda * _conv
+        _lines_raw = (L_lambda_lines_aniso + L_lambda_feii + L_lambda_lines_iso) * _conv
+        components = {
+            **components,
+            "_disc_block": _disc_raw,
+            "_disc_hidden": _disc_raw * _disc_scalar - components["disc"],
+            "_lines_raw": _lines_raw,
+            "_lines_hidden": _lines_raw - components["lines"],
+            "_torus_raw": _torus_pre_screen * _conv,
+        }
 
     # Apply float32 rescaling in log space if reference evaluation was active.
     # Blocks were evaluated at ``_AGN_LBOL_REF``; we rescale the magnitude now
@@ -1814,12 +1971,13 @@ agn_torus_block, agn_attenuation_block : str
         components_final = components
 
     # Line-of-sight isotropic-equivalent bolometric luminosity of the direct emission
-    # (``log_L_agn_los``): the disc block's own spectrum at the viewing angle, integrated over the
+    # (``log_L_agn_direct_los``): the disc block's own spectrum at the viewing angle, integrated
+    # over the
     # budget grid, before the torus screen, the polar dust, the tie and the energy debits. It is
     # the quantity to compare with a catalog L_bol from a bolometric correction;
     # ``agn_log_lbol`` is the angle-integrated accretion power. Held in log10 (an erg/s scalar
     # overflows float32) and not scaled by ``agn_lum_ratio``, like ``L_agn_bol``.
-    if return_components:
+    if return_components and not _ledger_row:
         _los_wave = _los_budget_wave(agn_disc_block == "kubota_done", wave.dtype)
         _direct_lambda = disc_fn(
             _los_wave,
@@ -1831,7 +1989,124 @@ agn_torus_block, agn_attenuation_block : str
         _log_direct = jnp.log10(jnp.maximum(_direct_power, representable_floor(1e-100)))
         components_final = {
             **components_final,
-            LOS_LOG_LUMINOSITY_KEY: _log_direct + (_log_scale_offset if _use_ref else 0.0),
+            DIRECT_LOS_LOG_LUMINOSITY_KEY: _log_direct + (_log_scale_offset if _use_ref else 0.0),
+        }
+
+    if return_components and return_ledger:
+        _w_l = ledger_wave(wave.dtype, block_edges(_selectors))
+
+        def _ledger_eval(mu):
+            return compose_l_nu(
+                _w_l,
+                agn_log_lbol,
+                **_selectors,
+                template_state=template_state,
+                return_components=True,
+                strict_keys=False,
+                _ledger_row=True,
+                _l5100_disc=l5100_disc,
+                **{**_params_in, "agn_cos_inc": mu},
+            )[1]
+
+        # The Type-1/2 sigmoids the sightline quadrature lays panels about: the torus's own
+        # (gray mask or screen) and the polar dust's.
+        _sigmoids = []
+        if agn_torus_block in TORUS_SCREEN_BLOCKS:
+            _sigmoids.append(
+                jnp.sin(jnp.radians(torus_screen_geometry(agn_torus_block, params)[0]))
+            )
+        elif agn_torus_block not in _SELF_CONTAINED_TORI:
+            _sigmoids.append(
+                jnp.sin(jnp.radians(params.get("agn_theta_torus", DEFAULT_AGN_THETA_TORUS)))
+            )
+        if agn_attenuation_block == "polar_dust":
+            _sigmoids.append(jnp.sin(jnp.radians(_atten_params["agn_polar_oa"])))
+        _mu_q, _w_q = ledger_sightlines(library_cos_nodes(agn_torus_block), _sigmoids, wave.dtype)
+        _cos_obs = jnp.asarray(
+            _params_in.get("agn_cos_inc", DEFAULT_AGN_COS_INC), dtype=wave.dtype
+        )
+        # One row at a time (``lax.map``), not ``vmap``: in pure float32 the batched multicolor
+        # disc behind ``smc_prevot`` differs from the unbatched one at 30-173 A by up to 1e8
+        # (#3105), a 0.15 dex error in its power; mapped rows match the unbatched evaluation to
+        # 5e-7 per node and 2e-8 in power.
+        _evals = jax.lax.map(_ledger_eval, jnp.concatenate([_cos_obs[None], _mu_q]))
+
+        def _row_mean(key):
+            """log10 of the sphere mean of a row piece's power [dex re erg/s]."""
+            return log10_weighted_sum(
+                jax.vmap(log10_emitted_bolometric, in_axes=(0, None))(_evals[key][1:], _w_l), _w_q
+            )
+
+        # The disc before any obscuration, integrated over all directions: the sphere mean of
+        # the disc block's own spectrum (un-reddened, before every screen) over the sightlines,
+        # times the runner's debit. Its angular law is linear in cos i (``2 cos i D + H``, or
+        # isotropic), so the quadrature is exact for it. A recipe without a disc carries its
+        # (debited) share of the accretion power unemitted, as a torus-only template does
+        # (NAMING_CONTRACT 4c, "Template tori").
+        # The unemitted disc and lines: the sphere mean of the hidden spectra, the same
+        # quadrature as the emitted ones, so emitted + unemitted is the intrinsic power.
+        _log_disc_unem = None
+        if agn_disc_block == "none":
+            _log_disc_intr = (
+                jnp.asarray(agn_log_lbol) + np.log10(L_SUN_ERG) + log10_magnitude(_disc_scalar)
+            )
+        else:
+            _log_disc_intr = _row_mean("_disc_block") + log10_magnitude(_disc_scalar)
+            _log_disc_unem = log10_signed_sphere_mean(_evals["_disc_hidden"][1:], _w_l, _w_q)
+        if _tie_intrinsic is not None:
+            # Under the active tie the disc is rebuilt from the library: its unemitted share is
+            # the difference from the tie's intrinsic disc.
+            _offset = _log_scale_offset if _use_ref else 0.0
+            _log_tie_intr = log10_magnitude(_tie_intrinsic * _ledger_polar_norm) + _offset
+            _log_disc_intr = jnp.where(_agn_fracAGN > 0.0, _log_tie_intr, _log_disc_intr)
+            _log_disc_unem = None
+        _log_lines_intr = _row_mean("_lines_raw") if _has_lines else jnp.asarray(-jnp.inf)
+        _log_lines_unem = (
+            log10_signed_sphere_mean(_evals["_lines_hidden"][1:], _w_l, _w_q)
+            if _has_lines
+            else None
+        )
+        _aniso_fn = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
+        _log_aniso = (
+            None
+            if _aniso_fn is None
+            else _aniso_fn(_templates_for("torus", agn_torus_block), wave.dtype, **params)
+        )
+        # A foreground attenuation block screens the torus as well; its power before the screen
+        # is the torus block's own emission (``polar_dust`` leaves the torus unscreened).
+        _log_torus_intr = None
+        if agn_attenuation_block not in ("none", "polar_dust") and agn_torus_block != "none":
+            _log_torus_intr = log10_emitted_bolometric(_evals["_torus_raw"][0], _w_l) - (
+                0.0 if _log_aniso is None else _log_aniso
+            )
+        _log_power = None
+        if agn_torus_block != "none":
+            # CIGALE's ``agn_power``: the torus block's power along the sightline, on the fixed
+            # budget grid (exact on the library's own axis), before the polar split.
+            _log_power = log10_magnitude(_torus_power_on_budget()) + (
+                _log_scale_offset if _use_ref else 0.0
+            )
+        _closed = ledger_policy_closes(**_selectors, agn_norm=_agn_norm)
+        _flag = (
+            jnp.where(_agn_fracAGN > 0.0, 0.0, 1.0)
+            if _closed and _tie_active
+            else jnp.asarray(1.0 if _closed else 0.0)
+        )
+        components_final = {
+            **components_final,
+            **ledger_from_evaluations(
+                _evals,
+                _w_l,
+                _w_q,
+                log_disc_intrinsic=_log_disc_intr,
+                log_lines_intrinsic=_log_lines_intr,
+                log_disc_unemitted=_log_disc_unem,
+                log_lines_unemitted=_log_lines_unem,
+                log_torus_intrinsic=_log_torus_intr,
+                log_torus_anisotropy=_log_aniso,
+                log_power=_log_power,
+                closed=_flag,
+            ),
         }
 
     # Return with optional L_2500_intrinsic/L_4400_intrinsic and per-sub-block
@@ -1847,10 +2122,23 @@ agn_torus_block, agn_attenuation_block : str
 
 
 def _scale_components(components: dict, agn_lum_ratio: Array | float) -> dict:
-    """Scale every SED sub-block by ``agn_lum_ratio``; the log10 luminosity key is not an SED."""
-    return {
-        k: v if k == LOS_LOG_LUMINOSITY_KEY else agn_lum_ratio * v for k, v in components.items()
-    }
+    """Scale every SED sub-block and ledger power by ``agn_lum_ratio``.
+
+    The ledger's ``log_L_agn_*`` powers are shifted by ``log10(agn_lum_ratio)`` and their
+    ``L_agn_*_lsun`` siblings multiplied by it, so they stay the integrals of the scaled SED.
+    ``log_L_agn_direct_los`` (like ``L_agn_bol``) and the ``agn_ledger_closed`` flag are not
+    scaled.
+    """
+    log_ratio = log10_magnitude(jnp.asarray(agn_lum_ratio))
+    scaled = {}
+    for k, v in components.items():
+        if k in (DIRECT_LOS_LOG_LUMINOSITY_KEY, LEDGER_CLOSED_KEY):
+            scaled[k] = v
+        elif k.startswith("log_L_agn_"):
+            scaled[k] = v + log_ratio
+        else:
+            scaled[k] = agn_lum_ratio * v
+    return scaled
 
 
 def composable_agn_l_nu(
@@ -1867,6 +2155,8 @@ def composable_agn_l_nu(
     return_l2500: bool = False,
     return_components: bool = False,
     torus_below_index: BelowLibraryIndex | None = None,
+    return_ledger: bool = False,
+    strict_keys: bool = True,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point: :data:`L_ν` in erg/s/Hz.
@@ -1898,6 +2188,15 @@ agn_torus_block, agn_attenuation_block : str, optional
         :func:`compose_l_nu`) as the last element of the returned tuple,
         with every entry scaled by ``agn_lum_ratio`` (matching ``L_nu``).
         Default: False.
+    torus_below_index : BelowLibraryIndex, optional
+        See :func:`compose_l_nu`.
+    return_ledger : bool, optional
+        With ``return_components``, add the energy ledger to it (see :func:`compose_l_nu`);
+        its powers are scaled by ``agn_lum_ratio`` like the SEDs. Default: False.
+    strict_keys : bool, optional
+        Refuse a keyword no selected block reads (see :func:`compose_l_nu`). Default True. The
+        AGN component, the registry entry and the presets pass the full declared ``agn_*``
+        superset and so pass ``False``; the grammar refuses an unread key there (#2994).
     **params
         Per-impl free parameters forwarded to every block.
 
@@ -1952,6 +2251,8 @@ agn_torus_block, agn_attenuation_block : str, optional
         return_l2500=return_l2500,
         return_components=return_components,
         torus_below_index=torus_below_index,
+        return_ledger=return_ledger,
+        strict_keys=strict_keys,
         **params,
     )
     if return_l2500 and return_components:
