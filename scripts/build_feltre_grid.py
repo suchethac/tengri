@@ -39,10 +39,20 @@ Group "/feltre":
   logn_axis         : (3,)         float64  log(n_H) axis
   logZ_axis         : (16,)        float64  log10(Z) axis
   xi_d_axis         : (3,)         float64  dust-to-metal ratio axis
-  line_wavelengths_aa : (20,)      float64  vacuum wavelengths [Angstrom]
+  line_wavelengths_aa : (20,)      float64  vacuum wavelengths [Angstrom]; the
+                                            air labels converted once here
   line_names        : (20,)        str      line identifiers
   logHB_per_logq    : (4,9,3,16,3) float64  log10(L_Hβ / Q_H) [erg/photon]
   line_ratios       : (4,9,3,16,3,20) float64  L_line / L_Hβ (dimensionless)
+
+Wavelength convention
+---------------------
+The NEOGAL tables follow Cloudy's convention: vacuum below 2000 Angstrom, air
+at and above (Ferland et al. 2017, PASP 129, 194001, sec. 2.3.3). Every line
+label is therefore listed in the table's own convention below, and the whole
+list goes through :func:`tengri.utils.air_vacuum.air_to_vac` once, here, which
+converts the labels at and above 2000 Angstrom and leaves the UV ones alone.
+The stored ``line_wavelengths_aa`` is vacuum; the loader does not convert again.
 
 References
 ----------
@@ -66,25 +76,30 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from tengri.utils.air_vacuum import air_to_vac
+
 # ── Physical constants (cgs) ──────────────────────────────────────
 _C_CGS: float = 2.99792458e10  # speed of light [cm/s]
 _H_PLANCK: float = 6.62607015e-34 * 1e7  # Planck constant [erg·s]
 _NU_LYMAN: float = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]
 _RYDBERG_ERG: float = 2.1799e-11  # 13.6 eV [erg]
 
-# Vacuum wavelengths [Angstrom] for the 20 Feltre+2016 emission lines.
-# Source: NIST ASD (Kramida et al. 2023, https://physics.nist.gov/asd)
+# Line labels [Angstrom] for the 20 Feltre+2016 emission lines, in the table's
+# convention (Cloudy): air at and above 2000 Angstrom, vacuum below.
+# Optical values are NIST ASD standard-air wavelengths (Kramida et al. 2023,
+# https://physics.nist.gov/asd). UV values are NIST vacuum wavelengths.
+# They become vacuum in ``build`` via ``air_to_vac``.
 _LINE_WAVELENGTHS_AA: list[float] = [
-    3727.09,  # [OII]3727 (doublet centroid)
-    4861.33,  # Hbeta
-    4958.92,  # [OIII]4959
-    5006.84,  # [OIII]5007
-    6300.30,  # [OI]6300
-    6548.05,  # [NII]6548
-    6564.61,  # Halpha (vacuum)
-    6583.45,  # [NII]6584
-    6716.44,  # [SII]6717
-    6730.82,  # [SII]6731
+    3726.032,  # [OII]3727 (the 3726 doublet component, NIST air; vacuum 3727.09)
+    4861.33,  # Hbeta (air)
+    4958.92,  # [OIII]4959 (air)
+    5006.84,  # [OIII]5007 (air)
+    6300.30,  # [OI]6300 (air)
+    6548.05,  # [NII]6548 (air)
+    6562.80,  # Halpha (air; vacuum 6564.61)
+    6583.45,  # [NII]6584 (air)
+    6716.44,  # [SII]6717 (air)
+    6730.82,  # [SII]6731 (air)
     1240.81,  # NV1240 (doublet centroid)
     1548.20,  # CIV1548
     1550.77,  # CIV1551
@@ -228,6 +243,9 @@ def build(
     print(f"  logZ:   {logZ_axis}")
     print(f"  xi_d:   {xi_d_axis}")
 
+    # ── Convert labels to vacuum once (#3180) ─────────────────────
+    line_wavelengths_vac = air_to_vac(np.array(_LINE_WAVELENGTHS_AA, dtype=np.float64))
+
     # ── Allocate output arrays ────────────────────────────────────
     # Normalization: line luminosities in NEOGAL are erg/s per L_acc = 10^45
     # We store:
@@ -284,6 +302,10 @@ def build(
             "logHB_per_logq = log10(L_Hbeta [erg/s] / Q_H [photons/s]); "
             "line_ratios = L_line / L_Hbeta"
         )
+        f.attrs["wavelength_convention"] = (
+            "vacuum; labels >= 2000 A converted from air with tengri.utils.air_vacuum.air_to_vac "
+            "(Cloudy convention, Ferland+2017 sec. 2.3.3)"
+        )
 
         grp = f.create_group("feltre")
         grp.create_dataset("alpha_axis", data=alpha_axis)
@@ -291,7 +313,7 @@ def build(
         grp.create_dataset("logn_axis", data=logn_axis)
         grp.create_dataset("logZ_axis", data=logZ_axis)
         grp.create_dataset("xi_d_axis", data=xi_d_axis)
-        grp.create_dataset("line_wavelengths_aa", data=np.array(_LINE_WAVELENGTHS_AA))
+        grp.create_dataset("line_wavelengths_aa", data=line_wavelengths_vac)
         dt = h5py.special_dtype(vlen=str)
         ds = grp.create_dataset("line_names", shape=(n_lines,), dtype=dt)
         for i, name in enumerate(_LINE_NAMES):

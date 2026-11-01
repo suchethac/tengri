@@ -106,10 +106,9 @@ class DerivedState:
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
-    stellar_mass_scale: jnp.ndarray | None = None
-    #: log10(total_mass x L_sun) [dex]: the float32-safe form of
-    #: ``stellar_mass_scale``, which is ~1e43 and so overflows float32 for
-    #: any galaxy above ~9e4 Msun (#1206).
+    #: log10(total_mass x L_sun) [dex]. The linear erg/s scale is ~1e43 for a
+    #: 1e10 Msun galaxy and overflows float32 for any galaxy above ~9e4 Msun, so
+    #: only the log form is published (#1206, #3149).
     log_stellar_mass_scale: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
@@ -465,12 +464,16 @@ class DerivedState:
     # term (#1206) via ``apply_log10_scale`` so the AGN-driven radio emission
     # never materializes the out-of-range linear luminosity.
     log_L_agn_bol: jnp.ndarray | None = None
+    # The torus fraction the composable AGN was evaluated at (``agn_torus_frac``, or the value
+    # the ``agn_ir_frac`` coupling derives); its energy ledger, computed on request as
+    # properties (#3076), re-evaluates the chain at it.
+    agn_torus_frac_effective: jnp.ndarray | None = None
     # log10 of the line-of-sight isotropic-equivalent bolometric luminosity of
     # the AGN's direct emission [dex re erg/s]: int L_nu(i) dnu with
-    # L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust.
-    # ``L_agn_bol`` is the accretion power integrated over all directions.
-    # Published by the composable AGN only.
-    log_L_agn_los: jnp.ndarray | None = None
+    # L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust
+    # (``log_L_agn_los`` until #3076). ``L_agn_bol`` is the accretion power integrated over
+    # all directions. Published by the composable AGN only.
+    log_L_agn_direct_los: jnp.ndarray | None = None
     # log10 of the AGN component luminosities published by the standalone AGN components
     # [dex re erg/s]; the erg/s values (~1e44) are ``inf`` in float32 (NAMING_CONTRACT 4c).
     # ``*_disc`` / ``*_torus`` / ``*_polar_dust`` are angle-integrated powers where the
@@ -497,7 +500,7 @@ class DerivedState:
     # ``log_L_agn_<piece>``: 1e8 to 1e14 Lsun is representable in float32 where the erg/s value
     # is not (NAMING_CONTRACT 4c). Formed from the dex value as pow10(log - log10(L_sun)).
     L_agn_bol_lsun: jnp.ndarray | None = None
-    L_agn_los_lsun: jnp.ndarray | None = None
+    L_agn_direct_los_lsun: jnp.ndarray | None = None
     L_agn_disc_lsun: jnp.ndarray | None = None
     L_agn_disc_los_lsun: jnp.ndarray | None = None
     L_agn_torus_lsun: jnp.ndarray | None = None
@@ -759,6 +762,10 @@ class DerivedState:
     log_L_x_agn_total: jnp.ndarray | None = None
     log_Lnu_2keV_30deg: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
+    # Milky Way foreground screen T(lambda) on the rest grid, shape (n_wave,), dimensionless:
+    # the observed-frame transmission evaluated at wave_rest * (1 + z). Absent when no screen
+    # is configured. Consumed by every projection, after the IGM factor.
+    foreground_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
     # number per band, and <T>_f depends only on (z, filter, convention): the

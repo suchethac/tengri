@@ -143,9 +143,9 @@ DECLARATION_FILES: dict[str, str] = {
 # it failed on the rebase before any human reread the file. That is the point of
 # expiring an exception rather than recording it.
 ALLOWLIST: dict[str, str] = {
-    "forward/sed_model.py::cardelli": (
+    "components/dust/foreground.py::<expr>": (
         "Milky Way FOREGROUND extinction, not the galaxy's attenuation law: "
-        "`dust_Rv` here is `spec.foreground_rv`, a separate field with its own "
+        "`dust_Rv` here is the foreground R_V, a separate field with its own "
         "physical meaning. There is no resolved galaxy-law dict to splat, and "
         "splatting one would be wrong"
     ),

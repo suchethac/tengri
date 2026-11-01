@@ -272,6 +272,7 @@ class DustConfig:
             "kriek_conroy",
             "smc",
             "cardelli",
+            "chevallard13",
             "salim",
             "li08",
             "vw07_bc",

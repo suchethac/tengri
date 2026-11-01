@@ -61,6 +61,7 @@ DUST_LAWS = frozenset(
     {
         "calzetti",
         "cardelli",
+        "chevallard13",
         "conroy2010",
         "d03_mwrv31",
         "hd23_mwrv31",

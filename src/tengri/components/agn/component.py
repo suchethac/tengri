@@ -20,13 +20,20 @@ Cross-component publications
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
-- ``state.derived["log_L_agn_los"]`` (dex re erg/s, composable model only):
+- ``state.derived["log_L_agn_direct_los"]`` (dex re erg/s, composable model only):
   :math:`\\log_{10}` of the line-of-sight isotropic-equivalent bolometric luminosity
   of the AGN's direct emission, :math:`\\int L_\\nu(i)\\,d\\nu` with
   :math:`L_\\nu(i) = 2\\cos i\\,D_\\nu + H_\\nu` (disc and warm zones scale with
   :math:`\\cos i`, the corona does not), before the torus screen and the polar dust.
   Compare this key, not ``L_agn_bol``, with a catalog :math:`L_{\\rm bol}` from a
-  bolometric correction.
+  bolometric correction. Until #3076 it was ``log_L_agn_los``.
+- The composable energy ledger (#3076, NAMING_CONTRACT 4c "Composable runner"), computed
+  on request as properties (``pred.properties[...]``, ``model.predict_properties``), not
+  in the forward pass: ``log_L_agn_los`` (the integral of the emitted ``sed_agn``), the
+  angle-integrated ``log_L_agn_<piece>`` and line-of-sight ``log_L_agn_<piece>_los`` of the
+  disc, torus, lines and polar dust, ``log_L_agn_{disc,torus,lines}_unemitted``,
+  ``log_L_agn_power``, every one with an ``L_agn_*_lsun`` sibling, and
+  ``agn_ledger_closed`` (1 when the pieces add up to the accretion power).
 - ``state.derived["log_L_12um"]``, ``["log_L_6um"]`` (dex re erg/s):
   :math:`\\log_{10}\\nu L_\\nu` at 12 and 6 µm of the AGN's own emission (disc +
   torus + polar dust for the composable model, the whole SED for a monolithic
@@ -55,8 +62,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, ClassVar
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -74,8 +83,12 @@ from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
+from tengri.components.agn.blocks._ledger import ledger_property_specs
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
+from tengri.components.agn.blocks.runner import (
+    DIRECT_LOS_LOG_LUMINOSITY_KEY,
+    composable_agn_l_nu,
+)
 from tengri.components.agn.blocks.torus_library_transmission import below_library_index
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
@@ -377,6 +390,7 @@ class AGNSEDComponent(TemplateThreading):
             agn_log_lbol=lbol,
             return_components=True,
             template_state=template_state,
+            strict_keys=False,
             **kwargs,
         )
         return {key: components[key] for key in self._TERM_KEYS}
@@ -387,26 +401,7 @@ class AGNSEDComponent(TemplateThreading):
         Mirrors the ``agn_kwargs`` assembled in :meth:`apply` for the composable model, so
         :meth:`emission_terms` and the dense path evaluate the same function.
         """
-        kwargs = {
-            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
-            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
-            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
-            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
-            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
-            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
-            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
-            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-        }
-        for key, val in params.items():
-            if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:
-                kwargs[key] = jnp.asarray(val)
+        kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", 0.5))
         kwargs["agn_disc_block"] = self.config.agn_disc_block
         kwargs["agn_nlr_block"] = self.config.agn_nlr_block
         kwargs["agn_blr_block"] = self.config.agn_blr_block
@@ -470,12 +465,19 @@ class AGNSEDComponent(TemplateThreading):
                 "(L_agn_bol ~1e46 overflows float32)",
             ),
             DerivedKey(
-                "log_L_agn_los",
+                "log_L_agn_direct_los",
                 "dex",
                 "log10 of the line-of-sight isotropic-equivalent bolometric luminosity "
                 "[dex re erg/s] of the AGN direct emission, int L_nu(i) dnu with "
                 "L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust; "
                 "composable model only. Compare with a catalog L_bol",
+            ),
+            DerivedKey(
+                "agn_torus_frac_effective",
+                "",
+                "torus fraction the composable AGN was evaluated at: agn_torus_frac, or the "
+                "value the agn_ir_frac coupling derives from the absorbed stellar power; "
+                "composable model only (the energy ledger re-evaluates the chain at it)",
             ),
             DerivedKey(
                 "agn_adaf_mdot",
@@ -498,9 +500,9 @@ class AGNSEDComponent(TemplateThreading):
                 "10**agn_log_lbol, the AGN accretion power in solar luminosities",
             ),
             DerivedKey(
-                "L_agn_los_lsun",
+                "L_agn_direct_los_lsun",
                 "Lsun",
-                "log_L_agn_los in solar luminosities; composable model only",
+                "log_L_agn_direct_los in solar luminosities; composable model only",
             ),
             DerivedKey(
                 "L_agn_adaf_accretion_lsun",
@@ -725,6 +727,74 @@ class AGNSEDComponent(TemplateThreading):
             "attenuation": self.config.agn_attenuation_block,
         }
 
+    def _agn_call_kwargs(self, params, template_data, wave) -> dict:
+        """The keyword arguments the AGN model function is called with, before the coupling.
+
+        Parameters
+        ----------
+        params : mapping
+            The component's parameter slice.
+        template_data : dict or None
+            JIT-threaded templates (``template_data["agn"]``).
+        wave : ndarray, shape (n_wave,)
+            The grid the model is evaluated on [Angstrom]; the build-time library index is
+            passed only for the chain's own grid.
+
+        Returns
+        -------
+        dict
+            Numeric parameters at the user ``agn_torus_frac``, the composable selectors, and
+            the threaded templates.
+        """
+        # The numeric parameters and the static block selectors (a non-composable model
+        # absorbs the selectors via ``**kwargs``).
+        agn_kwargs = self._composable_kwargs(params)
+        agn_data = _agn_template_data(template_data)
+        if agn_data.get("skirtor") is not None:
+            agn_kwargs["_template"] = agn_data["skirtor"]
+        # Per-block template libraries for the composable runner, which hands each stage its
+        # own family's bundle; without it every template-backed block loads its grid at trace
+        # time and bakes it in.
+        if agn_data.get("blocks"):
+            agn_kwargs["template_state"] = agn_data["blocks"]
+        # The composable runner's build-time library index set, when the chain built one for
+        # this grid; without it the runner takes the dense traced path.
+        below_index = getattr(self._state, "torus_below_index", None)
+        master_wave = getattr(self._state, "torus_master_wave", None)
+        if self.config.model == "composable" and below_index is not None and wave is master_wave:
+            agn_kwargs["torus_below_index"] = below_index
+        return agn_kwargs
+
+    def energy_ledger(self, state, params, template_data=None) -> dict:
+        """The composable runner's energy ledger, evaluated on request.
+
+        Re-evaluates the chain at the ledger's sightlines and grid (NAMING_CONTRACT 4c,
+        "Composable runner"), at the torus fraction :meth:`apply` used, so it costs nothing
+        in a forward pass that does not ask for it.
+
+        Parameters
+        ----------
+        state : ForwardState
+            The state :meth:`apply` produced (its ``agn_torus_frac_effective``).
+        params : mapping
+            The component's parameter slice.
+        template_data : dict or None
+            JIT-threaded templates, as given to :meth:`apply`.
+
+        Returns
+        -------
+        dict
+            ``{key: scalar}`` over :func:`ledger_property_specs`.
+        """
+        probe = jnp.asarray(_LEDGER_PROBE_AA, dtype=state.wave.dtype)
+        agn_kwargs = {
+            **self._agn_call_kwargs(params, template_data, probe),
+            "agn_torus_frac": state.derived["agn_torus_frac_effective"],
+        }
+        static = tuple(sorted((k, v) for k, v in agn_kwargs.items() if isinstance(v, str)))
+        traced = {k: v for k, v in agn_kwargs.items() if not isinstance(v, str)}
+        return _ledger_evaluation(probe, jnp.asarray(params["agn_log_lbol"]), traced, static)
+
     def apply(
         self,
         state: ForwardState,
@@ -768,52 +838,9 @@ class AGNSEDComponent(TemplateThreading):
         # provided, extract AGN SKIRTOR template and thread it.
         agn_fn = resolve_agn_model(self.config.model)
 
-        # Thread the SKIRTOR template as a JIT runtime input
-        skirtor_template = None
-        block_templates = None
-        band_table = None
-        if template_data is not None and isinstance(template_data, dict):
-            agn_data = template_data.get("agn")
-            if agn_data is not None and isinstance(agn_data, dict):
-                skirtor_template = agn_data.get("skirtor")
-                block_templates = agn_data.get("blocks")
-                band_table = agn_data.get("band_table")
-        # Build kwargs, adding _template for SKIRTOR threading if available.
-        # The agn_kwargs dict is built in two passes:
-        #   1. Explicit defaults for the AGN params the registered models
-        #      most commonly read (kept here so missing keys don't break
-        #      multicolor / skirtor / kubota_done at trace time).
-        #   2. Forward every additional ``agn_*`` key from ``params`` so
-        #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
-        #      reach the registered function via its ``**kwargs`` tail.
-        agn_kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", 0.5))
-        # Composable-AGN block selectors are static Python strings (not
-        # traced JAX values). They live on the config so the runner can
-        # close over them at trace-build time and pick the right per-stage
-        # callable. For non-composable AGN models the registered function
-        # absorbs them via ``**kwargs`` and they have no effect.
-        agn_kwargs["agn_disc_block"] = self.config.agn_disc_block
-        agn_kwargs["agn_nlr_block"] = self.config.agn_nlr_block
-        agn_kwargs["agn_blr_block"] = self.config.agn_blr_block
-        agn_kwargs["agn_feii_block"] = self.config.agn_feii_block
-        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
-        agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
-        agn_kwargs["agn_norm"] = self.config.agn_norm
-        agn_kwargs["agn_polar_law"] = self.config.agn_polar_law
-        if skirtor_template is not None:
-            agn_kwargs["_template"] = skirtor_template
-        # Per-block template libraries for the composable runner. The runner
-        # reads this under the name ``template_state`` and hands each stage
-        # its OWN family's bundle; without it every template-backed block
-        # loads its grid at trace time and bakes it in.
-        if block_templates:
-            agn_kwargs["template_state"] = block_templates
-        # The composable runner's build-time library index set, when the chain built one for
-        # this grid; without it the runner takes the dense traced path.
-        below_index = getattr(self._state, "torus_below_index", None)
-        master_wave = getattr(self._state, "torus_master_wave", None)
-        if self.config.model == "composable" and below_index is not None and wave is master_wave:
-            agn_kwargs["torus_below_index"] = below_index
+        agn_kwargs = self._agn_call_kwargs(params, template_data, wave)
+        block_templates = agn_kwargs.get("template_state")
+        band_table = _agn_template_data(template_data).get("band_table")
 
         # CIGALE-faithful cross-component coupling
         # ────────────────────────────────────────────────────────────
@@ -1052,7 +1079,11 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_torus"] = agn_components["torus"]
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
-            derived_overrides["log_L_agn_los"] = agn_components[LOS_LOG_LUMINOSITY_KEY]
+            derived_overrides["log_L_agn_direct_los"] = agn_components[
+                DIRECT_LOS_LOG_LUMINOSITY_KEY
+            ]
+            # The torus fraction of this evaluation, for the energy ledger computed on request.
+            derived_overrides["agn_torus_frac_effective"] = jnp.asarray(agn_torus_frac_effective)
         if self.config.model == "composable" and self.config.agn_disc_block == "adaf":
             # The ADAF's accretion side (Mahadevan 1997, Eq. 4): ``agn_log_lbol`` is the
             # radiated luminosity Q_ie + delta Q+, so the accretion power is not it.
@@ -1073,7 +1104,11 @@ class AGNSEDComponent(TemplateThreading):
                 for k, v in with_lsun_siblings(
                     {
                         key: derived_overrides[key]
-                        for key in ("log_L_agn_bol", "log_L_agn_los", "log_L_agn_adaf_accretion")
+                        for key in (
+                            "log_L_agn_bol",
+                            "log_L_agn_direct_los",
+                            "log_L_agn_adaf_accretion",
+                        )
                         if key in derived_overrides
                     }
                 ).items()
@@ -1190,6 +1225,69 @@ class AGNSEDComponent(TemplateThreading):
         )
         n_filters = both.shape[-1] // 2
         return both[:n_filters], both[n_filters:]
+
+
+#: The wavelength the on-request ledger evaluation runs its (discarded) caller grid on [Angstrom];
+#: the ledger integrates on its own grid.
+_LEDGER_PROBE_AA = (5100.0,)
+
+
+@partial(jax.jit, static_argnames=("static",))
+def _ledger_evaluation(probe, agn_log_lbol, traced: dict, static: tuple) -> dict:
+    """The runner's ledger, compiled once per recipe (``static``: the string selectors)."""
+    _, comps = composable_agn_l_nu(
+        probe,
+        agn_log_lbol=agn_log_lbol,
+        return_components=True,
+        return_ledger=True,
+        strict_keys=False,
+        **dict(static),
+        **traced,
+    )
+    return {key: comps[key] for key in ledger_property_specs()}
+
+
+def _agn_template_data(template_data) -> dict:
+    """``template_data["agn"]`` when present, else an empty dict."""
+    if isinstance(template_data, dict) and isinstance(template_data.get("agn"), dict):
+        return template_data["agn"]
+    return {}
+
+
+def _composable_ledger_bundle(state, params, model, template_data) -> dict:
+    """The composable AGN's energy ledger for a property request (see ``Property.bundle``)."""
+    from tengri.forward.orchestrator import slice_params_for_component
+
+    agn = next(c for c in model._full_state_chain() if c.name == "agn")
+    full = {**dict(model.spec.get_fixed_values()), **dict(params)}
+    return agn.energy_ledger(state, slice_params_for_component(agn, full), template_data)
+
+
+def _is_composable(component) -> bool:
+    """Whether ``component`` is the composable AGN (the one with an energy ledger)."""
+    return getattr(getattr(component, "config", None), "model", None) == "composable"
+
+
+def _register_ledger_properties() -> None:
+    """Register the composable energy ledger as on-request ``agn`` properties."""
+    from tengri.forward.properties import Property, register_properties
+
+    register_properties(
+        "agn",
+        {
+            key: Property(
+                units=units,
+                group="agn",
+                doc=doc,
+                bundle=_composable_ledger_bundle,
+                available=_is_composable,
+            )
+            for key, (units, doc) in ledger_property_specs().items()
+        },
+    )
+
+
+_register_ledger_properties()
 
 
 def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:

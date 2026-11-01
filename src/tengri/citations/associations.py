@@ -43,9 +43,13 @@ SFH_CITATIONS: dict[str, list[str]] = {
     # (MNRAS 480, 4379) for the Bagpipes one: the menu row names both.
     "delayed": ["cigale", "bagpipes"],
     "continuity": ["leja2019"],
+    "continuity_young_fraction": ["leja2019"],
     "continuity_flex": ["leja2019"],
     "dirichlet": ["leja2019"],
     "dense_basis": ["iyer2020"],
+    # Current-episode types (#3177): the BEAGLE parameterization of the episode.
+    "recent": ["chevallard2016"],
+    "recent_ssfr": ["chevallard2016"],
     # The SFH shape is Leja+2019; the Wang+2024 prior paper has no bundled
     # BibTeX entry yet, so only the half that exists is claimed.
     "prospector_beta": ["leja2019"],
@@ -79,6 +83,8 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "li08": ["li2008_ext"],  # Li+2008 four-coefficient analytical curve (ADS-verified)
     "vw07_bc": ["witt_gordon2000"],  # tengri source notes Wild+2007; closest workspace match
     "vw07_diff": ["witt_gordon2000"],  # see above; update once Wild+2007 is in the workspace bib
+    # Chevallard+13 curve, applied inside the Charlot & Fall (2000) screen (#3178).
+    "chevallard13": ["chevallard2013", "charlot_fall2000"],
     "cf00": ["charlot_fall2000"],
 }
 
@@ -129,6 +135,9 @@ NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     # ``collect_citations`` for any caller still matching by backend name
     # (#2429 opus review round 2, item 1).
     "cb19": ["byler2017", "cloudy"],
+    # Gutkin+2016 NEOGAL line table, the grammar selector neb={'type': 'gutkin16'}.
+    # The table is CLOUDY c13.03 output, so the Cloudy citation rides along.
+    "gutkin16": ["gutkin2016", "cloudy"],
     "mappings": ["mappings"],
     # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
     # Byler+2017 Cloudy photoionization grids.

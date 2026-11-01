@@ -98,6 +98,7 @@ def test_composable_runner_threads_type_to_feii_block(agn_type):
                 agn_feii_block=feii_block,
                 agn_torus_block="grahsp",
                 agn_attenuation_block="grahsp_biatten",
+                strict_keys=False,  # one parameter set for both FeII choices
                 agn_grahsp_log_l5100=44.0,
                 agn_grahsp_a_feii=5.0,
                 agn_type=agn_type,

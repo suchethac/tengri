@@ -22,9 +22,11 @@
 # carry a negative chunk, and a negative linear continuation is not a physical value to keep.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 4
+src/tengri/components/_z_response.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/_nthcomp.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/adaf.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/adaf.py | jnp.clip with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/agn/blocks/masking.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/blocks/runner.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
@@ -32,7 +34,6 @@ src/tengri/components/agn/blocks/torus_screen.py | jnp.clip with floor 0.0 < 1e-
 src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
 src/tengri/components/agn/disc.py | jnp.clip with floor 0.0 < 1e-20 -> 4
-src/tengri/components/agn/adaf.py | jnp.clip with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.clip with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
 src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -48,7 +49,6 @@ src/tengri/components/agn/qsogen.py | jnp.maximum with floor 1e-60 < 1e-20 -> 1
 src/tengri/components/agn/skirtor.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/agn/unified.py | jnp.clip with floor 0.0 < 1e-20 -> 1
-src/tengri/components/_z_response.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 10
 src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
@@ -72,9 +72,12 @@ src/tengri/components/nebular/component.py | jnp.maximum with floor 0.0 < 1e-20 
 src/tengri/components/nebular/fesc_model.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/nebular/ionizing_spectrum.py | jnp.clip with floor 0.0 < 1e-20 -> 4
 src/tengri/components/nebular/line_precompute.py | jnp.maximum with floor -30.0 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -30.0 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -80.0 < 1e-20 -> 1
 src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor -30.0 < 1e-20 -> 1
-src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/stellar/age_boundary.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/components/stellar/age_boundary.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/stellar/component.py | jnp.clip with floor 0.0 < 1e-20 -> 1
@@ -102,7 +105,6 @@ src/tengri/forward/prediction.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/inference/backends/nested/utils.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/inference/posterior.py | jnp.maximum with floor 1e-30 < 1e-20 -> 4
 src/tengri/observation/banded.py | jnp.clip with floor 0.0 < 1e-20 -> 2
-src/tengri/observation/calibration.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/eline_priors.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/observation/eline_priors.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/line_ratio_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
@@ -115,6 +117,3 @@ src/tengri/utils/interpolation.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/utils/magnitudes.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
-src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -30.0 < 1e-20 -> 1
-src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor -80.0 < 1e-20 -> 1
-src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 0.0 < 1e-20 -> 1

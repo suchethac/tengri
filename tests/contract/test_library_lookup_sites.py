@@ -365,10 +365,23 @@ def test_skirtor_photometry_lookup_reproduces_grid_nodes():
         jnp.asarray(_ascending_axis(3, lo, hi))
         for lo, hi in [(3.0, 11.0), (0.0, 1.5), (0.0, 2.0), (20.0, 60.0), (0.0, 1.0)]
     )
-    grid_phot = jnp.asarray(rng.uniform(0.1, 3.0, size=(3, 3, 3, 3, 3, 4)))
-    fn = sp.build_skirtor_photometry_lookup({"grid_phot": grid_phot, "axes": axes})
+    from tengri.utils.physics_constants import C_AA, L_SUN
+
+    # Three template wavelengths, read on themselves, folded into two bands.
+    wave = np.array([1.0e4, 2.0e4, 4.0e4])
+    fold = rng.uniform(0.0, 1.0, size=(3, 2))
+    table = jnp.asarray(rng.uniform(0.1, 3.0, size=(3, 3, 3, 3, 3, 4)))
+    precomp = {
+        "grid_phot": table,
+        "axes": axes,
+        "wave_read": jnp.asarray(wave),
+        "wave_quad": jnp.asarray(wave),
+        "fold": jnp.asarray(fold),
+    }
+    fn = sp.build_skirtor_photometry_lookup(precomp)
     for idx in np.ndindex(3, 3, 3, 3, 3):
         point = [float(a[i]) for a, i in zip(axes, idx, strict=True)]
         got = fn(45.0, *point, 0.5)
-        expected = 10.0**45.0 * 0.5 * np.asarray(grid_phot[idx])
+        row = np.asarray(table[idx])
+        expected = 10.0**45.0 * 0.5 * (L_SUN * row[:-1] / row[-1] * wave**2 / C_AA) @ fold
         np.testing.assert_allclose(np.asarray(got), expected, rtol=1e-10)

@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import types
 import zlib
 
@@ -225,7 +226,8 @@ class Parameters:
     n_free : int
         Number of free parameters.
     nebular_mode : str
-        Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', or 'cb19'.
+        Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', 'cb19', 'gutkin16',
+        'mappings' or 'mappings_agn'.
     dust_model : str
         Dust model: 'two_component' or 'single_component'.
     dust_emission : str or None
@@ -780,6 +782,7 @@ class Parameters:
             dust_screens=self.dust_screens,
             dust_nebular_screen=self.dust_nebular_screen,
             dust_law_neb=self.dust_law_neb,
+            dust_parameterization=self.dust_parameterization,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1045,6 +1048,22 @@ class Parameters:
         # nebular_mappings_agn_grid_path below. None resolves the packaged
         # default at CB19Backend construction time.
         self.nebular_cb19_grid_path = kwargs.pop("nebular_cb19_grid_path", None)
+        # Gutkin+2016 NEOGAL table (#983): the grid path, the upper stellar mass
+        # cutoff (the table has mup = 100 and 300 Msun) and the continuum switch.
+        # None resolves the packaged data/gutkin16_grid.h5 at backend construction.
+        self.nebular_gutkin16_grid_path = kwargs.pop("nebular_gutkin16_grid_path", None)
+        self.nebular_gutkin16_mup = float(kwargs.pop("nebular_gutkin16_mup", 100.0))
+        if self.nebular_gutkin16_mup not in (100.0, 300.0):
+            raise ParameterError(
+                f"neb mup={self.nebular_gutkin16_mup:g} is not a node of the Gutkin+2016 "
+                "table; valid mup values: 100, 300 (Msun)."
+            )
+        self.nebular_gutkin16_continuum = kwargs.pop("nebular_gutkin16_continuum", "analytic")
+        if self.nebular_gutkin16_continuum not in ("analytic", "none"):
+            raise ParameterError(
+                "neb continuum must be 'analytic' or 'none', got "
+                f"{self.nebular_gutkin16_continuum!r}."
+            )
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
         # tengri.config.settings): the one declaration every other spelling
@@ -1070,6 +1089,14 @@ class Parameters:
         from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
 
         self.cue_lyc_max_age_yr = validate_lyc_max_age_yr(kwargs.pop("cue_lyc_max_age_yr", "all"))
+        from tengri.components.nebular._balmer_series import (
+            BALMER_SERIES_N_MAX_DEFAULT,
+            validate_balmer_series_n_max,
+        )
+
+        self.cue_balmer_series_n_max = validate_balmer_series_n_max(
+            kwargs.pop("cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT)
+        )
         # Opt-in publish of the Cue line share (``nebular_line_frac``), read by
         # ``Spectroscopy(nebular_lines=False)``; off by default.
         self.cue_publish_line_fraction = bool(kwargs.pop("cue_publish_line_fraction", False))
@@ -1089,6 +1116,7 @@ class Parameters:
         self.nebular_mappings_agn_grid_path = kwargs.pop("nebular_mappings_agn_grid_path", None)
 
         self._nebular_cb19 = False
+        self._nebular_gutkin16 = False
         self._nebular_mappings = False
         self._nebular_mappings_agn = False
         if nebular == "cue":
@@ -1096,6 +1124,9 @@ class Parameters:
             nebular = False
         elif nebular == "cb19":
             self._nebular_cb19 = True
+            nebular = False
+        elif nebular == "gutkin16":
+            self._nebular_gutkin16 = True
             nebular = False
         elif nebular == "mappings":
             self._nebular_mappings = True
@@ -1120,14 +1151,15 @@ class Parameters:
                 bool(nebular_ssp),
                 bool(nebular),
                 bool(nebular_cue),
+                bool(self._nebular_gutkin16),
                 bool(self._nebular_mappings),
                 bool(self._nebular_mappings_agn),
             ]
         )
         if n_set > 1:
             raise ValueError(
-                "nebular_ssp, nebular (CLOUDY), nebular_cue, mappings, and mappings_agn are "
-                "mutually exclusive: choose one."
+                "nebular_ssp, nebular (CLOUDY), nebular_cue, gutkin16, mappings, and "
+                "mappings_agn are mutually exclusive: choose one."
             )
 
         # Resolve mode
@@ -1139,6 +1171,8 @@ class Parameters:
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif self._nebular_cb19:
             self.nebular_mode = "cb19"
+        elif self._nebular_gutkin16:
+            self.nebular_mode = "gutkin16"
         elif self._nebular_mappings:
             self.nebular_mode = "mappings"
         elif self._nebular_mappings_agn:
@@ -1197,6 +1231,42 @@ class Parameters:
                         stacklevel=2,
                     )
                     kwargs.pop(name)
+
+    def _init_dust_parameterization(self, kwargs) -> None:
+        """Pop ``dust_parameterization`` and refuse the depth keys it does not declare (#3176)."""
+        from tengri.components.dust._params import DUST_PARAMETERIZATIONS
+
+        self.dust_parameterization = str(kwargs.pop("dust_parameterization", "tau_bc_diff"))
+        if self.dust_parameterization not in DUST_PARAMETERIZATIONS:
+            raise ValueError(
+                f"dust_parameterization must be one of {DUST_PARAMETERIZATIONS}; "
+                f"got {self.dust_parameterization!r}."
+            )
+        if self.dust_parameterization != "tau_bc_diff" and self.dust_model != "two_component":
+            raise ValueError(
+                f"dust_parameterization={self.dust_parameterization!r} is a two_component "
+                f"setting (got dust_model={self.dust_model!r}); drop it."
+            )
+        if self.dust_model != "two_component":
+            return
+        if self.dust_parameterization == "tauv_mu":
+            given = [k for k in ("dust_tau_bc", "dust_tau_diff") if k in kwargs]
+            if given:
+                raise ParameterError(
+                    f"dust_parameterization='tauv_mu' declares the total V-band depth and the "
+                    f"diffuse fraction, not {given}. Give dust_tau_v and dust_mu instead, "
+                    f"where tau_v = tau_bc + tau_diff and mu = tau_diff / (tau_bc + tau_diff); "
+                    f"or drop dust_parameterization='tauv_mu' to keep dust_tau_bc and "
+                    f"dust_tau_diff."
+                )
+        else:
+            given = [k for k in ("dust_tau_v", "dust_mu") if k in kwargs]
+            if given:
+                raise ParameterError(
+                    f"{given} needs parameterization='tauv_mu' (dust_parameterization="
+                    f"'tauv_mu'); the default native pair declares dust_tau_bc and "
+                    f"dust_tau_diff instead."
+                )
 
     def _init_dust_config(self, kwargs, *, validate_flat: bool = True):
         """Resolve dust model, attenuation law, and emission from kwargs."""
@@ -1257,6 +1327,26 @@ class Parameters:
         # the youngest stars (default). Set it to give HII-region emission its
         # own birth-cloud curve while still sharing the diffuse ISM screen.
         self.dust_law_neb = law_neb_explicit
+
+        # Screen-depth parameterization (#3176): the flat twin of the grammar's
+        # 'parameterization' key. Only two_component reads it, and tau_v / mu
+        # and the native pair never appear together.
+        self._init_dust_parameterization(kwargs)
+
+        # chevallard13 is the diffuse-screen law only (#3178): legal as law_diff
+        # on a two-screen model, refused on every other slot.
+        from tengri.components.dust.laws._registry import refuse_diffuse_only_law
+
+        refuse_diffuse_only_law(self.dust_law_bc, key="dust_law_bc", dust_model=self.dust_model)
+        refuse_diffuse_only_law(
+            self.dust_law_diff, key="dust_law_diff", dust_model=self.dust_model
+        )
+        refuse_diffuse_only_law(self.dust_law_neb, key="dust_law_neb", dust_model=self.dust_model)
+        if self.dust_model == "age_binned":
+            for _screen in self.dust_screens:
+                refuse_diffuse_only_law(
+                    _screen[0], key="dust_screens[...]", dust_model=self.dust_model
+                )
 
         # Per-source dust-screen choice (#2234 replacement): which screen
         # attenuates the nebular continuum + line catalog, the shock SED, and
@@ -1994,6 +2084,7 @@ class Parameters:
                     f"violate physical constraint: {err_msg}"
                 )
         self._validate_orderings()
+        self._validate_sfr_pole()
 
     #: Pairs that must stay ordered ``greater > lesser`` in LOOKBACK time, with the
     #: physical reason. ``bound_check`` above is strictly per-parameter and cannot
@@ -2065,6 +2156,42 @@ class Parameters:
                 f"lower bound of '{greater}' above the upper bound of '{lesser}', or "
                 "lower the latter), or fix one of them."
             )
+
+    #: The current-episode sSFR form (#3177): ``psi_S = 10**log_ssfr`` [yr^-1] and the
+    #: episode duration, whose product must stay below the pole at 1.
+    _SSFR_POLE_PARAMS = ("sfh_recent_ssfr_log_ssfr", "sfh_recent_ssfr_timescale_myr")
+
+    def _validate_sfr_pole(self):
+        """Refuse a ``recent_ssfr`` prior that can reach the sSFR pole (#3177).
+
+        The joint upper bound ``10**hi(log_ssfr) * hi(timescale) * 1e6`` is taken
+        from the declared or user-given bounds: a ``Fixed`` value is its own bound,
+        a prior contributes its upper edge. The check itself is
+        :func:`~tengri.components.stellar.sfh.check_specific_sfr_pole`; a violation
+        is re-raised as :exc:`ParameterError` so it reads like the other build
+        refusals.
+        """
+        from tengri.components.stellar.sfh import check_specific_sfr_pole
+
+        ssfr_name, dt_name = self._SSFR_POLE_PARAMS
+        if ssfr_name not in self._distributions or dt_name not in self._distributions:
+            return
+        log_hi = self._distributions[ssfr_name].bounds[-1]
+        dt_hi_yr = self._distributions[dt_name].bounds[-1] * 1e6
+        try:
+            check_specific_sfr_pole(log_hi, dt_hi_yr)
+        except ValueError as exc:
+            product = 10.0**log_hi * dt_hi_yr
+            # psi_S * dt < 1 needs log10 psi_S < -log10(dt) and dt < 10**-log10(psi_S).
+            max_log_ssfr = -math.log10(dt_hi_yr)
+            max_dt_myr = 10.0 ** (-log_hi) / 1e6
+            raise ParameterError(
+                f"the joint prior box reaches the sSFR pole psi_S*dt = 1: "
+                f"{ssfr_name} upper bound {log_hi:g} with {dt_name} upper bound "
+                f"{dt_hi_yr / 1e6:g} Myr gives psi_S*dt = {product:.3g} >= 1 (the episode "
+                f"would need more than the total formed mass). Narrow {ssfr_name} to below "
+                f"{max_log_ssfr:.3g}, or {dt_name} to below {max_dt_myr:.3g} Myr."
+            ) from exc
 
     # ── Properties ────────────────────────────────────────────────────
 
@@ -3141,6 +3268,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_mean_sfh_type": content("SFH model selection determines parameters"),
     "_n_grid": content("grid size for stochastic SFH determines parameters"),
     "_nebular_cb19": content("nebular backend selection determines parameters"),
+    "_nebular_gutkin16": content("nebular backend selection determines parameters"),
     "_nebular_explicit": content(
         "owner-flagged: a build-time flag that selects an advisory branch. True "
         "when the caller stated a nebular disposition (any of the three neb "
@@ -3184,6 +3312,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "cue_lyc_max_age_yr": content(
         "oldest stellar age whose ionizing photons Cue counts changes Q_H and the shape"
     ),
+    "cue_balmer_series_n_max": content(
+        "highest Balmer level Cue appends above H10 changes the published line catalog"
+    ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
@@ -3196,6 +3327,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_diff": content("diffuse dust law determines parameters"),
     "dust_law_neb": content("nebular dust law determines parameters"),
     "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_parameterization": content(
+        "screen-depth parameterization: 'tauv_mu' declares dust_tau_v and dust_mu in place "
+        "of dust_tau_bc and dust_tau_diff, which changes the parameter set (#3176)"
+    ),
     "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
     "dust_agn_screen": content(
         "which screen AGN light passes through; also moves AGN before dust "
@@ -3238,6 +3373,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "neb_ionization": content("nebular ionization source determines parameters"),
     "nebular": content("nebular emission backend determines parameters"),
     "nebular_cb19_grid_path": content("cb19 grid path determines available parameters"),
+    "nebular_gutkin16_grid_path": content("gutkin16 grid path determines available parameters"),
+    "nebular_gutkin16_mup": content("gutkin16 upper mass cutoff selects a different table slice"),
+    "nebular_gutkin16_continuum": content("gutkin16 continuum switch changes the emitted SED"),
     "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
     "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
     "nebular_mappings_agn_ionizing_source_warning": content(

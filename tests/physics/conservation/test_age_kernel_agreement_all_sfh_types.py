@@ -51,6 +51,11 @@ REFUSALS = {
 }
 
 
+#: Current-episode types (#3177) splice a constant-SFR episode over a smooth
+#: history, so the grammar refuses them alone; each is built beside ``delayed``.
+SMOOTH_PARTNER = {"recent": "delayed", "recent_ssfr": "delayed"}
+
+
 def _unique_families():
     seen = {}
     for key, spec in SFH_REGISTRY.items():
@@ -86,6 +91,11 @@ def _formed(model, params=None):
     return float(model.predict_state(params or {}).derived["log_mstar_formed"])
 
 
+def _sfh_type(family):
+    partner = SMOOTH_PARTNER.get(family)
+    return family if partner is None else [partner, family]
+
+
 def _check_kernels_agree(ssp, obs, family, z):
     if family in REFUSALS:
         with pytest.raises((ValueError, TypeError), match=REFUSALS[family]):
@@ -95,7 +105,7 @@ def _check_kernels_agree(ssp, obs, family, z):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for kernel in ("cic", "dsps"):
-            m = _build(ssp, obs, kernel, z, {"type": family})
+            m = _build(ssp, obs, kernel, z, {"type": _sfh_type(family)})
             out[kernel] = (_formed(m), np.asarray(m.predict_photometry({})))
     declared = out["cic"][0]
     assert abs(out["dsps"][0] - declared) <= 1e-8 * abs(declared), f"{family} z={z}: mass"

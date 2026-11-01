@@ -1453,7 +1453,31 @@ def _flux_conserving_resample(
     wave_query: jnp.ndarray,
     edge_aa: float | None = None,
 ) -> jnp.ndarray:
+    """Bin-averaged resample; see :func:`_resample_peak_factored`.
+
+    The cumulative integral is formed on ``sed_rest`` divided by a power of two,
+    the binary exponent of its peak (#3149). A 1e10 Msun galaxy's SED reaches
+    ~1e31 erg/s/Hz and its cumulative integral runs past float32's ceiling, so
+    the integral cannot be formed on the raw SED. The scale is exact in binary
+    floating point, so float64 output is bit-identical to the unfactored
+    integral. The exponent is a ``stop_gradient`` factorization constant, and the
+    all-zero SED has exponent 0.
+    """
+    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
+    means = _resample_peak_factored(wave_rest, jnp.ldexp(sed_rest, -exponent), wave_query, edge_aa)
+    return jnp.ldexp(means, exponent)
+
+
+def _resample_peak_factored(
+    wave_rest: jnp.ndarray,
+    sed_rest: jnp.ndarray,
+    wave_query: jnp.ndarray,
+    edge_aa: float | None = None,
+) -> jnp.ndarray:
     r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
+
+    ``sed_rest`` is expected at an O(1) peak; :func:`_flux_conserving_resample`
+    applies the power-of-two factor.
 
     Each output value is the *mean flux density over that pixel's wavelength bin*
     (the integral of the model over the bin divided by the bin width) rather
@@ -1586,13 +1610,25 @@ def compute_spectrum_conserving(
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes.
     """
-    wave_rest_query = wave_obs / (1.0 + redshift)
-    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
-    sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query, edge_aa)
+    sed_at_pixels = _conserving_pixel_luminosity(
+        sed_rest, wave_rest, wave_obs, redshift, has_lyc_edge=has_lyc_edge
+    )
     # Dimming applied to the pixel SED directly, not as a standalone flux_scale
     # (~1e-58, which underflows float32 to zero). See _resample_to_spectrum
     # above and #1206.
     return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
+
+
+def _conserving_pixel_luminosity(sed_rest, wave_rest, wave_obs, redshift, has_lyc_edge=False):
+    """Bin-integrated rest-frame L_nu on the observed pixels, before dimming.
+
+    Shared by :func:`compute_spectrum_conserving` and
+    :func:`compute_spectrum_conserving_lsf`, which need the pixel luminosity
+    itself to restore a peak factor before the flux conversion (#3149).
+    """
+    wave_rest_query = wave_obs / (1.0 + redshift)
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    return _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query, edge_aa)
 
 
 def compute_spectrum_conserving_lsf(
@@ -1648,15 +1684,21 @@ def compute_spectrum_conserving_lsf(
         return x if x.ndim == 0 else jnp.interp(wave_model_obs, wave_obs, x)
 
     # An array resolution takes the piecewise path (rest grids are not log-uniform).
+    # Peak factoring (#3149): the line-spread convolution sums the SED over its
+    # kernel, and a 1e10 Msun galaxy's SED sum runs past float32's ceiling. The
+    # convolution is linear, so the power-of-two factor is restored exactly on
+    # the pixel luminosity before the flux conversion.
+    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
     sed_broad = apply_lsf(
-        sed_rest,
+        jnp.ldexp(sed_rest, -exponent),
         wave_rest,
         _onto_model(resolution),
         sigma_lib_kms=_onto_model(sigma_lib_kms),
         n_bins=n_bins,
         sigma_v_kms=sigma_v_kms,
     )
-    return compute_spectrum_conserving(sed_broad, wave_rest, wave_obs, redshift, dl_cm)
+    pixel_lnu = _conserving_pixel_luminosity(sed_broad, wave_rest, wave_obs, redshift)
+    return lnu_to_fnu(jnp.ldexp(pixel_lnu, exponent), dl_cm, redshift)
 
 
 #: Fractional spread in ``d(ln lambda)`` tolerated before a grid is called

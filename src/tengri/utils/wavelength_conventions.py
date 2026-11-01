@@ -90,9 +90,12 @@ SOURCES: tuple[WavelengthSource, ...] = (
     WavelengthSource(
         "feltre16",
         "data/feltre_grid.h5",
-        "mixed",
-        "NIST air values for [OIII], [OI], [NII], [SII], Hbeta; Halpha and [OII]3727 "
-        "are vacuum (offsets from eline_catalog); UV lines vacuum",
+        "vacuum",
+        "NEOGAL tables follow Cloudy (air at and above 2000 A, vacuum below, Ferland+2017 "
+        "sec. 2.3.3); scripts/build_feltre_grid.py converts every optical label once with "
+        "air_to_vac (NIST air values for [OII]3727, Hbeta, [OIII], [OI], [NII], Halpha, "
+        "[SII]) and stores vacuum, recorded in the file's wavelength_convention attribute "
+        "(#3180); UV lines are vacuum as published",
         "tengri.components.nebular.agn_nebular._load_feltre_grid",
     ),
     WavelengthSource(
