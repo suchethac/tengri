@@ -68,8 +68,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Lsun (luminous QSO) brackets the AGN population.
         Uniform(8.0, 14.0, default=10.0),
         "AGN accretion power log10(L_acc / Lsun), integrated over all directions "
-        "(independent of the inclination); the line-of-sight value is the derived "
-        "log_L_agn_los",
+        "(independent of the inclination); the line-of-sight value of the direct emission is "
+        "the derived log_L_agn_direct_los, that of the emitted SED log_L_agn_los",
     ),
     ParamDeclaration(
         "agn_alpha",

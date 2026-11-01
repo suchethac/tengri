@@ -19,7 +19,7 @@ import pytest
 
 from tengri.components.agn.blocks import resolve_agn_block
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components.agn.blocks.runner import _KUBOTA_LEDGER_WAVE, compose_l_nu
+from tengri.components.agn.blocks.runner import _KUBOTA_BUDGET_WAVE, compose_l_nu
 from tengri.utils.grid_interp import loglog_integral
 
 pytestmark = pytest.mark.limit
@@ -51,7 +51,7 @@ def test_compact_kubota_ledger_matches_a_dense_integral(log_mbh, log_lbol, spin,
         agn_f_hard=f_hard,
         templates=None,
     )
-    w = jnp.asarray(_KUBOTA_LEDGER_WAVE)
+    w = jnp.asarray(_KUBOTA_BUDGET_WAVE)
     dense_w = jnp.asarray(np.geomspace(1.0e-3, 1.0e10, 400001))
     got = float(jnp.trapezoid(disc(w, **kw), w))
     ref = float(jnp.trapezoid(disc(dense_w, **kw), dense_w))
