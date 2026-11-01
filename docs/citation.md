@@ -162,6 +162,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1093/mnras/staa2620](https://doi.org/10.1093/mnras/staa2620).
 - PSD-governed SFH variability in cosmological simulations. Iyer et al.
   (2020), [arXiv:2007.07916](https://arxiv.org/abs/2007.07916).
+- Current-episode star formation (constant rate over the last Delta t, spliced
+  over a smooth history; `recent`, `recent_ssfr`). Chevallard & Charlot (2016),
+  [doi:10.1093/mnras/stw1756](https://doi.org/10.1093/mnras/stw1756).
 
 ### Nebular emission
 

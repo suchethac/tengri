@@ -128,3 +128,87 @@ def test_float32_log_extrapolation_is_finite():
         assert log_uv.dtype == jnp.float32
         assert bool(jnp.isfinite(log_uv))
         np.testing.assert_allclose(float(log_uv), np.log10(_analytic_l_uv_1600()), rtol=1e-4)
+
+
+# ── traced grids (jax.jit): the same answer as the concrete path, no NaN ──
+
+
+def _jit_lin(sed, wave):
+    return jax.jit(compute_uv_luminosity_1600)(sed, wave)
+
+
+def _jit_log(sed, wave):
+    return jax.jit(compute_log_uv_luminosity_1600)(sed, wave)
+
+
+def test_jitted_power_law_extrapolation_matches_concrete_and_analytic():
+    wave = np.geomspace(1700.0, 10000.0, 400)
+    sed = jnp.asarray(_power_law_sed(wave))
+    wave_j = jnp.asarray(wave)
+    with pytest.warns(UserWarning, match="extrapolated along a power law"):
+        concrete = float(compute_uv_luminosity_1600(sed, wave_j))
+        concrete_log = float(compute_log_uv_luminosity_1600(sed, wave_j))
+    jitted = float(_jit_lin(sed, wave_j))
+    jitted_log = float(_jit_log(sed, wave_j))
+    assert np.isfinite(jitted) and np.isfinite(jitted_log)
+    np.testing.assert_allclose(jitted, concrete, rtol=1e-10)
+    np.testing.assert_allclose(jitted_log, concrete_log, rtol=1e-10)
+    np.testing.assert_allclose(jitted, _analytic_l_uv_1600(), rtol=1e-6)
+    np.testing.assert_allclose(10.0**jitted_log, _analytic_l_uv_1600(), rtol=1e-6)
+
+
+def test_jitted_no_uv_grid_gives_edge_value():
+    wave = np.geomspace(2700.0, 10000.0, 300)  # nothing in the Calzetti windows
+    sed = jnp.asarray(_power_law_sed(wave))
+    wave_j = jnp.asarray(wave)
+    with pytest.warns(UserWarning, match="nearest edge value"):
+        concrete = float(compute_uv_luminosity_1600(sed, wave_j))
+    jitted = float(_jit_lin(sed, wave_j))
+    assert np.isfinite(jitted)
+    np.testing.assert_allclose(jitted, concrete, rtol=1e-12)
+    np.testing.assert_allclose(jitted, (C_AA / 1600.0) * float(sed[0]), rtol=1e-12)
+
+
+def test_jitted_in_grid_value_equals_concrete():
+    wave = np.geomspace(91.0, 1.0e6, 2000)
+    sed = jnp.asarray(1.0e27 * (wave / 1.0e4) ** -1.5 + 1.0e25)
+    wave_j = jnp.asarray(wave)
+    np.testing.assert_allclose(
+        float(_jit_lin(sed, wave_j)),
+        float(compute_uv_luminosity_1600(sed, wave_j)),
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        float(_jit_log(sed, wave_j)),
+        float(compute_log_uv_luminosity_1600(sed, wave_j)),
+        rtol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("grid", ["in_grid", "extrapolated"])
+def test_jitted_gradient_wrt_sed_is_finite_and_nonzero(grid):
+    if grid == "in_grid":
+        wave = np.geomspace(91.0, 1.0e6, 2000)
+        sed_np = 1.0e27 * (wave / 1.0e4) ** -1.5 + 1.0e25
+    else:
+        wave = np.geomspace(1700.0, 10000.0, 400)
+        sed_np = _power_law_sed(wave)
+    wave_j = jnp.asarray(wave)
+    sed = jnp.asarray(sed_np)
+    grad_lin = jax.jit(jax.grad(lambda s, w: compute_uv_luminosity_1600(s, w)))(sed, wave_j)
+    grad_log = jax.jit(jax.grad(lambda s, w: compute_log_uv_luminosity_1600(s, w)))(sed, wave_j)
+    for grad in (grad_lin, grad_log):
+        assert bool(jnp.all(jnp.isfinite(grad)))
+        assert float(jnp.sum(jnp.abs(grad))) > 0.0
+
+
+def test_jitted_float32_log_extrapolation_is_finite():
+    wave_np = np.geomspace(1700.0, 10000.0, 400)
+    sed_np = _power_law_sed(wave_np)
+    with jax.enable_x64(False):
+        wave = jnp.asarray(wave_np, dtype=jnp.float32)
+        sed = jnp.asarray(sed_np, dtype=jnp.float32)
+        log_uv = jax.jit(compute_log_uv_luminosity_1600)(sed, wave)
+        assert log_uv.dtype == jnp.float32
+        assert bool(jnp.isfinite(log_uv))
+        np.testing.assert_allclose(float(log_uv), np.log10(_analytic_l_uv_1600()), rtol=1e-4)

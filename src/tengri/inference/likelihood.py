@@ -81,6 +81,7 @@ def build_base_likelihood(context: InferenceContext):
         CloudyELineMarginalizedLikelihood,
         ELineFittedLikelihood,
         ELineMarginalizedLikelihood,
+        ModelELineMarginalizedLikelihood,
         MultivariateGaussianLikelihood,
         StudentTLikelihood,
     )
@@ -286,6 +287,7 @@ def build_base_likelihood(context: InferenceContext):
             eline_prior_sigma=context.eline_prior_sigma or 1e10,
             eline_line_wavelengths=context.eline_independent_wavelengths,
             eline_prior_width_dex=context.eline_prior_width_dex,
+            **_model_prior_kwargs(context),
             channel="spec_fnu",
             **chol_kw,
         )
@@ -394,6 +396,26 @@ def build_base_likelihood(context: InferenceContext):
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
                 **chol_kw,
+            )
+        elif context.eline_prior_type == "model":
+            match_index, matched = _model_line_match(context)
+            eline_lk = ModelELineMarginalizedLikelihood(
+                fnu_obs=spec_obs,
+                fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
+                design_matrix_builder=builder,
+                prior_inputs_builder=_model_prior_inputs(context),
+                match_index=match_index,
+                matched=matched,
+                line_wavelengths=context.eline_independent_wavelengths,
+                prior_width_dex=context.eline_prior_width_dex,
+                channel="spec_fnu",
             )
         else:
             eline_lk = ELineMarginalizedLikelihood(
@@ -630,6 +652,66 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
         eline_delta_v_kms=delta_v,
     )
     return apply_doublet_constraints(G, constraint_matrix)
+
+
+def _model_line_match(context: InferenceContext):
+    """Static index of the model line matching each independent catalog line."""
+    from tengri.observation.eline_marginalization import model_line_match
+
+    return model_line_match(context.model, context.eline_independent_wavelengths)
+
+
+def _model_prior_kwargs(context: InferenceContext) -> dict:
+    """Constructor keywords of the model-centered line prior, empty for any other prior."""
+    if context.eline_prior_type != "model":
+        return {}
+    match_index, matched = _model_line_match(context)
+    return {
+        "prior_inputs_builder": _model_prior_inputs(context),
+        "match_index": match_index,
+        "matched": matched,
+    }
+
+
+def _model_prior_inputs(context: InferenceContext):
+    """Closure returning ``(redshift, dl_cm, aperture_frac, transmission)`` for the prior.
+
+    The redshift and distance follow the forward pass's resolution order, and the
+    aperture fraction is read from ``params`` with ``Fixed(1.0)`` as the default. The
+    transmission is the model's Milky Way screen at each catalog line, ones without one.
+    """
+    model = context.model
+    fixed_values = context.fixed_values
+
+    def inputs(params):
+        redshift = model._get_redshift(params, fixed_values)
+        dl_cm = model._get_dl_cm(params, fixed_values)
+        aperture_frac = params.get(
+            "eline_aperture_frac", fixed_values.get("eline_aperture_frac", 1.0)
+        )
+        transmission = _catalog_foreground(context, redshift)
+        return redshift, dl_cm, aperture_frac, transmission
+
+    return inputs
+
+
+def _catalog_foreground(context: InferenceContext, redshift):
+    """Milky Way transmission at the independent catalog lines; ones without a screen."""
+    import jax.numpy as jnp
+
+    from tengri.observation.eline_marginalization import line_foreground_transmission
+
+    spec = context.model.spec
+    wavelengths = context.eline_independent_wavelengths
+    if getattr(spec, "foreground_ebmv_mw", 0.0) > 0.0:
+        return line_foreground_transmission(
+            wavelengths,
+            redshift,
+            spec.foreground_ebmv_mw,
+            spec.foreground_rv,
+            spec.foreground_law,
+        )
+    return jnp.ones(jnp.shape(wavelengths)[0])
 
 
 def _make_eline_design_builder(context: InferenceContext):
