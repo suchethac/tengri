@@ -304,7 +304,8 @@ class TestSKIRTORPolarDustIntegration:
         # Direct import: this one resolves today, and the sibling deleted above
         # shows what `except Exception: pytest.skip(...)` costs when it stops
         # resolving — the test goes green instead of red.
-        from tengri.components.agn.blocks.runner import composable_agn_l_nu
+        # The registry entry: it takes the declared superset, as the component calls it.
+        from tengri.components.agn.blocks.registry import composable as composable_agn_l_nu
 
         # Call composable runner twice with different polar_ebv, both Type 2
         common_params = {

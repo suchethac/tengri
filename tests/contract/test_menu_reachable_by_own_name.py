@@ -98,4 +98,10 @@ class TestConceptSynonymsStillWin:
         """The redirect must not swallow ordinary searches."""
         hits = tengri.search("torus")
         assert len(hits) > 1
-        assert len(hits) < len(tengri.list_agn_blocks())
+        hit_names = {r["name"] for r in hits}
+        block_names = {r["name"] for r in tengri.list_agn_blocks()}
+        # Not redirected to the AGN-block menu: the hits are not that menu, and they include
+        # entries no menu row carries (a parameter or property named for the torus).
+        assert hit_names != block_names
+        non_block = hit_names - block_names
+        assert any("torus" in n.lower() for n in non_block), sorted(non_block)

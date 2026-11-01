@@ -1815,7 +1815,8 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
         warn_if_lines_are_unavailable(pred._model, (name,))
         entry = catalog[name]
         state = pred._ensure_state()
-        return entry.fn(state, pred._params)
+        cache = pred._cache.setdefault("_property_bundles", {})
+        return entry.evaluate(state, pred._params, model=pred._model, cache=cache)
 
     def __contains__(self, name: str) -> bool:
         """Check if a property is available."""
