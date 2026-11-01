@@ -85,6 +85,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_DELTA,
     DEFAULT_DUST_RV,
     DEFAULT_DUST_SLOPE,
+    DEFAULT_DUST_TAU_V,
     DEFAULT_DUST_TEA_SCATTER,
     KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
     TEA_DELTA_DEFAULT,
@@ -277,7 +278,7 @@ _C13_PIVOT_UM = 0.55
 )
 def chevallard13(
     wavelength: jnp.ndarray,
-    tau_v: float = 1.0,
+    tau_v: float = DEFAULT_DUST_TAU_V,
 ) -> jnp.ndarray:
     r"""Chevallard+2013 quasi-universal diffuse-ISM attenuation curve.
 

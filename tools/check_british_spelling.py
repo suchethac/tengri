@@ -112,6 +112,7 @@ ALLOWED_TOKENS = frozenset(
         "log10_specific_ionising_luminosity",  # Synthesizer grid HDF5 dataset key
         "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737
         "Greybody",  # Synthesizer's dust emission class name, cited beside tengri's graybody
+        "photoionisation",  # Synthesizer module name: synthesizer.photoionisation
     }
 )
 

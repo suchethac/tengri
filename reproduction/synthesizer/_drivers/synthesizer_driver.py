@@ -44,6 +44,53 @@ _BLR_GRID = "test_grid_agn-blr"
 _DUST_GRID = "draine_li_dust_emission_grid_MW_3p1"
 
 
+def cue_logu_from_synthesizer_u(u_syn: float, n_h: float = 100.0, log_r: float = 19.0) -> float:
+    r"""Cue ``neb_logU`` that gives the same ionizing Q as Synthesizer's U at fixed n_H.
+
+    Synthesizer's ionization parameter :math:`U_{\rm syn}` (its
+    ``calculate_U_from_Q``) is the volume-averaged value
+    :math:`\langle U\rangle = (\alpha_B^{2/3}/c)\,(3Qn_H/4\pi)^{1/3}`, three times
+    the Strömgren-radius parameter :math:`U_S` of Gutkin et al. (2016) eq. 7 [G16]_.
+    Cue's ``neb_logU`` is the inner-face value at a fixed radius :math:`R`,
+
+    .. math::
+
+        U_{\rm in} = \frac{Q}{4\pi R^2 n_H c},
+
+    so the two differ by a factor that depends on Q and :math:`n_H`. On the
+    Synthesizer grid, :math:`U_{\rm syn}` and :math:`n_H` are fixed, which fixes
+    Q and makes the mapping a constant.
+
+    Parameters
+    ----------
+    u_syn : float
+        Synthesizer ionization parameter :math:`\langle U\rangle`, dimensionless.
+    n_h : float, optional
+        Hydrogen number density :math:`n_H` [cm^-3]. Default: 100.
+    log_r : float, optional
+        Inner-face radius :math:`\log_{10}(R / \mathrm{cm})`. Default: 19.0, Cue's
+        reference radius.
+
+    Returns
+    -------
+    float
+        :math:`\log_{10} U_{\rm in}`, the value to pass as Cue's ``neb_logU``.
+
+    References
+    ----------
+    .. [G16] Gutkin, J., Charlot, S., Bruzual, G. (2016). MNRAS, 462, 1757.
+    """
+    import math
+
+    from synthesizer.photoionisation import calculate_Q_from_U
+
+    from tengri.utils.physics_constants import C_CGS
+
+    q_ion = calculate_Q_from_U(u_syn, n_h)
+    radius = 10.0**log_r
+    return math.log10(q_ion / (4.0 * math.pi * radius**2 * n_h * C_CGS))
+
+
 def synthesizer_version() -> str:
     """Installed cosmos-synthesizer version, for the grid provenance line.
 
