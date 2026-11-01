@@ -5,6 +5,11 @@ Every entry writes one BEAGLE parameter file with the same SSP or SFH, matched
 across sections, so the comparison isolates one physics block at a time. Rows are
 per-object ``from_file`` values in BEAGLE's log units (:math:`\\log Z/Z_\\odot` with
 :math:`Z_\\odot=0.01524`, :math:`\\log M_\\odot`, :math:`\\log` yr).
+
+IGM: every section with :math:`z > 0` carries ``IGM ABSORPTION = Inoue`` (the default in
+:class:`~reproduction.beagle._drivers.beagle_run.MockRun`); the two no-IGM controls
+(``s12_igm_none_*``) omit the keyword. The CCWW13_full section is for information only (see
+``_TUFFS_GEOMETRY``).
 """
 
 from __future__ import annotations
@@ -101,6 +106,14 @@ def _igm_sections() -> tuple[MockRun, ...]:
             )
     return tuple(runs)
 
+# CCWW13_full solves the Tuffs et al. (2004) radiative transfer for a galaxy geometry, which BEAGLE
+# reads from these two parameters. The values are arbitrary fixed choices. The full variant is shown
+# for information only: tengri implements the universal relation (CCWW13_universal), not the
+# geometry-resolved one.
+_TUFFS_GEOMETRY = {
+    "CCWW13_full": (mock_fixed("inclination", value=60.0), mock_fixed("tau_b_perp", value=4.0)),
+}
+
 RUN_MATRIX: tuple[MockRun, ...] = (
     MockRun(
         section="s1_ssp_bc03",
@@ -136,6 +149,7 @@ RUN_MATRIX: tuple[MockRun, ...] = (
                 _DELAYED,
                 mock_fixed("tauV_eff", value=1.0),
                 mock_fixed("mu", value=0.4),
+                *_TUFFS_GEOMETRY.get(law, ()),
             ),
         )
         for law in ATTENUATION_LAWS

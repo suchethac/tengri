@@ -142,3 +142,60 @@ def test_igm_sections_differ_only_in_the_igm_keyword() -> None:
         return {line for line in run.param_text().splitlines() if not line.startswith(skip)}
 
     assert stripped(inoue) ^ stripped(none) == {"IGM ABSORPTION = Inoue"}
+
+
+def test_ccww13_full_section_carries_the_tuffs_geometry() -> None:
+    text = M.by_section("s4_ccww13_full")[0].param_text()
+    assert "PARAMETER = name:attenuation_type mock:type:fixed char_value:CCWW13_full" in text
+    assert "PARAMETER = name:inclination mock:type:fixed value:60.0" in text
+    assert "PARAMETER = name:tau_b_perp mock:type:fixed value:4.0" in text
+    assert "PARAMETER = name:tauV_eff mock:type:fixed value:1.0" in text
+    assert "PARAMETER = name:mu mock:type:fixed value:0.4" in text
+    universal = M.by_section("s4_ccww13_universal")[0].param_text()
+    assert "tau_b_perp" not in universal and "inclination" not in universal
+
+
+def test_capstone_renders_without_docker_and_names_the_four_galaxies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reproduction.beagle._drivers import beagle_capstone as C
+
+    monkeypatch.delenv("BEAGLE_WORKDIR", raising=False)
+    run = C.capstone_run()
+    text = run.param_text()
+    assert "# objects: 79 7837 15775 1826" in text
+    assert len(run.catalog_table) == 4
+    assert len(run.filters) == 17
+    assert "TEMPLATES NEBULAR = " in text
+    assert "PRIORS CATALOGUE = " in text
+    assert (
+        "PARAMETER = name:redshift type:fitted prior:distribution:dirac prior:colName:zz" in text
+    )
+    for line in (
+        "PRINT SPECTRUM = T",
+        "PRINT PHOTOMETRY = T",
+        "PRINT LINE FLUXES = T",
+        "PRINT CONTINUUM = T",
+    ):
+        assert line in text
+    assert "PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_example.param" in text
+
+
+def test_run_commands_need_the_allow_docker_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    from reproduction.beagle._drivers import beagle_run as R
+
+    assert R.main(["--run", "s1_ssp_bc03"]) == 1
+    assert "--allow-docker" in capsys.readouterr().err
+    assert R.main(["--fit-capstone"]) == 0
+    assert "--allow-docker" in capsys.readouterr().out
+
+
+def test_capstone_throughputs_are_dimensionless_and_nonnegative() -> None:
+    from reproduction.beagle._drivers import beagle_capstone as C
+
+    run = C.capstone_run()
+    for spec in run.filters:
+        assert np.all(spec.transmission >= 0.0)
+        assert spec.transmission.max() <= 1.0
+    k_band = next(f for f in run.filters if f.name == "ISAAC_KS")
+    assert 0.0 < k_band.transmission.max() < 1.0

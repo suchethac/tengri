@@ -497,6 +497,9 @@ class FitRun:
         Fitted, fixed and dependent parameters (``type:fitted``, ``type:fixed``, ``type:dependent``).
     redshift_column : str, optional
         Catalog column read as a Dirac redshift prior (``PRIORS CATALOGUE``).
+    sampler : str
+        Sampler settings file under ``$BEAGLE_PARAM_DIR``; ``MCMC_example.param`` carries BEAGLE's
+        MultiNest settings.
     """
 
     section: str
@@ -512,6 +515,7 @@ class FitRun:
     seed: int = 12345
     cosmology: Cosmology = PLANCK18_BEAGLE
     igm: str | None = "Inoue"
+    sampler: str = "MCMC_new.param"
     mode: Literal["fit"] = field(default="fit", init=False)
 
     def __post_init__(self) -> None:
@@ -531,7 +535,8 @@ class FitRun:
         return self.catalog_table
 
     def _body_lines(self) -> list[str]:
-        lines = ["[main]", "VERBOSE = 2", f"SEED = {self.seed}", *self.cosmology.lines()]
+        lines = ["[main]", f"# objects: {' '.join(self.galaxy_ids)}"]
+        lines += ["VERBOSE = 2", f"SEED = {self.seed}", *self.cosmology.lines()]
         lines += _template_lines(self.templates, self.nebular)
         if self.rebin is not None:
             lines.append(f"REBIN TEMPLATES = {self.rebin}")
@@ -543,7 +548,7 @@ class FitRun:
             dirac = f"prior:distribution:dirac prior:colName:{self.redshift_column}"
             lines.append(Param("redshift", "type:fitted", prior=dirac).render())
         lines += _output_lines(photometry=True, spectrum=self.print_spectrum, sfh=False, nebular=self.nebular)
-        lines.append("PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_new.param")
+        lines.append(f"PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/{self.sampler}")
         return lines
 
     @property
@@ -731,8 +736,18 @@ def _render(runs: Sequence[Run], out: Path) -> int:
     return 0
 
 
-def _fit_capstone() -> int:
-    print("fit capstone: no Paper I galaxy ids are committed yet; nothing was run.")
+def _fit_capstone(*, allow_docker: bool) -> int:
+    from .beagle_capstone import capstone_run
+
+    item = capstone_run()
+    if not allow_docker:
+        print(f"{item.name}: {len(item.galaxy_ids)} galaxies, {len(item.filters)} bands (not run)")
+        print("add --allow-docker to materialize and fit")
+        return 0
+    require_available()
+    materialize(item, workdir())
+    parsed = run(item, allow_docker=True)
+    print(f"{item.name}: posteriors for {len(parsed.posterior or {})} galaxies")
     return 0
 
 
@@ -745,8 +760,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=None, help="directory for --render-params")
     parser.add_argument("--run", metavar="SECTION", help="run one matrix section through Docker")
     parser.add_argument("--run-all", action="store_true", help="run every matrix section")
-    parser.add_argument("--fit-capstone", action="store_true", help="placeholder for the fit capstone")
+    parser.add_argument("--fit-capstone", action="store_true", help="fit the four Paper I galaxies")
     parser.add_argument("--status", action="store_true", help="show which runs are cached")
+    parser.add_argument("--allow-docker", action="store_true", help="allow runs through Docker")
     args = parser.parse_args(argv)
     try:
         return _dispatch(args, parser, RUN_MATRIX, by_section)
@@ -760,10 +776,13 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser, matrix,
         out = args.out if args.out is not None else workdir()
         return _render(matrix, out)
     if args.fit_capstone:
-        return _fit_capstone()
+        return _fit_capstone(allow_docker=args.allow_docker)
     if args.status:
         return _status(matrix)
     if args.run or args.run_all:
+        if not args.allow_docker:
+            print("refusing to run BEAGLE without --allow-docker", file=sys.stderr)
+            return 1
         require_available()
         targets = list(matrix) if args.run_all else by_section(args.run)
         for item in targets:
