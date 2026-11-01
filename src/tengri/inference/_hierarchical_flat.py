@@ -329,10 +329,18 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     not a claim requiring anyone's diligence.
     """
     from tengri import Fitter
+    from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
+    from tengri.config.exceptions import ConfigError
     from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
     n_gal = fitter.n_galaxies
     spec = fitter._spec
+    if young_fraction_prior_for_spec(spec) is not None:
+        raise ConfigError(
+            "the young-fraction prior term is not evaluated on the hierarchical flat seam "
+            "(log_prior there is the iid N(0, 1) of every latent); the Student-t ratio prior "
+            "would be dropped. Use coordinates='ratios' there."
+        )
     stochastic = spec.stochastic
     n_grid = spec.n_grid
     free_names = fitter._free_names

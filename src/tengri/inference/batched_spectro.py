@@ -55,6 +55,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
@@ -187,13 +188,19 @@ def batched_neg_log_posterior(
     loglik = batched_log_likelihood(model, spec)
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
+    young_fraction = young_fraction_prior_for_spec(model.spec)
 
     def nlp(params_unbounded: dict, obs: SpectroBatch) -> jax.Array:
         physical = _unstandardize_parameters(
             params_unbounded, model.spec, free_names, fixed_values, stochastic=False
         )
         phys_free = {n: physical[n] for n in free_names}
-        prior = standardized_neg_log_prior(params_unbounded, free_names, stochastic=False)
+        prior = standardized_neg_log_prior(
+            params_unbounded,
+            free_names,
+            stochastic=False,
+            young_fraction=young_fraction,
+        )
         return -loglik(phys_free, obs) + prior
 
     return nlp

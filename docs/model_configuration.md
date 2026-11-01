@@ -232,6 +232,7 @@ Generated per-domain parameter references are shown above. For per-type paramete
 - `'age_kernel'`: `'cic'` (default, cloud-in-cell) or `'dsps'`, which names the same integration (#2683).
 - `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
+- `'coordinates'`: For `type='continuity'`, `'ratios'` (default) samples the Student-t log-SFR ratios, and `'young_fraction'` samples the stick-breaking mass fractions from the youngest bin instead. The fractions give the photometrically pinned young mass its own axis, because the ratio coordinates make the posterior a curved ridge when that mass is well constrained. The Student-t ratio prior is carried to the fractions as an exact pullback, so both choices describe the same posterior. The young-fraction form needs all six fractions free and fits on the Fitter paths that evaluate the standardized prior; the evidence and hierarchical paths refuse it with a `ConfigError`.
 
 **Minimal example:**
 ```python
