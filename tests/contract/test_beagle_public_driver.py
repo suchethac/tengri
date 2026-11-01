@@ -8,6 +8,7 @@ the BEAGLE binary or BEAGLE templates.
 from __future__ import annotations
 
 import math
+import os
 
 import numpy as np
 import pytest
@@ -96,3 +97,18 @@ def test_beagle_workshop_summary_names_env_when_unset(monkeypatch):
     monkeypatch.delenv("ART_SEDFITTING_DIR", raising=False)
     with pytest.raises(RuntimeError, match="ART_SEDFITTING_DIR"):
         bd.beagle_workshop_summary(1)
+
+
+def test_beagle_workshop_summary_unset_env_names_variable(monkeypatch):
+    monkeypatch.delenv("ART_SEDFITTING_DIR", raising=False)
+    with pytest.raises(RuntimeError, match="ART_SEDFITTING_DIR"):
+        bd.beagle_workshop_summary(3)
+
+
+@pytest.mark.skipif(not os.environ.get("ART_SEDFITTING_DIR"), reason="ART_SEDFITTING_DIR is unset")
+@pytest.mark.parametrize(("z", "n_rows"), [(1, 367), (3, 154)])
+def test_beagle_workshop_summary_reads_upstream_catalogue(z, n_rows):
+    table = bd.beagle_workshop_summary(z)
+    assert len(table) == n_rows
+    assert table.colnames[:6] == ["ID", "M_tot_mean", "M_tot_median", "M_tot_68.00",
+                                  "M_tot_95.00", "M_star_mean"]  # fmt: skip

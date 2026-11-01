@@ -40,9 +40,9 @@ date, and the SHA-256 of this builder and of each input file.
 
 References
 ----------
-Pacifici, C., Iyer, K. G., Mobasher, B., et al. 2023, ApJ, 944, 141,
-doi:10.3847/1538-4357/acacff ("The Art of Measuring Physical Parameters in Galaxies: A Critical
-Assessment of Spectral Energy Distribution Fitting Techniques").
+Pacifici, C., et al. 2023, "The Art of Measuring Physical Parameters in Galaxies: A Critical
+Assessment of Spectral Energy Distribution Fitting Techniques," ApJ, 944, 141,
+doi:10.3847/1538-4357/acacff, arXiv:2212.01915.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """BEAGLE public-ingredient layer: repackaged public tables and analytic references.
 
-BEAGLE (Chevallard & Charlot 2016) is a binary fitter that ships its own nebular grid and its
+BEAGLE (Chevallard & Charlot 2016 [5]_) is a binary fitter that ships its own nebular grid and its
 own templates. This module does not drive that binary and does not read BEAGLE templates. It
 reads only public inputs that are committed to the repository or supplied by the user:
 
@@ -14,7 +14,8 @@ reads only public inputs that are committed to the repository or supplied by the
   checkout (``$ART_SEDFITTING_DIR``) and never committed.
 
 It also implements three analytic references that BEAGLE's own prescriptions define: the
-Charlot & Fall (2000) two-component attenuation, the Chevallard et al. (2013) universal slope,
+Charlot & Fall (2000 [3]_) two-component attenuation, the Chevallard et al. (2013 [4]_)
+universal slope,
 and the BEAGLE current-component star-formation relation.
 
 Units and conventions
@@ -30,20 +31,25 @@ a BEAGLE log Z/Z_sun in tengri's convention (``met_logzsol``, ``neb_logZ_gas``),
 
 References
 ----------
-.. [1] Gutkin, J., Charlot, S., & Bruzual, G. 2016, MNRAS, 462, 1757,
-   doi:10.1093/mnras/stw1716, "Modelling the nebular emission from primeval to present-day
-   star-forming galaxies".
-.. [2] Feltre, A., Charlot, S., & Gutkin, J. 2016, MNRAS, 456, 3354 (NEOGAL narrow-line-region
-   grid; title and DOI not yet checked against the paper).
-.. [3] Charlot, S., & Fall, S. M. 2000, ApJ, 539, 718, doi:10.1086/309250, "A simple model for
-   the absorption of starlight by dust in galaxies".
-.. [4] Chevallard, J., Charlot, S., Wandelt, B., & Wild, V. 2013, MNRAS, 433, 3348,
-   doi:10.1093/mnras/stt940, "Joint constraints on dust attenuation and star formation".
-.. [5] Chevallard, J., & Charlot, S. 2016, MNRAS, 462, 1415 (BEAGLE; title and DOI not yet
-   checked against the paper).
-.. [6] Pacifici, C., et al. 2023, ApJ, 944, 141, doi:10.3847/1538-4357/acacff, "The Art of
-   Measuring Physical Parameters in Galaxies: A Critical Assessment of Spectral Energy
-   Distribution Fitting Techniques".
+.. [1] Gutkin, J., Charlot, S., & Bruzual, G. 2016, "Modelling the nebular emission from
+   primeval to present-day star-forming galaxies," MNRAS, 462, 1757,
+   doi:10.1093/mnras/stw1716, arXiv:1607.06086.
+.. [2] Feltre, A., Charlot, S., & Gutkin, J. 2016, "Nuclear activity versus star formation:
+   emission-line diagnostics at ultraviolet and optical wavelengths," MNRAS, 456, 3354,
+   doi:10.1093/mnras/stv2794, arXiv:1511.08217.
+.. [3] Charlot, S., & Fall, S. M. 2000, "A Simple Model for the Absorption of Starlight by
+   Dust in Galaxies," ApJ, 539, 718, doi:10.1086/309250.
+.. [4] Chevallard, J., Charlot, S., Wandelt, B., & Wild, V. 2013, "Insights into the content
+   and spatial distribution of dust from the integrated spectral properties of galaxies,"
+   MNRAS, 432, 2061, doi:10.1093/mnras/stt523, arXiv:1303.6631.
+.. [5] Chevallard, J., & Charlot, S. 2016, "Modelling and interpreting spectral energy
+   distributions of galaxies with BEAGLE," MNRAS, 462, 1415, doi:10.1093/mnras/stw1756,
+   arXiv:1603.03037.
+.. [6] Pacifici, C., et al. 2023, "The Art of Measuring Physical Parameters in Galaxies: A
+   Critical Assessment of Spectral Energy Distribution Fitting Techniques," ApJ, 944, 141,
+   doi:10.3847/1538-4357/acacff, arXiv:2212.01915.
+.. [7] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. 2014, "An updated analytic model for
+   attenuation by the intergalactic medium," MNRAS, 442, 1805, doi:10.1093/mnras/stu936.
 """
 
 from __future__ import annotations
@@ -436,7 +442,7 @@ def delayed_sfr(t_yr, tau_yr: float, mass: float) -> np.ndarray:
 def current_component(mass_smooth: float, log_ssfr: float, dt_yr: float) -> float:
     """Current-bin SFR [M_sun/yr] from the BEAGLE specific-SFR relation.
 
-    BEAGLE (Chevallard & Charlot 2016) parameterizes the recent SFR by the specific SFR of the
+    BEAGLE (Chevallard & Charlot 2016 [5]_) parameterizes the recent SFR by the specific SFR of the
     current bin, :math:`\\psi_S=\\psi/[M(t_{\\rm start},\\Delta t)+\\psi\\Delta t]`, so that
     :math:`\\psi=\\psi_S M/(1-\\psi_S\\Delta t)`. Here :math:`M` is the smooth-part stellar mass
     formed before the bin [M_sun], :math:`\\Delta t` the bin duration [yr] and :math:`\\psi_S` the
@@ -469,7 +475,7 @@ def current_component(mass_smooth: float, log_ssfr: float, dt_yr: float) -> floa
 
 
 def inoue14_transmission(wave_obs_aa, z: float) -> np.ndarray:
-    """Mean IGM transmission [dimensionless] at observed-frame wavelengths (Inoue+2014).
+    """Mean IGM transmission [dimensionless] at observed-frame wavelengths (Inoue+2014 [7]_).
 
     Thin wrapper over :func:`tengri.components.igm.igm.igm_transmission`.
 
@@ -608,7 +614,7 @@ def beagle_workshop_summary(z: int):
     Returns
     -------
     astropy.table.Table
-        The summary table of ``code_outputs/BEAGLE_summary_catalog_z{z}.fits``.
+        The summary table of ``code_outputs/BEAGLE_summary_catalogue_z{z}.fits``.
 
     Raises
     ------
@@ -617,6 +623,7 @@ def beagle_workshop_summary(z: int):
     FileNotFoundError
         If the summary file is absent from that checkout.
     """
+    import astropy.units as u
     from astropy.table import Table
 
     root = os.environ.get(ART_ENV)
@@ -626,10 +633,13 @@ def beagle_workshop_summary(z: int):
             "the BEAGLE summary catalogs are read from its code_outputs/ directory and are "
             "not committed."
         )
-    path = Path(root) / "code_outputs" / f"BEAGLE_summary_catalog_z{z}.fits"
+    path = Path(root) / "code_outputs" / f"BEAGLE_summary_catalogue_z{z}.fits"
     if not path.is_file():
         raise FileNotFoundError(f"{path} is missing from the {ART_ENV} checkout")
-    return Table.read(path)
+    with warnings.catch_warnings():
+        # The summary file writes its flux unit 'M_sun', which the FITS standard does not parse.
+        warnings.simplefilter("ignore", category=u.UnitsWarning)
+        return Table.read(path, hdu=1)
 
 
 def _selftest() -> None:
