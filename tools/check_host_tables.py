@@ -51,6 +51,9 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src" / "tengri"
 HOST_CALLS = {"len", "float", "int", "tuple", "list", "device_table", "host_array"}
 HOST_ATTRS = {"shape", "size", "dtype", "ndim"}
+#: Names that hold a cached template library (a numpy-backed bundle) in the AGN modules.
+LIBRARY_NAMES = {"grid", "aniso", "templates", "template", "library", "bundle", "table"}
+LIBRARY_DIR = SRC / "components" / "agn"
 
 
 def _table_names(tree: ast.Module) -> set[str]:
@@ -129,6 +132,64 @@ def scan(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
     return rows
 
 
+def _is_library_read(arg: ast.AST, loop_names: frozenset[str] = frozenset()) -> bool:
+    """True when ``arg`` is a field of a template library, a subscript of one, or its
+    scale-safe copy; ``loop_names`` are comprehension variables iterating over such fields."""
+    if isinstance(arg, ast.Subscript):
+        return _is_library_read(arg.value, loop_names)
+    if isinstance(arg, ast.Attribute):
+        return isinstance(arg.value, ast.Name) and arg.value.id in LIBRARY_NAMES
+    if isinstance(arg, ast.Name):
+        return arg.id in loop_names
+    return isinstance(arg, ast.Call) and getattr(arg.func, "id", "") == "float32_safe_template"
+
+
+def _loop_names(tree: ast.AST) -> dict[ast.AST, frozenset[str]]:
+    """For each comprehension, the variables it binds from a library field."""
+    out: dict[ast.AST, frozenset[str]] = {}
+    for comp in ast.walk(tree):
+        if isinstance(comp, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+            out[comp] = frozenset(
+                g.target.id
+                for g in comp.generators
+                if isinstance(g.target, ast.Name) and _is_library_read(g.iter)
+            )
+    return out
+
+
+def scan_library_conversions(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
+    """Bare ``jnp.asarray(library.field)`` conversions in the AGN modules.
+
+    A cached library holds numpy arrays, so a conversion without a stated dtype takes the
+    dtype of the first conversion anywhere in the process (see the module docstring). The
+    dtype must be stated: ``device_table(library.field)`` or ``jnp.asarray(x, dtype=...)``.
+    """
+    rows: list[tuple[Path, int, str, str]] = []
+    for path in paths:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        loops = _loop_names(tree)
+        inside: dict[ast.AST, frozenset[str]] = {}
+        for comp, names in loops.items():
+            for child in ast.walk(comp):
+                inside[child] = names
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"asarray", "array"}
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "jnp"
+                and len(node.args) == 1
+                and not node.keywords
+            ):
+                continue
+            if _is_library_read(node.args[0], inside.get(node, frozenset())):
+                rows.append(
+                    (path, node.lineno, ast.unparse(node)[:60], "VIOLATION: bare library read")
+                )
+    return rows
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -136,12 +197,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     rows = scan(sorted(SRC.rglob("*.py")))
+    library_rows = scan_library_conversions(sorted(LIBRARY_DIR.rglob("*.py")))
     if args.list:
-        for path, line, name, verdict in rows:
+        for path, line, name, verdict in rows + library_rows:
             print(f"{path.relative_to(REPO)}:{line}: {name:<30} {verdict}")
         print(f"{len(rows)} table uses inside function bodies")
         return 0
-    bad = [r for r in rows if r[3].startswith("VIOLATION")]
+    bad = [r for r in rows if r[3].startswith("VIOLATION")] + library_rows
     if not rows:
         print("check_host_tables: no host tables found under src/tengri (the census is empty)")
         return 1

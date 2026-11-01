@@ -167,6 +167,7 @@ def _evaluate_recipe_on_grid(
         l_nu = composable_agn_l_nu(
             wave_jax,
             template_state=template_state,
+            strict_keys=False,
             **recipe.as_selector_dict(),
             **call_params,
         )

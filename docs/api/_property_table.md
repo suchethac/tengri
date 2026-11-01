@@ -1,5 +1,19 @@
 | Name | Units | Group | Component | Description |
 |------|-------|-------|-----------|-------------|
+| `L_agn_disc_los_lsun` | Lsun | agn | agn | log_L_agn_disc_los in solar luminosities |
+| `L_agn_disc_lsun` | Lsun | agn | agn | log_L_agn_disc in solar luminosities |
+| `L_agn_disc_unemitted_lsun` | Lsun | agn | agn | log_L_agn_disc_unemitted in solar luminosities |
+| `L_agn_lines_los_lsun` | Lsun | agn | agn | log_L_agn_lines_los in solar luminosities |
+| `L_agn_lines_lsun` | Lsun | agn | agn | log_L_agn_lines in solar luminosities |
+| `L_agn_lines_unemitted_lsun` | Lsun | agn | agn | log_L_agn_lines_unemitted in solar luminosities |
+| `L_agn_los_lsun` | Lsun | agn | agn | log_L_agn_los in solar luminosities |
+| `L_agn_polar_dust_los_lsun` | Lsun | agn | agn | log_L_agn_polar_dust_los in solar luminosities |
+| `L_agn_polar_dust_lsun` | Lsun | agn | agn | log_L_agn_polar_dust in solar luminosities |
+| `L_agn_power_lsun` | Lsun | agn | agn | log_L_agn_power in solar luminosities |
+| `L_agn_torus_los_lsun` | Lsun | agn | agn | log_L_agn_torus_los in solar luminosities |
+| `L_agn_torus_lsun` | Lsun | agn | agn | log_L_agn_torus in solar luminosities |
+| `L_agn_torus_unemitted_lsun` | Lsun | agn | agn | log_L_agn_torus_unemitted in solar luminosities |
+| `agn_ledger_closed` | — | agn | agn | 1.0 when the angle-integrated pieces plus the unemitted ones add up to the accretion power agn_lum_ratio * 10**agn_log_lbol L_sun, else 0.0 (self-contained quasar templates, agn_norm='independent', 'cigale_joint' with lines or an active agn_ir_frac tie, polar dust beside a library torus with anisotropy); composable AGN only |
 | `balmer_break` | — | sed | stellar | Balmer break diagnostic |
 | `balmer_decrement` | — | lines | nebular | Balmer decrement: Hα/Hβ |
 | `bpt_nii` | dex | lines | nebular | BPT-NII diagnostic: log10([NII]6584 / Hα) |
@@ -21,6 +35,19 @@
 | `l_x_agn` | Lsun | xray | xray | X-ray luminosity from AGN. `l_x_agn = 10**(log_l_x_agn - log10(L_sun))` |
 | `l_x_total` | Lsun | xray | xray | Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - log10(L_sun))` |
 | `l_x_xrb` | Lsun | xray | xray | X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - log10(L_sun))` |
+| `log_L_agn_disc` | dex | agn | agn | log10 power [dex re erg/s] of the disc (with its corona) as emitted, integrated over all directions (sphere mean over cos i); composable AGN only |
+| `log_L_agn_disc_los` | dex | agn | agn | log10 power [dex re erg/s] of the disc (with its corona) as emitted along agn_cos_inc, the integral of that piece of the SED; composable AGN only |
+| `log_L_agn_disc_unemitted` | dex | agn | agn | log10 power [dex re erg/s] carried by the disc (with its corona) but removed before it leaves the AGN (torus screen, polar dust, attenuation block, disc reddening), integrated over all directions; composable AGN only |
+| `log_L_agn_lines` | dex | agn | agn | log10 power [dex re erg/s] of the NLR + BLR + FeII emission lines as emitted, integrated over all directions (sphere mean over cos i); composable AGN only |
+| `log_L_agn_lines_los` | dex | agn | agn | log10 power [dex re erg/s] of the NLR + BLR + FeII emission lines as emitted along agn_cos_inc, the integral of that piece of the SED; composable AGN only |
+| `log_L_agn_lines_unemitted` | dex | agn | agn | log10 power [dex re erg/s] carried by the NLR + BLR + FeII emission lines but removed before it leaves the AGN (torus screen, polar dust, attenuation block, disc reddening), integrated over all directions; composable AGN only |
+| `log_L_agn_los` | dex | agn | agn | log10 of the emitted AGN SED integrated over frequency along agn_cos_inc [dex re erg/s], the line-of-sight sum of the ledger pieces; composable AGN only |
+| `log_L_agn_polar_dust` | dex | agn | agn | log10 power [dex re erg/s] of the polar-dust re-emission as emitted, integrated over all directions (sphere mean over cos i); composable AGN only |
+| `log_L_agn_polar_dust_los` | dex | agn | agn | log10 power [dex re erg/s] of the polar-dust re-emission as emitted along agn_cos_inc, the integral of that piece of the SED; composable AGN only |
+| `log_L_agn_power` | dex | agn | agn | log10 of the AGN dust power the runner normalizes the torus and the polar dust on [dex re erg/s], the torus block's power along agn_cos_inc (CIGALE's agn_power, the anchor of the agn_ir_frac tie); composable AGN with a torus only |
+| `log_L_agn_torus` | dex | agn | agn | log10 power [dex re erg/s] of the torus dust as emitted, integrated over all directions (sphere mean over cos i); composable AGN only |
+| `log_L_agn_torus_los` | dex | agn | agn | log10 power [dex re erg/s] of the torus dust as emitted along agn_cos_inc, the integral of that piece of the SED; composable AGN only |
+| `log_L_agn_torus_unemitted` | dex | agn | agn | log10 power [dex re erg/s] carried by the torus dust but removed before it leaves the AGN (torus screen, polar dust, attenuation block, disc reddening), integrated over all directions; composable AGN only |
 | `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity, nan with a warning on cue's legacy 128-line subset (full_catalog=false), where no catalog line falls within tolerance of this wavelength (#2239) [dex re erg/s]; float32-safe form of `civ_1549`. `log_civ_1549 = log10(civ_1549) + log10(L_sun)`. |
 | `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha`. `log_halpha = log10(halpha) + log10(L_sun)`. |
 | `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta`. `log_hbeta = log10(hbeta) + log10(L_sun)`. |

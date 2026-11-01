@@ -1604,6 +1604,9 @@ def build_profiled_loss_fn(fitter: Fitter):
     fixed_values = fitter._fixed_values
     stochastic = spec.stochastic
     field_centering = float(getattr(spec, "field_centering", 1.0))
+    from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
+
+    young_fraction = young_fraction_prior_for_spec(spec)
     model = fitter.model
     mass_name = fitter._profile_mass_name
     mass_prior = fitter._profile_mass_prior
@@ -1648,6 +1651,7 @@ def build_profiled_loss_fn(fitter: Fitter):
             stochastic=stochastic,
             centering=field_centering,
             psd_sigma_dex=(params.get("sfh_field_psd_sigma") if field_centering != 1.0 else None),
+            young_fraction=young_fraction,
         )
 
     return loss_fn

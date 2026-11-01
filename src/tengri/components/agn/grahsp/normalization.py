@@ -118,7 +118,7 @@ def _netzer_unit_nm(params: GRAHSPParams, templates: GRAHSPTemplates):
         mdot=params.disc_mdot,
     )
     disc_wave = np.asarray(templates.disc_wave_nm, dtype=float)
-    disc_lumin = jnp.asarray(templates.disc_lumin[idx])
+    disc_lumin = device_table(templates.disc_lumin[idx])
 
     def unit_fn(wave_nm):
         return netzer_disc(
@@ -182,7 +182,7 @@ def narrow_line_unit_power(
         templates.line_narrow_liner if agn_type == AGN_TYPE_LINER else templates.line_narrow_sy2
     )
     return _line_power(
-        jnp.asarray(templates.line_wave_nm), l_narrow * jnp.asarray(narrow), linewidth_kms
+        device_table(templates.line_wave_nm), l_narrow * device_table(narrow), linewidth_kms
     )
 
 
@@ -195,8 +195,8 @@ def broad_line_unit_power(
     """Unit-``l5100`` broad-line power above the lumBolBBB cut [erg/s] (type 1 only)."""
     l_broad = _HBETA_BROAD_RATIO * (1.0 / LAMBDA_5100_NM) * a_lines
     return _line_power(
-        jnp.asarray(templates.line_wave_nm),
-        l_broad * jnp.asarray(templates.line_broad),
+        device_table(templates.line_wave_nm),
+        l_broad * device_table(templates.line_broad),
         linewidth_kms,
     )
 
@@ -233,8 +233,8 @@ def feii_forest_unit_power(
     nodes = _retained_nodes(twave)
     values = jnp.interp(
         jnp.asarray(nodes),
-        jnp.asarray(twave),
-        jnp.asarray(template_lumin),
+        device_table(twave),
+        device_table(template_lumin),
         left=0.0,
         right=0.0,
     )

@@ -232,6 +232,7 @@ Generated per-domain parameter references are shown above. For per-type paramete
 - `'age_kernel'`: `'cic'` (default, cloud-in-cell) or `'dsps'`, which names the same integration (#2683).
 - `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
+- `'coordinates'`: For `type='continuity'`, `'ratios'` (default) samples the Student-t log-SFR ratios, and `'young_fraction'` samples the stick-breaking mass fractions from the youngest bin instead. The fractions give the photometrically pinned young mass its own axis, because the ratio coordinates make the posterior a curved ridge when that mass is well constrained. The Student-t ratio prior is carried to the fractions as an exact pullback, so both choices describe the same posterior. The young-fraction form needs all six fractions free and fits on the Fitter paths that evaluate the standardized prior; the evidence and hierarchical paths refuse it with a `ConfigError`.
 
 **Minimal example:**
 ```python
@@ -560,17 +561,18 @@ agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 
 **Structural keys:**
 - `'ebmv_mw'`: Milky Way E(B-V) reddening (mag). Typically 0.01–0.2.
-- `'law'`: Dust law: `'mw_rv31'` (Fitzpatrick 1999, default), `'ccm89'` (CCM89), etc.
-- `'rv'`: Dust RV parameter override (law-dependent).
+- `'law'`: `'cardelli'` (Cardelli, Clayton & Mathis 1989, default) or `'fitzpatrick99'` (Fitzpatrick 1999). Multiply a Schlegel et al. (1998) map E(B-V) by 0.86 (Schlafly & Finkbeiner 2011) before using it with `'fitzpatrick99'`; the code applies the E(B-V) it is given.
+- `'rv'`: Total-to-selective extinction ratio R_V (default 3.1).
 
 **Minimal example:**
 ```python
-foreground={'ebmv_mw': 0.05, 'law': 'mw_rv31'}
+foreground={'ebmv_mw': 0.05, 'law': 'fitzpatrick99'}
 ```
 
 **Gotchas:**
 - Foreground reddening is applied **in addition to** any dust attenuation in the model.
-- It is a **source reddening**, not observer-frame extinction.
+- The screen is applied once on the observed-frame projection path, so the spectrum and the photometry are reddened by the same transmission.
+- On the batched spectroscopic path the law and R_V come from the template and E(B-V) is per galaxy: give each `GalaxySpectrum` its `ebmv_mw` (a template with a nonzero foreground E(B-V) refuses galaxies without one).
 - No free parameters by default (use Fixed() if you need to pin values precisely).
 
 ### Redshift: `redshift`
@@ -596,6 +598,17 @@ redshift=0.05                         # Auto-converts to Fixed(0.05)
 - IGM models apply **only** to observed-frame wavelengths, so redshift **must** be known for IGM to work.
 
 ---
+
+### Spectroscopic calibration: `Spectroscopy` options
+
+These options configure the analytic calibration marginal (`calibration_marginalize=True`), not the SED build grammar. They are fields of `Spectroscopy`.
+
+- `calibration_segments`: the pixel count of each camera segment (for example `wave_obs_segment_sizes`) or one integer id per pixel, `0 .. n_seg - 1`. The calibration multiplier then carries one free scale per segment, `M = s_seg + sum_j a_j T_j`. Default `None`: the multiplier is `1 + sum_j a_j T_j`, bit-identical to a model without the option.
+- `cal_prior`: `"gaussian"` (default) puts `N(0, sigma^2)` on the tilt and `N(1, sigma^2)` on each segment scale; `"scale_free"` puts a flat prior on the coefficients in data-flux units, so the marginal does not depend on the model's flux scale.
+- `cal_scale_prior`: `(log10_center, sigma_dex)`, a log-normal prior on the mean multiplier `q` over a window. It adds one sampled parameter, `cal_log_q = ln q`. A Gaussian in `q` itself at 0.3 dex puts 7 % of its mass at `q < 0` and is much stronger on the high side, which is why the log-normal is the form.
+- `cal_scale_window`: `(lo, hi)` [Angstrom] inside the grid over which `q` is averaged. Default: every fitted pixel of the segment that contains the r band's effective wavelength (6231 Angstrom). Needs `cal_scale_prior`.
+
+On the batched path `GalaxySpectrum(segment_ids=..., cal_scale_prior=...)` gives each galaxy its own layout and prior.
 
 ## III. Round-trip: configuration serialization
 

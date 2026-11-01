@@ -27,8 +27,9 @@ cubic), as the shape is.
 A torus-only component has no disc of its own: the disc share :math:`(1 - f) L_{\rm bol}` is
 published as ``log_L_agn_disc_unemitted`` so the ledger closes on the accretion power,
 ``10**agn_log_lbol L_sun`` (NAMING_CONTRACT section 4c, "Template tori"). The standalone
-template tori publish it; the composable torus blocks of the restored libraries do not yet
-(#3076), and :func:`torus_ledger_from_grid` is the seam their runner will call.
+template tori publish it. The composable runner publishes the same angle-integrated torus power
+from :func:`log10_anisotropy` of the block's library (``blocks/torus_anisotropy``), in its own
+ledger (NAMING_CONTRACT section 4c, "Composable runner", #3076).
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from tengri.components.agn._template_grid import (
     torus_lnu_from_grid,
 )
 from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 from tengri.utils.scale import log10_magnitude, pow10
 
@@ -223,7 +225,7 @@ def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
     mean = jnp.trapezoid(powers, mu, axis=inc.axis) / (mu[-1] - mu[0])
     return AnisotropyGrid(
         values=powers / jnp.expand_dims(mean, inc.axis),
-        axes=tuple(jnp.asarray(a) for a in axes),
+        axes=tuple(device_table(a) for a in axes),
     )
 
 
@@ -277,15 +279,15 @@ def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) ->
     """
     if grid.anisotropy is not None:
         return AnisotropyGrid(
-            values=jnp.asarray(grid.anisotropy), axes=tuple(jnp.asarray(a) for a in grid.axes)
+            values=device_table(grid.anisotropy), axes=tuple(device_table(a) for a in grid.axes)
         )
     return anisotropy_grid(_record_powers(grid, dtype), grid.axes, inc)
 
 
 def _record_powers(grid: TorusTemplateGrid, dtype):
     """Each record's frequency integral on its own wavelength nodes, leading shape."""
-    template = jnp.asarray(float32_safe_template(grid.template, dtype))
-    wave = jnp.asarray(grid.wave_grid)
+    template = device_table(float32_safe_template(grid.template, dtype))
+    wave = device_table(grid.wave_grid)
     flat = template.reshape(-1, template.shape[-1])
     powers = jax.vmap(lambda row: native_bolometric_nu(row, wave, floor=0.0))(flat)
     return powers.reshape(template.shape[:-1])
@@ -294,7 +296,7 @@ def _record_powers(grid: TorusTemplateGrid, dtype):
 def _profile(aniso: AnisotropyGrid, coords: tuple, inc: TorusInclination):
     """The anisotropy at every inclination node, the other axes interpolated at ``coords``."""
     n_axes = len(aniso.axes)
-    values = jnp.moveaxis(jnp.asarray(aniso.values), inc.axis, n_axes - 1)
+    values = jnp.moveaxis(device_table(aniso.values), inc.axis, n_axes - 1)
     other = tuple(i for i in range(n_axes) if i != inc.axis)
     if not other:
         return values

@@ -872,6 +872,14 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
     igm_trans = state.derived.get("igm_transmission", None) if state.derived is not None else None
     if igm_trans is not None:
         sed_rest = sed_rest * igm_trans
+    # Milky Way foreground screen (#3140), published on the same rest grid by
+    # ``SEDModel.predict_state``. Applied once here, so the photometric block of
+    # ``Observation.predict`` and every caller of this kernel see one screen.
+    foreground_trans = (
+        state.derived.get("foreground_transmission", None) if state.derived is not None else None
+    )
+    if foreground_trans is not None:
+        sed_rest = sed_rest * foreground_trans
 
     # Exact Lyman-continuum edge on THIS projection's own (finer) union grid
     # (#2447, one Lyman edge): ``sed_rest`` already carries the physical

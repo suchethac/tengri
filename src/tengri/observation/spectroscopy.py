@@ -9,6 +9,7 @@ marginalization. Includes factory methods for common instruments.
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +21,18 @@ from tengri._cache_keys import (
     content,
     derive_key,
     exclude,
-    shape,
+)
+from tengri.observation.banded import (
+    BandedMatrix,
+    banded_cholesky,
+    banded_to_dense,
+    dense_to_banded,
+)
+from tengri.observation.calibration_segments import (
+    CAL_PRIORS,
+    check_cal_scale_prior,
+    segment_ids,
+    window_mask,
 )
 from tengri.observation.constants import ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
@@ -73,6 +85,27 @@ class Spectroscopy:
         Order of multiplicative Chebyshev calibration polynomial.
         0 = no calibration (default). Order N adds N free params
         (``cal_c1``, ..., ``cal_cN``) with ``Gaussian(0, 0.1)`` priors.
+    calibration_segments : tuple[int, ...], ndarray or None
+        Camera segments of the calibration multiplier: the pixel count of each
+        segment (for example ``wave_obs_segment_sizes``) or one integer id per
+        pixel, the ids being ``0 .. n_seg - 1``. Each segment gets its own free
+        scale in the analytic calibration marginal. Default: None (the multiplier
+        is ``1 + sum_j a_j T_j``).
+    cal_prior : {"gaussian", "scale_free"}
+        Prior on the calibration coefficients in the analytic marginal.
+        ``"gaussian"`` is ``N(0, sigma^2)`` on the tilt and ``N(1, sigma^2)`` on each
+        segment scale; ``"scale_free"`` is flat in data-flux units. Default:
+        ``"gaussian"``.
+    cal_scale_prior : tuple[float, float] or None
+        ``(log10_center, sigma_dex)`` of a log-normal prior on the mean calibration
+        multiplier ``q`` over the window. ``q`` becomes one extra sampled latent,
+        ``cal_log_q = ln q``. A Gaussian in ``q`` itself at 0.3 dex would put 7 % of
+        its mass at ``q < 0`` and much more on the high side, which is why the
+        log-normal is the form. Default: None.
+    cal_scale_window : tuple[float, float] or None
+        ``(lo, hi)`` [Angstrom] inside the grid over which ``q`` is averaged.
+        Default: None, every fitted pixel of the segment that contains the r band's
+        effective wavelength (6231 Angstrom). Needs ``cal_scale_prior``.
     eline_prior_sigma : float
         Prior width on emission line amplitudes for marginalization.
         Default: 100.0.
@@ -111,11 +144,15 @@ class Spectroscopy:
         ``neb={"type": "cue", "publish_line_fraction": True}`` and dust that
         republishes the reddened ``sed_nebular`` (``two_component``,
         ``age_binned``, or no dust). Default: True.
-    covariance : jnp.ndarray or None
-        Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
-        When provided, the likelihood uses ``diff @ C^{-1} @ diff``
-        instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
-        precomputed at construction time.  Default: None (diagonal noise).
+    covariance : jnp.ndarray, BandedMatrix or None
+        Spectral covariance matrix, a dense array of shape ``(n_pix, n_pix)`` or a
+        symmetric :class:`~tengri.observation.banded.BandedMatrix`. When provided, the
+        likelihood whitens the residual with the Cholesky factor of the covariance
+        instead of dividing by per-pixel sigma. A banded matrix, and a dense matrix
+        whose entries beyond a half-bandwidth below a quarter of ``n_pix`` are zero to
+        1e-12 of the largest variance, is factored once at construction into a banded
+        lower factor (:func:`~tengri.observation.banded.banded_cholesky`). Any other
+        dense matrix is inverted once. Default: None (diagonal noise).
 
     Returns
     -------
@@ -152,17 +189,19 @@ class Spectroscopy:
         Minimum broad component FWHM [km/s].
     nebular_lines : bool
         Whether ``spec_fnu`` carries the nebular emission lines.
-    covariance : ndarray, shape (n_pix, n_pix) or None
+    covariance : ndarray, shape (n_pix, n_pix), BandedMatrix or None
         Spectral covariance matrix.
-    covariance_inv : ndarray, shape (n_pix, n_pix) or None
-        Inverse covariance matrix (precomputed).
+    chol_data : ndarray, shape (p + 1, n_pix) or None
+        Bands of the lower Cholesky factor of a banded covariance.
+    chol_offsets : tuple of int or None
+        Diagonal offsets ``(0, -1, ..., -p)`` of the factor.
 
     Notes
     -----
     A frozen dataclass that encapsulates spectroscopic instrument metadata,
     including wavelength grid, resolution profile, calibration strategy,
-    and emission-line fitting configuration. Precomputes the inverse
-    covariance matrix at initialization for efficient likelihood evaluation.
+    and emission-line fitting configuration. Factors a banded covariance, or
+    inverts a dense one, at initialization for efficient likelihood evaluation.
     Used by SEDModel to configure spectral prediction and by the inference
     engine to set up calibration priors.
 
@@ -216,9 +255,13 @@ class Spectroscopy:
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
     nebular_lines: bool = True
-    covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
+    covariance: jnp.ndarray | BandedMatrix | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
     wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
+    calibration_segments: object | None = dataclasses.field(default=None, hash=False)
+    cal_prior: str = "gaussian"
+    cal_scale_prior: tuple[float, float] | None = None
+    cal_scale_window: tuple[float, float] | None = None
     #: Unit of ``wave_obs`` at construction [AA | angstrom | nm | um | micron].
     #: Init-only: ``wave_obs`` is converted to Angstrom here and stored in Angstrom.
     wave_unit: dataclasses.InitVar[str] = "AA"
@@ -272,6 +315,8 @@ class Spectroscopy:
                 f"calibration_order must be non-negative, got {self.calibration_order}"
             )
 
+        self._validate_calibration_options(w)
+
         if self.eline_mode not in ELINE_MODES:
             if self.eline_mode == "fixed":
                 raise ValueError(
@@ -297,17 +342,7 @@ class Spectroscopy:
                     f"wave_obs length {len(self.wave_obs)}"
                 )
 
-        # Set up covariance inverse
-        if self.covariance is not None:
-            cov = jnp.asarray(self.covariance)
-            n = len(self.wave_obs)
-            if cov.shape != (n, n):
-                raise ValueError(
-                    f"covariance shape {cov.shape} does not match expected ({n}, {n})"
-                )
-            object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
-        else:
-            object.__setattr__(self, "_cov_inv", None)
+        self._set_up_covariance(len(self.wave_obs))
 
         # Validate resolution matrix
         if self.resolution_matrix is not None:
@@ -317,6 +352,47 @@ class Spectroscopy:
                     f"resolution_matrix has {data.shape[1]} columns but wave_obs "
                     f"has length {len(self.wave_obs)}"
                 )
+
+    def _validate_calibration_options(self, w: np.ndarray) -> None:
+        """Validate the segment layout, prior kind, fiber-fraction prior and window."""
+        if self.cal_prior not in CAL_PRIORS:
+            raise ValueError(f"cal_prior must be one of {CAL_PRIORS}, got {self.cal_prior!r}")
+        prior = check_cal_scale_prior(self.cal_scale_prior)
+        object.__setattr__(self, "cal_scale_prior", prior)
+        ids = (
+            None
+            if self.calibration_segments is None
+            else segment_ids(self.calibration_segments, int(w.shape[0]))
+        )
+        if self.cal_scale_window is not None and prior is None:
+            raise ValueError("cal_scale_window needs cal_scale_prior")
+        if prior is not None:
+            window_mask(w, ids, self.cal_scale_window)
+
+    @property
+    def segment_ids(self) -> np.ndarray | None:
+        """Per-pixel calibration segment id, or None without ``calibration_segments``.
+
+        Returns
+        -------
+        ndarray of int, shape (n_pix,), or None
+            Id of the camera segment of every pixel, in ``range(n_cal_segments)``.
+
+        Notes
+        -----
+        ``calibration_segments`` takes the per-segment pixel counts (for example
+        ``wave_obs_segment_sizes``) or one integer id per pixel. Build-time NumPy
+        property, not JIT-compatible.
+        """
+        if self.calibration_segments is None:
+            return None
+        return segment_ids(self.calibration_segments, int(self.wave_obs.shape[0]))
+
+    @property
+    def n_cal_segments(self) -> int:
+        """Number of calibration segments; 0 without ``calibration_segments``."""
+        ids = self.segment_ids
+        return 0 if ids is None else int(ids.max()) + 1
 
     def _validate_segment_sizes(self, w: np.ndarray) -> None:
         """Validate segment size structure.
@@ -454,6 +530,30 @@ class Spectroscopy:
         grid = self.wave_obs if wave_obs is None or _is_traced(wave_obs) else wave_obs
         return resolve_resample_mode(self.resample, grid, wave_rest_model, z_ref)
 
+    def _set_up_covariance(self, n: int) -> None:
+        """Factor a banded covariance, or invert a dense one, and store the result."""
+        factor, inverse = None, None
+        cov = self.covariance
+        if isinstance(cov, BandedMatrix):
+            if np.shape(cov.data)[1] != n:
+                raise ValueError(
+                    f"covariance has {np.shape(cov.data)[1]} columns but wave_obs has length {n}"
+                )
+            factor = banded_cholesky(cov)
+        elif cov is not None:
+            dense = jnp.asarray(cov)
+            if dense.shape != (n, n):
+                raise ValueError(
+                    f"covariance shape {dense.shape} does not match expected ({n}, {n})"
+                )
+            banded = dense_to_banded(np.asarray(dense))
+            if banded is None:
+                inverse = jnp.linalg.inv(dense)
+            else:
+                factor = banded_cholesky(banded)
+        object.__setattr__(self, "_chol", factor)
+        object.__setattr__(self, "_cov_inv", inverse)
+
     @property
     def has_covariance(self) -> bool:
         """Whether a full covariance matrix is configured.
@@ -468,7 +568,7 @@ class Spectroscopy:
         Read-only property; determined at initialization.
 
         """
-        return self._cov_inv is not None
+        return self.covariance is not None
 
     @property
     def has_resolution_matrix(self) -> bool:
@@ -489,8 +589,32 @@ class Spectroscopy:
         return self.resolution_matrix is not None
 
     @property
+    def chol_data(self) -> jnp.ndarray | None:
+        """Bands of the lower Cholesky factor of a banded covariance, or None.
+
+        Returns
+        -------
+        ndarray, shape (p + 1, n_pix) or None
+            ``data[k, i] = L[i, i - k]`` [data units], or None when the covariance is
+            absent or dense and not banded.
+        """
+        return None if self._chol is None else self._chol.data
+
+    @property
+    def chol_offsets(self) -> tuple[int, ...] | None:
+        """Diagonal offsets ``(0, -1, ..., -p)`` of :attr:`chol_data`, or None."""
+        if self._chol is None:
+            return None
+        return tuple(int(k) for k in np.asarray(self._chol.offsets).ravel())
+
+    @property
+    def has_banded_covariance(self) -> bool:
+        """Whether the covariance is held as a banded Cholesky factor."""
+        return self._chol is not None
+
+    @property
     def cov_inv(self) -> jnp.ndarray | None:
-        """Precomputed inverse covariance matrix, or None.
+        """Inverse covariance matrix, or None.
 
         Returns
         -------
@@ -500,11 +624,17 @@ class Spectroscopy:
 
         Notes
         -----
-        The inverse is precomputed at initialization for efficient likelihood
-        evaluation. This property is read-only.
-
+        Read-only. A dense, non-banded covariance is inverted at construction. A
+        banded covariance is inverted here on each call; the likelihoods use the
+        banded factor and never read it.
         """
-        return self._cov_inv
+        if self._cov_inv is not None:
+            return self._cov_inv
+        if self._chol is None:
+            return None
+        cov = self.covariance
+        dense = banded_to_dense(cov) if isinstance(cov, BandedMatrix) else np.asarray(cov)
+        return jnp.linalg.inv(jnp.asarray(dense))
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this spectroscopy configuration.
@@ -532,6 +662,13 @@ class Spectroscopy:
         tail = ()
         if resolution_matrix_key is not None:
             tail = (("resolution_matrix", resolution_matrix_key),)
+        if self._chol is not None:
+            tail = (
+                *tail,
+                ("covariance_factor", (self.chol_offsets, tuple(self._chol.data.shape))),
+            )
+        elif self.covariance is not None:
+            tail = (*tail, ("covariance_dense", tuple(np.shape(self.covariance))))
 
         return derive_key(self, _SPECTROSCOPY_CACHE_KEY_POLICY, tail=tail)
 
@@ -616,7 +753,9 @@ class Spectroscopy:
         -------
         dict[str, Distribution]
             Mapping of calibration coefficient names (``cal_c1``, ..., ``cal_cN``)
-            to ``Gaussian(0, 0.1)`` priors. Empty dict if ``calibration_order == 0``.
+            to ``Gaussian(0, 0.1)`` priors, plus ``cal_log_q`` (the log of the mean
+            multiplier, a Gaussian from ``cal_scale_prior``) when that is set. Empty
+            dict if ``calibration_order == 0`` and ``cal_scale_prior`` is None.
 
         Notes
         -----
@@ -625,9 +764,11 @@ class Spectroscopy:
         Gaussian prior centered at 0 in log space (unity in linear space).
 
         """
-        if self.calibration_order == 0:
-            return {}
-        return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        params = {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        if self.cal_scale_prior is not None:
+            center, sigma_dex = self.cal_scale_prior
+            params["cal_log_q"] = Gaussian(math.log(10.0) * center, math.log(10.0) * sigma_dex)
+        return params
 
     def calibration_coeffs(self, params) -> jnp.ndarray | None:
         """Extract calibration coefficients from parameter dict.
@@ -1205,11 +1346,17 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     "eline_broad": content("broad component option affects line fitting model"),
     "eline_broad_fwhm_min_kms": content("minimum broad FWHM affects the fit model"),
     "nebular_lines": content("dropping the nebular lines changes the predicted spectrum"),
-    "covariance": shape(
-        "per-galaxy data: only its shape fixes the program; values are a runtime input"
+    "covariance": exclude(
+        "per-galaxy data: keyed through the tail by factor offsets and shape; "
+        "values are a runtime input"
     ),
+    "_chol": exclude("banded Cholesky factor, derived in __post_init__"),
     "resolution_matrix": exclude("keyed through the tail with full data content"),
     "_cov_inv": exclude("precomputed inverse of covariance, derived in __post_init__"),
+    "calibration_segments": content("segment scales add calibration columns to the marginal"),
+    "cal_prior": content("scale-free vs Gaussian coefficient prior changes the likelihood"),
+    "cal_scale_prior": content("the fiber-fraction prior adds a latent and conditions the block"),
+    "cal_scale_window": content("the window sets which pixels define the mean multiplier"),
     "wave_obs_segment_sizes": exclude(
         "per-camera segment validation; does not change predictions"
     ),

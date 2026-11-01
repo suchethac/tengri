@@ -261,6 +261,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     citation="Netzer & Trakhtenbrot 2014, MNRAS 438, 672; Buchner et al. 2024, arXiv:2405.19297",
     status="production",
     short_doc="GRAHSP Netzer & Trakhtenbrot 2014 disc templates",
+    template_loader=load_grahsp_templates,
 )
 def grahsp_netzer_disc_block(
     wavelength: Array,
