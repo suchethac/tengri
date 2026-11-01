@@ -10,6 +10,9 @@ one jitted program, with the same arguments the scaled path passes.
 (a) forward values agree to 2e-15 relative to the peak on a real-SSP model and on
     synthetic grids (array and scalar resolution, linear and log-uniform grids);
 (b) the gradient of ``sum(flux * w)`` with respect to the rest SED is bit-identical.
+
+The bare flux-conserving resample (no line-spread function) uses the same stop-gradient
+power-of-two multiplies, and is checked the same way against the unscaled resample.
 """
 
 import jax
@@ -31,6 +34,7 @@ from tengri.cosmology import luminosity_distance
 from tengri.observation.spectrum import (
     _resample_peak_factored,
     apply_lsf,
+    compute_spectrum_conserving,
     compute_spectrum_conserving_lsf,
 )
 from tengri.utils.conversions import lnu_to_fnu
@@ -188,4 +192,35 @@ def test_real_model_lsf_gradient_is_bit_identical():
 
     grad_new = np.asarray(jax.grad(new_loss)(sed))
     grad_ref = np.asarray(jax.grad(ref_loss)(sed))
+    assert np.array_equal(grad_new, grad_ref)
+
+
+@jax.jit
+def _reference_conserving(sed, wave_rest, wave_obs, redshift, dl_cm):
+    """Unscaled bin-integrated resample and flux conversion, jitted like the path under test."""
+    wave_rest_query = wave_obs / (1.0 + redshift)
+    pixel_lnu = _resample_peak_factored(wave_rest, sed, wave_rest_query, None)
+    return lnu_to_fnu(pixel_lnu, dl_cm, redshift)
+
+
+def test_real_model_conserving_forward_and_gradient_match_unscaled():
+    _, state, wave_obs = _real_model_inputs()
+    wave_rest = state.wave
+    sed = state.sed_intrinsic
+    dl_cm = jnp.asarray(luminosity_distance(_Z)).reshape(())
+    got = compute_spectrum_conserving(sed, wave_rest, wave_obs, _Z, dl_cm)
+    ref = _reference_conserving(sed, wave_rest, wave_obs, _Z, dl_cm)
+    assert np.all(np.isfinite(np.asarray(got)))
+    assert _max_relative(got, ref) <= _RTOL_FORWARD
+    w = jnp.asarray(np.random.default_rng(5).standard_normal(wave_obs.shape[0]))
+
+    def new_loss(s):
+        return jnp.sum(compute_spectrum_conserving(s, wave_rest, wave_obs, _Z, dl_cm) * w)
+
+    def ref_loss(s):
+        return jnp.sum(_reference_conserving(s, wave_rest, wave_obs, _Z, dl_cm) * w)
+
+    grad_new = np.asarray(jax.grad(new_loss)(sed))
+    grad_ref = np.asarray(jax.grad(ref_loss)(sed))
+    assert np.any(grad_new != 0.0), "gradient is identically zero"
     assert np.array_equal(grad_new, grad_ref)

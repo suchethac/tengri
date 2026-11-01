@@ -1461,11 +1461,15 @@ def _flux_conserving_resample(
     the integral cannot be formed on the raw SED. The scale is exact in binary
     floating point, so float64 output is bit-identical to the unfactored
     integral. The exponent is a ``stop_gradient`` factorization constant, and the
-    all-zero SED has exponent 0.
+    all-zero SED has exponent 0. The two powers of two are applied as stop-gradient
+    multiplies, because ``jnp.ldexp`` has an inexact derivative.
     """
     exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    means = _resample_peak_factored(wave_rest, jnp.ldexp(sed_rest, -exponent), wave_query, edge_aa)
-    return jnp.ldexp(means, exponent)
+    dtype = jnp.result_type(sed_rest)
+    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
+    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    means = _resample_peak_factored(wave_rest, sed_rest * scale_in, wave_query, edge_aa)
+    return means * scale_out
 
 
 def _resample_peak_factored(
