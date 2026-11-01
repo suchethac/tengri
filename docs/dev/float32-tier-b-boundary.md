@@ -98,9 +98,9 @@ Compensated summation (Kahan / pairwise) was **not** used: it addresses lost sig
 
 **Stellar mass scale — DELIVERED (`log_stellar_mass_scale`):**
 - Symbol: `stellar_mass_scale` = `total_mass × L_sun`. Measured 3.828e43 for a 1e10 M⊙ galaxy.
-- Location: `src/tengri/components/stellar/component.py`, published in `derived["stellar_mass_scale"]`.
+- Location: `src/tengri/components/stellar/component.py`. Only its log form is published, as `derived["log_stellar_mass_scale"]`; the linear key is no longer published (#3149).
 - **No SSP grid rescues this.** It is `total_mass` times a constant, with no SSP flux factor to keep it small, so it overflows for *every* galaxy above `3.4e38 / 3.828e33 ≈ 9e4` M⊙. Unlike the SED — where `total_mass × ssp_flux_at_age` lands first and keeps the magnitude in range — this scale has no small factor to hide behind.
-- **Delivered:** the producer already computed `log10_mass_scale` for the log-domain Q_H integral and simply never published it. It is now published alongside the linear key, with a `DerivedKey`, a `DerivedState` field, and a `_CANONICAL_UNITS` entry pinning it to `dex`. The `jnp.log10(mass_scale)` fallback the dust energy balance carried is removed — it would have recovered `inf` rather than the finite value the producer already holds.
+- **Delivered:** the producer already computed `log10_mass_scale` for the log-domain Q_H integral and simply never published it. It is published as the only form of this scale, with a `DerivedKey`, a `DerivedState` field, and a `_CANONICAL_UNITS` entry pinning it to `dex`. The `jnp.log10(mass_scale)` fallback the dust energy balance carried is removed — it would have recovered `inf` rather than the finite value the producer already holds.
 
 **Luminosity distance curvature factor — DELIVERED (`log10_four_pi_dl2`):**
 - Symbol: `4π d_L²` (~1e57 cm²), and its reciprocal `(1+z)/(4π d_L²)` (~1e-57).
@@ -506,7 +506,7 @@ two-component dust (τ_bc = 1.0, τ_diff = 0.7) with Dale 2014 emission.
 | `log_nion` | 49.407332 | 49.407333 | log contract holds |
 | `log_L_ir` | 43.372214 | 43.372215 | log contract holds |
 | `log_stellar_mass_scale` | 43.583 | 43.583 | log contract holds |
-| `stellar_mass_scale` | 3.828e43 | `inf` | linear, use log form |
+| `stellar_mass_scale` | 3.828e43 | `inf` | no longer published; use `log_stellar_mass_scale` |
 | `nion` | 2.5547e49 | `inf` | linear, use `log_nion` |
 | `L_absorbed` / `L_ir` | 2.3562e43 | `inf` | linear, use `log_L_ir` |
 | `sed_dust_ir` | 4.4273e30 | finite, all 11 template models | delivered (item 6) |
