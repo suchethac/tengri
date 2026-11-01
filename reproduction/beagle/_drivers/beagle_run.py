@@ -21,6 +21,13 @@ distance :math:`d_L` in ``FULL SED``. The driver forms
 :mod:`reproduction.beagle._drivers.units`. Wavelengths at or above 2000 Angstrom
 are air in BEAGLE's output and are converted once to vacuum.
 
+IGM
+---
+Every section with :math:`z > 0` carries ``IGM ABSORPTION = Inoue``, BEAGLE's default
+when fitting. ``FULL SED`` is the intrinsic rest-frame spectrum without IGM; the IGM
+transmission is only visible through the photometry, so the IGM section measures it
+through narrow top-hat bands and compares an Inoue run with a run that omits the keyword.
+
 References
 ----------
 .. [1] Chevallard, J. & Charlot, S. 2016, MNRAS, 462, 1415, "Modelling and
@@ -372,7 +379,15 @@ class MockRun:
     filters : tuple of FilterSpec, optional
         Bands for mock photometry (``PRINT PHOTOMETRY``).
     igm : str, optional
-        IGM model, e.g. ``"Inoue"``; omitted for ``None``.
+        IGM model written as ``IGM ABSORPTION``. Defaults to ``"Inoue"``, BEAGLE's
+        default when fitting; ``None`` omits the keyword, which is the no-IGM control
+        (the manual documents no ``"none"`` value; the omission is to be confirmed
+        by a run). IGM acts on the photometry only; ``FULL SED`` carries none.
+    print_sfh : bool
+        Request the ``STAR FORMATION HISTORIES`` printout. BEAGLE 0.29.2 cannot print
+        the star formation history of an ``ssp`` mock (it segfaults in
+        ``star_formation::print_sf_che_history``), so the request is dropped for
+        ssp sections whatever this flag says.
     """
 
     section: str
@@ -387,7 +402,7 @@ class MockRun:
     rebin: int | None = 10
     seed: int = 12345
     cosmology: Cosmology = PLANCK18_BEAGLE
-    igm: str | None = None
+    igm: str | None = "Inoue"
     mode: Literal["mock"] = field(default="mock", init=False)
 
     def __post_init__(self) -> None:
@@ -401,6 +416,9 @@ class MockRun:
             raise ValueError(f"{self.section}: {sorted(clash)} are both rows and params")
         if self.dust is not None and self.dust not in ATTENUATION_LAWS:
             raise ValueError(f"{self.section}: unknown attenuation law {self.dust!r}")
+
+    def _is_ssp(self) -> bool:
+        return any(p.name == "sfh_type" and p.char_value == "ssp" for p in self.params)
 
     def _params(self) -> list[Param]:
         files = [from_file(k) for k in self.rows[0].keys()]
@@ -425,7 +443,7 @@ class MockRun:
         lines += _output_lines(
             photometry=self.filters is not None,
             spectrum=self.print_sed,
-            sfh=self.print_sfh,
+            sfh=self.print_sfh and not self._is_ssp(),
             nebular=self.nebular,
         )
         lines += [f"N_OBJECTS = {len(self.rows)}", "PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_new.param"]

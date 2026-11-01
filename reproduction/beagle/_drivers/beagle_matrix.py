@@ -13,9 +13,12 @@ import itertools
 import math
 from collections.abc import Sequence
 
+import numpy as np
+
 from .beagle_run import (
     ATTENUATION_LAWS,
     ZSUN,
+    FilterSpec,
     MockRun,
     mock_fixed,
 )
@@ -60,6 +63,43 @@ def _nebular_rows() -> tuple[dict[str, float], ...]:
 
 _SAMPLE_Z = 1.0
 _DELAYED = mock_fixed("sfh_type", char_value="delayed")
+
+IGM_REST_CENTERS_AA = tuple(float(v) for v in np.linspace(850.0, 1216.0, 12))
+IGM_BAND_FRACTION = 0.02  # top-hat full width as a fraction of the observed center
+
+
+def _tophat(name: str, center: float) -> FilterSpec:
+    """A top-hat band of full width ``IGM_BAND_FRACTION * center`` (observed frame, Angstrom)."""
+    half = 0.5 * IGM_BAND_FRACTION * center
+    wl = np.linspace(center - 1.5 * half, center + 1.5 * half, 201)
+    transmission = (np.abs(wl - center) <= half).astype(float)
+    return FilterSpec(name, wl, transmission)
+
+
+def _igm_filters(z: float) -> tuple[FilterSpec, ...]:
+    """Twelve top-hats whose rest-frame centers span 850-1216 A, observed at ``1 + z``."""
+    return tuple(
+        _tophat(f"th{i:02d}", rest * (1.0 + z)) for i, rest in enumerate(IGM_REST_CENTERS_AA)
+    )
+
+
+def _igm_sections() -> tuple[MockRun, ...]:
+    """Per redshift, an Inoue run and a no-IGM control; BEAGLE filters are per run, so one run per z."""
+    runs = []
+    for z in (1.0, 3.0, 6.0):
+        row = {"redshift": z, "mass": 10.0, "sfr": 1.0, "metallicity": _logz(0.02), "tau": 9.0}
+        for label, igm in (("inoue", "Inoue"), ("none", None)):
+            runs.append(
+                MockRun(
+                    section=f"s12_igm_{label}_z{int(z)}",
+                    rows=(row,),
+                    templates="bc03",
+                    params=(_DELAYED,),
+                    filters=_igm_filters(z),
+                    igm=igm,
+                )
+            )
+    return tuple(runs)
 
 RUN_MATRIX: tuple[MockRun, ...] = (
     MockRun(
@@ -114,17 +154,9 @@ RUN_MATRIX: tuple[MockRun, ...] = (
         nebular=True,
         params=(mock_fixed("sfh_type", char_value="constant"), mock_fixed("max_stellar_age", value=9.0)),
     ),
-    MockRun(
-        section="s12_igm",
-        rows=tuple(
-            {"redshift": z, "mass": 10.0, "sfr": 1.0, "metallicity": _logz(0.02), "tau": 9.0}
-            for z in (1.0, 3.0, 6.0)
-        ),
-        templates="bc03",
-        params=(mock_fixed("sfh_type", char_value="delayed"),),
-        igm="Inoue",
-    ),
+    *_igm_sections(),
 )
+
 
 
 def by_section(section: str) -> list[MockRun]:

@@ -109,3 +109,36 @@ def test_cache_round_trip_preserves_arrays(tmp_path: Path) -> None:
     assert loaded.continuum_sed is None
     assert loaded.posterior is None
     assert loaded.provenance["image"] == "test"
+
+
+def test_ssp_section_does_not_print_the_sfh() -> None:
+    ssp = M.by_section("s1_ssp_bc03")[0]
+    text = ssp.param_text()
+    assert "sfh_type" in text and "char_value:ssp" in text
+    assert "PRINT SF AND ChE HISTORIES = F" in text
+    assert "PRINT SF AND ChE HISTORIES = T" not in text
+    delayed = M.by_section("s2_sfh_delayed")[0].param_text()
+    assert "PRINT SF AND ChE HISTORIES = T" in delayed
+
+
+@pytest.mark.parametrize("run", M.RUN_MATRIX, ids=lambda r: r.section)
+def test_igm_is_inoue_unless_the_section_is_the_no_igm_control(run: B.MockRun) -> None:
+    lines = run.param_text().splitlines()
+    igm = [line for line in lines if line.startswith("IGM ABSORPTION")]
+    if run.section.startswith("s12_igm_none"):
+        assert igm == []
+    else:
+        assert igm == ["IGM ABSORPTION = Inoue"]
+
+
+def test_igm_sections_differ_only_in_the_igm_keyword() -> None:
+    inoue = M.by_section("s12_igm_inoue_z3")[0]
+    none = M.by_section("s12_igm_none_z3")[0]
+    assert len(inoue.filters) == 12
+    assert len(none.filters) == 12
+
+    def stripped(run: B.MockRun) -> set[str]:
+        skip = ("RESULTS DIRECTORY", "MOCK CATALOGUE NAME", "MOCK INPUT", "FILTERS CONFIGURATION")
+        return {line for line in run.param_text().splitlines() if not line.startswith(skip)}
+
+    assert stripped(inoue) ^ stripped(none) == {"IGM ABSORPTION = Inoue"}
