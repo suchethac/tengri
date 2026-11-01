@@ -95,6 +95,15 @@ Monte Carlo error: each median has about 0.04 widths with 200 draws, so the diff
 
 The synthetic grid (100 wavelengths, 3 metallicities, 20 ages) makes these builds small. The memory is dominated by the process baseline. The builds are not comparable to the real-grid build numbers in the page.
 
+## MAP against truth, same 300 Adam steps
+
+- Per-galaxy path: `Fixed(z)` build of each galaxy, `Fitter` with `approx=None`, the same learning rate and step count.
+- Batched path: free-redshift template, `fit_spectra_map_vmap`, one call.
+- Batched MAP is within 0.002 dex of truth on all 12 mocks.
+- Per-galaxy MAP is +0.049 (galaxy 0), +0.048 (galaxy 5) and +0.048 (galaxy 10) dex high on the three mocks with truth 9.00. The other nine per-galaxy MAP values are within 0.003 dex.
+- NUTS posterior medians on galaxies 0, 4 and 11 agree with the batched medians to 0.07, 0.02 and 0.02 `Fitter` widths (section (c)).
+- Reading: after 300 Adam steps the two paths' MAP values can differ by 0.05 dex on the same mock, while their posterior medians agree within Monte Carlo error. MAP is a warm start for the sampler, not an estimate. The cause of the per-galaxy offset was not investigated; the paths differ in redshift handling (`Fixed(z)` against free redshift).
+
 ## Summary
 
 - Build plus compile plus MAP, all 12 galaxies: per-galaxy path 25.7 s (sum of four stages, each galaxy compiled separately); batched path 22.7 s on the first call and 0.82 s on the second call.

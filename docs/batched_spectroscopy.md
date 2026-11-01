@@ -212,16 +212,18 @@ With 200 draws the median of each run has a Monte Carlo error of about 0.04 widt
 of two medians has about 0.06 widths. The largest difference, 0.07 widths on galaxy 0, is within
 that error.
 
-**Peak memory.** Each build ran in a fresh process. Before the build the process was at about
-494 MB, after importing the package and the synthetic grid.
+**Peak memory.** Each build ran in a fresh process. The table gives the peak RSS of one build on the
+100-pixel synthetic grid. Most of that figure is the process baseline: about 494 MB after importing the
+package and the grid, so the build itself added about 11 MB.
 
-| Build | Peak RSS after build | Build wall |
+| Build (synthetic grid) | Peak RSS after build | Build wall |
 |---|---|---|
-| Free-redshift template | 504.8 MB | 0.19 s |
-| `Fixed(z)` build, galaxy 0 | 508.3 MB | 0.14 s |
+| Free-redshift template, process-baseline figure | 504.8 MB | 0.19 s |
+| `Fixed(z)` build, galaxy 0, process-baseline figure | 508.3 MB | 0.14 s |
 
-These builds use the 100-pixel synthetic grid of the test suite, so the memory is dominated by the
-process baseline. The larger memory of models with dust emission or an IGM term is tracked in
+The build size on a real grid is the figure to plan memory with. On the real grid of the 24-galaxy run,
+the free-redshift template built at a peak of 632 MB and one `Fixed(z)` build at 754 MB. That model has
+no dust emission and no IGM term. The larger build peak of models with those terms is tracked in
 [#3153](https://github.com/suchethac/tengri/issues/3153).
 
 **Larger set.** An earlier measurement on 24 galaxies at 4,159 to 4,751 fitted pixels, with the same
@@ -235,11 +237,13 @@ What these numbers show:
 - Batched MAP over 12 galaxies costs about the same as the whole per-galaxy path on its first call,
   22.7 s against 25.7 s including compile. Once compiled, the 300-step batched call costs 0.82 s.
 - The batched and per-galaxy posteriors agree on the three sampled galaxies within 0.07 widths.
-- The per-galaxy MAP estimates for the three galaxies with truth 9.00 landed 0.048 to 0.049 dex high.
-  The batched MAP estimates for the same galaxies are within 0.002 dex. The two paths differ in redshift
-  handling (the per-galaxy build is `Fixed(z)`), and the cause of the offset was not investigated.
-- For a non-parametric star formation history, use `fit_spectra_catalog_mcmc` for the posterior. MAP is
-  a warm start, not an estimate.
+- After 300 Adam steps the per-galaxy MAP estimates for the three mocks with truth 9.00 sit 0.048 to
+  0.049 dex high, while the batched MAP estimates are within 0.002 dex of truth on all 12 mocks.
+- For a non-parametric star formation history, use `fit_spectra_catalog_mcmc` for the posterior.
+
+After 300 Adam steps the two paths' MAP values can differ by 0.05 dex on the same mock, while their
+posterior medians agree within Monte Carlo error. The MAP is therefore a warm start for the sampler,
+not an estimate.
 
 ## Float32
 
