@@ -477,6 +477,12 @@ _AGN_MBH_DUST = {
 #:               rest_sed_last +1.4e-03; photometry -1.7e-04, +1.8e-04, +6.1e-05
 #: (rest_sed_0 is the 0.01 A bin, where the corona is ~10 orders below its peak and the pin is
 #: the most ill-conditioned key.) Captured on this tree by ``_F64_REFERENCE_CHILD`` per mass.
+#: Re-captured for #3015 (log M_BH 10 only; 6 and 8 are unchanged). The kubota_done disc ends at
+#: R_out = r_sg (Kubota & Done 2018; RELAGN) with no 10 R_isco floor or 0.5 R_out clip. At log M_BH
+#: 10, log L_bol 11 (lambda_Edd = 3.0e-4) r_sg = 21.1 R_g, so the saturated corona carries
+#: L_0 h(3.5) where it carried L_0 h(5). Old -> new, relative: rest_sed_sum -8.48e-02,
+#: rest_sed_0 -4.23e-01, rest_sed_mid -9.53e-02, rest_sed_last -1.02e-01; photometry (r, W3, W4)
+#: -9.57e-02, -1.63e-02, -4.74e-03.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.5594106635660487e32,
@@ -493,11 +499,11 @@ _REF_F64_AGN_BLACK_HOLE_MASS = {
         "photometry": (1.2086542983710622e-27, 1.5635657807579732e-27, 1.7710697344413592e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7032554952206092e32,
-        "rest_sed_0": 1.2449774852481998e16,
-        "rest_sed_mid": 3.19572347826585e28,
-        "rest_sed_last": 9.768530240445937e21,
-        "photometry": (1.2154923004059334e-27, 1.5875125651576988e-27, 1.7788693045472384e-27),
+        "rest_sed_sum": 1.5588023912773802e32,
+        "rest_sed_0": 7189207067304417.0,
+        "rest_sed_mid": 2.8910265080041455e28,
+        "rest_sed_last": 8.772828236359366e21,
+        "photometry": (1.0992005161725894e-27, 1.5615609602418526e-27, 1.7704364116627775e-27),
     },
 }
 
