@@ -162,6 +162,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1093/mnras/staa2620](https://doi.org/10.1093/mnras/staa2620).
 - PSD-governed SFH variability in cosmological simulations. Iyer et al.
   (2020), [arXiv:2007.07916](https://arxiv.org/abs/2007.07916).
+- Current-episode star formation (constant rate over the last Delta t, spliced
+  over a smooth history; `recent`, `recent_ssfr`). Chevallard & Charlot (2016),
+  [doi:10.1093/mnras/stw1756](https://doi.org/10.1093/mnras/stw1756).
 
 ### Nebular emission
 
@@ -172,6 +175,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:1705.10877](https://arxiv.org/abs/1705.10877).
 - FSPS nebular emission grids baked into the with-nebular SSP files. Byler
   et al. (2017), [arXiv:1611.08305](https://arxiv.org/abs/1611.08305).
+- Density-bounded H II regions and Lyman-continuum escape in the emission-line
+  spectra of metal-poor galaxies, the context of the Gutkin+2016 backend. Plat
+  et al. (2019), [arXiv:1909.07386](https://arxiv.org/abs/1909.07386).
 - [Cue](https://github.com/yi-jia-li/cue): neural emulator for nebular
   emission lines. Li et al. (2025),
   [arXiv:2405.04598](https://arxiv.org/abs/2405.04598).
@@ -191,6 +197,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:astro-ph/9911459](https://arxiv.org/abs/astro-ph/9911459).
 - Two-component birth-cloud plus ISM attenuation. Charlot & Fall (2000),
   [arXiv:astro-ph/0003128](https://arxiv.org/abs/astro-ph/0003128).
+- Optical-depth-dependent diffuse-ISM attenuation curve, the `chevallard13` law. Chevallard et al. (2013),
+  "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies",
+  MNRAS 432, 2061, [doi:10.1093/mnras/stt523](https://doi.org/10.1093/mnras/stt523).
 - Clumpy-medium radiative transfer attenuation. Witt & Gordon (2000),
   [arXiv:astro-ph/9907342](https://arxiv.org/abs/astro-ph/9907342).
 - FM90 ultraviolet extinction parameterization (c1, c2, c3, c4, x0, gamma) used by
