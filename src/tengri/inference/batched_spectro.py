@@ -76,6 +76,7 @@ from jax.flatten_util import ravel_pytree
 from jax.scipy.linalg import block_diag
 
 from tengri.analysis.diagnostics.autocorrelation import nested_rhat
+from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
 from tengri.config.exceptions import ConfigError
 from tengri.forward.batched_spectrum import (
     batched_eline_design,
@@ -542,6 +543,7 @@ def batched_neg_log_posterior(
     )
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
+    young_fraction = young_fraction_prior_for_spec(model.spec)
     latent_spec = _latent_spec(model)
     has_q = model.observation.spectroscopy.cal_scale_prior is not None
 
@@ -550,7 +552,12 @@ def batched_neg_log_posterior(
             params_unbounded, latent_spec, free_names, fixed_values, stochastic=False
         )
         phys_free = {n: physical[n] for n in free_names}
-        prior = standardized_neg_log_prior(params_unbounded, free_names, stochastic=False)
+        prior = standardized_neg_log_prior(
+            params_unbounded,
+            free_names,
+            stochastic=False,
+            young_fraction=young_fraction,
+        )
         if has_q:
             log_q = phys_free[CAL_LOG_Q]
             prior = prior - 0.5 * log_q**2 - _log_q_log_normal(obs, log_q)
