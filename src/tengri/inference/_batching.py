@@ -38,7 +38,9 @@ reproducibility-over-throughput trade:
 **The budget is divided across ``K * n_chains``, not K alone.** Chains are a
 second real ``vmap`` axis (``_vmap_chains``), they multiply the live activation
 set exactly as K does, and a helper that ignored them would hand back a K that
-OOMs the moment somebody asks for four chains.
+OOMs the moment somebody asks for four chains. On the catalog samplers the
+``n_chains`` passed in is the live width each galaxy carries, which for ChEES is
+its adaptation ensemble (``_catalog_live_chains``), not the sampling chain count.
 
 The per-galaxy cost model here is deliberately coarse, activations are not
 just the data array, which is precisely *why* the budget is a knob rather than
