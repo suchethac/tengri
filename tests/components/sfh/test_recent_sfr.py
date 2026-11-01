@@ -189,6 +189,7 @@ def _delayed_recent_kw(**recent):
     return base
 
 
+@pytest.mark.contract
 def test_registry_lists_recent_and_recent_ssfr():
     """Both current-episode types are registered and appear in the SFH menu."""
     from tengri import list_sfh_models
@@ -202,6 +203,7 @@ def test_registry_lists_recent_and_recent_ssfr():
     assert {"recent", "recent_ssfr"} <= set(menu)
 
 
+@pytest.mark.contract
 def test_resolve_sfh_delayed_recent_param_names():
     """resolve_sfh(['delayed', 'recent']) declares the episode and delayed names."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -224,6 +226,7 @@ def test_resolve_sfh_delayed_recent_param_names():
     [["delayed", "recent", "recent_ssfr"], ["delayed", "recent", "recent"]],
     ids=["recent_and_ssfr", "recent_twice"],
 )
+@pytest.mark.contract
 def test_two_current_terms_refused(types):
     """At most one current episode per composition."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -233,6 +236,7 @@ def test_two_current_terms_refused(types):
 
 
 @pytest.mark.parametrize("types", [["recent"], ["recent_ssfr"]], ids=["recent", "recent_ssfr"])
+@pytest.mark.contract
 def test_recent_requires_a_smooth_member(types):
     """A current term alone, with no additive smooth member, is refused."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -241,6 +245,7 @@ def test_recent_requires_a_smooth_member(types):
         resolve_sfh(types)
 
 
+@pytest.mark.conservation
 def test_composed_history_equals_psi_in_window_and_conserves_smooth_mass():
     """Composed SFR is psi in the window; smooth part keeps 10**log_total_mass."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -262,6 +267,7 @@ def test_composed_history_equals_psi_in_window_and_conserves_smooth_mass():
     assert_allclose(total, M_DELAYED + PSI * DT_YR, rtol=1e-6)
 
 
+@pytest.mark.contract
 def test_recent_ssfr_form_equals_recent_form_at_converted_psi():
     """recent_ssfr with log psi_S equals recent with psi = psi_from_specific_sfr(...)."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -285,6 +291,7 @@ def test_recent_ssfr_form_equals_recent_form_at_converted_psi():
     )
 
 
+@pytest.mark.contract
 def test_timescale_in_myr_reaches_kernel_in_years():
     """Delta t = 50 Myr, scaled by the registry map, puts the window edge at 5e7 yr."""
     from tengri.components.stellar.sfh.registry import resolve_sfh
