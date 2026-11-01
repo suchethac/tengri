@@ -53,6 +53,7 @@ __all__ = [
     "adaf_disc_block",
     "adaf_disc_power",
     "cigale_adaf_disc_block",
+    "cigale_disc_power",
     "cigale_schartmann_disc_block",
     "cigale_schartmann_skirtor_attenuated_disc_block",
     "cigale_skirtor_disc_block",
@@ -806,6 +807,43 @@ def multicolor_disc_block(
         agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+def cigale_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of the CIGALE piecewise-power-law discs, in units of ``L_bol``.
+
+    :func:`cigale_schartmann_disc_block`, :func:`cigale_skirtor_disc_block` and
+    :func:`cigale_adaf_disc_block` scale a unit-area spectrum by
+    :math:`L_{\rm bol} = 10^{\mathtt{agn\_log\_lbol}} L_\odot`: the area is normalized by the
+    closed-form integral of the power-law segments (:func:`piecewise_powerlaw_disk`; the ADAF
+    blend is ``(1 - delta)`` and ``delta`` times two unit-area parts), so the power is exactly
+    :math:`L_{\rm bol}`.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, as the block receives it (unused: the fraction
+        does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm bol}`. A trapezoid of the
+        spectrum on the runner's fixed budget grid gives 3.2e-6 less, a quadrature artifact of
+        the segment breaks that the line debit would carry into C2 in proportion to the line
+        fraction.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
+
+
+for _name in ("schartmann2005", "skirtor", "adaf_lopez2024"):
+    register_disc_power(_name)(cigale_disc_power)
+del _name
 
 
 @register_disc_power("multicolor")

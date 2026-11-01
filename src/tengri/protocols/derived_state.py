@@ -468,6 +468,12 @@ class DerivedState:
     # the ``agn_ir_frac`` coupling derives); its energy ledger, computed on request as
     # properties (#3076), re-evaluates the chain at it.
     agn_torus_frac_effective: jnp.ndarray | None = None
+    # 1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac (its covering factor
+    # sits at a bound), else 0.0. Published by the composable AGN only.
+    agn_ir_frac_saturated: jnp.ndarray | None = None
+    # log10 of the host light in the agn_ir_frac window (int L_nu / lambda^2 dlambda, or its
+    # value at one wavelength); the realized window fraction is served from it on request.
+    log_agn_ir_frac_window_host: jnp.ndarray | None = None
     # log10 of the line-of-sight isotropic-equivalent bolometric luminosity of
     # the AGN's direct emission [dex re erg/s]: int L_nu(i) dnu with
     # L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust

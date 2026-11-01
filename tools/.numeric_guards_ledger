@@ -20,15 +20,22 @@
 # nebular_grid_precompute's 0.0 maximum floors the sub-band chunk fractions, outside the table
 # only (inside, the convex blend of non-negative fractions is already >= 0): a partition cannot
 # carry a negative chunk, and a negative linear continuation is not a physical value to keep.
+# _ir_frac_window.conserving_torus_frac_from_window and refine_conserving_window_root (#2320):
+# clip(t, 0.0, 1.0) bounds a covering factor, not a divisor; t = 0 is the legal
+# agn_torus_frac = 0 (no torus) and is never logged. runner.py's maximum(1 - E_lines/E_disc, 0.0)
+# is the same covering-factor bound under a line block: the torus share cannot be negative; its
+# maximum(1 - t - E_lines/E_disc, 0.0) keeps the disc share non-negative when the lines outshine it.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 4
 src/tengri/components/_z_response.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/_ir_frac_window.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/_nthcomp.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/adaf.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/adaf.py | jnp.clip with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/agn/blocks/masking.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/blocks/runner.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
 src/tengri/components/agn/blocks/torus_screen.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1

@@ -152,6 +152,10 @@ _BUDGET_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
 DIRECT_LOS_LOG_LUMINOSITY_KEY = "log_L_agn_direct_los"
 #: Key of the ledger's emitted line-of-sight sum, the integral of ``sed_agn`` (#3076).
 LOS_LOG_LUMINOSITY_KEY = "log_L_agn_los"
+#: Key of the torus fraction the runner applied [dimensionless]: ``agn_torus_frac`` clipped to
+#: ``[0, 1]`` and, under ``agn_norm='conserving'`` with a line block, bounded by
+#: ``1 - E_lines/E_disc``. A scalar, not an SED; not scaled by ``agn_lum_ratio``.
+TORUS_FRAC_APPLIED_KEY = "agn_torus_frac_applied"
 _LINE_BUDGET_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
 
 
@@ -1422,8 +1426,23 @@ agn_torus_block, agn_attenuation_block : str
             1e-30,
         )
         _line_fraction = _e_lines / _e_disc
-        L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
-        _disc_scalar = _disc_scalar - _line_fraction
+        if _conserve_via_debit:
+            # The torus and the lines both take their power from the disc, so their shares
+            # cannot add up to more than the disc has: ``t <= 1 - E_lines/E_disc``. Without
+            # this bound the disc share ``1 - t - E_lines/E_disc`` went negative as t -> 1 and
+            # the ledger counted the negative disc as emitted power (C2 = +1.3e-2 at t = 1
+            # with the analytic NLR). The torus block and every stage below see the bounded
+            # fraction, which the runner publishes (``TORUS_FRAC_APPLIED_KEY``).
+            _torus_frac = jnp.minimum(_torus_frac, jnp.maximum(1.0 - _line_fraction, 0.0))
+            params = {**params, "agn_torus_frac": _torus_frac}
+            # Lines brighter than the disc (E_lines > E_disc, reachable with an NLR and a BLR
+            # near their prior maxima) leave the disc nothing: its share stops at 0, the pieces
+            # exceed the accretion power, and the ledger publishes agn_ledger_closed = 0.
+            _disc_scalar = jnp.maximum(1.0 - _torus_frac - _line_fraction, 0.0)
+            L_lambda_disc = _disc_intrinsic * _disc_scalar
+        else:
+            L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
+            _disc_scalar = _disc_scalar - _line_fraction
 
     # Stage 4: IR torus.
     torus_fn = resolve_agn_block("torus", agn_torus_block)
@@ -1977,6 +1996,9 @@ agn_torus_block, agn_attenuation_block : str
     # the quantity to compare with a catalog L_bol from a bolometric correction;
     # ``agn_log_lbol`` is the angle-integrated accretion power. Held in log10 (an erg/s scalar
     # overflows float32) and not scaled by ``agn_lum_ratio``, like ``L_agn_bol``.
+    if return_components:
+        components_final = {**components_final, TORUS_FRAC_APPLIED_KEY: _torus_frac}
+
     if return_components and not _ledger_row:
         _los_wave = _los_budget_wave(agn_disc_block == "kubota_done", wave.dtype)
         _direct_lambda = disc_fn(
@@ -2106,6 +2128,9 @@ agn_torus_block, agn_attenuation_block : str
                 log_torus_anisotropy=_log_aniso,
                 log_power=_log_power,
                 closed=_flag,
+                # The flag is 1 only where the pieces add up to the accretion power, not only
+                # where the recipe's policy says they should.
+                log_budget=jnp.asarray(agn_log_lbol) + np.log10(L_SUN_ERG),
             ),
         }
 
@@ -2132,7 +2157,7 @@ def _scale_components(components: dict, agn_lum_ratio: Array | float) -> dict:
     log_ratio = log10_magnitude(jnp.asarray(agn_lum_ratio))
     scaled = {}
     for k, v in components.items():
-        if k in (DIRECT_LOS_LOG_LUMINOSITY_KEY, LEDGER_CLOSED_KEY):
+        if k in (DIRECT_LOS_LOG_LUMINOSITY_KEY, LEDGER_CLOSED_KEY, TORUS_FRAC_APPLIED_KEY):
             scaled[k] = v
         elif k.startswith("log_L_agn_"):
             scaled[k] = v + log_ratio

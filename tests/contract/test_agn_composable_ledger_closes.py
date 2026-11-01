@@ -231,7 +231,9 @@ def _check_c2(sel, params, comps):
     total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
     total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
     assert total / budget - 1.0 == pytest.approx(excess, abs=_RTOL)
-    assert float(comps["agn_ledger_closed"]) == 1.0
+    # The flag measures the closure: a block that misses its own nominal power by more than the
+    # tolerance (the pinned normalizations) publishes 0.
+    assert float(comps["agn_ledger_closed"]) == float(abs(excess) <= _RTOL)
 
 
 def _check_c4_siblings(comps):
@@ -359,6 +361,179 @@ _RECIPES = {
     ),
     "no_disc": (_selectors("none", "fritz"), _BASE),
 }
+
+#: Covering factors at and near the line bound ``t <= 1 - E_lines/E_disc`` (the analytic NLR
+#: takes 1% of the disc here). Before the bound the disc share ``1 - t - E_lines/E_disc`` went
+#: negative above t = 0.99, the ledger counted the negative disc as emitted power and C2 read
+#: +1.18e-2 at t = 0.999 and +1.31e-2 at t = 1 while the flag read 1.
+_LINE_BOUND_FRACS = (0.98, 0.999, 1.0)
+
+
+@pytest.mark.parametrize("torus_frac", _LINE_BOUND_FRACS)
+def test_line_bound_closes_the_ledger_near_full_cover(torus_frac):
+    """C2 to 1e-6 with an analytic NLR as the torus covers the whole disc; the applied torus
+    fraction is ``min(t, 1 - E_lines/E_disc)``."""
+    sel = _selectors("schartmann2005", "skirtor", nlr="analytic")
+    _skip_without_library(sel)
+    params = {**_BASE, "agn_torus_frac": torus_frac}
+    _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
+    budget = 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
+    total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
+    assert total / budget - 1.0 == pytest.approx(0.0, abs=_RTOL)
+    assert float(comps["agn_ledger_closed"]) == 1.0
+    lines = _lin(comps, "log_L_agn_lines") / budget
+    assert float(comps["agn_torus_frac_applied"]) == pytest.approx(
+        min(torus_frac, 1.0 - lines), rel=_RTOL
+    )
+
+
+#: Strong lines below the disc's power: (nlr, blr, cf = efficiency). The NLR alone takes
+#: cf x efficiency of the accretion power; with the BLR the lines pass the disc's power near
+#: 0.61, so the BLR cases stop below it. The debit's disc power was a grid integral 3.2e-6 low
+#: for the CIGALE discs, and C2 grew with the line fraction: -1.6e-6 at 0.7, -2.6e-6 at 0.9,
+#: -3.1e-6 at 0.99 (NLR alone), -2.1e-6 at 0.5 and -3.0e-6 at 0.6 (NLR + BLR).
+_STRONG_LINES = [
+    ("analytic", "none", 0.7),
+    ("analytic", "none", 0.9),
+    ("analytic", "none", 0.99),
+    ("analytic", "analytic", 0.3),
+    ("analytic", "analytic", 0.5),
+    ("analytic", "analytic", 0.6),
+]
+
+
+@pytest.mark.parametrize("disc", ["schartmann2005", "skirtor", "adaf_lopez2024"])
+@pytest.mark.parametrize(
+    ("nlr", "blr", "x"), _STRONG_LINES, ids=[f"{n}-{b}-{x}" for n, b, x in _STRONG_LINES]
+)
+def test_strong_lines_close_the_ledger(disc, nlr, blr, x):
+    """C2 to 1e-6 and the flag at 1 with lines up to 0.99 of the disc's power."""
+    sel = _selectors(disc, "skirtor", nlr=nlr, blr=blr)
+    _skip_without_library(sel)
+    params = {
+        **_BASE,
+        "agn_torus_frac": 0.0,
+        "agn_nlr_cf": x,
+        "agn_nlr_line_efficiency": x,
+        "agn_blr_cf": x,
+        "agn_blr_line_efficiency": x,
+    }
+    _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
+    budget = 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
+    total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
+    assert total / budget - 1.0 == pytest.approx(0.0, abs=_RTOL)
+    assert float(comps["agn_ledger_closed"]) == 1.0
+
+
+#: An analytic NLR and BLR near their prior maxima (covering fraction and line efficiency 0.9,
+#: inside the declared [0, 1]) radiate more than the disc carries: E_lines/E_disc > 1.
+_BRIGHT_LINES = {
+    "agn_nlr_cf": 0.9,
+    "agn_nlr_line_efficiency": 0.9,
+    "agn_blr_cf": 0.9,
+    "agn_blr_line_efficiency": 0.9,
+}
+
+
+@pytest.mark.parametrize("torus_frac", (0.0, 0.5))
+def test_lines_brighter_than_the_disc_open_the_ledger(torus_frac):
+    """E_lines > E_disc: the disc and torus shares stop at 0 (never negative) and the ledger
+    publishes ``agn_ledger_closed = 0``."""
+    sel = _selectors("schartmann2005", "skirtor", nlr="analytic", blr="analytic")
+    _skip_without_library(sel)
+    params = {**_BASE, **_BRIGHT_LINES, "agn_torus_frac": torus_frac}
+    _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
+    budget = 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    assert _lin(comps, "log_L_agn_lines") / budget > 1.0
+    assert float(comps["agn_torus_frac_applied"]) == 0.0
+    for piece in (*_PIECES, *(f"{p}_unemitted" for p in _UNEMITTED)):
+        value = float(comps[f"log_L_agn_{piece}"])
+        assert not np.isnan(value), piece
+    assert _lin(comps, "log_L_agn_disc") == 0.0
+    assert _lin(comps, "log_L_agn_torus") == 0.0
+    assert float(comps["agn_ledger_closed"]) == 0.0
+
+
+def test_flag_is_zero_where_the_pieces_do_not_close():
+    """The flag measures the closure: a block whose own spectrum misses its nominal power by
+    more than the flag's tolerance publishes 0 even under a closing policy (the Nenkova torus,
+    2.1e-4 of its power, 8.4e-5 of the budget at agn_torus_frac = 0.4)."""
+    sel = _selectors("multicolor", "nenkova")
+    _skip_without_library(sel)
+    _, comps = _evaluate(_WAVE, sel, _BASE, ledger=True)
+    assert ledger_policy_closes(**sel, agn_norm="conserving")
+    assert float(comps["agn_ledger_closed"]) == 0.0
+
+
+#: 'conserving' beside an active fracAGN (#2320), built through ``SEDModel.build`` so the
+#: covering factor comes from the fracAGN mapping (the runner never reads ``agn_ir_frac``):
+#: (torus, attenuation block, log_total_mass), interior and saturated.
+_FRACAGN_BUILDS = [
+    ("skirtor", "polar_dust", -7.0),
+    ("fritz", "none", -7.0),
+    ("skirtor", "none", -5.0),
+]
+
+
+@pytest.mark.parametrize(
+    ("torus", "atten", "log_total_mass"),
+    _FRACAGN_BUILDS,
+    ids=[f"{t}-{a}-{m}" for t, a, m in _FRACAGN_BUILDS],
+)
+def test_conserving_fracagn_build_closes_the_ledger(
+    synthetic_ssp_wide, torus, atten, log_total_mass
+):
+    """C2 to 1e-6 and the flag at 1 for a fracAGN-driven covering factor, built end to end."""
+    from tengri import DEFAULT, Fixed, SEDModel
+
+    agn = {
+        "type": "composable",
+        "norm": "conserving",
+        "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": torus, "all_params": Fixed(DEFAULT)},
+        "agn_ir_frac": Fixed(0.3),
+        "all_params": Fixed(DEFAULT),
+    }
+    if atten != "none":
+        agn["atten"] = {"type": atten, "all_params": Fixed(DEFAULT), "agn_polar_ebv": Fixed(0.1)}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            synthetic_ssp_wide,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(log_total_mass),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.5),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+            agn=agn,
+            redshift=Fixed(0.05),
+        )
+    keys = (
+        *(f"log_L_agn_{p}" for p in _PIECES),
+        *(f"log_L_agn_{p}_unemitted" for p in _UNEMITTED),
+        "agn_ledger_closed",
+    )
+    comps = {k: np.asarray(v) for k, v in model.predict_properties({}, names=keys).items()}
+    t = float(model.predict_state({}).derived["agn_torus_frac_effective"])
+    assert 0.0 < t <= 1.0
+    fixed = model.spec.get_fixed_values()
+    budget = float(fixed["agn_lum_ratio"]) * 10.0 ** (float(fixed["agn_log_lbol"]) + _LOG_LSUN)
+    total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
+    total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
+    assert total / budget - 1.0 == pytest.approx(0.0, abs=_RTOL)
+    assert float(comps["agn_ledger_closed"]) == 1.0
 
 
 @pytest.mark.parametrize("name", sorted(_RECIPES))

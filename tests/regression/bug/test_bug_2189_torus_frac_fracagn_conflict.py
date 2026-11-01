@@ -177,13 +177,13 @@ def test_wildcard_never_frees_torus_frac_when_fracagn_active(ssp, obs, torus_typ
         "type": "composable",
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": {"type": torus_type, "all_params": FREE},
-        # 'cigale_joint', the one policy that admits an active fracAGN: R65
-        # refuses 'independent' beside it and R67 refuses 'conserving' too
-        # (under both, disc and torus sit on unrelated luminosity scales and
-        # int(disc)/int(torus) scales as 1/M*). The narrowing this test
-        # measures is a property of an active fracAGN alone --
-        # AGNSEDComponent.apply() overrides agn_torus_frac "regardless of
-        # agn_norm" -- so the surviving policy exercises it. agn_log_lbol is
+        # 'cigale_joint', one of the two policies that admit an active fracAGN
+        # ('conserving' is the other; R65 refuses 'independent', where disc
+        # and torus sit on unrelated luminosity scales and int(disc)/int(torus)
+        # scales as 1/M*). The narrowing this test measures is a property of
+        # an active fracAGN alone -- AGNSEDComponent.apply() overrides
+        # agn_torus_frac under every admitted policy -- so one policy
+        # exercises it. agn_log_lbol is
         # left at its registry default rather than pinned to 12.0 because
         # under 'cigale_joint' + skirtor the coupling derives the AGN power
         # and R55 refuses a value it would discard.
@@ -286,9 +286,9 @@ def _build_with_placement(
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": torus,
         # Every placement below makes fracAGN active. R65 refuses
-        # 'independent' beside an active fracAGN and R67 refuses 'conserving'
-        # as well, so 'cigale_joint' is the policy that admits the pair; the
-        # override this file measures is agn_norm-independent. agn_log_lbol
+        # 'independent' beside an active fracAGN; 'cigale_joint' and
+        # 'conserving' admit it, and the override this file measures holds
+        # under both, so one policy exercises it. agn_log_lbol
         # stays at its registry default: under 'cigale_joint' + skirtor the
         # coupling sets the AGN power and R55 refuses a pinned value it would
         # discard.
