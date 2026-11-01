@@ -271,6 +271,45 @@ def test_build_screened_wildcard_fracagn_warns_and_is_dropped(synthetic_ssp_wide
     assert "agn_ir_frac" not in model.spec.free_params
 
 
+def test_build_screened_named_free_fracagn_is_refused(synthetic_ssp_wide):
+    """Build path: ``agn_ir_frac: FREE`` written by name is the user's choice, so beside a screen
+    it raises like a Fixed value above 0 or a custom prior (only the wildcard is dropped)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
+            SEDModel.build(
+                synthetic_ssp_wide,
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                    "agn_screen": "diffuse",
+                },
+                dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+                agn={
+                    "type": "composable",
+                    "norm": "conserving",
+                    "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+                    "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                    "agn_ir_frac": FREE,
+                    "all_params": Fixed(DEFAULT),
+                },
+                redshift=Fixed(0.05),
+            )
+
+
+def test_flat_screened_named_declared_prior_is_refused():
+    """Flat path: naming agn_ir_frac with its declared prior is still the caller's choice."""
+    from tengri.parameters.parameters import Parameters
+
+    declared = Parameters(agn_model="composable").get_distribution("agn_ir_frac")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
+            _flat("conserving", "diffuse", agn_ir_frac=declared)
+
+
 def test_build_unscreened_wildcard_fracagn_is_unchanged(synthetic_ssp_wide):
     """Build path without a screen: the wildcard leaves agn_ir_frac free."""
     with warnings.catch_warnings():

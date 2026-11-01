@@ -1551,7 +1551,12 @@ def parse_groups(**kwargs) -> Parameters:
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(
-        **resolved_kwargs, _grammar_validated=True, _timing_excluded=timing_dropped
+        **resolved_kwargs,
+        _grammar_validated=True,
+        _timing_excluded=timing_dropped,
+        # Which names only an ``all_params: FREE`` wildcard freed: the spec distinguishes them
+        # from a FREE the user wrote by name (the screened-fracAGN settlement reads it).
+        _wildcard_freed=frozenset(n for n, t in provenance.items() if t == "wildcard_free"),
     )
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):

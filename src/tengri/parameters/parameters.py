@@ -608,6 +608,8 @@ class Parameters:
         # keys against: both names of a pair must stay declared there.
         timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
+        # Names a grammar ``all_params: FREE`` wildcard freed (empty on the flat path).
+        self._wildcard_freed: frozenset[str] = frozenset(kwargs.pop("_wildcard_freed", ()))
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs, defer_resource_paths=defer_resource_paths)
@@ -2172,13 +2174,15 @@ class Parameters:
         Raises
         ------
         ConfigError
-            If ``agn_ir_frac`` is Fixed above 0, or free with a prior other than its declared
-            one.
+            If the caller set ``agn_ir_frac``: Fixed above 0, a prior other than its declared
+            one, or ``FREE`` written by name.
 
         Warns
         -----
         AdvisoryWarning
-            If ``agn_ir_frac`` is free only through its declared prior; it is fixed at 0.0.
+            If ``agn_ir_frac`` is free only through its declared prior because nothing named
+            it (a flat spec that leaves it out, an ``all_params: FREE`` wildcard); it is fixed
+            at 0.0.
         """
         dist = self._distributions.get("agn_ir_frac")
         if dist is None:
@@ -2194,7 +2198,8 @@ class Parameters:
             and type(dist) is type(default)
             and tuple(dist.bounds) == tuple(default.bounds)
         )
-        if not same_as_declared:
+        named = "agn_ir_frac" in self._user_provided and "agn_ir_frac" not in self._wildcard_freed
+        if named or not same_as_declared:
             raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
         warnings.warn(
             f"agn_ir_frac is free only through its declared prior, but dust_agn_screen="
@@ -2464,6 +2469,7 @@ class Parameters:
         )
         # Preserve user_provided set: auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
+        object.__setattr__(new_spec, "_wildcard_freed", self._wildcard_freed)
         object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
@@ -3379,6 +3385,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "_mirrors": content("parameter mirror relationships determine structure"),
     "_user_provided": content("user-provided parameters determine parameter source"),
+    "_wildcard_freed": exclude(
+        "the names a grammar wildcard freed, read once at construction to settle a screened "
+        "fracAGN; what it decides is in the keyed provenance and the free/fixed structure"
+    ),
     "_valid_param_names": content("valid parameter names define scope"),
     # Excluded: these are derived or runtime-only
     "_distributions": exclude(
