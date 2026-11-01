@@ -91,6 +91,12 @@ in a derivative work like tengri is permitted on the condition that the
 SVO service is cited. Users should cite Rodrigo et al. 2024 (SVO) when
 publishing tengri-based work that uses any of these curves.
 
+## Photometric catalogs
+
+| File | Scientific source | Build path | Usage |
+| --- | --- | --- | --- |
+| `beagle_workshop_catalog.h5` | Pacifici et al. 2023 (ApJ 944, 141; doi:10.3847/1538-4357/acacff), CANDELS GOODS-S SED-fitting workshop photometry (z = 1 and z = 3 catalogs) and the filter curves they use | repackaged, with attribution, from the MIT-licensed camipacifici/art_sedfitting repository at commit 32d23a2 by `scripts/build_beagle_workshop_catalog.py`; no SED-fitting code output is included | Paper-published data; cite Pacifici+ 2023 |
+
 ## Test / regression reference fixtures (`*.npz`)
 
 Reference outputs captured from specific upstream versions for detecting
