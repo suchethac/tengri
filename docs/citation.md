@@ -196,6 +196,8 @@ the forward model, and listed oldest first within each group.
 - FM90 ultraviolet extinction parameterization (c1, c2, c3, c4, x0, gamma) used by
   gordon03_smcbar. Fitzpatrick & Massa (1990),
   [doi:10.1086/191413](https://doi.org/10.1086/191413).
+- Milky Way foreground extinction law (spline anchors and R_V dependence). Fitzpatrick (1999),
+  [doi:10.1086/316293](https://doi.org/10.1086/316293).
 - SMC, LMC, and MW extinction curves. Gordon et al. (2003),
   [arXiv:astro-ph/0305257](https://arxiv.org/abs/astro-ph/0305257).
 - Four-coefficient analytical extinction curve, tengri's `li08` law. Li et

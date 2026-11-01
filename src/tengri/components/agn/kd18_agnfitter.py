@@ -49,6 +49,7 @@ from jax import numpy as jnp
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LOG_MBH
 from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -265,10 +266,10 @@ def kd18_agnfitter_sed_from_grid(
     -----
     **JIT-compatible**: yes.
     """
-    grid_jax = jnp.asarray(grid.template)
-    wave_grid = jnp.asarray(grid.wave_grid)
-    mbh_ax = jnp.asarray(grid.log_mbh)
-    edd_ax = jnp.asarray(grid.log_edd)
+    grid_jax = device_table(grid.template)
+    wave_grid = device_table(grid.wave_grid)
+    mbh_ax = device_table(grid.log_mbh)
+    edd_ax = device_table(grid.log_edd)
     m = _hold_at_axis(agn_log_mbh, mbh_ax)
     e = _hold_at_axis(agn_log_ledd, edd_ax)
     i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
@@ -506,11 +507,11 @@ def kd18_agnfitter_warmindex_sed_from_grid(
     axes: node-exact at any grid corner, same rationale as the 2-D bilinear
     case (a smooth kernel is not node-exact and would smear the disc peak).
     """
-    grid_jax = jnp.asarray(grid.template)
-    wave_grid = jnp.asarray(grid.wave_grid)
-    mbh_ax = jnp.asarray(grid.log_mbh)
-    edd_ax = jnp.asarray(grid.log_edd)
-    warm_ax = jnp.asarray(grid.gamma_warm)
+    grid_jax = device_table(grid.template)
+    wave_grid = device_table(grid.wave_grid)
+    mbh_ax = device_table(grid.log_mbh)
+    edd_ax = device_table(grid.log_edd)
+    warm_ax = device_table(grid.gamma_warm)
 
     m = _hold_at_axis(agn_log_mbh, mbh_ax)
     e = _hold_at_axis(agn_log_ledd, edd_ax)

@@ -59,11 +59,17 @@ _WARNED: set[str] = set()
 # nu^(2+beta) toward long wavelengths, negligible by 1e8 A (1 cm).
 _TOY_WAVE_LO = 1.0e3  # Angstrom
 _TOY_WAVE_HI = 1.0e8  # Angstrom
+#: Nodes of that span. The trapezoid error is second order in the spacing: the default 4097
+#: left the emitted torus 1.32e-6 short of ``f L_bol`` (measured on a dense grid); 16385 nodes
+#: leave it within 1e-7.
+_TOY_NODES = 16385
 
 
 def _toy_integral(shape_fn: Callable) -> jnp.ndarray:
     """Floored frequency integral of a toy-torus shape on the fixed internal span."""
-    return analytic_bolometric_nu(shape_fn, _TOY_WAVE_LO, _TOY_WAVE_HI, floor=1e-100)
+    return analytic_bolometric_nu(
+        shape_fn, _TOY_WAVE_LO, _TOY_WAVE_HI, n_nodes=_TOY_NODES, floor=1e-100
+    )
 
 
 # ── Model 1: Simple hot blackbody torus ───────────────────────────

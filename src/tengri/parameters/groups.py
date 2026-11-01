@@ -103,6 +103,7 @@ from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
+from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 from tengri.config.exceptions import (
     AdvisoryWarning,
     ConfigError,
@@ -2027,7 +2028,13 @@ def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
 #: edges from other declared parameters (``tflex_gyr`` and friends) and are
 #: out of scope here.
 _Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES = frozenset(
-    {"continuity", "dirichlet", "bursty_continuity", "prospector_beta"}
+    {
+        "continuity",
+        "continuity_young_fraction",
+        "dirichlet",
+        "bursty_continuity",
+        "prospector_beta",
+    }
 )
 
 
@@ -3614,6 +3621,43 @@ def _validate_sfh_quench_ordering(sfh_type, resolved: dict, provenance: dict[str
         )
 
 
+#: Registry name of the continuity SFH in young-fraction coordinates (#3139).
+_CONTINUITY_YOUNG_FRACTION = "continuity_young_fraction"
+
+
+def _continuity_coordinates_type(sfh_type, coordinates):
+    """Map ``sfh={'type': 'continuity', 'coordinates': ...}`` to its registry name.
+
+    Parameters
+    ----------
+    sfh_type : str or list
+        The ``sfh`` group's ``type``.
+    coordinates : str
+        ``"ratios"`` (the default Student-t ratio coordinates) or ``"young_fraction"``
+        (stick-breaking fractions from the youngest bin).
+
+    Returns
+    -------
+    str
+        ``"continuity"`` or ``"continuity_young_fraction"``.
+
+    Raises
+    ------
+    ValueError
+        If ``coordinates`` is unknown, or applied to a type other than ``continuity``.
+    """
+    if coordinates not in ("ratios", "young_fraction"):
+        raise ValueError(
+            f"sfh coordinates must be 'ratios' or 'young_fraction', got {coordinates!r}."
+        )
+    if sfh_type != "continuity":
+        raise ValueError(
+            f"sfh coordinates={coordinates!r} applies only to sfh type 'continuity', "
+            f"got {sfh_type!r}."
+        )
+    return _CONTINUITY_YOUNG_FRACTION if coordinates == "young_fraction" else "continuity"
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -3623,6 +3667,8 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     nested-dict grammar (#337).
     """
     sfh_type = sfh_dict.get("type")
+    if "coordinates" in sfh_dict:
+        sfh_type = _continuity_coordinates_type(sfh_type, sfh_dict["coordinates"])
 
     # ``bin_edges_gyr`` is a structural setting (array of bin edges in
     # Gyr) that only applies to non-parametric SFHs. Surface it as a
@@ -5135,6 +5181,13 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
 
             result["cue_lyc_max_age_yr"] = validate_lyc_max_age_yr(neb_dict["lyc_max_age_yr"])
+        # Highest Balmer level appended above Cue's last native line (H10): None or 10-50.
+        if "balmer_series_n_max" in neb_dict:
+            from tengri.components.nebular._balmer_series import validate_balmer_series_n_max
+
+            result["cue_balmer_series_n_max"] = validate_balmer_series_n_max(
+                neb_dict["balmer_series_n_max"]
+            )
         # Opt-in: publish the line share of the Cue SED, so a spectrum can be
         # predicted without the nebular lines (Spectroscopy(nebular_lines=False)).
         if "publish_line_fraction" in neb_dict:
@@ -5652,14 +5705,14 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_
 #: laws that take a single ``R_V`` parameter are usable as a foreground
 #: screen: host-dust laws with two free knobs (slope, bump, ...) would
 #: collide with the host ``dust`` block's parameter prefix.
-_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
 
 #: Laws the AGN attenuation-stage block actually implements. One entry, and that
 #: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
 #: and applies it unconditionally, so the block is single-curve by construction
 #: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
 #:
-#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: This was validated against ``DUST_LAWS`` (23 entries) with every accepted
 #: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
 #: validated, accepted, and silently given the Prevot SMC curve. Measured: five
 #: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same
@@ -5808,7 +5861,15 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 # group still reads this table alone for both.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset(
-        {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
+        {
+            "type",
+            "*",
+            "all_params",
+            "bin_edges_gyr",
+            "age_kernel",
+            "field_centering",
+            "coordinates",
+        }
     ),
     # ``met`` is the parallel of ``sfh``: both describe the stellar population's
     # history, and both select a model with ``type`` like every other group
@@ -5960,7 +6021,9 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
-    "cue": frozenset({"nitrogen", "lyc_max_age_yr", "publish_line_fraction"}),
+    "cue": frozenset(
+        {"nitrogen", "lyc_max_age_yr", "balmer_series_n_max", "publish_line_fraction"}
+    ),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -6102,6 +6165,12 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
         _Structural("lyc_max_age_yr", "cue_lyc_max_age_yr", "all", only_types=("cue",)),
+        _Structural(
+            "balmer_series_n_max",
+            "cue_balmer_series_n_max",
+            BALMER_SERIES_N_MAX_DEFAULT,
+            only_types=("cue",),
+        ),
         _Structural(
             "publish_line_fraction", "cue_publish_line_fraction", False, only_types=("cue",)
         ),
@@ -6905,6 +6974,16 @@ def _validate_user_keys(
                     f"neb 'lyc_max_age_yr' is only available for type 'cue' (got {neb_type!r}): "
                     "it sets the oldest stellar age whose ionizing photons Cue counts, and "
                     "the other backends read a fixed age range from their own grids."
+                )
+
+            if (
+                "balmer_series_n_max" in top_val
+                and "balmer_series_n_max" not in neb_type_specific_keys
+            ):
+                raise ConfigError(
+                    f"neb 'balmer_series_n_max' is only available for type 'cue' (got "
+                    f"{neb_type!r}): it sets the highest Balmer level appended above Cue's "
+                    "last native line, H10, and the grid backends carry their own catalogs."
                 )
 
             if (
@@ -9410,7 +9489,11 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         sfh_type = spec.mean_sfh_type
         # Normalize: if single-element list, return string
         if isinstance(sfh_type, list):
-            return sfh_type[0] if len(sfh_type) == 1 else sfh_type
+            sfh_type = sfh_type[0] if len(sfh_type) == 1 else sfh_type
+        # The young-fraction registry name is emitted as the continuity type with
+        # its coordinates key, so the grammar round-trips (#3139).
+        if sfh_type == _CONTINUITY_YOUNG_FRACTION:
+            return "continuity"
         return sfh_type
     elif group_name == "dust_attenuation":
         return spec.dust_model
@@ -9496,6 +9579,13 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
+
+    if group_name == "sfh":
+        sfh_type = spec.mean_sfh_type
+        if sfh_type == _CONTINUITY_YOUNG_FRACTION or (
+            isinstance(sfh_type, list) and _CONTINUITY_YOUNG_FRACTION in sfh_type
+        ):
+            group_output["coordinates"] = "young_fraction"
 
     if group_name == "dust_attenuation":
         # Dust laws are now handled in _emit_declared_structural with the new 'law' key.

@@ -103,6 +103,9 @@ STRUCTURAL_KEYS: frozenset[str] = frozenset(
         "agn_feii_block",
         "agn_attenuation_block",
         "agn_norm",
+        # #3076: a published derived flag of the composable AGN (0.0 or 1.0), not a
+        # parameter; it shares the scanned prefix.
+        "agn_ledger_closed",
         "sfh_model",
         "sfh_bin_edges_gyr",
     }

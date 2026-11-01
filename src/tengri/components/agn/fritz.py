@@ -57,6 +57,7 @@ from tengri.components.agn._torus_inclination import (
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 from tengri.utils.scale import pow10, representable_denominator
@@ -87,6 +88,53 @@ class FritzComponents(NamedTuple):
 # ── Template grid interpolation ───────────────────────────────────
 
 
+#: Unit tag the loader's reading of ``dust`` and ``disk`` presumes: CIGALE's
+#: ``model.dust`` / ``model.disk``, :math:`L_\lambda` [W/nm], the dust normalized to
+#: unit integral.
+_EXPECTED_UNIT = "W/nm"
+
+#: The tag the grid carried before #3077, on the hosted copy that
+#: ``scripts/download_fritz2006_templates.py`` fetches until it is re-uploaded.
+#: The records under it are the same W/nm data; only the tag was wrong. Remove
+#: this acceptance once the hosted file carries the corrected tags.
+_LEGACY_UNIT_TAG = "erg/s/Hz"
+
+
+@functools.cache
+def _warn_legacy_unit_tag(grid_path: str, key: str) -> None:
+    """Warn once per file and attribute that the grid carries the pre-#3077 unit tag."""
+    warnings.warn(
+        f"Fritz grid {grid_path!r} declares {key}={_LEGACY_UNIT_TAG!r}, the tag of the "
+        f"grid before it was corrected; the records are L_lambda [{_EXPECTED_UNIT}] "
+        "and are read as such. Re-download the corrected file with "
+        "`python scripts/download_fritz2006_templates.py --force`.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
+def _check_unit_attrs(attrs, grid_path: str) -> None:
+    """Refuse a grid whose ``dust_unit`` / ``disk_unit`` tag is not W/nm.
+
+    The exact legacy mislabel ``erg/s/Hz`` is read as W/nm with a one-time warning.
+    """
+    for key in ("dust_unit", "disk_unit"):
+        tag = attrs.get(key)
+        if isinstance(tag, bytes):
+            tag = tag.decode()
+        if tag is not None and str(tag).startswith(_EXPECTED_UNIT):
+            continue
+        if tag is not None and str(tag).startswith(_LEGACY_UNIT_TAG):
+            _warn_legacy_unit_tag(grid_path, key)
+            continue
+        raise TengriIOError(
+            f"Fritz grid {grid_path!r} declares {key}={tag!r}, but the loader reads "
+            f"the records as L_lambda [{_EXPECTED_UNIT}] (CIGALE model.dust / model.disk). "
+            "Re-download the grid with scripts/download_fritz2006_templates.py "
+            "--force, or rebuild it with scripts/build_fritz2006_grid.py."
+        )
+
+
 def _load_grid_arrays(grid_path: str):
     """Load raw numpy arrays from a Fritz grid file.
 
@@ -111,6 +159,7 @@ def _load_grid_arrays(grid_path: str):
     import h5py as _h5py
 
     with _h5py.File(grid_path, "r") as f:
+        _check_unit_attrs(f["fritz2006"].attrs, grid_path)
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
         # Read as float64 on the host: the file stores float32, and a few far-UV nodes are
         # float32 subnormals that a device-side conversion would flush to zero.
@@ -423,7 +472,7 @@ def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     if grid.norm is None:
         return anisotropy_grid(jnp.ones(jnp.shape(grid.dust)[:-1]), axes, TORUS_INCLINATION)
     return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
@@ -559,7 +608,7 @@ def fritz_sed_from_grid(
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    axes = tuple(device_table(a) for a in grid.axes)
     _refuse_off_grid("agn_fritz_oa", agn_fritz_oa, axes[4])
     _refuse_off_grid("agn_fritz_psy", agn_fritz_psy, axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
     point = (
@@ -577,8 +626,8 @@ def fritz_sed_from_grid(
     # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
     # axis, mu = cos i = sin(psy).
     shape = _interpolate_to_power(
-        jnp.asarray(grid.dust),
-        jnp.asarray(grid.wave_grid),
+        device_table(grid.dust),
+        device_table(grid.wave_grid),
         axes,
         wavelength,
         point,
@@ -796,7 +845,7 @@ def fritz_disc_dust_wave(template: FritzGrid | None = None):
         The library's native wavelength axis [Å].
     """
     grid = load_fritz_default_grid() if template is None else template
-    return jnp.asarray(grid.wave_grid)
+    return device_table(grid.wave_grid)
 
 
 def fritz_disc_dust_ratio(
@@ -873,8 +922,8 @@ def fritz_disc_dust_ratio(
     grid = _template if _template is not None and _template.disk is not None else None
     if grid is None:
         grid = load_fritz_default_grid()
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
-    wave_grid = jnp.asarray(grid.wave_grid)
+    axes = tuple(device_table(a) for a in grid.axes)
+    wave_grid = device_table(grid.wave_grid)
 
     def _interp(table, psy):
         point = (
@@ -889,7 +938,7 @@ def fritz_disc_dust_ratio(
         # does not pass through the grid nodes and moves the disk/dust integral ratio, which
         # is what this tie reads, by several per cent even at a node.
         return interp_nd_pchip(
-            jnp.asarray(table),
+            device_table(table),
             axes,
             tuple(jnp.asarray(c) for c in point),
             extrapolate=_PSY_EXTRAPOLATE,
