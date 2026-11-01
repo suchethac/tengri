@@ -9,25 +9,34 @@ Also provides a Laplace evidence estimate (the loss carries the prior
 unnormalized as 0.5*sum(xi^2), so the (2*pi)^{D/2} factors cancel):
     log Z_laplace = -H(theta_MAP) - 0.5*log(det(H))
 
+Before the Gaussian is built, the MAP estimate is polished by a few damped
+saddle-free Newton steps on the exact Hessian (see :mod:`tengri.inference.newton`),
+so the expansion point is a stationary point rather than wherever the optimizer
+stopped.
+
 Works entirely in unbounded parameter space (where the loss is smooth),
 then transforms samples to physical space.
 """
 
 from __future__ import annotations
 
+import math
 import time
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.flatten_util import ravel_pytree
 
 from tengri.config.exceptions import (
+    ImportanceSamplingUnreliableWarning,
     LaplaceNotAtModeWarning,
     LaplaceVarianceCeilingWarning,
     warn_measured,
 )
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference.backends._psis import pareto_k_threshold
+from tengri.inference.importance import StudentTProposal, importance_sample
+from tengri.inference.newton import _loss_derivatives_jit, newton_polish
 
 # Newton decrement above which the expansion point is reported as off-mode
 # [nats]. An offset of ``delta`` standard deviations along a single direction
@@ -35,6 +44,10 @@ from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physic
 # DRW-field population: converged fits scored 0.0005-0.075, under-converged
 # ones 1.3 upward (issue #1537).
 DEFAULT_STATIONARITY_TOL = 0.1
+
+# Gradient max-norm at which the Newton polish stops. Far below any reporting
+# tolerance: the polish is for reaching the mode, not for passing the check.
+_NEWTON_POLISH_GRAD_TOL = 1e-10
 
 
 def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
@@ -121,36 +134,6 @@ def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
     return eigenvalues, eigenvalues_clipped, eigenvectors, hessian_reg, n_clipped
 
 
-def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
-    """Hessian via central finite differences on pre-compiled grad_fn.
-
-    2×D gradient evaluations using the already-JIT-compiled grad_fn.
-    Zero additional JAX compilation, each call is a cache hit on the
-    same compiled kernel.
-
-    For D=7 at ~350μs/eval: total ≈ 5ms (vs 55s for ``jax.hessian``
-    which compiles a monolithic second-derivative XLA program).
-    """
-    n = len(theta_flat)
-    H = np.zeros((n, n))
-
-    for j in range(n):
-        h = eps * max(abs(float(theta_flat[j])), 1.0)
-
-        theta_plus = theta_flat.at[j].set(theta_flat[j] + h)
-        theta_minus = theta_flat.at[j].set(theta_flat[j] - h)
-
-        _, grad_plus = grad_fn(unravel_fn(theta_plus), data_args)
-        _, grad_minus = grad_fn(unravel_fn(theta_minus), data_args)
-
-        gp_flat, _ = ravel_pytree(grad_plus)
-        gm_flat, _ = ravel_pytree(grad_minus)
-
-        H[:, j] = np.asarray((gp_flat - gm_flat) / (2.0 * h))
-
-    return jnp.asarray(H)
-
-
 def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
     """Loss drop a quadratic model predicts between here and the mode [nats].
 
@@ -191,19 +174,117 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
     return float(0.5 * jnp.sum(projected**2 / eigenvalues))
 
 
+def _validate_importance_args(importance_draws, importance_df):
+    """Reject importance settings the Pareto check cannot use."""
+    if isinstance(importance_draws, bool) or not isinstance(importance_draws, (int, np.integer)):
+        raise ValueError(f"importance_draws must be a non-negative int, got {importance_draws!r}")
+    if importance_draws < 0:
+        raise ValueError(f"importance_draws must be a non-negative int, got {importance_draws}")
+    if 0 < importance_draws < 10:
+        raise ValueError(f"importance_draws must be 0 or at least 10, got {importance_draws}")
+    if isinstance(importance_df, bool) or not (
+        np.isfinite(float(importance_df)) and float(importance_df) > 0.0
+    ):
+        raise ValueError(f"importance_df must be a positive finite number, got {importance_df!r}")
+
+
+def _importance_check(
+    *,
+    key,
+    logdensity_fn,
+    data_args,
+    center,
+    cov,
+    n_samples,
+    importance_draws,
+    importance_df,
+):
+    """Reweight a Student-t proposal at the mode and resample the posterior from it.
+
+    The proposal is centered on the polished mode with the Laplace covariance. The
+    weights are PSIS-smoothed, and ``n_samples`` draws are resampled with
+    replacement in proportion to them.
+
+    Returns
+    -------
+    samples_flat : jnp.ndarray, shape (n_samples, D)
+        Resampled posterior draws in unbounded space.
+    diagnostics : dict
+        ``pareto_k``, ``pareto_k_threshold``, ``importance_ess``,
+        ``log_evidence_is``, ``log_evidence_is_err``.
+
+    Warns
+    -----
+    ImportanceSamplingUnreliableWarning
+        When the PSIS tail shape exceeds the threshold for the draw count, or is NaN.
+    """
+    key_is, key_resample = jax.random.split(key)
+    n_dim = int(center.shape[0])
+    proposal = StudentTProposal(
+        mean=center,
+        chol=jnp.linalg.cholesky(cov),
+        df=float(importance_df),
+    )
+    log_norm = -0.5 * n_dim * math.log(2.0 * math.pi)
+    result = importance_sample(
+        logdensity_fn,
+        data_args,
+        proposal,
+        importance_draws,
+        key_is,
+        log_norm=log_norm,
+    )
+
+    weights = jnp.exp(jnp.asarray(result.psis.log_weights))
+    indices = jax.random.choice(
+        key_resample, importance_draws, shape=(n_samples,), replace=True, p=weights
+    )
+    samples_flat = jnp.asarray(result.draws)[indices]
+
+    pareto_k = float(result.psis.pareto_k)
+    threshold = pareto_k_threshold(importance_draws)
+    if not pareto_k <= threshold:
+        warn_measured(
+            f"Laplace importance check is unreliable: Pareto k-hat {pareto_k:.3g} "
+            f"exceeds the threshold {threshold:.3g} for {importance_draws} draws "
+            f"(ESS {result.ess:.4g}). The importance ratios are heavy-tailed, so "
+            f"the reweighted posterior and log_evidence_is are dominated by a few "
+            f"draws, and the Gaussian/Student-t approximation misses posterior mass. "
+            f"Use mcmc_nuts or nss for this model.",
+            ImportanceSamplingUnreliableWarning,
+            stacklevel=3,
+            pareto_k=pareto_k,
+            pareto_k_threshold=threshold,
+            n_importance_draws=int(importance_draws),
+            importance_ess=float(result.ess),
+        )
+
+    diagnostics = {
+        "pareto_k": pareto_k,
+        "pareto_k_threshold": threshold,
+        "importance_ess": float(result.ess),
+        "log_evidence_is": float(result.log_z),
+        "log_evidence_is_err": float(result.log_z_err),
+    }
+    return samples_flat, diagnostics
+
+
 def run_laplace(
     *,
     key,
-    loss_fn,
+    logdensity_fn,
     data_args,
-    map_params_unbounded,
+    position,
+    unravel_fn,
     to_physical_fn,
     model,
-    grad_fn=None,
     n_samples=2000,
     regularize=True,
     min_eigenvalue=1e-6,
     stationarity_tol=DEFAULT_STATIONARITY_TOL,
+    newton_steps=2,
+    importance_draws=0,
+    importance_df=5.0,
     verbose=True,
 ):
     """Run Laplace approximation from a MAP estimate.
@@ -212,21 +293,19 @@ def run_laplace(
     ----------
     key : PRNGKey
         Random key for sampling.
-    loss_fn : callable
-        Loss function: ``(unbounded param dict, data_args) -> scalar``.
-    data_args : dict
-        Observed data dict (``data``, ``noise``, etc.).
-    map_params_unbounded : dict
-        MAP parameters in unbounded space.
+    logdensity_fn : callable
+        Log-density (maximized): ``(flat position, data_args) -> scalar``. The
+        same function the samplers use; the loss is its negation.
+    data_args : pytree
+        Observed data passed through to ``logdensity_fn``.
+    position : array_like, shape (n_dim,)
+        Flat MAP estimate in unbounded space.
+    unravel_fn : callable
+        Maps a flat position back to the parameter pytree.
     to_physical_fn : callable
-        Converts unbounded param dict to physical space.
+        Converts an unbounded parameter pytree to physical space.
     model : Model
         Forward model (stored in Posterior).
-    grad_fn : callable, optional
-        Pre-compiled ``(params, data_args) -> (loss, grad)`` function.
-        When provided, the Hessian is computed via central finite
-        differences, avoiding the monolithic ``jax.hessian`` compilation
-        (55s → 5ms for D=7).  Falls back to ``jax.hessian`` if ``None``.
     n_samples : int
         Number of posterior samples to draw.
     regularize : bool
@@ -239,6 +318,17 @@ def run_laplace(
         Default 0.1, an offset of ~0.45 standard deviations. Raise it to
         silence the check; the decrement is reported in ``diagnostics`` either
         way.
+    newton_steps : int, optional
+        Maximum number of damped saddle-free Newton polish steps taken from the
+        expansion point before the expansion (see Notes). ``0`` disables the
+        polish. Default 2.
+    importance_draws : int, optional
+        Number of Student-t proposal draws for the importance check (see Notes).
+        ``0`` disables the check and the samples are Gaussian. A positive value
+        must be at least 10. Default 0.
+    importance_df : float, optional
+        Degrees of freedom of the Student-t proposal used by the importance
+        check. Default 5.0.
     verbose : bool
         Print progress.
 
@@ -246,6 +336,9 @@ def run_laplace(
     -------
     Posterior
         Samples from the Gaussian approximation, with Laplace log-evidence.
+        With ``importance_draws > 0`` the samples are resampled from the
+        importance draws in proportion to their PSIS-smoothed weights, and the
+        diagnostics carry the importance check (see Notes).
         ``Posterior.log_evidence`` is populated from the Gaussian approximation
         formula (see Notes), valid only when stated guards are met.
 
@@ -253,11 +346,21 @@ def run_laplace(
     -----
     LaplaceNotAtModeWarning
         When the Newton decrement exceeds ``stationarity_tol``, meaning
-        ``map_params_unbounded`` is not a stationary point of ``loss_fn`` and
-        ``H^-1`` is therefore not a covariance (issue #1537).
+        ``position`` is not a stationary point of the loss and ``H^-1`` is
+        therefore not a covariance (issue #1537).
+    ImportanceSamplingUnreliableWarning
+        When ``importance_draws > 0`` and the PSIS tail shape exceeds the
+        reliability threshold, or is NaN.
 
     Notes
     -----
+    **Newton polish**: up to ``newton_steps`` damped saddle-free Newton steps
+    (Dauphin et al. 2014 [1]_) on the exact Hessian are taken from the
+    optimizer's endpoint before the expansion. A step is accepted only if its
+    loss is finite and strictly lower than the current loss. The covariance is
+    always built from the Hessian at the polished point; L-BFGS's own
+    inverse-Hessian estimate is never used for the covariance.
+
     **Posterior samples & uncertainty**: ``cov = H^-1`` holds only at a mode.
     ``run_map`` takes a fixed number of Adam steps with no convergence test, so
     an under-converged expansion point reaches here routinely and produces a
@@ -295,6 +398,18 @@ def run_laplace(
     - ``diagnostics["n_clipped_eigenvalues"] == 0``: no Hessian eigenvalues
       were floored (the spectrum is positive-definite and well-conditioned).
 
+    **Importance check**: with ``importance_draws > 0``, a Student-t proposal
+    (``importance_df`` degrees of freedom) centered on the polished mode with the
+    Laplace covariance is importance-sampled against the same flat log-density
+    the samplers use, with the normalized prior restored. The importance ratios
+    are PSIS-smoothed [2]_, and the posterior samples are resampled from the
+    draws in proportion to the smoothed weights. The Pareto shape ``k-hat`` is
+    reported as ``diagnostics["pareto_k"]``. Above ``min(1 - 1/log10(n), 0.7)``
+    (``n`` the number of importance draws) the reweighted posterior and
+    ``diagnostics["log_evidence_is"]`` are unreliable, and
+    :class:`~tengri.config.exceptions.ImportanceSamplingUnreliableWarning` is
+    emitted. ``Posterior.log_evidence`` remains the Laplace value.
+
     **Known failure mode**: Posterior mass piled against a physical prior
     boundary (|ξ| large in standardized space) breaks the Gaussian approximation;
     the evidence can be severely biased. Remedy: cross-check against an
@@ -304,37 +419,55 @@ def run_laplace(
     Evidence scatter (uncertainties) are not reported; the Laplace
     approximation has no intrinsic sampling error, only model-error bias which
     cannot be quantified without comparison to other methods.
+
+    References
+    ----------
+    .. [1] Dauphin, Y. N., Pascanu, R., Gulcehre, C., Cho, K., Ganguli, S., &
+       Bengio, Y. (2014). Identifying and attacking the saddle point problem in
+       high-dimensional non-convex optimization. Advances in Neural Information
+       Processing Systems 27. arXiv:1406.2572.
+    .. [2] Vehtari, A., Simpson, D., Gelman, A., Yao, Y., & Gabry, J. (2024).
+       Pareto Smoothed Importance Sampling. Journal of Machine Learning
+       Research, 25(72), 1-58. arXiv:1507.02646.
     """
     from tengri.inference.posterior import Posterior
 
+    if isinstance(newton_steps, bool) or not isinstance(newton_steps, (int, np.integer)):
+        raise ValueError(f"newton_steps must be a non-negative int, got {newton_steps!r}")
+    if newton_steps < 0:
+        raise ValueError(f"newton_steps must be a non-negative int, got {newton_steps}")
+    _validate_importance_args(importance_draws, importance_df)
+
     t0 = time.time()
 
-    # Flatten MAP params to a single vector
-    theta_flat, unravel_fn = ravel_pytree(map_params_unbounded)
+    theta_flat = jnp.asarray(position)
     n_dim = len(theta_flat)
 
     if verbose:
         print(f"Laplace: {n_dim} parameters, {n_samples} samples")
 
-    # Hessian at MAP, finite differences on pre-compiled grad_fn (fast)
-    # or jax.hessian (slow compilation, exact).
-    if grad_fn is not None:
-        hessian = _finite_diff_hessian(
-            grad_fn,
+    # Loss gradient and exact Hessian at the optimizer's endpoint.
+    grad_flat, hessian = _loss_derivatives_jit(logdensity_fn, theta_flat, data_args)
+
+    # Decrement at the endpoint, before any polish, on the raw spectrum.
+    initial_eigenvalues, initial_eigenvectors = jnp.linalg.eigh(hessian)
+    decrement_initial = _newton_decrement(grad_flat, initial_eigenvalues, initial_eigenvectors)
+
+    # Damped saddle-free Newton polish: the Hessian, gradient and decrement below
+    # all describe the polished point.
+    n_newton_accepted = 0
+    if newton_steps > 0:
+        theta_flat, n_newton_accepted, grad_flat, hessian = newton_polish(
             theta_flat,
-            unravel_fn,
+            logdensity_fn,
             data_args,
+            max_steps=int(newton_steps),
+            tol=_NEWTON_POLISH_GRAD_TOL,
+            loss_grad=grad_flat,
+            loss_hessian=hessian,
         )
-    else:
-
-        def loss_flat(x):
-            """Evaluate loss on flat unbounded parameter vector."""
-            return loss_fn(unravel_fn(x), data_args)
-
-        hessian = jax.hessian(loss_flat)(theta_flat)
-
-    # Symmetrize (numerical safety)
-    hessian = 0.5 * (hessian + hessian.T)
+    if verbose:
+        print(f"  Newton polish: {n_newton_accepted} step(s) accepted")
 
     (
         _eigenvalues_raw,
@@ -356,12 +489,6 @@ def run_laplace(
     # Is the expansion point actually a mode?  cov = H^-1 only means covariance
     # there; nothing upstream guarantees it, and nothing downstream can detect
     # it (i.i.d. Gaussian draws score R-hat ~ 1 whatever the shape).
-    if grad_fn is not None:
-        _, grad_at_map = grad_fn(map_params_unbounded, data_args)
-    else:
-        grad_at_map = jax.grad(lambda p: loss_fn(p, data_args))(map_params_unbounded)
-    grad_flat, _ = ravel_pytree(grad_at_map)
-
     grad_norm = float(jnp.linalg.norm(grad_flat))
     decrement = _newton_decrement(grad_flat, eigenvalues_clipped, eigenvectors)
 
@@ -405,8 +532,27 @@ def run_laplace(
     if verbose:
         print(f"  Newton decrement: {decrement:.4g} nats (|grad| {grad_norm:.4g})")
 
-    # Draw samples from N(theta_MAP, H^{-1})
-    samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
+    importance_diagnostics = {}
+    if importance_draws > 0:
+        if not bool(jnp.all(eigenvalues_clipped > 0)):
+            raise ValueError(
+                "importance_draws needs a positive-definite Hessian at the expansion "
+                "point; the spectrum is indefinite (use regularize=True or a converged "
+                "init_from)."
+            )
+        samples_flat, importance_diagnostics = _importance_check(
+            key=key,
+            logdensity_fn=logdensity_fn,
+            data_args=data_args,
+            center=theta_flat,
+            cov=cov,
+            n_samples=n_samples,
+            importance_draws=int(importance_draws),
+            importance_df=importance_df,
+        )
+    else:
+        # Draw samples from N(theta_MAP, H^{-1})
+        samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
 
     # Laplace log-evidence estimate. The loss is -log L + 0.5*sum(xi^2), i.e. the
     # prior enters UNNORMALIZED (standardized_neg_log_prior omits -(D/2) log 2pi).
@@ -415,7 +561,7 @@ def run_laplace(
     # so log Z = -loss_at_map - 0.5 log det H, with no explicit 2pi term. Keeping
     # the +(D/2) log 2pi here would bias log Z upward by 0.92 nats per free
     # parameter and tilt model comparison toward higher-D models.
-    loss_at_map = float(loss_fn(map_params_unbounded, data_args))
+    loss_at_map = -float(logdensity_fn(theta_flat, data_args))
     log_det_h = jnp.sum(jnp.log(eigenvalues_clipped))
     log_evidence = -loss_at_map - 0.5 * log_det_h
 
@@ -445,7 +591,10 @@ def run_laplace(
             "n_clipped_eigenvalues": n_clipped,
             "condition_number": float(eigenvalues_clipped[-1] / eigenvalues_clipped[0]),
             "newton_decrement": decrement,
+            "newton_decrement_initial": decrement_initial,
+            "newton_steps_accepted": n_newton_accepted,
             "grad_norm_at_expansion": grad_norm,
+            **importance_diagnostics,
         },
         loss_history=None,
         log_evidence=float(log_evidence),

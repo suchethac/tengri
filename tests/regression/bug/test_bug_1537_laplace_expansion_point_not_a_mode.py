@@ -71,23 +71,28 @@ def _quartic_loss(params, _data_args):
     return 0.5 * x**2 + 0.25 * y**4 + 0.005 * y**2
 
 
-_GRAD_FN = jax.jit(jax.value_and_grad(_quartic_loss), static_argnums=())
+def _quartic_logdensity(position, data_args):
+    """Log-density the Laplace backend consumes: the negated loss on a flat position."""
+    return -_quartic_loss({"x": position[0], "y": position[1]}, data_args)
 
 
-def _grad_fn(params, data_args):
-    return _GRAD_FN(params, data_args)
+def _unravel(position):
+    return {"x": position[0], "y": position[1]}
 
 
 def _run(y0, **kwargs):
     """Laplace expanded about ``(0, y0)``; ``y0 = 0`` is the true mode."""
+    # The Newton polish is disabled: these tests pin detection of an off-mode point,
+    # and the polish would move that point onto the mode before the check runs.
+    kwargs.setdefault("newton_steps", 0)
     return run_laplace(
         key=jax.random.PRNGKey(0),
-        loss_fn=_quartic_loss,
+        logdensity_fn=_quartic_logdensity,
         data_args={},
-        map_params_unbounded={"x": jnp.asarray(0.0), "y": jnp.asarray(y0)},
+        position=jnp.array([0.0, y0]),
+        unravel_fn=_unravel,
         to_physical_fn=lambda p: p,
         model=None,
-        grad_fn=_grad_fn,
         n_samples=256,
         verbose=False,
         **kwargs,
@@ -224,7 +229,9 @@ def _saddle_loss(params, _data_args):
     return 0.5 * params["x"] ** 2 - 0.5 * params["y"] ** 2
 
 
-_SADDLE_GRAD = jax.jit(jax.value_and_grad(_saddle_loss))
+def _saddle_logdensity(position, data_args):
+    """Negated saddle loss on a flat position."""
+    return -_saddle_loss({"x": position[0], "y": position[1]}, data_args)
 
 
 class TestAnIndefiniteHessianIsAlsoNotAMode:
@@ -238,14 +245,16 @@ class TestAnIndefiniteHessianIsAlsoNotAMode:
     """
 
     def _run_saddle(self, y0, **kwargs):
+        # Polish disabled: this pins detection of the saddle, not its repair.
+        kwargs.setdefault("newton_steps", 0)
         return run_laplace(
             key=jax.random.PRNGKey(0),
-            loss_fn=_saddle_loss,
+            logdensity_fn=_saddle_logdensity,
             data_args={},
-            map_params_unbounded={"x": jnp.asarray(0.0), "y": jnp.asarray(y0)},
+            position=jnp.array([0.0, y0]),
+            unravel_fn=_unravel,
             to_physical_fn=lambda p: p,
             model=None,
-            grad_fn=_SADDLE_GRAD,
             n_samples=64,
             regularize=False,
             verbose=False,
