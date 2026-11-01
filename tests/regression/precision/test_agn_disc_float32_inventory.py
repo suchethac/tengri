@@ -73,25 +73,35 @@ pytestmark = pytest.mark.regression_bug
 #: * ``adaf_lopez2024`` — log-space piecewise power law, the kernel also used by
 #:                        ``skirtor`` and ``schartmann2005``
 #:
-#: The rest are marked ``slow``: they re-test the *same* mechanisms on further
-#: disc impls, and each costs a fresh JAX compile in both precisions (~96% of this
-#: file's runtime), so they earn their keep nightly rather than on every push.
-#: ``relagn`` is here deliberately — it is the most expensive case (26 MB grid,
-#: enough to OOM a parallel worker) and its mechanism is covered by slone_netzer.
+#: The nightly-only discs are marked ``slow``. Each costs a fresh JAX compile in both
+#: precisions (~96% of this file's runtime), so each is kept only for a float32
+#: mechanism that no PR-tier disc exercises:
+#:
+#: * ``kubota_done``    -- shape-class disc with the ``L_sun``-unit internals
+#: * ``adaf``           -- the Mahadevan ADAF solved once per composition through
+#:                         ``DISC_STATE_BLOCKS`` (the runner's ``disc_state`` path, which no
+#:                         other disc takes) and its ``T_e`` / ``x_M`` solves
+#: * ``richards2006``   -- template scaled by a log10 offset (``pow10``), never a linear
+#:                         erg/s intermediate
+#: * ``qsogen``         -- the analytic broken power law + hot dust normalized by
+#:                         ``analytic_bolometric_nu``, plus the emission-line template
+#: * ``grahsp_sbpl``    -- the log-space ``agn_grahsp_log_l5100`` pre-shift
+#:
+#: The discs left out share a mechanism with a kept one: ``skirtor`` and
+#: ``schartmann2005`` evaluate the same ``piecewise_powerlaw_disk`` kernel as
+#: ``adaf_lopez2024``; ``relagn`` normalizes through ``scale_to_lbol_native`` as
+#: ``slone_netzer`` does (and is the most expensive case, enough to OOM a parallel worker);
+#: ``grahsp_netzer`` shares ``_disc_log_l5100`` / ``apply_log10_scale`` with
+#: ``grahsp_sbpl``, and its Netzer-template float32 accuracy is pinned by
+#: ``test_bug_2842_grahsp_published_float32.py::
+#: test_published_luminosities_and_sed_are_finite_and_accurate_in_float32[netzer_disc]``.
 _PR_DISCS = ["multicolor", "powerlaw", "slone_netzer", "adaf_lopez2024"]
 _NIGHTLY_DISCS = [
     "kubota_done",
     "adaf",
     "richards2006",
-    "skirtor",
     "qsogen",
-    "schartmann2005",
-    "relagn",
-    # Grid-backed (template + bolometric-integral precompute), same OOM/compile
-    # cost profile as relagn/slone_netzer -- nightly rather than every-PR
-    # (#1206 §D: fixed, was the sole _GRID_CLASS_XFAIL member).
     "grahsp_sbpl",
-    "grahsp_netzer",
 ]
 _EXACT_DISCS = _PR_DISCS + _NIGHTLY_DISCS
 
@@ -153,9 +163,9 @@ def _sed_agn(ssp, disc, dtype):
 
 #: Disc blocks backed by a large HDF5 template grid. Holding the float64 and
 #: float32 copies at once (plus their compiled executables) is enough to OOM a
-#: parallel pytest worker — the RELAGN grid alone is 26 MB — so the float64 side is
+#: parallel pytest worker, so the float64 side is
 #: released before the float32 model is built.
-_LARGE_GRID_DISCS = frozenset({"relagn", "slone_netzer"})
+_LARGE_GRID_DISCS = frozenset({"slone_netzer"})
 
 
 #: A step this large between adjacent grid points is a model cutoff, not physics.
