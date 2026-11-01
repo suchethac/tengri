@@ -68,7 +68,7 @@ def test_flat_logdensity_equals_negative_batched_neg_log_posterior(template, two
         nlp = batched_neg_log_posterior(template, spec)
         for row in range(batch.z.shape[0]):
             obs = batch.galaxy(row)
-            data_args = substitute(obs, None, None, None, None, None)
+            data_args = substitute(obs, None, None, None, None, None, _template_args)
             for _ in range(3):
                 x = init_flat + jnp.asarray(rng.normal(scale=0.3, size=init_flat.shape))
                 np.testing.assert_allclose(
@@ -136,7 +136,12 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
     fit_spectra_catalog_mcmc(template, two_buckets, batch_size=2, **kwargs)
     assert seen == [2, 2]
     seen.clear()
+    # The default is batch_size="auto": the budget covers these small buckets, so
+    # each bucket runs as one lax.map chunk of its own galaxies (K = n_gal).
     fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
+    assert seen == [int(batch.z.shape[0]) for _, batch, _ in two_buckets]
+    seen.clear()
+    fit_spectra_catalog_mcmc(template, two_buckets, batch_size=None, **kwargs)
     assert seen == [None, None]
 
 

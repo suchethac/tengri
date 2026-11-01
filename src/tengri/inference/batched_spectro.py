@@ -61,6 +61,9 @@ JIT note
 pure JAX functions, safe under :func:`jax.vmap`, :func:`jax.grad` and
 :func:`jax.jit`. :func:`fit_spectra_map_vmap` is a Python driver: it compiles
 one optimizer run per bucket, and the bucket spec is the compile signature.
+The template tables (SSP grid, template data, z-table) are not closed over by any
+returned function: the drivers pass them as an explicit argument, so a compiled
+program holds no table as a constant and its executable stays small.
 """
 
 from __future__ import annotations
@@ -86,9 +89,13 @@ from tengri.forward.batched_spectrum import (
     predict_batched_observables,
     require_model_spec,
 )
+from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference.backends.mcmc.catalog import (
+    CATALOG_CHEES_ENSEMBLE,
     GHMC_DEFAULT_SUPERCHAINS,
+    _catalog_live_chains,
     build_catalog_mcmc_engine,
+    map_with_shared,
 )
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import (
@@ -416,7 +423,8 @@ def batched_log_likelihood(
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
-) -> Callable[[dict, SpectroBatch], jax.Array]:
+    threaded: tuple | None = None,
+) -> Callable[..., jax.Array]:
     """Return the one-galaxy Gaussian log-likelihood as a pure JAX function.
 
     Parameters
@@ -437,13 +445,18 @@ def batched_log_likelihood(
     cal_prior_sigma : float, optional
         Standard deviation of the Gaussian prior on each calibration coefficient.
         Used only with ``calibration_marginalize``. Default 1.0.
+    threaded : tuple, optional
+        The template tables ``(ssp_data, template_data, ztable_data)`` from
+        :meth:`~tengri.forward.sed_model.SEDModel.threaded_template_inputs`. None
+        (default) reads them from ``model`` here, outside any trace. A driver that
+        jits the returned function passes them once and feeds them as an argument.
 
     Returns
     -------
     callable
-        ``loglik(params, obs) -> scalar``. ``params`` maps each free physical
-        parameter name to a scalar [physical units]; ``obs`` is one galaxy
-        (:meth:`SpectroBatch.galaxy`). The function returns
+        ``loglik(params, obs, tables=threaded) -> scalar``. ``params`` maps each free
+        physical parameter name to a scalar [physical units]; ``obs`` is one galaxy
+        (:meth:`SpectroBatch.galaxy`) and ``tables`` the template tables. The function returns
         :math:`-\\tfrac12 \\chi^2` over the real spectral pixels, plus the
         photometric term when ``spec.has_phot``. The normalization constant is
         dropped. Call under :func:`jax.vmap` for a batch.
@@ -476,7 +489,7 @@ def batched_log_likelihood(
     the marginal over the line amplitudes, and over the calibration polynomial too when
     ``calibration_marginalize=True``, with the normalization constant dropped.
     """
-    threaded = _prepare_template(model)
+    threaded_default = _prepare_template(model) if threaded is None else threaded
     require_model_spec(model, spec)
     spectroscopy = model.observation.spectroscopy
     if spectroscopy.eline_mode == "fitted" and spec.cov_offsets:
@@ -508,11 +521,11 @@ def batched_log_likelihood(
         )
     segment_route = calibration_marginalize and _segment_route(model, spec)
 
-    def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
+    def loglik(params: dict, obs: SpectroBatch, tables: tuple = threaded_default) -> jax.Array:
         log_q = params[CAL_LOG_Q] if has_q else None
         forward_params = {k: v for k, v in params.items() if k != CAL_LOG_Q}
         out = predict_batched_observables(
-            model, forward_params, obs, spec, threaded=threaded, line_set=line_set
+            model, forward_params, obs, spec, threaded=tables, line_set=line_set
         )
         chol = _pixel_factor(spec, obs)
         if marginal_lines:
@@ -561,7 +574,8 @@ def batched_neg_log_posterior(
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
-) -> Callable[[dict, SpectroBatch], jax.Array]:
+    threaded: tuple | None = None,
+) -> Callable[..., jax.Array]:
     """Return the one-galaxy negative log-posterior in standardized space.
 
     Parameters
@@ -570,15 +584,15 @@ def batched_neg_log_posterior(
         Template model (see :func:`batched_log_likelihood`).
     spec : SpectroBatchSpec
         Static bucket key of the batch the function will receive.
-    calibration_marginalize, cal_n_poly, cal_prior_sigma
+    calibration_marginalize, cal_n_poly, cal_prior_sigma, threaded
         Forwarded to :func:`batched_log_likelihood`.
 
     Returns
     -------
     callable
-        ``nlp(params_unbounded, obs) -> scalar``. ``params_unbounded`` maps each
-        free parameter other than redshift to its standardized latent; ``obs`` is
-        one galaxy. The value is
+        ``nlp(params_unbounded, obs, tables=threaded) -> scalar``. ``params_unbounded``
+        maps each free parameter other than redshift to its standardized latent; ``obs``
+        is one galaxy and ``tables`` the template tables. The value is
         :math:`-\\log p(d \\mid \\theta(\\xi)) + \\tfrac12 \\sum_i \\xi_i^2`, up to a
         constant.
 
@@ -594,12 +608,14 @@ def batched_neg_log_posterior(
     ``_unstandardize_parameters`` (``tengri.inference.loss_functions``), and only
     the free names are passed on, so fixed values never reach the forward pass.
     """
+    threaded_default = _prepare_template(model) if threaded is None else threaded
     loglik = batched_log_likelihood(
         model,
         spec,
         calibration_marginalize=calibration_marginalize,
         cal_n_poly=cal_n_poly,
         cal_prior_sigma=cal_prior_sigma,
+        threaded=threaded_default,
     )
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
@@ -607,7 +623,9 @@ def batched_neg_log_posterior(
     latent_spec = _latent_spec(model)
     has_q = model.observation.spectroscopy.cal_scale_prior is not None
 
-    def nlp(params_unbounded: dict, obs: SpectroBatch) -> jax.Array:
+    def nlp(
+        params_unbounded: dict, obs: SpectroBatch, tables: tuple = threaded_default
+    ) -> jax.Array:
         physical = _unstandardize_parameters(
             params_unbounded, latent_spec, free_names, fixed_values, stochastic=False
         )
@@ -621,7 +639,7 @@ def batched_neg_log_posterior(
         if has_q:
             log_q = phys_free[CAL_LOG_Q]
             prior = prior - 0.5 * log_q**2 - _log_q_log_normal(obs, log_q)
-        return -loglik(phys_free, obs) + prior
+        return -loglik(phys_free, obs, tables) + prior
 
     return nlp
 
@@ -701,23 +719,23 @@ def _slice_tree(tree, start: int, stop: int):
     return jax.tree_util.tree_map(lambda a: a[start:stop], tree)
 
 
-def _fit_chunk(nlp, batch, init, *, n_steps, learning_rate):
+def _fit_chunk(nlp, batch, init, threaded, *, n_steps, learning_rate):
     """Run Adam on one chunk of galaxies from the given latents."""
     import optax
 
     optimizer = optax.adam(learning_rate)
     opt_state = jax.vmap(optimizer.init)(init)
-    value_and_grad = jax.vmap(jax.value_and_grad(nlp))
+    value_and_grad = jax.vmap(jax.value_and_grad(nlp), in_axes=(0, 0, None))
 
     def step(carry, _):
         params, state = carry
-        losses, grads = value_and_grad(params, batch)
+        losses, grads = value_and_grad(params, batch, threaded)
         updates, state = jax.vmap(optimizer.update)(grads, state, params)
         params = jax.vmap(optax.apply_updates)(params, updates)
         return (params, state), losses
 
     (params_final, _), loss_trace = jax.lax.scan(step, (init, opt_state), None, length=n_steps)
-    final_nlp = jax.vmap(nlp)(params_final, batch)
+    final_nlp = jax.vmap(nlp, in_axes=(0, 0, None))(params_final, batch, threaded)
     return params_final, final_nlp, loss_trace
 
 
@@ -726,14 +744,14 @@ def _max_abs(tree) -> jax.Array:
     return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
 
 
-def _lbfgs_one(nlp, obs, init, *, n_steps, gtol):
+def _lbfgs_one(nlp, obs, tables, init, *, n_steps, gtol):
     """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
     import optax
 
     optimizer = optax.lbfgs()
 
     def value_fn(params):
-        return nlp(params, obs)
+        return nlp(params, obs, tables)
 
     value_and_grad = optax.value_and_grad_from_state(value_fn)
     state = optimizer.init(init)
@@ -759,7 +777,7 @@ def _lbfgs_one(nlp, obs, init, *, n_steps, gtol):
     return params, value, trace
 
 
-def _lbfgs_chunk(nlp, batch, init, *, n_steps, gtol):
+def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
 
     The chunk is one ``vmap`` of per-galaxy ``while_loop`` runs. JAX keeps a
@@ -768,18 +786,18 @@ def _lbfgs_chunk(nlp, batch, init, *, n_steps, gtol):
     trace holds the final value.
     """
 
-    def one(obs, init_one):
-        return _lbfgs_one(nlp, obs, init_one, n_steps=n_steps, gtol=gtol)
+    def one(obs, init_one, tables):
+        return _lbfgs_one(nlp, obs, tables, init_one, n_steps=n_steps, gtol=gtol)
 
-    params_final, final_nlp, trace = jax.vmap(one)(batch, init)
+    params_final, final_nlp, trace = jax.vmap(one, in_axes=(0, 0, None))(batch, init, threaded)
     return params_final, final_nlp, trace.T
 
 
-def _run_chunk(nlp, batch, init, *, optimizer, n_steps, learning_rate, gtol):
+def _run_chunk(nlp, batch, init, threaded, *, optimizer, n_steps, learning_rate, gtol):
     """Dispatch one chunk to the optimizer named by ``optimizer``."""
     if optimizer == "adam":
-        return _fit_chunk(nlp, batch, init, n_steps=n_steps, learning_rate=learning_rate)
-    return _lbfgs_chunk(nlp, batch, init, n_steps=n_steps, gtol=gtol)
+        return _fit_chunk(nlp, batch, init, threaded, n_steps=n_steps, learning_rate=learning_rate)
+    return _lbfgs_chunk(nlp, batch, init, threaded, n_steps=n_steps, gtol=gtol)
 
 
 def _fit_bucket(
@@ -796,13 +814,15 @@ def _fit_bucket(
     cal_prior_sigma=1.0,
     optimizer="lbfgs",
     gtol=1e-5,
+    threaded,
 ):
     """Run one optimizer on one bucket, returning final latents, final nlp and the loss trace.
 
     The initial latents are drawn for the whole bucket and then sliced, so the
     result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
     of at most ``chunk_size`` galaxies, which bounds the peak memory of the
-    gradient.
+    gradient. ``threaded`` is the template tables, passed to every chunk as an
+    argument.
     """
     nlp = batched_neg_log_posterior(
         model,
@@ -810,6 +830,7 @@ def _fit_bucket(
         calibration_marginalize=calibration_marginalize,
         cal_n_poly=cal_n_poly,
         cal_prior_sigma=cal_prior_sigma,
+        threaded=threaded,
     )
     n_gal = int(batch.z.shape[0])
     init = init_unbounded_batch(model, n_gal, key)
@@ -822,6 +843,7 @@ def _fit_bucket(
                 nlp,
                 _slice_tree(batch, start, stop),
                 _slice_tree(init, start, stop),
+                threaded,
                 optimizer=optimizer,
                 n_steps=n_steps,
                 learning_rate=learning_rate,
@@ -917,8 +939,7 @@ def fit_spectra_map_vmap(
     Results are returned in the catalog order by permuting with the concatenated
     bucket index arrays.
     """
-    _refuse_stochastic(model)
-    check_template_model(model)
+    threaded = _prepare_template(model)
     if calibration_marginalize:
         _refuse_calibration_order(model)
     if not batches:
@@ -945,6 +966,7 @@ def fit_spectra_map_vmap(
             cal_prior_sigma=cal_prior_sigma,
             optimizer=optimizer,
             gtol=gtol,
+            threaded=threaded,
         )
         buckets.append(
             {
@@ -968,7 +990,14 @@ def fit_spectra_map_vmap(
 
 
 def _bucket_catalog_inputs(
-    model, spec, batch, *, calibration_marginalize=False, cal_n_poly=3, cal_prior_sigma=1.0
+    model,
+    spec,
+    batch,
+    *,
+    calibration_marginalize=False,
+    cal_n_poly=3,
+    cal_prior_sigma=1.0,
+    threaded=None,
 ):
     """Flat log-density and per-galaxy substitution for one bucket's catalog sampler.
 
@@ -980,6 +1009,9 @@ def _bucket_catalog_inputs(
         Static key of the bucket.
     batch : SpectroBatch
         The bucket's galaxies, with a leading batch axis.
+    threaded : tuple, optional
+        The template tables from :func:`_prepare_template`, computed once by the caller.
+        None reads them from ``model``.
 
     Returns
     -------
@@ -988,10 +1020,11 @@ def _bucket_catalog_inputs(
         :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`
         takes as ``flat_logdensity``. ``log_post_2arg(x, data_args)`` is the
         log-posterior of the standardized latents ``x`` for the galaxy in
-        ``data_args["obs"]``.
+        ``data_args["obs"]``, with the template tables in ``data_args["threaded"]``.
     substitute : callable
-        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err) ->
-        {"obs": data}``, the per-galaxy ``data_args`` the engine substitutes.
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared) ->
+        {"obs": data, "threaded": shared["threaded"]}``, the per-galaxy ``data_args``
+        the engine substitutes. The tables are the shared argument, not a per-galaxy copy.
 
     Notes
     -----
@@ -999,23 +1032,26 @@ def _bucket_catalog_inputs(
     :func:`jax.flatten_util.ravel_pytree` on one galaxy's latents, which sorts the
     names, so every flat position maps back to the same named latent.
     """
+    tables = _prepare_template(model) if threaded is None else threaded
     nlp = batched_neg_log_posterior(
         model,
         spec,
         calibration_marginalize=calibration_marginalize,
         cal_n_poly=cal_n_poly,
         cal_prior_sigma=cal_prior_sigma,
+        threaded=tables,
     )
     init_one = {n: v[0] for n, v in init_unbounded_batch(model, 1, jax.random.PRNGKey(0)).items()}
     init_flat, unravel_fn = ravel_pytree(init_one)
 
     def log_post_2arg(position, data_args):
-        return -nlp(unravel_fn(position), data_args["obs"])
+        return -nlp(unravel_fn(position), data_args["obs"], data_args["threaded"])
 
-    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
-        return {"obs": data}
+    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
+        return {"obs": data, "threaded": shared["threaded"]}
 
-    return (log_post_2arg, unravel_fn, init_flat, {"obs": batch.galaxy(0)}), substitute
+    template_data_args = {"obs": batch.galaxy(0), "threaded": tables}
+    return (log_post_2arg, unravel_fn, init_flat, template_data_args), substitute
 
 
 def _flat_rows(latents: dict) -> jax.Array:
@@ -1070,6 +1106,28 @@ def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     )
 
 
+def _resolve_bucket_batch_size(
+    batch_size: int | str | None,
+    *,
+    n_gal: int,
+    n_data_per_gal: int,
+    sampler: str,
+    n_chains: int,
+    n_ensemble: int | str,
+) -> int | None:
+    """Galaxies per ``lax.map`` step for one bucket; ``"auto"`` is sized by the budget."""
+    if batch_size is None or isinstance(batch_size, int):
+        return batch_size
+    if batch_size != AUTO:
+        raise ValueError(f"batch_size must be an int, None or {AUTO!r}, got {batch_size!r}")
+    return resolve_forward_chunk_size(
+        AUTO,
+        n_gal=n_gal,
+        n_data_per_gal=n_data_per_gal,
+        n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
+    )
+
+
 def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
@@ -1081,7 +1139,7 @@ def fit_spectra_catalog_mcmc(
     seed: int = 0,
     init: str = "map",
     map_steps: int = 200,
-    batch_size: int | None = None,
+    batch_size: int | str | None = AUTO,
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
@@ -1116,13 +1174,24 @@ def fit_spectra_catalog_mcmc(
     map_steps : int, optional
         Iterations of the MAP warm start (L-BFGS, as in :func:`fit_spectra_map_vmap`).
         Ignored when ``init="prior"``. Default 200.
-    batch_size : int, optional
+    batch_size : int, None or ``"auto"``, optional
         Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
-        (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the
-        galaxies one at a time. On a CPU a small value or ``None`` is right: a wide
-        ``vmap`` of NUTS trees waits for its deepest tree and costs memory. On a
-        GPU a large value is what buys parallel throughput. The draws do not
-        depend on this value, up to floating-point reduction order.
+        (passed as ``batch_size`` to ``lax.map``). The default ``"auto"`` follows
+        :class:`~tengri.inference.catalog_fitter.CatalogFitter`'s rule (#1189): one
+        galaxy per dispatch is the anti-pattern, so each bucket is sized as below.
+        ``None`` is the explicit way back to one galaxy per step (a ``lax.map``
+        scan), and an integer is used as given. ``"auto"`` sizes each bucket to
+        ``K = floor(B / ((32 MiB + n_data * 4 KiB) * n_chains))``, clipped to
+        ``[1, n_gal]``, where ``B`` is the budget in bytes, ``n_data`` the bucket's
+        largest spectrum, and ``n_chains`` the live chains per galaxy (the ChEES
+        ensemble for ``sampler="chees"``). ``B`` is ``TENGRI_FORWARD_MEMORY_BUDGET_GB``
+        (default 2 GB). The budget is pinned, not read from the device, so the same
+        K results on every machine and a run's numerics do not depend on what else
+        is resident (see ``tengri.inference._batching``). On a CPU a small value
+        or ``None`` is right: a wide ``vmap`` of NUTS trees waits for its deepest
+        tree and costs memory. On a GPU a large value is what buys parallel
+        throughput. The draws do not depend on this value, up to floating-point
+        reduction order.
     calibration_marginalize : bool, optional
         Marginalize a Chebyshev calibration polynomial out of the spectral term, as
         :func:`batched_log_likelihood` does. Also applies to the MAP warm start.
@@ -1171,8 +1240,7 @@ def fit_spectra_catalog_mcmc(
     space of :func:`batched_neg_log_posterior`, whose prior is iid N(0, 1), and the
     draws are unstandardized to physical values only on return.
     """
-    _refuse_stochastic(model)
-    check_template_model(model)
+    threaded = _prepare_template(model)
     if init not in ("map", "prior"):
         raise ValueError(f"init must be 'map' or 'prior', got {init!r}")
     if not batches:
@@ -1210,10 +1278,19 @@ def fit_spectra_catalog_mcmc(
             calibration_marginalize=calibration_marginalize,
             cal_n_poly=cal_n_poly,
             cal_prior_sigma=cal_prior_sigma,
+            threaded=threaded,
         )
         unravel_fn = flat[1]
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
+        bucket_batch = _resolve_bucket_batch_size(
+            batch_size,
+            n_gal=n_gal,
+            n_data_per_gal=int(spec.n_max),
+            sampler=sampler,
+            n_chains=n_chains,
+            n_ensemble=options.get("n_ensemble", CATALOG_CHEES_ENSEMBLE),
+        )
         run_one, _ = build_catalog_mcmc_engine(
             None,
             sampler,
@@ -1225,14 +1302,14 @@ def fit_spectra_catalog_mcmc(
             **options,
         )
 
-        def one_galaxy(xs, run_one=run_one):
-            x0, gal_key, obs = xs
-            return run_one(x0, gal_key, obs, None, None, None, None, None)
+        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
+            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
 
-        positions, divergent = jax.lax.map(
+        positions, divergent = map_with_shared(
             one_galaxy,
             (starts, jax.random.split(sample_key, n_gal), batch),
-            batch_size=batch_size,
+            flat[3],
+            batch_size=bucket_batch,
         )
         n_draws = positions.shape[1]
         latent_draws = np.asarray(positions)

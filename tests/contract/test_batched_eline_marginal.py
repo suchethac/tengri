@@ -431,29 +431,70 @@ def test_padding_quantum_leaves_marginal_unchanged(synthetic_ssp):
     np.testing.assert_allclose(values[1], values[0], rtol=1e-10)
 
 
-def test_float32_marginal_is_finite_and_nonzero(synthetic_ssp):
-    """With x64 off, the marginal and its gradient are finite and nonzero at log10 M = 4.0.
+def _model_matched_data(ssp, z):
+    """Data in the model's flux units for a 10^10 Msun galaxy: (flux, sigma, prior_sigma).
 
-    They run at a reduced flux scale until #3202 fixes the float32 underflow at physical scales.
+    The truth is the float64 spectrum of the same template at log10 M = 10. The data is
+    the truth plus noise at the level of sigma, and sigma is 10% of the truth plus a floor of
+    1e-2 of its peak, so sigma stays representable in float32. The line prior width is the peak,
+    the same ratio to the continuum as the 1e-15 width had to the 1.3e-15 flux.
     """
-    from tengri.inference.batched_spectro import batched_log_likelihood
-    from tengri.observation.batched import build_spectro_batches
+    truth = np.asarray(
+        _marg_template(ssp).predict_spectrum({"sfh_dpl_log_total_mass": 10.0, "redshift": z})
+    )
+    peak = float(np.max(np.abs(truth)))
+    sigma = 0.1 * np.abs(truth) + 1.0e-2 * peak
+    noise = np.random.default_rng(0).standard_normal(truth.size)
+    return truth + sigma * noise, sigma, peak
 
-    scale = 1.0e-6
+
+_F32_LOG_M = 10.1  # offset from the truth, so the residuals are nonzero
+
+
+def _batched_value_and_grad(ssp, flux, sigma, z, prior_sigma, log_mass):
+    """Batched marginal value and gradient dict at one point, in the current precision."""
+    from tengri.inference.batched_spectro import batched_log_likelihood
+    from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+
+    model = _marg_template(ssp, prior_sigma=prior_sigma)
+    gal = GalaxySpectrum(wave=_MARG_WAVE, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_MARG_R)
+    spec, batch, _ = build_spectro_batches([gal], model=model)[0]
+    loglik = batched_log_likelihood(model, spec)
+    obs = batch.galaxy(0)
+    params = {"sfh_dpl_log_total_mass": log_mass}
+    value = loglik(params, obs)
+    grad = jax.grad(lambda p: loglik(p, obs))(params)
+    return float(value), grad
+
+
+def test_float32_marginal_is_finite_and_nonzero(synthetic_ssp_physical):
+    """With x64 off, the batched marginal and its gradient are finite and nonzero.
+
+    The galaxy is 10^10 Msun on the physically normalized SSP, with data in the model's flux
+    units. The float32 value and gradient must also agree with float64 at the same point.
+    """
     z = 0.1
+    flux, sigma, prior_sigma = _model_matched_data(synthetic_ssp_physical, z)
+    value64, grad64 = _batched_value_and_grad(
+        synthetic_ssp_physical, flux, sigma, z, prior_sigma, _F32_LOG_M
+    )
     with jax.enable_x64(False):
-        model = _marg_template(synthetic_ssp, prior_sigma=_MARG_PRIOR_SIGMA * scale)
-        gal = _marg_galaxy(z, flux_scale=scale)
-        spec, batch, _ = build_spectro_batches([gal], model=model)[0]
-        loglik = batched_log_likelihood(model, spec)
-        obs = batch.galaxy(0)
-        params = {"sfh_dpl_log_total_mass": 4.0}
-        value = float(loglik(params, obs))
-        grad = jax.grad(lambda p: loglik(p, obs))(params)
-        g = float(grad["sfh_dpl_log_total_mass"])
-    assert np.isfinite(value)
-    assert np.isfinite(g)
-    assert g != 0.0
+        value32, grad32 = _batched_value_and_grad(
+            synthetic_ssp_physical, flux, sigma, z, prior_sigma, _F32_LOG_M
+        )
+    assert np.isfinite(value32)
+    assert value32 != 0.0
+    for leaf in jax.tree.leaves(grad32):
+        assert np.all(np.isfinite(np.asarray(leaf)))
+        assert np.all(np.asarray(leaf) != 0.0)
+    rel_value = abs(value32 - value64) / abs(value64)
+    rel_grad = max(
+        abs(float(np.asarray(g32)) - float(np.asarray(g64))) / abs(float(np.asarray(g64)))
+        for g32, g64 in zip(jax.tree.leaves(grad32), jax.tree.leaves(grad64))
+    )
+    # Measured float32 vs float64 at this point: rel_value 3.04e-5, rel_grad 2.41e-5.
+    assert rel_value < 1.5e-4
+    assert rel_grad < 1.5e-4
 
 
 def test_fitted_lines_with_calibration_marginal_are_refused(synthetic_ssp):
@@ -546,37 +587,49 @@ def test_per_galaxy_marginal_classes_are_finite_and_match_float64_in_float32(
     np.testing.assert_allclose(got_joint, expected_joint, rtol=2e-5)
 
 
-# They run at a reduced flux scale until #3202 fixes the float32 underflow at physical scales.
-_F32_SCALE = 1.0e-6
+def _per_galaxy_value_and_grad(ssp, z, flux, sigma, prior_sigma, log_mass, *, joint):
+    """Per-galaxy marginal value and d/d log10 M at one point, in the current precision."""
+    template = _marg_template(ssp, prior_sigma=prior_sigma)
+    lines, joint_cls = _per_galaxy_classes(
+        template, z, flux=flux, sigma=sigma, prior_sigma=prior_sigma
+    )
+    cls = joint_cls if joint else lines
+
+    def value(logm):
+        m = jnp.asarray(template.predict_spectrum({"sfh_dpl_log_total_mass": logm, "redshift": z}))
+        if joint:
+            return cls.log_prob({"spec_fnu": m}, params={})
+        return cls.log_prob({"spec_fnu": m})
+
+    return float(value(jnp.asarray(_F32_LOG_M))), float(jax.grad(value)(jnp.asarray(_F32_LOG_M)))
 
 
-def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthetic_ssp):
-    """Lines-only and joint per-galaxy marginals have finite, nonzero gradients at log M 4.0."""
+def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthetic_ssp_physical):
+    """Lines-only and joint per-galaxy marginals have finite, nonzero gradients in float32.
+
+    The galaxy is 10^10 Msun on the physically normalized SSP, with data in the model's flux
+    units. The float32 values and gradients must also agree with float64 at the same point.
+    """
     z = 0.1
-    flux, sigma = _marg_data()
-    prior_sigma = _MARG_PRIOR_SIGMA * _F32_SCALE
-    with jax.enable_x64(False):
-        template32 = _marg_template(synthetic_ssp, prior_sigma=prior_sigma)
-        lines32, joint32 = _per_galaxy_classes(
-            template32,
-            z,
-            flux=flux * _F32_SCALE,
-            sigma=sigma * _F32_SCALE,
-            prior_sigma=prior_sigma,
+    flux, sigma, prior_sigma = _model_matched_data(synthetic_ssp_physical, z)
+    for joint in (False, True):
+        value64, grad64 = _per_galaxy_value_and_grad(
+            synthetic_ssp_physical, z, flux, sigma, prior_sigma, _F32_LOG_M, joint=joint
         )
-
-        def value(logm, cls, joint):
-            m = jnp.asarray(
-                template32.predict_spectrum({"sfh_dpl_log_total_mass": logm, "redshift": z})
+        with jax.enable_x64(False):
+            value32, grad32 = _per_galaxy_value_and_grad(
+                synthetic_ssp_physical, z, flux, sigma, prior_sigma, _F32_LOG_M, joint=joint
             )
-            if joint:
-                return cls.log_prob({"spec_fnu": m}, params={})
-            return cls.log_prob({"spec_fnu": m})
-
-        for cls, joint in ((lines32, False), (joint32, True)):
-            grad = float(jax.grad(value)(jnp.asarray(4.0), cls, joint))
-            assert np.isfinite(grad)
-            assert grad != 0.0
+        assert np.isfinite(value32)
+        assert value32 != 0.0
+        assert np.isfinite(grad32)
+        assert grad32 != 0.0
+        rel_value = abs(value32 - value64) / abs(value64)
+        rel_grad = abs(grad32 - grad64) / abs(grad64)
+        # Measured float32 vs float64 at this point, lines-only and joint: rel_value up to
+        # 5.79e-5, rel_grad up to 6.87e-5.
+        assert rel_value < 4.0e-4
+        assert rel_grad < 4.0e-4
 
 
 def test_per_galaxy_and_batched_marginals_both_call_the_one_helper(synthetic_ssp, monkeypatch):

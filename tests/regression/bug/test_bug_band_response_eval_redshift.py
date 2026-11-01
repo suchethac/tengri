@@ -327,11 +327,13 @@ def test_the_batched_catalog_engine_loss_follows_each_galaxys_redshift(
     template = Fitter(catalog_model, flux[0], noise[0])
     init = template._initialize_unbounded(jax.random.PRNGKey(3))
     log_post, _unravel, init_flat, template_args = _get_flat_logdensity(template, init)
-    substitute = _make_substitute(template_args, True, False)
+    substitute = _make_substitute(True, False)
     presence = jnp.ones_like(jnp.asarray(flux))
 
     def loss_one(data, noise_i, presence_i, z):
-        return -log_post(init_flat, substitute(data, noise_i, presence_i, z, None, None))
+        return -log_post(
+            init_flat, substitute(data, noise_i, presence_i, z, None, None, template_args)
+        )
 
     losses = np.asarray(
         jax.vmap(loss_one)(jnp.asarray(flux), jnp.asarray(noise), presence, jnp.asarray(CATALOG_Z))
@@ -351,7 +353,7 @@ def test_the_batched_map_warm_start_runs_with_the_tables_threaded(catalog_model,
     init = template._initialize_unbounded(jax.random.PRNGKey(3))
     start, _ = jax.flatten_util.ravel_pytree(init)
     n_gal = flux.shape[0]
-    warm = jax.vmap(map_init)(
+    warm = jax.vmap(map_init, in_axes=(0,) * 7 + (None,))(
         jnp.tile(start, (n_gal, 1)),
         jnp.asarray(flux),
         jnp.asarray(noise),
@@ -359,6 +361,7 @@ def test_the_batched_map_warm_start_runs_with_the_tables_threaded(catalog_model,
         jnp.asarray(CATALOG_Z),
         jnp.zeros((n_gal, 1)),
         jnp.ones((n_gal, 1)),
+        template._data_args,
     )
     assert np.all(np.isfinite(np.asarray(warm)))
 

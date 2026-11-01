@@ -19,11 +19,11 @@ from jax.flatten_util import ravel_pytree
 
 from tengri import FREE, Fixed, Observation, SEDModel, Spectroscopy, Uniform
 from tengri.inference.batched_spectro import batched_neg_log_posterior, fit_spectra_map_vmap
+from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter
 from tengri.observation.batched import build_spectro_batches
 from tests.contract.test_batched_spectro_loglik import _MASS, _mock_catalog, _record
 from tests.contract.test_batched_spectrum_forward import _banded
-from tests.inference.test_profile_mass import _newton_decrement_and_sigma_xi
 
 pytestmark = pytest.mark.contract
 
@@ -32,6 +32,8 @@ pytestmark = pytest.mark.contract
 _DECREMENT_BAR = 1e-8
 #: Agreement with the per-galaxy Fitter MAP in standardized units.
 _STANDARDIZED_TOL = 1e-4
+#: Slack in nats on the objective comparison at a non-stationary Fitter point.
+_OBJECTIVE_SLACK = 1e-9
 
 #: Adam driver on the three mocks, seed 0, 25 steps, recorded on the previous driver.
 _ADAM25_MASS = np.array([9.991730669643628, 10.307567535163958, 9.473208382015576])
@@ -48,6 +50,23 @@ def _dpl_template(ssp, wave, resolution, *, redshift):
         neb={"type": "none"},
         redshift=redshift,
     )
+
+
+def _fitter_decrement(fitter, post) -> tuple[float, bool]:
+    """Newton decrement [nats] and positive-definiteness of a Fitter MAP, without asserting."""
+    ctx = InferenceContext.from_target(fitter)
+    flat, unravel = ravel_pytree(ctx.unbounded_from_posterior(post))
+
+    def loss(vec):
+        return ctx.neg_log_posterior_fn(unravel(vec), ctx.data_args)
+
+    grad = jax.grad(loss)(flat)
+    eigenvalues, eigenvectors = jnp.linalg.eigh(jax.hessian(loss)(flat))
+    positive = eigenvalues > 0
+    safe = jnp.where(positive, eigenvalues, 1.0)
+    projected = (eigenvectors.T @ grad) ** 2
+    decrement = 0.5 * float(jnp.sum(jnp.where(positive, projected / safe, 0.0)))
+    return decrement, bool(jnp.all(positive))
 
 
 @pytest.fixture(scope="module")
@@ -82,6 +101,14 @@ def _batched_decrement(nlp, obs, xi: dict) -> float:
 
 
 def test_batched_map_matches_fitter_map_and_is_stationary(synthetic_ssp, template, mock, batches):
+    """Batched MAP matches each galaxy's Fitter MAP where the Fitter's point is stationary.
+
+    The batched point must always be stationary: its Hessian is positive definite and its
+    decrement is below the bar. The per-galaxy Fitter is scipy L-BFGS-B, which on some
+    galaxies stops at a non-stationary point (#3205). There the Fitter's Hessian is not
+    positive definite or its decrement is above the bar, so the point is not a reference
+    to match, and the batched negative log-posterior must be no higher than the Fitter's.
+    """
     [(spec, batch, index)] = batches
     np.testing.assert_array_equal(np.asarray(index), [0, 1, 2])
     result = fit_spectra_map_vmap(template, batches)
@@ -109,15 +136,23 @@ def test_batched_map_matches_fitter_map_and_is_stationary(synthetic_ssp, templat
         obs = batch.galaxy(i)
         decrement = _batched_decrement(nlp, obs, xi_batch)
         assert np.isfinite(decrement) and decrement < _DECREMENT_BAR, (i, decrement)
-        fit_decrement, _ = _newton_decrement_and_sigma_xi(fitter, post)
-        if fit_decrement < _DECREMENT_BAR:
+        fit_decrement, fit_positive = _fitter_decrement(fitter, post)
+        if fit_positive and fit_decrement < _DECREMENT_BAR:
             for name in names:
                 gap = abs(float(xi_batch[name]) - float(xi_fit[name]))
                 assert gap < _STANDARDIZED_TOL, (i, name, gap)
         else:
-            # The Fitter's point is not stationary, so it is not a reference to match.
-            # The batched point must then be at least as low in the negative log-posterior.
-            assert float(nlp(xi_batch, obs)) <= float(nlp(xi_fit, obs)) + 1e-8, (i, fit_decrement)
+            reason = (
+                "Hessian not positive definite"
+                if not fit_positive
+                else f"decrement {fit_decrement:.3e} above the bar"
+            )
+            print(f"galaxy {i}: Fitter point non-stationary ({reason}); objective comparison")
+            assert float(nlp(xi_batch, obs)) <= float(nlp(xi_fit, obs)) + _OBJECTIVE_SLACK, (
+                i,
+                fit_decrement,
+                fit_positive,
+            )
 
 
 def test_adam_option_reproduces_the_previous_driver(template, batches):

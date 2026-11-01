@@ -70,6 +70,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._params import CB19_PARAMS, GUTKIN16_PARAMS, PARAMS as _NEB_PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _log10_sum_of_finite,
@@ -81,8 +82,19 @@ from tengri.components.nebular._shared import (
 )
 from tengri.components.nebular.cloudy_cb19 import CB19Backend
 from tengri.config.exceptions import BackendError, ParameterError
+from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import library_lookup
 from tengri.utils.scale import pow10
+
+# Signature defaults are read off the ParamDeclarations (ADR-0011), never
+# repeated as literals: a bare numeral is a second copy that can drift.
+_DEFAULT_LOGU = declared_default(_NEB_PARAMS, "neb_logU")
+_DEFAULT_FESC = declared_default(_NEB_PARAMS, "neb_fesc")
+_DEFAULT_FESC_LYA = declared_default(_NEB_PARAMS, "neb_fesc_lya")
+_DEFAULT_FDUST_FRAC = declared_default(_NEB_PARAMS, "neb_fdust_frac")
+_DEFAULT_LOG_NH = declared_default(CB19_PARAMS, "neb_log_nH")
+_DEFAULT_XI_D = declared_default(GUTKIN16_PARAMS, "neb_xi_d")
+_DEFAULT_CO_RATIO = declared_default(GUTKIN16_PARAMS, "neb_co_ratio")
 
 #: Lyman-alpha vacuum rest wavelength [Angstrom], appended to the table's lines.
 LYA_WAVE_AA: float = 1215.67
@@ -383,14 +395,14 @@ class Gutkin16Backend:
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = _DEFAULT_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_xi_d: float = 0.3,
-        neb_co_ratio: float = 1.0,
+        neb_fesc: float = _DEFAULT_FESC,
+        neb_fesc_lya: float = _DEFAULT_FESC_LYA,
+        neb_fdust_frac: float = _DEFAULT_FDUST_FRAC,
+        neb_log_nH: float = _DEFAULT_LOG_NH,
+        neb_xi_d: float = _DEFAULT_XI_D,
+        neb_co_ratio: float = _DEFAULT_CO_RATIO,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -482,8 +494,8 @@ class Gutkin16Backend:
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_fesc: float = 0.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = _DEFAULT_FESC,
+        neb_fdust_frac: float = _DEFAULT_FDUST_FRAC,
         **_kwargs,
     ) -> jnp.ndarray:
         r"""Nebular continuum on the SSP wavelength grid [erg/s/Hz].
@@ -536,14 +548,14 @@ class Gutkin16Backend:
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = _DEFAULT_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_xi_d: float = 0.3,
-        neb_co_ratio: float = 1.0,
+        neb_fesc: float = _DEFAULT_FESC,
+        neb_fesc_lya: float = _DEFAULT_FESC_LYA,
+        neb_fdust_frac: float = _DEFAULT_FDUST_FRAC,
+        neb_log_nH: float = _DEFAULT_LOG_NH,
+        neb_xi_d: float = _DEFAULT_XI_D,
+        neb_co_ratio: float = _DEFAULT_CO_RATIO,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
