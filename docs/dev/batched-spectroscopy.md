@@ -141,7 +141,7 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
-- 2026-11-01, #3118: the published page `docs/batched_spectroscopy.md` describes the stack with measured numbers from a 24-galaxy mock set (Apple M4 Pro, CPU, float64, at `a608d682f`). Measured: template build 3.8 s and 632 MB peak RSS; one per-galaxy `Fixed(z)` build 0.72 s and 754 MB; one batched MAP call over 24 galaxies 45 s including compile and 127 s for 300 steps; one per-galaxy NUTS fit over 14.5 min before a memory kill. The jit-miss counter includes build-time compiles. The page's float32 section links #3149, which reports non-finite spectroscopic output above log10 M of about 5.25 in pure float32. The 12-galaxy per-galaxy MAP baseline was not run.
+- 2026-11-01, #3118: the published page `docs/batched_spectroscopy.md` describes the stack with measured numbers from a 24-galaxy mock set (Apple M4 Pro, CPU, float64, at `a608d682f`). Measured: template build 3.8 s and 632 MB peak RSS; one per-galaxy `Fixed(z)` build 0.72 s and 754 MB; one batched MAP call over 24 galaxies 45 s including compile and 127 s for 300 steps; one per-galaxy NUTS fit over 14.5 min before a memory kill. The jit-miss counter includes build-time compiles. The page's float32 section links #3149, which reports non-finite spectroscopic output above log10 M of about 5.25 in pure float32. The 12-mock comparison with the per-galaxy Fitter is in `docs/dev/measurements/2026-11-01-batched-vs-fitter.md`.
 - 2026-10-31, #3117: analytic emission-line marginalization on the batched spectroscopic
   path, and the exact joint of calibration and lines on both paths. `eline_mode="marginalized"`
   with a flat prior is accepted, alone or with `calibration_marginalize=True`. The

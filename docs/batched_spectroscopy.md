@@ -133,12 +133,12 @@ bucket and a new compile.
 count is one bucket, and each bucket compiles once. Larger `quantum` means fewer buckets and more
 padding, so more pixels evaluated per galaxy.
 
-For 24 galaxies with fitted pixel counts from 4,159 to 4,751:
+For 24 galaxies with fitted pixel counts from 4,159 to 4,751. Padding is the padded pixels minus the fitted pixels, divided by the fitted pixels summed over the 24 galaxies:
 
 | `quantum` | Buckets | Padded counts (`n_max`) | Padding |
 |---|---|---|---|
-| 256 | 3 | 4,352, 4,608, 4,864 | 3.0% of the fitted pixels, per galaxy on average |
-| 4864 | 1 | 4,864 | 9.4% of the fitted pixels, per galaxy on average |
+| 256 | 3 | 4,352, 4,608, 4,864 | 3.0% |
+| 4864 | 1 | 4,864 | 9.2% |
 
 One bucket means `quantum` is at least the span of the pixel counts. Choose the value by how many
 compiles you can afford against how much padding you can accept. The padded pixels carry zero
@@ -168,45 +168,86 @@ with it.
 
 ## Measured numbers
 
-The numbers below come from a set of 24 mock DESI-like dwarf spectra, fit with the template and
-records of the workflow above. They ran on an Apple M4 Pro (14 cores, 48 GiB),
-CPU only, at float64, on the batched stack at commit `a608d682f`.
+The numbers come from 12 mock spectra fit two ways on one machine: the per-galaxy `Fitter` on a
+`Fixed(z)` build of the template, and the batched stack on the free-redshift template. The mocks
+have 560, 600 or 640 pixels over 4000 to 7500 angstrom, banded resolution R = 300, a 5 percent
+calibration tilt and three injected emission lines (H beta, [O III] 5007 and H alpha). The model is
+a DPL star formation history with the mass free, `eline_mode="marginalized"`, and
+`calibration_marginalize=True` with `cal_n_poly=3`. The batched path used `quantum=64`, which gives
+two buckets: 4 galaxies at 576 padded pixels and 8 at 640.
 
-| Quantity | Measurement |
-|---|---|
-| Template build, free redshift | 3.8 s, peak RSS 632 MB |
-| One per-galaxy build, `Fixed(z)` | 0.72 s, peak RSS 754 MB |
-| Batched MAP, 24 galaxies, one call, first call | 45 s, including compile |
-| Batched MAP, 24 galaxies, 300 Adam steps | 127 s, 5.3 s per galaxy |
-| Batched MAP vs truth, log10 M | mean +0.19 dex, rms 0.26 dex |
-| Batched ChEES, one galaxy | 242 s including compile, 0 divergences |
-| Batched ChEES median vs truth | within 0.25 posterior widths |
-| Per-galaxy `Fitter` NUTS, one galaxy | more than 14.5 min and 2.6 GB before a memory kill |
+The machine is an Apple M4 Pro with 14 cores and 48 GiB of memory, on CPU at float64.
 
-Read these as measurements on this machine under load, not as benchmarks of the method. The
-jit-miss counter counts build-time compiles too: 874 misses on the first MAP call. The fit program
-itself compiles once per bucket and recompiles only when the step count changes, which added 4
-misses at a new scan length.
+**Per-galaxy path.** Times are summed over the galaxies of each pixel count, four each.
 
-Two conclusions follow for the recommended path:
+| Stage | 560 pixels | 600 pixels | 640 pixels | All 12 |
+|---|---|---|---|---|
+| `SEDModel.build` | 0.27 s | 0.36 s | 0.51 s | 1.13 s |
+| `Fitter` construction | 2.49 s | 2.23 s | 2.36 s | 7.08 s |
+| First `neg_log_posterior` evaluation (compile) | 1.64 s | 2.47 s | 2.43 s | 6.53 s |
+| 300 Adam MAP steps | 3.10 s | 4.36 s | 3.49 s | 10.95 s |
 
-- MAP under-converges a continuity star formation history at 300 steps. Its mass is biased by
-  +0.19 dex. Use `fit_spectra_catalog_mcmc` for the posterior.
-- The per-galaxy NUTS fit at 10 free parameters used a dense mass matrix and was stopped by the
-  memory limit. The batched timing used ChEES on one galaxy, so the two timings are not like for like.
+**Batched path.** All 12 galaxies in one call per step.
 
-The build memory above is for a model without dust emission or an IGM term. Models with those
-terms have a larger build peak, tracked in [#3153](https://github.com/suchethac/tengri/issues/3153).
+| Stage | Wall | JIT cache misses |
+|---|---|---|
+| `build_spectro_batches(quantum=64)` | 0.05 s | not counted |
+| `fit_spectra_map_vmap`, first call, 300 steps | 22.72 s | 573 |
+| `fit_spectra_map_vmap`, second call, 300 steps | 0.82 s | 2 |
 
-The per-galaxy MAP time for the same 24 galaxies was not measured on this set, so the speed
-comparison above is per-galaxy NUTS against batched ChEES on one galaxy.
+The jit-miss counter counts build-time compiles too. The second call logged 2 cache misses at the
+same step count; their cause was not traced.
+
+**Posterior check.** Three galaxies, with `n_warmup=100` and `n_samples=200`. The batched run is
+`fit_spectra_catalog_mcmc` on the free-redshift template. The `Fitter` run is `mcmc_nuts` on the
+galaxy's `Fixed(z)` build. The table gives the median of log10 M and the 16 to 84 percent width.
+
+| Galaxy | Pixels | z | Truth | Batched median (width) | `Fitter` median (width) | Difference / `Fitter` width | Wall, batched / `Fitter` |
+|---|---|---|---|---|---|---|---|
+| 0 | 560 | 0.050 | 9.00 | 9.0024 (0.0020) | 9.0023 (0.0021) | 0.07 | 11.1 s / 11.2 s |
+| 4 | 600 | 0.086 | 10.00 | 9.9996 (0.0020) | 9.9996 (0.0017) | 0.02 | 12.1 s / 11.2 s |
+| 11 | 640 | 0.150 | 9.25 | 9.2517 (0.0014) | 9.2518 (0.0015) | 0.02 | 12.4 s / 9.1 s |
+
+With 200 draws the median of each run has a Monte Carlo error of about 0.04 widths, so the difference
+of two medians has about 0.06 widths. The largest difference, 0.07 widths on galaxy 0, is within
+that error.
+
+**Peak memory.** Each build ran in a fresh process. Before the build the process was at about
+494 MB, after importing the package and the synthetic grid.
+
+| Build | Peak RSS after build | Build wall |
+|---|---|---|
+| Free-redshift template | 504.8 MB | 0.19 s |
+| `Fixed(z)` build, galaxy 0 | 508.3 MB | 0.14 s |
+
+These builds use the 100-pixel synthetic grid of the test suite, so the memory is dominated by the
+process baseline. The larger memory of models with dust emission or an IGM term is tracked in
+[#3153](https://github.com/suchethac/tengri/issues/3153).
+
+**Larger set.** An earlier measurement on 24 galaxies at 4,159 to 4,751 fitted pixels, with the same
+machine and the code at `a608d682f`, gave a first batched MAP call of 45 s including compile and 127 s
+for 300 steps (5.3 s per galaxy). A per-galaxy `Fitter` NUTS run on one galaxy with a dense mass matrix
+ran for more than 14.5 minutes and 2.6 GB before a memory kill. That timing used the `Fitter` defaults at
+ten free parameters and is not comparable to the table above.
+
+What these numbers show:
+
+- Batched MAP over 12 galaxies costs about the same as the whole per-galaxy path on its first call,
+  22.7 s against 25.7 s including compile. Once compiled, the 300-step batched call costs 0.82 s.
+- The batched and per-galaxy posteriors agree on the three sampled galaxies within 0.07 widths.
+- The per-galaxy MAP estimates for the three galaxies with truth 9.00 landed 0.048 to 0.049 dex high.
+  The batched MAP estimates for the same galaxies are within 0.002 dex. The two paths differ in redshift
+  handling (the per-galaxy build is `Fixed(z)`), and the cause of the offset was not investigated.
+- For a non-parametric star formation history, use `fit_spectra_catalog_mcmc` for the posterior. MAP is
+  a warm start, not an estimate.
 
 ## Float32
 
-Float32 is supported as a mode. The mass window in which the spectroscopic forward stays
-finite in pure float32 is not yet established. The reproducer in
-[#3149](https://github.com/suchethac/tengri/issues/3149) gives non-finite output above
-log10 M of about 5.25 on its fixture. Use float64 for catalog fits until that issue closes.
+Float32 is a supported mode. The stack's tests check that the float32 gradients are finite and
+nonzero at log10 M = 4.0, with the data scaled to the working range. The per-galaxy spectroscopic
+forward itself is not finite in pure float32 at every mass. On the fixture of
+[#3149](https://github.com/suchethac/tengri/issues/3149) it is non-finite above log10 M of about 5.25.
+Check the fit output for finite values before using a float32 catalog fit.
 
 ## What the stack does not do
 
