@@ -115,11 +115,12 @@ def test_float32_grid_loads_at_working_precision(f32_any):
 
 
 def test_stellar_mass_scale_finite_on_float32_grid(f32_any):
-    """The headline symptom: ``inf`` before the fix, 3.828e42 after."""
+    """The headline symptom, carried in log10: the linear scale is not published (#3149)."""
     state = _build(load_ssp_data(f32_any)).predict_state({})
-    scale = float(np.asarray(state.derived["stellar_mass_scale"]))
-    assert np.isfinite(scale), "stellar_mass_scale overflowed float32 (#1099)"
-    assert scale == pytest.approx(1.0e9 * L_SUN_ERG_PER_S, rel=1e-5)
+    assert "stellar_mass_scale" not in state.derived
+    log_scale = float(np.asarray(state.derived["log_stellar_mass_scale"]))
+    assert np.isfinite(log_scale), "log_stellar_mass_scale overflowed float32 (#1099)"
+    assert 10.0**log_scale == pytest.approx(1.0e9 * L_SUN_ERG_PER_S, rel=1e-5)
 
 
 def test_upcast_preserves_stored_values(f32_any):
