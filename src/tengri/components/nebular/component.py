@@ -1116,9 +1116,10 @@ class NebularSEDComponent(TemplateThreading):
                     )
                 # Vacuum wavelengths throughout: every backend's loader converts
                 # its air labels to vacuum ONCE at ingestion (cue:
-                # ``load_cue_weights``; mappings, feltre: ``catalog_air_to_vacuum``;
-                # cb19: its declared air lines; cloudy_grid is vacuum as
-                # published), so ``line_waves`` is published as-is. There is no
+                # ``load_cue_weights``; mappings: ``catalog_air_to_vacuum``;
+                # feltre: ``scripts/build_feltre_grid.py``; cb19: its declared
+                # air lines; cloudy_grid is vacuum as published), so ``line_waves`` is
+                # published as-is. There is no
                 # post-hoc air/vacuum vote here: a second conversion would be a
                 # double conversion. ``line_waves`` may be a tracer under a
                 # jitted sampler, which is why nothing is read from it on the host.
