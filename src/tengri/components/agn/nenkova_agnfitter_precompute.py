@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._runtime_band_quadrature import runtime_preintegrated_grid
+from tengri.components.agn._template_power_table import runtime_preintegrated_grid
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.nenkova_agnfitter import (
     TORUS_INCLINATION,
@@ -103,7 +103,7 @@ def precompute_nenkova_agnfitter_photometry(
     **Quadrature**: each record is resampled log-log onto the filter quadrature grid
     (the template nodes inside every band plus the rest-frame filter nodes) and
     integrated with the runtime's ``lnu_filter_integral``
-    (``_runtime_band_quadrature.runtime_band_photometry``), so at a node the lookup is
+    (``_template_power_table.runtime_band_photometry``), so at a node the lookup is
     the runtime's band photometry to rounding.
     """
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG

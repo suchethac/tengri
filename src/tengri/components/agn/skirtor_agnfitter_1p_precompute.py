@@ -29,13 +29,13 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._runtime_band_quadrature import runtime_preintegrated_grid
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     AXIS_TRANSFORMS,
     accepts_retired_incl_skirtor,
     free_incl_position,
     skirtor_incl_from_cos_inc,
 )
+from tengri.components.agn._template_power_table import runtime_preintegrated_grid
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.skirtor_agnfitter_1p import (
     TORUS_INCLINATION,
@@ -104,7 +104,7 @@ def precompute_skirtor_agnfitter_1p_photometry(
     **Quadrature**: each record is resampled log-log onto the filter quadrature grid
     (the template nodes inside every band plus the rest-frame filter nodes) and
     integrated with the runtime's ``lnu_filter_integral``
-    (``_runtime_band_quadrature.runtime_band_photometry``), so at a node the lookup is
+    (``_template_power_table.runtime_band_photometry``), so at a node the lookup is
     the runtime's band photometry to rounding.
     """
 
