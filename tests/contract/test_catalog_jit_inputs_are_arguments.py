@@ -103,3 +103,56 @@ def test_log_density_is_bit_identical_with_shared_arrays_as_arguments(catalog_en
     argument_value = float(jax.jit(log_post)(init_flat, template))
     assert argument_value == closure_value
     assert argument_value == _RECORDED_LOGDENSITY
+
+
+def _all_consts(jaxpr) -> list:
+    """Every constant of ``jaxpr`` and of the jaxprs nested in its equations."""
+    found = list(jaxpr.consts)
+    for eqn in jaxpr.jaxpr.eqns:
+        for value in eqn.params.values():
+            for item in value if isinstance(value, (tuple, list)) else (value,):
+                if hasattr(item, "jaxpr") and hasattr(item, "consts"):
+                    found.extend(_all_consts(item))
+                elif hasattr(item, "eqns"):
+                    found.extend(_all_consts(jax.core.ClosedJaxpr(item, ())))
+    return found
+
+
+def test_jitted_map_program_holds_no_shared_array_as_a_constant(
+    catalog_engine_inputs, monkeypatch
+):
+    """The program ``map_with_shared`` hands to ``jax.jit`` embeds no SSP-sized constant.
+
+    The wrapper's jitted function and its call arguments are recorded, then traced
+    with ``make_jaxpr`` including the nested ``lax.map`` body. A wrapper that closes
+    over ``shared`` instead of taking it as an input leaves the SSP cube in the
+    constants.
+    """
+    from tengri.inference.backends.mcmc import catalog
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine, map_with_shared
+
+    fitter, galaxy, shared, ssp = catalog_engine_inputs
+    run_one, _ = build_catalog_mcmc_engine(fitter, "nuts", n_warmup=5, n_burnin=2, n_samples=4)
+    xs = jax.tree_util.tree_map(lambda leaf: jnp.stack([leaf, leaf]), galaxy)
+    recorded = {}
+    real_jit = jax.jit
+
+    def recording_jit(fn, *args, **kwargs):
+        compiled = real_jit(fn, *args, **kwargs)
+
+        def call(*call_args):
+            recorded["fn"], recorded["args"] = fn, call_args
+            return compiled(*call_args)
+
+        return call
+
+    monkeypatch.setattr(catalog.jax, "jit", recording_jit)
+    map_with_shared(run_one, xs, shared, batch_size=2)
+    monkeypatch.undo()
+
+    jaxpr = jax.make_jaxpr(recorded["fn"])(*recorded["args"])
+    ssp_nbytes = np.asarray(ssp.ssp_flux).nbytes
+    big = [
+        int(np.asarray(c).nbytes) for c in _all_consts(jaxpr) if np.asarray(c).nbytes >= ssp_nbytes
+    ]
+    assert big == [], f"constants at or above the SSP cube size ({ssp_nbytes} B): {big}"
