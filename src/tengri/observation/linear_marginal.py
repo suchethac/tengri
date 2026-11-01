@@ -84,7 +84,9 @@ def marginalize_linear_nuisance(
         Prior mean :math:`\mu` of the coefficients [coefficient units]. Default: zeros.
     prior_precision : array_like, shape (k, k), optional
         Prior precision :math:`\Lambda^{-1}` of the coefficients [coefficient units
-        to the power -2]. ``None`` gives a flat prior. Default: None.
+        to the power -2]. ``None`` gives a flat prior for every column. A column whose
+        diagonal entry is zero is flat, and the other columns keep their Gaussian prior.
+        Default: None.
     col_mask : array_like, shape (k,), optional
         Column mask :math:`c \in \{0, 1\}^k`. A masked coefficient is fixed out of the
         model. Default: all ones.
@@ -183,6 +185,14 @@ def marginalize_linear_nuisance(
     term :math:`+\,n_c \ln s`. This fixes the improper constant of the flat prior to
     the same value in every unit system.
 
+    The Gaussian prior's normalization :math:`(2\pi)^{-k/2}` cancels the
+    :math:`(2\pi)^{k/2}` of the Gaussian integral over the coefficients, so the
+    value is the exact log of the marginal over :math:`\beta` of the data term times
+    the prior, up to the constants of the data term. The determinant lemma then gives the
+    prior terms :math:`-\tfrac12\ln\det\Lambda - \tfrac12\ln\det M` as written, so a
+    Gaussian column with a large width :math:`W` differs from a flat column by
+    :math:`-\ln W`.
+
     A masked coefficient contributes exactly nothing: the identity block makes
     :math:`M'` nonsingular without a floor, and the result equals deleting that column,
     provided its prior-mean entries are zero. The constant
@@ -250,15 +260,14 @@ def marginalize_linear_nuisance(
     if prior_precision is None:
         log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)
     else:
-        flat = (
-            jnp.zeros(n_col, dtype=dtype) if flat_mask is None else jnp.asarray(flat_mask, dtype)
-        )
+        gaussian = (jnp.diag(precision) > 0).astype(dtype)
+        flat = col * (1.0 - gaussian) if flat_mask is None else jnp.asarray(flat_mask, dtype)
         prior_unscaled = d_mat @ precision @ d_mat + (eye - d_mat) + jnp.diag(flat)
         _sign_p, logdet_p = jnp.linalg.slogdet(prior_unscaled)
         log_like = (
             log_like
             + 0.5 * (logdet_p + 2.0 * jnp.sum(col) * jnp.log(coef_scale))
-            - 0.5 * jnp.dot(mean, precision @ mean)
+            - 0.5 * jnp.dot(col * mean, precision @ (col * mean))
         )
 
     return MarginalResult(
