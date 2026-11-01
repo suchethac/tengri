@@ -21,7 +21,6 @@ import pytest
 from reproduction.synthesizer._drivers.synthesizer_driver import (
     cue_logu_from_synthesizer_u,
 )
-from synthesizer.photoionisation import calculate_Q_from_U
 
 from tengri.utils.physics_constants import C_CGS
 
@@ -33,34 +32,46 @@ _R_INNER_FACE = 1e19
 _N_H = 100.0
 
 
-def _inline_logu(u_syn: float) -> float:
+@pytest.fixture
+def calculate_q_from_u():
+    """Synthesizer's own Q(U); the mapping is defined against it, so it skips without it.
+
+    ``cosmos-synthesizer`` is an optional reproduction dependency, not in ``[dev]``,
+    so a module-level import fails collection of the whole suite on a runner without it.
+    """
+    photoionisation = pytest.importorskip("synthesizer.photoionisation")
+    return photoionisation.calculate_Q_from_U
+
+
+def _inline_logu(calculate_q_from_u, u_syn: float) -> float:
     """Inner-face log U of the Q that Synthesizer's U implies, computed inline."""
-    q = calculate_Q_from_U(u_syn, _N_H)
+    q = calculate_q_from_u(u_syn, _N_H)
     return math.log10(q / (4.0 * math.pi * _R_INNER_FACE**2 * _N_H * C_CGS))
 
 
-def test_matched_value_matches_inline_definitions():
+def test_matched_value_matches_inline_definitions(calculate_q_from_u):
     got = cue_logu_from_synthesizer_u(0.01)
-    assert got == pytest.approx(_inline_logu(0.01), abs=1e-9)
+    assert got == pytest.approx(_inline_logu(calculate_q_from_u, 0.01), abs=1e-9)
     assert abs(got - (-2.35)) < 0.01
 
 
 @pytest.mark.parametrize("u_syn", [1e-3, 1e-2, 1e-1, 1.0])
-def test_helper_matches_inline_definition_across_u(u_syn):
-    assert cue_logu_from_synthesizer_u(u_syn) == pytest.approx(_inline_logu(u_syn), abs=1e-9)
+def test_helper_matches_inline_definition_across_u(calculate_q_from_u, u_syn):
+    expected = _inline_logu(calculate_q_from_u, u_syn)
+    assert cue_logu_from_synthesizer_u(u_syn) == pytest.approx(expected, abs=1e-9)
 
 
 @pytest.mark.parametrize("u_syn", [1e-3, 1e-2, 1e-1])
-def test_round_trip_through_cue_inverse(u_syn):
+def test_round_trip_through_cue_inverse(calculate_q_from_u, u_syn):
     """The helper's output, fed to Cue's own inverse, returns Synthesizer's Q."""
     from tengri.components.nebular.cue import _logq_from_logu
 
     logu = cue_logu_from_synthesizer_u(u_syn)
     logq = float(_logq_from_logu(jnp.asarray(logu), jnp.asarray(math.log10(_N_H)), log_R=19.0))
-    assert logq == pytest.approx(math.log10(calculate_Q_from_U(u_syn, _N_H)), abs=1e-9)
+    assert logq == pytest.approx(math.log10(calculate_q_from_u(u_syn, _N_H)), abs=1e-9)
 
 
-def test_mapping_is_monotonic_in_synthesizer_u():
+def test_mapping_is_monotonic_in_synthesizer_u(calculate_q_from_u):
     grid = np.logspace(-3, 0, 25)
     mapped = np.array([cue_logu_from_synthesizer_u(float(u)) for u in grid])
     assert np.all(np.diff(mapped) > 0.0)
