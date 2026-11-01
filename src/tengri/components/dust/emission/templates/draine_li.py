@@ -124,6 +124,13 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
     #: ``dust_umean``: the model's mean radiation field <U> (CIGALE ``dust.umean``).
     outputs: ClassVar = {"dust_umean": ""}
+    published: ClassVar = {
+        "dust_umean": (
+            "",
+            "dust",
+            "mean radiation field <U> of the Draine & Li model (dimensionless)",
+        ),
+    }
 
     accepts_threaded_templates: ClassVar[bool] = True
 
@@ -239,6 +246,13 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
 
     #: ``dust_umean``: the model's mean radiation field <U> (CIGALE ``dust.umean``).
     outputs: ClassVar = {"dust_umean": ""}
+    published: ClassVar = {
+        "dust_umean": (
+            "",
+            "dust",
+            "mean radiation field <U> of the Draine & Li model (dimensionless)",
+        ),
+    }
 
     accepts_threaded_templates: ClassVar[bool] = True
 

@@ -182,6 +182,15 @@ class EmissionComponent(SEDModelComponent):
         "sed_dust_ir": "erg/s/Hz",
         "log_L_ir_emergent": "dex",
     }
+    #: Published to the property menu under their own names (#3144); every concrete template
+    #: inherits these.
+    published: ClassVar[dict[str, tuple]] = {
+        "log_L_ir_emergent": (
+            "dex",
+            "dust",
+            "log10 of the IR luminosity this emission template radiates [dex re erg/s]",
+        ),
+    }
 
     #: Whether this backend renormalizes its template so that
     #: :math:`\\int L_\\nu\\,d\\nu = L_{\\rm ir}` — i.e. whether it carries the

@@ -86,7 +86,7 @@ resolution finds the base class's method implementations rather than dicts.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -112,6 +112,38 @@ __all__ = [
 
 # Module-level registry: name → class
 _REGISTRY: dict[str, type[SEDModelComponent]] = {}
+
+#: Published declarations waiting for the property registry. ``tengri.forward.properties`` is
+#: imported from inside component modules' class bodies only at its own risk, because importing it
+#: runs ``tengri.forward``'s package init, which imports the components being defined. So the
+#: registry installs itself as :data:`_PUBLISH_SINK` when it loads, and anything declared before
+#: that is queued here and flushed then.
+_PENDING_PUBLISHED: list[tuple[str, dict]] = []
+_PUBLISH_SINK: Callable[[str, dict], None] | None = None
+
+
+def publish_outputs(component_name: str, published: dict) -> None:
+    """Hand a ``published`` declaration to the property registry, now or once it is loaded."""
+    if _PUBLISH_SINK is None:
+        _PENDING_PUBLISHED.append((component_name, published))
+    else:
+        _PUBLISH_SINK(component_name, published)
+
+
+def _gather_published(cls: type) -> dict[str, tuple]:
+    """``published`` declarations ``cls`` inherits from abstract bases, then its own.
+
+    A base that defines its own ``name`` is concrete and registers its own entries, so it is
+    skipped; abstract bases (no ``name`` of their own) contribute theirs to every subclass.
+    """
+    merged: dict[str, tuple] = {}
+    for base in cls.__mro__[::-1]:
+        if base is not cls and "name" in vars(base):
+            continue
+        declared = vars(base).get("published")
+        if isinstance(declared, dict):
+            merged.update(declared)
+    return merged
 
 
 @dataclass(frozen=True)
@@ -481,6 +513,15 @@ class SEDModelComponent(TemplateThreading):
                 # ``properties`` came from ``vars(cls)``, so it is on this class and
                 # ``delattr`` cannot raise.
                 delattr(cls, "properties")
+
+            # Published outputs (#3144): ``published = {key: (units, group, doc[, available])}``
+            # declares the ``state.derived`` keys this component publishes under their own names.
+            # Abstract bases (e.g. EmissionComponent) contribute their ``published`` to every
+            # concrete subclass; a concrete ancestor registered its own entries when it was
+            # defined, so it is not walked again.
+            published = _gather_published(cls)
+            if published:
+                publish_outputs(vars(cls)["name"], published)
 
         # Register by name; ONLY concrete classes that define their OWN ``name``.
         # Abstract authoring bases (e.g. EmissionComponent) inherit the default name and

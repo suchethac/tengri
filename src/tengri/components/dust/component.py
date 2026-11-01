@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
@@ -171,6 +171,15 @@ class DustAttenuationSEDComponent(TemplateThreading):
         default_factory=DustAttenuationSEDComponentConfig
     )
     name: str = "dust_attenuation"
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {
+        "L_ir": (
+            "erg/s",
+            "dust",
+            "dust IR budget: absorbed luminosity times the energy-balance factor [erg/s]",
+        ),
+        "log_L_ir": ("dex", "dust", "log10 of the dust IR budget [dex re erg/s]"),
+    }
     parameter_prefix: str = "dust_"
     _state: DustAttenuationSEDComponentState | None = None
     nebular_from_grid: bool = False
@@ -932,3 +941,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
 from tengri.components.sed_model_component import _REGISTRY
 
 _REGISTRY["single_component"] = DustAttenuationSEDComponent
+
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("dust_attenuation", DustAttenuationSEDComponent.published)

@@ -233,6 +233,16 @@ class AGNSEDComponentState(SEDComponentState):
     torus_master_wave: Any | None = None
 
 
+def _is_composable(component) -> bool:
+    """Whether ``component`` is the composable AGN (the one with an energy ledger)."""
+    return getattr(getattr(component, "config", None), "model", None) == "composable"
+
+
+def _is_adaf_disc(component) -> bool:
+    """Whether ``component`` is the composable AGN with the ADAF disc (its accretion)."""
+    return _is_composable(component) and component.config.agn_disc_block == "adaf"
+
+
 @dataclass(frozen=True)
 class AGNSEDComponent(TemplateThreading):
     """SEDComponent adapter for the unified AGN model registry.
@@ -248,6 +258,76 @@ class AGNSEDComponent(TemplateThreading):
 
     config: AGNSEDComponentConfig = field(default_factory=AGNSEDComponentConfig)
     name: str = "agn"
+
+    #: Published to the property menu under their own names (#3144). Each ``available``
+    #: predicate says when the configured component produces the key. The composable energy
+    #: ledger (``COMPOSABLE_LEDGER_OUTPUTS``) is served on request by
+    #: :func:`_register_ledger_properties`, so it is not repeated here.
+    published: ClassVar[dict[str, tuple]] = {
+        "L_agn_bol": (
+            "erg/s",
+            "agn",
+            "AGN accretion power 10**agn_log_lbol L_sun, integrated over all directions "
+            "(independent of the inclination)",
+        ),
+        "log_L_agn_bol": (
+            "dex",
+            "agn",
+            "log10(L_agn_bol / (erg/s)); float32-safe form (L_agn_bol ~1e46 overflows float32)",
+        ),
+        "L_agn_bol_lsun": (
+            "Lsun",
+            "agn",
+            "10**agn_log_lbol, the AGN accretion power in solar luminosities",
+        ),
+        "log_L_agn_direct_los": (
+            "dex",
+            "agn",
+            "log10 of the line-of-sight isotropic-equivalent bolometric luminosity [dex re erg/s] "
+            "of the AGN direct emission, before the torus screen and the polar dust; composable "
+            "model only",
+            _is_composable,
+        ),
+        "L_agn_direct_los_lsun": (
+            "Lsun",
+            "agn",
+            "log_L_agn_direct_los in solar luminosities; composable model only",
+            _is_composable,
+        ),
+        "agn_adaf_mdot": (
+            "",
+            "agn",
+            "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd (Mahadevan 1997, "
+            "Eq. 4); composable model with the 'adaf' disc only",
+            _is_adaf_disc,
+        ),
+        "log_L_agn_adaf_accretion": (
+            "dex",
+            "agn",
+            "log10 of the ADAF accretion power mdot L_Edd = eta_eff Mdot c^2 [dex re erg/s] with "
+            "eta_eff = 0.1 (Mahadevan 1997, Eq. 4); composable model with the 'adaf' disc only",
+            _is_adaf_disc,
+        ),
+        "L_agn_adaf_accretion_lsun": (
+            "Lsun",
+            "agn",
+            "log_L_agn_adaf_accretion in solar luminosities; composable model with the 'adaf' "
+            "disc only",
+            _is_adaf_disc,
+        ),
+        "log_L_6um": (
+            "dex",
+            "agn",
+            "log10 nu L_nu at 6 um [dex re erg/s] of disc + torus + polar dust (the whole SED "
+            "for monolithic models)",
+        ),
+        "log_L_12um": (
+            "dex",
+            "agn",
+            "log10 nu L_nu at 12 um [dex re erg/s] of disc + torus + polar dust (the whole SED "
+            "for monolithic models); drives the lopez24 alpha_IRX corona",
+        ),
+    }
     parameter_prefix: str = "agn_"
     _state: AGNSEDComponentState | None = None
 
@@ -1263,11 +1343,6 @@ def _composable_ledger_bundle(state, params, model, template_data) -> dict:
     return agn.energy_ledger(state, slice_params_for_component(agn, full), template_data)
 
 
-def _is_composable(component) -> bool:
-    """Whether ``component`` is the composable AGN (the one with an energy ledger)."""
-    return getattr(getattr(component, "config", None), "model", None) == "composable"
-
-
 def _register_ledger_properties() -> None:
     """Register the composable energy ledger as on-request ``agn`` properties."""
     from tengri.forward.properties import Property, register_properties
@@ -1288,6 +1363,9 @@ def _register_ledger_properties() -> None:
 
 
 _register_ledger_properties()
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("agn", AGNSEDComponent.published)
 
 
 def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:

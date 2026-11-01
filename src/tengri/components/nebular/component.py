@@ -21,7 +21,7 @@ import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import cache, partial
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -252,6 +252,16 @@ class NebularSEDComponent(TemplateThreading):
     config: NebularSEDComponentConfig = field(default_factory=NebularSEDComponentConfig)
     backend: Any | None = None
     name: str = "nebular"
+
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {
+        "log_L_lyc": (
+            "dex",
+            "neb",
+            "log10 of the raw ionizing luminosity L_LyC [dex re erg/s], before the escape and "
+            "dust shares",
+        ),
+    }
     _state: NebularSEDComponentState | None = None
     #: Optional per-Q_H nebular grid (:class:`NebularGridTable`). When attached
     #: (via :meth:`SEDModel.enable_fast_nebular`) and it carries a photometry
@@ -2110,6 +2120,9 @@ _LOG_LINE_PROPERTIES = {
 _LINES_PROPERTIES.update(_LOG_LINE_PROPERTIES)
 
 register_properties("nebular", _LINES_PROPERTIES)
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("nebular", NebularSEDComponent.published)
 
 del Property, register_properties, _LINES_PROPERTIES, _LOG_LINE_PROPERTIES
 

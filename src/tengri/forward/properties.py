@@ -41,7 +41,7 @@ with the ``ForwardState`` during forward passes.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
@@ -52,7 +52,9 @@ __all__ = [
     "PropertyEntry",
     "assemble_available_properties",
     "missing_property_message",
+    "published_property",
     "register_properties",
+    "register_published",
     "warn_if_lines_are_unavailable",
 ]
 
@@ -195,6 +197,67 @@ def register_properties(component_name: str, props: dict[str, Property]) -> None
         if name not in PROPERTY_REGISTRY:
             PROPERTY_REGISTRY[name] = []
         PROPERTY_REGISTRY[name].append(entry)
+
+
+def published_property(
+    key: str,
+    units: str,
+    group: str,
+    doc: str,
+    available: Callable | None = None,
+) -> Property:
+    """A property that reads one ``state.derived`` key under its own name.
+
+    Parameters
+    ----------
+    key : str
+        The ``state.derived`` key the component publishes. The property takes the same name.
+    units, group, doc : str
+        As for :class:`Property`.
+    available : Callable, optional
+        ``available(component) -> bool``: whether the configured component produces ``key``.
+
+    Returns
+    -------
+    Property
+        A property whose ``fn`` returns ``state.derived[key]``. It does not return NaN for a
+        missing key: a listed name must have a value, so the predicate has to be exact.
+    """
+
+    def fn(state, params, _key=key):
+        return state.derived[_key]
+
+    return Property(units=units, group=group, doc=doc, fn=fn, available=available)
+
+
+def register_published(component_name: str, published: Mapping[str, tuple]) -> None:
+    """Register a component's ``published`` declaration as properties.
+
+    Parameters
+    ----------
+    component_name : str
+        Name of the component that publishes the keys.
+    published : mapping
+        ``{key: (units, group, doc)}`` or ``{key: (units, group, doc, available)}``. ``available``
+        is the optional predicate of :func:`published_property`.
+
+    Raises
+    ------
+    ValueError
+        If an entry is not a 3- or 4-tuple.
+    """
+    props: dict[str, Property] = {}
+    for key, spec in published.items():
+        if len(spec) not in (3, 4):
+            raise ValueError(
+                f"published[{key!r}] of component {component_name!r} must be "
+                f"(units, group, doc) or (units, group, doc, available); got {spec!r}"
+            )
+        units, group, doc, *rest = spec
+        props[key] = published_property(
+            key, units, group, doc, available=rest[0] if rest else None
+        )
+    register_properties(component_name, props)
 
 
 def assemble_available_properties(
@@ -583,3 +646,22 @@ def warn_if_lines_are_unavailable(model, names) -> None:
         )
         return
     _warn_if_headline_line_uncovered(model, backend, requested)
+
+
+def _connect_published_sink() -> None:
+    """Route ``published`` declarations to :func:`register_published`, flushing the queue.
+
+    Component classes declare ``published`` while they are being defined, before this module
+    can be imported without a cycle, so they queue their declarations; this runs once, when the
+    registry is loaded, and every later declaration is registered directly.
+    """
+    from tengri.components import sed_model_component
+
+    sed_model_component._PUBLISH_SINK = register_published
+    pending = list(sed_model_component._PENDING_PUBLISHED)
+    sed_model_component._PENDING_PUBLISHED.clear()
+    for component_name, published in pending:
+        register_published(component_name, published)
+
+
+_connect_published_sink()

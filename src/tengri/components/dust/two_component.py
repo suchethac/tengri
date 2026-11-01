@@ -523,6 +523,21 @@ class DustSEDComponent(TemplateThreading):
     #: (``SEDModel._nebular_interval_weights``) to ``attenuate_line_catalog``.
     needs_nebular_interval_weights: ClassVar[bool] = True
     name: str = "dust"
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {
+        "L_ir": (
+            "erg/s",
+            "dust",
+            "dust IR budget: absorbed luminosity times the energy-balance factor [erg/s]",
+            lambda component: type(component) is DustSEDComponent,
+        ),
+        "log_L_ir": (
+            "dex",
+            "dust",
+            "log10 of the dust IR budget [dex re erg/s]",
+            lambda component: type(component) is DustSEDComponent,
+        ),
+    }
     parameter_prefix: str = "dust_"
     #: When set (via ``approx=WavePrecomp(fast_dust_emission=True)``), project IR
     #: re-emission at the filter effective wavelength rather than integrating the
@@ -2348,3 +2363,7 @@ class DustSEDComponent(TemplateThreading):
 from tengri.components.sed_model_component import _REGISTRY
 
 _REGISTRY["two_component"] = DustSEDComponent
+
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("dust", DustSEDComponent.published)

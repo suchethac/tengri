@@ -22,7 +22,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
@@ -417,6 +417,21 @@ class AgeBinnedDustComponent(TemplateThreading):
 
     config: AgeBinnedDustComponentConfig = field(default_factory=AgeBinnedDustComponentConfig)
     name: str = "dust"
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {
+        "L_ir": (
+            "erg/s",
+            "dust",
+            "dust IR budget: absorbed luminosity times the energy-balance factor [erg/s]",
+            lambda component: type(component) is AgeBinnedDustComponent,
+        ),
+        "log_L_ir": (
+            "dex",
+            "dust",
+            "log10 of the dust IR budget [dex re erg/s]",
+            lambda component: type(component) is AgeBinnedDustComponent,
+        ),
+    }
     parameter_prefix: str = "dust_"
 
     def citations(self) -> tuple[str, ...]:
@@ -944,3 +959,7 @@ class AgeBinnedDustComponent(TemplateThreading):
 from tengri.components.sed_model_component import _REGISTRY
 
 _REGISTRY["age_binned"] = AgeBinnedDustComponent
+
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("dust", AgeBinnedDustComponent.published)

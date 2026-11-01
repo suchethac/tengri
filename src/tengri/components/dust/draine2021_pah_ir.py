@@ -142,6 +142,13 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
 
     name = "draine2021_pah_ir"
     citations = ("draine2021_pah",)
+    published: ClassVar[dict[str, tuple]] = {
+        "L_ir_emission": (
+            "erg/s",
+            "dust",
+            "bolometric IR luminosity the PAH emission re-radiates [erg/s]",
+        ),
+    }
     parameter_prefix = "dust_"
     config: Draine2021PAHIRConfig = Draine2021PAHIRConfig()
 

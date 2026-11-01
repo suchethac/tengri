@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
@@ -153,6 +153,15 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         default_factory=WG00AttenuationSEDComponentConfig
     )
     name: str = "wg00_attenuation"
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {
+        "L_ir": (
+            "erg/s",
+            "dust",
+            "dust IR budget: absorbed luminosity times the energy-balance factor [erg/s]",
+        ),
+        "log_L_ir": ("dex", "dust", "log10 of the dust IR budget [dex re erg/s]"),
+    }
     parameter_prefix: str = "dust_"
     _state: WG00AttenuationSEDComponentState | None = None
 
@@ -489,3 +498,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 from tengri.components.sed_model_component import _REGISTRY
 
 _REGISTRY["wg00"] = WG00AttenuationSEDComponent
+
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("wg00_attenuation", WG00AttenuationSEDComponent.published)

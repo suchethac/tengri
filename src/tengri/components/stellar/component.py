@@ -28,7 +28,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax
 import jax.numpy as jnp
@@ -2426,6 +2426,9 @@ class StellarSEDComponent:
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
+
+    #: Published to the property menu under their own names (#3144).
+    published: ClassVar[dict[str, tuple]] = {"sfr": ("Msun/yr", "sfh", "SFR at lookback ~ 0")}
     parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_", "agb_dust_")
     #: AGB circumstellar dust-shell ratio template (#2534), resampled onto
     #: ``ssp_data``'s own axes. Set only when ``agb_dust_weight`` is FREE (a
@@ -5419,6 +5422,9 @@ register_properties("stellar", _SFH_PROPERTIES)
 register_properties("stellar", _SED_PROPERTIES)
 register_properties("stellar", _IONIZING_PROPERTIES)
 register_properties("stellar", _SFH_TIMING_PROPERTIES)
+from tengri.components.sed_model_component import publish_outputs
+
+publish_outputs("stellar", StellarSEDComponent.published)
 
 del (
     Property,
