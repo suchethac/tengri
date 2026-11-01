@@ -48,9 +48,8 @@ where :math:`R_b` is the filter transmission, :math:`\Phi_b` the band :math:`L_\
 per :math:`L_\odot` of torus power [erg/s/Hz], and :math:`L_\odot` [erg/s]. The band
 integral is the runtime's own: the template resampled log-log onto the filter
 quadrature grid and folded with ``lnu_filter_integral``
-(:func:`runtime_band_photometry`, below), not a linear quadrature
-between the template's own wavelengths, which sat up to 50% off the runtime at the
-nodes (#3160). At a node the lookup is therefore the runtime's photometry to rounding;
+(:func:`runtime_band_photometry`, below). At a node the lookup is therefore the
+runtime's photometry on the native-plus-filter-node grid to rounding;
 between nodes it commutes with the runtime wherever the interpolant is linear in the
 tabulated values, leaving only the data dependence of the PCHIP tangents and the
 nonlinearity of the log-log resampling.
@@ -76,7 +75,6 @@ grid of the native and filter nodes to rounding.
 
 from __future__ import annotations
 
-import dataclasses
 from typing import NamedTuple
 
 import jax
@@ -84,10 +82,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.forward.precompute.templates import precompute_template_photometry
 from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.filter_convention import FilterConvention, filter_weight_np
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip, resample_template
+from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.utils.scale import log10_flux_scale
 
 #: Records resampled and folded per ``lax.map`` step.
 _RECORD_BATCH: int = 64
@@ -115,6 +115,13 @@ def quadrature_grid(
         The union of those nodes with every filter node in the rest frame [Angstrom].
         Every quadrature point lies between two adjacent kept nodes, so the log-log
         resampling over the kept nodes equals the runtime's over the whole template.
+
+    Notes
+    -----
+    **JIT-compatible**: no, this is a build-time function (NumPy, concrete shapes).
+
+    A filter node outside the template's range brackets onto the end node; the
+    resampling returns zero there, as the runtime's does.
     """
     wave = np.asarray(wave, dtype=np.float64)
     n_wave = wave.shape[0]
@@ -131,7 +138,7 @@ def quadrature_grid(
 def band_fold(
     wave_quad: np.ndarray, filter_waves: list, filter_trans: list, redshift: float
 ) -> jnp.ndarray:
-    """The runtime's filter quadrature on ``wave_quad`` as a matrix.
+    r"""The runtime's filter quadrature on ``wave_quad`` as a matrix.
 
     Parameters
     ----------
@@ -148,8 +155,21 @@ def band_fold(
     -------
     ndarray, shape (n_quad, n_filters)
         :math:`F_{qb}` [dimensionless]: an SED on ``wave_quad`` [erg/s/Hz] times this
-        matrix is its band L_nu [erg/s/Hz]. ``lnu_filter_integral`` is linear in the
-        SED, so its Jacobian is the quadrature.
+        matrix is its band L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: no, it is called at build time; the matrix it returns is an
+    ordinary array, safe to close over or pass through ``jit``/``vmap``/``grad``.
+
+    .. math::
+
+        F_{qb} = \frac{\partial\,\mathcal{L}_b[L_\nu]}{\partial L_\nu(\lambda_q)},
+
+    with :math:`\mathcal{L}_b` the band integral of ``lnu_filter_integral`` (the union
+    of SED and filter nodes, transmission interpolated, confined to the filter's
+    support) and :math:`\lambda_q` the nodes of ``wave_quad`` [Angstrom]. The integral
+    is linear in the SED, so the Jacobian is exact and the product is the integral.
     """
     wq = jnp.asarray(wave_quad)
 
@@ -250,26 +270,41 @@ def runtime_preintegrated_grid(
     -------
     PreintegratedGrid
         ``phot``, shape ``(*grid_dims, n_filters)``, from :func:`runtime_band_photometry`
-        [units of ``templates``]; the remaining fields (axes, edges, effective
-        wavelengths) from ``precompute_template_photometry``, for the Fixed-axis
-        bookkeeping of ``collapse_fixed_axes``.
+        [units of ``templates``]; ``axes`` and their ``edges_for_grid`` edges for the
+        Fixed-axis bookkeeping of ``collapse_fixed_axes``; no Taylor moment.
+
+    Notes
+    -----
+    **JIT-compatible**: no, this is a build-time function.
+
+    The effective wavelength of each band is the weight's first moment on the filter's
+    own nodes,
+
+    .. math::
+
+        \lambda_{\rm eff} = \frac{\int \lambda\,R_b\,w\,\mathrm{d}\lambda}
+                               {\int R_b\,w\,\mathrm{d}\lambda},
+
+    with :math:`R_b` the transmission, :math:`w = 1/\lambda` the photon-counting
+    weight and :math:`\lambda` the observed-frame wavelength [Angstrom]; the rest-frame
+    value is divided by :math:`1 + z`. The torus lookups do not read it.
     """
-    filter_waves = [np.asarray(fw) for fw in filter_waves]
-    filter_trans = [np.asarray(ft) for ft in filter_trans]
-    bookkeeping = precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=filter_waves,
-        filter_trans=filter_trans,
-        redshift=redshift,
-        dl_cm=1.0,
-        axes=axes,
-        energy_normalize=False,
-        units="lnu",
-    )
     phot = runtime_band_photometry(templates, wave_rest, filter_waves, filter_trans, redshift)
-    return dataclasses.replace(
-        bookkeeping, phot=jnp.asarray(phot, dtype=jnp.asarray(bookkeeping.phot).dtype)
+    eff_obs = np.empty(len(filter_waves))
+    for b, (fw, ft) in enumerate(zip(filter_waves, filter_trans, strict=True)):
+        fw = np.asarray(fw, dtype=np.float64)
+        tw = np.asarray(ft, dtype=np.float64) * filter_weight_np(fw, FilterConvention.BESSELL)
+        eff_obs[b] = np.trapezoid(tw * fw, fw) / np.trapezoid(tw, fw)
+    axes_j = tuple(jnp.asarray(ax) for ax in axes)
+    return PreintegratedGrid(
+        phot=jnp.asarray(phot),
+        moment=None,
+        axes=axes_j,
+        edges=tuple(edges_for_grid(ax) for ax in axes_j),
+        effective_wavelengths=jnp.asarray(eff_obs),
+        effective_wavelengths_rest=jnp.asarray(eff_obs / (1.0 + redshift)),
+        log10_flux_scale=log10_flux_scale(redshift, 1.0),
+        n_filters=len(filter_waves),
     )
 
 
