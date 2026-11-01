@@ -89,6 +89,53 @@ class FritzComponents(NamedTuple):
 # ── Template grid interpolation ───────────────────────────────────
 
 
+#: Unit tag the loader's reading of ``dust`` and ``disk`` presumes: CIGALE's
+#: ``model.dust`` / ``model.disk``, :math:`L_\lambda` [W/nm], the dust normalized to
+#: unit integral.
+_EXPECTED_UNIT = "W/nm"
+
+#: The tag the grid carried before #3077, on the hosted copy that
+#: ``scripts/download_fritz2006_templates.py`` fetches until it is re-uploaded.
+#: The records under it are the same W/nm data; only the tag was wrong. Remove
+#: this acceptance once the hosted file carries the corrected tags.
+_LEGACY_UNIT_TAG = "erg/s/Hz"
+
+
+@functools.cache
+def _warn_legacy_unit_tag(grid_path: str, key: str) -> None:
+    """Warn once per file and attribute that the grid carries the pre-#3077 unit tag."""
+    warnings.warn(
+        f"Fritz grid {grid_path!r} declares {key}={_LEGACY_UNIT_TAG!r}, the tag of the "
+        f"grid before it was corrected; the records are L_lambda [{_EXPECTED_UNIT}] "
+        "and are read as such. Re-download the corrected file with "
+        "`python scripts/download_fritz2006_templates.py --force`.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
+def _check_unit_attrs(attrs, grid_path: str) -> None:
+    """Refuse a grid whose ``dust_unit`` / ``disk_unit`` tag is not W/nm.
+
+    The exact legacy mislabel ``erg/s/Hz`` is read as W/nm with a one-time warning.
+    """
+    for key in ("dust_unit", "disk_unit"):
+        tag = attrs.get(key)
+        if isinstance(tag, bytes):
+            tag = tag.decode()
+        if tag is not None and str(tag).startswith(_EXPECTED_UNIT):
+            continue
+        if tag is not None and str(tag).startswith(_LEGACY_UNIT_TAG):
+            _warn_legacy_unit_tag(grid_path, key)
+            continue
+        raise TengriIOError(
+            f"Fritz grid {grid_path!r} declares {key}={tag!r}, but the loader reads "
+            f"the records as L_lambda [{_EXPECTED_UNIT}] (CIGALE model.dust / model.disk). "
+            "Re-download the grid with scripts/download_fritz2006_templates.py "
+            "--force, or rebuild it with scripts/build_fritz2006_grid.py."
+        )
+
+
 def _load_grid_arrays(grid_path: str):
     """Load raw numpy arrays from a Fritz grid file.
 
@@ -113,6 +160,7 @@ def _load_grid_arrays(grid_path: str):
     import h5py as _h5py
 
     with _h5py.File(grid_path, "r") as f:
+        _check_unit_attrs(f["fritz2006"].attrs, grid_path)
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
         # Read as float64 on the host: the file stores float32, and a few far-UV nodes are
         # float32 subnormals that a device-side conversion would flush to zero.

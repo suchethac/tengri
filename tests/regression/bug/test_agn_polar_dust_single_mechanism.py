@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 
 from tengri.components.agn.blocks.atten import polar_dust_attenuation_block
-from tengri.components.agn.blocks.runner import composable_agn_l_nu
+from tengri.components.agn.blocks.registry import composable as composable_agn_l_nu
 
 pytestmark = pytest.mark.regression_bug
 

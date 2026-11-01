@@ -172,6 +172,10 @@ ALLOWLIST: dict[str, str] = {
         "GAP: traced nodes skip the ascending-order check; every library's loader builds its "
         "inclination axis ascending on the host, so the traced axis is that one (documented)"
     ),
+    "components/agn/blocks/_ledger.py::ledger_sightlines": (
+        "general: traced panel edges keep coinciding edges as empty panels of zero weight; "
+        "concrete edges drop them first; both are the same quadrature"
+    ),
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "
         "traced values at build (documented)"

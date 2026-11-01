@@ -1862,6 +1862,121 @@ def _ghmc_meads_scan(
     return positions, divergent, step_size, momentum_inv_scale, alpha, delta
 
 
+def _wall_value(value):
+    """Map a non-finite log-density to -inf, which GHMC rejects as a divergent proposal."""
+    return jnp.where(jnp.isfinite(value), value, -jnp.inf)
+
+
+def _walled_logdensity(logdensity_fn_2arg, data_args):
+    """Return ``log_p(position)`` with a non-finite value mapped to -inf and a zero gradient there.
+
+    The reverse-mode gradient is replaced by zero wherever the value is non-finite, because
+    the derivative of a density outside its support is NaN and would otherwise propagate
+    into the adapted metric through the warmup.
+    """
+
+    def raw(position):
+        return logdensity_fn_2arg(position, data_args)
+
+    @jax.custom_vjp
+    def walled(position):
+        return _wall_value(raw(position))
+
+    def walled_fwd(position):
+        value, grad = jax.value_and_grad(raw)(position)
+        return _wall_value(value), (value, grad)
+
+    def walled_bwd(residual, cotangent):
+        value, grad = residual
+        return (jnp.where(jnp.isfinite(value), grad * cotangent, 0.0),)
+
+    walled.defvjp(walled_fwd, walled_bwd)
+    return walled
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6))
+def ghmc_catalog_scan(
+    ensemble_init,
+    warmup_key,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    n_folds,
+):
+    """Fixed-length MEADS warmup from explicit starts, then GHMC sampling of every chain.
+
+    Parameters
+    ----------
+    ensemble_init : ndarray, shape (n_chains, D)
+        Starting position of each chain; the MEADS ensemble is these chains [latent units].
+    warmup_key : PRNGKey (traced)
+        Key of the MEADS adaptation.
+    chain_keys : ndarray, shape (n_chains, n_iter, 2)
+        Pre-split per-chain keys for the sampling scan.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``; non-finite values are treated as walls.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does not trigger recompilation.
+    n_warmup : int (static)
+        Number of MEADS adaptation steps, run to completion (no adaptive stop).
+    n_folds : int (static)
+        MEADS folds K; ``n_chains`` must be a multiple of it.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chains, n_iter, D)
+        Sampled positions of each chain, including the iterations to be discarded.
+    divergent : ndarray, shape (n_chains, n_iter), bool
+        True where the GHMC transition exceeded the divergence threshold, including a
+        proposal that fell outside the wall.
+    step_size : ndarray, shape ()
+        Adapted step size [latent units].
+    momentum_inv_scale : ndarray, shape (D,)
+        Adapted diagonal momentum scale.
+    alpha, delta : ndarray, shape ()
+        Adapted damping and slice translation.
+
+    Notes
+    -----
+    **JIT-compatible**: the function is jitted with ``data_args`` traced, so galaxies with
+    different data share one compiled program. **Gradient-safe**: the wall-wrapped
+    log-density has zero gradient wherever its value is non-finite.
+
+    The warmup is a fixed-length MEADS run. The window stop of a resumable adaptation is not
+    available because the BlackJAX MEADS ``run`` restarts its step counter, which feeds the
+    damping schedule.
+    """
+    import blackjax
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    ld_1arg = _walled_logdensity(logdensity_fn_2arg, data_args)
+    warmup = blackjax.meads_adaptation(
+        ld_1arg,
+        num_chains=ensemble_init.shape[0],
+        num_folds=n_folds,
+        adaptation_info_fn=get_filter_adapt_info_fn(),
+    )
+    (last_states, parameters), _ = warmup.run(warmup_key, ensemble_init, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    momentum_inv_scale = parameters["momentum_inverse_scale"]
+    alpha = parameters["alpha"]
+    delta = parameters["delta"]
+    kernel = _get_ghmc_kernel()
+
+    def _step(state, key):
+        """Advance GHMC by one step, returning position and divergence flag."""
+        state, info = kernel(key, state, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
+        return state, (state.position, info.is_divergent)
+
+    def _chain(state, keys):
+        """Run one chain's sampling scan."""
+        return jax.lax.scan(_step, state, keys)[1]
+
+    positions, divergent = jax.vmap(_chain)(last_states, chain_keys)
+    return positions, divergent, step_size, momentum_inv_scale, alpha, delta
+
+
 # ---------------------------------------------------------------------------
 # ChEES-HMC (cross-chain adapted trajectory length, lock-step preserved)
 # ---------------------------------------------------------------------------

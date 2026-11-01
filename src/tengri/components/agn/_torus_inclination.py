@@ -27,8 +27,9 @@ cubic), as the shape is.
 A torus-only component has no disc of its own: the disc share :math:`(1 - f) L_{\rm bol}` is
 published as ``log_L_agn_disc_unemitted`` so the ledger closes on the accretion power,
 ``10**agn_log_lbol L_sun`` (NAMING_CONTRACT section 4c, "Template tori"). The standalone
-template tori publish it; the composable torus blocks of the restored libraries do not yet
-(#3076), and :func:`torus_ledger_from_grid` is the seam their runner will call.
+template tori publish it. The composable runner publishes the same angle-integrated torus power
+from :func:`log10_anisotropy` of the block's library (``blocks/torus_anisotropy``), in its own
+ledger (NAMING_CONTRACT section 4c, "Composable runner", #3076).
 """
 
 from __future__ import annotations

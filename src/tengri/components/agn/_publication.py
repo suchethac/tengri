@@ -118,7 +118,14 @@ def with_lsun_outputs(outputs: dict) -> dict:
     return {**outputs, **siblings}
 
 
-def publication_wave(dtype, extra_aa=(), n_nodes: int = PUBLICATION_NODES) -> jnp.ndarray:
+def publication_wave(
+    dtype,
+    extra_aa=(),
+    n_nodes: int = PUBLICATION_NODES,
+    *,
+    fine_window: tuple[float, float, int] | None = None,
+    traced: bool = False,
+) -> jnp.ndarray:
     """Fixed publication wavelength grid, ascending, with diagnostic nodes included.
 
     Parameters
@@ -126,18 +133,55 @@ def publication_wave(dtype, extra_aa=(), n_nodes: int = PUBLICATION_NODES) -> jn
     dtype : dtype
         Floating dtype of the returned array (the caller's wavelength dtype).
     extra_aa : sequence of float, optional
-        Diagnostic wavelengths [Angstrom] that must be grid nodes exactly.
+        Diagnostic wavelengths [Angstrom] that must be grid nodes exactly: a band edge or a
+        spectral discontinuity, where a node on each side makes the quadrature second order.
     n_nodes : int, optional
         Number of log-uniform nodes; the coarsest count that meets the identity tolerance.
+    fine_window : (lo, hi, n), optional
+        A window [Angstrom] sampled by ``n`` log-uniform nodes in place of the coarse ones
+        inside it (the coarse spacing is kept outside). One uniform piece, because a line block
+        paints each line conserving its flux over the cells of the grid it is given: coarse
+        nodes interleaved in the window move the line integral (3e-5 measured).
+    traced : bool, optional
+        Build the log-uniform pieces in the trace from their end points, so only ``extra_aa``
+        enters the graph as a literal; the nodes are then sorted in the trace.
 
     Returns
     -------
     ndarray, shape (n_pub,)
         Ascending wavelengths [Angstrom], independent of any caller grid.
     """
-    nodes = np.geomspace(PUBLICATION_LO_AA, PUBLICATION_HI_AA, n_nodes)
-    nodes = np.unique(np.concatenate([nodes, np.asarray(extra_aa, dtype=np.float64)]))
-    return jnp.asarray(nodes, dtype=dtype)
+    extra = np.asarray(extra_aa, dtype=np.float64)
+    if fine_window is None:
+        pieces = [(PUBLICATION_LO_AA, PUBLICATION_HI_AA, n_nodes, False, False)]
+    else:
+        lo, hi, n = fine_window
+        per_dex = (n_nodes - 1) / np.log10(PUBLICATION_HI_AA / PUBLICATION_LO_AA)
+        n_lo = int(np.ceil(per_dex * np.log10(lo / PUBLICATION_LO_AA))) + 1
+        n_hi = int(np.ceil(per_dex * np.log10(PUBLICATION_HI_AA / hi))) + 1
+        pieces = [
+            (PUBLICATION_LO_AA, lo, n_lo, False, True),
+            (lo, hi, n, False, False),
+            (hi, PUBLICATION_HI_AA, n_hi, True, False),
+        ]
+    if not traced:
+        nodes = np.concatenate(
+            [
+                np.geomspace(a, b, k)[(1 if drop_first else 0) : (-1 if drop_last else None)]
+                for a, b, k, drop_first, drop_last in pieces
+            ]
+        )
+        nodes = np.unique(np.concatenate([nodes, extra]))
+        return jnp.asarray(nodes, dtype=dtype)
+    traced_pieces = [
+        jnp.exp(jnp.linspace(np.log(a), np.log(b), k, dtype=dtype))[
+            (1 if drop_first else 0) : (-1 if drop_last else None)
+        ]
+        for a, b, k, drop_first, drop_last in pieces
+    ]
+    if extra.size == 0:
+        return jnp.concatenate(traced_pieces)
+    return jnp.sort(jnp.concatenate([*traced_pieces, jnp.asarray(extra, dtype=dtype)]))
 
 
 def emitted_bolometric(sed_pub, wave_pub) -> jnp.ndarray:
