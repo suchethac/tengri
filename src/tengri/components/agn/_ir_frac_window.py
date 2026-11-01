@@ -169,6 +169,84 @@ def log10_torus_frac_from_window(
     return log_odds + log_ratio + jnp.log10(PROVISIONAL_TORUS_FRAC)
 
 
+#: Torus fractions of the two provisional passes of the conserving window solve.
+CONSERVING_PROVISIONAL_FRACS = (0.25, 0.75)
+
+
+def _log10_window(wave, lnu, lam_min: float, lam_max: float):
+    """``log10`` of the window integral of ``L_nu / lam^2``, or of its value at one wavelength."""
+    if lam_min == lam_max:
+        return _log10_safe(jnp.interp(lam_min, wave, lnu / wave**2))
+    return _log10_safe(_window_q(wave, lnu, lam_min, lam_max))
+
+
+def conserving_torus_frac_from_window(
+    wave, host_lnu, lnu_a, lnu_b, frac, lam_min: float, lam_max: float
+):
+    r"""The covering factor that gives the window fraction under ``agn_norm='conserving'``.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Rest wavelength [Angstrom], ascending.
+    host_lnu : array_like, shape (n_wave,)
+        Host SED without the AGN [erg/s/Hz].
+    lnu_a, lnu_b : array_like, shape (n_wave,)
+        AGN total SED at the torus fractions :data:`CONSERVING_PROVISIONAL_FRACS`
+        [erg/s/Hz].
+    frac : float or array_like
+        AGN fraction ``f`` of the light in the window, ``0 < f < 1``.
+    lam_min, lam_max : float
+        Window edges [Angstrom]; equal edges give the monochromatic case.
+
+    Returns
+    -------
+    ndarray, scalar
+        ``agn_torus_frac`` in ``[0, 1]``, dimensionless.
+
+    Notes
+    -----
+    Under ``'conserving'`` the AGN power is ``agn_lum_ratio 10**agn_log_lbol L_sun`` and the
+    torus fraction ``t`` splits it: the disc carries ``(1 - t)`` of it and the torus ``t``. The
+    window luminosity of the AGN is then affine in ``t``,
+
+    .. math::
+
+        W(t) = W_a + \frac{t - t_a}{t_b - t_a}\,(W_b - W_a),
+
+    and the fraction is solved from :math:`W(t) = H\,f/(1 - f)`:
+
+    .. math::
+
+        t = t_a + (t_b - t_a)\,\frac{H f/(1-f) - W_a}{W_b - W_a},
+
+    with :math:`W_a`, :math:`W_b` the AGN window luminosities at
+    :math:`t_a, t_b` = :data:`CONSERVING_PROVISIONAL_FRACS` and :math:`H` the host's
+    [erg/s/Angstrom, up to the common factor ``c``], each the integral of
+    :math:`L_\nu/\lambda^2` over ``[lam_min, lam_max]`` (the value at the wavelength when the
+    edges are equal). ``t`` is then clipped to ``[0, 1]``: a covering factor. Outside that range
+    the requested fraction is not reachable at this accretion power (the disc alone outshines
+    the target in the window, or the whole power re-emitted by the torus falls short of it),
+    and the realized fraction is the one at the bound. Approximation: the affine form is exact
+    for every recipe without the ``polar_dust`` block; with it the polar re-emission's share of
+    the AGN dust moves with ``t`` and the solve is the chord through the two passes. All
+    ratios are formed in log space relative to :math:`W_b`, so nothing erg/s-scale forms
+    in float32. JIT/grad/vmap compatible; ``lam_min``/``lam_max`` are static floats.
+    """
+    t_a, t_b = CONSERVING_PROVISIONAL_FRACS
+    frac = jnp.asarray(frac)
+    log_odds = _log10_safe(frac) - _log10_safe(1.0 - frac)
+    log_wb = _log10_window(wave, lnu_b, lam_min, lam_max)
+    s = jnp.power(10.0, _log10_window(wave, lnu_a, lam_min, lam_max) - log_wb)
+    target = jnp.power(10.0, _log10_window(wave, host_lnu, lam_min, lam_max) + log_odds - log_wb)
+    # W_b == W_a: the torus share leaves the window untouched, so no fraction can move it; the
+    # selected denominator keeps the reverse pass finite there and the bound below decides.
+    slope = 1.0 - s
+    live = jnp.abs(slope) > 0.0
+    t = t_a + (t_b - t_a) * (target - s) / jnp.where(live, slope, 1.0)
+    return jnp.clip(jnp.where(live, t, 1.0), 0.0, 1.0)
+
+
 def agn_power_from_window(wave, host_lnu, agn_lnu, dust_lnu, frac, lam_min, lam_max):
     """``agn_power`` [erg/s] for a wavelength window; the linear form of the log helper.
 

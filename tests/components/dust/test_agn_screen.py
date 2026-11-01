@@ -532,7 +532,7 @@ def test_warn_agn_dust_double_count_fires_with_screened_agn(synthetic_ssp_wide):
     is a structural zero since #2314) and BOTH
     ``dust_frac_agn`` and ``agn_ir_frac`` (fracAGN) are positive-active.
     fracAGN is itself refused outside ``agn_norm="cigale_joint"``
-    (``_validate_fracagn_requires_cigale_joint``, R65/R67: 'independent' and
+    (``_validate_fracagn_refuses_independent``, R65/R67: 'independent' and
     'conserving' both raise ``ConfigError`` for an active fracAGN, since the
     disc and torus would sit on two unrelated luminosity scales). PR-D2's own
     cycle rule refuses ``agn_screen != "none"`` under exactly

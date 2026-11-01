@@ -71,7 +71,9 @@ import numpy as np
 
 from tengri.components._term_response import term_band_response
 from tengri.components.agn._ir_frac_window import (
+    CONSERVING_PROVISIONAL_FRACS,
     PROVISIONAL_TORUS_FRAC,
+    conserving_torus_frac_from_window,
     log10_torus_frac_from_window,
 )
 from tengri.components.agn._lbol_reference import (
@@ -79,6 +81,7 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
+from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
@@ -803,7 +806,7 @@ class AGNSEDComponent(TemplateThreading):
         template_data: Any | None = None,
         ztable_data: Any | None = None,
     ) -> ForwardState:
-        """Add AGN emission to ``state.sed_intrinsic`` and publish ``L_agn_bol``.
+        r"""Add AGN emission to ``state.sed_intrinsic`` and publish ``L_agn_bol``.
 
         Parameters
         ----------
@@ -823,6 +826,34 @@ class AGNSEDComponent(TemplateThreading):
         ForwardState
             New state with ``sed_intrinsic`` updated and ``L_agn_bol``
             published to ``derived``.
+
+        Notes
+        -----
+        **fracAGN** (``agn_ir_frac = f > 0``) sets the torus fraction ``t`` the AGN is
+        evaluated at (published as ``agn_torus_frac_effective``). Under ``'cigale_joint'`` it
+        follows CIGALE ``skirtor2016``: the AGN dust power is
+        ``agn_power = L_absorbed f/(1 - f)`` and ``t = agn_power / L_bol`` (a window changes only
+        the scale factor). Under ``'conserving'`` the AGN power stays the accretion power and
+        fracAGN sets only the covering factor, so the ledger closes on ``agn_log_lbol``. Total
+        dust (``ir_frac_window = (0, 0)``):
+
+        .. math::
+
+            t = \min\left(1,\;
+                \frac{L_{\rm abs}}{r\,L_{\rm bol}}\,\frac{f}{1 - f}\right),
+
+        so the AGN dust power :math:`t\,r\,L_{\rm bol}` is the fraction :math:`f` of the
+        total dust power :math:`t\,r\,L_{\rm bol} + L_{\rm abs}`. Here :math:`L_{\rm abs}`
+        [erg/s] is the stellar and nebular power the dust screen absorbs (``log_L_absorbed``),
+        :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol} L_\odot` [erg/s] and :math:`r` is
+        ``agn_lum_ratio`` [dimensionless]. A window ``[lambda_min, lambda_max]`` makes :math:`f`
+        the AGN fraction of the light in the window; ``t`` then solves
+        :math:`W_{\rm agn}(t) = H f/(1 - f)` with :math:`H` and :math:`W_{\rm agn}` the host
+        and AGN window luminosities (:func:`conserving_torus_frac_from_window`). ``t`` is a
+        covering factor and is clipped to ``[0, 1]``: where the absorbed host power asks for
+        more AGN dust than the accretion power can supply, the torus re-emits all of it, the
+        disc is fully covered and the realized fraction falls below ``f`` (its gradient in
+        ``f`` is zero there).
         """
         wave = state.wave
 
@@ -856,6 +887,14 @@ class AGNSEDComponent(TemplateThreading):
         # default; ``agn={'ir_frac_window': ...}`` selects a wavelength window instead (#2662),
         # which changes only the scale factor of ``agn_power`` (see ``_ir_frac_window``).
         #
+        # Under ``agn_norm='conserving'`` the AGN power stays ``agn_lum_ratio x L_bol`` and
+        # fracAGN sets only the covering factor ``agn_torus_frac`` (owner ruling on #2320): the
+        # torus re-emits ``t x agn_lum_ratio x L_bol`` and the disc keeps ``1 - t`` of it, so the
+        # ledger closes on ``agn_log_lbol``. Total dust: ``t = min(1, L_absorbed f/(1-f) /
+        # (agn_lum_ratio L_bol))``. Window: ``t`` solves ``W_agn(t) = H f/(1-f)`` on the affine
+        # ``W_agn(t)`` (``conserving_torus_frac_from_window``), clipped to ``[0, 1]``. See
+        # :meth:`AGNSEDComponent.apply` Notes.
+        #
         # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
         # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
         # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
@@ -873,6 +912,7 @@ class AGNSEDComponent(TemplateThreading):
         # #2187-series split). The ``log_L_ir`` fallback below covers a chain
         # built before the split published the new key.
         ir_frac_window = tuple(self.config.agn_ir_frac_window)
+        _conserving = self.config.agn_norm == "conserving"
         _log_L_absorbed = state.derived.get("log_L_absorbed")
         if _log_L_absorbed is None:
             _log_L_absorbed = state.derived.get("log_L_ir")
@@ -907,25 +947,42 @@ class AGNSEDComponent(TemplateThreading):
             # Same grid and kwargs as the final evaluation (extended master grid, build-time
             # below-library index), so the provisional D/W carries the final pass's numerics.
             _wave_ext, _to_caller, _ = _with_diagnostic_nodes(wave)
-            _prov_kwargs = {**agn_kwargs, "agn_torus_frac": PROVISIONAL_TORUS_FRAC}
-            _L_ext, _, _, _ = agn_fn(
-                _wave_ext,
-                agn_log_lbol=agn_log_lbol,
-                return_l2500=True,
-                return_components=True,
-                **_prov_kwargs,
-            )
-            _L_prov = jnp.take(_L_ext, _to_caller, axis=-1)
-            _log_torus_frac = log10_torus_frac_from_window(
-                wave,
-                _host,
-                _L_prov,
-                agn_ir_frac,
-                ir_frac_window[0] * 1.0e4,
-                ir_frac_window[1] * 1.0e4,
-            )
+
+            def _provisional(torus_frac):
+                _L_ext, _, _, _ = agn_fn(
+                    _wave_ext,
+                    agn_log_lbol=agn_log_lbol,
+                    return_l2500=True,
+                    return_components=True,
+                    **{**agn_kwargs, "agn_torus_frac": torus_frac},
+                )
+                return jnp.take(_L_ext, _to_caller, axis=-1)
+
+            _lam_min, _lam_max = ir_frac_window[0] * 1.0e4, ir_frac_window[1] * 1.0e4
+            if _conserving:
+                # Under 'conserving' the disc keeps (1 - t) of the accretion power, so the AGN
+                # window light is affine in t, not proportional to it: two passes fix the line.
+                _torus_frac_window = conserving_torus_frac_from_window(
+                    wave,
+                    _host,
+                    *(_provisional(t) for t in CONSERVING_PROVISIONAL_FRACS),
+                    agn_ir_frac,
+                    _lam_min,
+                    _lam_max,
+                )
+            else:
+                _torus_frac_window = _pow10(
+                    log10_torus_frac_from_window(
+                        wave,
+                        _host,
+                        _provisional(PROVISIONAL_TORUS_FRAC),
+                        agn_ir_frac,
+                        _lam_min,
+                        _lam_max,
+                    )
+                )
             agn_torus_frac_effective = jnp.where(
-                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+                agn_ir_frac > 0.0, _torus_frac_window, agn_torus_frac_user
             )
         else:
             # log10(agn_power / L_agn_bol)
@@ -937,6 +994,13 @@ class AGNSEDComponent(TemplateThreading):
                 - agn_log_lbol
                 - _LOG10_L_SUN
             )
+            if _conserving:
+                # The torus is t x agn_lum_ratio x L_bol, and t is a covering factor.
+                _log_torus_frac = jnp.minimum(
+                    _log_torus_frac
+                    - jnp.log10(jnp.asarray(params.get("agn_lum_ratio", DEFAULT_AGN_LUM_RATIO))),
+                    0.0,
+                )
             agn_torus_frac_effective = jnp.where(
                 agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
             )

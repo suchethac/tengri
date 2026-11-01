@@ -1686,54 +1686,53 @@ def _check_polar_reference_grid_extent(
     )
 
 
-def _validate_fracagn_requires_cigale_joint(spec) -> None:
-    """Raise if an active fracAGN meets a non-joint ``agn_norm`` (R65, R67).
+def _validate_fracagn_refuses_independent(spec) -> None:
+    """Raise if an active fracAGN meets ``agn_norm='independent'`` (R65).
 
-    fracAGN (``agn_ir_frac``) is the CIGALE ``skirtor2016`` coupling: the AGN
-    power becomes ``L_absorbed x f/(1 - f)``, derived from the **dust-absorbed
-    stellar** luminosity, and every ``agn_norm`` policy routes the torus
-    through that derived power. Only ``'cigale_joint'`` routes the DISC
-    through it too, via the SKIRTOR template ratio ``R``. The other two
-    policies reference the disc to ``10**agn_log_lbol`` instead -- verbatim
-    under ``'independent'``, debited by ``(1 - agn_torus_frac)`` under
-    ``'conserving'`` -- so disc and torus sit on two unrelated luminosity
-    scales and their ratio is proportional to ``1/M*``: it reports the
-    stellar mass rather than any AGN parameter.
+    fracAGN (``agn_ir_frac``) sets the torus from the **dust-absorbed stellar**
+    luminosity. Two policies give that a single reference. ``'cigale_joint'``
+    is the CIGALE ``skirtor2016`` coupling: the AGN power becomes
+    ``L_absorbed x f/(1 - f)`` and the disc follows it through the SKIRTOR
+    template ratio ``R``. ``'conserving'`` keeps the AGN power at
+    ``agn_lum_ratio x 10**agn_log_lbol L_sun`` and lets fracAGN set only the
+    covering factor ``agn_torus_frac`` (owner ruling on #2320): the torus
+    re-emits that share of the accretion power and the disc keeps the rest, so
+    the ledger closes on ``agn_log_lbol`` (see ``AGNSEDComponent.apply``).
+    ``'independent'`` has neither: the disc stays on ``10**agn_log_lbol``
+    verbatim while the torus follows the absorbed host power, so disc and torus
+    sit on two unrelated luminosity scales and their ratio is proportional to
+    ``1/M*``: it reports the stellar mass rather than any AGN parameter.
 
     Measured (composable ``disc='schartmann2005'`` + ``torus='skirtor'``,
     ``dust_emission='dale2014_cigale'``, ``agn_log_lbol`` at its registry
     default, ``agn_ir_frac=0.3``), sweeping ONLY the stellar mass and reading
     ``int(sed_agn_disc)/int(sed_agn_torus)``:
 
-    ============  ==================  ==================  ==================
-    ``log M*``    independent         conserving          cigale_joint
-    ============  ==================  ==================  ==================
-    0.0            5.004902e+10        5.004902e+10        2.838156
-    7.0            5.004902e+03        5.003901e+03        2.838156
-    10.0           5.004902e+00        4.004135e+00        2.838156
-    12.0           5.004902e-02        0.000000e+00        2.838156
-    ============  ==================  ==================  ==================
+    ============  ==================  ==================
+    ``log M*``    independent         cigale_joint
+    ============  ==================  ==================
+    0.0            5.004902e+10        2.838156
+    7.0            5.004902e+03        2.838156
+    10.0           5.004902e+00        2.838156
+    12.0           5.004902e-02        2.838156
+    ============  ==================  ==================
 
-    Twelve orders of magnitude in both refused columns, constant in the legal
-    one. The torus integral is identical to six digits under all three
-    (``7.626100e+42`` at ``log M* = 10``), which is what pins the mechanism on
-    the disc side rather than on the coupling. ``'conserving'`` is the worse of
-    the two: at ``log M* = 12`` the derived ``agn_torus_frac`` clips to 1 and
-    the disc is debited to **exactly zero**. Without fracAGN both policies are
-    coherent -- ``'independent'`` holds ``2.001533`` at every mass -- so the
-    pathology is the combination, not either half, which is why this refuses
-    the pair and nothing else. Nothing raised or warned before: the four
-    components still summed to ``sed_agn`` exactly, so the accounting was
-    intact while the configuration was meaningless.
+    Twelve orders of magnitude in the refused column, constant in the legal
+    one. Under ``'conserving'`` the ratio moves with the stellar mass as well,
+    but by construction: the covering factor is what fracAGN sets, and the
+    disc plus the torus is the accretion power at every mass. Without fracAGN
+    ``'independent'`` is coherent -- it holds ``2.001533`` at every mass -- so
+    the pathology is the combination, which is why this refuses the pair and
+    nothing else.
 
     Raises
     ------
     ConfigError
-        If ``spec.agn_norm`` is ``'independent'`` or ``'conserving'`` and
-        ``agn_ir_frac`` is active (FREE, or Fixed with a value > 0). An
-        explicit ``Fixed(0.0)`` states "no coupling" and is deliberately legal
-        -- it is one of the remedies this refusal names, and advice a guard
-        refuses is the #1364 defect.
+        If ``spec.agn_norm`` is ``'independent'`` and ``agn_ir_frac`` is
+        active (FREE, or Fixed with a value > 0). An explicit ``Fixed(0.0)``
+        states "no coupling" and is deliberately legal -- it is one of the
+        remedies this refusal names, and advice a guard refuses is the #1364
+        defect.
 
     See Also
     --------
@@ -1743,7 +1742,7 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
     from tengri.config.exceptions import ConfigError
 
     policy = str(getattr(spec, "agn_norm", "cigale_joint") or "cigale_joint")
-    if policy not in ("independent", "conserving"):
+    if policy != "independent":
         return
 
     free = set(spec.free_params)
@@ -1756,42 +1755,24 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
     if not ir_frac_active:
         return
 
-    disc_reference = {
-        "independent": (
-            "under 'independent' the disc stays on 10**agn_log_lbol by that policy's contract"
-        ),
-        "conserving": (
-            "under 'conserving' the disc stays on 10**agn_log_lbol debited by "
-            "(1 - agn_torus_frac), a second and unrelated reference"
-        ),
-    }[policy]
-    measured = {
-        "independent": (
-            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to 5.00e-02 at log M* = 12"
-        ),
-        "conserving": (
-            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to exactly "
-            "0.00e+00 at log M* = 12, where the derived agn_torus_frac clips "
-            "to 1 and debits the disc away entirely"
-        ),
-    }[policy]
-
     raise ConfigError(
-        f"agn_norm={policy!r} was selected with an active fracAGN "
-        "(agn_ir_frac). fracAGN derives the AGN power from the dust-absorbed "
-        "stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE skirtor2016 "
-        f"coupling), and the torus follows it -- but {disc_reference}, so "
-        "disc and torus sit on two unrelated luminosity scales and their "
-        f"ratio scales as 1/M*: measured, {measured}, i.e. it reports the "
-        "stellar mass rather than any AGN parameter. Two ways out: (1) "
-        "agn={'norm': 'cigale_joint'} with a SKIRTOR torus, the single policy "
-        "that ties the disc to the same agn_power reference through the "
-        "template ratio R (measured: int(disc)/int(torus) = 2.838156 at every "
-        "stellar mass) -- this is the policy fracAGN was written for; or (2) "
-        f"keep 'norm': {policy!r} and set agn={{'agn_ir_frac': Fixed(0.0)}} "
-        "(or omit it) to drop the coupling, which leaves agn_torus_frac "
-        "scaling the torus and agn_log_lbol scaling the disc. See rulings R65 "
-        "and R67."
+        "agn_norm='independent' was selected with an active fracAGN "
+        "(agn_ir_frac). fracAGN sets the torus from the dust-absorbed stellar "
+        "luminosity, L_absorbed * f/(1 - f), but under 'independent' the disc "
+        "stays on 10**agn_log_lbol by that policy's contract, so disc and torus "
+        "sit on two unrelated luminosity scales and their ratio scales as "
+        "1/M*: measured, int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 "
+        "to 5.00e-02 at log M* = 12, i.e. it reports the stellar mass rather "
+        "than any AGN parameter. Three ways out: (1) agn={'norm': "
+        "'cigale_joint'} with a SKIRTOR torus, the CIGALE coupling, which ties "
+        "the disc to the same agn_power reference through the template ratio R "
+        "(measured: int(disc)/int(torus) = 2.838156 at every stellar mass); "
+        "(2) agn={'norm': 'conserving'}, under which the AGN power stays "
+        "10**agn_log_lbol and fracAGN sets only the covering factor "
+        "agn_torus_frac; or (3) keep 'norm': 'independent' and set "
+        "agn={'agn_ir_frac': Fixed(0.0)} (or omit it) to drop the coupling, "
+        "which leaves agn_torus_frac scaling the torus and agn_log_lbol "
+        "scaling the disc. See ruling R65."
     )
 
 
@@ -14468,7 +14449,7 @@ class SEDModel:
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_torus_frac_fracagn_conflict(spec)
-        _validate_fracagn_requires_cigale_joint(spec)
+        _validate_fracagn_refuses_independent(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
         _validate_radio_firrc_domain(spec)
