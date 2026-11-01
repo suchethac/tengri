@@ -1,70 +1,72 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""GHMC runs under blackjax >= 1.5 (argument-order regression).
+"""GHMC call sites match the installed blackjax signature (argument-order regression).
 
-Fresh-user audit (2026-07): ``fitter.run("mcmc_ghmc")`` crashed with
-``TypeError: Expected a callable value, got JitTracer(uint32[2])``. blackjax
-changed ``blackjax.mcmc.ghmc.init`` to ``init(position, logdensity_fn,
-rng_key)``, but tengri still called it in the old ``(position, rng_key,
-logdensity_fn)`` order, so the PRNG key was handed to blackjax where the
-log-density callable was expected. This pins the fixed order end to end.
+``blackjax.mcmc.ghmc.init`` takes ``(position, logdensity_fn, rng_key)`` in
+blackjax >= 1.5 and took ``(position, rng_key, logdensity_fn)`` before, which
+handed the PRNG key to blackjax where the log-density callable was expected
+(``TypeError: Expected a callable value, got JitTracer(uint32[2])``). tengri
+passes ``position``, ``logdensity_fn`` and ``rng_key`` by keyword. These tests
+run tengri's GHMC scan on a two-dimensional Gaussian log-density, with no
+model and no ``Fitter``, so they need neither a data file nor the
+``allow_unvalidated`` escape hatch of the broken-tier ``mcmc_ghmc`` backend.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import inspect
 
+import blackjax
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import (
-    DEFAULT,
-    FREE,
-    Fitter,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    WavePrecomp,
-    generate_mock,
-    load_ssp_data,
-)
+from tengri.inference.backends.mcmc._shared import _get_ghmc_kernel, _ghmc_full_scan
 
-pytestmark = [pytest.mark.regression_bug, pytest.mark.slow]
-
-_SSP = Path("data/fsps_prsc_miles_chabrier.h5")
+pytestmark = pytest.mark.regression_bug
 
 
-@pytest.mark.skipif(not _SSP.exists(), reason="needs data/fsps_prsc_miles_chabrier.h5")
-def test_ghmc_runs_and_returns_finite_samples():
-    ssp = load_ssp_data(str(_SSP))
-    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]))
+def _logdensity(position, data_args):
+    return -0.5 * jnp.sum((position - data_args) ** 2)
+
+
+def test_ghmc_init_parameters_are_the_keywords_tengri_passes():
+    """``ghmc.init`` accepts ``position``, ``logdensity_fn`` and ``rng_key`` by name."""
+    names = set(inspect.signature(blackjax.mcmc.ghmc.init).parameters)
+    assert {"position", "logdensity_fn", "rng_key"} <= names
+
+
+def test_ghmc_scan_runs_and_returns_finite_samples_on_a_gaussian():
+    """tengri's GHMC scan runs end to end on a unit Gaussian centred at (1, -2).
+
+    The sample mean of 400 draws after 100 warmup steps lies within 0.5 of the
+    centre per axis (the sample standard error is about 0.05 for independent
+    draws; 0.5 admits the autocorrelation of a short GHMC chain and excludes a
+    chain stuck at the origin start, 1 and 2 away).
+    """
     key = jax.random.PRNGKey(0)
-    sed = SEDModel.build(
-        ssp_data=ssp,
-        observation=obs,
-        redshift=Fixed(0.05),
-        sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={
-            "law": "power_law",
-            "type": "two_component",
-            "all_params": Fixed(DEFAULT),
-        },
-        approx=WavePrecomp(),
+    warmup_key, init_key, chain_key = jax.random.split(key, 3)
+    centre = jnp.asarray([1.0, -2.0])
+    positions, divergent, step_size, inv_mass = _ghmc_full_scan(
+        jnp.zeros(2),
+        warmup_key,
+        init_key,
+        jax.random.split(chain_key, 400),
+        _logdensity,
+        centre,
+        100,
+        0.8,
+        0.5,
+        0.5,
     )
-    mock = generate_mock(sed, sed.spec.sample(key), key=key, snr=30.0)
-    fitter = Fitter(
-        sed, np.asarray(mock["flux_obs"]), np.asarray(mock["noise"]), data_type="photometry"
-    )
-    # ``allow_unvalidated`` because mcmc_ghmc is tier="broken" (#1287 quarantined
-    # it after this test was written, so it had been red on every HEAD since).
-    # The quarantine is about *mixing*; this test is about argument order, and it
-    # is precisely the "benchmarking and backend development must remain
-    # possible" case the escape hatch exists for.
-    post = fitter.run(
-        "mcmc_ghmc", key=key, n_samples=60, n_warmup=60, allow_unvalidated=True
-    )  # must not raise
-    samples = post.samples
-    assert samples, "GHMC returned no samples"
-    for name, arr in samples.items():
-        assert np.all(np.isfinite(np.asarray(arr))), f"non-finite GHMC samples for {name}"
+    assert np.all(np.isfinite(np.asarray(positions)))
+    assert np.isfinite(float(step_size))
+    assert np.all(np.isfinite(np.asarray(inv_mass)))
+    assert divergent.shape == (400,)
+    assert np.asarray(positions).mean(axis=0) == pytest.approx(np.asarray(centre), abs=0.5)
+
+
+def test_ghmc_kernel_positional_order_matches_tengri_call():
+    """The kernel's positional parameters follow ``(rng_key, state, logdensity_fn, ...)``."""
+    names = list(inspect.signature(_get_ghmc_kernel()).parameters)
+    assert names[:3] == ["rng_key", "state", "logdensity_fn"]
