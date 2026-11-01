@@ -1541,6 +1541,7 @@ agn_torus_block, agn_attenuation_block : str
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
         # Where the tie is inactive (fracAGN = 0) the disc is the debited one.
         _disc_scalar = 1.0 - _torus_frac
+        _disc_torus_share = _disc_scalar
         if return_ledger:
             # The tied disc before the torus hides any of it, integrated over all directions:
             # the face-on library power ``agn_power x R_faceon`` times the library disc's

@@ -739,9 +739,12 @@ def kubota_done_disc_power(agn_log_lbol: float, **_params) -> Array:
     -----
     **JIT-compatible**: yes, pure ``jnp``.
     """
+    # On the float32 path ``agn_log_lbol`` is the reference magnitude and the shape (hence R_out,
+    # which follows the Eddington ratio) is set by ``agn_log_lbol_shape``, the true L_acc.
+    shape_log_lbol = _params.get("agn_log_lbol_shape")
     return 1.0 - kubota_done_unemitted_fraction(
         _params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
-        agn_log_lbol,
+        agn_log_lbol if shape_log_lbol is None else shape_log_lbol,
         _params.get("agn_a_spin", 0.0),
     )
 
