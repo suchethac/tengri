@@ -1318,6 +1318,14 @@ def test_torus_table_nodes_match_runtime(spec, redshift):
         )
 
     nodes = np.array(list(itertools.product(*_library_axes(grid))))
+    # The face-on SKIRTOR node is not a node of the runtime's coordinate: above
+    # cos i = 1 - 1e-6 the runtime continues arccos along its tangent, so cos i = 1 reads
+    # the library at i = 0.04 deg, off-node (skirtor_incl_from_cos_inc). Those rows are
+    # covered by the 5e-2 sweeps instead.
+    on_node = np.ones(nodes.shape[0], dtype=bool)
+    for k in spec.get("deg_axes", ()):
+        on_node &= nodes[:, k] != 0.0
+    nodes = nodes[on_node]
     stacked = jnp.asarray(np.array([_kwarg_values(spec, tuple(row)) for row in nodes]))
 
     def batched(fn):
