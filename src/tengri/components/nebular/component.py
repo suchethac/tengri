@@ -57,7 +57,14 @@ __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 #: other three in #2213); CLOUDY, Cue and the baked-in backend have no such
 #: axes. They are threaded per backend by :func:`_backend_accepted_params`
 #: rather than added to the shared kwargs unconditionally.
-_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = ("neb_log_nH", "neb_co", "neb_dno", "neb_hbfrac")
+_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = (
+    "neb_log_nH",
+    "neb_co",
+    "neb_dno",
+    "neb_hbfrac",
+    "neb_xi_d",
+    "neb_co_ratio",
+)
 
 #: Backend methods the shared kwargs dict is splatted into. A parameter is
 #: threaded only when *every* method that exists names it, so a backend that
@@ -373,7 +380,7 @@ class NebularSEDComponent(TemplateThreading):
             ),
         ]
 
-        if self.config.backend in ("cloudy_grid", "cb19", "mappings"):
+        if self.config.backend in ("cloudy_grid", "cb19", "gutkin16", "mappings"):
             return std_knobs
 
         if self.config.backend == "cue":
@@ -423,7 +430,8 @@ class NebularSEDComponent(TemplateThreading):
 
         raise NotImplementedError(
             f"NebularSEDComponent unknown backend {self.config.backend!r}; "
-            f"supported: 'baked_in', 'cloudy_grid', 'cb19', 'mappings', 'cue', 'shock'."
+            "supported: 'baked_in', 'cloudy_grid', 'cb19', 'gutkin16', 'mappings', "
+            "'cue', 'shock'."
         )
 
     def outputs(self) -> tuple[DerivedKey, ...]:
@@ -561,7 +569,7 @@ class NebularSEDComponent(TemplateThreading):
             warning_mode = "suppress" if self.config.suppress_baked_in_warning else "warn"
             BakedInBackend(ionizing_source_warning=warning_mode)
             return NebularSEDComponentState(name=self.name)
-        if self.config.backend in ("cloudy_grid", "cb19", "mappings", "cue", "shock"):
+        if self.config.backend in ("cloudy_grid", "cb19", "gutkin16", "mappings", "cue", "shock"):
             if self.backend is None:
                 raise ValueError(
                     f"NebularSEDComponent(backend={self.config.backend!r}) requires "
@@ -775,7 +783,7 @@ class NebularSEDComponent(TemplateThreading):
         10**log_line_lum, ...)`` reproduces ``sed_nebular`` of the exact path.
         Backends without a continuum (CB19, MAPPINGS) return a zero continuum.
         """
-        if self.config.backend not in ("cue", "cloudy_grid", "cb19", "mappings"):
+        if self.config.backend not in ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings"):
             raise ValueError(
                 f"split_sed: nebular backend {self.config.backend!r} has no "
                 "continuum + line-catalog split."
@@ -1057,7 +1065,7 @@ class NebularSEDComponent(TemplateThreading):
                 **cue_extras,
                 template_data=template_data,
             )
-        else:  # cloudy_grid, cb19, mappings
+        else:  # cloudy_grid, cb19, gutkin16, mappings
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             age_weights = state.derived.get("age_weights")
             if ssp_ages_yr is None or age_weights is None:
@@ -1103,7 +1111,7 @@ class NebularSEDComponent(TemplateThreading):
                         template_data=template_data,
                         cloudyfsps_only=cue_cloudyfsps_only,
                     )
-                else:  # cloudy_grid, cb19, mappings
+                else:  # cloudy_grid, cb19, gutkin16, mappings
                     line_waves, line_lums = mix_dig_line_luminosities(
                         self.backend,
                         ssp_weights=ssp_weights,
@@ -1117,8 +1125,9 @@ class NebularSEDComponent(TemplateThreading):
                 # Vacuum wavelengths throughout: every backend's loader converts
                 # its air labels to vacuum ONCE at ingestion (cue:
                 # ``load_cue_weights``; mappings, feltre: ``catalog_air_to_vacuum``;
-                # cb19: its declared air lines; cloudy_grid is vacuum as
-                # published), so ``line_waves`` is published as-is. There is no
+                # cb19: its declared air lines; cloudy_grid and gutkin16 are
+                # vacuum as published; gutkin16's builder converted its labels
+                # once (T1), so ``line_waves`` is published as-is. There is no
                 # post-hoc air/vacuum vote here: a second conversion would be a
                 # double conversion. ``line_waves`` may be a tracer under a
                 # jitted sampler, which is why nothing is read from it on the host.

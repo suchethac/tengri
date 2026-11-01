@@ -135,6 +135,9 @@ NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     # ``collect_citations`` for any caller still matching by backend name
     # (#2429 opus review round 2, item 1).
     "cb19": ["byler2017", "cloudy"],
+    # Gutkin+2016 NEOGAL line table, the grammar selector neb={'type': 'gutkin16'}.
+    # The table is CLOUDY c13.03 output, so the Cloudy citation rides along.
+    "gutkin16": ["gutkin2016", "cloudy"],
     "mappings": ["mappings"],
     # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
     # Byler+2017 Cloudy photoionization grids.

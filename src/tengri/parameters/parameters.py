@@ -226,7 +226,8 @@ class Parameters:
     n_free : int
         Number of free parameters.
     nebular_mode : str
-        Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', or 'cb19'.
+        Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', 'cb19', 'gutkin16',
+        'mappings' or 'mappings_agn'.
     dust_model : str
         Dust model: 'two_component' or 'single_component'.
     dust_emission : str or None
@@ -1047,6 +1048,22 @@ class Parameters:
         # nebular_mappings_agn_grid_path below. None resolves the packaged
         # default at CB19Backend construction time.
         self.nebular_cb19_grid_path = kwargs.pop("nebular_cb19_grid_path", None)
+        # Gutkin+2016 NEOGAL table (#983): the grid path, the upper stellar mass
+        # cutoff (the table has mup = 100 and 300 Msun) and the continuum switch.
+        # None resolves the packaged data/gutkin16_grid.h5 at backend construction.
+        self.nebular_gutkin16_grid_path = kwargs.pop("nebular_gutkin16_grid_path", None)
+        self.nebular_gutkin16_mup = float(kwargs.pop("nebular_gutkin16_mup", 100.0))
+        if self.nebular_gutkin16_mup not in (100.0, 300.0):
+            raise ParameterError(
+                f"neb mup={self.nebular_gutkin16_mup:g} is not a node of the Gutkin+2016 "
+                "table; valid mup values: 100, 300 (Msun)."
+            )
+        self.nebular_gutkin16_continuum = kwargs.pop("nebular_gutkin16_continuum", "analytic")
+        if self.nebular_gutkin16_continuum not in ("analytic", "none"):
+            raise ParameterError(
+                "neb continuum must be 'analytic' or 'none', got "
+                f"{self.nebular_gutkin16_continuum!r}."
+            )
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
         # tengri.config.settings): the one declaration every other spelling
@@ -1099,6 +1116,7 @@ class Parameters:
         self.nebular_mappings_agn_grid_path = kwargs.pop("nebular_mappings_agn_grid_path", None)
 
         self._nebular_cb19 = False
+        self._nebular_gutkin16 = False
         self._nebular_mappings = False
         self._nebular_mappings_agn = False
         if nebular == "cue":
@@ -1106,6 +1124,9 @@ class Parameters:
             nebular = False
         elif nebular == "cb19":
             self._nebular_cb19 = True
+            nebular = False
+        elif nebular == "gutkin16":
+            self._nebular_gutkin16 = True
             nebular = False
         elif nebular == "mappings":
             self._nebular_mappings = True
@@ -1130,14 +1151,15 @@ class Parameters:
                 bool(nebular_ssp),
                 bool(nebular),
                 bool(nebular_cue),
+                bool(self._nebular_gutkin16),
                 bool(self._nebular_mappings),
                 bool(self._nebular_mappings_agn),
             ]
         )
         if n_set > 1:
             raise ValueError(
-                "nebular_ssp, nebular (CLOUDY), nebular_cue, mappings, and mappings_agn are "
-                "mutually exclusive: choose one."
+                "nebular_ssp, nebular (CLOUDY), nebular_cue, gutkin16, mappings, and "
+                "mappings_agn are mutually exclusive: choose one."
             )
 
         # Resolve mode
@@ -1149,6 +1171,8 @@ class Parameters:
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif self._nebular_cb19:
             self.nebular_mode = "cb19"
+        elif self._nebular_gutkin16:
+            self.nebular_mode = "gutkin16"
         elif self._nebular_mappings:
             self.nebular_mode = "mappings"
         elif self._nebular_mappings_agn:
@@ -3244,6 +3268,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_mean_sfh_type": content("SFH model selection determines parameters"),
     "_n_grid": content("grid size for stochastic SFH determines parameters"),
     "_nebular_cb19": content("nebular backend selection determines parameters"),
+    "_nebular_gutkin16": content("nebular backend selection determines parameters"),
     "_nebular_explicit": content(
         "owner-flagged: a build-time flag that selects an advisory branch. True "
         "when the caller stated a nebular disposition (any of the three neb "
@@ -3348,6 +3373,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "neb_ionization": content("nebular ionization source determines parameters"),
     "nebular": content("nebular emission backend determines parameters"),
     "nebular_cb19_grid_path": content("cb19 grid path determines available parameters"),
+    "nebular_gutkin16_grid_path": content("gutkin16 grid path determines available parameters"),
+    "nebular_gutkin16_mup": content("gutkin16 upper mass cutoff selects a different table slice"),
+    "nebular_gutkin16_continuum": content("gutkin16 continuum switch changes the emitted SED"),
     "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
     "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
     "nebular_mappings_agn_ionizing_source_warning": content(

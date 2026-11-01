@@ -22,6 +22,7 @@ edit:
 | Dust IR emission (modified BB, Casey, Dale, DL07, PAH) | `components/dust/emission/` (`analytic/` closed-form components, `templates/` library components) |
 | Dust energy-balance integral (`L_absorbed`, LyC-masked) | `forward/energy_balance.py` (canonical `bolometric_absorbed`, #922); fast-path LUT in `components/dust/energy_balance_precompute.py` |
 | Nebular continuum + line emission | `components/nebular/` |
+| Gutkin+2016 H II line tables (`neb={'type': 'gutkin16'}`) | `components/nebular/gutkin16.py` (`Gutkin16Backend`); grid `data/gutkin16_grid.h5`, built by `scripts/build_gutkin16_grid.py` from `data/neogal/`; tests `tests/components/nebular/test_gutkin16_backend.py`, `tests/components/nebular/test_gutkin16_grid_regen.py`, `tests/contract/test_gutkin16_grammar.py` |
 | AGN disc / torus / NLR / BLR | `components/agn/` |
 | IGM transmission | `components/igm/` |
 | Radio synchrotron + free-free + jets | `components/radio/` |
