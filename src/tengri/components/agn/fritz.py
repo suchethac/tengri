@@ -503,7 +503,7 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     even when this first runs inside a trace; without it the cache would
     immortalize ``DynamicJaxprTracer`` values that leak out of the trace scope.
     The cache is keyed on the process float dtype as well as the path
-    (:func:`~tengri.components.agn._template_grid.cache_per_float_dtype`): the
+    (``_template_grid.cache_per_float_dtype``): the
     arrays take the dtype of the mode they are built in, so a path-only key
     handed a float32 load to every later float64 run.
     """
