@@ -165,37 +165,43 @@ def test_wave_precomp_matches_exact_with_free_tau_diff(ssp):
     assert_allclose(l_lut, l_exact, rtol=1e-8)
 
 
-def test_nebular_and_line_channels_see_the_depth_dependent_curve(ssp):
-    """Own nebular screen at tau_neb = 2: the Balmer attenuation is exp(-2 k(lambda, 2)).
+def _diffuse_nebular_model(ssp, tau):
+    """Every nebular and line photon passes the diffuse screen (``nebular_screen='diffuse'``)."""
+    dust = _two(
+        "power_law",
+        "chevallard13",
+        Fixed(0.0),
+        Fixed(tau),
+        nebular_screen="diffuse",
+    )
+    return _build(ssp, dust)
 
-    ``nebular_screen='own'`` makes the nebular channel exactly one screen,
-    T_neb = exp(-tau_neb k_neb), so the Halpha/Hbeta attenuation ratio is a
-    closed form. The tau = 0 model supplies the intrinsic line ratio.
+
+def test_nebular_and_line_channels_see_the_depth_dependent_curve(ssp):
+    """The nebular continuum and the lines take exp(-tau k(lambda, tau)) at the screen's own depth.
+
+    ``chevallard13`` is a diffuse-ISM law, so the galaxy-wide screen is the diffuse one:
+    ``nebular_screen='diffuse'`` puts the nebular continuum and the lines behind the same
+    depth-dependent curve. The tau = 0 model supplies the intrinsic continuum and lines.
     """
     targets = jnp.asarray([_HALPHA, _HBETA])
-
-    def balmer(tau_neb):
-        dust = _two(
-            "power_law",
-            "power_law",
-            Fixed(0.0),
-            Fixed(0.0),
-            nebular_screen="own",
-            law_neb="chevallard13",
-            tau_neb=Fixed(tau_neb),
-        )
-        model = _build(ssp, dust)
-        waves = np.asarray(model.predict_state({}).derived["line_waves"])
-        flux = np.asarray(model.predict_line_fluxes({}, target_wavelengths=targets))
-        return float(flux[0] / flux[1]), waves
-
-    ratio_2, waves = balmer(2.0)
-    ratio_0, _ = balmer(0.0)
+    models = {tau: _diffuse_nebular_model(ssp, tau) for tau in (0.0, 0.3, 2.0)}
+    base = models[0.0].predict_state({})
+    wave = np.asarray(base.wave)
+    neb0 = np.asarray(base.derived["sed_nebular"])
+    line_waves = np.asarray(base.derived["line_waves"])
+    lines0 = np.asarray(models[0.0].predict_line_fluxes({}, target_wavelengths=targets))
+    mask = (neb0 > 1e-12 * np.max(neb0)) & (wave > _LYMAN_LIMIT)
     # Each target is matched to the nearest catalog line; the curve is evaluated there.
-    lines = jnp.asarray([waves[np.argmin(np.abs(waves - t))] for t in (_HALPHA, _HBETA)])
-    k = np.asarray(chevallard13(lines, tau_v=2.0))
-    expected = np.exp(-2.0 * (k[0] - k[1]))
-    assert_allclose(ratio_2 / ratio_0, expected, rtol=1e-8)
+    lines = jnp.asarray([line_waves[np.argmin(np.abs(line_waves - t))] for t in (_HALPHA, _HBETA)])
+    for tau in (0.3, 2.0):
+        state = models[tau].predict_state({})
+        transmission = np.asarray(state.derived["sed_nebular"]) / neb0
+        expected = np.exp(-tau * np.asarray(chevallard13(jnp.asarray(wave), tau_v=tau)))
+        assert_allclose(transmission[mask], expected[mask], rtol=1e-10)
+        flux = np.asarray(models[tau].predict_line_fluxes({}, target_wavelengths=targets))
+        expected_lines = np.exp(-tau * np.asarray(chevallard13(lines, tau_v=tau)))
+        assert_allclose(flux / lines0, expected_lines, rtol=1e-10)
 
 
 def test_float32_matches_float64(ssp):
@@ -216,5 +222,8 @@ def test_gradient_wrt_tau_diff_finite_matches_fd(ssp):
 
     grad = float(jax.grad(total)(jnp.asarray(1.0)))
     assert np.isfinite(grad)
+    assert grad != 0.0, (
+        "an identically zero d(photometry)/d(tau_diff) would mean the screen is not read"
+    )
     fd = fd_grad(lambda x: float(total(jnp.asarray(x))), 1.0)
     assert_allclose(grad, fd, rtol=1e-3)

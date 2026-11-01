@@ -105,6 +105,9 @@ def test_gradient_wrt_tau_v_finite_at_0_and_0p5(tau):
 
     g = jax.grad(loss)(jnp.asarray(tau))
     assert np.isfinite(float(g))
+    assert float(g) != 0.0, (
+        "an identically zero d(curve)/d(tau_v) would mean the depth is not read"
+    )
 
 
 def test_jit_matches_eager():

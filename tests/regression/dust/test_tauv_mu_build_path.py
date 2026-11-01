@@ -46,11 +46,22 @@ INTERP_RTOL = 0.10
 #: At a LUT node the interpolation is exact by construction (sibling: 1e-8).
 NODE_RTOL = 1e-8
 
-#: Off-node sanity bound. Between nodes the LUT interpolates linearly in (tau_bc, tau_diff),
-#: and at small depth the relative error is set by the node spacing, not by the mapping:
-#: it is 0.1-0.3 here, above the sibling's 10% that was measured on a different hull. A
-#: wrong axis or a wrong per-node depth misses by O(1), so this bound still catches it.
-OFF_NODE_SANITY = 0.5
+# Off-node ratchets. These small-depth bounds are ratchets on the linear-node LUT (#3199):
+# the grid places its 24 nodes linearly in tau, and between nodes the linear interpolant
+# error is set by the node spacing at small depth, not by the (tau_V, mu) mapping. The
+# native parameterization carries the same error (see the shared-error test below). They
+# must be tightened when the geometric node placement (#3199) lands.
+OFF_NODE_RATCHET = {
+    ("a", 0.05): 1e-1,
+    ("a", 1.0): 5e-3,
+    ("a", 3.9): 2e-4,
+    ("b", 0.01, 0.05): 2e-3,
+    ("b", 0.01, 0.95): 0.25,
+    ("b", 4.0, 0.05): 5e-2,
+    ("b", 4.0, 0.95): 1e-7,
+    ("b", 2.0, 0.5): 1e-3,
+    ("e", 0.05): 0.4,
+}
 
 #: The LUT's per-node depth axis size (``_grid`` in ``SEDModel``).
 N_NODES = 24
@@ -167,8 +178,10 @@ def test_free_tau_v_lut_matches_exact_path(synthetic_ssp_wide, monkeypatch):
         points=at_nodes,
     )
     for point, err in interior_err:
-        print(f"(a) interior tau_v={point['dust_tau_v']}: rel err {err:.3e}")
-        assert err < OFF_NODE_SANITY, f"interior LUT error {err:.3e} at {point}"
+        tau_v = point["dust_tau_v"]
+        print(f"(a) interior tau_v={tau_v}: rel err {err:.3e}")
+        bound = OFF_NODE_RATCHET[("a", tau_v)]
+        assert err < bound, f"interior LUT error {err:.3e} above ratchet {bound:g} at {point}"
     for point, err in node_err:
         print(f"(a) node tau_v={point['dust_tau_v']}: rel err {err:.3e}")
         assert err < NODE_RTOL, f"node LUT error {err:.3e} at {point}"
@@ -184,7 +197,7 @@ def test_free_tau_v_and_mu_lut_matches_exact_at_box_corners_and_center(
 ):
     """A free dust_mu may take the LUT (#3176): corners and center agree with the exact path."""
     corners = [{"dust_tau_v": v, "dust_mu": m} for v in TAU_V_BOUNDS for m in MU_BOUNDS]
-    center = {"dust_tau_v": 0.5 * sum(TAU_V_BOUNDS), "dust_mu": 0.5 * sum(MU_BOUNDS)}
+    center = {"dust_tau_v": 2.0, "dust_mu": 0.5}
     _, errors = _lut_vs_exact(
         synthetic_ssp_wide,
         monkeypatch,
@@ -194,8 +207,10 @@ def test_free_tau_v_and_mu_lut_matches_exact_at_box_corners_and_center(
         points=[*corners, center],
     )
     for point, err in errors:
-        print(f"(b) tau_v={point['dust_tau_v']:.3f} mu={point['dust_mu']:.3f}: rel err {err:.3e}")
-        assert err < OFF_NODE_SANITY, f"box LUT error {err:.3e} at {point}"
+        key = ("b", point["dust_tau_v"], point["dust_mu"])
+        print(f"(b) tau_v={key[1]:.3f} mu={key[2]:.3f}: rel err {err:.3e}")
+        bound = OFF_NODE_RATCHET[key]
+        assert err < bound, f"box LUT error {err:.3e} above ratchet {bound:g} at {point}"
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +290,74 @@ def test_chevallard13_diffuse_lut_matches_exact_at_three_tau_v(synthetic_ssp_wid
     for point, err in errors:
         print(f"(e) chevallard13 node tau_v={point['dust_tau_v']:.4f}: rel err {err:.3e}")
         assert err < NODE_RTOL, f"chevallard13 node LUT error {err:.3e} at {point}"
+    _, off_node = _lut_vs_exact(
+        synthetic_ssp_wide,
+        monkeypatch,
+        tau_v=Uniform(*TAU_V_BOUNDS),
+        mu=Fixed(0.4),
+        drop={"dust_tau_v"},
+        law_diff="chevallard13",
+        points=[{"dust_tau_v": 0.05}],
+    )
+    for point, err in off_node:
+        print(f"(e) chevallard13 off-node tau_v={point['dust_tau_v']}: rel err {err:.3e}")
+        bound = OFF_NODE_RATCHET[("e", point["dust_tau_v"])]
+        assert err < bound, f"chevallard13 off-node error {err:.3e} above ratchet {bound:g}"
+
+
+def _native_model(ssp, *, tau_bc, tau_diff):
+    """A native two-screen model with free tau_BC and tau_diff over the given priors."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=_obs(),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "law_diff": "calzetti",
+                "tau_bc": tau_bc,
+                "tau_diff": tau_diff,
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+            approx=WavePrecomp(),
+        )
+
+
+def test_native_and_tauv_mu_share_the_linear_node_error(synthetic_ssp_wide):
+    """Same nodes, same interpolant: the (tau_V, mu) hull adds no error of its own.
+
+    With mu = 0.4 the (tau_V, mu) hull is tau_BC in [0.006, 2.4] and tau_diff in
+    [0.004, 1.6]. Native priors over exactly that hull give the same 24 nodes, so the
+    native LUT and the tauv_mu LUT interpolate identically at (tau_BC, tau_diff) =
+    (0.03, 0.02) = (0.6, 0.4) x tau_V = 0.05.
+    """
+    native = _native_model(
+        synthetic_ssp_wide,
+        tau_bc=Uniform(0.006, 2.4),
+        tau_diff=Uniform(0.004, 1.6),
+    )
+    tauv_mu = _tauv_mu_model(synthetic_ssp_wide, tau_v=Uniform(*TAU_V_BOUNDS), mu=Fixed(0.4))
+    assert native._energy_balance_lut_cache is not None
+    assert tauv_mu._energy_balance_lut_cache is not None
+    a = np.asarray(
+        native.predict_photometry(
+            {
+                **dict(native.spec.sample(jax.random.PRNGKey(0))),
+                "dust_tau_bc": 0.03,
+                "dust_tau_diff": 0.02,
+            }
+        )
+    )
+    b = np.asarray(
+        tauv_mu.predict_photometry(
+            {**dict(tauv_mu.spec.sample(jax.random.PRNGKey(0))), "dust_tau_v": 0.05}
+        )
+    )
+    assert_allclose(b, a, rtol=1e-6)
 
 
 # ---------------------------------------------------------------------------
