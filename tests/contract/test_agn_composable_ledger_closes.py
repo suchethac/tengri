@@ -358,6 +358,17 @@ _RECIPES = {
         {**_BASE, "agn_lum_ratio": 0.3},
     ),
     "no_disc": (_selectors("none", "fritz"), _BASE),
+    # 'conserving' beside an active fracAGN (#2320): fracAGN sets only the covering factor
+    # (the AGN component derives agn_torus_frac from it), so the runner closes on L_bol for
+    # the two tori the 'cigale_joint' tie would otherwise renormalize.
+    "conserving_fracagn_skirtor_polar": (
+        _selectors("kubota_done", "skirtor", atten="polar_dust"),
+        {**_BASE, "agn_ir_frac": 0.3, "agn_polar_ebv": 0.1},
+    ),
+    "conserving_fracagn_fritz": (
+        _selectors("kubota_done", "fritz"),
+        {**_BASE, "agn_ir_frac": 0.3},
+    ),
 }
 
 

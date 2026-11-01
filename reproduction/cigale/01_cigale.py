@@ -3005,7 +3005,13 @@ print(
 # anchor enters the AGN normalization too. `agn_log_lbol`, the angle-integrated
 # accretion power, is then not a free input: setting both is two statements of
 # one power, and the build refuses it. Use `agn_norm='independent'` and
-# `agn_log_lbol` for a model with no `agn_ir_frac`.
+# `agn_log_lbol` for a model with no `agn_ir_frac`. To keep `agn_log_lbol` as
+# the AGN power and still state an AGN dust fraction, use
+# `agn_norm='conserving'`: there `agn_ir_frac` sets only the covering factor
+# `agn_torus_frac`, the torus re-emits that share of the accretion power so the
+# AGN dust is the fraction `f` of the total (or of the light in
+# `ir_frac_window`), and the disc keeps the rest, so the pieces add up to
+# `agn_log_lbol`.
 #
 # **Verification Status:** CROSSVAL: SKIRTOR torus (mean 3-param)
 

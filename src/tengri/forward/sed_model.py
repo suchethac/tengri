@@ -1686,8 +1686,8 @@ def _check_polar_reference_grid_extent(
     )
 
 
-def _validate_fracagn_refuses_independent(spec) -> None:
-    """Raise if an active fracAGN meets ``agn_norm='independent'`` (R65).
+def _validate_fracagn_norm_policy(spec) -> None:
+    """Raise if an active fracAGN meets a policy that cannot carry it (R65).
 
     fracAGN (``agn_ir_frac``) sets the torus from the **dust-absorbed stellar**
     luminosity. Two policies give that a single reference. ``'cigale_joint'``
@@ -1725,14 +1725,21 @@ def _validate_fracagn_refuses_independent(spec) -> None:
     the pathology is the combination, which is why this refuses the pair and
     nothing else.
 
+    ``'conserving'`` reads the absorbed host power at run time, so it needs the
+    dust to run before the AGN. A screened AGN (``dust_agn_screen != 'none'``)
+    runs before the dust, the absorbed power is not yet published, and the
+    coupling would fall back to the user ``agn_torus_frac`` without a word;
+    that pair is refused too (``'cigale_joint'`` refuses a screen for the same
+    reason, in ``Parameters``).
+
     Raises
     ------
     ConfigError
-        If ``spec.agn_norm`` is ``'independent'`` and ``agn_ir_frac`` is
-        active (FREE, or Fixed with a value > 0). An explicit ``Fixed(0.0)``
-        states "no coupling" and is deliberately legal -- it is one of the
-        remedies this refusal names, and advice a guard refuses is the #1364
-        defect.
+        If ``agn_ir_frac`` is active (FREE, or Fixed with a value > 0) and
+        ``spec.agn_norm`` is ``'independent'``, or is ``'conserving'`` beside a
+        screened AGN. An explicit ``Fixed(0.0)`` states "no coupling" and is
+        deliberately legal -- it is one of the remedies this refusal names, and
+        advice a guard refuses is the #1364 defect.
 
     See Also
     --------
@@ -1742,7 +1749,7 @@ def _validate_fracagn_refuses_independent(spec) -> None:
     from tengri.config.exceptions import ConfigError
 
     policy = str(getattr(spec, "agn_norm", "cigale_joint") or "cigale_joint")
-    if policy != "independent":
+    if policy not in ("independent", "conserving"):
         return
 
     free = set(spec.free_params)
@@ -1754,6 +1761,24 @@ def _validate_fracagn_refuses_independent(spec) -> None:
     ir_frac_active = ("agn_ir_frac" in free) or (float(fixed.get("agn_ir_frac", 0.0)) > 0.0)
     if not ir_frac_active:
         return
+
+    screen = str(getattr(spec, "dust_agn_screen", "none") or "none")
+    if policy == "conserving":
+        if screen == "none":
+            return
+        # A screened AGN runs before the dust (the screen attenuates sed_agn inside the dust
+        # step), so the absorbed power fracAGN reads is not yet published when the AGN runs
+        # and the coupling would silently fall back to the user agn_torus_frac.
+        raise ConfigError(
+            f"agn_norm='conserving' with an active fracAGN (agn_ir_frac) and "
+            f"dust_agn_screen={screen!r}: fracAGN sets agn_torus_frac from the power the "
+            "dust absorbs from the host, but a screened AGN is evaluated before the dust "
+            "(the screen attenuates the AGN inside the dust step), so that power does not "
+            "exist yet when the AGN runs. Choose one of: drop the screen "
+            "(dust_attenuation={'agn_screen': 'none'}), or drop the coupling "
+            "(agn={'agn_ir_frac': Fixed(0.0)}) and state the covering factor with "
+            "agn_torus_frac."
+        )
 
     raise ConfigError(
         "agn_norm='independent' was selected with an active fracAGN "
@@ -1767,9 +1792,9 @@ def _validate_fracagn_refuses_independent(spec) -> None:
         "'cigale_joint'} with a SKIRTOR torus, the CIGALE coupling, which ties "
         "the disc to the same agn_power reference through the template ratio R "
         "(measured: int(disc)/int(torus) = 2.838156 at every stellar mass); "
-        "(2) agn={'norm': 'conserving'}, under which the AGN power stays "
-        "10**agn_log_lbol and fracAGN sets only the covering factor "
-        "agn_torus_frac; or (3) keep 'norm': 'independent' and set "
+        "(2) agn={'norm': 'conserving'} with an unscreened AGN, under which the "
+        "AGN power stays 10**agn_log_lbol and fracAGN sets only the covering "
+        "factor agn_torus_frac; or (3) keep 'norm': 'independent' and set "
         "agn={'agn_ir_frac': Fixed(0.0)} (or omit it) to drop the coupling, "
         "which leaves agn_torus_frac scaling the torus and agn_log_lbol "
         "scaling the disc. See ruling R65."
@@ -14449,7 +14474,7 @@ class SEDModel:
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_torus_frac_fracagn_conflict(spec)
-        _validate_fracagn_refuses_independent(spec)
+        _validate_fracagn_norm_policy(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
         _validate_radio_firrc_domain(spec)

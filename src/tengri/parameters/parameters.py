@@ -661,8 +661,9 @@ class Parameters:
                 f"  - agn_norm='independent' (each block on its own scale)\n"
                 f"  - agn_norm='conserving' (energy-conserving joint scaling)\n"
                 f"  - dust_agn_screen='none' (unscreened AGN)\n"
-                f"A screened AGN cannot use fracAGN (agn_ir_frac), which requires "
-                f"agn_norm='cigale_joint': drop the screen or the coupling."
+                f"A screened AGN cannot use fracAGN (agn_ir_frac) under any policy, "
+                f"since it reads the absorbed power the screen is part of: drop the "
+                f"screen or the coupling."
             )
         # Block-recipe validation (typo hard-error + suspicious-combo warnings)
         # is deferred until after the parameter distributions are built, so the

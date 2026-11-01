@@ -81,8 +81,7 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
-from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO
-from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
@@ -187,8 +186,10 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``agn_ir_frac>0``). ``"independent"`` keeps each component on its own
         luminosity scale (disc on ``agn_log_lbol``, torus on ``agn_power``,
         polar via the legacy face-on proxy), the GRAHSP/AGNfitter-style
-        bookkeeping. A static string, read by the runner like the block
-        selectors.
+        bookkeeping. ``"conserving"`` debits every piece from
+        ``agn_log_lbol``; beside an active ``agn_ir_frac`` the coupling sets
+        only ``agn_torus_frac`` (see :meth:`AGNSEDComponent.apply`). A static
+        string, read by the runner like the block selectors.
     """
 
     name: str = "agn"
@@ -602,7 +603,11 @@ class AGNSEDComponent(TemplateThreading):
         the CIGALE-style disc/torus/polar normalization. Declaring these as
         optional inputs ensures the dust component runs before AGN in this
         configuration (#556). When ``agn_norm`` is ``"independent"`` or
-        ``"conserving"``, AGN has no dust dependency and these are omitted.
+        ``"conserving"``, these are omitted, so a screened AGN can run before the
+        dust. ``"conserving"`` beside an active ``agn_ir_frac`` reads
+        ``log_L_absorbed`` too; it gets it from the canonical order (dust before
+        AGN), and the build refuses that coupling beside a screened AGN
+        (``sed_model._validate_fracagn_norm_policy``).
         """
         if self.config.agn_norm == "cigale_joint":
             return (
