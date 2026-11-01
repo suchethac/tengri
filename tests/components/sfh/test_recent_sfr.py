@@ -148,3 +148,144 @@ def test_jit_matches_eager():
     eager = splice_current_episode(t, s, PSI, DT_YR)
     jitted = jax.jit(splice_current_episode)(t, s, PSI, DT_YR)
     assert_allclose(np.asarray(jitted), np.asarray(eager), rtol=1e-12, atol=1e-12)
+
+
+# ── Registry types 'recent' and 'recent_ssfr' (#3177 part 2) ────────────
+#
+# The composer receives values already in internal units, exactly as
+# ``get_internal_params`` delivers them: ``sfh_recent_timescale_myr`` arrives
+# as Delta t in yr (scale 1e6), ``sfh_delayed_tau_gyr`` as tau in yr (scale 1e9).
+
+M_DELAYED = 1e10  # declared smooth formed mass, 10**10 Msun
+LOG_M_DELAYED = 10.0
+TAU_GYR = 1.0
+AGE_GYR = 5.0
+
+
+def _delayed_recent_kw(**recent):
+    base = {
+        "sfh_delayed_log_total_mass": LOG_M_DELAYED,
+        "sfh_delayed_tau_gyr": TAU_GYR * 1e9,
+        "sfh_delayed_age_gyr": AGE_GYR * 1e9,
+    }
+    base.update(recent)
+    return base
+
+
+def test_registry_lists_recent_and_recent_ssfr():
+    """Both current-episode types are registered and appear in the SFH menu."""
+    from tengri import list_sfh_models
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    assert "recent" in SFH_REGISTRY
+    assert "recent_ssfr" in SFH_REGISTRY
+    assert SFH_REGISTRY["recent"].composition_type == "current"
+    assert SFH_REGISTRY["recent_ssfr"].composition_type == "current"
+    menu = {row["name"]: row for row in list_sfh_models()}
+    assert {"recent", "recent_ssfr"} <= set(menu)
+
+
+def test_resolve_sfh_delayed_recent_param_names():
+    """resolve_sfh(['delayed', 'recent']) declares the episode and delayed names."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    _fn, params, pmap, _settings = resolve_sfh(["delayed", "recent"])
+    for name in (
+        "sfh_recent_log_sfr",
+        "sfh_recent_timescale_myr",
+        "sfh_delayed_log_total_mass",
+        "sfh_delayed_tau_gyr",
+        "sfh_delayed_age_gyr",
+    ):
+        assert name in params, name
+    assert pmap["sfh_recent_timescale_myr"] == ("timescale_yr", 1e6, 0.0)
+    assert pmap["sfh_recent_log_sfr"] == ("log_sfr", 1.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    "types",
+    [["delayed", "recent", "recent_ssfr"], ["delayed", "recent", "recent"]],
+    ids=["recent_and_ssfr", "recent_twice"],
+)
+def test_two_current_terms_refused(types):
+    """At most one current episode per composition."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    with pytest.raises(ValueError, match="At most one current episode per composition"):
+        resolve_sfh(types)
+
+
+@pytest.mark.parametrize("types", [["recent"], ["recent_ssfr"]], ids=["recent", "recent_ssfr"])
+def test_recent_requires_a_smooth_member(types):
+    """A current term alone, with no additive smooth member, is refused."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    with pytest.raises(ValueError, match="smooth"):
+        resolve_sfh(types)
+
+
+def test_composed_history_equals_psi_in_window_and_conserves_smooth_mass():
+    """Composed SFR is psi in the window; smooth part keeps 10**log_total_mass."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    fn, _params, _pmap, _settings = resolve_sfh(["delayed", "recent"])
+    t = _grid()
+    kw = _delayed_recent_kw(
+        sfh_recent_log_sfr=float(np.log10(PSI)),
+        sfh_recent_timescale_myr=DT_YR,
+    )
+    sfr = np.asarray(fn(t, **kw))
+    inside = np.asarray(t) < 0.9 * DT_YR
+    assert_allclose(sfr[inside], PSI, rtol=0, atol=1e-12)
+
+    smooth_part = sfr - PSI * np.asarray(window_weight(t, 0.0, DT_YR))
+    got = np.trapezoid(smooth_part, np.asarray(t))
+    assert_allclose(got, M_DELAYED, rtol=1e-6)
+    total = np.trapezoid(sfr, np.asarray(t))
+    assert_allclose(total, M_DELAYED + PSI * DT_YR, rtol=1e-6)
+
+
+def test_recent_ssfr_form_equals_recent_form_at_converted_psi():
+    """recent_ssfr with log psi_S equals recent with psi = psi_from_specific_sfr(...)."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    log_ssfr = -8.0
+    psi = float(psi_from_specific_sfr(log_ssfr, M_DELAYED, DT_YR))
+    t = _grid()
+
+    fn_ssfr, _p, _m, _s = resolve_sfh(["delayed", "recent_ssfr"])
+    kw_ssfr = _delayed_recent_kw(
+        sfh_recent_ssfr_log_ssfr=log_ssfr,
+        sfh_recent_ssfr_timescale_myr=DT_YR,
+    )
+    fn_rec, _p2, _m2, _s2 = resolve_sfh(["delayed", "recent"])
+    kw_rec = _delayed_recent_kw(
+        sfh_recent_log_sfr=float(np.log10(psi)),
+        sfh_recent_timescale_myr=DT_YR,
+    )
+    assert_allclose(
+        np.asarray(fn_ssfr(t, **kw_ssfr)), np.asarray(fn_rec(t, **kw_rec)), rtol=1e-10, atol=0
+    )
+
+
+def test_timescale_in_myr_reaches_kernel_in_years():
+    """Delta t = 50 Myr, scaled by the registry map, puts the window edge at 5e7 yr."""
+    from tengri.components.stellar.sfh.registry import resolve_sfh
+
+    fn, _p, pmap, _s = resolve_sfh(["delayed", "recent"])
+    scale = pmap["sfh_recent_timescale_myr"][1]
+    dt_yr = 50.0 * scale
+    assert_allclose(dt_yr, 5e7)
+    t = _grid()
+    sfr = np.asarray(
+        fn(
+            t,
+            **_delayed_recent_kw(
+                sfh_recent_log_sfr=float(np.log10(PSI)),
+                sfh_recent_timescale_myr=dt_yr,
+            ),
+        )
+    )
+    tn = np.asarray(t)
+    assert_allclose(sfr[tn < 0.99 * 5e7], PSI, rtol=0, atol=1e-12)
+    assert np.all(sfr[tn > 1.01 * 5e7] != PSI)

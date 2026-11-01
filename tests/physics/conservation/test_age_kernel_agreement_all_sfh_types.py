@@ -45,6 +45,8 @@ REFUSALS = {
     "gaussian_burst": "not yet validated",
     "prospector_beta": "not yet validated",
     "top_hat": "not yet validated",
+    "recent": "not yet validated",
+    "recent_ssfr": "not yet validated",
     "burst": "additive",
     "field": "additive",
     "table": "runtime arrays",
