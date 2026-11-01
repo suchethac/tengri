@@ -90,7 +90,9 @@ def test_register_duplicate_raises():
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_validate_clean_recipe_emits_no_warnings():
+def test_validate_clean_recipe_emits_only_the_ledger_note():
+    """The full GRAHSP recipe raises no recipe issue; it carries the rule-10 note that its
+    self-contained template does not close the energy ledger (#3076), and nothing else."""
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always", RecipeWarning)
         issues = validate_block_recipe(
@@ -101,8 +103,9 @@ def test_validate_clean_recipe_emits_no_warnings():
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
         )
-    assert issues == []
-    assert not any(issubclass(x.category, RecipeWarning) for x in w)
+    assert len(issues) == 1 and "energy ledger does not close" in issues[0], issues
+    recipe_warnings = [x for x in w if issubclass(x.category, RecipeWarning)]
+    assert all("energy ledger does not close" in str(x.message) for x in recipe_warnings)
 
 
 def test_validate_all_none_warns():
