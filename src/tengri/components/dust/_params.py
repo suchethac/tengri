@@ -838,6 +838,11 @@ ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
     {"dust_tau_bc", "dust_tau_diff", "dust_tau_neb"}
 ) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
+#: The native birth-cloud / diffuse depth pair. Not declared under
+#: ``parameterization="tauv_mu"``, where :data:`TAUV_MU_PARAMS` and ``dust_tau_v``
+#: take their place (#3176).
+ATTENUATION_NATIVE_TAU_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust_tau_diff"})
+
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_tau_v",
@@ -872,6 +877,7 @@ TAUV_MU_PARAMS: tuple[ParamDeclaration, ...] = (
 
 __all__ = [
     "ANALYTIC_BETA_IR_DEFAULT",
+    "ATTENUATION_NATIVE_TAU_ONLY",
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
