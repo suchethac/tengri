@@ -514,8 +514,9 @@ class PopulationFitter:
         (default) routes every factory-built photometry model through the
         ``WavePrecomp`` LUT, a hierarchical sampler evaluates the forward
         model thousands of times, and the exact path costs a measured ~2-6x
-        more per evaluation. Spectroscopy and joint fits stay exact under
-        ``"auto"``, since the spectrum LUT is opt-in. ``None`` forces the exact
+        more per evaluation. A joint fit's photometry takes the same LUT; a
+        spectrum channel takes the spectrum LUT only where that LUT serves the
+        pixels exactly and is exact otherwise. ``None`` forces the exact
         wave-grid path; an explicit config is used verbatim. A factory whose
         models already carry the LUT is respected untouched.
 

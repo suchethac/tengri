@@ -11340,13 +11340,10 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
-        # Route the photometry channel through the LUT projection
-        # when the model was built with ``approx=WavePrecomp(...)``. The
-        # routing decision is closure-captured per-model and baked into
-        # ``compile_signature`` (via the resolved ``approx`` config tuple),
-        # so structurally-equal models share a compile across the two
-        # routings without colliding. Spectrum stays exact, no spectrum
-        # LUT yet.
+        # A photometry-only observation under ``approx=WavePrecomp(...)`` projects through
+        # the LUT. The routing is closure-captured per model and baked into
+        # ``compile_signature`` via the resolved ``approx`` config tuple. A joint
+        # observation takes the branches below.
         use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
         # Part B: spectrum LUT inside the fused JIT kernel. ``predict_state``
         # (called within ``_impl``) publishes ``spec_eff_waves`` + the per-pixel
@@ -11355,17 +11352,11 @@ class SEDModel:
         # JOINT model also project photometry in the same kernel (Part A).
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
-        # A joint observation whose spectrum channel stays exact (pixels wider than the
-        # model grid, a free sigma_v or a banded resolution matrix) still keeps its
-        # photometry on the WavePrecomp LUT: the two channels share one forward state and
-        # the exact spectrum only needs the full SED, which the chain still publishes.
-        # Without this the spectrum's exact path drags the photometry onto the exact
-        # filter integration too, the only part of a joint fit the LUT can still save.
-        # A model with a nebular grid attached stays on the exact route, because serving
-        # photometry from the grid zeroes ``sed_nebular`` and the exact spectrum reads it.
+        # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
+        # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
+        # which the exact spectrum reads.
         mixed_phot_lut = (
             phot_lut
-            and not spec_lut
             and observation.can_do_spectroscopy
             and observation.can_do_photometry
             and getattr(self, "_nebular_grid_table", None) is None
