@@ -275,6 +275,7 @@ addopts = "--tb=short --strict-markers -m 'not crossval and not slow and not ben
 xfail_strict = true
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
+    "weekly: too long for the nightly slow legs (over 1 h); excluded from every nightly `slow` leg (`and not weekly`) and run only by the `slow-weekly` job in tests-weekly.yml (`-m weekly`); give it `slow` too",
     "network: test genuinely exercises a network path; exempt from the conftest network guard (#1546)",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
     "benchmark: asserts a wall-clock ratio; run serially (`-m benchmark -n 0`), never under -n auto",

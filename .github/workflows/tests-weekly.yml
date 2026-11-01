@@ -1,0 +1,101 @@
+name: Tests (weekly)
+
+# The `weekly`-marked tests, each too long for the nightly legs in tests.yml.
+# Its own workflow so the Sunday cron does not re-fire the nightly jobs and so
+# `ci-ok` (tests.yml) is untouched; `weekly-alarm` below opens or updates an
+# issue when a scheduled run fails, as `nightly-alarm` does for the nightly.
+on:
+  schedule:
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+
+jobs:
+  # Weekly tier: the tests marked `weekly`, each too long for the nightly legs
+  # (the joint-model NUTS parity test measured 3,652 s on run 41294360604, before
+  # #3224's ~10 % cut). Runs on the weekly cron, on workflow_dispatch and on a PR
+  # carrying the `run-slow-tests` label (standing down on an unrelated label
+  # event, as `slow` does). The nightly inference legs deselect `weekly`.
+  #
+  # Tier (classified in tools/check_ci_pr_coverage.py): opt-in via the
+  # `run-slow-tests` label, never part of a plain pull request or of `ci-ok`.
+  # A new `weekly` test in another file needs its path added to the pytest line
+  # below; tools/check_slow_marks_reachable.py fails the build otherwise.
+  slow-weekly:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tests-slow-weekly-${{ github.ref }}
+      cancel-in-progress: false
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'run-slow-tests')
+          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+              || github.event.label.name == 'run-slow-tests'))
+    # Provisional until the first weekly run's warm cache is measured. The caps in
+    # tests.yml sum to about 9.62 GB against the 10 GB repository cache quota; 0.25
+    # here makes about 9.87 GB (0.4 would have made about 10.02 GB).
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: "0.25"
+    # The job budget exceeds the step's, which exceeds pytest's per-test --timeout, so
+    # a hung test is named by pytest before the step or the job is cut.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Same restore + save(if: always()) JAX cache pattern as the `slow` job.
+      - id: jaxver
+        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
+      - id: week
+        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: tengri-jax-slow-weekly-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
+          restore-keys: |
+            tengri-jax-slow-weekly-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-slow-weekly-
+      # `-m weekly` replaces the default addopts selector, so the `slow` deselection
+      # does not apply; `-n 0` keeps it serial (NUTS peaks at several GB).
+      - run: python -X faulthandler -m pytest tests/inference/test_profile_mass.py -v -m weekly -n 0 --timeout=4500 --timeout-method=signal --durations=30
+        timeout-minutes: 80
+      - uses: actions/cache/save@v6
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.jax_cache.outputs.cache-primary-key }}
+
+  weekly-alarm:
+    name: weekly-alarm
+    if: always() && github.event_name == 'schedule' && needs.slow-weekly.result != 'success'
+    needs: [slow-weekly]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update weekly failure issue
+        run: |
+          set -euo pipefail
+          ISSUES=$(gh issue list --state open --label nightly-red --limit 100 --json number,title --jq '[.[] | select(.title | startswith("[weekly-red]"))]')
+          COUNT=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)))')
+          if [ "$COUNT" -eq 0 ]; then
+            gh issue create \
+              --title "[weekly-red] Weekly slow tests failed" \
+              --label nightly-red --label area:ci \
+              --body "Weekly run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (commit ${{ github.sha }}) failed the slow-weekly job."
+          else
+            ISSUE_NUM=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; issues = json.load(sys.stdin); print(issues[0]["number"] if issues else "")')
+            gh issue comment "$ISSUE_NUM" \
+              --body "Weekly run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (commit ${{ github.sha }}) also failed."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

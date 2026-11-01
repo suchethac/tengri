@@ -1896,11 +1896,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join --durations tools/ci_inference_durations.json) -v --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --timeout=600 --timeout-method=signal --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join --durations tools/ci_inference_durations.json) -v --ignore=tests/crossval -m 'not crossval and not population_fit and not weekly' -n 0 --timeout=600 --timeout-method=signal --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit and not weekly' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit and not weekly' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1921,7 +1921,7 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit and not weekly' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
