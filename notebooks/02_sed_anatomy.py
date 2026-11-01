@@ -175,6 +175,13 @@ citations.print_citations(model)
 # ## Panchromatic anatomy
 #
 # All components of the SED from X-rays to radio are shown together on a single rest-frame wavelength grid.
+#
+# The dust emission in this model is the Dale 2014 template, which has no single dust temperature,
+# so the da Cunha et al. (2013) CMB heating boost does not apply to it. The analytic models
+# (`modified_blackbody`, `graybody`, `casey2012`) include the boost by default, and the Schreiber
+# templates include it when `cmb=True` is set. Their emitted dust luminosity is the absorbed
+# power times [T_d(z)/T_d,0]^(4+beta). For 20 K dust with beta = 1.8 at z = 6 that factor is 1.76,
+# so the far-IR can exceed the absorbed stellar power. The stellar energy balance is unchanged.
 
 # %%
 params = model.spec.sample(jax.random.PRNGKey(0))

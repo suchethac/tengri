@@ -2609,9 +2609,11 @@ class TestCIGALESKIRTOR:
         strict=True,
         raises=AssertionError,
         reason=(
-            "tengri/pCIGALE SKIRTOR NIR/V ratio = 0.745 at 1.0-1.2 um with the CIGALE "
-            "fracAGN normalization (tengri's host V is 0.58x pCIGALE's, from the "
-            "attenuation split and the SSP library, not yet isolated), see #2480"
+            "tengri/pCIGALE AGN NIR/V ratio = 1.968 at 1.0-1.2 um (disc+torus, both "
+            "normalized to their own host V). tengri's sightline bolometric at i=30 is "
+            "2.35x the CIGALE total (9.30 vs 3.96 Lsun): agn_log_lbol is the angle-"
+            "averaged accretion power, so the sightline total is not agn_log_lbol. "
+            "tengri's host V is 0.576x pCIGALE's (not isolated). See #2480"
         ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):

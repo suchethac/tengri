@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax.flatten_util import ravel_pytree
 
 from tengri import (
     DEFAULT,
@@ -35,21 +36,59 @@ pytestmark = pytest.mark.contract
 _FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "des_g", "des_r", "des_i"]
 _MASS_NAME = "sfh_tsnorm_log_total_mass"
 
-#: Absolute bar on each MAP parameter's profiled-vs-unprofiled difference.
-#: Measured at snr=300 over mock seeds 0-5 (FSPS minimal recipe, same fit
-#: kwargs as the test): the worst single-parameter difference was 0.076
-#: (sfh_tsnorm_trunc, seed 1) and 0.025 (seed 2); seed 5, the test's own
-#: draw, is 4.96e-3. Profiled and unprofiled MAP are different optimization
-#: problems, so the difference is set by optimizer tolerance and the
-#: Occam-factor term, not by a shared fixed point. The bar sits above the
-#: measured maximum with margin; a 1e-3 bar failed on this draw (#2424).
-#: Most of that spread was the unprofiled L-BFGS-B stopping on scipy's
-#: relative-decrease test far from its minimum (seed 5 later read 0.19 on
-#: sfh_tsnorm_trunc at grad norm 0.057); with the gradient tolerance binding
-#: (``map_dispatch._SCIPY_FTOL``) seeds 0-5 measure 0.024, 0.012, 3.6e-3,
-#: 2.8e-3, 7.9e-4 and 3.7e-4, the remainder the estimators' own difference.
-_MAP_PARITY_BAR = 0.1
+#: Profiled-vs-unprofiled MAP parameter difference, as a fraction of that
+#: parameter's own posterior sigma (Laplace, from the unprofiled Hessian). The
+#: bar is scale-aware: sigma runs from 0.046 (met_logzsol) to 3.7
+#: (sfh_tsnorm_trunc) on this fit, so no absolute number fits all of them.
+#: Measured on the test's draw (seed 5, snr 300) on jax 0.11.1 and 0.12.0: the
+#: worst parameter is 0.0041 sigma, and the two builds agree to 4 figures. The
+#: bar is 0.02 sigma, 5x that. A fit that is wrong in the way #2841 was wrong
+#: (scipy's relative-decrease rule stopping early, 0.19 off on
+#: sfh_tsnorm_trunc = 0.05 sigma, 1.4e-3 nats above the minimum) fails it, and
+#: 0.02 sigma costs 2e-4 nats in the loss (0.5 * 0.02**2), a shift nobody would
+#: read off a posterior.
+_MAP_PARITY_SIGMA_FRACTION = 0.02
+#: Newton decrement 0.5 g^T H^-1 g [nats] at the reported MAP: the loss drop a
+#: quadratic model predicts between that point and the minimum. Unlike |g| it is
+#: invariant under reparameterization, and unlike |g| it does not read the
+#: gradient's round-off floor: where f has stopped changing at float64
+#: round-off, |g| is 2e-5 to 4e-4 depending on the XLA build (#3083), while the
+#: decrement is 5e-14 on both. Measured 5e-14 (unprofiled) and 1e-14 to 5e-14
+#: (profiled); the #2841 early stop sat 1.4e-3 above the minimum. 1e-8 lies
+#: five decades from each, and is an offset of 1.4e-4 sigma.
+_NEWTON_DECREMENT_BAR = 1e-8
 _SPEC_WAVE = jnp.linspace(4000.0, 7000.0, 40)
+
+
+def _newton_decrement_and_sigma_xi(fitter, post):
+    """Newton decrement [nats] and Laplace sigma per free parameter at a MAP.
+
+    Both are read from the Hessian of the fitter's own negative log posterior
+    at the posterior's unbounded point. ``sigma`` is in the unbounded
+    (standardized) coordinate; see :func:`_physical_sigma`.
+    """
+    ctx = InferenceContext.from_target(fitter)
+    flat, unravel = ravel_pytree(ctx.unbounded_from_posterior(post))
+
+    def loss(vec):
+        return ctx.neg_log_posterior_fn(unravel(vec), ctx.data_args)
+
+    grad = jax.grad(loss)(flat)
+    hessian = jax.hessian(loss)(flat)
+    eigenvalues, eigenvectors = jnp.linalg.eigh(hessian)
+    assert bool(jnp.all(eigenvalues > 0)), "Hessian at the MAP is not positive definite"
+    decrement = 0.5 * float(jnp.sum((eigenvectors.T @ grad) ** 2 / eigenvalues))
+    sigma = np.sqrt(np.diag(np.linalg.inv(np.asarray(hessian))))
+    return decrement, dict(zip(unravel(flat).keys(), (float(x) for x in sigma), strict=True))
+
+
+def _physical_sigma(fitter, name, post, sigma_unbounded):
+    """Convert a sigma in the unbounded coordinate to the parameter's own units."""
+    ctx = InferenceContext.from_target(fitter)
+    x = float(ctx.unbounded_from_posterior(post)[name])
+    dist = fitter.spec.get_distribution(name)
+    slope = jax.grad(lambda v: dist.unstandardize(v))(jnp.asarray(x))
+    return abs(float(slope)) * sigma_unbounded
 
 
 def _minimal_model(ssp_data):
@@ -365,24 +404,33 @@ class TestMapParity:
         assert post_on.diagnostics["profile_mass_resolved"] is True
         assert post_off.diagnostics["profile_mass_resolved"] is False
 
-        # Both optimizers reached their stationary points. scipy's default
-        # relative-decrease test once stopped the unprofiled fit at grad norm
-        # 0.057 while reporting success, 1.4e-3 above the joint minimum the
-        # profiled MAP had found, which is the whole of the parity gap it left.
-        for label, post in (("unprofiled", post_off), ("profiled", post_on)):
-            grad_norm = post.diagnostics["grad_norm"]
-            # grad-assert: finite-only — a stationary point is the claim; zero is the ideal value
-            assert np.isfinite(grad_norm) and grad_norm < 1e-4, (
-                f"{label} MAP stopped at grad norm {grad_norm:.3g}, not at a minimum"
+        # Both optimizers reached a stationary point: the remaining improvement
+        # a Newton step predicts is negligible. (The raw gradient norm is not the
+        # measure: at the minimum it is round-off noise that depends on the XLA
+        # build, #3083.) scipy's default relative-decrease test once stopped the
+        # unprofiled fit 1.4e-3 nats above the joint minimum, which was the whole
+        # of the parity gap it left.
+        fitter_off = Fitter(forward, data=flux, noise=noise, profile_mass=False)
+        fitter_on = Fitter(forward, data=flux, noise=noise, profile_mass=True)
+        for label, fitter, post in (
+            ("unprofiled", fitter_off, post_off),
+            ("profiled", fitter_on, post_on),
+        ):
+            decrement, _ = _newton_decrement_and_sigma_xi(fitter, post)
+            assert np.isfinite(decrement) and decrement < _NEWTON_DECREMENT_BAR, (
+                f"{label} MAP is not at a minimum: a Newton step would lower the loss "
+                f"by {decrement:.3g} nats (bar {_NEWTON_DECREMENT_BAR:g})"
             )
 
-        for name in post_off.params:
-            if name == _MASS_NAME:
-                diff = abs(float(post_off.params[name]) - float(post_on.params[name]))
-                assert diff < _MAP_PARITY_BAR, f"mass MAP differs by {diff:.3e} dex"
-            elif name in forward.spec.free_params:
-                diff = abs(float(post_off.params[name]) - float(post_on.params[name]))
-                assert diff < _MAP_PARITY_BAR, f"{name} MAP differs by {diff:.3e}"
+        # Parity on the parameters, in units of each one's own posterior sigma.
+        _, sigma_xi = _newton_decrement_and_sigma_xi(fitter_off, post_off)
+        for name, sigma_unbounded in sigma_xi.items():
+            sigma = _physical_sigma(fitter_off, name, post_off, sigma_unbounded)
+            diff = abs(float(post_off.params[name]) - float(post_on.params[name]))
+            assert diff < _MAP_PARITY_SIGMA_FRACTION * sigma, (
+                f"{name} MAP differs by {diff:.3e} = {diff / sigma:.3g} sigma "
+                f"(bar {_MAP_PARITY_SIGMA_FRACTION} sigma, sigma = {sigma:.3g})"
+            )
 
     # Deliberately no joint/spectroscopy-mock counterpart, in any tolerance:
     # the profiled (marginal) MAP and the joint (theta, mass) MAP are
