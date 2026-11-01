@@ -74,28 +74,51 @@ def _max_relative_error(values, reference):
 # ── (a) float32 conserving resample is finite and agrees with float64 ─────
 
 
-@pytest.mark.parametrize("resolution", [None, 2000], ids=["no_lsf", "lsf_r2000"])
-def test_float32_conserving_spectrum_is_finite_and_matches_float64(synthetic_ssp, resolution):
+# The float32 bound on test (a). Rounding in the flux-conserving bin integral is
+# eps32 x (max |cumulative sum| / min pixel integral), because each pixel mean is a
+# difference of two cumulative values. On the test grid (synthetic_ssp at log10 M = 6,
+# z = 0.1, 160 pixels over 4000-7500 A, peak-factored SED) that ratio is 3.51e2
+# (max |cumsum| 2.32e3 over min pixel integral 6.63), so the expected error is
+# 1.19e-7 x 3.51e2 = 4.2e-5. Measured: 3.77e-5 without LSF, 1.98e-5 with LSF at R = 2000.
+# The bound is 1e-4, about 2.4x the expected error.
+_FLOAT32_RESAMPLE_RTOL = 1e-4
+
+
+@pytest.mark.parametrize(
+    ("resample", "resolution"),
+    [
+        ("conserving", None),
+        ("conserving", 2000),
+        ("point", None),
+        ("point", 2000),
+    ],
+    ids=["no_lsf", "lsf_r2000", "point_no_lsf", "point_lsf_r2000"],
+)
+def test_float32_spectrum_is_finite_and_matches_float64(synthetic_ssp, resample, resolution):
     """Bright synthetic SSP at log10 M = 6: the resample overflowed before the fix.
 
     The cumulative integral of a 1e6 Msun SED runs past 3.4e38 in float32 when
     formed on the raw erg/s/Hz values; the peak-factored integral stays in range.
+    The point-sampling projection forms the mass-scaled SED in linear erg/s/Hz, so
+    it is factored the same way (#3149).
     """
     params = {"sfh_dpl_log_total_mass": _LOG_M_FLOAT32}
     reference = np.asarray(
-        _spectroscopic_model(synthetic_ssp, resolution=resolution).predict_spectrum(params)
+        _spectroscopic_model(synthetic_ssp, resample=resample, resolution=resolution).predict_spectrum(
+            params
+        )
     )
     assert np.all(np.isfinite(reference))
     assert np.any(reference != 0.0), "reference is identically zero"
 
     with jax.enable_x64(False):
-        model32 = _spectroscopic_model(synthetic_ssp, resolution=resolution)
+        model32 = _spectroscopic_model(synthetic_ssp, resample=resample, resolution=resolution)
         spectrum32 = np.asarray(model32.predict_spectrum(params))
         assert spectrum32.dtype == np.float32
 
-    assert np.all(np.isfinite(spectrum32)), "float32 conserving spectrum is non-finite (#3149)"
+    assert np.all(np.isfinite(spectrum32)), f"float32 {resample} spectrum is non-finite (#3149)"
     assert np.any(spectrum32 != 0.0), "spectrum32 is identically zero"
-    assert _max_relative_error(spectrum32.astype(np.float64), reference) < 1e-5
+    assert _max_relative_error(spectrum32.astype(np.float64), reference) < _FLOAT32_RESAMPLE_RTOL
 
 
 # ── (b) float64 bit-identity against the unfactored integral ───────────────
