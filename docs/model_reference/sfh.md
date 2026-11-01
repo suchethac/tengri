@@ -28,6 +28,8 @@ tengri provides a registry of parametric mean SFH models $\bar{\dot{M}}_{\star}(
 | `continuity` | 7 | Leja et al. (2019) | Piecewise-constant, Student-$t$ smoothness | $\log M_\star$ + 6 ratios |
 | `dirichlet` | 7 | Leja et al. (2017) | Piecewise-constant, Dirichlet prior | $\log M_\star$ + 6 stick-break |
 | `burst` | 2 | Zacharegkas et al. (2025) | Triweight in $\log t_{\rm age}$ (Eq. {eq}`eq-triweight-burst`) | Amplitude set by $f_b$ |
+| `recent` | 2 | Chevallard & Charlot (2016) | $\psi$ for $0\le t\le\Delta t$, smooth history outside (Eq. {eq}`eq-recent-episode`) | Spliced over a smooth member; $\psi = 10^{\texttt{log\_sfr}}$ |
+| `recent_ssfr` | 2 | Chevallard & Charlot (2016) | As `recent`, with $\psi$ set by $\psi_{\rm S}=10^{\texttt{log\_ssfr}}$ (Eq. {eq}`eq-recent-ssfr`) | Pole at $\psi_{\rm S}\Delta t=1$, refused at build |
 
 : Parametric mean SFH models available in tengri. $N_p$ denotes the number of free parameters per model. All amplitudes are specified as $\log_{10}(\dot{M}_\star^{\rm peak} / M_\odot\,{\rm yr}^{-1})$.
 
@@ -45,6 +47,26 @@ $$ (eq-skewed-kernel)
  where $t_p$ is the peak lookback time, $w$ is the Gaussian width, and $\gamma$ is the skewness parameter ($\gamma = 0$ recovers a symmetric Gaussian).
 
 (app-sfh-burst)=
+
+## Current Episode Component
+
+(app-sfh-current-episode)=
+
+The current-episode types (`recent`, `recent_ssfr`) add a constant star-formation rate over the most recent $\Delta t$ on top of a smooth history, following the BEAGLE current-episode parameterization (Chevallard & Charlot 2016). With $t$ the lookback time and $\psi$ the episode rate,
+
+$$\dot M_\star(t) = \psi \quad (0\le t\le\Delta t), \qquad \dot M_\star(t) = S(t)\,\frac{M_S}{\int_{\Delta t}^{\infty} S(t')\,dt'} \quad (t>\Delta t),
+$$ (eq-recent-episode)
+
+where $S(t)$ is the smooth history and $M_S$ its formed mass, which the splice keeps. The total formed mass is $M_S+\psi\,\Delta t$. The `recent_ssfr` form sets the specific rate $\psi_{\rm S}=\psi/(M_S+\psi\,\Delta t)$ [yr$^{-1}$], which inverts to
+
+$$\psi = \frac{\psi_{\rm S}\,M_S}{1-\psi_{\rm S}\,\Delta t},
+$$ (eq-recent-ssfr)
+
+with a pole at $\psi_{\rm S}\Delta t = 1$. The joint constraint is $\psi_{\rm S}\Delta t < 1$ over the prior box: the build refuses a box whose upper bounds reach it (`ParameterError`, naming both knobs and the arithmetic). The registry bound on $\log_{10}\psi_{\rm S}$ alone does not protect the 100 Myr end of the duration prior.
+
+**Mass bookkeeping.** BEAGLE's `mass` includes the episode. Tengri's smooth `log_total_mass` is therefore BEAGLE's $M-\psi\,\Delta t$, and BEAGLE's `mass` equals tengri's derived formed `stellar_mass`. The published `sfr_10myr` and `sfr_100myr` are the window-averaged rates, and `stellar_mass_surviving` excludes the mass that has since been lost.
+
+Build the episode beside a smooth member: `sfh={'type': ['delayed', 'recent'], ...}`. On its own, a current episode has no history to splice over and is refused. Cross-code: BAGPIPES `burst` is set by a mass, CIGALE `sfhdelayedbq` by a rate ratio, and Prospector has no equivalent.
 
 ## Burst Component
 

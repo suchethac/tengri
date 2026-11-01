@@ -35,7 +35,7 @@ These tests pin three things:
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, SEDModel, builders
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, builders
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.groups import (
     _extract_short_name,
@@ -121,7 +121,14 @@ def test_no_two_parameters_of_one_type_collapse_to_the_same_short_key():
 # ``burst`` and ``field`` are composable components, not standalone SFHs
 # ("At least one additive (smooth) SFH component required"), so they are
 # exercised composed with ``dpl``.
-_COMPOSE_WITH_DPL = frozenset({"burst", "field"})
+_COMPOSE_WITH_DPL = frozenset({"burst", "field", "recent", "recent_ssfr"})
+
+# Per-type prior overrides for the all-FREE round trip. The all-FREE box of
+# ``recent_ssfr`` (log_ssfr up to -7.3, duration up to 100 Myr) reaches the sSFR
+# pole, psi_S * dt = 5 > 1, so the build refuses it by design. The round trip
+# therefore narrows log_ssfr to (-12, -8.5): with dt up to 100 Myr the product
+# stays at most 0.32 < 1, and the case still round-trips every other parameter.
+_FREE_BOX_OVERRIDES = {"recent_ssfr": {"log_ssfr": Uniform(-12.0, -8.5)}}
 
 
 def _sfh_types_the_builder_accepts():
@@ -202,7 +209,11 @@ def test_gyr_alias_short_key_is_a_fixed_shim(sfh_type, gyr):
 def test_parameters_to_groups_round_trips_through_parse_groups(sfh_type):
     """full -> short (emitter) -> full (parser) reproduces the same Parameters."""
     forward = parse_groups(
-        sfh={"type": _sfh_type_value(sfh_type), "all_params": FREE},
+        sfh={
+            "type": _sfh_type_value(sfh_type),
+            "all_params": FREE,
+            **_FREE_BOX_OVERRIDES.get(sfh_type, {}),
+        },
         redshift=Fixed(0.05),
     )
     groups = parameters_to_groups(forward)

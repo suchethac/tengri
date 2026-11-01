@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import types
 import zlib
 
@@ -2026,6 +2027,7 @@ class Parameters:
                     f"violate physical constraint: {err_msg}"
                 )
         self._validate_orderings()
+        self._validate_sfr_pole()
 
     #: Pairs that must stay ordered ``greater > lesser`` in LOOKBACK time, with the
     #: physical reason. ``bound_check`` above is strictly per-parameter and cannot
@@ -2097,6 +2099,42 @@ class Parameters:
                 f"lower bound of '{greater}' above the upper bound of '{lesser}', or "
                 "lower the latter), or fix one of them."
             )
+
+    #: The current-episode sSFR form (#3177): ``psi_S = 10**log_ssfr`` [yr^-1] and the
+    #: episode duration, whose product must stay below the pole at 1.
+    _SSFR_POLE_PARAMS = ("sfh_recent_ssfr_log_ssfr", "sfh_recent_ssfr_timescale_myr")
+
+    def _validate_sfr_pole(self):
+        """Refuse a ``recent_ssfr`` prior that can reach the sSFR pole (#3177).
+
+        The joint upper bound ``10**hi(log_ssfr) * hi(timescale) * 1e6`` is taken
+        from the declared or user-given bounds: a ``Fixed`` value is its own bound,
+        a prior contributes its upper edge. The check itself is
+        :func:`~tengri.components.stellar.sfh.check_specific_sfr_pole`; a violation
+        is re-raised as :exc:`ParameterError` so it reads like the other build
+        refusals.
+        """
+        from tengri.components.stellar.sfh import check_specific_sfr_pole
+
+        ssfr_name, dt_name = self._SSFR_POLE_PARAMS
+        if ssfr_name not in self._distributions or dt_name not in self._distributions:
+            return
+        log_hi = self._distributions[ssfr_name].bounds[-1]
+        dt_hi_yr = self._distributions[dt_name].bounds[-1] * 1e6
+        try:
+            check_specific_sfr_pole(log_hi, dt_hi_yr)
+        except ValueError as exc:
+            product = 10.0**log_hi * dt_hi_yr
+            # psi_S * dt < 1 needs log10 psi_S < -log10(dt) and dt < 10**-log10(psi_S).
+            max_log_ssfr = -math.log10(dt_hi_yr)
+            max_dt_myr = 10.0 ** (-log_hi) / 1e6
+            raise ParameterError(
+                f"the joint prior box reaches the sSFR pole psi_S*dt = 1: "
+                f"{ssfr_name} upper bound {log_hi:g} with {dt_name} upper bound "
+                f"{dt_hi_yr / 1e6:g} Myr gives psi_S*dt = {product:.3g} >= 1 (the episode "
+                f"would need more than the total formed mass). Narrow {ssfr_name} to below "
+                f"{max_log_ssfr:.3g}, or {dt_name} to below {max_dt_myr:.3g} Myr."
+            ) from exc
 
     # ── Properties ────────────────────────────────────────────────────
 

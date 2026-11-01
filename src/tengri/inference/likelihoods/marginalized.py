@@ -39,7 +39,9 @@ from tengri.observation.calibration import (
 )
 from tengri.observation.eline_marginalization import (
     marginalize_emission_lines as _marginalize_emission_lines,
+    model_line_prior,
     unit_line_prior,
+    unit_model_line_prior,
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.utils.scale import representable_floor as _representable_floor
@@ -49,6 +51,7 @@ __all__ = [
     "CloudyELineMarginalizedLikelihood",
     "ELineFittedLikelihood",
     "ELineMarginalizedLikelihood",
+    "ModelELineMarginalizedLikelihood",
 ]
 
 
@@ -499,6 +502,123 @@ _CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 }
 
 
+@dataclass(frozen=True)
+class ModelELineMarginalizedLikelihood:
+    r"""E-line marginalization with a Gaussian prior centered on the model's line prediction.
+
+    Each line amplitude has the prior :math:`\mathcal{N}(\mu_l, (w\,\mu_l)^2)` with
+    :math:`\mu_l` the attenuated model line luminosity projected onto the spectrum's
+    flux-density scale (:func:`~tengri.observation.eline_marginalization.model_line_prior`).
+    A catalog line the model does not predict keeps a flat prior.
+
+    Parameters
+    ----------
+    fnu_obs, fnu_err : ndarray, shape (n_pixels,)
+        Observed spectrum and 1-sigma uncertainties [erg/s/cm^2/Hz].
+    design_matrix_builder : callable, keyword-only
+        Closure returning the ``(n_pixels, n_lines)`` design matrix from ``params``.
+    prior_inputs_builder : callable, keyword-only
+        Closure returning ``(redshift, dl_cm, aperture_frac, transmission)`` from
+        ``params`` [dimensionless, cm, dimensionless, dimensionless].
+    match_index, matched : ndarray, shape (n_lines,), keyword-only
+        Static catalog-to-model line map from
+        :func:`~tengri.observation.eline_marginalization.match_model_lines`.
+    line_wavelengths : ndarray, shape (n_lines,), keyword-only
+        Rest-frame vacuum wavelengths of the independent catalog lines [Angstrom].
+    prior_width_dex : float, keyword-only
+        Prior width :math:`\Delta` in dex. Default 0.3.
+    channel : str, keyword-only
+        Prediction-dict key of the model spectrum. Default ``"spec_fnu"``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The prediction must carry
+    ``"log_line_lums_attenuated"`` [dex]; the static map is a NumPy array.
+
+    **Gradient-safe**: yes, with respect to the model spectrum, the line luminosities,
+    the aperture fraction and the redshift.
+    """
+
+    fnu_obs: jnp.ndarray
+    fnu_err: jnp.ndarray
+    _: KW_ONLY
+    design_matrix_builder: Callable[[Mapping[str, jnp.ndarray]], jnp.ndarray]
+    prior_inputs_builder: Callable[[Mapping[str, jnp.ndarray]], tuple]
+    match_index: jnp.ndarray
+    matched: jnp.ndarray
+    line_wavelengths: jnp.ndarray
+    prior_width_dex: float = 0.3
+    channel: str = "spec_fnu"
+    name: str = "eline_marginalized_model"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
+
+    def log_prob(
+        self,
+        prediction: Mapping[str, jnp.ndarray],
+        params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
+    ) -> jnp.ndarray:
+        params = params or {}
+        design = self.design_matrix_builder(params)
+        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        model_spec = prediction[self.channel]
+        redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
+        prior = model_line_prior(
+            prediction["log_line_lums_attenuated"],
+            self.match_index,
+            self.matched,
+            self.line_wavelengths,
+            redshift,
+            dl_cm,
+            aperture_frac,
+            self.prior_width_dex,
+            transmission=transmission,
+        )
+        unit = unit_model_line_prior(design, prior, noise=fnu_err)
+        result = marginalize_linear_nuisance(
+            fnu_obs,
+            model_spec,
+            unit.design,
+            sigma=fnu_err,
+            prior_mean=unit.prior_mean,
+            prior_precision=unit.prior_precision,
+            scale=unit.scale,
+        )
+        n_pix = fnu_obs.shape[0]
+        return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(fnu_err))
+
+    def declared_parameters(self):
+        return []
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: data by shape, the rest by content.
+
+        ``design_matrix_builder`` and ``prior_inputs_builder`` are closures and are
+        excluded, as in :meth:`ELineMarginalizedLikelihood.cache_key`.
+        """
+        return derive_key(self, _MODEL_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_MODEL_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "design_matrix_builder": exclude("a closure; see ELineMarginalizedLikelihood's row"),
+    "prior_inputs_builder": exclude("a closure over the model and fixed values"),
+    "match_index": content("static catalog-to-model map is baked into the prior"),
+    "matched": content("static flat/Gaussian split is baked into the prior"),
+    "line_wavelengths": content("catalog wavelengths enter the prior's observed lines"),
+    "prior_width_dex": content("prior width in dex is baked into the marginal"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Emission-line amplitudes, explicit free-parameter fitting
 # ─────────────────────────────────────────────────────────────────────
@@ -621,15 +741,23 @@ class CalibrationELineMarginalizedLikelihood:
         Calibration polynomial: order and per-coefficient prior σ.
     eline_prior_type : str, keyword-only
         ``"flat"`` (default, Gaussian with per-line variance
-        ``eline_prior_sigma**2``) or ``"cloudy"`` (Cloudy-grid prior
+        ``eline_prior_sigma**2``), ``"cloudy"`` (Cloudy-grid prior
         evaluated at ``params["met_logzsol"]`` /
-        ``params["neb_logU"]``).
+        ``params["neb_logU"]``) or ``"model"`` (Gaussian centered on the
+        model's own attenuated line prediction, see
+        :class:`ModelELineMarginalizedLikelihood`).
     eline_prior_sigma : float, keyword-only
         Per-line prior σ for the flat case [erg/s/cm²/Hz]. Default 1e10.
     eline_line_wavelengths : ndarray | None, keyword-only
         Rest-frame line wavelengths (Cloudy case only) [Å].
     eline_prior_width_dex : float, keyword-only
-        Cloudy prior width [dex]. Default 0.5.
+        Cloudy or model prior width [dex]. Default 0.5.
+    prior_inputs_builder, match_index, matched : keyword-only
+        Model prior only: the closure returning
+        ``(redshift, dl_cm, aperture_frac, transmission)`` from ``params`` and the static
+        catalog-to-model line map, as in
+        :class:`ModelELineMarginalizedLikelihood`. The prediction must carry
+        ``"log_line_lums_attenuated"`` [dex].
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
     segments, n_segments : keyword-only
@@ -671,6 +799,9 @@ class CalibrationELineMarginalizedLikelihood:
     eline_prior_sigma: float = 1e10
     eline_line_wavelengths: jnp.ndarray | None = None
     eline_prior_width_dex: float = 0.5
+    prior_inputs_builder: Callable[[Mapping[str, jnp.ndarray]], tuple] | None = None
+    match_index: jnp.ndarray | None = None
+    matched: jnp.ndarray | None = None
     channel: str = "spec_fnu"
     name: str = "calibration_eline_marginalized"
     fnu_obs_key: str | None = None
@@ -728,8 +859,23 @@ class CalibrationELineMarginalizedLikelihood:
             whitening = {
                 "chol_lower": BandedMatrix(np.asarray(self.chol_offsets, dtype=int), chol_data)
             }
-        line_mean, line_width = self._line_prior(params, n_lines)
-        line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
+        if self.eline_prior_type == "model":
+            redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
+            model_prior = model_line_prior(
+                prediction["log_line_lums_attenuated"],
+                self.match_index,
+                self.matched,
+                self.eline_line_wavelengths,
+                redshift,
+                dl_cm,
+                aperture_frac,
+                self.eline_prior_width_dex,
+                transmission=transmission,
+            )
+            line = unit_model_line_prior(design_lines, model_prior, noise=sigma)
+        else:
+            line_mean, line_width = self._line_prior(params, n_lines)
+            line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
         design = jnp.concatenate([model_spec[:, None] * basis, line.design], axis=1)
         prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line.prior_mean])
         prior_precision = block_diag(
@@ -801,6 +947,9 @@ _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
         "content here too for defense in depth: cheap and harmless"
     ),
     "eline_prior_width_dex": content("Cloudy prior width in dex is baked into the marginal"),
+    "prior_inputs_builder": exclude("a closure over the model and fixed values"),
+    "match_index": content("static catalog-to-model map is baked into the prior"),
+    "matched": content("static flat/Gaussian split is baked into the prior"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
