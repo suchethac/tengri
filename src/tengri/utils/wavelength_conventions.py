@@ -106,7 +106,10 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "converted line sits 0.53 A above the vacuum Hgamma (label rounding, not a "
         "convention error). MgII_2796A/MgII_2803A: 3MdB columns MgII_2796/MgII_2803 round "
         "the air 2795.53/2802.71 (vacuum 2796.35/2803.53 would round to 2796/2804), "
-        "residuals after conversion +0.47/+0.30 A",
+        "residuals after conversion +0.47/+0.30 A. Since #3113 each label that rounds a "
+        "line of observation/line_list.py (within 1.5 A of its air wavelength) takes that "
+        "line's vacuum wavelength, and the 7320/7330 labels the blend centers, so those "
+        "residuals are gone",
         "tengri.components.nebular.shock._load_mappings_grids",
     ),
     WavelengthSource(
@@ -122,7 +125,10 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "label rounding; infrared labels (Ne2_1281um ... C2_15774um, > 1e4 A) are the "
         "NIST VACUUM values (O3_8836um 88.36 and C2_15774um 157.74, air would be 88.33 "
         "and 157.70) and are left alone (the stored values are 100x the label, a "
-        "separate scale defect in scripts/build_flury2024_grids.py _parse_wavelength_aa)",
+        "separate scale defect in scripts/build_flury2024_grids.py _parse_wavelength_aa). "
+        "Since #3113 each optical label within 0.5 A of the air wavelength of a line of "
+        "observation/line_list.py takes that line's vacuum wavelength (the O2_7319/7320/"
+        "7330/7331 labels name single components and keep the plain conversion)",
         "tengri.components.nebular.mappings_photo._load_agn_grid",
     ),
     WavelengthSource(
@@ -148,7 +154,10 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "(longward of 2000 A), so the six labels beyond 100 micron (121.769, 145.495, "
         "157.636, 205.283, 370, 609 micron) are air labels too; Byler+2017 "
         "(arXiv:1611.08305) convert Cloudy's air labels with Morton 1991; "
-        "scripts/convert_cue_weights.py",
+        "scripts/convert_cue_weights.py. The blend labels 7323, 7332 and 7332.15 name the "
+        "[O II] 7320 and 7330 blends and are not air wavelengths (the air blends sit near "
+        "7320.5 and 7330.2): they take the vacuum blend centers of observation/line_list.py "
+        "(7321.47, 7332.21) instead of the converted label (#3113)",
         "tengri.components.nebular.cue._load_cue_weights_eager",
     ),
     WavelengthSource(
