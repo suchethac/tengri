@@ -177,14 +177,14 @@ def _sample_prior_nuts(prior, *, n_chains: int, n_draws: int, n_warmup: int, see
             init_flat,
             {"obs": jnp.zeros(())},
         ),
-        substitute=lambda data, noise, presence, redshift, lfo, lfe: {"obs": data},
+        substitute=lambda data, noise, presence, redshift, lfo, lfe, shared: {"obs": data},
     )
     key = jax.random.PRNGKey(seed)
     inits = jax.random.normal(key, (n_chains, init_flat.shape[0]))
     keys = jax.random.split(jax.random.fold_in(key, 1), n_chains)
     zeros = jnp.zeros((n_chains,))
-    positions, _divergent = jax.vmap(run_one)(
-        inits, keys, zeros, zeros, zeros, zeros, zeros, zeros
+    positions, _divergent = jax.vmap(run_one, in_axes=(0,) * 8 + (None,))(
+        inits, keys, zeros, zeros, zeros, zeros, zeros, zeros, {"obs": jnp.zeros(())}
     )
     xi_fraction = np.asarray(positions).reshape(-1, init_flat.shape[0])[:, 1:]
     fractions = np.asarray(ndtr(jnp.asarray(xi_fraction)))
