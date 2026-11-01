@@ -75,6 +75,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from jax.scipy.linalg import block_diag
 
+from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
 from tengri.config.exceptions import ConfigError
 from tengri.forward.batched_spectrum import (
@@ -84,7 +85,10 @@ from tengri.forward.batched_spectrum import (
     predict_batched_observables,
     require_model_spec,
 )
-from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+from tengri.inference.backends.mcmc.catalog import (
+    GHMC_DEFAULT_SUPERCHAINS,
+    build_catalog_mcmc_engine,
+)
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
@@ -92,7 +96,11 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
-from tengri.observation.calibration import calibration_basis
+from tengri.observation.calibration import (
+    calibration_basis,
+    marginalize_calibration_segments,
+)
+from tengri.observation.calibration_segments import R_BAND_EFFECTIVE_AA
 from tengri.observation.eline_marginalization import (
     eline_amplitude_names,
     unit_line_prior,
@@ -101,6 +109,70 @@ from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian, Uniform
 
 _REDSHIFT = "redshift"
+
+#: Name of the fiber-fraction latent: ``ln q``, the log of the window-mean calibration
+#: multiplier. Its template prior is the unit normal; the per-galaxy log-normal and the
+#: coefficient prior's own q marginal enter in :func:`batched_neg_log_posterior`.
+CAL_LOG_Q = "cal_log_q"
+_LN10 = math.log(10.0)
+
+
+def _segment_route(model, spec: SpectroBatchSpec) -> bool:
+    """Whether the calibration marginal needs the segment/scale-free/fiber-fraction form."""
+    spectroscopy = model.observation.spectroscopy
+    return (
+        spec.n_segments > 0
+        or spectroscopy.cal_prior != "gaussian"
+        or spectroscopy.cal_scale_prior is not None
+    )
+
+
+def _q_window(obs: SpectroBatch, window, dtype) -> jax.Array:
+    """Window of the mean multiplier: ``window`` in Angstrom, else the r band's segment."""
+    if window is not None:
+        lo, hi = window
+        return ((obs.wave >= lo) & (obs.wave <= hi)).astype(dtype)
+    distance = jnp.where(obs.pix_mask > 0, jnp.abs(obs.wave - R_BAND_EFFECTIVE_AA), jnp.inf)
+    return (obs.segment == obs.segment[jnp.argmin(distance)]).astype(dtype)
+
+
+def _segment_marginal(
+    model_flux,
+    obs: SpectroBatch,
+    spec: SpectroBatchSpec,
+    model,
+    n_poly,
+    prior_sigma,
+    log_q,
+    lines=None,
+    line_col_mask=None,
+    chol=None,
+):
+    """Marginal over segment scales, tilt and (when given) lines: one function, both paths."""
+    spectroscopy = model.observation.spectroscopy
+    window = None
+    if log_q is not None:
+        window = _q_window(obs, spectroscopy.cal_scale_window, obs.flux.dtype)
+    return marginalize_calibration_segments(
+        model_flux,
+        obs.flux,
+        obs.sigma,
+        obs.wave,
+        obs.segment,
+        n_segments=spec.n_segments,
+        n_poly=n_poly,
+        prior_sigma=prior_sigma,
+        cal_prior=spectroscopy.cal_prior,
+        pix_mask=obs.pix_mask,
+        wave_range=(obs.cal_lo, obs.cal_hi),
+        lines=lines,
+        line_col_mask=line_col_mask,
+        log_q=log_q,
+        q_window=window,
+        q_prior=True,
+        chol_data=None if chol is None else chol.data,
+        chol_offsets=None if chol is None else spec.cov_offsets,
+    )[0]
 
 
 def _refuse_stochastic(model) -> None:
@@ -130,6 +202,12 @@ def _refuse_calibration_order(model) -> None:
         )
 
 
+def _log_q_log_normal(obs: SpectroBatch, log_q) -> jax.Array:
+    """Log of the galaxy's log-normal prior on ``ln q``, ``N(ln10 * center, (ln10 * sigma)^2)``."""
+    center, width = _LN10 * obs.cal_scale_center, _LN10 * obs.cal_scale_sigma
+    return -0.5 * ((log_q - center) / width) ** 2 - jnp.log(width * math.sqrt(2.0 * math.pi))
+
+
 def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | None:
     """Banded Cholesky factor of one galaxy's pixel covariance, or ``None`` for diagonal noise."""
     if not spec.cov_offsets:
@@ -143,13 +221,24 @@ def _whitening(obs: SpectroBatch, chol: BandedMatrix | None) -> dict:
 
 
 def _spectral_marginal_loglik(
-    model_flux, obs: SpectroBatch, n_poly: int, prior_sigma: float, chol: BandedMatrix | None
+    model_flux,
+    obs: SpectroBatch,
+    n_poly: int,
+    prior_sigma: float,
+    segment_args=None,
+    chol: BandedMatrix | None = None,
 ):
     """Marginal log-likelihood of one galaxy's spectrum over a Chebyshev calibration.
 
     The design is ``model_flux[:, None] * T(x)`` on the real grid's extremes, so padded
-    pixels (zero weight through ``obs.pix_mask``) carry no information.
+    pixels (zero weight through ``obs.pix_mask``) carry no information. ``segment_args``
+    is ``(model, spec, log_q, chol)`` for the segment form, else the Chebyshev-only form.
     """
+    if segment_args is not None:
+        model, spec, log_q, segment_chol = segment_args
+        return _segment_marginal(
+            model_flux, obs, spec, model, n_poly, prior_sigma, log_q, chol=segment_chol
+        )
     design = model_flux[:, None] * calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, n_poly)
     return marginalize_linear_nuisance(
         data=obs.flux,
@@ -169,11 +258,14 @@ def _latent_spec(model):
     ``b = 10 * eline_prior_sigma``, the same prior as ``Fitter._init_eline_arrays``.
     """
     spectroscopy = model.observation.spectroscopy
-    if spectroscopy.eline_mode in ("off", "marginalized"):
-        return model.spec
-    names = eline_amplitude_names(spectroscopy.effective_catalog)
-    bound = 10.0 * spectroscopy.eline_prior_sigma
-    return model.spec.merge_observation_params(**{nm: Uniform(-bound, bound) for nm in names})
+    extra = {}
+    if spectroscopy.cal_scale_prior is not None:
+        extra[CAL_LOG_Q] = Gaussian(0.0, 1.0)
+    if spectroscopy.eline_mode not in ("off", "marginalized"):
+        names = eline_amplitude_names(spectroscopy.effective_catalog)
+        bound = 10.0 * spectroscopy.eline_prior_sigma
+        extra.update({nm: Uniform(-bound, bound) for nm in names})
+    return model.spec.merge_observation_params(**extra) if extra else model.spec
 
 
 def _free_latent_names(model) -> list[str]:
@@ -202,7 +294,9 @@ def _marginal_lines_loglik(
     calibration_marginalize: bool,
     cal_n_poly: int,
     cal_prior_sigma: float,
-    chol: BandedMatrix | None,
+    spec: SpectroBatchSpec | None = None,
+    log_q=None,
+    chol: BandedMatrix | None = None,
 ) -> jax.Array:
     """Marginal log-likelihood over the line amplitudes, jointly with the calibration.
 
@@ -219,6 +313,25 @@ def _marginal_lines_loglik(
     line = unit_line_prior(
         g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
     )
+    if calibration_marginalize and _segment_route(model, spec):
+        marginal = _segment_marginal(
+            model0,
+            obs,
+            spec,
+            model,
+            cal_n_poly,
+            cal_prior_sigma,
+            log_q,
+            lines=line,
+            line_col_mask=line_cols.astype(g_eff.dtype),
+            chol=chol,
+        )
+        n_eff = jnp.sum(obs.pix_mask)
+        return (
+            marginal
+            + 0.5 * n_eff * math.log(2.0 * math.pi)
+            + jnp.sum(obs.pix_mask * jnp.log(scatter))
+        )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
         design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
@@ -331,25 +444,37 @@ def batched_log_likelihood(
                 "calibration_marginalize."
             )
     line_set = batched_line_set(model) if marginal_lines else None
+    has_q = spectroscopy.cal_scale_prior is not None
+    if has_q and not calibration_marginalize:
+        raise ConfigError(
+            "cal_scale_prior needs calibration_marginalize=True: the fiber-fraction prior "
+            "conditions the analytic calibration marginal."
+        )
+    segment_route = calibration_marginalize and _segment_route(model, spec)
 
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
-        out = predict_batched_observables(model, params, obs, spec, threaded=threaded)
+        log_q = params[CAL_LOG_Q] if has_q else None
+        forward_params = {k: v for k, v in params.items() if k != CAL_LOG_Q}
+        out = predict_batched_observables(model, forward_params, obs, spec, threaded=threaded)
         chol = _pixel_factor(spec, obs)
         if marginal_lines:
             total = _marginal_lines_loglik(
                 model,
                 line_set,
                 out["spec_fnu"],
-                params,
+                forward_params,
                 obs,
                 calibration_marginalize=calibration_marginalize,
                 cal_n_poly=cal_n_poly,
                 cal_prior_sigma=cal_prior_sigma,
+                spec=spec,
+                log_q=log_q,
                 chol=chol,
             )
         elif calibration_marginalize:
+            segment_args = (model, spec, log_q, chol) if segment_route else None
             total = _spectral_marginal_loglik(
-                out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, chol
+                out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, segment_args, chol
             )
         elif chol is not None:
             whitened = banded_forward_substitution(
@@ -420,6 +545,7 @@ def batched_neg_log_posterior(
     fixed_values = dict(model.spec.get_fixed_values())
     young_fraction = young_fraction_prior_for_spec(model.spec)
     latent_spec = _latent_spec(model)
+    has_q = model.observation.spectroscopy.cal_scale_prior is not None
 
     def nlp(params_unbounded: dict, obs: SpectroBatch) -> jax.Array:
         physical = _unstandardize_parameters(
@@ -432,6 +558,9 @@ def batched_neg_log_posterior(
             stochastic=False,
             young_fraction=young_fraction,
         )
+        if has_q:
+            log_q = phys_free[CAL_LOG_Q]
+            prior = prior - 0.5 * log_q**2 - _log_q_log_normal(obs, log_q)
         return -loglik(phys_free, obs) + prior
 
     return nlp
@@ -775,6 +904,31 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     return jnp.where(keep, map_rows, prior_rows)
 
 
+#: Chains per galaxy the driver uses for the MEADS sampler when none are given.
+_GHMC_DRIVER_CHAINS = 32
+
+
+def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
+    """Largest nested R-hat over the coordinates of one galaxy's chains.
+
+    Parameters
+    ----------
+    chains : ndarray, shape (n_chains, n_samples, D)
+        Draws of one galaxy, chain-major, in the latent space [dimensionless].
+    n_superchains : int
+        Number of superchains the chains are grouped into.
+
+    Returns
+    -------
+    float
+        Maximum over the D coordinates of the nested R-hat of each coordinate's chains.
+    """
+    return max(
+        float(nested_rhat(jnp.asarray(chains[:, :, d]), n_superchains))
+        for d in range(chains.shape[-1])
+    )
+
+
 def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
@@ -802,7 +956,7 @@ def fit_spectra_catalog_mcmc(
     batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
         Output of :func:`~tengri.observation.batched.build_spectro_batches` built
         with ``model=model``.
-    sampler : {"nuts", "hmc", "chees"}, optional
+    sampler : {"nuts", "hmc", "chees", "ghmc"}, optional
         Sampler handed to
         :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`.
         Default ``"nuts"``.
@@ -837,7 +991,9 @@ def fit_spectra_catalog_mcmc(
         Prior standard deviation of each calibration coefficient. Default 1.0.
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
-        ``target_accept_rate`` or ``use_dense``.
+        ``target_accept_rate`` or ``use_dense``. With ``sampler="ghmc"`` the defaults are
+        ``n_chains=32`` and ``n_superchains=8``; ``n_chains`` must be a multiple of
+        ``n_superchains``.
 
     Returns
     -------
@@ -848,6 +1004,12 @@ def fit_spectra_catalog_mcmc(
         ``eline_mode="fitted"`` the ``eline_amp_*`` line amplitudes are included.
         ``"divergences"``: ndarray of int, shape ``(N,)``. Divergent transitions
         per galaxy, in the same order.
+        ``"n_warmup_used"``: ndarray of int, shape ``(N,)``. Adaptation steps each galaxy
+        ran. The warmup is fixed-length, so this is ``n_warmup`` for every galaxy.
+        ``"nested_rhat"``: ndarray of float, shape ``(N,)``, or None. For
+        ``sampler="ghmc"``, the per-coordinate maximum nested R-hat over the
+        ``n_superchains`` superchains of each galaxy's latent draws. None for the other
+        samplers.
 
     Raises
     ------
@@ -888,6 +1050,12 @@ def fit_spectra_catalog_mcmc(
             cal_prior_sigma=cal_prior_sigma,
         )["params"]
 
+    options = dict(engine_kwargs)
+    if sampler == "ghmc":
+        options.setdefault("n_chains", _GHMC_DRIVER_CHAINS)
+    n_chains = int(options.get("n_chains", 1))
+    n_superchains = int(options.get("n_superchains", GHMC_DEFAULT_SUPERCHAINS))
+
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
     per_bucket = []
     for (spec, batch, index), bucket_key in zip(batches, bucket_keys):
@@ -912,7 +1080,7 @@ def fit_spectra_catalog_mcmc(
             n_samples=n_samples,
             flat_logdensity=flat,
             substitute=substitute,
-            **engine_kwargs,
+            **options,
         )
 
         def one_galaxy(xs, run_one=run_one):
@@ -925,6 +1093,11 @@ def fit_spectra_catalog_mcmc(
             batch_size=batch_size,
         )
         n_draws = positions.shape[1]
+        latent_draws = np.asarray(positions)
+        rhat = None
+        if sampler == "ghmc":
+            per_chain = latent_draws.reshape(n_gal, n_chains, n_draws // n_chains, -1)
+            rhat = [_nested_rhat_max(per_chain[g], n_superchains) for g in range(n_gal)]
         latents = jax.vmap(unravel_fn)(positions.reshape(-1, positions.shape[-1]))
         physical = _to_physical(model, latents)
         per_bucket.append(
@@ -932,6 +1105,7 @@ def fit_spectra_catalog_mcmc(
                 "index": index,
                 "draws": {n: np.asarray(v).reshape(n_gal, n_draws) for n, v in physical.items()},
                 "divergences": np.asarray(divergent).sum(axis=1),
+                "nested_rhat": rhat,
             }
         )
 
@@ -940,4 +1114,14 @@ def fit_spectra_catalog_mcmc(
     names = _free_latent_names(model)
     draws = {n: np.concatenate([b["draws"][n] for b in per_bucket], axis=0)[order] for n in names}
     divergences = np.concatenate([b["divergences"] for b in per_bucket])[order]
-    return {"draws": draws, "divergences": divergences}
+    n_warmup_used = np.full(catalog_index.shape[0], int(n_warmup), dtype=int)
+    rhat_out = None
+    if sampler == "ghmc":
+        flat_rhat = [r for b in per_bucket for r in b["nested_rhat"]]
+        rhat_out = np.asarray(flat_rhat, dtype=float)[order]
+    return {
+        "draws": draws,
+        "divergences": divergences,
+        "n_warmup_used": n_warmup_used,
+        "nested_rhat": rhat_out,
+    }
