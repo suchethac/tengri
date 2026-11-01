@@ -514,11 +514,9 @@ class SKIRTORTorus(SEDModelComponent):
         units="dimensionless",
         default=_DELTA_PRIOR.default,
     )
-    # NOTE: CIGALE's ``lambda_fracAGN`` (band over which the AGN fraction is
-    # normalized) is intentionally NOT exposed here. tengri normalizes frac_agn
-    # bolometrically, which is exactly CIGALE's default ("0/0"). A band-restricted
-    # normalization is a documented follow-up (umbrella audit issue) rather than a
-    # dead Fixed knob.
+    # NOTE: this standalone component normalizes frac_agn bolometrically, CIGALE's default
+    # ``lambda_fracAGN="0/0"``. The band-restricted CIGALE window is exposed on the composable
+    # AGN as ``agn={'ir_frac_window': (lmin_um, lmax_um)}`` (#3010).
 
     # Cross-component outputs
     outputs: ClassVar[dict[str, str]] = with_lsun_outputs(

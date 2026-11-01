@@ -54,8 +54,16 @@ def test_dust_analytic_precompute_and_lookup(model, filter_set):
     chex.assert_tree_all_finite(np.asarray(out))
 
 
-@pytest.mark.parametrize("key", ["modified_blackbody", "casey2012", "graybody", "pah_drude"])
+@pytest.mark.parametrize("key", ["modified_blackbody", "graybody"])
 def test_dust_analytic_registered(key):
     from tengri.forward.precompute.registry import _REGISTRY
 
     assert _REGISTRY[key].endswith("dust_analytic_precompute")
+
+
+@pytest.mark.parametrize("key", ["casey2012", "pah_drude"])
+def test_dust_analytic_duplicates_not_registered(key):
+    # #2324: casey2012 and pah_drude were registry duplicates of the exact band response.
+    from tengri.forward.precompute.registry import _REGISTRY
+
+    assert key not in _REGISTRY
