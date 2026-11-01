@@ -144,6 +144,7 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
+- 2026-11-01, #3212: the template tables (SSP grid, template data, z-table) reach the batched log-likelihood, the negative log-posterior, the MAP chunks and the catalog bucket log-density as explicit arguments, not closure constants. A bucket's compiled program therefore embeds no SSP-sized constant, so its executable can be serialized by the persistent compile cache. The float64 value at a fixed standardized point is unchanged.
 - 2026-11-01, #3118: `docs/batched_spectroscopy.md` rewritten against main at `fb0aa11c0`: banded covariance, per-segment calibration scales and priors, the extended Balmer series, young-fraction coordinates, 4-D [alpha/Fe] grids and `sampler="ghmc"` described as shipped; all 20 `SpectroBatch` leaves listed; links kept only for open issues.
 - 2026-11-01, #3118: the published page `docs/batched_spectroscopy.md` describes the stack with measured numbers from a 24-galaxy mock set (Apple M4 Pro, CPU, float64, at `a608d682f`). Measured: template build 3.8 s and 632 MB peak RSS; one per-galaxy `Fixed(z)` build 0.72 s and 754 MB; one batched MAP call over 24 galaxies 45 s including compile and 127 s for 300 steps; one per-galaxy NUTS fit over 14.5 min before a memory kill. The jit-miss counter includes build-time compiles. The page's float32 section links #3149, which reports non-finite spectroscopic output above log10 M of about 5.25 in pure float32. The 12-mock comparison with the per-galaxy Fitter is in `docs/dev/measurements/2026-11-01-batched-vs-fitter.md`.
 - 2026-11-01, #3133: banded pixel covariance on the batched spectroscopic path.
@@ -200,6 +201,21 @@ a leaf, if it changes a shape or a branch.
   mode (`jax.enable_x64(False)`) returns NaN for this fixture's flux scale on the
   batched forward, for the plain Gaussian term as well as the marginal, so the float32
   test is not yet green.
+
+- 2026-11-01, #3193: the batched MAP and the catalog warm start run L-BFGS to gradient
+  tolerance, as the per-galaxy Fitter does. `fit_spectra_map_vmap(optimizer="lbfgs")` is
+  the default: `optax.lbfgs` with a zoom line search, one `while_loop` per galaxy under
+  `vmap`, stopping when the largest standardized gradient entry is below `gtol` (1e-5) or
+  at `n_steps` iterations. `optimizer="adam"` keeps the previous driver. `init="map"` in
+  `fit_spectra_catalog_mcmc` uses the same default. On twelve mocks (all-DPL SFH, mass
+  free, 10 to 10.6 dex truth) the Adam 300-step MAP is within 0.0017 dex of truth and the
+  L-BFGS MAP within 9e-5 dex; the per-galaxy Fitter MAP agrees with L-BFGS to 6e-4 dex.
+  Wall time with compile included: 4.2 s per galaxy for Adam (300 steps), 1.0 s for L-BFGS.
+  `tests/contract/test_batched_map_lbfgs.py` compares every standardized parameter with
+  the Fitter MAP where the Fitter's point is stationary (Newton decrement below 1e-8 nats,
+  as in `tests/inference/test_profile_mass.py`), and requires the batched point to be no
+  higher in the negative log-posterior where it is not; the Adam driver is pinned.
+
 - 2026-11-01, #3138: `eline_prior_type="model"` on the per-galaxy line-only marginalized
   likelihood. Each line has a Gaussian prior centered on the model's attenuated line
   luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.

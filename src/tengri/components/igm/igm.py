@@ -792,8 +792,11 @@ def igm_transmission_patchy(
 # ── Madau+1995 IGM (alternative, simpler model) ───────────────────
 
 
-# Lyman-series rest-frame wavelengths and coefficients (Madau 1995, Table 1).
-# 17 lines from Ly-alpha (1216 Å) to Ly-limit.
+# Lyman-series rest-frame wavelengths and coefficients, 17 lines from Ly-alpha (1216 Å)
+# to the Lyman limit. Madau (1995) eqs. 12 and 15 print the coefficients A_j for
+# Lyα–Lyδ and state that 13 higher-order members were included; the 17-line set here is
+# the one FSPS uses (``src/igm_absorb.f90`` in cconroy20/fsps, the same wavelengths and
+# coefficients line for line), not a table printed in that paper.
 _MADAU_LYW = host_array(
     [
         1215.67,

@@ -24,6 +24,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import apply_log10_scale, pow10
 
 # Module-level aliases (kept for terse local use)
 _C_AA: float = C_AA
@@ -76,27 +77,44 @@ def shock_emission(
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
-    from tengri.components.nebular.shock import compute_shock_sed
+    from tengri.components.nebular.shock import (
+        SHOCK_LHA_LOG_REF,
+        compute_shock_sed,
+        factored_l_bol,
+        shock_log10_halpha_anchor,
+    )
 
-    nu = _C_AA / wave
-    l_bol = -jnp.trapezoid(sed_so_far, nu)
-    # Order-of-magnitude approximation: L(Hα) ~ 1e-3 × L_bol for a star-
-    # forming galaxy. Used only to set the *normalization* of the shock
-    # template, the resulting shock SED is then scaled by ``shock_frac``
-    # at the call site. Magnitude not validity-ranged against a paper;
-    # flagged for replacement with the case-B prediction from the SFH.
-    l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
-    l_shock_halpha = shock_frac * l_halpha_approx
-
-    return compute_shock_sed(
-        wave,
-        shock_velocity,
-        l_shock_halpha,
+    shock_kwargs = dict(
         shock_log_density=shock_log_density,
         shock_b_over_sqrt_n=shock_b_over_sqrt_n,
         shock_abundance=shock_abundance,
         shock_component=shock_component,
     )
+    nu = _C_AA / wave
+    # The bolometric integral is taken in the same peak-factored form as the
+    # shock component (#3149); a float32 L_bol of ~1e46 erg/s is not representable.
+    hat_l_bol, exponent = factored_l_bol(sed_so_far, nu)
+    if jnp.asarray(sed_so_far).dtype != jnp.float32:
+        # Order-of-magnitude approximation: L(Hα) ~ 1e-3 × L_bol for a star-
+        # forming galaxy. Used only to set the *normalization* of the shock
+        # template, the resulting shock SED is then scaled by ``shock_frac``
+        # at the call site. Magnitude not validity-ranged against a paper;
+        # flagged for replacement with the case-B prediction from the SFH.
+        l_bol = jnp.ldexp(hat_l_bol, exponent)
+        l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
+        return compute_shock_sed(
+            wave, shock_velocity, shock_frac * l_halpha_approx, **shock_kwargs
+        )
+    # Float32: L(Hα) ~ 1e41 erg/s overflows, so the anchor is carried at the
+    # reference scale and the reference is restored on the (O(1e26)) output.
+    log_anchor = shock_log10_halpha_anchor(hat_l_bol, exponent, shock_frac)
+    sed_ref = compute_shock_sed(
+        wave,
+        shock_velocity,
+        pow10(log_anchor - SHOCK_LHA_LOG_REF),
+        **shock_kwargs,
+    )
+    return apply_log10_scale(sed_ref, SHOCK_LHA_LOG_REF)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
