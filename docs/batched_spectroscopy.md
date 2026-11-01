@@ -320,8 +320,10 @@ not an estimate.
 
 ## Float32
 
-Float32 is a supported mode. The stack's tests check that the float32 likelihoods and their
-gradients are finite and nonzero for a galaxy of 10^10 Msun on a physically normalized SSP.
+Float32 is a supported mode. It needs the data and σ in the model's flux units (F_nu,
+erg/s/cm²/Hz), and σ must be representable in float32 (above about 1e-38). The stack's tests check
+that the float32 likelihoods and their gradients are finite and nonzero for a galaxy of 10^10 Msun
+on a physically normalized SSP, with data in those units.
 
 ## What the stack does not do
 
