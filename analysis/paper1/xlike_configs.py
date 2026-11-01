@@ -9,11 +9,30 @@ component libraries. Built as free-parameter models for fitting.
 
 from __future__ import annotations
 
-from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp, load_ssp
+import numpy as np
+
+from tengri import DEFAULT, Fixed, LogUniform, SEDModel, Uniform, WavePrecomp, load_ssp
 from tengri.cosmology import age_at_z
+from tengri.parameters.translate import LOG10_ZSUN
 
 from .config_metadata import XLIKE_SSP
 from .configs import _continuity_sfh, met_prior_for
+
+# BEAGLE priors (Chevallard & Charlot 2016; BEAGLE example parameter files).
+# tau is log-uniform over 10^7-10^10.5 yr in BEAGLE; tengri's delayed-tau declaration
+# stops at 20 Gyr, indistinguishable from 31.6 Gyr over the age of a z ~ 1 galaxy.
+BEAGLE_TAU_GYR = (0.01, 20.0)
+# Log-uniform maximum stellar age from 0.1 Gyr to the age of the universe at z.
+BEAGLE_MIN_AGE_GYR = 0.1
+# CC16 Table 2 gives [-12, -7]; -7 is the pole psi_S * dt = 1 at a 10 Myr window.
+BEAGLE_LOG_SSFR = (-12.0, -7.3)
+BEAGLE_RECENT_TIMESCALE_MYR = 10.0
+# Flat in log tau_V (CC16 sec. 4.2); mu fixed as in the workshop run (every catalog mu = 0.400).
+BEAGLE_TAU_V = (1e-3, 5.0)
+BEAGLE_MU = 0.4
+# Uniform in log10(Z / BEAGLE_ZSUN), with BEAGLE's solar metallicity.
+BEAGLE_LOGZ_RANGE_BEAGLE_ZSUN = (-2.2, 0.24)
+BEAGLE_ZSUN = 0.01524
 
 
 def cigale_like(ssp_data, observation, z: float) -> SEDModel:
@@ -174,51 +193,104 @@ def bagpipes_like(ssp_data, observation, z: float) -> SEDModel:
     )
 
 
-def beagle_like(ssp_data, observation, z: float) -> SEDModel:
-    """BEAGLE-like: delayed-tau SFH, BC03, power law 2-comp, no dust IR, Cue.
+def beagle_met_prior(ssp_data) -> Uniform:
+    """BEAGLE metallicity prior in log10(Z/Zsun), clipped to the SSP grid.
 
-    Parameterization follows Pacifici et al. (2023) Table 1 (BEAGLE row):
-    - SFH: Delayed exponential (delayed-tau; BEAGLE's standard parametric form)
+    BEAGLE samples log10(Z/BEAGLE_ZSUN) uniformly on ``BEAGLE_LOGZ_RANGE_BEAGLE_ZSUN``.
+    That range is shifted into tengri's log10(Z/Zsun) convention and intersected
+    with the grid-derived prior from ``met_prior_for``.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        SSP library whose metallicity grid bounds the prior.
+
+    Returns
+    -------
+    Uniform
+        Prior on ``met_logzsol`` with lower bound ``max(beagle_lo, grid_lo)`` and
+        upper bound ``min(beagle_hi, grid_hi)``.
+
+    Raises
+    ------
+    ValueError
+        If the intersection is empty.
+    """
+    offset = float(np.log10(BEAGLE_ZSUN) - LOG10_ZSUN)
+    beagle_lo, beagle_hi = (edge + offset for edge in BEAGLE_LOGZ_RANGE_BEAGLE_ZSUN)
+    grid = met_prior_for(ssp_data)
+    lower = max(beagle_lo, grid.lo)
+    upper = min(beagle_hi, grid.hi)
+    if lower >= upper:
+        raise ValueError(
+            f"BEAGLE metallicity prior [{beagle_lo:.3f}, {beagle_hi:.3f}] does not "
+            f"overlap the grid prior [{grid.lo:.3f}, {grid.hi:.3f}] in log10(Z/Zsun)"
+        )
+    return Uniform(lower, upper)
+
+
+def beagle_like(ssp_data, observation, z: float) -> SEDModel:
+    """BEAGLE-like: delayed-tau SFH with a recent episode, BC03, CF00 tau_V/mu dust, Gutkin+16 nebular.
+
+    Parameterization follows Chevallard & Charlot (2016) and Gutkin, Charlot &
+    Bruzual (2016):
+    - SFH: delayed-tau plus a recent episode (``recent_ssfr``) with a fixed
+      10 Myr timescale. Priors: ``tau_gyr`` LogUniform(0.01, 20),
+      ``age_frac`` LogUniform(0.1 Gyr / age(z), 1),
+      ``log_total_mass`` Uniform(8, 12.5), ``log_ssfr`` Uniform(-12, -7.3),
+      ``timescale_myr`` Fixed(10)
+    - Metallicity: ``beagle_met_prior`` (BEAGLE's uniform prior in
+      log10(Z/0.01524) on [-2.2, 0.24], clipped to the grid)
     - SSP: BC03 (registered grid: bc03_pdva_stelib_chabrier)
-    - Attenuation: Two-component power law (Charlot & Fall 2000)
-    - Dust IR: None (Table 1: No)
-    - Nebular: Cue with free ionization parameter logU
+    - Attenuation: Charlot & Fall (2000) two-component power laws parameterized
+      by (tau_V, mu), with slopes -1.3 (birth cloud) and -0.7 (diffuse). Priors:
+      ``tau_v`` LogUniform(1e-3, 5); ``mu`` Fixed(0.4)
+    - Dust IR: none
+    - Nebular: Gutkin+16 with free ``logU`` Uniform(-4, -1); ``xi_d`` Fixed(0.3),
+      ``log_nH`` Fixed(2), ``co_ratio`` Fixed(1)
+    - IGM: Inoue
 
     **Parity check: False** — no reproduction notebook available.
 
-    Physical differences vs external BEAGLE (stated in mismatches):
-    - No reproduction notebook, so no bit-level parity check is available
-    - BC03 2003 vs BEAGLE's 2016 update
-    - Cue vs BEAGLE's Gutkin+2016 Cloudy 13 grids
-    - Power law without BEAGLE's mu/tau_V re-parametrization
-    - No optional burst component (BEAGLE's optional feature not included)
+    Physical differences vs BEAGLE (stated in mismatches):
+    - BC03 2003 instead of BEAGLE's 2016 Charlot & Bruzual update (not public)
+    - Gas-phase metallicity fixed at the nebular default instead of tied to the stellar metallicity
+    - sSFR prior stops at -7.3 (BEAGLE's -7 is the pole of the conversion at a 10 Myr window)
+    - tau prior stops at 20 Gyr instead of 31.6 Gyr (tengri's delayed-tau declaration)
+    - A common 5% flux-error floor instead of BEAGLE's 2%
     """
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
         sfh={
-            "type": "delayed",
+            "type": ["delayed", "recent_ssfr"],
             "all_params": Fixed(DEFAULT),
-            "tau_gyr": Uniform(0.1, 20.0),
-            "age_frac": Uniform(1.0 / age_at_z(z), 1.0),  # formation age >= 1 Gyr
+            "tau_gyr": LogUniform(BEAGLE_TAU_GYR[0], BEAGLE_TAU_GYR[1]),
+            "age_frac": LogUniform(BEAGLE_MIN_AGE_GYR / age_at_z(z), 1.0),
             "log_total_mass": Uniform(8.0, 12.5),
-            "met_logzsol": met_prior_for(ssp_data),
+            "met_logzsol": beagle_met_prior(ssp_data),
+            "log_ssfr": Uniform(BEAGLE_LOG_SSFR[0], BEAGLE_LOG_SSFR[1]),
+            "timescale_myr": Fixed(BEAGLE_RECENT_TIMESCALE_MYR),
         },
         dust_attenuation={
             "type": "two_component",
+            "parameterization": "tauv_mu",
             "law_bc": "power_law",
             "slope_bc": -1.3,
             "law_diff": "power_law",
             "slope_diff": -0.7,
+            "tau_v": LogUniform(BEAGLE_TAU_V[0], BEAGLE_TAU_V[1]),
+            "mu": Fixed(BEAGLE_MU),
             "all_params": Fixed(DEFAULT),
-            "tau_bc": Uniform(0.0, 3.0),
-            "tau_diff": Uniform(0.5, 3.0),
         },
         dust_emission={"type": "none"},
         neb={
-            "type": "cue",
-            "neb_logU": Uniform(-4.0, -1.0),
-            "all_params": Fixed(DEFAULT),
+            "type": "gutkin16",
+            "logU": Uniform(-4.0, -1.0),
+            "xi_d": Fixed(0.3),
+            "log_nH": Fixed(2.0),
+            "co_ratio": Fixed(1.0),
+            "other_params": Fixed(DEFAULT),
         },
         redshift=Fixed(z),
         igm={"type": "inoue"},

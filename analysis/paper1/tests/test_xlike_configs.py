@@ -288,3 +288,109 @@ class TestFitOneArgparse:
         for key in XLIKE_KEYS:
             args = parser.parse_args(["--galaxy", "79", "--config", key, "--out", "/tmp"])
             assert args.config == key
+
+
+class _FakeGridPrior:
+    """Stand-in for the ``met_prior_for`` return value: exposes ``lo`` and ``hi``."""
+
+    def __init__(self, lo: float, hi: float):
+        self.lo = lo
+        self.hi = hi
+
+
+class TestBeagleLikeParameterization:
+    """BEAGLE-like priors and components, read from the captured SEDModel.build call."""
+
+    @staticmethod
+    def _capture(monkeypatch, z: float = 1.0) -> dict:
+        from unittest.mock import MagicMock
+
+        import numpy as np
+        from paper1.xlike_configs import beagle_like
+
+        captured = {}
+
+        def mock_build(**kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
+
+        ssp_data = MagicMock()
+        ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
+        beagle_like(ssp_data, MagicMock(), z=z)
+        return captured
+
+    def test_tau_v_free_mu_fixed_no_bc_or_diffuse_tau(self, monkeypatch):
+        """tau_V is a LogUniform(1e-3, 5) prior, mu is fixed at 0.4, no tau_bc/tau_diff."""
+        from tengri import Fixed, LogUniform
+
+        dust = self._capture(monkeypatch)["dust_attenuation"]
+
+        assert isinstance(dust["tau_v"], LogUniform)
+        assert dust["tau_v"].lo == pytest.approx(1e-3)
+        assert dust["tau_v"].hi == pytest.approx(5.0)
+        assert isinstance(dust["mu"], Fixed)
+        assert dust["mu"].value == pytest.approx(0.4)
+        assert "tau_bc" not in dust
+        assert "tau_diff" not in dust
+
+    def test_age_prior_lower_bound_is_0p1_gyr_over_age_at_z(self, monkeypatch):
+        """age_frac is log-uniform from 0.1 Gyr / age(z) to 1."""
+        from tengri import LogUniform
+        from tengri.cosmology import age_at_z
+
+        sfh = self._capture(monkeypatch, z=1.0)["sfh"]
+
+        assert isinstance(sfh["age_frac"], LogUniform)
+        assert sfh["age_frac"].lo == pytest.approx(0.1 / age_at_z(1.0))
+        assert sfh["age_frac"].hi == pytest.approx(1.0)
+
+    def test_beagle_met_prior_is_intersection_of_beagle_and_grid(self, monkeypatch):
+        """Metallicity bounds are max/min of BEAGLE's shifted range and the grid prior."""
+        from unittest.mock import MagicMock
+
+        from paper1 import xlike_configs
+        from paper1.xlike_configs import beagle_met_prior
+
+        # BEAGLE range in log10(Z/Zsun): [-2.2, 0.24] + log10(0.01524) - LOG10_ZSUN ~ +0.0307
+        beagle_lo, beagle_hi = -2.2 + 0.0307, 0.24 + 0.0307
+        ssp_data = MagicMock()
+
+        monkeypatch.setattr(xlike_configs, "met_prior_for", lambda _ssp: _FakeGridPrior(-3.0, 1.0))
+        wide = beagle_met_prior(ssp_data)
+        assert wide.lo == pytest.approx(beagle_lo, abs=1e-3)
+        assert wide.hi == pytest.approx(beagle_hi, abs=1e-3)
+
+        monkeypatch.setattr(xlike_configs, "met_prior_for", lambda _ssp: _FakeGridPrior(-1.0, 0.1))
+        narrow = beagle_met_prior(ssp_data)
+        assert narrow.lo == pytest.approx(-1.0)
+        assert narrow.hi == pytest.approx(0.1)
+
+        monkeypatch.setattr(xlike_configs, "met_prior_for", lambda _ssp: _FakeGridPrior(0.5, 1.0))
+        with pytest.raises(ValueError, match="does not overlap"):
+            beagle_met_prior(ssp_data)
+
+    def test_ssfr_upper_bound_and_recent_timescale(self, monkeypatch):
+        """log_ssfr spans [-12, -7.3]; the recent-episode timescale is fixed at 10 Myr."""
+        from tengri import Fixed, Uniform
+
+        sfh = self._capture(monkeypatch)["sfh"]
+
+        assert sfh["type"] == ["delayed", "recent_ssfr"]
+        assert isinstance(sfh["log_ssfr"], Uniform)
+        assert sfh["log_ssfr"].lo == pytest.approx(-12.0)
+        assert sfh["log_ssfr"].hi == pytest.approx(-7.3)
+        assert isinstance(sfh["timescale_myr"], Fixed)
+        assert sfh["timescale_myr"].value == pytest.approx(10.0)
+
+    def test_neb_is_gutkin16_with_free_logu(self, monkeypatch):
+        """Nebular is gutkin16 with logU free on [-4, -1]."""
+        from tengri import Uniform
+
+        neb = self._capture(monkeypatch)["neb"]
+
+        assert neb["type"] == "gutkin16"
+        assert isinstance(neb["logU"], Uniform)
+        assert neb["logU"].lo == pytest.approx(-4.0)
+        assert neb["logU"].hi == pytest.approx(-1.0)
