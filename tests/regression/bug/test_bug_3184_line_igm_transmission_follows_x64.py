@@ -2,7 +2,7 @@
 """#3184: _line_igm_transmission returns the trace's canonical dtype, not its input's.
 
 The early return for a chain with no IGM component was ``jnp.ones_like(line_wave_rest)``, so a
-float64 wavelength array materialised under x64 came back as float64 ones under
+float64 wavelength array materialized under x64 came back as float64 ones under
 ``jax.enable_x64(False)``, and the next ``jnp.log10`` failed with a float64/float32 ``lax.mul``
 mismatch. The function now states its wavelength input with ``device_table`` (the #3086
 contract), so both the early return and the quadrature return a dtype the trace can hold.
