@@ -1520,7 +1520,19 @@ def _register_ledger_properties() -> None:
                 ),
                 bundle=_ir_frac_bundle,
                 available=_is_composable,
-            )
+            ),
+            "agn_ir_frac_saturated": Property(
+                units="",
+                group="agn",
+                doc=(
+                    "1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac: the "
+                    "covering factor it asks for sits at a bound of [0, 1] (or at the line bound "
+                    "1 - E_lines/E_disc), so agn_ir_frac_realized differs from agn_ir_frac; else "
+                    "0.0. Composable AGN only"
+                ),
+                fn=lambda state, params: state.derived["agn_ir_frac_saturated"],
+                available=_is_composable,
+            ),
         },
     )
 

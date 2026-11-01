@@ -448,6 +448,26 @@ def test_saturation_flag_fires_exactly_when_the_bound_binds(synthetic_ssp_wide, 
     assert _derived(model, "agn_torus_frac_effective") == pytest.approx(min(t_raw, 1.0), rel=1e-12)
 
 
+@pytest.mark.parametrize(("log_total_mass", "saturated"), [(-7.0, 0.0), (-5.0, 1.0)])
+def test_saturation_outputs_are_properties(synthetic_ssp_wide, log_total_mass, saturated):
+    """Both outputs are reachable on the property surfaces: ``predict_properties`` (the
+    jit/vmap surface) and ``pred.properties``, with the same values."""
+    model = _build(synthetic_ssp_wide, ir_frac=0.3, log_total_mass=log_total_mass)
+    names = ("agn_ir_frac_saturated", "agn_ir_frac_realized")
+    assert set(names) <= set(model.available_properties)
+    props = model.predict_properties({}, names=names)
+    pred = model.predict({})
+    assert float(props["agn_ir_frac_saturated"]) == saturated
+    assert float(pred.properties["agn_ir_frac_saturated"]) == saturated
+    assert float(pred.properties["agn_ir_frac_realized"]) == pytest.approx(
+        float(props["agn_ir_frac_realized"]), rel=1e-12
+    )
+    if saturated:
+        assert float(props["agn_ir_frac_realized"]) < 0.3
+    else:
+        assert float(props["agn_ir_frac_realized"]) == pytest.approx(0.3, rel=_RTOL)
+
+
 def test_covering_factor_saturates_and_the_ledger_still_closes(synthetic_ssp_wide):
     """A host that asks for more AGN dust than the accretion power has: ``t = 1``, no more.
 

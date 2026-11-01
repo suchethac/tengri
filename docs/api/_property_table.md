@@ -14,6 +14,7 @@
 | `L_agn_torus_lsun` | Lsun | agn | agn | log_L_agn_torus in solar luminosities |
 | `L_agn_torus_unemitted_lsun` | Lsun | agn | agn | log_L_agn_torus_unemitted in solar luminosities |
 | `agn_ir_frac_realized` | — | agn | agn | AGN fraction agn_ir_frac measures, from what the model emitted: the AGN dust power over AGN dust plus the host's absorbed power (total dust), or the AGN share of the light in ir_frac_window. Equals agn_ir_frac where agn_ir_frac_saturated is 0 and agn_ledger_closed is 1; composable AGN only |
+| `agn_ir_frac_saturated` | — | agn | agn | 1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac: the covering factor it asks for sits at a bound of [0, 1] (or at the line bound 1 - E_lines/E_disc), so agn_ir_frac_realized differs from agn_ir_frac; else 0.0. Composable AGN only |
 | `agn_ledger_closed` | — | agn | agn | 1.0 when the angle-integrated pieces plus the unemitted ones add up to the accretion power agn_lum_ratio * 10**agn_log_lbol L_sun, else 0.0 (self-contained quasar templates, agn_norm='independent', 'cigale_joint' with lines or an active agn_ir_frac tie, polar dust beside a library torus with anisotropy); composable AGN only |
 | `balmer_break` | — | sed | stellar | Balmer break diagnostic |
 | `balmer_decrement` | — | lines | nebular | Balmer decrement: Hα/Hβ |
