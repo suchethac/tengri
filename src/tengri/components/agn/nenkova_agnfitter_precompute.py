@@ -27,16 +27,14 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
+from tengri.components.agn._template_power_table import runtime_preintegrated_grid
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.nenkova_agnfitter import (
     TORUS_INCLINATION,
     _load_nenkova_agnfitter_arrays,
     load_nenkova_agnfitter_grid,
 )
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
-)
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -101,6 +99,12 @@ def precompute_nenkova_agnfitter_photometry(
     **Normalization**: Templates are frequency-normalized so that the
     integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``nenkova_agnfitter.py``.
+
+    **Quadrature**: each record is resampled log-log onto the filter quadrature grid
+    (the template nodes inside every band plus the rest-frame filter nodes) and
+    integrated with the runtime's ``lnu_filter_integral``
+    (``_template_power_table.runtime_band_photometry``), so at a node the lookup is
+    the runtime's band photometry to rounding.
     """
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -128,16 +132,10 @@ def precompute_nenkova_agnfitter_photometry(
     scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
     lnu_grid = _LSUN_ERG * grid_reordered * scale[..., None]
 
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
-        axes=(cos_inc_axis,),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
+    # The band photometry the runtime produces: each record resampled log-log onto the
+    # filter quadrature grid and integrated with lnu_filter_integral (#3160).
+    preint = runtime_preintegrated_grid(
+        lnu_grid, wave_grid, filter_waves, filter_trans, redshift, (cos_inc_axis,)
     )
 
     axes_jax = (jnp.asarray(cos_inc_axis),)

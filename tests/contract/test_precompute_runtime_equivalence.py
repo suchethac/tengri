@@ -449,22 +449,24 @@ def test_dust_ir_emitter_lut_matches_exact(real_ssp, emitter):
 # not a bypass.
 #
 # "Exact" reference: the runtime ``*_sed_from_grid`` function (the same one
-# the composable torus block calls) evaluated at the point under test, then
-# filter-integrated via :func:`tengri.observation.photometry.lnu_filter_integral`
-# -- the same BESSELL-convention integral
-# :func:`tengri.utils.grid_interp.preintegrate_grid` documents itself as
-# matching, but a genuinely independent call (no shared code with the
-# adapter under test).
+# the composable torus block calls) evaluated at the point under test on a model
+# wavelength grid, then filter-integrated via
+# :func:`tengri.observation.photometry.lnu_filter_integral`. The model grid is the
+# template's native nodes plus every filter node in the rest frame
+# (``_runtime_wave``): the runtime resamples the template log-log onto it, as onto any
+# model grid, and the filter integral then sees the SED at its own nodes. A reference
+# on the native grid alone integrates linearly between the coarse template
+# wavelengths, the same quadrature the tables used to be built with, so it could not
+# see those tables sit up to 50% off the runtime at their own nodes (#3160).
 #
 # Tolerance, measured (not guessed): at an exact grid node neither path
-# interpolates, so agreement is machine precision (measured worst case
-# 8.6e-15 across all seven blocks) -- rtol=1e-10 leaves 5 orders of margin.
+# interpolates, so agreement is rounding (measured worst case over every node of all
+# nine libraries, at z = 0 and 1.2 with irregular filters, in
+# ``test_torus_table_nodes_match_runtime``) -- rtol=1e-10.
 # Off-node, the two paths do not commute (precompute interpolates
 # NODE-PREINTEGRATED PHOTOMETRY via PCHIP; the exact path integrates the
 # TEMPLATE interpolated in wavelength space, then integrates through the
-# filter) so a real, larger residual is expected: measured worst case 3.45e-2
-# (``cat3d_wind_lowfwd``, whose axes are widest in relative terms) -- rtol
-# =5e-2 leaves ~50% margin over every measured case.
+# filter) so a real, larger residual is expected, held to the 5e-2 contract.
 #
 # Bug found by this table (fixed in this round, not merely tested around):
 # ``skirtor_agnfitter{,_1p,_2p}_precompute.py`` each multiplied by
@@ -583,18 +585,20 @@ def _kwarg_values(spec, values):
     )
 
 
+def _runtime_wave(grid, waves, redshift=0.0):
+    """Model wavelength grid of the reference [Angstrom]: the template's native nodes and
+    every filter node in the rest frame."""
+    rest = [np.asarray(w, dtype=float) / (1.0 + redshift) for w in waves]
+    return jnp.asarray(np.unique(np.concatenate([np.asarray(grid.wave_grid, float), *rest])))
+
+
 def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans):
     """Filter-integrated photometry from the runtime SED function directly."""
     kwargs = dict(zip(axis_kwargs, values, strict=True))
-    L_nu = sed_fn(
-        grid, jnp.asarray(grid.wave_grid), agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs
-    )
+    wave = _runtime_wave(grid, waves)
+    L_nu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
     out = [
-        float(
-            lnu_filter_integral(
-                L_nu, jnp.asarray(grid.wave_grid), jnp.asarray(w), jnp.asarray(t), 0.0
-            )
-        )
+        float(lnu_filter_integral(L_nu, wave, jnp.asarray(w), jnp.asarray(t), 0.0))
         for w, t in zip(waves, trans, strict=True)
     ]
     return np.asarray(out)
@@ -651,7 +655,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
 
     def test_node_matches_exact(self, spec, grid_torus_filters):
         """At an exact grid node, precompute and exact photometry agree to
-        machine precision (measured worst case 8.6e-15; rtol=1e-10 here)."""
+        rounding (measured worst case 2.1e-14 over every node; rtol=1e-10 here)."""
         self._skip_if_missing(spec)
         runtime_mod, precompute_mod = self._modules(spec)
         loader = getattr(runtime_mod, spec["loader"])
@@ -670,8 +674,8 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
 
     def test_offnode_matches_exact(self, spec, grid_torus_filters):
         """Off a grid node, the two paths do not commute (interpolate-then-
-        integrate vs integrate-then-interpolate); measured worst case 3.45e-2
-        (cat3d_wind_lowfwd) -- rtol=5e-2 here."""
+        integrate vs integrate-then-interpolate); the largest sweep gap below is 3.9e-2
+        (cat3d_wind) -- rtol=5e-2 here."""
         self._skip_if_missing(spec)
         runtime_mod, precompute_mod = self._modules(spec)
         loader = getattr(runtime_mod, spec["loader"])
@@ -907,6 +911,14 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
 # 3.78e-2 (cat3d_wind); with five more mid-infrared bands the same library reaches 4.4e-2
 # at cos i = 0.009, the largest gap measured anywhere.
 #
+# Those figures were taken against a reference on the native template grid. With the
+# tables and the reference both on the runtime's quadrature (#3160), the structured and
+# random sweeps with the ten irregular filters of ``_irregular_filters`` below, at z = 0
+# and 1.2, measure at most: cat3d_wind 3.91e-2, cat3d_wind_lowfwd 3.92e-2,
+# skirtor_agnfitter_2p 2.32e-2, nenkova_agnfitter_3p 1.72e-2, skirtor_agnfitter_1p
+# 1.04e-2, skirtor_agnfitter 6.9e-3, nenkova_agnfitter_2p 4.2e-3, nenkova_agnfitter
+# 8.3e-4, silva04 7.3e-4.
+#
 # skirtor_agnfitter_1p (27 points, 1.67e-3) and nenkova_agnfitter (24 points, 6.4e-4) are
 # power-weighted already, by an identity: with one library axis a is proportional to the
 # record power P, so their tables, records times (a / mean a) / P, hold the raw band
@@ -1020,16 +1032,16 @@ def _load_torus(spec):
     return runtime_mod, precompute_mod, grid
 
 
-def _exact_photometry_fn(sed_fn, grid, names, waves, trans):
-    """Runtime band photometry at kwarg values, vmappable."""
-    wave_native = jnp.asarray(grid.wave_grid)
+def _exact_photometry_fn(sed_fn, grid, names, waves, trans, redshift=0.0):
+    """Runtime band photometry at kwarg values on the ``_runtime_wave`` model grid."""
+    wave = _runtime_wave(grid, waves, redshift)
 
     def exact(*values):
         kwargs = dict(zip(names, values, strict=True))
-        lnu = sed_fn(grid, wave_native, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
+        lnu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
         return jnp.stack(
             [
-                lnu_filter_integral(lnu, wave_native, jnp.asarray(w), jnp.asarray(t), 0.0)
+                lnu_filter_integral(lnu, wave, jnp.asarray(w), jnp.asarray(t), redshift)
                 for w, t in zip(waves, trans, strict=True)
             ]
         )
@@ -1176,19 +1188,23 @@ def test_torus_table_fixed_axis_lookup_matches_exact(spec, fixed_axis, grid_toru
 @pytest.mark.parametrize("spec", _POWER_TABLE_SPECS, ids=_POWER_TABLE_IDS)
 def test_torus_table_is_power_weighted(spec, grid_torus_filters):
     """The lookup is the power-weighted reading of the raw library records, built here
-    independently: band photometry of every raw record (``lnu_filter_integral``) and
-    its bolometric power (``native_bolometric_nu_np``), SciPy's PCHIP of each along
-    each axis in turn with the others at a node, their ratio, times the runtime's a / mean(a)
-    for an anisotropic library.
+    independently: band photometry of every raw record, resampled log-log onto the
+    ``_runtime_wave`` model grid as the runtime emits it and integrated there with
+    ``lnu_filter_integral``, and its bolometric power (``native_bolometric_nu_np``),
+    SciPy's PCHIP of each along each axis in turn with the others at a node, their
+    ratio, times the runtime's a / mean(a) for an anisotropic library.
 
-    Tolerance 1e-4, measured: the table builder and ``lnu_filter_integral`` integrate
-    the bands by different quadratures, 3e-5 apart at the nodes. An equal-weight table
-    misses by 1e-2 and more; a wrong power channel by more still.
+    Tolerance 1e-9: the table and this reference integrate the bands by the same
+    quadrature, so what remains is the two PCHIP implementations, as in the SKIRTOR
+    degree-axis test above. An equal-weight table misses by 1e-2 and more; a wrong
+    power channel by more still, and a table integrated linearly between the
+    template's own wavelengths by up to 3e-1.
     """
     from scipy.interpolate import PchipInterpolator
 
     from tengri.components.agn._template_grid import native_bolometric_nu_np
     from tengri.components.agn._torus_inclination import library_anisotropy, log10_anisotropy
+    from tengri.utils.grid_interp import resample_template
     from tengri.utils.physics_constants import L_SUN
 
     runtime_mod, precompute_mod, grid = _load_torus(spec)
@@ -1200,6 +1216,7 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
     )
     axes = _library_axes(grid)
     wave_native = np.asarray(grid.wave_grid, dtype=float)
+    wave = _runtime_wave(grid, waves)
     for swept in range(len(axes)):
         index = [len(a) // 2 for a in axes]
         index[swept] = slice(None)
@@ -1209,8 +1226,8 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
                 [
                     float(
                         lnu_filter_integral(
-                            jnp.asarray(r),
-                            jnp.asarray(wave_native),
+                            resample_template(wave, jnp.asarray(wave_native), jnp.asarray(r)),
+                            wave,
                             jnp.asarray(w),
                             jnp.asarray(t),
                             0.0,
@@ -1239,5 +1256,92 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
             kwargs = dict(zip(spec["axis_kwargs"], _kwarg_values(spec, tuple(point)), strict=True))
             got = np.asarray(lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
             np.testing.assert_allclose(
-                got, want, rtol=1e-4, err_msg=f"{spec['name']} axis {swept} at {x}"
+                got, want, rtol=1e-9, err_msg=f"{spec['name']} axis {swept} at {x}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Every node of every torus table is the runtime's photometry (#3160)
+# ---------------------------------------------------------------------------
+#
+# A table integrated linearly between the template's own wavelengths matched a reference
+# integrated the same way, and sat up to 50% off the runtime at its own nodes: the runtime
+# resamples the template log-log onto the model grid before the filter integral. Each
+# table is now built on the runtime's quadrature, so at every node it is the runtime on
+# the ``_runtime_wave`` model grid to rounding: measured worst case over all nodes of
+# the nine libraries, both redshifts, 2.1e-14 -- rtol=1e-10. Measured before the
+# rebuild, against this same reference: skirtor_agnfitter_1p 5.0e-1, cat3d_wind_lowfwd
+# 3.3e-1 (both at z = 1.2).
+#
+# Irregular filters: unevenly spaced nodes, a transmission vanishing at the band edges,
+# bands from 1300 A to 95 um, so at z = 1.2 the bluest falls below some libraries'
+# template range and the reddest band reads the far-infrared tail.
+
+_NODE_REDSHIFTS = (0.0, 1.2)
+
+
+def _irregular_filters():
+    """Ten bands, 1300 A - 95 um [Angstrom], seeded uneven node spacing."""
+    rng = np.random.default_rng(3)
+    bands = [
+        (1300.0, 1800.0, 7),
+        (2600.0, 3500.0, 25),
+        (4800.0, 6300.0, 40),
+        (10500.0, 13500.0, 31),
+        (19500.0, 24000.0, 18),
+        (30000.0, 39000.0, 22),
+        (41000.0, 52000.0, 15),
+        (75000.0, 160000.0, 50),
+        (195000.0, 270000.0, 12),
+        (550000.0, 950000.0, 20),
+    ]
+    waves, trans = [], []
+    for lo, hi, n in bands:
+        x = np.sort(np.concatenate([[lo, hi], rng.uniform(lo, hi, n - 2)]))
+        u = (x - lo) / (hi - lo)
+        waves.append(x)
+        trans.append(np.sin(np.pi * u) ** 0.7 * (1.0 + 0.3 * np.sin(7.0 * u)))
+    return waves, trans
+
+
+@pytest.mark.parametrize("redshift", _NODE_REDSHIFTS, ids=[f"z{z}" for z in _NODE_REDSHIFTS])
+@pytest.mark.parametrize("spec", _TORUS_SWEEP_SPECS, ids=_TORUS_SWEEP_IDS)
+def test_torus_table_nodes_match_runtime(spec, redshift):
+    """At every node, the table is the runtime's band photometry to 1e-10."""
+    runtime_mod, precompute_mod, grid = _load_torus(spec)
+    waves, trans = _irregular_filters()
+    names = spec["axis_kwargs"]
+    exact = _exact_photometry_fn(
+        getattr(runtime_mod, spec["sed_fn"]), grid, names, waves, trans, redshift
+    )
+    lookup = precompute_mod.build_lookup(
+        precompute_mod.precompute(
+            list(waves), list(trans), redshift, None, grid_path=str(spec["grid_path"])
+        )
+    )
+
+    def precomputed(*values):
+        return lookup(
+            agn_log_lbol=0.0, agn_torus_frac=1.0, **dict(zip(names, values, strict=True))
+        )
+
+    nodes = np.array(list(itertools.product(*_library_axes(grid))))
+    # The face-on SKIRTOR node is not a node of the runtime's coordinate: above
+    # cos i = 1 - 1e-6 the runtime continues arccos along its tangent, so cos i = 1 reads
+    # the library at i = 0.04 deg, off-node (skirtor_incl_from_cos_inc). Those rows are
+    # covered by the 5e-2 sweeps instead.
+    on_node = np.ones(nodes.shape[0], dtype=bool)
+    for k in spec.get("deg_axes", ()):
+        on_node &= nodes[:, k] != 0.0
+    nodes = nodes[on_node]
+    stacked = jnp.asarray(np.array([_kwarg_values(spec, tuple(row)) for row in nodes]))
+
+    def batched(fn):
+        return jax.jit(lambda v: jax.lax.map(lambda r: fn(*r), v, batch_size=_SWEEP_BATCH))
+
+    want = np.asarray(batched(exact)(stacked))
+    got = np.asarray(batched(precomputed)(stacked))
+    for row, g, e in zip(nodes, got, want, strict=True):
+        _assert_equivalent(
+            g, e, f"{spec['name']} node {dict(zip(names, row))} at z={redshift}", rtol=1e-10
+        )
