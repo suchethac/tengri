@@ -62,7 +62,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -199,6 +199,10 @@ class MappingsAGNGridData(NamedTuple):
 #: ``scripts/build_flury2024_grids.py`` writes the attribute; bump both together.
 FLURY_SCHEMA_VERSION = 2
 
+#: The Flury+2024 optical labels are the PyNeb integer names, the air wavelength
+#: rounded to the nearest Angstrom (#3113).
+_LABEL_HALF_WIDTH_AA = 0.5
+
 
 def _require_current_schema(f: h5py.File, filepath: str | Path) -> None:
     """Refuse a Flury+2024 file built by an older ``build_flury2024_grids.py``."""
@@ -261,7 +265,11 @@ def _load_stellar_grid(
         line_ratios = jnp.array(grp["line_ratios"][:])  # (N_z,N_a,N_s,N_u,N_n,N_lines)
 
         # Wavelengths stored in the top-level group per model/density sub-group
-        line_wavelengths = jnp.array(catalog_air_to_vacuum(grp["line_wavelengths_aa"][:]))
+        line_wavelengths = jnp.array(
+            rounded_labels_to_vacuum(
+                grp["line_wavelengths_aa"][:], half_width_aa=_LABEL_HALF_WIDTH_AA
+            )
+        )
 
     grid_data = MappingsStellarGridData(
         line_wavelengths=line_wavelengths,
@@ -290,7 +298,11 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
         _require_current_schema(f, filepath)
         grp = f[f"agn_oxaf/{density}"]
 
-        line_wavelengths = jnp.array(catalog_air_to_vacuum(grp["line_wavelengths_aa"][:]))
+        line_wavelengths = jnp.array(
+            rounded_labels_to_vacuum(
+                grp["line_wavelengths_aa"][:], half_width_aa=_LABEL_HALF_WIDTH_AA
+            )
+        )
         zo_axis = jnp.array(grp["z_axis"][:])
         logU_axis = jnp.array(grp["logU_axis"][:])
         logmbh_axis = jnp.array(grp["logmbh_axis"][:])
