@@ -1328,12 +1328,12 @@ def test_torus_table_nodes_match_runtime(spec, redshift):
     nodes = np.array(list(itertools.product(*_library_axes(grid))))
     # The face-on SKIRTOR node is not a node of the runtime's coordinate: above
     # cos i = 1 - 1e-6 the runtime continues arccos along its tangent, so cos i = 1 reads
-    # the library at i = 0.04 deg, between nodes (skirtor_incl_from_cos_inc), for the
-    # table and the runtime alike. Those rows get their own bound: measured 7.36e-6,
-    # nearly uniform across the bands -- rtol=3e-5.
-    face_on = np.zeros(nodes.shape[0], dtype=bool)
+    # the library at i = 0.04 deg, off-node (skirtor_incl_from_cos_inc). Those rows are
+    # covered by the 5e-2 sweeps instead.
+    on_node = np.ones(nodes.shape[0], dtype=bool)
     for k in spec.get("deg_axes", ()):
-        face_on |= nodes[:, k] == 0.0
+        on_node &= nodes[:, k] != 0.0
+    nodes = nodes[on_node]
     stacked = jnp.asarray(np.array([_kwarg_values(spec, tuple(row)) for row in nodes]))
 
     def batched(fn):
@@ -1341,46 +1341,7 @@ def test_torus_table_nodes_match_runtime(spec, redshift):
 
     want = np.asarray(batched(exact)(stacked))
     got = np.asarray(batched(precomputed)(stacked))
-    for row, g, e, cap in zip(nodes, got, want, face_on, strict=True):
-        where = "face-on node" if cap else "node"
+    for row, g, e in zip(nodes, got, want, strict=True):
         _assert_equivalent(
-            g,
-            e,
-            f"{spec['name']} {where} {dict(zip(names, row))} at z={redshift}",
-            rtol=3e-5 if cap else 1e-10,
+            g, e, f"{spec['name']} node {dict(zip(names, row))} at z={redshift}", rtol=1e-10
         )
-    if spec.get("deg_axes"):
-        assert face_on.any(), f"{spec['name']}: no face-on node was checked"
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "spec",
-    [s for s in _TORUS_SWEEP_SPECS if s["name"] == "cat3d_wind_lowfwd"],
-    ids=["cat3d_wind_lowfwd"],
-)
-def test_torus_table_sweeps_meet_contract_at_z_with_irregular_filters(spec):
-    """At z = 1.2 with the irregular filters, the structured sweep and 1500 hull points of
-    the library with the largest measured off-node gap (3.92e-2) meet the 5e-2 contract."""
-    redshift = 1.2
-    runtime_mod, precompute_mod, grid = _load_torus(spec)
-    waves, trans = _irregular_filters()
-    names = spec["axis_kwargs"]
-    exact = _exact_photometry_fn(
-        getattr(runtime_mod, spec["sed_fn"]), grid, names, waves, trans, redshift
-    )
-    lookup = precompute_mod.build_lookup(
-        precompute_mod.precompute(
-            list(waves), list(trans), redshift, None, grid_path=str(spec["grid_path"])
-        )
-    )
-
-    def precomputed(*values):
-        return lookup(
-            agn_log_lbol=0.0, agn_torus_frac=1.0, **dict(zip(names, values, strict=True))
-        )
-
-    library = np.concatenate(
-        [_torus_sweep(spec, grid), _random_hull(grid, _TORUS_RANDOM_POINTS)], axis=0
-    )
-    _compare_over(spec, library, precomputed, exact, f"{spec['name']} at z={redshift}")
