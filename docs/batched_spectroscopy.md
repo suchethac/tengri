@@ -112,20 +112,33 @@ posterior = fit_spectra_catalog_mcmc(template, batches, n_warmup=200, n_samples=
 
 ## What each galaxy carries, and what the template fixes
 
-Each galaxy supplies its own data, traced through the compiled function as arrays:
+Each galaxy supplies its own data, traced through the compiled function as arrays. A batch holds
+these 20 leaves, in this order, each with a leading galaxy axis:
 
-- the observed grid, padded to the bucket's pixel count, and the pixel mask;
-- the flux, the inverse variance, and the banded resolution operator;
-- the redshift;
-- the SFH bin edges in Gyr, when the galaxy has its own ladder (`sfh_bin_edges_gyr`);
-- the calibration range, the photometry and its presence mask;
-- the line mask: which catalog lines land on the galaxy's observed grid at its redshift;
-- the line resolution, and the Milky Way E(B-V) of the foreground, when the template has one.
+| Leaf | Content |
+|---|---|
+| `wave` | Observed grid [Angstrom], padded to the bucket's pixel count |
+| `pix_mask` | 1.0 for a good real pixel, 0.0 for padded, masked or zero-weight pixels |
+| `flux` | Observed F_nu [erg/s/cm^2/Hz]; 0 on excluded pixels |
+| `sigma` | 1-sigma flux error; 1 on excluded pixels |
+| `r_data` | Banded resolution rows; empty when the resolution is Gaussian |
+| `resolution_pp` | Per-pixel spectral resolution R; empty when the resolution is banded |
+| `z` | Redshift |
+| `cal_lo`, `cal_hi` | Smallest and largest real wavelength [Angstrom], the calibration range |
+| `phot_flux`, `phot_err` | Photometry and its errors [erg/s/cm^2/Hz]; empty without photometry |
+| `phot_presence` | 1.0 where a filter has a finite flux and a positive error |
+| `sfh_bin_edges_gyr` | Per-galaxy SFH bin edges [Gyr]; empty when the template ladder is used |
+| `line_mask` | 1.0 for each catalog line that lands on the galaxy's real grid at its redshift |
+| `eline_resolution` | Spectral resolution R that sets the emission-line profile width |
+| `ebmv_mw` | Milky Way E(B-V) of the foreground, per galaxy |
+| `chol_data` | Bands of the lower Cholesky factor of the galaxy's pixel covariance; empty without one |
+| `segment` | Calibration segment id of each pixel; zeros without segments |
+| `cal_scale_center`, `cal_scale_sigma` | `log10_center` and `sigma_dex` of the galaxy's log-normal prior on the mean calibration multiplier |
 
 The template fixes everything that changes a shape or a branch of the compiled function: the
 SED family and its parameter set, the emission-line catalog, the filter union, the SFH type and
-the number of its edges, the resolution form, and `quantum`. A change to any of these is a new
-bucket and a new compile.
+the number of its edges, the resolution form, the number of calibration segments, the covariance
+offsets, and `quantum`. A change to any of these is a new bucket and a new compile.
 
 ## Choosing `quantum`
 
@@ -159,6 +172,11 @@ which lines are in the grid. Its row sums give the number of lines each galaxy c
 measured set below, a 3.3 to 3.9 thousand-angstrom window with sky, camera-join and Ca K masks held
 12 to 24 of the 39 catalog lines.
 
+**Balmer series.** `LineList.default_optical()` carries H8 to H14, He I 3889 and [Ne III] 3968
+beside the lower-order lines. With `neb={"type": "cue", "balmer_series_n_max": 50}`, the default,
+Cue's emission appends H11 to H50 at the Case-B ratios of Storey and Hummer (1995) to H-beta.
+`balmer_series_n_max=None` leaves the series at Cue's own last line.
+
 **Calibration.** `calibration_marginalize=True` with `cal_n_poly=3` integrates a Chebyshev
 calibration polynomial out of the spectral term, with the prior width `cal_prior_sigma`. The
 joint marginal of calibration and lines is exact, so the two marginals are not applied one after
@@ -166,7 +184,51 @@ the other. The calibration marginal requires `calibration_order=0` in the templa
 combination with fitted lines (`eline_mode="fitted"`) is refused. Use `"marginalized"` lines
 with it.
 
+**Per-segment calibration scales.** For a spectrum made of several camera segments, give the
+template `Spectroscopy(calibration_segments=...)`, either the pixel count of each segment or one
+integer id per pixel, and each segment gets its own free scale in the calibration marginal. A
+galaxy supplies its own ids with `GalaxySpectrum(segment_ids=...)`. Galaxies with different segment
+counts form separate buckets. `cal_prior="scale_free"` replaces the Gaussian prior on the
+coefficients with a prior flat in data-flux units; the default is `"gaussian"`.
+
+**Fiber-fraction prior.** `Spectroscopy(cal_scale_prior=(log10_center, sigma_dex))` puts a
+log-normal prior on the mean calibration multiplier q over a window, and q enters the fit as one
+sampled latent, `cal_log_q`. `cal_scale_window=(lo, hi)` [Angstrom] sets the window; the default
+is the segment that holds the r band's effective wavelength. `GalaxySpectrum(cal_scale_prior=...)`
+sets the prior galaxy by galaxy.
+
+## Correlated noise
+
+`GalaxySpectrum(covariance=BandedMatrix)` gives a galaxy a symmetric banded pixel covariance
+[(erg/s/cm^2/Hz)^2]. Every galaxy that carries one uses the same diagonal offsets, and the
+template is built without a `Spectroscopy.covariance` of its own. The spectral term, the
+calibration marginal and the line marginals whiten the residual by one banded Cholesky factor.
+Masked and padded pixels are identity rows of that factor, so they contribute nothing.
+`ivar` still selects the good pixels.
+
+## Star formation history and stellar grids
+
+**Young-fraction coordinates.** `sfh={"type": "continuity", "coordinates": "young_fraction"}`
+samples the mass fractions of the continuity SFH from the youngest bin outward, each
+Uniform(0, 1). Use it when the photometry pins the young mass: the posterior then has its own
+axis for that mass. The default, `"ratios"`, samples the log SFR ratios.
+
+**[alpha/Fe] grids.** A 4-D SSP grid with an [alpha/Fe] axis is contracted over metallicity at each
+alpha node before the alpha interpolation, so a sampled `met_alpha_fe` adds no per-draw copy of
+the cube. A free AGB dust-shell weight (`agb_dust_weight`) collapses alpha first and runs the
+rest of the stellar sum on a 3-D cube.
+
+## Choosing a sampler
+
+`fit_spectra_catalog_mcmc` takes `sampler="nuts"` (the default), `"hmc"`, `"chees"` or `"ghmc"`.
+Use `"chees"` for catalog-wide posteriors. `"ghmc"` runs MEADS with `n_chains=32` and
+`n_superchains=8` by default and a fixed-length warmup, and it returns the per-galaxy
+`nested_rhat`. On narrow posteriors it does not reach NUTS: at DESI-like signal to noise the
+measured gap is 0.48 posterior widths.
+
 ## Measured numbers
+
+The numbers were measured at commit `a608d682f`. This page describes the code at `fb0aa11c0`.
 
 The numbers come from 12 mock spectra fit two ways on one machine: the per-galaxy `Fitter` on a
 `Fixed(z)` build of the template, and the batched stack on the free-redshift template. The mocks
@@ -226,8 +288,7 @@ the free-redshift template built at a peak of 632 MB and one `Fixed(z)` build at
 no dust emission and no IGM term. The larger build peak of models with those terms is tracked in
 [#3153](https://github.com/suchethac/tengri/issues/3153).
 
-**Larger set.** An earlier measurement on 24 galaxies at 4,159 to 4,751 fitted pixels, with the same
-machine and the code at `a608d682f`, gave a first batched MAP call of 45 s including compile and 127 s
+**Larger set.** A measurement on 24 galaxies at 4,159 to 4,751 fitted pixels, on the same machine, gave a first batched MAP call of 45 s including compile and 127 s
 for 300 steps (5.3 s per galaxy). A per-galaxy `Fitter` NUTS run on one galaxy with a dense mass matrix
 ran for more than 14.5 minutes and 2.6 GB before a memory kill. That timing used the `Fitter` defaults at
 ten free parameters and is not comparable to the table above.
@@ -257,18 +318,12 @@ Check the fit output for finite values before using a float32 catalog fit.
 
 Each limit below names what to do instead.
 
-- **Banded pixel covariance.** The batched likelihood uses diagonal noise. For correlated noise,
-  use the per-galaxy `Fitter` until [#3133](https://github.com/suchethac/tengri/issues/3133)
-  lands.
-- **Per-segment calibration scales and a fiber-fraction prior.** The batch carries one calibration
-  polynomial per galaxy. Use the per-galaxy `Fitter` for per-segment scales until
-  [#3134](https://github.com/suchethac/tengri/issues/3134) lands.
-- **The MEADS sampler.** The catalog engine offers `sampler="nuts"`, `"hmc"` and `"chees"`. Use
-  `sampler="chees"` until [#3135](https://github.com/suchethac/tengri/issues/3135) lands.
-- **A model-centered line prior.** The batched stack takes the flat prior on line amplitudes. Use
-  the flat prior until [#3138](https://github.com/suchethac/tengri/issues/3138) lands.
+- **A template covariance.** Give each `GalaxySpectrum` its own `covariance=BandedMatrix` and
+  build the template without one.
 - **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor.
   Use Gaussian noise.
+- **The Cloudy line prior and broad lines.** Use `eline_prior_type="flat"` and `eline_broad=False`,
+  or `eline_mode="fitted"` or `"off"`.
 - **Spectral indices.** Use the per-galaxy `Fitter`.
 - **Gaussian-process star formation histories.** Use a parametric history with the batch, or the
   per-galaxy `Fitter` for a Gaussian-process history.
