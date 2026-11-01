@@ -282,7 +282,9 @@ class SpectroBatchSpec:
         Gaussian resolution ``R``.
     grid_kind : str
         One of ``"banded"`` (banded resolution), ``"log_uniform"`` or
-        ``"nonuniform"`` (Gaussian resolution on that grid).
+        ``"nonuniform"`` (Gaussian resolution). ``"log_uniform"`` means a log-uniform
+        grid with a constant resolution (a scalar or an all-equal per-pixel array).
+        A log-uniform grid with a varying per-pixel resolution is ``"nonuniform"``.
     lsf_n_bins : int
         Number of bins used by the spectral LSF approximation. Stored in the
         key so that buckets built with different binning never share a compile.
@@ -511,7 +513,8 @@ def classify_grid(wave) -> str:
     -------
     str
         ``"log_uniform"`` if ``diff(log wave)`` is constant to relative
-        tolerance ``1e-6``, otherwise ``"nonuniform"``.
+        tolerance ``1e-6``, otherwise ``"nonuniform"``. This looks at the grid
+        alone; the builder also requires a constant resolution for ``"log_uniform"``.
 
     Raises
     ------
@@ -654,6 +657,21 @@ def _prepare_resolution(g: GalaxySpectrum, n: int, n_max: int):
     return None, np.zeros((0, n_max)), r_pp
 
 
+def _builder_grid_kind(wave: np.ndarray, offsets, r_pp: np.ndarray) -> str:
+    """Return the grid kind the builder assigns to one Gaussian-or-banded galaxy.
+
+    A log-uniform grid keeps the ``"log_uniform"`` kind only when its resolution is
+    constant: a scalar, or a per-pixel array whose values are all equal. A varying
+    per-pixel R on a log-uniform grid is ``"nonuniform"``, so it takes the variable-R
+    path. ``r_pp`` is the padded per-pixel row, which repeats the last real value, so
+    its spread equals the spread of the real pixels. Banded galaxies keep their kind.
+    """
+    kind = classify_grid(wave)
+    if kind == "log_uniform" and offsets is None and np.ptp(r_pp) != 0.0:
+        return "nonuniform"
+    return kind
+
+
 def _prepare_photometry(g: GalaxySpectrum):
     """Return ``(has_phot, flux, err, presence)`` with flux and error zero-filled."""
     if g.phot_flux is None:
@@ -768,8 +786,9 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
     spec : SpectroBatchSpec
         Bucket key, with ``offsets`` and ``conserving`` resolved.
     log_grid : bool
-        Whether this galaxy's own wavelength grid is log-uniform (its padding
-        is then geometric).
+        Whether this galaxy's builder-assigned grid kind is ``"log_uniform"``, that is,
+        its grid is log-uniform and its resolution constant (its padding is then
+        geometric). A log-uniform grid with a varying resolution is padded linearly.
 
     Returns
     -------
@@ -917,7 +936,7 @@ def _prepare_galaxy(
 
         n_max = n if quantum is None else -(-n // quantum) * quantum
         offsets, r_data, r_pp = _prepare_resolution(g, n, n_max)
-        kind = classify_grid(wave)
+        kind = _builder_grid_kind(wave, offsets, r_pp)
         log_grid = kind == "log_uniform"
         grid_kind = "banded" if offsets is not None else kind
         conserving = None
@@ -1191,7 +1210,11 @@ def build_spectro_batches(
     Build-time NumPy helper, not JIT-compatible; call it once per catalog.
     Galaxies are grouped by :class:`SpectroBatchSpec`, so galaxies with
     different offsets, grid kinds, photometry widths or resample modes never share
-    a bucket, even when their pixel counts match.
+    a bucket, even when their pixel counts match. The grid kind of a Gaussian galaxy
+    is ``"log_uniform"`` only when its grid is log-uniform and its resolution is
+    constant (a scalar, or a per-pixel array with ``np.ptp == 0``). A log-uniform
+    grid with a varying per-pixel resolution is ``"nonuniform"``, so the two resolution
+    cases on one grid land in different buckets and each takes its own LSF path.
 
     Padded pixels get ``flux = 0``, ``sigma = 1`` and ``pix_mask = 0``. Real
     pixels with a non-finite flux or ivar, ``ivar <= 0`` or a false mask get

@@ -144,6 +144,8 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
+- 2026-11-01, #3118: `docs/batched_spectroscopy.md` rewritten against main at `fb0aa11c0`: banded covariance, per-segment calibration scales and priors, the extended Balmer series, young-fraction coordinates, 4-D [alpha/Fe] grids and `sampler="ghmc"` described as shipped; all 20 `SpectroBatch` leaves listed; links kept only for open issues.
+- 2026-11-01, #3118: the published page `docs/batched_spectroscopy.md` describes the stack with measured numbers from a 24-galaxy mock set (Apple M4 Pro, CPU, float64, at `a608d682f`). Measured: template build 3.8 s and 632 MB peak RSS; one per-galaxy `Fixed(z)` build 0.72 s and 754 MB; one batched MAP call over 24 galaxies 45 s including compile and 127 s for 300 steps; one per-galaxy NUTS fit over 14.5 min before a memory kill. The jit-miss counter includes build-time compiles. The page's float32 section links #3149, which reports non-finite spectroscopic output above log10 M of about 5.25 in pure float32. The 12-mock comparison with the per-galaxy Fitter is in `docs/dev/measurements/2026-11-01-batched-vs-fitter.md`.
 - 2026-11-01, #3133: banded pixel covariance on the batched spectroscopic path.
   `GalaxySpectrum(covariance=BandedMatrix)` gives a galaxy a banded covariance; every
   galaxy that carries one uses the same offsets, or `build_spectro_batches` raises naming
@@ -212,3 +214,21 @@ a leaf, if it changes a shape or a branch.
   the Fitter MAP where the Fitter's point is stationary (Newton decrement below 1e-8 nats,
   as in `tests/inference/test_profile_mass.py`), and requires the batched point to be no
   higher in the negative log-posterior where it is not; the Adam driver is pinned.
+
+- 2026-11-01, #3138: `eline_prior_type="model"` on the per-galaxy line-only marginalized
+  likelihood. Each line has a Gaussian prior centered on the model's attenuated line
+  luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.
+  The mapping is checked against the lines-on minus lines-off spectrum over the H-beta
+  window (ratio 0.991). The prior mean carries the Milky Way foreground screen at each
+  line's observed wavelength on both paths; the intergalactic transmission is left out,
+  since every catalog line lies above 1216 Angstrom, where it transmits exactly one.
+  The batched path evaluates the same prior through the same
+  helpers (`model_line_prior`, `unit_model_line_prior`), with the attenuated line
+  luminosities returned by `predict_batched_observables` and the catalog-to-model line
+  map fixed at build time; the calibration joint takes the block prior
+  `blockdiag(I / sigma_cal^2, unit)` with prior mean `[0, mu / w]` on both paths.
+  `eline_aperture_frac` is a registered observation parameter (`Fixed(1.0)`, freed with
+  `eline_aperture_frac=Uniform(...)` or `FREE` at build, round-tripped by `to_groups`).
+  The per-galaxy fit reads the line luminosities from the same forward that paints the
+  spectrum. A masked line column leaves no trace in the marginal even with a nonzero
+  prior mean.
