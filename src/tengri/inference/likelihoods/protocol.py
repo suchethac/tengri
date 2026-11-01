@@ -41,9 +41,11 @@ from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.noise import (
     censored_neg_log_likelihood as _censored_neg_log_lik,
     variable_noise_hamiltonian as _student_t_neg_log_lik,
@@ -435,8 +437,11 @@ class MultivariateGaussianLikelihood:
     """
 
     obs: jnp.ndarray
-    cov_inv: jnp.ndarray
+    cov_inv: jnp.ndarray | None = None
     _: KW_ONLY
+    chol_data: jnp.ndarray | None = None
+    chol_offsets: tuple[int, ...] | None = None
+    chol_key: str | None = None
     channel: str = "spec_fnu"
     name: str = "mvn_gaussian"
     obs_key: str | None = None
@@ -448,10 +453,22 @@ class MultivariateGaussianLikelihood:
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
+        """Return ``-0.5 diff^T C^-1 diff``, evaluated through the banded factor when given.
+
+        With ``chol_data`` the quadratic form is ``-0.5 |L^-1 diff|^2`` for the lower
+        factor ``L`` of the covariance, so the dense inverse is never formed.
+        """
         del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         diff = obs - prediction[self.channel]
-        return -0.5 * (diff @ self.cov_inv @ diff)
+        if self.chol_data is None:
+            return -0.5 * (diff @ self.cov_inv @ diff)
+        factor = BandedMatrix(
+            offsets=np.asarray(self.chol_offsets, dtype=int),
+            data=resolve_channel_data(self.chol_data, self.chol_key, None, data_args),
+        )
+        whitened = banded_forward_substitution(factor, diff)
+        return -0.5 * jnp.dot(whitened, whitened)
 
     def declared_parameters(self):
         return []
@@ -473,6 +490,9 @@ _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "cov_inv": content(
         "the noise covariance basis; a per-model structural input, not per-galaxy data"
     ),
+    "chol_data": shape("banded factor bands; only their shape fixes the program"),
+    "chol_offsets": content("diagonal offsets of the factor are static program structure"),
+    "chol_key": content("data_args routing key changes which traced input is read"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "obs_key": content("data_args routing key changes which traced input is read"),

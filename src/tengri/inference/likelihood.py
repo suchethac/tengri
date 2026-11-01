@@ -173,11 +173,21 @@ def build_base_likelihood(context: InferenceContext):
             )
 
     # ── Spec covariance (correlated noise on spectroscopy) ──────
-    if "spec_cov_inv" in context.data_args:
-        cov_inv = context.data_args["spec_cov_inv"]
+    # A banded covariance enters as its Cholesky factor, read through data_args; the
+    # marginalized classes whiten with it, the plain case uses the correlated Gaussian.
+    chol_kw = {}
+    if "spec_chol_data" in context.data_args:
+        chol_kw = {
+            "chol_data": context.data_args["spec_chol_data"],
+            "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
+            "chol_key": "spec_chol_data",
+        }
+    marginalizes = context.calibration_marginalize or context.eline_marginalize
+    if "spec_cov_inv" in context.data_args or (chol_kw and not marginalizes):
+        cov_inv = context.data_args.get("spec_cov_inv")
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data"
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **chol_kw
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
@@ -193,6 +203,7 @@ def build_base_likelihood(context: InferenceContext):
                     channel="spec_fnu",
                     obs_key="data",
                     data_slice=(n_phot, len(context.data)),
+                    **chol_kw,
                 ),
             )
 
@@ -271,12 +282,14 @@ def build_base_likelihood(context: InferenceContext):
             design_matrix_builder=builder,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             eline_prior_type=context.eline_prior_type or "flat",
             eline_prior_sigma=context.eline_prior_sigma or 1e10,
             eline_line_wavelengths=context.eline_independent_wavelengths,
             eline_prior_width_dex=context.eline_prior_width_dex,
             **_model_prior_kwargs(context),
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_eline_lk
@@ -314,7 +327,9 @@ def build_base_likelihood(context: InferenceContext):
             wavelength=wavelength,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_lk
@@ -380,6 +395,7 @@ def build_base_likelihood(context: InferenceContext):
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
+                **chol_kw,
             )
         elif context.eline_prior_type == "model":
             match_index, matched = _model_line_match(context)
@@ -415,6 +431,7 @@ def build_base_likelihood(context: InferenceContext):
                 design_matrix_builder=builder,
                 prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
+                **chol_kw,
             )
         if context.data_type == "spectroscopy":
             return eline_lk
@@ -551,6 +568,36 @@ def build_likelihood_extras(context: InferenceContext):
 
 
 # ── Helpers (private) ────────────────────────────────────────────────
+
+
+def _calibration_segment_kwargs(context: InferenceContext, wavelength) -> dict:
+    """Return the segment, prior and fiber-fraction fields of the calibration likelihoods.
+
+    Reads ``calibration_segments``, ``cal_prior``, ``cal_scale_prior`` and
+    ``cal_scale_window`` off the model's spectroscopy; all defaults give the
+    unsegmented Gaussian form, so a model without them is unchanged.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from tengri.observation.calibration_segments import window_mask
+
+    spectroscopy = getattr(context.model.observation, "spectroscopy", None)
+    if spectroscopy is None:
+        return {}
+    ids = spectroscopy.segment_ids
+    has_q = spectroscopy.cal_scale_prior is not None
+    q_window = None
+    if has_q:
+        mask = window_mask(np.asarray(wavelength), ids, spectroscopy.cal_scale_window)
+        q_window = jnp.asarray(mask)
+    return {
+        "segments": None if ids is None else jnp.asarray(ids),
+        "n_segments": spectroscopy.n_cal_segments,
+        "cal_prior": spectroscopy.cal_prior,
+        "q_window": q_window,
+        "has_q": has_q,
+    }
 
 
 def _n_phot_split(context: InferenceContext) -> int:

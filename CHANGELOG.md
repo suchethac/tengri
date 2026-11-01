@@ -1,6 +1,8 @@
 ## [Unreleased]
 
 ### Added
+- feat(observation,inference): per-segment calibration scales, a scale-free coefficient prior and a log-normal fiber-fraction prior on the mean multiplier, on both spectroscopic paths (#3134)
+- feat(observation,inference): banded pixel covariance on both spectroscopic paths through one banded Cholesky in the marginal primitive (#3133)
 - feat(inference,nebular): eline_prior_type="model" ties marginalized line amplitudes to the model's own line prediction, on the per-galaxy and the batched paths, alone and in the joint with the calibration polynomial; `eline_aperture_frac` (default `Fixed(1.0)`) is a declared parameter that rescales the prior mean and is freed like any other; the prior mean carries the Milky Way foreground screen at each line's observed wavelength (#3138)
 - feat(inference,nebular): analytic emission-line marginalization on the batched spectroscopic path, and the exact joint with calibration on both paths (#3117, closes #2354).
 - feat(dust,observation): Fitzpatrick (1999) Milky Way foreground on the projection path (spectrum and photometry), per-galaxy ebmv_mw leaf on the batched path; registered as a dust law, so it is also available as an intrinsic screen law like cardelli (#3140)

@@ -597,6 +597,17 @@ redshift=0.05                         # Auto-converts to Fixed(0.05)
 
 ---
 
+### Spectroscopic calibration: `Spectroscopy` options
+
+These options configure the analytic calibration marginal (`calibration_marginalize=True`), not the SED build grammar. They are fields of `Spectroscopy`.
+
+- `calibration_segments`: the pixel count of each camera segment (for example `wave_obs_segment_sizes`) or one integer id per pixel, `0 .. n_seg - 1`. The calibration multiplier then carries one free scale per segment, `M = s_seg + sum_j a_j T_j`. Default `None`: the multiplier is `1 + sum_j a_j T_j`, bit-identical to a model without the option.
+- `cal_prior`: `"gaussian"` (default) puts `N(0, sigma^2)` on the tilt and `N(1, sigma^2)` on each segment scale; `"scale_free"` puts a flat prior on the coefficients in data-flux units, so the marginal does not depend on the model's flux scale.
+- `cal_scale_prior`: `(log10_center, sigma_dex)`, a log-normal prior on the mean multiplier `q` over a window. It adds one sampled parameter, `cal_log_q = ln q`. A Gaussian in `q` itself at 0.3 dex puts 7 % of its mass at `q < 0` and is much stronger on the high side, which is why the log-normal is the form.
+- `cal_scale_window`: `(lo, hi)` [Angstrom] inside the grid over which `q` is averaged. Default: every fitted pixel of the segment that contains the r band's effective wavelength (6231 Angstrom). Needs `cal_scale_prior`.
+
+On the batched path `GalaxySpectrum(segment_ids=..., cal_scale_prior=...)` gives each galaxy its own layout and prior.
+
 ## III. Round-trip: configuration serialization
 
 A model's resolved configuration can be inspected and edited via serialization.
