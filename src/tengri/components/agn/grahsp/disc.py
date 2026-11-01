@@ -34,6 +34,7 @@ from jax import Array
 
 from tengri.components.agn.grahsp.bbb import LAMBDA_5100_NM
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.host_array import device_table
 
 __all__ = ["netzer_disc", "netzer_disc_interp", "select_disc_model"]
 
@@ -113,8 +114,8 @@ def netzer_disc(
     shape is the upstream template's.
     """
     wave = jnp.asarray(wave_nm)
-    disc_wave = jnp.asarray(disc_wave_nm)
-    disc_lumin = jnp.asarray(disc_lumin_model)
+    disc_wave = device_table(disc_wave_nm)
+    disc_lumin = device_table(disc_lumin_model)
 
     # Scale template by l5100 and interpolate onto output grid.
     # Zero padding outside disc template support.
@@ -199,8 +200,8 @@ def netzer_disc_interp(
     but not widened.
     """
     wave = jnp.asarray(wave_nm)
-    disc_wave = jnp.asarray(disc_wave_nm)
-    disc_lum = jnp.asarray(disc_lumin)
+    disc_wave = device_table(disc_wave_nm)
+    disc_lum = device_table(disc_lumin)
 
     # Grid axes (from GRAHSP bundle labels)
     m_grid = jnp.array([6.0, 7.0, 8.0, 9.0])

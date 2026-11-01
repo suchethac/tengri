@@ -49,6 +49,7 @@ from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._template_grid import float32_safe_template, scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -260,11 +261,11 @@ def silva04_sed_from_grid(
        arXiv:1606.05648.
     """
     template = interp_nd_pchip(
-        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
-        (jnp.asarray(grid.log_nh_axis),),
+        device_table(float32_safe_template(grid.template, wavelength.dtype)),
+        (device_table(grid.log_nh_axis),),
         (agn_log_nh_silva,),
     )
-    wave_native = jnp.asarray(grid.wave_grid)
+    wave_native = device_table(grid.wave_grid)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
     # Normalized once (#2851): the Silva et al. (2004) templates have no inclination axis,

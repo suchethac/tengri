@@ -398,7 +398,11 @@ _UNCOVERED: dict[str, str] = {
     "disc_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "qsogen_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "nenkova_agnfitter_precompute": "signature-driven collapse mismatches; not diagnosed",
-    "skirtor_precompute": "5 axes; no collapse test written",
+    "skirtor_precompute": (
+        "Fixed axes read off the whole table, not contracted; collapsed lookup vs runtime "
+        "covered by test_skirtor_precompute_matches_runtime.py::"
+        "test_fixed_axis_read_matches_runtime"
+    ),
     # Fix round 2: measured to mismatch through this harness (~0.06-2.2% at each axis):
     # the shared collapse contracts the axis with triweight, the lookup reads PCHIP.
     "skirtor_agnfitter_1p_precompute": (

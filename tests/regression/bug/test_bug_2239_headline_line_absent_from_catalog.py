@@ -37,6 +37,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri.components.nebular._balmer_series import BALMER_CASE_B_RATIOS_TO_HBETA
 from tengri.utils.batching import vmap_chunked
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 
@@ -48,6 +49,8 @@ _SSP_PATH = DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 #: (r12 research, measured on the packaged ``data/cue_weights.npz``).
 _N_FULL_CATALOG = 138
 _N_LEGACY_SUBSET = 128
+#: Balmer lines H11-H50 the default catalog appends after Cue's 138 trained species.
+_N_BALMER_APPENDED = len(BALMER_CASE_B_RATIOS_TO_HBETA)
 
 
 @pytest.fixture(scope="module")
@@ -123,7 +126,7 @@ def test_civ_1549_is_silent_and_finite_on_the_default_catalog(_cue_fixture_avail
 
 @requires_cue_weights
 def test_published_catalog_size_tracks_full_catalog(_cue_fixture_available):
-    """138 rows by default, 128 under the explicit legacy-subset opt-out."""
+    """138 trained rows plus the appended Balmer lines by default, 128 under the opt-out."""
     default_model = _build(full_catalog=None)
     subset_model = _build(full_catalog=False)
     params_default = {}  # both models are all-Fixed (n_free=0); free-only means empty (#2296)
@@ -137,8 +140,9 @@ def test_published_catalog_size_tracks_full_catalog(_cue_fixture_available):
     n_default = int(default_model.predict(params_default).lines.all_waves.size)
     n_subset = int(subset_model.predict(params_subset).lines.all_waves.size)
 
-    assert n_default == _N_FULL_CATALOG, (
-        f"default cue catalog carries {n_default} lines, expected {_N_FULL_CATALOG}"
+    assert n_default == _N_FULL_CATALOG + _N_BALMER_APPENDED, (
+        f"default cue catalog carries {n_default} lines, "
+        f"expected {_N_FULL_CATALOG + _N_BALMER_APPENDED}"
     )
     assert n_subset == _N_LEGACY_SUBSET, (
         f"full_catalog=False cue catalog carries {n_subset} lines, expected {_N_LEGACY_SUBSET}"

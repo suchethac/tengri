@@ -210,10 +210,10 @@ def test_relagn_grid_disc_power_at_cos_half_is_the_accretion_power(relagn_grid):
 @pytest.mark.parametrize("disc_block", ["kubota_done", "multicolor"])
 @pytest.mark.parametrize("i_deg", [0, 30, 60])
 def test_line_of_sight_key_is_the_integral_of_the_direct_emission(disc_block, i_deg):
-    """log_L_agn_los = log10 int L_nu(i) dnu of the published disc component, 1e-4 dex."""
+    """log_L_agn_direct_los = log10 int L_nu(i) dnu of the published disc component, 1e-4 dex."""
     _, comps = _run(disc_block, _COS[i_deg])
     expected = np.log10(_power(comps["disc"], _WIDE))
-    assert float(comps["log_L_agn_los"]) == pytest.approx(expected, abs=1e-4)
+    assert float(comps["log_L_agn_direct_los"]) == pytest.approx(expected, abs=1e-4)
 
 
 def _build_model(ssp, i_deg):
@@ -250,14 +250,14 @@ def _build_model(ssp, i_deg):
 
 @pytest.mark.parametrize("i_deg", [0, 30, 60])
 def test_published_keys_through_the_model(i_deg):
-    """Through SEDModel: L_agn_bol = L_acc at every i; log_L_agn_los is the runner's value."""
+    """Through SEDModel: L_agn_bol = L_acc at every i; log_L_agn_direct_los is the runner's."""
     ssp = load_ssp_data(str(_SSP_PATH))
     state = _build_model(ssp, i_deg).predict_state({})
     assert float(state.derived["log_L_agn_bol"]) == pytest.approx(_LOG_LBOL + np.log10(L_SUN))
     assert float(state.derived["L_agn_bol"]) == pytest.approx(_L_ACC, rel=1e-12)
     _, comps = _run("kubota_done", _COS[i_deg])
-    assert float(state.derived["log_L_agn_los"]) == pytest.approx(
-        float(comps["log_L_agn_los"]), abs=1e-4
+    assert float(state.derived["log_L_agn_direct_los"]) == pytest.approx(
+        float(comps["log_L_agn_direct_los"]), abs=1e-4
     )
 
 
@@ -463,7 +463,7 @@ def test_flux_gradient_in_cos_inc_is_2_d_nu(cos_inc):
 # h. catalog comparison
 # ----------------------------------------------------------------------------------
 def test_line_of_sight_key_exceeds_the_parameter_by_the_measured_factor():
-    """At i = 30 deg, log_L_agn_los - agn_log_lbol = log10[(2 cos 30 D + H) / (D + H)].
+    """At i = 30 deg, log_L_agn_direct_los - agn_log_lbol = log10[(2 cos 30 D + H) / (D + H)].
 
     D and H follow from the two spectra at cos i = 1 and cos i = 0.05 (the power is
     linear in cos i); the factor is within 0.01 dex of log10(2 cos 30) = 0.2386 because the
@@ -476,6 +476,6 @@ def test_line_of_sight_key_exceeds_the_parameter_by_the_measured_factor():
     h = p_one - two_d
     factor = (_COS[30] * two_d + h) / (0.5 * two_d + h)
     expected = np.log10(factor)
-    measured = float(comps["log_L_agn_los"]) - (_LOG_LBOL + np.log10(L_SUN))
+    measured = float(comps["log_L_agn_direct_los"]) - (_LOG_LBOL + np.log10(L_SUN))
     assert measured == pytest.approx(expected, abs=2e-3)
     assert measured == pytest.approx(np.log10(2.0 * _COS[30]), abs=1e-2)

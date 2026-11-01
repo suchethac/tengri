@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
 from tengri.components.stellar.sfh.gp_sfh import (
@@ -85,6 +86,10 @@ from tengri.components.stellar.sfh.nonparametric import (
     psb_continuity_flex,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
+from tengri.components.stellar.sfh.young_fraction import (
+    continuity_young_fraction,
+    flat_young_fractions,
+)
 from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
 from tengri.utils.cosmology import age_at_z0_host
@@ -1796,6 +1801,49 @@ _register(
     ),
 )
 
+# --- continuity in young-fraction coordinates (#3139) ---
+# Same SFH family as ``continuity``; the six free latents are the stick-breaking
+# fractions from the youngest bin, each Uniform(0, 1) on the standardized seam.
+# The Student-t prior on the ratios enters as an exact pullback through
+# ``InferenceContext`` (see tengri.components.stellar.sfh.young_fraction).
+_CONT_YF_DEFAULTS = tuple(
+    float(x) for x in np.asarray(flat_young_fractions(DEFAULT_BIN_EDGES_GYR))
+)
+_register(
+    SFHModelSpec(
+        name="continuity_young_fraction",
+        fn=continuity_young_fraction,
+        params={
+            "sfh_cont_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0, default=10.0),
+            ),
+            **{
+                f"sfh_cont_young_frac_{k}": ParamDef(
+                    f"youngest-first stick-breaking fraction of bin {k} (M_{k}/R_{k})",
+                    _always_true,
+                    "",
+                    Uniform(0.0, 1.0, default=_CONT_YF_DEFAULTS[k]),
+                )
+                for k in range(6)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_cont_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_cont_young_frac_{k}": (f"young_frac_{k}", 1.0, 0.0) for k in range(6)},
+        },
+        composition_type="additive",
+    ),
+    citation="Leja et al. 2019 (ApJ 876, 3)",
+    short_doc=(
+        "Continuity SFH (Leja+19) in youngest-first stick-breaking fractions; "
+        "exact pullback of the StudentT(0, 0.3, df=2) ratio prior"
+    ),
+)
+
 # --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
 # Default: 3 flex ratios (flex_0..flex_2) + ratio_young + ratio_old = 5 free params.
 # n_flex ratios → n_flex+1 internal flex time bins.
@@ -2526,6 +2574,7 @@ def apply_compositor_swap(names: list[str]) -> list[str]:
 _NONPARAM_NAMES = frozenset(
     {
         "continuity",
+        "continuity_young_fraction",
         "dirichlet",
         "continuity_flex",
         "bursty_continuity",
