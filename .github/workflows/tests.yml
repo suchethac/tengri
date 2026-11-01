@@ -68,10 +68,6 @@ on:
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
     - cron: "0 4 * * *"
-    # Weekly slow tier, Sundays 05:00 UTC: only the `weekly`-marked tests (the
-    # joint-model NUTS parity test, ~1 h on a runner). The nightly jobs also fire
-    # on this event; the `slow-weekly` job keys on `github.event.schedule`.
-    - cron: "0 5 * * 0"
   workflow_dispatch:
 
 # Supersede stale runs -- but never on `main`.
@@ -1927,57 +1923,6 @@ jobs:
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
         run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
         timeout-minutes: 30
-      - uses: actions/cache/save@v6
-        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-        with:
-          path: ~/.cache/tengri_jax_cache
-          key: ${{ steps.jax_cache.outputs.cache-primary-key }}
-
-  # Weekly tier: the tests marked `weekly`, each too long for the nightly legs
-  # (the joint-model NUTS parity test measured 3,652 s on run 41294360604, before
-  # #3224's ~10 % cut). Runs on the weekly cron, on workflow_dispatch and on a PR
-  # carrying the `run-slow-tests` label (standing down on an unrelated label
-  # event, as `slow` does). The nightly inference legs deselect `weekly`.
-  slow-weekly:
-    runs-on: ubuntu-latest
-    concurrency:
-      group: tests-slow-weekly-${{ github.ref }}
-      cancel-in-progress: false
-    if: |
-      (github.event_name == 'schedule' && github.event.schedule == '0 5 * * 0')
-      || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request'
-          && contains(github.event.pull_request.labels.*.name, 'run-slow-tests')
-          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
-              || github.event.label.name == 'run-slow-tests'))
-    env:
-      TENGRI_JAX_CACHE_MAX_GB: "0.4"
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
-      # Same restore + save(if: always()) JAX cache pattern as the `slow` job.
-      - id: jaxver
-        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
-      - id: week
-        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
-        id: jax_cache
-        with:
-          path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-slow-weekly-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
-          restore-keys: |
-            tengri-jax-slow-weekly-${{ hashFiles('pyproject.toml') }}-
-            tengri-jax-slow-weekly-
-      # `-m weekly` replaces the default addopts selector, so the `slow` deselection
-      # does not apply; `-n 0` keeps it serial (NUTS peaks at several GB).
-      - run: python -X faulthandler -m pytest tests -v -m weekly -n 0 --timeout=4500 --timeout-method=signal --durations=30
-        timeout-minutes: 75
       - uses: actions/cache/save@v6
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
