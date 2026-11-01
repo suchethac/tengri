@@ -332,9 +332,13 @@ def chevallard13(
     The fit is valid for :math:`0.1 \le \lambda \le 2.5\,\mu\text{m}`; the
     index :math:`n` uses :math:`\lambda` clipped to that range.
 
-    This law needs the screen's own depth (``tau_v``). The birth-cloud screen is
-    not part of this law. Plumbing ``tau_v`` through the two-component screens is
-    a later change.
+    This law needs the depth of the screen it is applied to (``tau_v``). The
+    screens offer their own diffuse-ISM V-band depth through ``offer_screen_depth``:
+    the two-component interval transmissions, the energy-balance LUT (evaluated per
+    node at that node's own depth), and the nebular and line channels, including the
+    nebular dust-grid builder, all pass the diffuse screen's ``tau_V``, so ``tau_v``
+    here is always the diffuse screen's depth. The law is accepted as ``law_diff``
+    only (#3178).
 
     Implements the ``ccww13_universal`` attenuation option of BEAGLE (Chevallard
     & Charlot 2016 [2]_), as published; validated against the equations.
