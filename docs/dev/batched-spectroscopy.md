@@ -200,3 +200,20 @@ a leaf, if it changes a shape or a branch.
   mode (`jax.enable_x64(False)`) returns NaN for this fixture's flux scale on the
   batched forward, for the plain Gaussian term as well as the marginal, so the float32
   test is not yet green.
+- 2026-11-01, #3138: `eline_prior_type="model"` on the per-galaxy line-only marginalized
+  likelihood. Each line has a Gaussian prior centered on the model's attenuated line
+  luminosity, `mu = f_ap L lambda_obs^2 / (4 pi d_L^2 c)`, with width `(10^dex - 1) mu`.
+  The mapping is checked against the lines-on minus lines-off spectrum over the H-beta
+  window (ratio 0.991). The prior mean carries the Milky Way foreground screen at each
+  line's observed wavelength on both paths; the intergalactic transmission is left out,
+  since every catalog line lies above 1216 Angstrom, where it transmits exactly one.
+  The batched path evaluates the same prior through the same
+  helpers (`model_line_prior`, `unit_model_line_prior`), with the attenuated line
+  luminosities returned by `predict_batched_observables` and the catalog-to-model line
+  map fixed at build time; the calibration joint takes the block prior
+  `blockdiag(I / sigma_cal^2, unit)` with prior mean `[0, mu / w]` on both paths.
+  `eline_aperture_frac` is a registered observation parameter (`Fixed(1.0)`, freed with
+  `eline_aperture_frac=Uniform(...)` or `FREE` at build, round-tripped by `to_groups`).
+  The per-galaxy fit reads the line luminosities from the same forward that paints the
+  spectrum. A masked line column leaves no trace in the marginal even with a nonzero
+  prior mean.

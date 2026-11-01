@@ -301,3 +301,71 @@ def test_static_lsf_pad_shortens_the_batched_fft(synthetic_ssp):
     assert with_pad < n_max + 2 * pad + _FFT_SLACK
     assert with_pad < without / 2
     assert without >= 2 * n_max
+
+
+def _batched_single(template, wave, resolution, z, params):
+    """Return ``(spec, spec_fnu)`` of one galaxy run through the batched forward pass."""
+    record = GalaxySpectrum(
+        wave=wave, flux=np.ones(wave.size), ivar=np.ones(wave.size), resolution=resolution, z=z
+    )
+    spec, batch, _ = build_spectro_batches([record], model=template)[0]
+    predict = make_batched_predict(template, spec)
+    return spec, np.asarray(predict(_stack(params, 1), batch)["spec_fnu"])[0]
+
+
+def test_varying_r_on_log_uniform_grid_is_not_replaced_by_its_first_pixel(synthetic_ssp):
+    """A per-pixel R rising 1000 -> 2000 on a log-uniform grid is used pixel by pixel (#3145).
+
+    The batched spectrum must differ from the scalar R = 1000 batch by far more than
+    round-off, and must equal the per-galaxy model built with the same R array.
+    """
+    wave = np.geomspace(4000.0, 7000.0, 160)
+    r_rising = np.linspace(1000.0, 2000.0, 160)
+    z = 0.05
+    template = _free_z_model(synthetic_ssp, wave, {"resolution": 1000.0})
+    params = _base_params(template)
+
+    spec_rising, out_rising = _batched_single(template, wave, r_rising, z, params)
+    _, out_scalar = _batched_single(template, wave, 1000.0, z, params)
+    assert spec_rising.grid_kind == "nonuniform"
+
+    peak = np.max(np.abs(out_scalar))
+    assert np.max(np.abs(out_rising - out_scalar)) / peak > 1e-6
+
+    ref = _free_z_model(synthetic_ssp, wave, {"resolution": r_rising})
+    ref_spec = np.asarray(ref.predict_spectrum({**params, "redshift": z}))
+    np.testing.assert_allclose(out_rising, ref_spec, rtol=1e-10, atol=0.0)
+
+
+def test_constant_per_pixel_r_on_log_uniform_grid_keeps_the_scalar_path(synthetic_ssp):
+    """A constant per-pixel R array is classified log-uniform and matches the scalar R."""
+    wave = np.geomspace(4000.0, 7000.0, 160)
+    z = 0.05
+    template = _free_z_model(synthetic_ssp, wave, {"resolution": 1500.0})
+    params = _base_params(template)
+
+    spec_arr, out_arr = _batched_single(template, wave, np.full(160, 1500.0), z, params)
+    spec_sc, out_sc = _batched_single(template, wave, 1500.0, z, params)
+    assert spec_arr.grid_kind == "log_uniform"
+    assert spec_sc.grid_kind == "log_uniform"
+    np.testing.assert_allclose(out_arr, out_sc, rtol=1e-12, atol=0.0)
+
+
+def test_padding_refusal_names_the_reason_of_the_grid_kind(synthetic_ssp):
+    """Padding a varying-R galaxy takes the nonuniform reason; a constant-R one, the log reason."""
+    wave = np.geomspace(4000.0, 7000.0, 160)
+    template = _free_z_model(synthetic_ssp, wave, {"resolution": 1000.0})
+    rising = GalaxySpectrum(
+        wave=wave,
+        flux=np.ones(160),
+        ivar=np.ones(160),
+        resolution=np.linspace(1000.0, 2000.0, 160),
+        z=0.05,
+    )
+    constant = GalaxySpectrum(
+        wave=wave, flux=np.ones(160), ivar=np.ones(160), resolution=1500.0, z=0.05
+    )
+    with pytest.raises(ValueError, match="rest-frame range"):
+        build_spectro_batches([rising], quantum=192, model=template)
+    with pytest.raises(ValueError, match="geometrically"):
+        build_spectro_batches([constant], quantum=192, model=template)
