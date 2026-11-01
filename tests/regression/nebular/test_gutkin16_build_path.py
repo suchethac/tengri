@@ -290,6 +290,9 @@ def _run_child(x64: bool) -> dict:
 
 
 def test_float32_build_matches_float64_build_within_a_millidex():
+    # The child loads _SSP_FILE itself; this presence check skips like the ssp fixture.
+    if not _SSP_FILE.is_file():
+        pytest.skip(f"bare-stellar SSP not present: {_SSP_FILE}")
     f64 = _run_child(x64=True)
     f32 = _run_child(x64=False)
     assert f64["x64"] is True
