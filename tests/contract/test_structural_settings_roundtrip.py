@@ -347,6 +347,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
         # Same case: a PARAMETER (dust_log_L_ir), the total dust IR budget
         # override (#2187-series), reachable as a dust_emission grammar key.
         "log_L_ir",
+        # sfh.coordinates is not stored: it is derived from the young-fraction SFH
+        # type (continuity_young_fraction), so _add_structural_settings emits it.
+        "coordinates",
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")
@@ -363,7 +366,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
             # is emitted by the per-group walk, not by a structural rule.
             if f"{group}.{key}" in _GROUP_STRUCTURAL_KEYS:
                 continue
-            if group in ("dust_attenuation", "dust_emission", "agn.atten") and key in hand_written:
+            if group in ("dust_attenuation", "dust_emission", "agn.atten", "sfh") and (
+                key in hand_written
+            ):
                 continue
             missing.append(f"{group}.{key}")
 

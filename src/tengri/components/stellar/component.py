@@ -321,10 +321,12 @@ def _fast_path_unsupported_sfh_fns():
         psb_continuity_flex,
     )
     from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
+    from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
 
     binned = "the fast path integrates a closed-form SFR and has no bin basis for it"
     return {
         continuity: binned,
+        continuity_young_fraction: binned,
         continuity_flex: binned,
         dirichlet: binned,
         psb_continuity: binned,
@@ -2907,6 +2909,7 @@ class StellarSEDComponent:
             "trunc_exp",
             "psb_flex",
             "continuity",
+            "continuity_young_fraction",
             "dirichlet",
             "dense_basis",
             "lnorm",

@@ -82,6 +82,7 @@ from tengri.components.stellar.sfh.registry import (
     compute_field_gp,
     resolve_sfh,
 )
+from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
 
 # Canonical short-form names. The historical ``*_sfh``-suffixed variants
 # were redundant inside ``tengri.components.stellar.sfh`` and have been
@@ -105,6 +106,7 @@ __all__ = [
     "continuity_flex",
     "continuity_flex_prior_logp",
     "continuity_prior_logp",
+    "continuity_young_fraction",
     "declining_exponential",
     "delayed_exponential",
     "delayed_tau",

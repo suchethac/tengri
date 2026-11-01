@@ -489,8 +489,6 @@ _ALLOWED = {
     # here, filed as a Tier-B float32 known-open. That was wrong: the floor
     # bound in float64 too and collapsed the polynomial. Fixed, not exempted —
     # see tests/regression/bug/test_calibration_variance_floor.py.)
-    # Calibration-parameter prior width, an O(0.1) dimensionless quantity.
-    ("observation/calibration.py", "prior_precision = 1.0 / (prior_sigma**2)"),
 }
 
 
