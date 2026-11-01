@@ -26,6 +26,19 @@ TENGRI_DISABLE_JAX_CACHE=1:
 then sum the setup+call+teardown lines per file and write them rounded to 0.1 s
 with sorted keys (a per-file sum of the three phases).
 
+The ledger for tests/inference is tools/ci_inference_durations.json, the
+wall-clock seconds of each file run alone under the slow-tier selection
+(-m 'not crossval and not population_fit' -n 0, one process per file, JAX_PLATFORMS=cpu)
+on a Mac under heavy load (load average 400 to 600), so the values are
+relative weights, not runner times. Two entries are not plain wall times:
+test_profile_mass.py is the 489 s its 27 other tests take plus 1800 s for
+test_nuts_posterior_means_agree_joint (a lower bound: the remainder up to the
+2289 s at which the host killed the run before the test returned; user CPU was
+2706 s), and
+test_profile_mass_posterior_identity.py is 739 s (656 s for its three
+tests plus 83 s for the seed-3 warmup test, at the same load).
+Regenerate by timing each file alone and writing {path: seconds}, sorted.
+
 Output format: one path per line by default, or space-joined on one line
 with --join. Exits with code 2 if the requested part is empty (no files
 would be assigned to that leg).
