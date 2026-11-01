@@ -377,6 +377,48 @@ def monolithic_models_with_line_components() -> frozenset[str]:
     return frozenset(_AGN_PRESETS) | frozenset({"grahsp"})
 
 
+def is_composable_recipe(name: str) -> bool:
+    """Whether ``agn={'type': name}`` runs through the composable block runner.
+
+    ``"composable"`` and every deprecated preset name qualify: a preset is a fixed choice of
+    block selectors and normalization over that runner (see :func:`resolve_agn_model`). The
+    self-contained models (``grahsp``, ``skirtor_stalevski``) do not.
+
+    Parameters
+    ----------
+    name : str
+        AGN model name (the component's ``config.model``).
+
+    Returns
+    -------
+    bool
+    """
+    return name == "composable" or name in _AGN_PRESETS
+
+
+def preset_overrides(name: str) -> dict[str, str]:
+    """Block selectors and normalization a deprecated preset forces over the component config.
+
+    ``preset_wrapper`` in :func:`resolve_agn_model` lets the preset win over the config, so
+    the config's selectors (the grammar's ``"none"`` for a preset build) are not what runs.
+
+    Parameters
+    ----------
+    name : str
+        AGN model name.
+
+    Returns
+    -------
+    dict of str to str
+        ``{"agn_<stage>_block": ..., "agn_norm": ...}`` for the keys the preset sets; empty for
+        ``"composable"`` and for any name that is not a preset.
+    """
+    preset = _AGN_PRESETS.get(name)
+    if preset is None:
+        return {}
+    return {k: v for k, v in preset.items() if k != "_description"}
+
+
 def _resolve_monolithic_model(name: str) -> Callable | None:
     """Return the monolithic forward function for a self-contained model.
 
