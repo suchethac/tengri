@@ -8,6 +8,9 @@ bucket in ``tengri.parameters._builders``:
   ionization knobs registered when ``nebular in {cloudy, cue, cb19}``).
 - :data:`CB19_PARAMS` → ``_CB19_PARAMS`` (CB_19 grid-only continuous
   axes: density, C/O, ΔN/O, HbFrac).
+- :data:`GUTKIN16_PARAMS` → ``_GUTKIN16_PARAMS`` (Gutkin+2016 grid-only
+  axes: dust-to-metal ratio and linear (C/O)/(C/O)⊙; reuses the density
+  declaration of :data:`CB19_PARAMS`).
 - :data:`ELINE_PARAMS` → ``_ELINE_PARAMS`` (line velocity dispersion +
   offset, registered when ``eline_mode`` is active).
 - :data:`ELINE_BROAD_PARAMS` → ``_ELINE_BROAD_PARAMS`` (AGN broad-line
@@ -246,6 +249,34 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         # ``neb_dno`` there -- so freeing it is a loud, explicit refusal today,
         # not the silent no-op it was before this fix.
         free_prior=Uniform(0.0, 1.0, "HbFrac", default=1.0),
+    ),
+)
+
+# Gutkin+2016 extra continuous axes (nebular == "gutkin16").
+# The density axis is the same declaration object as CB_19's (the registry is
+# first-wins, so sharing the object keeps the two backends from declaring
+# ``neb_log_nH`` twice with different text).
+# ``neb_co_ratio`` is BEAGLE's ``nebular_CO``: linear (C/O)/(C/O)_sun with
+# (C/O)_sun = 0.44. It is not ``neb_co``, which is CB_19's log10 C/O.
+GUTKIN16_PARAMS: tuple[ParamDeclaration, ...] = (
+    next(decl for decl in CB19_PARAMS if decl.name == "neb_log_nH"),
+    ParamDeclaration(
+        "neb_xi_d",
+        Fixed(0.3),  # Gutkin+2016 fiducial dust-to-metal ratio
+        "Dust-to-metal mass ratio xi_d of the nebular gas, linear [grid range: 0.1 to 0.5] "
+        "(Gutkin+2016 eq. 4)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1] (Gutkin+2016 grid: 0.1 to 0.5; extrapolated outside)",
+        free_prior=Uniform(0.1, 0.5, "Dust-to-metal mass ratio", default=0.3),
+    ),
+    ParamDeclaration(
+        "neb_co_ratio",
+        Fixed(1.0),  # solar C/O, BEAGLE's nebular_CO default
+        "Linear C/O relative to solar, (C/O)/(C/O)_sun with (C/O)_sun = 0.44 "
+        "[grid range: 0.1 to 1.4]",
+        lambda lo, hi: lo > 0 and hi <= 10,
+        "must be in (0, 10] (Gutkin+2016 grid: 0.1 to 1.4; extrapolated outside)",
+        free_prior=Uniform(0.1, 1.4, "Linear C/O relative to solar", default=1.0),
     ),
 )
 
@@ -517,6 +548,7 @@ __all__ = [
     "CUE_IONSPEC_PARAMS",
     "ELINE_BROAD_PARAMS",
     "ELINE_PARAMS",
+    "GUTKIN16_PARAMS",
     "PARAMS",
     "SHOCK_PARAMS",
 ]

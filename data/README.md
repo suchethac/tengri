@@ -68,6 +68,7 @@ its own isochrones internally.
 | `cue_weights.npz` | Cue nebular emulator — Li et al. 2025 (ApJ 986, 9; arXiv:2405.04598). Also carries the per-line emulator error (`line_emul_sigma_frac`, from upstream `nn_stats_v0.pkl`) | `scripts/convert_cue_weights.py` converts the trained Speculator pickles and `nn_stats_v0.pkl` shipped with upstream Cue (github.com/yi-jia-li/cue) | Upstream Cue is MIT; redistributed here with attribution — cite Li+ 2025 |
 | `neogal/AGN_NLR_nebular_feltre16` (+ `.tar.gz`) | Feltre et al. 2016 NLR grid | NEOGAL distribution at www.iap.fr/neogal | Paper-published grid; cite Feltre+ 2016; NEOGAL distributes for scientific use |
 | `neogal/nebular_emission_gutkin16.tar.gz`, `neogal/nebular_emission_Z*.txt` | Gutkin et al. 2016 nebular grid | NEOGAL distribution | Paper-published grid; cite Gutkin+ 2016 |
+| `gutkin16_grid.h5` | Gutkin et al. 2016 star-forming nebular grid as line-to-ionizing-photon ratios (14 Z × 7 log U × 3 ξ_d × 2 n_H × 9 C/O × 2 m_up), vacuum wavelengths, Case B anchor, BC03 Q_H diagnostic; built by `scripts/build_gutkin16_grid.py` (#983) | `neogal/nebular_emission_Z*.txt` (NEOGAL distribution at www.iap.fr/neogal) | Repackaged; cite Gutkin+ 2016 (MNRAS 462, 1757). The Case B anchor follows Osterbrock & Ferland 2006 |
 | `cloudy_raw/emlines_info.dat` | Cloudy default emission-line database | upstream Cloudy 17+ | Cloudy is open source (GPL-compatible); the line list is reference data, cite Ferland+ 2017 |
 
 ## GRAHSP AGN reference inputs
