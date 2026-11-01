@@ -1521,7 +1521,17 @@ agn_torus_block, agn_attenuation_block : str
             # with the X-rays photoelectrically absorbed below its grid), the same transmission
             # any source behind the torus takes, unity face-on. The analytic screen remains only
             # for a torus without a disc column.
-            _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
+            # The model's disc and warm zones carry their own dissipation, ``(1 - f - R_unem/L)``
+            # of the accretion power: the K&D disc does not emit what it dissipates beyond
+            # ``R_out`` (#3015).
+            _r_unem_tie = kubota_done_unemitted_fraction(
+                params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                agn_log_lbol,
+                params.get("agn_a_spin", 0.0),
+            )
+            _p_disc_model = (1.0 - _corona_fraction - _r_unem_tie) * (
+                10.0**agn_log_lbol_eval * L_SUN_ERG
+            )
             _corona_scale = (
                 _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
             ) / _p_disc_model
