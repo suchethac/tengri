@@ -51,10 +51,12 @@ def test_precompute_matches_runtime_midir_to_farir_ratio():
         [jnp.asarray(ft_mid), jnp.asarray(ft_far)],
         redshift=0.0,
     )
-    grid_phot = np.asarray(precomp["grid_phot"])  # (..., n_filters), L_ν per L_sun
+    lookup = precompute_mod.build_lookup(precomp)
     # Flux ratio at one representative grid node (central index per axis).
-    node = tuple(s // 2 for s in grid_phot.shape[:-1])
-    precomp_ratio = float(grid_phot[node][0] / grid_phot[node][1])
+    node = tuple(len(a) // 2 for a in precomp["axes"])
+    node_values = [float(np.asarray(a)[i]) for a, i in zip(precomp["axes"], node)]
+    band = np.asarray(lookup(0.0, *node_values, 1.0))  # L_ν per L_sun
+    precomp_ratio = float(band[0] / band[1])
 
     # Exact runtime SED at the same node parameters. The photometry precompute
     # is 5-D (tau, p, q, oa, cos_inc) with the radius ratio pinned to R=20

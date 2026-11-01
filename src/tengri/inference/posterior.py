@@ -38,6 +38,38 @@ logger = logging.getLogger(__name__)
 _PROPERTY_CHUNK = 64
 
 
+def _bundle_siblings(model, name: str, exclude=()) -> tuple[str, ...]:
+    """``name`` and every not-yet-computed property evaluated in the same bundle.
+
+    Parameters
+    ----------
+    model : object
+        Any model a posterior carries (``SEDModel``, ``ForwardModel``, ...). One without an
+        inspectable property catalog evaluates ``name`` on its own.
+    name : str
+        The requested property.
+    exclude : container, optional
+        Names already computed.
+
+    Returns
+    -------
+    tuple of str
+        ``(name,)`` unless the model's catalog marks ``name`` as part of a bundle.
+    """
+    ensure = getattr(model, "_ensure_property_catalog", None)
+    if not callable(ensure):
+        return (name,)
+    catalog = ensure()
+    entry = catalog.get(name) if hasattr(catalog, "get") else None
+    bundle = getattr(entry, "bundle", None)
+    if bundle is None:
+        return (name,)
+    siblings = tuple(
+        k for k, e in catalog.items() if getattr(e, "bundle", None) is bundle and k not in exclude
+    )
+    return siblings if name in siblings else (name, *siblings)
+
+
 class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
     r"""The property catalog lifted over the sample axis.
 
@@ -96,20 +128,23 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
             raise KeyError(missing_property_message(name, available=available))
 
+        # A property computed with siblings (``Property.bundle``, the composable AGN's energy
+        # ledger) is evaluated once for every name that shares it, not once per name.
+        names = _bundle_siblings(model, name, exclude=cache)
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.
-            value = model.predict_properties(post.params, names=(name,))[name]
+            values = model.predict_properties(post.params, names=names)
         else:
             from tengri.utils.batching import vmap_chunked
 
             fn = vmap_chunked(
-                lambda p: model.predict_properties(p, names=(name,))[name],
+                lambda p: model.predict_properties(p, names=names),
                 chunk_size=_PROPERTY_CHUNK,
             )
-            value = fn(post.samples)
-
-        cache[name] = value
-        return value
+            values = fn(post.samples)
+        for key in names:
+            cache[key] = values[key]
+        return cache[name]
 
     def __contains__(self, name: str) -> bool:
         return name in self._model().available_properties

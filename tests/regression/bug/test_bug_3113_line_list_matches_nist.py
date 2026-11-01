@@ -20,6 +20,12 @@ _TOL_AA = 0.06
 #: NIST Atomic Spectra Database standard-air wavelengths [Angstrom]
 #: (https://physics.nist.gov/asd). The two [O II] blends are the mean of their
 #: components (7318.92, 7319.99 and 7329.67, 7330.73).
+#: The high-order Balmer entries (H8 to H14) are the NIST H I Ritz vacuum wavelengths
+#: tabulated in ``tengri.components.nebular._balmer_series`` (energy levels fetched
+#: 2026-10-31), converted to standard air with ``vac_to_air`` and rounded to 0.01 A.
+#: He I 3889 and [Ne III] 3968 are the Cue catalog labels ``data/cue_weights.npz``
+#: ``lineList_wav`` (Cloudy air labels 3888.64 and 3967.47); the catalog's vacuum
+#: values are their ``air_to_vac``.
 _NIST_AIR_AA = {
     "MgII_2796": 2795.53,
     "MgII_2803": 2802.71,
@@ -28,6 +34,15 @@ _NIST_AIR_AA = {
     "OII_3726": 3726.03,
     "OII_3729": 3728.82,
     "NeIII_3869": 3868.76,
+    "HeI_3889": 3888.64,
+    "H8": 3889.05,
+    "H9": 3835.38,
+    "H10": 3797.90,
+    "H11": 3770.63,
+    "H12": 3750.15,
+    "H13": 3734.37,
+    "H14": 3721.94,
+    "NeIII_3968": 3967.47,
     "Hepsilon": 3970.07,
     "Hdelta": 4101.73,
     "Hgamma": 4340.47,

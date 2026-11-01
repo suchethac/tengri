@@ -64,7 +64,8 @@ _LOG_C_CUE = np.log10(2.9979e10)  # cue.utils.logQ
 def backend():
     if not _WEIGHTS.is_file():
         pytest.skip("Cue weights not found")
-    return CueBackend(str(_WEIGHTS))
+    # The network's own 138 lines: the direct-call comparison is line for line.
+    return CueBackend(str(_WEIGHTS), balmer_series_n_max=None)
 
 
 def _ratios(wav, lum):
