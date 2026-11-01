@@ -117,6 +117,23 @@ def test_ssfr_pole_refused(ssfr_dt):
         check_specific_sfr_pole(log_hi, DT_YR)
 
 
+@pytest.mark.limit
+def test_pole_and_fully_windowed_history_propagate_non_finite():
+    """No clamp hides a degenerate input: the pole and a zero splice norm give non-finite output.
+
+    The build refuses a prior that reaches the pole (check_specific_sfr_pole is the
+    only guard), so these are the kernel's own behavior when that guard is bypassed.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        at_pole = psi_from_specific_sfr(jnp.log10(1.0 / DT_YR), M_SMOOTH, DT_YR)
+    assert not np.isfinite(float(at_pole))
+    t = _grid()
+    inside_only = jnp.where(t < DT_YR, 1.0, 0.0)  # all smooth mass inside the window
+    with np.errstate(divide="ignore", invalid="ignore"):
+        spliced = splice_current_episode(t, inside_only, PSI, DT_YR)
+    assert not np.all(np.isfinite(np.asarray(spliced)))
+
+
 @pytest.mark.gradient
 def test_splice_gradient_wrt_psi_and_timescale_finite_nonzero():
     """d/d(log psi) and d/d(Delta t) of the total mass are finite and nonzero.

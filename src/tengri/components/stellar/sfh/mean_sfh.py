@@ -2685,9 +2685,9 @@ def splice_current_episode(
 
     The normalization integral :math:`\int S(1-w)\,dt` is evaluated with
     :func:`jax.numpy.trapezoid` on the caller's grid, so the smooth mass is
-    conserved exactly on that grid, not on a finer one. The floor
-    ``representable_denominator(1e-30)`` only guards a fully-windowed history
-    (all smooth mass inside the window).
+    conserved exactly on that grid, not on a finer one. The division is not
+    clamped: a norm of zero means the window covers the whole smooth history,
+    which is a broken input, and it propagates as non-finite output.
 
     Cross-code note: BEAGLE's ``mass`` includes the episode, so a tengri smooth
     ``log_total_mass`` (=:math:`M_S`) corresponds to BEAGLE's :math:`M - \psi\Delta t`.
@@ -2704,7 +2704,7 @@ def splice_current_episode(
     m_smooth = jnp.trapezoid(smooth_sfr, t_lookback)
     outside = smooth_sfr * (1.0 - w)
     norm = jnp.trapezoid(outside, t_lookback)
-    scale = m_smooth / jnp.maximum(norm, representable_denominator(1e-30))
+    scale = m_smooth / norm
     return psi * w + outside * scale
 
 
@@ -2740,13 +2740,12 @@ def psi_from_specific_sfr(
     -----
     **JIT-compatible**: yes. **Gradient-safe**: away from the pole.
 
-    The denominator is floored at ``1e-12``, so a traced call cannot divide by
-    zero or flip sign. This floor is a numerical guard only. The physical refusal
-    of a prior that reaches the pole :math:`\psi_S\Delta t = 1` is made at build
-    time by :func:`check_specific_sfr_pole`.
+    The denominator is not clamped: at the pole :math:`\psi_S\Delta t = 1` the
+    output is non-finite. The refusal of a prior that reaches the pole is made at
+    build time by :func:`check_specific_sfr_pole`, the only guard.
     """
     s = 10.0**log_ssfr
-    return s * m_smooth / jnp.maximum(1.0 - s * timescale_yr, 1e-12)
+    return s * m_smooth / (1.0 - s * timescale_yr)
 
 
 def check_specific_sfr_pole(log_ssfr_hi: float, timescale_yr_hi: float) -> None:
