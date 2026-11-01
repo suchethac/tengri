@@ -25,7 +25,6 @@ References
 
 """
 
-import functools
 import warnings
 from collections.abc import Callable
 
@@ -39,7 +38,11 @@ from tengri.components.agn._phys import (
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.components.agn._template_grid import analytic_bolometric_nu, native_bolometric_nu
+from tengri.components.agn._template_grid import (
+    analytic_bolometric_nu,
+    cache_per_float_dtype,
+    native_bolometric_nu,
+)
 from tengri.utils.grid_interp import library_lookup, resample_template
 
 # ── Physical constants (CGS) ──────────────────────────────────────
@@ -404,7 +407,7 @@ def _find_nenkova_grid() -> str:
     raise FileNotFoundError(_NENKOVA_NOT_FOUND_MSG)
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_nenkova_default() -> Callable:
     return create_nenkova_from_grid(_find_nenkova_grid())
 

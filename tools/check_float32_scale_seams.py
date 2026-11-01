@@ -177,9 +177,12 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "flushed to zero, so ``inf * 0`` was nan. The renormalization now divides "
         "the shape integral out before the constant meets the SED array, and the "
         "float32 path carries the scale in log space "
-        "(``utils.scale.apply_log10_scale``, #1388).",
+        "(``utils.scale.apply_log10_scale``, #1388). The template tori share one "
+        "pair of helpers in ``_template_grid`` whose linear product is the float64 "
+        "branch only; float32 takes ``_float32_torus_power`` (#3084).",
         (
-            "tengri.components.agn._template_grid:torus_lnu_from_grid",
+            "tengri.components.agn._template_grid:scale_by_torus_power",
+            "tengri.components.agn._template_grid:scale_to_torus_power_native",
             "tengri.components.agn.adaf:_adaf_mdot_of_log_lbol",
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
@@ -192,14 +195,11 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.disc:kubota_done_disc",
             "tengri.components.agn.disc:multicolor_disc",
             "tengri.components.agn.disc:relagn_disc_from_grid",
-            "tengri.components.agn.fritz:create_fritz_components_from_grid.fritz_components",
-            "tengri.components.agn.fritz:fritz_sed_from_grid",
             "tengri.components.agn.grahsp.model:compute_grahsp_sed",
             "tengri.components.agn.kd18_agnfitter:_renormalize",
             "tengri.components.agn.kd_precompute:_compute_bh_and_radii",
             "tengri.components.agn.kd_precompute:kubota_done_disc_preintegrated",
             "tengri.components.agn.qsogen:_qsogen_components",
-            "tengri.components.agn.silva04:silva04_sed_from_grid",
             "tengri.components.agn.skirtor:_skirtor_grid_sed",
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",
             "tengri.components.agn.skirtor:create_skirtor_raw_total_from_grid.fn",
