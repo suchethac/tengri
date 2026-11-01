@@ -104,6 +104,7 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_geometry,
     torus_screen_transmission,
 )
+from tengri.components.agn.disc import kubota_done_unemitted_fraction
 from tengri.components.agn.fritz import (
     FritzGrid,
     fritz_disc_dust_ratio,
@@ -120,6 +121,7 @@ from tengri.components.agn.skirtor import (
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.scale import (
+    log10_add,
     log10_magnitude,
     log10_weighted_sum,
     representable_denominator,
@@ -323,6 +325,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
     DEFAULT_AGN_OA_SKIRTOR,
     DEFAULT_AGN_TAU_SKIRTOR,
@@ -2053,6 +2056,21 @@ agn_torus_block, agn_attenuation_block : str
         else:
             _log_disc_intr = _row_mean("_disc_block") + log10_magnitude(_disc_scalar)
             _log_disc_unem = log10_signed_sphere_mean(_evals["_disc_hidden"][1:], _w_l, _w_q)
+            if agn_disc_block == "kubota_done":
+                # The K&D disc stops at R_out and does not emit the dissipation beyond it (#3015).
+                # That share of the disc's budget is unemitted, and joins the screened light.
+                _r_unem = kubota_done_unemitted_fraction(
+                    params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                    agn_log_lbol,
+                    params.get("agn_a_spin", 0.0),
+                )
+                _log_disc_unem = log10_add(
+                    _log_disc_unem,
+                    jnp.log10(jnp.maximum(_r_unem, representable_floor(1e-100)))
+                    + jnp.asarray(agn_log_lbol)
+                    + np.log10(L_SUN_ERG)
+                    + log10_magnitude(_disc_scalar),
+                )
         if _tie_intrinsic is not None:
             # Under the active tie the disc is rebuilt from the library: its unemitted share is
             # the difference from the tie's intrinsic disc.

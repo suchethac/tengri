@@ -16,6 +16,7 @@ unreachable regime (``lambda_Edd`` below ``f_hard / 0.93``) saturated at the wro
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -110,4 +111,116 @@ def test_clip_zone_radii_admits_up_to_the_outer_radius():
     assert float(r_warm) == pytest.approx(r_out)
     r_hot, r_warm = D._clip_zone_radii(0.1, 0.2, r_isco, r_out)
     assert float(r_hot) == pytest.approx(r_isco * 1.01)
-    assert float(r_warm) == pytest.approx(r_isco * 1.01 * 1.01)
+    # R_warm is floored at R_hot itself (no 1.01 factor): a zero-width warm zone is allowed.
+    assert float(r_warm) == pytest.approx(r_isco * 1.01)
+
+
+def test_clip_zone_radii_allows_zero_width_zones():
+    """R_hot = R_out gives R_warm = R_out too, with no floor above R_out (#3015)."""
+    r_hot, r_warm = D._clip_zone_radii(5000.0, 5000.0, 6.0, 1000.0)
+    assert float(r_hot) == pytest.approx(1000.0)
+    assert float(r_warm) == pytest.approx(1000.0)
+
+
+#: Hot-flow cap at the ceiling X_MAX, the disc's total dissipation h(inf) (K&D 2018 Eq. 2).
+_X_MAX = float(D._NT_X_MAX)
+_LOG_MBHS = (7.0, 8.0)
+_WAVE_CHECK = jnp.asarray([3000.0, 6.1992])  # 3000 A and 2 keV [A]
+
+
+@pytest.mark.parametrize("log_mbh", _LOG_MBHS)
+def test_sed_is_finite_with_finite_gradient_across_the_switch(log_mbh):
+    """Finite L_nu and d L_nu / d agn_log_lbol on both sides of the reachable/unreachable switch.
+
+    Grid ``agn_log_lbol`` 8-14 in steps of 0.05 dex: the switch sits near 9.5 dex at
+    ``mbh = 7`` and at 10.5 dex at ``mbh = 8``, so the grid crosses it at both masses.
+    """
+
+    def l_nu(log_lbol):
+        return D.kubota_done_disc(_WAVE_CHECK, agn_log_lbol=log_lbol, agn_log_mbh=log_mbh)
+
+    value_and_grad = jax.jit(jax.value_and_grad(lambda lb: l_nu(lb)[0], argnums=0))
+    value = jax.jit(l_nu)
+    for log_lbol in np.arange(8.0, 14.0 + 1e-9, 0.05):
+        lb = jnp.asarray(float(log_lbol))
+        nu_values = np.asarray(value(lb))
+        assert np.all(np.isfinite(nu_values)), (log_lbol, nu_values)
+        _, grad = value_and_grad(lb)
+        assert np.isfinite(float(grad)), log_lbol
+
+
+def test_unreachable_regime_emits_no_disc_or_warm_light_and_corona_is_the_disc_share():
+    """Unreachable (lambda_Edd = 0.01): disc + warm emit exactly 0; corona = L0 h(R_out/R_isco)."""
+    lambda_edd = 0.01
+    r_hot, _r_warm, r_out, r_isco, _t_in, _l_edd = _zone(0.02, lambda_edd)
+    assert r_hot == pytest.approx(r_out, rel=1e-12)
+    _total, l_nu_disc, _l_nu_hot, corona_fraction = D.kubota_done_disc(
+        _WAVE_CHECK[:1],
+        agn_log_lbol=LOG_LEDD_1E7_LSUN + np.log10(lambda_edd),
+        agn_log_mbh=LOG_MBH,
+        agn_f_hard=0.02,
+        _return_parts=True,
+    )
+    assert np.max(np.abs(np.asarray(l_nu_disc))) == 0.0
+    x_out = r_out / r_isco
+    h_out_over_h_inf = float(N.nt_h(jnp.log(x_out), 0.0)) / float(N.nt_h(jnp.log(_X_MAX), 0.0))
+    np.testing.assert_allclose(float(corona_fraction), h_out_over_h_inf, rtol=1e-9)
+
+
+_SELECTORS = {
+    "agn_disc_block": "kubota_done",
+    "agn_nlr_block": "none",
+    "agn_blr_block": "none",
+    "agn_feii_block": "none",
+    "agn_torus_block": "none",
+    "agn_attenuation_block": "none",
+}
+_LEDGER_WAVE = jnp.asarray(np.geomspace(100.0, 1.0e7, 400))
+_LEDGER_RTOL = 1.0e-6
+_PIECE_KEYS = ("log_L_agn_disc", "log_L_agn_torus", "log_L_agn_lines", "log_L_agn_polar_dust")
+_UNEMITTED_KEYS = (
+    "log_L_agn_disc_unemitted",
+    "log_L_agn_torus_unemitted",
+    "log_L_agn_lines_unemitted",
+)
+
+
+def _ledger(log_lbol):
+    """The composable runner's published ledger for a kubota_done disc alone [dex re erg/s]."""
+    from tengri.components.agn.blocks._protocol import collect_block_templates
+    from tengri.components.agn.blocks.runner import composable_agn_l_nu
+
+    templates = collect_block_templates(
+        {k[len("agn_") : -len("_block")]: v for k, v in _SELECTORS.items()}
+    )
+    _, comps = composable_agn_l_nu(
+        _LEDGER_WAVE,
+        log_lbol,
+        return_components=True,
+        return_ledger=True,
+        template_state=templates,
+        strict_keys=False,
+        agn_norm="conserving",
+        agn_log_mbh=LOG_MBH,
+        **_SELECTORS,
+    )
+    return {k: float(np.asarray(v)) for k, v in comps.items()}
+
+
+@pytest.mark.parametrize(
+    "log_lbol", [9.5, 11.5], ids=["unreachable_lbol9.5", "reachable_lbol11.5"]
+)
+def test_ledger_closes_with_the_unemitted_remainder(log_lbol):
+    """C2 on the disc alone: emitted pieces + unemitted pieces = L_bol, to 1e-6 (#3015).
+
+    Both regimes: at lbol 9.5 (lambda_Edd = 0.01) the disc and warm zones are empty and the
+    corona takes the disc's share inside R_out; at lbol 11.5 (lambda_Edd = 1) the hot flow is
+    the reachable f_hard L_Edd.
+    """
+    comps = _ledger(log_lbol)
+    assert comps["agn_ledger_closed"] == 1.0
+    total = sum(10.0 ** comps[k] for k in _PIECE_KEYS if np.isfinite(comps[k]))
+    total += sum(10.0 ** comps[k] for k in _UNEMITTED_KEYS if np.isfinite(comps[k]))
+    budget = 10.0 ** (log_lbol + LOG_LSUN_ERG)
+    np.testing.assert_allclose(total / budget, 1.0, rtol=_LEDGER_RTOL, atol=0.0)
+    assert np.isfinite(comps["log_L_agn_disc_unemitted"])

@@ -333,8 +333,10 @@ class KD18Disc(SEDModelComponent):
 
         ``log_L_agn_disc`` [dex re erg/s] is the log of the angle-integrated emitted power: it
         is independent of ``cos_inc`` and equals ``lum_ratio`` times the accretion power
-        implied by ``log_lbol`` (less the corona's cut tail). ``log_L_agn_disc_los`` is the log
-        of the line-of-sight isotropic-equivalent luminosity of the emitted,
+        implied by ``log_lbol``, less the dissipation the disc does not emit beyond its outer
+        radius (:func:`~tengri.components.agn.disc.kubota_done_unemitted_fraction`, #3015).
+        ``log_L_agn_disc_los`` is the log of the line-of-sight isotropic-equivalent luminosity
+        of the emitted,
         inclination-projected SED, a derived output; at :math:`\cos i = 0.5` the two coincide.
         Both are integrals on a fixed grid of 1e-3 A to 1e10 A, independent of the caller's
         wavelength grid, and are formed in log space so they are finite and accurate in pure

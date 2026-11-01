@@ -39,6 +39,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.components.agn.blocks._ledger import (
     NON_CONSERVING_DISCS,
     NON_CONSERVING_TORI,
@@ -55,6 +56,7 @@ from tengri.components.agn.blocks.runner import (
     validate_block_recipe,
 )
 from tengri.components.agn.blocks.spectral_edges import block_edges
+from tengri.components.agn.disc import kubota_done_unemitted_fraction
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests.contract._heap import release_heap
@@ -188,6 +190,18 @@ def _disc_normalization(disc: str) -> float:
     return _power(comps["disc"], wave) / 10.0 ** (_LOG_LBOL + _LOG_LSUN) - 1.0
 
 
+def _unemitted_share(disc: str) -> float:
+    """Share of ``10**agn_log_lbol L_sun`` the disc block does not emit, published as unemitted.
+
+    Only the K&D disc stops at its self-gravity radius (#3015): the dissipation beyond ``R_out``
+    is the closed form of :func:`kubota_done_unemitted_fraction` at the default black hole mass
+    and this file's ``agn_log_lbol``, not a pinned number.
+    """
+    if disc != "kubota_done":
+        return 0.0
+    return float(kubota_done_unemitted_fraction(DEFAULT_AGN_LOG_MBH, _LOG_LBOL))
+
+
 @functools.cache
 def _torus_normalization(torus: str, frac: float) -> float:
     """A torus block's own power over ``f 10**agn_log_lbol L_sun``, minus one.
@@ -224,7 +238,8 @@ def _check_c2(sel, params, comps):
     frac = float(params.get("agn_torus_frac", 0.0))
     torus = sel["agn_torus_block"]
     disc_share = 1.0 if torus in _SELF_CONTAINED else 1.0 - frac
-    excess = disc_share * _disc_normalization(sel["agn_disc_block"])
+    disc = sel["agn_disc_block"]
+    excess = disc_share * (_disc_normalization(disc) + _unemitted_share(disc))
     if torus not in _SELF_CONTAINED:
         excess += frac * _torus_normalization(torus, frac)
     budget = float(params.get("agn_lum_ratio", 1.0)) * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
@@ -288,6 +303,9 @@ def test_block_integrates_to_its_nominal_power(category, block):
     _skip_without_library(sel)
     excess = _disc_normalization(block) if category == "disc" else _torus_normalization(block, 0.4)
     expected = _PINNED_NORMALIZATION.get((category, block), 0.0)
+    if category == "disc":
+        # The K&D disc emits down to R_out; the remainder is published as unemitted (#3015).
+        expected -= _unemitted_share(block)
     assert excess == pytest.approx(expected, abs=_RTOL)
 
 
@@ -438,7 +456,7 @@ def test_disc_sphere_mean_matches_a_dense_independent_mu_integral(torus):
     )
     emitted = _richardson_sphere_mean(sel, params, wave)
     intrinsic = (1.0 - params["agn_torus_frac"]) * 10.0 ** (_LOG_LBOL + _LOG_LSUN)
-    intrinsic *= 1.0 + _disc_normalization("kubota_done")
+    intrinsic *= 1.0 + _disc_normalization("kubota_done") + _unemitted_share("kubota_done")
     _, comps = _evaluate(_WAVE, sel, {**params, "agn_cos_inc": 0.5}, ledger=True)
     assert _lin(comps, "log_L_agn_disc") == pytest.approx(emitted, rel=_RTOL)
     assert _lin(comps, "log_L_agn_disc_unemitted") == pytest.approx(intrinsic - emitted, rel=_RTOL)
