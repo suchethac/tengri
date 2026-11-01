@@ -153,6 +153,33 @@ def _neb_isochrone_tag_from_ssp(ssp_data) -> str | None:
 # module-level import of this name FROM HERE a real import cycle.
 
 
+def screened_fracagn_message(agn_norm: str, dust_agn_screen: str) -> str:
+    """The refusal of an active fracAGN beside a screened AGN, shared by both build paths.
+
+    Parameters
+    ----------
+    agn_norm : str
+        The AGN normalization policy.
+    dust_agn_screen : str
+        The host-dust screen on the AGN (not ``'none'``).
+
+    Returns
+    -------
+    str
+        The ``ConfigError`` message.
+    """
+    return (
+        f"agn_norm={agn_norm!r} with an active fracAGN (agn_ir_frac) and "
+        f"dust_agn_screen={dust_agn_screen!r}: fracAGN sets agn_torus_frac from the power the "
+        "dust absorbs from the host, but a screened AGN is evaluated before the dust (the "
+        "screen attenuates the AGN inside the dust step), so that power does not exist yet "
+        "when the AGN runs. Choose one of: drop the screen "
+        "(dust_attenuation={'agn_screen': 'none'}), or drop the coupling "
+        "(agn={'agn_ir_frac': Fixed(0.0)}) and state the covering factor with "
+        "agn_torus_frac."
+    )
+
+
 def _stable_param_seed(name: str) -> int:
     """Deterministic 32-bit seed for a parameter name's sampling substream.
 
@@ -661,9 +688,9 @@ class Parameters:
                 f"  - agn_norm='independent' (each block on its own scale)\n"
                 f"  - agn_norm='conserving' (energy-conserving joint scaling)\n"
                 f"  - dust_agn_screen='none' (unscreened AGN)\n"
-                f"A screened AGN cannot use fracAGN (agn_ir_frac) under any policy, "
-                f"since it reads the absorbed power the screen is part of: drop the "
-                f"screen or the coupling."
+                f"A screened AGN cannot carry fracAGN (agn_ir_frac) under any policy: "
+                f"the coupling reads the absorbed power the screen is part of, so drop "
+                f"the screen or set agn_ir_frac=Fixed(0.0)."
             )
         # Block-recipe validation (typo hard-error + suspicious-combo warnings)
         # is deferred until after the parameter distributions are built, so the
@@ -981,6 +1008,23 @@ class Parameters:
                 params=recipe_params,
                 param_support=param_support,
             )
+
+        # A screened AGN runs before the dust, so an active fracAGN would read an absorbed power
+        # that does not exist yet and fall back to the user agn_torus_frac without a word. The
+        # 'cigale_joint' pairing is refused above; every other policy is refused here. A flat
+        # spec that leaves agn_ir_frac at its prior frees it, which is active. The structural
+        # spec parse_groups validates keys against carries registry defaults, not a model, and
+        # is exempt.
+        if (
+            not timing_keep_all
+            and self.agn_model not in (None, "none")
+            and self.dust_agn_screen != "none"
+        ):
+            _ir_frac_dist = self._distributions.get("agn_ir_frac")
+            if _ir_frac_dist is not None and (
+                not _ir_frac_dist.is_fixed or float(_ir_frac_dist.value) > 0.0
+            ):
+                raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
         # DERIVE the Eddington ratio from agn_log_lbol + agn_log_mbh, so

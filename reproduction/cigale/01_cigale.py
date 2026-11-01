@@ -3008,10 +3008,14 @@ print(
 # `agn_log_lbol` for a model with no `agn_ir_frac`. To keep `agn_log_lbol` as
 # the AGN power and still state an AGN dust fraction, use
 # `agn_norm='conserving'`: there `agn_ir_frac` sets only the covering factor
-# `agn_torus_frac`, the torus re-emits that share of the accretion power so the
-# AGN dust is the fraction `f` of the total (or of the light in
-# `ir_frac_window`), and the disc keeps the rest, so the pieces add up to
-# `agn_log_lbol`.
+# `agn_torus_frac`. The torus re-emits that share of the accretion power and the
+# disc keeps the rest, so the pieces add up to `agn_log_lbol`. The AGN dust is
+# the fraction `f` of the total (or of the light in `ir_frac_window`) wherever
+# the accretion power can supply it. A covering factor cannot pass 1, so a total
+# fraction above `r L_bol / (r L_bol + L_absorbed)` is out of reach
+# (`r = agn_lum_ratio`); there the torus covers the whole disc,
+# `agn_ir_frac_saturated` is 1 and `agn_ir_frac_realized` gives the fraction the
+# model reaches.
 #
 # **Verification Status:** CROSSVAL: SKIRTOR torus (mean 3-param)
 

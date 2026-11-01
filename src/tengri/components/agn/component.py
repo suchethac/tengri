@@ -72,9 +72,12 @@ import numpy as np
 from tengri.components._term_response import term_band_response
 from tengri.components.agn._ir_frac_window import (
     CONSERVING_PROVISIONAL_FRACS,
+    CONSERVING_WINDOW_REFINE_STEPS,
     PROVISIONAL_TORUS_FRAC,
+    _log10_window,
     conserving_torus_frac_from_window,
     log10_torus_frac_from_window,
+    refine_conserving_window_root,
 )
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
@@ -89,6 +92,7 @@ from tengri.components.agn.blocks._ledger import ledger_property_specs
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.runner import (
     DIRECT_LOS_LOG_LUMINOSITY_KEY,
+    TORUS_FRAC_APPLIED_KEY,
     composable_agn_l_nu,
 )
 from tengri.components.agn.blocks.torus_library_transmission import below_library_index
@@ -107,6 +111,7 @@ from tengri.protocols.component import (
     SEDComponentState,
     declared_default,
 )
+from tengri.utils.scale import log10_add
 
 __all__ = [
     "AGNSEDComponent",
@@ -190,6 +195,11 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``agn_log_lbol``; beside an active ``agn_ir_frac`` the coupling sets
         only ``agn_torus_frac`` (see :meth:`AGNSEDComponent.apply`). A static
         string, read by the runner like the block selectors.
+    agn_screened : bool
+        Whether the host dust screens the AGN (``dust_agn_screen != 'none'``), which puts the
+        AGN before the dust. Unscreened, ``'conserving'`` declares the dust's
+        ``log_L_absorbed`` an input, so the fracAGN coupling's read of it is ordered by the
+        component contract.
     """
 
     name: str = "agn"
@@ -203,6 +213,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     agn_norm: str = "cigale_joint"
     agn_polar_law: str = "smc"
     agn_ir_frac_window: tuple[float, float] = (0.0, 0.0)
+    agn_screened: bool = False
 
 
 @dataclass(frozen=True)
@@ -484,6 +495,21 @@ class AGNSEDComponent(TemplateThreading):
                 "composable model only (the energy ledger re-evaluates the chain at it)",
             ),
             DerivedKey(
+                "agn_ir_frac_saturated",
+                "",
+                "1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac: the "
+                "covering factor it asks for sits at a bound of [0, 1] (or at the line bound "
+                "1 - E_lines/E_disc), so agn_ir_frac_realized differs from agn_ir_frac; else "
+                "0.0. Composable model only",
+            ),
+            DerivedKey(
+                "log_agn_ir_frac_window_host",
+                "dex",
+                "log10 of the host light in the agn_ir_frac window, int L_nu/lambda^2 dlambda "
+                "[dex re erg/s/Hz/Angstrom] (L_nu/lambda^2 at the wavelength for a single-"
+                "wavelength window); composable model with agn={'ir_frac_window': ...} only",
+            ),
+            DerivedKey(
                 "agn_adaf_mdot",
                 "",
                 "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd with "
@@ -602,13 +628,22 @@ class AGNSEDComponent(TemplateThreading):
         ``log_L_ir`` and ``L_absorbed`` from the dust component to compute
         the CIGALE-style disc/torus/polar normalization. Declaring these as
         optional inputs ensures the dust component runs before AGN in this
-        configuration (#556). When ``agn_norm`` is ``"independent"`` or
-        ``"conserving"``, these are omitted, so a screened AGN can run before the
-        dust. ``"conserving"`` beside an active ``agn_ir_frac`` reads
-        ``log_L_absorbed`` too; it gets it from the canonical order (dust before
-        AGN), and the build refuses that coupling beside a screened AGN
-        (``sed_model._validate_fracagn_norm_policy``).
+        configuration (#556). Under ``"conserving"`` an unscreened AGN declares
+        ``log_L_absorbed``, which the fracAGN coupling reads, so the dust runs first
+        by contract; a screened one declares nothing (it runs before the dust, and the
+        build refuses the coupling beside a screen,
+        ``sed_model._validate_fracagn_norm_policy``). ``"independent"`` declares
+        nothing.
         """
+        if self.config.agn_norm == "conserving" and not self.config.agn_screened:
+            return (
+                DerivedKey(
+                    "log_L_absorbed",
+                    "dex",
+                    "log10 of the power the host dust absorbs; read by the conserving "
+                    "fracAGN coupling to set the covering factor",
+                ),
+            )
         if self.config.agn_norm == "cigale_joint":
             return (
                 DerivedKey(
@@ -854,11 +889,29 @@ class AGNSEDComponent(TemplateThreading):
         ``agn_lum_ratio`` [dimensionless]. A window ``[lambda_min, lambda_max]`` makes :math:`f`
         the AGN fraction of the light in the window; ``t`` then solves
         :math:`W_{\rm agn}(t) = H f/(1 - f)` with :math:`H` and :math:`W_{\rm agn}` the host
-        and AGN window luminosities (:func:`conserving_torus_frac_from_window`). ``t`` is a
-        covering factor and is clipped to ``[0, 1]``: where the absorbed host power asks for
-        more AGN dust than the accretion power can supply, the torus re-emits all of it, the
-        disc is fully covered and the realized fraction falls below ``f`` (its gradient in
-        ``f`` is zero there).
+        and AGN window luminosities. Without ``polar_dust`` the window light is affine in ``t``
+        and two passes give the root exactly (:func:`conserving_torus_frac_from_window`);
+        beside ``polar_dust`` it is rational in ``t`` and the root is refined from that chord
+        by Newton steps (:func:`refine_conserving_window_root`), to the residuals the
+        regression test pins.
+
+        ``t`` is a covering factor and stays in ``[0, t_max]``, with ``t_max = 1``, or
+        ``1 - E_lines/E_disc`` with a line block (the runner's bound: the torus and the lines
+        share the disc's power). Where ``f`` asks for a ``t`` outside that range it is not
+        reachable at this accretion power: ``t`` stays at the bound, the realized fraction
+        differs from ``f`` and its gradient in ``f`` is zero. The total-dust bound is
+        :math:`f_{\max} = t_{\max} r L_{\rm bol}/(t_{\max} r L_{\rm bol} + L_{\rm abs})`;
+        a window has a lower bound as well, the disc's own share of the window light at
+        ``t = 0``. ``agn_ir_frac_saturated`` (published) is 1 there, and
+        ``agn_ir_frac_realized`` (a property, computed on request) gives the fraction the
+        model reaches.
+
+        The mapping reaches ``f`` exactly where the energy ledger closes
+        (``agn_ledger_closed == 1``). The exception is ``polar_dust`` beside a library torus
+        with anisotropy (Fritz): the runner splits the dust budget on the torus's sightline
+        power, not its angle-integrated power (#3100), so the ledger does not close and the
+        realized total-dust fraction exceeds ``f`` by up to 3.25% (measured at ``f = 0.05``,
+        2.5% at ``f = 0.3``); ``agn_ir_frac_realized`` reports it.
         """
         wave = state.wave
 
@@ -925,6 +978,7 @@ class AGNSEDComponent(TemplateThreading):
             _log_L_absorbed = jnp.log10(
                 jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
             )
+        _log_window_host = None
         if _log_L_absorbed is None:
             # No dust screen published an absorbed luminosity. Construction
             # refuses an active fracAGN in that case (sed_model._validate_
@@ -964,6 +1018,8 @@ class AGNSEDComponent(TemplateThreading):
                 return jnp.take(_L_ext, _to_caller, axis=-1)
 
             _lam_min, _lam_max = ir_frac_window[0] * 1.0e4, ir_frac_window[1] * 1.0e4
+            # The host light in the window, for the realized fraction served on request.
+            _log_window_host = _log10_window(wave, _host, _lam_min, _lam_max)
             if _conserving:
                 # Under 'conserving' the disc keeps (1 - t) of the accretion power, so the AGN
                 # window light is affine in t, not proportional to it: two passes fix the line.
@@ -975,6 +1031,20 @@ class AGNSEDComponent(TemplateThreading):
                     _lam_min,
                     _lam_max,
                 )
+                if self.config.agn_attenuation_block == "polar_dust":
+                    # Beside polar dust the window light is rational in t (the polar share of
+                    # the dust budget moves with the disc it absorbs): the chord is the start
+                    # of an exact root solve.
+                    _torus_frac_window = refine_conserving_window_root(
+                        _provisional,
+                        wave,
+                        _host,
+                        agn_ir_frac,
+                        _lam_min,
+                        _lam_max,
+                        _torus_frac_window,
+                        n_steps=CONSERVING_WINDOW_REFINE_STEPS,
+                    )
             else:
                 _torus_frac_window = _pow10(
                     log10_torus_frac_from_window(
@@ -1009,6 +1079,8 @@ class AGNSEDComponent(TemplateThreading):
             agn_torus_frac_effective = jnp.where(
                 agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
             )
+        # The covering factor fracAGN asked for, inside [0, 1]; the runner may bound it further.
+        _torus_frac_requested = agn_torus_frac_effective
         agn_kwargs = {**agn_kwargs, "agn_torus_frac": agn_torus_frac_effective}
         # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
         # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
@@ -1151,6 +1223,27 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["log_L_agn_direct_los"] = agn_components[
                 DIRECT_LOS_LOG_LUMINOSITY_KEY
             ]
+            if _conserving:
+                # Under 'conserving' the runner bounds the torus share by what the lines leave
+                # of the disc (``t <= 1 - E_lines/E_disc``); publish the fraction it applied.
+                _applied = agn_components[TORUS_FRAC_APPLIED_KEY]
+                # fracAGN could not be met: its covering factor sits at a bound of [0, 1], or
+                # the runner bounded it.
+                derived_overrides["agn_ir_frac_saturated"] = jnp.where(
+                    (agn_ir_frac > 0.0)
+                    & (
+                        (_torus_frac_requested >= 1.0)
+                        | (_torus_frac_requested <= 0.0)
+                        | (_applied != _torus_frac_requested)
+                    ),
+                    1.0,
+                    0.0,
+                ).astype(wave.dtype)
+                agn_torus_frac_effective = _applied
+            else:
+                derived_overrides["agn_ir_frac_saturated"] = jnp.zeros((), dtype=wave.dtype)
+            if _log_window_host is not None:
+                derived_overrides["log_agn_ir_frac_window_host"] = _log_window_host
             # The torus fraction of this evaluation, for the energy ledger computed on request.
             derived_overrides["agn_torus_frac_effective"] = jnp.asarray(agn_torus_frac_effective)
         if self.config.model == "composable" and self.config.agn_disc_block == "adaf":
@@ -1332,6 +1425,40 @@ def _composable_ledger_bundle(state, params, model, template_data) -> dict:
     return agn.energy_ledger(state, slice_params_for_component(agn, full), template_data)
 
 
+def _ir_frac_bundle(state, params, model, template_data) -> dict:
+    r"""The AGN share fracAGN measures, from what the model emitted (``agn_ir_frac_realized``).
+
+    Total dust (no window): :math:`D/(D + L_{\rm abs})`, with :math:`D` the AGN dust power
+    and :math:`L_{\rm abs}` the power the host dust absorbs (``log_L_absorbed``). Under
+    ``'conserving'`` :math:`D` is the ledger's angle-integrated torus plus polar dust; under
+    ``'cigale_joint'`` it is CIGALE's ``agn_power`` (``log_L_agn_power``), the quantity that
+    coupling sets. With ``ir_frac_window`` it is :math:`W_{\rm agn}/(W_{\rm agn} + H)`, the
+    AGN share of the light in the window, from ``sed_agn`` and the host light the forward pass
+    published (``log_agn_ir_frac_window_host``). NaN without an absorbed power.
+    """
+    from tengri.forward.orchestrator import slice_params_for_component
+
+    agn = next(c for c in model._full_state_chain() if c.name == "agn")
+    window = tuple(agn.config.agn_ir_frac_window)
+    if window != (0.0, 0.0):
+        log_agn = _log10_window(
+            state.wave, state.derived["sed_agn"], window[0] * 1.0e4, window[1] * 1.0e4
+        )
+        log_rest = state.derived["log_agn_ir_frac_window_host"]
+    else:
+        log_rest = state.derived.get("log_L_absorbed")
+        if log_rest is None:
+            return {"agn_ir_frac_realized": jnp.asarray(jnp.nan, dtype=state.wave.dtype)}
+        full = {**dict(model.spec.get_fixed_values()), **dict(params)}
+        ledger = agn.energy_ledger(state, slice_params_for_component(agn, full), template_data)
+        if agn.config.agn_norm == "conserving":
+            log_agn = log10_add(ledger["log_L_agn_torus"], ledger["log_L_agn_polar_dust"])
+        else:
+            log_agn = ledger["log_L_agn_power"]
+    # D/(D + rest) = 1/(1 + 10**(log rest - log D)), formed in log space for float32.
+    return {"agn_ir_frac_realized": 1.0 / (1.0 + jnp.power(10.0, log_rest - log_agn))}
+
+
 def _is_composable(component) -> bool:
     """Whether ``component`` is the composable AGN (the one with an energy ledger)."""
     return getattr(getattr(component, "config", None), "model", None) == "composable"
@@ -1352,6 +1479,24 @@ def _register_ledger_properties() -> None:
                 available=_is_composable,
             )
             for key, (units, doc) in ledger_property_specs().items()
+        },
+    )
+    register_properties(
+        "agn",
+        {
+            "agn_ir_frac_realized": Property(
+                units="",
+                group="agn",
+                doc=(
+                    "AGN fraction agn_ir_frac measures, from what the model emitted: the AGN "
+                    "dust power over AGN dust plus the host's absorbed power (total dust), or "
+                    "the AGN share of the light in ir_frac_window. Equals agn_ir_frac where "
+                    "agn_ir_frac_saturated is 0 and agn_ledger_closed is 1; composable AGN "
+                    "only"
+                ),
+                bundle=_ir_frac_bundle,
+                available=_is_composable,
+            )
         },
     )
 

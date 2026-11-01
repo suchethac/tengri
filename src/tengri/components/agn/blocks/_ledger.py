@@ -78,6 +78,12 @@ _UNEMITTED_PIECES: tuple[str, ...] = ("disc", "torus", "lines")
 #: Key of the published ledger flag: 1.0 when the pieces close on the accretion power, else 0.0.
 LEDGER_CLOSED_KEY = "agn_ledger_closed"
 
+#: Relative closure tolerance of the flag: ``|sum / budget - 1|`` above it publishes 0.0 even on
+#: a recipe whose policy closes (C2 of ``tests/contract/test_agn_composable_ledger_closes.py``).
+LEDGER_CLOSURE_RTOL: float = 1.0e-6
+#: The same tolerance in pure float32, where each ledger power carries ~1e-4 dex of round-off.
+LEDGER_CLOSURE_RTOL_FLOAT32: float = 1.0e-3
+
 #: Every ``log_L_agn_*`` key the ledger publishes [dex re erg/s] (each with its ``_lsun`` sibling).
 LEDGER_KEYS: tuple[str, ...] = (
     "log_L_agn_los",
@@ -417,6 +423,7 @@ def ledger_from_evaluations(
     log_torus_anisotropy=None,
     log_power=None,
     closed,
+    log_budget=None,
 ) -> dict:
     r"""The published ledger from the runner's pieces at the sightline and the quadrature points.
 
@@ -450,7 +457,12 @@ def ledger_from_evaluations(
         ``log10`` of the AGN dust power the torus and polar dust are normalized on [dex re
         erg/s]; ``None`` (published ``-inf``) without a torus.
     closed : float
-        1.0 when the recipe conserves the accretion power, else 0.0.
+        1.0 when the recipe's policy conserves the accretion power, else 0.0.
+    log_budget : float, optional
+        ``log10`` of the accretion power the pieces must add up to [dex re erg/s]. Given, the
+        published flag is ``closed`` only where the angle-integrated pieces plus the unemitted
+        ones are the budget to :data:`LEDGER_CLOSURE_RTOL` (:data:`LEDGER_CLOSURE_RTOL_FLOAT32`
+        in float32), and 0.0 elsewhere; ``None`` publishes ``closed`` as given.
 
     Returns
     -------
@@ -502,6 +514,31 @@ def ledger_from_evaluations(
             else jnp.asarray(direct[piece], dtype=wave.dtype)
         )
     out[POWER_KEY] = jnp.asarray(-jnp.inf if log_power is None else log_power, dtype=wave.dtype)
+    flag = jnp.asarray(closed, dtype=wave.dtype)
+    if log_budget is not None:
+        flag = flag * _closes_on(out, jnp.asarray(log_budget, dtype=wave.dtype))
     out = with_lsun_siblings(out)
-    out[LEDGER_CLOSED_KEY] = jnp.asarray(closed, dtype=wave.dtype)
+    out[LEDGER_CLOSED_KEY] = flag
     return out
+
+
+def _closes_on(ledger: dict, log_budget):
+    r"""1.0 where the ledger's pieces add up to ``10**log_budget`` within the closure tolerance.
+
+    .. math::
+
+        \left|\frac{\sum_p L_p + \sum_q L_{q,\,\rm unemitted}}{L_{\rm budget}} - 1\right|
+        \le \epsilon,
+
+    with :math:`p` over :data:`LEDGER_PIECES`, :math:`q` over the unemitted pieces and
+    :math:`\epsilon` :data:`LEDGER_CLOSURE_RTOL` (float64) or
+    :data:`LEDGER_CLOSURE_RTOL_FLOAT32`. Formed in log space, so it is finite in float32.
+    """
+    logs = jnp.stack(
+        [ledger[f"log_L_agn_{p}"] for p in LEDGER_PIECES]
+        + [ledger[f"log_L_agn_{q}_unemitted"] for q in _UNEMITTED_PIECES]
+    )
+    log_total = log10_weighted_sum(logs, jnp.ones_like(logs), axis=0)
+    excess = jnp.expm1((log_total - log_budget) * np.log(10.0))
+    rtol = LEDGER_CLOSURE_RTOL if logs.dtype == jnp.float64 else LEDGER_CLOSURE_RTOL_FLOAT32
+    return jnp.where(jnp.abs(excess) <= rtol, 1.0, 0.0).astype(logs.dtype)

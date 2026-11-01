@@ -9,15 +9,20 @@ the ruling the build was refused (R67, ``_validate_fracagn_requires_cigale_joint
 
 The mapping (``AGNSEDComponent.apply`` Notes), total dust:
 
-    t = min(1, L_absorbed f / ((1 - f) agn_lum_ratio L_bol)),
+    t = min(t_max, L_absorbed f / ((1 - f) agn_lum_ratio L_bol)),
 
-so the AGN dust is the fraction ``f`` of ``AGN dust + L_absorbed``. With
-``ir_frac_window`` ``t`` solves ``W_agn(t) = H f/(1 - f)`` on the affine window light.
-Checked here: the build is admitted, the realized fraction is ``f`` (total dust and two
-windows), the ledger closes (``agn_ledger_closed == 1``, C2 to 1e-6), the covering factor
-saturates at 1 with the ledger still closed, gradients in ``agn_ir_frac`` and
-``agn_log_lbol`` are finite and live, and ``'cigale_joint'`` is not clipped (its mapping is
-the CIGALE ``skirtor2016`` one, unchanged).
+so the AGN dust is the fraction ``f`` of ``AGN dust + L_absorbed``; ``t_max = 1``, or
+``1 - E_lines/E_disc`` with a line block. With ``ir_frac_window`` ``t`` solves
+``W_agn(t) = H f/(1 - f)``: exactly by two passes on the affine window light, and by Newton
+steps from that chord beside ``polar_dust``, where the window light is rational in ``t``.
+Where ``f`` is out of reach ``t`` stays at the bound, ``agn_ir_frac_saturated`` is 1 and the
+``agn_ir_frac_realized`` property reports the fraction the model reaches.
+
+Checked here: admission and the screened refusal (both build paths); the realized fraction
+(total dust, two windows, the polar-dust window at the review's points) against what the
+model emitted; the saturation flag at both bounds, beside the line bound; the ledger closure;
+gradients against central finite differences, inside and at a bound; the Fritz + polar-dust
+exception (#3100); and ``'cigale_joint'`` against a reference frozen on main.
 
 The synthetic SSP's flux scale is arbitrary: at ``log_total_mass = -7`` it absorbs
 ``L_absorbed ~ 1.3e43 erg/s``, the order of an ``agn_log_lbol = 10`` AGN, which puts ``t``
@@ -27,6 +32,7 @@ inside ``(0, 1)``.
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -35,6 +41,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.agn._ir_frac_window import _window_q
+from tengri.config.exceptions import ConfigError
 from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -51,6 +58,15 @@ _LEDGER = (
 )
 #: The ledger's C2 tolerance (tests/contract/test_agn_composable_ledger_closes.py).
 _RTOL = 1.0e-6
+#: The polar-dust window root is solved to this relative residual in the window fraction.
+_ROOT_RTOL = 1.0e-9
+_BAND = (5.0, 20.0)
+_REFERENCE = (
+    Path(__file__).resolve().parents[1]
+    / "data"
+    / "agn_2320_cigale_joint_reference"
+    / "reference.npz"
+)
 
 
 def _build(
@@ -63,19 +79,37 @@ def _build(
     obs=None,
     log_lbol=None,
     screen="none",
+    torus="skirtor",
+    polar_ebv=None,
+    lum_ratio=None,
+    nlr=None,
+    torus_frac=None,
 ):
+    torus_group = {"type": torus, "all_params": Fixed(DEFAULT)}
+    if torus_frac is not None:
+        torus_group["agn_torus_frac"] = torus_frac
     agn = {
         "type": "composable",
         "norm": norm,
         "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
-        "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+        "torus": torus_group,
         "agn_ir_frac": ir_frac if not isinstance(ir_frac, float) else Fixed(ir_frac),
         "all_params": Fixed(DEFAULT),
     }
+    if polar_ebv is not None:
+        agn["atten"] = {
+            "type": "polar_dust",
+            "all_params": Fixed(DEFAULT),
+            "agn_polar_ebv": Fixed(polar_ebv),
+        }
+    if nlr is not None:
+        agn["nlr"] = {"type": nlr, "all_params": Fixed(DEFAULT)}
     if window is not None:
         agn["ir_frac_window"] = window
     if log_lbol is not None:
         agn["agn_log_lbol"] = log_lbol
+    if lum_ratio is not None:
+        agn["agn_lum_ratio"] = Fixed(lum_ratio)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -102,9 +136,15 @@ def _build(
         )
 
 
-def _ledger(model):
-    props = model.predict_properties({}, names=(*_LEDGER, "agn_ledger_closed"))
+def _ledger(model, params=None):
+    props = model.predict_properties(params or {}, names=(*_LEDGER, "agn_ledger_closed"))
     return {k: float(v) for k, v in props.items()}
+
+
+def _closure(ledger, log_lbol=_LOG_LBOL, lum_ratio=1.0):
+    """C2: pieces plus unemitted over the accretion power, minus one."""
+    total = sum(10.0 ** ledger[k] for k in _LEDGER)
+    return total / (lum_ratio * 10.0**log_lbol * L_SUN) - 1.0
 
 
 def _dust_fraction(model):
@@ -115,9 +155,9 @@ def _dust_fraction(model):
     return agn_dust / (agn_dust + 10.0 ** float(state.derived["log_L_absorbed"]))
 
 
-def _window_fraction(model, window):
+def _window_fraction(model, window, params=None):
     """AGN share of the light in the window, from the emitted SEDs [dimensionless]."""
-    state = model.predict_state({})
+    state = model.predict_state(params or {})
     wave = np.asarray(state.wave)
     agn = np.asarray(state.derived["sed_agn"])
     host = np.asarray(state.sed_intrinsic) - agn
@@ -131,8 +171,16 @@ def _window_fraction(model, window):
     return w_agn / (w_agn + w_host)
 
 
-def _torus_frac(model):
-    return float(model.predict_state({}).derived["agn_torus_frac_effective"])
+def _derived(model, key, params=None):
+    return float(model.predict_state(params or {}).derived[key])
+
+
+def _realized(model, params=None):
+    props = model.predict_properties(params or {}, names=("agn_ir_frac_realized",))
+    return float(props["agn_ir_frac_realized"])
+
+
+# ── admission ──────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("ir_frac", [Fixed(0.3), FREE], ids=["fixed", "free"])
@@ -145,8 +193,6 @@ def test_conserving_with_active_fracagn_builds(synthetic_ssp_wide, ir_frac):
 def test_screened_agn_with_fracagn_is_refused(synthetic_ssp_wide):
     """A screened AGN runs before the dust, so the absorbed power fracAGN reads does not exist
     yet: refused, instead of falling back to the user ``agn_torus_frac``."""
-    from tengri.config.exceptions import ConfigError
-
     with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
         _build(synthetic_ssp_wide, screen="diffuse")
     # Without the coupling the screened conserving AGN is legal.
@@ -154,28 +200,135 @@ def test_screened_agn_with_fracagn_is_refused(synthetic_ssp_wide):
     assert model.spec.agn_norm == "conserving"
 
 
+@pytest.mark.parametrize("norm", ["conserving", "independent"])
+def test_screened_fracagn_is_refused_on_the_flat_path(norm):
+    """The flat ``Parameters`` path refuses the same pairing, under every policy it admits."""
+    from tengri.parameters.parameters import Parameters
+    from tengri.parameters.priors import Fixed as _Fixed
+
+    kwargs = dict(
+        agn_model="composable",
+        agn_disc_block="schartmann2005",
+        agn_torus_block="skirtor",
+        agn_norm=norm,
+        dust_agn_screen="diffuse",
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
+            Parameters(**kwargs, agn_ir_frac=_Fixed(0.3))
+        Parameters(**kwargs, agn_ir_frac=_Fixed(0.0))
+
+
+# ── the realized fraction ──────────────────────────────────────────────────
+
+
 @pytest.mark.parametrize("frac", [0.1, 0.3])
 def test_total_dust_fraction_is_realized(synthetic_ssp_wide, frac):
-    """The AGN dust is the fraction ``f`` of the total dust (measured 2.6e-8 relative)."""
+    """The AGN dust is the fraction ``f`` of the total dust (measured 2.6e-8 relative), and the
+    published realized fraction says so."""
     model = _build(synthetic_ssp_wide, ir_frac=frac)
-    assert 0.0 < _torus_frac(model) < 1.0
+    assert 0.0 < _derived(model, "agn_torus_frac_effective") < 1.0
     assert _dust_fraction(model) == pytest.approx(frac, rel=_RTOL)
+    assert _realized(model) == pytest.approx(frac, rel=_RTOL)
+    assert _derived(model, "agn_ir_frac_saturated") == 0.0
 
 
 @pytest.mark.parametrize("window", [(5.0, 20.0), (10.0, 10.0)], ids=["band", "mono"])
 def test_window_fraction_is_realized(synthetic_ssp_wide, window):
     """With a window, ``f`` is the AGN share of the window light, from the emitted SED."""
     model = _build(synthetic_ssp_wide, ir_frac=0.3, log_total_mass=-6.0, window=window)
-    assert 0.0 < _torus_frac(model) < 1.0
+    assert 0.0 < _derived(model, "agn_torus_frac_effective") < 1.0
     assert _window_fraction(model, window) == pytest.approx(0.3, rel=_RTOL)
+    assert _realized(model) == pytest.approx(0.3, rel=_RTOL)
+    assert _derived(model, "agn_ir_frac_saturated") == 0.0
 
 
-def test_ledger_closes_on_agn_log_lbol(synthetic_ssp_wide):
-    """``agn_ledger_closed == 1`` and the pieces plus unemitted are ``L_bol`` to 1e-6 (C2)."""
-    ledger = _ledger(_build(synthetic_ssp_wide, ir_frac=0.3))
-    assert ledger["agn_ledger_closed"] == 1.0
-    total = sum(10.0 ** ledger[k] for k in _LEDGER)
-    assert total / (10.0**_LOG_LBOL * L_SUN) - 1.0 == pytest.approx(0.0, abs=_RTOL)
+#: The review's polar-dust window points where ``f = 0.3`` is reachable (``t`` in (0, 1)):
+#: (torus, log_lbol, polar_ebv, lum_ratio). The chord missed them by -1.1%, -0.4% and +6.7%;
+#: three Newton steps reach 6e-15, 7e-16 and 3e-14.
+_POLAR_INTERIOR = [
+    ("skirtor", 10.0, 0.03, None),
+    ("fritz", 10.0, 0.03, None),
+    ("skirtor", 11.0, 0.03, 0.3),
+]
+
+
+@pytest.mark.parametrize(
+    ("torus", "log_lbol", "polar_ebv", "lum_ratio"),
+    _POLAR_INTERIOR,
+    ids=["skirtor", "fritz", "skirtor-r0.3"],
+)
+def test_polar_dust_window_root_is_exact(
+    synthetic_ssp_wide, torus, log_lbol, polar_ebv, lum_ratio
+):
+    """Beside polar dust the window light is rational in ``t``: the solve still lands on ``f``."""
+    model = _build(
+        synthetic_ssp_wide,
+        log_total_mass=-6.0,
+        window=_BAND,
+        torus=torus,
+        polar_ebv=polar_ebv,
+        lum_ratio=lum_ratio,
+        log_lbol=Fixed(log_lbol),
+    )
+    assert 0.0 < _derived(model, "agn_torus_frac_effective") < 1.0
+    assert _window_fraction(model, _BAND) == pytest.approx(0.3, rel=_ROOT_RTOL)
+    assert _derived(model, "agn_ir_frac_saturated") == 0.0
+
+
+#: The review's polar-dust window points the chord reported +70% and +63% at. Both are out of
+#: reach: the disc's own share of the window light at ``t = 0`` (0.4536) already exceeds ``f``.
+_POLAR_FLOOR = [
+    ("skirtor", 11.0, 0.3, None),
+    ("fritz", 11.0, 0.3, None),
+]
+
+
+@pytest.mark.parametrize(
+    ("torus", "log_lbol", "polar_ebv", "lum_ratio"),
+    _POLAR_FLOOR,
+    ids=["skirtor-ebv0.3", "fritz-ebv0.3"],
+)
+def test_polar_dust_window_below_the_floor_saturates(
+    synthetic_ssp_wide, torus, log_lbol, polar_ebv, lum_ratio
+):
+    """An unreachable window fraction: ``t = 0``, the flag is 1, and the realized fraction is
+    the one a bare ``agn_torus_frac = 0`` model emits."""
+    kwargs = dict(
+        log_total_mass=-6.0,
+        torus=torus,
+        polar_ebv=polar_ebv,
+        lum_ratio=lum_ratio,
+        log_lbol=Fixed(log_lbol),
+    )
+    model = _build(synthetic_ssp_wide, window=_BAND, **kwargs)
+    floor = _window_fraction(
+        _build(synthetic_ssp_wide, ir_frac=Fixed(0.0), torus_frac=Fixed(0.0), **kwargs), _BAND
+    )
+    assert floor > 0.3
+    assert _derived(model, "agn_torus_frac_effective") == 0.0
+    assert _derived(model, "agn_ir_frac_saturated") == 1.0
+    assert _realized(model) == pytest.approx(floor, rel=_RTOL)
+    assert _window_fraction(model, _BAND) == pytest.approx(floor, rel=_RTOL)
+
+
+# ── saturation ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("log_total_mass", [-7.0, -6.0, -5.5, -5.0])
+def test_saturation_flag_fires_exactly_when_the_bound_binds(synthetic_ssp_wide, log_total_mass):
+    """The flag is ``t_raw >= 1`` with ``t_raw = L_abs f/((1 - f) r L_bol)``; where it is 0 the
+    realized fraction is ``f``, where it is 1 it is ``f_max = r L_bol/(r L_bol + L_abs)``."""
+    model = _build(synthetic_ssp_wide, ir_frac=0.3, log_total_mass=log_total_mass)
+    l_abs = 10.0 ** _derived(model, "log_L_absorbed")
+    l_bol = 10.0**_LOG_LBOL * L_SUN
+    t_raw = l_abs * 0.3 / (0.7 * l_bol)
+    saturated = _derived(model, "agn_ir_frac_saturated")
+    assert saturated == float(t_raw >= 1.0)
+    expected = 0.3 if t_raw < 1.0 else l_bol / (l_bol + l_abs)
+    assert _realized(model) == pytest.approx(expected, rel=_RTOL)
+    assert _derived(model, "agn_torus_frac_effective") == pytest.approx(min(t_raw, 1.0), rel=1e-12)
 
 
 def test_covering_factor_saturates_and_the_ledger_still_closes(synthetic_ssp_wide):
@@ -185,46 +338,129 @@ def test_covering_factor_saturates_and_the_ledger_still_closes(synthetic_ssp_wid
     pieces still add up to ``L_bol``.
     """
     model = _build(synthetic_ssp_wide, ir_frac=0.3, log_total_mass=-5.0)
-    assert _torus_frac(model) == 1.0
+    assert _derived(model, "agn_torus_frac_effective") == 1.0
     assert _dust_fraction(model) < 0.3
     ledger = _ledger(model)
     assert ledger["agn_ledger_closed"] == 1.0
-    total = sum(10.0 ** ledger[k] for k in _LEDGER)
-    assert total / (10.0**_LOG_LBOL * L_SUN) - 1.0 == pytest.approx(0.0, abs=_RTOL)
+    assert _closure(ledger) == pytest.approx(0.0, abs=_RTOL)
 
 
-def test_gradients_are_finite_and_live(synthetic_ssp_wide, synthetic_tophat_obs):
-    """d(photometry)/d(agn_ir_frac, agn_log_lbol): finite and nonzero."""
-    model = _build(
-        synthetic_ssp_wide,
-        ir_frac=FREE,
-        obs=synthetic_tophat_obs,
-        log_lbol=FREE,
-    )
-    params = {"agn_ir_frac": jnp.asarray(0.3), "agn_log_lbol": jnp.asarray(_LOG_LBOL)}
+def test_line_block_bounds_the_covering_factor(synthetic_ssp_wide):
+    """With an NLR the torus and the lines share the disc's power: ``t <= 1 - E_lines/E_disc``.
+
+    At saturation the runner applies that bound, the flag is 1 and the ledger closes (before the
+    bound C2 was +1.3e-2 here while ``agn_ledger_closed`` read 1).
+    """
+    model = _build(synthetic_ssp_wide, ir_frac=0.3, log_total_mass=-5.0, nlr="analytic")
+    ledger = _ledger(model)
+    lines = 10.0 ** ledger["log_L_agn_lines"] / (10.0**_LOG_LBOL * L_SUN)
+    t = _derived(model, "agn_torus_frac_effective")
+    assert t == pytest.approx(1.0 - lines, rel=1e-6)
+    assert t < 1.0
+    assert _derived(model, "agn_ir_frac_saturated") == 1.0
+    assert ledger["agn_ledger_closed"] == 1.0
+    assert _closure(ledger) == pytest.approx(0.0, abs=_RTOL)
+
+
+def test_ledger_closes_on_agn_log_lbol(synthetic_ssp_wide):
+    """``agn_ledger_closed == 1`` and the pieces plus unemitted are ``L_bol`` to 1e-6 (C2)."""
+    ledger = _ledger(_build(synthetic_ssp_wide, ir_frac=0.3))
+    assert ledger["agn_ledger_closed"] == 1.0
+    assert _closure(ledger) == pytest.approx(0.0, abs=_RTOL)
+
+
+def test_fritz_polar_dust_total_mapping_is_bounded(synthetic_ssp_wide):
+    """Fritz + polar dust: the ledger does not close (#3100), and the realized total-dust
+    fraction exceeds ``f`` by at most the measured 3.25%; the property reports it."""
+    model = _build(synthetic_ssp_wide, ir_frac=0.3, torus="fritz", polar_ebv=0.1)
+    assert _ledger(model)["agn_ledger_closed"] == 0.0
+    realized = _realized(model)
+    assert realized == pytest.approx(_dust_fraction(model), rel=1e-9)
+    assert 0.0 < realized / 0.3 - 1.0 <= 0.0325
+
+
+# ── gradients ──────────────────────────────────────────────────────────────
+
+_FD_STEP = 1.0e-5
+
+
+def _fd_check(model, params):
+    """AD against central finite differences of ``sum(log10 photometry)``, per parameter."""
 
     def objective(p):
         return jnp.sum(jnp.log10(model.predict_photometry(p)))
 
     grads = jax.grad(objective)(params)
     for name, g in grads.items():
+        up = {**params, name: params[name] + _FD_STEP}
+        down = {**params, name: params[name] - _FD_STEP}
+        fd = float(objective(up) - objective(down)) / (2.0 * _FD_STEP)
         assert np.isfinite(float(g)), name
-        assert float(g) != 0.0, name
+        assert float(g) == pytest.approx(fd, rel=1e-5, abs=1e-8), name
+    return {k: float(v) for k, v in grads.items()}
 
 
-def test_cigale_joint_is_not_clipped(synthetic_ssp_wide):
-    """'cigale_joint' keeps CIGALE's ``agn_power / L_bol`` unclipped: the covering-factor bound
-    is the conserving policy's alone.
-
-    At ``log_total_mass = -5`` the CIGALE mapping asks for ``t > 1``; 'cigale_joint' passes it
-    through (the torus then carries ``L_absorbed f/(1-f)``) while 'conserving' stops at 1.
-    """
-    joint = _torus_frac(_build(synthetic_ssp_wide, norm="cigale_joint", log_total_mass=-5.0))
-    conserving = _torus_frac(_build(synthetic_ssp_wide, log_total_mass=-5.0))
-    assert joint > 1.0
-    assert conserving == 1.0
-    state = _build(synthetic_ssp_wide, norm="cigale_joint", log_total_mass=-5.0).predict_state({})
-    expected = 10.0 ** (
-        float(state.derived["log_L_absorbed"]) + np.log10(0.3 / 0.7) - _LOG_LBOL - np.log10(L_SUN)
+@pytest.mark.parametrize(
+    ("case", "kwargs"),
+    [
+        ("total", dict()),
+        ("polar_window", dict(log_total_mass=-6.0, window=_BAND, polar_ebv=0.03)),
+    ],
+)
+def test_gradients_match_finite_differences(
+    synthetic_ssp_wide, synthetic_tophat_obs, case, kwargs
+):
+    """d(photometry)/d(agn_ir_frac, agn_log_lbol) equals central finite differences, and is
+    nonzero inside the reachable range."""
+    model = _build(
+        synthetic_ssp_wide, ir_frac=FREE, obs=synthetic_tophat_obs, log_lbol=FREE, **kwargs
     )
-    assert joint == pytest.approx(expected, rel=1e-12)
+    params = {"agn_ir_frac": jnp.asarray(0.3), "agn_log_lbol": jnp.asarray(_LOG_LBOL)}
+    grads = _fd_check(model, params)
+    assert grads["agn_ir_frac"] != 0.0
+    assert grads["agn_log_lbol"] != 0.0
+
+
+def test_gradient_in_the_saturated_region(synthetic_ssp_wide, synthetic_tophat_obs):
+    """At ``t = 1`` the photometry does not depend on ``agn_ir_frac``: AD = FD = 0."""
+    model = _build(
+        synthetic_ssp_wide,
+        ir_frac=FREE,
+        obs=synthetic_tophat_obs,
+        log_lbol=FREE,
+        log_total_mass=-5.0,
+    )
+    params = {"agn_ir_frac": jnp.asarray(0.3), "agn_log_lbol": jnp.asarray(_LOG_LBOL)}
+    grads = _fd_check(model, params)
+    assert grads["agn_ir_frac"] == 0.0
+
+
+# ── 'cigale_joint' unchanged ──────────────────────────────────────────────
+
+#: The reference is frozen on main (``generate.py`` beside it records the SHA). XLA's floating
+#: point moves by ~1e-7 between JAX versions and CPU targets (#1763), so a frozen file is held
+#: to the repository's golden tolerance rather than bitwise.
+_GOLDEN_RTOL = 1.0e-6
+
+
+@pytest.mark.parametrize(
+    ("name", "window", "log_total_mass"), [("total", None, -5.0), ("window", _BAND, -6.0)]
+)
+def test_cigale_joint_matches_the_main_reference(synthetic_ssp_wide, name, window, log_total_mass):
+    """'cigale_joint' + fracAGN reproduces the reference frozen on main: the SED and the
+    unclipped ``t`` (above 1 for the total-dust case, which 'conserving' would clip)."""
+    ref = np.load(_REFERENCE)
+    state = _build(
+        synthetic_ssp_wide, norm="cigale_joint", window=window, log_total_mass=log_total_mass
+    ).predict_state({})
+    t = float(state.derived["agn_torus_frac_effective"])
+    assert t == pytest.approx(float(ref[f"{name}_torus_frac"]), rel=_GOLDEN_RTOL)
+    np.testing.assert_allclose(
+        np.asarray(state.sed_intrinsic), ref[f"{name}_sed"], rtol=_GOLDEN_RTOL, atol=0.0
+    )
+    if name == "total":
+        assert t > 1.0
+        assert (
+            _derived(_build(synthetic_ssp_wide, log_total_mass=-5.0), "agn_torus_frac_effective")
+            == 1.0
+        )

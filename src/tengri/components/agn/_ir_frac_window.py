@@ -227,9 +227,10 @@ def conserving_torus_frac_from_window(
     edges are equal). ``t`` is then clipped to ``[0, 1]``: a covering factor. Outside that range
     the requested fraction is not reachable at this accretion power (the disc alone outshines
     the target in the window, or the whole power re-emitted by the torus falls short of it),
-    and the realized fraction is the one at the bound. Approximation: the affine form is exact
-    for every recipe without the ``polar_dust`` block; with it the polar re-emission's share of
-    the AGN dust moves with ``t`` and the solve is the chord through the two passes. All
+    and the realized fraction is the one at the bound. The affine form is exact for every
+    recipe without the ``polar_dust`` block. With it the polar re-emission's share of the AGN
+    dust moves with ``t``, the window light is rational in ``t``, and this chord is only the
+    start of :func:`refine_conserving_window_root`, which the component always applies. All
     ratios are formed in log space relative to :math:`W_b`, so nothing erg/s-scale forms
     in float32. JIT/grad/vmap compatible; ``lam_min``/``lam_max`` are static floats.
     """
@@ -245,6 +246,83 @@ def conserving_torus_frac_from_window(
     live = jnp.abs(slope) > 0.0
     t = t_a + (t_b - t_a) * (target - s) / jnp.where(live, slope, 1.0)
     return jnp.clip(jnp.where(live, t, 1.0), 0.0, 1.0)
+
+
+def refine_conserving_window_root(
+    agn_lnu_at,
+    wave,
+    host_lnu,
+    frac,
+    lam_min: float,
+    lam_max: float,
+    t_start,
+    *,
+    n_steps: int,
+):
+    r"""The exact covering factor of the conserving window solve, refined from a start.
+
+    Parameters
+    ----------
+    agn_lnu_at : callable
+        ``t -> L_nu`` [erg/s/Hz], shape (n_wave,): the AGN total SED at torus fraction ``t``.
+    wave : array_like, shape (n_wave,)
+        Rest wavelength [Angstrom], ascending.
+    host_lnu : array_like, shape (n_wave,)
+        Host SED without the AGN [erg/s/Hz].
+    frac : float or array_like
+        AGN fraction ``f`` of the light in the window, ``0 < f < 1``.
+    lam_min, lam_max : float
+        Window edges [Angstrom]; equal edges give the monochromatic case.
+    t_start : array_like
+        Starting covering factor in ``[0, 1]`` (the chord of
+        :func:`conserving_torus_frac_from_window`).
+    n_steps : int
+        Newton steps (static), each one forward-mode evaluation of ``agn_lnu_at``.
+
+    Returns
+    -------
+    ndarray, scalar
+        ``agn_torus_frac`` in ``[0, 1]``, dimensionless.
+
+    Notes
+    -----
+    Solves :math:`g(t) = \log_{10} W_{\rm agn}(t) - \log_{10}[H f/(1-f)] = 0` on
+    :math:`[0, 1]`. Beside ``polar_dust`` the window light is rational in :math:`t` (the polar
+    share of the dust budget moves with the disc it absorbs), so the chord through two passes
+    is only a start. Each Newton step takes :math:`t \leftarrow t - g/g'` with :math:`g'` from a
+    forward-mode derivative of one pass, and is clipped to :math:`[0, 1]`, so an unreachable
+    fraction ends at the bound. Measured on the 5-20 um window at ``f = 0.3`` (synthetic SSP,
+    skirtor and Fritz, ``agn_polar_ebv = 0.03``): the chord's -1.1% and -0.4% become -7.8e-5 and
+    -1.0e-5 after one step, -3.9e-9 and -6.8e-11 after two, 6e-15 and 7e-16 after three. A
+    secant rule reaches 2e-11 at the same cost (53.92 against 53.94 MFLOP for a value-and-gradient
+    pass), but its last slope is a chord, so its gradient is not the root's.
+
+    The iterates carry no gradient. The last step is
+    :math:`t^\ast = \bar t - g(\bar t)/\mathrm{sg}(g'(\bar t))` with :math:`\bar t` the
+    stopped iterate, whose derivative in any parameter :math:`\theta` is
+    :math:`-\partial_\theta g/g'`: the implicit-function derivative of the root.
+    JIT/grad/vmap compatible.
+    """
+    import jax
+
+    frac = jnp.asarray(frac)
+    log_target = _log10_window(wave, host_lnu, lam_min, lam_max) + (
+        _log10_safe(frac) - _log10_safe(1.0 - frac)
+    )
+
+    def g(t):
+        return _log10_window(wave, agn_lnu_at(t), lam_min, lam_max) - log_target
+
+    def _step(t, value, slope):
+        live = jnp.abs(slope) > 0.0
+        return jnp.clip(t - value / jnp.where(live, slope, 1.0) * live, 0.0, 1.0)
+
+    t = jax.lax.stop_gradient(jnp.asarray(t_start))
+    for _ in range(n_steps - 1):
+        value, slope = jax.jvp(g, (t,), (jnp.ones_like(t),))
+        t = jax.lax.stop_gradient(_step(t, value, slope))
+    value, slope = jax.jvp(g, (t,), (jnp.ones_like(t),))
+    return _step(t, value, jax.lax.stop_gradient(slope))
 
 
 def agn_power_from_window(wave, host_lnu, agn_lnu, dust_lnu, frac, lam_min, lam_max):
@@ -268,3 +346,8 @@ def agn_power_from_window(wave, host_lnu, agn_lnu, dust_lnu, frac, lam_min, lam_
         wave, host_lnu, agn_lnu, dust_lnu, frac, lam_min, lam_max
     )
     return jnp.power(10.0, log_power)
+
+
+#: Newton steps of the conserving window solve beside ``polar_dust``
+#: (:func:`refine_conserving_window_root`): three reach 1e-14 from the chord.
+CONSERVING_WINDOW_REFINE_STEPS: int = 3

@@ -1770,16 +1770,9 @@ def _validate_fracagn_norm_policy(spec) -> None:
         # A screened AGN runs before the dust (the screen attenuates sed_agn inside the dust
         # step), so the absorbed power fracAGN reads is not yet published when the AGN runs
         # and the coupling would silently fall back to the user agn_torus_frac.
-        raise ConfigError(
-            f"agn_norm='conserving' with an active fracAGN (agn_ir_frac) and "
-            f"dust_agn_screen={screen!r}: fracAGN sets agn_torus_frac from the power the "
-            "dust absorbs from the host, but a screened AGN is evaluated before the dust "
-            "(the screen attenuates the AGN inside the dust step), so that power does not "
-            "exist yet when the AGN runs. Choose one of: drop the screen "
-            "(dust_attenuation={'agn_screen': 'none'}), or drop the coupling "
-            "(agn={'agn_ir_frac': Fixed(0.0)}) and state the covering factor with "
-            "agn_torus_frac."
-        )
+        from tengri.parameters.parameters import screened_fracagn_message
+
+        raise ConfigError(screened_fracagn_message(policy, screen))
 
     raise ConfigError(
         "agn_norm='independent' was selected with an active fracAGN "
