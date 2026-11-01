@@ -457,7 +457,7 @@ def test_dust_ir_emitter_lut_matches_exact(real_ssp, emitter):
 # model grid, and the filter integral then sees the SED at its own nodes. A reference
 # on the native grid alone integrates linearly between the coarse template
 # wavelengths, the same quadrature the tables used to be built with, so it could not
-# see those tables sit 5-33% off the runtime at their own nodes (#3160).
+# see those tables sit up to 50% off the runtime at their own nodes (#3160).
 #
 # Tolerance, measured (not guessed): at an exact grid node neither path
 # interpolates, so agreement is rounding (measured worst case over every node of all
@@ -655,7 +655,7 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
 
     def test_node_matches_exact(self, spec, grid_torus_filters):
         """At an exact grid node, precompute and exact photometry agree to
-        machine precision (measured worst case 8.6e-15; rtol=1e-10 here)."""
+        rounding (measured worst case 2.1e-14 over every node; rtol=1e-10 here)."""
         self._skip_if_missing(spec)
         runtime_mod, precompute_mod = self._modules(spec)
         loader = getattr(runtime_mod, spec["loader"])
@@ -674,8 +674,8 @@ class TestGridTorusPrecomputeRuntimeEquivalence:
 
     def test_offnode_matches_exact(self, spec, grid_torus_filters):
         """Off a grid node, the two paths do not commute (interpolate-then-
-        integrate vs integrate-then-interpolate); measured worst case 3.45e-2
-        (cat3d_wind_lowfwd) -- rtol=5e-2 here."""
+        integrate vs integrate-then-interpolate); the largest sweep gap below is 3.9e-2
+        (cat3d_wind) -- rtol=5e-2 here."""
         self._skip_if_missing(spec)
         runtime_mod, precompute_mod = self._modules(spec)
         loader = getattr(runtime_mod, spec["loader"])
@@ -910,6 +910,14 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
 # and over 1500 uniform random points of the hull (seed 0), power-weighted, at most
 # 3.78e-2 (cat3d_wind); with five more mid-infrared bands the same library reaches 4.4e-2
 # at cos i = 0.009, the largest gap measured anywhere.
+#
+# Those figures were taken against a reference on the native template grid. With the
+# tables and the reference both on the runtime's quadrature (#3160), the structured and
+# random sweeps with the ten irregular filters of ``_irregular_filters`` below, at z = 0
+# and 1.2, measure at most: cat3d_wind 3.91e-2, cat3d_wind_lowfwd 3.92e-2,
+# skirtor_agnfitter_2p 2.32e-2, nenkova_agnfitter_3p 1.72e-2, skirtor_agnfitter_1p
+# 1.04e-2, skirtor_agnfitter 6.9e-3, nenkova_agnfitter_2p 4.2e-3, nenkova_agnfitter
+# 8.3e-4, silva04 7.3e-4.
 #
 # skirtor_agnfitter_1p (27 points, 1.67e-3) and nenkova_agnfitter (24 points, 6.4e-4) are
 # power-weighted already, by an identity: with one library axis a is proportional to the
@@ -1257,11 +1265,11 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
 # ---------------------------------------------------------------------------
 #
 # A table integrated linearly between the template's own wavelengths matched a reference
-# integrated the same way, and sat 5-50% off the runtime at its own nodes: the runtime
+# integrated the same way, and sat up to 50% off the runtime at its own nodes: the runtime
 # resamples the template log-log onto the model grid before the filter integral. Each
 # table is now built on the runtime's quadrature, so at every node it is the runtime on
 # the ``_runtime_wave`` model grid to rounding: measured worst case over all nodes of
-# the nine libraries, both redshifts, 2.4e-14 -- rtol=1e-10. Measured before the
+# the nine libraries, both redshifts, 2.1e-14 -- rtol=1e-10. Measured before the
 # rebuild, against this same reference: skirtor_agnfitter_1p 5.0e-1, cat3d_wind_lowfwd
 # 3.3e-1 (both at z = 1.2).
 #
