@@ -40,7 +40,6 @@ import numpy as np
 import pytest
 
 from tengri.components.agn.blocks._ledger import (
-    LEDGER_CLOSURE_RTOL,
     NON_CONSERVING_DISCS,
     NON_CONSERVING_TORI,
     ledger_policy_closes,
@@ -234,7 +233,7 @@ def _check_c2(sel, params, comps):
     assert total / budget - 1.0 == pytest.approx(excess, abs=_RTOL)
     # The flag measures the closure: a block that misses its own nominal power by more than the
     # tolerance (the pinned normalizations) publishes 0.
-    assert float(comps["agn_ledger_closed"]) == float(abs(excess) <= LEDGER_CLOSURE_RTOL)
+    assert float(comps["agn_ledger_closed"]) == float(abs(excess) <= _RTOL)
 
 
 def _check_c4_siblings(comps):
@@ -387,6 +386,45 @@ def test_line_bound_closes_the_ledger_near_full_cover(torus_frac):
     assert float(comps["agn_torus_frac_applied"]) == pytest.approx(
         min(torus_frac, 1.0 - lines), rel=_RTOL
     )
+
+
+#: Strong lines below the disc's power: (nlr, blr, cf = efficiency). The NLR alone takes
+#: cf x efficiency of the accretion power; with the BLR the lines pass the disc's power near
+#: 0.61, so the BLR cases stop below it. The debit's disc power was a grid integral 3.2e-6 low
+#: for the CIGALE discs, and C2 grew with the line fraction: -1.6e-6 at 0.7, -2.6e-6 at 0.9,
+#: -3.1e-6 at 0.99 (NLR alone), -2.1e-6 at 0.5 and -3.0e-6 at 0.6 (NLR + BLR).
+_STRONG_LINES = [
+    ("analytic", "none", 0.7),
+    ("analytic", "none", 0.9),
+    ("analytic", "none", 0.99),
+    ("analytic", "analytic", 0.3),
+    ("analytic", "analytic", 0.5),
+    ("analytic", "analytic", 0.6),
+]
+
+
+@pytest.mark.parametrize("disc", ["schartmann2005", "skirtor", "adaf_lopez2024"])
+@pytest.mark.parametrize(
+    ("nlr", "blr", "x"), _STRONG_LINES, ids=[f"{n}-{b}-{x}" for n, b, x in _STRONG_LINES]
+)
+def test_strong_lines_close_the_ledger(disc, nlr, blr, x):
+    """C2 to 1e-6 and the flag at 1 with lines up to 0.99 of the disc's power."""
+    sel = _selectors(disc, "skirtor", nlr=nlr, blr=blr)
+    _skip_without_library(sel)
+    params = {
+        **_BASE,
+        "agn_torus_frac": 0.0,
+        "agn_nlr_cf": x,
+        "agn_nlr_line_efficiency": x,
+        "agn_blr_cf": x,
+        "agn_blr_line_efficiency": x,
+    }
+    _, comps = _evaluate(_WAVE, sel, params, ledger=True, strict=False)
+    budget = 10.0 ** (_LOG_LBOL + _LOG_LSUN)
+    total = sum(_lin(comps, f"log_L_agn_{p}") for p in _PIECES)
+    total += sum(_lin(comps, f"log_L_agn_{p}_unemitted") for p in _UNEMITTED)
+    assert total / budget - 1.0 == pytest.approx(0.0, abs=_RTOL)
+    assert float(comps["agn_ledger_closed"]) == 1.0
 
 
 #: An analytic NLR and BLR near their prior maxima (covering fraction and line efficiency 0.9,
