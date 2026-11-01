@@ -174,17 +174,19 @@ def measure_cell(
     redshift = jnp.zeros((width,))
     lf = jnp.zeros((width, 0))
     le = jnp.zeros((width, 0))
-    args = (init, keys, data, noise, presence, redshift, lf, le)
+    args = (init, keys, data, noise, presence, redshift, lf, le, fitter._data_args)
 
     if n_gal is not None:
         # The fitter's own shape: scan N/chunk steps of a chunk-wide vmap. This
         # is the arrangement the O(1)-in-N contract is a claim about.
-        fn = jax.jit(lambda *a: jax.lax.map(lambda row: run_one(*row), a, batch_size=chunk))
+        fn = jax.jit(
+            lambda *a: jax.lax.map(lambda row: run_one(*row[:8], a[8]), a[:8], batch_size=chunk)
+        )
     elif chunk == 1:
         fn = jax.jit(run_one)
-        args = tuple(a[0] for a in args)
+        args = (*(a[0] for a in args[:8]), fitter._data_args)
     else:
-        fn = jax.jit(jax.vmap(run_one))
+        fn = jax.jit(jax.vmap(run_one, in_axes=(0,) * 8 + (None,)))
 
     t0 = time.perf_counter()
     lowered = fn.lower(*args)
@@ -276,13 +278,15 @@ def adaptation_spread(
 
     init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
     ld, _unravel, init_flat, template = _get_flat_logdensity(fitter, init_params)
-    substitute = _make_substitute(template, False, False)
+    substitute = _make_substitute(False, False)
     n_dim = int(init_flat.shape[0])
     strength = _resolve_whitening_strength(precondition, n_dim)
     sample_ld = ld if strength is None else _preconditioned_logdensity(ld, strength)
 
     def warmup_one(gal_key, data, noise, presence):
-        data_args = substitute(data, noise, presence, jnp.zeros(()), jnp.zeros((0,)), jnp.zeros((0,)))
+        data_args = substitute(
+            data, noise, presence, jnp.zeros(()), jnp.zeros((0,)), jnp.zeros((0,)), template
+        )
         if strength is None:
             sample_args, sample_init = data_args, init_flat
         else:

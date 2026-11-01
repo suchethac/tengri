@@ -92,6 +92,7 @@ from tengri.inference.backends.mcmc.catalog import (
     GHMC_DEFAULT_SUPERCHAINS,
     _catalog_live_chains,
     build_catalog_mcmc_engine,
+    map_with_shared,
 )
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import (
@@ -993,7 +994,7 @@ def _bucket_catalog_inputs(
         log-posterior of the standardized latents ``x`` for the galaxy in
         ``data_args["obs"]``.
     substitute : callable
-        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err) ->
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared) ->
         {"obs": data}``, the per-galaxy ``data_args`` the engine substitutes.
 
     Notes
@@ -1015,7 +1016,7 @@ def _bucket_catalog_inputs(
     def log_post_2arg(position, data_args):
         return -nlp(unravel_fn(position), data_args["obs"])
 
-    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
+    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
         return {"obs": data}
 
     return (log_post_2arg, unravel_fn, init_flat, {"obs": batch.galaxy(0)}), substitute
@@ -1269,13 +1270,13 @@ def fit_spectra_catalog_mcmc(
             **options,
         )
 
-        def one_galaxy(xs, run_one=run_one):
-            x0, gal_key, obs = xs
-            return run_one(x0, gal_key, obs, None, None, None, None, None)
+        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
+            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
 
-        positions, divergent = jax.lax.map(
+        positions, divergent = map_with_shared(
             one_galaxy,
             (starts, jax.random.split(sample_key, n_gal), batch),
+            flat[3],
             batch_size=bucket_batch,
         )
         n_draws = positions.shape[1]
