@@ -371,9 +371,10 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
 def _resolution_for(model, spec: SpectroBatchSpec, obs: SpectroBatch):
     """Return the ``resolution`` argument for the spectral projection.
 
-    A per-pixel array selects the variable-R path on a nonuniform grid, and a
-    scalar is used only on a log-uniform grid, where the single-FFT path is exact.
-    Banded resolution ignores this argument.
+    A ``"log_uniform"`` bucket has a constant resolution (the builder sends a varying
+    per-pixel R to ``"nonuniform"``), so its first pixel is the value of every pixel,
+    and the scalar feeds the single-FFT path. Every other Gaussian bucket passes the
+    per-pixel row to the variable-R path. Banded resolution ignores this argument.
     """
     if spec.grid_kind == "banded":
         return model._lsf_resolution
