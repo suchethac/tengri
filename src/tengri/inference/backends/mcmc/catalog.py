@@ -10,10 +10,11 @@ window adaptation **plus** sampling for one galaxy entirely inside JIT, so
 chains in parallel on the accelerator while the compiled program stays O(1) in
 the catalog size N.
 
-The forward model (log-posterior) and its large shared inputs (SSP grid,
-template data, fixed values, threaded through ``data_args["_jit_inputs"]``)
-are identical across galaxies and are captured once; only each galaxy's
-observed ``data`` / ``noise`` vary per ``lax.map`` step. This mirrors the
+The forward model (log-posterior) is identical across galaxies. Its large shared
+inputs (SSP grid, template data, fixed values, threaded through
+``data_args["_jit_inputs"]``) are passed to every call as the ``shared`` argument,
+so the compiled program takes them as inputs and embeds no copy of them; only each
+galaxy's observed ``data`` / ``noise`` vary per ``lax.map`` step. This mirrors the
 native-VI catalog engine in :mod:`tengri.inference.backends.vi.native`.
 
 Unlike :func:`tengri.inference.backends.mcmc.nuts.run_nuts`, warmup is run
@@ -180,19 +181,17 @@ def _check_ghmc_counts(n_chains, n_superchains, n_folds):
         )
 
 
-def _make_substitute(template_data_args, thread_redshift: bool, thread_line_fluxes: bool):
+def _make_substitute(thread_redshift: bool, thread_line_fluxes: bool):
     """Build the per-galaxy ``data_args`` substitution used by every catalog kernel.
 
     Substituting this galaxy's data into the shared template is what keeps the
     log-posterior receiving exactly the pytree it was built for: the shared
-    ``_jit_inputs`` (SSP grid, templates) stay captured and only the observation
-    varies per ``lax.map`` step. It lives in one place so the MAP warm start and
-    the sampler cannot disagree about what a galaxy's data is.
+    ``_jit_inputs`` (SSP grid, templates) arrive as the ``shared`` argument and
+    only the observation varies per ``lax.map`` step. It lives in one place so the
+    MAP warm start and the sampler cannot disagree about what a galaxy's data is.
 
     Parameters
     ----------
-    template_data_args : dict
-        The shared ``data_args`` pytree the flat log-posterior was built for.
     thread_redshift, thread_line_fluxes : bool
         Build-time Python bools, so the branches resolve during tracing: the
         per-galaxy ``redshift`` (#1337) and line-flux arrays (#1480) only reach
@@ -201,15 +200,15 @@ def _make_substitute(template_data_args, thread_redshift: bool, thread_line_flux
     Returns
     -------
     callable
-        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err) -> dict``.
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared) -> dict``.
 
     Notes
     -----
     **JIT/vmap-compatible.**
     """
 
-    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
-        data_args = dict(template_data_args)
+    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
+        data_args = dict(shared)
         data_args["data"] = data
         data_args["noise"] = noise
         data_args["sqrt_noise_inv"] = inv_noise_std(noise)
@@ -307,17 +306,17 @@ def build_catalog_metric_diagnostics(
     -------
     callable
         ``diag_one(init_flat, data, noise, presence, redshift, line_flux_obs,
-        line_flux_err) -> (metric_condition, whitened_condition, ok)``, all
+        line_flux_err, shared) -> (metric_condition, whitened_condition, ok)``, all
         scalars. ``ok`` is False for a galaxy that fell back to the identity.
     """
     init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-    log_posterior_flat_2arg, _unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
-        fitter, init_params
-    )
-    substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
+    log_posterior_flat_2arg = _get_flat_logdensity(fitter, init_params)[0]
+    substitute = _make_substitute(thread_redshift, thread_line_fluxes)
 
-    def diag_one(init_flat, data, noise, presence, redshift, line_flux_obs, line_flux_err):
-        data_args = substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err)
+    def diag_one(init_flat, data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
+        data_args = substitute(
+            data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
+        )
         return traced_metric_conditioning(
             log_posterior_flat_2arg,
             init_flat,
@@ -367,7 +366,7 @@ def build_catalog_map_init(
     -------
     callable
         ``map_init_one(init_flat, data, noise, presence, redshift,
-        line_flux_obs, line_flux_err) -> ndarray, shape (n_dim,)``, the warm
+        line_flux_obs, line_flux_err, shared) -> ndarray, shape (n_dim,)``, the warm
         start for that galaxy.
 
     Notes
@@ -379,14 +378,16 @@ def build_catalog_map_init(
     import optax
 
     init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-    log_posterior_flat_2arg, _unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
-        fitter, init_params
-    )
-    substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
+    log_posterior_flat_2arg = _get_flat_logdensity(fitter, init_params)[0]
+    substitute = _make_substitute(thread_redshift, thread_line_fluxes)
     optimizer = optax.adam(learning_rate)
 
-    def map_init_one(init_flat, data, noise, presence, redshift, line_flux_obs, line_flux_err):
-        data_args = substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err)
+    def map_init_one(
+        init_flat, data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
+    ):
+        data_args = substitute(
+            data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
+        )
 
         def objective(x):
             return -log_posterior_flat_2arg(x, data_args)
@@ -407,6 +408,41 @@ def build_catalog_map_init(
         return jnp.where(keep, x_final, init_flat)
 
     return map_init_one
+
+
+def map_with_shared(fn, xs, shared, *, batch_size):
+    """Apply ``fn`` to every galaxy of ``xs`` in ``lax.map`` chunks, with ``shared`` as an input.
+
+    ``fn`` is called as ``fn(*x, shared)`` for each galaxy's tuple ``x``. The
+    shared pytree is an argument of the jitted map, so its arrays (the SSP grid
+    and templates) are compiled as inputs and not embedded as constants.
+
+    Parameters
+    ----------
+    fn : callable
+        ``fn(*x, shared) -> pytree``, evaluated for one galaxy.
+    xs : tuple of array_like
+        Per-galaxy arrays, each with the galaxy axis leading.
+    shared : pytree
+        The shared ``data_args`` template, identical for every galaxy.
+    batch_size : int
+        Galaxies per ``lax.map`` step.
+
+    Returns
+    -------
+    pytree
+        ``fn`` evaluated for every galaxy, stacked on the leading axis.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the map is compiled once per call.
+    """
+
+    @jax.jit
+    def mapped(shared_arg, xs_arg):
+        return jax.lax.map(lambda x: fn(*x, shared_arg), xs_arg, batch_size=batch_size)
+
+    return mapped(shared, xs)
 
 
 def build_catalog_mcmc_engine(
@@ -443,9 +479,10 @@ def build_catalog_mcmc_engine(
     ----------
     fitter : Fitter or None
         A template :class:`~tengri.inference.fitter.Fitter` for the shared
-        model. Only its structure is used, its log-posterior and the shared
-        ``_jit_inputs`` are captured; per-galaxy ``data``/``noise`` are supplied
-        at call time so the compiled program is reused across galaxies. May be
+        model. Only its structure is used, and its log-posterior is captured.
+        The shared ``_jit_inputs`` travel as the ``shared`` argument of ``run_one``,
+        and per-galaxy ``data``/``noise`` are supplied at call time, so the compiled
+        program is reused across galaxies. May be
         None when ``flat_logdensity`` is given; it is then never read.
     sampler : {"nuts", "hmc", "chees", "ghmc"}
         Which BlackJAX sampler to vectorize. ``"ghmc"`` runs the MEADS adaptation for a fixed
@@ -538,19 +575,22 @@ def build_catalog_mcmc_engine(
         whose per-galaxy observation is not a Fitter's ``data``.
     substitute : callable or None, optional
         Replaces the default per-galaxy ``data_args`` builder. It takes
-        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err)`` and
-        returns the ``data_args`` pytree that ``log_posterior_flat_2arg`` receives.
-        When None, the builder from the fitter's template is used.
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared)``
+        and returns the ``data_args`` pytree that ``log_posterior_flat_2arg`` receives.
+        When None, the builder for the template ``shared`` is used.
 
     Returns
     -------
     run_one : callable
         ``(init_flat, key, data, noise, presence, redshift, line_flux_obs,
-        line_flux_err) -> (positions, divergent)`` with ``positions`` shape
+        line_flux_err, shared) -> (positions, divergent)`` with ``positions`` shape
         ``(n_chains * n_samples, D)`` and ``divergent`` shape
-        ``(n_chains * n_samples,)``. When
+        ``(n_chains * n_samples,)``. ``shared`` is the template ``data_args``
+        pytree, ``_jit_inputs`` included; it is the same for every galaxy and must be
+        passed on every call. When
         ``thread_line_fluxes=False``, line_flux_obs and line_flux_err are ignored.
-        Safe to wrap with ``jax.vmap`` / ``jax.lax.map``.
+        Safe to wrap with ``jax.vmap`` (with ``shared`` mapped over ``None``) or
+        :func:`map_with_shared`.
     unravel_fn : callable
         ``1D ndarray -> pytree`` for turning flat positions back into parameter
         dicts.
@@ -558,9 +598,10 @@ def build_catalog_mcmc_engine(
     Notes
     -----
     **JIT/vmap-compatible.** The returned ``run_one`` closes over the static
-    log-posterior and the shared ``data_args`` template (including the big
-    ``_jit_inputs`` arrays); each call substitutes the galaxy's ``data``/``noise``
-    and its derived ``sqrt_noise_inv``. The underlying scan cores
+    log-posterior only. The shared ``data_args`` template (including the big
+    ``_jit_inputs`` arrays) enters as the ``shared`` argument, so a jitted caller
+    compiles it as an input rather than a constant. Each call substitutes the
+    galaxy's ``data``/``noise`` and its derived ``sqrt_noise_inv``. The underlying scan cores
     (``_nuts_full_scan`` / ``_hmc_full_scan``) are pre-JIT'd with ``data_args``
     traced, so different galaxies never trigger recompilation.
     """
@@ -585,20 +626,20 @@ def build_catalog_mcmc_engine(
         ensemble_scale = ensemble_jitter
 
     if flat_logdensity is not None:
-        log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = flat_logdensity
+        log_posterior_flat_2arg, unravel_fn, _init_flat, _template_data_args = flat_logdensity
     elif fitter is None:
         raise ValueError(
             "build_catalog_mcmc_engine needs a fitter or a flat_logdensity; both are None"
         )
     else:
         init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-        log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
-            fitter, init_params
+        log_posterior_flat_2arg, unravel_fn, _init_flat, _template_data_args = (
+            _get_flat_logdensity(fitter, init_params)
         )
     n_chain = n_burnin + n_samples
 
     if substitute is None:
-        substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
+        substitute = _make_substitute(thread_redshift, thread_line_fluxes)
 
     # Resolved ONCE, at build time, from a concrete Python value: the whitening
     # strength is static, so ``strength is None`` below is a trace-time branch and
@@ -624,8 +665,12 @@ def build_catalog_mcmc_engine(
         else _preconditioned_logdensity(log_posterior_flat_2arg, strength)
     )
 
-    def run_one(init_flat, gal_key, data, noise, presence, redshift, line_flux_obs, line_flux_err):
-        data_args = substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err)
+    def run_one(
+        init_flat, gal_key, data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
+    ):
+        data_args = substitute(
+            data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
+        )
 
         if strength is None:
             sample_args, sample_init, precond = data_args, init_flat, None

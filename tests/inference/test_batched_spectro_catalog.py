@@ -68,7 +68,7 @@ def test_flat_logdensity_equals_negative_batched_neg_log_posterior(template, two
         nlp = batched_neg_log_posterior(template, spec)
         for row in range(batch.z.shape[0]):
             obs = batch.galaxy(row)
-            data_args = substitute(obs, None, None, None, None, None)
+            data_args = substitute(obs, None, None, None, None, None, _template_args)
             for _ in range(3):
                 x = init_flat + jnp.asarray(rng.normal(scale=0.3, size=init_flat.shape))
                 np.testing.assert_allclose(
