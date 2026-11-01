@@ -74,6 +74,9 @@ data/*.h5
 # Gutkin+2016 NEOGAL star-forming nebular grid (~1.4 MB), repackaged by
 # scripts/build_gutkin16_grid.py (#983).
 !data/gutkin16_grid.h5
+# CANDELS GOODS-S workshop photometry (~0.6 MB), repackaged from Pacifici+2023 by
+# scripts/build_beagle_workshop_catalog.py. No BEAGLE output is in it.
+!data/beagle_workshop_catalog.h5
 # ── The two SSP grids the gallery needs, committed on purpose (#1146) ──
 # CI could not execute a single example without these, so a broken example
 # shipped next to a stale figure (see tools/run_gallery_examples.py). The wNE

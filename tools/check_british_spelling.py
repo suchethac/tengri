@@ -203,6 +203,10 @@ ALLOWED_PHRASES = (
     # to ordinary prose uses of the word elsewhere -- scoped to the full
     # compound identifier instead, per the ALLOWED_TOKENS note above.
     "edd_labelling",
+    # Upstream file name of the BEAGLE summary catalogues in the art_sedfitting checkout
+    # (code_outputs/BEAGLE_summary_catalogue_z{1,3}.fits). The literal must match the bytes on
+    # disk, so the upstream spelling is kept; the scope is the compound file name only.
+    "BEAGLE_summary_catalogue_z",
 )
 
 
