@@ -21,6 +21,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.physics_constants import L_SUN
+
 from tengri.components.agn import (
     _nt_emissivity as N,
     disc as D,
@@ -29,7 +31,7 @@ from tengri.components.agn import (
 pytestmark = pytest.mark.regression_bug
 
 LOG_MBH = 7.0
-LOG_LSUN_ERG = 33.58265  # log10(L_sun [erg/s])
+LOG_LSUN_ERG = float(np.log10(L_SUN))  # log10(L_sun [erg/s]), exact to the code's constant
 LOG_LEDD_1E7_LSUN = 11.5174  # log10(L_Edd / L_sun) for 1e7 Msun, to within 1e-4 dex
 
 
@@ -204,7 +206,7 @@ def _ledger(log_lbol):
         agn_log_mbh=LOG_MBH,
         **_SELECTORS,
     )
-    return {k: float(np.asarray(v)) for k, v in comps.items()}
+    return {k: float(np.asarray(v)) for k, v in comps.items() if np.ndim(v) == 0}
 
 
 @pytest.mark.parametrize(

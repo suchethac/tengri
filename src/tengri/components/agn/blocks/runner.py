@@ -1207,6 +1207,8 @@ agn_torus_block, agn_attenuation_block : str
     if _conserve_via_debit:
         L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
         _disc_scalar = 1.0 - _torus_frac
+    # The torus debit alone: the unemitted K&D remainder takes no line-energy debit (#3015).
+    _disc_torus_share = _disc_scalar
 
     _budget_cache: dict = {}
 
@@ -2069,7 +2071,7 @@ agn_torus_block, agn_attenuation_block : str
                     jnp.log10(jnp.maximum(_r_unem, representable_floor(1e-100)))
                     + jnp.asarray(agn_log_lbol)
                     + np.log10(L_SUN_ERG)
-                    + log10_magnitude(_disc_scalar),
+                    + log10_magnitude(_disc_torus_share),
                 )
         if _tie_intrinsic is not None:
             # Under the active tie the disc is rebuilt from the library: its unemitted share is
@@ -2077,7 +2079,16 @@ agn_torus_block, agn_attenuation_block : str
             _offset = _log_scale_offset if _use_ref else 0.0
             _log_tie_intr = log10_magnitude(_tie_intrinsic * _ledger_polar_norm) + _offset
             _log_disc_intr = jnp.where(_agn_fracAGN > 0.0, _log_tie_intr, _log_disc_intr)
-            _log_disc_unem = None
+            # Active tie: the unemitted share is the tie's intrinsic disc less its emitted disc,
+            # the ledger's own difference (the K&D remainder is left out, as ruled). Inactive tie
+            # (fracAGN = 0): the disc is the plain one, with its screened and remainder share.
+            _tie_emitted = _row_mean("disc")
+            _tie_gap = log10_add(_log_tie_intr, _tie_emitted, sign_b=-1.0)
+            _log_tie_unem = jnp.where(
+                _log_tie_intr > _tie_emitted, _tie_gap, jnp.asarray(-jnp.inf)
+            )
+            if _log_disc_unem is not None:
+                _log_disc_unem = jnp.where(_agn_fracAGN > 0.0, _log_tie_unem, _log_disc_unem)
         _log_lines_intr = _row_mean("_lines_raw") if _has_lines else jnp.asarray(-jnp.inf)
         _log_lines_unem = (
             log10_signed_sphere_mean(_evals["_lines_hidden"][1:], _w_l, _w_q)
