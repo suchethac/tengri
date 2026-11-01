@@ -323,8 +323,9 @@ PHOTOMETRY_CONVENTION_CITATIONS: dict[str, list[str]] = {
 # Inference backends (values passed to ``Fitter.run(backend=...)``).
 BACKEND_CITATIONS: dict[str, list[str]] = {
     "map": [],
-    "laplace": [],
+    "laplace": ["psis", "dauphin2014"],
     "pathfinder": ["pathfinder"],
+    "hmc_is": ["psis"],
     "mcmc_nuts": ["blackjax"],
     "nuts": ["blackjax"],
     "mcmc_raytrace": ["raytrace_behroozi"],

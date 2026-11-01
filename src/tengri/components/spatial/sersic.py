@@ -109,5 +109,11 @@ class Sersic(SpatialModelComponent):
         r_ell = jnp.sqrt(x_rot**2 + (y_rot / p["axis_ratio"]) ** 2)
 
         b_n = _b_n(p["n"])
-        intensity = jnp.exp(-b_n * ((r_ell / p["re_kpc"]) ** (1.0 / p["n"]) - 1.0))
+        # The center pixel (r_ell = 0) is selected as its exact value 0, so no
+        # derivative order differentiates the fractional power at a zero base
+        # (grad/hessian of (0)**(1/n) are inf/NaN and would propagate to n, re).
+        on_axis = r_ell > 0.0
+        r_safe = jnp.where(on_axis, r_ell, 1.0)
+        ratio = jnp.where(on_axis, (r_safe / p["re_kpc"]) ** (1.0 / p["n"]), 0.0)
+        intensity = jnp.exp(-b_n * (ratio - 1.0))
         return intensity, {}

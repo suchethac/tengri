@@ -1218,6 +1218,10 @@ comparison toward higher-dimensional models.
 error, since SED posteriors are mildly curved in ξ-space). Laplace breaks on
 prior-boundary pileup (posterior mass clustering at uniform-prior edges).
 
+**Newton polish:** Before the Gaussian is built, the optimizer's endpoint is polished with up to `newton_steps` (default 2) damped saddle-free Newton steps on the exact Hessian of the shared log-density, the same flat log-density the samplers use. A step is kept only if it raises the log-density. The covariance comes from that exact Hessian; the inverse-Hessian estimate that L-BFGS builds along the way is never used for the covariance.
+
+**Importance check:** `fitter.run("laplace", importance_draws=4000)` draws from a Student-t proposal centered on the mode with the Laplace covariance and reweights the draws with Pareto-smoothed importance weights (Vehtari et al. 2024). `pareto_k` is the shape estimate of the weight tail. Below the threshold min(1 - 1/log10 n, 0.7), the Gaussian is adequate and the reweighted draws and importance-sampling evidence are usable. Above it, the Gaussian is not reliable and `ImportanceSamplingUnreliableWarning` is emitted; use `mcmc_nuts` or `nss` instead.
+
 #### 10.2.3 Importance Sampling (`method="hmc_is"`)
 
 **Principle:** Sample posterior with HMC, then reweight by likelihood/prior ratio under a
