@@ -420,6 +420,8 @@ def build_components(
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,
     dust_transition_width_dex: float = 0.0,
+    # Screen-depth parameterization of the two-component screens (#3176).
+    dust_parameterization: str = "tau_bc_diff",
     dust_ir_diffuse_screen: bool = False,
     dust_ir_cmb: bool = False,
     dust_emission_model: str = "modified_blackbody",
@@ -676,6 +678,7 @@ def build_components(
                 lyc_in_energy_balance=dust_lyc_in_energy_balance,
                 lyc_escape_geometry=dust_lyc_escape_geometry,
                 t_birth_yr=dust_t_birth_yr,
+                parameterization=dust_parameterization,
                 transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,

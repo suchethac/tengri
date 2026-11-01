@@ -186,14 +186,6 @@ def test_native_rest_sed_bit_identical_to_base(native_outputs):
     assert np.array_equal(rest, _BASE_REST)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "forward wiring not in this lane: forward/component_factory.py does not pass "
-        "dust_parameterization into DustSEDComponentConfig, so the tauv_mu build still "
-        "declares dust_tau_bc at predict time. Remove this marker when that lands."
-    ),
-)
 def test_tauv_mu_matches_native_photometry_and_rest_sed(ssp):
     """tauv_mu at (tau_V, mu) equals native at the pair it derives, bit for bit.
 

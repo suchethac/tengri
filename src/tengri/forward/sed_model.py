@@ -4925,6 +4925,8 @@ class SEDModel:
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
         self._dust_transition_width_dex = float(getattr(spec, "dust_transition_width_dex", 0.0))
+        # Screen-depth parameterization of the two-component screens (#3176).
+        self._dust_parameterization = str(getattr(spec, "dust_parameterization", "tau_bc_diff"))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -13635,6 +13637,7 @@ class SEDModel:
             dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
+            dust_parameterization=getattr(self, "_dust_parameterization", "tau_bc_diff"),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_ir_cmb=getattr(self, "_dust_ir_cmb", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
