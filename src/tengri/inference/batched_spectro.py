@@ -1072,7 +1072,7 @@ def fit_spectra_catalog_mcmc(
         ensemble for ``sampler="chees"``). ``B`` is ``TENGRI_FORWARD_MEMORY_BUDGET_GB``
         (default 2 GB). The budget is pinned, not read from the device, so the same
         K results on every machine and a run's numerics do not depend on what else
-        is resident (see :mod:`tengri.inference._batching`). On a CPU a small value
+        is resident (see ``tengri.inference._batching``). On a CPU a small value
         or ``None`` is right: a wide ``vmap`` of NUTS trees waits for its deepest
         tree and costs memory. On a GPU a large value is what buys parallel
         throughput. The draws do not depend on this value, up to floating-point
