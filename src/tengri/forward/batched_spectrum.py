@@ -105,10 +105,13 @@ def check_template_model(model) -> None:
     model : SEDModel
         Template model. Its redshift must be free, its spectroscopy must be
         configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
-        line fluxes, line ratios, spectral indices, marginalized emission lines,
-        broad emission lines (``eline_broad``), a spectral covariance or a
+        line fluxes, line ratios, spectral indices, emission lines with a Cloudy
+        prior, broad emission lines (``eline_broad``), a spectral covariance or a
         Student-t or calibration-floor noise model. Emission lines with
-        ``eline_mode='fitted'`` and ``eline_broad=False`` are accepted.
+        ``eline_mode='fitted'`` or ``'marginalized'`` (flat prior) and
+        ``eline_broad=False`` are accepted. A pixel covariance is a per-galaxy input
+        (:class:`~tengri.observation.batched.GalaxySpectrum`) and the template
+        must not carry one.
 
     Raises
     ------
@@ -143,13 +146,15 @@ def check_template_model(model) -> None:
     spectroscopy = observation.spectroscopy
     if spectroscopy.covariance is not None:
         raise ValueError(
-            "template model has a spectral covariance (correlated noise), which the "
-            "batched Gaussian likelihood does not evaluate; use diagonal noise"
+            "template model carries a spectral covariance; the batched path reads each "
+            "GalaxySpectrum's own covariance (give every record its BandedMatrix and "
+            "build the template without one)"
         )
-    if spectroscopy.eline_mode == "marginalized":
+    if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "cloudy":
         raise ValueError(
-            "template model marginalizes emission lines (eline_mode='marginalized'), which "
-            "the batched likelihood does not evaluate yet; use eline_mode='fitted' or 'off'"
+            "template model marginalizes emission lines with a Cloudy prior "
+            "(eline_prior_type='cloudy'), which the batched likelihood does not evaluate; "
+            "use eline_prior_type='flat', or eline_mode='fitted' or 'off'"
         )
     if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
         raise ValueError(
@@ -414,7 +419,10 @@ def predict_batched_observables(
         ``"spec_fnu"`` of shape ``(n_max,)``, F_nu [erg/s/cm^2/Hz], zero on padded
         and masked pixels. With ``eline_mode="fitted"`` the line model
         ``G_eff @ a`` is added to the calibrated continuum before the pixel mask,
-        with ``a`` the ``eline_amp_*`` entries of ``params``. ``"phot_fnu"`` of
+        with ``a`` the ``eline_amp_*`` entries of ``params``. With
+        ``eline_mode="marginalized"`` ``spec_fnu`` is the calibrated continuum alone:
+        the line columns enter the likelihood through :func:`batched_eline_design`.
+        ``"phot_fnu"`` of
         shape ``(n_filt,)`` when ``spec.has_phot``, otherwise shape ``(0,)``.
 
     Raises
@@ -513,7 +521,7 @@ def predict_batched_observables(
         lsf_pad_pixels=spec.lsf_pad_pixels,
         nebular_lines=spectroscopy.nebular_lines,
     )
-    if line_set is not None:
+    if line_set is not None and spectroscopy.eline_mode == "fitted":
         amps = jnp.asarray([params[nm] for nm in line_set.amplitude_names])
         spec_fnu = spec_fnu + batched_eline_design(line_set, obs, full) @ amps
     out["spec_fnu"] = spec_fnu * obs.pix_mask

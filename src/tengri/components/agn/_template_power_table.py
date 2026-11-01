@@ -185,7 +185,14 @@ def full_coords(free_values: tuple, collapsed: dict[int, float], n_axes: int) ->
     return tuple(collapsed[k] if k in collapsed else next(free) for k in range(n_axes))
 
 
-def read_at_fixed_axes(table, axes, free_values: tuple, collapsed: dict[int, float]):
+def read_at_fixed_axes(
+    table,
+    axes,
+    free_values: tuple,
+    collapsed: dict[int, float],
+    *,
+    extrapolate: tuple[bool, ...] | None = None,
+):
     """Interpolate the full table with the Fixed axes held at their values.
 
     The tensor-product PCHIP is not independent of axis order (the Fritsch-Carlson
@@ -204,10 +211,15 @@ def read_at_fixed_axes(table, axes, free_values: tuple, collapsed: dict[int, flo
         Coordinates of the free axes, in axis order, in the table's variables.
     collapsed : dict of int to float
         Axis index to its Fixed coordinate, in the table's variable.
+    extrapolate : tuple of bool, optional
+        Per-axis extrapolation flags of the runtime kernel, passed to
+        :func:`~tengri.utils.grid_interp.interp_nd_pchip`. Default: clip on every axis.
 
     Returns
     -------
     ndarray, shape (n_channels,)
         The interpolated table row.
     """
-    return interp_nd_pchip(table, axes, full_coords(free_values, collapsed, len(axes)))
+    return interp_nd_pchip(
+        table, axes, full_coords(free_values, collapsed, len(axes)), extrapolate=extrapolate
+    )

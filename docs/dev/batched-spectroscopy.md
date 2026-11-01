@@ -36,9 +36,14 @@ Every entry of `_BATCH_FIELDS` in `observation/batched.py`, in order:
 | `phot_flux`, `phot_err` | `(B, n_filt)` | Photometry; zero-width when the bucket has none |
 | `phot_presence` | `(B, n_filt)` | 1.0 where a filter has a finite flux and a positive error |
 | `sfh_bin_edges_gyr` | `(B, n_sfh_edges)` | Per-galaxy SFH bin edges [Gyr]; zero-width when the template ladder is used |
+| `line_mask` | `(B, n_lines)` | 1.0 when a catalog line lands on the real grid at the galaxy's redshift; zero-width when the template fits no lines |
+| `eline_resolution` | `(B,)` | Spectral resolution [dimensionless] the line profiles use, per galaxy |
+| `chol_data` | `(B, p + 1, n_max)` | Bands of each galaxy's lower Cholesky factor of its banded pixel covariance, factored on the host with that galaxy's `pix_mask`; masked and padded rows are identity rows; `(B, 0, n_max)` placeholder without a covariance |
+| `segment` | `(B, n_max)` | Calibration segment id of each pixel, padded with the last real id; zeros when `spec.n_segments == 0` |
+| `cal_scale_center`, `cal_scale_sigma` | `(B,)` | `log10_center` and `sigma_dex` of the galaxy's log-normal prior on the mean calibration multiplier; 0 and 1 when it has none |
 
-The batch carries no line-flux, line-mask or emission-line resolution leaves: the
-emission-line channels are refused (see the refusal table).
+The batch carries no line-flux leaves: the line-flux and line-ratio channels are
+refused (see the refusal table).
 
 ## The key fields of `SpectroBatchSpec`
 
@@ -67,8 +72,9 @@ batch is evaluated. Each refusal below is raised as a `ValueError` unless noted.
 | Fixed redshift | The batch's `obs.z` must be the only redshift | Build with a free redshift |
 | `catalog_z_range` | A per-galaxy redshift window in `WavePrecomp` | Build with a free redshift and without `catalog_z_range` |
 | `SpectrumPrecomp` spectrum LUT | The LUT bakes the observation grid | Build with `spectrum_precomp` off |
-| Spectral covariance | Correlated noise; the batched likelihood is diagonal | Use diagonal noise |
-| `eline_mode != 'off'` | Emission-line fitting is not evaluated in batch | Use `eline_mode='off'` |
+| A template `Spectroscopy.covariance` | The batched path reads each galaxy's own covariance; a template covariance would be ignored | Build the template without one and give every `GalaxySpectrum` its `covariance=BandedMatrix` (carried by the `chol_data` leaf) |
+| `eline_mode='marginalized'` with `eline_prior_type='cloudy'` | The Cloudy-prior line marginal is not evaluated in batch | Use `eline_prior_type='flat'`, or `eline_mode='fitted'` or `'off'` |
+| `eline_broad=True` with lines | Broad-line profiles are not evaluated in batch | Use `eline_broad=False` |
 | `line_fluxes`, `line_ratios`, `spectral_indices`, `lines` | Not evaluated in batch | Remove them from the template |
 | Student-t or non-zero calibration-floor noise | The batched likelihood is Gaussian with no floor | Use diagonal Gaussian noise with a zero floor |
 
@@ -78,6 +84,7 @@ Two refusals are raised from `inference/batched_spectro.py`, not from the table:
 |---|---|---|
 | Stochastic (GP-field) SFH | `NotImplementedError` | Use a parametric SFH |
 | `calibration_marginalize=True` with `calibration_order > 0` | `ConfigError` | Set `calibration_order=0`, or set `calibration_marginalize=False` and fit the coefficients |
+| `calibration_marginalize=True` with `eline_mode='fitted'` | `NotImplementedError` | Use `eline_mode='marginalized'` for the joint marginal, or set `calibration_marginalize=False` |
 
 ## One marginalization primitive
 
@@ -107,6 +114,21 @@ With `calibration_marginalize=True` the batched spectral term is
 
 with `T(x)` built on `cal_lo`, `cal_hi`. The photometric term is unchanged.
 
+With `eline_mode='marginalized'` (flat prior) the line amplitudes are integrated out
+with the same primitive. The line design is `G_eff` from `batched_eline_design`, with
+a column mask for lines that land outside the real grid. The line amplitudes are
+rescaled by the prior width, `a = eline_prior_sigma * a'`, so the prior is the unit
+normal. The marginal is invariant under this change of variables, and the prior
+precision `1/eline_prior_sigma**2` is never formed, since it overflows float32 at
+F_nu scale. The reparametrization is one shared helper, `unit_line_prior` in
+`observation/eline_marginalization.py`, that the batched path and both per-galaxy classes call. The joint with calibration uses the design `[spec_fnu * T(x) | G_eff * eline_prior_sigma]`
+and the block prior `blockdiag(I / cal_prior_sigma**2, I)`. The per-galaxy classes
+`ELineMarginalizedLikelihood` and `CalibrationELineMarginalizedLikelihood` evaluate
+the same joint, and the two paths agree at rtol 1e-10 for one galaxy.
+
+The line marginal drops `-1/2 N ln 2pi - sum ln sigma`, as the per-galaxy line marginal
+does, so the joint with calibration on the marginalized path also drops that constant.
+
 **Normalization.** The plain batched spectral term drops
 `-1/2 N ln 2pi - sum ln sigma` over the real pixels, as `diag_gaussian_log_prob` does.
 The marginal keeps it, as `CalibrationMarginalizedLikelihood` does on the per-galaxy
@@ -122,6 +144,49 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
+- 2026-11-01, #3133: banded pixel covariance on the batched spectroscopic path.
+  `GalaxySpectrum(covariance=BandedMatrix)` gives a galaxy a banded covariance; every
+  galaxy that carries one uses the same offsets, or `build_spectro_batches` raises naming
+  both offset tuples. The builder factors `M C M + (I - M)` per galaxy on the host
+  (`M` its good-pixel mask) into the `chol_data` leaf, with identity padded rows, and
+  `SpectroBatchSpec.cov_offsets` holds the factor's static offsets. The Gaussian term,
+  the calibration marginal and the line marginals whiten by the factor through
+  `marginalize_linear_nuisance(chol_lower=...)` or `banded_forward_substitution`, so a
+  masked or padded pixel contributes nothing. The Gaussian term drops the normalization
+  constant, as the diagonal term and the per-galaxy `MultivariateGaussianLikelihood`
+  do. A template's own `Spectroscopy.covariance` is refused.
+  `tests/contract/test_batched_banded_covariance.py` pins the batched value against the
+  per-galaxy dense covariance with masked pixels deleted, the marginals against the
+  per-galaxy classes, padding at `rtol=1e-12`, one compile across covariances, the
+  offsets refusal, and the float32 value and gradient at log10 M = 4.0.
+- 2026-10-31, #3117: analytic emission-line marginalization on the batched spectroscopic
+  path, and the exact joint of calibration and lines on both paths. `eline_mode="marginalized"`
+  with a flat prior is accepted, alone or with `calibration_marginalize=True`. The
+  per-galaxy `CalibrationELineMarginalizedLikelihood` is the exact joint, replacing the
+  sequential point-estimate composition (#2354). `marginalize_emission_lines` is a wrapper
+  over the primitive, and the value is the exact marginal: the prior penalty enters once.
+  `tests/contract/test_batched_eline_marginal.py` pins the batched value against the
+  per-galaxy classes, a masked line against the run with that column deleted, every line
+  masked against the lines-off likelihood, one compile across masks, padding, and the
+  float32 value and gradient at log10 M = 4.0. The slow-tier comparison of batched and
+  per-galaxy NUTS medians is in `tests/inference/test_batched_spectro_catalog.py`.
+- 2026-11-01, #3134: per-segment calibration scales, the scale-free coefficient prior and the
+  fiber-fraction prior on both paths. `Spectroscopy(calibration_segments=, cal_prior=,
+  cal_scale_prior=, cal_scale_window=)` and `GalaxySpectrum(segment_ids=, cal_scale_prior=)` feed
+  the leaves above; `SpectroBatchSpec.n_segments` is static and part of the bucket key, so
+  galaxies with different segment counts land in different buckets. The per-galaxy
+  `CalibrationMarginalizedLikelihood`, the joint class and the batched marginal all call
+  `marginalize_calibration_segments`, and on the segment route the banded pixel covariance factor
+  enters that same marginal (`chol_data=`, `chol_offsets=`). The mean multiplier over the window is carried as the
+  latent `cal_log_q` (`ln q`): per galaxy a declared observation parameter with the Gaussian
+  prior from `cal_scale_prior`; batched, a latent with a unit-normal template prior whose
+  standardized prior term `batched_neg_log_posterior` replaces by each galaxy's own
+  log-normal. The coefficient block is conditioned on `q` through an orthonormal null-space
+  basis of the window vector, and the value includes the coefficient prior's own marginal of
+  `ln q` (`calibration_q_log_prior`). `tests/contract/test_calibration_segments_scale_prior.py`
+  pins the primitive layer and the quadrature over `ln q`;
+  `tests/contract/test_calibration_segments_batched.py` pins batched against per-galaxy,
+  padding, one compile and float32.
 - 2026-10-31, #3116: calibration marginalization on the batched spectroscopic path.
   `batched_log_likelihood`, `batched_neg_log_posterior`, `fit_spectra_map_vmap` and
   `fit_spectra_catalog_mcmc` take `calibration_marginalize`, `cal_n_poly` and

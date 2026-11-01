@@ -1071,6 +1071,14 @@ class Parameters:
         from tengri.components.nebular.ionizing_spectrum import validate_lyc_max_age_yr
 
         self.cue_lyc_max_age_yr = validate_lyc_max_age_yr(kwargs.pop("cue_lyc_max_age_yr", "all"))
+        from tengri.components.nebular._balmer_series import (
+            BALMER_SERIES_N_MAX_DEFAULT,
+            validate_balmer_series_n_max,
+        )
+
+        self.cue_balmer_series_n_max = validate_balmer_series_n_max(
+            kwargs.pop("cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT)
+        )
         # Opt-in publish of the Cue line share (``nebular_line_frac``), read by
         # ``Spectroscopy(nebular_lines=False)``; off by default.
         self.cue_publish_line_fraction = bool(kwargs.pop("cue_publish_line_fraction", False))
@@ -3184,6 +3192,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "cue_lyc_max_age_yr": content(
         "oldest stellar age whose ionizing photons Cue counts changes Q_H and the shape"
+    ),
+    "cue_balmer_series_n_max": content(
+        "highest Balmer level Cue appends above H10 changes the published line catalog"
     ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),

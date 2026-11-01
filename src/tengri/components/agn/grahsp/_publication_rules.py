@@ -21,6 +21,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+from tengri.utils.host_array import device_table
+
 _LN10: float = math.log(10.0)
 _NM_PER_UM: float = 1000.0
 
@@ -178,8 +180,8 @@ def feii_segment_product(h_fn, template_wave_nm: Array, template_lumin: Array) -
     ndarray, shape ()
         :math:`\int L_{\rm FeII}\,h\,\mathrm{d}\lambda` per unit amplitude [erg/s].
     """
-    wave = jnp.asarray(template_wave_nm)
-    lumin = jnp.asarray(template_lumin)
+    wave = device_table(template_wave_nm)
+    lumin = device_table(template_lumin)
     w0, w1 = wave[:-1], wave[1:]
     l0, l1 = lumin[:-1], lumin[1:]
     half = 0.5 * (w1 - w0)

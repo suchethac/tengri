@@ -47,6 +47,7 @@ from tengri.utils.grid_interp import (
     loglog_integral,
     resample_template,
 )
+from tengri.utils.host_array import device_table
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -507,7 +508,54 @@ def _interpolate_and_normalize(
     # ``wave_grid`` is monotonically ascending (set at load time in
     # ``_load_grid_arrays``), so the integral is positive without an explicit
     # ``argsort``. Don't re-add a sort here.
-    integral_lam = loglog_integral(wave_grid, template)
+    return _emit_normalized_lnu(
+        template, wave_grid, wavelength, l_scale, loglog_integral(wave_grid, template)
+    )
+
+
+def _emit_normalized_lnu(
+    template: jnp.ndarray,
+    wave_grid: jnp.ndarray,
+    wavelength: jnp.ndarray,
+    l_scale: float,
+    integral_lam: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Scale an interpolated template to ``l_scale`` and emit it as L_nu on ``wavelength``.
+
+    The emission step of :func:`_interpolate_and_normalize`, shared with the photometry
+    precompute so both emit the same SED:
+
+    .. math::
+
+        L_\nu(\lambda) = \frac{L_{\rm scale}}{P}\,\mathcal{R}[T](\lambda)\,\frac{\lambda^2}{c},
+
+    with :math:`T` the L_lambda-like template on ``wave_grid``, :math:`P` its
+    bolometric integral ``integral_lam``, :math:`\mathcal{R}` the log-log resampling of
+    :func:`~tengri.utils.grid_interp.resample_template` (zero outside ``wave_grid``),
+    :math:`\lambda` [Angstrom] and :math:`c` [Angstrom/s].
+
+    Parameters
+    ----------
+    template : array_like, shape (n_native,)
+        L_lambda-like template [arbitrary units per Angstrom].
+    wave_grid : array_like, shape (n_native,)
+        Template wavelengths [Angstrom], ascending.
+    wavelength : array_like, shape (n_wave,)
+        Output wavelengths [Angstrom].
+    l_scale : float
+        Luminosity the template is scaled to [erg/s].
+    integral_lam : array_like, shape ()
+        Bolometric integral of ``template`` [template units times Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Specific luminosity L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
     integral_safe = jnp.maximum(jnp.abs(integral_lam), representable_denominator(1e-100))
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
@@ -541,17 +589,37 @@ class SKIRTORGrid(NamedTuple):
     edges: tuple
 
 
+def _torus_template_cube(raw: dict):
+    """The template cube the torus SED is built from: v3 dust emission, else the v2 total.
+
+    The v3 ``total`` is the escaping disc plus the dust; the torus component emits only
+    the dust, so reading ``total`` would add the disc twice once a disc block is present.
+    The runtime SED and the photometry precompute both take their cube from here.
+
+    Parameters
+    ----------
+    raw : dict
+        Output of :func:`_load_grid_arrays`.
+
+    Returns
+    -------
+    ndarray, shape (*axes_shape, n_wave)
+        L_lambda-like template cube [arbitrary units per Angstrom].
+    """
+    return raw["dust"] if "dust" in raw else raw["total"]
+
+
 def _load_skirtor_grid_data(grid_path: str) -> SKIRTORGrid:
     """Load a SKIRTOR grid file into a threadable :class:`SKIRTORGrid` pytree.
 
-    Prefers the v3 dust-only template when present (avoids disc/dust
-    double-counting); falls back to the v2 ``total`` cube.
+    The cube is :func:`_torus_template_cube`: the v3 dust-only template when present
+    (avoids disc/dust double-counting), else the v2 ``total`` cube.
 
     ``_load_grid_arrays`` has already put every axis in ascending order
     (#1911), so the axes reach ``edges_for_grid`` in the order it requires.
     """
     raw = _load_grid_arrays(grid_path)
-    grid = raw["dust"] if "dust" in raw else raw["total"]
+    grid = _torus_template_cube(raw)
 
     # ``ensure_compile_time_eval`` so the concrete arrays are captured even if
     # the first call happens inside a jit trace (mirrors the legacy closure).
@@ -1817,9 +1885,9 @@ def skirtor_disc_attenuation_from_grid(
     if grid is None:
         return jnp.ones_like(jnp.asarray(wavelength))
 
-    disk_grid = jnp.asarray(grid.disk)
-    wave_grid = jnp.asarray(grid.wave_grid)
-    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    disk_grid = device_table(grid.disk)
+    wave_grid = device_table(grid.wave_grid)
+    axes = tuple(device_table(a) for a in grid.axes)
 
     point_i = (
         agn_tau_skirtor,
