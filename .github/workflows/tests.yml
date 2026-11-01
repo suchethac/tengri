@@ -813,8 +813,10 @@ jobs:
           # computed by this very machinery, so a PR that edits it cannot be
           # trusted to have been routed by the old rules.
           # tools/ci_bug_durations.json is the ledger that splits regression/bug
-          # across the three b-shards: a change to it moves tests between shards.
-          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_bug_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
+          # across the three b-shards, and tools/ci_inference_durations.json the one
+          # that splits tests/inference across the three slow legs: a change to
+          # either moves tests between shards.
+          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_(bug|inference)_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
 
           # schedule and workflow_dispatch always run everything. The nightly is
           # the backstop that catches drift a per-PR filter cannot see.
@@ -1767,9 +1769,13 @@ jobs:
       fail-fast: false
       matrix:
         # Measured serial inference ≈ 51 min on a full run; the tier has died
-        # before its summary line (#2363). Three contiguous file legs at 45 min
-        # each print `--durations=30` so the legs are rebalanced from measured
-        # durations, not static counts. integration still single-leg (114–118 min).
+        # before its summary line (#2363). Three file legs at 45 min each, split
+        # by the measured per-file seconds in tools/ci_inference_durations.json
+        # (greedy longest-processing-time), because the contiguous split put the
+        # whole test_profile_mass* cluster on leg 3, which was cut at 45 min on
+        # every nightly 2026-10-23..31 (legs 1 and 2 took 20-25 and 4-9 min).
+        # Each leg runs `-v --timeout=600` so a cut leg still shows per-test
+        # progress and a hang is named. integration still single-leg (114–118 min).
         include:
           - suite: inference
             part: 1
@@ -1779,14 +1785,10 @@ jobs:
             part: 2
             of: 3
             timeout: 45
-          # Leg 3 was cut at 45 min on every nightly 2026-10-23..30 (legs 1 and
-          # 2 took 20-25 and 4-9 min), so it has never printed its
-          # `--durations`. 120 lets it complete once; rebalance the legs from
-          # that measurement and bring the budget back down.
           - suite: inference
             part: 3
             of: 3
-            timeout: 120
+            timeout: 45
           - suite: integration
             timeout: 180
           # Every other @pytest.mark.slow test outside the two trees above.
@@ -1892,7 +1894,7 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join --durations tools/ci_inference_durations.json) -v --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --timeout=600 --timeout-method=signal --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
             python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
           else

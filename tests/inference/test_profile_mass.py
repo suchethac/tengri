@@ -485,6 +485,10 @@ class TestSamplerParity:
             z = abs(a.mean() - b.mean()) / se if se > 0 else 0.0
             assert z < 3.0, f"{name}: off_mean={a.mean():.4g} on_mean={b.mean():.4g} z={z:.2f}"
 
+    # Two NUTS runs (2 chains, 400 warmup steps, dense mass matrix) of the joint
+    # photometry+spectrum model: about 2500 s of CPU on a loaded laptop, far
+    # past the 600 s per-test bound the slow tier applies to every other test.
+    @pytest.mark.timeout(3000)
     def test_nuts_posterior_means_agree_joint(self, ssp_data_fsps):
         """Joint photometry+spectrum posterior means agree with and without profiling.
 

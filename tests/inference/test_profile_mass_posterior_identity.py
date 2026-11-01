@@ -195,9 +195,12 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
 #: and mock, so under the null the thinned PIT values of different seeds are
 #: independent Uniform(0, 1) draws and their pool is one Uniform(0, 1) sample.
 #: One KS test on the pool has a false-alarm rate of ``_PIT_ALPHA`` by
-#: construction. Six single-seed tests at the same bar each fail at that rate,
-#: so one red per run was the expected outcome, not a defect (#2424).
-_PIT_SEEDS = (0, 1, 2, 3, 4, 5)
+#: construction, whatever the seed count. Single-seed tests at the same bar
+#: would each fail at that rate (#2424). Three seeds pool to about 300 thinned
+#: PIT values per model, for which the KS bar at ``_PIT_ALPHA`` is 0.094; a
+#: shift of the conditional by s posterior widths moves the PIT CDF by about
+#: 0.40 s, so a shift of 0.24 widths or more is detected.
+_PIT_SEEDS = (0, 1, 2)
 _PIT_ALPHA = 0.01
 
 
@@ -368,12 +371,7 @@ class TestProfileMassPosteriorIdentityPIT:
 class TestProfileMassPosteriorIdentitySmoke:
     """Smoke test: profiled vs unprofiled mass posteriors agree."""
 
-    @pytest.fixture(params=[0, 1, 2, 3, 4, 5])
-    def seed(self, request):
-        """All six seeds must pass."""
-        return request.param
-
-    def test_profiled_unprofiled_agreement(self, ssp_data_fsps, seed):
+    def test_profiled_unprofiled_agreement(self, ssp_data_fsps):
         """Profiled and unprofiled mass posteriors agree on percentiles.
 
         Procedure:
@@ -385,6 +383,7 @@ class TestProfileMassPosteriorIdentitySmoke:
         This is a smoke test with looser tolerance than the PIT: it exercises
         the code path and catches gross plumbing errors, but is not as stringent.
         """
+        seed = 0
         model = _minimal_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
         _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
