@@ -165,6 +165,18 @@ out analytically, so no line parameters are sampled. The marginal is exact for a
 amplitude prior and a linear design. Use `"marginalized"` for catalog-wide fits where the line
 amplitudes are nuisance parameters.
 
+**Model-centered line prior.** `Spectroscopy(eline_mode="marginalized", eline_prior_type="model")`
+replaces the flat prior with a Gaussian on each line amplitude, centered on the model's own
+prediction for that line. The prediction is carried through the same projection as the continuum,
+including the dust and the Milky Way foreground. The width is `eline_prior_width_dex`, in dex
+(default 0.3). The parameter `eline_aperture_frac` scales the prior mean by the fraction of the
+line flux that falls inside the fiber. It is `Fixed(1.0)` by default, and
+`SEDModel.build(eline_aperture_frac=...)` frees it or sets it to a prior. The prior works with the
+lines marginalized alone and inside the joint marginal with the calibration polynomial. A line
+outside a galaxy's grid or under a pixel mask contributes nothing. Use it instead of the flat prior
+when the lines should follow the model's dust and star formation history, so that the Balmer
+decrement constrains the attenuation.
+
 **Lines outside a galaxy's grid.** A catalog line that falls outside a galaxy's observed grid at
 its redshift contributes nothing to that galaxy. Its column is removed from the design, so it
 neither adds to the model nor changes the marginal. The `line_mask` leaf of each batch records
@@ -322,8 +334,8 @@ Each limit below names what to do instead.
   build the template without one.
 - **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor.
   Use Gaussian noise.
-- **The Cloudy line prior and broad lines.** Use `eline_prior_type="flat"` and `eline_broad=False`,
-  or `eline_mode="fitted"` or `"off"`.
+- **The Cloudy line prior and broad lines.** Use `eline_prior_type="flat"` or `"model"` and
+  `eline_broad=False`, or `eline_mode="fitted"` or `"off"`.
 - **Spectral indices.** Use the per-galaxy `Fitter`.
 - **Gaussian-process star formation histories.** Use a parametric history with the batch, or the
   per-galaxy `Fitter` for a Gaussian-process history.
