@@ -151,6 +151,14 @@ _LOG_C = host_array(math.log10(_C_CGS))
 # 100 Myr, the cutoff ``lyc_max_age_yr=1e8`` selects. Kept importable from here; the
 # precompute lives in ionizing_spectrum, and the age mask below reads the same cutoff
 # from the backend, so the table and the forward filter cannot disagree.
+from tengri.components.nebular._balmer_series import (
+    BALMER_SERIES_N_FIRST,
+    BALMER_SERIES_N_MAX_DEFAULT,
+    HBETA_VACUUM_AA,
+    balmer_series_arrays,
+    balmer_series_sigma_frac,
+    validate_balmer_series_n_max,
+)
 from tengri.components.nebular.ionizing_spectrum import (
     _CLIP_RANGES,
     IONSPEC_NAMES,
@@ -1095,6 +1103,36 @@ _YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
 # ── Cue backend: NN emulator of CLOUDY's nebular emission ─────────
 
 
+class _BalmerExtension(NamedTuple):
+    """Static (numpy) description of the Balmer lines appended to Cue's sorted catalog."""
+
+    hbeta_index: int
+    wavelength: np.ndarray
+    ratio: np.ndarray
+    sensitivity: np.ndarray
+    names: tuple
+
+
+def _build_balmer_extension(sorted_wav: np.ndarray, n_max: int | None) -> _BalmerExtension | None:
+    """Locate H-beta in the sorted catalog and tabulate the lines appended after it."""
+    if n_max is None or n_max < BALMER_SERIES_N_FIRST:
+        return None
+    hbeta_index = int(np.argmin(np.abs(sorted_wav - HBETA_VACUUM_AA)))
+    if abs(float(sorted_wav[hbeta_index]) - HBETA_VACUUM_AA) > 0.1:
+        raise ValueError(
+            f"Cue catalog has no H-beta within 0.1 A of {HBETA_VACUUM_AA} A "
+            f"(nearest {float(sorted_wav[hbeta_index])} A); cannot anchor the Balmer series."
+        )
+    n_upper, wavelength, ratio, sensitivity = balmer_series_arrays(n_max)
+    return _BalmerExtension(
+        hbeta_index,
+        wavelength,
+        ratio,
+        sensitivity,
+        tuple(f"H{int(n)}" for n in n_upper),
+    )
+
+
 class CueBackend:
     """Cue neural net emulator backend for nebular emission.
 
@@ -1119,11 +1157,25 @@ class CueBackend:
     default_gas_logqion : float, optional
         Default log10(Q_H) normalization [log10(photons/s)] when not specified
         per call. Default: 49.1 (typical for young stellar populations).
+    balmer_series_n_max : int or None, optional
+        Highest hydrogen Balmer upper level appended to the full catalog above
+        Cue's last native line (H10), from 10 to 50; ``None`` (or 10) appends
+        none. Default 50. The legacy 128-line subset is never extended.
 
     Notes
     -----
     **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
     Neural network forward passes are pure functions with no side effects.
+
+    **Balmer series above H10**: the lines H11 to ``balmer_series_n_max`` carry
+    :math:`L(\\mathrm{H}n) = R_n\\,L(\\mathrm{H}\\beta)` with :math:`R_n` the
+    Case-B emissivity ratio of Storey & Hummer (1995) at 10^4 K and 10^2 cm^-3,
+    taken from H-beta after the escape and dust factors so the added lines carry
+    them too. They follow the native lines of the full catalog in order of ``n``,
+    so every native index (``line_old_idx``) is unchanged. Approximation: fixed
+    :math:`(T_e, n_e)`; the ratios change by up to
+    6.7% for :math:`n \\le 24` and 27% at :math:`n = 50` over 5000-20000 K and
+    :math:`n_e` = 10^2-10^3 cm^-3 (``tengri.components.nebular._balmer_series``).
 
     **Precomputation**: If ``ssp_data`` is provided, ionizing spectrum
     parameters are precomputed once at init time via
@@ -1192,6 +1244,7 @@ class CueBackend:
         default_gas_logqion: float = 49.1,
         nitrogen: str = "absolute",
         lyc_max_age_yr: str | float = LYC_ALL_AGES,
+        balmer_series_n_max: int | None = BALMER_SERIES_N_MAX_DEFAULT,
     ) -> None:
         if nitrogen not in CUE_NITROGEN_MODES:
             raise ValueError(
@@ -1215,6 +1268,11 @@ class CueBackend:
         # inside a jit trace would be handed to the *next* trace (#1631).
         self._line_sort_idx = np.argsort(self.weights.nn_line_wav)
         self._cont_sort_idx = np.argsort(self.weights.cont_wav)
+        self.balmer_series_n_max = validate_balmer_series_n_max(balmer_series_n_max)
+        self._balmer = _build_balmer_extension(
+            np.asarray(self.weights.nn_line_wav)[np.asarray(self.weights.batched_sort_idx)],
+            self.balmer_series_n_max,
+        )
 
         # Precompute ionizing spectrum parameters from SSP if provided.
         # These serve as defaults when ionspec params are not explicitly
@@ -1619,7 +1677,19 @@ class CueBackend:
         if cloudyfsps_only:
             old_idx = weights.line_old_idx
             return wav[old_idx], lum[old_idx]
-        return wav, lum
+        ext = self._balmer
+        if ext is None:
+            return wav, lum
+        added = lum[ext.hbeta_index] * jnp.asarray(ext.ratio, dtype=lum.dtype)
+        lum_all = jnp.concatenate([lum, added])
+        xp = np if isinstance(wav, np.ndarray) else jnp
+        wav_all = xp.concatenate([wav, ext.wavelength])
+        return wav_all, lum_all
+
+    @property
+    def balmer_series_line_names(self) -> tuple[str, ...]:
+        """Names (``'H11'``, ...) of the Balmer lines appended to the full catalog."""
+        return () if self._balmer is None else self._balmer.names
 
     def published_line_wavelengths(
         self, *, cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT
@@ -1668,7 +1738,10 @@ class CueBackend:
         wav_sorted = np.asarray(weights.nn_line_wav)[np.asarray(weights.batched_sort_idx)]
         if cloudyfsps_only:
             return wav_sorted[np.asarray(weights.line_old_idx)]
-        return wav_sorted
+        ext = self._balmer
+        if ext is None:
+            return wav_sorted
+        return np.concatenate([wav_sorted, ext.wavelength])
 
     def published_line_model_sigma(self, *, cloudyfsps_only: bool) -> np.ndarray | None:
         """Fractional 1-sigma emulator error per published line, without a forward pass.
@@ -1716,7 +1789,11 @@ class CueBackend:
             )
         if cloudyfsps_only:
             return sigma[np.asarray(weights.line_old_idx)]
-        return sigma
+        ext = self._balmer
+        if ext is None:
+            return sigma
+        added = balmer_series_sigma_frac(float(sigma[ext.hbeta_index]), ext.sensitivity)
+        return np.concatenate([sigma, added.astype(np.float32)])
 
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
@@ -2425,6 +2502,10 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
     "default_gas_logqion": content("default ionizing-photon normalization"),
     "nitrogen": content("meaning of gas_logno (absolute [N/O] or offset from a relation)"),
     "lyc_max_age_yr": content("oldest stellar age whose ionizing photons are counted"),
+    "balmer_series_n_max": content("highest Balmer level appended to the full line catalog"),
+    "_balmer": exclude(
+        "static arrays derived from weights and balmer_series_n_max, both content-keyed"
+    ),
     "_lyc_max_log_age": exclude("log10 of lyc_max_age_yr, which is already content-keyed"),
     "_line_sort_idx": exclude("argsort of weights.nn_line_wav; weights is already content-keyed"),
     "_cont_sort_idx": exclude("argsort of weights.cont_wav; weights is already content-keyed"),
