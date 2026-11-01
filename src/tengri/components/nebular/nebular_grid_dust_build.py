@@ -177,10 +177,15 @@ def _nebular_screen_for(
     from tengri.components.dust._apply import (
         merge_neb_screen_live_overrides,
         resolve_bc_diff_law_params,
+        screen_optical_depths,
     )
     from tengri.components.dust.laws._registry import select_law_kwargs
+    from tengri.components.dust.two_component import _neb_screen_depth
 
     cfg = dust.config
+    # The screen depths resolve through the one helper, so a tauv_mu component
+    # reads (tau_V, mu) and offers the same depths the exact path applies.
+    tau_bc, tau_diff = screen_optical_depths(params, cfg.parameterization)
     bc_law_params, diff_law_params = resolve_bc_diff_law_params(
         params,
         dict(cfg.bc_law_overrides),
@@ -189,10 +194,16 @@ def _nebular_screen_for(
         bc_law=cfg.law_bc,
         diff_law=cfg.law_diff,
         redshift=params.get("redshift"),
+        tau_bc=tau_bc,
+        tau_diff=tau_diff,
     )
     neb_law = cfg.law_neb or cfg.law_bc
     neb_overrides = merge_neb_screen_live_overrides(
-        params, cfg.neb_law_overrides, cfg.live_shape_params
+        params,
+        cfg.neb_law_overrides,
+        cfg.live_shape_params,
+        neb_law=neb_law,
+        tau_v=_neb_screen_depth(cfg.nebular_screen, params, tau_bc),
     )
     neb_bc_params = {
         k: jnp.asarray(v)
@@ -211,6 +222,13 @@ def _tau_params(dust, ref_params: Mapping, tau_a: float, tau_b: float) -> dict:
     q = dict(ref_params)
     if isinstance(dust, DustAttenuationSEDComponent):
         q["dust_tau_v"] = float(tau_b)
+    elif getattr(dust.config, "parameterization", "tau_bc_diff") == "tauv_mu":
+        # The node is a (tau_bc, tau_diff) pair; the tauv_mu screens read
+        # (tau_V, mu), so map the pair onto them. A zero total depth gives
+        # both screens zero whatever mu is, so mu = 1/2 there.
+        tau_v = float(tau_a) + float(tau_b)
+        q["dust_tau_v"] = tau_v
+        q["dust_mu"] = float(tau_b) / tau_v if tau_v > 0.0 else 0.5
     else:
         q["dust_tau_bc"], q["dust_tau_diff"] = float(tau_a), float(tau_b)
     return q

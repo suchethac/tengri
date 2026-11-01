@@ -2918,6 +2918,10 @@ class StellarSEDComponent:
             "psb",
             "psb_suess2022",
             "delayed_bq",
+            # Current-episode types (#3177): a constant-SFR episode spliced over
+            # the smooth history by resolve_sfh (mean_sfh.splice_current_episode).
+            "recent",
+            "recent_ssfr",
             "dense_basis_pure",
             "exp",
             "dexp",

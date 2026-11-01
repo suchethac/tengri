@@ -236,6 +236,9 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         bc_law=getattr(model, "_dust_law_bc", None),
         diff_law=getattr(model, "_dust_law_diff", None),
         redshift=p.get("redshift"),
+        # The same depths the transmission below applies (p["tau_bc"] / p["tau_diff"]).
+        tau_bc=p["tau_bc"],
+        tau_diff=p["tau_diff"],
     )
 
     steps.append(
