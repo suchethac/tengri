@@ -38,6 +38,7 @@ Every entry of `_BATCH_FIELDS` in `observation/batched.py`, in order:
 | `sfh_bin_edges_gyr` | `(B, n_sfh_edges)` | Per-galaxy SFH bin edges [Gyr]; zero-width when the template ladder is used |
 | `line_mask` | `(B, n_lines)` | 1.0 when a catalog line lands on the real grid at the galaxy's redshift; zero-width when the template fits no lines |
 | `eline_resolution` | `(B,)` | Spectral resolution [dimensionless] the line profiles use, per galaxy |
+| `chol_data` | `(B, p + 1, n_max)` | Bands of each galaxy's lower Cholesky factor of its banded pixel covariance, factored on the host with that galaxy's `pix_mask`; masked and padded rows are identity rows; `(B, 0, n_max)` placeholder without a covariance |
 
 The batch carries no line-flux leaves: the line-flux and line-ratio channels are
 refused (see the refusal table).
@@ -69,7 +70,7 @@ batch is evaluated. Each refusal below is raised as a `ValueError` unless noted.
 | Fixed redshift | The batch's `obs.z` must be the only redshift | Build with a free redshift |
 | `catalog_z_range` | A per-galaxy redshift window in `WavePrecomp` | Build with a free redshift and without `catalog_z_range` |
 | `SpectrumPrecomp` spectrum LUT | The LUT bakes the observation grid | Build with `spectrum_precomp` off |
-| Spectral covariance | Correlated noise; the batched likelihood is diagonal | Use diagonal noise |
+| A template `Spectroscopy.covariance` | The batched path reads each galaxy's own covariance; a template covariance would be ignored | Build the template without one and give every `GalaxySpectrum` its `covariance=BandedMatrix` (carried by the `chol_data` leaf) |
 | `eline_mode='marginalized'` with `eline_prior_type='cloudy'` | The Cloudy-prior line marginal is not evaluated in batch | Use `eline_prior_type='flat'`, or `eline_mode='fitted'` or `'off'` |
 | `eline_broad=True` with lines | Broad-line profiles are not evaluated in batch | Use `eline_broad=False` |
 | `line_fluxes`, `line_ratios`, `spectral_indices`, `lines` | Not evaluated in batch | Remove them from the template |
@@ -141,6 +142,21 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
+- 2026-11-01, #3133: banded pixel covariance on the batched spectroscopic path.
+  `GalaxySpectrum(covariance=BandedMatrix)` gives a galaxy a banded covariance; every
+  galaxy that carries one uses the same offsets, or `build_spectro_batches` raises naming
+  both offset tuples. The builder factors `M C M + (I - M)` per galaxy on the host
+  (`M` its good-pixel mask) into the `chol_data` leaf, with identity padded rows, and
+  `SpectroBatchSpec.cov_offsets` holds the factor's static offsets. The Gaussian term,
+  the calibration marginal and the line marginals whiten by the factor through
+  `marginalize_linear_nuisance(chol_lower=...)` or `banded_forward_substitution`, so a
+  masked or padded pixel contributes nothing. The Gaussian term drops the normalization
+  constant, as the diagonal term and the per-galaxy `MultivariateGaussianLikelihood`
+  do. A template's own `Spectroscopy.covariance` is refused.
+  `tests/contract/test_batched_banded_covariance.py` pins the batched value against the
+  per-galaxy dense covariance with masked pixels deleted, the marginals against the
+  per-galaxy classes, padding at `rtol=1e-12`, one compile across covariances, the
+  offsets refusal, and the float32 value and gradient at log10 M = 4.0.
 - 2026-10-31, #3117: analytic emission-line marginalization on the batched spectroscopic
   path, and the exact joint of calibration and lines on both paths. `eline_mode="marginalized"`
   with a flat prior is accepted, alone or with `calibration_marginalize=True`. The

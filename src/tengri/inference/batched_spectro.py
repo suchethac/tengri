@@ -37,6 +37,11 @@ Gaussian diagonal noise only. Emission lines are covered with
 prior of the non-batched fitter, and the returned ``params`` carry the
 ``eline_amp_*`` entries next to the physical parameters.
 
+A banded pixel covariance is covered through
+:attr:`~tengri.observation.batched.GalaxySpectrum.covariance`: the spectral term whitens
+the residual by the galaxy's banded Cholesky factor (``SpectroBatch.chol_data``) in
+place of ``sigma``, in the Gaussian term and in the marginals alike.
+
 Calibration marginalization is covered: with ``calibration_marginalize=True``
 the spectral term is the closed-form marginal over a Chebyshev calibration
 polynomial, the same :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
@@ -46,7 +51,7 @@ Emission lines marginalized analytically (``eline_mode="marginalized"`` with a f
 prior) are covered, jointly with the calibration polynomial when
 ``calibration_marginalize=True``. Emission lines fitted as free amplitudes
 (``eline_mode="fitted"``) are covered too. Not covered: Cloudy-prior line marginalization
-(``eline_prior_type="cloudy"``), spectral covariance, Student-t and
+(``eline_prior_type="cloudy"``), Student-t and
 calibration-floor noise, spectral indices, and stochastic (GP-field) SFH. A
 stochastic model raises :class:`NotImplementedError`.
 
@@ -84,6 +89,7 @@ from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
 )
+from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.observation.calibration import calibration_basis
 from tengri.observation.eline_marginalization import (
@@ -123,7 +129,21 @@ def _refuse_calibration_order(model) -> None:
         )
 
 
-def _spectral_marginal_loglik(model_flux, obs: SpectroBatch, n_poly: int, prior_sigma: float):
+def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | None:
+    """Banded Cholesky factor of one galaxy's pixel covariance, or ``None`` for diagonal noise."""
+    if not spec.cov_offsets:
+        return None
+    return BandedMatrix(offsets=np.asarray(spec.cov_offsets, dtype=int), data=obs.chol_data)
+
+
+def _whitening(obs: SpectroBatch, chol: BandedMatrix | None) -> dict:
+    """Noise keyword of the marginal primitive: the factor when present, else ``sigma``."""
+    return {"sigma": obs.sigma} if chol is None else {"chol_lower": chol}
+
+
+def _spectral_marginal_loglik(
+    model_flux, obs: SpectroBatch, n_poly: int, prior_sigma: float, chol: BandedMatrix | None
+):
     """Marginal log-likelihood of one galaxy's spectrum over a Chebyshev calibration.
 
     The design is ``model_flux[:, None] * T(x)`` on the real grid's extremes, so padded
@@ -134,7 +154,7 @@ def _spectral_marginal_loglik(model_flux, obs: SpectroBatch, n_poly: int, prior_
         data=obs.flux,
         model0=model_flux,
         design=design,
-        sigma=obs.sigma,
+        **_whitening(obs, chol),
         pix_mask=obs.pix_mask,
         prior_precision=jnp.eye(n_poly) / prior_sigma**2,
     ).log_like
@@ -181,6 +201,7 @@ def _marginal_lines_loglik(
     calibration_marginalize: bool,
     cal_n_poly: int,
     cal_prior_sigma: float,
+    chol: BandedMatrix | None,
 ) -> jax.Array:
     """Marginal log-likelihood over the line amplitudes, jointly with the calibration.
 
@@ -193,8 +214,9 @@ def _marginal_lines_loglik(
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
+    scatter = obs.sigma if chol is None else chol.data[0]
     line = unit_line_prior(
-        g_eff, spectroscopy.eline_prior_sigma, noise=obs.sigma, pix_mask=obs.pix_mask
+        g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
     )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
@@ -207,12 +229,12 @@ def _marginal_lines_loglik(
         prior_mean, precision = line.prior_mean, line.prior_precision
     weight = obs.pix_mask
     n_eff = jnp.sum(weight)
-    log_sigma_sum = jnp.sum(weight * jnp.log(obs.sigma))
+    log_sigma_sum = jnp.sum(weight * jnp.log(scatter))
     result = marginalize_linear_nuisance(
         obs.flux,
         model0,
         design,
-        sigma=obs.sigma,
+        **_whitening(obs, chol),
         pix_mask=obs.pix_mask,
         prior_mean=prior_mean,
         prior_precision=precision,
@@ -292,6 +314,11 @@ def batched_log_likelihood(
     threaded = _prepare_template(model)
     require_model_spec(model, spec)
     spectroscopy = model.observation.spectroscopy
+    if spectroscopy.eline_mode == "fitted" and spec.cov_offsets:
+        raise NotImplementedError(
+            "fitted emission-line amplitudes with a pixel covariance are not evaluated; "
+            "use eline_mode='marginalized', or drop the covariance"
+        )
     marginal_lines = spectroscopy.eline_mode == "marginalized"
     if calibration_marginalize:
         _refuse_calibration_order(model)
@@ -306,6 +333,7 @@ def batched_log_likelihood(
 
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
         out = predict_batched_observables(model, params, obs, spec, threaded=threaded)
+        chol = _pixel_factor(spec, obs)
         if marginal_lines:
             total = _marginal_lines_loglik(
                 model,
@@ -316,9 +344,17 @@ def batched_log_likelihood(
                 calibration_marginalize=calibration_marginalize,
                 cal_n_poly=cal_n_poly,
                 cal_prior_sigma=cal_prior_sigma,
+                chol=chol,
             )
         elif calibration_marginalize:
-            total = _spectral_marginal_loglik(out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma)
+            total = _spectral_marginal_loglik(
+                out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, chol
+            )
+        elif chol is not None:
+            whitened = banded_forward_substitution(
+                chol, obs.pix_mask * (obs.flux - out["spec_fnu"])
+            )
+            total = -0.5 * jnp.dot(whitened, whitened)
         else:
             total = diag_gaussian_log_prob(
                 out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask

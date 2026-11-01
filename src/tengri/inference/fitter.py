@@ -2714,7 +2714,10 @@ class Fitter:
         if obs is not None:
             spec_cfg = getattr(obs, "spectroscopy", None)
             if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-                args["spec_cov_inv"] = spec_cfg.cov_inv
+                if spec_cfg.has_banded_covariance:
+                    args["spec_chol_data"] = spec_cfg.chol_data
+                else:
+                    args["spec_cov_inv"] = spec_cfg.cov_inv
 
             line_flux_cfg = self._resolved_line_fluxes()
             if line_flux_cfg is not None:

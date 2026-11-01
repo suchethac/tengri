@@ -32,6 +32,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.observation.banded import BandedMatrix
 from tengri.observation.eline_catalog import (
     DEFAULT_LINE_NAMES,  # noqa: F401, re-exported for convenience
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
@@ -391,7 +392,7 @@ def unit_line_prior(
 
 def marginalize_emission_lines(
     residual: jnp.ndarray,
-    noise: jnp.ndarray,
+    noise: jnp.ndarray | None,
     design_matrix: jnp.ndarray,
     prior_variance: jnp.ndarray | None = None,
     *,
@@ -399,6 +400,8 @@ def marginalize_emission_lines(
     col_mask: jnp.ndarray | None = None,
     scale: jnp.ndarray | None = None,
     prior_sigma: jnp.ndarray | None = None,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
 ) -> tuple:
     r"""Analytically marginalize emission-line amplitudes under a Gaussian prior.
 
@@ -410,9 +413,10 @@ def marginalize_emission_lines(
     ----------
     residual : array_like, shape (n_pix,)
         Data minus continuum model, ``d - m`` [data units].
-    noise : array_like, shape (n_pix,)
+    noise : array_like, shape (n_pix,) or None
         Per-pixel noise standard deviation :math:`\sigma` [data units]. Must be
-        strictly positive wherever ``pix_mask`` is nonzero.
+        strictly positive wherever ``pix_mask`` is nonzero. Not read when
+        ``chol_data`` is given (pass ``None``).
     design_matrix : array_like, shape (n_pix, n_lines)
         Gaussian design matrix from :func:`build_eline_design_matrix`
         [data units per line-amplitude unit].
@@ -436,6 +440,15 @@ def marginalize_emission_lines(
         geometric mean of ``noise`` over the unmasked pixels,
         :math:`\exp(\sum_i w_i \ln\sigma_i / N_\mathrm{eff})`, so float32 runs at
         flux scale stay finite.
+    chol_data : array_like, shape (p + 1, n_pix), optional
+        Bands of the lower Cholesky factor of the pixel covariance, from
+        :func:`~tengri.observation.banded.banded_cholesky` with the same ``pix_mask``.
+        The pixels are then whitened by the factor, the noise scale of the line prior is
+        the factor's diagonal, and the :math:`\sum_i \ln\sigma_i` terms become
+        :math:`\sum_i \ln L_{ii}`. Default: None (diagonal ``noise``).
+    chol_offsets : tuple of int, optional
+        Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
+        ``chol_data``.
 
     Returns
     -------
@@ -488,17 +501,22 @@ def marginalize_emission_lines(
         width = jnp.sqrt(jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,)))
     else:
         width = jnp.broadcast_to(jnp.atleast_1d(prior_sigma), (n_lines,))
-    line = unit_line_prior(design_matrix, width, noise=noise, pix_mask=pix_mask)
-    weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
+    if chol_data is None:
+        scatter, whitening = noise, {"sigma": noise}
+    else:
+        factor = BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
+        scatter, whitening = chol_data[0], {"chol_lower": factor}
+    line = unit_line_prior(design_matrix, width, noise=scatter, pix_mask=pix_mask)
+    weight = jnp.ones_like(scatter) if pix_mask is None else pix_mask
     n_eff = jnp.sum(weight)
-    log_noise_sum = jnp.sum(weight * jnp.log(noise))
+    log_noise_sum = jnp.sum(weight * jnp.log(scatter))
     coef_scale = line.scale if scale is None else scale
 
     result = marginalize_linear_nuisance(
         residual,
         jnp.zeros_like(residual),
         line.design,
-        sigma=noise,
+        **whitening,
         pix_mask=pix_mask,
         prior_mean=line.prior_mean,
         prior_precision=line.prior_precision,
@@ -512,7 +530,7 @@ def marginalize_emission_lines(
 
 
 # JIT-compiled version (prior_variance must be traced, not static)
-marginalize_emission_lines = jax.jit(marginalize_emission_lines)
+marginalize_emission_lines = jax.jit(marginalize_emission_lines, static_argnames=("chol_offsets",))
 
 
 @jax.jit

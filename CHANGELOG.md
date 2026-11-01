@@ -1,6 +1,9 @@
 ## [Unreleased]
 
 ### Added
+- feat(observation,inference): banded pixel covariance on both spectroscopic paths through one banded Cholesky in the marginal primitive (#3133)
+- feat(inference,nebular): analytic emission-line marginalization on the batched spectroscopic path, and the exact joint with calibration on both paths (#3117, closes #2354).
+- feat(dust,observation): Fitzpatrick (1999) Milky Way foreground on the projection path (spectrum and photometry), per-galaxy ebmv_mw leaf on the batched path; registered as a dust law, so it is also available as an intrinsic screen law like cardelli (#3140)
 - feat(inference,nebular): analytic emission-line marginalization on the batched spectroscopic path, and the exact joint with calibration on both paths (#3117, closes #2354).
 - feat(dust,observation): Fitzpatrick (1999) Milky Way foreground on the projection path (spectrum and photometry), per-galaxy ebmv_mw leaf on the batched path; registered as a dust law, so it is also available as an intrinsic screen law like cardelli (#3140)
 - feat(dust,observation): Fitzpatrick (1999) Milky Way foreground on the projection path (spectrum and photometry), per-galaxy ebmv_mw leaf on the batched path; registered as a dust law, so it is also available as an intrinsic screen law like cardelli (#3140)

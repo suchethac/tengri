@@ -44,7 +44,9 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
+from tengri.observation.banded import BandedMatrix
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.utils.scale import representable_floor as _representable_floor
 
@@ -216,7 +218,7 @@ def calibration_basis(
     return jnp.stack(columns, axis=-1)
 
 
-@partial(jax.jit, static_argnames=("n_poly",))
+@partial(jax.jit, static_argnames=("n_poly", "chol_offsets"))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -227,6 +229,8 @@ def marginalize_calibration(
     *,
     pix_mask: jnp.ndarray | None = None,
     wave_range: tuple[float, float] | None = None,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     r"""Analytically marginalize over calibration polynomial coefficients.
 
@@ -263,6 +267,13 @@ def marginalize_calibration(
     wave_range : tuple of float, optional, keyword-only
         ``(wave_min, wave_max)`` [Angstrom] that normalize the Chebyshev coordinate.
         Default: ``(wavelength.min(), wavelength.max())``.
+    chol_data : array_like, shape (p + 1, n_wave), optional, keyword-only
+        Bands of the lower Cholesky factor of the pixel covariance, from
+        :func:`~tengri.observation.banded.banded_cholesky`. With a factor the pixels are
+        whitened by it and ``obs_err`` is not read. Default: None (diagonal ``obs_err``).
+    chol_offsets : tuple of int, optional, keyword-only
+        Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
+        ``chol_data``.
 
     Returns
     -------
@@ -302,15 +313,18 @@ def marginalize_calibration(
 
     basis = calibration_basis(wavelength, wave_min, wave_max, n_poly)
 
-    # Guard only against sigma == 0, in the sigma domain, at the working dtype's
-    # smallest normal. Never a variance floor (#1588).
-    err_safe = jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))
+    if chol_data is None:
+        # Guard only against sigma == 0, in the sigma domain, at the working dtype's
+        # smallest normal. Never a variance floor (#1588).
+        noise = {"sigma": jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))}
+    else:
+        noise = {"chol_lower": BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)}
 
     result = marginalize_linear_nuisance(
         obs_flux,
         model_flux,
         model_flux[:, jnp.newaxis] * basis,
-        sigma=err_safe,
+        **noise,
         pix_mask=pix_mask,
         prior_precision=jnp.eye(n_poly) / prior_sigma**2,
     )

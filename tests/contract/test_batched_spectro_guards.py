@@ -230,6 +230,13 @@ def test_template_with_unsupported_setting_is_refused(synthetic_ssp, case):
         check_template_model(template)
 
 
+def test_template_covariance_refusal_names_the_per_galaxy_leaf(synthetic_ssp):
+    template = _refusal_cases(synthetic_ssp)["covariance"]()
+    with pytest.raises(ValueError, match="template model carries a spectral covariance") as err:
+        check_template_model(template)
+    assert "give every record its BandedMatrix" in str(err.value)
+
+
 def test_plain_free_redshift_template_is_accepted(synthetic_ssp):
     wave = _grid(100, 4000.0, 7000.0)
     check_template_model(_model(synthetic_ssp, wave, obs_kw={"noise": NoiseModel()}))
