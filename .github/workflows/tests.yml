@@ -1831,9 +1831,11 @@ jobs:
           && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
               || github.event.label.name == 'run-slow-tests'))
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
-    # Sizes from warm working sets; see CHANGELOG.md.
+    # Sizes from warm working sets; see CHANGELOG.md. The three inference caps (total 1.05,
+    # as before) are provisional: they follow the ledger split (leg 1 is test_profile_mass.py
+    # alone) and are to be re-measured from the next nightly's warm cache.
     env:
-      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.2","inference-2":"0.2","inference-3":"0.65","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.4","inference-2":"0.4","inference-3":"0.25","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
     timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7

@@ -199,7 +199,7 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
 #: would each fail at that rate (#2424). Three seeds pool to about 300 thinned
 #: PIT values per model, for which the KS bar at ``_PIT_ALPHA`` is 0.094; a
 #: shift of the conditional by s posterior widths moves the PIT CDF by about
-#: 0.40 s, so a shift of 0.24 widths or more is detected.
+#: 0.40 s, so a shift of 0.24 widths or more is detected (0.15 widths at six seeds).
 _PIT_SEEDS = (0, 1, 2)
 _PIT_ALPHA = 0.01
 
@@ -388,12 +388,9 @@ class TestProfileMassPosteriorIdentitySmoke:
         forward = ForwardModel.build(sed=model)
         _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
 
-        # 400 warmup steps, not 100: at 100 the unprofiled chain of seed 3 left
-        # warmup unadapted (28 divergences, mass percentiles pinned at
-        # 9.79-9.80 dex) and the KS test compared a stuck chain, not a posterior.
-        # At 400 the same fit has no divergence and the two posteriors agree
-        # (KS p = 0.38). Which seeds hit that depended on the MAP start point,
-        # so it moved when the MAP optimizer began converging (#2683).
+        # 400 warmup steps, not 100, so the unprofiled chain adapts (#2683). This
+        # seed-0 smoke covers profiled-versus-unprofiled agreement; the seed-3
+        # warmup regression is covered by ``test_unprofiled_warmup_adapts_seed3``.
         fit_kw = dict(
             method="mcmc_nuts",
             dense_mass_matrix=False,
@@ -449,3 +446,26 @@ class TestProfileMassPosteriorIdentitySmoke:
         assert ks_pvalue >= 0.001, (
             f"Seed {seed}: KS p-value {ks_pvalue:.4f} suggests distributions differ."
         )
+
+    def test_unprofiled_warmup_adapts_seed3(self, ssp_data_fsps):
+        """The unprofiled chain of seed 3 leaves warmup adapted (#2683).
+
+        At 100 warmup steps this fit was stuck (28 divergences, mass percentiles
+        pinned at 9.79-9.80 dex); at 400 it has no divergence. Which seeds hit
+        the stall depended on the MAP start point.
+        """
+        model = _minimal_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _truth, flux, noise = _mock(model, seed=3, snr=30.0)
+        post = forward.fit(
+            flux,
+            noise,
+            profile_mass=False,
+            key=jax.random.PRNGKey(3 + 30000),
+            method="mcmc_nuts",
+            dense_mass_matrix=False,
+            n_warmup=400,
+            n_samples=200,
+            n_chains=1,
+        )
+        assert post.diagnostics.get("n_divergent") == 0, post.diagnostics.get("n_divergent")
