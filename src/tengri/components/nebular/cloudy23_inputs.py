@@ -18,15 +18,15 @@ Notes
 
 References
 ----------
-.. [1] Ferland, G.J. et al. 2023, "The Cloudy 23 Release",
-   Frontiers in Astronomy and Space Sciences, to appear.
+.. [1] Chatzikos, M. et al. 2023, "The 2023 Release of Cloudy",
+   Rev. Mexicana Astron. Astrofis. 59, 327.
 .. [2] Ferland, G.J. et al. 2017, "The 2017 Release Cloudy",
    Rev. Mexicana Astron. Astrofis. 53, 385.
-.. [3] Byler, N. et al. 2017, "Emission-line Diagnostics of O Stars",
-   ApJ, 840, 44.
-.. [4] Gutkin, J., Charlot, S., & Bruzual, G. 2016, "Impact of Photoionized
-   Gas on the JWST-observable Emission Line Signatures of High-z Galaxies",
-   MNRAS, 462, 1757.
+.. [3] Byler, N. et al. 2017, "Nebular Continuum and Line Emission in Stellar
+   Population Synthesis Models", ApJ, 840, 44.
+.. [4] Gutkin, J., Charlot, S., & Bruzual, G. 2016, "Modelling the nebular
+   emission from primeval to present-day star-forming galaxies", MNRAS, 462,
+   1757.
 """
 
 from __future__ import annotations
@@ -202,11 +202,11 @@ def build_cloudy23_deck(
 
     References
     ----------
-    .. [1] Ferland, G.J. et al. 2023, "The Cloudy 23 Release",
-       Frontiers in Astronomy and Space Sciences, to appear.
-    .. [2] Gutkin, J., Charlot, S., & Bruzual, G. 2016, "Impact of
-       Photoionized Gas on the JWST-observable Emission Line Signatures
-       of High-z Galaxies", MNRAS, 462, 1757.
+    .. [1] Chatzikos, M. et al. 2023, "The 2023 Release of Cloudy",
+       Rev. Mexicana Astron. Astrofis. 59, 327.
+    .. [2] Gutkin, J., Charlot, S., & Bruzual, G. 2016, "Modelling the nebular
+       emission from primeval to present-day star-forming galaxies", MNRAS,
+       462, 1757.
 
     """
     # Validate inputs

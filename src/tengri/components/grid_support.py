@@ -201,6 +201,33 @@ def _cb19_grid_support() -> dict[str, tuple[float, float]]:
     }
 
 
+def _gutkin16_grid_support() -> dict[str, tuple[float, float]]:
+    """Read the Gutkin+2016 table's axis extents, in the public parameter units (#983).
+
+    ``neb_logZ_gas`` is the public log10(Z/Zsun): the table stores absolute log10(Z),
+    so its axis is shifted by ``LOG10_ZSUN`` (the nebular component adds that offset
+    before calling any backend). ``neb_log_nH``, ``neb_xi_d`` and ``neb_co_ratio``
+    are stored in the units they are declared in. The mup axis is not a free
+    parameter (it is structural), so it has no entry here.
+    """
+    from tengri.utils.physics_constants import LOG10_ZSUN
+
+    out: dict[str, tuple[float, float]] = {}
+    out.update(_h5_axis_support("gutkin16_grid.h5", "gutkin16/logU_axis", "neb_logU"))
+    out.update(
+        _h5_axis_support(
+            "gutkin16_grid.h5",
+            "gutkin16/logZ_axis",
+            "neb_logZ_gas",
+            transform=lambda axis: axis - LOG10_ZSUN,
+        )
+    )
+    out.update(_h5_axis_support("gutkin16_grid.h5", "gutkin16/log_nH_axis", "neb_log_nH"))
+    out.update(_h5_axis_support("gutkin16_grid.h5", "gutkin16/xi_d_axis", "neb_xi_d"))
+    out.update(_h5_axis_support("gutkin16_grid.h5", "gutkin16/co_ratio_axis", "neb_co_ratio"))
+    return out
+
+
 def _mappings_stellar_grid_support() -> dict[str, tuple[float, float]]:
     """Read MAPPINGS V stellar backend's default grid's log U axis (#2460).
 
@@ -357,6 +384,7 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     ("agn.disc", "grahsp_netzer"): _grahsp_netzer_support,
     ("neb", "cloudy"): _cloudy_grid_support,
     ("neb", "cb19"): _cb19_grid_support,
+    ("neb", "gutkin16"): _gutkin16_grid_support,
     ("neb", "mappings"): _mappings_stellar_grid_support,
     ("neb", "mappings_agn"): _mappings_agn_grid_support,
     ("neb", "cue"): _cue_grid_support,
@@ -384,6 +412,7 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     },
 }
 # Nebular components registered (#2460): ("neb", "cloudy"), ("neb", "cb19"),
+# ("neb", "gutkin16") (#983),
 # ("neb", "mappings"), ("neb", "mappings_agn") -- all four clip neb_logU onto
 # a grid axis (confirmed by reading each interpolator: CloudyGridBackend's
 # triweight/linear lookup, CB19Backend's _frac_idx, MAPPINGS'
