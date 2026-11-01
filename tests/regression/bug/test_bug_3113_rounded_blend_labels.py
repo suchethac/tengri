@@ -215,6 +215,6 @@ def test_labels_without_a_line_list_counterpart_keep_the_plain_conversion():
     np.testing.assert_allclose(out, air_to_vac(raw), rtol=0, atol=1e-9)
 
 
-def test_label_within_the_half_width_of_a_listed_line_snaps_to_its_vacuum_centre():
+def test_label_within_the_half_width_of_a_listed_line_snaps_to_its_vacuum_center():
     out = rounded_labels_to_vacuum(np.array([_SNAP_AIR_AA]), half_width_aa=_HALF_WIDTH_AA)
     np.testing.assert_allclose(out, [_CATALOG["H8"]], rtol=0, atol=1e-9)
