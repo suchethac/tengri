@@ -85,8 +85,11 @@ from tengri.forward.batched_spectrum import (
     predict_batched_observables,
     require_model_spec,
 )
+from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference.backends.mcmc.catalog import (
+    CATALOG_CHEES_ENSEMBLE,
     GHMC_DEFAULT_SUPERCHAINS,
+    _catalog_live_chains,
     build_catalog_mcmc_engine,
 )
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
@@ -929,6 +932,28 @@ def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     )
 
 
+def _resolve_bucket_batch_size(
+    batch_size: int | str | None,
+    *,
+    n_gal: int,
+    n_data_per_gal: int,
+    sampler: str,
+    n_chains: int,
+    n_ensemble: int | str,
+) -> int | None:
+    """Galaxies per ``lax.map`` step for one bucket; ``"auto"`` is sized by the budget."""
+    if batch_size is None or isinstance(batch_size, int):
+        return batch_size
+    if batch_size != AUTO:
+        raise ValueError(f"batch_size must be an int, None or {AUTO!r}, got {batch_size!r}")
+    return resolve_forward_chunk_size(
+        AUTO,
+        n_gal=n_gal,
+        n_data_per_gal=n_data_per_gal,
+        n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
+    )
+
+
 def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
@@ -940,7 +965,7 @@ def fit_spectra_catalog_mcmc(
     seed: int = 0,
     init: str = "map",
     map_steps: int = 200,
-    batch_size: int | None = None,
+    batch_size: int | str | None = None,
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
@@ -974,13 +999,21 @@ def fit_spectra_catalog_mcmc(
         ``"map"``.
     map_steps : int, optional
         Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
-    batch_size : int, optional
+    batch_size : int, None or ``"auto"``, optional
         Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
         (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the
-        galaxies one at a time. On a CPU a small value or ``None`` is right: a wide
-        ``vmap`` of NUTS trees waits for its deepest tree and costs memory. On a
-        GPU a large value is what buys parallel throughput. The draws do not
-        depend on this value, up to floating-point reduction order.
+        galaxies one at a time. ``"auto"`` sizes each bucket to
+        ``K = floor(B / ((32 MiB + n_data * 4 KiB) * n_chains))``, clipped to
+        ``[1, n_gal]``, where ``B`` is the budget in bytes, ``n_data`` the bucket's
+        largest spectrum, and ``n_chains`` the live chains per galaxy (the ChEES
+        ensemble for ``sampler="chees"``). ``B`` is ``TENGRI_FORWARD_MEMORY_BUDGET_GB``
+        (default 2 GB). The budget is pinned, not read from the device, so the same
+        K results on every machine and a run's numerics do not depend on what else
+        is resident (see :mod:`tengri.inference._batching`). On a CPU a small value
+        or ``None`` is right: a wide ``vmap`` of NUTS trees waits for its deepest
+        tree and costs memory. On a GPU a large value is what buys parallel
+        throughput. The draws do not depend on this value, up to floating-point
+        reduction order.
     calibration_marginalize : bool, optional
         Marginalize a Chebyshev calibration polynomial out of the spectral term, as
         :func:`batched_log_likelihood` does. Also applies to the MAP warm start.
@@ -1072,6 +1105,14 @@ def fit_spectra_catalog_mcmc(
         unravel_fn = flat[1]
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
+        bucket_batch = _resolve_bucket_batch_size(
+            batch_size,
+            n_gal=n_gal,
+            n_data_per_gal=int(spec.n_max),
+            sampler=sampler,
+            n_chains=n_chains,
+            n_ensemble=options.get("n_ensemble", CATALOG_CHEES_ENSEMBLE),
+        )
         run_one, _ = build_catalog_mcmc_engine(
             None,
             sampler,
@@ -1090,7 +1131,7 @@ def fit_spectra_catalog_mcmc(
         positions, divergent = jax.lax.map(
             one_galaxy,
             (starts, jax.random.split(sample_key, n_gal), batch),
-            batch_size=batch_size,
+            batch_size=bucket_batch,
         )
         n_draws = positions.shape[1]
         latent_draws = np.asarray(positions)
