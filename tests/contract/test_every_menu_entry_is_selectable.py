@@ -53,6 +53,7 @@ pytestmark = pytest.mark.contract
 # Substrings that mark a refusal as designed rather than broken.
 ALLOWED_REFUSALS = (
     "not yet validated against the DSPS forward path",
+    "is the diffuse-ISM screen law only",  # chevallard13 as a non-law_diff slot (#3178)
     "At least one additive (smooth) SFH component required",
     "model protocol surface incomplete",  # MAPPINGS AGN backend (#2082)
     # FIRRC radio blocks normalize against L_ir and refuse to build without a

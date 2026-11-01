@@ -4026,10 +4026,14 @@ class SEDModel:
             return
         # Dust screen with potentially non-trivial optical depth? (Zero dust →
         # the LUT is exact, so there is nothing to warn about.)
-        if (
-            max(self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc"))
-            < 0.1
-        ):
+        if getattr(self, "_dust_parameterization", "tau_bc_diff") == "tauv_mu":
+            # mu <= 1, so both screens are at most tau_V.
+            depth = self._max_plausible_tau("dust_tau_v")
+        else:
+            depth = max(
+                self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc")
+            )
+        if depth < 0.1:
             return
         z_rep = self._representative_redshift()
         names = list(getattr(self.observation.photometry, "names", []) or [])
@@ -11738,11 +11742,14 @@ class SEDModel:
     #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
     #: this set without also checking the energy-balance LUT build requirements is
     #: a silent numerical error.
+    #: ``dust_mu`` exists only under two_component (requirement (1) above), and its
+    #: (tau_V, mu) box sets the LUT hull (#3176).
     _EB_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
             "dust_tau_diff",
             "dust_tau_v",
+            "dust_mu",
             "dust_eta_balance",
             "dust_log_L_ir",
         }
@@ -11765,8 +11772,16 @@ class SEDModel:
     #: *shape* is fixed, and the homogeneity probe independently guards correctness.
     #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
     #: adding a new attenuation parameter that does not reshape the emission.
+    #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
-        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
+        {
+            "dust_tau_bc",
+            "dust_tau_diff",
+            "dust_eta_balance",
+            "dust_log_L_ir",
+            "dust_tau_v",
+            "dust_mu",
+        }
     )
 
     def _ztable_data_for_jit(self):
@@ -12116,8 +12131,29 @@ class SEDModel:
                         return jnp.linspace(lo, hi, 24)
                     return jnp.asarray([_required_fixed_value(fixed, name)])
 
-                tau_bc_grid = _grid("dust_tau_bc")
-                tau_diff_grid = _grid("dust_tau_diff")
+                if dust.config.parameterization == "tauv_mu":
+                    # The native pair is not declared under tauv_mu: the axes are the
+                    # hull of the (tau_V, mu) box, the image of which both screens
+                    # take (#3176). A degenerate span is one node, as in _grid.
+                    def _hull(lo, hi):
+                        if hi - lo <= 0.0:
+                            return jnp.asarray([lo])
+                        return jnp.linspace(lo, hi, 24)
+
+                    def _span(name):
+                        if name in free:
+                            dist = self.spec.get_distribution(name)
+                            return float(dist.bounds[0]), float(dist.bounds[1])
+                        value = _required_fixed_value(fixed, name)
+                        return value, value
+
+                    v_lo, v_hi = _span("dust_tau_v")
+                    m_lo, m_hi = _span("dust_mu")
+                    tau_bc_grid = _hull((1.0 - m_hi) * v_lo, (1.0 - m_lo) * v_hi)
+                    tau_diff_grid = _hull(m_lo * v_lo, m_hi * v_hi)
+                else:
+                    tau_bc_grid = _grid("dust_tau_bc")
+                    tau_diff_grid = _grid("dust_tau_diff")
                 z_nodes = self._energy_balance_z_nodes(
                     (law_bc, law_diff), tau_bc_grid.shape[0], tau_diff_grid.shape[0]
                 )
