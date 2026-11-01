@@ -230,6 +230,13 @@ def test_template_with_unsupported_setting_is_refused(synthetic_ssp, case):
         check_template_model(template)
 
 
+def test_template_covariance_refusal_names_the_per_galaxy_leaf(synthetic_ssp):
+    template = _refusal_cases(synthetic_ssp)["covariance"]()
+    with pytest.raises(ValueError, match="template model carries a spectral covariance") as err:
+        check_template_model(template)
+    assert "give every record its BandedMatrix" in str(err.value)
+
+
 def test_plain_free_redshift_template_is_accepted(synthetic_ssp):
     wave = _grid(100, 4000.0, 7000.0)
     check_template_model(_model(synthetic_ssp, wave, obs_kw={"noise": NoiseModel()}))
@@ -324,3 +331,34 @@ def test_chunk_size_splits_the_bucket_into_vmapped_chunks(synthetic_ssp, monkeyp
     calls.clear()
     fit_spectra_map_vmap(template, batches, n_steps=2)
     assert calls == [3]
+
+
+# ── A banded template refuses records without the banded operator ─────────
+
+
+def _banded_template(ssp, wave):
+    """Template whose spectroscopy carries the banded resolution operator."""
+    return _model(ssp, wave, spectro_kw={"resolution": _R_BANDED, **_banded(wave)})
+
+
+@pytest.mark.parametrize("kind", ["scalar", "per_pixel"])
+def test_banded_template_refuses_records_without_the_banded_operator(synthetic_ssp, kind):
+    wave = _grid(300, 4000.0, 7000.0)
+    template = _banded_template(synthetic_ssp, wave)
+    if kind == "scalar":
+        resolution = _R_BANDED
+    else:
+        resolution = np.full(wave.size, _R_BANDED)
+    with pytest.raises(ValueError, match="the template's resolution is banded") as err:
+        build_spectro_batches([_record_for(wave, resolution=resolution)], model=template)
+    assert "gaussian_resolution_bands" in str(err.value)
+
+
+def test_banded_template_accepts_records_with_the_banded_operator(synthetic_ssp):
+    wave = _grid(300, 4000.0, 7000.0)
+    template = _banded_template(synthetic_ssp, wave)
+    operator = _banded(wave)["resolution_matrix"]
+    [(spec, _, _)] = build_spectro_batches(
+        [_record_for(wave, resolution=operator)], model=template
+    )
+    assert spec.grid_kind == "banded"

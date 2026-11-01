@@ -2663,11 +2663,9 @@ class Fitter:
         )
 
         if self._eline_fitted:
-            _secondary_indices = {dc.secondary_idx for dc in _catalog.doublets}
-            _independent_line_names = [
-                nm for i, nm in enumerate(_catalog.names) if i not in _secondary_indices
-            ]
-            self._eline_amplitude_names = [f"eline_amp_{nm}" for nm in _independent_line_names]
+            from tengri.observation.eline_marginalization import eline_amplitude_names
+
+            self._eline_amplitude_names = eline_amplitude_names(_catalog)
             _amp_bound = 10.0 * self._eline_prior_sigma
             _amp_priors = {
                 nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
@@ -2716,7 +2714,10 @@ class Fitter:
         if obs is not None:
             spec_cfg = getattr(obs, "spectroscopy", None)
             if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-                args["spec_cov_inv"] = spec_cfg.cov_inv
+                if spec_cfg.has_banded_covariance:
+                    args["spec_chol_data"] = spec_cfg.chol_data
+                else:
+                    args["spec_cov_inv"] = spec_cfg.cov_inv
 
             line_flux_cfg = self._resolved_line_fluxes()
             if line_flux_cfg is not None:

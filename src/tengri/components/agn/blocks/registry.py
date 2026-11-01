@@ -69,7 +69,10 @@ agn_torus_block, agn_attenuation_block : str, optional
         (disc on ``agn_log_lbol``, dust on the absorbed-energy ``agn_power``),
         which does *not* conserve energy across the disc/dust boundary.
     **params
-        Per-impl free parameters forwarded to every block.
+        Per-impl free parameters forwarded to every block. This entry is called with the
+        full declared ``agn_*`` superset (the AGN component, the presets), so a key no block
+        reads is accepted unless ``strict_keys=True`` is passed (the grammar refuses one,
+        #2994).
 
     Returns
     -------
@@ -91,5 +94,5 @@ agn_torus_block, agn_attenuation_block : str, optional
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
         agn_norm=agn_norm,
-        **params,
+        **{"strict_keys": False, **params},
     )
