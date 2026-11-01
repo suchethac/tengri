@@ -156,8 +156,9 @@ ALLOWLIST: dict[str, str] = {
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
     ),
     "utils/sed_quantities.py::_uv_anchor_plan": (
-        "tracer → 'traced': in-grid interpolation with NaN wherever the grid does not span 1600 Å "
-        "(loud), never the extrapolate/edge plans, which need a concrete grid."
+        "tracer → 'traced': the three cases are selected with jnp.where on the traced coverage "
+        "(in-grid; masked-sum power-law fit; edge), the same values as the concrete plans, "
+        "with no warning under trace."
     ),
     # ---- recorded gaps: the unknown is not the general path; owner to decide ----
     "observation/spectrum.py::_lsf_sigma_bound_kms": (
