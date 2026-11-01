@@ -191,6 +191,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:astro-ph/9911459](https://arxiv.org/abs/astro-ph/9911459).
 - Two-component birth-cloud plus ISM attenuation. Charlot & Fall (2000),
   [arXiv:astro-ph/0003128](https://arxiv.org/abs/astro-ph/0003128).
+- Optical-depth-dependent diffuse-ISM attenuation curve, the `chevallard13` law. Chevallard et al. (2013),
+  "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies",
+  MNRAS 432, 2061, [doi:10.1093/mnras/stt523](https://doi.org/10.1093/mnras/stt523).
 - Clumpy-medium radiative transfer attenuation. Witt & Gordon (2000),
   [arXiv:astro-ph/9907342](https://arxiv.org/abs/astro-ph/9907342).
 - FM90 ultraviolet extinction parameterization (c1, c2, c3, c4, x0, gamma) used by
