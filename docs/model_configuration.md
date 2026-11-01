@@ -294,6 +294,9 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
 
 **Structural keys:**
 - `'type'`: Architecture: `'single_component'` (one dust screen) or `'two_component'` (birth-cloud + diffuse). Default varies by law.
+- `'parameterization'`: Screen-depth parameterization of a `'two_component'` block: `'tau_bc_diff'` (default; declares `'tau_bc'` and `'tau_diff'`) or `'tauv_mu'` (declares `'tau_v'` and `'mu'`). Charlot & Fall (2000) written as a total V-band depth and the fraction in the diffuse ISM: `tau_BC = (1 - mu) tau_V`, `tau_ISM = mu tau_V`. The two forms are the same model, bit-identical at equivalent values.
+  - `'tau_v'` (under `'tauv_mu'`): total V-band optical depth of the two screens (`dust_tau_v`). Default `Fixed(1.0)`; free prior `Uniform(0, 4)`.
+  - `'mu'` (under `'tauv_mu'`): fraction of the V-band depth in the diffuse ISM (`dust_mu`), in [0, 1]. Default `Fixed(0.3)`; free prior `Uniform(0, 1)`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'law'`: Attenuation law: `'calzetti'`, `'ccm89'`, `'mw_rv31'`, `'kext00'`, etc. Menu: `tengri.list_dust_laws()`.
   - On `'single_component'`: one law for the entire dust.
@@ -301,6 +304,7 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
   - On `'wg00'` (Willis & Graves 2000 screen): use structural keys like `'dust_curve'`, `'geometry'`, `'structure'` instead of a law name.
 - `'law_bc'`: Birth-cloud attenuation law (two-component only). Required with `'law_diff'` when not using shared `'law'`.
 - `'law_diff'`: Diffuse dust attenuation law (two-component only). Required with `'law_bc'` when not using shared `'law'`.
+  - `'chevallard13'` (Chevallard et al. 2013, optical-depth-dependent curve) is accepted as `'law_diff'` only. Its slope flattens as the diffuse depth grows, and it is fitted over 0.1 to 2.5 μm, with the index held at its edge values outside that range.
 - `'law_neb'`: Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`). Under `'nebular_screen': 'own'` it is the law of the own screen.
 - `'nebular_screen'`: Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through. On `'two_component'`: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse, mixed by where the ionizing photons come from), `'diffuse'` (the old-star screen), `'none'` (`'off'` is a synonym), or `'own'`: one dedicated screen `T_neb(λ) = exp(−tau_neb · k_neb(λ))`, with `k_neb` the `'law_neb'` curve (default `'law_bc'`, normalized to k(5500 Å) = 1) and `tau_neb` the declared parameter `dust_tau_neb` (Fixed at 1 unless set or freed; `Uniform(0, 4)` when freed). `'own'` is the TOTAL nebular attenuation: no cascade through the diffuse screen, no young/old mixture, no `dust_f_obscuration` floor; the absorbed nebular energy joins the dust budget as for the other choices. On `'age_binned'`: `'birth_cloud'` (default, the ionizing-weighted interval mixture) or `'own'` (`law_neb` defaults to the first screen's law, with that screen's shape parameters; an explicit `law_neb` declares its own `<shape>_neb` parameters). `'tau_neb'` (and, on `'age_binned'`, `'law_neb'` and the `<shape>_neb` keys) is refused with any choice but `'own'`, naming `nebular_screen='own'`. `'single_component'` accepts only `'none'`. Cross-code: CIGALE's `E(B−V)_lines = f_att⁻¹ · E(B−V)_stars` is this screen with `tau_neb = f_att⁻¹ · tau_stars`; Prospector/FSPS (`dust1` + `dust2` on the lines) and BAGPIPES (`η · A_V` on the birth cloud) have no separate nebular depth, which is what the default reproduces.
 - `'shock_screen'`: Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
@@ -351,6 +355,9 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.4, 'ta
 # Two component (per-screen laws)
 dust_attenuation={'type': 'two_component', 'law_bc': 'ccm89', 'law_diff': 'calzetti', 'tau_bc': 0.4, 'tau_diff': 0.2}
 
+# Total V-band depth and diffuse fraction (Charlot & Fall 2000), chevallard13 as the diffuse-ISM law
+dust_attenuation={'type': 'two_component', 'parameterization': 'tauv_mu', 'law_bc': 'power_law', 'law_diff': 'chevallard13', 'tau_v': FREE, 'mu': Fixed(0.4), 'other_params': Fixed(DEFAULT)}
+
 # WG00 screen with structural selectors
 dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', 'structure': 'clumpy'}
 
@@ -382,6 +389,9 @@ dust_attenuation={
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
 - Each emission source passes through the screen its selector names (`'nebular_screen'`, `'shock_screen'`, `'agn_screen'`); the absorbed nebular and shock power joins the dust energy balance under those screens.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
+- A native depth key (`'tau_bc'`, `'tau_diff'`) under `'parameterization': 'tauv_mu'` raises, and so does `'tau_v'` or `'mu'` without `'tauv_mu'`; name one description per block.
+- `'parameterization'` on a `'single_component'` block raises, because it is a two-component setting.
+- `'chevallard13'` given as `'law'`, `'law_bc'` or `'law_neb'` raises, because it is legal only as `'law_diff'`.
 - Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`: the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
 - **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not. A lone `'slope_bc'` is then complete, because there is no partner to give.
 - The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen. `'law_neb'` defaults to `'law_bc'`, and a `'*_neb'` override is checked against whichever of the two is in force.

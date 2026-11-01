@@ -782,6 +782,7 @@ class Parameters:
             dust_screens=self.dust_screens,
             dust_nebular_screen=self.dust_nebular_screen,
             dust_law_neb=self.dust_law_neb,
+            dust_parameterization=self.dust_parameterization,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1231,6 +1232,42 @@ class Parameters:
                     )
                     kwargs.pop(name)
 
+    def _init_dust_parameterization(self, kwargs) -> None:
+        """Pop ``dust_parameterization`` and refuse the depth keys it does not declare (#3176)."""
+        from tengri.components.dust._params import DUST_PARAMETERIZATIONS
+
+        self.dust_parameterization = str(kwargs.pop("dust_parameterization", "tau_bc_diff"))
+        if self.dust_parameterization not in DUST_PARAMETERIZATIONS:
+            raise ValueError(
+                f"dust_parameterization must be one of {DUST_PARAMETERIZATIONS}; "
+                f"got {self.dust_parameterization!r}."
+            )
+        if self.dust_parameterization != "tau_bc_diff" and self.dust_model != "two_component":
+            raise ValueError(
+                f"dust_parameterization={self.dust_parameterization!r} is a two_component "
+                f"setting (got dust_model={self.dust_model!r}); drop it."
+            )
+        if self.dust_model != "two_component":
+            return
+        if self.dust_parameterization == "tauv_mu":
+            given = [k for k in ("dust_tau_bc", "dust_tau_diff") if k in kwargs]
+            if given:
+                raise ParameterError(
+                    f"dust_parameterization='tauv_mu' declares the total V-band depth and the "
+                    f"diffuse fraction, not {given}. Give dust_tau_v and dust_mu instead, "
+                    f"where tau_v = tau_bc + tau_diff and mu = tau_diff / (tau_bc + tau_diff); "
+                    f"or drop dust_parameterization='tauv_mu' to keep dust_tau_bc and "
+                    f"dust_tau_diff."
+                )
+        else:
+            given = [k for k in ("dust_tau_v", "dust_mu") if k in kwargs]
+            if given:
+                raise ParameterError(
+                    f"{given} needs parameterization='tauv_mu' (dust_parameterization="
+                    f"'tauv_mu'); the default native pair declares dust_tau_bc and "
+                    f"dust_tau_diff instead."
+                )
+
     def _init_dust_config(self, kwargs, *, validate_flat: bool = True):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
@@ -1290,6 +1327,26 @@ class Parameters:
         # the youngest stars (default). Set it to give HII-region emission its
         # own birth-cloud curve while still sharing the diffuse ISM screen.
         self.dust_law_neb = law_neb_explicit
+
+        # Screen-depth parameterization (#3176): the flat twin of the grammar's
+        # 'parameterization' key. Only two_component reads it, and tau_v / mu
+        # and the native pair never appear together.
+        self._init_dust_parameterization(kwargs)
+
+        # chevallard13 is the diffuse-screen law only (#3178): legal as law_diff
+        # on a two-screen model, refused on every other slot.
+        from tengri.components.dust.laws._registry import refuse_diffuse_only_law
+
+        refuse_diffuse_only_law(self.dust_law_bc, key="dust_law_bc", dust_model=self.dust_model)
+        refuse_diffuse_only_law(
+            self.dust_law_diff, key="dust_law_diff", dust_model=self.dust_model
+        )
+        refuse_diffuse_only_law(self.dust_law_neb, key="dust_law_neb", dust_model=self.dust_model)
+        if self.dust_model == "age_binned":
+            for _screen in self.dust_screens:
+                refuse_diffuse_only_law(
+                    _screen[0], key="dust_screens[...]", dust_model=self.dust_model
+                )
 
         # Per-source dust-screen choice (#2234 replacement): which screen
         # attenuates the nebular continuum + line catalog, the shock SED, and
@@ -3270,6 +3327,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_diff": content("diffuse dust law determines parameters"),
     "dust_law_neb": content("nebular dust law determines parameters"),
     "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_parameterization": content(
+        "screen-depth parameterization: 'tauv_mu' declares dust_tau_v and dust_mu in place "
+        "of dust_tau_bc and dust_tau_diff, which changes the parameter set (#3176)"
+    ),
     "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
     "dust_agn_screen": content(
         "which screen AGN light passes through; also moves AGN before dust "

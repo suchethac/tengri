@@ -83,6 +83,8 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "li08": ["li2008_ext"],  # Li+2008 four-coefficient analytical curve (ADS-verified)
     "vw07_bc": ["witt_gordon2000"],  # tengri source notes Wild+2007; closest workspace match
     "vw07_diff": ["witt_gordon2000"],  # see above; update once Wild+2007 is in the workspace bib
+    # Chevallard+13 curve, applied inside the Charlot & Fall (2000) screen (#3178).
+    "chevallard13": ["chevallard2013", "charlot_fall2000"],
     "cf00": ["charlot_fall2000"],
 }
 

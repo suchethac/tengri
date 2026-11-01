@@ -103,6 +103,7 @@ from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
+from tengri.components.dust.laws._registry import refuse_diffuse_only_law
 from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 from tengri.config.exceptions import (
     AdvisoryWarning,
@@ -4344,6 +4345,61 @@ def _own_screen_keys_given(dust_atten_dict: dict, dust_type: str) -> list[str]:
     return [k for k in dust_atten_dict if k in names]
 
 
+_NATIVE_DEPTH_KEYS = ("tau_bc", "tau_diff", "dust_tau_bc", "dust_tau_diff")
+_TAUV_MU_KEYS = ("tau_v", "mu", "dust_tau_v", "dust_mu")
+
+
+def _translate_parameterization(dust_atten_dict: dict, result: dict, dust_type: str) -> str:
+    """Resolve the screen-depth parameterization of a dust_attenuation block (#3176).
+
+    ``'tau_bc_diff'`` (default) declares the native birth-cloud / diffuse pair;
+    ``'tauv_mu'`` declares ``tau_v`` and ``mu`` instead. Only ``two_component``
+    reads it. Refuses a native depth key under ``tauv_mu`` and a tauv_mu key
+    under the native choice, so a block never names both descriptions.
+
+    Returns the resolved parameterization and writes it to ``result`` when it is
+    set on a two_component block.
+    """
+    from tengri.components.dust._params import DUST_PARAMETERIZATIONS
+
+    tauv_mu_given = [k for k in _TAUV_MU_KEYS if k in dust_atten_dict]
+    if "parameterization" not in dust_atten_dict:
+        if dust_type == "two_component" and tauv_mu_given:
+            raise ValueError(
+                f"dust_attenuation {tauv_mu_given} needs parameterization='tauv_mu' (got the "
+                f"native tau_bc/tau_diff pair). Set parameterization='tauv_mu', or give "
+                f"tau_bc and tau_diff instead."
+            )
+        return "tau_bc_diff"
+    value = dust_atten_dict["parameterization"]
+    if dust_type != "two_component":
+        raise ValueError(
+            f"dust_attenuation 'parameterization' is a two_component setting (got "
+            f"type={dust_type!r}); drop 'parameterization'."
+        )
+    if value not in DUST_PARAMETERIZATIONS:
+        raise ValueError(
+            f"dust_attenuation['parameterization'] must be one of {DUST_PARAMETERIZATIONS}; "
+            f"got {value!r}."
+        )
+    native_given = [k for k in _NATIVE_DEPTH_KEYS if k in dust_atten_dict]
+    if value == "tauv_mu" and native_given:
+        raise ValueError(
+            f"dust_attenuation parameterization='tauv_mu' declares the total V-band depth "
+            f"and the diffuse fraction, not {native_given}. Give tau_v and mu instead, "
+            f"where tau_v = tau_bc + tau_diff and mu = tau_diff / (tau_bc + tau_diff); "
+            f"or drop parameterization='tauv_mu' to keep tau_bc and tau_diff."
+        )
+    if value == "tau_bc_diff" and tauv_mu_given:
+        raise ValueError(
+            f"dust_attenuation {tauv_mu_given} needs parameterization='tauv_mu' (got the "
+            f"native tau_bc/tau_diff pair). Set parameterization='tauv_mu', or give "
+            f"tau_bc and tau_diff instead."
+        )
+    result["dust_parameterization"] = value
+    return value
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -4485,6 +4541,7 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         )
 
     result["dust_model"] = dust_type
+    parameterization = _translate_parameterization(dust_atten_dict, result, dust_type)
 
     # age_binned (#2528): N independent screens, each its own law and age
     # window. Its parameter set is a per-build variable (one dust_tau_i per
@@ -4492,6 +4549,14 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # law-XOR-law_bc/law_diff machinery below, which is two_component/
     # single_component-specific.
     if dust_type == "age_binned":
+        refuse_diffuse_only_law(
+            dust_atten_dict.get("law_neb"), key="law_neb", dust_model=dust_type
+        )
+        for _screen in dust_atten_dict.get("screens") or ():
+            if isinstance(_screen, dict):
+                refuse_diffuse_only_law(
+                    _screen.get("law"), key="screens[...]['law']", dust_model=dust_type
+                )
         _translate_age_binned(dust_atten_dict, result)
         _translate_age_split_and_lyc_keys(dust_atten_dict, result)
         return
@@ -4660,7 +4725,9 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # give, because noll09 has no slope to set. Demanding one there and then
     # refusing it as unread (#2185) would leave no spelling that parses.
     if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
-        for stem in ("tau", *OVERRIDE_STEMS):
+        # Under tauv_mu the depth is tau_v + mu, not a tau_bc/tau_diff pair (#3176).
+        _pair_stems = OVERRIDE_STEMS if parameterization == "tauv_mu" else ("tau", *OVERRIDE_STEMS)
+        for stem in _pair_stems:
             bc, diff = f"{stem}_bc", f"{stem}_diff"
             has_bc = dust_atten_dict.get(bc) is not None
             has_diff = dust_atten_dict.get(diff) is not None
@@ -4761,6 +4828,11 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 )
             result["dust_law_bc"] = dust_law_bc
             result["dust_law_diff"] = dust_law_diff
+
+    # Diffuse-only laws (#3178): chevallard13 is legal only as law_diff.
+    refuse_diffuse_only_law(dust_law, key="law", dust_model=dust_type)
+    refuse_diffuse_only_law(dust_law_bc, key="law_bc", dust_model=dust_type)
+    refuse_diffuse_only_law(dust_law_neb, key="law_neb", dust_model=dust_type)
 
     # law_neb: optional per-screen override for nebular birth cloud. None -> inherit dust_law_bc
     if dust_law_neb is not None:
@@ -5930,6 +6002,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # Evaluation order of the two-component age mixture ('per_node' |
             # 'grouped'); same model either way. Two-component only.
             "age_mixture",
+            # Screen-depth parameterization (#3176): 'tau_bc_diff' (default) or
+            # 'tauv_mu' (tau_v and mu in place of tau_bc/tau_diff). Two-component only.
+            "parameterization",
             # Young/old split: birth-cloud dispersal age [yr] (two_component) and
             # the dispersal width [dex] of every age edge (0 = hard step). Static.
             "t_birth_yr",
@@ -6150,6 +6225,12 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
         _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
+        _Structural(
+            "parameterization",
+            "dust_parameterization",
+            "tau_bc_diff",
+            only_types=("two_component",),
+        ),
         # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
         # bc/diff/neb), the Lyman flags and the law keys are emitted by
         # _add_structural_settings / _emit_declared_structural, not by this table.
@@ -8669,7 +8750,11 @@ def _dust_group_accepted_keys() -> frozenset[str]:
     structural = _GROUP_STRUCTURAL_KEYS["dust_attenuation"]
     # Gather the short forms of all dust attenuation parameters
     param_short_forms = frozenset()
-    for param_tuple in [_params.ATTENUATION_PARAMS, _params.SINGLE_COMPONENT_PARAMS]:
+    for param_tuple in [
+        _params.ATTENUATION_PARAMS,
+        _params.SINGLE_COMPONENT_PARAMS,
+        _params.TAUV_MU_PARAMS,
+    ]:
         param_short_forms |= frozenset(
             param.name[len("dust_") :] if param.name.startswith("dust_") else param.name
             for param in param_tuple
