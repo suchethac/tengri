@@ -727,3 +727,94 @@ def test_unwired_block_is_declined_with_its_reason(key):
         pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
     assert _band_table(model) is None
     assert model._agn_band_table_decline == f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
+
+
+def _agn_model(agn: dict, approx):
+    """A WavePrecomp-or-exact model with the given ``agn`` group and no other free parameter."""
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=_ssp(),
+            observation=Observation(
+                photometry=Photometry(filters=tuple(_tophat(c) for c in _BANDS_AA))
+            ),
+            redshift=Fixed(0.1),
+            approx=approx,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            agn=agn,
+        )
+
+
+#: Deprecated presets whose agn_norm is ``cigale_joint``, the only tie the precompute evaluates
+#: (``composable_precompute._evaluate_recipe_on_grid`` does not pass agn_norm into the recipe).
+#: The other presets carry ``conserving`` or ``independent``; their tables would be built under
+#: the wrong normalization, so the gate declines them (see ``test_conserving_preset_...``).
+PRESET_CIGALE_JOINT = ("skirtor",)
+
+
+@pytest.mark.parametrize("name", PRESET_CIGALE_JOINT)
+def test_preset_table_is_built_and_matches_exact_when_fixed(name, integral_spy):
+    """A preset with every AGN parameter Fixed takes the table; its AGN row is exact to 1e-3."""
+    from tengri import DEFAULT, Fixed
+
+    agn = {"type": name, "all_params": Fixed(DEFAULT)}
+    table = _agn_model(agn, _wavepre())
+    exact = _agn_model(agn, None)
+    assert _band_table(table) is not None, table._agn_band_table_decline
+    params = dict(table.spec.sample(jax.random.PRNGKey(0)))
+    before = len(integral_spy)
+    jax.block_until_ready(table.predict_photometry(params))
+    assert len(integral_spy) == before, "predict integrated the AGN SED through the filters"
+    assert _assert_kept_tables_match_exact(table, exact)
+
+
+@pytest.mark.parametrize("name", PRESET_CIGALE_JOINT)
+def test_preset_with_one_free_axis_matches_exact_off_node(name):
+    """A preset with a free agn_log_lbol is tabulated; off-node draws match exact to 1e-3."""
+    from tengri import DEFAULT, Fixed, Uniform
+
+    agn = {"type": name, "all_params": Fixed(DEFAULT), "agn_log_lbol": Uniform(10.5, 12.0)}
+    table = _agn_model(agn, _wavepre())
+    exact = _agn_model(agn, None)
+    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert list(_band_table(table)["axes"]) == ["agn_log_lbol"]
+    # Off the node grid (the axis spacing is 1.5 / 128): none of these is a node.
+    for lbol in (10.87, 11.31, 11.73):
+        params = {"agn_log_lbol": lbol}
+        np.testing.assert_allclose(
+            _table_row(table, params), _exact_agn_band(exact, params), rtol=_AGN_RTOL
+        )
+
+
+@pytest.mark.parametrize("name", ["grahsp", "skirtor_stalevski"])
+def test_self_contained_models_are_declined_as_not_composable(name):
+    """The self-contained models are not composable recipes, preset or not: declined."""
+    from tengri import DEFAULT, Fixed
+
+    model = _agn_model({"type": name, "all_params": Fixed(DEFAULT)}, _wavepre())
+    assert _band_table(model) is None
+    assert model._agn_band_table_decline == "the AGN is not a composable recipe"
+
+
+@pytest.mark.parametrize("name", ["silva04", "kubota_done"])
+def test_conserving_preset_is_declined_by_the_norm_rule(name):
+    """A preset with agn_norm='conserving' is declined: its table would use cigale_joint.
+
+    The gate reads the preset's resolved norm, not the component's config (which holds the
+    grammar default ``cigale_joint`` for every preset). The reason names the norm.
+    """
+    from tengri import DEFAULT, Fixed
+
+    model = _agn_model({"type": name, "all_params": Fixed(DEFAULT)}, _wavepre())
+    assert _band_table(model) is None
+    assert model._agn_band_table_decline.startswith(
+        "the table is evaluated under agn_norm='cigale_joint'"
+    ), model._agn_band_table_decline

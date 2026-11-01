@@ -875,6 +875,10 @@ TAUV_MU_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
+# Read off SINGLE_COMPONENT_PARAMS (defined above); chevallard13 and other
+# single-screen signatures import this rather than repeating 1.0 (#3178).
+DEFAULT_DUST_TAU_V = declared_default(SINGLE_COMPONENT_PARAMS, "dust_tau_v")
+
 __all__ = [
     "ANALYTIC_BETA_IR_DEFAULT",
     "ATTENUATION_NATIVE_TAU_ONLY",
@@ -904,6 +908,7 @@ __all__ = [
     "DEFAULT_DUST_QPAH",
     "DEFAULT_DUST_RV",
     "DEFAULT_DUST_SLOPE",
+    "DEFAULT_DUST_TAU_V",
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
     "DEFAULT_DUST_UMIN",
