@@ -374,7 +374,7 @@ def native_wave_nebular(model: str | None) -> np.ndarray | None:
     -------
     ndarray or None
         Native nebular continuum wavelength grid [Å], or None for backends
-        with no native grid (``"cloudy"``, ``"cb19"``, unknown names, or
+        with no native grid (``"cloudy"``, ``"cb19"``, ``"gutkin16"``, unknown names, or
         absent data files). For Cue, the grid extends from its native 1e8 Å
         to 1 m with analytic free-free continuation nodes; interpolation onto
         longer grids (radio wing to 3e11 Å) continues the tail via
@@ -387,7 +387,7 @@ def native_wave_nebular(model: str | None) -> np.ndarray | None:
     is an analytic continuation (optically thin free-free, L_nu ∝ nu^-0.1),
     NOT an emulator prediction (#2346).
     """
-    if not model or model in ("none", "off", "ssp", "cloudy", "cb19"):
+    if not model or model in ("none", "off", "ssp", "cloudy", "cb19", "gutkin16"):
         return None
     candidates = _NEBULAR_TEMPLATES.get(model)
     if candidates is None:

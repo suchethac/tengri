@@ -151,17 +151,20 @@ def test_galaxy_without_ebmv_matches_a_model_with_no_screen(synthetic_ssp, wave)
 
 
 def test_float32_batched_matches_per_galaxy_and_gradient_is_finite_and_nonzero(
-    synthetic_ssp, wave
+    synthetic_ssp_physical, wave
 ):
     """Float32 batched equals per-galaxy (rtol 1e-4); gradient finite, nonzero.
 
-    Mass is 4 dex below galaxy scale because the float32 forward is non-finite above
-    log10 M ~ 4.4 (#3149); move back to galaxy masses when that issue closes.
+    Galaxy-scale log10 M = 10 on the physically normalized SSP (#3149).
     """
-    mass, z, ebmv = 4.0, 0.05, 0.1
+    mass, z, ebmv = 10.0, 0.05, 0.1
     with jax.enable_x64(False):
-        template = _template(synthetic_ssp, wave, foreground={"ebmv_mw": 0.0, "law": _LAW})
-        ref_model = _template(synthetic_ssp, wave, foreground={"ebmv_mw": ebmv, "law": _LAW})
+        template = _template(
+            synthetic_ssp_physical, wave, foreground={"ebmv_mw": 0.0, "law": _LAW}
+        )
+        ref_model = _template(
+            synthetic_ssp_physical, wave, foreground={"ebmv_mw": ebmv, "law": _LAW}
+        )
         record = GalaxySpectrum(
             wave=wave,
             flux=np.ones(wave.size),

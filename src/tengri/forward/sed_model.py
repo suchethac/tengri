@@ -4026,10 +4026,14 @@ class SEDModel:
             return
         # Dust screen with potentially non-trivial optical depth? (Zero dust →
         # the LUT is exact, so there is nothing to warn about.)
-        if (
-            max(self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc"))
-            < 0.1
-        ):
+        if getattr(self, "_dust_parameterization", "tau_bc_diff") == "tauv_mu":
+            # mu <= 1, so both screens are at most tau_V.
+            depth = self._max_plausible_tau("dust_tau_v")
+        else:
+            depth = max(
+                self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc")
+            )
+        if depth < 0.1:
             return
         z_rep = self._representative_redshift()
         names = list(getattr(self.observation.photometry, "names", []) or [])
@@ -4925,6 +4929,8 @@ class SEDModel:
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
         self._dust_transition_width_dex = float(getattr(spec, "dust_transition_width_dex", 0.0))
+        # Screen-depth parameterization of the two-component screens (#3176).
+        self._dust_parameterization = str(getattr(spec, "dust_parameterization", "tau_bc_diff"))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -5022,7 +5028,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19", "gutkin16"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -5094,6 +5100,22 @@ class SEDModel:
                 spec.free_params,
                 grid_path=self._nebular_backend.grid_path,
             )
+        elif spec.nebular_mode == "gutkin16":
+            # Gutkin+2016 NEOGAL line table (#983). Same failure mode as the cb19
+            # branch above: without this arm the build fell through to BakedIn.
+            # The table stores vacuum labels and absolute log Z, so neb_logZ_gas
+            # takes the unit-converting delta registered above.
+            from tengri.components.nebular import Gutkin16Backend
+
+            # Build kwargs from non-None user-supplied values only (#2220).
+            kwargs = {"ssp_data": ssp_data}
+            if spec.nebular_gutkin16_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
+            if spec.nebular_gutkin16_mup is not None:
+                kwargs["mup"] = spec.nebular_gutkin16_mup
+            if spec.nebular_gutkin16_continuum is not None:
+                kwargs["continuum"] = spec.nebular_gutkin16_continuum
+            self._nebular_backend = Gutkin16Backend(**kwargs)
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.
@@ -9360,7 +9382,6 @@ class SEDModel:
         contract; unsupported chains raise here (never silently wrong).
         """
         from tengri.components.dust.two_component import DustSEDComponent
-        from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
         from tengri.observation.spectral_indices import (
             measure_index_jax,
             measure_indices_from_window_lut,
@@ -9383,8 +9404,7 @@ class SEDModel:
         full_params = self._evaluation_params(params, fixed_values)
 
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
-        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
-        scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+        joint_weights, _total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         younger_fraction = (
             stellar.compute_age_boundary_fractions(full_params)
             if stellar.config.age_boundaries_yr
@@ -9403,7 +9423,10 @@ class SEDModel:
                 full_params, pc.points.waves, younger_fraction
             )
 
-        values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
+        # No mass scale: every break and EW index is a ratio of window means, so
+        # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
+        # galaxy and overflows float32 in the F_lambda conversion (#3149).
+        values = measure_indices_from_window_lut(joint_weights, 1.0, transmission, pc)
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
@@ -11774,11 +11797,14 @@ class SEDModel:
     #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
     #: this set without also checking the energy-balance LUT build requirements is
     #: a silent numerical error.
+    #: ``dust_mu`` exists only under two_component (requirement (1) above), and its
+    #: (tau_V, mu) box sets the LUT hull (#3176).
     _EB_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
             "dust_tau_diff",
             "dust_tau_v",
+            "dust_mu",
             "dust_eta_balance",
             "dust_log_L_ir",
         }
@@ -11801,8 +11827,16 @@ class SEDModel:
     #: *shape* is fixed, and the homogeneity probe independently guards correctness.
     #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
     #: adding a new attenuation parameter that does not reshape the emission.
+    #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
-        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
+        {
+            "dust_tau_bc",
+            "dust_tau_diff",
+            "dust_eta_balance",
+            "dust_log_L_ir",
+            "dust_tau_v",
+            "dust_mu",
+        }
     )
 
     def _ztable_data_for_jit(self):
@@ -12137,7 +12171,7 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
                 _live_neb = any(
                     isinstance(c, NebularSEDComponent)
                     and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
@@ -12152,8 +12186,29 @@ class SEDModel:
                         return jnp.linspace(lo, hi, 24)
                     return jnp.asarray([_required_fixed_value(fixed, name)])
 
-                tau_bc_grid = _grid("dust_tau_bc")
-                tau_diff_grid = _grid("dust_tau_diff")
+                if dust.config.parameterization == "tauv_mu":
+                    # The native pair is not declared under tauv_mu: the axes are the
+                    # hull of the (tau_V, mu) box, the image of which both screens
+                    # take (#3176). A degenerate span is one node, as in _grid.
+                    def _hull(lo, hi):
+                        if hi - lo <= 0.0:
+                            return jnp.asarray([lo])
+                        return jnp.linspace(lo, hi, 24)
+
+                    def _span(name):
+                        if name in free:
+                            dist = self.spec.get_distribution(name)
+                            return float(dist.bounds[0]), float(dist.bounds[1])
+                        value = _required_fixed_value(fixed, name)
+                        return value, value
+
+                    v_lo, v_hi = _span("dust_tau_v")
+                    m_lo, m_hi = _span("dust_mu")
+                    tau_bc_grid = _hull((1.0 - m_hi) * v_lo, (1.0 - m_lo) * v_hi)
+                    tau_diff_grid = _hull(m_lo * v_lo, m_hi * v_hi)
+                else:
+                    tau_bc_grid = _grid("dust_tau_bc")
+                    tau_diff_grid = _grid("dust_tau_diff")
                 z_nodes = self._energy_balance_z_nodes(
                     (law_bc, law_diff), tau_bc_grid.shape[0], tau_diff_grid.shape[0]
                 )
@@ -12614,8 +12669,15 @@ class SEDModel:
         return table
 
     def _agn_band_table_gate(self, chain):
-        """Reason the composable AGN band table cannot represent this model, or ``None``."""
+        """Reason the composable AGN band table cannot represent this model, or ``None``.
+
+        A ``composable`` model and a deprecated preset (``agn={'type': 'skirtor'}``) both run
+        the composable runner, so both are eligible. The selectors and norm are read from
+        :meth:`AGNSEDComponent.resolved_recipe`, not the config, which holds the grammar's
+        defaults for a preset. A self-contained model is declined as not composable.
+        """
         from tengri.components.agn.component import AGNSEDComponent
+        from tengri.components.agn.unified import is_composable_recipe
 
         agn = next((c for c in chain if isinstance(c, AGNSEDComponent)), None)
         stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
@@ -12625,16 +12687,21 @@ class SEDModel:
         free = sorted(p for p in self.spec.free_params if p.startswith("agn_"))
         axes = [p for p in free if p != "agn_lum_ratio"]
 
-        if agn is None or getattr(agn.config, "model", None) != "composable":
+        if agn is None or not is_composable_recipe(getattr(agn.config, "model", None)):
             return "the AGN is not a composable recipe"
+        recipe = agn.resolved_recipe()
         if not self._approx.get("wave_precomp"):
             return "WavePrecomp is off"
         if getattr(st, "phot_fw_padded", None) is None:
             return "no padded filter curves"
         if self._response_z_nodes() is not None:
             return "the registry adapter is built at one redshift and the redshift is not Fixed"
-        if self._agn_norm != "cigale_joint" or self._agn_polar_law != "smc":
-            return "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc'"
+        if recipe["norm"] != "cigale_joint" or recipe["polar_law"] != "smc":
+            return (
+                "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc' "
+                f"(this AGN resolves to norm={recipe['norm']!r}, "
+                f"polar_law={recipe['polar_law']!r})"
+            )
         if ir_frac is None or float(ir_frac) != 0.0:
             return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
         if len(axes) > max(self._AGN_TABLE_NODES):
@@ -12649,15 +12716,8 @@ class SEDModel:
         unwired = [p for p in axes if p in UNWIRED_AXES]
         if unwired:
             return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
-        for category, attr in (
-            ("disc", "agn_disc_block"),
-            ("nlr", "agn_nlr_block"),
-            ("blr", "agn_blr_block"),
-            ("feii", "agn_feii_block"),
-            ("torus", "agn_torus_block"),
-            ("attenuation", "agn_attenuation_block"),
-        ):
-            key = f"{category}/{getattr(agn.config, attr, 'none')}"
+        for category in ("disc", "nlr", "blr", "feii", "torus", "attenuation"):
+            key = f"{category}/{recipe[category]}"
             if key in UNWIRED_BLOCKS:
                 return f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
         unbounded = [
@@ -12677,9 +12737,10 @@ class SEDModel:
     def _build_agn_band_table(self, chain):
         """Run the ``composable_agn`` adapter over the free axes; ``(table, reason)``."""
         from tengri.components.agn.blocks.recipe import Recipe
-        from tengri.components.agn.component import numeric_agn_kwargs
+        from tengri.components.agn.component import AGNSEDComponent, numeric_agn_kwargs
         from tengri.forward.precompute import reach_axes, registry
 
+        agn = next(c for c in chain if isinstance(c, AGNSEDComponent))
         module = registry.resolve("composable_agn")
         fixed = self.spec.get_fixed_values()
         axes_names = sorted(
@@ -12721,8 +12782,15 @@ class SEDModel:
             lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
             axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
             fixed_values.pop("agn_log_lbol", None)
-        recipe = Recipe.from_parameters(
-            self.spec, axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names)
+        selectors = agn.resolved_recipe()
+        recipe = Recipe.from_selectors(
+            disc=selectors["disc"],
+            nlr=selectors["nlr"],
+            blr=selectors["blr"],
+            feii=selectors["feii"],
+            torus=selectors["torus"],
+            attenuation=selectors["attenuation"],
+            axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names),
         )
 
         def _tabulate(grids):
@@ -13578,6 +13646,8 @@ class SEDModel:
                 neb_backend_name = "cloudy_grid"
             elif "mappings" in cls_name:
                 neb_backend_name = "mappings"
+            elif "gutkin16" in cls_name:
+                neb_backend_name = "gutkin16"
             elif "cue" in cls_name:
                 neb_backend_name = "cue"
             elif "shock" in cls_name:
@@ -13673,6 +13743,7 @@ class SEDModel:
             dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
+            dust_parameterization=getattr(self, "_dust_parameterization", "tau_bc_diff"),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_ir_cmb=getattr(self, "_dust_ir_cmb", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
@@ -13758,7 +13829,7 @@ class SEDModel:
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
         lyc_mask_live = False
         _live_neb = any(
             isinstance(c, NebularSEDComponent)
@@ -14128,7 +14199,7 @@ class SEDModel:
             is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
-            ``"mappings"``, ``"cue"``, ``"shock"``, or None.
+            ``"gutkin16"``, ``"mappings"``, ``"cue"``, ``"shock"``, or None.
         agn : str or None
             AGN model. None (disabled) or any AGN model name.
         redshift : float or str

@@ -36,23 +36,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-import jax
 import jax.numpy as jnp
 
-from tengri.components.nebular.shock import _shock_line_arrays, compute_shock_sed
+from tengri.components.nebular.shock import (
+    SHOCK_LHA_LOG_REF,
+    _shock_line_arrays,
+    compute_shock_sed,
+    factored_l_bol,
+    shock_log10_halpha_anchor,
+)
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import SEDComponentConfig
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import apply_log10_scale, pow10 as _pow10
 
-#: Reference Hα luminosity the float32 path carries the shock shape at, as log10
-#: of erg/s (#1206). The shock SED is exactly linear in L_Hα, so ANY split of the
-#: scale is exact: but the split point decides whether float32 survives. Carrying
-#: at unit Hα pushes the whole ~41 dex onto ``apply_log10_scale``, whose Jacobian
-#: is ``10**offset`` and therefore ``inf`` past 38.5 dex: the forward stayed finite
-#: while the gradient became NaN. At 1e30 the carried array (~1e18) and the
-#: derivative (~1e30) both sit well inside float32.
-_SHOCK_LHA_LOG_REF: float = 30.0
+_SHOCK_LHA_LOG_REF: float = SHOCK_LHA_LOG_REF
 
 __all__ = ["ShockNebular", "ShockNebularConfig"]
 
@@ -248,23 +246,16 @@ class ShockNebular(SEDModelComponent):
             # Relative: fraction of the galaxy's approximate Hα. Same
             # order-of-magnitude proxy (L(Hα) ~ 1e-3 L_bol) as the legacy
             # ``shock_emission`` helper, so the two paths agree bit-for-bit.
+            # ``l_bol`` ~1e44 erg/s overflows float32, so both branches take it in
+            # the same peak-factored form (#3149). Float32 carries the anchor in
+            # log10 (#1436); float64 restores the linear value, exact because the
+            # factor is a power of two.
+            _hat_l_bol, _exponent = factored_l_bol(sed_in, nu)
             if _f32:
-                # ``l_bol`` ~1e44 erg/s overflows too: peak-factor the integrand
-                # so only the O(1) residual is integrated, and carry the peak in
-                # log10 along with the 1e-3 proxy and the user's fraction.
-                # stop_gradient: factorization constant, added back as log10(_peak) (#1436).
-                _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed_in)))
-                _peak = jnp.where(_peak > 0.0, _peak, 1.0)
-                _hat_l_bol = -jnp.trapezoid(sed_in / _peak, nu)
-                _log_l_shock_halpha = (
-                    jnp.log10(_peak)
-                    + jnp.log10(jnp.maximum(_hat_l_bol, 1e-30))
-                    - 3.0
-                    + jnp.log10(jnp.maximum(p["frac"], 1e-30))
-                )
+                _log_l_shock_halpha = shock_log10_halpha_anchor(_hat_l_bol, _exponent, p["frac"])
                 l_shock_halpha = _pow10(_log_l_shock_halpha - _SHOCK_LHA_LOG_REF)
             else:
-                l_bol = -jnp.trapezoid(sed_in, nu)
+                l_bol = jnp.ldexp(_hat_l_bol, _exponent)
                 l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
                 l_shock_halpha = p["frac"] * l_halpha_approx
                 _log_l_shock_halpha = None
