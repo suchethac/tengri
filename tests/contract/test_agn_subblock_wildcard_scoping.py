@@ -277,13 +277,10 @@ def _cases(categories: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii",
 _ALL_CASES = _cases()
 
 # Q1 differentiates the model with respect to every free parameter of the block, and
-# ``disc/adaf`` is by far its costliest case: 283 s and a 7.7 GB resident / 18.6 GB peak
-# memory footprint on one machine (139 s at ac45672d2; the next case, ``disc/kubota_done``,
-# takes 23 s and 1.7 GB). A CI runner is about three times slower and has 16 GB for two
-# workers, so the case either exceeds the suite's 600 s per-test limit — under xdist that
-# kills the worker and the rest of this file never runs — or, given more time, exhausts
-# the runner's memory. It runs in the ``slow`` tier until its cost is brought back down
-# (#2768).
+# ``disc/adaf`` is its costliest case (five freed parameters through the ADAF solve). Its
+# gradient is one traced call per seed over all freed names, measured at 31 s and 1.0 GB
+# resident on one machine (cold cache). The case stays in the ``slow`` tier because it is
+# the costliest Q1 case (#2768).
 _Q1_SLOW = {("disc", "adaf")}
 _Q1_PARAMS = [
     pytest.param(
@@ -514,11 +511,19 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     # 0.0 at EVERY one of these seeds is a real, not a floating-point, no-op.
     _SEEDS = (0, 1, 2, 3, 4)
     support = _block_grid_support(category, block_type)
-    dead = []
-    for name in sorted(free_agn):
-        live_at_any_seed = False
-        for seed in _SEEDS:
-            p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
+    names = sorted(free_agn)
+
+    # One gradient with respect to every freed name at once, not one per name: a
+    # per-name ``jax.grad`` of a fresh closure retraces and recompiles the whole model
+    # for each (name, seed) pair, which is where this test's cost sits for blocks with
+    # several freed parameters. Not jitted: several blocks read their parameters on the
+    # host and need concrete values.
+    grad_all = jax.grad(lambda q, p: obj({**p, **q}))
+
+    def probe_point(seed):
+        p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
+        q = {}
+        for name in names:
             v0 = jnp.asarray(p[name])
             if name in support:
                 # A template-backed block clips its axes onto the grid, where
@@ -530,6 +535,36 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
                 # Probe inside the axis instead.
                 lo, hi = support[name]
                 v0 = jnp.asarray(0.5 * (lo + hi))
+            q[name] = v0
+        return p, q
+
+    # The joint point equals a name's own single-name point only when at most one freed
+    # name sits on a template grid (that one name is moved to its axis midpoint, as it is
+    # alone). With two or more, moving them together is a different point, so those names
+    # are left to the per-name probe below.
+    n_support = sum(1 for name in names if name in support)
+    joint_names = names if n_support <= 1 else [n for n in names if n not in support]
+    live = set()
+    for seed in _SEEDS:
+        if not joint_names:
+            break
+        p, q = probe_point(seed)
+        grads = grad_all({name: q[name] for name in joint_names}, p)
+        live |= {name for name in joint_names if float(grads[name]) != 0.0}
+        if len(live) == len(joint_names):
+            break
+
+    # A name the joint probe leaves at zero is re-probed alone, moving only that
+    # name off its sampled value, so a zero gradient is only reported when it is
+    # zero at every seed in isolation as well.
+    dead = []
+    for name in names:
+        if name in live:
+            continue
+        live_at_any_seed = False
+        for seed in _SEEDS:
+            p, q = probe_point(seed)
+            v0 = q[name] if name in support else jnp.asarray(p[name])
             g = float(jax.grad(lambda v, name=name, p=p: obj({**p, name: v}))(v0))
             if g != 0.0:
                 live_at_any_seed = True

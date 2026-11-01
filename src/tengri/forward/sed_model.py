@@ -118,6 +118,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
@@ -6411,13 +6412,17 @@ class SEDModel:
         return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
 
     def _resample_z_ref(self) -> float:
-        """Redshift at which ``resample="auto"`` is decided (#2530).
+        """Redshift at which ``resample="auto"`` is decided (#2530, #3171).
 
-        The fixed redshift when redshift is fixed; the lowest redshift of the
-        prior when it is free (the coarsest rest-frame pixels, where a point
-        sample is worst). Every path that turns the model into pixels passes
-        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
-        same decision.
+        A catalog model (``catalog_z_range`` set) returns the lower end of that
+        range, even when its spec carries a ``Fixed`` placeholder redshift: the
+        real redshift arrives per galaxy at runtime, and the coarsest rest-frame
+        pixels sit at the lowest redshift. Otherwise the fixed redshift when
+        redshift is fixed, and the lowest redshift of the prior when it is free
+        (the coarsest rest-frame pixels, where a point sample is worst). Every
+        path that turns the model into pixels passes this to
+        :meth:`Spectroscopy.resolve_conserving`, so they all reach the same
+        decision.
 
         Returns
         -------
@@ -6433,6 +6438,9 @@ class SEDModel:
             below by a finite prior ``lo``. Pass ``resample=`` explicitly, or
             declare a bounded redshift prior.
         """
+        catalog_z_range = getattr(self, "_catalog_z_range", None)
+        if catalog_z_range is not None:
+            return max(0.0, float(catalog_z_range[0]))
         try:
             d = self.spec.get_distribution("redshift")
         except (AttributeError, KeyError):
@@ -8126,8 +8134,15 @@ class SEDModel:
         static structural flag (``component.config.igm_model``), never a
         traced value; only ``sigma_kms`` / ``z`` / the absorber knobs flow
         as (possibly traced) runtime values.
+
+        The result never carries a dtype the current trace cannot hold: a
+        float64 ``line_wave_rest`` under ``jax.enable_x64(False)`` comes back
+        float32 (the ``device_table`` contract, #3086); under x64 a float32
+        input follows ordinary promotion against the float64 runtime values.
         """
-        line_wave_rest = jnp.asarray(line_wave_rest)
+        # The input is stated in the trace's canonical dtype, so the no-IGM early return
+        # and the quadrature both return it for every caller (#3184, the #3086 contract).
+        line_wave_rest = device_table(line_wave_rest)
         component = self._line_igm_component()
         if component is None:
             return jnp.ones_like(line_wave_rest)
