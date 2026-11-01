@@ -95,6 +95,16 @@ def _own_tau_neb(choice: str, params: Mapping[str, jnp.ndarray]) -> jnp.ndarray 
     return jnp.asarray(params["dust_tau_neb"]) if choice == NEBULAR_OWN_SCREEN else None
 
 
+def _neb_screen_depth(choice: str, params: Mapping[str, jnp.ndarray], tau_bc):
+    """The nebular screen's optical depth: ``dust_tau_neb`` under ``'own'``, else ``tau_bc``.
+
+    Offered to the nebular law (#3178), so ``chevallard13`` on the nebular
+    screen sees the depth that screen applies.
+    """
+    tau_neb = _own_tau_neb(choice, params)
+    return tau_bc if tau_neb is None else tau_neb
+
+
 def _screen_transmission(
     choice: str,
     *,
@@ -941,6 +951,7 @@ class DustSEDComponent(TemplateThreading):
         -----
         **JIT-compatible**: yes, pure ``jnp`` + registry law resolution.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
             dict(self.config.bc_law_overrides),
@@ -949,6 +960,8 @@ class DustSEDComponent(TemplateThreading):
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
             redshift=params.get("redshift"),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
         )
         return self._transmission_from_law_params(
             params, wavelength, jnp.asarray(younger_fraction)[0], bc_law_params, diff_law_params
@@ -1117,6 +1130,7 @@ class DustSEDComponent(TemplateThreading):
         -----
         **JIT-compatible**: yes, pure ``jnp`` plus build-time registry lookups.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
             dict(self.config.bc_law_overrides),
@@ -1125,10 +1139,16 @@ class DustSEDComponent(TemplateThreading):
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
             redshift=params.get("redshift"),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
         )
         neb_law = self.config.law_neb or self.config.law_bc
         neb_overrides = merge_neb_screen_live_overrides(
-            params, self.config.neb_law_overrides, self.config.live_shape_params
+            params,
+            self.config.neb_law_overrides,
+            self.config.live_shape_params,
+            neb_law=neb_law,
+            tau_v=_neb_screen_depth(self.config.nebular_screen, params, tau_bc),
         )
         neb_bc_params = {
             k: jnp.asarray(v)
@@ -1221,6 +1241,7 @@ class DustSEDComponent(TemplateThreading):
         -----
         **JIT-compatible**: yes, pure ``jnp`` plus build-time registry lookups.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
             dict(self.config.bc_law_overrides),
@@ -1229,13 +1250,19 @@ class DustSEDComponent(TemplateThreading):
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
             redshift=params.get("redshift"),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
         )
         neb_law = self.config.law_neb or self.config.law_bc
         # Live *_neb per-screen overrides layered on the static ones -- see
         # merge_neb_screen_live_overrides for why this cannot be a naive
         # stem.replace("dust_", "") (#2428).
         _neb_overrides_for_line = merge_neb_screen_live_overrides(
-            params, self.config.neb_law_overrides, self.config.live_shape_params
+            params,
+            self.config.neb_law_overrides,
+            self.config.live_shape_params,
+            neb_law=neb_law,
+            tau_v=_neb_screen_depth(self.config.nebular_screen, params, tau_bc),
         )
         neb_bc_params = {
             k: jnp.asarray(v)
@@ -1344,6 +1371,8 @@ class DustSEDComponent(TemplateThreading):
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
             redshift=params.get("redshift"),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
         )
         # The ONE binding for every curve evaluation in this method. Hoisted to
         # method scope on purpose: the photometry LUT and the spectroscopy pixel
@@ -1513,7 +1542,11 @@ class DustSEDComponent(TemplateThreading):
         # merge_neb_screen_live_overrides for why this cannot be a naive
         # stem.replace("dust_", "") (#2428).
         _neb_overrides = merge_neb_screen_live_overrides(
-            params, self.config.neb_law_overrides, self.config.live_shape_params
+            params,
+            self.config.neb_law_overrides,
+            self.config.live_shape_params,
+            neb_law=neb_law,
+            tau_v=_neb_screen_depth(self.config.nebular_screen, params, tau_bc),
         )
         # Start from the stellar birth-cloud params, then layer every nebular
         # override on top. Merging rather than iterating ``bc_law_params`` keys:

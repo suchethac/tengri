@@ -341,7 +341,7 @@ def chevallard13(
 
     References
     ----------
-    .. [1] S. Chevallard, S. Charlot, B. Wandelt, and V. Wild, "Insights into the
+    .. [1] J. Chevallard, S. Charlot, B. Wandelt, and V. Wild, "Insights into the
        content and spatial distribution of dust from the integrated spectral
        properties of galaxies," MNRAS, 432, 2061 (2013).
        https://doi.org/10.1093/mnras/stt523 (arXiv:1303.6631)

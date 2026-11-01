@@ -29,6 +29,7 @@ from tengri.components.dust._params import (
     DUST_PARAMETERIZATIONS,
 )
 from tengri.components.dust.laws._registry import (
+    law_kwarg_names,
     reject_unread_law_kwargs,
     resolve_dust_law,
     select_law_kwargs,
@@ -71,6 +72,40 @@ _TABLED_SCREEN_SPELLINGS: frozenset[str] = frozenset(
 )
 
 
+def offer_screen_depth(law, kw: Mapping, tau_v) -> dict:
+    """``kw`` plus the screen's own V-band optical depth, when ``law`` reads ``tau_v``.
+
+    ``tau_v`` is an injected screen quantity, not a user shape parameter
+    (#3178), offered the way ``redshift`` is (#2199): a screen that applies a
+    depth-dependent law (``chevallard13``) passes the depth it applies. A law
+    that does not declare ``tau_v`` is not offered it, since
+    :func:`reject_unread_law_kwargs` would refuse the key.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key or law function the keywords are destined for.
+    kw : Mapping
+        Law-function keyword arguments assembled so far.
+    tau_v : jnp.ndarray or float or None
+        The screen's V-band optical depth [dimensionless]. ``None`` offers nothing.
+
+    Returns
+    -------
+    dict
+        A new dict; ``kw`` itself is not mutated.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; signature introspection on a static law name, the
+    depth passes through untouched (traced arrays stay traced).
+    """
+    offered = dict(kw)
+    if tau_v is not None and "tau_v" in law_kwarg_names(law):
+        offered["tau_v"] = tau_v
+    return offered
+
+
 def resolve_bc_diff_law_params(
     params: Mapping,
     bc_overrides: Mapping | None = None,
@@ -79,6 +114,8 @@ def resolve_bc_diff_law_params(
     bc_law: str | None = None,
     diff_law: str | None = None,
     redshift: jnp.ndarray | float | None = None,
+    tau_bc: jnp.ndarray | float | None = None,
+    tau_diff: jnp.ndarray | float | None = None,
 ) -> tuple[dict, dict]:
     """Split shared dust law parameters into birth-cloud and diffuse law dicts.
 
@@ -120,6 +157,12 @@ def resolve_bc_diff_law_params(
         The model redshift [dimensionless], offered to both screens before the
         narrowing above. ``None`` offers nothing, for the direct callers that
         have no model to ask.
+
+    tau_bc, tau_diff : jnp.ndarray or float, optional
+        The birth-cloud and diffuse screens' own V-band optical depths, offered
+        to a law that reads ``tau_v`` (``chevallard13``) before the narrowing
+        below (#3178). ``None`` offers nothing. A screen whose law is not given
+        (``bc_law`` / ``diff_law`` ``None``) is not narrowed and is not offered.
 
     Returns
     -------
@@ -212,9 +255,9 @@ def resolve_bc_diff_law_params(
         bc["redshift"] = redshift
         diff["redshift"] = redshift
     if bc_law is not None:
-        bc = select_law_kwargs(bc_law, bc)
+        bc = select_law_kwargs(bc_law, offer_screen_depth(bc_law, bc, tau_bc))
     if diff_law is not None:
-        diff = select_law_kwargs(diff_law, diff)
+        diff = select_law_kwargs(diff_law, offer_screen_depth(diff_law, diff, tau_diff))
     return bc, diff
 
 
@@ -222,6 +265,8 @@ def merge_neb_screen_live_overrides(
     params: Mapping,
     neb_overrides: Mapping,
     live_shape_params: frozenset[str] | None,
+    neb_law: str | None = None,
+    tau_v=None,
 ) -> dict:
     """Layer live ``*_neb`` per-screen params on top of static neb overrides.
 
@@ -272,6 +317,9 @@ def merge_neb_screen_live_overrides(
     already uses for ``bc``/``diff``, so the two screens cannot drift again.
     """
     result = dict(neb_overrides)
+    if neb_law is not None:
+        # The nebular screen's own depth (#3178): tau_neb under 'own', else tau_bc.
+        result = offer_screen_depth(neb_law, result, tau_v)
     if live_shape_params is None:
         return result
     tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
@@ -337,6 +385,8 @@ def two_component_curves(
     bc_params: dict | None = None,
     diff_params: dict | None = None,
     lyman_cutoff_aa: float = 0.0,
+    tau_v_bc=None,
+    tau_v_diff=None,
     **law_params,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """The birth-cloud and diffuse attenuation curves :func:`two_component_dust` applies.
@@ -351,6 +401,9 @@ def two_component_curves(
         Per-screen law-parameter overlays on ``law_params``.
     lyman_cutoff_aa : float, optional
         Zero both curves below this wavelength. [Å] ``0.0`` disables.
+    tau_v_bc, tau_v_diff : float or ndarray, optional
+        The birth-cloud and diffuse screens' own V-band optical depths, offered
+        to a law that reads ``tau_v`` (#3178). ``None`` offers nothing.
     **law_params
         Shared law keyword arguments.
 
@@ -369,8 +422,8 @@ def two_component_curves(
     # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
     # keys it names, so callers can steepen the birth cloud (FSPS
     # ``dust1_index=-1.0``) without touching the diffuse ISM.
-    bc_kw = {**law_params, **(bc_params or {})}
-    diff_kw = {**law_params, **(diff_params or {})}
+    bc_kw = offer_screen_depth(law_bc, {**law_params, **(bc_params or {})}, tau_v_bc)
+    diff_kw = offer_screen_depth(law_diff, {**law_params, **(diff_params or {})}, tau_v_diff)
     # The two screens can carry different laws, so a key that belongs to one is
     # foreign to the other. Offer each law only what it declares -- and refuse a
     # key NEITHER declares, which used to vanish into the laws' `**kwargs`
@@ -552,7 +605,15 @@ def two_component_interval_transmission(
     # keys it names, so callers can steepen the birth cloud (FSPS
     # ``dust1_index=-1.0``) without touching the diffuse ISM.
     k_bc, k_diff = two_component_curves(
-        wavelength, law_bc, law_diff, bc_params, diff_params, lyman_cutoff_aa, **law_params
+        wavelength,
+        law_bc,
+        law_diff,
+        bc_params,
+        diff_params,
+        lyman_cutoff_aa,
+        tau_v_bc=tau_v1,
+        tau_v_diff=tau_v2,
+        **law_params,
     )
     return nested_two_screen_intervals(tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration)
 
@@ -667,8 +728,14 @@ def two_component_dust_separable(
        https://doi.org/10.1086/309250
     """
     reject_unread_law_kwargs(law_params, (law_bc_fn, law_diff_fn), "two_component_dust_separable")
-    k_bc = law_bc_fn(wavelength, **select_law_kwargs(law_bc_fn, law_params))
-    k_diff = law_diff_fn(wavelength, **select_law_kwargs(law_diff_fn, law_params))
+    k_bc = law_bc_fn(
+        wavelength,
+        **select_law_kwargs(law_bc_fn, offer_screen_depth(law_bc_fn, law_params, tau_v1)),
+    )
+    k_diff = law_diff_fn(
+        wavelength,
+        **select_law_kwargs(law_diff_fn, offer_screen_depth(law_diff_fn, law_params, tau_v2)),
+    )
     return nested_two_screen_mixture(
         younger_fraction, tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration
     )
@@ -730,8 +797,13 @@ def two_component_dust_fast(
     **JIT-compatible**: yes.  **Gradient-safe**: yes.
     """
     reject_unread_law_kwargs(law_params, (law_bc, law_diff), "two_component_dust_fast")
-    k_bc = resolve_dust_law(law_bc)(wavelengths, **select_law_kwargs(law_bc, law_params))
-    k_diff = resolve_dust_law(law_diff)(wavelengths, **select_law_kwargs(law_diff, law_params))
+    k_bc = resolve_dust_law(law_bc)(
+        wavelengths, **select_law_kwargs(law_bc, offer_screen_depth(law_bc, law_params, tau_v1))
+    )
+    k_diff = resolve_dust_law(law_diff)(
+        wavelengths,
+        **select_law_kwargs(law_diff, offer_screen_depth(law_diff, law_params, tau_v2)),
+    )
     return nested_two_screen_mixture(
         younger_fraction, tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration
     )
