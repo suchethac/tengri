@@ -2518,15 +2518,10 @@ class StellarSEDComponent:
                 "DSPS joint (metallicity, age) weights, shape (n_met, n_age)",
             ),
             DerivedKey(
-                "stellar_mass_scale",
-                "erg/s/Hz",
-                "total_mass x L_sun: scales SSP per-Msun luminosities to erg/s/Hz",
-            ),
-            DerivedKey(
                 "log_stellar_mass_scale",
                 "dex",
-                "log10(total_mass x L_sun): the float32-safe form of "
-                "stellar_mass_scale, which is ~1e43 and so overflows float32",
+                "log10(total_mass x L_sun): the float32-safe mass scale; the linear "
+                "erg/s form overflows float32",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey(
@@ -3612,17 +3607,9 @@ class StellarSEDComponent:
                 )
             sed_intrinsic = jnp.sum(lnu_interval, axis=0)
 
-        # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
-        # is ~1e42 for a 1e9 Msun galaxy, which overflows float32 (max 3.4e38)
-        # to ``inf``; silently, since JAX neither warns nor NaNs. The SED above
-        # never trips this because ``total_mass x ssp_flux_at_age`` lands first
-        # and keeps the magnitude small; the two consumers below have no such
-        # small factor to hide behind. Pin the scale at working precision so a
-        # float32 SSP grid (bc03_*, pgny_*) cannot poison the nebular backends
-        # through the ionizing SED (#1099).
-        mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
-        # Log10 of the mass scale, folded into the log-domain Q_H integral
-        # (_integrate_nion_log10 log10_scale) so no ~1e42 intermediate is materialized.
+        # Log10 of the mass scale ``total_mass x L_sun``, folded into the log-domain
+        # Q_H integral (_integrate_nion_log10 log10_scale). The linear erg/s scale
+        # (~1e42 for a 1e9 Msun galaxy) is never formed: it overflows float32 (#1099).
         log10_mass_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -3866,11 +3853,8 @@ class StellarSEDComponent:
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
             # of the full-wavelength stellar cube (WavePrecomp speed path).
             joint_weights=joint_weights,
-            stellar_mass_scale=mass_scale_erg,
-            # The float32-safe form of the same scale. ``mass_scale_erg`` is
-            # ~1e43 for a 1e10 Msun galaxy and so is ``inf`` in pure float32
-            # for any galaxy above ~9e4 Msun: it is total_mass times a
-            # constant, with no SSP flux factor to keep it in range (#1206).
+            # log10(total_mass x L_sun). The linear scale is ~1e43 for a 1e10 Msun
+            # galaxy and is not published: it is inf in pure float32 (#1206, #3149).
             log_stellar_mass_scale=log10_mass_scale,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream

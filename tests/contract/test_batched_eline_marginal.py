@@ -431,25 +431,23 @@ def test_padding_quantum_leaves_marginal_unchanged(synthetic_ssp):
     np.testing.assert_allclose(values[1], values[0], rtol=1e-10)
 
 
-def test_float32_marginal_is_finite_and_nonzero(synthetic_ssp):
-    """With x64 off, the marginal and its gradient are finite and nonzero at log10 M = 4.0.
+def test_float32_marginal_is_finite_and_nonzero(synthetic_ssp_physical):
+    """With x64 off, the marginal and its gradient are finite and nonzero at log10 M = 10.
 
-    The float32 forward is non-finite above log10 M of about 4.4 (#3149), so the stellar
-    mass is 4.0 and the flux, noise and prior scale are the 1e-6 multiples of the
-    double-precision tests.
+    The SSP is physically normalized (``synthetic_ssp_physical``) and the flux, noise
+    and prior scale are the double-precision values, unscaled (#3149).
     """
     from tengri.inference.batched_spectro import batched_log_likelihood
     from tengri.observation.batched import build_spectro_batches
 
-    scale = 1.0e-6
     z = 0.1
     with jax.enable_x64(False):
-        model = _marg_template(synthetic_ssp, prior_sigma=_MARG_PRIOR_SIGMA * scale)
-        gal = _marg_galaxy(z, flux_scale=scale)
+        model = _marg_template(synthetic_ssp_physical, prior_sigma=_MARG_PRIOR_SIGMA)
+        gal = _marg_galaxy(z)
         spec, batch, _ = build_spectro_batches([gal], model=model)[0]
         loglik = batched_log_likelihood(model, spec)
         obs = batch.galaxy(0)
-        params = {"sfh_dpl_log_total_mass": 4.0}
+        params = {"sfh_dpl_log_total_mass": 10.0}
         value = float(loglik(params, obs))
         grad = jax.grad(lambda p: loglik(p, obs))(params)
         g = float(grad["sfh_dpl_log_total_mass"])
@@ -471,11 +469,9 @@ def test_fitted_lines_with_calibration_marginal_are_refused(synthetic_ssp):
 
 # Per-galaxy marginalized classes in float32 at the batched test's point (#3117, #3149).
 #
-# The flux, noise and prior width are the 1e-6 multiples of the double-precision fixture
-# (prior width 1e-21), and the stellar mass is log10 M = 4.0, where the float32 forward is
-# finite (#3149). The old formula formed 1/sigma_p**2 and was non-finite here.
-
-_F32_SCALE = 1.0e-6
+# The stellar mass is log10 M = 10 on the physically normalized SSP, and the flux, noise
+# and prior width are the double-precision values. The old formula formed 1/sigma_p**2,
+# which is non-finite in float32 at this scale.
 
 
 def _per_galaxy_classes(template, z, *, flux, sigma, prior_sigma):
@@ -505,38 +501,40 @@ def _per_galaxy_classes(template, z, *, flux, sigma, prior_sigma):
     return lines, joint
 
 
-def test_per_galaxy_marginal_classes_are_finite_and_match_float64_in_float32(synthetic_ssp):
+def test_per_galaxy_marginal_classes_are_finite_and_match_float64_in_float32(
+    synthetic_ssp_physical,
+):
     """Lines-only and joint per-galaxy marginals are finite in float32 and match float64.
 
-    At log10 M = 4.0 with the scaled data and prior width 1e-21, the old 1/sigma_p**2 form
-    is non-finite in float32. The float32 values must agree with the float64 values to
+    At log10 M = 10 on the physically normalized SSP, the old 1/sigma_p**2 form is
+    non-finite in float32. The float32 values must agree with the float64 values to
     rtol 2e-5. The prediction is the float64 model cast to float32, so the comparison
     isolates the marginal; the float32 forward is covered by the batched float32 test.
     """
     z = 0.1
-    params = {"sfh_dpl_log_total_mass": 4.0}
+    params = {"sfh_dpl_log_total_mass": 10.0}
     flux, sigma = _marg_data()
-    prior_sigma = _MARG_PRIOR_SIGMA * _F32_SCALE
-    template64 = _marg_template(synthetic_ssp)
+    prior_sigma = _MARG_PRIOR_SIGMA
+    template64 = _marg_template(synthetic_ssp_physical)
     m64 = jnp.asarray(template64.predict_spectrum({**params, "redshift": z}))
     lines64, joint64 = _per_galaxy_classes(
         template64,
         z,
-        flux=flux * _F32_SCALE,
-        sigma=sigma * _F32_SCALE,
+        flux=flux,
+        sigma=sigma,
         prior_sigma=prior_sigma,
     )
     expected_lines = float(lines64.log_prob({"spec_fnu": m64}))
     expected_joint = float(joint64.log_prob({"spec_fnu": m64}, params={}))
 
     with jax.enable_x64(False):
-        template32 = _marg_template(synthetic_ssp, prior_sigma=prior_sigma)
+        template32 = _marg_template(synthetic_ssp_physical, prior_sigma=prior_sigma)
         m32 = jnp.asarray(m64)
         lines32, joint32 = _per_galaxy_classes(
             template32,
             z,
-            flux=flux * _F32_SCALE,
-            sigma=sigma * _F32_SCALE,
+            flux=flux,
+            sigma=sigma,
             prior_sigma=prior_sigma,
         )
         got_lines = float(lines32.log_prob({"spec_fnu": m32}))
@@ -548,18 +546,18 @@ def test_per_galaxy_marginal_classes_are_finite_and_match_float64_in_float32(syn
     np.testing.assert_allclose(got_joint, expected_joint, rtol=2e-5)
 
 
-def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthetic_ssp):
-    """The lines-only and joint per-galaxy marginals have finite, nonzero gradients in float32."""
+def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthetic_ssp_physical):
+    """Lines-only and joint per-galaxy marginals have finite, nonzero gradients at log M 10."""
     z = 0.1
     flux, sigma = _marg_data()
-    prior_sigma = _MARG_PRIOR_SIGMA * _F32_SCALE
+    prior_sigma = _MARG_PRIOR_SIGMA
     with jax.enable_x64(False):
-        template32 = _marg_template(synthetic_ssp, prior_sigma=prior_sigma)
+        template32 = _marg_template(synthetic_ssp_physical, prior_sigma=prior_sigma)
         lines32, joint32 = _per_galaxy_classes(
             template32,
             z,
-            flux=flux * _F32_SCALE,
-            sigma=sigma * _F32_SCALE,
+            flux=flux,
+            sigma=sigma,
             prior_sigma=prior_sigma,
         )
 
@@ -572,7 +570,7 @@ def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthet
             return cls.log_prob({"spec_fnu": m})
 
         for cls, joint in ((lines32, False), (joint32, True)):
-            grad = float(jax.grad(value)(jnp.asarray(4.0), cls, joint))
+            grad = float(jax.grad(value)(jnp.asarray(10.0), cls, joint))
             assert np.isfinite(grad)
             assert grad != 0.0
 

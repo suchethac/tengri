@@ -9346,7 +9346,6 @@ class SEDModel:
         contract; unsupported chains raise here (never silently wrong).
         """
         from tengri.components.dust.two_component import DustSEDComponent
-        from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
         from tengri.observation.spectral_indices import (
             measure_index_jax,
             measure_indices_from_window_lut,
@@ -9369,8 +9368,7 @@ class SEDModel:
         full_params = self._evaluation_params(params, fixed_values)
 
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
-        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
-        scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+        joint_weights, _total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         younger_fraction = (
             stellar.compute_age_boundary_fractions(full_params)
             if stellar.config.age_boundaries_yr
@@ -9389,7 +9387,10 @@ class SEDModel:
                 full_params, pc.points.waves, younger_fraction
             )
 
-        values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
+        # No mass scale: every break and EW index is a ratio of window means, so
+        # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
+        # galaxy and overflows float32 in the F_lambda conversion (#3149).
+        values = measure_indices_from_window_lut(joint_weights, 1.0, transmission, pc)
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
