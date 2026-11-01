@@ -7194,15 +7194,14 @@ class SEDModel:
         # at observed-frame wavelengths so it works for any source
         # redshift. Skipped when ebmv_mw=0 (the default).
         if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
-            from tengri.components.dust.attenuation import cardelli
+            from tengri.components.dust.foreground import foreground_transmission
 
-            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
-            rv = jnp.asarray(self.spec.foreground_rv)
-            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
-            # T(λ) = 10^(-0.4 * A_V * k(λ))
-            k_lambda = cardelli(wave_obs, dust_Rv=rv)
-            a_v = rv * ebmv
-            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
+            sed_obs = sed_obs * foreground_transmission(
+                wave_obs,
+                jnp.asarray(self.spec.foreground_ebmv_mw),
+                jnp.asarray(self.spec.foreground_rv),
+                self.spec.foreground_law,
+            )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -9893,7 +9892,7 @@ class SEDModel:
             if chain is None:
                 chain = self._build_component_chain()
             active_names = {c.name for c in chain}
-            self._property_catalog = assemble_available_properties(active_names)
+            self._property_catalog = assemble_available_properties(active_names, chain)
         return self._property_catalog
 
     def predict_properties(
@@ -10035,11 +10034,15 @@ class SEDModel:
             params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         )
 
-        # Evaluate each property
+        # Evaluate each property; a property computed on request (``bundle``) is evaluated
+        # once for all the names that share it.
         result = {}
+        bundles: dict = {}
         for name in names_to_compute:
             entry = self._property_catalog[name]
-            result[name] = entry.fn(state, params)
+            result[name] = entry.evaluate(
+                state, params, model=self, template_data=template_data, cache=bundles
+            )
 
         return result
 
@@ -11093,6 +11096,20 @@ class SEDModel:
             state0 = state0.with_(
                 derived=state0.derived.with_(
                     spec_sigma_v_kms=jnp.asarray(self._get_sigma_v_kms(full_params))
+                )
+            )
+        if self.spec.foreground_ebmv_mw > 0.0:
+            from tengri.components.dust.foreground import foreground_rest_transmission
+
+            state0 = state0.with_(
+                derived=state0.derived.with_(
+                    foreground_transmission=foreground_rest_transmission(
+                        state0.wave,
+                        self._get_redshift(full_params),
+                        jnp.asarray(self.spec.foreground_ebmv_mw),
+                        jnp.asarray(self.spec.foreground_rv),
+                        self.spec.foreground_law,
+                    )
                 )
             )
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.

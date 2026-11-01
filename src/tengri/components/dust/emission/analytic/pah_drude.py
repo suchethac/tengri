@@ -45,9 +45,9 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
     or cross-validated against energy-balance tests.
 
     The PAH template is a pure shape (no free parameters). This component provides
-    the full-wavelength evaluation; the adapter in
-    :mod:`~tengri.components.dust.dust_analytic_precompute` is registered in
-    ``forward/precompute/registry.py``, and no kernel consumes its lookups today.
+    the full-wavelength evaluation. The template has no free shape, so the exact all-fixed
+    band response serves it; the :mod:`~tengri.components.dust.dust_analytic_precompute`
+    adapter is not registered in ``forward/precompute/registry.py``.
 
     References
     ----------

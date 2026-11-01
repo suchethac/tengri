@@ -137,15 +137,15 @@ def gaussian_lines(
     l_broad = _HBETA_BROAD_RATIO * l_agn * a_lines
     l_narrow = _HBETA_NARROW_RATIO * l_agn * a_lines
     wave_nm = jnp.asarray(wave_nm)
-    line_wave_nm = jnp.asarray(line_wave_nm)
+    line_wave_nm = device_table(line_wave_nm)
     if agn_type == AGN_TYPE_BL:
         broad_total = _add_gaussians(
-            wave_nm, line_wave_nm, l_broad * jnp.asarray(line_broad), linewidth_kms
+            wave_nm, line_wave_nm, l_broad * device_table(line_broad), linewidth_kms
         )
         narrow_total = _add_gaussians(
             wave_nm,
             line_wave_nm,
-            l_narrow * jnp.asarray(line_narrow_sy2),
+            l_narrow * device_table(line_narrow_sy2),
             linewidth_kms,
         )
     elif agn_type == AGN_TYPE_SY2:
@@ -153,7 +153,7 @@ def gaussian_lines(
         narrow_total = _add_gaussians(
             wave_nm,
             line_wave_nm,
-            l_narrow * jnp.asarray(line_narrow_sy2),
+            l_narrow * device_table(line_narrow_sy2),
             linewidth_kms,
         )
     elif agn_type == AGN_TYPE_LINER:
@@ -161,7 +161,7 @@ def gaussian_lines(
         narrow_total = _add_gaussians(
             wave_nm,
             line_wave_nm,
-            l_narrow * jnp.asarray(line_narrow_liner),
+            l_narrow * device_table(line_narrow_liner),
             linewidth_kms,
         )
     else:
@@ -224,8 +224,8 @@ def feii_forest(
     l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines
     interp = jnp.interp(
         wave_nm,
-        jnp.asarray(template_wave_nm),
-        jnp.asarray(template_lumin),
+        device_table(template_wave_nm),
+        device_table(template_lumin),
         left=0.0,
         right=0.0,
     )

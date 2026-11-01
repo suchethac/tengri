@@ -13,7 +13,8 @@ there instead. Three things are pinned per family:
 (c) with every shape parameter fixed the exact table is still used and the registry is not
     asked for the family.
 
-A family whose table misses its stated accuracy stays unwired and is recorded in ``UNWIRED``.
+A family whose table misses its stated accuracy, or that has no gap to fill, is not registered:
+it is recorded in ``RETIRED`` and the registry must not list it.
 """
 
 from __future__ import annotations
@@ -40,7 +41,9 @@ def _missed(measured: str, detail: str) -> str:
 
 
 _UNMEASURED = f"not measured separately, same adapter module as dale2014; {_TRIWEIGHT}"
-UNWIRED: dict[str, str] = {
+#: Keys removed from the registry (#2324). Each was a duplicate of the exact all-fixed band
+#: response with no gap-filling consumer. ``RETIRED`` records why, so the reason survives.
+RETIRED: dict[str, str] = {
     "draine_li2007": _missed("4.3e-1", "30 draws, umin and qpah free, z = 0.05"),
     "dl07": "same adapter as draine_li2007",
     "draine_li2014": _UNMEASURED,
@@ -52,6 +55,7 @@ UNWIRED: dict[str, str] = {
         "alpha_mir ~ 1.15, T ~ 30 K) vs the adapter's 1e-3 contract; the 4-D lookup is also "
         "2x slower than the per-call integral (2.6 vs 1.25 ms per jitted predict)"
     ),
+    "pah_drude": "no free shape: the exact all-fixed band response always applies",
 }
 
 
@@ -138,7 +142,7 @@ def _dust_model(model_key: str, approx, *, free: bool, ssp=None, bands_aa=_FAR_I
 # Accuracy: the analytic dust adapters assert 1e-3 against the exact closure at random points
 # inside the declared priors (dust_analytic_precompute.build_lookup). Measured here through the
 # model at z = 0.05 in the 100-500 um bands, max over 100 seeded draws with every table axis
-# free: modified_blackbody 3.5e-4, graybody 3.6e-4, casey2012 2.7e-3 (see UNWIRED).
+# free: modified_blackbody 3.5e-4, graybody 3.6e-4 (casey2012 is in ``RETIRED``).
 FAMILIES: dict[str, Family] = {
     key: Family(
         key,
@@ -149,7 +153,6 @@ FAMILIES: dict[str, Family] = {
     for key, stated in (
         ("modified_blackbody", "3.5e-4"),
         ("graybody", "2.9e-4"),
-        ("casey2012", "8.0e-4"),
     )
 }
 # Dale2014: 30 seeded draws of alpha_dale over the template library's span, z = 0.05, 8-500 um.
@@ -164,7 +167,7 @@ FAMILIES["dale2014"] = Family(
 
 
 def _wired():
-    return [k for k in FAMILIES if k not in UNWIRED]
+    return list(FAMILIES)
 
 
 def _shape_table(model) -> dict | None:
@@ -242,18 +245,10 @@ def test_free_shape_matches_exact_and_has_finite_gradients(key):
     assert any(float(g) != 0.0 for g in grads.values())
 
 
-def test_unwired_keys_are_registered_adapters():
+def test_retired_keys_are_not_registered():
     from tengri.forward.precompute import registry
 
-    assert set(UNWIRED) <= set(registry.registered_components())
-
-
-@pytest.mark.parametrize("key", sorted(set(UNWIRED) & set(FAMILIES)))
-def test_unwired_family_is_not_engaged(key):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        model = FAMILIES[key].build(_wavepre(), free=True)
-    assert _shape_table(model) is None, f"{key} is recorded as unwired: {UNWIRED[key]}"
+    assert not set(RETIRED) & set(registry.registered_components())
 
 
 @pytest.mark.parametrize("key", _wired())

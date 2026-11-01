@@ -45,6 +45,11 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    "utils/host_array.py::device_table": (
+        "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
+        "held once per table and dtype; a concrete device array is cast to the canonical dtype "
+        "on every call and never held"
+    ),
     "_cache_keys.py::baked": "traced value raises TypeError: a traced value cannot key a cache",
     "components/agn/blocks/runner.py::compose_l_nu": (
         "traced fracAGN goes through jax.lax.cond over both polar branches"
@@ -166,6 +171,10 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/_torus_inclination.py::inclination_quadrature_in": (
         "GAP: traced nodes skip the ascending-order check; every library's loader builds its "
         "inclination axis ascending on the host, so the traced axis is that one (documented)"
+    ),
+    "components/agn/blocks/_ledger.py::ledger_sightlines": (
+        "general: traced panel edges keep coinciding edges as empty panels of zero weight; "
+        "concrete edges drop them first; both are the same quadrature"
     ),
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "

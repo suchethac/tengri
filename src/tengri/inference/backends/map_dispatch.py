@@ -34,8 +34,10 @@ _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 #: a weakly constrained direction while the gradient is still large, and reports
 #: success: on the minimal recipe the unprofiled MAP stopped at grad norm 0.057
 #: (tol 1e-5), 1.4e-3 above the joint minimum, with ``sfh_tsnorm_trunc`` 0.19 off
-#: it; at this ftol it reaches grad norm 1.1e-5 and agrees with the profiled MAP
-#: to 3.7e-4.
+#: it; at this ftol it sits within 1e-13 nats of the minimum (Newton decrement)
+#: and agrees with the profiled MAP to 0.004 sigma per parameter. The reported
+#: grad norm at that point is round-off noise that depends on the XLA build
+#: (2e-5 to 4e-4, #3083), so it is not a convergence measure.
 _SCIPY_FTOL = 1e-15
 
 # Short-form name aliases used in fitter and tests

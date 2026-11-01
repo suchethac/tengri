@@ -1264,9 +1264,24 @@ class CueBackend:
                 "     baked-in nebular backend already models the lines."
             )
 
+        ssp_flux_np = np.array(ssp_data.ssp_flux)
+        self._alpha_fe_table_node = None
+        if ssp_flux_np.ndim == 4:
+            # A 4D ([alpha/Fe]-axis) library (#226): the ionizing-parameter tables are fitted per
+            # (Z, age) from ONE [alpha/Fe] slab, the node nearest solar, so the nebular ionizing
+            # spectrum is that of the solar-scaled templates whatever met_alpha_fe is sampled. The
+            # Lyman-continuum shape of the young, hot stars that set Q_H and the ionizing slopes
+            # depends weakly on [alpha/Fe] next to its dependence on Z and age; the stellar
+            # continuum and lines of the 4D cube are still interpolated at met_alpha_fe by the
+            # stellar component. Recorded in ``_alpha_fe_table_node`` so a record can state the
+            # approximation.
+            alpha_nodes = np.array(ssp_data.ssp_alpha_fe)
+            k = int(np.argmin(np.abs(alpha_nodes)))
+            ssp_flux_np = ssp_flux_np[:, k]
+            self._alpha_fe_table_node = float(alpha_nodes[k])
         result = precompute_ionizing_params_table(
             np.array(ssp_data.ssp_wave),
-            np.array(ssp_data.ssp_flux),
+            ssp_flux_np,
             np.array(ssp_data.ssp_lgmet),
             ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
             max_log_age=self._lyc_max_log_age,
