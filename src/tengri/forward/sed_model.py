@@ -5041,6 +5041,7 @@ class SEDModel:
         )
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
+            from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 
             # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
@@ -5060,6 +5061,9 @@ class SEDModel:
                 ssp_data=ssp_data,
                 nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
                 lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
+                balmer_series_n_max=getattr(
+                    spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
+                ),
             )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
