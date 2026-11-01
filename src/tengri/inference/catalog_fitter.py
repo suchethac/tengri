@@ -1921,6 +1921,7 @@ class _CatalogFitterOriginal:
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
             build_catalog_metric_diagnostics,
+            map_with_shared,
         )
         from tengri.inference.backends.mcmc.chees import CHEES_TARGET_ACCEPT_RATE
         from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
@@ -2188,10 +2189,6 @@ class _CatalogFitterOriginal:
             all_init = jnp.concatenate([all_init, jnp.zeros((n_pad_extra, d_params))], axis=0)
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
-        def _run_one(args):
-            ini, gk, d, n, p, z, lf, le = args
-            return run_one(ini, gk, d, n, p, z, lf, le)
-
         xs = (
             all_init,
             gal_keys,
@@ -2203,9 +2200,13 @@ class _CatalogFitterOriginal:
             all_line_err,
         )
         if n_dev > 1:
-            all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
+            all_positions, all_divergent = self._sharded_vmap(
+                run_one, xs, dev_list, fitter._data_args
+            )
         else:
-            all_positions, all_divergent = jax.lax.map(_run_one, xs, batch_size=K)
+            all_positions, all_divergent = map_with_shared(
+                run_one, xs, fitter._data_args, batch_size=K
+            )
         all_positions = all_positions[:n_gal]
         all_divergent = all_divergent[:n_gal]
         jax.block_until_ready(all_positions)
@@ -2225,8 +2226,8 @@ class _CatalogFitterOriginal:
                 thread_redshift=per_galaxy_z,
                 thread_line_fluxes=per_galaxy_lines,
             )
-            raw_c, white_c, ok_c = jax.lax.map(
-                lambda a: diag_one(*a),
+            raw_c, white_c, ok_c = map_with_shared(
+                diag_one,
                 (
                     all_init[:n_gal],
                     all_data_orig,
@@ -2236,6 +2237,7 @@ class _CatalogFitterOriginal:
                     all_line_flux_orig,
                     all_line_err_orig,
                 ),
+                fitter._data_args,
                 batch_size=K,
             )
             precond_cond = np.asarray(raw_c)
@@ -2507,7 +2509,10 @@ class _CatalogFitterOriginal:
         ``optax`` is missing, since a warm start is an improvement rather than a
         requirement.
         """
-        from tengri.inference.backends.mcmc.catalog import build_catalog_map_init
+        from tengri.inference.backends.mcmc.catalog import (
+            build_catalog_map_init,
+            map_with_shared,
+        )
 
         try:
             map_init_one = build_catalog_map_init(
@@ -2526,8 +2531,8 @@ class _CatalogFitterOriginal:
             return all_init
 
         t0 = time.time()
-        warm = jax.lax.map(
-            lambda args: map_init_one(*args), (all_init, *per_galaxy), batch_size=chunk
+        warm = map_with_shared(
+            map_init_one, (all_init, *per_galaxy), fitter._data_args, batch_size=chunk
         )
         jax.block_until_ready(warm)
         if verbose:
@@ -2539,7 +2544,7 @@ class _CatalogFitterOriginal:
         return warm
 
     @staticmethod
-    def _sharded_vmap(run_one, xs, dev_list):
+    def _sharded_vmap(run_one, xs, dev_list, shared):
         """``jax.vmap(run_one)`` over a galaxy axis sharded across ``dev_list``.
 
         Per-galaxy fits are independent, so this is pure data parallelism with
@@ -2555,8 +2560,8 @@ class _CatalogFitterOriginal:
         mesh = jax.sharding.Mesh(np.asarray(dev_list, dtype=object), ("gal",))
         sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("gal"))
         xs_sharded = jax.device_put(xs, sharding)
-        run_all = jax.jit(jax.vmap(run_one))
-        return run_all(*xs_sharded)
+        run_all = jax.jit(jax.vmap(run_one, in_axes=(0,) * len(xs) + (None,)))
+        return run_all(*xs_sharded, shared)
 
     # ------------------------------------------------------------------
     # Internal: sequential fallback (all other methods)
