@@ -118,6 +118,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
@@ -6411,13 +6412,17 @@ class SEDModel:
         return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
 
     def _resample_z_ref(self) -> float:
-        """Redshift at which ``resample="auto"`` is decided (#2530).
+        """Redshift at which ``resample="auto"`` is decided (#2530, #3171).
 
-        The fixed redshift when redshift is fixed; the lowest redshift of the
-        prior when it is free (the coarsest rest-frame pixels, where a point
-        sample is worst). Every path that turns the model into pixels passes
-        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
-        same decision.
+        A catalog model (``catalog_z_range`` set) returns the lower end of that
+        range, even when its spec carries a ``Fixed`` placeholder redshift: the
+        real redshift arrives per galaxy at runtime, and the coarsest rest-frame
+        pixels sit at the lowest redshift. Otherwise the fixed redshift when
+        redshift is fixed, and the lowest redshift of the prior when it is free
+        (the coarsest rest-frame pixels, where a point sample is worst). Every
+        path that turns the model into pixels passes this to
+        :meth:`Spectroscopy.resolve_conserving`, so they all reach the same
+        decision.
 
         Returns
         -------
@@ -6433,6 +6438,9 @@ class SEDModel:
             below by a finite prior ``lo``. Pass ``resample=`` explicitly, or
             declare a bounded redshift prior.
         """
+        catalog_z_range = getattr(self, "_catalog_z_range", None)
+        if catalog_z_range is not None:
+            return max(0.0, float(catalog_z_range[0]))
         try:
             d = self.spec.get_distribution("redshift")
         except (AttributeError, KeyError):
@@ -8126,8 +8134,15 @@ class SEDModel:
         static structural flag (``component.config.igm_model``), never a
         traced value; only ``sigma_kms`` / ``z`` / the absorber knobs flow
         as (possibly traced) runtime values.
+
+        The result never carries a dtype the current trace cannot hold: a
+        float64 ``line_wave_rest`` under ``jax.enable_x64(False)`` comes back
+        float32 (the ``device_table`` contract, #3086); under x64 a float32
+        input follows ordinary promotion against the float64 runtime values.
         """
-        line_wave_rest = jnp.asarray(line_wave_rest)
+        # The input is stated in the trace's canonical dtype, so the no-IGM early return
+        # and the quadrature both return it for every caller (#3184, the #3086 contract).
+        line_wave_rest = device_table(line_wave_rest)
         component = self._line_igm_component()
         if component is None:
             return jnp.ones_like(line_wave_rest)
@@ -11327,7 +11342,7 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+        def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
             # so a zeroed sed_nebular is invisible to it by construction.
@@ -11372,7 +11387,7 @@ class SEDModel:
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
                 avail = {k: v for k, v in out.items() if k in observables_type._fields}
-                return observables_type(**avail)
+                return observables_type(**avail), state
             if observation.can_do_spectroscopy:
                 # Per-wavelength SSP library LSF curve (#2518): read off the
                 # *runtime* ssp_data argument, not the closure-captured
@@ -11387,7 +11402,7 @@ class SEDModel:
                 # branch on a traced value.
                 curve_kms = ssp_data.ssp_resolution_kms
                 sigma_lib_curve = (ssp_data.ssp_wave, curve_kms) if curve_kms is not None else None
-                return observation.predict(
+                obs = observation.predict(
                     state,
                     full,
                     wave_obs=wave_obs,
@@ -11401,11 +11416,21 @@ class SEDModel:
                     window_z=window_z,
                     observables_type=observables_type,
                 )
+                return obs, state
             if use_lut:
-                return observation.predict_via_precomp(
+                obs = observation.predict_via_precomp(
                     state, full, observables_type=observables_type
                 )
-            return observation.predict(state, full, observables_type=observables_type)
+                return obs, state
+            return observation.predict(state, full, observables_type=observables_type), state
+
+        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+            return _forward(params, fixed_values, ssp_data, template_data, ztable_data)[0]
+
+        def _impl_with_lines(params, fixed_values, ssp_data, template_data, ztable_data):
+            obs, state = _forward(params, fixed_values, ssp_data, template_data, ztable_data)
+            derived = state.derived
+            return obs, derived.get("log_line_lums_attenuated", derived.get("log_line_lums"))
 
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
@@ -11413,7 +11438,21 @@ class SEDModel:
         # the IDENTICAL forward+projection logic eagerly (no XLA compile) without
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
+        cache["predict_observables_lines_jit"] = jax.jit(_impl_with_lines)
         return jit_fn
+
+    def _get_or_build_predict_observables_lines_jit(self):
+        """Return the cached kernel that returns ``(observables, log_line_lums_attenuated)``.
+
+        The line luminosities [dex, log10 erg/s], shape ``(n_lines,)`` (``None`` when the
+        model publishes no line catalog), come out of the same forward that paints the
+        observables.
+        """
+        from tengri.inference._model_cache import _default_owner
+
+        self._get_or_build_predict_observables_jit()
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        return cache["predict_observables_lines_jit"]
 
     def threaded_template_inputs(self):
         """Return ``(ssp_data, template_data, ztable_data)`` for a traced per-galaxy forward.

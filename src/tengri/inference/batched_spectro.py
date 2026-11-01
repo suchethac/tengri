@@ -48,10 +48,10 @@ polynomial, the same :func:`~tengri.observation.linear_marginal.marginalize_line
 primitive that the per-galaxy calibration-marginalized likelihood evaluates.
 
 Emission lines marginalized analytically (``eline_mode="marginalized"`` with a flat
-prior) are covered, jointly with the calibration polynomial when
-``calibration_marginalize=True``. Emission lines fitted as free amplitudes
-(``eline_mode="fitted"``) are covered too. Not covered: Cloudy-prior line marginalization
-(``eline_prior_type="cloudy"``), Student-t and
+prior, or with the model-centered prior ``eline_prior_type="model"``) are covered,
+jointly with the calibration polynomial when ``calibration_marginalize=True``. Emission
+lines fitted as free amplitudes (``eline_mode="fitted"``) are covered too. Not covered:
+Cloudy-prior line marginalization (``eline_prior_type="cloudy"``), Student-t and
 calibration-floor noise, spectral indices, and stochastic (GP-field) SFH. A
 stochastic model raises :class:`NotImplementedError`.
 
@@ -78,6 +78,7 @@ from jax.scipy.linalg import block_diag
 from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
 from tengri.config.exceptions import ConfigError
+from tengri.cosmology import luminosity_distance
 from tengri.forward.batched_spectrum import (
     batched_eline_design,
     batched_line_set,
@@ -106,7 +107,11 @@ from tengri.observation.calibration import (
 from tengri.observation.calibration_segments import R_BAND_EFFECTIVE_AA
 from tengri.observation.eline_marginalization import (
     eline_amplitude_names,
+    line_foreground_transmission,
+    model_line_match,
+    model_line_prior,
     unit_line_prior,
+    unit_model_line_prior,
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian, Uniform
@@ -287,16 +292,62 @@ def _prepare_template(model) -> Any:
     return model.threaded_template_inputs()
 
 
+def _line_unit_prior(
+    model,
+    line_set,
+    out: dict,
+    full: dict,
+    g_eff,
+    obs: SpectroBatch,
+    match,
+    has_foreground,
+    scatter,
+):
+    """Unit-normal form of the line prior: flat, or centered on the model's own lines.
+
+    With a foreground screen the model-centered mean is screened at each line's observed
+    wavelength with the galaxy's own E(B-V), as the projected spectrum is.
+    """
+    spectroscopy = model.observation.spectroscopy
+    if match is None:
+        return unit_line_prior(
+            g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
+        )
+    transmission = None
+    if has_foreground:
+        transmission = line_foreground_transmission(
+            line_set.independent_wavelengths,
+            obs.z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
+        )
+    prior = model_line_prior(
+        out["log_line_lums_attenuated"],
+        match[0],
+        match[1],
+        line_set.independent_wavelengths,
+        obs.z,
+        jnp.asarray(luminosity_distance(obs.z)).reshape(()),
+        full.get("eline_aperture_frac", 1.0),
+        spectroscopy.eline_prior_width_dex,
+        transmission=transmission,
+    )
+    return unit_model_line_prior(g_eff, prior, noise=scatter, pix_mask=obs.pix_mask)
+
+
 def _marginal_lines_loglik(
     model,
     line_set,
-    model0,
+    out: dict,
     params: dict,
     obs: SpectroBatch,
     *,
+    match=None,
     calibration_marginalize: bool,
     cal_n_poly: int,
     cal_prior_sigma: float,
+    has_foreground: bool,
     spec: SpectroBatchSpec | None = None,
     log_q=None,
     chol: BandedMatrix | None = None,
@@ -306,16 +357,16 @@ def _marginal_lines_loglik(
     The design is the line matrix of :func:`batched_eline_design`, with the
     calibration columns ``model0 * T(x)`` in front when ``calibration_marginalize``.
     A line with no support on the real grid is removed through ``col_mask``.
+    ``match`` is ``None`` for the flat prior, or the static ``(match_index, matched)``
+    map of the model-centered prior, which also reads ``out["log_line_lums_attenuated"]``.
     The normalization constant is dropped, as in the per-galaxy line marginal.
     """
-    spectroscopy = model.observation.spectroscopy
+    model0 = out["spec_fnu"]
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
     scatter = obs.sigma if chol is None else chol.data[0]
-    line = unit_line_prior(
-        g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
-    )
+    line = _line_unit_prior(model, line_set, out, full, g_eff, obs, match, has_foreground, scatter)
     if calibration_marginalize and _segment_route(model, spec):
         marginal = _segment_marginal(
             model0,
@@ -446,7 +497,12 @@ def batched_log_likelihood(
                 "eline_mode='marginalized' for the joint marginal, or disable "
                 "calibration_marginalize."
             )
-    line_set = batched_line_set(model) if marginal_lines else None
+    line_set = batched_line_set(model)
+    match = (
+        model_line_match(model, line_set.independent_wavelengths)
+        if marginal_lines and spectroscopy.eline_prior_type == "model"
+        else None
+    )
     has_q = spectroscopy.cal_scale_prior is not None
     if has_q and not calibration_marginalize:
         raise ConfigError(
@@ -458,18 +514,22 @@ def batched_log_likelihood(
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
         log_q = params[CAL_LOG_Q] if has_q else None
         forward_params = {k: v for k, v in params.items() if k != CAL_LOG_Q}
-        out = predict_batched_observables(model, forward_params, obs, spec, threaded=threaded)
+        out = predict_batched_observables(
+            model, forward_params, obs, spec, threaded=threaded, line_set=line_set
+        )
         chol = _pixel_factor(spec, obs)
         if marginal_lines:
             total = _marginal_lines_loglik(
                 model,
                 line_set,
-                out["spec_fnu"],
+                out,
                 forward_params,
                 obs,
+                match=match,
                 calibration_marginalize=calibration_marginalize,
                 cal_n_poly=cal_n_poly,
                 cal_prior_sigma=cal_prior_sigma,
+                has_foreground=spec.has_foreground,
                 spec=spec,
                 log_q=log_q,
                 chol=chol,

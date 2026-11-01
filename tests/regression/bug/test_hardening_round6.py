@@ -260,3 +260,20 @@ def test_real_fixed_redshift_is_unchanged(synthetic_ssp_wide):
     assert spectrum.shape == _WAVE.shape
     assert np.all(np.isfinite(spectrum))
     assert np.all(spectrum >= 0.0)
+
+
+def test_real_catalog_placeholder_fixed_z_decides_resample_at_catalog_lower_end(
+    synthetic_ssp_wide,
+):
+    """(f) #3171: a catalog model decides ``resample="auto"`` at the catalog range's lower end.
+
+    The spec carries a ``Fixed`` placeholder redshift, and the real redshift arrives at
+    runtime within ``catalog_z_range``. The coarsest rest-frame pixels sit at the lowest
+    redshift, so the decision must be taken at ``catalog_z_range[0]``, not the placeholder.
+    """
+    placeholder = 0.1
+    approx = (WavePrecomp(catalog_z_range=(0.01, 1.0)), SpectrumPrecomp())
+    model = _build_model(synthetic_ssp_wide, Fixed(placeholder), approx=approx)
+    assert model._catalog_z_range == (0.01, 1.0)
+    assert model.observation.spectroscopy.resample == "auto"
+    assert _ref(model) == pytest.approx(0.01)
