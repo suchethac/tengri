@@ -1529,12 +1529,18 @@ agn_torus_block, agn_attenuation_block : str
                 agn_log_lbol,
                 params.get("agn_a_spin", 0.0),
             )
-            _p_disc_model = (1.0 - _corona_fraction - _r_unem_tie) * (
-                10.0**agn_log_lbol_eval * L_SUN_ERG
+            _l_acc_eval = 10.0**agn_log_lbol_eval * L_SUN_ERG
+            _p_disc_model = (1.0 - _corona_fraction - _r_unem_tie) * _l_acc_eval
+            # Where the hot flow fills the disc (``R_hot = R_out``) the model has no disc or warm
+            # zone, ``P_D,model`` is 0 and the ratio of the tied disc power to it has no meaning:
+            # the corona then keeps its own scale (RELQSO, #3015).
+            _has_disc = _p_disc_model > 1e-9 * _l_acc_eval
+            _corona_scale = jnp.where(
+                _has_disc,
+                (_TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon)
+                / jnp.where(_has_disc, _p_disc_model, _l_acc_eval),
+                1.0,
             )
-            _corona_scale = (
-                _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
-            ) / _p_disc_model
             _corona_sight = _library_sightline()
             if _corona_sight is None:
                 _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)

@@ -477,33 +477,36 @@ _AGN_MBH_DUST = {
 #:               rest_sed_last +1.4e-03; photometry -1.7e-04, +1.8e-04, +6.1e-05
 #: (rest_sed_0 is the 0.01 A bin, where the corona is ~10 orders below its peak and the pin is
 #: the most ill-conditioned key.) Captured on this tree by ``_F64_REFERENCE_CHILD`` per mass.
-#: Re-captured for #3015 (log M_BH 10 only; 6 and 8 are unchanged). The kubota_done disc ends at
-#: R_out = r_sg (Kubota & Done 2018; RELAGN) with no 10 R_isco floor or 0.5 R_out clip. At log M_BH
-#: 10, log L_bol 11 (lambda_Edd = 3.0e-4) r_sg = 21.1 R_g, so the saturated corona carries
-#: L_0 h(3.5) where it carried L_0 h(5). Old -> new, relative: rest_sed_sum -8.48e-02,
-#: rest_sed_0 -4.23e-01, rest_sed_mid -9.53e-02, rest_sed_last -1.02e-01; photometry (r, W3, W4)
-#: -9.57e-02, -1.63e-02, -4.74e-03.
+#: Re-captured for #3015. The kubota_done disc ends at R_out = r_sg (Kubota & Done 2018; RELAGN)
+#: with no 10 R_isco floor or 0.5 R_out clip, and the SKIRTOR tie keeps the corona's ratio to the
+#: disc, ``H / D = f / (1 - f - R_unem / L)`` (see test_bug_2601_skirtor_disc_tie.py). Old -> new,
+#: relative, in (rest_sed_sum, rest_sed_0, rest_sed_mid, rest_sed_last) order:
+#:   log M_BH 6:  +1.1e-10 / +3.77e-03 / 0 / 0; photometry unchanged
+#:   log M_BH 8:  +2.51e-04 / +1.68e-01 / +2.66e-04 / 0; photometry (r, W3, W4) +2.93e-04, 0, 0
+#:   log M_BH 10: +0.182 / +105 / +0.198 / 0; photometry +0.207, +0.0132, +1.94e-04
+#: At log M_BH 10, log L_bol 11 (lambda_Edd = 3.0e-4) r_sg = 21.1 R_g, the hot flow fills the disc
+#: and the corona keeps its own scale; 0.01 A is 1e-8 of the peak there.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5594106635660487e32,
-        "rest_sed_0": 107797379767304.1,
+        "rest_sed_sum": 1.5594106637385598e32,
+        "rest_sed_0": 108204047441390.98,
         "rest_sed_mid": 2.8914653865344756e28,
         "rest_sed_last": 8.773438001349959e21,
         "photometry": (1.099527068736421e-27, 1.5613865677248782e-27, 1.7704391179433187e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6789229681932187e32,
-        "rest_sed_0": 2.624695376459065e16,
-        "rest_sed_mid": 3.161888044610268e28,
+        "rest_sed_sum": 1.679343795103247e32,
+        "rest_sed_0": 3.066520170192709e16,
+        "rest_sed_mid": 3.162729319130743e28,
         "rest_sed_last": 8.839446872961821e21,
-        "photometry": (1.2086542983710622e-27, 1.5635657807579732e-27, 1.7710697344413592e-27),
+        "photometry": (1.2090083783122584e-27, 1.5635657807593619e-27, 1.7710697344413592e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5588023912773802e32,
-        "rest_sed_0": 7189207067304417.0,
-        "rest_sed_mid": 2.8910265080041455e28,
+        "rest_sed_sum": 1.8419135502708347e32,
+        "rest_sed_0": 7.652309097363384e17,
+        "rest_sed_mid": 3.4635035564355416e28,
         "rest_sed_last": 8.772828236359366e21,
-        "photometry": (1.0992005161725894e-27, 1.5615609602418526e-27, 1.7704364116627775e-27),
+        "photometry": (1.3263179247375802e-27, 1.5821712950270997e-27, 1.770779108245779e-27),
     },
 }
 
