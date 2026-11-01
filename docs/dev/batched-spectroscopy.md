@@ -144,6 +144,7 @@ a leaf, if it changes a shape or a branch.
 
 ## Record
 
+- 2026-11-01, #3118: the published page `docs/batched_spectroscopy.md` describes the stack with measured numbers from a 24-galaxy mock set (Apple M4 Pro, CPU, float64, at `a608d682f`). Measured: template build 3.8 s and 632 MB peak RSS; one per-galaxy `Fixed(z)` build 0.72 s and 754 MB; one batched MAP call over 24 galaxies 45 s including compile and 127 s for 300 steps; one per-galaxy NUTS fit over 14.5 min before a memory kill. The jit-miss counter includes build-time compiles. The page's float32 section links #3149, which reports non-finite spectroscopic output above log10 M of about 5.25 in pure float32. The 12-mock comparison with the per-galaxy Fitter is in `docs/dev/measurements/2026-11-01-batched-vs-fitter.md`.
 - 2026-11-01, #3133: banded pixel covariance on the batched spectroscopic path.
   `GalaxySpectrum(covariance=BandedMatrix)` gives a galaxy a banded covariance; every
   galaxy that carries one uses the same offsets, or `build_spectro_batches` raises naming
