@@ -662,7 +662,7 @@ def _model_line_match(context: InferenceContext):
 
 
 def _model_prior_kwargs(context: InferenceContext) -> dict:
-    """Constructor keywords of the model-centred line prior, empty for any other prior."""
+    """Constructor keywords of the model-centered line prior, empty for any other prior."""
     if context.eline_prior_type != "model":
         return {}
     match_index, matched = _model_line_match(context)

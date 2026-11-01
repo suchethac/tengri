@@ -928,7 +928,7 @@ _TOP_LEVEL_SETTINGS = {
     # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
     # ``Spectroscopy`` observation so it need not be set twice (#653).
     "eline_mode",
-    # Line aperture factor of the model-centred emission-line prior; registered with
+    # Line aperture factor of the model-centered emission-line prior; registered with
     # ``eline_mode`` and freed or pinned here (``FREE``, ``Fixed(...)``, a prior).
     "eline_aperture_frac",
 }

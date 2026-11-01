@@ -504,7 +504,7 @@ _CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 
 @dataclass(frozen=True)
 class ModelELineMarginalizedLikelihood:
-    r"""E-line marginalization with a Gaussian prior centred on the model's line prediction.
+    r"""E-line marginalization with a Gaussian prior centered on the model's line prediction.
 
     Each line amplitude has the prior :math:`\mathcal{N}(\mu_l, (w\,\mu_l)^2)` with
     :math:`\mu_l` the attenuated model line luminosity projected onto the spectrum's
@@ -743,7 +743,7 @@ class CalibrationELineMarginalizedLikelihood:
         ``"flat"`` (default, Gaussian with per-line variance
         ``eline_prior_sigma**2``), ``"cloudy"`` (Cloudy-grid prior
         evaluated at ``params["met_logzsol"]`` /
-        ``params["neb_logU"]``) or ``"model"`` (Gaussian centred on the
+        ``params["neb_logU"]``) or ``"model"`` (Gaussian centered on the
         model's own attenuated line prediction, see
         :class:`ModelELineMarginalizedLikelihood`).
     eline_prior_sigma : float, keyword-only

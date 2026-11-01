@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Model-centred emission-line prior: unit mapping, normalization and the exact limits."""
+"""Model-centered emission-line prior: unit mapping, normalization and the exact limits."""
 
 import jax
 import jax.numpy as jnp
@@ -73,7 +73,7 @@ def _model(ssp, nebular_lines, foreground=None):
 
 
 def _hbeta_prior_ratio(ssp, foreground=None):
-    """Projected H-beta line integral divided by the model-centred prior mean."""
+    """Projected H-beta line integral divided by the model-centered prior mean."""
     with jax.enable_x64(True):
         on = _model(ssp, True, foreground)
         off = _model(ssp, False, foreground)
@@ -396,7 +396,7 @@ def _catalog(absent=None):
 
 
 def _btemplate(ssp, *, free_ap=False, catalog=None, foreground=None):
-    """Cue template with marginalized lines under the model-centred prior, free redshift."""
+    """Cue template with marginalized lines under the model-centered prior, free redshift."""
     spectroscopy = Spectroscopy(
         wave_obs=jnp.asarray(_BW),
         resolution=_BR,

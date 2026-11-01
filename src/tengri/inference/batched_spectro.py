@@ -295,9 +295,9 @@ def _line_unit_prior(
     has_foreground,
     scatter,
 ):
-    """Unit-normal form of the line prior: flat, or centred on the model's own lines.
+    """Unit-normal form of the line prior: flat, or centered on the model's own lines.
 
-    With a foreground screen the model-centred mean is screened at each line's observed
+    With a foreground screen the model-centered mean is screened at each line's observed
     wavelength with the galaxy's own E(B-V), as the projected spectrum is.
     """
     spectroscopy = model.observation.spectroscopy
@@ -350,7 +350,7 @@ def _marginal_lines_loglik(
     calibration columns ``model0 * T(x)`` in front when ``calibration_marginalize``.
     A line with no support on the real grid is removed through ``col_mask``.
     ``match`` is ``None`` for the flat prior, or the static ``(match_index, matched)``
-    map of the model-centred prior, which also reads ``out["log_line_lums_attenuated"]``.
+    map of the model-centered prior, which also reads ``out["log_line_lums_attenuated"]``.
     The normalization constant is dropped, as in the per-galaxy line marginal.
     """
     model0 = out["spec_fnu"]
@@ -489,7 +489,7 @@ def batched_log_likelihood(
                 "eline_mode='marginalized' for the joint marginal, or disable "
                 "calibration_marginalize."
             )
-    line_set = batched_line_set(model) if marginal_lines else None
+    line_set = batched_line_set(model)
     match = (
         model_line_match(model, line_set.independent_wavelengths)
         if marginal_lines and spectroscopy.eline_prior_type == "model"

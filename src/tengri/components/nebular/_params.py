@@ -280,7 +280,7 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         "eline_aperture_frac",
         Fixed(1.0),  # Default: the fiber takes the same share of line light as of the model
         "Fiber share of the model's line light relative to its share of the stellar light "
-        "(centres the model-based line amplitude prior, eline_prior_type='model')",
+        "(centers the model-based line amplitude prior, eline_prior_type='model')",
         lambda lo, hi: lo > 0,
         "must have lo > 0",
         # Strictly positive: a vanishing share erases the prior mean rather than

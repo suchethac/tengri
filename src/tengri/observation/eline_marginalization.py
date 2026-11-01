@@ -400,7 +400,7 @@ def unit_line_prior(
 
 
 class ModelLinePrior(NamedTuple):
-    """Gaussian line prior centred on the model's own line prediction.
+    """Gaussian line prior centered on the model's own line prediction.
 
     Attributes
     ----------
@@ -543,7 +543,7 @@ def model_line_prior(
     width_dex: float,
     transmission: jnp.ndarray | None = None,
 ) -> ModelLinePrior:
-    r"""Line amplitude prior centred on the model's attenuated line luminosity.
+    r"""Line amplitude prior centered on the model's attenuated line luminosity.
 
     The model's line luminosity :math:`L_l` [erg/s] is projected onto the spectrum's
     flux-density scale with the factor that the spectral projection applies to a line.
@@ -638,7 +638,7 @@ def unit_model_line_prior(
     noise: jnp.ndarray,
     pix_mask: jnp.ndarray | None = None,
 ) -> UnitLinePrior:
-    r"""Rewrite a model-centred line prior as a unit-normal form for the linear primitive.
+    r"""Rewrite a model-centered line prior as a unit-normal form for the linear primitive.
 
     Each amplitude is :math:`a_l = \mu_l + w_l\,a'_l`. A Gaussian line has
     :math:`a'_l \sim \mathcal{N}(0,1)`, and a flat line has no prior on :math:`a'_l`,
