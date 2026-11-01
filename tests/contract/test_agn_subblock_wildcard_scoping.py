@@ -279,8 +279,8 @@ _ALL_CASES = _cases()
 # Q1 differentiates the model with respect to every free parameter of the block, and
 # ``disc/adaf`` is its costliest case (five freed parameters through the ADAF solve). Its
 # gradient is one traced call per seed over all freed names, measured at 31 s and 1.0 GB
-# resident on one machine (cold cache). The case stays in the ``slow`` tier because its
-# compile dominates the file's cost (#2768).
+# resident on one machine (cold cache). The case stays in the ``slow`` tier because it is
+# the costliest Q1 case (#2768).
 _Q1_SLOW = {("disc", "adaf")}
 _Q1_PARAMS = [
     pytest.param(
@@ -538,12 +538,20 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
             q[name] = v0
         return p, q
 
+    # The joint point equals a name's own single-name point only when at most one freed
+    # name sits on a template grid (that one name is moved to its axis midpoint, as it is
+    # alone). With two or more, moving them together is a different point, so those names
+    # are left to the per-name probe below.
+    n_support = sum(1 for name in names if name in support)
+    joint_names = names if n_support <= 1 else [n for n in names if n not in support]
     live = set()
     for seed in _SEEDS:
+        if not joint_names:
+            break
         p, q = probe_point(seed)
-        grads = grad_all(q, p)
-        live |= {name for name in names if float(grads[name]) != 0.0}
-        if len(live) == len(names):
+        grads = grad_all({name: q[name] for name in joint_names}, p)
+        live |= {name for name in joint_names if float(grads[name]) != 0.0}
+        if len(live) == len(joint_names):
             break
 
     # A name the joint probe leaves at zero is re-probed alone, moving only that

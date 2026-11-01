@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Float32 status of every composable-AGN disc block (#1206).
 
-A durable inventory: for each registered disc block, build a composable AGN
-(disc + SKIRTOR torus, CIGALE-joint norm) and compare ``sed_agn`` between
-float64 and pure float32.
+A durable inventory: for the discs listed in ``_PR_DISCS`` and ``_NIGHTLY_DISCS``, build a
+composable AGN (disc + SKIRTOR torus, CIGALE-joint norm) and compare ``sed_agn`` between
+float64 and pure float32. Every registered disc is covered here directly, or through the
+shared kernel or helper named in the coverage list above ``_PR_DISCS``.
 
 The **shape-class** discs — whose spectral shape depends on L_bol (temperature),
 so the float32 path must take the TRUE L_bol for the shape while normalizing
 MAGNITUDE to a reference — are all fixed: ``multicolor``, ``kubota_done`` and
 ``adaf`` carry log-space (or L_sun-unit) internals plus the
 ``agn_log_lbol_shape`` split. The shape-invariant discs (``powerlaw``,
-``richards2006``, ``skirtor``, ``qsogen``, ``schartmann2005``) are exact under
+``richards2006``, ``skirtor``, ``qsogen``, ``schartmann2005``; the last two are checked
+through shared code) are exact under
 the plain reference-evaluation + rescale.
 
 ``adaf_lopez2024`` is exact too: its CIGALE piecewise power law formed
@@ -33,8 +35,8 @@ end-to-end (composable ``grahsp_sbpl`` + SKIRTOR torus, ``agn_log_lbol=11``):
 float32 finite, max relative deviation from float64 1.6e-5 above the noise floor.
 
 ``_SHAPE_CLASS_XFAIL`` / ``_GRID_CLASS_XFAIL`` are both empty as a result:
-every registered composable disc block is float32-exact. Kept (rather than
-deleted) as the named place a future non-float32-safe disc joins, with its own
+every registered composable disc block is float32-exact (directly or through shared code).
+Kept (rather than deleted) as the named place a future non-float32-safe disc joins, with its own
 entry and rationale.
 
 This test pins the exact discs (regression guard) and ``xfail``\ s the rest
@@ -92,9 +94,9 @@ pytestmark = pytest.mark.regression_bug
 #: ``adaf_lopez2024``; ``relagn`` normalizes through ``scale_to_lbol_native`` as
 #: ``slone_netzer`` does (and is the most expensive case, enough to OOM a parallel worker);
 #: ``grahsp_netzer`` shares ``_disc_log_l5100`` / ``apply_log10_scale`` with
-#: ``grahsp_sbpl``, and its Netzer-template float32 accuracy is pinned by
-#: ``test_bug_2842_grahsp_published_float32.py::
-#: test_published_luminosities_and_sed_are_finite_and_accurate_in_float32[netzer_disc]``.
+#: ``grahsp_sbpl``, and the composable block's Netzer interpolation + X-ray floor in pure
+#: float32 is pinned by ``tests/regression/bug/test_grahsp_netzer_disc_block_float32.py``
+#: (this file's tolerance; measured max relative error 8.6e-6).
 _PR_DISCS = ["multicolor", "powerlaw", "slone_netzer", "adaf_lopez2024"]
 _NIGHTLY_DISCS = [
     "kubota_done",
@@ -163,8 +165,8 @@ def _sed_agn(ssp, disc, dtype):
 
 #: Disc blocks backed by a large HDF5 template grid. Holding the float64 and
 #: float32 copies at once (plus their compiled executables) is enough to OOM a
-#: parallel pytest worker, so the float64 side is
-#: released before the float32 model is built.
+#: parallel pytest worker, so the float64 side is released before the float32 model is
+#: built.
 _LARGE_GRID_DISCS = frozenset({"slone_netzer"})
 
 
