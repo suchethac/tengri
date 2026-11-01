@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from reproduction.synthesizer._drivers.synthesizer_driver import (
@@ -47,6 +48,16 @@ def test_matched_value_matches_inline_definitions():
 @pytest.mark.parametrize("u_syn", [1e-3, 1e-2, 1e-1, 1.0])
 def test_helper_matches_inline_definition_across_u(u_syn):
     assert cue_logu_from_synthesizer_u(u_syn) == pytest.approx(_inline_logu(u_syn), abs=1e-9)
+
+
+@pytest.mark.parametrize("u_syn", [1e-3, 1e-2, 1e-1])
+def test_round_trip_through_cue_inverse(u_syn):
+    """The helper's output, fed to Cue's own inverse, returns Synthesizer's Q."""
+    from tengri.components.nebular.cue import _logq_from_logu
+
+    logu = cue_logu_from_synthesizer_u(u_syn)
+    logq = float(_logq_from_logu(jnp.asarray(logu), jnp.asarray(math.log10(_N_H)), log_R=19.0))
+    assert logq == pytest.approx(math.log10(calculate_Q_from_U(u_syn, _N_H)), abs=1e-9)
 
 
 def test_mapping_is_monotonic_in_synthesizer_u():

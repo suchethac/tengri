@@ -76,6 +76,10 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
+from tengri.parameters.groups import (
+    _agn_registered_block_types,
+    _agn_subblock_declared_params,
+)
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -1334,19 +1338,21 @@ BH_COS_INC = float(np.cos(np.radians(BH_INC)))
 _TORUS_FRAC = THETA_TORUS / 90.0
 
 
-# Torus types that read each torus key. The composable grammar refuses a key the selected
-# type does not read ("does not read the keys ... is read by ...", src/tengri/parameters/
-# groups.py), so each key is set only for these types. Sets from the parameter registry.
-_TORUS_READS_THETA = frozenset(
-    {"cat3d_wind", "cat3d_wind_lowfwd", "nenkova", "nenkova_agnfitter", "nenkova_agnfitter_2p",
-     "nenkova_agnfitter_3p", "silva04", "simple", "skirtor_agnfitter", "skirtor_agnfitter_1p",
-     "skirtor_agnfitter_2p", "two_temperature"}
-)
-_TORUS_READS_FRAC = frozenset(
-    {"cat3d_wind", "cat3d_wind_lowfwd", "fritz", "nenkova", "nenkova_agnfitter",
-     "nenkova_agnfitter_2p", "nenkova_agnfitter_3p", "silva04", "simple", "skirtor",
-     "skirtor_agnfitter", "skirtor_agnfitter_1p", "skirtor_agnfitter_2p", "two_temperature"}
-)
+# Block types that read each key, from the parameter registry. The composable grammar
+# refuses a key the selected type does not read (guard introduced by commit 2f891d207,
+# #985 / #2834), so each key is set only for these types.
+def _readers(category, key):
+    return frozenset(
+        t
+        for t in _agn_registered_block_types(category)
+        if key in (_agn_subblock_declared_params(category, t, selection=None) or frozenset())
+    )
+
+
+_DISC_READS_LOG_MBH = _readers("disc", "agn_log_mbh")
+
+_TORUS_READS_THETA = _readers("torus", "agn_theta_torus")
+_TORUS_READS_FRAC = _readers("torus", "agn_torus_frac")
 
 
 def _disc_keys(disc_type):
@@ -1423,13 +1429,6 @@ w_disc_s, L_disc_s = agn["disc"]
 _disc_models = (
     ("kubota_done", "Kubota & Done qsosed"),
     ("schartmann2005", "broken power law (Schartmann 2005)"),
-)
-# Disc types whose block reads ``agn_log_mbh``. The composable grammar refuses the key on
-# any other disc type ("does not read the key ... is read by ...", src/tengri/parameters/
-# groups.py), so it is set only for these.
-_DISC_READS_LOG_MBH = frozenset(
-    {"adaf", "kd18_agnfitter", "kd18_agnfitter_warmindex", "kubota_done", "multicolor",
-     "relagn", "slone_netzer"}
 )
 _disc_tengri = {}
 for disc_type, _ in _disc_models:
@@ -2225,8 +2224,10 @@ print(
 # and 0.1411 against Synthesizer's 0.2856, 0.2112 and 0.1437. Synthesizer's `Madau96`
 # anchors the photoelectric term at 950 Å rather than the 912 Å Lyman limit (eq. 16 and
 # its footnote 3), sums Lyα to Lyγ only (Lyδ is dropped) and omits the eq. 13 metal-line
-# term. tengri follows eqs. 12–16 to better than 0.001 away from the edges and carries the
-# 17 Lyman lines of the paper.
+# term. tengri follows eqs. 12–16 to better than 0.001 away from the edges. It carries 17
+# Lyman lines, as the paper's own calculation does ("plus 13 higher order members"); the
+# paper prints A_j for Lyα–Lyδ only, and the higher-order coefficients are FSPS's tabulation
+# (`igm_absorb.f90`).
 
 # %%
 _wave_rest_igm = np.linspace(700.0, 1300.0, 800)
