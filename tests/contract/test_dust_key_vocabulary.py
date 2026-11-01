@@ -144,7 +144,8 @@ class TestEveryLawKeywordDeclared:
         for law_name in DUST_LAWS:
             kw_set = law_kwarg_names(law_name)
             # law_kwarg_names may or may not include wavelength/redshift; check both
-            subset = kw_set - {"wavelength", "redshift"}
+            # tau_v: injected screen depth, not a user shape parameter (#3178)
+            subset = kw_set - {"wavelength", "redshift", "tau_v"}
             missing = subset - declared_names
             assert not missing, (
                 f"Law {law_name!r} has undeclared kwargs: {missing}. Declared: {declared_names}"

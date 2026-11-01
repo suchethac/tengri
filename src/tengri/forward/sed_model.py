@@ -59,6 +59,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import math
 import pathlib
 import types
 import warnings
@@ -117,6 +118,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
@@ -1229,6 +1231,67 @@ def _warn_agn_dust_double_count(spec) -> None:
             "AGNDustDoubleCountWarning if the overlap is deliberate.",
             AGNDustDoubleCountWarning,
             stacklevel=3,
+        )
+
+
+#: Dust models that republish ``sed_nebular`` multiplied by their nebular
+#: transmission, plus the dust-free model. ``single_component`` and ``wg00``
+#: attenuate ``sed_intrinsic`` as a whole and leave ``derived["sed_nebular"]``
+#: intrinsic, so ``nebular_line_frac * sed_nebular`` would be the unattenuated
+#: line light, not the light in the spectrum.
+_DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
+
+
+def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
+    """Refuse a line-free spectrum the model cannot produce exactly.
+
+    ``Spectroscopy(nebular_lines=False)`` subtracts
+    ``nebular_line_frac * sed_nebular`` from the spectrum. That is the
+    attenuated line light only when the Cue component publishes the fraction
+    (``neb={"type": "cue", "publish_line_fraction": True}``, DIG inactive) and
+    the dust republishes the reddened ``sed_nebular``. Run by
+    :meth:`SEDModel.__init__` so both :meth:`SEDModel.build` and direct
+    construction refuse it.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter spec.
+    observation : Observation or None
+        The model's observation; only its spectroscopy is read.
+
+    Raises
+    ------
+    ValueError
+        If ``publish_line_fraction`` is set with DIG active, or
+        ``nebular_lines=False`` is requested without the Cue fraction or with a
+        dust model that leaves ``sed_nebular`` unattenuated.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+    from tengri.observation.observation import NEBULAR_LINES_OFF_NEEDS_FRACTION
+
+    publishes = bool(getattr(spec, "cue_publish_line_fraction", False))
+    if publishes and _dig_may_be_active(spec):
+        raise ValueError(
+            "neb publish_line_fraction needs DIG inactive: the continuum + line split it "
+            "publishes has no DIG mix. Pin neb_dig_frac at Fixed(0.0)."
+        )
+    spectro = getattr(observation, "spectroscopy", None)
+    if spectro is None or spectro.nebular_lines:
+        return
+    if getattr(spec, "nebular_mode", None) != "cue" or not publishes:
+        raise ValueError(
+            NEBULAR_LINES_OFF_NEEDS_FRACTION
+            + f" (got neb type {getattr(spec, 'nebular_mode', None)!r}, "
+            f"publish_line_fraction={publishes})."
+        )
+    dust_model = getattr(spec, "dust_model", None)
+    if dust_model not in _DUST_MODELS_REPUBLISHING_SED_NEBULAR:
+        raise ValueError(
+            f"Spectroscopy(nebular_lines=False) needs dust_attenuation type 'two_component' "
+            f"or 'age_binned', or no dust (got {dust_model!r}): those republish "
+            "derived['sed_nebular'] attenuated, while the others leave it unattenuated, so "
+            "the line light removed from the spectrum would not match the light in it."
         )
 
 
@@ -3201,6 +3264,12 @@ class SEDModel:
         resolution-matrix fallback). Shared by the single-object and composite paths (#610).
         """
         spectro = getattr(observation, "spectroscopy", None)
+        if spectro is not None and not spectro.nebular_lines:
+            raise ValueError(
+                "approx=SpectrumPrecomp() cannot drop the nebular lines from the spectrum: "
+                "the per-pixel lookup table carries the nebular family whole. Use the exact "
+                "path (approx=None) with Spectroscopy(nebular_lines=False)."
+            )
         if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
             # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
             # model takes the exact path and says so (#2958).
@@ -3351,6 +3420,7 @@ class SEDModel:
         observation, spec = self._init_observation(spec, filters, observation)
         _validate_fracagn_requires_dust(spec)
         _validate_ir_frac_window_has_fraction(spec)
+        _validate_nebular_lines_in_spectrum(spec, observation)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -3957,10 +4027,14 @@ class SEDModel:
             return
         # Dust screen with potentially non-trivial optical depth? (Zero dust →
         # the LUT is exact, so there is nothing to warn about.)
-        if (
-            max(self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc"))
-            < 0.1
-        ):
+        if getattr(self, "_dust_parameterization", "tau_bc_diff") == "tauv_mu":
+            # mu <= 1, so both screens are at most tau_V.
+            depth = self._max_plausible_tau("dust_tau_v")
+        else:
+            depth = max(
+                self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc")
+            )
+        if depth < 0.1:
             return
         z_rep = self._representative_redshift()
         names = list(getattr(self.observation.photometry, "names", []) or [])
@@ -4856,6 +4930,8 @@ class SEDModel:
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
         self._dust_transition_width_dex = float(getattr(spec, "dust_transition_width_dex", 0.0))
+        # Screen-depth parameterization of the two-component screens (#3176).
+        self._dust_parameterization = str(getattr(spec, "dust_parameterization", "tau_bc_diff"))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -4953,7 +5029,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19", "gutkin16"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -4972,6 +5048,7 @@ class SEDModel:
         )
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
+            from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 
             # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
@@ -4991,6 +5068,9 @@ class SEDModel:
                 ssp_data=ssp_data,
                 nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
                 lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
+                balmer_series_n_max=getattr(
+                    spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
+                ),
             )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
@@ -5021,6 +5101,22 @@ class SEDModel:
                 spec.free_params,
                 grid_path=self._nebular_backend.grid_path,
             )
+        elif spec.nebular_mode == "gutkin16":
+            # Gutkin+2016 NEOGAL line table (#983). Same failure mode as the cb19
+            # branch above: without this arm the build fell through to BakedIn.
+            # The table stores vacuum labels and absolute log Z, so neb_logZ_gas
+            # takes the unit-converting delta registered above.
+            from tengri.components.nebular import Gutkin16Backend
+
+            # Build kwargs from non-None user-supplied values only (#2220).
+            kwargs = {"ssp_data": ssp_data}
+            if spec.nebular_gutkin16_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
+            if spec.nebular_gutkin16_mup is not None:
+                kwargs["mup"] = spec.nebular_gutkin16_mup
+            if spec.nebular_gutkin16_continuum is not None:
+                kwargs["continuum"] = spec.nebular_gutkin16_continuum
+            self._nebular_backend = Gutkin16Backend(**kwargs)
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.
@@ -6338,29 +6434,58 @@ class SEDModel:
         return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
 
     def _resample_z_ref(self) -> float:
-        """Redshift at which ``resample="auto"`` is decided (#2530).
+        """Redshift at which ``resample="auto"`` is decided (#2530, #3171).
 
-        The fixed redshift when redshift is fixed; the lowest redshift of the
-        prior when it is free (the coarsest rest-frame pixels, where a point
-        sample is worst). Every path that turns the model into pixels passes
-        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
-        same decision.
+        A catalog model (``catalog_z_range`` set) returns the lower end of that
+        range, even when its spec carries a ``Fixed`` placeholder redshift: the
+        real redshift arrives per galaxy at runtime, and the coarsest rest-frame
+        pixels sit at the lowest redshift. Otherwise the fixed redshift when
+        redshift is fixed, and the lowest redshift of the prior when it is free
+        (the coarsest rest-frame pixels, where a point sample is worst). Every
+        path that turns the model into pixels passes this to
+        :meth:`Spectroscopy.resolve_conserving`, so they all reach the same
+        decision.
 
         Returns
         -------
         float
-            Reference redshift (>= 0).
+            Reference redshift (>= 0). Under ``resample="auto"`` with no fixed
+            redshift and no finite lower bound on the prior, there is no
+            reference to decide at, so the call raises instead.
+
+        Raises
+        ------
+        ParameterError
+            If ``resample="auto"`` and the redshift is neither fixed nor bounded
+            below by a finite prior ``lo``. Pass ``resample=`` explicitly, or
+            declare a bounded redshift prior.
         """
+        catalog_z_range = getattr(self, "_catalog_z_range", None)
+        if catalog_z_range is not None:
+            return max(0.0, float(catalog_z_range[0]))
         try:
             d = self.spec.get_distribution("redshift")
         except (AttributeError, KeyError):
             d = None
-        if d is None:
-            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
-        if getattr(d, "is_fixed", False):
+        if d is not None and getattr(d, "is_fixed", False):
             return max(0.0, float(d.value))
-        lo = getattr(d, "lo", None)
-        return max(0.0, float(lo)) if lo is not None else 0.0
+        fixed_z = getattr(self, "_z_fixed", None)
+        if fixed_z is not None:
+            return max(0.0, float(fixed_z))
+        lo = getattr(d, "lo", None) if d is not None else None
+        if lo is not None and math.isfinite(float(lo)):
+            return max(0.0, float(lo))
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is None or getattr(spectroscopy, "resample", None) != "auto":
+            return 0.0
+        raise ParameterError(
+            'resample="auto" needs a bounded redshift: the redshift is free with no finite '
+            "lower bound (or has no distribution), so there is no redshift at which to decide "
+            "between point sampling and the bin integral. Declare a bounded redshift prior, "
+            'or pass resample= explicitly to Spectroscopy ("point" or "conserving").'
+        )
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -7103,15 +7228,14 @@ class SEDModel:
         # at observed-frame wavelengths so it works for any source
         # redshift. Skipped when ebmv_mw=0 (the default).
         if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
-            from tengri.components.dust.attenuation import cardelli
+            from tengri.components.dust.foreground import foreground_transmission
 
-            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
-            rv = jnp.asarray(self.spec.foreground_rv)
-            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
-            # T(λ) = 10^(-0.4 * A_V * k(λ))
-            k_lambda = cardelli(wave_obs, dust_Rv=rv)
-            a_v = rv * ebmv
-            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
+            sed_obs = sed_obs * foreground_transmission(
+                wave_obs,
+                jnp.asarray(self.spec.foreground_ebmv_mw),
+                jnp.asarray(self.spec.foreground_rv),
+                self.spec.foreground_law,
+            )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -7734,6 +7858,7 @@ class SEDModel:
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
         cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        nebular_lines = spectroscopy.nebular_lines if spectroscopy is not None else True
         sigma_v_getter = self._get_sigma_v_kms
         lsf_scale_getter = self._get_lsf_scale
 
@@ -7783,6 +7908,7 @@ class SEDModel:
                 cal_wave_range=cal_wave_range,
                 conserving=conserving,
                 resolution_matrix=resolution_matrix,
+                nebular_lines=nebular_lines,
             )
 
         if traced_grid:
@@ -8030,8 +8156,15 @@ class SEDModel:
         static structural flag (``component.config.igm_model``), never a
         traced value; only ``sigma_kms`` / ``z`` / the absorber knobs flow
         as (possibly traced) runtime values.
+
+        The result never carries a dtype the current trace cannot hold: a
+        float64 ``line_wave_rest`` under ``jax.enable_x64(False)`` comes back
+        float32 (the ``device_table`` contract, #3086); under x64 a float32
+        input follows ordinary promotion against the float64 runtime values.
         """
-        line_wave_rest = jnp.asarray(line_wave_rest)
+        # The input is stated in the trace's canonical dtype, so the no-IGM early return
+        # and the quadrature both return it for every caller (#3184, the #3086 contract).
+        line_wave_rest = device_table(line_wave_rest)
         component = self._line_igm_component()
         if component is None:
             return jnp.ones_like(line_wave_rest)
@@ -9800,7 +9933,7 @@ class SEDModel:
             if chain is None:
                 chain = self._build_component_chain()
             active_names = {c.name for c in chain}
-            self._property_catalog = assemble_available_properties(active_names)
+            self._property_catalog = assemble_available_properties(active_names, chain)
         return self._property_catalog
 
     def predict_properties(
@@ -9942,11 +10075,15 @@ class SEDModel:
             params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         )
 
-        # Evaluate each property
+        # Evaluate each property; a property computed on request (``bundle``) is evaluated
+        # once for all the names that share it.
         result = {}
+        bundles: dict = {}
         for name in names_to_compute:
             entry = self._property_catalog[name]
-            result[name] = entry.fn(state, params)
+            result[name] = entry.evaluate(
+                state, params, model=self, template_data=template_data, cache=bundles
+            )
 
         return result
 
@@ -11002,6 +11139,20 @@ class SEDModel:
                     spec_sigma_v_kms=jnp.asarray(self._get_sigma_v_kms(full_params))
                 )
             )
+        if self.spec.foreground_ebmv_mw > 0.0:
+            from tengri.components.dust.foreground import foreground_rest_transmission
+
+            state0 = state0.with_(
+                derived=state0.derived.with_(
+                    foreground_transmission=foreground_rest_transmission(
+                        state0.wave,
+                        self._get_redshift(full_params),
+                        jnp.asarray(self.spec.foreground_ebmv_mw),
+                        jnp.asarray(self.spec.foreground_rv),
+                        self.spec.foreground_law,
+                    )
+                )
+            )
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
         # closure-captured copies (self.ssp_data / internal templates / z-tables).
@@ -11213,7 +11364,7 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+        def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
             # so a zeroed sed_nebular is invisible to it by construction.
@@ -11258,7 +11409,7 @@ class SEDModel:
                 if observation.can_do_photometry and phot_lut:
                     out.update(observation.predict_via_precomp(state, full, observables_type=None))
                 avail = {k: v for k, v in out.items() if k in observables_type._fields}
-                return observables_type(**avail)
+                return observables_type(**avail), state
             if observation.can_do_spectroscopy:
                 # Per-wavelength SSP library LSF curve (#2518): read off the
                 # *runtime* ssp_data argument, not the closure-captured
@@ -11273,7 +11424,7 @@ class SEDModel:
                 # branch on a traced value.
                 curve_kms = ssp_data.ssp_resolution_kms
                 sigma_lib_curve = (ssp_data.ssp_wave, curve_kms) if curve_kms is not None else None
-                return observation.predict(
+                obs = observation.predict(
                     state,
                     full,
                     wave_obs=wave_obs,
@@ -11287,11 +11438,21 @@ class SEDModel:
                     window_z=window_z,
                     observables_type=observables_type,
                 )
+                return obs, state
             if use_lut:
-                return observation.predict_via_precomp(
+                obs = observation.predict_via_precomp(
                     state, full, observables_type=observables_type
                 )
-            return observation.predict(state, full, observables_type=observables_type)
+                return obs, state
+            return observation.predict(state, full, observables_type=observables_type), state
+
+        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
+            return _forward(params, fixed_values, ssp_data, template_data, ztable_data)[0]
+
+        def _impl_with_lines(params, fixed_values, ssp_data, template_data, ztable_data):
+            obs, state = _forward(params, fixed_values, ssp_data, template_data, ztable_data)
+            derived = state.derived
+            return obs, derived.get("log_line_lums_attenuated", derived.get("log_line_lums"))
 
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
@@ -11299,7 +11460,21 @@ class SEDModel:
         # the IDENTICAL forward+projection logic eagerly (no XLA compile) without
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
+        cache["predict_observables_lines_jit"] = jax.jit(_impl_with_lines)
         return jit_fn
+
+    def _get_or_build_predict_observables_lines_jit(self):
+        """Return the cached kernel that returns ``(observables, log_line_lums_attenuated)``.
+
+        The line luminosities [dex, log10 erg/s], shape ``(n_lines,)`` (``None`` when the
+        model publishes no line catalog), come out of the same forward that paints the
+        observables.
+        """
+        from tengri.inference._model_cache import _default_owner
+
+        self._get_or_build_predict_observables_jit()
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        return cache["predict_observables_lines_jit"]
 
     def threaded_template_inputs(self):
         """Return ``(ssp_data, template_data, ztable_data)`` for a traced per-galaxy forward.
@@ -11622,11 +11797,14 @@ class SEDModel:
     #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
     #: this set without also checking the energy-balance LUT build requirements is
     #: a silent numerical error.
+    #: ``dust_mu`` exists only under two_component (requirement (1) above), and its
+    #: (tau_V, mu) box sets the LUT hull (#3176).
     _EB_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
             "dust_tau_diff",
             "dust_tau_v",
+            "dust_mu",
             "dust_eta_balance",
             "dust_log_L_ir",
         }
@@ -11649,8 +11827,16 @@ class SEDModel:
     #: *shape* is fixed, and the homogeneity probe independently guards correctness.
     #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
     #: adding a new attenuation parameter that does not reshape the emission.
+    #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
-        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
+        {
+            "dust_tau_bc",
+            "dust_tau_diff",
+            "dust_eta_balance",
+            "dust_log_L_ir",
+            "dust_tau_v",
+            "dust_mu",
+        }
     )
 
     def _ztable_data_for_jit(self):
@@ -11985,7 +12171,7 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
                 _live_neb = any(
                     isinstance(c, NebularSEDComponent)
                     and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
@@ -12000,8 +12186,29 @@ class SEDModel:
                         return jnp.linspace(lo, hi, 24)
                     return jnp.asarray([_required_fixed_value(fixed, name)])
 
-                tau_bc_grid = _grid("dust_tau_bc")
-                tau_diff_grid = _grid("dust_tau_diff")
+                if dust.config.parameterization == "tauv_mu":
+                    # The native pair is not declared under tauv_mu: the axes are the
+                    # hull of the (tau_V, mu) box, the image of which both screens
+                    # take (#3176). A degenerate span is one node, as in _grid.
+                    def _hull(lo, hi):
+                        if hi - lo <= 0.0:
+                            return jnp.asarray([lo])
+                        return jnp.linspace(lo, hi, 24)
+
+                    def _span(name):
+                        if name in free:
+                            dist = self.spec.get_distribution(name)
+                            return float(dist.bounds[0]), float(dist.bounds[1])
+                        value = _required_fixed_value(fixed, name)
+                        return value, value
+
+                    v_lo, v_hi = _span("dust_tau_v")
+                    m_lo, m_hi = _span("dust_mu")
+                    tau_bc_grid = _hull((1.0 - m_hi) * v_lo, (1.0 - m_lo) * v_hi)
+                    tau_diff_grid = _hull(m_lo * v_lo, m_hi * v_hi)
+                else:
+                    tau_bc_grid = _grid("dust_tau_bc")
+                    tau_diff_grid = _grid("dust_tau_diff")
                 z_nodes = self._energy_balance_z_nodes(
                     (law_bc, law_diff), tau_bc_grid.shape[0], tau_diff_grid.shape[0]
                 )
@@ -13426,6 +13633,8 @@ class SEDModel:
                 neb_backend_name = "cloudy_grid"
             elif "mappings" in cls_name:
                 neb_backend_name = "mappings"
+            elif "gutkin16" in cls_name:
+                neb_backend_name = "gutkin16"
             elif "cue" in cls_name:
                 neb_backend_name = "cue"
             elif "shock" in cls_name:
@@ -13495,6 +13704,7 @@ class SEDModel:
                 getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
             ),
             dig_active=_dig_may_be_active(self.spec),
+            cue_publish_line_fraction=bool(getattr(self.spec, "cue_publish_line_fraction", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),
@@ -13520,6 +13730,7 @@ class SEDModel:
             dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
+            dust_parameterization=getattr(self, "_dust_parameterization", "tau_bc_diff"),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_ir_cmb=getattr(self, "_dust_ir_cmb", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
@@ -13605,7 +13816,7 @@ class SEDModel:
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
         lyc_mask_live = False
         _live_neb = any(
             isinstance(c, NebularSEDComponent)
@@ -13975,7 +14186,7 @@ class SEDModel:
             is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
-            ``"mappings"``, ``"cue"``, ``"shock"``, or None.
+            ``"gutkin16"``, ``"mappings"``, ``"cue"``, ``"shock"``, or None.
         agn : str or None
             AGN model. None (disabled) or any AGN model name.
         redshift : float or str

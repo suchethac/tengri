@@ -29,6 +29,7 @@ References
 
 from __future__ import annotations
 
+import functools
 import inspect
 import re
 from pathlib import Path
@@ -44,7 +45,7 @@ from tengri.components.agn.blocks.atten import (
     polar_dust_attenuation_block,
     polar_dust_reemission_lnu,
 )
-from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.blocks.runner import compose_l_nu as _compose_l_nu
 from tengri.components.agn.fritz import load_fritz_default_grid
 from tengri.components.agn.polar_dust import polar_dust_extinction
 from tengri.components.dust.attenuation import smc
@@ -69,6 +70,10 @@ _BASE = dict(
     agn_feii_block="none",
     agn_norm="independent",
 )
+
+#: The fixtures share one keyword superset across discs and tori (SKIRTOR geometry, black-hole
+#: mass), as the AGN component does, so the strict unread-key check of ``compose_l_nu`` is off.
+compose_l_nu = functools.partial(_compose_l_nu, strict_keys=False)
 _POLAR_PARAMS = dict(agn_polar_T=100.0, agn_polar_beta=1.6)
 
 
@@ -1166,7 +1171,7 @@ def _tied_fritz(psy, ebv, *, disc="schartmann2005", mbh=8.0, wave=_FRITZ_WAVE):
         return_components=True,
         **{**_FRITZ_TIE, "agn_disc_block": disc},
     )
-    return {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_los"}
+    return {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_direct_los"}
 
 
 #: Hard X-rays [A] (7.7 to 17.7 keV), where the tied disc has no flux and the corona is alone.

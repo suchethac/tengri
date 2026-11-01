@@ -46,6 +46,30 @@ $$ (eq-dust-sigmoid)
 $$ (eq-tau-total)
  where $k(\lambda)$ is normalized at $\lambda = 5500$ Å. This requires the full $(n_{\rm age} \times n_\lambda)$ outer product for the exponential, but preserves smooth differentiability through the age boundary, which may matter for gradient-based inference when the data constrain the transition region.
 
+#### Total depth and diffuse fraction
+
+Under `parameterization='tauv_mu'` the two screens are set by the total V-band depth $\hat\tau_V$ and the fraction $\mu \in [0, 1]$ of that depth in the diffuse ISM, following Charlot and Fall (2000) in the BEAGLE and MAGPHYS convention:
+
+$$ \tau_{\rm BC} = (1 - \mu)\,\hat\tau_V, \qquad \tau_{\rm ISM} = \mu\,\hat\tau_V.
+
+$$ (eq-dust-taumu)
+
+This is the same two-screen model as the native $(\tau_{\rm BC}, \tau_{\rm ISM})$ pair, reparametrized, so equivalent values give bit-identical predictions. The convention in BEAGLE and MAGPHYS places a log-uniform prior on $\hat\tau_V$ and either fixes $\mu$ at 0.3 to 0.4 or leaves it uniform on $[0, 1]$. The declared free priors are $\hat\tau_V \sim$ Uniform(0, 4), default 1.0, and $\mu \sim$ Uniform(0, 1), default 0.3; another prior on $\hat\tau_V$ is passed explicitly. The energy-balance table of the fast path is built on the hull of the $(\hat\tau_V, \mu)$ box, so its $\tau_{\rm BC}$ and $\tau_{\rm ISM}$ axes span the range of Equation {eq}`eq-dust-taumu` over the box, and a free $\mu$ widens them.
+
+#### Chevallard et al. (2013) diffuse-ISM law
+
+The `chevallard13` law is an optical-depth-dependent curve for the diffuse screen. It is accepted as `law_diff` only, and the diffuse screen supplies its own depth $\tau_{\rm ISM}$ to the curve. With $\tau_V \equiv \tau_{\rm ISM}$, the curve is
+
+$$ n_V(\tau_V) = \frac{2.8}{1 + 3\sqrt{\tau_V}}, \qquad b(\tau_V) = 0.3 - 0.05\,\tau_V
+
+$$ (eq-dust-c13-index)
+
+$$ n(\lambda, \tau_V) = n_V(\tau_V) + b(\tau_V)\,\left(\frac{\lambda}{\mu\text{m}} - 0.55\right), \qquad k(\lambda, \tau_V) = \left(\frac{\lambda}{5500\,\text{\AA}}\right)^{-n(\lambda, \tau_V)}
+
+$$ (eq-dust-c13)
+
+and the diffuse transmission is $\exp[-\tau_{\rm ISM}\, k(\lambda, \tau_{\rm ISM})]$, with $k = 1$ at 5500 Å for every depth. The slope flattens as the depth grows. The fit of Chevallard et al. (2013) covers 0.1 to 2.5 μm. Outside that range the index is held at its 0.1 μm and 2.5 μm values, which is an approximation and not an extrapolation of the fit.
+
 ### Age-Binned ($N$-Screen) Framework
 
 The age-binned mode generalizes the two-component model to $N$ independent screens, each with its own attenuation curve $k_i(\lambda)$ and a window $(l_i, h_i)$ in $\log_{10}(t_{\rm age}/{\rm yr})$, either edge of which may be unbounded. Windows need not partition the age axis. The optical depth seen by an SSP of age $t_{\rm age}$ is $$\tau(\lambda, t_{\rm age}) = \sum_{i} w_i(t_{\rm age})\, \tau_i\, k_i(\lambda),
@@ -269,6 +293,8 @@ Cardelli, Jason A., Geoffrey C. Clayton, and John S. Mathis. 1989. "The Relation
 Casey, Caitlin M. 2012. "Far-infrared spectral energy distribution fitting for galaxies near and far." 425 (4): 3094--103. <https://doi.org/10.1111/j.1365-2966.2012.21455.x>.
 
 Charlot, Stéphane, and S. Michael Fall. 2000. "A Simple Model for the Absorption of Starlight by Dust in Galaxies." 539 (2): 718--31. <https://doi.org/10.1086/309250>.
+
+Chevallard, Jacopo, Stéphane Charlot, Benjamin Wandelt, and Vivienne Wild. 2013. "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies." 432: 2061--91. <https://doi.org/10.1093/mnras/stt523>.
 
 Chevance, Mélanie, J. M. Diederik Kruijssen, Alexander P. S. Hygate, et al. 2020. "The lifecycle of molecular clouds in nearby star-forming disc galaxies." 493 (2): 2872--909. <https://doi.org/10.1093/mnras/stz3525>.
 

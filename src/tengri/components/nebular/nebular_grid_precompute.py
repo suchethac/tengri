@@ -78,6 +78,7 @@ from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
@@ -1266,10 +1267,9 @@ def precompute_nebular_grid(
             stacklevel=2,
         )
 
-    # Through numpy first: a float64 device array (LineFluxData builds its wavelengths
-    # under x64) stays float64 under jnp.asarray even with x64 off, and the IGM line
-    # transmission then carries that float64 into a float32 build (#2914).
-    wavelengths = jnp.asarray(np.asarray(wavelengths))
+    # The precompute states its wavelength table's dtype once for the whole build (#3027,
+    # #3184); the line-IGM seam does the same inside _line_igm_transmission.
+    wavelengths = device_table(wavelengths)
     caller_z = None
     if ref_params is None:
         ref_params = dict(spec.sample(jax.random.PRNGKey(0)))

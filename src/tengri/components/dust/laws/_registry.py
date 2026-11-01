@@ -64,6 +64,36 @@ class DustLawRegistryEntry:
 
 DUST_LAWS: dict[str, Callable] = {}
 
+#: Laws that are legal only as the diffuse-ISM screen law (``law_diff``) of a
+#: ``two_component`` model (#3178). ``chevallard13`` takes the V-band depth of the
+#: screen it is applied to, which the diffuse screen alone defines.
+DIFFUSE_ONLY_LAWS: frozenset[str] = frozenset({"chevallard13"})
+
+
+def refuse_diffuse_only_law(law, *, key: str, dust_model: str) -> None:
+    """Raise when a diffuse-only law is given anywhere but ``law_diff`` of a two-screen model.
+
+    Parameters
+    ----------
+    law : str or None
+        The law the user named for the slot ``key``.
+    key : str
+        The slot as the user spelled it (``'law'``, ``'law_bc'``, ``'law_neb'``,
+        ``'dust_law_bc'``, ...), for the message.
+    dust_model : str
+        The resolved dust type (``'two_component'``, ``'single_component'``, ...).
+    """
+    if law not in DIFFUSE_ONLY_LAWS:
+        return
+    if key in ("law_diff", "dust_law_diff") and dust_model == "two_component":
+        return
+    raise ValueError(
+        f"attenuation law {law!r} is the diffuse-ISM screen law only: it is legal as "
+        f"'law_diff' on type='two_component' (got {key}={law!r} on "
+        f"type={dust_model!r}). Name it as law_diff={law!r} and give the birth cloud "
+        f"a different law (law_bc=...)."
+    )
+
 
 def register_dust_law(
     name: str,

@@ -34,6 +34,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.host_array import device_table
 
 __all__ = [
     "SI_DEFAULTS",
@@ -293,10 +294,10 @@ def torus_mn12_continuum(
     .. [3] Buchner, J. et al. 2024, arXiv:2405.19297, §2.1.3. Template implementation.
     """
     wave = jnp.asarray(wave_nm)
-    mn12_wave = jnp.asarray(mn12_wave_nm)
-    mn12_avg_arr = jnp.asarray(mn12_avg)
-    mn12_lo_arr = jnp.asarray(mn12_lo)
-    mn12_hi_arr = jnp.asarray(mn12_hi)
+    mn12_wave = device_table(mn12_wave_nm)
+    mn12_avg_arr = device_table(mn12_avg)
+    mn12_lo_arr = device_table(mn12_lo)
+    mn12_hi_arr = device_table(mn12_hi)
 
     # Build spectrum on native template grid
     # Use jnp.where for differentiability across the tor_temp branch
@@ -378,8 +379,8 @@ def torus_mn12_si(
     .. [3] Buchner, J. et al. 2024, arXiv:2405.19297, §2.1.3.
     """
     wave = jnp.asarray(wave_nm)
-    si_wave = jnp.asarray(si_wave_nm)
-    si_lumin_arr = jnp.asarray(si_lumin)
+    si_wave = device_table(si_wave_nm)
+    si_lumin_arr = device_table(si_lumin)
 
     # Same l_torus as the continuum: the silicate is relative to the 12 um continuum.
     l_torus = 2.5 * l5100 * fcov / 12000.0

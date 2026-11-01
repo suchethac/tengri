@@ -356,6 +356,11 @@ def build_components(
     # a defensive fallback for direct callers of this function; the grammar
     # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
+    # When ``True`` and ``nebular_backend == "cue"``, the nebular component
+    # publishes ``nebular_line_frac`` (the line share of ``sed_nebular``) for
+    # ``Spectroscopy(nebular_lines=False)``. Resolved from
+    # ``Parameters.cue_publish_line_fraction`` on the grammar path.
+    cue_publish_line_fraction: bool = False,
     # When ``True`` (spec has ``neb_dig_frac`` free or fixed nonzero),
     # both HII and DIG nebular components are evaluated and mixed (#2262).
     # When ``False`` (spec pins ``neb_dig_frac`` at the default 0.0),
@@ -415,6 +420,8 @@ def build_components(
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,
     dust_transition_width_dex: float = 0.0,
+    # Screen-depth parameterization of the two-component screens (#3176).
+    dust_parameterization: str = "tau_bc_diff",
     dust_ir_diffuse_screen: bool = False,
     dust_ir_cmb: bool = False,
     dust_emission_model: str = "modified_blackbody",
@@ -537,11 +544,11 @@ def build_components(
         :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`.
     nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
-        ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
+        ``"gutkin16"``, ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
         nebular entirely.
     nebular_backend_instance : object | None
         Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
-        ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
+        ``gutkin16`` / ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
         paths). Required for those backends.
     agn_model : str | None
         AGN model registry key (``"composable"`` or deprecated monolithic names
@@ -671,6 +678,7 @@ def build_components(
                 lyc_in_energy_balance=dust_lyc_in_energy_balance,
                 lyc_escape_geometry=dust_lyc_escape_geometry,
                 t_birth_yr=dust_t_birth_yr,
+                parameterization=dust_parameterization,
                 transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,
@@ -780,6 +788,7 @@ def build_components(
                     backend=nebular_backend,
                     cue_full_catalog=cue_full_catalog,
                     dig_active=dig_active,
+                    publish_line_fraction=cue_publish_line_fraction,
                 ),
                 backend=nebular_backend_instance,
             )

@@ -232,6 +232,8 @@ Generated per-domain parameter references are shown above. For per-type paramete
 - `'age_kernel'`: `'cic'` (default, cloud-in-cell) or `'dsps'`, which names the same integration (#2683).
 - `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
+- `'type': ['delayed', 'recent']` and `['delayed', 'recent_ssfr']` build a current star-formation episode of constant rate over the last `timescale_myr` on top of the smooth `delayed` history, with `log_sfr` (or the specific rate `log_ssfr`) as the episode parameter; `recent_ssfr` is refused at build if its priors reach the sSFR pole. See `docs/model_reference/sfh.md`.
+- `'coordinates'`: For `type='continuity'`, `'ratios'` (default) samples the Student-t log-SFR ratios, and `'young_fraction'` samples the stick-breaking mass fractions from the youngest bin instead. The fractions give the photometrically pinned young mass its own axis, because the ratio coordinates make the posterior a curved ridge when that mass is well constrained. The Student-t ratio prior is carried to the fractions as an exact pullback, so both choices describe the same posterior. The young-fraction form needs all six fractions free and fits on the Fitter paths that evaluate the standardized prior; the evidence and hierarchical paths refuse it with a `ConfigError`.
 
 **Minimal example:**
 ```python
@@ -292,6 +294,9 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
 
 **Structural keys:**
 - `'type'`: Architecture: `'single_component'` (one dust screen) or `'two_component'` (birth-cloud + diffuse). Default varies by law.
+- `'parameterization'`: Screen-depth parameterization of a `'two_component'` block: `'tau_bc_diff'` (default; declares `'tau_bc'` and `'tau_diff'`) or `'tauv_mu'` (declares `'tau_v'` and `'mu'`). Charlot & Fall (2000) written as a total V-band depth and the fraction in the diffuse ISM: `tau_BC = (1 - mu) tau_V`, `tau_ISM = mu tau_V`. The two forms are the same model, bit-identical at equivalent values.
+  - `'tau_v'` (under `'tauv_mu'`): total V-band optical depth of the two screens (`dust_tau_v`). Default `Fixed(1.0)`; free prior `Uniform(0, 4)`.
+  - `'mu'` (under `'tauv_mu'`): fraction of the V-band depth in the diffuse ISM (`dust_mu`), in [0, 1]. Default `Fixed(0.3)`; free prior `Uniform(0, 1)`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'law'`: Attenuation law: `'calzetti'`, `'ccm89'`, `'mw_rv31'`, `'kext00'`, etc. Menu: `tengri.list_dust_laws()`.
   - On `'single_component'`: one law for the entire dust.
@@ -299,6 +304,7 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
   - On `'wg00'` (Willis & Graves 2000 screen): use structural keys like `'dust_curve'`, `'geometry'`, `'structure'` instead of a law name.
 - `'law_bc'`: Birth-cloud attenuation law (two-component only). Required with `'law_diff'` when not using shared `'law'`.
 - `'law_diff'`: Diffuse dust attenuation law (two-component only). Required with `'law_bc'` when not using shared `'law'`.
+  - `'chevallard13'` (Chevallard et al. 2013, optical-depth-dependent curve) is accepted as `'law_diff'` only. Its slope flattens as the diffuse depth grows, and it is fitted over 0.1 to 2.5 μm, with the index held at its edge values outside that range.
 - `'law_neb'`: Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`). Under `'nebular_screen': 'own'` it is the law of the own screen.
 - `'nebular_screen'`: Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through. On `'two_component'`: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse, mixed by where the ionizing photons come from), `'diffuse'` (the old-star screen), `'none'` (`'off'` is a synonym), or `'own'`: one dedicated screen `T_neb(λ) = exp(−tau_neb · k_neb(λ))`, with `k_neb` the `'law_neb'` curve (default `'law_bc'`, normalized to k(5500 Å) = 1) and `tau_neb` the declared parameter `dust_tau_neb` (Fixed at 1 unless set or freed; `Uniform(0, 4)` when freed). `'own'` is the TOTAL nebular attenuation: no cascade through the diffuse screen, no young/old mixture, no `dust_f_obscuration` floor; the absorbed nebular energy joins the dust budget as for the other choices. On `'age_binned'`: `'birth_cloud'` (default, the ionizing-weighted interval mixture) or `'own'` (`law_neb` defaults to the first screen's law, with that screen's shape parameters; an explicit `law_neb` declares its own `<shape>_neb` parameters). `'tau_neb'` (and, on `'age_binned'`, `'law_neb'` and the `<shape>_neb` keys) is refused with any choice but `'own'`, naming `nebular_screen='own'`. `'single_component'` accepts only `'none'`. Cross-code: CIGALE's `E(B−V)_lines = f_att⁻¹ · E(B−V)_stars` is this screen with `tau_neb = f_att⁻¹ · tau_stars`; Prospector/FSPS (`dust1` + `dust2` on the lines) and BAGPIPES (`η · A_V` on the birth cloud) have no separate nebular depth, which is what the default reproduces.
 - `'shock_screen'`: Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
@@ -349,6 +355,9 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.4, 'ta
 # Two component (per-screen laws)
 dust_attenuation={'type': 'two_component', 'law_bc': 'ccm89', 'law_diff': 'calzetti', 'tau_bc': 0.4, 'tau_diff': 0.2}
 
+# Total V-band depth and diffuse fraction (Charlot & Fall 2000), chevallard13 as the diffuse-ISM law
+dust_attenuation={'type': 'two_component', 'parameterization': 'tauv_mu', 'law_bc': 'power_law', 'law_diff': 'chevallard13', 'tau_v': FREE, 'mu': Fixed(0.4), 'other_params': Fixed(DEFAULT)}
+
 # WG00 screen with structural selectors
 dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', 'structure': 'clumpy'}
 
@@ -380,6 +389,9 @@ dust_attenuation={
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
 - Each emission source passes through the screen its selector names (`'nebular_screen'`, `'shock_screen'`, `'agn_screen'`); the absorbed nebular and shock power joins the dust energy balance under those screens.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
+- A native depth key (`'tau_bc'`, `'tau_diff'`) under `'parameterization': 'tauv_mu'` raises, and so does `'tau_v'` or `'mu'` without `'tauv_mu'`; name one description per block.
+- `'parameterization'` on a `'single_component'` block raises, because it is a two-component setting.
+- `'chevallard13'` given as `'law'`, `'law_bc'` or `'law_neb'` raises, because it is legal only as `'law_diff'`.
 - Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`: the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
 - **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not. A lone `'slope_bc'` is then complete, because there is no partner to give.
 - The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen. `'law_neb'` defaults to `'law_bc'`, and a `'*_neb'` override is checked against whichever of the two is in force.
@@ -411,12 +423,16 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 ### Nebular emission: `neb`
 
 **Structural keys:**
-- `'type'`: Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
+- `'type'`: Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'gutkin16'` (Gutkin+2016 NEOGAL H II line tables), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'`: `cue` only: bool, default `True` (#2239). Publishes the full ~138-line Cue-trained catalog. Set to `False` to narrow to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
 - `'nitrogen'`: `cue` only: `'absolute'` (default) or a relation name (`'nicholls17'`) (#2693). Selects the meaning of `gas_logno`; see the nebular notes below. Raises on other backends.
+- `'balmer_series_n_max'`: `cue` only: `50` (default), an integer from 10 to 50, or `None`. Appends the hydrogen Balmer lines H11 to H`n_max` above Cue's last native line (H10) to the full catalog, each at its Case-B emissivity ratio to H-beta (Storey & Hummer 1995) at 10^4 K and 10^2 cm^-3. `None` (or 10) publishes Cue's own lines only. The ratios are fixed at that temperature and density and change by up to 6.7% for H24 and below, and 27% at H50, over 5000-20000 K and 10^2-10^3 cm^-3; each added line carries that change in its model sigma. The legacy 128-line subset (`full_catalog: False`) is never extended. Raises on other backends.
 - `'lyc_max_age_yr'`: `cue` only: `'all'` (default) or the oldest stellar age [yr] whose ionizing photons Cue counts. By default Q_H and the ionizing-spectrum shape come from every age bin of the SSP, so a quiescent galaxy has the Hα luminosity its old (post-AGB) Lyman continuum implies. `1e8` gives the former 100 Myr cut: Q_H, the shape and the nebular lines and continuum are bit-identical to it, and with a finite value `dust_attenuation['lyc_reprocessed_by']` defaults to `'young'`, so the stellar SED below 912 Å keeps the LyC of the ages Cue does not count, as before. `'all'` together with a finite value raises (see `lyc_reprocessed_by`). With a birth-cloud dust type (`two_component`, `age_binned`) the supported pairings are: `lyc_max_age_yr='all'` with `lyc_reprocessed_by='all'` (the default); `lyc_max_age_yr` <= `t_birth_yr` with `'young'`; and `t_birth_yr` < `lyc_max_age_yr` <= `1e8` with `'young'` (one warning about the 10-100 Myr gap). A finite value above `1e8` has no supported pairing and raises, because energy is created under `'young'` (LyC of ages between `t_birth_yr` and the cutoff stays in the SED while Cue re-emits it) and lost under `'all'` (LyC of ages beyond the cutoff is removed and never re-emitted). `single_component` and `wg00` have no young/old split, so this pairing check does not apply to them. Raises on other backends.
-- `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
+- `'publish_line_fraction'`: `cue` only: bool, default `False`. Publishes `derived['nebular_line_frac']`, the line share of the nebular SED, lines / (continuum + lines), with `sed_nebular` and every observable unchanged. Required by `Spectroscopy(nebular_lines=False)`, which removes Cue's lines from the spectrum only, so the photometry keeps them while the caller fits the spectrum's lines with its own free amplitudes. Raises with DIG active.
+- `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'gutkin16'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
+- `'mup'`: `gutkin16` only: upper stellar mass cutoff [M⊙], `100` (default) or `300`, the two m_up slices of the table. Other values raise.
+- `'continuum'`: `gutkin16` only: `'analytic'` (default; free-free plus two-photon continuum) or `'none'`. Other values raise.
 - `'model'`: MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
 - `'density'`: MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
 - `'ionizing_source_warning'`: MAPPINGS V ionizing-source warning control (`'mappings'`/`'mappings_agn'`): `'raise'`, `'warn'`, or `'suppress'`.
@@ -427,12 +443,34 @@ neb={'type': 'cue', 'logZ_gas': -0.3, 'other_params': Fixed(DEFAULT)}
 neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 ```
 
+**Gutkin+2016 backend (`'gutkin16'`).** It implements the Cloudy c13.03 H II-region grids of Gutkin, Charlot & Bruzual (2016) from the public NEOGAL tables, over the same line set that BEAGLE interpolates. The packaged grid `data/gutkin16_grid.h5` is used unless `'grid'` is given.
+
+| Key | Default | Free prior (`FREE` resolves to) | Table extent |
+|---|---|---|---|
+| `'logU'` (`neb_logU`) | `Fixed(-3.0)` | `Uniform(-4.0, -1.0)` | log10 U_S, −4.0 to −1.0 (7 nodes) |
+| `'logZ_gas'` (`neb_logZ_gas`) | `Fixed(-0.3)` | `Uniform(-2.15, 0.45)` | log10(Z/Z⊙), −2.15 to +0.45 (14 metallicities) |
+| `'log_nH'` (`neb_log_nH`) | `Fixed(2.0)` | `Uniform(2.0, 3.0)` | log10(n_H / cm⁻³), 2 to 3 (100 and 1000 cm⁻³) |
+| `'xi_d'` (`neb_xi_d`) | `Fixed(0.3)` | `Uniform(0.1, 0.5)` | dust-to-metal ratio, 0.1, 0.3, 0.5 (3 nodes) |
+| `'co_ratio'` (`neb_co_ratio`) | `Fixed(1.0)` | `Uniform(0.1, 1.4)` | (C/O)/(C/O)⊙, 0.1 to 1.4 (9 nodes) |
+
+`FREE` adopts the table extent. An explicit prior or a fixed value outside the table is refused at build, with the range to narrow to. In the grammar `neb_logZ_gas` is log10(Z/Z⊙) with Z⊙ = 0.0142. The table axis is absolute log10 Z, from Z = 0.0001 to 0.04 at 14 metallicities, and the nebular component adds log10 Z⊙ before the backend reads the value. `neb_co_ratio` is linear (C/O)/(C/O)⊙, not the log10 C/O of `'cb19'`.
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs, sfh={...}, redshift=Fixed(0.1),
+    neb={'type': 'gutkin16', 'mup': 300, 'logU': Uniform(-4.0, -1.0), 'other_params': Fixed(DEFAULT)},
+)
+```
+
 **Gotchas:**
 - Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
 - **Cue's response to `neb_logU` depends on the ionizing spectrum it is fed.** `neb_logU` reaches the network unchanged as Cue's `gas_logu` (the inner-face U at R = 10^19 cm, trained over log U -4 to -1, Li et al. 2025, arXiv:2405.04598, Table 1; values outside that range are passed unclipped). Cue is *not* a fixed-spectrum CLOUDY grid: its 7 ionizing-shape inputs are derived from the SSP, and the fitted shape sets how far O++ can grow with U. At Cue's own default (hard) young-starburst shape, [O III]/H-beta rises from 3.4 to 6.1 between log U = -3 and -1.5. For the soft shape fitted to a delayed-tau population (tau = 300 Myr, age 100 Myr, FSPS MIST+MILES, Z = 0.02), [O III]/H-beta saturates at 0.60, 0.67, 0.65 for log U = -3, -2, -1.5; the saturated level depends on the population's age weights. A flat [O III]/H-beta against `neb_logU` therefore reflects the ionizing shape, not a wiring error, and a difference from a CLOUDY grid computed at a fixed spectrum is a difference of model and spectrum. Use `ionspec_*` overrides to probe other shapes.
 - **Cue counts ionizing photons from every stellar age.** For a population whose star formation ended long ago the nebular emission is then set by the old-star Lyman continuum (post-AGB and extreme horizontal-branch stars; Binette et al. 1994, A&A 292, 13), at about the case-B Hα per ionizing photon (L(Hα) = 1.37e-12 erg x Q_H, Osterbrock & Ferland 2006). Hα equivalent widths of order 1 Å follow. The photon rate of these ages depends on the SSP library: the FSPS/MIST grids carry about 3e40-1e41 photons/s/Msun at ages above 1 Gyr, the FSPS/Padova grid essentially none. For a star-forming history the change from the 100 Myr cut is below 0.5%. Because the stellar SED gives up the LyC of every age under the Cue default `dust_attenuation['lyc_reprocessed_by']='all'`, the energy closes: measured on a grid with 5e40 photons/s/Msun above 1 Gyr, the nebular light is 94% (tau 0.3 Gyr at 10 Gyr) to 97% (tau 1 Gyr at 10 Gyr) of the LyC energy removed, the rest not being re-emitted within the SED grid. With a finite cutoff the default is `'young'`, which leaves the LyC of the ages beyond the cut in the stellar SED. Cue's forbidden-line ratios for old (post-AGB) ionizing shapes are not validated against CLOUDY. `neb={'type': 'cue', 'lyc_max_age_yr': 1e8}` restores the cut. The `cloudy`, `cb19` and `mappings` backends keep their own age range, set by the ages their grids cover.
+- `'gutkin16'`: an explicit prior on `neb_logU` or `neb_log_nH` wider than the table (−4 to −1, 2 to 3) is refused at build, with the range to narrow to. Use `FREE` to take the table extent, or a prior inside it as in the example above.
+- `'gutkin16'`: at Z = 0.040 the public table's m_up = 300 rows are identical to its m_up = 100 rows. The table is used as published.
+- `'gutkin16'`: With `approx=FeaturePrecomp()` and a free `neb_logU`, the fast nebular table reproduces the exact gutkin16 line fluxes to 8e-4 per band at the default 16 nodes and to 5e-5 with `FeaturePrecomp(n_grid={'neb_logU': 32})`; the exact path interpolates the table's seven logU nodes with PCHIP and the fast table re-samples it.
 - Cue's `gas_logno` is its absolute [N/O] input by default; `neb={'type': 'cue', 'nitrogen': 'nicholls17'}` makes it the offset from the Nicholls+2017 N/O--O/H relation at `neb_logZ_gas`, the convention of `neb_dno` in the grid backends (which embody their own, unrecorded, relation; the two agree at the N/[O II] level, Cue/grid 0.78-0.99 over `neb_logZ_gas` -1 to 0). The [N/O] Cue is actually fed is the `log_no` property in both modes (#2693).
 
 
@@ -558,17 +596,18 @@ agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 
 **Structural keys:**
 - `'ebmv_mw'`: Milky Way E(B-V) reddening (mag). Typically 0.01–0.2.
-- `'law'`: Dust law: `'mw_rv31'` (Fitzpatrick 1999, default), `'ccm89'` (CCM89), etc.
-- `'rv'`: Dust RV parameter override (law-dependent).
+- `'law'`: `'cardelli'` (Cardelli, Clayton & Mathis 1989, default) or `'fitzpatrick99'` (Fitzpatrick 1999). Multiply a Schlegel et al. (1998) map E(B-V) by 0.86 (Schlafly & Finkbeiner 2011) before using it with `'fitzpatrick99'`; the code applies the E(B-V) it is given.
+- `'rv'`: Total-to-selective extinction ratio R_V (default 3.1).
 
 **Minimal example:**
 ```python
-foreground={'ebmv_mw': 0.05, 'law': 'mw_rv31'}
+foreground={'ebmv_mw': 0.05, 'law': 'fitzpatrick99'}
 ```
 
 **Gotchas:**
 - Foreground reddening is applied **in addition to** any dust attenuation in the model.
-- It is a **source reddening**, not observer-frame extinction.
+- The screen is applied once on the observed-frame projection path, so the spectrum and the photometry are reddened by the same transmission.
+- On the batched spectroscopic path the law and R_V come from the template and E(B-V) is per galaxy: give each `GalaxySpectrum` its `ebmv_mw` (a template with a nonzero foreground E(B-V) refuses galaxies without one).
 - No free parameters by default (use Fixed() if you need to pin values precisely).
 
 ### Redshift: `redshift`
@@ -594,6 +633,17 @@ redshift=0.05                         # Auto-converts to Fixed(0.05)
 - IGM models apply **only** to observed-frame wavelengths, so redshift **must** be known for IGM to work.
 
 ---
+
+### Spectroscopic calibration: `Spectroscopy` options
+
+These options configure the analytic calibration marginal (`calibration_marginalize=True`), not the SED build grammar. They are fields of `Spectroscopy`.
+
+- `calibration_segments`: the pixel count of each camera segment (for example `wave_obs_segment_sizes`) or one integer id per pixel, `0 .. n_seg - 1`. The calibration multiplier then carries one free scale per segment, `M = s_seg + sum_j a_j T_j`. Default `None`: the multiplier is `1 + sum_j a_j T_j`, bit-identical to a model without the option.
+- `cal_prior`: `"gaussian"` (default) puts `N(0, sigma^2)` on the tilt and `N(1, sigma^2)` on each segment scale; `"scale_free"` puts a flat prior on the coefficients in data-flux units, so the marginal does not depend on the model's flux scale.
+- `cal_scale_prior`: `(log10_center, sigma_dex)`, a log-normal prior on the mean multiplier `q` over a window. It adds one sampled parameter, `cal_log_q = ln q`. A Gaussian in `q` itself at 0.3 dex puts 7 % of its mass at `q < 0` and is much stronger on the high side, which is why the log-normal is the form.
+- `cal_scale_window`: `(lo, hi)` [Angstrom] inside the grid over which `q` is averaged. Default: every fitted pixel of the segment that contains the r band's effective wavelength (6231 Angstrom). Needs `cal_scale_prior`.
+
+On the batched path `GalaxySpectrum(segment_ids=..., cal_scale_prior=...)` gives each galaxy its own layout and prior.
 
 ## III. Round-trip: configuration serialization
 

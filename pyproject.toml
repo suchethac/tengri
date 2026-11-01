@@ -97,7 +97,10 @@ all = [
     "astroquery>=0.4",
 ]
 dev = [
-    "pytest>=7.0",
+    # #3120: pytest 9.2.0's approx rejects JAX arrays as expected values with an explicit
+    # tolerance (upstream pytest-dev/pytest#15284, closed 2026-10-30, unreleased). Lift this cap
+    # once the pytest release containing that fix is out (follow-up #3123).
+    "pytest>=7.0,<9.2",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.5",
     # Per-test timeout safety net. Under `-n auto` a single test that

@@ -20,7 +20,9 @@ message:
   nebular continuum corrupting the ionizing fit), not just low.
 """
 
+import ast
 import os
+import re
 import warnings
 
 import pytest
@@ -434,6 +436,12 @@ def test_unbuildable_rows_do_not_advertise_a_build_call():
     )
 
 
+def _composed_sfh_type(use):
+    """The ``sfh`` type list a ``use:`` hint spells out, or ``None`` for a bare name."""
+    match = re.search(r"sfh=\{'type': (\[[^\]]*\])", use)
+    return ast.literal_eval(match.group(1)) if match else None
+
+
 def test_every_advertised_sfh_use_hint_actually_builds(synthetic_ssp_wide, synthetic_tophat_obs):
     """Execute the hints rather than pattern-matching them.
 
@@ -454,7 +462,7 @@ def test_every_advertised_sfh_use_hint_actually_builds(synthetic_ssp_wide, synth
         assert row["use"].startswith("SEDModel.build("), row["use"]
         # Mixture/modulator rows advertise the composed ``['const', name]``
         # form; parse whichever shape the row carries rather than assuming one.
-        spec = ["const", row["name"]] if "['const', " in row["use"] else row["name"]
+        spec = _composed_sfh_type(row["use"]) or row["name"]
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")

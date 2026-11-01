@@ -362,6 +362,63 @@ def test_freefree_absent_key_stays_true_for_cb19(synthetic_radio_ssp, synthetic_
     )
 
 
+def _build_gutkin16_radio_model(ssp, obs, continuum=None):
+    """A radio model with ``neb={'type': 'gutkin16'}`` and the ``sf.freefree`` key absent."""
+    neb = {"type": "gutkin16", "all_params": Fixed(DEFAULT)}
+    if continuum is not None:
+        neb["continuum"] = continuum
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(0.0),
+            sfh={"type": "const", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti"},
+            dust_emission={"type": "draine_li2014"},
+            neb=neb,
+            radio={
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "all_params": FREE,
+                "q_ir": Fixed(2.5),
+                "alpha_sf": Fixed(0.8),
+            },
+        )
+
+
+def test_freefree_absent_key_resolves_to_false_for_gutkin16_analytic(
+    synthetic_radio_ssp, synthetic_tophat_obs
+):
+    """Gutkin+2016 with its default analytic continuum carries free-free (#983).
+
+    The radio block's thermal term must yield to the nebular continuum, or the
+    free-free emission is counted twice.
+    """
+    model = _build_gutkin16_radio_model(synthetic_radio_ssp, synthetic_tophat_obs)
+    assert model.spec.radio_include_freefree is None
+    assert _radio_config(model).include_freefree is False, (
+        "gutkin16 with continuum='analytic' publishes free-free in sed_nebular, so the "
+        "radio thermal term must resolve to False"
+    )
+
+
+def test_freefree_absent_key_stays_true_for_gutkin16_without_continuum(
+    synthetic_radio_ssp, synthetic_tophat_obs
+):
+    """Gutkin+2016 with ``continuum='none'`` publishes no continuum (#983).
+
+    Nothing carries the free-free then, so the radio term must run.
+    """
+    model = _build_gutkin16_radio_model(
+        synthetic_radio_ssp, synthetic_tophat_obs, continuum="none"
+    )
+    assert _radio_config(model).include_freefree is True, (
+        "gutkin16 with continuum='none' publishes no free-free, so the radio thermal "
+        "term must resolve to True"
+    )
+
+
 def test_explicit_freefree_true_overrides_cue_auto_rule(ssp_data_fsps, synthetic_tophat_obs):
     """Explicit ``freefree=True`` overrides the Cue auto-rule; SED differs from False."""
     model_explicit_true = _build_cue_radio_model(
