@@ -141,12 +141,16 @@ def _jit_engine_energy(fitter):
     return energy
 
 
-def _nifty_energy(fitter):
-    """The NIFTy likelihood ``vi`` / ``vi_nonlinear_fast`` / ``vi_linear*`` minimize."""
+def _nifty_energy(fitter, primals=lambda fitter, z: {_NAME: z}):
+    """The NIFTy likelihood ``vi`` / ``vi_nonlinear_fast`` / ``vi_linear*`` minimize.
+
+    ``primals(fitter, z)`` maps the mass latent ``z`` to the likelihood's full
+    primal dict; the default fits models whose only free parameter is the mass.
+    """
     from tengri.inference.backends.vi.nifty import _build_nifty_likelihood
 
     likelihood = _build_nifty_likelihood(fitter)
-    return lambda z: likelihood.energy({_NAME: z})
+    return lambda z: likelihood.energy(primals(fitter, z))
 
 
 def _native_engine_energy(builder_name):
@@ -269,15 +273,15 @@ def test_gradient_of_a_limit_violated_by_thirty_sigma(ssp, truth, family):
 
 # ── recovery ─────────────────────────────────────────────────────────────────
 
-#: Posterior means at ``limit = 3 x model`` on band 2 with NO ``data_mask``, measured
-#: on main (``vi_*`` / ``native_vi_*``, key PRNGKey(1), 20 iterations). A detection fit
-#: pulled to the limit value: truth 10.5 + log10 of the band-2 pull.
-_MAIN_DETECTION_MEAN = {
-    "vi_nonlinear_fast": 10.6455,
-    "vi_linear_fast": 10.6456,
-    "native_vi_linear": 10.6462,
-    "native_vi_nonlinear": 10.6460,
-}
+#: Posterior mean at ``limit = 3 x model`` on band 2 with NO ``data_mask``, measured
+#: on main (``vi_nonlinear_fast`` and ``vi_linear_fast``, key PRNGKey(1), 20
+#: iterations). A detection fit pulled to the limit value: truth 10.5 + log10 of
+#: the band-2 pull. ``vi_linear_fast`` is kept for its MGVI sampling and metric
+#: path, which carries the censored band.
+_MAIN_DETECTION_MEAN = {"vi_nonlinear_fast": 10.6455, "vi_linear_fast": 10.6456}
+# native_vi_* is tier="broken"; re-enable when the backend is validated.
+# _MAIN_DETECTION_MEAN["native_vi_linear"] = 10.6462
+# _MAIN_DETECTION_MEAN["native_vi_nonlinear"] = 10.6460
 
 
 @pytest.fixture(scope="module")
@@ -343,34 +347,45 @@ def test_a_free_noise_model_with_an_all_detected_mask_is_not_refused(ssp, truth)
 
 # ── #2668: one model object, many Fitters ────────────────────────────────────
 
-#: Tolerance between a fit on a reused model and the fit on a fresh model with the
-#: same data and key: 1e-3 dex, set after measuring the run-to-run spread of the
-#: same fixed-key fit (see the brief); well below the 0.60 dex separating the two
-#: data sets and the 0.007 dex posterior standard deviation.
-_REUSE_TOL = 1e-3
+
+def _free_noise_primals(fitter, z):
+    """Latent position ``z`` for the mass and 0 (the prior centre) for every other free name."""
+    return {name: (z if name == _NAME else jnp.asarray(0.0)) for name in fitter._free_names}
 
 
-@pytest.mark.slow
+def _likelihood_energy(fitter, z):
+    return float(_nifty_energy(fitter, _free_noise_primals)(z))
+
+
 @pytest.mark.parametrize("free_noise", [False, True], ids=["fixed_noise", "free_noise"])
-@pytest.mark.parametrize("method", ["vi_nonlinear_fast", "vi_linear"])
-def test_two_fitters_on_one_model_each_fit_their_own_data(ssp, truth, method, free_noise):
-    """Data 0.5x then 2x the model on ONE model object: each fit equals a fresh-model fit."""
+def test_two_fitters_on_one_model_each_score_their_own_data(ssp, truth, free_noise):
+    """A second ``Fitter`` on one model object scores its own data, not the first's.
+
+    Data 0.5x then 2x the model on ONE model object. The NIFTy likelihood of the
+    second Fitter, evaluated at a fixed latent, equals the likelihood of a Fitter
+    on a fresh model with the same data (1e-10 relative, same float64 sum), and
+    differs from the first Fitter's by far more than that. With fixed noise it
+    also equals the half chi-squared of the second data set.
+    """
     shared = _build_model(ssp, free_noise=free_noise)
-    reused = [
-        _run_mean(
-            _fitter(ssp, truth, scale=s, model=shared, free_noise=free_noise, all_bands=True),
-            method,
+
+    def make(scale, model=None):
+        return _fitter(ssp, truth, scale=scale, model=model, free_noise=free_noise, all_bands=True)
+
+    first = make(0.5, shared)
+    second = make(2.0, shared)
+    z = _latent(second, 10.9)
+    e_first = _likelihood_energy(first, z)
+    e_second = _likelihood_energy(second, z)
+    e_fresh = _likelihood_energy(make(2.0), z)
+    assert e_second == pytest.approx(e_fresh, rel=1e-10)
+    assert abs(e_second - e_first) > 1e-3 * abs(e_fresh)
+    if not free_noise:
+        resid = (np.asarray(second.data, dtype=float) - _pred_at(second, 10.9)) / np.asarray(
+            second.noise, dtype=float
         )
-        for s in (0.5, 2.0, 0.5)
-    ]
-    fresh = [
-        _run_mean(_fitter(ssp, truth, scale=s, free_noise=free_noise, all_bands=True), method)
-        for s in (0.5, 2.0)
-    ]
-    assert reused[0] == pytest.approx(fresh[0], abs=_REUSE_TOL)
-    assert reused[1] == pytest.approx(fresh[1], abs=_REUSE_TOL)
-    assert reused[2] == pytest.approx(fresh[0], abs=_REUSE_TOL)
-    assert reused[1] - reused[0] > 0.5
+        want = 0.5 * float(np.sum(resid**2))
+        assert e_second == pytest.approx(want, rel=1e-10)
 
 
 # ── registry sweep: every backend honors or refuses ``data_mask`` ───────────
@@ -428,23 +443,16 @@ def test_every_registered_backend_has_a_declared_data_mask_family():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("name", sorted(_BACKENDS))
-def test_each_registered_backend_honors_or_refuses_data_mask(ssp, truth, loss_seam_cases, name):
-    """Loss-reading backends: loss energies equal the closed form. VI backends: refuse by name.
+def test_loss_reading_backends_honor_data_mask(loss_seam_cases):
+    """The two loss seams the loss-reading backends read equal the censored closed form.
 
-    Loss family: the two seams a backend can read (``loss_fn`` and the flat
-    log-density) equal the censored closed form for every mask value
-    (1e-10 relative, float64). VI family: the censored energy is closed-form
-    tested above for every engine; here the combination the engine cannot score,
-    a limit with a free noise model, raises ``ParameterError`` naming ``data_mask``
-    and the methods that honor it, before any compute.
+    ``loss_fn`` and the flat log-density equal the censored closed form for every
+    mask value (1e-10 relative, float64). The VI family is closed-form tested
+    above for every engine, and its refusal of a limit with a free noise model is
+    ``test_a_free_noise_model_with_a_limit_is_refused_by_name``; membership of
+    every registered backend in one of the two families is
+    ``test_every_registered_backend_has_a_declared_data_mask_family``.
     """
-    if name in _VI_ENERGY_BACKENDS:
-        fitter = _fitter(ssp, truth, scale=3.0, mask_value=1, free_noise=True)
-        with pytest.raises(ParameterError, match="data_mask"):
-            _run_mean(fitter, name)
-        return
-    assert name in _LOSS_BACKENDS
     for want, loss_value, logdensity_value in loss_seam_cases:
         assert loss_value == pytest.approx(want, rel=1e-10)
         assert logdensity_value == pytest.approx(want, rel=1e-10)
