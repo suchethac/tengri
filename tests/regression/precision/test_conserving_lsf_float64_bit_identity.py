@@ -211,6 +211,7 @@ def test_real_model_conserving_forward_and_gradient_match_unscaled():
     got = compute_spectrum_conserving(sed, wave_rest, wave_obs, _Z, dl_cm)
     ref = _reference_conserving(sed, wave_rest, wave_obs, _Z, dl_cm)
     assert np.all(np.isfinite(np.asarray(got)))
+    assert np.any(np.asarray(got) != 0.0), "conserving spectrum is identically zero"
     assert _max_relative(got, ref) <= _RTOL_FORWARD
     w = jnp.asarray(np.random.default_rng(5).standard_normal(wave_obs.shape[0]))
 
@@ -222,5 +223,6 @@ def test_real_model_conserving_forward_and_gradient_match_unscaled():
 
     grad_new = np.asarray(jax.grad(new_loss)(sed))
     grad_ref = np.asarray(jax.grad(ref_loss)(sed))
+    assert np.all(np.isfinite(grad_new))
     assert np.any(grad_new != 0.0), "gradient is identically zero"
     assert np.array_equal(grad_new, grad_ref)
