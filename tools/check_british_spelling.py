@@ -113,6 +113,7 @@ ALLOWED_TOKENS = frozenset(
         "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737
         "Greybody",  # Synthesizer's dust emission class name, cited beside tengri's graybody
         "photoionisation",  # Synthesizer module name: synthesizer.photoionisation
+        "CATALOGUE",  # BEAGLE parameter-file keywords (PHOTOMETRIC CATALOGUE): bytes on disk
     }
 )
 
