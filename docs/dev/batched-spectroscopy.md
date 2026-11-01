@@ -176,7 +176,8 @@ a leaf, if it changes a shape or a branch.
   the leaves above; `SpectroBatchSpec.n_segments` is static and part of the bucket key, so
   galaxies with different segment counts land in different buckets. The per-galaxy
   `CalibrationMarginalizedLikelihood`, the joint class and the batched marginal all call
-  `marginalize_calibration_segments`. The mean multiplier over the window is carried as the
+  `marginalize_calibration_segments`, and on the segment route the banded pixel covariance factor
+  enters that same marginal (`chol_data=`, `chol_offsets=`). The mean multiplier over the window is carried as the
   latent `cal_log_q` (`ln q`): per galaxy a declared observation parameter with the Gaussian
   prior from `cal_scale_prior`; batched, a latent with a unit-normal template prior whose
   standardized prior term `batched_neg_log_posterior` replaces by each galaxy's own

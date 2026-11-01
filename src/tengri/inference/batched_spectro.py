@@ -141,6 +141,7 @@ def _segment_marginal(
     log_q,
     lines=None,
     line_col_mask=None,
+    chol=None,
 ):
     """Marginal over segment scales, tilt and (when given) lines: one function, both paths."""
     spectroscopy = model.observation.spectroscopy
@@ -164,6 +165,8 @@ def _segment_marginal(
         log_q=log_q,
         q_window=window,
         q_prior=True,
+        chol_data=None if chol is None else chol.data,
+        chol_offsets=None if chol is None else spec.cov_offsets,
     )[0]
 
 
@@ -224,11 +227,13 @@ def _spectral_marginal_loglik(
 
     The design is ``model_flux[:, None] * T(x)`` on the real grid's extremes, so padded
     pixels (zero weight through ``obs.pix_mask``) carry no information. ``segment_args``
-    is ``(model, spec, log_q)`` for the segment form, else the Chebyshev-only form.
+    is ``(model, spec, log_q, chol)`` for the segment form, else the Chebyshev-only form.
     """
     if segment_args is not None:
-        model, spec, log_q = segment_args
-        return _segment_marginal(model_flux, obs, spec, model, n_poly, prior_sigma, log_q)
+        model, spec, log_q, segment_chol = segment_args
+        return _segment_marginal(
+            model_flux, obs, spec, model, n_poly, prior_sigma, log_q, chol=segment_chol
+        )
     design = model_flux[:, None] * calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, n_poly)
     return marginalize_linear_nuisance(
         data=obs.flux,
@@ -314,12 +319,13 @@ def _marginal_lines_loglik(
             log_q,
             lines=line,
             line_col_mask=line_cols.astype(g_eff.dtype),
+            chol=chol,
         )
         n_eff = jnp.sum(obs.pix_mask)
         return (
             marginal
             + 0.5 * n_eff * math.log(2.0 * math.pi)
-            + jnp.sum(obs.pix_mask * jnp.log(obs.sigma))
+            + jnp.sum(obs.pix_mask * jnp.log(scatter))
         )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
@@ -440,11 +446,6 @@ def batched_log_likelihood(
             "conditions the analytic calibration marginal."
         )
     segment_route = calibration_marginalize and _segment_route(model, spec)
-    if segment_route and spec.cov_offsets:
-        raise NotImplementedError(
-            "a banded pixel covariance with calibration segments is not supported yet: "
-            "the segment marginal whitens by the diagonal sigma"
-        )
 
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
         log_q = params[CAL_LOG_Q] if has_q else None
@@ -466,7 +467,7 @@ def batched_log_likelihood(
                 chol=chol,
             )
         elif calibration_marginalize:
-            segment_args = (model, spec, log_q) if segment_route else None
+            segment_args = (model, spec, log_q, chol) if segment_route else None
             total = _spectral_marginal_loglik(
                 out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, segment_args, chol
             )

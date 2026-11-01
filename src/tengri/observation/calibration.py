@@ -438,7 +438,15 @@ def calibration_q_log_prior(
     return -0.5 * ((q - 1.0) ** 2 / var + jnp.log(2.0 * jnp.pi * var)) + log_q
 
 
-@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior", "q_prior"))
+def _whiten_banded(chol_lower: BandedMatrix, unit, weight) -> BandedMatrix:
+    """Return the factor in the normalized units, with masked rows kept as identity rows."""
+    diagonal = jnp.where(weight > 0, chol_lower.data[0] / unit, 1.0)
+    return BandedMatrix(
+        offsets=chol_lower.offsets, data=(chol_lower.data / unit).at[0].set(diagonal)
+    )
+
+
+@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior", "q_prior", "chol_offsets"))
 def marginalize_calibration_segments(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -457,6 +465,8 @@ def marginalize_calibration_segments(
     log_q: jnp.ndarray | None = None,
     q_window: jnp.ndarray | None = None,
     q_prior: bool = False,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     r"""Marginalize per-segment calibration scales and a Chebyshev tilt in closed form.
 
@@ -520,6 +530,15 @@ def marginalize_calibration_segments(
         Static. With ``log_q`` given, add :func:`calibration_q_log_prior`, so the value is
         the log density of :math:`\ln q` under the coefficient prior times the data
         likelihood, up to the user's own prior on :math:`\ln q`. Default False.
+    chol_data : array_like, shape (p + 1, n), optional, keyword-only
+        Bands of the banded lower Cholesky factor of the pixel covariance, from
+        :func:`~tengri.observation.banded.banded_cholesky` with the same ``pix_mask``
+        [data flux units]. It replaces ``obs_err`` as the noise: the whitening is
+        :math:`L^{-1}` instead of :math:`\mathrm{diag}(\sigma)^{-1}`, and ``obs_err``
+        only sets the normalization. Default: diagonal noise.
+    chol_offsets : tuple of int, optional, keyword-only
+        Diagonal offsets of ``chol_data``, static under JIT. Given together with
+        ``chol_data``. Default: ``None``.
 
     Returns
     -------
@@ -634,11 +653,21 @@ def marginalize_calibration_segments(
         col_mask = jnp.concatenate([jnp.ones(k_cal), line_cols])
         flat_mask = jnp.concatenate([jnp.full(k_cal, float(free)), jnp.zeros(n_line)])
         coef_scale = lines.scale
+    chol_lower = (
+        None
+        if chol_offsets is None
+        else BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
+    )
+    noise = (
+        {"sigma": err_n}
+        if chol_lower is None
+        else {"chol_lower": _whiten_banded(chol_lower, unit, weight)}
+    )
     result = marginalize_linear_nuisance(
         data_n,
         model0,
         design,
-        sigma=err_n,
+        **noise,
         pix_mask=pix_mask,
         prior_mean=prior_mean,
         prior_precision=prior_precision,

@@ -26,8 +26,13 @@ from tengri.inference.batched_spectro import (
     batched_log_likelihood,
     batched_neg_log_posterior,
 )
-from tengri.inference.likelihoods.marginalized import CalibrationMarginalizedLikelihood
-from tengri.observation.batched import build_spectro_batches
+from tengri.inference.likelihoods.marginalized import (
+    CalibrationELineMarginalizedLikelihood,
+    CalibrationMarginalizedLikelihood,
+)
+from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+from tengri.observation.calibration import calibration_basis, marginalize_calibration_segments
+from tests.contract.test_batched_banded_covariance import _band_covariance, _to_banded
 from tests.contract.test_batched_cal_marginal import (
     _F32_TRUE_MASS,
     _mock_catalog,
@@ -332,3 +337,197 @@ def test_batched_joint_with_segments_lines_and_log_q_equals_per_galaxy(synthetic
             float(per_galaxy.log_prob(log_q[i])),
             rtol=1e-9,
         )
+
+
+# ── (f) Segments with a banded pixel covariance: the factor enters the segment marginal ──
+
+_COV_SCALE = 0.1e-15
+
+
+def _plain_template(ssp, cal_prior):
+    n = _J_WAVE.size
+    cut = int(_J_CUTS[0] * n)
+    spectroscopy = Spectroscopy(
+        wave_obs=jnp.asarray(_J_WAVE),
+        resample="conserving",
+        calibration_segments=(cut, n - cut),
+        **_banded(_J_WAVE),
+        cal_prior=cal_prior,
+        cal_scale_prior=(0.0, _J_SIGMA_DEX),
+        cal_scale_window=_J_WINDOW,
+    )
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(spectroscopy=spectroscopy),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), _MASS: Uniform(8.0, 12.0)},
+        neb={"type": "none"},
+        redshift=Uniform(0.0, 0.5),
+    )
+
+
+def _joint_flux():
+    return np.random.default_rng(3).normal(1.3e-15, 0.1e-15, _J_WAVE.size)
+
+
+def _covariance_records(resolution):
+    n = _J_WAVE.size
+    cuts = [int(c * n) for c in _J_CUTS]
+    covs = [_band_covariance(seed, n, _COV_SCALE) for seed in (11, 12)]
+    records = [
+        GalaxySpectrum(
+            wave=_J_WAVE,
+            flux=_joint_flux(),
+            ivar=1.0 / np.diag(cov),
+            z=z,
+            resolution=resolution,
+            segment_ids=np.repeat([0, 1], [cut, n - cut]),
+            cal_scale_prior=(center, _J_SIGMA_DEX),
+            covariance=_to_banded(cov),
+        )
+        for z, cut, center, cov in zip(_J_Z, cuts, _J_CENTERS, covs)
+    ]
+    return records, covs
+
+
+def _dense_reference(model, i, cov, lines, cal_prior, log_q, mass, line_mask_row):
+    n = _J_WAVE.size
+    cut = int(_J_CUTS[i] * n)
+    z = _J_Z[i]
+    window = ((_J_WINDOW[0] <= _J_WAVE) & (_J_WINDOW[1] >= _J_WAVE)).astype(float)
+    spectroscopy = Spectroscopy(wave_obs=jnp.asarray(_J_WAVE), covariance=cov)
+    common = dict(
+        fnu_obs=jnp.asarray(_joint_flux()),
+        fnu_err=jnp.asarray(np.sqrt(np.diag(cov))),
+        wavelength=jnp.asarray(_J_WAVE),
+        n_poly=2,
+        prior_sigma=1.0,
+        segments=jnp.asarray(np.repeat([0, 1], [cut, n - cut])),
+        n_segments=2,
+        cal_prior=cal_prior,
+        q_window=jnp.asarray(window),
+        has_q=True,
+        chol_data=spectroscopy.chol_data,
+        chol_offsets=spectroscopy.chol_offsets,
+    )
+    model_flux = model.predict_spectrum({_MASS: mass, "redshift": z, CAL_LOG_Q: log_q})
+    if not lines:
+        likelihood = CalibrationMarginalizedLikelihood(
+            common.pop("fnu_obs"), common.pop("fnu_err"), **common
+        )
+    else:
+        on_grid = np.asarray(line_mask_row) > 0
+        design = _joint_line_design(model, z)[:, on_grid]
+        likelihood = CalibrationELineMarginalizedLikelihood(
+            design_matrix_builder=lambda _p: design,
+            eline_prior_type="flat",
+            eline_prior_sigma=_J_PRIOR_SIGMA,
+            **common,
+        )
+    return float(likelihood.log_prob({"spec_fnu": model_flux}, {CAL_LOG_Q: log_q}))
+
+
+@pytest.mark.parametrize("lines", [False, True])
+@pytest.mark.parametrize("cal_prior", ["gaussian", "scale_free"])
+def test_banded_covariance_segments_batched_equals_per_galaxy(synthetic_ssp, cal_prior, lines):
+    model = (_joint_template if lines else _plain_template)(synthetic_ssp, cal_prior)
+    records, covs = _covariance_records(_J_R if lines else _banded(_J_WAVE)["resolution_matrix"])
+    [(spec, batch, _)] = build_spectro_batches(records, model=model)
+    assert spec.n_segments == 2
+    assert spec.cov_offsets != ()
+    masses = jnp.asarray([10.0, 10.1])
+    log_q = jnp.asarray(_J_LOG_Q)
+    params = {_MASS: masses, CAL_LOG_Q: log_q}
+    loglik = batched_log_likelihood(
+        model, spec, calibration_marginalize=True, cal_n_poly=2, cal_prior_sigma=1.0
+    )
+    values = np.asarray(jax.vmap(loglik)(params, batch))
+
+    # The factor changes the value: the same galaxies with diagonal noise differ.
+    diagonal = [record._replace(covariance=None) for record in records]
+    [(spec_d, batch_d, _)] = build_spectro_batches(diagonal, model=model)
+    diagonal_loglik = batched_log_likelihood(
+        model, spec_d, calibration_marginalize=True, cal_n_poly=2, cal_prior_sigma=1.0
+    )
+    diagonal_values = np.asarray(jax.vmap(diagonal_loglik)(params, batch_d))
+    assert np.all(np.abs(values - diagonal_values) > 1e-3 * np.abs(diagonal_values))
+
+    for i, cov in enumerate(covs):
+        expected = _dense_reference(
+            model,
+            i,
+            cov,
+            lines,
+            cal_prior,
+            float(log_q[i]),
+            float(masses[i]),
+            np.asarray(batch.line_mask[i]),
+        )
+        np.testing.assert_allclose(values[i], expected, rtol=1e-10)
+
+
+def test_segments_with_banded_covariance_equal_dense_hand_computation():
+    n = _J_WAVE.size
+    wave = jnp.asarray(_J_WAVE)
+    cut = int(_J_CUTS[0] * n)
+    segments = np.repeat([0, 1], [cut, n - cut])
+    cov = _band_covariance(21, n, _COV_SCALE)
+    model = 1.2e-15 * (1.0 + 0.3 * np.sin(_J_WAVE / 400.0))
+    noise = np.random.default_rng(5).multivariate_normal(np.zeros(n), cov)
+    flux = model * (1.0 + 0.1 * segments) + noise
+    spectroscopy = Spectroscopy(wave_obs=wave, covariance=cov)
+    value = marginalize_calibration_segments(
+        jnp.asarray(model),
+        jnp.asarray(flux),
+        jnp.sqrt(jnp.diag(jnp.asarray(cov))),
+        wave,
+        jnp.asarray(segments),
+        n_segments=2,
+        n_poly=2,
+        prior_sigma=1.0,
+        cal_prior="gaussian",
+        chol_data=spectroscopy.chol_data,
+        chol_offsets=spectroscopy.chol_offsets,
+    )[0]
+    basis = np.asarray(
+        calibration_basis(
+            wave,
+            float(_J_WAVE.min()),
+            float(_J_WAVE.max()),
+            2,
+            segments=jnp.asarray(segments),
+            n_segments=2,
+        )
+    )
+    design = model[:, None] * basis
+    s_mat = cov + design @ design.T
+    resid = flux - model
+    _sign, logdet = np.linalg.slogdet(s_mat)
+    expected = (
+        -0.5 * n * np.log(2.0 * np.pi) - 0.5 * logdet - 0.5 * resid @ np.linalg.solve(s_mat, resid)
+    )
+    np.testing.assert_allclose(float(value), expected, rtol=1e-10)
+
+
+def _values_by_index(records, model, quantum, params):
+    values = {}
+    for spec, batch, index in build_spectro_batches(records, quantum=quantum, model=model):
+        loglik = batched_log_likelihood(
+            model, spec, calibration_marginalize=True, cal_n_poly=2, cal_prior_sigma=1.0
+        )
+        sel = np.asarray(index)
+        out = jax.vmap(loglik)(
+            {_MASS: params[_MASS][sel], CAL_LOG_Q: params[CAL_LOG_Q][sel]}, batch
+        )
+        values.update({int(p): float(v) for p, v in zip(sel, np.asarray(out))})
+    return values
+
+
+def test_banded_covariance_segments_padding_is_exact(synthetic_ssp):
+    model = _plain_template(synthetic_ssp, "gaussian")
+    records, _covs = _covariance_records(_banded(_J_WAVE)["resolution_matrix"])
+    params = {_MASS: jnp.asarray([10.0, 10.1]), CAL_LOG_Q: jnp.asarray(_J_LOG_Q)}
+    padded = _values_by_index(records, model, 64, params)
+    exact = _values_by_index(records, model, None, params)
+    assert set(padded) == set(exact) == {0, 1}
+    for i, value in exact.items():
+        np.testing.assert_allclose(padded[i], value, rtol=1e-10)
