@@ -73,7 +73,7 @@ For a single power law $f_\nu \propto \nu^{\alpha_{\rm pl}}$ (as used for AGN; {
 
 Five additional parameters describe the photoionized gas:
 
-- $\log U \in [-4, -1]$: ionization parameter at the illuminated face of the cloud.
+- $\log U \in [-5, 0]$ (declared prior; Cue was trained on $[-4, -1]$): ionization parameter at the illuminated face of the cloud, at $R = 10^{19}$ cm (Cue's default).
 
 - $\log n_{\rm H} \in [1, 4]$: hydrogen number density ($\mathrm{cm}^{-3}$).
 

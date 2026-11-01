@@ -41,8 +41,11 @@
 # ## Setup
 #
 # Every model on this page carries nebular emission: tengri uses Cue (Li et al. 2025)
-# at logU = −2, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at the same
-# values. Residuals in every section therefore include the Cue-vs-Cloudy nebular
+# at neb_logU = −2.3535, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at
+# log U = −2. tengri's `neb_logU` is the inner-face ionisation parameter at R = 10^19 cm
+# (Cue's default), while Synthesizer's U = (α_B^(2/3)/c)(3Q n_H/4π)^(1/3) is evaluated at
+# n_H = 100 cm⁻³, so Synthesizer's log U = −2 corresponds to `neb_logU` = −2.3535 here.
+# Residuals in every section therefore include the Cue-vs-Cloudy nebular
 # difference, quantified in §8.
 
 # %%
@@ -102,12 +105,13 @@ AGE_GYR_FIDUCIAL = 5.0
 AV_FIDUCIAL = 1.0
 Z_FIDUCIAL = 0.02  # absolute metallicity (≈ solar on the Synthesizer grid)
 
-# Fiducial nebular configuration (Cue at logU=-2, solar metallicity, f_esc=0).
+# Fiducial nebular configuration (Cue at neb_logU=-2.3535, the Synthesizer log U = -2
+# equivalent; solar metallicity, f_esc=0).
 # Every model carries this nebular emission; residuals include the Cue-vs-Cloudy
 # difference, quantified in §8.
 NEB_FIDUCIAL = {
     "type": "cue",
-    "logU": Fixed(-2.0),
+    "logU": Fixed(-2.3535),
     "logZ_gas": Fixed(0.0),
     "fesc": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
@@ -1271,6 +1275,20 @@ _SYN_GRID_DIR = os.environ.get(
 BH_MASS = 1e8  # Msun
 BH_EDD = 0.5  # Eddington ratio
 BH_INC = 30.0  # degrees
+
+
+def _disc_block(disc_type):
+    """Disc sub-block that carries the §9 black-hole mass only if the type reads it.
+
+    The declared key set comes from the same table the composable refusal checks
+    against, so a disc that ignores ``agn_log_mbh`` is built without it.
+    """
+    from tengri.parameters.agn_ownership import _agn_subblock_declared_params
+
+    block = {"type": disc_type}
+    if "agn_log_mbh" in (_agn_subblock_declared_params("disc", disc_type) or ()):
+        block["agn_log_mbh"] = Fixed(float(np.log10(BH_MASS)))
+    return block
 BH_Z = 0.01  # absolute gas metallicity
 THETA_TORUS = 30.0  # degrees
 CF = 0.1  # NLR/BLR covering fraction
@@ -1327,10 +1345,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             # derived from agn_log_lbol and agn_log_mbh, #846, not a separate knob).
             # Leaving agn_log_mbh at tengri's default (1e7 M⊙) ran a hotter, fainter
             # disc (0.75x); pinning it to the §9 BH gives a ~0.98x match.
-            "disc": {
-                "type": disc,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block(disc),
             "torus": {
                 "type": torus,
                 "agn_theta_torus": Fixed(THETA_TORUS),
@@ -1389,10 +1404,7 @@ for disc_type, _ in _disc_models:
             # Match the §9 BH so the kubota_done disc temperature profile matches
             # Synthesizer's qsosed (ignored by the power-law disc). Without this the
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
-            "disc": {
-                "type": disc_type,
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block(disc_type),
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
@@ -1855,10 +1867,7 @@ def _unified_phot(approx):
         },
         agn={
             "type": "composable",
-            "disc": {
-                "type": "kubota_done",
-                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            },
+            "disc": _disc_block("kubota_done"),
             "torus": {
                 "type": "simple",
                 "agn_theta_torus": Fixed(THETA_TORUS),
