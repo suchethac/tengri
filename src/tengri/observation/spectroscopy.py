@@ -21,7 +21,12 @@ from tengri._cache_keys import (
     content,
     derive_key,
     exclude,
-    shape,
+)
+from tengri.observation.banded import (
+    BandedMatrix,
+    banded_cholesky,
+    banded_to_dense,
+    dense_to_banded,
 )
 from tengri.observation.calibration_segments import (
     CAL_PRIORS,
@@ -139,11 +144,15 @@ class Spectroscopy:
         ``neb={"type": "cue", "publish_line_fraction": True}`` and dust that
         republishes the reddened ``sed_nebular`` (``two_component``,
         ``age_binned``, or no dust). Default: True.
-    covariance : jnp.ndarray or None
-        Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
-        When provided, the likelihood uses ``diff @ C^{-1} @ diff``
-        instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
-        precomputed at construction time.  Default: None (diagonal noise).
+    covariance : jnp.ndarray, BandedMatrix or None
+        Spectral covariance matrix, a dense array of shape ``(n_pix, n_pix)`` or a
+        symmetric :class:`~tengri.observation.banded.BandedMatrix`. When provided, the
+        likelihood whitens the residual with the Cholesky factor of the covariance
+        instead of dividing by per-pixel sigma. A banded matrix, and a dense matrix
+        whose entries beyond a half-bandwidth below a quarter of ``n_pix`` are zero to
+        1e-12 of the largest variance, is factored once at construction into a banded
+        lower factor (:func:`~tengri.observation.banded.banded_cholesky`). Any other
+        dense matrix is inverted once. Default: None (diagonal noise).
 
     Returns
     -------
@@ -180,17 +189,19 @@ class Spectroscopy:
         Minimum broad component FWHM [km/s].
     nebular_lines : bool
         Whether ``spec_fnu`` carries the nebular emission lines.
-    covariance : ndarray, shape (n_pix, n_pix) or None
+    covariance : ndarray, shape (n_pix, n_pix), BandedMatrix or None
         Spectral covariance matrix.
-    covariance_inv : ndarray, shape (n_pix, n_pix) or None
-        Inverse covariance matrix (precomputed).
+    chol_data : ndarray, shape (p + 1, n_pix) or None
+        Bands of the lower Cholesky factor of a banded covariance.
+    chol_offsets : tuple of int or None
+        Diagonal offsets ``(0, -1, ..., -p)`` of the factor.
 
     Notes
     -----
     A frozen dataclass that encapsulates spectroscopic instrument metadata,
     including wavelength grid, resolution profile, calibration strategy,
-    and emission-line fitting configuration. Precomputes the inverse
-    covariance matrix at initialization for efficient likelihood evaluation.
+    and emission-line fitting configuration. Factors a banded covariance, or
+    inverts a dense one, at initialization for efficient likelihood evaluation.
     Used by SEDModel to configure spectral prediction and by the inference
     engine to set up calibration priors.
 
@@ -244,7 +255,7 @@ class Spectroscopy:
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
     nebular_lines: bool = True
-    covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
+    covariance: jnp.ndarray | BandedMatrix | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
     wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
     calibration_segments: object | None = dataclasses.field(default=None, hash=False)
@@ -331,17 +342,7 @@ class Spectroscopy:
                     f"wave_obs length {len(self.wave_obs)}"
                 )
 
-        # Set up covariance inverse
-        if self.covariance is not None:
-            cov = jnp.asarray(self.covariance)
-            n = len(self.wave_obs)
-            if cov.shape != (n, n):
-                raise ValueError(
-                    f"covariance shape {cov.shape} does not match expected ({n}, {n})"
-                )
-            object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
-        else:
-            object.__setattr__(self, "_cov_inv", None)
+        self._set_up_covariance(len(self.wave_obs))
 
         # Validate resolution matrix
         if self.resolution_matrix is not None:
@@ -529,6 +530,30 @@ class Spectroscopy:
         grid = self.wave_obs if wave_obs is None or _is_traced(wave_obs) else wave_obs
         return resolve_resample_mode(self.resample, grid, wave_rest_model, z_ref)
 
+    def _set_up_covariance(self, n: int) -> None:
+        """Factor a banded covariance, or invert a dense one, and store the result."""
+        factor, inverse = None, None
+        cov = self.covariance
+        if isinstance(cov, BandedMatrix):
+            if np.shape(cov.data)[1] != n:
+                raise ValueError(
+                    f"covariance has {np.shape(cov.data)[1]} columns but wave_obs has length {n}"
+                )
+            factor = banded_cholesky(cov)
+        elif cov is not None:
+            dense = jnp.asarray(cov)
+            if dense.shape != (n, n):
+                raise ValueError(
+                    f"covariance shape {dense.shape} does not match expected ({n}, {n})"
+                )
+            banded = dense_to_banded(np.asarray(dense))
+            if banded is None:
+                inverse = jnp.linalg.inv(dense)
+            else:
+                factor = banded_cholesky(banded)
+        object.__setattr__(self, "_chol", factor)
+        object.__setattr__(self, "_cov_inv", inverse)
+
     @property
     def has_covariance(self) -> bool:
         """Whether a full covariance matrix is configured.
@@ -543,7 +568,7 @@ class Spectroscopy:
         Read-only property; determined at initialization.
 
         """
-        return self._cov_inv is not None
+        return self.covariance is not None
 
     @property
     def has_resolution_matrix(self) -> bool:
@@ -564,8 +589,32 @@ class Spectroscopy:
         return self.resolution_matrix is not None
 
     @property
+    def chol_data(self) -> jnp.ndarray | None:
+        """Bands of the lower Cholesky factor of a banded covariance, or None.
+
+        Returns
+        -------
+        ndarray, shape (p + 1, n_pix) or None
+            ``data[k, i] = L[i, i - k]`` [data units], or None when the covariance is
+            absent or dense and not banded.
+        """
+        return None if self._chol is None else self._chol.data
+
+    @property
+    def chol_offsets(self) -> tuple[int, ...] | None:
+        """Diagonal offsets ``(0, -1, ..., -p)`` of :attr:`chol_data`, or None."""
+        if self._chol is None:
+            return None
+        return tuple(int(k) for k in np.asarray(self._chol.offsets).ravel())
+
+    @property
+    def has_banded_covariance(self) -> bool:
+        """Whether the covariance is held as a banded Cholesky factor."""
+        return self._chol is not None
+
+    @property
     def cov_inv(self) -> jnp.ndarray | None:
-        """Precomputed inverse covariance matrix, or None.
+        """Inverse covariance matrix, or None.
 
         Returns
         -------
@@ -575,11 +624,17 @@ class Spectroscopy:
 
         Notes
         -----
-        The inverse is precomputed at initialization for efficient likelihood
-        evaluation. This property is read-only.
-
+        Read-only. A dense, non-banded covariance is inverted at construction. A
+        banded covariance is inverted here on each call; the likelihoods use the
+        banded factor and never read it.
         """
-        return self._cov_inv
+        if self._cov_inv is not None:
+            return self._cov_inv
+        if self._chol is None:
+            return None
+        cov = self.covariance
+        dense = banded_to_dense(cov) if isinstance(cov, BandedMatrix) else np.asarray(cov)
+        return jnp.linalg.inv(jnp.asarray(dense))
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this spectroscopy configuration.
@@ -607,6 +662,13 @@ class Spectroscopy:
         tail = ()
         if resolution_matrix_key is not None:
             tail = (("resolution_matrix", resolution_matrix_key),)
+        if self._chol is not None:
+            tail = (
+                *tail,
+                ("covariance_factor", (self.chol_offsets, tuple(self._chol.data.shape))),
+            )
+        elif self.covariance is not None:
+            tail = (*tail, ("covariance_dense", tuple(np.shape(self.covariance))))
 
         return derive_key(self, _SPECTROSCOPY_CACHE_KEY_POLICY, tail=tail)
 
@@ -1284,9 +1346,11 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     "eline_broad": content("broad component option affects line fitting model"),
     "eline_broad_fwhm_min_kms": content("minimum broad FWHM affects the fit model"),
     "nebular_lines": content("dropping the nebular lines changes the predicted spectrum"),
-    "covariance": shape(
-        "per-galaxy data: only its shape fixes the program; values are a runtime input"
+    "covariance": exclude(
+        "per-galaxy data: keyed through the tail by factor offsets and shape; "
+        "values are a runtime input"
     ),
+    "_chol": exclude("banded Cholesky factor, derived in __post_init__"),
     "resolution_matrix": exclude("keyed through the tail with full data content"),
     "_cov_inv": exclude("precomputed inverse of covariance, derived in __post_init__"),
     "calibration_segments": content("segment scales add calibration columns to the marginal"),
