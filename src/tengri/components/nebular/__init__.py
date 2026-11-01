@@ -2,7 +2,7 @@
 """Nebular emission models for tengri.
 
 Provides modular backends for adding nebular emission (emission lines +
-continuum) to the stellar SED. Six backends:
+continuum) to the stellar SED. Seven backends:
 
 - **BakedIn** (default): Use SSP files with nebular emission pre-included
   (e.g., wNE files with fixed logU=-3, logZ=0). No free parameters.
@@ -18,6 +18,11 @@ continuum) to the stellar SED. Six backends:
   Paredes et al. 2023). 6D grid over log(O/H), logU, log_nH, log(C/O), ΔN/O,
   HbFrac. **Lines only: no nebular continuum.** Run
   ``scripts/download_cb19_templates.py`` to build the HDF5 file.
+
+- **Gutkin16**: Gutkin, Charlot & Bruzual (2016) Cloudy c13.03 H II-region line grids
+  from the public NEOGAL tables, as per-ionizing-photon templates over logU, logZ_gas,
+  xi_d, log n_H and C/O. **Lines plus an analytic continuum (free-free and two-photon)
+  by default.** Run ``scripts/build_gutkin16_grid.py`` to rebuild the HDF5 file.
 
 - **MappingsPhotoStellar**: MAPPINGS V v5.2.1 photoionization grids (Flury
   et al. 2024, arXiv:2412.06763; Zenodo 14140949). Stellar ionizing spectra
