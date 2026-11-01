@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Added
+- **Current-episode SFH types buildable through the grammar; sSFR pole refused at build; derived SFR and mass properties pinned (#3177).** `sfh={'type': ['delayed', 'recent'], ...}` and `['delayed', 'recent_ssfr']` now build through `SEDModel.build` (they were registry-only). The constant-SFR episode over the last `timescale_myr` is spliced over the smooth `delayed` history, keeping its formed mass; `recent_ssfr` is refused at build with `ParameterError` when its joint prior bound reaches the sSFR pole (`psi_S * Delta t >= 1`). Both types pass the age-kernel agreement test (cic vs dsps agree to round-off at z = 0 and 2.5). Equations and BEAGLE bookkeeping are in `docs/model_reference/sfh.md`; the registry `doc` field carries them to `tengri.describe`.
 - docs: the batched spectroscopy page describes the model-centered line prior (eline_prior_type="model")
 - docs: the batched spectroscopic stack page, with measured build, compile and fit numbers against the per-galaxy Fitter (#3118)
 - **Balmer series completed above Cue's H10 from Case-B ratios (n <= 50); high-order Balmer, He I 3889 and [Ne III] 3968 in `LineList.default_optical()` (#3136).** `neb={'type': 'cue', 'balmer_series_n_max': 50}` (default; `None` disables) appends H11 to H50 to Cue's full catalog at `R_n x L(Hbeta)`, with `R_n` the Storey & Hummer (1995) Case-B ratio at 1e4 K and 1e2 cm^-3, so the series above n = 20, 7.6% of H-beta, is in the SED; the ratios move by up to 27% over 5000-20000 K and are carried in each line's model sigma.
