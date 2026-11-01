@@ -41,6 +41,7 @@ import numpy as np
 
 from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -218,10 +219,10 @@ def slone_netzer_sed_from_grid(
 
     **JIT-compatible**: yes.
     """
-    grid_jax = jnp.asarray(grid.template)
-    wave_grid = jnp.asarray(grid.wave_grid)
-    mbh_ax = jnp.asarray(grid.log_mbh)
-    edd_ax = jnp.asarray(grid.log_edd)
+    grid_jax = device_table(grid.template)
+    wave_grid = device_table(grid.wave_grid)
+    mbh_ax = device_table(grid.log_mbh)
+    edd_ax = device_table(grid.log_edd)
     # Node-exact bilinear interpolation over (log_mbh, log_edd). The SN12
     # templates' peak wavelength varies strongly with accretion rate, so a
     # smooth triweight kernel (which is not node-exact) smears the peak

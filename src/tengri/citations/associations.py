@@ -43,6 +43,7 @@ SFH_CITATIONS: dict[str, list[str]] = {
     # (MNRAS 480, 4379) for the Bagpipes one: the menu row names both.
     "delayed": ["cigale", "bagpipes"],
     "continuity": ["leja2019"],
+    "continuity_young_fraction": ["leja2019"],
     "continuity_flex": ["leja2019"],
     "dirichlet": ["leja2019"],
     "dense_basis": ["iyer2020"],

@@ -25,15 +25,19 @@ the continuum model (enabling gradient-based inference of physical
 parameters).
 """
 
+import math
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.observation.banded import BandedMatrix
 from tengri.observation.eline_catalog import (
     DEFAULT_LINE_NAMES,  # noqa: F401, re-exported for convenience
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
 )
-from tengri.utils.scale import whiten
+from tengri.observation.linear_marginal import marginalize_linear_nuisance
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -279,110 +283,254 @@ def expand_constrained_amplitudes(
     return a_hat_full, a_cov_full
 
 
-def marginalize_emission_lines(
-    residual: jnp.ndarray,
-    noise: jnp.ndarray,
-    design_matrix: jnp.ndarray,
-    prior_variance: jnp.ndarray | None = None,
-) -> tuple:
-    r"""Analytically marginalize emission-line amplitudes.
+class UnitLinePrior(NamedTuple):
+    """Unit-normal form of a Gaussian line prior, as returned by :func:`unit_line_prior`.
 
-    Computes the marginalized log-likelihood by integrating out the
-    linear emission-line amplitude vector under a Gaussian prior.
+    Attributes
+    ----------
+    design : ndarray, shape (n_pix, n_lines)
+        Design matrix with each column multiplied by its prior width.
+    prior_mean : ndarray, shape (n_lines,)
+        Prior mean of the unit coefficients, ``mu / w``.
+    prior_precision : ndarray, shape (n_lines, n_lines)
+        Identity: the unit coefficients carry a unit normal prior.
+    scale : ndarray, shape ()
+        Coefficient scale that keeps the whitened design at order unity.
+    """
+
+    design: jnp.ndarray
+    prior_mean: jnp.ndarray
+    prior_precision: jnp.ndarray
+    scale: jnp.ndarray
+
+
+def unit_line_prior(
+    design: jnp.ndarray,
+    prior_width: jnp.ndarray,
+    *,
+    noise: jnp.ndarray,
+    pix_mask: jnp.ndarray | None = None,
+    prior_mean: jnp.ndarray | None = None,
+) -> UnitLinePrior:
+    r"""Rewrite a Gaussian line prior as a unit normal on rescaled amplitudes.
+
+    Each line amplitude is written as :math:`a_j = \mu_j + w_j a'_j` with
+    :math:`a'_j \sim \mathcal{N}(0, 1)`. The model :math:`G a` becomes
+    :math:`G\,\mathrm{diag}(w)\, a' + G\mu`, so the design is the column-scaled
+    matrix. The marginal likelihood is invariant under this change of variables.
+    The prior precision :math:`1/w_j^2` is never formed, which matters in float32 at
+    F_nu scale, where :math:`w_j \sim 10^{-21}` makes :math:`1/w_j^2` overflow.
 
     Parameters
     ----------
-    residual : array, shape (n_pix,)
-        Data minus continuum model: ``d - m``.
-    noise : array, shape (n_pix,)
-        Per-pixel noise standard deviation (sigma).
-    design_matrix : array, shape (n_pix, n_lines)
-        Gaussian design matrix from :func:`build_eline_design_matrix`.
-    prior_variance : scalar or array, shape (n_lines,)
-        Prior variance on line amplitudes.  Large values (default 1e10)
-        give an uninformative prior.
+    design : array_like, shape (n_pix, n_lines)
+        Design matrix :math:`G` [data units per line-amplitude unit].
+    prior_width : scalar or array_like, shape (n_lines,)
+        Prior standard deviation :math:`w_j` of each amplitude [data units]. A scalar
+        applies to every line (the flat-prior case).
+    noise : array_like, shape (n_pix,)
+        Per-pixel noise standard deviation :math:`\sigma_i` [data units]. Sets the
+        scale.
+    pix_mask : array_like, shape (n_pix,), optional
+        Pixel mask :math:`w_i \in \{0, 1\}`. Masked pixels are left out of the scale.
+        Default: all ones.
+    prior_mean : array_like, shape (n_lines,), optional
+        Prior mean :math:`\mu_j` of each amplitude [data units]. Default: zeros.
 
     Returns
     -------
-    ln_L_marg : scalar
-        Marginalized log-likelihood (dimensionless).
-    a_hat : ndarray, shape (n_lines,)
-        Posterior-mean (optimal) line amplitudes [same units as residual].
-    a_cov : ndarray, shape (n_lines, n_lines)
-        Posterior covariance of line amplitudes.
+    UnitLinePrior
+        ``(design, prior_mean, prior_precision, scale)`` for
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`. The
+        coefficients it returns are the unit amplitudes :math:`a'`, so the amplitudes
+        are :math:`a = \mu + w\, a'`.
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations via ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` operations.
 
-    **Gradient-safe**: yes, differentiable everywhere w.r.t. ``residual``,
-    ``noise``, and ``design_matrix``, in float32 as well as float64.
+    **Gradient-safe**: yes, with respect to ``design``, ``prior_width``, ``noise`` and
+    ``prior_mean``. The scale is the geometric mean of ``noise`` over the unmasked
+    pixels divided by the largest width, so it is order unity for any prior width.
 
-    **Numerical stability (#1206)**: the normal equations are assembled from
-    the *whitened* design matrix :math:`\tilde G = G/\sigma` rather than from
-    :math:`N^{-1} = 1/\sigma^2`,
+    **vmap**: yes over any leading batch axis.
+
+    The scale :math:`s` is an exact change of variables: the marginal value does not
+    depend on it, as :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+    documents. The per-galaxy wrapper and the batched path both call this helper, so a
+    line prior is written in one form on both.
+
+    Examples
+    --------
+    ::
+
+        line = unit_line_prior(G, w, noise=sigma, prior_mean=mu)
+        result = marginalize_linear_nuisance(
+            data,
+            model0,
+            line.design,
+            sigma=sigma,
+            prior_mean=line.prior_mean,
+            prior_precision=line.prior_precision,
+            scale=line.scale,
+        )
+        a_hat = width * result.coef_hat  # amplitudes in data units
+
+    """
+    n_lines = design.shape[1]
+    width = jnp.broadcast_to(jnp.atleast_1d(prior_width), (n_lines,))
+    mean = jnp.zeros(n_lines, dtype=design.dtype) if prior_mean is None else prior_mean
+    weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
+    log_noise_mean = jnp.sum(weight * jnp.log(noise)) / jnp.sum(weight)
+    return UnitLinePrior(
+        design=design * width,
+        prior_mean=mean / width,
+        prior_precision=jnp.eye(n_lines, dtype=design.dtype),
+        scale=jnp.exp(log_noise_mean) / jnp.max(width),
+    )
+
+
+def marginalize_emission_lines(
+    residual: jnp.ndarray,
+    noise: jnp.ndarray | None,
+    design_matrix: jnp.ndarray,
+    prior_variance: jnp.ndarray | None = None,
+    *,
+    pix_mask: jnp.ndarray | None = None,
+    col_mask: jnp.ndarray | None = None,
+    scale: jnp.ndarray | None = None,
+    prior_sigma: jnp.ndarray | None = None,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
+) -> tuple:
+    r"""Analytically marginalize emission-line amplitudes under a Gaussian prior.
+
+    Integrates the linear line amplitudes out of the residual model through
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`, with a
+    zero model offset, so the residual is the data.
+
+    Parameters
+    ----------
+    residual : array_like, shape (n_pix,)
+        Data minus continuum model, ``d - m`` [data units].
+    noise : array_like, shape (n_pix,) or None
+        Per-pixel noise standard deviation :math:`\sigma` [data units]. Must be
+        strictly positive wherever ``pix_mask`` is nonzero. Not read when
+        ``chol_data`` is given (pass ``None``).
+    design_matrix : array_like, shape (n_pix, n_lines)
+        Gaussian design matrix from :func:`build_eline_design_matrix`
+        [data units per line-amplitude unit].
+    prior_variance : scalar or array_like, shape (n_lines,), optional
+        Prior variance :math:`\Lambda` of each line amplitude [data units squared].
+        Large values give an uninformative prior. Default: ``1e10`` per line.
+    pix_mask : array_like, shape (n_pix,), optional
+        Pixel mask :math:`w \in \{0, 1\}`. Masked pixels contribute nothing to any
+        term. Default: all ones.
+    col_mask : array_like, shape (n_lines,), optional
+        Line mask :math:`c \in \{0, 1\}`. A masked line is fixed out of the model.
+        Default: all ones.
+    prior_sigma : scalar or array_like, shape (n_lines,), optional
+        Prior standard deviation :math:`\sqrt{\Lambda}` of each line amplitude
+        [data units]. Pass this instead of ``prior_variance`` when the variance
+        would underflow the working precision (below about 1e-19 in float32).
+        Exactly one of the two may be given.
+    scale : scalar, optional
+        Coefficient scale :math:`s` that keeps the whitened design at order unity.
+        The value does not depend on :math:`s` in exact arithmetic. Default: the
+        geometric mean of ``noise`` over the unmasked pixels,
+        :math:`\exp(\sum_i w_i \ln\sigma_i / N_\mathrm{eff})`, so float32 runs at
+        flux scale stay finite.
+    chol_data : array_like, shape (p + 1, n_pix), optional
+        Bands of the lower Cholesky factor of the pixel covariance, from
+        :func:`~tengri.observation.banded.banded_cholesky` with the same ``pix_mask``.
+        The pixels are then whitened by the factor, the noise scale of the line prior is
+        the factor's diagonal, and the :math:`\sum_i \ln\sigma_i` terms become
+        :math:`\sum_i \ln L_{ii}`. Default: None (diagonal ``noise``).
+    chol_offsets : tuple of int, optional
+        Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
+        ``chol_data``.
+
+    Returns
+    -------
+    ln_L_marg : ndarray, shape ()
+        Marginal log-likelihood (dimensionless).
+    a_hat : ndarray, shape (n_lines,)
+        Posterior-mean line amplitudes [data units].
+    a_cov : ndarray, shape (n_lines, n_lines)
+        Posterior covariance of the line amplitudes [data units squared].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``prior_variance`` may be traced.
+
+    **Gradient-safe**: yes, with respect to ``residual``, ``noise``,
+    ``design_matrix`` and ``prior_variance``, in float32 as well as float64.
+
+    The value is the exact marginal likelihood of the residual under
+    :math:`r = G a + \epsilon` with :math:`\epsilon \sim \mathcal{N}(0, \mathrm{diag}\,\sigma^2)`
+    and :math:`a \sim \mathcal{N}(0, \Lambda)`,
 
     .. math::
 
-        G^\mathsf{T} N^{-1} G = \tilde G^\mathsf{T} \tilde G,
-        \qquad
-        G^\mathsf{T} N^{-1} r = \tilde G^\mathsf{T} \tilde r,
-        \qquad
-        \chi^2_{\rm cont} = \tilde r^\mathsf{T} \tilde r
+        \ln L = -\tfrac12 \ln\det\!\big(\mathrm{diag}\,\sigma^2 + G\Lambda G^\mathsf{T}\big)
+        - \tfrac12\, r^\mathsf{T}\big(\mathrm{diag}\,\sigma^2 + G\Lambda G^\mathsf{T}\big)^{-1} r
+        + \sum_i \ln\sigma_i,
 
-    with :math:`\tilde r = r/\sigma`. At a real spectroscopic
-    :math:`\sigma \sim 3\times10^{-30}` the quantity :math:`1/\sigma^2` is
-    ~1e59, outside the float32 ceiling of 3.4e38, so the previous spelling
-    made every one of ``ln_L_marg``, ``a_hat`` and ``a_cov``, and the
-    gradient, ``NaN``, contradicting the promise above. Identical in float64.
+    with the constant :math:`-\tfrac12 N_\mathrm{eff}\ln 2\pi` and the
+    :math:`-\sum_i \ln\sigma_i` of the normalized Gaussian left out. Equivalently
+    :math:`\ln L = -\tfrac12\,\tilde r^\mathsf{T}\tilde r + \tfrac12\,\hat a^\mathsf{T}
+    (\tilde G^\mathsf{T}\tilde G)\,\hat a + \tfrac12\,\hat a^\mathsf{T}\Lambda^{-1}\hat a
+    + \tfrac12 \ln\det(\Lambda^{-1})
+    - \tfrac12\ln\det(\tilde G^\mathsf{T}\tilde G + \Lambda^{-1})`,
+    with :math:`\tilde G = G/\sigma`, :math:`\tilde r = r/\sigma` and
+    :math:`\hat a = (\tilde G^\mathsf{T}\tilde G + \Lambda^{-1})^{-1}\tilde G^\mathsf{T}\tilde r`.
+    The prior penalty :math:`\hat a^\mathsf{T}\Lambda^{-1}\hat a` enters this value
+    once. A form that subtracts it a second time is lower by exactly
+    :math:`\hat a^\mathsf{T}\Lambda^{-1}\hat a`.
 
-    **CUDA GEMM lowering (#2023)**: :math:`\tilde G^\mathsf{T} \tilde G` used to
-    be spelled as a matmul (``g_whitened.T @ g_whitened``). At the
-    :math:`(n_{\rm lines}, n_{\rm lines})` shape this function is ever called
-    with -- a handful of emission lines -- that GEMM is one cuBLASLt refuses
-    under JAX 0.11, which removed the legacy cuBLAS fallback that used to
-    absorb it: ``INTERNAL: GEMM is not supported by cublasLt and legacy cublas
-    fallback is removed``. Reproduces whenever the operands arrive
-    float64-valued and get traced under x64 disabled (the implicit truncation
-    a float32 tengri session performs); a matmul built fresh from genuinely
-    float32 operands of the identical shape does not trip it. So this is an
-    XLA/cuBLASLt lowering gap tied to that truncation, not a precision bug --
-    ``jax.lax.Precision.HIGHEST`` does not help. Spelled instead as an
-    explicit broadcast-multiply-sum, which never lowers to a GEMM at all and
-    is bit-identical to the matmul it replaced (float64 CPU, rtol 1e-12).
+    The masks and the scale are handled by
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`; a masked
+    line or pixel is selected out rather than floored.
 
     """
     n_lines = design_matrix.shape[1]
+    if prior_sigma is not None and prior_variance is not None:
+        raise ValueError("pass prior_variance or prior_sigma, not both")
+    if prior_sigma is None:
+        _pv = jnp.full((n_lines,), 1e10) if prior_variance is None else prior_variance
+        width = jnp.sqrt(jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,)))
+    else:
+        width = jnp.broadcast_to(jnp.atleast_1d(prior_sigma), (n_lines,))
+    if chol_data is None:
+        scatter, whitening = noise, {"sigma": noise}
+    else:
+        factor = BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
+        scatter, whitening = chol_data[0], {"chol_lower": factor}
+    line = unit_line_prior(design_matrix, width, noise=scatter, pix_mask=pix_mask)
+    weight = jnp.ones_like(scatter) if pix_mask is None else pix_mask
+    n_eff = jnp.sum(weight)
+    log_noise_sum = jnp.sum(weight * jnp.log(scatter))
+    coef_scale = line.scale if scale is None else scale
 
-    g_whitened = whiten(design_matrix, noise[:, None])
-    r_whitened = whiten(residual, noise)
-    # Broadcast-multiply-sum, not a matmul: see "CUDA GEMM lowering (#2023)" above.
-    gt_ninv_g = jnp.sum(g_whitened[:, :, None] * g_whitened[:, None, :], axis=0)
-    gt_ninv_r = g_whitened.T @ r_whitened
-
-    # Flat prior (~uninformative) when prior_variance is omitted.
-    _pv = prior_variance if prior_variance is not None else jnp.full((n_lines,), 1e10)
-    prior_variance = jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,))
-    lambda_inv = jnp.diag(1.0 / prior_variance)
-
-    # Posterior covariance: Sigma_a = (G^T N^{-1} G + Lambda^{-1})^{-1}
-    a_cov = jnp.linalg.inv(gt_ninv_g + lambda_inv)
-
-    # Posterior mean (optimal amplitudes)
-    a_hat = a_cov @ gt_ninv_r
-
-    chi2_continuum = jnp.sum(r_whitened**2)
-    chi2_marg = chi2_continuum - a_hat @ gt_ninv_g @ a_hat
-    prior_penalty = jnp.sum(a_hat**2 / prior_variance)
-    _sign, logdet_sigma = jnp.linalg.slogdet(a_cov)
-    log_det_correction = logdet_sigma - jnp.sum(jnp.log(prior_variance))
-    ln_l_marg = -0.5 * chi2_marg - 0.5 * prior_penalty + 0.5 * log_det_correction
-
+    result = marginalize_linear_nuisance(
+        residual,
+        jnp.zeros_like(residual),
+        line.design,
+        **whitening,
+        pix_mask=pix_mask,
+        prior_mean=line.prior_mean,
+        prior_precision=line.prior_precision,
+        col_mask=col_mask,
+        scale=coef_scale,
+    )
+    ln_l_marg = result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_noise_sum
+    a_hat = width * result.coef_hat
+    a_cov = (width[:, None] * width[None, :]) * result.coef_cov
     return ln_l_marg, a_hat, a_cov
 
 
 # JIT-compiled version (prior_variance must be traced, not static)
-marginalize_emission_lines = jax.jit(marginalize_emission_lines)
+marginalize_emission_lines = jax.jit(marginalize_emission_lines, static_argnames=("chol_offsets",))
 
 
 @jax.jit

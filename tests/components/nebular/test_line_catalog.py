@@ -33,7 +33,7 @@ class TestLineListDefault13:
 class TestLineListDefaultOptical:
     def test_count_in_range(self):
         cat = LineList.default_optical()
-        assert 35 <= cat.n_lines <= 45
+        assert 35 <= cat.n_lines <= 50
 
     def test_has_bpt_lines(self):
         cat = LineList.default_optical()

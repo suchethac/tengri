@@ -15,13 +15,15 @@ The data split into two halves:
 * **Traced** (:class:`SpectroBatch`): pixel wavelengths, masks, fluxes, errors,
   the resolution rows, redshifts, calibration ranges, photometry and, when
   given, each galaxy's non-parametric SFH bin edges, the emission-line mask and
-  resolution, and each galaxy's Milky Way E(B-V). Each leaf has a leading
+  resolution, each galaxy's Milky Way E(B-V), and the banded Cholesky factor of
+  its pixel covariance (``chol_data``, factored on the host at build time with
+  the galaxy's pixel mask). Each leaf has a leading
   batch axis ``B``, so the batch can be mapped with :func:`jax.vmap` or passed
   as a regular argument to a jitted function.
 * **Static** (:class:`SpectroBatchSpec`): the bucketed pixel count ``n_max``,
-  the banded diagonal offsets, the grid kind, the spectral-LSF binning and the
-  photometry width. These fix array shapes and control flow, so they are part
-  of the compile signature. The builder groups galaxies by spec so that each
+  the banded diagonal offsets, the covariance-factor offsets, the grid kind, the
+  spectral-LSF binning and the photometry width. These fix array shapes and control
+  flow, so they are part of the compile signature. The builder groups galaxies by spec so that each
   bucket compiles once.
 
 Why the grid kind is static
@@ -53,7 +55,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.observation.banded import BandedMatrix
+from tengri.observation.banded import BandedMatrix, banded_cholesky
+from tengri.observation.calibration_segments import check_cal_scale_prior, segment_ids
 from tengri.observation.eline_marginalization import eline_scalar_resolution
 from tengri.observation.spectroscopy import resolve_resample_mode
 from tengri.observation.spectrum import (
@@ -85,6 +88,10 @@ _BATCH_FIELDS: tuple[str, ...] = (
     "line_mask",
     "eline_resolution",
     "ebmv_mw",
+    "chol_data",
+    "segment",
+    "cal_scale_center",
+    "cal_scale_sigma",
 )
 
 
@@ -123,6 +130,20 @@ class GalaxySpectrum(NamedTuple):
         build-time ladder for this galaxy only, so a bucket can mix galaxies
         whose ladders differ. ``n_edges`` must equal the template's edge count.
         ``None`` (default) uses the template's ladder.
+    segment_ids : array_like of int, shape (n_pix,), optional
+        Camera segment of every pixel for the per-segment calibration scales, the
+        ids being ``0 .. n_seg - 1``. Galaxies in one bucket share ``n_seg``.
+        ``None`` (default) gives the calibration multiplier no segment scales.
+    cal_scale_prior : tuple of float, optional
+        ``(log10_center, sigma_dex)`` of this galaxy's log-normal prior on the mean
+        calibration multiplier ``q``. ``None`` (default) takes the template's
+        ``Spectroscopy.cal_scale_prior``.
+    covariance : BandedMatrix, optional
+        Symmetric banded pixel covariance of ``flux`` [(erg/s/cm^2/Hz)^2], with
+        ``n_pix`` columns. The spectral likelihood whitens by its banded Cholesky
+        factor instead of ``ivar``; ``ivar`` still selects the good pixels. Every
+        galaxy that carries one must use the same diagonal offsets. ``None`` (default)
+        keeps the diagonal ``ivar`` noise.
     """
 
     wave: Any
@@ -135,6 +156,9 @@ class GalaxySpectrum(NamedTuple):
     phot_err: Any = None
     sfh_bin_edges_gyr: Any = None
     ebmv_mw: float | None = None
+    segment_ids: Any = None
+    cal_scale_prior: tuple[float, float] | None = None
+    covariance: Any = None
 
     @classmethod
     def from_flambda(
@@ -151,6 +175,7 @@ class GalaxySpectrum(NamedTuple):
         phot_wave_eff=None,
         sfh_bin_edges_gyr=None,
         ebmv_mw=None,
+        covariance_lambda=None,
     ) -> GalaxySpectrum:
         """Build a record from data per wavelength, converting to F_nu.
 
@@ -176,11 +201,13 @@ class GalaxySpectrum(NamedTuple):
             which the per-wavelength photometry is converted.
         sfh_bin_edges_gyr : array_like, shape (n_edges,), optional
             Per-galaxy SFH bin edges [Gyr], as in :class:`GalaxySpectrum`.
+        covariance_lambda : BandedMatrix, optional
+            Banded pixel covariance of ``flux_lambda`` [(erg/s/cm^2/Angstrom)^2].
 
         Returns
         -------
         GalaxySpectrum
-            Record with ``flux`` and ``ivar`` in F_nu units.
+            Record with ``flux``, ``ivar`` and ``covariance`` in F_nu units.
 
         Raises
         ------
@@ -192,7 +219,8 @@ class GalaxySpectrum(NamedTuple):
         Uses :func:`tengri.utils.conversions.flambda_to_fnu`, so F_nu = F_lambda
         lambda^2 / c with c from :mod:`tengri.utils.physics_constants`. Errors
         scale the same way, and an inverse variance divides by the square of
-        that factor: ivar_nu = ivar_lambda / (lambda^2 / c)^2.
+        that factor: ivar_nu = ivar_lambda / (lambda^2 / c)^2. A covariance entry
+        scales by the factors of its two pixels, C_nu[i, j] = s_i s_j C_lambda[i, j].
         """
         w = np.asarray(wave, dtype=np.float64)
         scale = np.asarray(flambda_to_fnu(np.ones_like(w), w), dtype=np.float64)
@@ -223,7 +251,22 @@ class GalaxySpectrum(NamedTuple):
             phot_err=phot_err,
             sfh_bin_edges_gyr=sfh_bin_edges_gyr,
             ebmv_mw=ebmv_mw,
+            covariance=_covariance_to_fnu(covariance_lambda, scale),
         )
+
+
+def _covariance_to_fnu(cov, scale: np.ndarray):
+    """Scale a banded F_lambda covariance to F_nu with the per-pixel factors ``scale``."""
+    if cov is None:
+        return None
+    offs = np.asarray(cov.offsets, dtype=int).ravel()
+    data = np.asarray(cov.data, dtype=np.float64)
+    n = scale.shape[0]
+    out = np.zeros_like(data)
+    for k, off in enumerate(offs):
+        rows = np.arange(max(0, -off), min(n, n - off))
+        out[k, rows] = data[k, rows] * scale[rows] * scale[rows + off]
+    return BandedMatrix(offsets=offs, data=out)
 
 
 @dataclass(frozen=True)
@@ -270,6 +313,13 @@ class SpectroBatchSpec:
         template fits lines (``eline_mode != "off"``); ``0`` otherwise. The count
         is fixed by the template, so galaxies with different counts never share
         a bucket.
+    n_segments : int
+        Number of calibration segments of the galaxies' ``segment_ids``; ``0``
+        (default) when they carry none. Galaxies with different counts never share
+        a bucket.
+    cov_offsets : tuple of int
+        Diagonal offsets ``(0, -1, ..., -p)`` of the banded Cholesky factor of the
+        pixel covariance; ``()`` (default) when the bucket has no covariance.
 
     Raises
     ------
@@ -295,6 +345,8 @@ class SpectroBatchSpec:
     n_sfh_edges: int = 0
     has_foreground: bool = False
     n_lines: int = 0
+    n_segments: int = 0
+    cov_offsets: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -322,6 +374,9 @@ class SpectroBatchSpec:
         pad = self.lsf_pad_pixels
         if pad is not None and (isinstance(pad, bool) or not isinstance(pad, int) or pad < 0):
             raise ValueError(f"lsf_pad_pixels must be None or a non-negative int, got {pad!r}")
+        n_seg = self.n_segments
+        if isinstance(n_seg, bool) or not isinstance(n_seg, int) or n_seg < 0:
+            raise ValueError(f"n_segments must be a non-negative integer, got {n_seg!r}")
         n_edges = self.n_sfh_edges
         is_int = isinstance(n_edges, int) and not isinstance(n_edges, bool)
         if not is_int or n_edges < 0 or n_edges == 1:
@@ -329,6 +384,9 @@ class SpectroBatchSpec:
         n_lines = self.n_lines
         if isinstance(n_lines, bool) or not isinstance(n_lines, int) or n_lines < 0:
             raise ValueError(f"n_lines must be a non-negative integer, got {n_lines!r}")
+        cov = self.cov_offsets
+        if not isinstance(cov, tuple) or cov != tuple(-k for k in range(len(cov))):
+            raise ValueError(f"cov_offsets must be () or (0, -1, ..., -p), got {cov!r}")
 
 
 @dataclass(frozen=True)
@@ -371,6 +429,18 @@ class SpectroBatch:
         Scalar resolution R [dimensionless] that sets the emission-line profile
         width: the template's scalar R on a banded-resolution galaxy, otherwise
         the galaxy's own R over its real pixels (median when per-pixel).
+    chol_data : ndarray, shape (B, p + 1, n_max)
+        Bands of each galaxy's lower Cholesky factor of the pixel covariance,
+        ``chol_data[b, k, i] = L[i, i - k]`` [F_nu units], factored on the host with
+        that galaxy's ``pix_mask``. A masked or padded pixel has an identity row, so
+        it contributes nothing to the whitened residual or to ``ln det``. Zero-width
+        (``p + 1 = 0``) when the bucket has no covariance (``spec.cov_offsets == ()``).
+    segment : ndarray of int, shape (B, n_max)
+        Calibration segment id of every pixel, padded with the last real id;
+        zeros when ``spec.n_segments == 0``.
+    cal_scale_center, cal_scale_sigma : ndarray, shape (B,)
+        ``log10_center`` and ``sigma_dex`` of the galaxy's log-normal prior on the
+        mean calibration multiplier; zeros and ones when the galaxy has none.
 
     Notes
     -----
@@ -397,6 +467,10 @@ class SpectroBatch:
     line_mask: jax.Array
     eline_resolution: jax.Array
     ebmv_mw: jax.Array
+    chol_data: jax.Array
+    segment: jax.Array
+    cal_scale_center: jax.Array
+    cal_scale_sigma: jax.Array
 
     def galaxy(self, i: int) -> SpectroBatch:
         """Return galaxy ``i`` as an unbatched :class:`SpectroBatch`.
@@ -766,13 +840,58 @@ def _galaxy_eline_resolution(g: GalaxySpectrum, n: int, template_r: float) -> fl
     return eline_scalar_resolution(r)
 
 
+def _prepare_segments(g: GalaxySpectrum, n: int, n_max: int) -> tuple[np.ndarray, int]:
+    """Return the padded per-pixel segment ids and the segment count (0 without ids)."""
+    if g.segment_ids is None:
+        return np.zeros(n_max, dtype=np.int64), 0
+    ids = segment_ids(g.segment_ids, n)
+    padded = np.concatenate([ids, np.full(n_max - n, ids[-1], dtype=np.int64)])
+    return padded, int(ids.max()) + 1
+
+
+def _covariance_offsets(g: GalaxySpectrum) -> tuple[int, ...] | None:
+    """Return the diagonal offsets of a galaxy's covariance, or ``None`` without one."""
+    if g.covariance is None:
+        return None
+    return tuple(int(o) for o in np.asarray(g.covariance.offsets).ravel())
+
+
+def _chol_leaf(g: GalaxySpectrum, good: np.ndarray, n: int, n_max: int) -> np.ndarray:
+    """Return the lower-factor bands ``(p + 1, n_max)`` of one galaxy's covariance.
+
+    The real ``n`` pixels are factored with the galaxy's good-pixel mask, so a masked
+    pixel has an identity row; the padded rows are identity rows as well.
+    """
+    cov = g.covariance
+    if not isinstance(cov, BandedMatrix):
+        raise ValueError("covariance must be a BandedMatrix")
+    if np.shape(cov.data)[1] != n:
+        raise ValueError(f"covariance has {np.shape(cov.data)[1]} columns, expected {n}")
+    factor = banded_cholesky(cov, good.astype(float))
+    bands = np.asarray(factor.data, dtype=np.float64)
+    out = np.zeros((bands.shape[0], n_max))
+    out[:, :n] = bands
+    out[0, n:] = 1.0
+    return out
+
+
 def _prepare_galaxy(
-    index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wave_range, policy, eline=None
+    index: int,
+    g: GalaxySpectrum,
+    quantum,
+    lsf_n_bins,
+    rest_wave_range,
+    policy,
+    eline=None,
+    template_cal_prior=None,
+    template_cal_window=None,
 ):
     """Validate one galaxy and return ``(spec, row, n_real, log_grid)``.
 
     ``eline`` is ``None`` when the template does not fit lines, else
-    ``(rest_wavelengths, template_resolution)``.
+    ``(rest_wavelengths, template_resolution)``. ``template_cal_prior`` and
+    ``template_cal_window`` are the template's ``cal_scale_prior`` and
+    ``cal_scale_window`` (``None`` without a template).
     """
     try:
         wave = np.asarray(g.wave, dtype=np.float64)
@@ -826,6 +945,19 @@ def _prepare_galaxy(
             rest_lines = np.asarray(rest_lines, dtype=np.float64)
             line_mask = _line_mask(wave, rest_lines, z)
         eline_r = _galaxy_eline_resolution(g, n, template_r)
+        seg_row, n_segments = _prepare_segments(g, n, n_max)
+        cal_prior = check_cal_scale_prior(
+            g.cal_scale_prior if g.cal_scale_prior is not None else template_cal_prior
+        )
+        if cal_prior is not None and n_segments == 0 and template_cal_window is None:
+            raise ValueError(
+                "cal_scale_prior without cal_scale_window needs segment_ids: the default "
+                "window is the segment that contains the r band"
+            )
+        if g.covariance is None:
+            chol = np.zeros((0, n_max))
+        else:
+            chol = _chol_leaf(g, good, n, n_max)
         spec = SpectroBatchSpec(
             n_max=n_max,
             offsets=offsets,
@@ -837,6 +969,8 @@ def _prepare_galaxy(
             n_sfh_edges=int(sfh_edges.shape[0]),
             has_foreground=g.ebmv_mw is not None,
             n_lines=int(rest_lines.shape[0]),
+            n_segments=n_segments,
+            cov_offsets=tuple(-k for k in range(chol.shape[0])),
         )
     except ValueError as exc:
         raise ValueError(f"galaxy {index}: {exc}") from exc
@@ -864,6 +998,10 @@ def _prepare_galaxy(
         "line_mask": line_mask,
         "eline_resolution": np.asarray(eline_r),
         "ebmv_mw": np.asarray(0.0 if g.ebmv_mw is None else float(g.ebmv_mw)),
+        "chol_data": chol,
+        "segment": seg_row,
+        "cal_scale_center": np.asarray(0.0 if cal_prior is None else cal_prior[0]),
+        "cal_scale_sigma": np.asarray(1.0 if cal_prior is None else cal_prior[1]),
     }
     return spec, row, n, log_grid
 
@@ -947,6 +1085,22 @@ def _template_eline(model):
     return np.asarray(catalog.wavelengths, dtype=np.float64), eline_scalar_resolution(
         spectroscopy.resolution
     )
+
+
+def _require_common_covariance_offsets(galaxies: Sequence[GalaxySpectrum]) -> None:
+    """Raise when two galaxies that carry a covariance use different diagonal offsets."""
+    first = None
+    for i, g in enumerate(galaxies):
+        offsets = _covariance_offsets(g)
+        if offsets is None:
+            continue
+        if first is None:
+            first = (i, offsets)
+        elif offsets != first[1]:
+            raise ValueError(
+                f"galaxy {i} covariance offsets {offsets} differ from galaxy {first[0]} "
+                f"offsets {first[1]}; every galaxy with a covariance must share one banded layout"
+            )
 
 
 def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
@@ -1049,6 +1203,12 @@ def build_spectro_batches(
     ``(n_lines,)``: 1.0 where the redshifted line center lies inside the real
     grid, else 0.0. Otherwise ``n_lines = 0`` and ``line_mask`` has shape
     ``(0,)``. ``eline_resolution`` is always filled (see :class:`SpectroBatch`).
+
+    A galaxy with a ``covariance`` gets ``chol_data``, the bands of the Cholesky factor
+    of ``M C M + (I - M)`` with ``M`` its good-pixel mask, factored here on the host;
+    padded rows are identity rows. A covariance that is not positive definite raises
+    ``ValueError`` naming the galaxy, and galaxies whose covariances use different
+    diagonal offsets raise ``ValueError`` naming both offset tuples.
     """
     if quantum is not None and (not isinstance(quantum, int) or quantum < 1):
         raise ValueError(f"quantum must be a positive integer or None, got {quantum!r}")
@@ -1075,11 +1235,16 @@ def build_spectro_batches(
     elif lsf_n_bins is None:
         lsf_n_bins = 16
 
+    _require_common_covariance_offsets(galaxies)
     eline = _template_eline(model)
+    cal_prior, cal_window = None, None
+    if model is not None:
+        spectroscopy = model.observation.spectroscopy
+        cal_prior, cal_window = spectroscopy.cal_scale_prior, spectroscopy.cal_scale_window
     buckets: dict[SpectroBatchSpec, list[tuple[int, dict, int, bool]]] = {}
     for i, g in enumerate(galaxies):
         spec, row, n_real, log_grid = _prepare_galaxy(
-            i, g, quantum, lsf_n_bins, rest_wave_range, policy, eline
+            i, g, quantum, lsf_n_bins, rest_wave_range, policy, eline, cal_prior, cal_window
         )
         buckets.setdefault(spec, []).append((i, row, n_real, log_grid))
 

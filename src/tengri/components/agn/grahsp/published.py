@@ -108,6 +108,7 @@ from tengri.components.agn.grahsp.publication import (
     window_edges,
 )
 from tengri.components.agn.grahsp.torus import SI_DEFAULTS, _log_gaussian_pair
+from tengri.utils.host_array import device_table
 
 if TYPE_CHECKING:
     from tengri.components.agn.grahsp.component import GRAHSPSEDComponentState
@@ -346,7 +347,7 @@ class PublishedLuminosities:
         the Netzer disc on its own nodes plus a log grid (it is zero beyond its last node).
         """
         if self.config.disc_model == "netzer":
-            nodes = jnp.asarray(templates_state.disc_wave_nm)
+            nodes = device_table(templates_state.disc_wave_nm)
             top = nodes[-1] if hi_nm is None else jnp.minimum(nodes[-1], hi_nm)
             grid_hi = _DISC_GRID_HI_NM if hi_nm is None else hi_nm
             grid = jnp.asarray(log_breaks(lo_nm, grid_hi, SBPL_PER_DECADE, extra_nm))
@@ -399,14 +400,14 @@ class PublishedLuminosities:
         l_broad = _HBETA_BROAD_RATIO * l_agn * a_lines
         l_narrow = _HBETA_NARROW_RATIO * l_agn * a_lines
         if cfg.agn_type == 1:
-            lumin = (
-                l_broad * templates_state.line_broad + l_narrow * templates_state.line_narrow_sy2
+            lumin = l_broad * device_table(templates_state.line_broad) + l_narrow * device_table(
+                templates_state.line_narrow_sy2
             )
         elif cfg.agn_type == 2:
-            lumin = l_narrow * templates_state.line_narrow_sy2
+            lumin = l_narrow * device_table(templates_state.line_narrow_sy2)
         else:
-            lumin = l_narrow * templates_state.line_narrow_liner
-        centers = jnp.asarray(templates_state.line_wave_nm)
+            lumin = l_narrow * device_table(templates_state.line_narrow_liner)
+        centers = device_table(templates_state.line_wave_nm)
         sigmas = linewidth_sigma_nm(centers, jnp.asarray(params["agn_grahsp_linewidth_kms"]))
         return centers, sigmas, _LAMBDA_5100_NM * lumin
 
@@ -553,9 +554,9 @@ class PublishedLuminosities:
             The integral [erg/s].
         """
         cfg = self.config
-        nodes = [jnp.asarray(templates_state.torus_mn12_wave_nm)]
+        nodes = [device_table(templates_state.torus_mn12_wave_nm)]
         if cfg.include_si:
-            nodes.append(jnp.asarray(templates_state.torus_mn12_si_wave_nm))
+            nodes.append(device_table(templates_state.torus_mn12_si_wave_nm))
         if weight_fn is not None:
             nodes.append(jnp.asarray([PREVOT_DEFAULTS["lam_break_nm"]]))
         edges = jnp.sort(jnp.concatenate(nodes))
