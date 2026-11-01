@@ -11355,6 +11355,21 @@ class SEDModel:
         # JOINT model also project photometry in the same kernel (Part A).
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
+        # A joint observation whose spectrum channel stays exact (pixels wider than the
+        # model grid, a free sigma_v or a banded resolution matrix) still keeps its
+        # photometry on the WavePrecomp LUT: the two channels share one forward state and
+        # the exact spectrum only needs the full SED, which the chain still publishes.
+        # Without this the spectrum's exact path drags the photometry onto the exact
+        # filter integration too, the only part of a joint fit the LUT can still save.
+        # A model with a nebular grid attached stays on the exact route, because serving
+        # photometry from the grid zeroes ``sed_nebular`` and the exact spectrum reads it.
+        mixed_phot_lut = (
+            phot_lut
+            and not spec_lut
+            and observation.can_do_spectroscopy
+            and observation.can_do_photometry
+            and getattr(self, "_nebular_grid_table", None) is None
+        )
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
         # build runs each component's ``precompute()``, which for the
@@ -11437,8 +11452,15 @@ class SEDModel:
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
-                    observables_type=observables_type,
+                    observables_type=None if mixed_phot_lut else observables_type,
                 )
+                if mixed_phot_lut:
+                    # The exact kernel's own photometry is discarded (XLA drops it as dead
+                    # code); the LUT supplies phot_fnu and phot_rest_fnu.
+                    out = {"spec_fnu": obs["spec_fnu"]}
+                    out.update(observation.predict_via_precomp(state, full, observables_type=None))
+                    avail = {k: v for k, v in out.items() if k in observables_type._fields}
+                    return observables_type(**avail), state
                 return obs, state
             if use_lut:
                 obs = observation.predict_via_precomp(
