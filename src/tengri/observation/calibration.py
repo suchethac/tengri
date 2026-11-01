@@ -44,8 +44,11 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from tengri.utils.scale import representable_floor as _representable_floor, whiten as _whiten
+from tengri.observation.banded import BandedMatrix
+from tengri.observation.linear_marginal import marginalize_linear_nuisance
+from tengri.utils.scale import representable_floor as _representable_floor
 
 #: Guard against ``obs_err == 0`` only. Expressed in **sigma**, not variance:
 #: the previous ``maximum(obs_err**2, 1e-30)`` was a floor on the variance and
@@ -165,6 +168,57 @@ def calibration_polynomial(
 
 
 @partial(jax.jit, static_argnames=("n_poly",))
+def calibration_basis(
+    wave: jnp.ndarray,
+    wave_min: float,
+    wave_max: float,
+    n_poly: int,
+) -> jnp.ndarray:
+    r"""Chebyshev basis T_1 through T_{n_poly} on a calibration wavelength grid.
+
+    Column :math:`k` of the result is :math:`T_k(x)` with
+    :math:`x = (2\lambda - \lambda_\min - \lambda_\max)/(\lambda_\max - \lambda_\min)`,
+    so that :math:`1 + B\,c` equals :func:`calibration_polynomial` for coefficients
+    :math:`c = (a_1, \ldots, a_{n})`.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n,)
+        Wavelength grid [Angstrom].
+    wave_min : float
+        Lower bound of the normalization interval [Angstrom].
+    wave_max : float
+        Upper bound of the normalization interval [Angstrom].
+    n_poly : int
+        Highest polynomial order, at least 1. Static under JIT.
+
+    Returns
+    -------
+    ndarray, shape (n, n_poly)
+        Basis matrix :math:`[T_1(x), \ldots, T_{n_\mathrm{poly}}(x)]` (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``n_poly`` is static and the recurrence is a Python loop
+    over it, so no ``lax.scan`` is traced.
+
+    **Gradient-safe**: yes, differentiable with respect to ``wave``, ``wave_min`` and
+    ``wave_max``.
+
+    The recurrence is :math:`T_0 = 1`, :math:`T_1 = x`,
+    :math:`T_{k+1} = 2x\,T_k - T_{k-1}`.
+
+    """
+    x = 2.0 * (wave - wave_min) / (wave_max - wave_min) - 1.0
+    columns = [x]
+    t_prev, t_curr = jnp.ones_like(x), x
+    for _ in range(n_poly - 1):
+        t_prev, t_curr = t_curr, 2.0 * x * t_curr - t_prev
+        columns.append(t_curr)
+    return jnp.stack(columns, axis=-1)
+
+
+@partial(jax.jit, static_argnames=("n_poly", "chol_offsets"))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -172,8 +226,13 @@ def marginalize_calibration(
     wavelength: jnp.ndarray,
     n_poly: int = 3,
     prior_sigma: float = 1.0,
+    *,
+    pix_mask: jnp.ndarray | None = None,
+    wave_range: tuple[float, float] | None = None,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Analytically marginalize over calibration polynomial coefficients.
+    r"""Analytically marginalize over calibration polynomial coefficients.
 
     Given a model SED m(lambda) and observed spectrum d(lambda) with noise
     sigma(lambda), the calibrated model is C(lambda)*m(lambda) where C is
@@ -202,6 +261,19 @@ def marginalize_calibration(
     prior_sigma : float, optional
         Standard deviation of the Gaussian prior on each coefficient.
         Default 1.0.
+    pix_mask : array_like, shape (n_wave,), optional, keyword-only
+        Pixel mask in {0, 1}. Masked pixels are absent from every term. Default: all
+        pixels used.
+    wave_range : tuple of float, optional, keyword-only
+        ``(wave_min, wave_max)`` [Angstrom] that normalize the Chebyshev coordinate.
+        Default: ``(wavelength.min(), wavelength.max())``.
+    chol_data : array_like, shape (p + 1, n_wave), optional, keyword-only
+        Bands of the lower Cholesky factor of the pixel covariance, from
+        :func:`~tengri.observation.banded.banded_cholesky`. With a factor the pixels are
+        whitened by it and ``obs_err`` is not read. Default: None (diagonal ``obs_err``).
+    chol_offsets : tuple of int, optional, keyword-only
+        Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
+        ``chol_data``.
 
     Returns
     -------
@@ -216,106 +288,48 @@ def marginalize_calibration(
     Notes
     -----
     JIT-compatible: yes, `n_poly` is a static argument.
-    Gradient-safe: no, uses matrix inversion (not safe for gradient).
+    Gradient-safe: yes, inherited from
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
 
-    The marginalized log-likelihood integrates the Gaussian likelihood and
-    Gaussian prior on the polynomial coefficients in closed form via the
-    matrix determinant lemma.
+    The calibration polynomial is the nuisance design
+    :math:`X = m(\lambda)\,T(x)` with :math:`T` from :func:`calibration_basis`, and
+    the marginal is :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`
+    with prior precision :math:`I/\sigma_{\rm prior}^2` and prior mean zero. The
+    sigma floor, :math:`\sigma \ge` ``representable_floor(1e-300)``, is applied here,
+    before whitening; the primitive itself applies no floor.
+
+    ``wave_range=None`` uses the grid extremes. On a monotonic grid these are the
+    first and last wavelengths.
 
     References
     ----------
     Johnson et al. 2021, ApJS, 254, 22 (Prospector).
 
     """
-    wave_min = wavelength[0]
-    wave_max = wavelength[-1]
+    if wave_range is None:
+        wave_min, wave_max = wavelength.min(), wavelength.max()
+    else:
+        wave_min, wave_max = wave_range
 
-    # Normalized coordinate x in [-1, 1]
-    x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
+    basis = calibration_basis(wavelength, wave_min, wave_max, n_poly)
 
-    # Build Chebyshev basis T_1(x) ... T_{n_poly}(x) via recurrence
-    # T_0 = 1, T_1 = x, T_{k+1} = 2x T_k - T_{k-1}
-    def _cheb_step(carry, _k):
-        """Execute one step of the Chebyshev recurrence to build basis functions."""
-        t_prev, t_curr = carry
-        t_next = 2.0 * x * t_curr - t_prev
-        return (t_curr, t_next), t_next
+    if chol_data is None:
+        # Guard only against sigma == 0, in the sigma domain, at the working dtype's
+        # smallest normal. Never a variance floor (#1588).
+        noise = {"sigma": jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))}
+    else:
+        noise = {"chol_lower": BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)}
 
-    t0 = jnp.ones_like(x)
-    t1 = x
-    init = (t0, t1)
-
-    # We need T_1 through T_{n_poly}. T_1 = x is already computed.
-    # Scan generates T_2 ... T_{n_poly}.
-    _, higher = jax.lax.scan(_cheb_step, init, jnp.arange(2, n_poly + 1))
-    # basis shape: (n_poly, n_wave), rows are T_1, T_2, ..., T_{n_poly}
-    basis = jnp.concatenate([t1[jnp.newaxis], higher], axis=0)
-
-    # Whitened weights. NEVER form 1/sigma**2 (#1588): it is ~1e59 at a real
-    # flux uncertainty, and the variance-domain floor this replaced
-    # (``maximum(obs_err**2, 1e-30)``) bound on *every pixel of every realistic
-    # spectrum* (sigma < 1e-15 trips it) pinning inv_var to exactly 1e30 in
-    # **float64**. The data term then lost to the prior and the recovered
-    # polynomial collapsed toward zero: c_hat[0] 5.0e-02 -> 7.5e-04 at
-    # F_lambda ~1e-17, and -> 7.6e-26 at F_nu ~1e-28. Guard only against
-    # sigma == 0, in the sigma domain, at the working dtype's smallest normal.
-    err_safe = jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))
-
-    # Design matrix: D_jk = sum_i [T_j(x_i) * m_i * T_k(x_i) * m_i / sigma_i^2]
-    # = sum_i [(T_j * m/sigma) * (T_k * m/sigma)]
-    weighted_model = _whiten(model_flux, err_safe)  # m / sigma
-    # B_{j,i} = T_j(x_i) * m(x_i) / sigma(x_i)
-    b_matrix = basis * weighted_model[jnp.newaxis, :]  # (n_poly, n_wave)
-
-    # A = B @ B^T + (1/prior_sigma^2) * I
-    a_matrix = b_matrix @ b_matrix.T  # (n_poly, n_poly)
-    prior_precision = 1.0 / (prior_sigma**2)
-    a_matrix = a_matrix + prior_precision * jnp.eye(a_matrix.shape[0])
-
-    # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
-    residual = obs_flux - model_flux
-    # r_j = sum_i [T_j * (m/sigma) * ((d-m)/sigma)], algebraically the same as
-    # T_j * m * (d-m) / sigma^2, without ever forming 1/sigma^2.
-    rhs = jnp.sum(
-        basis * weighted_model[jnp.newaxis, :] * _whiten(residual, err_safe)[jnp.newaxis, :],
-        axis=1,
-    )  # (n_poly,)
-
-    # Solve for MAP coefficients: A c_hat = rhs
-    c_hat = jax.numpy.linalg.solve(a_matrix, rhs)
-
-    # Posterior covariance Sigma_post = A^{-1}
-    # For c_hat_err we need diag(A^{-1}), computed via solve against identity
-    sigma_post = jax.numpy.linalg.solve(a_matrix, jnp.eye(a_matrix.shape[0]))
-    c_hat_err = jnp.sqrt(jnp.maximum(jnp.diag(sigma_post), 0.0))
-
-    # --- Marginalized log-likelihood ---
-
-    # Calibrated model at c_hat
-    cal_poly = 1.0 + jnp.dot(c_hat, basis)  # (n_wave,)
-    model_cal = cal_poly * model_flux
-    chi2 = jnp.sum(_whiten(obs_flux - model_cal, err_safe) ** 2)
-
-    # Prior penalty: c_hat^T Lambda^{-1} c_hat
-    prior_penalty = prior_precision * jnp.dot(c_hat, c_hat)
-
-    # Log-determinant terms
-    # ln|Sigma_post| = -ln|A|, ln|Lambda| = n_poly * ln(prior_sigma^2)
-    _sign_a, logdet_a = jnp.linalg.slogdet(a_matrix)
-    log_det_sigma_post = -logdet_a  # ln|A^{-1}|
-    log_det_lambda = n_poly * jnp.log(prior_sigma**2)
-
-    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i)
-    n_wave = wavelength.shape[0]
-    # ``err_safe``, not ``obs_err``: the same zero the whitening guards would
-    # otherwise make this term -inf while chi2 stayed finite.
-    log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(err_safe))
-
-    log_likelihood_marginal = log_norm - 0.5 * (
-        chi2 + prior_penalty - log_det_sigma_post + log_det_lambda
+    result = marginalize_linear_nuisance(
+        obs_flux,
+        model_flux,
+        model_flux[:, jnp.newaxis] * basis,
+        **noise,
+        pix_mask=pix_mask,
+        prior_precision=jnp.eye(n_poly) / prior_sigma**2,
     )
-
-    return log_likelihood_marginal, c_hat, c_hat_err
+    c_hat_err = jnp.sqrt(jnp.diag(result.coef_cov))
+    return result.log_like, result.coef_hat, c_hat_err
 
 
 @jax.jit

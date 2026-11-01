@@ -200,6 +200,8 @@ def marginalize_emission_lines_cloudy(
     line_wavelengths: jnp.ndarray | None = None,
     prior_width_dex: float = 0.3,
     l_hbeta: float = 1.0,
+    chol_data: jnp.ndarray | None = None,
+    chol_offsets: tuple[int, ...] | None = None,
 ) -> tuple:
     """Emission line marginalization with CLOUDY-based priors.
 
@@ -227,6 +229,11 @@ def marginalize_emission_lines_cloudy(
     l_hbeta : float
         Estimated Hbeta luminosity (or flux) to scale the CLOUDY
         ratios to absolute amplitudes. Default 1.0 (ratios only).
+    chol_data : array (p + 1, n_pix) or None
+        Bands of the lower Cholesky factor of the pixel covariance; ``noise`` is then
+        not read. Default None.
+    chol_offsets : tuple of int or None
+        Diagonal offsets of ``chol_data``. Static.
 
     Returns
     -------
@@ -268,6 +275,8 @@ def marginalize_emission_lines_cloudy(
         noise,
         design_matrix,
         prior_variance=prior_variance,
+        chol_data=chol_data,
+        chol_offsets=chol_offsets,
     )
 
     # Restore the prior mean offset
