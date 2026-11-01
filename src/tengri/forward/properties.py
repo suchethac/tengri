@@ -72,20 +72,31 @@ class Property:
         Group name for related properties (e.g., ``"sfh"``, ``"sed"``).
     doc : str
         One-line description of the quantity.
-    fn : Callable
+    fn : Callable, optional
         Pure function ``fn(state, params) -> scalar`` that reads
         ``state.derived[...]`` and returns a JAX scalar.
+    bundle : Callable, optional
+        For a property computed only on request, in place of ``fn``:
+        ``bundle(state, params, model, template_data) -> dict`` returning this property
+        and its siblings, evaluated once per request for every property that names the same
+        ``bundle`` (the composable AGN's energy ledger, which re-evaluates the chain at many
+        sightlines and so is not part of the forward pass).
+    available : Callable, optional
+        ``available(component) -> bool``: whether the declaring component, as configured,
+        provides the property; ``None`` means always.
 
     Notes
     -----
-    The ``fn`` field is not compared or hashed (marked ``compare=False``)
-    so frozen dataclasses can store it.
+    The callables are not compared or hashed (marked ``compare=False``)
+    so frozen dataclasses can store them.
     """
 
     units: str
     group: str
     doc: str
-    fn: Callable = field(compare=False, hash=False)
+    fn: Callable | None = field(default=None, compare=False, hash=False)
+    bundle: Callable | None = field(default=None, compare=False, hash=False)
+    available: Callable | None = field(default=None, compare=False, hash=False)
 
 
 @dataclass(frozen=True)
@@ -104,8 +115,12 @@ class PropertyEntry:
         Short description.
     component_name : str
         Name of the component that declared this property.
-    fn : Callable
+    fn : Callable, optional
         Pure function ``fn(state, params) -> scalar``.
+    bundle : Callable, optional
+        See :class:`Property`.
+    available : Callable, optional
+        See :class:`Property`.
     """
 
     name: str
@@ -113,7 +128,37 @@ class PropertyEntry:
     group: str
     doc: str
     component_name: str
-    fn: Callable = field(compare=False, hash=False)
+    fn: Callable | None = field(default=None, compare=False, hash=False)
+    bundle: Callable | None = field(default=None, compare=False, hash=False)
+    available: Callable | None = field(default=None, compare=False, hash=False)
+
+    def evaluate(self, state, params, model=None, template_data=None, cache=None):
+        """The property's value: ``fn``, or its entry of the (cached) ``bundle``.
+
+        Parameters
+        ----------
+        state : ForwardState
+            The forward state.
+        params : mapping
+            The parameters ``state`` was computed from.
+        model : SEDModel, optional
+            The model, for a ``bundle`` property.
+        template_data : Any, optional
+            The JIT-threading channel, for a ``bundle`` property.
+        cache : dict, optional
+            ``{bundle: result}`` shared across the properties of one request.
+
+        Returns
+        -------
+        scalar
+            The property value.
+        """
+        if self.bundle is None:
+            return self.fn(state, params)
+        cache = {} if cache is None else cache
+        if self.bundle not in cache:
+            cache[self.bundle] = self.bundle(state, params, model, template_data)
+        return cache[self.bundle][self.name]
 
 
 def register_properties(component_name: str, props: dict[str, Property]) -> None:
@@ -144,13 +189,17 @@ def register_properties(component_name: str, props: dict[str, Property]) -> None
             doc=prop.doc,
             component_name=component_name,
             fn=prop.fn,
+            bundle=prop.bundle,
+            available=prop.available,
         )
         if name not in PROPERTY_REGISTRY:
             PROPERTY_REGISTRY[name] = []
         PROPERTY_REGISTRY[name].append(entry)
 
 
-def assemble_available_properties(active_component_names: set[str]) -> dict[str, PropertyEntry]:
+def assemble_available_properties(
+    active_component_names: set[str], components=None
+) -> dict[str, PropertyEntry]:
     """Assemble properties available in a built model.
 
     Filters :data:`PROPERTY_REGISTRY` to only entries whose component
@@ -162,6 +211,9 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
     active_component_names : set[str]
         Set of component names present in the model
         (e.g., ``{"stellar", "dust", "neb"}``).
+    components : sequence, optional
+        The active component objects, against which an entry's ``available`` predicate is
+        evaluated; entries with a predicate are dropped when ``None``.
 
     Returns
     -------
@@ -173,9 +225,19 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
     ValueError
         If two active components declare the same property name.
     """
+    by_name = {getattr(c, "name", None): c for c in (components or ())}
+
+    def _provided(entry: PropertyEntry) -> bool:
+        if entry.component_name not in active_component_names:
+            return False
+        if entry.available is None:
+            return True
+        component = by_name.get(entry.component_name)
+        return component is not None and bool(entry.available(component))
+
     catalog: dict[str, PropertyEntry] = {}
     for name, entries in PROPERTY_REGISTRY.items():
-        active_entries = [e for e in entries if e.component_name in active_component_names]
+        active_entries = [e for e in entries if _provided(e)]
         if len(active_entries) > 1:
             component_list = ", ".join(e.component_name for e in active_entries)
             raise ValueError(
