@@ -175,6 +175,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:1705.10877](https://arxiv.org/abs/1705.10877).
 - FSPS nebular emission grids baked into the with-nebular SSP files. Byler
   et al. (2017), [arXiv:1611.08305](https://arxiv.org/abs/1611.08305).
+- Density-bounded H II regions and Lyman-continuum escape in the emission-line
+  spectra of metal-poor galaxies, the context of the Gutkin+2016 backend. Plat
+  et al. (2019), [arXiv:1909.07386](https://arxiv.org/abs/1909.07386).
 - [Cue](https://github.com/yi-jia-li/cue): neural emulator for nebular
   emission lines. Li et al. (2025),
   [arXiv:2405.04598](https://arxiv.org/abs/2405.04598).

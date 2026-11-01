@@ -64,6 +64,7 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
     "_DLA_PARAMS": ("tengri.components.igm._params", "DLA_PARAMS"),
     # PR5: nebular sub-buckets + shock + stellar α/Fe
     "_CB19_PARAMS": ("tengri.components.nebular._params", "CB19_PARAMS"),
+    "_GUTKIN16_PARAMS": ("tengri.components.nebular._params", "GUTKIN16_PARAMS"),
     "_ELINE_PARAMS": ("tengri.components.nebular._params", "ELINE_PARAMS"),
     "_ELINE_BROAD_PARAMS": (
         "tengri.components.nebular._params",
@@ -321,7 +322,7 @@ def _build_param_registry(
         defaults[pname] = pdef.default
 
     # Nebular params (CLOUDY, Cue, or CB_19; not BakedIn/ssp/off).
-    if nebular in ("cloudy", "cue", "cb19"):
+    if nebular in ("cloudy", "cue", "cb19", "gutkin16"):
         nebular_bucket = _resolve_lazy_bucket("_NEBULAR_PARAMS")
         for pname, (desc, check, err, default) in nebular_bucket.items():
             registry[pname] = (desc, check, err)
@@ -331,6 +332,12 @@ def _build_param_registry(
     if nebular == "cb19":
         cb19_bucket = _resolve_lazy_bucket("_CB19_PARAMS")
         for pname, (desc, check, err, default) in cb19_bucket.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    if nebular == "gutkin16":
+        gutkin16_bucket = _resolve_lazy_bucket("_GUTKIN16_PARAMS")
+        for pname, (desc, check, err, default) in gutkin16_bucket.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 

@@ -5211,6 +5211,16 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         # cloudy/mappings/mappings_agn read it.
         if "grid" in neb_dict:
             result["nebular_cb19_grid_path"] = str(neb_dict["grid"])
+    elif neb_type == "gutkin16":
+        result["nebular"] = "gutkin16"
+        # Pass only what the user wrote; Parameters holds the defaults (mup=100,
+        # continuum="analytic", the packaged data/gutkin16_grid.h5).
+        if "grid" in neb_dict:
+            result["nebular_gutkin16_grid_path"] = str(neb_dict["grid"])
+        if "mup" in neb_dict:
+            result["nebular_gutkin16_mup"] = neb_dict["mup"]
+        if "continuum" in neb_dict:
+            result["nebular_gutkin16_continuum"] = neb_dict["continuum"]
     elif neb_type == "mappings":
         result["nebular"] = "mappings"
         # Pass only what the user explicitly wrote; constructor defaults are the
@@ -5957,7 +5967,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
-    # types that read it ("cloudy", "cb19", "mappings", "mappings_agn"),
+    # types that read it ("cloudy", "cb19", "gutkin16", "mappings", "mappings_agn"),
     # added per-type via _NEB_TYPE_SPECIFIC_KEYS (defined below this table) in
     # _validate_user_keys so a type that never reads it (cue, ssp, none)
     # raises instead of silently dropping the path.
@@ -6024,6 +6034,9 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
+    # "gutkin16": the grid path, the upper mass cutoff (100 or 300) and the
+    # continuum switch. ``mup`` and ``continuum`` are not read by any other type.
+    "gutkin16": frozenset({"grid", "mup", "continuum"}),
     "cue": frozenset(
         {"nitrogen", "lyc_max_age_yr", "balmer_series_n_max", "publish_line_fraction"}
     ),
@@ -6195,6 +6208,13 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # (#2220) had just wired in: parse_groups(**spec.to_groups()) reverted
         # a cb19 model to the packaged default grid with no error.
         _Structural("grid", "nebular_cb19_grid_path", None, only_types=("cb19",)),
+        # Gutkin+2016 structural selectors. Only read when type is 'gutkin16', so a
+        # cb19 or cloudy spec never emits them.
+        _Structural("grid", "nebular_gutkin16_grid_path", None, only_types=("gutkin16",)),
+        _Structural("mup", "nebular_gutkin16_mup", 100.0, only_types=("gutkin16",)),
+        _Structural(
+            "continuum", "nebular_gutkin16_continuum", "analytic", only_types=("gutkin16",)
+        ),
     ),
     "shock": (
         _Structural("norm", "shock_norm", "frac"),
@@ -6946,7 +6966,7 @@ def _validate_user_keys(
         # "grid" (#2220 follow-up) used to be legal for every type via the
         # base _GROUP_STRUCTURAL_KEYS["neb"] set, so neb={'type': 'cue',
         # 'grid': p} / {'type': 'ssp', ...} accepted the key and silently
-        # dropped it -- only "cloudy", "cb19", "mappings" and "mappings_agn"
+        # dropped it -- only "cloudy", "cb19", "gutkin16", "mappings" and "mappings_agn"
         # read it in _translate_neb. It is legal only for those four types
         # now, and the check just below refuses it by name for every other
         # type.
@@ -7004,7 +7024,7 @@ def _validate_user_keys(
                     f"Unknown key 'grid' in group 'neb': type {neb_type!r} does not "
                     "read a grid file, so the key would be silently ignored. "
                     "'grid' is only accepted when type is one of 'cloudy', 'cb19', "
-                    "'mappings', 'mappings_agn'."
+                    "'gutkin16', 'mappings', 'mappings_agn'."
                 )
 
         # A group whose parameter partition spans several structural variants
