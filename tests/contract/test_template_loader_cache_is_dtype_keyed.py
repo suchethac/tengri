@@ -275,7 +275,12 @@ def test_no_template_loader_is_left_on_a_path_only_cache():
 
 @pytest.mark.parametrize(("mod_name", "loader_name"), _TIERED)
 def test_float32_first_load_does_not_reach_float64(mod_name, loader_name):
-    """Float32 load, then float64 in one process: float64 leaves, bitwise the fresh value."""
+    """Float32 load, then float64 in one process: the fresh load's arrays and value, bitwise.
+
+    The arrays held are compared dtype for dtype with an uncached float64 load made after
+    the module's caches are cleared, not with float64 itself: a library stored in float32
+    on disk (the SKIRTOR v3 cube) legitimately loads as float32 in either mode.
+    """
     mod = _module(mod_name)
     loader = getattr(mod, loader_name)
     args, evaluate = _evaluator(mod_name, loader_name)
@@ -288,17 +293,19 @@ def test_float32_first_load_does_not_reach_float64(mod_name, loader_name):
             wave = jnp.asarray(_WAVE, jnp.float64)
             loaded = loader(*args)
             after = np.asarray(evaluate(loaded, wave))
-            fresh = np.asarray(evaluate(loader.__wrapped__(*args), wave))
-            held = _held_arrays(loaded)
-            dtypes = {
-                str(np.asarray(x).dtype)
-                for x in held
-                if np.issubdtype(np.asarray(x).dtype, np.floating)
-            }
+            held = [str(np.asarray(x).dtype) for x in _held_arrays(loaded)]
+            _clear_caches(mod)
+            fresh_load = loader.__wrapped__(*args)
+            fresh = np.asarray(evaluate(fresh_load, wave))
+            expected = [str(np.asarray(x).dtype) for x in _held_arrays(fresh_load)]
     finally:
         _clear_caches(mod)
     assert held, f"{mod_name}.{loader_name}: no array found in the loaded object"
-    assert dtypes <= {"float64"}, f"{mod_name}.{loader_name}: float64 load holds {dtypes}"
+    assert "float64" in expected, f"{mod_name}.{loader_name}: a fresh float64 load holds none"
+    assert held == expected, (
+        f"{mod_name}.{loader_name}: after a float32-first load the float64 load holds "
+        f"{sorted(set(held))}, a fresh one {sorted(set(expected))}"
+    )
     assert after.dtype == np.float64
     np.testing.assert_array_equal(after, fresh)
 
