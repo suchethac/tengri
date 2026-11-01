@@ -88,7 +88,16 @@ _BUILDABLE_NEBULAR = ["cb19", "cue"]
 
 #: What the grammar advertises. Pinned so that registering a type -- or
 #: dropping one -- is a deliberate edit rather than a silent change.
-_REGISTERED_NEBULAR = {"cb19", "cloudy", "cue", "mappings", "mappings_agn", "none", "ssp"}
+_REGISTERED_NEBULAR = {
+    "cb19",
+    "cloudy",
+    "cue",
+    "gutkin16",
+    "mappings",
+    "mappings_agn",
+    "none",
+    "ssp",
+}
 
 
 @pytest.fixture(scope="module")

@@ -81,6 +81,7 @@ def build_base_likelihood(context: InferenceContext):
         CloudyELineMarginalizedLikelihood,
         ELineFittedLikelihood,
         ELineMarginalizedLikelihood,
+        ModelELineMarginalizedLikelihood,
         MultivariateGaussianLikelihood,
         StudentTLikelihood,
     )
@@ -172,11 +173,21 @@ def build_base_likelihood(context: InferenceContext):
             )
 
     # ── Spec covariance (correlated noise on spectroscopy) ──────
-    if "spec_cov_inv" in context.data_args:
-        cov_inv = context.data_args["spec_cov_inv"]
+    # A banded covariance enters as its Cholesky factor, read through data_args; the
+    # marginalized classes whiten with it, the plain case uses the correlated Gaussian.
+    chol_kw = {}
+    if "spec_chol_data" in context.data_args:
+        chol_kw = {
+            "chol_data": context.data_args["spec_chol_data"],
+            "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
+            "chol_key": "spec_chol_data",
+        }
+    marginalizes = context.calibration_marginalize or context.eline_marginalize
+    if "spec_cov_inv" in context.data_args or (chol_kw and not marginalizes):
+        cov_inv = context.data_args.get("spec_cov_inv")
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data"
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **chol_kw
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
@@ -192,6 +203,7 @@ def build_base_likelihood(context: InferenceContext):
                     channel="spec_fnu",
                     obs_key="data",
                     data_slice=(n_phot, len(context.data)),
+                    **chol_kw,
                 ),
             )
 
@@ -270,11 +282,14 @@ def build_base_likelihood(context: InferenceContext):
             design_matrix_builder=builder,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             eline_prior_type=context.eline_prior_type or "flat",
             eline_prior_sigma=context.eline_prior_sigma or 1e10,
             eline_line_wavelengths=context.eline_independent_wavelengths,
             eline_prior_width_dex=context.eline_prior_width_dex,
+            **_model_prior_kwargs(context),
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_eline_lk
@@ -312,7 +327,9 @@ def build_base_likelihood(context: InferenceContext):
             wavelength=wavelength,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             channel="spec_fnu",
+            **chol_kw,
         )
         if context.data_type == "spectroscopy":
             return cal_lk
@@ -378,6 +395,27 @@ def build_base_likelihood(context: InferenceContext):
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
+                **chol_kw,
+            )
+        elif context.eline_prior_type == "model":
+            match_index, matched = _model_line_match(context)
+            eline_lk = ModelELineMarginalizedLikelihood(
+                fnu_obs=spec_obs,
+                fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
+                design_matrix_builder=builder,
+                prior_inputs_builder=_model_prior_inputs(context),
+                match_index=match_index,
+                matched=matched,
+                line_wavelengths=context.eline_independent_wavelengths,
+                prior_width_dex=context.eline_prior_width_dex,
+                channel="spec_fnu",
             )
         else:
             eline_lk = ELineMarginalizedLikelihood(
@@ -391,7 +429,9 @@ def build_base_likelihood(context: InferenceContext):
                     else (_n_phot_split(context), len(context.data))
                 ),
                 design_matrix_builder=builder,
+                prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
+                **chol_kw,
             )
         if context.data_type == "spectroscopy":
             return eline_lk
@@ -530,6 +570,36 @@ def build_likelihood_extras(context: InferenceContext):
 # ── Helpers (private) ────────────────────────────────────────────────
 
 
+def _calibration_segment_kwargs(context: InferenceContext, wavelength) -> dict:
+    """Return the segment, prior and fiber-fraction fields of the calibration likelihoods.
+
+    Reads ``calibration_segments``, ``cal_prior``, ``cal_scale_prior`` and
+    ``cal_scale_window`` off the model's spectroscopy; all defaults give the
+    unsegmented Gaussian form, so a model without them is unchanged.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from tengri.observation.calibration_segments import window_mask
+
+    spectroscopy = getattr(context.model.observation, "spectroscopy", None)
+    if spectroscopy is None:
+        return {}
+    ids = spectroscopy.segment_ids
+    has_q = spectroscopy.cal_scale_prior is not None
+    q_window = None
+    if has_q:
+        mask = window_mask(np.asarray(wavelength), ids, spectroscopy.cal_scale_window)
+        q_window = jnp.asarray(mask)
+    return {
+        "segments": None if ids is None else jnp.asarray(ids),
+        "n_segments": spectroscopy.n_cal_segments,
+        "cal_prior": spectroscopy.cal_prior,
+        "q_window": q_window,
+        "has_q": has_q,
+    }
+
+
 def _n_phot_split(context: InferenceContext) -> int:
     """Number of photometric data points in joint (phot+spec) data.
 
@@ -556,15 +626,10 @@ def _eline_scalar_resolution(model) -> float:
     median (first-order, R varies slowly across a band). 2000 remains the
     fallback only when the observation declares no resolution at all.
     """
-    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
-    resolution = getattr(spec_cfg, "resolution", None)
-    if resolution is None:
-        return 2000.0
-    if getattr(resolution, "ndim", 0):
-        import numpy as np
+    from tengri.observation.eline_marginalization import eline_scalar_resolution
 
-        return float(np.median(np.asarray(resolution)))
-    return float(resolution)
+    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
+    return eline_scalar_resolution(getattr(spec_cfg, "resolution", None))
 
 
 def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
@@ -587,6 +652,66 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
         eline_delta_v_kms=delta_v,
     )
     return apply_doublet_constraints(G, constraint_matrix)
+
+
+def _model_line_match(context: InferenceContext):
+    """Static index of the model line matching each independent catalog line."""
+    from tengri.observation.eline_marginalization import model_line_match
+
+    return model_line_match(context.model, context.eline_independent_wavelengths)
+
+
+def _model_prior_kwargs(context: InferenceContext) -> dict:
+    """Constructor keywords of the model-centered line prior, empty for any other prior."""
+    if context.eline_prior_type != "model":
+        return {}
+    match_index, matched = _model_line_match(context)
+    return {
+        "prior_inputs_builder": _model_prior_inputs(context),
+        "match_index": match_index,
+        "matched": matched,
+    }
+
+
+def _model_prior_inputs(context: InferenceContext):
+    """Closure returning ``(redshift, dl_cm, aperture_frac, transmission)`` for the prior.
+
+    The redshift and distance follow the forward pass's resolution order, and the
+    aperture fraction is read from ``params`` with ``Fixed(1.0)`` as the default. The
+    transmission is the model's Milky Way screen at each catalog line, ones without one.
+    """
+    model = context.model
+    fixed_values = context.fixed_values
+
+    def inputs(params):
+        redshift = model._get_redshift(params, fixed_values)
+        dl_cm = model._get_dl_cm(params, fixed_values)
+        aperture_frac = params.get(
+            "eline_aperture_frac", fixed_values.get("eline_aperture_frac", 1.0)
+        )
+        transmission = _catalog_foreground(context, redshift)
+        return redshift, dl_cm, aperture_frac, transmission
+
+    return inputs
+
+
+def _catalog_foreground(context: InferenceContext, redshift):
+    """Milky Way transmission at the independent catalog lines; ones without a screen."""
+    import jax.numpy as jnp
+
+    from tengri.observation.eline_marginalization import line_foreground_transmission
+
+    spec = context.model.spec
+    wavelengths = context.eline_independent_wavelengths
+    if getattr(spec, "foreground_ebmv_mw", 0.0) > 0.0:
+        return line_foreground_transmission(
+            wavelengths,
+            redshift,
+            spec.foreground_ebmv_mw,
+            spec.foreground_rv,
+            spec.foreground_law,
+        )
+    return jnp.ones(jnp.shape(wavelengths)[0])
 
 
 def _make_eline_design_builder(context: InferenceContext):

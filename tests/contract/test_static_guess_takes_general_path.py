@@ -45,6 +45,11 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    "utils/host_array.py::device_table": (
+        "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
+        "held once per table and dtype; a concrete device array is cast to the canonical dtype "
+        "on every call and never held"
+    ),
     "_cache_keys.py::baked": "traced value raises TypeError: a traced value cannot key a cache",
     "components/agn/blocks/runner.py::compose_l_nu": (
         "traced fracAGN goes through jax.lax.cond over both polar branches"
@@ -151,8 +156,9 @@ ALLOWLIST: dict[str, str] = {
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
     ),
     "utils/sed_quantities.py::_uv_anchor_plan": (
-        "tracer → 'traced': in-grid interpolation with NaN wherever the grid does not span 1600 Å "
-        "(loud), never the extrapolate/edge plans, which need a concrete grid."
+        "tracer → 'traced': the three cases are selected with jnp.where on the traced coverage "
+        "(in-grid; masked-sum power-law fit; edge), the same values as the concrete plans, "
+        "with no warning under trace."
     ),
     # ---- recorded gaps: the unknown is not the general path; owner to decide ----
     "observation/spectrum.py::_lsf_sigma_bound_kms": (
@@ -166,6 +172,10 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/_torus_inclination.py::inclination_quadrature_in": (
         "GAP: traced nodes skip the ascending-order check; every library's loader builds its "
         "inclination axis ascending on the host, so the traced axis is that one (documented)"
+    ),
+    "components/agn/blocks/_ledger.py::ledger_sightlines": (
+        "general: traced panel edges keep coinciding edges as empty panels of zero weight; "
+        "concrete edges drop them first; both are the same quadrature"
     ),
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "

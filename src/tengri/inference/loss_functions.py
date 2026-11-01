@@ -18,6 +18,11 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.stellar.sfh.young_fraction import (
+    YOUNG_FRACTION_NAMES,
+    young_fraction_latents,
+    young_fraction_prior_for_spec,
+)
 from tengri.inference.likelihoods.gaussian import standardized_residual
 
 __all__ = [
@@ -32,6 +37,65 @@ __all__ = [
 
 
 def standardized_neg_log_prior(
+    params_unbounded,
+    free_names,
+    *,
+    stochastic,
+    centering=1.0,
+    psd_sigma_dex=None,
+    young_fraction=None,
+):
+    r"""Negative log-prior of the standardized latents, up to a constant.
+
+    Adds the young-fraction term of the continuity SFH when the latents carry
+    ``sfh_cont_young_frac_k``; see :func:`_standardized_neg_log_prior_core` for
+    the iid part and the GP-field term.
+
+    Parameters
+    ----------
+    young_fraction : YoungFractionPrior or None, optional
+        The exact pullback of the ratio prior to the young fractions, from
+        :func:`~tengri.components.stellar.sfh.young_fraction.young_fraction_prior_for_spec`.
+        Required whenever ``params_unbounded`` carries the young-fraction
+        latents; omitting it there raises rather than dropping the term.
+
+    Returns
+    -------
+    ndarray, scalar
+        Negative log-prior [nats], rank 0.
+
+    Raises
+    ------
+    ConfigError
+        If the young-fraction latents are present and ``young_fraction`` is None.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: pure reductions and a ``jnp.where`` box test.
+    """
+    base = _standardized_neg_log_prior_core(
+        params_unbounded,
+        free_names,
+        stochastic=stochastic,
+        centering=centering,
+        psd_sigma_dex=psd_sigma_dex,
+    )
+    has_young = any(name in params_unbounded for name in YOUNG_FRACTION_NAMES)
+    if not has_young:
+        return base
+    if young_fraction is None:
+        from tengri.config.exceptions import ConfigError
+
+        raise ConfigError(
+            "the continuity young-fraction latents are present but no young-fraction "
+            "prior was passed to standardized_neg_log_prior; without it the Student-t "
+            "ratio prior is dropped. Pass young_fraction=young_fraction_prior_for_spec(spec)."
+        )
+    log_density = young_fraction.log_density_from_latents(young_fraction_latents(params_unbounded))
+    return base - log_density
+
+
+def _standardized_neg_log_prior_core(
     params_unbounded, free_names, *, stochastic, centering=1.0, psd_sigma_dex=None
 ):
     r"""Negative log-prior of the standardized latents, up to a constant.
@@ -154,6 +218,7 @@ def _build_prediction(
     measured_line_defs=None,
     jit_inputs=None,
     threaded_impl=None,
+    needs_line_lums=False,
 ):
     """Forward-model prediction in one place.
 
@@ -201,6 +266,7 @@ def _build_prediction(
     # ``model.predict_*`` accessors (which closure-capture the SSP grid, so
     # this path bakes it; acceptable for the non-inference / dummy-model uses).
     _obs = None
+    _threaded_lums = None
     if threaded_impl is not None and jit_inputs is not None and not use_components:
         _obs = threaded_impl(
             params,
@@ -209,6 +275,8 @@ def _build_prediction(
             jit_inputs["template_data"],
             jit_inputs.get("ztable_data"),
         )
+        if needs_line_lums:
+            _obs, _threaded_lums = _obs
 
     if data_type == "photometry":
         if _obs is not None:
@@ -264,7 +332,12 @@ def _build_prediction(
     # than sharing one ``predict_state`` with the photometry channel. Measured on a
     # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
-    needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
+    needs_state = (
+        has_line_ratios
+        or has_indices
+        or (has_line_fluxes and not fast_lines)
+        or (needs_line_lums and _threaded_lums is None)
+    )
     if not needs_state:
         feature_state = None
     elif jit_inputs is not None:
@@ -279,6 +352,13 @@ def _build_prediction(
         )
     else:
         feature_state = model.predict_state(free_params)
+    if needs_line_lums and _threaded_lums is not None:
+        prediction["log_line_lums_attenuated"] = _threaded_lums
+    elif needs_line_lums:
+        derived = feature_state.derived
+        prediction["log_line_lums_attenuated"] = derived.get(
+            "log_line_lums_attenuated", derived["log_line_lums"]
+        )
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
@@ -374,6 +454,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
+    needs_line_lums = getattr(fitter, "_eline_prior_type", None) == "model"
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
     # Build-time signature check: the internal adapter cohort accepts
@@ -400,9 +481,11 @@ def _build_data_neg_log_likelihood_fn(fitter):
     # the fast path just never reached them). ``_build_prediction`` reads the
     # threaded arrays out of ``data_args["_jit_inputs"]`` at call time.
     _threaded_impl = (
-        model._get_or_build_predict_observables_jit()
-        if not use_components and hasattr(model, "_get_or_build_predict_observables_jit")
-        else None
+        None
+        if use_components or not hasattr(model, "_get_or_build_predict_observables_jit")
+        else model._get_or_build_predict_observables_lines_jit()
+        if needs_line_lums
+        else model._get_or_build_predict_observables_jit()
     )
 
     # Eager channel-scale pre-check (#1495): evaluate every likelihood channel
@@ -441,6 +524,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             use_components=use_components,
             has_line_ratios=has_line_ratios,
             measured_line_defs=measured_line_defs,
+            needs_line_lums=needs_line_lums,
         )
         _channels = (
             user_likelihood.likelihoods
@@ -467,6 +551,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             measured_line_defs=measured_line_defs,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=_threaded_impl,
+            needs_line_lums=needs_line_lums,
         )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
@@ -689,6 +774,7 @@ def build_loss_fn(fitter):
     # Static: the field parameterization is a build-time choice, so it is read
     # once here rather than per call (#1355).
     field_centering = float(getattr(spec, "field_centering", 1.0))
+    young_fraction = young_fraction_prior_for_spec(spec)
     neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
     # Extra log-prior hook (#[task-7], RULING R10): the SAME fitter._extra_log_prior
     # honored by build_logprior_fn (physical-space prior, nested sampling /
@@ -736,6 +822,7 @@ def build_loss_fn(fitter):
             # latent prior depends on it, so it has to be the sampled value and
             # not a constant.
             psd_sigma_dex=(params.get("sfh_field_psd_sigma") if field_centering != 1.0 else None),
+            young_fraction=young_fraction,
         )
         if extra_log_prior is not None:
             # ``loss`` is a NEGATIVE log posterior (to minimize); extra_log_prior
@@ -814,11 +901,18 @@ def build_logprior_fn(fitter):
     >>> logprior = build_logprior_fn(fitter)
     >>> lp = logprior({"stellar_mass": 11.0, "age_gyr": 1.5})
     """
+    from tengri.config.exceptions import ConfigError
     from tengri.parameters.priors import Uniform
 
     spec = fitter.spec
     free_names = fitter._free_names
     extra_log_prior = getattr(fitter, "_extra_log_prior", None)
+    if young_fraction_prior_for_spec(spec) is not None:
+        raise ConfigError(
+            "the young-fraction prior term is not evaluated on the physical-space log-prior "
+            "(build_logprior_fn, used by evidence and nested sampling); the Student-t ratio "
+            "prior would be dropped. Use coordinates='ratios' on this path."
+        )
 
     # Check if all distributions are Uniform
     all_uniform = all(isinstance(spec.get_distribution(name), Uniform) for name in free_names)

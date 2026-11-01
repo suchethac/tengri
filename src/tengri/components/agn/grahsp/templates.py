@@ -8,11 +8,12 @@ table, torus wave grid).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from functools import lru_cache
 from pathlib import Path
 
 import h5py
+import jax
 import numpy as np
 from jax import Array
 
@@ -69,6 +70,10 @@ class GRAHSPTemplates:
     The template-path fields (``torus_mn12_*``, ``feii_vc04_*``, ``disc_*``)
     default to ``None`` for backward compatibility with bundles built before
     the GRAHSP parity implementation; regenerate via ``tools/build_grahsp_hdf5.py``.
+
+    The bundle is immutable and a registered pytree. ``disc_wave_nm``, ``feii_wave_nm`` and
+    ``feii_vc04_wave_nm`` are static pytree data, so they must be concrete host arrays: the
+    normalization integrals select their nodes on the host, also inside ``jit``.
     """
 
     feii_wave_nm: Array
@@ -92,6 +97,64 @@ class GRAHSPTemplates:
     disc_m: tuple[str, ...] | None = field(default=None, repr=False)
     disc_a: tuple[str, ...] | None = field(default=None, repr=False)
     disc_mdot: tuple[str, ...] | None = field(default=None, repr=False)
+
+
+class _StaticAxis:
+    """A host wavelength axis held as pytree aux data: hashable and comparable by value.
+
+    The normalization integrals choose their nodes on the host, so these axes must be
+    concrete inside ``jit``. Aux data has to hash and compare equal for a jit cache hit; the
+    wrapper does both on the axis bytes.
+    """
+
+    __slots__ = ("_key", "array")
+
+    def __init__(self, array: np.ndarray):
+        self.array = array
+        self._key = (array.shape, array.dtype.str, array.tobytes())
+
+    def __hash__(self) -> int:
+        return hash(self._key)
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _StaticAxis) and self._key == other._key
+
+
+#: Fields read on the host by the normalization (node selection); static in the pytree.
+_STATIC_AXES = ("disc_wave_nm", "feii_wave_nm", "feii_vc04_wave_nm")
+_LABEL_FIELDS = ("line_names", "disc_m", "disc_a", "disc_mdot")
+_CHILD_FIELDS = tuple(
+    f.name for f in fields(GRAHSPTemplates) if f.name not in _STATIC_AXES + _LABEL_FIELDS
+)
+
+
+def _flatten_templates(bundle: GRAHSPTemplates):
+    children = tuple(getattr(bundle, name) for name in _CHILD_FIELDS)
+    axes = tuple(
+        None if getattr(bundle, name) is None else _StaticAxis(np.asarray(getattr(bundle, name)))
+        for name in _STATIC_AXES
+    )
+    labels = tuple(getattr(bundle, name) for name in _LABEL_FIELDS)
+    return children, (axes, labels)
+
+
+def _unflatten_templates(aux, children) -> GRAHSPTemplates:
+    axes, labels = aux
+    values = dict(zip(_CHILD_FIELDS, children, strict=True))
+    values.update(
+        {
+            name: None if ax is None else ax.array
+            for name, ax in zip(_STATIC_AXES, axes, strict=True)
+        }
+    )
+    values.update(dict(zip(_LABEL_FIELDS, labels, strict=True)))
+    return GRAHSPTemplates(**values)
+
+
+# The bundle is a pytree so the AGN runner can pass it to the jitted forward model as an
+# argument. The tables are children; the label tuples and the wavelength axes the
+# normalization reads on the host are static aux data.
+jax.tree_util.register_pytree_node(GRAHSPTemplates, _flatten_templates, _unflatten_templates)
 
 
 @lru_cache(maxsize=4)
