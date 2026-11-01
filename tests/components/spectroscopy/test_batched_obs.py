@@ -488,3 +488,14 @@ def test_lsf_pad_pixels_is_part_of_the_bucket_key():
 def test_lsf_pad_pixels_is_validated(bad):
     with pytest.raises(ValueError, match="lsf_pad_pixels"):
         SpectroBatchSpec(n_max=300, offsets=None, grid_kind="nonuniform", lsf_pad_pixels=bad)
+
+
+def test_varying_r_and_constant_r_on_one_log_grid_split_buckets():
+    """A varying per-pixel R is nonuniform; constant R, scalar or array, is log-uniform (#3145)."""
+    wave = np.geomspace(3600.0, 9800.0, 300)
+    varying = _galaxy(300, grid=wave, resolution=np.linspace(2000.0, 3000.0, 300))
+    scalar = _galaxy(300, grid=wave, resolution=3000.0)
+    constant = _galaxy(300, grid=wave, resolution=np.full(300, 3000.0))
+    buckets = build_spectro_batches([varying, scalar, constant])
+    indices = {spec.grid_kind: idx.tolist() for spec, _, idx in buckets}
+    assert indices == {"nonuniform": [0], "log_uniform": [1, 2]}
