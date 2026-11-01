@@ -45,10 +45,15 @@ bolometric integral. The lookup interpolates both and divides,
     P^{\rm raw} = \int T\,\mathrm{d}\nu,
 
 where :math:`R_b` is the filter transmission, :math:`\Phi_b` the band :math:`L_\nu`
-per :math:`L_\odot` of torus power [erg/s/Hz], and :math:`L_\odot` [erg/s]. At a node
-this is the node-normalized photometry exactly; between nodes it commutes with the
-runtime wherever the interpolant is linear in the tabulated values, leaving only the
-data dependence of the PCHIP tangents.
+per :math:`L_\odot` of torus power [erg/s/Hz], and :math:`L_\odot` [erg/s]. The band
+integral is the runtime's own: the template resampled log-log onto the filter
+quadrature grid and folded with ``lnu_filter_integral``
+(``_runtime_band_quadrature.runtime_band_photometry``), not a linear quadrature
+between the template's own wavelengths, which sat up to 19% off the runtime at the
+nodes (#3160). At a node the lookup is therefore the runtime's photometry to rounding;
+between nodes it commutes with the runtime wherever the interpolant is linear in the
+tabulated values, leaving only the data dependence of the PCHIP tangents and the
+nonlinearity of the log-log resampling.
 """
 
 from __future__ import annotations
@@ -58,8 +63,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._runtime_band_quadrature import runtime_preintegrated_grid
 from tengri.components.agn._template_grid import native_bolometric_nu_np
-from tengri.forward.precompute.templates import precompute_template_photometry
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -117,6 +122,14 @@ def power_weighted_template_photometry(
     ValueError
         If any record's bolometric power is not finite and positive: the power channel
         is the divisor of every lookup, and a zero there is 0/0 off-node.
+
+    Notes
+    -----
+    **JIT-compatible**: no, this is a build-time function.
+
+    The band channels are the runtime's band photometry of each record
+    (``_runtime_band_quadrature.runtime_preintegrated_grid``): the record resampled
+    log-log onto the filter quadrature grid and integrated with ``lnu_filter_integral``.
     """
     templates = np.asarray(templates, dtype=np.float64)
     wave_rest = np.asarray(wave_rest, dtype=np.float64)
@@ -132,16 +145,13 @@ def power_weighted_template_photometry(
             f"bolometric power (first at grid index {np.argwhere(bad)[0].tolist()}); the "
             "power-weighted table divides by that power and cannot represent them."
         )
-    preint = precompute_template_photometry(
-        templates=_LSUN_ERG * templates / power[..., None],
-        wave_rest=wave_rest,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
-        axes=axes,
-        energy_normalize=False,
-        units="lnu",
+    preint = runtime_preintegrated_grid(
+        _LSUN_ERG * templates / power[..., None],
+        wave_rest,
+        filter_waves,
+        filter_trans,
+        redshift,
+        axes,
     )
     weight = jnp.asarray(power / float(np.median(power)), dtype=jnp.asarray(preint.phot).dtype)
     table = jnp.concatenate([preint.phot * weight[..., None], weight[..., None]], axis=-1)
