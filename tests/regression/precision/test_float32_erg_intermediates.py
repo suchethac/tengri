@@ -104,9 +104,9 @@ def test_float32_spectrum_is_finite_and_matches_float64(synthetic_ssp, resample,
     """
     params = {"sfh_dpl_log_total_mass": _LOG_M_FLOAT32}
     reference = np.asarray(
-        _spectroscopic_model(synthetic_ssp, resample=resample, resolution=resolution).predict_spectrum(
-            params
-        )
+        _spectroscopic_model(
+            synthetic_ssp, resample=resample, resolution=resolution
+        ).predict_spectrum(params)
     )
     assert np.all(np.isfinite(reference))
     assert np.any(reference != 0.0), "reference is identically zero"
