@@ -1,6 +1,8 @@
 ## [Unreleased]
 
 ### Added
+- MEADS ("ghmc") is available as `sampler="ghmc"` in the catalog engine; mixing on tengri posteriors is not yet at NUTS level (strict xfail conformance test, measured gap 0.48 widths at DESI-like S/N); fixed-length warmup (#3135). The warmup runs `n_warmup` steps and returns `n_warmup_used = n_warmup`; an adaptive stop needs a resumable MEADS step (#3135 follow-up).
+- **Nested R-hat (Margossian et al.) and tail ESS diagnostics for many-short-chain samplers (#3135).** `nested_rhat(draws, n_superchains)` gives the nested R-hat of chains grouped into superchains, with rank-normalized and folded draws as in Vehtari et al. (2021). `tail_ess(draws)` gives the minimum effective sample size of the 5 % and 95 % quantile indicators.
 - feat(observation,inference): per-segment calibration scales, a scale-free coefficient prior and a log-normal fiber-fraction prior on the mean multiplier, on both spectroscopic paths (#3134)
 - feat(observation,inference): banded pixel covariance on both spectroscopic paths through one banded Cholesky in the marginal primitive (#3133)
 - feat(inference,nebular): analytic emission-line marginalization on the batched spectroscopic path, and the exact joint with calibration on both paths (#3117, closes #2354).
