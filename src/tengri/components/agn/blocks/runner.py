@@ -104,6 +104,7 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_geometry,
     torus_screen_transmission,
 )
+from tengri.components.agn.disc import kubota_done_unemitted_fraction
 from tengri.components.agn.fritz import (
     FritzGrid,
     fritz_disc_dust_ratio,
@@ -120,6 +121,7 @@ from tengri.components.agn.skirtor import (
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.scale import (
+    log10_add,
     log10_magnitude,
     log10_weighted_sum,
     representable_denominator,
@@ -323,6 +325,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
     DEFAULT_AGN_OA_SKIRTOR,
     DEFAULT_AGN_TAU_SKIRTOR,
@@ -1204,6 +1207,8 @@ agn_torus_block, agn_attenuation_block : str
     if _conserve_via_debit:
         L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
         _disc_scalar = 1.0 - _torus_frac
+    # The torus debit alone: the unemitted K&D remainder takes no line-energy debit (#3015).
+    _disc_torus_share = _disc_scalar
 
     _budget_cache: dict = {}
 
@@ -1516,10 +1521,26 @@ agn_torus_block, agn_attenuation_block : str
             # with the X-rays photoelectrically absorbed below its grid), the same transmission
             # any source behind the torus takes, unity face-on. The analytic screen remains only
             # for a torus without a disc column.
-            _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
-            _corona_scale = (
-                _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
-            ) / _p_disc_model
+            # The model's disc and warm zones carry their own dissipation, ``(1 - f - R_unem/L)``
+            # of the accretion power: the K&D disc does not emit what it dissipates beyond
+            # ``R_out`` (#3015).
+            _r_unem_tie = kubota_done_unemitted_fraction(
+                params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                agn_log_lbol,
+                params.get("agn_a_spin", 0.0),
+            )
+            _l_acc_eval = 10.0**agn_log_lbol_eval * L_SUN_ERG
+            _p_disc_model = (1.0 - _corona_fraction - _r_unem_tie) * _l_acc_eval
+            # Where the hot flow fills the disc (``R_hot = R_out``) the model has no disc or warm
+            # zone, ``P_D,model`` is 0 and the ratio of the tied disc power to it has no meaning:
+            # the corona then keeps its own scale (RELQSO, #3015).
+            _has_disc = _p_disc_model > 1e-9 * _l_acc_eval
+            _corona_scale = jnp.where(
+                _has_disc,
+                (_TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon)
+                / jnp.where(_has_disc, _p_disc_model, _l_acc_eval),
+                1.0,
+            )
             _corona_sight = _library_sightline()
             if _corona_sight is None:
                 _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
@@ -1536,6 +1557,7 @@ agn_torus_block, agn_attenuation_block : str
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
         # Where the tie is inactive (fracAGN = 0) the disc is the debited one.
         _disc_scalar = 1.0 - _torus_frac
+        _disc_torus_share = _disc_scalar
         if return_ledger:
             # The tied disc before the torus hides any of it, integrated over all directions:
             # the face-on library power ``agn_power x R_faceon`` times the library disc's
@@ -2053,13 +2075,37 @@ agn_torus_block, agn_attenuation_block : str
         else:
             _log_disc_intr = _row_mean("_disc_block") + log10_magnitude(_disc_scalar)
             _log_disc_unem = log10_signed_sphere_mean(_evals["_disc_hidden"][1:], _w_l, _w_q)
+            if agn_disc_block == "kubota_done":
+                # The K&D disc stops at R_out and does not emit the dissipation beyond it (#3015).
+                # That share of the disc's budget is unemitted, and joins the screened light.
+                _r_unem = kubota_done_unemitted_fraction(
+                    params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                    agn_log_lbol,
+                    params.get("agn_a_spin", 0.0),
+                )
+                _log_disc_unem = log10_add(
+                    _log_disc_unem,
+                    jnp.log10(jnp.maximum(_r_unem, representable_floor(1e-100)))
+                    + jnp.asarray(agn_log_lbol)
+                    + np.log10(L_SUN_ERG)
+                    + log10_magnitude(_disc_torus_share),
+                )
         if _tie_intrinsic is not None:
             # Under the active tie the disc is rebuilt from the library: its unemitted share is
             # the difference from the tie's intrinsic disc.
             _offset = _log_scale_offset if _use_ref else 0.0
             _log_tie_intr = log10_magnitude(_tie_intrinsic * _ledger_polar_norm) + _offset
             _log_disc_intr = jnp.where(_agn_fracAGN > 0.0, _log_tie_intr, _log_disc_intr)
-            _log_disc_unem = None
+            # Active tie: the unemitted share is the tie's intrinsic disc less its emitted disc,
+            # the ledger's own difference (the K&D remainder is left out, as ruled). Inactive tie
+            # (fracAGN = 0): the disc is the plain one, with its screened and remainder share.
+            _tie_emitted = _row_mean("disc")
+            _tie_gap = log10_add(_log_tie_intr, _tie_emitted, sign_b=-1.0)
+            _log_tie_unem = jnp.where(
+                _log_tie_intr > _tie_emitted, _tie_gap, jnp.asarray(-jnp.inf)
+            )
+            if _log_disc_unem is not None:
+                _log_disc_unem = jnp.where(_agn_fracAGN > 0.0, _log_tie_unem, _log_disc_unem)
         _log_lines_intr = _row_mean("_lines_raw") if _has_lines else jnp.asarray(-jnp.inf)
         _log_lines_unem = (
             log10_signed_sphere_mean(_evals["_lines_hidden"][1:], _w_l, _w_q)

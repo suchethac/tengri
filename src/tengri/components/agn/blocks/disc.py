@@ -29,6 +29,7 @@ from tengri.components.agn.blocks._protocol import (
 from tengri.components.agn.disc import (
     kubota_done_disc,
     kubota_done_disc_split,
+    kubota_done_unemitted_fraction,
     load_relagn_default_grid,
     multicolor_disc,
 )
@@ -712,32 +713,40 @@ def kubota_done_disc_split_block(
 
 @register_disc_power("kubota_done")
 def kubota_done_disc_power(agn_log_lbol: float, **_params) -> Array:
-    r"""Power of :func:`kubota_done_disc_block` at ``cos i = 0.5``, in units of ``L_acc``.
+    r"""Emitted power of :func:`kubota_done_disc_block`, in units of ``L_acc`` (#3015).
 
-    The disc is normalized so that its angle-integrated power is
-    :math:`L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot` (Kubota & Done 2018,
-    Sects. 2.1-2.2), and at
-    :math:`\cos i = 0.5` the line-of-sight spectrum :math:`2\cos i\,D_\nu`
-    (plus the corona) has exactly that power.
+    The zones emit their own Page-Thorne dissipation (corona, disc and warm zones inside
+    ``R_out``). The dissipation beyond ``R_out`` is not emitted, so the emitted power is
+    :math:`(1 - R_{\rm unem}/L_{\rm acc})\,L_{\rm acc}`, the closed form of
+    :func:`~tengri.components.agn.disc.kubota_done_unemitted_fraction`. A line-energy debit
+    divides by this power, so it must be the power the disc spectrum carries.
 
     Parameters
     ----------
     agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
-        fraction does not depend on it).
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it.
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)` in ``_params`` [dex]; the default when absent.
+    agn_a_spin : float, optional
+        Dimensionless spin in ``_params`` [dimensionless]; 0 when absent.
 
     Returns
     -------
     ndarray
-        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. A grid integral of
-        the spectrum on a dense grid gives 0.99927 of it at log M_BH = 8 (the cut corona tail).
+        Emitted disc power over ``L_acc`` [dimensionless], in ``(0, 1]``.
 
     Notes
     -----
     **JIT-compatible**: yes, pure ``jnp``.
     """
-    del agn_log_lbol
-    return jnp.asarray(1.0)
+    # On the float32 path ``agn_log_lbol`` is the reference magnitude and the shape (hence R_out,
+    # which follows the Eddington ratio) is set by ``agn_log_lbol_shape``, the true L_acc.
+    shape_log_lbol = _params.get("agn_log_lbol_shape")
+    return 1.0 - kubota_done_unemitted_fraction(
+        _params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+        agn_log_lbol if shape_log_lbol is None else shape_log_lbol,
+        _params.get("agn_a_spin", 0.0),
+    )
 
 
 @register_agn_block(

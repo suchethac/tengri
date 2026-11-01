@@ -26,6 +26,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.components.agn import disc as disc_module
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests.regression.bug.test_bug_2760_torus_screen_is_library_sightline import (
@@ -57,6 +58,17 @@ _NONE = dict(
 #: l_hot exactly and the disc its L_acc - l_hot, #2733); multicolor 2.1e-5 (quadrature). The
 #: energy checks assert at three times these.
 _ENERGY_TOL = {"kubota_done": 3 * 2.6e-6, "multicolor": 3 * 2.1e-5}
+
+
+def _emitted_share(disc_block):
+    """Share of ``L_acc`` the disc emits [dimensionless]: all of it, less the K&D disc's remainder.
+
+    The K&D zones emit their own dissipation inside ``R_out`` and nothing beyond it (Kubota & Done
+    2018 Sec. 2.2; #3015). The multicolor disc emits all of ``L_acc``.
+    """
+    if disc_block != "kubota_done":
+        return 1.0
+    return 1.0 - float(disc_module.kubota_done_unemitted_fraction(DEFAULT_AGN_LOG_MBH, _LOG_LBOL))
 
 
 def _power(l_nu, wave):
@@ -115,14 +127,16 @@ def test_sphere_average_power_is_the_accretion_power(disc_block):
     cos_nodes = 0.5 * (nodes + 1.0)  # map [-1, 1] -> [0, 1]
     powers = np.array([_power(_disc_lnu(disc_block, c, _WIDE), _WIDE) for c in cos_nodes])
     mean_power = float(np.sum(0.5 * weights * powers))
-    assert mean_power / _L_ACC == pytest.approx(1.0, abs=_ENERGY_TOL[disc_block])
+    assert mean_power / _L_ACC == pytest.approx(
+        _emitted_share(disc_block), abs=_ENERGY_TOL[disc_block]
+    )
 
 
 @pytest.mark.parametrize("disc_block", ["kubota_done", "multicolor"])
 def test_line_of_sight_power_at_cos_half_is_the_accretion_power(disc_block):
     """At cos i = 0.5 (D + H) / (D + H): the line-of-sight power equals L_acc."""
     power = _power(_disc_lnu(disc_block, 0.5, _WIDE), _WIDE)
-    assert power / _L_ACC == pytest.approx(1.0, abs=_ENERGY_TOL[disc_block])
+    assert power / _L_ACC == pytest.approx(_emitted_share(disc_block), abs=_ENERGY_TOL[disc_block])
 
 
 # ----------------------------------------------------------------------------------
@@ -474,8 +488,8 @@ def test_line_of_sight_key_exceeds_the_parameter_by_the_measured_factor():
     p_low = _power(_disc_lnu("kubota_done", 0.05, _WIDE), _WIDE)
     two_d = (p_one - p_low) / 0.95  # = 2 D  (power slope in cos i)
     h = p_one - two_d
-    factor = (_COS[30] * two_d + h) / (0.5 * two_d + h)
-    expected = np.log10(factor)
+    # The key is relative to the full accretion power, of which the K&D disc emits (1 - R/L_acc).
+    expected = np.log10((_COS[30] * two_d + h) / _L_ACC)
     measured = float(comps["log_L_agn_direct_los"]) - (_LOG_LBOL + np.log10(L_SUN))
     assert measured == pytest.approx(expected, abs=2e-3)
     assert measured == pytest.approx(np.log10(2.0 * _COS[30]), abs=1e-2)

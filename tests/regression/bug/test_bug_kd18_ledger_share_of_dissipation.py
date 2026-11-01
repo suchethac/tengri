@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""The kubota_done Mdot comes from the disc's own dissipation; the SED closes on L_bol.
+r"""The kubota_done Mdot comes from the disc's own dissipation (#3015 closes on L_bol less R).
 
 Kubota & Done (2018, MNRAS 480, 1247; arXiv:1804.00171) fix the hot-flow power
 :math:`L_{\rm diss,hot} = f_{\rm hard} L_{\rm Edd}` (Eq. 2, Table 3). The Page & Thorne (1974)
@@ -54,14 +54,20 @@ def _run(log_lbol, a_spin, f_hard):
 
 
 @pytest.mark.parametrize(("log_lbol", "a_spin", "f_hard"), _POINTS)
-def test_share_is_at_most_one_and_sed_closes_on_lbol(log_lbol, a_spin, f_hard):
+def test_share_is_at_most_one_and_sed_closes_on_lbol_less_the_unemitted_share(
+    log_lbol, a_spin, f_hard
+):
     with jax.enable_x64(True):
         wave, parts = _run(log_lbol, a_spin, f_hard)
         share = parts[3]
         nu = 2.99792458e18 / np.asarray(wave)
         total = abs(np.trapezoid(parts[0], nu))
-    assert 0.0 < share <= 0.99
-    assert total == pytest.approx(10.0**log_lbol * _LSUN, rel=_RTOL)
+    assert 0.0 < share <= 0.99 + 1.0e-12  # the cap, to its last rounding
+    # The zones emit their own dissipation: L_bol less the share beyond R_out (#3015).
+    unemitted = float(
+        disc_module.kubota_done_unemitted_fraction(_BASE["agn_log_mbh"], log_lbol, a_spin)
+    )
+    assert total == pytest.approx(10.0**log_lbol * _LSUN * (1.0 - unemitted), rel=_RTOL)
 
 
 def test_f_hard_gradient_is_finite_and_nonzero_across_the_former_saturation_boundary():
