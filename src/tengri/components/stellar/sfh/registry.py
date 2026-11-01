@@ -181,6 +181,9 @@ class SFHRegistryEntry:
         Default "production".
     short_doc : str
         Optional one-line description. Default empty string.
+    doc : str
+        Optional longer description (equations, bookkeeping, cross-code notes),
+        shown by ``tengri.describe``. Default empty string.
 
     Notes
     -----
@@ -192,6 +195,7 @@ class SFHRegistryEntry:
     citation: str = ""
     status: str = "production"
     short_doc: str = ""
+    doc: str = ""
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Forward calls to the wrapped callable."""
@@ -313,10 +317,6 @@ UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
         "constant_then_exponential",
         "db",
         "dbp",
-        # Current-episode types (#3177): registry-level only until the stellar
-        # component admits them to _SUPPORTED_SFH and forward-validates them.
-        "recent",
-        "recent_ssfr",
     }
 )
 
@@ -338,6 +338,7 @@ def _register(
     citation: str = "",
     status: str = "production",
     short_doc: str = "",
+    doc: str = "",
 ) -> None:
     """Register an SFH model spec in the global registry.
 
@@ -352,6 +353,8 @@ def _register(
         Default "production".
     short_doc : str, optional
         One-line description. Default empty string.
+    doc : str, optional
+        Longer description shown by ``tengri.describe``. Default empty string.
 
     Returns
     -------
@@ -367,6 +370,7 @@ def _register(
         citation=citation,
         status=status,
         short_doc=short_doc,
+        doc=doc,
     )
     SFH_REGISTRY[spec.name] = entry
 
@@ -2426,25 +2430,9 @@ _register(
 # A constant-SFR episode over the most recent Delta t, spliced over the smooth
 # history by resolve_sfh (kernels: mean_sfh.current_episode and
 # splice_current_episode). It is not a fraction of the formed mass (that is the
-# ``burst`` mixture), and the GP ``field`` does not multiply it: the field
-# modulates the smooth history first, then the episode replaces that history
-# over [0, Delta t].
-#
-# Equations, with t the lookback time [yr] and psi the episode SFR [Msun/yr]:
-#   SFR(t) = psi inside the window, and the smooth history outside it, rescaled
-#   so that its formed mass M_S is kept. The total formed mass is M_S + psi Delta t.
-#   recent_ssfr sets psi_S = psi / (M_S + psi Delta t) [yr^-1], which inverts to
-#   psi = psi_S M_S / (1 - psi_S Delta t). That map has a pole at psi_S Delta t = 1.
-#
-# Reference: Chevallard & Charlot 2016, "Modelling and interpreting spectral
-# energy distributions of galaxies with BEAGLE", MNRAS 462, 1415,
-# doi:10.1093/mnras/stw1756, arXiv:1603.03037. BEAGLE sets the episode with its
-# ``sfr`` or ``specific_sfr`` and ``current_sfr_timescale`` parameters.
-# Bookkeeping: BEAGLE's ``mass`` includes the episode. So tengri's smooth
-# ``log_total_mass`` corresponds to BEAGLE's M - psi Delta t, and BEAGLE's
-# ``mass`` corresponds to tengri's derived formed ``stellar_mass``.
-# Cross-code: BAGPIPES ``burst`` is set by a mass, CIGALE ``sfhdelayedbq`` by a
-# rate ratio, and Prospector has no equivalent.
+# ``burst`` mixture), and the GP ``field`` does not multiply it. The equations,
+# bookkeeping and references live in the ``doc=`` fields below (shown by
+# ``tengri.describe``).
 
 
 def _recent_timescale_ok(lo, hi):
@@ -2453,7 +2441,13 @@ def _recent_timescale_ok(lo, hi):
 
 
 def _recent_ssfr_ok(lo, hi):
-    """Specific-SFR upper bound: psi_S Delta t < 1 at Delta t = 100 Myr (pole)."""
+    """Per-parameter specific-SFR bound: hi < -7.0 [log10 yr^-1].
+
+    At Delta t = 10 Myr, log10 psi_S = -7.0 already gives psi_S Delta t = 1 (the
+    pole), and at 100 Myr it gives 10. So this bound alone does not protect the
+    100 Myr end of the free duration prior. The joint check at build
+    (``Parameters._validate_sfr_pole``) is what refuses a box that reaches the pole.
+    """
     return hi < -7.0
 
 
@@ -2494,6 +2488,18 @@ _register(
         },
         composition_type="current",
     ),
+    doc=(
+        "Constant-SFR episode over the last Delta t, spliced over the smooth history. "
+        "With t the lookback time and psi = 10**log_sfr [Msun/yr], the SFR is psi for "
+        "0 <= t <= Delta t, and the smooth history S(t) outside it, rescaled so that "
+        "its formed mass M_S is kept. The total formed mass is M_S + psi Delta t. "
+        "Bookkeeping (BEAGLE convention): BEAGLE's ``mass`` includes the episode, so "
+        "tengri's smooth ``log_total_mass`` is BEAGLE's M - psi Delta t, and BEAGLE's "
+        "``mass`` is tengri's derived formed ``stellar_mass``. Cross-code: BEAGLE "
+        "(Chevallard & Charlot 2016) sets the episode by ``sfr`` or ``specific_sfr`` "
+        "and ``current_sfr_timescale``; BAGPIPES ``burst`` is set by a mass; CIGALE "
+        "``sfhdelayedbq`` by a rate ratio; Prospector has no equivalent."
+    ),
     short_doc="Constant-SFR current episode over the last Delta t, spliced over a smooth SFH",
     citation="Chevallard & Charlot 2016, MNRAS 462, 1415",
 )
@@ -2506,7 +2512,7 @@ _register(
             "sfh_recent_ssfr_log_ssfr": ParamDef(
                 "log10 of the current episode's specific SFR [yr^-1]",
                 _recent_ssfr_ok,
-                "must have hi < -7.0 so that psi_S Delta t < 1 at Delta t = 100 Myr",
+                "must have hi < -7.0; the joint pole check at build refuses psi_S Delta t >= 1",
                 Uniform(-12.0, -7.3, default=-10.0),
             ),
             "sfh_recent_ssfr_timescale_myr": ParamDef(
@@ -2523,6 +2529,15 @@ _register(
             "sfh_recent_ssfr_timescale_myr": ("timescale_yr", 1e6, 0.0),
         },
         composition_type="current",
+    ),
+    doc=(
+        "Current episode set by its specific SFR. psi_S = 10**log_ssfr [yr^-1] is "
+        "defined against the total formed mass, psi_S = psi / (M_S + psi Delta t), "
+        "which inverts to psi = psi_S M_S / (1 - psi_S Delta t). The map has a pole at "
+        "psi_S Delta t = 1, so a prior whose joint upper bound reaches it is refused "
+        "at build. The spliced SFH is the one ``recent`` gives at the converted psi. "
+        "Bookkeeping and cross-code notes as for ``recent`` (BEAGLE sets the episode "
+        "by ``specific_sfr``, Chevallard & Charlot 2016)."
     ),
     short_doc="Current episode set by its specific SFR, spliced over a smooth SFH (BEAGLE)",
     citation="Chevallard & Charlot 2016, MNRAS 462, 1415",
