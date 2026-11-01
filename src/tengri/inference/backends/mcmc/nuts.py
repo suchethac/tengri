@@ -21,6 +21,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _get_nuts_kernel,
     _nuts_chain_scan,
+    _nuts_chain_scan_from_position,
     _nuts_warmup_only,
     _resolve_chain_parallel,
     _set_cached_adaptation,
@@ -912,11 +913,10 @@ def run_nuts(
         _multichain_burnin_done = True
     else:
         chain_parallel_effective = "n/a (n_chains=1)"
-        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions, n_leapfrog, energy = _nuts_chain_scan(
-                state,
+            positions, divergent, expansions, n_leapfrog, energy = _nuts_chain_scan_from_position(
+                init_flat,
                 chain_keys,
                 log_posterior_flat_2arg,
                 data_args,

@@ -1070,6 +1070,35 @@ def _nuts_warmup_only(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 6))
+def _nuts_chain_scan_from_position(
+    init_flat,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    step_size,
+    inv_mass_matrix,
+    max_doublings,
+):
+    """NUTS chain scan started from a position; the starting state is built inside the jit.
+
+    The starting log-density and gradient are evaluated in the same compiled
+    program as the scan, so they are not dispatched one primitive at a time.
+    """
+    import blackjax
+
+    state = blackjax.mcmc.nuts.init(init_flat, lambda p: logdensity_fn_2arg(p, data_args))
+    return _nuts_chain_scan(
+        state,
+        chain_keys,
+        logdensity_fn_2arg,
+        data_args,
+        step_size,
+        inv_mass_matrix,
+        max_doublings,
+    )
+
+
+@functools.partial(jax.jit, static_argnums=(2, 6))
 def _nuts_chain_scan(
     state,
     chain_keys,
