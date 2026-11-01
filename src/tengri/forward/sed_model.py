@@ -5042,6 +5042,7 @@ class SEDModel:
         )
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
+            from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 
             # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
@@ -5061,6 +5062,9 @@ class SEDModel:
                 ssp_data=ssp_data,
                 nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
                 lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
+                balmer_series_n_max=getattr(
+                    spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
+                ),
             )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
@@ -6408,13 +6412,17 @@ class SEDModel:
         return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
 
     def _resample_z_ref(self) -> float:
-        """Redshift at which ``resample="auto"`` is decided (#2530).
+        """Redshift at which ``resample="auto"`` is decided (#2530, #3171).
 
-        The fixed redshift when redshift is fixed; the lowest redshift of the
-        prior when it is free (the coarsest rest-frame pixels, where a point
-        sample is worst). Every path that turns the model into pixels passes
-        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
-        same decision.
+        A catalog model (``catalog_z_range`` set) returns the lower end of that
+        range, even when its spec carries a ``Fixed`` placeholder redshift: the
+        real redshift arrives per galaxy at runtime, and the coarsest rest-frame
+        pixels sit at the lowest redshift. Otherwise the fixed redshift when
+        redshift is fixed, and the lowest redshift of the prior when it is free
+        (the coarsest rest-frame pixels, where a point sample is worst). Every
+        path that turns the model into pixels passes this to
+        :meth:`Spectroscopy.resolve_conserving`, so they all reach the same
+        decision.
 
         Returns
         -------
@@ -6430,6 +6438,9 @@ class SEDModel:
             below by a finite prior ``lo``. Pass ``resample=`` explicitly, or
             declare a bounded redshift prior.
         """
+        catalog_z_range = getattr(self, "_catalog_z_range", None)
+        if catalog_z_range is not None:
+            return max(0.0, float(catalog_z_range[0]))
         try:
             d = self.spec.get_distribution("redshift")
         except (AttributeError, KeyError):

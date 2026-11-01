@@ -36,6 +36,11 @@ from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 pytestmark = pytest.mark.regression_bug
 
 _TOL_AA = 0.1
+_HALF_WIDTH_AA = 0.5
+#: Air label in the gap between H8 and [Ne III] 3968, more than the half-width from every line.
+_FREE_AIR_AA = 3920.0
+#: 0.048 Angstrom from H8 (air 3889.048) and 0.36 from He I 3889: the nearest line wins.
+_SNAP_AIR_AA = 3889.0
 _FLURY = DATA_DIR / "flury2024_grids.h5"
 _LINES = LineList.default_optical()
 _CATALOG = dict(zip(_LINES.names, np.asarray(_LINES.wavelengths, dtype=float)))
@@ -194,10 +199,22 @@ def test_shock_template_lines_land_on_the_line_list():
     _assert_on_catalog([waves[i] for i, _ in pairs], [c for _, c in pairs], "shock")
 
 
+def test_counterpart_free_label_is_farther_than_the_half_width_from_every_line():
+    from tengri.utils.air_vacuum import vac_to_air
+
+    air = np.asarray(vac_to_air(np.asarray(_LINES.wavelengths, dtype=float)), dtype=float)
+    assert np.min(np.abs(air - _FREE_AIR_AA)) > _HALF_WIDTH_AA
+
+
 def test_labels_without_a_line_list_counterpart_keep_the_plain_conversion():
     """Vacuum UV labels and air labels far from any line-list line are not snapped."""
     from tengri.utils.air_vacuum import air_to_vac
 
-    raw = np.array([1549.0, 3889.0, 7319.0, 7331.0])
-    out = rounded_labels_to_vacuum(raw, half_width_aa=0.5)
+    raw = np.array([1549.0, _FREE_AIR_AA, 7319.0, 7331.0])
+    out = rounded_labels_to_vacuum(raw, half_width_aa=_HALF_WIDTH_AA)
     np.testing.assert_allclose(out, air_to_vac(raw), rtol=0, atol=1e-9)
+
+
+def test_label_within_the_half_width_of_a_listed_line_snaps_to_its_vacuum_center():
+    out = rounded_labels_to_vacuum(np.array([_SNAP_AIR_AA]), half_width_aa=_HALF_WIDTH_AA)
+    np.testing.assert_allclose(out, [_CATALOG["H8"]], rtol=0, atol=1e-9)
