@@ -1562,13 +1562,29 @@ def _hot_flow_fraction(
     return jnp.minimum(f_hard_safe * _pow10(log10_edd_over_bol), cap / h_inf)
 
 
+#: Smallest ``R_out / R_ISCO`` [dimensionless]. A numerical bound, not physics: it keeps
+#: ``R_hot`` (which is at least ``1.01 R_ISCO``) inside the disc when the self-gravity radius is
+#: smaller than the ISCO, which only a very massive, very sub-Eddington hole reaches. Above it
+#: ``R_out = r_sg`` exactly, as in RELAGN (``r_out = r_sg``, Hagen & Done 2023, arXiv:2304.01253).
+_R_OUT_MIN_OVER_ISCO = 1.01
+
+
+def _zone_outer_radius_rg(r_sg_rg: float, r_isco_rg: float) -> float:
+    """Outer disc radius of the K&D zones in ``R_g``: the self-gravity radius.
+
+    ``R_out = r_sg`` (Laor & Netzer 1989; K&D 2018 Sec. 2.2), bounded below by
+    ``_R_OUT_MIN_OVER_ISCO * R_ISCO`` for numerical safety only.
+    """
+    return jnp.maximum(r_sg_rg, r_isco_rg * _R_OUT_MIN_OVER_ISCO)
+
+
 def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
     """Largest admissible ``R_hot / R_isco``: the outer radius ``R_out`` in units of ``R_isco``.
 
-    ``R_out = max(r_sg, 10 R_isco)`` (both in ``R_g``), so the ratio needs no physical constants.
+    ``R_out = r_sg`` (see :func:`_zone_outer_radius_rg`), so the ratio needs no physical constants.
     The clip of :func:`_clip_zone_radii` admits ``R_hot`` up to ``R_out``.
     """
-    return jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
+    return _zone_outer_radius_rg(r_sg_rg, r_isco_rg) / r_isco_rg
 
 
 def kubota_done_unemitted_fraction(
@@ -1586,7 +1602,7 @@ def kubota_done_unemitted_fraction(
         \frac{R_{\rm unem}}{L_{\rm bol}} = 1 - \frac{h(R_{\rm out}/R_{\rm ISCO})}{h(\infty)},
 
     with :math:`h` the dimensionless Novikov-Thorne integral (:func:`_nt_h`) and
-    :math:`R_{\rm out} = \max(R_{\rm sg}, 10 R_{\rm ISCO})` as in :func:`_compute_zone_radii`.
+    :math:`R_{\rm out} = R_{\rm sg}` as in :func:`_compute_zone_radii`.
     The remainder is published as ``log_L_agn_disc_unemitted`` by the composable runner (#3015).
 
     Parameters
@@ -1619,7 +1635,7 @@ def kubota_done_unemitted_fraction(
     )
     r_isco_rg = _isco_radius(agn_a_spin)
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    x_out = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
+    x_out = _hot_zone_x_max(r_isco_rg, r_sg_rg)
     h_inf = _nt_h(jnp.log(_NT_X_MAX), agn_a_spin)
     return 1.0 - _nt_h(jnp.log(x_out), agn_a_spin) / h_inf
 
@@ -1699,7 +1715,7 @@ def _compute_zone_radii(
     # ``L_Edd`` (the former form overflows float32 for a cotangent of ~1e32, #2767).
     l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+    r_out_cm = _zone_outer_radius_rg(r_sg_rg, r_isco_rg) * r_g
 
     # R_hot is solved from the SAME L_hot the corona radiates (#2572), limited to what the
     # annuli inside the outer radius R_out dissipate.
@@ -2321,6 +2337,14 @@ def kubota_done_disc(
 
     the dissipation the disc would have beyond its self-gravity radius, which K&D do not emit.
     It is published as ``log_L_agn_disc_unemitted`` (:func:`kubota_done_unemitted_fraction`).
+
+    **Validity domain.** The three-zone geometry of Kubota & Done (2018) applies for
+    :math:`\\lambda_{\\rm Edd}` above about :math:`f_{\\rm hard}` (~0.02), where the disc can
+    dissipate :math:`f_{\\rm hard} L_{\\rm Edd}` inside :math:`R_{\\rm out}`. Below it the disc
+    truncates: there are no disc or warm zones, as in RELQSO, and the hot flow is modeled as
+    radiatively efficient Comptonization of all the dissipation inside :math:`R_{\\rm out}`
+    (K&D 2018 do not model radiative inefficiency). For that regime ``disc='adaf'`` is the
+    radiatively inefficient alternative. No warning is issued.
 
     The hard X-ray photon index Γ_hot is derived self-consistently from the
     Beloborodov (1999) energy-balance relation if requested; otherwise uses

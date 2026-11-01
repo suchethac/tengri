@@ -149,7 +149,18 @@ def _grad_and_fd(model, overrides=None):
 # ~0.0376 L0, inside the 0.33 L0 ceiling, so R_hot is solved in the interior of its
 # bracket (x_hot 1.6). Before the derivative fix the default f_hard pinned R_hot at the
 # old ceiling at the issue point; this point is interior either way.
-_CASES = [(name, "", {}) for name in _DISC_BLOCKS] + [
+#
+# Why the plain ``kubota_done`` case pins ``agn_f_hard = 0.01`` (#3015). The prior draw 0.096 at
+# this point (lambda_Edd = 0.03) asks the corona for 3.2x the disc's whole dissipation, so
+# ``R_hot = R_out`` and no disc or warm zone exists (Kubota & Done 2018 Sec. 2.2; the RELQSO
+# source sets ``r_h = r_out`` in that case). The SED is then the corona alone, whose
+# optical-to-IR values are numerical noise ~1e-8 against a 1e15 peak; the log-derivative of
+# those noise values is not a gradient of the model (reverse mode differs from forward mode and
+# central FD by 2% there, forward mode matches FD). ``f_hard = 0.01`` keeps the zones separate,
+# the regime this contract tests.
+_CASES = [
+    (name, "", {"agn_f_hard": 0.01} if name == "kubota_done" else {}) for name in _DISC_BLOCKS
+] + [
     ("kubota_done", "-r_hot_unclipped", {"agn_f_hard": 0.005}),
 ]
 

@@ -843,6 +843,7 @@ def _compute_bh_and_radii(
         _nt_l0,
         _r_hot_bisect,
         _self_gravity_radius,
+        _zone_outer_radius_rg,
     )
 
     r_g = _gravitational_radius(agn_log_mbh)
@@ -870,7 +871,7 @@ def _compute_bh_and_radii(
 
     # Zone radii
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+    r_out_cm = _zone_outer_radius_rg(r_sg_rg, r_isco_rg) * r_g
 
     # Same L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
     l_hot_target = _hot_flow_luminosity(

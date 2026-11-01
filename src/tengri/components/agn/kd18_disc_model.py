@@ -95,6 +95,16 @@ class KD18Disc(SEDModelComponent):
     zone, and hot corona. Self-consistent zone radii and temperature profiles
     enable smooth inference gradients across the full parameter space.
 
+    Notes
+    -----
+    **Validity domain.** The three-zone geometry applies for
+    :math:`\\lambda_{\\rm Edd}` above about :math:`f_{\\rm hard}` (~0.02).
+    Below it the disc truncates: there are no disc or warm zones
+    (as in RELQSO, Hagen & Done 2023, arXiv:2304.01253), and the hot flow is modeled as
+    radiatively efficient Comptonization of all the dissipation inside :math:`R_{\\rm out}`;
+    Kubota & Done (2018) do not model radiative inefficiency. ``disc='adaf'`` is the
+    radiatively inefficient alternative for that regime. No warning is issued.
+
     Attributes
     ----------
     name : str

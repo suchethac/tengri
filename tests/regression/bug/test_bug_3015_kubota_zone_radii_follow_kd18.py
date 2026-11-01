@@ -21,12 +21,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.utils.physics_constants import L_SUN
-
 from tengri.components.agn import (
     _nt_emissivity as N,
     disc as D,
 )
+from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
 
@@ -226,3 +225,33 @@ def test_ledger_closes_with_the_unemitted_remainder(log_lbol):
     budget = 10.0 ** (log_lbol + LOG_LSUN_ERG)
     np.testing.assert_allclose(total / budget, 1.0, rtol=_LEDGER_RTOL, atol=0.0)
     assert np.isfinite(comps["log_L_agn_disc_unemitted"])
+
+
+# ── Self-gravity radius and the R_out bound (owner addendum, #3015) ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("log_mbh", "lambda_edd"),
+    [(7.0, 0.3), (8.0, 0.05), (9.0, 1.0)],
+    ids=["m1e7", "m1e8", "m1e9"],
+)
+def test_self_gravity_radius_is_the_laor_netzer_closed_form(log_mbh, lambda_edd):
+    """``r_sg = 2150 (M/1e9)^(-2/9) mdot^(4/9) alpha^(2/9)`` [R_g], alpha = 0.1.
+
+    The expression RELAGN evaluates in ``_calc_r_selfGravity`` (``alpha = 0.1``, ``mdot`` the
+    Eddington-scaled accretion rate, equal to ``L_bol / L_Edd``; Hagen & Done 2023,
+    arXiv:2304.01253) after Laor & Netzer (1989), MNRAS 238, 897.
+    """
+    want = 2150.0 * (10.0 ** (log_mbh - 9.0)) ** (-2.0 / 9.0) * lambda_edd ** (4.0 / 9.0)
+    want *= 0.1 ** (2.0 / 9.0)
+    got = float(D._self_gravity_radius(log_mbh, lambda_edd))
+    np.testing.assert_allclose(got, want, rtol=1e-12)
+
+
+def test_r_out_is_the_self_gravity_radius_above_the_numerical_bound():
+    """``R_out = r_sg`` wherever ``r_sg`` exceeds the ISCO; no ``10 R_ISCO`` floor (RELAGN)."""
+    r_isco = 6.0
+    for r_sg in (7.0, 20.0, 59.0, 61.0, 2000.0):  # below and above the retired 10 R_ISCO = 60
+        np.testing.assert_allclose(float(D._zone_outer_radius_rg(r_sg, r_isco)), r_sg, rtol=0)
+    # Only where r_sg is inside the ISCO does the bound act, keeping R_out > R_ISCO.
+    assert float(D._zone_outer_radius_rg(3.0, r_isco)) == pytest.approx(r_isco * 1.01)
