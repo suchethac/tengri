@@ -200,6 +200,7 @@ def _build_param_registry(
     dust_screens=(),
     dust_nebular_screen="birth_cloud",
     dust_law_neb=None,
+    dust_parameterization="tau_bc_diff",
     dust_emission=None,
     agn_model=None,
     radio=False,
@@ -231,6 +232,9 @@ def _build_param_registry(
         age_binned's own-law shape parameters).
     dust_law_neb : str or None
         age_binned's own-screen law; ``None`` reads the youngest screen's law.
+    dust_parameterization : str
+        ``"tau_bc_diff"`` (default) registers the native pair; ``"tauv_mu"``
+        registers ``dust_tau_v`` and ``dust_mu`` in its place (#3176).
     evolving_metallicity : bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
     chem_evol : bool
@@ -272,7 +276,12 @@ def _build_param_registry(
     # takes their place there.
     _is_single = dust_model in ("single_component", "wg00")
     _is_age_binned = dust_model == "age_binned"
-    from tengri.components.dust._params import ATTENUATION_PARAMS
+    from tengri.components.dust._params import (
+        ATTENUATION_NATIVE_TAU_ONLY,
+        ATTENUATION_PARAMS,
+        SINGLE_COMPONENT_PARAMS,
+        TAUV_MU_PARAMS,
+    )
 
     if _is_age_binned:
         # age_binned (#2528): N independent screens, one dust_tau_i / per-
@@ -299,8 +308,11 @@ def _build_param_registry(
             registry[decl.name] = (decl.description, check, decl.bound_error)
             defaults[decl.name] = decl.prior
     else:
+        _tauv_mu = dust_parameterization == "tauv_mu" and not _is_single
         for decl in ATTENUATION_PARAMS:
             if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
+                continue
+            if _tauv_mu and decl.name in ATTENUATION_NATIVE_TAU_ONLY:
                 continue
             if decl.name == "dust_tau_neb" and dust_nebular_screen != "own":
                 continue  # read only under nebular_screen='own' (#2625)
@@ -313,6 +325,13 @@ def _build_param_registry(
             for pname, (desc, check, err, default) in single_comp_bucket.items():
                 registry[pname] = (desc, check, err)
                 defaults[pname] = default
+
+        if _tauv_mu:
+            # tau_v (the single-screen declaration, reused) and mu replace the pair.
+            for decl in (*SINGLE_COMPONENT_PARAMS, *TAUV_MU_PARAMS):
+                check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+                registry[decl.name] = (decl.description, check, decl.bound_error)
+                defaults[decl.name] = decl.prior
 
     # Metallicity params from registry (replaces ad-hoc evolving_metallicity/chem_evol)
     _, met_params, _, _ = resolve_met(met_mode)
