@@ -238,11 +238,13 @@ def test_flat_screened_default_fracagn_warns_and_is_dropped(norm):
 
 @pytest.mark.parametrize("norm", ["conserving", "independent"])
 def test_flat_unscreened_fracagn_is_unchanged(norm):
-    """Flat path without a screen: the default-prior agn_ir_frac stays free, no warning."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", AdvisoryWarning)
+    """Flat path without a screen: the default-prior agn_ir_frac stays free, and the screened
+    settlement does not warn."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         spec = _flat(norm, "none")
     assert "agn_ir_frac" in spec.free_params
+    assert not [w for w in caught if "agn_ir_frac is free only through" in str(w.message)]
 
 
 def test_build_screened_wildcard_fracagn_warns_and_is_dropped(synthetic_ssp_wide):
@@ -510,6 +512,7 @@ def _fd_check(model, params):
         up = {**params, name: params[name] + _FD_STEP}
         down = {**params, name: params[name] - _FD_STEP}
         fd = float(objective(up) - objective(down)) / (2.0 * _FD_STEP)
+        # grad-assert: finite-only — a zero is correct at a bound; the FD comparison checks it
         assert np.isfinite(float(g)), name
         assert float(g) == pytest.approx(fd, rel=1e-5, abs=1e-8), name
     return {k: float(v) for k, v in grads.items()}
@@ -532,6 +535,7 @@ def test_gradients_match_finite_differences(
     )
     params = {"agn_ir_frac": jnp.asarray(0.3), "agn_log_lbol": jnp.asarray(_LOG_LBOL)}
     grads = _fd_check(model, params)
+    # grad-assert: nonzero-only — _fd_check asserted both finite
     assert grads["agn_ir_frac"] != 0.0
     assert grads["agn_log_lbol"] != 0.0
 

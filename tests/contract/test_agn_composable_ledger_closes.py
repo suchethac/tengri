@@ -40,6 +40,7 @@ import numpy as np
 import pytest
 
 from tengri.components.agn.blocks._ledger import (
+    LEDGER_CLOSURE_RTOL,
     NON_CONSERVING_DISCS,
     NON_CONSERVING_TORI,
     ledger_policy_closes,
@@ -233,7 +234,7 @@ def _check_c2(sel, params, comps):
     assert total / budget - 1.0 == pytest.approx(excess, abs=_RTOL)
     # The flag measures the closure: a block that misses its own nominal power by more than the
     # tolerance (the pinned normalizations) publishes 0.
-    assert float(comps["agn_ledger_closed"]) == float(abs(excess) <= _RTOL)
+    assert float(comps["agn_ledger_closed"]) == float(abs(excess) <= LEDGER_CLOSURE_RTOL)
 
 
 def _check_c4_siblings(comps):
@@ -419,7 +420,8 @@ def test_lines_brighter_than_the_disc_open_the_ledger(torus_frac):
 
 def test_flag_is_zero_where_the_pieces_do_not_close():
     """The flag measures the closure: a block whose own spectrum misses its nominal power by
-    more than 1e-6 publishes 0 even under a closing policy (the Nenkova torus, 2.1e-4)."""
+    more than the flag's tolerance publishes 0 even under a closing policy (the Nenkova torus,
+    2.1e-4 of its power, 8.4e-5 of the budget at agn_torus_frac = 0.4)."""
     sel = _selectors("multicolor", "nenkova")
     _skip_without_library(sel)
     _, comps = _evaluate(_WAVE, sel, _BASE, ledger=True)

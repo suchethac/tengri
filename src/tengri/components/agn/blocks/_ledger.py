@@ -79,10 +79,18 @@ _UNEMITTED_PIECES: tuple[str, ...] = ("disc", "torus", "lines")
 LEDGER_CLOSED_KEY = "agn_ledger_closed"
 
 #: Relative closure tolerance of the flag: ``|sum / budget - 1|`` above it publishes 0.0 even on
-#: a recipe whose policy closes (C2 of ``tests/contract/test_agn_composable_ledger_closes.py``).
-LEDGER_CLOSURE_RTOL: float = 1.0e-6
-#: The same tolerance in pure float32, where each ledger power carries ~1e-4 dex of round-off.
-LEDGER_CLOSURE_RTOL_FLOAT32: float = 1.0e-3
+#: a recipe whose policy closes. Set from the measured float64 C2 of the contract recipes: the
+#: closing ones sit at <= 4e-7; the largest quadrature residual found is 3.1e-6, an analytic NLR
+#: at cf = efficiency = 0.99 (it grows with the line fraction); the blocks that miss their own
+#: nominal power sit at 7.3e-5 (Richards 2006 disc beside a torus at agn_torus_frac = 0.4) and
+#: 8.4e-5 (Nenkova torus at 0.4). 1e-5 is 3x above the residual and 7x below the defects.
+LEDGER_CLOSURE_RTOL: float = 1.0e-5
+#: The same tolerance in pure float32. Measured on the 27 closing contract recipes whose float32
+#: SED is finite, float32 round-off reaches |C2| = 3.7e-5 (powerlaw disc + Fritz torus); the two
+#: defects above read 6.4e-5 and 9.8e-5. The round-off and the defects are not separable with
+#: headroom, so the tolerance keeps 4x above the round-off and the two defects read 1.0 in float32
+#: (0.0 in float64): float32 resolves a closure error of 1.5e-4, not one of 1e-4.
+LEDGER_CLOSURE_RTOL_FLOAT32: float = 1.5e-4
 
 #: Every ``log_L_agn_*`` key the ledger publishes [dex re erg/s] (each with its ``_lsun`` sibling).
 LEDGER_KEYS: tuple[str, ...] = (
