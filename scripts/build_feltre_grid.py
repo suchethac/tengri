@@ -90,7 +90,7 @@ _RYDBERG_ERG: float = 2.1799e-11  # 13.6 eV [erg]
 # https://physics.nist.gov/asd). UV values are NIST vacuum wavelengths.
 # They become vacuum in ``build`` via ``air_to_vac``.
 _LINE_WAVELENGTHS_AA: list[float] = [
-    3727.09,  # [OII]3727 (air label; NIST doublet 3726.03 / 3728.82)
+    3726.032,  # [OII]3727 (the 3726 doublet component, NIST air; vacuum 3727.09)
     4861.33,  # Hbeta (air)
     4958.92,  # [OIII]4959 (air)
     5006.84,  # [OIII]5007 (air)

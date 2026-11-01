@@ -34,8 +34,8 @@ _OPTICAL_VAC_AA = {
     "[NII]6584": (6585.27, 0.02),
     "[SII]6717": (6718.29, 0.02),
     "[SII]6731": (6732.67, 0.02),
-    # [O II] 3726.03 / 3728.82 air doublet; the table's single 3727 label, through air_to_vac.
-    "[OII]3727": (3728.1, 1.2),
+    # [O II] 3726.032 air (the 3726 doublet component) -> vacuum 3727.09.
+    "[OII]3727": (3727.09, 0.05),
 }
 
 #: NIST vacuum wavelengths of the UV labels, which the table already quotes in vacuum.
