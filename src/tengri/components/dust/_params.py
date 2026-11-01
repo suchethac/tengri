@@ -838,6 +838,11 @@ ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
     {"dust_tau_bc", "dust_tau_diff", "dust_tau_neb"}
 ) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
+#: The native birth-cloud / diffuse depth pair. Not declared under
+#: ``parameterization="tauv_mu"``, where :data:`TAUV_MU_PARAMS` and ``dust_tau_v``
+#: take their place (#3176).
+ATTENUATION_NATIVE_TAU_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust_tau_diff"})
+
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_tau_v",
@@ -849,8 +854,30 @@ SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
+#: Two-component parameterizations the component accepts (#3176). ``tau_bc_diff``
+#: is the native pair (``dust_tau_bc``, ``dust_tau_diff``); ``tauv_mu`` derives the
+#: same pair from a total V-band depth and the diffuse-ISM fraction (Charlot &
+#: Fall 2000): ``tau_BC = (1 - mu) tau_V``, ``tau_ISM = mu tau_V``.
+DUST_PARAMETERIZATIONS: tuple[str, ...] = ("tau_bc_diff", "tauv_mu")
+
+#: Declared only under ``parameterization="tauv_mu"`` (the conditional-declaration
+#: precedent is ``dust_tau_neb``). ``dust_tau_v`` is reused from
+#: :data:`SINGLE_COMPONENT_PARAMS`, not redeclared.
+TAUV_MU_PARAMS: tuple[ParamDeclaration, ...] = (
+    ParamDeclaration(
+        "dust_mu",
+        Fixed(0.3),
+        "fraction of the total V-band attenuation optical depth arising in the "
+        "diffuse ISM (Charlot & Fall 2000)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must lie in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "diffuse-ISM fraction of V-band depth", default=0.3),
+    ),
+)
+
 __all__ = [
     "ANALYTIC_BETA_IR_DEFAULT",
+    "ATTENUATION_NATIVE_TAU_ONLY",
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
@@ -880,11 +907,13 @@ __all__ = [
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
     "DEFAULT_DUST_UMIN",
+    "DUST_PARAMETERIZATIONS",
     "KRIEK_CONROY_BUMP_STRENGTH_DEFAULT",
     "MBB_T_K_DEFAULT",
     "PARAMS",
     "SCHREIBER2018_T_K_DEFAULT",
     "SCHREIBER_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",
+    "TAUV_MU_PARAMS",
     "TEA_DELTA_DEFAULT",
 ]

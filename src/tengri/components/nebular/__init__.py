@@ -2,7 +2,7 @@
 """Nebular emission models for tengri.
 
 Provides modular backends for adding nebular emission (emission lines +
-continuum) to the stellar SED. Six backends:
+continuum) to the stellar SED. Seven backends:
 
 - **BakedIn** (default): Use SSP files with nebular emission pre-included
   (e.g., wNE files with fixed logU=-3, logZ=0). No free parameters.
@@ -18,6 +18,11 @@ continuum) to the stellar SED. Six backends:
   Paredes et al. 2023). 6D grid over log(O/H), logU, log_nH, log(C/O), ΔN/O,
   HbFrac. **Lines only: no nebular continuum.** Run
   ``scripts/download_cb19_templates.py`` to build the HDF5 file.
+
+- **Gutkin16**: Gutkin, Charlot & Bruzual (2016) Cloudy c13.03 H II-region line grids
+  from the public NEOGAL tables, as per-ionizing-photon templates over logU, logZ_gas,
+  xi_d, log n_H and C/O. **Lines plus an analytic continuum (free-free and two-photon)
+  by default.** Run ``scripts/build_gutkin16_grid.py`` to rebuild the HDF5 file.
 
 - **MappingsPhotoStellar**: MAPPINGS V v5.2.1 photoionization grids (Flury
   et al. 2024, arXiv:2412.06763; Zenodo 14140949). Stellar ionizing spectra
@@ -103,6 +108,11 @@ from tengri.components.nebular.dig import (
     mix_dig_grid_reconstruction,
     mix_dig_line_luminosities,
 )
+from tengri.components.nebular.gutkin16 import (
+    Gutkin16Backend,
+    Gutkin16MupError,
+    load_gutkin16_grid,
+)
 from tengri.components.nebular.mappings_photo import (
     IonizingSpectrumInconsistencyError,
     IonizingSpectrumInconsistencyWarning,
@@ -159,6 +169,13 @@ register_nebular_model(
     short_doc="6D CB19 lines-only nebular grid (CB19Backend)",
 )(CB19Backend)
 register_nebular_model(
+    "gutkin16",
+    citation="Gutkin, Charlot & Bruzual 2016 (MNRAS 462, 1757)",
+    short_doc=(
+        "Gutkin+2016 NEOGAL CLOUDY c13.03 line table (BEAGLE's nebular model) per ionizing photon"
+    ),
+)(Gutkin16Backend)
+register_nebular_model(
     "mappings",
     citation="Flury et al. 2024 (MAPPINGS V stellar grids, Zenodo 14140949)",
     status="experimental",
@@ -190,6 +207,8 @@ __all__ = [
     "CueBackend",
     "FeltreGridData",
     "FeltreNLRBackend",
+    "Gutkin16Backend",
+    "Gutkin16MupError",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
     "MappingsPhotoAGNBackend",
@@ -206,6 +225,7 @@ __all__ = [
     "build_cloudy23_deck",
     "compute_qh",
     "compute_shock_sed",
+    "load_gutkin16_grid",
     "mix_dig_emission",
     "mix_dig_grid_reconstruction",
     "mix_dig_line_luminosities",

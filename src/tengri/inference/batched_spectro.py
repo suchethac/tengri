@@ -48,10 +48,10 @@ polynomial, the same :func:`~tengri.observation.linear_marginal.marginalize_line
 primitive that the per-galaxy calibration-marginalized likelihood evaluates.
 
 Emission lines marginalized analytically (``eline_mode="marginalized"`` with a flat
-prior) are covered, jointly with the calibration polynomial when
-``calibration_marginalize=True``. Emission lines fitted as free amplitudes
-(``eline_mode="fitted"``) are covered too. Not covered: Cloudy-prior line marginalization
-(``eline_prior_type="cloudy"``), Student-t and
+prior, or with the model-centered prior ``eline_prior_type="model"``) are covered,
+jointly with the calibration polynomial when ``calibration_marginalize=True``. Emission
+lines fitted as free amplitudes (``eline_mode="fitted"``) are covered too. Not covered:
+Cloudy-prior line marginalization (``eline_prior_type="cloudy"``), Student-t and
 calibration-floor noise, spectral indices, and stochastic (GP-field) SFH. A
 stochastic model raises :class:`NotImplementedError`.
 
@@ -60,7 +60,7 @@ JIT note
 :func:`batched_log_likelihood` and :func:`batched_neg_log_posterior` return
 pure JAX functions, safe under :func:`jax.vmap`, :func:`jax.grad` and
 :func:`jax.jit`. :func:`fit_spectra_map_vmap` is a Python driver: it compiles
-one Adam scan per bucket, and the bucket spec is the compile signature.
+one optimizer run per bucket, and the bucket spec is the compile signature.
 """
 
 from __future__ import annotations
@@ -78,6 +78,7 @@ from jax.scipy.linalg import block_diag
 from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
 from tengri.config.exceptions import ConfigError
+from tengri.cosmology import luminosity_distance
 from tengri.forward.batched_spectrum import (
     batched_eline_design,
     batched_line_set,
@@ -103,7 +104,11 @@ from tengri.observation.calibration import (
 from tengri.observation.calibration_segments import R_BAND_EFFECTIVE_AA
 from tengri.observation.eline_marginalization import (
     eline_amplitude_names,
+    line_foreground_transmission,
+    model_line_match,
+    model_line_prior,
     unit_line_prior,
+    unit_model_line_prior,
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian, Uniform
@@ -284,16 +289,62 @@ def _prepare_template(model) -> Any:
     return model.threaded_template_inputs()
 
 
+def _line_unit_prior(
+    model,
+    line_set,
+    out: dict,
+    full: dict,
+    g_eff,
+    obs: SpectroBatch,
+    match,
+    has_foreground,
+    scatter,
+):
+    """Unit-normal form of the line prior: flat, or centered on the model's own lines.
+
+    With a foreground screen the model-centered mean is screened at each line's observed
+    wavelength with the galaxy's own E(B-V), as the projected spectrum is.
+    """
+    spectroscopy = model.observation.spectroscopy
+    if match is None:
+        return unit_line_prior(
+            g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
+        )
+    transmission = None
+    if has_foreground:
+        transmission = line_foreground_transmission(
+            line_set.independent_wavelengths,
+            obs.z,
+            obs.ebmv_mw,
+            model.spec.foreground_rv,
+            model.spec.foreground_law,
+        )
+    prior = model_line_prior(
+        out["log_line_lums_attenuated"],
+        match[0],
+        match[1],
+        line_set.independent_wavelengths,
+        obs.z,
+        jnp.asarray(luminosity_distance(obs.z)).reshape(()),
+        full.get("eline_aperture_frac", 1.0),
+        spectroscopy.eline_prior_width_dex,
+        transmission=transmission,
+    )
+    return unit_model_line_prior(g_eff, prior, noise=scatter, pix_mask=obs.pix_mask)
+
+
 def _marginal_lines_loglik(
     model,
     line_set,
-    model0,
+    out: dict,
     params: dict,
     obs: SpectroBatch,
     *,
+    match=None,
     calibration_marginalize: bool,
     cal_n_poly: int,
     cal_prior_sigma: float,
+    has_foreground: bool,
     spec: SpectroBatchSpec | None = None,
     log_q=None,
     chol: BandedMatrix | None = None,
@@ -303,16 +354,16 @@ def _marginal_lines_loglik(
     The design is the line matrix of :func:`batched_eline_design`, with the
     calibration columns ``model0 * T(x)`` in front when ``calibration_marginalize``.
     A line with no support on the real grid is removed through ``col_mask``.
+    ``match`` is ``None`` for the flat prior, or the static ``(match_index, matched)``
+    map of the model-centered prior, which also reads ``out["log_line_lums_attenuated"]``.
     The normalization constant is dropped, as in the per-galaxy line marginal.
     """
-    spectroscopy = model.observation.spectroscopy
+    model0 = out["spec_fnu"]
     full = {**dict(model.spec.get_fixed_values()), **params}
     g_eff = batched_eline_design(line_set, obs, full)
     line_cols = jnp.sum(jnp.abs(g_eff), axis=0) > 0
     scatter = obs.sigma if chol is None else chol.data[0]
-    line = unit_line_prior(
-        g_eff, spectroscopy.eline_prior_sigma, noise=scatter, pix_mask=obs.pix_mask
-    )
+    line = _line_unit_prior(model, line_set, out, full, g_eff, obs, match, has_foreground, scatter)
     if calibration_marginalize and _segment_route(model, spec):
         marginal = _segment_marginal(
             model0,
@@ -443,7 +494,12 @@ def batched_log_likelihood(
                 "eline_mode='marginalized' for the joint marginal, or disable "
                 "calibration_marginalize."
             )
-    line_set = batched_line_set(model) if marginal_lines else None
+    line_set = batched_line_set(model)
+    match = (
+        model_line_match(model, line_set.independent_wavelengths)
+        if marginal_lines and spectroscopy.eline_prior_type == "model"
+        else None
+    )
     has_q = spectroscopy.cal_scale_prior is not None
     if has_q and not calibration_marginalize:
         raise ConfigError(
@@ -455,18 +511,22 @@ def batched_log_likelihood(
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
         log_q = params[CAL_LOG_Q] if has_q else None
         forward_params = {k: v for k, v in params.items() if k != CAL_LOG_Q}
-        out = predict_batched_observables(model, forward_params, obs, spec, threaded=threaded)
+        out = predict_batched_observables(
+            model, forward_params, obs, spec, threaded=threaded, line_set=line_set
+        )
         chol = _pixel_factor(spec, obs)
         if marginal_lines:
             total = _marginal_lines_loglik(
                 model,
                 line_set,
-                out["spec_fnu"],
+                out,
                 forward_params,
                 obs,
+                match=match,
                 calibration_marginalize=calibration_marginalize,
                 cal_n_poly=cal_n_poly,
                 cal_prior_sigma=cal_prior_sigma,
+                has_foreground=spec.has_foreground,
                 spec=spec,
                 log_q=log_q,
                 chol=chol,
@@ -661,6 +721,67 @@ def _fit_chunk(nlp, batch, init, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
+def _max_abs(tree) -> jax.Array:
+    """Largest absolute entry over every leaf of a pytree."""
+    return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
+
+
+def _lbfgs_one(nlp, obs, init, *, n_steps, gtol):
+    """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
+    import optax
+
+    optimizer = optax.lbfgs()
+
+    def value_fn(params):
+        return nlp(params, obs)
+
+    value_and_grad = optax.value_and_grad_from_state(value_fn)
+    state = optimizer.init(init)
+    value, grad = value_and_grad(init, state=state)
+
+    def not_converged(carry):
+        _, _, _, grad_now, it, _ = carry
+        return (it < n_steps) & jnp.logical_not(_max_abs(grad_now) < gtol)
+
+    def advance(carry):
+        params, opt_state, value_now, grad_now, it, trace = carry
+        trace = trace.at[it].set(value_now)
+        updates, opt_state = optimizer.update(
+            grad_now, opt_state, params, value=value_now, grad=grad_now, value_fn=value_fn
+        )
+        params = optax.apply_updates(params, updates)
+        value_next, grad_next = value_and_grad(params, state=opt_state)
+        return params, opt_state, value_next, grad_next, it + 1, trace
+
+    carry = (init, state, value, grad, jnp.asarray(0), jnp.zeros((n_steps,), dtype=value.dtype))
+    params, _, value, _, n_done, trace = jax.lax.while_loop(not_converged, advance, carry)
+    trace = jnp.where(jnp.arange(n_steps) < n_done, trace, value)
+    return params, value, trace
+
+
+def _lbfgs_chunk(nlp, batch, init, *, n_steps, gtol):
+    """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
+
+    The chunk is one ``vmap`` of per-galaxy ``while_loop`` runs. JAX keeps a
+    converged galaxy's state fixed while the slowest galaxy of the chunk iterates.
+    The loss trace is ``(n_steps, B)`` as for Adam; after a galaxy stops, its
+    trace holds the final value.
+    """
+
+    def one(obs, init_one):
+        return _lbfgs_one(nlp, obs, init_one, n_steps=n_steps, gtol=gtol)
+
+    params_final, final_nlp, trace = jax.vmap(one)(batch, init)
+    return params_final, final_nlp, trace.T
+
+
+def _run_chunk(nlp, batch, init, *, optimizer, n_steps, learning_rate, gtol):
+    """Dispatch one chunk to the optimizer named by ``optimizer``."""
+    if optimizer == "adam":
+        return _fit_chunk(nlp, batch, init, n_steps=n_steps, learning_rate=learning_rate)
+    return _lbfgs_chunk(nlp, batch, init, n_steps=n_steps, gtol=gtol)
+
+
 def _fit_bucket(
     model,
     spec,
@@ -673,8 +794,10 @@ def _fit_bucket(
     calibration_marginalize=False,
     cal_n_poly=3,
     cal_prior_sigma=1.0,
+    optimizer="lbfgs",
+    gtol=1e-5,
 ):
-    """Run Adam on one bucket, returning final latents, final nlp and the loss trace.
+    """Run one optimizer on one bucket, returning final latents, final nlp and the loss trace.
 
     The initial latents are drawn for the whole bucket and then sliced, so the
     result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
@@ -695,12 +818,14 @@ def _fit_bucket(
     for start in range(0, n_gal, step):
         stop = min(start + step, n_gal)
         parts.append(
-            _fit_chunk(
+            _run_chunk(
                 nlp,
                 _slice_tree(batch, start, stop),
                 _slice_tree(init, start, stop),
+                optimizer=optimizer,
                 n_steps=n_steps,
                 learning_rate=learning_rate,
+                gtol=gtol,
             )
         )
     params_final = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs), *[p[0] for p in parts])
@@ -720,8 +845,10 @@ def fit_spectra_map_vmap(
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
+    optimizer: str = "lbfgs",
+    gtol: float = 1e-5,
 ) -> dict[str, Any]:
-    """Batched MAP fit of spectra across galaxies, one Adam scan per bucket.
+    """Batched MAP fit of spectra across galaxies, one vmapped optimizer run per bucket.
 
     Parameters
     ----------
@@ -732,9 +859,10 @@ def fit_spectra_map_vmap(
         Output of :func:`~tengri.observation.batched.build_spectro_batches` built
         with ``model=model``.
     n_steps : int, optional
-        Adam iterations per bucket. Default 500.
+        Iteration cap per bucket: L-BFGS iterations, or Adam steps when
+        ``optimizer="adam"``. Default 500.
     learning_rate : float, optional
-        Adam learning rate in standardized space. Default 0.05.
+        Adam learning rate in standardized space; unused by L-BFGS. Default 0.05.
     seed : int, optional
         PRNG seed for the initial latents. Default 0.
     chunk_size : int, optional
@@ -748,6 +876,14 @@ def fit_spectra_map_vmap(
         Calibration coefficients when ``calibration_marginalize``. Default 3.
     cal_prior_sigma : float, optional
         Prior standard deviation of each calibration coefficient. Default 1.0.
+    optimizer : {"lbfgs", "adam"}, optional
+        ``"lbfgs"`` (default) runs ``optax.lbfgs`` with a zoom line search on each
+        galaxy until its gradient infinity-norm, in standardized space, is below
+        ``gtol``, as the per-galaxy Fitter does. ``"adam"`` runs ``n_steps`` Adam
+        steps with ``learning_rate``.
+    gtol : float, optional
+        Gradient infinity-norm tolerance [standardized units] for ``"lbfgs"``.
+        Default 1e-5.
 
     Returns
     -------
@@ -760,7 +896,8 @@ def fit_spectra_map_vmap(
         each galaxy, in the same order.
         ``"loss_history"``: list of ndarray, one per bucket in ``batches`` order,
         each of shape ``(n_steps, B_bucket)``: the negative log-posterior at
-        each step before that step's update.
+        each iteration before that iteration's update. For L-BFGS a galaxy that has
+        converged holds its final value for the remaining rows.
 
     Raises
     ------
@@ -788,6 +925,8 @@ def fit_spectra_map_vmap(
         raise ValueError("batches is empty; build it with build_spectro_batches")
     if chunk_size is not None and (not isinstance(chunk_size, int) or chunk_size < 1):
         raise ValueError(f"chunk_size must be a positive integer or None, got {chunk_size!r}")
+    if optimizer not in ("lbfgs", "adam"):
+        raise ValueError(f"optimizer must be 'lbfgs' or 'adam', got {optimizer!r}")
 
     base_key = jax.random.PRNGKey(seed)
     bucket_keys = jax.random.split(base_key, len(batches))
@@ -804,6 +943,8 @@ def fit_spectra_map_vmap(
             calibration_marginalize=calibration_marginalize,
             cal_n_poly=cal_n_poly,
             cal_prior_sigma=cal_prior_sigma,
+            optimizer=optimizer,
+            gtol=gtol,
         )
         buckets.append(
             {
@@ -973,7 +1114,8 @@ def fit_spectra_catalog_mcmc(
         ``"prior"`` draws starts from :func:`init_unbounded_batch`. Default
         ``"map"``.
     map_steps : int, optional
-        Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
+        Iterations of the MAP warm start (L-BFGS, as in :func:`fit_spectra_map_vmap`).
+        Ignored when ``init="prior"``. Default 200.
     batch_size : int, optional
         Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
         (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the

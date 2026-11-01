@@ -121,7 +121,8 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
 
     st = m.predict_state(p)
     jw = np.asarray(st.derived["joint_weights"])
-    sms = float(np.asarray(st.derived["stellar_mass_scale"]))
+    # The linear scale is not published (#3149); rebuild it from the log key in float64.
+    sms = float(10.0 ** np.asarray(st.derived["log_stellar_mass_scale"], dtype=np.float64))
 
     # (1) the reconstruction identity the window LUT relies on
     sed_int = np.asarray(st.sed_intrinsic)
@@ -207,7 +208,7 @@ def _window_lut_indices(m, ssp, p, defs):
     """indices via measure_indices_from_window_lut with two-component dust."""
     st = m.predict_state(p)
     jw = jnp.asarray(st.derived["joint_weights"])
-    sms = jnp.asarray(st.derived["stellar_mass_scale"])
+    sms = 10.0 ** jnp.asarray(st.derived["log_stellar_mass_scale"], dtype=jnp.float64)
     ages = jnp.asarray(st.derived["ssp_ages_yr"])
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
     trans = two_component_dust(
