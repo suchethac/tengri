@@ -382,9 +382,15 @@ _FROZEN_LIBRARIES = (
     "cat3d_wind", "nenkova_agnfitter_2p", "skirtor_agnfitter", "fritz", "silva04",
     "nenkova_agnfitter_3p", "skirtor_agnfitter_1p",
 )  # fmt: skip
+#: One library per scaling code path in the PR tier (Fritz also carries its anisotropy
+#: digest); the rest, and the two other anisotropy tables, run in the ``slow`` tier.
+_FROZEN_TIERED = [
+    name if name in _PR_TIER else pytest.param(name, marks=pytest.mark.slow)
+    for name in _FROZEN_LIBRARIES
+]
 
 
-@pytest.mark.parametrize("name", _FROZEN_LIBRARIES)
+@pytest.mark.parametrize("name", _FROZEN_TIERED)
 def test_float64_matches_the_reference_frozen_on_main_bit_for_bit(name):
     """Float64 SEDs, their jacfwd, and the anisotropy tables equal main's, to the bit."""
     generator, frozen = _frozen_reference()

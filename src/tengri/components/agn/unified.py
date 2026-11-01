@@ -135,6 +135,7 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
 )
+from tengri.components.agn._template_grid import cache_per_float_dtype
 from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed
@@ -157,7 +158,7 @@ from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_skirtor_fn():
     """Load SKIRTOR template grid from file.
 
@@ -167,7 +168,7 @@ def _load_skirtor_fn():
     return create_skirtor_from_grid(_find_skirtor_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_skirtor_raw_total_fn():
     """Load the faithful raw-Stalevski SKIRTOR total interpolator (cached).
 
