@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for build_native_vi_nonlinear_engine in isolation."""
+"""Tests for build_native_vi_nonlinear_engine in isolation.
+
+The engine tests are parked while the backend is tier="broken"."""
 
 import pytest
 

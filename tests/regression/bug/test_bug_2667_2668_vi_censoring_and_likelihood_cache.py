@@ -141,12 +141,16 @@ def _jit_engine_energy(fitter):
     return energy
 
 
-def _nifty_energy(fitter):
-    """The NIFTy likelihood ``vi`` / ``vi_nonlinear_fast`` / ``vi_linear*`` minimize."""
+def _nifty_energy(fitter, primals=lambda fitter, z: {_NAME: z}):
+    """The NIFTy likelihood ``vi`` / ``vi_nonlinear_fast`` / ``vi_linear*`` minimize.
+
+    ``primals(fitter, z)`` maps the mass latent ``z`` to the likelihood's full
+    primal dict; the default fits models whose only free parameter is the mass.
+    """
     from tengri.inference.backends.vi.nifty import _build_nifty_likelihood
 
     likelihood = _build_nifty_likelihood(fitter)
-    return lambda z: likelihood.energy({_NAME: z})
+    return lambda z: likelihood.energy(primals(fitter, z))
 
 
 def _native_engine_energy(builder_name):
@@ -270,11 +274,11 @@ def test_gradient_of_a_limit_violated_by_thirty_sigma(ssp, truth, family):
 # ── recovery ─────────────────────────────────────────────────────────────────
 
 #: Posterior mean at ``limit = 3 x model`` on band 2 with NO ``data_mask``, measured
-#: on main (``vi_nonlinear_fast``, key PRNGKey(1), 20 iterations). A detection fit
-#: pulled to the limit value: truth 10.5 + log10 of the band-2 pull. ``vi_linear_fast``
-#: shares the NIFTy likelihood and the censored energy pinned above, and measures
-#: 10.6456.
-_MAIN_DETECTION_MEAN = {"vi_nonlinear_fast": 10.6455}
+#: on main (``vi_nonlinear_fast`` and ``vi_linear_fast``, key PRNGKey(1), 20
+#: iterations). A detection fit pulled to the limit value: truth 10.5 + log10 of
+#: the band-2 pull. ``vi_linear_fast`` is kept for its MGVI sampling and metric
+#: path, which carries the censored band.
+_MAIN_DETECTION_MEAN = {"vi_nonlinear_fast": 10.6455, "vi_linear_fast": 10.6456}
 # native_vi_* is tier="broken"; re-enable when the backend is validated.
 # _MAIN_DETECTION_MEAN["native_vi_linear"] = 10.6462
 # _MAIN_DETECTION_MEAN["native_vi_nonlinear"] = 10.6460
@@ -350,9 +354,7 @@ def _free_noise_primals(fitter, z):
 
 
 def _likelihood_energy(fitter, z):
-    from tengri.inference.backends.vi.nifty import _build_nifty_likelihood
-
-    return float(_build_nifty_likelihood(fitter).energy(_free_noise_primals(fitter, z)))
+    return float(_nifty_energy(fitter, _free_noise_primals)(z))
 
 
 @pytest.mark.parametrize("free_noise", [False, True], ids=["fixed_noise", "free_noise"])
