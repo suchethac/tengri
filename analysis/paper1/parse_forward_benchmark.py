@@ -15,6 +15,11 @@ import pathlib
 import platform
 import re
 import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import repo_relative
 
 PANEL_ROWS = [
     ("Stellar", "Stellar only"),
@@ -123,7 +128,7 @@ def main() -> None:
     ap.add_argument("--out", required=True, type=pathlib.Path)
     args = ap.parse_args()
     result = parse(args.log.read_text())
-    result["metadata"]["log"] = str(args.log)
+    result["metadata"]["log"] = repo_relative(args.log)
     args.out.write_text(json.dumps(result, indent=1) + "\n")
     for row in result["panel_a"]:
         print(

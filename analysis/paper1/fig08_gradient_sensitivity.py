@@ -236,7 +236,7 @@ def plot_figures(
         "sfh_dpl_alpha": r"$\alpha$",
         "sfh_dpl_beta": r"$\beta$",
         "sfh_dpl_tau_gyr": r"$\tau$ (Gyr)",
-        "sfh_dpl_age_gyr": "age (Gyr)",
+        "sfh_dpl_age_frac": r"age / $t_{\rm univ}(z)$",
         "sfh_dpl_log_total_mass": r"$\log M_*$",
         "met_logzsol": r"$\log Z$",
         "dust_tau_bc": r"$\tau_{\rm bc}$",
@@ -278,7 +278,7 @@ def main():
 
     eval_point = {
         "sfh_dpl_log_total_mass": 10.5,
-        "sfh_dpl_age_gyr": 4.0,
+        "sfh_dpl_age_frac": 4.0 / float(tengri.utils.cosmology.age_at_z(z)),  # 4 Gyr
         "sfh_dpl_tau_gyr": 2.0,
         "sfh_dpl_alpha": 2.0,
         "sfh_dpl_beta": 1.0,

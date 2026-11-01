@@ -69,7 +69,7 @@ from tengri import Parameters
 params = Parameters(
     mean_sfh_type="tsnorm",
     sfh_tsnorm_skew=Uniform(-0.5, 0.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.7090),  # 0.5-10 Gyr at z=1
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
     sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
@@ -90,7 +90,7 @@ for p in params.free_params:
 # Generate mock observation (Galaxy #1)
 true_params_gal1 = {
     "sfh_tsnorm_skew": 0.1,
-    "sfh_tsnorm_peak_lbt_gyr": 3.0,
+    "sfh_tsnorm_peak_lbt_frac": 0.5127,  # 3.0 Gyr at z=1
     "sfh_tsnorm_width_gyr": 1.2,
     "sfh_tsnorm_trunc": 0.3,
     "sfh_tsnorm_log_total_mass": 1.0 + 10.0,
@@ -180,7 +180,7 @@ galaxy_params = [
     # Galaxy 2
     {
         "sfh_tsnorm_skew": -0.3,
-        "sfh_tsnorm_peak_lbt_gyr": 7.0,
+        "sfh_tsnorm_peak_lbt_frac": 1.1963,  # 7.0 Gyr at z=1
         "sfh_tsnorm_width_gyr": 0.5,
         "sfh_tsnorm_trunc": 0.8,
         "sfh_tsnorm_log_total_mass": 0.2 + 10.0,
@@ -193,7 +193,7 @@ galaxy_params = [
     # Galaxy 3
     {
         "sfh_tsnorm_skew": 0.3,
-        "sfh_tsnorm_peak_lbt_gyr": 5.0,
+        "sfh_tsnorm_peak_lbt_frac": 0.8545,  # 5.0 Gyr at z=1
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_trunc": 0.5,
         "sfh_tsnorm_log_total_mass": 1.5 + 10.0,
@@ -206,7 +206,7 @@ galaxy_params = [
     # Galaxy 4
     {
         "sfh_tsnorm_skew": -0.1,
-        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_peak_lbt_frac": 0.3418,  # 2.0 Gyr at z=1
         "sfh_tsnorm_width_gyr": 0.8,
         "sfh_tsnorm_trunc": 0.2,
         "sfh_tsnorm_log_total_mass": 0.5 + 10.0,
@@ -219,7 +219,7 @@ galaxy_params = [
     # Galaxy 5
     {
         "sfh_tsnorm_skew": 0.4,
-        "sfh_tsnorm_peak_lbt_gyr": 8.0,
+        "sfh_tsnorm_peak_lbt_frac": 1.3672,  # 8.0 Gyr at z=1
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_trunc": 0.6,
         "sfh_tsnorm_log_total_mass": 2.0 + 10.0,
@@ -362,7 +362,7 @@ print("=" * 80)
 params_fresh = Parameters(
     mean_sfh_type="tsnorm",
     sfh_tsnorm_skew=Uniform(-0.5, 0.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.7090),  # 0.5-10 Gyr at z=1
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
     sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
@@ -391,7 +391,7 @@ print("  Done")
 params_fresh2 = Parameters(
     mean_sfh_type="tsnorm",
     sfh_tsnorm_skew=Uniform(-0.5, 0.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.7090),  # 0.5-10 Gyr at z=1
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
     sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),

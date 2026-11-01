@@ -34,7 +34,9 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import re
 import statistics
 import sys
 from collections import Counter, defaultdict
@@ -54,6 +56,36 @@ SELECTION_20 = ANALYSIS_DIR / "results" / "selected_galaxies_20.json"
 
 #: Field a cell may or may not carry, depending on when it was run.
 NOT_RECORDED = "not recorded"
+
+#: A draw counts as sitting at a bound when it lies within this fraction of the
+#: prior's width of it. A flat prior puts exactly this share in each band, so
+#: the band doubles as the null the observed share is judged against.
+EDGE_BAND = 0.05
+
+#: How close a declared lower bound must be to zero to count as the physical
+#: "none of this component" limit rather than an imposed floor.
+PHYSICAL_ZERO_ATOL = 1e-12
+
+#: Share of draws inside one edge band above which the cell is called pinned.
+#: Four times the flat-prior expectation, so ordinary posterior width near a
+#: bound does not register.
+PIN_THRESHOLD = 0.20
+
+#: Parameters whose lower bound *may* mean something physical: a posterior
+#: against tau = 0 is the fit saying "no dust is needed", an inference and not a
+#: defect, and agn_lum_ratio = 0 is the same statement about the AGN. Membership
+#: here is necessary but not sufficient -- the bound must also actually BE zero.
+#: Configuration I declares dust_tau_diff as Uniform(0.5, 3.0), and a floor of
+#: 0.5 is a forced minimum screen, so naming the parameter alone would file that
+#: wall under "physical" and hide it.
+PHYSICAL_ZERO_BOUNDS = frozenset({"dust_tau_v", "dust_tau_bc", "dust_tau_diff", "agn_lum_ratio"})
+
+#: Simplex coordinates. An edge means "all the mass in one age bin", which is a
+#: statement about the SFH rather than a wall the model was pushed into, so
+#: these are held apart from both other groups rather than silently counted.
+SIMPLEX_PARAMS_PREFIX = "sfh_dir_z"
+
+_UNIFORM = re.compile(r"Uniform\(([-\d.eE+]+),\s*([-\d.eE+]+)\)")
 
 
 def load_cells(results_dir: Path) -> dict[str, dict]:
@@ -94,6 +126,240 @@ def band_residuals(results_dir: Path, name: str) -> tuple[np.ndarray, list[str]]
     ]
 
 
+def _config_of(name: str, cell: dict) -> str:
+    """The cell's configuration, from the record if it has one, else its filename."""
+    return cell.get("config") or name.rsplit("_", 1)[-1]
+
+
+def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
+    """Which parameters sit against a prior bound, in how many cells.
+
+    The adoption bar cannot answer this. Zero divergences, split R-hat below
+    1.01 and a healthy ESS are all satisfied by a chain that has converged
+    cleanly onto a wall, so a cell can clear every leg of the bar while the
+    number it reports is set by the edge of the prior rather than by the data.
+    Section 7 asks where the posteriors lean on their boundaries precisely
+    because the rest of the census cannot see it.
+
+    Bounds are read from the cell's own ``priors`` record, so a prior derived
+    per library -- ``met_logzsol`` is held 0.02 dex inside its grid's outermost
+    node -- is judged against the bound that cell actually ran with, never
+    against a bound copied from another row.
+
+    Returns ``(rows, scanned, no_npz, no_priors)``. The two skip reasons are
+    different problems and are kept apart: a cell with no NPZ has lost its
+    draws, while a cell that has an NPZ but an empty ``priors`` record predates
+    the prior-recording feature and has bounds nobody wrote down. Reporting
+    them as one number misnames the cause -- every cell of the second kind
+    still carries its draws.
+    """
+    rows, scanned = [], 0
+    no_npz, no_priors = [], []
+    for name, cell in cells.items():
+        npz_path = results_dir / f"{name}.npz"
+        if not npz_path.is_file():
+            no_npz.append(name)
+            continue
+        with np.load(npz_path, allow_pickle=True) as npz:
+            available = set(npz.files)
+            draws = {
+                k: np.asarray(npz[k], dtype=float).ravel()
+                for k in (cell.get("priors") or {})
+                if k in available
+            }
+        if not draws:
+            no_priors.append(name)
+            continue
+        scanned += 1
+        for param, prior in (cell.get("priors") or {}).items():
+            match = _UNIFORM.match(str(prior))
+            if match is None or param not in draws:
+                continue
+            lo, hi = float(match.group(1)), float(match.group(2))
+            values = draws[param]
+            if hi <= lo or values.size == 0 or not np.isfinite(values).all():
+                continue
+            band = (hi - lo) * EDGE_BAND
+            at_lo = float(np.mean(values < lo + band))
+            at_hi = float(np.mean(values > hi - band))
+            if max(at_lo, at_hi) < PIN_THRESHOLD:
+                continue
+            low_end = at_lo >= at_hi
+            if param.startswith(SIMPLEX_PARAMS_PREFIX):
+                kind = "simplex"
+            elif low_end and param in PHYSICAL_ZERO_BOUNDS and abs(lo) <= PHYSICAL_ZERO_ATOL:
+                kind = "physical"
+            else:
+                kind = "artificial"
+            rows.append(
+                {
+                    "cell": name,
+                    "config": cell.get("config"),
+                    "adopted": bool(is_adopted(cell, _config_of(name, cell)).adopted),
+                    "param": param,
+                    "end": "lo" if low_end else "hi",
+                    "share": max(at_lo, at_hi),
+                    "kind": kind,
+                }
+            )
+    return rows, scanned, no_npz, no_priors
+
+
+def config_spread(cells: dict[str, dict], results_dir: Path):
+    """Per galaxy, how far apart the configurations put log10 M* and log10 SFR.
+
+    This is the sample-level result Section 7 asks for, and it is a spread
+    *within* a galaxy across configurations -- a model-choice uncertainty --
+    not a scatter across the sample. Taking it the other way round would report
+    the mass range of twenty galaxies, which is a property of the sample and
+    says nothing about the configurations.
+
+    Only adopted cells contribute. A galaxy with fewer than two adopted
+    configurations has no spread to report and is counted as uncovered rather
+    than entered as zero.
+
+    ``stellar_mass`` and ``sfr_100myr`` are stored linear, so the log is taken
+    after dropping non-positive draws, matching ``fig09_sample_level``.
+    """
+    per_galaxy: dict[int, dict[str, dict[str, float]]] = defaultdict(dict)
+    for name, cell in cells.items():
+        config = _config_of(name, cell)
+        if not is_adopted(cell, config).adopted:
+            continue
+        npz_path = results_dir / f"{name}.npz"
+        if not npz_path.is_file():
+            continue
+        with np.load(npz_path, allow_pickle=True) as npz:
+            for field in ("stellar_mass", "sfr_100myr"):
+                if field not in npz.files:
+                    continue
+                values = np.asarray(npz[field], dtype=float).ravel()
+                values = values[np.isfinite(values) & (values > 0)]
+                if values.size:
+                    per_galaxy[cell.get("gal_id")].setdefault(field, {})[config] = float(
+                        np.median(np.log10(values))
+                    )
+    out = {}
+    for field in ("stellar_mass", "sfr_100myr"):
+        spreads = []
+        for byconfig in per_galaxy.values():
+            got = byconfig.get(field, {})
+            if len(got) >= 2:
+                spreads.append((max(got.values()) - min(got.values()), len(got)))
+        out[field] = spreads
+    return out, len(per_galaxy)
+
+
+#: Published per-code outputs for the same galaxies, ingested by
+#: ingest_art_sedfitting.py. Committed, so this comparison does not need the
+#: external checkout that produced it.
+ART_SEDFITTING_CSV = ANALYSIS_DIR / "results" / "art_sedfitting_z1.csv"
+
+#: A logsfr outside this range is a code reporting "no star formation" through
+#: a floor rather than a measurement, and one such value would set the whole
+#: range for its galaxy. Stated here rather than applied silently.
+_LOGSFR_SANE = (-5.0, 15.0)
+
+
+def published_inter_code_spread(csv_path: Path = ART_SEDFITTING_CSV):
+    """Spread between published codes for the grid's own galaxies.
+
+    Returned per quantity for both the full set of codes and for the subset
+    whose definition matches what tengri reports, because the two differ and
+    only the matched one is a like-for-like comparison:
+
+    * Prospector publishes **formed** stellar mass; the other four publish
+      **survived**.
+    * BAGPIPES, BEAGLE, and Dense_Basis document a 100 Myr averaged SFR;
+      CIGALE and Prospector do not record a SFR timescale.
+
+    Mixing either pair inflates the spread by comparing different quantities,
+    which is the failure mode a cross-code number invites.
+
+    .. warning::
+
+       ``logmstar_survived`` is the subset that matches tengri's
+       ``stellar_mass_surviving``, **not** its ``stellar_mass``. The registry
+       defines ``stellar_mass`` as *total formed* stellar mass
+       (``forward/properties.py``, ``forward/prediction.py``) and publishes
+       surviving mass separately as ``stellar_mass_surviving``. An earlier
+       version of this docstring asserted the opposite, and the saved NPZ
+       records carry only the formed quantity, so any caller that reads
+       ``stellar_mass`` out of a fit record and sets it against this subset is
+       comparing formed mass to survived mass. Measured on real cells of this
+       grid the two differ by ~0.17-0.19 dex, which is comparable to the
+       published inter-code spread itself.
+    """
+    if not csv_path.is_file():
+        return None
+    rows = list(csv.DictReader(csv_path.read_text().splitlines()))
+
+    def _spread(field, keep, sane=None):
+        per_galaxy = defaultdict(dict)
+        for row in rows:
+            try:
+                gal_id = int(row["id"])
+                value = float(row[field])
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(value) or not keep(row):
+                continue
+            if sane is not None and not (sane[0] < value < sane[1]):
+                continue
+            per_galaxy[gal_id][row["code"]] = value
+        return {
+            gal_id: max(byc.values()) - min(byc.values())
+            for gal_id, byc in per_galaxy.items()
+            if len(byc) >= 2
+        }
+
+    return {
+        "logmstar_all": _spread("logmstar", lambda r: True),
+        "logmstar_survived": _spread(
+            "logmstar", lambda r: r.get("mass_definition_note") == "survived stellar mass"
+        ),
+        "logsfr_all": _spread("logsfr", lambda r: True, _LOGSFR_SANE),
+        "logsfr_100myr": _spread(
+            "logsfr", lambda r: "100 Myr" in (r.get("sfr_timescale_note") or ""), _LOGSFR_SANE
+        ),
+    }
+
+
+def attempt_selection_cost(cells: dict[str, dict]):
+    """Adopted cells whose recorded ``ess_min`` is not the best their rungs reached.
+
+    ``select_best_attempt`` ranks mixed-first, then fewest divergences, then
+    lowest R-hat. It has no ESS term, so when rungs tie on the legs it can see
+    it will take one with far fewer effective samples -- 79/II ties at zero
+    divergences across all three rungs and is decided on a R-hat difference of
+    0.027, taking ``ess_min`` 4.0 over 49.1.
+
+    Every better number is already in the record, so this is a reporting cost
+    rather than a sampling one, and it lands on the s/ESS figures Section 7
+    quotes. Reported rather than corrected: what "best" means interacts with
+    the bar, which is the owner's.
+    """
+    moved = []
+    for name, cell in cells.items():
+        config = _config_of(name, cell)
+        attempts = cell.get("attempts") or []
+        recorded = cell.get("ess_min")
+        if recorded is None or len(attempts) < 2:
+            continue
+        best = max((a.get("ess_min") or 0.0) for a in attempts)
+        if best > recorded * 1.05:
+            moved.append(
+                {
+                    "cell": name,
+                    "config": config,
+                    "adopted": bool(is_adopted(cell, config).adopted),
+                    "recorded": float(recorded),
+                    "best": float(best),
+                }
+            )
+    return moved
+
+
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
     """Values present for ``field``, and how many cells lack it.
 
@@ -120,7 +386,26 @@ def _fmt(values, spec=".4g"):
 
 
 def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path) -> bool:
-    """Print the census. Returns True when the grid is complete."""
+    """Print the census. Returns True when the grid is complete.
+
+    ``cells`` is filtered to ``config_keys`` first. Without that the
+    completeness test ``have == total`` can pass by coincidence: cells from a
+    configuration the caller did not ask for inflate ``have`` while the shorter
+    ``config_keys`` shrinks ``total``, and the two errors cancel. Measured on
+    the 2026-09-24 partial grid, a five-configuration view of 98 cells in rows
+    I-V plus 2 stray Configuration VI cells printed "100 of 100" and reported
+    the grid COMPLETE. A completeness check that can pass by accident is worse
+    than none, because it prints the reassuring answer.
+    """
+    wanted = set(config_keys)
+    dropped = {k: c for k, c in cells.items() if _config_of(k, c) not in wanted}
+    if dropped:
+        cells = {k: c for k, c in cells.items() if k not in dropped}
+        seen = sorted({_config_of(k, c) for k, c in dropped.items()})
+        print(
+            f"note                 : ignoring {len(dropped)} cell(s) outside the "
+            f"requested configurations {sorted(wanted)} -- found {seen}"
+        )
     total = len(expected_ids) * len(config_keys)
     have = len(cells)
     by_config = defaultdict(dict)
@@ -138,9 +423,6 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
     # is_adopted judges per configuration -- the relaxed bar applies to some
     # rows and not others -- so the config is read from the cell, with the
     # filename as the fallback for a cell that does not record one.
-    def _config_of(name: str, cell: dict) -> str:
-        return cell.get("config") or name.rsplit("_", 1)[-1]
-
     adopted = {k: c for k, c in cells.items() if is_adopted(c, _config_of(k, c)).adopted}
     refused = {k: c for k, c in cells.items() if k not in adopted}
     print(f"\nadopted              : {len(adopted)} of {have}")
@@ -287,6 +569,105 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         )
     if not complete:
         print("  ^ 'which configurations mix worst' needs every row; this is not that.")
+
+    # --- model-choice spread, the sample-level result -----------------------
+    spreads, n_gal = config_spread(cells, results_dir)
+    print("\nconfiguration-to-configuration spread, within a galaxy (adopted cells only)")
+    for field, label in (("stellar_mass", "log10 M*"), ("sfr_100myr", "log10 SFR(100 Myr)")):
+        rows = spreads.get(field) or []
+        if not rows:
+            print(f"  {label:<20} {NOT_RECORDED} (no galaxy has two adopted configurations)")
+            continue
+        vals = [v for v, _ in rows]
+        widest = max(rows, key=lambda r: r[0])
+        print(
+            f"  {label:<20} median {np.median(vals):.3f} dex, "
+            f"range {min(vals):.3f} to {max(vals):.3f} dex, "
+            f"over {len(rows)} of {n_gal} galaxies "
+            f"(widest spans {widest[1]} configurations)"
+        )
+    if not complete:
+        print("  ^ a galaxy missing a row cannot show that row's disagreement; partial.")
+
+    # --- the published inter-code spread, restricted to our galaxies -------
+    published = published_inter_code_spread()
+    if published is None:
+        print(f"\npublished inter-code spread: {NOT_RECORDED} (no {ART_SEDFITTING_CSV.name})")
+    else:
+        grid_ids = set(expected_ids)
+        print("\npublished inter-code spread, same galaxies (art_sedfitting)")
+        for key, label in (
+            ("logmstar_all", "log10 M*   all codes"),
+            ("logmstar_survived", "log10 M*   survived only"),
+            ("logsfr_all", "log10 SFR  all codes"),
+            ("logsfr_100myr", "log10 SFR  100 Myr only"),
+        ):
+            vals = [v for gid, v in (published.get(key) or {}).items() if gid in grid_ids]
+            if not vals:
+                print(f"  {label:<26} {NOT_RECORDED}")
+                continue
+            print(
+                f"  {label:<26} median {np.median(vals):.3f} dex, "
+                f"range {min(vals):.3f} to {max(vals):.3f}, over {len(vals)} galaxies"
+            )
+        print("  ^ compare the matched rows only: Prospector publishes formed mass,")
+        print("    and CIGALE and Prospector do not record a SFR timescale, so the")
+        print("    'all codes' rows compare mixed definitions.")
+
+    # --- what the attempt ranking costs the record -------------------------
+    moved = attempt_selection_cost(cells)
+    if moved:
+        adopted_moved = [m for m in moved if m["adopted"]]
+        print(
+            f"\nattempt selection: {len(moved)} cells record a lower ess_min than their "
+            f"own best rung ({len(adopted_moved)} of them adopted)"
+        )
+        for m in sorted(moved, key=lambda m: -(m["best"] / max(m["recorded"], 1e-9)))[:5]:
+            print(
+                f"  {m['cell']:<12} {m['config']:<4} recorded {m['recorded']:7.1f}  "
+                f"best rung {m['best']:7.1f}{'  (adopted)' if m['adopted'] else ''}"
+            )
+        print("  ^ select_best_attempt has no ESS term, so a rung that wins on divergences")
+        print("    or R-hat can lose an order of magnitude of effective samples. The better")
+        print("    numbers are in retune_history; this is a reporting cost, not a sampling one.")
+
+    # --- prior boundaries, which the adoption bar cannot see ---------------
+    rows, scanned, no_npz, no_priors = prior_boundary_pressure(cells, results_dir)
+    print(
+        f"\nprior-boundary pressure (edge band {EDGE_BAND:.0%} of prior width, "
+        f"pinned at {PIN_THRESHOLD:.0%} of draws)"
+    )
+    print(f"  cells scanned        : {scanned} of {len(cells)}")
+    if no_npz:
+        print(f"  no NPZ on disk       : {len(no_npz)}")
+    if no_priors:
+        _by = Counter(_config_of(n, cells[n]) for n in no_priors)
+        print(
+            f"  NPZ but no priors    : {len(no_priors)} "
+            f"({', '.join(f'{k} x{v}' for k, v in sorted(_by.items()))})"
+        )
+        print("    ^ these predate the prior record, so their bounds are unknown. They are")
+        print("      NOT counted as unpinned; a row listed here is judged on a fraction of")
+        print("      its cells, and the count must be quoted that way.")
+    artificial = [r for r in rows if r["kind"] == "artificial"]
+    pinned_cells = {r["cell"] for r in artificial}
+    adopted_pinned = {r["cell"] for r in artificial if r["adopted"]}
+    print(
+        f"  cells against an artificial bound: {len(pinned_cells)} of {scanned}, "
+        f"of which adopted: {len(adopted_pinned)}"
+    )
+    by_param = Counter(r["param"] + " (" + r["end"] + ")" for r in artificial)
+    for label, count in by_param.most_common():
+        print(f"    {label:<34} {count:>3} cells")
+    for kind, note in (
+        ("physical", "a bound at zero: the fit saying the component is not needed"),
+        ("simplex", "a simplex edge: all the mass in one age bin"),
+    ):
+        held = {r["cell"] for r in rows if r["kind"] == kind}
+        if held:
+            print(f"  held apart -- {kind}: {len(held)} cells ({note})")
+    if not complete:
+        print("  ^ a partial grid undercounts every line above.")
 
     # --- seed provenance, which the grid is not uniform about --------------
     seeds, seed_missing = coverage(cells, "seed")

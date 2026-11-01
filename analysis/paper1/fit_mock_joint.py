@@ -33,6 +33,7 @@ import argparse
 import json
 import sys
 import time
+import warnings
 
 import jax
 import numpy as np
@@ -42,6 +43,7 @@ from tengri import Data, ForwardModel
 
 from ._posterior_utils import (
     build_npz_payload,
+    chain_output_paths,
     divergent_draw_payload,
     posterior_output_paths,
     thin_samples,
@@ -69,6 +71,55 @@ UPPER_LIMIT = 1
 #: bind at all, which is the intent: thinning here would discard figure
 #: resolution to save megabytes.
 MOCK_MAX_SAVED_DRAWS = 10000
+
+#: The sampler's warning when it refuses a dense metric above the cap.
+CAP_REFUSAL_WARNING = r".*exceeds the D<=\d+ cap"
+
+
+def apply_dense_mass_override(n_dim: int, method: str) -> dict | None:
+    """Raise DENSE_MASS_MAX_DIM if needed and verify the override works.
+
+    Used only with --dense-above-cap to enable dense adaptation for D > 30.
+    Records the override in the JSON for reproducibility.
+
+    Args:
+        n_dim: The number of free parameters.
+        method: The MCMC method name, e.g. "mcmc_nuts".
+
+    Returns:
+        A dict with "library_cap", "raised_to", and "reason" if an override
+        was applied; None otherwise.
+
+    Raises:
+        RuntimeError: If the override is applied but resolve_dense_mass_gate
+            still returns False.
+    """
+    import tengri.inference.backends.mcmc.nuts as nuts_mod
+
+    library_cap = nuts_mod.DENSE_MASS_MAX_DIM
+    if n_dim <= library_cap:
+        return None
+
+    # Override the cap for this process
+    nuts_mod.DENSE_MASS_MAX_DIM = n_dim
+
+    # Verify the override took effect and the gate now passes
+    gate_passes = nuts_mod.resolve_dense_mass_gate(True, n_dim, method=method, verbose=False)
+    if not gate_passes:
+        raise RuntimeError(
+            f"dense_mass_matrix=True at D={n_dim} still failed after raising "
+            f"DENSE_MASS_MAX_DIM from {library_cap} to {n_dim}. "
+            f"The override did not resolve the gate."
+        )
+
+    return {
+        "library_cap": int(library_cap),
+        "raised_to": int(n_dim),
+        "reason": (
+            "one chain per process: dense adaptation measured 8.13 GB transient, "
+            "~3.4 GB steady per chain (2026-09-28)"
+        ),
+    }
 
 
 def observed_photometry(truth_npz):
@@ -174,6 +225,28 @@ def main(argv=None) -> int:
             "sampler kwargs for the evidence on both sides."
         ),
     )
+
+    parser.add_argument(
+        "--chain-tag",
+        default=None,
+        help=(
+            "tag for this chain file when running independent single-chain processes "
+            "that will be pooled later. Requires --n-chains 1 and a sampler method. "
+            "Writes to results_dir/mock_joint_chains/mock_joint_{method}_{tag}.npz "
+            "instead of the canonical results location. Useful for memory-bounded "
+            "chains that will be pooled by pool_mock_chains.py."
+        ),
+    )
+    parser.add_argument(
+        "--dense-above-cap",
+        action="store_true",
+        help=(
+            "raise DENSE_MASS_MAX_DIM (normally 30) to accommodate D > 30 at this "
+            "process's scale. Requires --dense-mass and --n-chains 1. Used only when "
+            "running independent single-chain processes (with --chain-tag). Fails if "
+            "the override does not resolve the gate, to avoid silent downgrade."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--init-from-map",
@@ -195,6 +268,23 @@ def main(argv=None) -> int:
         "Ignored for samplers.",
     )
     args = parser.parse_args(argv)
+
+    # Validate --chain-tag and --dense-above-cap
+    if args.chain_tag is not None:
+        if args.n_chains != 1:
+            parser.error("--chain-tag requires --n-chains 1")
+        if args.method == "map":
+            parser.error("--chain-tag requires a sampler method (not --method map)")
+
+    if args.dense_above_cap:
+        if not args.dense_mass:
+            parser.error("--dense-above-cap requires --dense-mass")
+        if args.n_chains != 1:
+            parser.error("--dense-above-cap requires --n-chains 1")
+        if args.chain_tag is None:
+            # A lone chain is not a posterior; it must never reach the canonical
+            # filenames the figure reads, which a 1-chain run once did.
+            parser.error("--dense-above-cap requires --chain-tag")
 
     if not TRUTH_NPZ.exists():
         raise FileNotFoundError(
@@ -276,6 +366,16 @@ def main(argv=None) -> int:
             "target_accept_rate": args.target_accept,
         }
 
+    # Apply dense mass override if requested
+    dense_cap_override = None
+    if args.dense_above_cap:
+        free = [str(x) for x in npz["free_params"]]
+        dense_cap_override = apply_dense_mass_override(len(free), args.method)
+        # The sampler resolves the cap again against its own latent length. If
+        # that refuses, the fit would proceed on a diagonal metric under a
+        # dense label, so the refusal is made fatal for this run.
+        warnings.filterwarnings("error", message=CAP_REFUSAL_WARNING)
+
     # Inference is canonically through ForwardModel, not the SEDModel directly.
     forward = ForwardModel.build(sed=model)
 
@@ -352,7 +452,14 @@ def main(argv=None) -> int:
         print(f"converged: fits the noise realization {c_truth - c_fit:.1f} better than truth")
 
     RESULTS.mkdir(exist_ok=True)
-    out, out_json = posterior_output_paths(RESULTS, args.method)
+    # Determine output paths based on --chain-tag
+    if args.chain_tag is not None:
+        # Save to mock_joint_chains subdirectory for pooling
+        (RESULTS / "mock_joint_chains").mkdir(parents=True, exist_ok=True)
+        out, out_json = chain_output_paths(RESULTS, args.method, args.chain_tag)
+    else:
+        # Save to canonical results location
+        out, out_json = posterior_output_paths(RESULTS, args.method)
 
     if args.method == "map":
         # MAP: simple point estimate, no posterior draws
@@ -380,6 +487,9 @@ def main(argv=None) -> int:
             wall,
             args.method,
             kwargs,
+            seed=args.seed,
+            chain_tag=args.chain_tag,
+            dense_cap_override=dense_cap_override,
         )
         print(f"\nsaved {out}")
         print(f"saved {out_json}")
@@ -398,6 +508,9 @@ def _save_sampler_results(
     wall,
     method,
     sampler_kwargs,
+    seed: int | None = None,
+    chain_tag: str | None = None,
+    dense_cap_override: dict | None = None,
 ) -> None:
     """Save sampler results: posterior draws, diagnostics to NPZ and JSON sidecar.
 
@@ -418,7 +531,11 @@ def _save_sampler_results(
         sampler_kwargs: Dict of sampler keyword arguments (n_warmup, n_samples,
             n_chains, dense_mass_matrix).
     """
-    samples_thin = thin_samples(posterior.samples, max_draws=MOCK_MAX_SAVED_DRAWS)
+    # When pooling chains, keep every draw; otherwise thin for canonical storage
+    if chain_tag is not None:
+        samples_thin = posterior.samples
+    else:
+        samples_thin = thin_samples(posterior.samples, max_draws=MOCK_MAX_SAVED_DRAWS)
 
     # Extract diagnostics from posterior
     diagnostics = posterior.diagnostics or {}
@@ -480,6 +597,8 @@ def _save_sampler_results(
     npz_payload["n_warmup"] = sampler_kwargs.get("n_warmup")
     npz_payload["n_samples"] = sampler_kwargs.get("n_samples")
     npz_payload["divergences_count"] = int(n_divergent)
+    if seed is not None:
+        npz_payload["seed"] = int(seed)
 
     # Sentinel keys for unavailable energy/ebfmi
     if energy is None:
@@ -511,12 +630,10 @@ def _save_sampler_results(
         "target_accept_rate": sampler_kwargs.get("target_accept_rate"),
         "dense_mass_matrix": sampler_kwargs.get("dense_mass_matrix"),
         "method": method,
-        # Which tree produced these numbers. Section 3 quotes them and the
-        # paper is pinned, so a diagnostic without a commit is a diagnostic
-        # nobody can check; read off the imported module rather than the
-        # working directory, because on this machine a bare `python` resolves
-        # `import tengri` to an unrelated checkout.
         "provenance": publishable(provenance),
+        "seed": seed,
+        "chain_tag": chain_tag,
+        "dense_cap_override": dense_cap_override,
     }
 
     # Add energy/ebfmi to JSON if available
