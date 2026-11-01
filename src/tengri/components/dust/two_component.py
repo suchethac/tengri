@@ -53,10 +53,14 @@ from tengri.components.dust._age_mixture import (
     mix_intervals,
     nebular_interval_weights,
 )
+from tengri.components.dust._apply import screen_optical_depths
 from tengri.components.dust._params import (
     ATTENUATION_PARAMS,
     DEFAULT_DUST_ETA_BALANCE,
     DEFAULT_DUST_F_OBSCURATION,
+    DUST_PARAMETERIZATIONS,
+    SINGLE_COMPONENT_PARAMS,
+    TAUV_MU_PARAMS,
 )
 from tengri.components.dust.attenuation import (
     merge_neb_screen_live_overrides,
@@ -304,6 +308,11 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Refused together with ``agn_norm="cigale_joint"`` (see the cycle-rule
         check in ``Parameters.__init__``), which already reads that same
         energy balance to normalize the AGN torus.
+    parameterization : str
+        How the two screen depths are declared (#3176): ``"tau_bc_diff"``
+        (default; native ``dust_tau_bc`` / ``dust_tau_diff``) or ``"tauv_mu"``
+        (``dust_tau_v`` / ``dust_mu``, Charlot & Fall 2000). One of
+        ``tengri.components.dust._params.DUST_PARAMETERIZATIONS``. Static.
     age_mixture : str
         How the per-node mixture of the two populations' transmissions is
         evaluated; the same model either way. ``"per_node"`` (default)
@@ -439,9 +448,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     fdust_credit_active: bool = True
     #: ``"per_node"`` or ``"grouped"``: see the class docstring.
     age_mixture: str = "per_node"
+    #: Screen-depth parameterization (#3176); see :class:`DustSEDComponent`.
+    parameterization: str = "tau_bc_diff"
 
     def __post_init__(self):
-        """Refuse an unknown ``age_mixture``."""
+        """Refuse an unknown ``parameterization`` or ``age_mixture``."""
+        if self.parameterization not in DUST_PARAMETERIZATIONS:
+            raise ValueError(
+                f"DustSEDComponentConfig.parameterization must be one of "
+                f"{DUST_PARAMETERIZATIONS}; got {self.parameterization!r}."
+            )
         if self.age_mixture not in AGE_MIXTURES:
             raise ValueError(
                 f"DustSEDComponentConfig.age_mixture must be one of {AGE_MIXTURES}; "
@@ -504,6 +520,29 @@ class DustSEDComponent(TemplateThreading):
     budget through the same ``sed_neb`` minus attenuated ``sed_neb`` integral as
     the other choices.  Prospector/FSPS and BAGPIPES have no separate nebular
     depth.
+
+    **Depth parameterization** (``config.parameterization``, #3176). The two
+    screen depths are either the native pair
+    :math:`(\tau_{\rm BC}, \tau_{\rm ISM})` = (``dust_tau_bc``,
+    ``dust_tau_diff``), or the total V-band depth :math:`\hat\tau_V` and the
+    diffuse-ISM fraction :math:`\mu` of Charlot & Fall (2000),
+
+    .. math::
+
+        \tau_{\rm BC} = (1-\mu)\,\hat\tau_V, \qquad
+        \tau_{\rm ISM} = \mu\,\hat\tau_V,
+
+    declared as ``dust_tau_v`` and ``dust_mu`` (default :math:`\mu = 0.3`) in
+    place of the pair. Under ``"tauv_mu"`` the declared defaults
+    (:math:`\hat\tau_V = 1.0`, :math:`\mu = 0.3`) resolve to screen depths
+    (0.7, 0.3), not the native (1.0, 0.3).
+
+    Cross-code: the native pair is the Prospector ``dust1`` / ``dust2`` form;
+    :math:`(\hat\tau_V, \mu)` is the MAGPHYS / BEAGLE ``tauV_eff`` / ``mu`` form;
+    BAGPIPES uses :math:`(A_V, \eta)`; CIGALE ``dustatt_2powerlaws`` uses
+    :math:`(A_V^{\rm BC}, \text{BC-to-ISM factor})`. BEAGLE (>= 0.27) counts the
+    dust inside its H II templates as part of :math:`\tau_{\rm BC}`; tengri
+    applies the full birth-cloud screen.
 
     Notes
     -----
@@ -739,18 +778,19 @@ class DustSEDComponent(TemplateThreading):
             )
         return tuple(keys)
 
-    def declared_parameters(self) -> list[ParamDeclaration]:
-        """Free parameters this component owns (attenuation-only).
+    def _depth_declarations(self) -> list[ParamDeclaration]:
+        """The screen-depth declarations of ``config.parameterization``.
 
-        Mirrors the canonical ``dust_*`` attenuation priors in
-        ``tengri.parameters._builders``. Users may override any
-        entry as :class:`Fixed` to drop it from the prior.
-
-        Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,
-        dust_umin, etc.) are now owned by the dust emission components
-        (modified_blackbody, dale2014, etc.) and are no longer declared here.
+        ``tau_bc_diff`` declares the native pair; ``tauv_mu`` replaces it with
+        ``dust_tau_v`` (reused from :data:`SINGLE_COMPONENT_PARAMS`) and
+        ``dust_mu``, the same conditional mechanism as ``dust_tau_neb``.
         """
-        decls = [
+        if self.config.parameterization == "tauv_mu":
+            return [
+                next(d for d in SINGLE_COMPONENT_PARAMS if d.name == "dust_tau_v"),
+                next(d for d in TAUV_MU_PARAMS if d.name == "dust_mu"),
+            ]
+        return [
             ParamDeclaration(
                 "dust_tau_bc",
                 # default 1.0: Charlot & Fall (2000) canonical birth-cloud tau_V
@@ -766,6 +806,21 @@ class DustSEDComponent(TemplateThreading):
                 Uniform(0.0, 3.0, default=0.3),
                 "Diffuse ISM V-band optical depth [dimensionless]",
             ),
+        ]
+
+    def declared_parameters(self) -> list[ParamDeclaration]:
+        """Free parameters this component owns (attenuation-only).
+
+        Mirrors the canonical ``dust_*`` attenuation priors in
+        ``tengri.parameters._builders``. Users may override any
+        entry as :class:`Fixed` to drop it from the prior.
+
+        Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,
+        dust_umin, etc.) are now owned by the dust emission components
+        (modified_blackbody, dale2014, etc.) and are no longer declared here.
+        """
+        decls = [
+            *self._depth_declarations(),
             ParamDeclaration(
                 "dust_slope",
                 Fixed(-0.7),
@@ -801,6 +856,15 @@ class DustSEDComponent(TemplateThreading):
             # The one declaration of dust_tau_neb (nebular_screen='own' only).
             decls.append(next(d for d in ATTENUATION_PARAMS if d.name == "dust_tau_neb"))
         return decls
+
+    def _screen_depths(self, params: Mapping[str, jnp.ndarray]) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """The two screen depths ``(tau_bc, tau_diff)``, read once per call.
+
+        The only read of the depths in this component: every method unpacks
+        through here, so a new parameterization changes one helper.
+        """
+        tau_bc, tau_diff = screen_optical_depths(params, self.config.parameterization)
+        return jnp.asarray(tau_bc), jnp.asarray(tau_diff)
 
     def precompute(
         self,
@@ -900,11 +964,12 @@ class DustSEDComponent(TemplateThreading):
         nebular-continuum block) and passes them here; :meth:`compute_transmission`
         resolves and delegates for the fast path.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         return two_component_dust(
             wavelength=jnp.asarray(wavelength),
             younger_fraction=jnp.asarray(younger_fraction),
-            tau_v1=jnp.asarray(params["dust_tau_bc"]),
-            tau_v2=jnp.asarray(params["dust_tau_diff"]),
+            tau_v1=tau_bc,
+            tau_v2=tau_diff,
             law_bc=self.config.law_bc,
             law_diff=self.config.law_diff,
             f_obscuration=jnp.asarray(
@@ -924,10 +989,11 @@ class DustSEDComponent(TemplateThreading):
         and :meth:`apply`; row 0 is the birth cloud plus the diffuse ISM, row 1
         the diffuse ISM only, each with its own ``f_obscuration`` mixture.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         return two_component_interval_transmission(
             wavelength=jnp.asarray(wavelength),
-            tau_v1=jnp.asarray(params["dust_tau_bc"]),
-            tau_v2=jnp.asarray(params["dust_tau_diff"]),
+            tau_v1=tau_bc,
+            tau_v2=tau_diff,
             law_bc=self.config.law_bc,
             law_diff=self.config.law_diff,
             f_obscuration=jnp.asarray(
@@ -1004,12 +1070,13 @@ class DustSEDComponent(TemplateThreading):
             line_wave,
             self.config.lyman_cutoff_aa,
         )
+        tau_bc, tau_diff = self._screen_depths(params)
         return _screen_transmission(
             self.config.nebular_screen,
             k_bc=k_bc,
             k_diff=k_diff,
-            tau_bc=jnp.asarray(params["dust_tau_bc"]),
-            tau_diff=jnp.asarray(params["dust_tau_diff"]),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
             f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
             neb_weights=neb_weights,
             tau_neb=_own_tau_neb(self.config.nebular_screen, params),
@@ -1229,6 +1296,7 @@ class DustSEDComponent(TemplateThreading):
             stellar SED plus IR re-emission, and ``L_ir`` published
             to ``derived``.
         """
+        tau_bc, tau_diff = self._screen_depths(params)
         if "lnu_age" not in state.derived or "ssp_ages_yr" not in state.derived:
             raise ValueError(
                 "DustSEDComponent.apply requires upstream stellar publications "
@@ -1389,8 +1457,8 @@ class DustSEDComponent(TemplateThreading):
                     wave,
                     self.config.lyman_cutoff_aa,
                 )
-                t_bc_raw = jnp.exp(-jnp.asarray(params["dust_tau_bc"]) * k_bc_full)
-                t_diff_raw = jnp.exp(-jnp.asarray(params["dust_tau_diff"]) * k_diff_full)
+                t_bc_raw = jnp.exp(-jnp.asarray(tau_bc) * k_bc_full)
+                t_diff_raw = jnp.exp(-jnp.asarray(tau_diff) * k_diff_full)
                 covered_raw = t_bc_raw * t_diff_raw
                 hole_raw = (
                     t_diff_raw
@@ -1469,11 +1537,9 @@ class DustSEDComponent(TemplateThreading):
         # below 912 Å is treated consistently when the cutoff is enabled.
         k_bc_neb = _lyman_clip(k_bc_neb, wave, self.config.lyman_cutoff_aa)
         k_diff_neb = _lyman_clip(k_diff_neb, wave, self.config.lyman_cutoff_aa)
-        # Bound once, shared with the shock block (§2d) and the energy-balance
-        # step (§3) below: the same ``dust_tau_bc``/``dust_tau_diff``/
+        # Bound once at the head of apply, shared with the shock block (§2d) and the
+        # energy-balance step (§3) below: the same screen depths and
         # ``dust_f_obscuration`` values, never re-read from ``params``.
-        _tau_bc = jnp.asarray(params["dust_tau_bc"])
-        _tau_diff = jnp.asarray(params["dust_tau_diff"])
         _f_obsc = jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION))
         # #2234: nebular_screen picks which of the two screens (or neither)
         # reddens the continuum; the pre-#2234 behavior (unconditional
@@ -1484,8 +1550,8 @@ class DustSEDComponent(TemplateThreading):
             self.config.nebular_screen,
             k_bc=k_bc_neb,
             k_diff=k_diff_neb,
-            tau_bc=_tau_bc,
-            tau_diff=_tau_diff,
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
             f_obsc=_f_obsc,
             neb_weights=neb_weights,
             tau_neb=_own_tau_neb(self.config.nebular_screen, params),
@@ -1566,8 +1632,8 @@ class DustSEDComponent(TemplateThreading):
             self.config.shock_screen,
             k_bc=k_bc_neb,
             k_diff=k_diff_neb,
-            tau_bc=_tau_bc,
-            tau_diff=_tau_diff,
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
             f_obsc=_f_obsc,
         )
 
@@ -1586,8 +1652,8 @@ class DustSEDComponent(TemplateThreading):
             self.config.agn_screen,
             k_bc=k_bc_neb,
             k_diff=k_diff_neb,
-            tau_bc=_tau_bc,
-            tau_diff=_tau_diff,
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
             f_obsc=_f_obsc,
         )
         # AGN line-only light (#2565): when the AGN ran before this component
@@ -1603,8 +1669,8 @@ class DustSEDComponent(TemplateThreading):
                 self.config.agn_screen,
                 k_bc=k_bc_neb,
                 k_diff=k_diff_neb,
-                tau_bc=_tau_bc,
-                tau_diff=_tau_diff,
+                tau_bc=tau_bc,
+                tau_diff=tau_diff,
                 f_obsc=_f_obsc,
             )
         )
@@ -1671,8 +1737,8 @@ class DustSEDComponent(TemplateThreading):
                 eb_lut,
                 jnp.asarray(jw),
                 jnp.asarray(log_mass_scale),
-                jnp.asarray(params["dust_tau_bc"]),
-                jnp.asarray(params["dust_tau_diff"]),
+                jnp.asarray(tau_bc),
+                jnp.asarray(tau_diff),
                 fesc=state.derived.get("lyc_fesc"),
                 younger_fraction=y_age,
                 # A LUT tabulated over redshift (a law that reads z) is read at
@@ -1694,7 +1760,7 @@ class DustSEDComponent(TemplateThreading):
                 # and join through log10_add_signed, each term keeping the sign of
                 # its own integral.
                 log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
-                    state, _tau_bc, _tau_diff, neb_weights
+                    state, tau_bc, tau_diff, neb_weights
                 )
                 log_other, sign_other = bolometric_absorbed_log10(
                     sed_shock + sed_agn,
@@ -1739,8 +1805,8 @@ class DustSEDComponent(TemplateThreading):
 
                 log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
                     state,
-                    jnp.asarray(params["dust_tau_bc"]),
-                    jnp.asarray(params["dust_tau_diff"]),
+                    jnp.asarray(tau_bc),
+                    jnp.asarray(tau_diff),
                     neb_weights,
                 )
                 log_L_absorbed = log10_add(
@@ -1897,8 +1963,8 @@ class DustSEDComponent(TemplateThreading):
             "diffuse",
             k_bc=jnp.zeros_like(k_diff_full),  # unused for diffuse branch
             k_diff=k_diff_full,
-            tau_bc=jnp.asarray(params["dust_tau_bc"]),
-            tau_diff=jnp.asarray(params["dust_tau_diff"]),
+            tau_bc=tau_bc,
+            tau_diff=tau_diff,
             f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
         )
 
@@ -1935,8 +2001,6 @@ class DustSEDComponent(TemplateThreading):
         if filter_eff is not None:
             from tengri.components.dust.attenuation import resolve_dust_law
 
-            tau_bc = jnp.asarray(params["dust_tau_bc"])
-            tau_diff = jnp.asarray(params["dust_tau_diff"])
             # The SAME resolved law parameters as the full-grid screen above,
             # splatted whole. This site used to thread `dust_slope` alone:
             # "matching its existing surface": which silently dropped
@@ -2311,8 +2375,6 @@ class DustSEDComponent(TemplateThreading):
         if spec_eff is not None:
             from tengri.components.dust.attenuation import resolve_dust_law
 
-            tau_bc = jnp.asarray(params["dust_tau_bc"])
-            tau_diff = jnp.asarray(params["dust_tau_diff"])
             # Same binding as the full-grid screen and the photometry LUT. This
             # block used to build its own ``dust_slope`` from
             # ``params.get("dust_slope", -0.7)`` and pass nothing else, so a

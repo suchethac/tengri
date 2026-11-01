@@ -26,6 +26,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_F_OBSCURATION,
     DEFAULT_DUST_RV,
     DEFAULT_DUST_SLOPE,
+    DUST_PARAMETERIZATIONS,
 )
 from tengri.components.dust.laws._registry import (
     reject_unread_law_kwargs,
@@ -874,3 +875,66 @@ def single_component_dust_fast(
 # low-tau channels.
 #
 # All functions are pure JAX and JIT-compatible.
+
+
+# ── Charlot & Fall screen depths: one helper for every parameterization ──
+
+
+def screen_optical_depths(
+    params: Mapping[str, object], parameterization: str
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Birth-cloud and diffuse-ISM V-band optical depths of the two screens.
+
+    The one place a two-component dust component reads its screen depths.
+
+    Parameters
+    ----------
+    params : mapping
+        Receives ``dust_tau_bc`` / ``dust_tau_diff`` when ``parameterization``
+        is ``"tau_bc_diff"``, or ``dust_tau_v`` / ``dust_mu`` when it is
+        ``"tauv_mu"``.
+    parameterization : str
+        One of :data:`DUST_PARAMETERIZATIONS`.
+
+    Returns
+    -------
+    tau_bc : ndarray
+        Birth-cloud optical depth [dimensionless].
+    tau_diff : ndarray
+        Diffuse-ISM optical depth [dimensionless].
+
+    Raises
+    ------
+    ValueError
+        If ``parameterization`` is not one of :data:`DUST_PARAMETERIZATIONS`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+
+    Under ``"tauv_mu"`` the depths follow Charlot & Fall (2000) in the
+    BEAGLE/MAGPHYS convention, with total V-band depth :math:`\hat\tau_V`
+    and diffuse fraction :math:`\mu`:
+
+    .. math::
+
+        \tau_{\rm BC} = (1 - \mu)\,\hat\tau_V, \qquad
+        \tau_{\rm ISM} = \mu\,\hat\tau_V.
+
+    The native ``"tau_bc_diff"`` pair is returned unchanged.
+
+    References
+    ----------
+    .. [1] Charlot, S. & Fall, S. M. 2000, ApJ, 539, 718,
+       doi:10.1086/309250
+    """
+    if parameterization == "tau_bc_diff":
+        return params["dust_tau_bc"], params["dust_tau_diff"]
+    if parameterization == "tauv_mu":
+        tv = jnp.asarray(params["dust_tau_v"])
+        mu = jnp.asarray(params["dust_mu"])
+        return (1 - mu) * tv, mu * tv
+    raise ValueError(
+        f"unknown dust parameterization {parameterization!r}; "
+        f"expected one of {DUST_PARAMETERIZATIONS}"
+    )
