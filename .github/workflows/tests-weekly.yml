@@ -18,8 +18,10 @@ jobs:
   # carrying the `run-slow-tests` label (standing down on an unrelated label
   # event, as `slow` does). The nightly inference legs deselect `weekly`.
   #
-  # Tier (tools/check_ci_pr_coverage.py reads tests.yml only): opt-in via the
+  # Tier (classified in tools/check_ci_pr_coverage.py): opt-in via the
   # `run-slow-tests` label, never part of a plain pull request or of `ci-ok`.
+  # A new `weekly` test in another file needs its path added to the pytest line
+  # below; tools/check_slow_marks_reachable.py fails the build otherwise.
   slow-weekly:
     runs-on: ubuntu-latest
     concurrency:
@@ -32,9 +34,14 @@ jobs:
           && contains(github.event.pull_request.labels.*.name, 'run-slow-tests')
           && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
               || github.event.label.name == 'run-slow-tests'))
+    # Provisional until the first weekly run's warm cache is measured. The caps in
+    # tests.yml sum to about 9.62 GB against the 10 GB repository cache quota; 0.25
+    # here makes about 9.87 GB (0.4 would have made about 10.02 GB).
     env:
-      TENGRI_JAX_CACHE_MAX_GB: "0.4"
-    timeout-minutes: 75
+      TENGRI_JAX_CACHE_MAX_GB: "0.25"
+    # The job budget exceeds the step's, which exceeds pytest's per-test --timeout, so
+    # a hung test is named by pytest before the step or the job is cut.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -58,8 +65,8 @@ jobs:
             tengri-jax-slow-weekly-
       # `-m weekly` replaces the default addopts selector, so the `slow` deselection
       # does not apply; `-n 0` keeps it serial (NUTS peaks at several GB).
-      - run: python -X faulthandler -m pytest tests -v -m weekly -n 0 --timeout=4500 --timeout-method=signal --durations=30
-        timeout-minutes: 75
+      - run: python -X faulthandler -m pytest tests/inference/test_profile_mass.py -v -m weekly -n 0 --timeout=4500 --timeout-method=signal --durations=30
+        timeout-minutes: 80
       - uses: actions/cache/save@v6
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
