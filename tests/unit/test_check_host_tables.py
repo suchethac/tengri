@@ -98,6 +98,8 @@ def test_the_live_tree_has_no_violations_and_a_real_census():
     assert not bad, "\n".join(f"{p}:{ln}: {n} {v}" for p, ln, n, v in bad)
     # Non-vacuity: the guard measured something. 122 uses at the time of writing.
     assert len(rows) > 80, f"census found only {len(rows)} table uses; it has gone blind"
+    library = mod.scan_library_conversions(sorted(mod.LIBRARY_DIR.rglob("*.py")))
+    assert not library, "\n".join(f"{p}:{ln}: {n}" for p, ln, n, _ in library)
 
 
 _LIBRARY_MODULE = """
@@ -113,8 +115,20 @@ def bad_scaled(grid, dtype):
 def bad_axes(grid):
     return tuple(jnp.asarray(axis) for axis in grid.axes)
 
-def bad_norm(norm):
-    return jnp.asarray(norm)
+def bad_indexed(grid):
+    return jnp.asarray(grid.axes[0])
+
+def fine_expression(x, norm):
+    return jnp.asarray(x / norm)
+
+def fine_call(f, axis):
+    return jnp.asarray(f(axis=axis))
+
+def fine_int(axis):
+    return jnp.asarray(axis)
+
+def fine_other_loop(axes):
+    return tuple(jnp.asarray(axis) for axis in axes)
 
 def good_device(grid):
     return device_table(grid.template)
@@ -132,4 +146,4 @@ def test_library_conversions_without_a_stated_dtype_are_flagged(tmp_path):
     source_lines = _LIBRARY_MODULE.splitlines()
     for line in flagged:
         assert "bad_" in "\n".join(source_lines[max(0, line - 3) : line])
-    assert len(flagged) == 4
+    assert len(flagged) == 4  # bad_field, bad_scaled, bad_axes, bad_indexed

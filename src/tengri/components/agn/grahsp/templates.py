@@ -70,6 +70,10 @@ class GRAHSPTemplates:
     The template-path fields (``torus_mn12_*``, ``feii_vc04_*``, ``disc_*``)
     default to ``None`` for backward compatibility with bundles built before
     the GRAHSP parity implementation; regenerate via ``tools/build_grahsp_hdf5.py``.
+
+    The bundle is immutable and a registered pytree. ``disc_wave_nm``, ``feii_wave_nm`` and
+    ``feii_vc04_wave_nm`` are static pytree data, so they must be concrete host arrays: the
+    normalization integrals select their nodes on the host, also inside ``jit``.
     """
 
     feii_wave_nm: Array

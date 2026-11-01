@@ -55,6 +55,40 @@ def test_a_custom_axis_is_used_under_jit_not_the_default_one():
     np.testing.assert_allclose(traced_custom, eager_custom, rtol=1e-9)
 
 
+@pytest.mark.parametrize(
+    ("feii_block", "axis"),
+    [("grahsp", "feii_wave_nm"), ("grahsp_veroncetty", "feii_vc04_wave_nm")],
+)
+def test_a_custom_feii_axis_is_used_under_jit(feii_block, axis):
+    """A shifted FeII axis changes the normalization, and jit agrees with eager on it."""
+    default = load_grahsp_templates()
+    custom = dataclasses.replace(default, **{axis: np.asarray(getattr(default, axis)) * 1.07})
+    eager_default = float(_log_l5100(default, feii_block))
+    eager_custom = float(_log_l5100(custom, feii_block))
+    assert abs(eager_custom - eager_default) > 1e-6
+    traced_custom = float(jax.jit(lambda t: _log_l5100(t, feii_block))(custom))
+    np.testing.assert_allclose(traced_custom, eager_custom, rtol=1e-9)
+
+
+def test_equal_bundles_share_a_trace_and_a_different_axis_retraces():
+    """The static axes hash by value: equal bundles hit the jit cache, a shifted axis misses."""
+    default = load_grahsp_templates()
+    same = dataclasses.replace(default, disc_wave_nm=np.array(default.disc_wave_nm))
+    shifted = dataclasses.replace(default, disc_wave_nm=np.asarray(default.disc_wave_nm) * 1.07)
+    traces = []
+
+    @jax.jit
+    def run(t):
+        traces.append(1)
+        return _log_l5100(t, "grahsp")
+
+    run(default)
+    run(same)
+    assert len(traces) == 1
+    run(shifted)
+    assert len(traces) == 2
+
+
 def test_composable_model_with_unset_l5100_predicts_with_the_bundle_threaded(
     synthetic_ssp_wide, synthetic_tophat_obs
 ):

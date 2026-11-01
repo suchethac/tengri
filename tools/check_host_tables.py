@@ -53,8 +53,6 @@ HOST_CALLS = {"len", "float", "int", "tuple", "list", "device_table", "host_arra
 HOST_ATTRS = {"shape", "size", "dtype", "ndim"}
 #: Names that hold a cached template library (a numpy-backed bundle) in the AGN modules.
 LIBRARY_NAMES = {"grid", "aniso", "templates", "template", "library", "bundle", "table"}
-#: Local names bound to one array read from a library (a stored norm, one axis).
-LIBRARY_ARRAY_NAMES = {"norm", "axis"}
 LIBRARY_DIR = SRC / "components" / "agn"
 
 
@@ -134,20 +132,29 @@ def scan(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
     return rows
 
 
-def _is_library_read(arg: ast.AST) -> bool:
-    """True when ``arg`` reads a field of a template library, or is its scale-safe copy."""
-    for node in ast.walk(arg):
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id in LIBRARY_NAMES
-        ):
-            return True
-        if isinstance(node, ast.Name) and node.id in LIBRARY_ARRAY_NAMES:
-            return True
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "float32_safe_template":
-            return True
-    return False
+def _is_library_read(arg: ast.AST, loop_names: frozenset[str] = frozenset()) -> bool:
+    """True when ``arg`` is a field of a template library, a subscript of one, or its
+    scale-safe copy; ``loop_names`` are comprehension variables iterating over such fields."""
+    if isinstance(arg, ast.Subscript):
+        return _is_library_read(arg.value, loop_names)
+    if isinstance(arg, ast.Attribute):
+        return isinstance(arg.value, ast.Name) and arg.value.id in LIBRARY_NAMES
+    if isinstance(arg, ast.Name):
+        return arg.id in loop_names
+    return isinstance(arg, ast.Call) and getattr(arg.func, "id", "") == "float32_safe_template"
+
+
+def _loop_names(tree: ast.AST) -> dict[ast.AST, frozenset[str]]:
+    """For each comprehension, the variables it binds from a library field."""
+    out: dict[ast.AST, frozenset[str]] = {}
+    for comp in ast.walk(tree):
+        if isinstance(comp, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+            out[comp] = frozenset(
+                g.target.id
+                for g in comp.generators
+                if isinstance(g.target, ast.Name) and _is_library_read(g.iter)
+            )
+    return out
 
 
 def scan_library_conversions(paths: Iterable[Path]) -> list[tuple[Path, int, str, str]]:
@@ -160,6 +167,11 @@ def scan_library_conversions(paths: Iterable[Path]) -> list[tuple[Path, int, str
     rows: list[tuple[Path, int, str, str]] = []
     for path in paths:
         tree = ast.parse(path.read_text(), filename=str(path))
+        loops = _loop_names(tree)
+        inside: dict[ast.AST, frozenset[str]] = {}
+        for comp, names in loops.items():
+            for child in ast.walk(comp):
+                inside[child] = names
         for node in ast.walk(tree):
             if not (
                 isinstance(node, ast.Call)
@@ -171,7 +183,7 @@ def scan_library_conversions(paths: Iterable[Path]) -> list[tuple[Path, int, str
                 and not node.keywords
             ):
                 continue
-            if _is_library_read(node.args[0]):
+            if _is_library_read(node.args[0], inside.get(node, frozenset())):
                 rows.append(
                     (path, node.lineno, ast.unparse(node)[:60], "VIOLATION: bare library read")
                 )

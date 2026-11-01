@@ -253,9 +253,7 @@ def torus_upstream(wave_torus_nm, wave_si_nm, params):
     lum5100A = p["lum5100A"]
 
     l_torus = 2.5 * lum5100A * fcov  # at 12 um (lambda * L_lambda)
-    cool_spectrum = np.exp(
-        -0.5 * ((log_wave - logCOOLlam) / COOLwidth) ** 2
-    )  # W = sigma (upstream drops the 1/2)
+    cool_spectrum = np.exp(-0.5 * ((log_wave - logCOOLlam) / COOLwidth) ** 2)  # W = sigma (upstream drops the 1/2)
     hot_spectrum = (
         HOTfcov
         * 10 ** (logCOOLlam - logHOTlam)
@@ -415,9 +413,7 @@ def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, 
     for _name, lam0, broad, sy2, liner in lines_rows:
         width_nm = lam0 * (line_width_kms * 1000.0) / cst.c
         sigma = width_nm * FWHM_TO_SIGMA
-        norm_factor = 510.0 / np.sqrt(
-            2.0 * np.pi * sigma**2
-        )  # unit-area Gaussian (upstream uses pi, not 2 pi)
+        norm_factor = 510.0 / np.sqrt(2.0 * np.pi * sigma**2)  # unit-area Gaussian (upstream uses pi, not 2 pi)
         shape = np.exp(-0.5 * (wave_nm_grid - lam0) ** 2 / sigma**2)
         if agn_type == 1:
             bl_lumin += l_broad * broad * shape * norm_factor
@@ -607,10 +603,12 @@ def make_netzer_disc_fixture():
         lumin = np.asarray(h["netzer_disc/lumin"][:], dtype=np.float64)
         m_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/m"][:]]
         a_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/a"][:]]
-        mdot_lab = [
-            x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/mdot"][:]
-        ]
-    cases = [(l5100, idx) for l5100 in (1.0e43, 1.0e44) for idx in (0, 2, 10, 15)]
+        mdot_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/mdot"][:]]
+    cases = [
+        (l5100, idx)
+        for l5100 in (1.0e43, 1.0e44)
+        for idx in (0, 2, 10, 15)
+    ]
     spectra = np.zeros((len(cases), wave_nm.size))
     params = np.empty((len(cases), 5, 2), dtype=object)
     j = int(np.searchsorted(wave_nm, 510.0))  # bracketing native nodes j-1, j

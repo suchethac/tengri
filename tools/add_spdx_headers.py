@@ -36,7 +36,9 @@ def project_license() -> str:
     Hardcoding the expected identifier here would mean a relicence has to be
     made in two places and silently passes if it is made in one.
     """
-    text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
     match = re.search(r"^license\s*=\s*\{\s*text\s*=\s*\"([^\"]+)\"", text, re.M)
     if match is None:
         raise SystemExit("pyproject.toml declares no license = {text = ...}; cannot check")
@@ -143,7 +145,10 @@ def main() -> int:
             )
         if missing or mismatched:
             return 1
-        print(f"All {len(files)} Python files declare {SPDX_MARKER}: {EXPECTED_LICENSE}.")
+        print(
+            f"All {len(files)} Python files declare "
+            f"{SPDX_MARKER}: {EXPECTED_LICENSE}."
+        )
         return 0
 
     # Only insert where there is nothing. A wrong identifier is a statement
