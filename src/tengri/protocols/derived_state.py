@@ -106,10 +106,9 @@ class DerivedState:
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
-    stellar_mass_scale: jnp.ndarray | None = None
-    #: log10(total_mass x L_sun) [dex]: the float32-safe form of
-    #: ``stellar_mass_scale``, which is ~1e43 and so overflows float32 for
-    #: any galaxy above ~9e4 Msun (#1206).
+    #: log10(total_mass x L_sun) [dex]. The linear erg/s scale is ~1e43 for a
+    #: 1e10 Msun galaxy and overflows float32 for any galaxy above ~9e4 Msun, so
+    #: only the log form is published (#1206, #3149).
     log_stellar_mass_scale: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None

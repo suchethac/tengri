@@ -31,7 +31,11 @@ from tengri.inference._batching import AUTO, chunking_was_requested, resolve_for
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
-from tengri.inference.backends.mcmc.catalog import CATALOG_CHEES_ENSEMBLE, DEFAULT_MAP_INIT_STEPS
+from tengri.inference.backends.mcmc.catalog import (
+    CATALOG_CHEES_ENSEMBLE,
+    DEFAULT_MAP_INIT_STEPS,
+    _catalog_live_chains,
+)
 from tengri.inference.mass_profile import reinsert_profiled_mass
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
@@ -1960,11 +1964,13 @@ class _CatalogFitterOriginal:
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
         # dispatch is the anti-pattern. This path already requires uniform
         # n_data (``_validate_uniform_data`` below runs regardless of K), so
-        # homogeneous=True holds here.
+        # homogeneous=True holds here. The budget divides by the live chains each
+        # galaxy carries: the ChEES ensemble for chees, n_chains otherwise.
         K = resolve_forward_chunk_size(
             forward_chunk_size,
             n_gal=n_gal,
             n_data_per_gal=len(self.galaxies[0]["flux_obs"]) if n_gal else None,
+            n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
         )
         dev_list = self._resolve_devices(devices)
         n_dev = len(dev_list) if dev_list else 1
