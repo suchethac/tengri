@@ -1568,6 +1568,13 @@ def _hot_flow_fraction(
 #: ``R_out = r_sg`` exactly, as in RELAGN (``r_out = r_sg``, Hagen & Done 2023, arXiv:2304.01253).
 _R_OUT_MIN_OVER_ISCO = 1.01
 
+#: Relative distance from ``R_out`` within which ``R_hot`` is ``R_out`` [dimensionless].
+#: The bisection converges to 1e-12 (``_bisect_log_x``), so this is five decades above it.
+_R_HOT_SNAP_RTOL = 1e-7
+
+#: Width, as a fraction of ``R_out``, below which a K&D zone is empty [dimensionless].
+_ZONE_WIDTH_RTOL = 1e-7
+
 
 def _zone_outer_radius_rg(r_sg_rg: float, r_isco_rg: float) -> float:
     """Outer disc radius of the K&D zones in ``R_g``: the self-gravity radius.
@@ -1768,7 +1775,16 @@ def _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm):
     tuple
         ``(r_hot_cm, r_warm_cm)`` clipped [cm].
     """
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm)
+    # Where the hot flow fills the disc the bisection lands within its tolerance of ``R_out`` but
+    # not on it; the left-over width (~1e-12 R_out) would carry a disc and warm zone of noise-level
+    # power whose logarithm is a difference of near-equal numbers, with forward- and reverse-mode
+    # derivatives that differ by the round-off amplified 1e12-fold (#3015). Snap it onto ``R_out``,
+    # a zero-width zone that contributes exactly zero.
+    r_hot_cm = jnp.where(
+        r_hot_cm >= r_out_cm * (1.0 - _R_HOT_SNAP_RTOL),
+        r_out_cm,
+        jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm),
+    )
     r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm, r_out_cm)
     return r_hot_cm, r_warm_cm
 
@@ -1944,6 +1960,12 @@ def _compute_zone_luminosities(
     l_nu_outer = apply_log10_scale(
         jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0), log10_ring_area_ref
     )
+    # A zone narrower than ``_ZONE_WIDTH_RTOL R_out`` is empty (R_warm = R_out, or R_hot = R_out
+    # where the hot flow fills the disc). Its ring widths are zero in exact arithmetic but ~1e-16
+    # R_out after the log10/power round trip, differently under jit and eager; the noise-level
+    # power and its derivative are not the model's (forward and reverse mode disagreed by 2-12%
+    # on the log-derivative, and jit differed from eager, #3015). An exact zero instead.
+    l_nu_outer = jnp.where(r_out_cm - r_warm_cm > _ZONE_WIDTH_RTOL * r_out_cm, l_nu_outer, 0.0)
 
     # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
     if not _NTHCOMP_AVAILABLE:
@@ -2003,6 +2025,7 @@ def _compute_zone_luminosities(
         jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0),
         log10_warm_area_ref + _LOG10_NTHCOMP_UNIT,
     )
+    l_nu_warm = jnp.where(r_warm_cm - r_hot_cm > _ZONE_WIDTH_RTOL * r_out_cm, l_nu_warm, 0.0)
 
     # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
     # Float32 (#1206): l_hot_erg ~5e43 and l_seed ~1e44 erg/s overflow. Work both

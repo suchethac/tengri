@@ -255,3 +255,41 @@ def test_r_out_is_the_self_gravity_radius_above_the_numerical_bound():
         np.testing.assert_allclose(float(D._zone_outer_radius_rg(r_sg, r_isco)), r_sg, rtol=0)
     # Only where r_sg is inside the ISCO does the bound act, keeping R_out > R_ISCO.
     assert float(D._zone_outer_radius_rg(3.0, r_isco)) == pytest.approx(r_isco * 1.01)
+
+
+def test_forward_and_reverse_derivatives_agree_where_the_hot_flow_fills_the_disc():
+    """``jvp == vjp`` of ``sum log10 L_nu`` at the saturated point (R_hot = R_out), to 1e-6.
+
+    Where the hot flow fills the disc the disc and warm zones have zero width. Their ring widths
+    came out ~1e-12 R_out (the bisection's residual) and then ~1e-16 R_out (the log10/power
+    round trip, different under jit and eager), a noise-level power whose logarithm has a
+    derivative made of round-off: reverse mode read 4864 against 4972 for forward mode and
+    central FD, and the jit-compiled value differed from the eager one by 30 orders. R_hot is now
+    snapped onto R_out and a zone narrower than ``_ZONE_WIDTH_RTOL R_out`` is an exact zero, so
+    the modes agree, eager and jit, on a wavelength grid reaching the 1e-60 tail of the corona.
+    """
+    wave = jnp.geomspace(0.01, 1.0e7, 1700)
+    kw = dict(
+        agn_a_spin=0.5,
+        agn_f_hard=0.0961646864166609,  # lambda_Edd = 0.03: f_hard / lambda_Edd = 3.2 > 0.93
+        agn_gamma_warm=2.944619039882477,
+        agn_kt_warm=0.13,
+        agn_r_warm_ratio=1.0904773766249702,
+    )
+
+    def objective(log_lbol, log_mbh):
+        sed = D.kubota_done_disc(wave, log_lbol, agn_log_mbh=log_mbh, **kw)
+        return jnp.sum(jnp.log10(jnp.maximum(sed, 1e-300)))
+
+    with jax.enable_x64(True):
+        primals = (jnp.asarray(11.5), jnp.asarray(8.5))
+        tangents = [tuple(jnp.asarray(float(i == j)) for j in range(2)) for i in range(2)]
+        reverse = np.asarray(jax.grad(objective, argnums=(0, 1))(*primals))
+        forward = np.asarray([jax.jvp(objective, primals, t)[1] for t in tangents])
+        reverse_jit = np.asarray(jax.jit(jax.grad(objective, argnums=(0, 1)))(*primals))
+        empty = D.kubota_done_disc_split(wave, *primals[:1], agn_log_mbh=8.5, **kw)[1]
+        r_hot, r_warm = D._clip_zone_radii(1.0 - 1e-12, 2.0, 0.5, 1.0)
+    np.testing.assert_allclose(reverse, forward, rtol=1e-6)
+    np.testing.assert_allclose(reverse_jit, forward, rtol=1e-6)
+    assert float(jnp.max(jnp.abs(empty))) == 0.0  # the disc and warm zones are exactly empty
+    assert float(r_hot) == float(r_warm) == 1.0  # a root within 1e-12 of R_out is R_out
