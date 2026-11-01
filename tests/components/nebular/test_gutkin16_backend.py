@@ -183,7 +183,12 @@ def test_grad_finite_wrt_five_axes(backend):
 
     grad = jax.grad(total_lum)(x0)
     assert grad.shape == (5,)
-    assert bool(jnp.all(jnp.isfinite(grad)))
+    assert bool(jnp.all(jnp.isfinite(grad))), (
+        "a non-finite gradient would mean the lookup is not differentiable"
+    )
+    assert bool(jnp.any(grad != 0.0)), (
+        "an identically zero gradient would mean the axes do not move the lines"
+    )
 
 
 def test_float32_agrees_with_float64(ssp):

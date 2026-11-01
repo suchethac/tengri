@@ -55,8 +55,6 @@ _AXES = ("neb_logU", "neb_logZ_gas", "neb_xi_d", "neb_co_ratio", "neb_log_nH")
 _IDENTITY_RTOL = 1.0e-6
 #: Float32 build vs float64 build, absolute dex, as in the cb19 float32 sibling.
 _F32_DEX_TOL = 1.0e-3
-#: WavePrecomp vs exact, relative, per band.
-_WAVEPRECOMP_RTOL = 3.0e-4
 
 
 @pytest.fixture(scope="module")
@@ -302,23 +300,32 @@ def test_float32_build_matches_float64_build_within_a_millidex():
         assert delta < _F32_DEX_TOL, f"float32 {key} differs by {delta:.3e} dex"
 
 
-# -- f. WavePrecomp against the exact path ---------------------------------------
+# -- f. FeaturePrecomp line grid against the exact path -----------------------------
+
+#: Off-node logU points: the table's logU nodes are 0.5 dex apart, so these are
+#: not nodes of any n_grid used below.
+_OFFNODE_LOGU = (-3.137, -2.713, -1.617)
+_FEATURE_LINES = [6564.6, 4862.7, 1215.67]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#983 open: the FeaturePrecomp line grid is resolution-limited for gutkin16 "
-        "(worst per-band error 6.4e-2 at n_grid=4, 1.2e-2 at 8, 7.8e-4 at 16, 5e-5 at 32, "
-        "off-node logU); the 3e-4 target is not met at the sibling's n_grid=4."
-    ),
-)
-def test_wave_precomp_lines_match_exact_per_band(ssp):
-    """Mirrors the WavePrecomp line-flux recipe of the escape-fraction sibling.
+def _worst_line_error(fast, exact):
+    """Worst per-band relative error of the fast line table against the exact path."""
+    target = jnp.asarray(_FEATURE_LINES)
+    worst = 0.0
+    for log_u in _OFFNODE_LOGU:
+        params = {"neb_logU": log_u}
+        grid = np.asarray(fast.predict_line_fluxes(params, target_wavelengths=target))
+        ref = np.asarray(exact.predict_line_fluxes(params, target_wavelengths=target))
+        rel = np.abs(grid - ref) / np.maximum(np.abs(ref), 1e-30)
+        worst = max(worst, float(rel.max()))
+    return worst
 
-    Measured worst per-band relative error against the exact path, FeaturePrecomp
-    lines (Hbeta, Halpha, Lya) over a free logU axis, at logU off the table nodes
-    (-3.137, -2.713, -1.617). The table's logU nodes are 0.5 dex apart::
+
+def test_default_feature_grid_matches_exact_lines_per_band(ssp):
+    """Default FeaturePrecomp (16 logU nodes) reproduces the exact gutkin16 lines.
+
+    Measured worst per-band relative error against the exact path, at the
+    off-node logU points above, for the fast table at each node count::
 
         n_grid   worst rel. error
         4        6.4e-2
@@ -326,24 +333,31 @@ def test_wave_precomp_lines_match_exact_per_band(ssp):
         16       7.8e-4
         32       5.0e-5
 
-    The error falls with n_grid, so this is grid resolution, not a defect. The
-    cb19 control cannot be used: its local placeholder grid is flat in logU.
+    The exact path is PCHIP over the table's seven logU nodes (0.5 dex apart),
+    and the fast table re-samples that PCHIP at its own nodes, so the residual is
+    grid resolution. The cb19 control cannot be used: its local placeholder grid
+    is flat in logU.
+    """
+    exact = _build(ssp, free=("neb_logU",))
+    fast = exact.with_approx((WavePrecomp(), FeaturePrecomp(lines=_FEATURE_LINES)))
+    assert fast._nebular_grid_table is not None
+    worst = _worst_line_error(fast, exact)
+    assert worst <= 1.0e-3, f"default n_grid=16: worst per-band error {worst:.2e} > 1.0e-3"
+
+
+def test_32_node_feature_grid_matches_exact_lines_per_band(ssp):
+    """FeaturePrecomp(n_grid={'neb_logU': 32}) reproduces the exact lines to 1e-4.
+
+    Same off-node points and recipe as the default-grid test; see its docstring
+    for the measured table.
     """
     exact = _build(ssp, free=("neb_logU",))
     fast = exact.with_approx(
-        (WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67], n_grid=4))
+        (WavePrecomp(), FeaturePrecomp(lines=_FEATURE_LINES, n_grid={"neb_logU": 32}))
     )
     assert fast._nebular_grid_table is not None
-    target = jnp.asarray([6564.6, 4862.7, 1215.67])
-    for log_u in (-3.2, -2.6):
-        params = {"neb_logU": log_u}
-        grid = np.asarray(fast.predict_line_fluxes(params, target_wavelengths=target))
-        ref = np.asarray(exact.predict_line_fluxes(params, target_wavelengths=target))
-        rel = np.abs(grid - ref) / np.maximum(np.abs(ref), 1e-30)
-        assert rel.max() <= _WAVEPRECOMP_RTOL, (
-            f"WavePrecomp vs exact at logU={log_u}: worst {rel.max():.2e} "
-            f"> {_WAVEPRECOMP_RTOL:.1e}"
-        )
+    worst = _worst_line_error(fast, exact)
+    assert worst <= 1.0e-4, f"n_grid=32: worst per-band error {worst:.2e} > 1.0e-4"
 
 
 # -- g. fast-nebular refuses a freed axis the grid bakes in ---------------------
