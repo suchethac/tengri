@@ -144,15 +144,38 @@ def test_igm_sections_differ_only_in_the_igm_keyword() -> None:
     assert stripped(inoue) ^ stripped(none) == {"IGM ABSORPTION = Inoue"}
 
 
-def test_ccww13_full_section_carries_the_tuffs_geometry() -> None:
-    text = M.by_section("s4_ccww13_full")[0].param_text()
-    assert "PARAMETER = name:attenuation_type mock:type:fixed char_value:CCWW13_full" in text
-    assert "PARAMETER = name:inclination mock:type:fixed value:60.0" in text
-    assert "PARAMETER = name:tau_b_perp mock:type:fixed value:4.0" in text
+def test_ccww13_full_is_not_run() -> None:
+    assert all(run.section != "s4_ccww13_full" for run in M.RUN_MATRIX)
+    assert all(run.dust != "CCWW13_full" for run in M.RUN_MATRIX)
+
+
+@pytest.mark.parametrize(
+    ("section", "law"),
+    [
+        ("s4_cf00", "CF00"),
+        ("s4_calzetti", "Calzetti"),
+        ("s4_ccww13_universal", "CCWW13_universal"),
+        ("s4_mw", "mw"),
+        ("s4_lmc", "lmc"),
+        ("s4_smc", "smc"),
+    ],
+)
+def test_attenuation_sections_carry_their_law_and_tauv(section: str, law: str) -> None:
+    run = M.by_section(section)[0]
+    text = run.param_text()
+    assert len(run.rows) == 1
+    assert f"PARAMETER = name:attenuation_type mock:type:fixed char_value:{law}" in text
     assert "PARAMETER = name:tauV_eff mock:type:fixed value:1.0" in text
-    assert "PARAMETER = name:mu mock:type:fixed value:0.4" in text
-    universal = M.by_section("s4_ccww13_universal")[0].param_text()
-    assert "tau_b_perp" not in universal and "inclination" not in universal
+
+
+@pytest.mark.parametrize("section", ["s4_cf00", "s4_ccww13_universal"])
+def test_mu_is_set_where_the_manual_requires_it(section: str) -> None:
+    assert "PARAMETER = name:mu mock:type:fixed value:0.4" in M.by_section(section)[0].param_text()
+
+
+@pytest.mark.parametrize("section", ["s4_calzetti", "s4_mw", "s4_lmc", "s4_smc"])
+def test_mu_is_omitted_where_the_manual_does_not_require_it(section: str) -> None:
+    assert "name:mu" not in M.by_section(section)[0].param_text()
 
 
 def test_capstone_renders_without_docker_and_names_the_four_galaxies(

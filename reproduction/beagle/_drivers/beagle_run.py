@@ -96,7 +96,7 @@ NEBULAR_TEMPLATES = {
         "ineb_June16/mup100/cb2016_Jan16_line_wavelengths_may2017.dat",
     ),
 }
-ATTENUATION_LAWS = ("CF00", "Calzetti", "CCWW13_universal", "CCWW13_full")
+ATTENUATION_LAWS = ("CF00", "Calzetti", "CCWW13_universal", "mw", "lmc", "smc")
 
 
 @dataclass(frozen=True)
