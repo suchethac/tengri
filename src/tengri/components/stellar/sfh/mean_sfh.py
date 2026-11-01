@@ -2582,3 +2582,201 @@ def gaussian_burst(
     exponent = -0.5 * (dt / sigma) ** 2
     shape = jnp.maximum(jnp.exp(exponent), 0.0)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+
+
+# ── Decoupled current star-formation episode (BEAGLE-style) ───────
+
+
+def current_episode(
+    t_lookback: jnp.ndarray,
+    log_sfr: float | jnp.ndarray,
+    timescale_yr: float | jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Constant-SFR episode over the most recent ``timescale_yr`` years.
+
+    .. math::
+
+        \psi(t) = \psi \, w(t; 0, \Delta t), \qquad \psi = 10^{\log_{10}\psi}
+
+    where :math:`w` is :func:`window_weight` on :math:`[0, \Delta t]`. This is the
+    episode alone, before it is spliced into a smooth history; see
+    :func:`splice_current_episode`.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr], starting at 0 for the exact telescoping of the
+        episode mass.
+    log_sfr : float or ndarray
+        log10 of the episode star-formation rate :math:`\psi` [M\ :sub:`\odot`/yr].
+    timescale_yr : float or ndarray
+        Episode duration :math:`\Delta t` [yr]. BEAGLE default: 1e7 yr.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Episode SFR at each lookback time [M\ :sub:`\odot`/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp`` elementwise operations.
+
+    **Gradient-safe**: yes. The window weight is piecewise linear in
+    :math:`\Delta t`, so the gradient is finite and nonzero for a boundary inside
+    the grid.
+
+    Cross-code note: BEAGLE (Chevallard & Charlot 2016 [1]_) parameterizes the
+    episode by ``sfr`` (or ``specific_sfr``) and ``current_sfr_timescale``.
+    BAGPIPES ``burst`` is parameterized by mass instead, and CIGALE
+    ``sfhdelayedbq`` by a rate ratio. Prospector has no equivalent component.
+
+    References
+    ----------
+    .. [1] Chevallard, J. & Charlot, S. 2016, MNRAS, 462, 1415,
+       "Modelling and interpreting spectral energy distributions of galaxies
+       with BEAGLE", doi:10.1093/mnras/stw1756, arXiv:1603.03037.
+    """
+    return 10.0**log_sfr * window_weight(t_lookback, 0.0, timescale_yr)
+
+
+def splice_current_episode(
+    t_lookback: jnp.ndarray,
+    smooth_sfr: jnp.ndarray,
+    psi: float | jnp.ndarray,
+    timescale_yr: float | jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Splice a constant-SFR episode into a smooth SFH, conserving smooth mass.
+
+    The episode replaces the smooth history over :math:`[0, \Delta t]`, and the
+    smooth part outside the window is renormalized so that it keeps its declared
+    formed mass :math:`M_S`:
+
+    .. math::
+
+        \mathrm{SFR}(t) = \psi\, w(t) + S(t)\,(1 - w(t))\,
+        \frac{M_S}{\int S(t')\,(1 - w(t'))\,dt'},
+
+    with :math:`w(t) = \mathrm{window\_weight}(t; 0, \Delta t)` and
+    :math:`M_S = \int S(t)\,dt`. The total formed mass is
+    :math:`M_S + \psi\,\Delta t`, and the SFR averaged over the window is
+    :math:`\psi` (Chevallard & Charlot 2016 [1]_, Secs. 2.5 and 4.2).
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr], starting at 0. Trapezoidal quadrature is used on
+        this grid for both :math:`M_S` and the renormalization integral.
+    smooth_sfr : array_like, shape (n_age,)
+        Smooth-history SFR :math:`S(t)` [M\ :sub:`\odot`/yr] on the same grid.
+    psi : float or ndarray
+        Episode SFR :math:`\psi` [M\ :sub:`\odot`/yr].
+    timescale_yr : float or ndarray
+        Episode duration :math:`\Delta t` [yr].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Spliced SFR [M\ :sub:`\odot`/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, the normalization is a
+    smooth function of :math:`\psi` and :math:`\Delta t`.
+
+    The normalization integral :math:`\int S(1-w)\,dt` is evaluated with
+    :func:`jax.numpy.trapezoid` on the caller's grid, so the smooth mass is
+    conserved exactly on that grid, not on a finer one. The floor
+    ``representable_denominator(1e-30)`` only guards a fully-windowed history
+    (all smooth mass inside the window).
+
+    Cross-code note: BEAGLE's ``mass`` includes the episode, so a tengri smooth
+    ``log_total_mass`` (=:math:`M_S`) corresponds to BEAGLE's :math:`M - \psi\Delta t`.
+    BAGPIPES ``burst`` is mass-parameterized and CIGALE ``sfhdelayedbq`` uses a
+    rate ratio, so neither matches this rate-based splice directly.
+
+    References
+    ----------
+    .. [1] Chevallard, J. & Charlot, S. 2016, MNRAS, 462, 1415,
+       "Modelling and interpreting spectral energy distributions of galaxies
+       with BEAGLE", doi:10.1093/mnras/stw1756, arXiv:1603.03037.
+    """
+    w = window_weight(t_lookback, 0.0, timescale_yr)
+    m_smooth = jnp.trapezoid(smooth_sfr, t_lookback)
+    outside = smooth_sfr * (1.0 - w)
+    norm = jnp.trapezoid(outside, t_lookback)
+    scale = m_smooth / jnp.maximum(norm, representable_denominator(1e-30))
+    return psi * w + outside * scale
+
+
+def psi_from_specific_sfr(
+    log_ssfr: float | jnp.ndarray,
+    m_smooth: float | jnp.ndarray,
+    timescale_yr: float | jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Episode SFR from BEAGLE's specific-SFR spelling.
+
+    BEAGLE defines :math:`\psi_S = \psi / (M_S + \psi\,\Delta t)` [yr\ :sup:`-1`],
+    relative to the total formed mass including the episode. Inverting gives
+
+    .. math::
+
+        \psi = \frac{\psi_S\, M_S}{1 - \psi_S\,\Delta t}.
+
+    Parameters
+    ----------
+    log_ssfr : float or ndarray
+        log10 of the episode specific SFR :math:`\psi_S` [yr\ :sup:`-1`].
+    m_smooth : float or ndarray
+        Smooth formed mass :math:`M_S` [M\ :sub:`\odot`].
+    timescale_yr : float or ndarray
+        Episode duration :math:`\Delta t` [yr].
+
+    Returns
+    -------
+    ndarray
+        Episode SFR :math:`\psi` [M\ :sub:`\odot`/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: away from the pole.
+
+    The denominator is floored at ``1e-12``, so a traced call cannot divide by
+    zero or flip sign. This floor is a numerical guard only. The physical refusal
+    of a prior that reaches the pole :math:`\psi_S\Delta t = 1` is made at build
+    time by :func:`check_specific_sfr_pole`.
+    """
+    s = 10.0**log_ssfr
+    return s * m_smooth / jnp.maximum(1.0 - s * timescale_yr, 1e-12)
+
+
+def check_specific_sfr_pole(log_ssfr_hi: float, timescale_yr_hi: float) -> None:
+    r"""Refuse a specific-SFR prior whose upper bound reaches the pole.
+
+    The map :func:`psi_from_specific_sfr` has a pole at :math:`\psi_S\Delta t = 1`.
+    A prior whose upper bound satisfies :math:`\psi_S\Delta t \ge 1` covers the
+    pole or the unphysical branch beyond it, so it is refused.
+
+    Parameters
+    ----------
+    log_ssfr_hi : float
+        Upper bound of log10 :math:`\psi_S` [yr\ :sup:`-1`]. Must be concrete.
+    timescale_yr_hi : float
+        Episode duration :math:`\Delta t` [yr] at its upper bound. Must be concrete.
+
+    Raises
+    ------
+    ValueError
+        If :math:`10^{\log_{10}\psi_S}\,\Delta t \ge 1`. The message names the pole
+        and both values.
+
+    Notes
+    -----
+    **JIT-compatible**: no. This is a build-time check on concrete floats.
+    """
+    product = 10.0 ** float(log_ssfr_hi) * float(timescale_yr_hi)
+    if product >= 1.0:
+        raise ValueError(
+            "specific SFR prior reaches the pole of psi = psi_S M_S / (1 - psi_S dt): "
+            f"psi_S*dt = {product:g} >= 1 (log10 psi_S = {float(log_ssfr_hi):g}, "
+            f"dt = {float(timescale_yr_hi):g} yr). Lower the upper bound."
+        )
