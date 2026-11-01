@@ -727,12 +727,19 @@ _DISC_TIMES_ETA_T_REFERENCE = {
         8.825368698532178e21,
     ),
     10.0: (
-        1.672066126593175e32,
-        9818827856132108.0,
-        3.1299782093620715e28,
-        9.558113648207253e21,
+        1.5582330334132957e32,
+        5669948850671592.0,
+        2.889875517113662e28,
+        8.772828236359366e21,
     ),
 }
+#: Re-captured for #3015 (log M_BH 10 only; 6 and 8 are unchanged). The retired ``10 R_isco``
+#: floor and the ``0.5 R_out`` clip are gone: ``R_out = r_sg`` as in Kubota & Done (2018) and
+#: RELAGN. At log M_BH 10, log L_bol 11 (lambda_Edd = 3.0e-4) ``r_sg`` is 21.1 R_g, so
+#: ``R_out / R_isco`` is 3.52 where the old floor gave 60 R_g (the clipped corona sat at
+#: ``R_hot / R_isco = 5``). The saturated corona carries ``L_0 h(x_out)``, which is 0.726 of the
+#: old ``L_0 h(5)``; 64.3% of L_bol is unemitted (``kubota_done_unemitted_fraction``). Old -> new,
+#: relative, in (sum, first, middle, last) order: -6.81e-02 / -4.23e-01 / -7.67e-02 / -8.22e-02.
 
 
 @pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])
