@@ -5022,7 +5022,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19", "gutkin16"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -5094,6 +5094,22 @@ class SEDModel:
                 spec.free_params,
                 grid_path=self._nebular_backend.grid_path,
             )
+        elif spec.nebular_mode == "gutkin16":
+            # Gutkin+2016 NEOGAL line table (#983). Same failure mode as the cb19
+            # branch above: without this arm the build fell through to BakedIn.
+            # The table stores vacuum labels and absolute log Z, so neb_logZ_gas
+            # takes the unit-converting delta registered above.
+            from tengri.components.nebular import Gutkin16Backend
+
+            # Build kwargs from non-None user-supplied values only (#2220).
+            kwargs = {"ssp_data": ssp_data}
+            if spec.nebular_gutkin16_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
+            if spec.nebular_gutkin16_mup is not None:
+                kwargs["mup"] = spec.nebular_gutkin16_mup
+            if spec.nebular_gutkin16_continuum is not None:
+                kwargs["continuum"] = spec.nebular_gutkin16_continuum
+            self._nebular_backend = Gutkin16Backend(**kwargs)
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.
@@ -12099,7 +12115,7 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
                 _live_neb = any(
                     isinstance(c, NebularSEDComponent)
                     and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
@@ -13540,6 +13556,8 @@ class SEDModel:
                 neb_backend_name = "cloudy_grid"
             elif "mappings" in cls_name:
                 neb_backend_name = "mappings"
+            elif "gutkin16" in cls_name:
+                neb_backend_name = "gutkin16"
             elif "cue" in cls_name:
                 neb_backend_name = "cue"
             elif "shock" in cls_name:
@@ -13720,7 +13738,7 @@ class SEDModel:
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
         lyc_mask_live = False
         _live_neb = any(
             isinstance(c, NebularSEDComponent)
@@ -14090,7 +14108,7 @@ class SEDModel:
             is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
-            ``"mappings"``, ``"cue"``, ``"shock"``, or None.
+            ``"gutkin16"``, ``"mappings"``, ``"cue"``, ``"shock"``, or None.
         agn : str or None
             AGN model. None (disabled) or any AGN model name.
         redshift : float or str

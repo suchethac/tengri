@@ -55,7 +55,7 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 #: These backends publish ``sed_nebular`` with a free-free component, so the radio
 #: block's Murphy+2011 ``radio_freefree`` term should not run in addition
 #: (would double-count the thermal emission). Keyed on the factory's ``nebular_backend``
-#: vocabulary: ``"baked_in"``, ``"cb19"``, ``"cloudy_grid"``, ``"mappings"``,
+#: vocabulary: ``"baked_in"``, ``"cb19"``, ``"cloudy_grid"``, ``"gutkin16"``, ``"mappings"``,
 #: ``"cue"``, ``"shock"``, or ``None``.
 #:
 #: - ``"cue"``: Li et al. (2025) neural emulator, carries a Q_H-normalized
@@ -64,7 +64,11 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 #:   free-free.
 #: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``)
 #:   publish no free-free in ``sed_nebular``; ``"cb19"`` publishes zeros (no
-#:   continuum at all). A nebular-included SSP carries its free-free inside the
+#:   continuum at all).
+#: - ``"gutkin16"`` is not in the set below. Its continuum method supplies an
+#:   analytic free-free plus two-photon continuum, so it is not a line-only
+#:   backend; whether that continuum belongs in this set is open (#983).
+#:   A nebular-included SSP carries its free-free inside the
 #:   SSP flux whatever backend is declared; the radio factory reads that from
 #:   the SSP's ``nebular`` stamp, not from this set (#2574).
 NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset({"cue", "cloudy_grid"})
@@ -82,8 +86,8 @@ def nebular_backend_carries_freefree(name: str | None) -> bool:
     ----------
     name : str or None
         Nebular backend name from the factory's vocabulary:
-        ``"baked_in"`` (default), ``"cb19"``, ``"cloudy_grid"``, ``"mappings"``,
-        ``"cue"``, ``"shock"``, or ``None`` to omit nebular.
+        ``"baked_in"`` (default), ``"cb19"``, ``"cloudy_grid"``, ``"gutkin16"``,
+        ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit nebular.
 
     Returns
     -------
