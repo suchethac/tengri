@@ -14,7 +14,8 @@ The data split into two halves:
 
 * **Traced** (:class:`SpectroBatch`): pixel wavelengths, masks, fluxes, errors,
   the resolution rows, redshifts, calibration ranges, photometry and, when
-  given, each galaxy's non-parametric SFH bin edges. Each leaf has a leading
+  given, each galaxy's non-parametric SFH bin edges, the emission-line mask and
+  resolution, and each galaxy's Milky Way E(B-V). Each leaf has a leading
   batch axis ``B``, so the batch can be mapped with :func:`jax.vmap` or passed
   as a regular argument to a jitted function.
 * **Static** (:class:`SpectroBatchSpec`): the bucketed pixel count ``n_max``,
@@ -53,6 +54,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.observation.banded import BandedMatrix
+from tengri.observation.calibration_segments import check_cal_scale_prior, segment_ids
+from tengri.observation.eline_marginalization import eline_scalar_resolution
 from tengri.observation.spectroscopy import resolve_resample_mode
 from tengri.observation.spectrum import (
     _LSF_MAX_SIGMA_KMS,
@@ -80,6 +83,12 @@ _BATCH_FIELDS: tuple[str, ...] = (
     "phot_err",
     "phot_presence",
     "sfh_bin_edges_gyr",
+    "line_mask",
+    "eline_resolution",
+    "ebmv_mw",
+    "segment",
+    "cal_scale_center",
+    "cal_scale_sigma",
 )
 
 
@@ -118,6 +127,14 @@ class GalaxySpectrum(NamedTuple):
         build-time ladder for this galaxy only, so a bucket can mix galaxies
         whose ladders differ. ``n_edges`` must equal the template's edge count.
         ``None`` (default) uses the template's ladder.
+    segment_ids : array_like of int, shape (n_pix,), optional
+        Camera segment of every pixel for the per-segment calibration scales, the
+        ids being ``0 .. n_seg - 1``. Galaxies in one bucket share ``n_seg``.
+        ``None`` (default) gives the calibration multiplier no segment scales.
+    cal_scale_prior : tuple of float, optional
+        ``(log10_center, sigma_dex)`` of this galaxy's log-normal prior on the mean
+        calibration multiplier ``q``. ``None`` (default) takes the template's
+        ``Spectroscopy.cal_scale_prior``.
     """
 
     wave: Any
@@ -129,6 +146,9 @@ class GalaxySpectrum(NamedTuple):
     phot_flux: Any = None
     phot_err: Any = None
     sfh_bin_edges_gyr: Any = None
+    ebmv_mw: float | None = None
+    segment_ids: Any = None
+    cal_scale_prior: tuple[float, float] | None = None
 
     @classmethod
     def from_flambda(
@@ -144,6 +164,7 @@ class GalaxySpectrum(NamedTuple):
         phot_err_lambda=None,
         phot_wave_eff=None,
         sfh_bin_edges_gyr=None,
+        ebmv_mw=None,
     ) -> GalaxySpectrum:
         """Build a record from data per wavelength, converting to F_nu.
 
@@ -215,6 +236,7 @@ class GalaxySpectrum(NamedTuple):
             phot_flux=phot_flux,
             phot_err=phot_err,
             sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+            ebmv_mw=ebmv_mw,
         )
 
 
@@ -253,6 +275,19 @@ class SpectroBatchSpec:
     n_sfh_edges : int
         Length of the per-galaxy SFH bin ladder the bucket carries; ``0`` (default)
         when its galaxies use the template's build-time ladder.
+    has_foreground : bool
+        Whether the bucket's galaxies carry their own Milky Way E(B-V). ``False``
+        (default) leaves the foreground screen out of the compiled program, so a
+        bucket without it evaluates exactly as a model with no screen.
+    n_lines : int
+        Number of emission lines in the template's effective catalog when the
+        template fits lines (``eline_mode != "off"``); ``0`` otherwise. The count
+        is fixed by the template, so galaxies with different counts never share
+        a bucket.
+    n_segments : int
+        Number of calibration segments of the galaxies' ``segment_ids``; ``0``
+        (default) when they carry none. Galaxies with different counts never share
+        a bucket.
 
     Raises
     ------
@@ -276,6 +311,9 @@ class SpectroBatchSpec:
     conserving: bool | None = None
     lsf_pad_pixels: int | None = None
     n_sfh_edges: int = 0
+    has_foreground: bool = False
+    n_lines: int = 0
+    n_segments: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -303,10 +341,16 @@ class SpectroBatchSpec:
         pad = self.lsf_pad_pixels
         if pad is not None and (isinstance(pad, bool) or not isinstance(pad, int) or pad < 0):
             raise ValueError(f"lsf_pad_pixels must be None or a non-negative int, got {pad!r}")
+        n_seg = self.n_segments
+        if isinstance(n_seg, bool) or not isinstance(n_seg, int) or n_seg < 0:
+            raise ValueError(f"n_segments must be a non-negative integer, got {n_seg!r}")
         n_edges = self.n_sfh_edges
         is_int = isinstance(n_edges, int) and not isinstance(n_edges, bool)
         if not is_int or n_edges < 0 or n_edges == 1:
             raise ValueError(f"n_sfh_edges must be 0 or an integer >= 2, got {n_edges!r}")
+        n_lines = self.n_lines
+        if isinstance(n_lines, bool) or not isinstance(n_lines, int) or n_lines < 0:
+            raise ValueError(f"n_lines must be a non-negative integer, got {n_lines!r}")
 
 
 @dataclass(frozen=True)
@@ -340,6 +384,21 @@ class SpectroBatch:
     sfh_bin_edges_gyr : ndarray, shape (B, n_sfh_edges)
         Per-galaxy SFH bin edges [Gyr]; zero-width when the bucket uses the
         template's ladder (``spec.n_sfh_edges == 0``).
+    line_mask : ndarray, shape (B, n_lines)
+        1.0 for each catalog line whose redshifted center ``lambda_i (1 + z)``
+        lies inside the galaxy's real (unpadded) grid ``[wave.min(), wave.max()]``,
+        else 0.0. Zero-width when the template does not fit lines
+        (``spec.n_lines == 0``).
+    eline_resolution : ndarray, shape (B,)
+        Scalar resolution R [dimensionless] that sets the emission-line profile
+        width: the template's scalar R on a banded-resolution galaxy, otherwise
+        the galaxy's own R over its real pixels (median when per-pixel).
+    segment : ndarray of int, shape (B, n_max)
+        Calibration segment id of every pixel, padded with the last real id;
+        zeros when ``spec.n_segments == 0``.
+    cal_scale_center, cal_scale_sigma : ndarray, shape (B,)
+        ``log10_center`` and ``sigma_dex`` of the galaxy's log-normal prior on the
+        mean calibration multiplier; zeros and ones when the galaxy has none.
 
     Notes
     -----
@@ -363,6 +422,12 @@ class SpectroBatch:
     phot_err: jax.Array
     phot_presence: jax.Array
     sfh_bin_edges_gyr: jax.Array
+    line_mask: jax.Array
+    eline_resolution: jax.Array
+    ebmv_mw: jax.Array
+    segment: jax.Array
+    cal_scale_center: jax.Array
+    cal_scale_sigma: jax.Array
 
     def galaxy(self, i: int) -> SpectroBatch:
         """Return galaxy ``i`` as an unbatched :class:`SpectroBatch`.
@@ -717,8 +782,48 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
     )
 
 
-def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wave_range, policy):
-    """Validate one galaxy and return ``(spec, row, n_real, log_grid)``."""
+def _line_mask(wave: np.ndarray, rest_lines: np.ndarray, z: float) -> np.ndarray:
+    """Return the 0/1 mask of catalog lines whose redshifted center lies on the grid."""
+    lam_obs = rest_lines * (1.0 + z)
+    inside = (lam_obs >= wave.min()) & (lam_obs <= wave.max())
+    return inside.astype(np.float64)
+
+
+def _galaxy_eline_resolution(g: GalaxySpectrum, n: int, template_r: float) -> float:
+    """Return the scalar R of the line profiles for one galaxy."""
+    if isinstance(g.resolution, BandedMatrix):
+        return template_r
+    r = np.broadcast_to(np.asarray(g.resolution, dtype=np.float64), (n,))
+    return eline_scalar_resolution(r)
+
+
+def _prepare_segments(g: GalaxySpectrum, n: int, n_max: int) -> tuple[np.ndarray, int]:
+    """Return the padded per-pixel segment ids and the segment count (0 without ids)."""
+    if g.segment_ids is None:
+        return np.zeros(n_max, dtype=np.int64), 0
+    ids = segment_ids(g.segment_ids, n)
+    padded = np.concatenate([ids, np.full(n_max - n, ids[-1], dtype=np.int64)])
+    return padded, int(ids.max()) + 1
+
+
+def _prepare_galaxy(
+    index: int,
+    g: GalaxySpectrum,
+    quantum,
+    lsf_n_bins,
+    rest_wave_range,
+    policy,
+    eline=None,
+    template_cal_prior=None,
+    template_cal_window=None,
+):
+    """Validate one galaxy and return ``(spec, row, n_real, log_grid)``.
+
+    ``eline`` is ``None`` when the template does not fit lines, else
+    ``(rest_wavelengths, template_resolution)``. ``template_cal_prior`` and
+    ``template_cal_window`` are the template's ``cal_scale_prior`` and
+    ``cal_scale_window`` (``None`` without a template).
+    """
     try:
         wave = np.asarray(g.wave, dtype=np.float64)
         if wave.ndim != 1 or wave.size < 3:
@@ -762,6 +867,24 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
 
         has_phot, p_flux, p_err, p_pres = _prepare_photometry(g)
         sfh_edges = _prepare_sfh_edges(g)
+        if eline is None:
+            rest_lines = np.zeros((0,))
+            line_mask = np.zeros((0,))
+            template_r = 2000.0
+        else:
+            rest_lines, template_r = eline
+            rest_lines = np.asarray(rest_lines, dtype=np.float64)
+            line_mask = _line_mask(wave, rest_lines, z)
+        eline_r = _galaxy_eline_resolution(g, n, template_r)
+        seg_row, n_segments = _prepare_segments(g, n, n_max)
+        cal_prior = check_cal_scale_prior(
+            g.cal_scale_prior if g.cal_scale_prior is not None else template_cal_prior
+        )
+        if cal_prior is not None and n_segments == 0 and template_cal_window is None:
+            raise ValueError(
+                "cal_scale_prior without cal_scale_window needs segment_ids: the default "
+                "window is the segment that contains the r band"
+            )
         spec = SpectroBatchSpec(
             n_max=n_max,
             offsets=offsets,
@@ -771,6 +894,9 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
             n_filt=int(p_flux.shape[0]),
             conserving=conserving,
             n_sfh_edges=int(sfh_edges.shape[0]),
+            has_foreground=g.ebmv_mw is not None,
+            n_lines=int(rest_lines.shape[0]),
+            n_segments=n_segments,
         )
     except ValueError as exc:
         raise ValueError(f"galaxy {index}: {exc}") from exc
@@ -795,6 +921,12 @@ def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wav
         "phot_err": p_err,
         "phot_presence": p_pres,
         "sfh_bin_edges_gyr": sfh_edges,
+        "line_mask": line_mask,
+        "eline_resolution": np.asarray(eline_r),
+        "ebmv_mw": np.asarray(0.0 if g.ebmv_mw is None else float(g.ebmv_mw)),
+        "segment": seg_row,
+        "cal_scale_center": np.asarray(0.0 if cal_prior is None else cal_prior[0]),
+        "cal_scale_sigma": np.asarray(1.0 if cal_prior is None else cal_prior[1]),
     }
     return spec, row, n, log_grid
 
@@ -863,6 +995,56 @@ def _bucket_lsf_pad(model, spec: SpectroBatchSpec, rows: list[dict]) -> int:
     return max(pads)
 
 
+def _template_eline(model):
+    """Return ``(rest_wavelengths, template_resolution)`` when the template fits lines.
+
+    ``None`` when there is no template or its ``eline_mode`` is ``"off"``. The
+    catalog is read once per call, outside any trace.
+    """
+    if model is None:
+        return None
+    spectroscopy = model.observation.spectroscopy
+    if spectroscopy.eline_mode == "off":
+        return None
+    catalog = spectroscopy.effective_catalog
+    return np.asarray(catalog.wavelengths, dtype=np.float64), eline_scalar_resolution(
+        spectroscopy.resolution
+    )
+
+
+def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
+    """Refuse scalar or per-pixel resolutions when the template is banded.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model with spectroscopy configured.
+    galaxies : sequence of GalaxySpectrum
+        Records, in catalog order; the index in the message is the position here.
+
+    Raises
+    ------
+    ValueError
+        If the template carries a banded resolution operator and a record's
+        ``resolution`` is not a :class:`~tengri.observation.banded.BandedMatrix`.
+
+    Notes
+    -----
+    Build-time Python check. A scalar or per-pixel record would be fitted with a
+    different line spread function from the one that the template applies.
+    """
+    if not model.observation.spectroscopy.has_resolution_matrix:
+        return
+    for i, g in enumerate(galaxies):
+        if not isinstance(g.resolution, BandedMatrix):
+            raise ValueError(
+                f"galaxy {i} has a scalar or per-pixel resolution, but the template's "
+                "resolution is banded; give each GalaxySpectrum the same banded operator "
+                "(gaussian_resolution_bands or the instrument's R matrix) or build the "
+                "template with a scalar/per-pixel resolution"
+            )
+
+
 def build_spectro_batches(
     galaxies: Sequence[GalaxySpectrum],
     *,
@@ -893,7 +1075,10 @@ def build_spectro_batches(
         from the template's ``resample`` mode with the same rule as
         :meth:`~tengri.observation.observation.Observation.predict`, and every
         padded bucket is checked with :func:`padding_exact`. Without it the
-        buckets carry ``conserving=None`` and cannot be evaluated.
+        buckets carry ``conserving=None`` and cannot be evaluated. When the template's
+        spectroscopy carries a banded resolution operator, the function refuses any
+        galaxy whose ``resolution`` is a scalar or per-pixel array: it would be fitted
+        with a different line spread function from the one that generated the data.
 
     Returns
     -------
@@ -921,6 +1106,12 @@ def build_spectro_batches(
     pixels with a non-finite flux or ivar, ``ivar <= 0`` or a false mask get
     ``pix_mask = 0``, ``sigma = 1`` and ``flux = 0``; the other pixels get
     ``sigma = 1 / sqrt(ivar)``.
+
+    When ``model`` fits emission lines (``eline_mode != "off"``), ``spec.n_lines``
+    is the catalog's line count and each galaxy's ``line_mask`` has shape
+    ``(n_lines,)``: 1.0 where the redshifted line center lies inside the real
+    grid, else 0.0. Otherwise ``n_lines = 0`` and ``line_mask`` has shape
+    ``(0,)``. ``eline_resolution`` is always filled (see :class:`SpectroBatch`).
     """
     if quantum is not None and (not isinstance(quantum, int) or quantum < 1):
         raise ValueError(f"quantum must be a positive integer or None, got {quantum!r}")
@@ -933,13 +1124,29 @@ def build_spectro_batches(
                 f"({policy.lsf_n_bins}); omit it to take the template's value"
             )
         lsf_n_bins = policy.lsf_n_bins
+        _require_banded_records(model, galaxies)
+        if model.spec.foreground_ebmv_mw > 0.0:
+            missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
+            if missing:
+                raise ValueError(
+                    "the template model carries a Milky Way foreground screen "
+                    f"(foreground_ebmv_mw={model.spec.foreground_ebmv_mw}), so every galaxy "
+                    f"needs its own E(B-V): galaxies {missing} have ebmv_mw=None. Give "
+                    "each GalaxySpectrum an ebmv_mw, or set the template's foreground "
+                    "E(B-V) to 0."
+                )
     elif lsf_n_bins is None:
         lsf_n_bins = 16
 
+    eline = _template_eline(model)
+    cal_prior, cal_window = None, None
+    if model is not None:
+        spectroscopy = model.observation.spectroscopy
+        cal_prior, cal_window = spectroscopy.cal_scale_prior, spectroscopy.cal_scale_window
     buckets: dict[SpectroBatchSpec, list[tuple[int, dict, int, bool]]] = {}
     for i, g in enumerate(galaxies):
         spec, row, n_real, log_grid = _prepare_galaxy(
-            i, g, quantum, lsf_n_bins, rest_wave_range, policy
+            i, g, quantum, lsf_n_bins, rest_wave_range, policy, eline, cal_prior, cal_window
         )
         buckets.setdefault(spec, []).append((i, row, n_real, log_grid))
 

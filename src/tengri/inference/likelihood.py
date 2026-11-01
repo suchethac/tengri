@@ -270,6 +270,7 @@ def build_base_likelihood(context: InferenceContext):
             design_matrix_builder=builder,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             eline_prior_type=context.eline_prior_type or "flat",
             eline_prior_sigma=context.eline_prior_sigma or 1e10,
             eline_line_wavelengths=context.eline_independent_wavelengths,
@@ -312,6 +313,7 @@ def build_base_likelihood(context: InferenceContext):
             wavelength=wavelength,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
+            **_calibration_segment_kwargs(context, wavelength),
             channel="spec_fnu",
         )
         if context.data_type == "spectroscopy":
@@ -391,6 +393,7 @@ def build_base_likelihood(context: InferenceContext):
                     else (_n_phot_split(context), len(context.data))
                 ),
                 design_matrix_builder=builder,
+                prior_variance=(context.eline_prior_sigma or 1e10) ** 2,
                 channel="spec_fnu",
             )
         if context.data_type == "spectroscopy":
@@ -530,6 +533,36 @@ def build_likelihood_extras(context: InferenceContext):
 # ── Helpers (private) ────────────────────────────────────────────────
 
 
+def _calibration_segment_kwargs(context: InferenceContext, wavelength) -> dict:
+    """Return the segment, prior and fiber-fraction fields of the calibration likelihoods.
+
+    Reads ``calibration_segments``, ``cal_prior``, ``cal_scale_prior`` and
+    ``cal_scale_window`` off the model's spectroscopy; all defaults give the
+    unsegmented Gaussian form, so a model without them is unchanged.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from tengri.observation.calibration_segments import window_mask
+
+    spectroscopy = getattr(context.model.observation, "spectroscopy", None)
+    if spectroscopy is None:
+        return {}
+    ids = spectroscopy.segment_ids
+    has_q = spectroscopy.cal_scale_prior is not None
+    q_window = None
+    if has_q:
+        mask = window_mask(np.asarray(wavelength), ids, spectroscopy.cal_scale_window)
+        q_window = jnp.asarray(mask)
+    return {
+        "segments": None if ids is None else jnp.asarray(ids),
+        "n_segments": spectroscopy.n_cal_segments,
+        "cal_prior": spectroscopy.cal_prior,
+        "q_window": q_window,
+        "has_q": has_q,
+    }
+
+
 def _n_phot_split(context: InferenceContext) -> int:
     """Number of photometric data points in joint (phot+spec) data.
 
@@ -556,15 +589,10 @@ def _eline_scalar_resolution(model) -> float:
     median (first-order, R varies slowly across a band). 2000 remains the
     fallback only when the observation declares no resolution at all.
     """
-    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
-    resolution = getattr(spec_cfg, "resolution", None)
-    if resolution is None:
-        return 2000.0
-    if getattr(resolution, "ndim", 0):
-        import numpy as np
+    from tengri.observation.eline_marginalization import eline_scalar_resolution
 
-        return float(np.median(np.asarray(resolution)))
-    return float(resolution)
+    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
+    return eline_scalar_resolution(getattr(spec_cfg, "resolution", None))
 
 
 def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):

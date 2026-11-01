@@ -9,6 +9,7 @@ marginalization. Includes factory methods for common instruments.
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import jax
 import jax.numpy as jnp
@@ -21,6 +22,12 @@ from tengri._cache_keys import (
     derive_key,
     exclude,
     shape,
+)
+from tengri.observation.calibration_segments import (
+    CAL_PRIORS,
+    check_cal_scale_prior,
+    segment_ids,
+    window_mask,
 )
 from tengri.observation.constants import ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
@@ -73,6 +80,27 @@ class Spectroscopy:
         Order of multiplicative Chebyshev calibration polynomial.
         0 = no calibration (default). Order N adds N free params
         (``cal_c1``, ..., ``cal_cN``) with ``Gaussian(0, 0.1)`` priors.
+    calibration_segments : tuple[int, ...], ndarray or None
+        Camera segments of the calibration multiplier: the pixel count of each
+        segment (for example ``wave_obs_segment_sizes``) or one integer id per
+        pixel, the ids being ``0 .. n_seg - 1``. Each segment gets its own free
+        scale in the analytic calibration marginal. Default: None (the multiplier
+        is ``1 + sum_j a_j T_j``).
+    cal_prior : {"gaussian", "scale_free"}
+        Prior on the calibration coefficients in the analytic marginal.
+        ``"gaussian"`` is ``N(0, sigma^2)`` on the tilt and ``N(1, sigma^2)`` on each
+        segment scale; ``"scale_free"`` is flat in data-flux units. Default:
+        ``"gaussian"``.
+    cal_scale_prior : tuple[float, float] or None
+        ``(log10_center, sigma_dex)`` of a log-normal prior on the mean calibration
+        multiplier ``q`` over the window. ``q`` becomes one extra sampled latent,
+        ``cal_log_q = ln q``. A Gaussian in ``q`` itself at 0.3 dex would put 7 % of
+        its mass at ``q < 0`` and much more on the high side, which is why the
+        log-normal is the form. Default: None.
+    cal_scale_window : tuple[float, float] or None
+        ``(lo, hi)`` [Angstrom] inside the grid over which ``q`` is averaged.
+        Default: None, every fitted pixel of the segment that contains the r band's
+        effective wavelength (6231 Angstrom). Needs ``cal_scale_prior``.
     eline_prior_sigma : float
         Prior width on emission line amplitudes for marginalization.
         Default: 100.0.
@@ -219,6 +247,10 @@ class Spectroscopy:
     covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
     wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
+    calibration_segments: object | None = dataclasses.field(default=None, hash=False)
+    cal_prior: str = "gaussian"
+    cal_scale_prior: tuple[float, float] | None = None
+    cal_scale_window: tuple[float, float] | None = None
     #: Unit of ``wave_obs`` at construction [AA | angstrom | nm | um | micron].
     #: Init-only: ``wave_obs`` is converted to Angstrom here and stored in Angstrom.
     wave_unit: dataclasses.InitVar[str] = "AA"
@@ -272,6 +304,8 @@ class Spectroscopy:
                 f"calibration_order must be non-negative, got {self.calibration_order}"
             )
 
+        self._validate_calibration_options(w)
+
         if self.eline_mode not in ELINE_MODES:
             if self.eline_mode == "fixed":
                 raise ValueError(
@@ -317,6 +351,47 @@ class Spectroscopy:
                     f"resolution_matrix has {data.shape[1]} columns but wave_obs "
                     f"has length {len(self.wave_obs)}"
                 )
+
+    def _validate_calibration_options(self, w: np.ndarray) -> None:
+        """Validate the segment layout, prior kind, fiber-fraction prior and window."""
+        if self.cal_prior not in CAL_PRIORS:
+            raise ValueError(f"cal_prior must be one of {CAL_PRIORS}, got {self.cal_prior!r}")
+        prior = check_cal_scale_prior(self.cal_scale_prior)
+        object.__setattr__(self, "cal_scale_prior", prior)
+        ids = (
+            None
+            if self.calibration_segments is None
+            else segment_ids(self.calibration_segments, int(w.shape[0]))
+        )
+        if self.cal_scale_window is not None and prior is None:
+            raise ValueError("cal_scale_window needs cal_scale_prior")
+        if prior is not None:
+            window_mask(w, ids, self.cal_scale_window)
+
+    @property
+    def segment_ids(self) -> np.ndarray | None:
+        """Per-pixel calibration segment id, or None without ``calibration_segments``.
+
+        Returns
+        -------
+        ndarray of int, shape (n_pix,), or None
+            Id of the camera segment of every pixel, in ``range(n_cal_segments)``.
+
+        Notes
+        -----
+        ``calibration_segments`` takes the per-segment pixel counts (for example
+        ``wave_obs_segment_sizes``) or one integer id per pixel. Build-time NumPy
+        property, not JIT-compatible.
+        """
+        if self.calibration_segments is None:
+            return None
+        return segment_ids(self.calibration_segments, int(self.wave_obs.shape[0]))
+
+    @property
+    def n_cal_segments(self) -> int:
+        """Number of calibration segments; 0 without ``calibration_segments``."""
+        ids = self.segment_ids
+        return 0 if ids is None else int(ids.max()) + 1
 
     def _validate_segment_sizes(self, w: np.ndarray) -> None:
         """Validate segment size structure.
@@ -616,7 +691,9 @@ class Spectroscopy:
         -------
         dict[str, Distribution]
             Mapping of calibration coefficient names (``cal_c1``, ..., ``cal_cN``)
-            to ``Gaussian(0, 0.1)`` priors. Empty dict if ``calibration_order == 0``.
+            to ``Gaussian(0, 0.1)`` priors, plus ``cal_log_q`` (the log of the mean
+            multiplier, a Gaussian from ``cal_scale_prior``) when that is set. Empty
+            dict if ``calibration_order == 0`` and ``cal_scale_prior`` is None.
 
         Notes
         -----
@@ -625,9 +702,11 @@ class Spectroscopy:
         Gaussian prior centered at 0 in log space (unity in linear space).
 
         """
-        if self.calibration_order == 0:
-            return {}
-        return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        params = {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
+        if self.cal_scale_prior is not None:
+            center, sigma_dex = self.cal_scale_prior
+            params["cal_log_q"] = Gaussian(math.log(10.0) * center, math.log(10.0) * sigma_dex)
+        return params
 
     def calibration_coeffs(self, params) -> jnp.ndarray | None:
         """Extract calibration coefficients from parameter dict.
@@ -1210,6 +1289,10 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "resolution_matrix": exclude("keyed through the tail with full data content"),
     "_cov_inv": exclude("precomputed inverse of covariance, derived in __post_init__"),
+    "calibration_segments": content("segment scales add calibration columns to the marginal"),
+    "cal_prior": content("scale-free vs Gaussian coefficient prior changes the likelihood"),
+    "cal_scale_prior": content("the fiber-fraction prior adds a latent and conditions the block"),
+    "cal_scale_window": content("the window sets which pixels define the mean multiplier"),
     "wave_obs_segment_sizes": exclude(
         "per-camera segment validation; does not change predictions"
     ),

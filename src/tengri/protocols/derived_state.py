@@ -759,6 +759,10 @@ class DerivedState:
     log_L_x_agn_total: jnp.ndarray | None = None
     log_Lnu_2keV_30deg: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
+    # Milky Way foreground screen T(lambda) on the rest grid, shape (n_wave,), dimensionless:
+    # the observed-frame transmission evaluated at wave_rest * (1 + z). Absent when no screen
+    # is configured. Consumed by every projection, after the IGM factor.
+    foreground_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
     # number per band, and <T>_f depends only on (z, filter, convention): the
