@@ -308,12 +308,27 @@ def test_float32_build_matches_float64_build_within_a_millidex():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "#983 open: WavePrecomp line fluxes miss the 3e-4 per-band target. Measured "
-        "worst 8.3e-3 at n_grid=4 over logU; strict so a fix flips this test."
+        "#983 open: the FeaturePrecomp line grid is resolution-limited for gutkin16 "
+        "(worst per-band error 6.4e-2 at n_grid=4, 1.2e-2 at 8, 7.8e-4 at 16, 5e-5 at 32, "
+        "off-node logU); the 3e-4 target is not met at the sibling's n_grid=4."
     ),
 )
 def test_wave_precomp_lines_match_exact_per_band(ssp):
-    """Mirrors the WavePrecomp line-flux recipe of the escape-fraction sibling."""
+    """Mirrors the WavePrecomp line-flux recipe of the escape-fraction sibling.
+
+    Measured worst per-band relative error against the exact path, FeaturePrecomp
+    lines (Hbeta, Halpha, Lya) over a free logU axis, at logU off the table nodes
+    (-3.137, -2.713, -1.617). The table's logU nodes are 0.5 dex apart::
+
+        n_grid   worst rel. error
+        4        6.4e-2
+        8        1.2e-2
+        16       7.8e-4
+        32       5.0e-5
+
+    The error falls with n_grid, so this is grid resolution, not a defect. The
+    cb19 control cannot be used: its local placeholder grid is flat in logU.
+    """
     exact = _build(ssp, free=("neb_logU",))
     fast = exact.with_approx(
         (WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67], n_grid=4))

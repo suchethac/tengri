@@ -62,19 +62,24 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 #:   continuum with free-free.
 #: - ``"cloudy_grid"``: tabulated Cloudy grid (Byler+2017 axis), carries
 #:   free-free.
+#: - ``"gutkin16"``: its analytic continuum (``continuum="analytic"``, the default)
+#:   carries free-free plus two-photon emission. A backend instance declares this
+#:   through its own ``carries_freefree_continuum`` attribute, which wins over this
+#:   set (see :func:`nebular_backend_carries_freefree`). With ``continuum="none"`` it
+#:   carries no free-free and the radio thermal term runs.
 #: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``)
 #:   publish no free-free in ``sed_nebular``; ``"cb19"`` publishes zeros (no
 #:   continuum at all).
-#: - ``"gutkin16"`` is not in the set below. Its continuum method supplies an
-#:   analytic free-free plus two-photon continuum, so it is not a line-only
-#:   backend; whether that continuum belongs in this set is open (#983).
-#:   A nebular-included SSP carries its free-free inside the
-#:   SSP flux whatever backend is declared; the radio factory reads that from
-#:   the SSP's ``nebular`` stamp, not from this set (#2574).
-NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset({"cue", "cloudy_grid"})
+#:
+#: A nebular-included SSP carries its free-free inside the SSP flux whatever backend
+#: is declared; the radio factory reads that from the SSP's ``nebular`` stamp, not
+#: from this set (#2574).
+NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset(
+    {"cue", "cloudy_grid", "gutkin16"}
+)
 
 
-def nebular_backend_carries_freefree(name: str | None) -> bool:
+def nebular_backend_carries_freefree(name: str | None, backend: object | None = None) -> bool:
     """Check if a declared nebular backend carries a free-free continuum.
 
     Used by :func:`tengri.forward.component_factory.build_components` to
@@ -88,20 +93,33 @@ def nebular_backend_carries_freefree(name: str | None) -> bool:
         Nebular backend name from the factory's vocabulary:
         ``"baked_in"`` (default), ``"cb19"``, ``"cloudy_grid"``, ``"gutkin16"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit nebular.
+    backend : object or None, optional
+        The pre-constructed backend instance, when one was passed. If it carries a
+        ``carries_freefree_continuum`` attribute, that attribute decides.
 
     Returns
     -------
     bool
-        ``True`` if the backend carries a free-free continuum (Cue, CloudyGrid).
-        ``False`` otherwise, including ``None``.
+        ``True`` if the backend carries a free-free continuum. ``False`` otherwise,
+        including ``None``.
 
     Notes
     -----
-    The rule is keyed on the *declared* backend name, never on the published
-    ``sed_nebular`` array or an approximation flag: the fast nebular grid path
-    publishes ``sed_nebular`` as all zeros for the same physical model, and
-    structural decisions must never be gated on approximation toggles.
+    The rule rests on what the backend's continuum supplies, decided in this order:
+
+    1. A backend instance that declares ``carries_freefree_continuum`` (Gutkin+2016,
+       true iff ``continuum="analytic"``) answers for itself.
+    2. Otherwise the declared name decides, by membership in
+       :data:`NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM`.
+
+    Neither step reads the published ``sed_nebular`` array or an approximation flag:
+    the fast nebular grid path publishes ``sed_nebular`` as all zeros for the same
+    physical model, and structural decisions must never be gated on approximation
+    toggles.
     """
+    declared = getattr(backend, "carries_freefree_continuum", None)
+    if declared is not None:
+        return bool(declared)
     return name in NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM
 
 
@@ -135,7 +153,7 @@ def nebular_carries_freefree(name: str | None, instance: object | None = None) -
     """
     from tengri.components.nebular._shared import NebularContinuumFallback
 
-    if nebular_backend_carries_freefree(name):
+    if nebular_backend_carries_freefree(name, instance):
         return True
     # The wrapper always carries free-free: its Tier 1 is a continuum-capable backend
     # and its Tier 2 is the analytic free-free plus two-photon continuum.

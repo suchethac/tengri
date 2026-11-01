@@ -319,6 +319,9 @@ class Gutkin16Backend:
             raise ValueError(f"continuum must be 'analytic' or 'none', got {continuum!r}")
         self.mup = float(mup)
         self.continuum = continuum
+        # The analytic continuum is free-free plus two-photon emission; the radio
+        # block reads this to yield its thermal term (#983).
+        self.carries_freefree_continuum = continuum == "analytic"
         self.grid_path = _resolve_path(grid_path)
         self.grid = load_gutkin16_grid(filepath=self.grid_path, mup=self.mup)
         self.line_names = gutkin16_line_names(self.grid_path)
