@@ -83,6 +83,8 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "li08": ["li2008_ext"],  # Li+2008 four-coefficient analytical curve (ADS-verified)
     "vw07_bc": ["witt_gordon2000"],  # tengri source notes Wild+2007; closest workspace match
     "vw07_diff": ["witt_gordon2000"],  # see above; update once Wild+2007 is in the workspace bib
+    # Chevallard+13 curve, applied inside the Charlot & Fall (2000) screen (#3178).
+    "chevallard13": ["chevallard2013", "charlot_fall2000"],
     "cf00": ["charlot_fall2000"],
 }
 
@@ -133,6 +135,9 @@ NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     # ``collect_citations`` for any caller still matching by backend name
     # (#2429 opus review round 2, item 1).
     "cb19": ["byler2017", "cloudy"],
+    # Gutkin+2016 NEOGAL line table, the grammar selector neb={'type': 'gutkin16'}.
+    # The table is CLOUDY c13.03 output, so the Cloudy citation rides along.
+    "gutkin16": ["gutkin2016", "cloudy"],
     "mappings": ["mappings"],
     # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
     # Byler+2017 Cloudy photoionization grids.
