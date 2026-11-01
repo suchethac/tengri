@@ -59,7 +59,7 @@
 "tests/inference/test_population_diagnostics.py": 7.0,
 "tests/inference/test_posterior_arithmetic.py": 7.0,
 "tests/inference/test_posterior_serialization.py": 7.0,
-"tests/inference/test_profile_mass.py": 2289.0,
+"tests/inference/test_profile_mass.py": 489.0,
 "tests/inference/test_profile_mass_backend_coverage.py": 14.0,
 "tests/inference/test_profile_mass_line_block.py": 51.0,
 "tests/inference/test_profile_mass_line_guard.py": 90.0,

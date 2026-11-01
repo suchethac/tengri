@@ -30,11 +30,11 @@ The ledger for tests/inference is tools/ci_inference_durations.json, the
 wall-clock seconds of each file run alone under the slow-tier selection
 (-m 'not crossval and not population_fit' -n 0, one process per file, JAX_PLATFORMS=cpu)
 on a Mac under heavy load (load average 400 to 600), so the values are
-relative weights, not runner times. Two entries are not plain wall times:
-test_profile_mass.py is the 489 s its 27 other tests take plus 1800 s for
-test_nuts_posterior_means_agree_joint (a lower bound: the remainder up to the
-2289 s at which the host killed the run before the test returned; user CPU was
-2706 s), and
+relative weights, not runner times. One entry is not a plain wall time:
+test_profile_mass.py is the 489 s its 27 other tests take; the joint-model NUTS
+parity test (test_nuts_posterior_means_agree_joint, marked ``weekly`` and run by the
+``slow-weekly`` job, 3,652 s on a runner) is deselected from these legs and no longer
+counted. The other,
 test_profile_mass_posterior_identity.py is 739 s (656 s for its three
 tests plus 83 s for the seed-3 warmup test, at the same load).
 Regenerate by timing each file alone and writing {path: seconds}, sorted.
