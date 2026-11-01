@@ -103,6 +103,11 @@ from tengri.components.nebular.dig import (
     mix_dig_grid_reconstruction,
     mix_dig_line_luminosities,
 )
+from tengri.components.nebular.gutkin16 import (
+    Gutkin16Backend,
+    Gutkin16MupError,
+    load_gutkin16_grid,
+)
 from tengri.components.nebular.mappings_photo import (
     IonizingSpectrumInconsistencyError,
     IonizingSpectrumInconsistencyWarning,
@@ -159,6 +164,13 @@ register_nebular_model(
     short_doc="6D CB19 lines-only nebular grid (CB19Backend)",
 )(CB19Backend)
 register_nebular_model(
+    "gutkin16",
+    citation="Gutkin, Charlot & Bruzual 2016 (MNRAS 462, 1757)",
+    short_doc=(
+        "Gutkin+2016 NEOGAL CLOUDY c13.03 line table (BEAGLE's nebular model) per ionizing photon"
+    ),
+)(Gutkin16Backend)
+register_nebular_model(
     "mappings",
     citation="Flury et al. 2024 (MAPPINGS V stellar grids, Zenodo 14140949)",
     status="experimental",
@@ -190,6 +202,8 @@ __all__ = [
     "CueBackend",
     "FeltreGridData",
     "FeltreNLRBackend",
+    "Gutkin16Backend",
+    "Gutkin16MupError",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
     "MappingsPhotoAGNBackend",
@@ -206,6 +220,7 @@ __all__ = [
     "build_cloudy23_deck",
     "compute_qh",
     "compute_shock_sed",
+    "load_gutkin16_grid",
     "mix_dig_emission",
     "mix_dig_grid_reconstruction",
     "mix_dig_line_luminosities",
