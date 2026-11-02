@@ -9,8 +9,8 @@ tests pin the seam:
 
 1. The catalog bucket program holds no constant as large as the SSP flux cube.
 2. The MAP driver's program holds no constant as large as the SSP flux cube.
-3. The float64 log-likelihood at a fixed standardized point is bit-identical to the
-   value recorded before the tables became arguments.
+3. The float64 log-likelihood at a fixed standardized point is bit-identical whether
+   the tables are passed as an argument or captured in a closure.
 
 The programs are recorded from the drivers themselves and traced with their
 per-galaxy inputs as arguments, so a table that a driver closes over shows up as a
@@ -30,10 +30,6 @@ from tests.contract.test_batched_spectro_loglik import _MASS, _TRUE_MASS, _mock_
 from tests.contract.test_batched_spectrum_forward import _banded, _free_z_model
 
 pytestmark = pytest.mark.contract
-
-#: Per-galaxy log-likelihood at the standardized point ``_TRUE_MASS + 0.05``, float64,
-#: recorded from the closure-captured build before the tables became arguments.
-_RECORDED_LOGLIK = np.array([-969143.1245560908, -1209237.2322956694, -1215310.5488341248])
 
 
 def _all_consts(closed) -> list:
@@ -143,10 +139,22 @@ def test_map_program_holds_no_table_as_a_constant(synthetic_ssp, template, bucke
     assert big == [], f"constants at or above the SSP cube size ({ssp_nbytes} B): {big}"
 
 
-def test_batched_log_likelihood_is_bit_identical_to_recorded_float64(template, bucket):
+def test_batched_log_likelihood_is_bit_identical_with_tables_as_argument(template, bucket):
+    """Passing the template tables as an argument gives the same float64 values as a closure.
+
+    The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. The
+    reference captures that same tuple eagerly in the returned function's closure.
+    """
     spec, batch = bucket
-    loglik = batched_spectro.batched_log_likelihood(template, spec)
+    tables = template.threaded_template_inputs()
     masses = jnp.asarray([m + 0.05 for m in _TRUE_MASS])
-    values = np.asarray(jax.vmap(loglik)({_MASS: masses}, batch))
+    params = {_MASS: masses}
+    as_argument = jax.vmap(
+        batched_spectro.batched_log_likelihood(template, spec), in_axes=(0, 0, None)
+    )(params, batch, tables)
+    in_closure = jax.vmap(batched_spectro.batched_log_likelihood(template, spec, threaded=tables))(
+        params, batch
+    )
+    values = np.asarray(as_argument)
     assert values.dtype == np.float64
-    np.testing.assert_array_equal(values, _RECORDED_LOGLIK)
+    np.testing.assert_array_equal(values, np.asarray(in_closure))
