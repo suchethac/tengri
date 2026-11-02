@@ -39,7 +39,7 @@ def _gauss_logdensity(x, data_args):
     return -0.5 * jnp.sum((x - data_args["mu"]) ** 2)
 
 
-def _substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
+def _substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
     """Per-galaxy data_args: the galaxy's center only."""
     return {"mu": data}
 
@@ -70,7 +70,7 @@ def test_engine_accepts_ghmc_and_returns_chain_stacked_draws():
     run_one = _engine()
     key = jax.random.PRNGKey(0)
     positions, divergent = run_one(
-        jnp.zeros(_DIM), key, jnp.ones(_DIM), None, None, None, None, None
+        jnp.zeros(_DIM), key, jnp.ones(_DIM), None, None, None, None, None, None
     )
     assert positions.shape == (_N_CHAINS * _N_SAMPLES, _DIM)
     assert divergent.shape == (_N_CHAINS * _N_SAMPLES,)
@@ -84,9 +84,9 @@ def test_two_galaxies_with_different_data_share_one_compiled_program():
     init = jnp.zeros(_DIM)
     first_data = jnp.array([1.0, 0.5])
     second_data = jnp.array([-2.0, 3.0])
-    jitted(init, key, first_data, None, None, None, None, None)
+    jitted(init, key, first_data, None, None, None, None, None, None)
     with jtu.count_jit_compilation_cache_miss() as misses:
-        jitted(init, key, second_data, None, None, None, None, None)
+        jitted(init, key, second_data, None, None, None, None, None, None)
     assert misses() == 0
 
 
@@ -167,7 +167,7 @@ def test_default_recovers_a_sigma_1e3_gaussian():
     )
     center = jnp.array([2.0, 2.0])
     positions, _divergent = run_one(
-        center, jax.random.PRNGKey(6), center, None, None, None, None, None
+        center, jax.random.PRNGKey(6), center, None, None, None, None, None, None
     )
     draws = np.asarray(positions)
     assert np.all(np.abs(draws.mean(axis=0) - 2.0) <= 0.05 * sigma)

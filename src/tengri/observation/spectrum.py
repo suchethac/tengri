@@ -1461,11 +1461,15 @@ def _flux_conserving_resample(
     the integral cannot be formed on the raw SED. The scale is exact in binary
     floating point, so float64 output is bit-identical to the unfactored
     integral. The exponent is a ``stop_gradient`` factorization constant, and the
-    all-zero SED has exponent 0.
+    all-zero SED has exponent 0. The two powers of two are applied as stop-gradient
+    multiplies, because ``jnp.ldexp`` has an inexact derivative.
     """
     exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    means = _resample_peak_factored(wave_rest, jnp.ldexp(sed_rest, -exponent), wave_query, edge_aa)
-    return jnp.ldexp(means, exponent)
+    dtype = jnp.result_type(sed_rest)
+    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
+    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    means = _resample_peak_factored(wave_rest, sed_rest * scale_in, wave_query, edge_aa)
+    return means * scale_out
 
 
 def _resample_peak_factored(
@@ -1676,6 +1680,12 @@ def compute_spectrum_conserving_lsf(
     Notes
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes.
+
+    The SED is divided by a power of two before the line-spread convolution and
+    multiplied back on the pixel luminosity, so the peak stays O(1). In float64 the
+    output equals the unscaled computation to within XLA fusion rounding (about one
+    ulp, measured 3e-16 relative to the peak), and the gradient with respect to
+    ``sed_rest`` is bit-identical to it.
     """
     wave_model_obs = wave_rest * (1.0 + redshift)
 
@@ -1684,21 +1694,37 @@ def compute_spectrum_conserving_lsf(
         return x if x.ndim == 0 else jnp.interp(wave_model_obs, wave_obs, x)
 
     # An array resolution takes the piecewise path (rest grids are not log-uniform).
-    # Peak factoring (#3149): the line-spread convolution sums the SED over its
-    # kernel, and a 1e10 Msun galaxy's SED sum runs past float32's ceiling. The
-    # convolution is linear, so the power-of-two factor is restored exactly on
-    # the pixel luminosity before the flux conversion.
+    # The line-spread convolution sums the SED over its kernel, so the SED is divided
+    # by its binary peak before the broadening and the factor is restored on the pixel
+    # luminosity. The factors are stop-gradient powers of two applied as multiplies:
+    # ``jnp.ldexp`` has an inexact derivative.
     exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
+    dtype = jnp.result_type(sed_rest)
+    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
+    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
     sed_broad = apply_lsf(
-        jnp.ldexp(sed_rest, -exponent),
+        sed_rest * scale_in,
         wave_rest,
         _onto_model(resolution),
         sigma_lib_kms=_onto_model(sigma_lib_kms),
         n_bins=n_bins,
         sigma_v_kms=sigma_v_kms,
     )
-    pixel_lnu = _conserving_pixel_luminosity(sed_broad, wave_rest, wave_obs, redshift)
-    return lnu_to_fnu(jnp.ldexp(pixel_lnu, exponent), dl_cm, redshift)
+    return _conserving_lsf_flux(sed_broad, scale_out, wave_rest, wave_obs, redshift, dl_cm)
+
+
+@jax.jit
+def _conserving_lsf_flux(sed_broad, scale, wave_rest, wave_obs, redshift, dl_cm):
+    """Bin-integrated flux of the broadened rest SED, restored by ``scale``.
+
+    Resample and flux conversion run as one jitted program, so XLA fuses them the
+    same way as :func:`compute_spectrum_conserving`. The restore sits before
+    :func:`lnu_to_fnu`, which therefore receives the pixel luminosity at its
+    unscaled magnitude.
+    """
+    wave_rest_query = wave_obs / (1.0 + redshift)
+    pixel_lnu = _resample_peak_factored(wave_rest, sed_broad, wave_rest_query, None) * scale
+    return lnu_to_fnu(pixel_lnu, dl_cm, redshift)
 
 
 #: Fractional spread in ``d(ln lambda)`` tolerated before a grid is called

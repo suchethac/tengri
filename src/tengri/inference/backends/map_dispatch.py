@@ -1149,14 +1149,22 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
         # unbounded point the Hessian is evaluated at, the same space the runners use.
         _reject_nonfinite_map(map_params)
 
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
+    # Same flat log-posterior the samplers and run_pathfinder use.
+    log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
+        context.fitter,
+        map_params,
+    )
+
     return run_laplace(
         key=key,
-        loss_fn=context.neg_log_posterior_fn,
-        data_args=context.data_args,
-        map_params_unbounded=map_params,
+        logdensity_fn=log_posterior_flat_2arg,
+        data_args=data_args,
+        position=init_flat,
+        unravel_fn=unravel_fn,
         to_physical_fn=context.to_physical,
         model=context.model,
-        grad_fn=context.grad_fn,
         **kwargs,
     )
 

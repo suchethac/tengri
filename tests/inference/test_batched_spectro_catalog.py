@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 
 from tengri import Fixed
+from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 from tengri.inference.batched_spectro import (
     _bucket_catalog_inputs,
@@ -68,7 +69,7 @@ def test_flat_logdensity_equals_negative_batched_neg_log_posterior(template, two
         nlp = batched_neg_log_posterior(template, spec)
         for row in range(batch.z.shape[0]):
             obs = batch.galaxy(row)
-            data_args = substitute(obs, None, None, None, None, None)
+            data_args = substitute(obs, None, None, None, None, None, _template_args)
             for _ in range(3):
                 x = init_flat + jnp.asarray(rng.normal(scale=0.3, size=init_flat.shape))
                 np.testing.assert_allclose(
@@ -151,11 +152,20 @@ _JOINT_Z = (0.10, 0.12, 0.14)
 _JOINT_MASS = (9.8, 10.0, 10.2)
 
 
-def _joint_draws() -> int:
-    """NUTS draws per run; ``TENGRI_JOINT_DRAWS`` shortens it for a smoke run."""
-    import os
+#: NUTS draws per side for the joint comparison. Its Monte Carlo error is set by the
+#: standard error of the difference of means, SE = sqrt(var_a/ESS_a + var_b/ESS_b). At
+#: 2000 draws the worst row over five seeds has 4 SE / width = 0.278, and SE scales as
+#: 1/sqrt(draws). Holding 4 SE / width below 0.05 needs draws > 2000 * (0.278 / 0.05)**2,
+#: about 62,000; 80,000 draws give 0.047 for that row, which leaves a margin for seed
+#: variation.
+_JOINT_SLOW_DRAWS = 80_000
 
-    return int(os.environ.get("TENGRI_JOINT_DRAWS", "2000"))
+
+def _mean_difference_standard_error(first: np.ndarray, second: np.ndarray) -> float:
+    """Monte Carlo standard error of ``mean(first) - mean(second)`` from the chains' ESS."""
+    ess_first = float(effective_sample_size({_MASS: first})[_MASS]["ess"])
+    ess_second = float(effective_sample_size({_MASS: second})[_MASS]["ess"])
+    return float(np.sqrt(np.var(first) / ess_first + np.var(second) / ess_second))
 
 
 def _joint_galaxies(template):
@@ -231,16 +241,18 @@ def _per_galaxy_mass_draws(ssp, galaxy, n_draws: int) -> np.ndarray:
     return np.asarray(post.samples[_MASS]).reshape(-1)
 
 
+@pytest.mark.slow
 def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
     """Batched and per-galaxy NUTS medians agree within 0.05 widths for every galaxy.
 
-    Draw count raised once from 200 to 2000 because at 200 the median difference's
-    Monte Carlo error (about 0.09 widths) exceeds the 0.05-width criterion; at 2000
-    it is about 0.03.
+    The run must resolve the bar: for each galaxy, four standard errors of the difference
+    of the two sample means must fall below 0.05 widths. The test fails when the run is
+    too short for that, so a shorter run cannot pass the bar by being noisier. The draw
+    count is :data:`_JOINT_SLOW_DRAWS`, sized for that resolution.
     """
     from tests.contract.test_batched_eline_marginal import _marg_template
 
-    n_draws = _joint_draws()
+    n_draws = _JOINT_SLOW_DRAWS
     template = _marg_template(synthetic_ssp, banded=True)
     galaxies = _joint_galaxies(template)
     batched = _batched_mass_draws(template, galaxies, n_draws)
@@ -250,6 +262,11 @@ def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
         per_galaxy = _per_galaxy_mass_draws(synthetic_ssp, galaxy, n_draws)
         width = float(np.std(per_galaxy))
         gap = abs(float(np.median(batched[row])) - float(np.median(per_galaxy)))
+        standard_error = _mean_difference_standard_error(batched[row], per_galaxy)
+        assert 4.0 * standard_error < 0.05 * width, (
+            f"row {row}: 4 SE = {4.0 * standard_error:.3e} is not below 0.05 widths "
+            f"({0.05 * width:.3e}); the run has too few draws to resolve the bar"
+        )
         assert gap < 0.05 * width, (row, gap, width)
 
 

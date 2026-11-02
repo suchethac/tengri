@@ -501,11 +501,11 @@ class TestCatalogEngines:
         logp, _unravel, init_flat, template = _get_flat_logdensity(
             fitter, fitter._initialize_unbounded(jax.random.PRNGKey(3))
         )
-        substitute = _make_substitute(template, True, False)
+        substitute = _make_substitute(True, False)
         presence = jnp.ones_like(jnp.asarray(datas[0]))
 
         def one(data, noise, z):
-            return logp(init_flat, substitute(data, noise, presence, z, None, None))
+            return logp(init_flat, substitute(data, noise, presence, z, None, None, template))
 
         batched = np.asarray(
             jax.jit(jax.vmap(one))(jnp.asarray(datas), jnp.asarray(noises), jnp.asarray(self._ZS))

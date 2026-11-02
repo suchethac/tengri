@@ -455,6 +455,14 @@ def test_a_bug_duration_ledger_change_runs_everything(tmp_path):
 
 
 @needs_tools
+def test_an_inference_duration_ledger_change_runs_everything(tmp_path):
+    """The ledger moves tests between the slow inference legs, so its edit forces the full run."""
+    result = _run_gate(tmp_path, files=[_f("tools/ci_inference_durations.json")])
+    assert (result["scope"], result["needed"]) == ("all", "false"), result["_log"]
+    assert sorted(_shards(result)) == sorted(EVERY)
+
+
+@needs_tools
 def test_a_filename_cannot_inject_a_workflow_command(tmp_path):
     """A changed filename is echoed inside a random stop-commands region."""
     result = _run_gate(tmp_path, files=[_f("src/tengri/a.py"), _f("::warning::injected")])

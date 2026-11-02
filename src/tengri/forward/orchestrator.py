@@ -285,6 +285,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_agn_polar_dust": "dex",
     "log_L_agn_polar_dust_los": "dex",
     "agn_torus_frac_effective": "",
+    "agn_ir_frac_saturated": "",
+    "log_agn_ir_frac_window_host": "dex",
     "log_L_agn_absorbed": "dex",
     "log_L_agn_bol_ionizing": "dex",
     "agn_adaf_mdot": "",

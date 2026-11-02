@@ -523,10 +523,10 @@ def _build_flat_logposterior(cat):
     fitter = cat._get_dummy_fitter()
     init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
     ld2, _unravel_fn, init_flat, template = _get_flat_logdensity(fitter, init_params)
-    substitute = _make_substitute(template, False, False)
+    substitute = _make_substitute(False, False)
 
     def one(x, data, noise, presence):
-        return ld2(x, substitute(data, noise, presence, 0.0, None, None))
+        return ld2(x, substitute(data, noise, presence, 0.0, None, None, template))
 
     return one, init_flat
 

@@ -56,6 +56,7 @@ import copy
 import logging
 import math
 import types
+import warnings
 import zlib
 
 import jax
@@ -63,7 +64,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
-from tengri.config.exceptions import ConfigError, ParameterError
+from tengri.config.exceptions import AdvisoryWarning, ConfigError, ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -152,6 +153,33 @@ def _neb_isochrone_tag_from_ssp(ssp_data) -> str | None:
 # (_builders -> observation -> components -> ... -> forward ->
 # component_factory -> components.nebular.component) that made a
 # module-level import of this name FROM HERE a real import cycle.
+
+
+def screened_fracagn_message(agn_norm: str, dust_agn_screen: str) -> str:
+    """The refusal of an active fracAGN beside a screened AGN, shared by both build paths.
+
+    Parameters
+    ----------
+    agn_norm : str
+        The AGN normalization policy.
+    dust_agn_screen : str
+        The host-dust screen on the AGN (not ``'none'``).
+
+    Returns
+    -------
+    str
+        The ``ConfigError`` message.
+    """
+    return (
+        f"agn_norm={agn_norm!r} with an active fracAGN (agn_ir_frac) and "
+        f"dust_agn_screen={dust_agn_screen!r}: fracAGN sets agn_torus_frac from the power the "
+        "dust absorbs from the host, but a screened AGN is evaluated before the dust (the "
+        "screen attenuates the AGN inside the dust step), so that power does not exist yet "
+        "when the AGN runs. Choose one of: drop the screen "
+        "(dust_attenuation={'agn_screen': 'none'}), or drop the coupling "
+        "(agn={'agn_ir_frac': Fixed(0.0)}) and state the covering factor with "
+        "agn_torus_frac."
+    )
 
 
 def _stable_param_seed(name: str) -> int:
@@ -582,6 +610,8 @@ class Parameters:
         # keys against: both names of a pair must stay declared there.
         timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
+        # Names a grammar ``all_params: FREE`` wildcard freed (empty on the flat path).
+        self._wildcard_freed: frozenset[str] = frozenset(kwargs.pop("_wildcard_freed", ()))
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs, defer_resource_paths=defer_resource_paths)
@@ -663,8 +693,9 @@ class Parameters:
                 f"  - agn_norm='independent' (each block on its own scale)\n"
                 f"  - agn_norm='conserving' (energy-conserving joint scaling)\n"
                 f"  - dust_agn_screen='none' (unscreened AGN)\n"
-                f"A screened AGN cannot use fracAGN (agn_ir_frac), which requires "
-                f"agn_norm='cigale_joint': drop the screen or the coupling."
+                f"A screened AGN cannot carry fracAGN (agn_ir_frac) under any policy: "
+                f"the coupling reads the absorbed power the screen is part of, so drop "
+                f"the screen or set agn_ir_frac=Fixed(0.0)."
             )
         # Block-recipe validation (typo hard-error + suspicious-combo warnings)
         # is deferred until after the parameter distributions are built, so the
@@ -983,6 +1014,21 @@ class Parameters:
                 params=recipe_params,
                 param_support=param_support,
             )
+
+        # A screened AGN runs before the dust, so an active fracAGN would read an absorbed power
+        # that does not exist yet and fall back to the user agn_torus_frac without a word. The
+        # 'cigale_joint' pairing is refused above. Under every other policy an agn_ir_frac the
+        # caller set (a value above 0, or a prior other than the declared one) is refused; one
+        # freed only by its declared prior (a flat spec that does not name it, an all_params
+        # wildcard) would be a dead parameter, so it is fixed at 0.0 with a warning. The
+        # structural spec parse_groups validates keys against carries registry defaults, not a
+        # model, and is exempt.
+        if (
+            not timing_keep_all
+            and self.agn_model not in (None, "none")
+            and self.dust_agn_screen != "none"
+        ):
+            self._settle_screened_ir_frac()
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
         # DERIVE the Eddington ratio from agn_log_lbol + agn_log_mbh, so
@@ -2241,6 +2287,50 @@ class Parameters:
         """
         return sorted(self._distributions.keys())
 
+    def _settle_screened_ir_frac(self) -> None:
+        """Refuse a caller-set fracAGN beside a screened AGN; fix a default-freed one at 0.0.
+
+        Raises
+        ------
+        ConfigError
+            If the caller set ``agn_ir_frac``: Fixed above 0, a prior other than its declared
+            one, or ``FREE`` written by name.
+
+        Warns
+        -----
+        AdvisoryWarning
+            If ``agn_ir_frac`` is free only through its declared prior because nothing named
+            it (a flat spec that leaves it out, an ``all_params: FREE`` wildcard); it is fixed
+            at 0.0.
+        """
+        dist = self._distributions.get("agn_ir_frac")
+        if dist is None:
+            return
+        if dist.is_fixed:
+            if float(dist.value) > 0.0:
+                raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
+            return
+        default = self._defaults.get("agn_ir_frac")
+        same_as_declared = (
+            default is not None
+            and not default.is_fixed
+            and type(dist) is type(default)
+            and tuple(dist.bounds) == tuple(default.bounds)
+        )
+        named = "agn_ir_frac" in self._user_provided and "agn_ir_frac" not in self._wildcard_freed
+        if named or not same_as_declared:
+            raise ConfigError(screened_fracagn_message(self.agn_norm, self.dust_agn_screen))
+        warnings.warn(
+            f"agn_ir_frac is free only through its declared prior, but dust_agn_screen="
+            f"{self.dust_agn_screen!r} puts the AGN before the dust, so the fracAGN coupling "
+            "has no absorbed power to read and agn_ir_frac would change nothing. It is fixed "
+            "at 0.0 and dropped from the free parameters. To keep the coupling, drop the screen "
+            "(dust_attenuation={'agn_screen': 'none'}); to state the torus, use agn_torus_frac.",
+            AdvisoryWarning,
+            stacklevel=3,
+        )
+        self._distributions["agn_ir_frac"] = Fixed(0.0)
+
     @property
     def free_params(self) -> list[str]:
         """Names of free (non-fixed) parameters.
@@ -2498,6 +2588,7 @@ class Parameters:
         )
         # Preserve user_provided set: auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
+        object.__setattr__(new_spec, "_wildcard_freed", self._wildcard_freed)
         object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
@@ -3421,6 +3512,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "_mirrors": content("parameter mirror relationships determine structure"),
     "_user_provided": content("user-provided parameters determine parameter source"),
+    "_wildcard_freed": exclude(
+        "the names a grammar wildcard freed, read once at construction to settle a screened "
+        "fracAGN; what it decides is in the keyed provenance and the free/fixed structure"
+    ),
     "_valid_param_names": content("valid parameter names define scope"),
     # Excluded: these are derived or runtime-only
     "_distributions": exclude(
