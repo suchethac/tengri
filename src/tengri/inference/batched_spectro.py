@@ -92,9 +92,11 @@ from tengri.forward.batched_spectrum import (
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference.backends.mcmc.catalog import (
     CATALOG_CHEES_ENSEMBLE,
+    GHMC_DEFAULT_FOLDS,
     GHMC_DEFAULT_SUPERCHAINS,
     _catalog_live_chains,
     build_catalog_mcmc_engine,
+    ghmc_default_chains,
     map_with_shared,
 )
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
@@ -1081,10 +1083,6 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     return jnp.where(keep, map_rows, prior_rows)
 
 
-#: Chains per galaxy the driver uses for the MEADS sampler when none are given.
-_GHMC_DRIVER_CHAINS = 32
-
-
 def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     """Largest nested R-hat over the coordinates of one galaxy's chains.
 
@@ -1203,8 +1201,12 @@ def fit_spectra_catalog_mcmc(
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
         ``target_accept_rate`` or ``use_dense``. With ``sampler="ghmc"`` the defaults are
-        ``n_chains=32`` and ``n_superchains=8``; ``n_chains`` must be a multiple of
-        ``n_superchains``.
+        ``n_superchains=8`` and the smallest ``n_chains`` of at least 32 that is a multiple
+        of ``n_superchains`` and of ``n_folds`` and gives each MEADS fold at least ``2 D``
+        chains (:func:`~tengri.inference.backends.mcmc.catalog.ghmc_default_chains`, D = the
+        galaxy's sampled coordinates); an explicit ``n_chains`` below that raises
+        :class:`~tengri.config.exceptions.ConfigError`. ``rewhiten_at`` (default 0.5) sets
+        when MEADS re-estimates its coordinates from the ensemble.
 
     Returns
     -------
@@ -1261,9 +1263,6 @@ def fit_spectra_catalog_mcmc(
         )["params"]
 
     options = dict(engine_kwargs)
-    if sampler == "ghmc":
-        options.setdefault("n_chains", _GHMC_DRIVER_CHAINS)
-    n_chains = int(options.get("n_chains", 1))
     n_superchains = int(options.get("n_superchains", GHMC_DEFAULT_SUPERCHAINS))
 
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
@@ -1281,6 +1280,13 @@ def fit_spectra_catalog_mcmc(
             threaded=threaded,
         )
         unravel_fn = flat[1]
+        if sampler == "ghmc" and "n_chains" not in engine_kwargs:
+            options["n_chains"] = ghmc_default_chains(
+                int(flat[2].shape[0]),
+                n_superchains,
+                int(options.get("n_folds", GHMC_DEFAULT_FOLDS)),
+            )
+        n_chains = int(options.get("n_chains", 1))
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
         bucket_batch = _resolve_bucket_batch_size(
