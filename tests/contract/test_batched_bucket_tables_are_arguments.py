@@ -9,8 +9,12 @@ tests pin the seam:
 
 1. The catalog bucket program holds no constant as large as the SSP flux cube.
 2. The MAP driver's program holds no constant as large as the SSP flux cube.
-3. The float64 log-likelihood at a fixed standardized point is bit-identical whether
-   the tables are passed as an argument or captured in a closure.
+3. The jitted batched log-likelihood, lowered with the tables as arguments, holds no
+   copy of a threaded table as a constant and takes the tables as parameters. The
+   closure form of the same program is checked by the same detector as a positive
+   control, so a regression that captures the tables as constants fails here.
+4. The float64 jitted log-likelihood with the tables as an argument agrees with the
+   jitted closure to within a few ulp.
 
 The programs are recorded from the drivers themselves and traced with their
 per-galaxy inputs as arguments, so a table that a driver closes over shows up as a
@@ -18,6 +22,10 @@ constant of the trace.
 """
 
 from __future__ import annotations
+
+import json
+import re
+from collections import Counter
 
 import jax
 import jax.numpy as jnp
@@ -30,6 +38,79 @@ from tests.contract.test_batched_spectro_loglik import _MASS, _TRUE_MASS, _mock_
 from tests.contract.test_batched_spectrum_forward import _banded, _free_z_model
 
 pytestmark = pytest.mark.contract
+
+# Numeric agreement tolerance of the argument and closure programs, in ulp. Measured
+# on macOS arm64 (jax 0.11.1, CPU): 0, 9, 6 ulp across the three galaxies. Measured on
+# linux/amd64 (python:3.12-slim container, jax 0.11.1, CPU): 55, 1, 13 ulp. The
+# tolerance is the next power of two above the largest of those measurements (55).
+_MAX_ULP = 64
+
+# Constant regex for the f64 constants of a StableHLO module: ``dense<payload> :
+# tensor<dims x f64>`` at the end of the line.
+_F64_CONSTANT = re.compile(r"stablehlo\.constant dense<(.*)> : tensor<([0-9x]*)f64>\s*$")
+_MAIN_SIGNATURE = re.compile(r"func\.func public @main\((.*?)\) ->")
+_F64_TENSOR = re.compile(r"tensor<([0-9x]*)f64>")
+
+
+def _lowered_text(fn, *args) -> str:
+    """StableHLO text of ``jax.jit(fn)`` lowered at ``args``."""
+    return jax.jit(fn).lower(*args).as_text()
+
+
+def _dims(text: str) -> tuple[int, ...]:
+    """Shape from a ``"3x20x"`` dimension string, ``""`` for a scalar."""
+    return tuple(int(d) for d in text.rstrip("x").split("x")) if text.strip("x") else ()
+
+
+def _decode(payload: str, shape: tuple[int, ...]) -> np.ndarray | None:
+    """Values of a dense f64 payload, or None when the printed form is not decodable."""
+    if payload.startswith('"0x'):
+        return np.frombuffer(bytes.fromhex(payload[3:-1]), dtype=np.float64).reshape(shape)
+    try:
+        return np.asarray(json.loads(payload), dtype=np.float64).reshape(shape)
+    except (ValueError, TypeError):
+        return None
+
+
+def _table_findings(text: str, tables: list[np.ndarray]) -> dict[str, list[tuple[int, ...]]]:
+    """Table copies held as constants, and table shapes the parameters do not supply.
+
+    A constant counts as a table copy when its shape equals a table's shape and its
+    values equal that table, or when its shape matches and its payload cannot be
+    decoded (a match on shape alone is then the conservative reading). ``missing``
+    lists table shapes that the ``main`` signature has no f64 parameter for, counted
+    with multiplicity.
+    """
+    constants = []
+    for line in text.splitlines():
+        match = _F64_CONSTANT.search(line)
+        if match is None:
+            continue
+        shape = _dims(match.group(2))
+        for table in tables:
+            if table.shape != shape:
+                continue
+            values = _decode(match.group(1), shape)
+            if values is None or np.array_equal(values, table):
+                constants.append(shape)
+    signature = _MAIN_SIGNATURE.search(text)
+    params = [_dims(d) for d in _F64_TENSOR.findall(signature.group(1))] if signature else []
+    needed = Counter(table.shape for table in tables)
+    missing = sorted((needed - Counter(params)).elements())
+    return {"constants": constants, "missing": missing}
+
+
+def _threaded_tables(tables, ssp) -> list[np.ndarray]:
+    """The template table leaves the batched program is meant to take as arguments.
+
+    The SSP wavelength grid is left out. The argument program holds it as a constant
+    too, because the grid is read from the model rather than from the threaded tuple:
+    the grid is not a parameter of that program. The flux cube and the age and
+    metallicity grids are the tables the seam passes, and those are what is checked.
+    """
+    wave = np.asarray(ssp.ssp_wave)
+    leaves = [np.asarray(leaf) for leaf in jax.tree_util.tree_leaves(tables)]
+    return [leaf for leaf in leaves if leaf.shape != wave.shape or not np.array_equal(leaf, wave)]
 
 
 def _all_consts(closed) -> list:
@@ -139,16 +220,44 @@ def test_map_program_holds_no_table_as_a_constant(synthetic_ssp, template, bucke
     assert big == [], f"constants at or above the SSP cube size ({ssp_nbytes} B): {big}"
 
 
-def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_16_ulp(template, bucket):
+def test_batched_log_likelihood_lowered_program_takes_tables_as_arguments(
+    synthetic_ssp, template, bucket
+):
+    """The lowered batched log-likelihood takes the tables as parameters, not constants.
+
+    The argument form is lowered with the tables as its third argument. The closure
+    form, which captures the same tables, is lowered through the same helper and read
+    by the same detector: it must show table copies as constants, which proves the
+    detector would catch a regression to closure capture.
+    """
+    spec, batch = bucket
+    tables = template.threaded_template_inputs()
+    threaded = _threaded_tables(tables, synthetic_ssp)
+    params = {_MASS: jnp.asarray([m + 0.05 for m in _TRUE_MASS])}
+    argument_fn = jax.vmap(
+        batched_spectro.batched_log_likelihood(template, spec), in_axes=(0, 0, None)
+    )
+    closure_fn = jax.vmap(batched_spectro.batched_log_likelihood(template, spec, threaded=tables))
+    argument = _table_findings(_lowered_text(argument_fn, params, batch, tables), threaded)
+    closure = _table_findings(_lowered_text(closure_fn, params, batch), threaded)
+    assert closure["constants"], "positive control: the closure program shows no table constant"
+    assert argument["constants"] == [], f"table copies held as constants: {argument['constants']}"
+    missing = argument["missing"]
+    assert missing == [], f"table shapes not among the parameters: {missing}"
+
+
+def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_64_ulp(template, bucket):
     """The jitted float64 value with the tables as an argument matches the jitted closure.
 
     The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. Both
     sides are compiled with ``jax.jit``, because the constant embedding this seam
     removes happens only in a compiled program. The closure form embeds the tables as
     compile-time constants, and XLA folds them in a different order from the argument
-    form. On this fixture the two agree to 0, 9 and 6 ulp across the three galaxies;
-    16 ulp is the margin the test allows above that spread. Tests 1 and 2 already pin
-    that the compiled bucket and MAP programs hold no table as a constant.
+    form, so the two differ at the ulp level and the platform sets the size: 0, 9 and 6
+    ulp across the three galaxies on macOS arm64, 55, 1 and 13 on linux/amd64. The
+    tolerance is the next power of two above the largest of these. Test 3 pins that the
+    lowered program holds no table as a constant; this test only checks that the two
+    forms agree numerically.
     """
     spec, batch = bucket
     tables = template.threaded_template_inputs()
@@ -163,4 +272,4 @@ def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_16_ulp(
     argument_values = np.asarray(jit_argument(params, batch, tables))
     closure_values = np.asarray(jit_closure(params, batch))
     assert argument_values.dtype == np.float64
-    np.testing.assert_array_max_ulp(argument_values, closure_values, maxulp=16)
+    np.testing.assert_array_max_ulp(argument_values, closure_values, maxulp=_MAX_ULP)
