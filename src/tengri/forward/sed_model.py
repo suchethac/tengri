@@ -11339,13 +11339,10 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
-        # Route the photometry channel through the LUT projection
-        # when the model was built with ``approx=WavePrecomp(...)``. The
-        # routing decision is closure-captured per-model and baked into
-        # ``compile_signature`` (via the resolved ``approx`` config tuple),
-        # so structurally-equal models share a compile across the two
-        # routings without colliding. Spectrum stays exact, no spectrum
-        # LUT yet.
+        # A photometry-only observation under ``approx=WavePrecomp(...)`` projects through
+        # the LUT. The routing is closure-captured per model and baked into
+        # ``compile_signature`` via the resolved ``approx`` config tuple. A joint
+        # observation takes the branches below.
         use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
         # Part B: spectrum LUT inside the fused JIT kernel. ``predict_state``
         # (called within ``_impl``) publishes ``spec_eff_waves`` + the per-pixel
@@ -11354,6 +11351,15 @@ class SEDModel:
         # JOINT model also project photometry in the same kernel (Part A).
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
+        # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
+        # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
+        # which the exact spectrum reads.
+        mixed_phot_lut = (
+            phot_lut
+            and observation.can_do_spectroscopy
+            and observation.can_do_photometry
+            and getattr(self, "_nebular_grid_table", None) is None
+        )
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
         # build runs each component's ``precompute()``, which for the
@@ -11436,8 +11442,15 @@ class SEDModel:
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
-                    observables_type=observables_type,
+                    observables_type=None if mixed_phot_lut else observables_type,
                 )
+                if mixed_phot_lut:
+                    # The exact kernel's own photometry is discarded (XLA drops it as dead
+                    # code); the LUT supplies phot_fnu and phot_rest_fnu.
+                    out = {"spec_fnu": obs["spec_fnu"]}
+                    out.update(observation.predict_via_precomp(state, full, observables_type=None))
+                    avail = {k: v for k, v in out.items() if k in observables_type._fields}
+                    return observables_type(**avail), state
                 return obs, state
             if use_lut:
                 obs = observation.predict_via_precomp(
@@ -11880,12 +11893,27 @@ class SEDModel:
         """
         return self._energy_balance_lut(chain) is not None
 
+    def _observation_reads_nebular_continuum(self) -> bool:
+        """Whether this model's observation projects a spectrum, which reads ``sed_nebular``.
+
+        The continuum census asks the component chain, and a spectrum is projected by
+        the observation, not by a component: the exact spectrum sums the rest SED and
+        the spectrum LUT samples the nebular SED at the pixels, so both read the
+        continuum the grid would zero. Left out of the census, a joint model ran its
+        observables kernel with ``sed_nebular`` exactly zero and projected both
+        channels off that state: photometry -14 % and spectrum -55 % on a dust-free
+        Cue model (#3227).
+        """
+        observation = getattr(self, "observation", None)
+        return observation is not None and bool(observation.can_do_spectroscopy)
+
     def nebular_grid_can_serve_photometry(self) -> bool:
         """Whether the per-Q_H nebular grid can serve this model's photometry.
 
         Serving photometry from the grid zeroes ``sed_nebular``, so it requires
-        that no component read the continuum. A dust component reads it, unless
-        it can take the nebular from the grid instead
+        that nothing read the continuum: no component, and no spectrum projected by
+        the observation (:meth:`_observation_reads_nebular_continuum`). A dust
+        component reads it, unless it can take the nebular from the grid instead
         (:meth:`_dust_can_take_nebular_from_grid`); then it does not count.
 
         Returns
@@ -11901,7 +11929,7 @@ class SEDModel:
             grid_baked_free_params,
         )
 
-        if grid_baked_free_params(self.spec):
+        if grid_baked_free_params(self.spec) or self._observation_reads_nebular_continuum():
             return False
 
         chain = getattr(self, "_cached_component_chain", None)
@@ -11924,6 +11952,10 @@ class SEDModel:
         and ``must_materialize_sed`` follows from it. Both happen here so the flag and
         the census cannot drift between call sites.
 
+        A projected spectrum reads the continuum too
+        (:meth:`_observation_reads_nebular_continuum`), so it materializes the nebular
+        SED and leaves the dust unflagged, like any other consumer.
+
         The grid's band photometry follows the evaluation redshift (fixed, free or
         runtime), so no redshift condition applies.
         """
@@ -11934,7 +11966,12 @@ class SEDModel:
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
         chain = list(chain)
-        if table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+        spectrum_reads = self._observation_reads_nebular_continuum()
+        if (
+            not spectrum_reads
+            and table.serves_dust
+            and self._dust_can_take_nebular_from_grid(chain)
+        ):
             eb_lut = self._energy_balance_lut(chain)
             dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
             for name_table, name_lut, grid_lut in (
@@ -11983,7 +12020,9 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
+            dataclasses.replace(
+                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or spectrum_reads
+            )
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain
