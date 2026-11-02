@@ -155,8 +155,8 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "``optimization_barrier(total_mass * per_msun_lsun) * L_sun`` and its "
         "``custom_jvp`` carries the same barrier on ``primal_out`` and on both "
         "tangent terms, so neither pass ever forms the scalar alone. "
-        "``StellarSEDComponent.apply`` computes the scale at working precision on "
-        "the derived/line path, outside any fitted gradient. The spectral-index "
+        "``StellarSEDComponent.apply`` no longer forms the scalar: the 4-D grid's "
+        "interval spectra split it by an exact power of two. The spectral-index "
         "LUT left this family with #3149: the scale cancels in its ratios and is "
         "no longer formed. "
         "``measure_line_fluxes`` left this family with the float32 line-channel fix "
@@ -165,7 +165,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tengri.components.stellar.component:_mass_scale_lnu",
             "tengri.components.stellar.component:_mass_scale_lnu_jvp",
-            "tengri.components.stellar.component:StellarSEDComponent.apply",
         ),
     ),
     "agn_bolometric_renorm": (
