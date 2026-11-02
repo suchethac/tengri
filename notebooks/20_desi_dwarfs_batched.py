@@ -211,6 +211,10 @@ def make_record(lo, hi, z, edges, mask, flux, ivar, phot, perr, ebmv, covariance
 # prior of 0.1 dex. The emission lines are marginalized jointly with the calibration. The Milky Way
 # screen is switched on through `foreground`; each galaxy supplies its own E(B−V).
 #
+# The Cue nebular lines are rendered at `neb_eline_sigma_kms` = 100 km/s, the default of that
+# parameter, and the mocks draw their lines from this same template at the same 100 km/s width, so
+# the mock and the fit use one line profile.
+#
 # The redshift is free in the template. A batch carries each galaxy's redshift, so `Fixed(z)` is
 # refused here.
 
@@ -444,10 +448,12 @@ for i in range(N_GAL):
 # ## Sampling all four
 #
 # `fit_spectra_catalog_mcmc` with the ChEES sampler runs every galaxy's chains, warm-started from
-# the MAP. Each galaxy runs two chains, 60 warmup steps and 60 draws per chain. The draws come back
-# with the chains flattened, one after the other, so the convergence check below is a split R-hat
-# computed on the two halves of each galaxy's flattened draws. It is a split statistic on halves,
-# not a between-chain R-hat. The interval is the 16 to 84 percent range of the draws.
+# the MAP. Each galaxy runs two chains, 40 warmup steps and 40 draws per chain. The sampler adapts a
+# four-chain ensemble per galaxy, the smallest the ChEES adaptation accepts, and `batch_size=1`
+# runs one galaxy per step, which bounds the memory of the run. The draws come back with the chains
+# flattened, one after the other, so the convergence check below is a split R-hat computed on the
+# two halves of each galaxy's flattened draws. It is a split statistic on halves, not a
+# between-chain R-hat. The interval is the 16 to 84 percent range of the draws.
 
 
 # %%
@@ -469,9 +475,11 @@ post = fit_spectra_catalog_mcmc(
     sampler="chees",
     init="map",
     precondition=1.0,
-    n_warmup=60,
-    n_samples=60,
+    n_warmup=40,
+    n_samples=40,
     n_chains=2,
+    n_ensemble=4,
+    batch_size=1,
     map_steps=MAP_STEPS,
     calibration_marginalize=True,
     cal_n_poly=3,
