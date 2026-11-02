@@ -98,7 +98,10 @@ from tengri.inference.backends.mcmc.catalog import (
     map_with_shared,
 )
 from tengri.inference.lbfgs_driver import lbfgs_to_gtol
-from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.inference.likelihoods.gaussian import (
+    diag_gaussian_log_prob,
+    standardized_residual,
+)
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
@@ -218,7 +221,8 @@ def _refuse_calibration_order(model) -> None:
 def _log_q_log_normal(obs: SpectroBatch, log_q) -> jax.Array:
     """Log of the galaxy's log-normal prior on ``ln q``, ``N(ln10 * center, (ln10 * sigma)^2)``."""
     center, width = _LN10 * obs.cal_scale_center, _LN10 * obs.cal_scale_sigma
-    return -0.5 * ((log_q - center) / width) ** 2 - jnp.log(width * math.sqrt(2.0 * math.pi))
+    z = standardized_residual(log_q, center, width)
+    return -0.5 * z**2 - jnp.log(width * math.sqrt(2.0 * math.pi))
 
 
 def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | None:

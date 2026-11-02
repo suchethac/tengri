@@ -851,6 +851,7 @@ def build_components(
                     agn_norm=agn_norm,
                     agn_polar_law=agn_polar_law,
                     agn_ir_frac_window=agn_ir_frac_window,
+                    agn_screened=dust_agn_screen != "none",
                 ),
             )
         )

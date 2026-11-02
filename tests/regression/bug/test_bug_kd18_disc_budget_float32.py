@@ -29,12 +29,16 @@ from tengri.components.agn import disc as disc_module
 
 pytestmark = pytest.mark.regression_bug
 
+# ``f_hard = 0.028`` puts the corona at 92% of L_bol (lambda_Edd = 0.0304) on the unsaturated side
+# of the hot-flow switch, which sits at 96.5% here (``h(R_out / R_isco) / h(inf)``, #3015); at the
+# earlier 0.05 the hot flow fills the disc, the disc and warm zones have zero width and there is no
+# disc spectrum left to compare.
 _EDGE = dict(
     agn_log_lbol=11.0,
     agn_log_mbh=8.0,
     agn_a_spin=0.499,
     agn_cos_inc=0.5,
-    agn_f_hard=0.05,
+    agn_f_hard=0.028,
     agn_gamma_warm=2.5,
     agn_kt_warm=0.55,
     agn_gamma_hard=2.0,
@@ -53,19 +57,13 @@ def _parts(float32):
 
 
 def test_corona_share_is_the_closed_form_in_float64():
-    """At the edge the zone clip binds, so the share is ``h(x_clip) / h(inf)``, to 1e-12.
-
-    The pre-ruling share was ``0.959307742595 = (3 / (2 eta r_isco)) h(x_clip)``; the new one is
-    that over ``L_diss / L_bol = 3 h(inf) / (2 eta r_isco)``, evaluated independently of the code
-    under test.
-    """
+    """Below the hot-flow switch the share is ``f_hard L_Edd / L_bol``, to 1e-12."""
     share = _parts(False)[3]
-    with jax.enable_x64(True):
-        r_rg = disc_module._isco_radius(_EDGE["agn_a_spin"])
-        eta = disc_module._radiative_efficiency(r_rg)
-        h_inf = disc_module._nt_h(jnp.log(disc_module._NT_X_MAX), _EDGE["agn_a_spin"])
-        l_diss_over_bol = float(1.5 * h_inf / (eta * r_rg))
-    assert share == pytest.approx(0.959307742595 / l_diss_over_bol, abs=1e-11)
+    log10_ledd = float(disc_module._log10_eddington_luminosity(_EDGE["agn_log_mbh"]))
+    expected = _EDGE["agn_f_hard"] * 10.0 ** (
+        log10_ledd - disc_module._LOG10_LSUN_ERG - _EDGE["agn_log_lbol"]
+    )
+    assert share == pytest.approx(expected, abs=1e-12)
     assert share <= 0.99
 
 
@@ -98,10 +96,13 @@ def test_hot_flow_fraction_matches_hot_flow_luminosity_in_float64():
 
 
 def test_float32_disc_spectrum_follows_float64_at_the_corona_dominated_edge():
-    """The disc spectrum, the cancellation-sensitive part, agrees to 5e-5 (was 1.68e-4)."""
+    """The disc spectrum agrees to 2e-4 (a uniform offset; it was 5e-5 while rescaled)."""
     p64, p32 = _parts(False), _parts(True)
     disc64, disc32 = p64[1], p32[1]
     significant = disc64 > 1e-3 * disc64.max()
     err = np.max(np.abs(disc32[significant] / disc64[significant] - 1.0))
-    assert err < 5e-5, err
+    # #3015: the disc spectrum is no longer rescaled to its budget, so the float32 evaluation of
+    # its absolute power (the T_in^4 ring amplitude) is no longer divided out. Measured 1.75e-4
+    # (a uniform -1.5e-4 offset, 7.6e-5 dex); the shape is unchanged. The bound is that, rounded.
+    assert err < 2.0e-4, err
     assert p32[3] == pytest.approx(p64[3], rel=1e-5)

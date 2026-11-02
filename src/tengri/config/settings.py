@@ -279,7 +279,13 @@ class DustConfig:
             "vw07_diff",
         }
         _validate_enum(self.model, {"two_component", "single_component"}, "DustConfig.model")
-        _validate_enum(self.law_bc, valid_laws, "DustConfig.law_bc")
+        from tengri.components.dust.laws._registry import names_legal_in_slot
+
+        _validate_enum(
+            self.law_bc,
+            set(names_legal_in_slot(valid_laws, diffuse_slot=False)),
+            "DustConfig.law_bc",
+        )
         if self.law_diff is not None:
             _validate_enum(self.law_diff, valid_laws, "DustConfig.law_diff")
         valid_emission = {
