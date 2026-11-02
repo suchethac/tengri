@@ -20,7 +20,6 @@ import numpy as np
 import pytest
 
 from tengri import Fixed
-from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 from tengri.inference.batched_spectro import (
     _bucket_catalog_inputs,
@@ -232,30 +231,12 @@ def _per_galaxy_mass_draws(ssp, galaxy, n_draws: int) -> np.ndarray:
     return np.asarray(post.samples[_MASS]).reshape(-1)
 
 
-def _mean_difference_standard_error(first: np.ndarray, second: np.ndarray) -> float:
-    """Monte Carlo standard error of ``mean(first) - mean(second)`` from the chains' ESS."""
-    ess_first = float(effective_sample_size({_MASS: first})[_MASS]["ess"])
-    ess_second = float(effective_sample_size({_MASS: second})[_MASS]["ess"])
-    return float(np.sqrt(np.var(first) / ess_first + np.var(second) / ess_second))
-
-
 def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
-    """Batched and per-galaxy NUTS medians agree within four Monte Carlo standard errors.
+    """Batched and per-galaxy NUTS medians agree within 0.05 widths for every galaxy.
 
-    For each galaxy the absolute difference of the posterior medians of the mass must be
-    below four times the standard error of the difference of the two sample means,
-    ``sqrt(var_batched / ESS_batched + var_per_galaxy / ESS_per_galaxy)``, with the ESS from
-    :func:`~tengri.analysis.diagnostics.autocorrelation.effective_sample_size`. The bar
-    follows the sampling error of the draws, not a fixed fraction of the posterior width:
-    at this draw count the Monte Carlo error of a median difference is about 0.07 of the
-    per-galaxy width, so a fixed 0.05-width bar fails on sampling noise alone. Draws come
-    from fixed seeds, so the test is deterministic.
-
-    Notes
-    -----
-    The standard error is the one for a difference of means. For Gaussian draws the
-    standard error of a median is about ``sqrt(pi / 2)`` times that of a mean, so the
-    bar is the mean-based one the sampler diagnostics provide, not a median-specific one.
+    Draw count raised once from 200 to 2000 because at 200 the median difference's
+    Monte Carlo error (about 0.09 widths) exceeds the 0.05-width criterion; at 2000
+    it is about 0.03.
     """
     from tests.contract.test_batched_eline_marginal import _marg_template
 
@@ -269,8 +250,7 @@ def test_joint_marginal_batched_nuts_matches_per_galaxy_nuts(synthetic_ssp):
         per_galaxy = _per_galaxy_mass_draws(synthetic_ssp, galaxy, n_draws)
         width = float(np.std(per_galaxy))
         gap = abs(float(np.median(batched[row])) - float(np.median(per_galaxy)))
-        standard_error = _mean_difference_standard_error(batched[row], per_galaxy)
-        assert gap < 4.0 * standard_error, (row, gap, standard_error, width)
+        assert gap < 0.05 * width, (row, gap, width)
 
 
 _LINE_PRIOR = 1.0e-14
