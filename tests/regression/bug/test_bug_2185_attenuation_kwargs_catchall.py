@@ -65,7 +65,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
 from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
-from tengri.components.dust.laws._registry import law_kwarg_names, list_laws
+from tengri.components.dust.laws._registry import law_kwarg_names, law_screen_keys, list_laws
 from tengri.config.exceptions import ParameterError
 from tengri.observation.photometry import FilterCurve
 
@@ -156,7 +156,7 @@ def _build(ssp, obs, atten):
 
 
 def _two(law, **extra):
-    return {"type": "two_component", "law": law, **extra}
+    return {"type": "two_component", **law_screen_keys(law), **extra}
 
 
 def _phot(model, params):
