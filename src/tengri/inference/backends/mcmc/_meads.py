@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """MEADS warmup with an ensemble re-whitening phase, for the catalog ``"ghmc"`` sampler.
 
 BlackJAX's ``meads_adaptation(...).run`` is one monolithic scan that cannot be paused, so the
