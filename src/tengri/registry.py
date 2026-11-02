@@ -1260,10 +1260,11 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
         if ctype in ("mixture", "modulator"):
             m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
-        # A current episode (#3177) is spliced over a smooth member, so its
-        # composed form names ``delayed`` beside it.
+        # A current episode (#3177) is spliced over a smooth member; its composed
+        # form names the base its registry entry declares (``smooth_base``).
         elif ctype == "current":
-            m["use"] = f"SEDModel.build(..., sfh={{'type': ['delayed', '{m['name']}']}})"
+            base = SFH_REGISTRY[m["name"]].smooth_base
+            m["use"] = f"SEDModel.build(..., sfh={{'type': ['{base}', '{m['name']}']}})"
     out = _filter_menu(out, "status", status, listing="list_sfh_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 

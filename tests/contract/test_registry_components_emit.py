@@ -49,6 +49,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.dust.laws._registry import is_diffuse_only_law, law_screen_keys
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
@@ -289,10 +290,17 @@ class TestRegistryComponentsEmit:
                 # SFH: build model with sfh config
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
+                    # A current episode splices over the smooth member its
+                    # registry entry declares (smooth_base); standing alone it
+                    # is refused by design, so the sweep composes it with that.
+                    sfh_type = name
+                    base = SFH_REGISTRY[name].smooth_base
+                    if base is not None:
+                        sfh_type = [base, name]
                     model = SEDModel.build(
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
-                        sfh={"type": name},
+                        sfh={"type": sfh_type},
                         redshift=Fixed(0.1),
                     )
 
