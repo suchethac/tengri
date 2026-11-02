@@ -2,8 +2,10 @@
 """HMC posterior with importance-sampled log-evidence estimation.
 
 Combines Hamiltonian Monte Carlo (via run_hmc) with importance sampling
-to estimate the Bayesian evidence log(Z) from the same chain. Pure JAX
-implementation of the proposal fitting and evidence computation.
+to estimate the Bayesian evidence log(Z) from the same chain. The proposal
+fitting lives here; the Student-t sampler, the target evaluation and the
+weighting are shared with the Laplace backend in
+:mod:`tengri.inference.importance`.
 
 Import via ``tengri.inference.backends.mcmc``.
 """
@@ -12,36 +14,32 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.flatten_util import ravel_pytree
 
-from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference.backends._psis import pareto_k_threshold
 from tengri.inference.backends.mcmc.hmc import run_hmc
 from tengri.inference.context import InferenceContext
+from tengri.inference.importance import (
+    StudentTProposal,
+    importance_estimate,
+    importance_sample,
+    sample_student_t,
+    student_t_logpdf,
+)
 from tengri.inference.posterior import Posterior
 
+# The Student-t log-density now lives in tengri.inference.importance; this name
+# is kept so existing imports of the private helper keep working.
+_proposal_logpdf = student_t_logpdf
 
-@dataclass(frozen=True)
-class StudentTProposal:
-    """Student-t proposal for importance sampling.
-
-    Attributes
-    ----------
-    mean : jnp.ndarray
-        Mean of the proposal, shape (D,).
-    chol : jnp.ndarray
-        Lower Cholesky factor of the proposal covariance, shape (D, D).
-        The full covariance is cov = chol @ chol.T.
-    df : float
-        Degrees of freedom of the Student-t distribution.
-    """
-
-    mean: jnp.ndarray
-    chol: jnp.ndarray
-    df: float
+__all__ = [
+    "StudentTProposal",
+    "run_hmc_is",
+]
 
 
 def _fit_proposal(
@@ -97,88 +95,27 @@ def _fit_proposal(
     )
 
 
-def _proposal_logpdf(
-    proposal: StudentTProposal,
-    x: jnp.ndarray,
-) -> jnp.ndarray:
-    """Evaluate Student-t log-probability density.
-
-    Computes log p(x; μ, Σ, df) where Σ = chol @ chol.T.
-
-    Parameters
-    ----------
-    proposal : StudentTProposal
-        Proposal object with mean, Cholesky factor, and degrees of freedom.
-    x : jnp.ndarray
-        Points at which to evaluate the density, shape (n, D) or (D,).
-
-    Returns
-    -------
-    jnp.ndarray
-        Log probability density, shape (n,) or scalar.
-
-    Notes
-    -----
-    Uses the Student-t density formula:
-    log p(x; μ, Σ, ν) = log Γ((ν+D)/2) - log Γ(ν/2) - (D/2) log(πν)
-                        - (1/2) log det(Σ)
-                        - ((ν+D)/2) log(1 + (x-μ)^T Σ^-1 (x-μ) / ν)
-
-    This matches scipy.stats.multivariate_t with shape=cov (the covariance).
-    """
-    x = jnp.asarray(x, dtype=jnp.float64)
-    mu = proposal.mean
-    chol = proposal.chol
-    nu = proposal.df
-    D = len(mu)
-
-    # Standardize: compute (x - mu)^T Σ^-1 (x - mu) via Cholesky
-    # Σ = L @ L^T, so Σ^-1 = (L^-T @ L^-1)
-    # (x - mu)^T Σ^-1 (x - mu) = ||L^-1 @ (x - mu)||^2
-    if x.ndim == 1:
-        delta = x - mu
-    else:
-        delta = x - mu[None, :]
-
-    # Solve L @ y = delta^T (shape (..., D))
-    y = jnp.linalg.solve(chol, delta.T).T  # Shape (..., D) or (D,)
-    mahal_sq = jnp.sum(y**2, axis=-1)  # Shape (...,) or scalar
-
-    # Log-determinant: log det(Σ) = 2 * sum(log diag(L))
-    log_det_sigma = 2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(chol))))
-
-    # Constant term
-    from scipy import special
-
-    const = (
-        float(special.loggamma((nu + D) / 2.0))
-        - float(special.loggamma(nu / 2.0))
-        - (D / 2.0) * jnp.log(jnp.pi * nu)
-    )
-
-    # Density evaluation
-    logpdf = const - 0.5 * log_det_sigma - ((nu + D) / 2.0) * jnp.log(1.0 + mahal_sq / nu)
-
-    return logpdf
-
-
 def _is_log_evidence(
-    log_target_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    log_target_fn: Callable[[np.ndarray], np.ndarray],
     key: jax.Array,
     proposal: StudentTProposal,
     n_draws: int,
     chunk_size: int = 4096,
 ) -> tuple[float, float, float, float]:
-    """Compute log-evidence via importance sampling.
+    """Compute log-evidence via importance sampling from a batched NumPy target.
 
-    Uses importance-sampling estimator of the evidence where proposal and
-    target are evaluated in standardized ξ-space.
+    A thin adapter over the shared primitives in
+    :mod:`tengri.inference.importance`: the draws come from
+    :func:`~tengri.inference.importance.sample_student_t` and the weights from
+    :func:`~tengri.inference.importance.importance_estimate`. Only the target
+    evaluation differs from :func:`~tengri.inference.importance.importance_sample`,
+    because ``log_target_fn`` here is a batched callable on NumPy arrays rather
+    than a JAX-traceable per-point log-density.
 
     Parameters
     ----------
     log_target_fn : callable
-        Log of the target density (posterior in ξ-space). Takes shape (n, D)
-        and returns shape (n,).
+        Log of the target density. Takes shape (n, D) and returns shape (n,).
     key : jax.Array
         JAX random key.
     proposal : StudentTProposal
@@ -186,8 +123,7 @@ def _is_log_evidence(
     n_draws : int
         Number of proposal samples to draw.
     chunk_size : int, default 4096
-        Batch size for evaluating log_target_fn. Larger chunks are faster
-        but use more memory.
+        Batch size for evaluating log_target_fn.
 
     Returns
     -------
@@ -202,89 +138,51 @@ def _is_log_evidence(
 
     Notes
     -----
-    The importance sampling estimator is:
-    log Ẑ = logsumexp(log w) - log N
-    where w_i ∝ exp(log_target(x_i) - log_q(x_i)) and q is the proposal.
-
-    The ESS (effective sample size) is computed as (Σw)²/(Σw²), normalized
-    by n_draws. The error estimate uses the delta method:
-    log_z_err ≈ std(log w) / (mean(log w) * sqrt(n_draws)).
-
     Chunking does not affect the result for a given key; all n_draws are
     sampled upfront, then evaluated in batches.
     """
-    mu = proposal.mean
-    chol = proposal.chol
-    nu = proposal.df
-    D = len(mu)
+    draws = sample_student_t(key, proposal, n_draws)
+    draws_np = np.asarray(draws)
 
-    # ── Sample from Student-t proposal ──────────────────────────────────
-    # x = μ + L @ z / sqrt(g/ν) where z~N(0,I), g~Chisq(ν)
-
-    key, subkey = jax.random.split(key)
-    z = jax.random.normal(subkey, (n_draws, D))
-
-    key, subkey = jax.random.split(key)
-    g = jax.random.chisquare(subkey, nu, (n_draws,))
-
-    scale = jnp.sqrt(g / nu)  # Shape (n_draws,)
-
-    # Compute (L @ z.T).T / scale = (z @ L.T) / scale, row by row
-    # For efficiency: z_scaled = z / scale[:, None], then x = mu + z_scaled @ L.T
-    z_scaled = z / scale[:, None]  # Shape (n_draws, D)
-    x_samples = mu[None, :] + z_scaled @ chol.T  # (n_draws, D) + (D, D).T = (n_draws, D)
-
-    # ── Evaluate log-likelihood and log-prior; compute weights ──────────
-    # log w = log_target(x) - log_q(x)
-
-    # Chunk the target evaluation (log_target_fn is already batched)
     log_target_vals = []
     for i in range(0, n_draws, chunk_size):
         end = min(i + chunk_size, n_draws)
-        chunk = np.asarray(x_samples[i:end])
-        log_target_chunk = np.asarray(log_target_fn(chunk))
-        log_target_vals.append(log_target_chunk)
-
+        log_target_vals.append(np.asarray(log_target_fn(draws_np[i:end])))
     log_target_all = np.concatenate(log_target_vals, axis=0)
 
-    # Proposal log pdf
-    log_q_all = np.array(_proposal_logpdf(proposal, x_samples))
+    log_q_all = np.asarray(student_t_logpdf(proposal, draws))
+    result = importance_estimate(draws, log_target_all, log_q_all)
+    return result.log_z, result.log_z_err, result.ess, result.max_weight_frac
 
-    # Log-weights
-    log_w = log_target_all - log_q_all  # Shape (n_draws,)
 
-    # ── Compute log-evidence and diagnostics ───────────────────────────
+def _ravel_column_order(structure: dict, free_names: list[str]) -> np.ndarray:
+    """Chain-column permutation that puts free-name columns in ``ravel_pytree`` order.
 
-    # Stabilize with log-sum-exp trick
-    log_w = jnp.asarray(log_w)
-    max_log_w = jnp.max(log_w)
-    w_normalized = jnp.exp(log_w - max_log_w)
+    The chain matrix is built with columns in ``free_names`` order, but the flat
+    log-density unravels in the key order of ``ravel_pytree`` (sorted keys for a
+    dict). Ravelling a tree of column indices gives the permutation directly.
 
-    # Log evidence
-    log_z = float(jax.scipy.special.logsumexp(log_w) - jnp.log(n_draws))
+    Parameters
+    ----------
+    structure : dict
+        Unbounded parameter pytree the flat log-density was built from.
+    free_names : list of str
+        Free parameter names, in chain column order.
 
-    # ESS = (Σw)² / Σw²  (normalized version: ESS / N)
-    sum_w = jnp.sum(w_normalized)
-    sum_w2 = jnp.sum(w_normalized**2)
-    ess_normalized = (sum_w**2) / sum_w2
-    ess = float(ess_normalized)
-
-    # Max weight fraction
-    max_w = jnp.max(w_normalized)
-    max_weight_frac = float(max_w / sum_w)
-
-    # Log-evidence error: delta method
-    # d/dw log(sum w / N) = 1 / (sum w)
-    # var(log Z) ≈ (d/dw)^2 * var(Σw_i) = var(w_i) / (Σw_i)^2
-    # std(log Z) ≈ std(w_i) / (Σw_i)
-    # But we want std of the log, so use: std(log w_i) / sqrt(N) via importance weights
-    # Actually, a better estimate: std(w) / (mean(w) * sqrt(N))
-    mean_w = sum_w / n_draws
-    var_w = (jnp.sum(w_normalized**2) / n_draws) - mean_w**2
-    std_w = jnp.sqrt(jnp.maximum(var_w, 1e-16))
-    log_z_err = float(std_w / (mean_w * jnp.sqrt(n_draws)))
-
-    return log_z, log_z_err, ess, max_weight_frac
+    Returns
+    -------
+    numpy.ndarray of int, shape (D,)
+        ``chain_flat[:, order]`` has columns in ravel order.
+    """
+    index_tree = {}
+    offset = 0
+    for name in free_names:
+        shape = np.shape(structure[name])
+        size = int(np.prod(shape, dtype=int))
+        index_tree[name] = np.arange(offset, offset + size).reshape(shape)
+        offset += size
+    flat_index, _ = ravel_pytree(index_tree)
+    return np.asarray(flat_index, dtype=int)
 
 
 def run_hmc_is(
@@ -357,8 +255,8 @@ def run_hmc_is(
     Posterior
         Posterior with HMC samples (physical space), best-fit parameters,
         method name "HMC+IS", and log_evidence. Diagnostics include HMC
-        convergence metrics, IS quality metrics (ess, max_weight_frac), and
-        proposal parameters.
+        convergence metrics, IS quality metrics (ess, max_weight_frac, and the
+        PSIS tail shape pareto_k), and proposal parameters.
 
     Raises
     ------
@@ -369,7 +267,9 @@ def run_hmc_is(
     -----
     **Evidence computation**: The importance-sampling estimator evaluates
     both proposal and target in standardized ξ-space (where the prior is
-    always N(0,I)). The log-evidence is:
+    always N(0,I)). The target is the flat log-density the samplers use,
+    ``tengri.inference.backends.mcmc._shared._get_flat_logdensity``, with
+    the normalized prior restored by ``log_norm``. The log-evidence is:
 
     .. math::
 
@@ -408,6 +308,8 @@ def run_hmc_is(
     >>> print(f"log Z = {result.log_evidence:.2f}")
     >>> print(f"ESS = {result.diagnostics['ess']:.0f}")
     """
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
     context = InferenceContext.from_target(context)
     fitter = context.fitter
 
@@ -444,14 +346,12 @@ def run_hmc_is(
         xi = prior_dists[name].standardize(theta_phys)
         samples_xi[name] = xi
 
-    # Flatten to (n_samples, D); column order follows free_names, matching
-    # _unflatten_xi below (scalar parameters only, the D ≲ 30 parametric scope).
+    # Flatten to (n_samples, D); column order follows free_names here and is
+    # permuted to the flat log-density's ravel order below.
     n_samples_chain = next(iter(samples_xi.values())).shape[0]
     chain_flat = np.column_stack(
         [np.asarray(samples_xi[name]).reshape(n_samples_chain, -1) for name in free_names]
     )
-
-    D = chain_flat.shape[1]
 
     # Drop non-finite rows before fitting the proposal. A physical sample that
     # lands exactly on a prior bound standardizes to ±inf (Phi^{-1} at 0 or 1),
@@ -466,12 +366,25 @@ def run_hmc_is(
                 f"HMC+IS: dropped {n_nonfinite}/{n_samples_chain} chain samples at "
                 f"prior bounds (non-finite in ξ-space)"
             )
+    D = chain_flat.shape[1]
     if chain_flat.shape[0] < max(10, 2 * D):
         raise ValueError(
             f"HMC+IS: only {chain_flat.shape[0]} finite ξ-space chain samples remain "
             f"(D={D}); the posterior is pinned to a prior boundary. Widen the prior "
             "or use method='nss' for this model."
         )
+
+    # ── Target: the flat log-density the samplers use ───────────────────
+    structure = context.unbounded_from_posterior(posterior_hmc)
+    n_flat = int(ravel_pytree(structure)[0].size)
+    if n_flat != D:
+        raise ValueError(
+            f"HMC+IS: the flat log-density has {n_flat} columns but the chain has "
+            f"{D} free-parameter columns; per-sample latent fields (stochastic specs) "
+            "are not supported by hmc_is."
+        )
+    chain_flat = chain_flat[:, _ravel_column_order(structure, free_names)]
+    logdensity_flat, _, _, data_args = _get_flat_logdensity(fitter, structure)
 
     if verbose:
         print(f"HMC+IS: {D} free params, re-standardized to ξ-space")
@@ -483,69 +396,29 @@ def run_hmc_is(
     if verbose:
         print(f"  Proposal: Student-t(df={proposal.df}, cond={cond_number:.2e})")
 
-    # ── Build log_target function in ξ-space ───────────────────────────
-    # log_target(ξ) = log_likelihood(ξ) + log_prior(ξ)
-
-    log_likelihood_fn = context.log_likelihood_fn
-    log_prior_fn = context.log_prior_fn
-    data_args = context.data_args
-
-    # Create unflatten function: we need to map (D,) -> dict of params
-    def _unflatten_xi(xi_flat):
-        """Convert flat ξ array back to parameter dict."""
-        result = {}
-        for offset, name in enumerate(free_names):
-            # For scalar parameters (most common case)
-            result[name] = xi_flat[offset : offset + 1][0]
-        return result
-
     # context.log_prior_fn is the UNNORMALIZED standardized prior -0.5*sum(xi^2)
     # (standardized_neg_log_prior, "up to a constant"). The evidence must be taken
     # against the normalized prior N(0, I), so restore -(D/2) log 2pi here;
     # omitting it inflates log Z by 0.92 nats per free parameter, tilting model
     # comparison toward higher-D models.
-    log_prior_norm = -0.5 * D * jnp.log(2.0 * jnp.pi)
-
-    def _log_target_xi_scalar(xi_flat, data_args):
-        """Evaluate log_target for a single ξ sample against ``data_args``."""
-        params_xi = _unflatten_xi(xi_flat)
-        ll = log_likelihood_fn(params_xi, data_args)
-        lp = log_prior_fn(params_xi)
-        return ll + lp + log_prior_norm
-
-    # Vectorize over samples; ``data_args`` is an argument, not a closure
-    # constant, so the cached compiled evaluation below serves every Fitter on
-    # this model whatever its data (the engine key carries the data's shape
-    # only).
-    log_target_batched = jax.vmap(_log_target_xi_scalar, in_axes=(0, None))
-
-    # Cache the evaluation via model cache
-    cache_key = (
-        fitter._engine_cache_key(),
-        "hmc_is_evidence",
-        chunk_size,
-    )
-    model_cache = _model_cache_owner.get_or_compile_model(context.model)
-    eval_cache = model_cache.setdefault("hmc_is_evals", {})
-
-    if cache_key not in eval_cache:
-        eval_cache[cache_key] = jax.jit(log_target_batched)
-
-    log_target_jitted = eval_cache[cache_key]
-
-    def log_target_fn_wrapped(x_samples):
-        """Wrap to use cached JIT, binding this Fitter's data."""
-        return log_target_jitted(x_samples, data_args)
+    log_prior_norm = float(-0.5 * D * np.log(2.0 * np.pi))
 
     # ── Compute log-evidence via importance sampling ────────────────────
     key, is_key = jax.random.split(key)
-    log_z, log_z_err, ess, max_weight_frac = _is_log_evidence(
-        log_target_fn_wrapped,
-        is_key,
+    is_result = importance_sample(
+        logdensity_flat,
+        data_args,
         proposal,
-        n_draws=n_is_draws,
-        chunk_size=chunk_size,
+        n_is_draws,
+        is_key,
+        log_norm=log_prior_norm,
+        batch_size=chunk_size,
     )
+    log_z = is_result.log_z
+    log_z_err = is_result.log_z_err
+    ess = is_result.ess
+    max_weight_frac = is_result.max_weight_frac
+    pareto_k = is_result.psis.pareto_k
 
     # ── Quality warnings ───────────────────────────────────────────────
     quality_warning = None
@@ -586,6 +459,8 @@ def run_hmc_is(
             "proposal_inflation": proposal_inflation,
             "max_weight_frac": max_weight_frac,
             "proposal_cond_number": cond_number,
+            "pareto_k": pareto_k,
+            "pareto_k_threshold": pareto_k_threshold(n_is_draws),
         }
     )
     if quality_warning is not None:

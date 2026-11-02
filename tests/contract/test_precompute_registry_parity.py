@@ -67,6 +67,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 from tengri.components.dust.attenuation import DUST_LAWS
+from tengri.components.dust.laws._registry import law_screen_keys
 from tengri.components.igm.igm import IGM_TRANSMISSION_MODELS
 
 pytestmark = pytest.mark.contract
@@ -173,7 +174,7 @@ def test_attenuation_law_lut_matches_exact(ssp_data_fsps, unattenuated, law):
     groups = {
         "dust_attenuation": {
             "type": "two_component",
-            "law": law,
+            **law_screen_keys(law),
             **_TYPICAL_TAU,
             "all_params": Fixed(DEFAULT),
         }
