@@ -90,6 +90,30 @@ ALREADY_GATED_JOBS: dict[str, str] = {
     "nightly-alarm": "`schedule` only; alerts when the nightly run fails ci-ok",
 }
 
+# Every other workflow file with a `pull_request` trigger: {file: {job: tier}}. A file or
+# job missing here is an unmade decision, as in the buckets above. `required_in_if` is the
+# text the job's own `if:` must contain (the opt-in label or the schedule event), so the
+# stated tier cannot drift away from the expression.
+OTHER_WORKFLOW_JOBS: dict[str, dict[str, tuple[str, str]]] = {
+    "docs-preview.yml": {
+        "build": (
+            "builds the docs preview for every non-draft pull request",
+            "pull_request.draft",
+        ),
+    },
+    "notebooks.yml": {
+        "list": ("schedule, dispatch or an opt-in label", "github.event_name == 'schedule'"),
+        "execute": ("schedule, dispatch or an opt-in label", "github.event_name == 'schedule'"),
+    },
+    "tests-weekly.yml": {
+        "slow-weekly": ("opt-in via the `run-slow-tests` label", "run-slow-tests"),
+        "weekly-alarm": (
+            "`schedule` only; alerts when slow-weekly fails",
+            "event_name == 'schedule'",
+        ),
+    },
+}
+
 _JOB_NAME = re.compile(r"^  ([A-Za-z][A-Za-z0-9_-]*):\s*$", re.MULTILINE)
 _PULL_REQUEST_BLOCK = re.compile(
     r"^  pull_request:\s*$(.*?)(?=^  \w|\Z)", re.MULTILINE | re.DOTALL
@@ -194,6 +218,40 @@ def wired_guards() -> set[str]:
     return wired
 
 
+def other_workflow_problems() -> list[str]:
+    """Problems in the jobs of every non-``tests.yml`` workflow with a ``pull_request`` trigger."""
+    problems: list[str] = []
+    seen: set[str] = set()
+    for wf in sorted(WORKFLOW.parent.glob("*.yml")):
+        if wf.name == WORKFLOW.name:
+            continue
+        text = strip_comments(wf.read_text(encoding="utf-8"))
+        if _PULL_REQUEST_BLOCK.search(text) is None:
+            continue
+        seen.add(wf.name)
+        declared = OTHER_WORKFLOW_JOBS.get(wf.name)
+        if declared is None:
+            problems.append(
+                f"`{wf.name}` has a `pull_request` trigger but is not classified in\n"
+                f"OTHER_WORKFLOW_JOBS in {Path(__file__).name}."
+            )
+            continue
+        found = job_names(text)
+        for name in found:
+            if name not in declared:
+                problems.append(f"job `{name}` of `{wf.name}` is in no tier bucket.")
+            elif declared[name][1] not in job_block(text, name):
+                problems.append(
+                    f"job `{name}` of `{wf.name}` is declared `{declared[name][0]}` but its "
+                    f"block does not contain `{declared[name][1]}`."
+                )
+        for name in sorted(set(declared) - set(found)):
+            problems.append(f"`{name}` is classified for `{wf.name}` but no longer exists.")
+    for name in sorted(set(OTHER_WORKFLOW_JOBS) - seen):
+        problems.append(f"`{name}` is classified but has no `pull_request` trigger or no file.")
+    return problems
+
+
 def main() -> int:
     if not WORKFLOW.is_file():
         print(f"ERROR: cannot read {WORKFLOW.relative_to(REPO_ROOT)}", file=sys.stderr)
@@ -269,6 +327,8 @@ def main() -> int:
             f"Either add `- run: python tools/{guard}.py` to a suitable job,\n"
             "or delete the orphaned guard and its tests."
         )
+
+    problems.extend(other_workflow_problems())
 
     if problems:
         print("CI pull-request coverage is not intact:\n", file=sys.stderr)

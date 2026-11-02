@@ -95,6 +95,16 @@ class KD18Disc(SEDModelComponent):
     zone, and hot corona. Self-consistent zone radii and temperature profiles
     enable smooth inference gradients across the full parameter space.
 
+    Notes
+    -----
+    **Validity domain.** The three-zone geometry applies for
+    :math:`\\lambda_{\\rm Edd}` above about :math:`f_{\\rm hard}` (~0.02).
+    Below it the disc truncates: there are no disc or warm zones
+    (as in RELQSO, Hagen & Done 2023, arXiv:2304.01253), and the hot flow is modeled as
+    radiatively efficient Comptonization of all the dissipation inside :math:`R_{\\rm out}`;
+    Kubota & Done (2018) do not model radiative inefficiency. ``disc='adaf'`` is the
+    radiatively inefficient alternative for that regime. No warning is issued.
+
     Attributes
     ----------
     name : str
@@ -333,8 +343,10 @@ class KD18Disc(SEDModelComponent):
 
         ``log_L_agn_disc`` [dex re erg/s] is the log of the angle-integrated emitted power: it
         is independent of ``cos_inc`` and equals ``lum_ratio`` times the accretion power
-        implied by ``log_lbol`` (less the corona's cut tail). ``log_L_agn_disc_los`` is the log
-        of the line-of-sight isotropic-equivalent luminosity of the emitted,
+        implied by ``log_lbol``, less the dissipation the disc does not emit beyond its outer
+        radius (:func:`~tengri.components.agn.disc.kubota_done_unemitted_fraction`, #3015).
+        ``log_L_agn_disc_los`` is the log of the line-of-sight isotropic-equivalent luminosity
+        of the emitted,
         inclination-projected SED, a derived output; at :math:`\cos i = 0.5` the two coincide.
         Both are integrals on a fixed grid of 1e-3 A to 1e10 A, independent of the caller's
         wavelength grid, and are formed in log space so they are finite and accurate in pure

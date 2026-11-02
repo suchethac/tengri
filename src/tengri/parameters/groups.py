@@ -615,6 +615,27 @@ def _valid_xray_types() -> frozenset[str]:
     return frozenset(valid_types)
 
 
+def _slot_laws(valid_laws, *, diffuse: bool) -> list[str]:
+    """Return the laws a grammar slot may be offered as remedies in an error.
+
+    Parameters
+    ----------
+    valid_laws : iterable of str
+        Every accepted dust law name.
+    diffuse : bool
+        True for the ``law_diff`` slot, False for ``law``/``law_bc``/``law_neb``.
+
+    Returns
+    -------
+    list of str
+        The names the slot accepts, so a remedy never names a spelling the
+        build refuses (the diffuse-only law on a birth-cloud slot, #3178).
+    """
+    from tengri.components.dust.laws._registry import names_legal_in_slot
+
+    return names_legal_in_slot(sorted(valid_laws), diffuse_slot=diffuse)
+
+
 def _valid_dust_laws() -> frozenset[str]:
     """Return accepted ``dust_attenuation.law`` values from the registry.
 
@@ -1552,7 +1573,12 @@ def parse_groups(**kwargs) -> Parameters:
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(
-        **resolved_kwargs, _grammar_validated=True, _timing_excluded=timing_dropped
+        **resolved_kwargs,
+        _grammar_validated=True,
+        _timing_excluded=timing_dropped,
+        # Which names only an ``all_params: FREE`` wildcard freed: the spec distinguishes them
+        # from a FREE the user wrote by name (the screened-fracAGN settlement reads it).
+        _wildcard_freed=frozenset(n for n, t in provenance.items() if t == "wildcard_free"),
     )
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
@@ -4093,7 +4119,9 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     if law_neb is not None:
         valid_laws = _valid_dust_laws()
         if law_neb not in valid_laws:
-            raise _unknown_name_error("dust law", law_neb, valid_laws, keyword="law_neb")
+            raise _unknown_name_error(
+                "dust law", law_neb, _slot_laws(valid_laws, diffuse=False), keyword="law_neb"
+            )
         result["dust_law_neb"] = law_neb
     declared = AgeBinnedDustComponent(
         config=AgeBinnedDustComponentConfig(
@@ -4763,7 +4791,9 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"'law': 'calzetti', 'tau_v': ...}}"
             )
         if dust_law not in valid_laws:
-            raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
+            raise _unknown_name_error(
+                "dust law", dust_law, _slot_laws(valid_laws, diffuse=False), keyword="law"
+            )
         # Store law on both _bc and _diff for consistency (single screen)
         result["dust_law_bc"] = dust_law
         result["dust_law_diff"] = dust_law
@@ -4815,16 +4845,26 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # Resolve to the two-screen form
         if has_law:
             if dust_law not in valid_laws:
-                raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
+                raise _unknown_name_error(
+                    "dust law", dust_law, _slot_laws(valid_laws, diffuse=False), keyword="law"
+                )
             result["dust_law_bc"] = dust_law
             result["dust_law_diff"] = dust_law
         else:
             # Both law_bc and law_diff are given (already checked above)
             if dust_law_bc not in valid_laws:
-                raise _unknown_name_error("dust law", dust_law_bc, valid_laws, keyword="law_bc")
+                raise _unknown_name_error(
+                    "dust law",
+                    dust_law_bc,
+                    _slot_laws(valid_laws, diffuse=False),
+                    keyword="law_bc",
+                )
             if dust_law_diff not in valid_laws:
                 raise _unknown_name_error(
-                    "dust law", dust_law_diff, valid_laws, keyword="law_diff"
+                    "dust law",
+                    dust_law_diff,
+                    _slot_laws(valid_laws, diffuse=True),
+                    keyword="law_diff",
                 )
             result["dust_law_bc"] = dust_law_bc
             result["dust_law_diff"] = dust_law_diff
