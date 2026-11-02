@@ -201,7 +201,7 @@ class Case(dict):
 
 def _dust_law_cases():
     """Every registered attenuation law, read from the registry not a list."""
-    from tengri.components.dust.laws._registry import DUST_LAWS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_screen_keys
 
     for law in sorted(DUST_LAWS):
         yield Case(
@@ -211,8 +211,7 @@ def _dust_law_cases():
             {
                 "dust_attenuation": {
                     "type": "two_component",
-                    "law_bc": law,
-                    "law_diff": law,
+                    **law_screen_keys(law),
                     "all_params": FREE,
                 },
                 "dust_emission": {"type": "themis", "all_params": Fixed(DEFAULT)},

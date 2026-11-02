@@ -59,6 +59,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
+from tengri.components.dust.laws._registry import is_diffuse_only_law, law_screen_keys
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -455,6 +456,10 @@ def _type_cfg(group: str, name: str) -> dict:
     ledger (condon92 vs radio_powerlaw) still measures real outputs.
     """
     if group == "dust":
+        if is_diffuse_only_law(name):
+            # Declared diffuse-screen only: the single-screen spelling does not build,
+            # so the law is carried on law_diff of a two-screen model.
+            return {"type": "two_component", **law_screen_keys(name)}
         return {"type": "single_component", "law": name}
     if group == "radio":
         from tengri.parameters.groups import _legacy_radio_type_to_blocks
