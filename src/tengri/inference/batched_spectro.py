@@ -61,6 +61,8 @@ JIT note
 pure JAX functions, safe under :func:`jax.vmap`, :func:`jax.grad` and
 :func:`jax.jit`. :func:`fit_spectra_map_vmap` is a Python driver: it compiles
 one optimizer run per bucket, and the bucket spec is the compile signature.
+The compiled program is cached per (model, bucket spec, optimizer options), so a
+repeated call with a new batch of the same spec reuses it and compiles nothing (#3247).
 The template tables (SSP grid, template data, z-table) are not closed over by any
 returned function: the drivers pass them as an explicit argument, so a compiled
 program holds no table as a constant and its executable stays small.
@@ -69,6 +71,7 @@ program holds no table as a constant and its executable stays small.
 from __future__ import annotations
 
 import math
+import weakref
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -765,6 +768,74 @@ def _run_chunk(nlp, batch, init, threaded, *, optimizer, n_steps, learning_rate,
     return _lbfgs_chunk(nlp, batch, init, threaded, n_steps=n_steps, gtol=gtol)
 
 
+#: Compiled chunk programs, one inner dict per model. Keyed weakly on the model: the
+#: program holds the model only through a weak reference, so dropping the model frees
+#: its entry and no cached program keeps a model alive.
+_CHUNK_PROGRAMS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _chunk_runner(model_ref, spec, options: dict):
+    """Return the un-jitted chunk program for one bucket: builds the objective, then optimizes.
+
+    ``tables`` is the traced template tables, passed to the objective as an argument,
+    so the program holds no table as a constant. The objective's own constants (the
+    emission-line set and the model-centered line match) come from JAX ops on
+    constant arrays; they are built under ``ensure_compile_time_eval`` so they stay
+    concrete, as the eager driver had them, because the line builder reads them with
+    numpy (#3247).
+    """
+
+    def run(batch, init, tables):
+        model = model_ref()
+        if model is None:
+            raise RuntimeError("the template model was collected while its MAP program was in use")
+        with jax.ensure_compile_time_eval():
+            nlp = batched_neg_log_posterior(
+                model,
+                spec,
+                calibration_marginalize=options["calibration_marginalize"],
+                cal_n_poly=options["cal_n_poly"],
+                cal_prior_sigma=options["cal_prior_sigma"],
+                threaded=tables,
+            )
+        return _run_chunk(
+            nlp,
+            batch,
+            init,
+            tables,
+            optimizer=options["optimizer"],
+            n_steps=options["n_steps"],
+            learning_rate=options["learning_rate"],
+            gtol=options["gtol"],
+        )
+
+    return run
+
+
+def _chunk_program(model, spec, options: dict):
+    """Return the jitted chunk program for ``(model, spec, options)``, compiling it once.
+
+    The cache key is the bucket spec and every option that changes the traced program.
+    A new batch of the same spec reuses the compiled executable.
+    """
+    key = (
+        spec,
+        options["calibration_marginalize"],
+        options["cal_n_poly"],
+        options["cal_prior_sigma"],
+        options["optimizer"],
+        options["n_steps"],
+        options["learning_rate"],
+        options["gtol"],
+    )
+    programs = _CHUNK_PROGRAMS.setdefault(model, {})
+    program = programs.get(key)
+    if program is None:
+        program = jax.jit(_chunk_runner(weakref.ref(model), spec, options))
+        programs[key] = program
+    return program
+
+
 def _fit_bucket(
     model,
     spec,
@@ -786,17 +857,20 @@ def _fit_bucket(
     The initial latents are drawn for the whole bucket and then sliced, so the
     result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
     of at most ``chunk_size`` galaxies, which bounds the peak memory of the
-    gradient. ``threaded`` is the template tables, passed to every chunk as an
-    argument.
+    gradient. The chunk program is jitted and cached per (model, spec, options); the
+    batch, the initial latents and ``threaded`` (the template tables) are its
+    arguments.
     """
-    nlp = batched_neg_log_posterior(
-        model,
-        spec,
-        calibration_marginalize=calibration_marginalize,
-        cal_n_poly=cal_n_poly,
-        cal_prior_sigma=cal_prior_sigma,
-        threaded=threaded,
-    )
+    options = {
+        "calibration_marginalize": calibration_marginalize,
+        "cal_n_poly": cal_n_poly,
+        "cal_prior_sigma": cal_prior_sigma,
+        "optimizer": optimizer,
+        "n_steps": n_steps,
+        "learning_rate": learning_rate,
+        "gtol": gtol,
+    }
+    program = _chunk_program(model, spec, options)
     n_gal = int(batch.z.shape[0])
     init = init_unbounded_batch(model, n_gal, key)
     step = n_gal if chunk_size is None else int(chunk_size)
@@ -804,16 +878,7 @@ def _fit_bucket(
     for start in range(0, n_gal, step):
         stop = min(start + step, n_gal)
         parts.append(
-            _run_chunk(
-                nlp,
-                _slice_tree(batch, start, stop),
-                _slice_tree(init, start, stop),
-                threaded,
-                optimizer=optimizer,
-                n_steps=n_steps,
-                learning_rate=learning_rate,
-                gtol=gtol,
-            )
+            program(_slice_tree(batch, start, stop), _slice_tree(init, start, stop), threaded)
         )
     params_final = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs), *[p[0] for p in parts])
     final_nlp = jnp.concatenate([p[1] for p in parts])
@@ -900,7 +965,9 @@ def fit_spectra_map_vmap(
     Notes
     -----
     **JIT-compatible**: no; this is a Python driver. Each bucket compiles once for
-    its :class:`SpectroBatchSpec` (and once more for a shorter final chunk).
+    its :class:`SpectroBatchSpec` (and once more for a shorter final chunk). The
+    compiled program is cached per (model, spec, optimizer options), so a repeated
+    call on a batch of the same spec compiles nothing (#3247).
     Results are returned in the catalog order by permuting with the concatenated
     bucket index arrays.
     """
