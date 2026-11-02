@@ -56,6 +56,8 @@
 
 - **Grid-support overhang is refused at build, and FREE resolves to the backend's support (#2626, #2244; breaking-change).** A `Fixed` value or an explicit prior that lies outside a template-backed component's grid now raises `ParameterError` at build, naming the parameter, the component, the value or range and the extent. It was a `GridSupportWarning`, so scripts that set an out-of-grid value now fail where they used to run. A declaration-sourced `FREE` parameter resolves to the selected backend's full support, even where that is wider than the registry declaration, and `summary()` shows `[resolved to <backend> grid: lo..hi]`. For example `neb={'type': 'cue', 'logZ_gas': FREE}` spans Cue's trained `[-2.2, 0.5]`, and `neb={'type': 'cloudy', 'logZ_gas': FREE}` spans the cloudy grid's `[-1.98, 0.2]`. Components with no registered support keep the declaration. Cue, a neural emulator, still warns and never raises.
 
+- **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
+
 ### Fixed
 
 - fix(inference): Fitter.run("map") checks stationarity at scipy's stop (Newton decrement, Hessian) and continues with the shared L-BFGS driver when scipy stops short; the result reports map_converged, map_decrement and map_attempts (#3205)
