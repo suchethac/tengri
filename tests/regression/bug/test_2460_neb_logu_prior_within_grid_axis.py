@@ -239,4 +239,4 @@ def test_neb_grid_support_census():
     one, read in isolation, would still look registered.
     """
     neb_keys = {name for selector, name in GRID_SUPPORT if selector == "neb"}
-    assert neb_keys == {"cloudy", "cb19", "mappings", "mappings_agn", "cue"}
+    assert neb_keys == {"cloudy", "cb19", "gutkin16", "mappings", "mappings_agn", "cue"}
