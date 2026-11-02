@@ -97,6 +97,7 @@ from tengri.inference.backends.mcmc.catalog import (
     build_catalog_mcmc_engine,
     map_with_shared,
 )
+from tengri.inference.lbfgs_driver import lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_log_prob,
     standardized_residual,
@@ -743,44 +744,6 @@ def _fit_chunk(nlp, batch, init, threaded, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
-def _max_abs(tree) -> jax.Array:
-    """Largest absolute entry over every leaf of a pytree."""
-    return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
-
-
-def _lbfgs_one(nlp, obs, tables, init, *, n_steps, gtol):
-    """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
-    import optax
-
-    optimizer = optax.lbfgs()
-
-    def value_fn(params):
-        return nlp(params, obs, tables)
-
-    value_and_grad = optax.value_and_grad_from_state(value_fn)
-    state = optimizer.init(init)
-    value, grad = value_and_grad(init, state=state)
-
-    def not_converged(carry):
-        _, _, _, grad_now, it, _ = carry
-        return (it < n_steps) & jnp.logical_not(_max_abs(grad_now) < gtol)
-
-    def advance(carry):
-        params, opt_state, value_now, grad_now, it, trace = carry
-        trace = trace.at[it].set(value_now)
-        updates, opt_state = optimizer.update(
-            grad_now, opt_state, params, value=value_now, grad=grad_now, value_fn=value_fn
-        )
-        params = optax.apply_updates(params, updates)
-        value_next, grad_next = value_and_grad(params, state=opt_state)
-        return params, opt_state, value_next, grad_next, it + 1, trace
-
-    carry = (init, state, value, grad, jnp.asarray(0), jnp.zeros((n_steps,), dtype=value.dtype))
-    params, _, value, _, n_done, trace = jax.lax.while_loop(not_converged, advance, carry)
-    trace = jnp.where(jnp.arange(n_steps) < n_done, trace, value)
-    return params, value, trace
-
-
 def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
 
@@ -791,7 +754,9 @@ def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """
 
     def one(obs, init_one, tables):
-        return _lbfgs_one(nlp, obs, tables, init_one, n_steps=n_steps, gtol=gtol)
+        return lbfgs_to_gtol(
+            lambda params: nlp(params, obs, tables), init_one, n_steps=n_steps, gtol=gtol
+        )
 
     params_final, final_nlp, trace = jax.vmap(one, in_axes=(0, 0, None))(batch, init, threaded)
     return params_final, final_nlp, trace.T
