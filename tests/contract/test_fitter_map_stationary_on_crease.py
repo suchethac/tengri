@@ -75,3 +75,32 @@ def test_fitter_map_is_stationary_on_the_crease_galaxy(synthetic_ssp, mock, batc
     assert post.diagnostics["map_decrement"] < MAP_DECREMENT_BAR
     assert post.diagnostics["map_attempts"] >= 1
     assert isinstance(post.diagnostics["map_message"], str)
+
+
+def test_converging_galaxy_skips_the_hessian_certificate(synthetic_ssp, mock, monkeypatch):
+    """A galaxy scipy converges on is accepted from its gradient alone (no Hessian)."""
+    from tengri.inference.backends import map_dispatch
+
+    calls = []
+    real = map_dispatch.stationarity
+
+    def counted(loss, x):
+        calls.append(1)
+        return real(loss, x)
+
+    monkeypatch.setattr(map_dispatch, "stationarity", counted)
+    g = mock[0]
+    fixed = _dpl_template(synthetic_ssp, g["wave"], _banded(g["wave"]), redshift=Fixed(g["z"]))
+    fitter = Fitter(
+        fixed,
+        data=jnp.asarray(g["flux"]),
+        noise=jnp.asarray(g["sigma"]),
+        data_type="spectroscopy",
+        approx=None,
+        profile_mass=False,
+    )
+    post = fitter.run("map", tol=1e-3)
+    assert calls == []
+    assert post.diagnostics["map_converged"] is True
+    assert post.diagnostics["map_decrement"] is None
+    assert post.diagnostics["map_attempts"] == 1

@@ -379,28 +379,25 @@ def _run_map_scipy(
     def flat_loss(vec):
         return loss_fn(unravel_fn(vec), data_args)
 
-    x_final, stat, attempts = _certify_map_point(
+    x_final, final_loss, grad_norm, decrement, converged, attempts = _certify_map_point(
         flat_loss,
         jnp.asarray(result.x),
         scipy_success=bool(result.success),
         n_steps=n_steps,
         gtol=tol,
     )
-    if not stat.stationary:
+    if not converged:
         warn_measured(
             f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
-            f"decrement {stat.decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}, "
-            f"Hessian positive definite: {stat.positive_definite}. scipy reported "
-            f"{result.message!r}. The returned point is not a minimum.",
-            decrement=stat.decrement,
-            grad_norm=stat.grad_norm,
+            f"decrement {decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}. "
+            f"scipy reported {result.message!r}. The returned point is not a minimum.",
+            decrement=decrement,
+            grad_norm=grad_norm,
         )
 
     best_params = unravel_fn(x_final)
     _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
-    final_loss = stat.nlp
-    converged = stat.stationary
 
     if verbose:
         cv_msg = " (converged)" if converged else ""
@@ -426,9 +423,9 @@ def _run_map_scipy(
             "final_loss": final_loss,
             "optimizer": opt_name,
             "converged": converged,
-            "grad_norm": stat.grad_norm,
-            "map_converged": stat.stationary,
-            "map_decrement": stat.decrement,
+            "grad_norm": grad_norm,
+            "map_converged": converged,
+            "map_decrement": decrement,
             "map_attempts": attempts,
             "map_message": str(result.message),
         },
@@ -457,28 +454,39 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     -------
     x : jax.Array, shape (D,)
         The reported point.
-    stat : Stationarity
-        Stationarity measure at ``x``.
+    nlp : float
+        Negative log-posterior at ``x`` [nats].
+    grad_norm : float
+        Euclidean norm of the gradient at ``x`` in standardized coordinates.
+    decrement : float or None
+        Newton decrement at ``x`` [nats], ``None`` when the certificate was not needed.
+    stationary : bool
+        Whether ``x`` is accepted as a MAP point.
     attempts : int
         Optimizer runs spent, scipy's included.
 
     Notes
     -----
-    scipy's own success flag is not trusted on its own: a point it reports as converged
-    is still continued when its Newton decrement is above :data:`MAP_DECREMENT_BAR`.
-    At most ``_MAP_CONTINUATION_ROUNDS`` optax runs follow scipy.
+    The Hessian certificate runs only when it can change the answer. When scipy reports
+    success and the re-evaluated max |grad| at ``x`` is below ``gtol``, the point is
+    accepted without the Hessian (``stat`` is ``None``, one attempt). Otherwise the
+    Newton decrement is measured, and a point that is not stationary is continued with
+    the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs.
     """
+    value, grad = jax.jit(jax.value_and_grad(flat_loss))(x)
+    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
+        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1
     stat = stationarity(flat_loss, x)
     attempts = 1
     if scipy_success and stat.stationary:
-        return x, stat, attempts
+        return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts
     for _ in range(_MAP_CONTINUATION_ROUNDS):
         x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
         attempts += 1
         stat = stationarity(flat_loss, x)
         if stat.stationary:
             break
-    return x, stat, attempts
+    return x, stat.nlp, stat.grad_norm, stat.decrement, stat.stationary, attempts
 
 
 def _best_finite_restart(final_losses) -> int:
