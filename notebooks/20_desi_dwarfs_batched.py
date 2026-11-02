@@ -61,12 +61,7 @@ from tengri import (
     make_agebins_from_zred,
     plot,
 )
-from tengri.forward.batched_spectrum import (
-    batched_eline_design,
-    batched_line_set,
-    check_template_model,
-    make_batched_predict,
-)
+from tengri.forward.batched_spectrum import check_template_model, make_batched_predict
 from tengri.inference.batched_spectro import fit_spectra_catalog_mcmc, fit_spectra_map_vmap
 from tengri.observation.banded import BandedMatrix, gaussian_resolution_bands
 from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
@@ -212,8 +207,10 @@ def make_record(lo, hi, z, edges, mask, flux, ivar, phot, perr, ebmv, covariance
 # screen is switched on through `foreground`; each galaxy supplies its own E(B−V).
 #
 # The Cue nebular lines are rendered at `neb_eline_sigma_kms` = 100 km/s, the default of that
-# parameter, and the mocks draw their lines from this same template at the same 100 km/s width, so
-# the mock and the fit use one line profile.
+# parameter, and the mocks come from this same template at the same 100 km/s width, so the mock and
+# the fit use one line profile. The catalog line amplitudes carry a Gaussian prior centered on the
+# model's own prediction for each line (`eline_prior_type="model"`, width at its default), so the
+# Balmer decrement constrains the dust as the model predicts it.
 #
 # The redshift is free in the template. A batch carries each galaxy's redshift, so `Fixed(z)` is
 # refused here.
@@ -230,7 +227,7 @@ def build_template():
         eline_mode="marginalized",
         eline_catalog=LineList.default_optical(),
         eline_prior_sigma=PRIOR_SIGMA,
-        eline_prior_type="flat",
+        eline_prior_type="model",
         eline_broad=False,
         calibration_segments=camera_ids(WAVE),
         cal_prior="scale_free",
@@ -276,13 +273,13 @@ print(f"check_template_model passed in {time.perf_counter() - t0:.2f} s")
 # %% [markdown]
 # ## The mocks
 #
-# Each galaxy's truth is drawn from the scenario ranges. The continuum comes from the batched forward
-# model at the truth, and the marginal line amplitudes are added on top of it, with amplitudes
-# between 0.5 and 10 times the continuum. The noise follows the banded covariance. The photometry
-# carries 5 percent scatter, and each galaxy keeps only the filters of its band set.
+# Each galaxy's truth is drawn from the scenario ranges. Its spectrum is the template's own
+# prediction at the truth, so the mock lies inside the model: the nebular emission lines are the
+# Cue lines the template renders, at the same 100 km/s width. The noise follows the banded covariance.
+# The photometry carries 5 percent scatter, and each galaxy keeps only the filters of its band set.
 #
-# The mocks are built in two passes: the first pass fixes the batch layout (the masks and line
-# columns), and the second adds the data. The bucket plan of the fit is printed after the mocks.
+# The batch layout (the masks and the bucket sizes) is fixed by a first pass over placeholder records,
+# and the mock data are added on the same buckets. The bucket plan of the fit is printed after the mocks.
 
 
 # %%
@@ -301,25 +298,17 @@ def draw_truth(rng):
 
 
 def predict_all(template, buckets, params):
-    """Continuum, photometry and line design of every galaxy, in catalog order."""
+    """Predicted spectrum and photometry of every galaxy at the truth, in catalog order."""
     cont = [None] * N_GAL
     phot = [None] * N_GAL
-    design = [None] * N_GAL
-    line_set = batched_line_set(template)
     for spec, batch, index in buckets:
         sel = jnp.asarray(index)
         bucket_params = {k: jnp.asarray(v)[sel] for k, v in params.items()}
         out = make_batched_predict(template, spec)(bucket_params, batch)
-        g = np.asarray(
-            jax.vmap(lambda o: batched_eline_design(line_set, o, {"eline_sigma_kms": 100.0}))(
-                batch
-            )
-        )
         for local, i in enumerate(index):
             cont[i] = np.asarray(out["spec_fnu"])[local]
             phot[i] = np.asarray(out["phot_fnu"])[local]
-            design[i] = g[local]
-    return cont, phot, design
+    return cont, phot
 
 
 def make_mocks(template):
@@ -347,7 +336,7 @@ def make_mocks(template):
         for k, (lo, hi) in enumerate(bounds)
     ]
     buckets = build_spectro_batches(placeholder, quantum=512, model=template)
-    cont, phot, design = predict_all(template, buckets, truth)
+    cont, phot = predict_all(template, buckets, truth)
 
     records = []
     for k, (lo, hi) in enumerate(bounds):
@@ -356,9 +345,7 @@ def make_mocks(template):
         cont_med = np.median(cont[k][:n][good])
         snr = rng.uniform(3.0, 10.0)
         sigma = cont_med / snr
-        amps = cont_med * 10 ** rng.uniform(-0.3, 1.0, design[k].shape[1])
-        lines = design[k][:n] @ amps
-        flux = cont[k][:n] + lines + correlated_noise(rng, n, sigma)
+        flux = cont[k][:n] + correlated_noise(rng, n, sigma)
         ivar = np.full(n, 1.0 / sigma**2)
         pflux = phot[k] * (1 + 0.05 * rng.standard_normal(phot[k].shape))
         perr = 0.05 * phot[k]
@@ -445,10 +432,15 @@ for i in range(N_GAL):
     )
 
 # %% [markdown]
+# The MAP is a starting point, not the estimate: for galaxy 2 it sits 0.38 dex above the truth
+# because the continuity history trades stellar mass against the age of the old bins (the MAP's
+# SFH ratios are far from the truth's), and the posterior below is the estimate.
+
+# %% [markdown]
 # ## Sampling all four
 #
 # `fit_spectra_catalog_mcmc` with the ChEES sampler runs every galaxy's chains, warm-started from
-# the MAP. Each galaxy runs two chains, 40 warmup steps and 40 draws per chain. The sampler adapts a
+# the MAP. Each galaxy runs two chains, 80 warmup steps and 80 draws per chain. The sampler adapts a
 # four-chain ensemble per galaxy, the smallest the ChEES adaptation accepts, and `batch_size=1`
 # runs one galaxy per step, which bounds the memory of the run. The draws come back with the chains
 # flattened, one after the other, so the convergence check below is a split R-hat computed on the
@@ -475,8 +467,8 @@ post = fit_spectra_catalog_mcmc(
     sampler="chees",
     init="map",
     precondition=1.0,
-    n_warmup=40,
-    n_samples=40,
+    n_warmup=80,
+    n_samples=80,
     n_chains=2,
     n_ensemble=4,
     batch_size=1,
@@ -518,9 +510,9 @@ plt.show()
 # ## One galaxy's window
 #
 # The data of galaxy 0 with the MAP continuum. The marginal line amplitudes are not returned by
-# `fit_spectra_map_vmap` or by the catalog sampler when `eline_mode="marginalized"`, so the model
-# below carries the stellar, nebular and dust continuum, and the emission lines appear as residual
-# structure. Set `eline_mode="fitted"` to return the `eline_amp_*` amplitudes.
+# `fit_spectra_map_vmap` or by the catalog sampler when `eline_mode="marginalized"`. The model below is
+# the template's prediction at the MAP, with its Cue nebular lines, and it does not include the
+# marginal catalog-line amplitudes. Set `eline_mode="fitted"` to return the `eline_amp_*` amplitudes.
 
 # %%
 g = 0
