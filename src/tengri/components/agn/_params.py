@@ -872,9 +872,23 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "
         "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
-        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used. With "
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used. Under "
+        "``agn_norm='conserving'`` the AGN power stays ``agn_log_lbol`` and the "
+        "coupling sets only the covering factor ``agn_torus_frac`` so that the AGN dust "
+        "is this fraction of the total. The covering factor cannot pass 1, so the "
+        "reachable fractions are ``f <= f_max = r L_bol / (r L_bol + L_absorbed)`` "
+        "(``r = agn_lum_ratio``, ``L_bol = 10**agn_log_lbol L_sun``; with a line block "
+        "``r L_bol`` is replaced by ``(1 - E_lines/E_disc) r L_bol``). With "
         "``agn={'ir_frac_window': (lambda_min_um, lambda_max_um)}`` the fraction is "
-        "that of the light in the window (CIGALE ``lambda_fracAGN``), not of the dust.",
+        "that of the light in the window (CIGALE ``lambda_fracAGN``), not of the dust; "
+        "under 'conserving' the reachable band is then "
+        "``[W_agn(0)/(W_agn(0) + H), W_agn(t_max)/(W_agn(t_max) + H)]``, with "
+        "``W_agn(t)`` the AGN light in the window at covering factor ``t``, ``H`` the "
+        "host's and ``t_max`` 1 (or ``1 - E_lines/E_disc``). Its lower edge is the disc's "
+        "own share of the window light (the covering factor cannot go below 0). "
+        "Outside the band the covering factor stays at the bound, "
+        "``agn_ir_frac_saturated`` is 1 and ``agn_ir_frac_realized`` gives the fraction "
+        "the model reaches.",
         lambda lo, hi: lo >= 0 and hi < 1.0,
         "must be in [0, 1)",
     ),
