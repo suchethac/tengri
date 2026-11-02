@@ -99,6 +99,16 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "tengri.components.nebular.agn_nebular._load_feltre_grid",
     ),
     WavelengthSource(
+        "gutkin16",
+        "data/gutkin16_grid.h5",
+        "vacuum",
+        "NEOGAL tables follow Cloudy (air at and above 2000 A, vacuum below, Ferland+2017 "
+        "sec. 2.3.3); scripts/build_gutkin16_grid.py converts every label at or above 2000 A "
+        "once with air_to_vac (NIST air values) and stores vacuum, recorded in the file's "
+        "wavelength_convention attribute; labels below 2000 A are vacuum as published",
+        "tengri.components.nebular.gutkin16.load_gutkin16_grid",
+    ),
+    WavelengthSource(
         "mappings5_3mdb",
         "data/mappings_templates.h5",
         "air",
