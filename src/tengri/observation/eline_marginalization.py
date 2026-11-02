@@ -360,7 +360,9 @@ def unit_line_prior(
 
     **Gradient-safe**: yes, with respect to ``design``, ``prior_width``, ``noise`` and
     ``prior_mean``. The scale is the geometric mean of ``noise`` over the unmasked
-    pixels divided by the largest width, so it is order unity for any prior width.
+    pixels divided by the largest entry of the width-scaled design, so the whitened
+    design is order unity whatever the flux scale of ``design`` and ``prior_width``.
+    The scale is held out of the gradient, as the value does not depend on it.
 
     **vmap**: yes over any leading batch axis.
 
@@ -391,11 +393,17 @@ def unit_line_prior(
     mean = jnp.zeros(n_lines, dtype=design.dtype) if prior_mean is None else prior_mean
     weight = jnp.ones_like(noise) if pix_mask is None else pix_mask
     log_noise_mean = jnp.sum(weight * jnp.log(noise)) / jnp.sum(weight)
+    scaled_design = design * width
+    # The whitened design is (G diag(w)) / sigma * s, so s must divide out the design
+    # magnitude, not only the width: at F_nu scale G diag(w) / sigma is ~1e6 and an
+    # s set by the width alone pushes its squares below the float32 range.
+    design_max = jnp.max(jnp.abs(scaled_design))
+    scale_design = jnp.where(design_max > 0, design_max, 1.0)
     return UnitLinePrior(
-        design=design * width,
+        design=scaled_design,
         prior_mean=mean / width,
         prior_precision=jnp.eye(n_lines, dtype=design.dtype),
-        scale=jnp.exp(log_noise_mean) / jnp.max(width),
+        scale=jax.lax.stop_gradient(jnp.exp(log_noise_mean) / scale_design),
     )
 
 
