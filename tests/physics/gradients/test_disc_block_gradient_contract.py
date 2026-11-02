@@ -149,6 +149,12 @@ def _grad_and_fd(model, overrides=None):
 # ~0.0376 L0, inside the 0.33 L0 ceiling, so R_hot is solved in the interior of its
 # bracket (x_hot 1.6). Before the derivative fix the default f_hard pinned R_hot at the
 # old ceiling at the issue point; this point is interior either way.
+#
+# The plain ``kubota_done`` case sits past the hot-flow switch (#3015): the prior-draw
+# ``agn_f_hard`` 0.096 at lambda_Edd 0.03 asks the corona for 3.2x the disc's dissipation, so
+# ``R_hot = R_out`` and the SED is the corona alone (Kubota & Done 2018 Sec. 2.2; RELQSO). That
+# is a smooth regime and AD must agree with FD there too; ``r_hot_unclipped`` below covers the
+# separate-zones regime.
 _CASES = [(name, "", {}) for name in _DISC_BLOCKS] + [
     ("kubota_done", "-r_hot_unclipped", {"agn_f_hard": 0.005}),
 ]

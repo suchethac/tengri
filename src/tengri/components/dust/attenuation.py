@@ -275,6 +275,7 @@ _C13_PIVOT_UM = 0.55
     "chevallard13",
     citation="Chevallard et al. 2013 (MNRAS 432, 2061)",
     short_doc="Chevallard+13 optical-depth-dependent diffuse ISM curve",
+    diffuse_only=True,
 )
 def chevallard13(
     wavelength: jnp.ndarray,

@@ -22,7 +22,7 @@ from tengri.components.dust.two_component import (
     DustSEDComponent,
     DustSEDComponentConfig,
 )
-from tengri.config.exceptions import AGNDustDoubleCountWarning, ParameterError
+from tengri.config.exceptions import AGNDustDoubleCountWarning, ConfigError, ParameterError
 from tengri.forward.energy_balance import bolometric_absorbed
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
@@ -531,18 +531,19 @@ def test_warn_agn_dust_double_count_fires_with_screened_agn(synthetic_ssp_wide):
     carries the embedded quasar template; on plain ``dale2014`` ``dust_frac_agn``
     is a structural zero since #2314) and BOTH
     ``dust_frac_agn`` and ``agn_ir_frac`` (fracAGN) are positive-active.
-    fracAGN is itself refused outside ``agn_norm="cigale_joint"``
-    (``_validate_fracagn_requires_cigale_joint``, R65/R67: 'independent' and
-    'conserving' both raise ``ConfigError`` for an active fracAGN, since the
-    disc and torus would sit on two unrelated luminosity scales). PR-D2's own
-    cycle rule refuses ``agn_screen != "none"`` under exactly
-    ``agn_norm="cigale_joint"``. So the double-count trigger and a screened
-    AGN cannot coexist in any buildable model -- verified here as two halves:
-    (a) the warning still fires under its documented (unscreened,
+    fracAGN is admitted under ``agn_norm="cigale_joint"`` and
+    ``"conserving"`` and refused under ``"independent"`` (R65,
+    ``_validate_fracagn_norm_policy``). PR-D2's own cycle rule refuses
+    ``agn_screen != "none"`` under ``agn_norm="cigale_joint"``, and
+    ``_validate_fracagn_norm_policy`` refuses a screen beside an active fracAGN
+    under ``"conserving"`` (a screened AGN runs before the dust, so the absorbed
+    power fracAGN reads is not yet published). So the double-count trigger and
+    a screened AGN cannot coexist in any buildable model -- verified here in
+    three parts: (a) the warning still fires under its documented (unscreened,
     cigale_joint) trigger, unaffected by this PR; (b) trying to pair that
     same trigger with a screened AGN raises the cycle-rule ``ParameterError``
     before the warning is ever reached, rather than silently dropping either
-    check.
+    check; (c) the same pairing under ``"conserving"`` raises ``ConfigError``.
     """
 
     def _build(*, screen, norm):
@@ -582,6 +583,10 @@ def test_warn_agn_dust_double_count_fires_with_screened_agn(synthetic_ssp_wide):
     # warning check in SEDModel.build is ever reached.
     with pytest.raises(ParameterError, match="incompatible with agn_norm"):
         _build(screen="diffuse", norm="cigale_joint")
+
+    # (c) Screened + conserving + fracAGN: refused, the absorbed power does not exist yet.
+    with pytest.raises(ConfigError, match="dust_agn_screen='diffuse'"):
+        _build(screen="diffuse", norm="conserving")
 
 
 # ── (c) Component chain order on a built model ──────────────────────────

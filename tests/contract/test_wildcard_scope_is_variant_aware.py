@@ -201,7 +201,7 @@ class Case(dict):
 
 def _dust_law_cases():
     """Every registered attenuation law, read from the registry not a list."""
-    from tengri.components.dust.laws._registry import DUST_LAWS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_screen_keys
 
     for law in sorted(DUST_LAWS):
         yield Case(
@@ -211,8 +211,7 @@ def _dust_law_cases():
             {
                 "dust_attenuation": {
                     "type": "two_component",
-                    "law_bc": law,
-                    "law_diff": law,
+                    **law_screen_keys(law),
                     "all_params": FREE,
                 },
                 "dust_emission": {"type": "themis", "all_params": Fixed(DEFAULT)},
@@ -611,14 +610,18 @@ def test_backend_declared_nebular_params_are_threaded():
     from tengri.components.nebular.cloudy_cb19 import CB19Backend
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
     from tengri.components.nebular.component import (
-        _BACKEND_OPTIONAL_PARAMS,
         _backend_accepted_params,
     )
+    from tengri.components.nebular.gutkin16 import Gutkin16Backend
 
-    assert _backend_accepted_params(CB19Backend) == frozenset(_BACKEND_OPTIONAL_PARAMS), (
-        "CB19 names log_nH / log_CO / dNO in both predict_nebular_sed and "
-        "predict_nebular_line_luminosities; all three must be threaded to it"
-    )
+    # CB19 names log_nH / log_CO / dNO / hbfrac in both sinks; it does not name the
+    # Gutkin+2016 axes (xi_d, co_ratio), which were added to the tuple with #983.
+    assert _backend_accepted_params(CB19Backend) == frozenset(
+        {"neb_log_nH", "neb_co", "neb_dno", "neb_hbfrac"}
+    ), "CB19 names log_nH / log_CO / dNO / hbfrac in both nebular sinks; all must be threaded"
+    assert _backend_accepted_params(Gutkin16Backend) == frozenset(
+        {"neb_log_nH", "neb_xi_d", "neb_co_ratio"}
+    ), "Gutkin16 names log_nH / xi_d / co_ratio in both nebular sinks; all must be threaded"
     for backend in (CloudyGridBackend, BakedInBackend):
         assert _backend_accepted_params(backend) == frozenset(), (
             f"{backend.__name__} models none of these axes, so threading them "

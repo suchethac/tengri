@@ -1687,54 +1687,60 @@ def _check_polar_reference_grid_extent(
     )
 
 
-def _validate_fracagn_requires_cigale_joint(spec) -> None:
-    """Raise if an active fracAGN meets a non-joint ``agn_norm`` (R65, R67).
+def _validate_fracagn_norm_policy(spec) -> None:
+    """Raise if an active fracAGN meets a policy that cannot carry it (R65).
 
-    fracAGN (``agn_ir_frac``) is the CIGALE ``skirtor2016`` coupling: the AGN
-    power becomes ``L_absorbed x f/(1 - f)``, derived from the **dust-absorbed
-    stellar** luminosity, and every ``agn_norm`` policy routes the torus
-    through that derived power. Only ``'cigale_joint'`` routes the DISC
-    through it too, via the SKIRTOR template ratio ``R``. The other two
-    policies reference the disc to ``10**agn_log_lbol`` instead -- verbatim
-    under ``'independent'``, debited by ``(1 - agn_torus_frac)`` under
-    ``'conserving'`` -- so disc and torus sit on two unrelated luminosity
-    scales and their ratio is proportional to ``1/M*``: it reports the
-    stellar mass rather than any AGN parameter.
+    fracAGN (``agn_ir_frac``) sets the torus from the **dust-absorbed stellar**
+    luminosity. Two policies give that a single reference. ``'cigale_joint'``
+    is the CIGALE ``skirtor2016`` coupling: the AGN power becomes
+    ``L_absorbed x f/(1 - f)`` and the disc follows it through the SKIRTOR
+    template ratio ``R``. ``'conserving'`` keeps the AGN power at
+    ``agn_lum_ratio x 10**agn_log_lbol L_sun`` and lets fracAGN set only the
+    covering factor ``agn_torus_frac`` (owner ruling on #2320): the torus
+    re-emits that share of the accretion power and the disc keeps the rest, so
+    the ledger closes on ``agn_log_lbol`` (see ``AGNSEDComponent.apply``).
+    ``'independent'`` has neither: the disc stays on ``10**agn_log_lbol``
+    verbatim while the torus follows the absorbed host power, so disc and torus
+    sit on two unrelated luminosity scales and their ratio is proportional to
+    ``1/M*``: it reports the stellar mass rather than any AGN parameter.
 
     Measured (composable ``disc='schartmann2005'`` + ``torus='skirtor'``,
     ``dust_emission='dale2014_cigale'``, ``agn_log_lbol`` at its registry
     default, ``agn_ir_frac=0.3``), sweeping ONLY the stellar mass and reading
     ``int(sed_agn_disc)/int(sed_agn_torus)``:
 
-    ============  ==================  ==================  ==================
-    ``log M*``    independent         conserving          cigale_joint
-    ============  ==================  ==================  ==================
-    0.0            5.004902e+10        5.004902e+10        2.838156
-    7.0            5.004902e+03        5.003901e+03        2.838156
-    10.0           5.004902e+00        4.004135e+00        2.838156
-    12.0           5.004902e-02        0.000000e+00        2.838156
-    ============  ==================  ==================  ==================
+    ============  ==================  ==================
+    ``log M*``    independent         cigale_joint
+    ============  ==================  ==================
+    0.0            5.004902e+10        2.838156
+    7.0            5.004902e+03        2.838156
+    10.0           5.004902e+00        2.838156
+    12.0           5.004902e-02        2.838156
+    ============  ==================  ==================
 
-    Twelve orders of magnitude in both refused columns, constant in the legal
-    one. The torus integral is identical to six digits under all three
-    (``7.626100e+42`` at ``log M* = 10``), which is what pins the mechanism on
-    the disc side rather than on the coupling. ``'conserving'`` is the worse of
-    the two: at ``log M* = 12`` the derived ``agn_torus_frac`` clips to 1 and
-    the disc is debited to **exactly zero**. Without fracAGN both policies are
-    coherent -- ``'independent'`` holds ``2.001533`` at every mass -- so the
-    pathology is the combination, not either half, which is why this refuses
-    the pair and nothing else. Nothing raised or warned before: the four
-    components still summed to ``sed_agn`` exactly, so the accounting was
-    intact while the configuration was meaningless.
+    Twelve orders of magnitude in the refused column, constant in the legal
+    one. Under ``'conserving'`` the ratio moves with the stellar mass as well,
+    but by construction: the covering factor is what fracAGN sets, and the
+    disc plus the torus is the accretion power at every mass. Without fracAGN
+    ``'independent'`` is coherent -- it holds ``2.001533`` at every mass -- so
+    the pathology is the combination, which is why this refuses the pair and
+    nothing else.
+
+    ``'conserving'`` reads the absorbed host power at run time, so it needs the
+    dust to run before the AGN. A screened AGN (``dust_agn_screen != 'none'``)
+    runs before the dust, the absorbed power is not yet published, and the
+    coupling would fall back to the user ``agn_torus_frac`` without a word;
+    that pair is refused too (``'cigale_joint'`` refuses a screen for the same
+    reason, in ``Parameters``).
 
     Raises
     ------
     ConfigError
-        If ``spec.agn_norm`` is ``'independent'`` or ``'conserving'`` and
-        ``agn_ir_frac`` is active (FREE, or Fixed with a value > 0). An
-        explicit ``Fixed(0.0)`` states "no coupling" and is deliberately legal
-        -- it is one of the remedies this refusal names, and advice a guard
-        refuses is the #1364 defect.
+        If ``agn_ir_frac`` is active (FREE, or Fixed with a value > 0) and
+        ``spec.agn_norm`` is ``'independent'``, or is ``'conserving'`` beside a
+        screened AGN. An explicit ``Fixed(0.0)`` states "no coupling" and is
+        deliberately legal -- it is one of the remedies this refusal names, and
+        advice a guard refuses is the #1364 defect.
 
     See Also
     --------
@@ -1757,42 +1763,35 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
     if not ir_frac_active:
         return
 
-    disc_reference = {
-        "independent": (
-            "under 'independent' the disc stays on 10**agn_log_lbol by that policy's contract"
-        ),
-        "conserving": (
-            "under 'conserving' the disc stays on 10**agn_log_lbol debited by "
-            "(1 - agn_torus_frac), a second and unrelated reference"
-        ),
-    }[policy]
-    measured = {
-        "independent": (
-            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to 5.00e-02 at log M* = 12"
-        ),
-        "conserving": (
-            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to exactly "
-            "0.00e+00 at log M* = 12, where the derived agn_torus_frac clips "
-            "to 1 and debits the disc away entirely"
-        ),
-    }[policy]
+    screen = str(getattr(spec, "dust_agn_screen", "none") or "none")
+    if policy == "conserving":
+        if screen == "none":
+            return
+        # A screened AGN runs before the dust (the screen attenuates sed_agn inside the dust
+        # step), so the absorbed power fracAGN reads is not yet published when the AGN runs
+        # and the coupling would silently fall back to the user agn_torus_frac.
+        from tengri.parameters.parameters import screened_fracagn_message
+
+        raise ConfigError(screened_fracagn_message(policy, screen))
 
     raise ConfigError(
-        f"agn_norm={policy!r} was selected with an active fracAGN "
-        "(agn_ir_frac). fracAGN derives the AGN power from the dust-absorbed "
-        "stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE skirtor2016 "
-        f"coupling), and the torus follows it -- but {disc_reference}, so "
-        "disc and torus sit on two unrelated luminosity scales and their "
-        f"ratio scales as 1/M*: measured, {measured}, i.e. it reports the "
-        "stellar mass rather than any AGN parameter. Two ways out: (1) "
-        "agn={'norm': 'cigale_joint'} with a SKIRTOR torus, the single policy "
-        "that ties the disc to the same agn_power reference through the "
-        "template ratio R (measured: int(disc)/int(torus) = 2.838156 at every "
-        "stellar mass) -- this is the policy fracAGN was written for; or (2) "
-        f"keep 'norm': {policy!r} and set agn={{'agn_ir_frac': Fixed(0.0)}} "
-        "(or omit it) to drop the coupling, which leaves agn_torus_frac "
-        "scaling the torus and agn_log_lbol scaling the disc. See rulings R65 "
-        "and R67."
+        "agn_norm='independent' was selected with an active fracAGN "
+        "(agn_ir_frac). fracAGN sets the torus from the dust-absorbed stellar "
+        "luminosity, L_absorbed * f/(1 - f), but under 'independent' the disc "
+        "stays on 10**agn_log_lbol by that policy's contract, so disc and torus "
+        "sit on two unrelated luminosity scales and their ratio scales as "
+        "1/M*: measured, int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 "
+        "to 5.00e-02 at log M* = 12, i.e. it reports the stellar mass rather "
+        "than any AGN parameter. Three ways out: (1) agn={'norm': "
+        "'cigale_joint'} with a SKIRTOR torus, the CIGALE coupling, which ties "
+        "the disc to the same agn_power reference through the template ratio R "
+        "(measured: int(disc)/int(torus) = 2.838156 at every stellar mass); "
+        "(2) agn={'norm': 'conserving'} with an unscreened AGN, under which the "
+        "AGN power stays 10**agn_log_lbol and fracAGN sets only the covering "
+        "factor agn_torus_frac; or (3) keep 'norm': 'independent' and set "
+        "agn={'agn_ir_frac': Fixed(0.0)} (or omit it) to drop the coupling, "
+        "which leaves agn_torus_frac scaling the torus and agn_log_lbol "
+        "scaling the disc. See ruling R65."
     )
 
 
@@ -11340,13 +11339,10 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
-        # Route the photometry channel through the LUT projection
-        # when the model was built with ``approx=WavePrecomp(...)``. The
-        # routing decision is closure-captured per-model and baked into
-        # ``compile_signature`` (via the resolved ``approx`` config tuple),
-        # so structurally-equal models share a compile across the two
-        # routings without colliding. Spectrum stays exact, no spectrum
-        # LUT yet.
+        # A photometry-only observation under ``approx=WavePrecomp(...)`` projects through
+        # the LUT. The routing is closure-captured per model and baked into
+        # ``compile_signature`` via the resolved ``approx`` config tuple. A joint
+        # observation takes the branches below.
         use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
         # Part B: spectrum LUT inside the fused JIT kernel. ``predict_state``
         # (called within ``_impl``) publishes ``spec_eff_waves`` + the per-pixel
@@ -11355,6 +11351,15 @@ class SEDModel:
         # JOINT model also project photometry in the same kernel (Part A).
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
+        # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
+        # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
+        # which the exact spectrum reads.
+        mixed_phot_lut = (
+            phot_lut
+            and observation.can_do_spectroscopy
+            and observation.can_do_photometry
+            and getattr(self, "_nebular_grid_table", None) is None
+        )
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
         # build runs each component's ``precompute()``, which for the
@@ -11437,8 +11442,15 @@ class SEDModel:
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
-                    observables_type=observables_type,
+                    observables_type=None if mixed_phot_lut else observables_type,
                 )
+                if mixed_phot_lut:
+                    # The exact kernel's own photometry is discarded (XLA drops it as dead
+                    # code); the LUT supplies phot_fnu and phot_rest_fnu.
+                    out = {"spec_fnu": obs["spec_fnu"]}
+                    out.update(observation.predict_via_precomp(state, full, observables_type=None))
+                    avail = {k: v for k, v in out.items() if k in observables_type._fields}
+                    return observables_type(**avail), state
                 return obs, state
             if use_lut:
                 obs = observation.predict_via_precomp(
@@ -11881,12 +11893,27 @@ class SEDModel:
         """
         return self._energy_balance_lut(chain) is not None
 
+    def _observation_reads_nebular_continuum(self) -> bool:
+        """Whether this model's observation projects a spectrum, which reads ``sed_nebular``.
+
+        The continuum census asks the component chain, and a spectrum is projected by
+        the observation, not by a component: the exact spectrum sums the rest SED and
+        the spectrum LUT samples the nebular SED at the pixels, so both read the
+        continuum the grid would zero. Left out of the census, a joint model ran its
+        observables kernel with ``sed_nebular`` exactly zero and projected both
+        channels off that state: photometry -14 % and spectrum -55 % on a dust-free
+        Cue model (#3227).
+        """
+        observation = getattr(self, "observation", None)
+        return observation is not None and bool(observation.can_do_spectroscopy)
+
     def nebular_grid_can_serve_photometry(self) -> bool:
         """Whether the per-Q_H nebular grid can serve this model's photometry.
 
         Serving photometry from the grid zeroes ``sed_nebular``, so it requires
-        that no component read the continuum. A dust component reads it, unless
-        it can take the nebular from the grid instead
+        that nothing read the continuum: no component, and no spectrum projected by
+        the observation (:meth:`_observation_reads_nebular_continuum`). A dust
+        component reads it, unless it can take the nebular from the grid instead
         (:meth:`_dust_can_take_nebular_from_grid`); then it does not count.
 
         Returns
@@ -11902,7 +11929,7 @@ class SEDModel:
             grid_baked_free_params,
         )
 
-        if grid_baked_free_params(self.spec):
+        if grid_baked_free_params(self.spec) or self._observation_reads_nebular_continuum():
             return False
 
         chain = getattr(self, "_cached_component_chain", None)
@@ -11925,6 +11952,10 @@ class SEDModel:
         and ``must_materialize_sed`` follows from it. Both happen here so the flag and
         the census cannot drift between call sites.
 
+        A projected spectrum reads the continuum too
+        (:meth:`_observation_reads_nebular_continuum`), so it materializes the nebular
+        SED and leaves the dust unflagged, like any other consumer.
+
         The grid's band photometry follows the evaluation redshift (fixed, free or
         runtime), so no redshift condition applies.
         """
@@ -11935,7 +11966,12 @@ class SEDModel:
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
         chain = list(chain)
-        if table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+        spectrum_reads = self._observation_reads_nebular_continuum()
+        if (
+            not spectrum_reads
+            and table.serves_dust
+            and self._dust_can_take_nebular_from_grid(chain)
+        ):
             eb_lut = self._energy_balance_lut(chain)
             dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
             for name_table, name_lut, grid_lut in (
@@ -11984,7 +12020,9 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
+            dataclasses.replace(
+                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or spectrum_reads
+            )
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain
@@ -14582,7 +14620,7 @@ class SEDModel:
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_torus_frac_fracagn_conflict(spec)
-        _validate_fracagn_requires_cigale_joint(spec)
+        _validate_fracagn_norm_policy(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
         _validate_radio_firrc_domain(spec)
