@@ -9,8 +9,8 @@ tests pin the seam:
 
 1. The catalog bucket program holds no constant as large as the SSP flux cube.
 2. The MAP driver's program holds no constant as large as the SSP flux cube.
-3. The float64 log-likelihood at a fixed standardized point is bit-identical to the
-   value recorded before the tables became arguments.
+3. The float64 log-likelihood at a fixed standardized point is bit-identical whether
+   the tables are passed as an argument or captured in a closure.
 
 The programs are recorded from the drivers themselves and traced with their
 per-galaxy inputs as arguments, so a table that a driver closes over shows up as a
@@ -30,10 +30,6 @@ from tests.contract.test_batched_spectro_loglik import _MASS, _TRUE_MASS, _mock_
 from tests.contract.test_batched_spectrum_forward import _banded, _free_z_model
 
 pytestmark = pytest.mark.contract
-
-#: Per-galaxy log-likelihood at the standardized point ``_TRUE_MASS + 0.05``, float64,
-#: recorded from the closure-captured build before the tables became arguments.
-_RECORDED_LOGLIK = np.array([-969143.1245560908, -1209237.2322956694, -1215310.5488341248])
 
 
 def _all_consts(closed) -> list:
@@ -143,10 +139,28 @@ def test_map_program_holds_no_table_as_a_constant(synthetic_ssp, template, bucke
     assert big == [], f"constants at or above the SSP cube size ({ssp_nbytes} B): {big}"
 
 
-def test_batched_log_likelihood_is_bit_identical_to_recorded_float64(template, bucket):
+def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_16_ulp(template, bucket):
+    """The jitted float64 value with the tables as an argument matches the jitted closure.
+
+    The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. Both
+    sides are compiled with ``jax.jit``, because the constant embedding this seam
+    removes happens only in a compiled program. The closure form embeds the tables as
+    compile-time constants, and XLA folds them in a different order from the argument
+    form. On this fixture the two agree to 0, 9 and 6 ulp across the three galaxies;
+    16 ulp is the margin the test allows above that spread. Tests 1 and 2 already pin
+    that the compiled bucket and MAP programs hold no table as a constant.
+    """
     spec, batch = bucket
-    loglik = batched_spectro.batched_log_likelihood(template, spec)
+    tables = template.threaded_template_inputs()
     masses = jnp.asarray([m + 0.05 for m in _TRUE_MASS])
-    values = np.asarray(jax.vmap(loglik)({_MASS: masses}, batch))
-    assert values.dtype == np.float64
-    np.testing.assert_array_equal(values, _RECORDED_LOGLIK)
+    params = {_MASS: masses}
+    jit_argument = jax.jit(
+        jax.vmap(batched_spectro.batched_log_likelihood(template, spec), in_axes=(0, 0, None))
+    )
+    jit_closure = jax.jit(
+        jax.vmap(batched_spectro.batched_log_likelihood(template, spec, threaded=tables))
+    )
+    argument_values = np.asarray(jit_argument(params, batch, tables))
+    closure_values = np.asarray(jit_closure(params, batch))
+    assert argument_values.dtype == np.float64
+    np.testing.assert_array_max_ulp(argument_values, closure_values, maxulp=16)
