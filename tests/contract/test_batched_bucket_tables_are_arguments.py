@@ -139,22 +139,28 @@ def test_map_program_holds_no_table_as_a_constant(synthetic_ssp, template, bucke
     assert big == [], f"constants at or above the SSP cube size ({ssp_nbytes} B): {big}"
 
 
-def test_batched_log_likelihood_is_bit_identical_with_tables_as_argument(template, bucket):
-    """Passing the template tables as an argument gives the same float64 values as a closure.
+def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_16_ulp(template, bucket):
+    """The jitted float64 value with the tables as an argument matches the jitted closure.
 
-    The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. The
-    reference captures that same tuple eagerly in the returned function's closure.
+    The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. Both
+    sides are compiled with ``jax.jit``, because the constant embedding this seam
+    removes happens only in a compiled program. The closure form embeds the tables as
+    compile-time constants, and XLA folds them in a different order from the argument
+    form. On this fixture the two agree to 0, 9 and 6 ulp across the three galaxies;
+    16 ulp is the margin the test allows above that spread. Tests 1 and 2 already pin
+    that the compiled bucket and MAP programs hold no table as a constant.
     """
     spec, batch = bucket
     tables = template.threaded_template_inputs()
     masses = jnp.asarray([m + 0.05 for m in _TRUE_MASS])
     params = {_MASS: masses}
-    as_argument = jax.vmap(
-        batched_spectro.batched_log_likelihood(template, spec), in_axes=(0, 0, None)
-    )(params, batch, tables)
-    in_closure = jax.vmap(batched_spectro.batched_log_likelihood(template, spec, threaded=tables))(
-        params, batch
+    jit_argument = jax.jit(
+        jax.vmap(batched_spectro.batched_log_likelihood(template, spec), in_axes=(0, 0, None))
     )
-    values = np.asarray(as_argument)
-    assert values.dtype == np.float64
-    np.testing.assert_array_equal(values, np.asarray(in_closure))
+    jit_closure = jax.jit(
+        jax.vmap(batched_spectro.batched_log_likelihood(template, spec, threaded=tables))
+    )
+    argument_values = np.asarray(jit_argument(params, batch, tables))
+    closure_values = np.asarray(jit_closure(params, batch))
+    assert argument_values.dtype == np.float64
+    np.testing.assert_array_max_ulp(argument_values, closure_values, maxulp=16)
