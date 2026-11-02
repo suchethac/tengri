@@ -149,6 +149,11 @@ from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
 
+#: Exact power of two that splits ``total_mass * L_sun`` (above float32's maximum for a
+#: dwarf) into a representable factor and a restore applied after the SSP contraction.
+#: Scaling by a power of two is exact, so float64 results are bit-identical.
+_MASS_SCALE_SPLIT = 2.0**-64
+
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"``: log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
@@ -3591,7 +3596,7 @@ class StellarSEDComponent:
 
                 lnu_interval = (
                     total_mass
-                    * LSUN_ERG_PER_S
+                    * (LSUN_ERG_PER_S * _MASS_SCALE_SPLIT)
                     * collapse_alpha_axis(
                         jnp.einsum(
                             "jma,mkaw->jkw",
@@ -3602,6 +3607,7 @@ class StellarSEDComponent:
                         _alpha_fa,
                         axis=1,
                     )
+                    / _MASS_SCALE_SPLIT
                 )
             else:
                 lnu_interval = total_mass * jnp.einsum(
