@@ -348,7 +348,7 @@ def law_kwarg_names(law: str | Callable) -> frozenset[str]:
 
 #: Law keyword arguments a screen supplies from its own state, never from a user
 #: parameter: ``redshift`` is passed by the forward pass (#2199) and ``tau_v`` is the
-#: screen's own V-band depth, offered by :func:`~tengri.components.dust._apply.offer_screen_depth`
+#: screen's own V-band depth, offered by ``offer_screen_depth`` in ``components/dust/_apply.py``
 #: (#3178). Sweeps over user-settable law parameters exclude these.
 SCREEN_INJECTED_KWARGS: frozenset[str] = frozenset({"redshift", "tau_v"})
 
