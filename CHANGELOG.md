@@ -36,6 +36,7 @@
 
 ### Changed
 - perf(inference): the batched MAP driver compiles once per bucket and the compiled program is reused, so a second call on a same-spec batch compiles nothing; 0.11 s against 2.15 s for the second call of a 60-step, 3-galaxy fit (#3247)
+- perf(inference): the batched catalog sampler compiles once per bucket and is reused, so a second call on a same-spec batch compiles nothing; 0.05 s against 2.25 s for the second call of a 5-warmup, 3-galaxy catalog fit (#3252)
 - feat(inference): the batched MAP and the catalog warm start run L-BFGS to gradient tolerance, as the Fitter does; Adam stays as optimizer="adam" (#3193)
 - **The composable AGN band table covers the deprecated preset names too (`skirtor`).** The table gate read the config's model name, which for a preset is the preset name, so an `agn={'type': 'skirtor'}` model was declined as "not a composable recipe" and integrated the AGN SED through every filter on each call. The gate and the builder now read the preset's resolved selectors and norm, and a preset whose `agn_norm` is not `cigale_joint` (every preset but `skirtor`) is declined with the norm named, since the table would be built under the wrong tie. Warm `predict_photometry` for the skirtor preset with eight filters at z = 0.5 went from 8.8 ms to 0.37 ms; the AGN row matches the exact path to the table's 1e-3 bound.
 
