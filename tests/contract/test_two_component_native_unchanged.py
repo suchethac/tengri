@@ -14,6 +14,8 @@ regenerating the literals means running the same build on ``fb0aa11c0``.
 
 from __future__ import annotations
 
+import sys
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -176,14 +178,27 @@ def native_outputs(ssp):
     return _outputs(_build(ssp, _native_atten(NATIVE_TAU_BC, NATIVE_TAU_DIFF)))
 
 
+def _assert_matches_base(values, base):
+    """Bit identity on the recording platform; agreement to 1e-12 elsewhere.
+
+    The literals were recorded on macOS. The same build on Linux (glibc libm) differs
+    from them in the last bits, as the continuity digests do (#3242), so off Darwin the
+    comparison is at rtol 1e-12. A changed native build moves these values by far more.
+    """
+    if sys.platform == "darwin":
+        assert np.array_equal(values, base)
+    else:
+        np.testing.assert_allclose(values, base, rtol=1e-12, atol=0.0)
+
+
 def test_native_photometry_bit_identical_to_base(native_outputs):
     phot, _ = native_outputs
-    assert np.array_equal(phot, _BASE_PHOT)
+    _assert_matches_base(phot, _BASE_PHOT)
 
 
 def test_native_rest_sed_bit_identical_to_base(native_outputs):
     _, rest = native_outputs
-    assert np.array_equal(rest, _BASE_REST)
+    _assert_matches_base(rest, _BASE_REST)
 
 
 def test_tauv_mu_matches_native_photometry_and_rest_sed(ssp):

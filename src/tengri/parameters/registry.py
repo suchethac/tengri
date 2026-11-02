@@ -85,6 +85,8 @@ _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
     # semantic stems (more specific: must precede the bare unit suffixes)
     ("log_total_mass", "log10(Msun)"),
     ("log_sfr_inst", "log10(Msun/yr)"),
+    # the current-episode rate (#3177): sfh_recent_log_sfr, sibling of log_sfr_inst
+    ("log_sfr", "log10(Msun/yr)"),
     ("met_logzsol_scatter", "dex"),
     # bare unit suffixes
     ("_gyr", "Gyr"),
