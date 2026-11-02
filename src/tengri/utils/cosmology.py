@@ -244,7 +244,9 @@ def _nu_relative_density(z, neff: float, m_nu_eV: tuple[float, float, float], tc
     off): the neutrino temperature is then also 0, so ``m_nu / (k_B T_nu)``
     is guarded against 0/0 and returns ``y_i = 0`` (masses become
     irrelevant, matching astropy's "Tcmb0=0 turns off photons and
-    neutrinos").
+    neutrinos"). A massless species (``y_i = 0``) is selected as its exact
+    value 1, so no derivative order differentiates the power at a zero
+    base (Komatsu et al. 2011, eq. 26).
 
     References
     ----------
@@ -261,10 +263,16 @@ def _nu_relative_density(z, neff: float, m_nu_eV: tuple[float, float, float], tc
     kt_nu0_ev_safe = jnp.where(kt_nu0_ev > 0.0, kt_nu0_ev, 1.0)
     m_nu = jnp.asarray(m_nu_eV)
     nu_y = jnp.where(kt_nu0_ev > 0.0, m_nu / kt_nu0_ev_safe, 0.0)
-    curr_nu_y = nu_y / (1.0 + z)[..., None]
-    rel_mass_per = (1.0 + (KOMATSU_NU_SHAPE_SCALE * curr_nu_y) ** KOMATSU_NU_SHAPE_INDEX) ** (
+    # Massless species (y = 0) are selected as their exact value 1, so no
+    # derivative order differentiates the power at a zero base (the second
+    # derivative of 0**1.83 is inf and would multiply dy/dz = 0 to NaN).
+    pos = nu_y > 0.0
+    nu_y_safe = jnp.where(pos, nu_y, 1.0)
+    curr_nu_y = nu_y_safe / (1.0 + z)[..., None]
+    massive = (1.0 + (KOMATSU_NU_SHAPE_SCALE * curr_nu_y) ** KOMATSU_NU_SHAPE_INDEX) ** (
         1.0 / KOMATSU_NU_SHAPE_INDEX
     )
+    rel_mass_per = jnp.where(pos, massive, 1.0)
     rel_mass = jnp.sum(rel_mass_per, axis=-1)
     return NEUTRINO_FERMI_DIRAC_CORRECTION * neff_per_nu * rel_mass
 
