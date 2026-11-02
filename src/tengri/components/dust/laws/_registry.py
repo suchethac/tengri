@@ -51,6 +51,7 @@ class DustLawRegistryEntry:
     citation: str = ""
     status: str = "production"
     short_doc: str = ""
+    diffuse_only: bool = False
 
     def __call__(self, *args, **kwargs):
         """Forward calls to the wrapped callable."""
@@ -64,10 +65,76 @@ class DustLawRegistryEntry:
 
 DUST_LAWS: dict[str, Callable] = {}
 
-#: Laws that are legal only as the diffuse-ISM screen law (``law_diff``) of a
-#: ``two_component`` model (#3178). ``chevallard13`` takes the V-band depth of the
-#: screen it is applied to, which the diffuse screen alone defines.
-DIFFUSE_ONLY_LAWS: frozenset[str] = frozenset({"chevallard13"})
+
+def is_diffuse_only_law(law: str | Callable | None) -> bool:
+    """Return True when a law is declared legal only as the diffuse-ISM screen.
+
+    Parameters
+    ----------
+    law : str, callable or None
+        Registry key, the registered law function, or None (no law named).
+
+    Returns
+    -------
+    bool
+        True when the law was registered with ``diffuse_only=True`` (for
+        example ``chevallard13``, which takes the V-band depth of the screen it
+        is applied to, so only the diffuse screen of a two-screen model defines
+        it, #3178). False for every other law and for None.
+
+    Notes
+    -----
+    **JIT-compatible**: no; registry lookup at build time.
+    """
+    if law is None:
+        return False
+    if isinstance(law, str):
+        entry = DUST_LAWS.get(law)
+        return bool(getattr(entry, "diffuse_only", False))
+    return bool(getattr(law, "diffuse_only", False))
+
+
+def diffuse_only_laws() -> frozenset[str]:
+    """Return the registry keys of every law declared ``diffuse_only``.
+
+    Returns
+    -------
+    frozenset of str
+        Registry keys whose entry carries ``diffuse_only=True``.
+
+    Notes
+    -----
+    **JIT-compatible**: no; registry lookup at build time.
+    """
+    return frozenset(name for name in DUST_LAWS if is_diffuse_only_law(name))
+
+
+def names_legal_in_slot(names, *, diffuse_slot: bool) -> list[str]:
+    """Narrow a list of law names to those a grammar slot accepts.
+
+    Parameters
+    ----------
+    names : iterable of str
+        Candidate registry keys.
+    diffuse_slot : bool
+        True for the diffuse screen slot (``law_diff`` of a two-screen model),
+        which accepts every law. False for any other slot (``law``, ``law_bc``,
+        ``law_neb``, a single screen), which refuses the diffuse-only laws.
+
+    Returns
+    -------
+    list of str
+        The names the slot accepts, in input order.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time name filter. Use it to build the menu of
+    remedies in an error message, so a hint never names a spelling the build
+    refuses.
+    """
+    if diffuse_slot:
+        return list(names)
+    return [name for name in names if not is_diffuse_only_law(name)]
 
 
 def refuse_diffuse_only_law(law, *, key: str, dust_model: str) -> None:
@@ -83,7 +150,7 @@ def refuse_diffuse_only_law(law, *, key: str, dust_model: str) -> None:
     dust_model : str
         The resolved dust type (``'two_component'``, ``'single_component'``, ...).
     """
-    if law not in DIFFUSE_ONLY_LAWS:
+    if not is_diffuse_only_law(law):
         return
     if key in ("law_diff", "dust_law_diff") and dust_model == "two_component":
         return
@@ -100,6 +167,7 @@ def register_dust_law(
     citation: str = "",
     status: str = "production",
     short_doc: str = "",
+    diffuse_only: bool = False,
 ) -> Callable:
     """Decorator factory that registers a dust attenuation curve under a name.
 
@@ -114,6 +182,9 @@ def register_dust_law(
         Default "production".
     short_doc : str, optional
         One-line description. Default empty string.
+    diffuse_only : bool, optional
+        True when the law is legal only as the diffuse-ISM screen (``law_diff``
+        of a ``two_component`` model). Default False.
 
     Returns
     -------
@@ -151,6 +222,7 @@ def register_dust_law(
             citation=citation,
             status=status,
             short_doc=short_doc,
+            diffuse_only=diffuse_only,
         )
         DUST_LAWS[name] = entry
         law_kwarg_names.cache_clear()
@@ -245,6 +317,34 @@ def law_kwarg_names(law: str | Callable) -> frozenset[str]:
         for p in sig.parameters.values()
         if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name != "wavelength"
     )
+
+
+#: Law keyword arguments a screen supplies from its own state, never from a user
+#: parameter: ``redshift`` is passed by the forward pass (#2199) and ``tau_v`` is the
+#: screen's own V-band depth, offered by :func:`~tengri.components.dust._apply.offer_screen_depth`
+#: (#3178). Sweeps over user-settable law parameters exclude these.
+SCREEN_INJECTED_KWARGS: frozenset[str] = frozenset({"redshift", "tau_v"})
+
+
+def law_user_kwarg_names(law: str | Callable) -> frozenset[str]:
+    """Keyword arguments of a law that a user can set, beyond ``wavelength``.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key or the law function itself.
+
+    Returns
+    -------
+    frozenset of str
+        :func:`law_kwarg_names` minus :data:`SCREEN_INJECTED_KWARGS`. Empty for
+        a law whose only signature keywords are supplied by the screen.
+
+    Notes
+    -----
+    **JIT-compatible**: no; signature introspection, build-time metadata.
+    """
+    return law_kwarg_names(law) - SCREEN_INJECTED_KWARGS
 
 
 def law_redshift_breakpoints(law: str | Callable) -> tuple[float, ...]:

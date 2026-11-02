@@ -432,6 +432,15 @@ def _usage_hint(name: str, kind: str) -> str:
             return f"SEDModel.build(..., dust_attenuation={{'type': '{name}', 'law': 'calzetti'}})"
         return f"SEDModel.build(..., dust_attenuation={{'type': '{name}'}})"
     if kind == "dust_attenuation":
+        from tengri.components.dust.laws._registry import is_diffuse_only_law
+
+        if is_diffuse_only_law(name):
+            # Declared diffuse-screen only: the single-screen spelling is refused,
+            # so the copy-paste hint is the two-screen form that carries it as law_diff.
+            return (
+                f"SEDModel.build(..., dust_attenuation={{'type': 'two_component', "
+                f"'law_bc': 'calzetti', 'law_diff': '{name}'}})"
+            )
         return (
             f"SEDModel.build(..., dust_attenuation={{'type': 'single_component', "
             f"'law': '{name}'}})"
