@@ -137,6 +137,33 @@ def names_legal_in_slot(names, *, diffuse_slot: bool) -> list[str]:
     return [name for name in names if not is_diffuse_only_law(name)]
 
 
+def law_screen_keys(name: str, *, birth_cloud_law: str = "calzetti") -> dict:
+    """Two-component law keys that spell one attenuation law legally.
+
+    Parameters
+    ----------
+    name : str
+        Registry key of the law to put on the two-component model.
+    birth_cloud_law : str, optional
+        Birth-cloud law used when ``name`` is diffuse-only, since such a law
+        cannot occupy the birth-cloud slot. Default ``"calzetti"``.
+
+    Returns
+    -------
+    dict
+        ``{"law": name}`` for an ordinary law, or
+        ``{"law_bc": birth_cloud_law, "law_diff": name}`` for a diffuse-only one.
+        Merge into a ``dust_attenuation`` dict with ``type='two_component'``.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time grammar spelling.
+    """
+    if is_diffuse_only_law(name):
+        return {"law_bc": birth_cloud_law, "law_diff": name}
+    return {"law": name}
+
+
 def refuse_diffuse_only_law(law, *, key: str, dust_model: str) -> None:
     """Raise when a diffuse-only law is given anywhere but ``law_diff`` of a two-screen model.
 
