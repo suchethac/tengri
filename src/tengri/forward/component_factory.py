@@ -414,8 +414,8 @@ def build_components(
     dust_lyc_reprocessed_by: str = "young",
     dust_lyc_in_energy_balance: bool = False,
     dust_lyc_escape_geometry: str = "screened",
-    # Evaluation order of the two-component age mixture ("per_node" | "grouped").
-    dust_age_mixture: str = "per_node",
+    # Evaluation order of the two-component age mixture ("grouped" | "per_node").
+    dust_age_mixture: str = "grouped",
     # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,

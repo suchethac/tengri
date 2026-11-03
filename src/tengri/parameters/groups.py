@@ -6264,7 +6264,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
-        _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
+        _Structural("age_mixture", "dust_age_mixture", "grouped", only_types=("two_component",)),
         _Structural(
             "parameterization",
             "dust_parameterization",
