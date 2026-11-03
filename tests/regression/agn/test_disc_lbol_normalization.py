@@ -22,7 +22,11 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC
-from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
+from tengri.components.agn.disc import (
+    kubota_done_disc,
+    kubota_done_unemitted_fraction,
+    multicolor_disc,
+)
 from tengri.utils.physics_constants import L_SUN
 
 # Wavelength grid spanning the hard X-ray corona (0.01 A) to the far-IR (5 mm),
@@ -35,6 +39,18 @@ def _l_bol_delivered(l_nu):
     nu = 2.99792458e18 / _WAVE  # Hz (c in A/s)
     order = jnp.argsort(nu)
     return float(jnp.trapezoid(np.asarray(l_nu)[order], np.asarray(nu)[order]))
+
+
+def _emitted_share(disc_fn, log_lbol):
+    """Share of ``L_acc`` the disc emits [dimensionless] (M_BH = 1e8, a = 0).
+
+    The K&D disc stops at its self-gravity radius and the dissipation beyond it is not emitted
+    (Kubota & Done 2018, Sec. 2.2; the RELQSO source of Hagen & Done 2023, arXiv:2304.01253, ends
+    the disc at ``r_out`` likewise, #3015). The multicolor disc emits all of it.
+    """
+    if disc_fn is kubota_done_disc:
+        return 1.0 - float(kubota_done_unemitted_fraction(8.0, log_lbol))
+    return 1.0
 
 
 def _p(disc_fn, log_lbol, cos_inc):
@@ -52,11 +68,13 @@ def test_disc_delivers_requested_lbol(disc_fn, log_lbol):
 
     The discs return ``L_nu(i) = 2 cos i D_nu + H_nu`` with
     ``int (D_nu + H_nu) dnu = L_acc = 10**agn_log_lbol L_sun``, so the line-of-sight power
-    equals ``L_acc`` at ``cos i = 0.5`` (M_BH = 1e8), to <1%.
+    equals ``L_acc`` at ``cos i = 0.5`` (M_BH = 1e8), to <1%, less the K&D disc's unemitted share
+    (the dissipation beyond ``R_out``, published separately in the composable ledger).
     """
+    want = _emitted_share(disc_fn, log_lbol)
     ratio = _p(disc_fn, log_lbol, 0.5) / (10.0**log_lbol * L_SUN)
-    assert abs(ratio - 1.0) < 0.01, (
-        f"{disc_fn.__name__} delivered L_bol ratio {ratio:.4f} (want 1.00 +/- 1%) "
+    assert abs(ratio - want) < 0.01, (
+        f"{disc_fn.__name__} delivered L_bol ratio {ratio:.4f} (want {want:.4f} +/- 1%) "
         f"at agn_log_lbol={log_lbol}, cos i = 0.5"
     )
 
@@ -78,14 +96,16 @@ def test_kubota_done_default_inclination_matches_disc_plus_corona_budget(log_lbo
     """``int L_nu(i) dnu = 2 cos i D + H`` with D, H measured from two evaluations.
 
     ``P(c) = 2 c D + H`` is linear in ``c``: ``P(1) - P(0) = 2 D`` and ``P(0) = H``. The
-    parts close the budget, ``D + H = L_acc`` (1%), and the power at the default inclination
-    equals ``2 cos i D + H`` (the ratio to ``L_acc`` is ``(2 cos i D + H) / (D + H)``).
+    parts close the budget, ``D + H = L_acc`` less the unemitted share (1%), and the power at
+    the default inclination equals ``2 cos i D + H`` (the ratio to ``L_acc`` is
+    ``(2 cos i D + H) / (D + H)``).
     """
     p0 = _p(kubota_done_disc, log_lbol, 0.0)
     p1 = _p(kubota_done_disc, log_lbol, 1.0)
     d_disc, h_corona = 0.5 * (p1 - p0), p0
     l_acc = 10.0**log_lbol * L_SUN
-    assert (d_disc + h_corona) / l_acc == pytest.approx(1.0, abs=0.01)
+    want = _emitted_share(kubota_done_disc, log_lbol)
+    assert (d_disc + h_corona) / l_acc == pytest.approx(want, abs=0.01)
     expected = (2.0 * DEFAULT_AGN_COS_INC * d_disc + h_corona) / (d_disc + h_corona)
     delivered = _p(kubota_done_disc, log_lbol, DEFAULT_AGN_COS_INC) / (d_disc + h_corona)
     assert delivered == pytest.approx(expected, rel=1e-6)

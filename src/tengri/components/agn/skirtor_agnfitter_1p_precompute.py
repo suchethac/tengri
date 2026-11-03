@@ -35,16 +35,14 @@ from tengri.components.agn._skirtor_agnfitter_sightline import (
     free_incl_position,
     skirtor_incl_from_cos_inc,
 )
+from tengri.components.agn._template_power_table import runtime_preintegrated_grid
 from tengri.components.agn._torus_inclination import node_power_scale
 from tengri.components.agn.skirtor_agnfitter_1p import (
     TORUS_INCLINATION,
     _load_skirtor_agnfitter_1p_arrays,
     load_skirtor_agnfitter_1p_grid,
 )
-from tengri.forward.precompute.templates import (
-    collapse_fixed_axes,
-    precompute_template_photometry,
-)
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -102,29 +100,31 @@ def precompute_skirtor_agnfitter_1p_photometry(
     **Normalization**: Templates are frequency-normalized so that the
     integration constant is L_sun x anisotropy / native_integral(template). This matches
     the runtime normalization in ``skirtor_agnfitter_1p.py``.
+
+    **Quadrature**: each record is resampled log-log onto the filter quadrature grid
+    (the template nodes inside every band plus the rest-frame filter nodes) and
+    integrated with the runtime's ``lnu_filter_integral``
+    (``_template_power_table.runtime_band_photometry``), so at a node the lookup is
+    the runtime's band photometry to rounding.
     """
 
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
-    grid = np.asarray(raw["template"], dtype=np.float64)  # (n_incl, n_wave)
     wave_grid = np.asarray(raw["wavelength"], dtype=np.float64)
     incl_axis = np.asarray(raw["incl_axis"], dtype=np.float64)
 
     # Each record at unit power times its anisotropy a / mean a (the scalar table),
     # as the runtime path normalizes the records (skirtor_agnfitter_1p.TORUS_INCLINATION).
+    # The records are the runtime grid's, on the scale node_power_scale measured them at
+    # (rescaled to their peak in a float32 process, as stored for threading).
     runtime_grid = load_skirtor_agnfitter_1p_grid(grid_path)
+    grid = np.asarray(runtime_grid.template, dtype=np.float64)  # (n_incl, n_wave)
     scale = node_power_scale(runtime_grid, TORUS_INCLINATION)
     lnu_grid = _LSUN_ERG * grid * scale[..., None]
 
-    preint = precompute_template_photometry(
-        templates=lnu_grid,
-        wave_rest=wave_grid,
-        filter_waves=[np.asarray(fw) for fw in filter_waves],
-        filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=redshift,
-        dl_cm=1.0,
-        axes=(incl_axis,),
-        energy_normalize=False,  # templates already normalized per L_sun
-        units="lnu",
+    # The band photometry the runtime produces: each record resampled log-log onto the
+    # filter quadrature grid and integrated with lnu_filter_integral (#3160).
+    preint = runtime_preintegrated_grid(
+        lnu_grid, wave_grid, filter_waves, filter_trans, redshift, (incl_axis,)
     )
 
     axes_jax = (jnp.asarray(incl_axis),)

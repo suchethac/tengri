@@ -56,6 +56,15 @@ the forward model, and listed oldest first within each group.
   & MacKay (2010), [arXiv:1001.0175](https://arxiv.org/abs/1001.0175).
 - Importance-sampling evidence estimation. Perrakis, Ntzoufras &
   Tsamardinos (2014), [arXiv:1106.5578](https://arxiv.org/abs/1106.5578).
+- Generalized Pareto fit by profile likelihood, used for the Pareto-smoothed
+  importance-sampling tail. Zhang and Stephens (2009),
+  [doi:10.1198/tech.2009.08017](https://doi.org/10.1198/tech.2009.08017).
+- Saddle-free Newton steps, which move past saddle points using the Hessian's
+  negative curvature. Dauphin et al. (2014),
+  [arXiv:1406.2572](https://arxiv.org/abs/1406.2572).
+- Pareto-smoothed importance sampling: stabilizes the importance weights and
+  checks their reliability with the Pareto k diagnostic. Vehtari et al. (2024),
+  [arXiv:1507.02646](https://arxiv.org/abs/1507.02646).
 - The Barker proposal: gradient-based MCMC robust to a step size that is
   wrong for one direction's scale. Livingstone & Zanella (2022),
   [arXiv:1908.11812](https://arxiv.org/abs/1908.11812).

@@ -41,6 +41,8 @@ Thumbs.db
 # Snapshot regression baselines are checked in (small, deterministic).
 !tests/_data/kernel_snapshots/*.npy
 !tests/regression/data/dust_emission_golden/*.npy
+!tests/regression/precision/fixtures/float64_template_tori_reference.npz
+!tests/regression/data/agn_2320_cigale_joint_reference/reference.npz
 
 # Jupyter
 .ipynb_checkpoints/
