@@ -64,7 +64,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._template_grid import (
+    TorusTemplateGrid,
+    cache_per_float_dtype,
+    loaded_template,
+)
 from tengri.components.agn._torus_inclination import (
     TorusInclination,
     anisotropy_values,
@@ -119,7 +123,7 @@ def _load_nenkova_agnfitter_3p_arrays(grid_path: str) -> dict:
         }
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_nenkova_agnfitter_3p_grid(grid_path: str) -> TorusTemplateGrid:
     """Load a ``NK0_mean_3p`` grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
@@ -161,7 +165,7 @@ def load_nenkova_agnfitter_3p_grid(grid_path: str) -> TorusTemplateGrid:
     cos_inc_axis_np = cos_inc_axis_np[order]
     template_reordered_np = grid_np[order]
     return TorusTemplateGrid(
-        template=template_reordered_np,
+        template=loaded_template(template_reordered_np),
         axes=(cos_inc_axis_np, oa_np, tv_np),
         wave_grid=wave_np,
         anisotropy=anisotropy_values(
@@ -294,7 +298,7 @@ def load_nenkova_agnfitter_3p_default_grid() -> TorusTemplateGrid:
     return load_nenkova_agnfitter_3p_grid(_find_nenkova_agnfitter_3p_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_nenkova_agnfitter_3p_default() -> Callable:
     return create_nenkova_agnfitter_3p_from_grid(_find_nenkova_agnfitter_3p_grid())
 

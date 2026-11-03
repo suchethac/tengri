@@ -47,8 +47,11 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import L_SUN as _L_SUN
-from tengri.components.agn._template_grid import native_bolometric_nu
+from tengri.components.agn._template_grid import (
+    cache_per_float_dtype,
+    native_bolometric_nu,
+    scale_by_torus_power,
+)
 from tengri.components.agn._torus_inclination import (
     AnisotropyGrid,
     TorusInclination,
@@ -341,6 +344,12 @@ def _interpolate_and_normalize(
     """
     # The torus library is a tabulated radiative-transfer result, so the lookup is a
     # node-exact PCHIP interpolant rather than the triweight smoother (#2606).
+    sed_nu, integral_safe = _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point)
+    return l_scale * sed_nu / integral_safe
+
+
+def _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point):
+    """The interpolated template as :math:`L_\\nu` [template units] and its native integral."""
     _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
     _refuse_off_grid("agn_fritz_psy", point[5], axes[5], margin=FRITZ_PSY_EDGE_MARGIN)
     template = interp_nd_pchip(grid_jax, axes, point, extrapolate=_PSY_EXTRAPOLATE)
@@ -348,8 +357,36 @@ def _interpolate_and_normalize(
     # result does not depend on the caller's wavelength sampling or range.
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
     sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
-    return l_scale * sed_nu / integral_safe
+    return sed_lam * wavelength**2 / _C_AA_PER_S, integral_safe
+
+
+def _interpolate_to_power(grid_jax, wave_grid, axes, wavelength, point, agn_log_lbol, frac):
+    r""":func:`_interpolate_and_normalize` at :math:`f\,10^{\rm agn\_log\_lbol} L_\odot`.
+
+    Parameters
+    ----------
+    grid_jax, wave_grid, axes, wavelength, point
+        As for :func:`_interpolate_and_normalize`.
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
+    frac : float
+        Fraction :math:`f` of :math:`L_{\rm bol}` the template carries [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Specific luminosity :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The power is applied by
+    ``_template_grid.scale_by_torus_power``: in float64 the linear product
+    ``10**agn_log_lbol * L_sun * f * sed / integral`` of :func:`_interpolate_and_normalize`
+    (bit for bit), in float32 as a ``log10`` offset, since ``10**agn_log_lbol L_sun`` alone
+    overflows there beyond ``agn_log_lbol`` of about 4.9 (#3084).
+    """
+    sed_nu, integral_safe = _interpolate_unit(grid_jax, wave_grid, axes, wavelength, point)
+    return scale_by_torus_power(sed_nu, integral_safe, agn_log_lbol, frac)
 
 
 class FritzGrid(NamedTuple):
@@ -445,7 +482,7 @@ def fritz_anisotropy(grid: FritzGrid) -> AnisotropyGrid:
     return anisotropy_grid(grid.norm, axes, TORUS_INCLINATION)
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_fritz_grid(grid_path: str) -> FritzGrid:
     """Load a Fritz+2006 grid HDF5 into a :class:`FritzGrid` pytree.
 
@@ -463,9 +500,12 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace.
 
     ``jax.ensure_compile_time_eval`` keeps the derived edge arrays concrete
-    even when this first runs inside a trace; without it the
-    ``functools.cache`` would immortalize ``DynamicJaxprTracer`` values that
-    leak out of the trace scope.
+    even when this first runs inside a trace; without it the cache would
+    immortalize ``DynamicJaxprTracer`` values that leak out of the trace scope.
+    The cache is keyed on the process float dtype as well as the path
+    (``_template_grid.cache_per_float_dtype``): the
+    arrays take the dtype of the mode they are built in, so a path-only key
+    handed a float32 load to every later float64 run.
     """
     raw = _load_grid_arrays(grid_path)
     if "norm" not in raw:
@@ -592,13 +632,14 @@ def fritz_sed_from_grid(
     # scalar on the six axes; the shape is the unit-power ``fritz2006/dust`` records as
     # before. Sightline: ``psy`` is the elevation above the equatorial plane [deg], last
     # axis, mu = cos i = sin(psy).
-    shape = _interpolate_and_normalize(
+    shape = _interpolate_to_power(
         device_table(grid.dust),
         device_table(grid.wave_grid),
         axes,
         wavelength,
         point,
-        10.0**agn_log_lbol * _L_SUN * agn_torus_frac,
+        agn_log_lbol,
+        agn_torus_frac,
     )
     return shape * pow10(log10_anisotropy(fritz_anisotropy(grid), point, TORUS_INCLINATION))
 
@@ -628,7 +669,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes, the returned function is pure JAX.
-    Grid loading is cached via ``@functools.cache``.
+    Grid loading is cached per path and process float dtype.
 
     References
     ----------
@@ -668,7 +709,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes, the returned function is pure JAX.
-    Grid loading is cached via ``@functools.cache``.
+    Grid loading is cached per path and process float dtype.
 
     **Gradient-safe**: yes, PCHIP interpolation is C1 in every coordinate.
 
@@ -715,7 +756,6 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             Named tuple with ``disk`` and ``dust`` arrays,
             each shape (n_wave,) in [erg s⁻¹ Hz⁻¹].
         """
-        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         point = (
             agn_fritz_r_ratio,
             agn_fritz_tau,
@@ -724,8 +764,9 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
-        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
+        power = (agn_log_lbol, agn_torus_frac)
+        disk = _interpolate_to_power(disk_jax, wave_grid, axes, wavelength, point, *power)
+        dust = _interpolate_to_power(dust_jax, wave_grid, axes, wavelength, point, *power)
         return FritzComponents(disk=disk, dust=dust)
 
     return fritz_components
@@ -958,13 +999,13 @@ def fritz_disc_dust_ratio(
     )
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_fritz_default():
     """Load Fritz2006 template grid from file (dust-only, the torus component)."""
     return create_fritz_from_grid(_find_fritz_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_fritz_components():
     """Load Fritz2006 template grid with separate components."""
     path = _find_fritz_grid()

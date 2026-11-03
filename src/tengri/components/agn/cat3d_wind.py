@@ -66,7 +66,12 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._template_grid import (
+    TorusTemplateGrid,
+    cache_per_float_dtype,
+    loaded_template,
+    torus_lnu_from_grid,
+)
 
 __all__ = [
     "cat3d_wind_analytic",
@@ -93,7 +98,7 @@ def _load_cat3d_arrays(grid_path: str) -> dict:
         }
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
     """Load a CAT3D-Wind grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
@@ -133,7 +138,7 @@ def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
     template_reordered = raw["template"][order]
 
     return TorusTemplateGrid(
-        template=np.asarray(template_reordered),
+        template=loaded_template(template_reordered),
         axes=(
             np.asarray(cos_inc_axis),
             np.asarray(raw["a_axis"]),
@@ -268,7 +273,7 @@ def _find_cat3d_grid() -> str:
     return require_data(_GRID_SEARCH_PATHS[-1], _NOT_FOUND_MSG)
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_cat3d_default() -> Callable:
     return create_cat3d_wind_from_grid(_find_cat3d_grid())
 

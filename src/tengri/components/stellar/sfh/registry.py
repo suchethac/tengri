@@ -269,7 +269,13 @@ class SFHModelSpec(NamedTuple):
         public_name -> (internal_name, scale, offset).
         Conversion: internal = public * scale + offset.
     composition_type : str
-        "additive", "mixture", or "modulator".
+        "additive", "mixture", "modulator", or "current".
+    smooth_base : str or None, optional
+        The additive member this model needs beside it to stand alone in a
+        composition. A current episode is spliced over a smooth history, so it
+        declares one here (``"delayed"``). The registry sweep, the menus and
+        the build hint all read this declaration. ``None`` (default) means the
+        model needs no base.
 
     Notes
     -----
@@ -283,6 +289,7 @@ class SFHModelSpec(NamedTuple):
     settings: dict[str, Any]
     internal_param_map: dict[str, tuple[str, float, float]]
     composition_type: str
+    smooth_base: str | None = None
 
 
 # ── Registries ────────────────────────────────────────────────────
@@ -2487,6 +2494,7 @@ _register(
             "sfh_recent_timescale_myr": ("timescale_yr", 1e6, 0.0),
         },
         composition_type="current",
+        smooth_base="delayed",
     ),
     doc=(
         "Constant-SFR episode over the last Delta t, spliced over the smooth history. "
@@ -2529,6 +2537,7 @@ _register(
             "sfh_recent_ssfr_timescale_myr": ("timescale_yr", 1e6, 0.0),
         },
         composition_type="current",
+        smooth_base="delayed",
     ),
     doc=(
         "Current episode set by its specific SFR. psi_S = 10**log_ssfr [yr^-1] is "

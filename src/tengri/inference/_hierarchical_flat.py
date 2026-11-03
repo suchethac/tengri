@@ -67,6 +67,7 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.inference.newton import newton_polish
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampler"]
@@ -644,46 +645,22 @@ def _newton_polish(prob, mode, *, tol, max_iters=12):
 
     First-order alone cannot deliver a mode at hierarchical D: measured on
     the D=516 reference fixture, Adam's ``max |grad log_prob|`` was 1.13e3
-    after 300 steps and still 84.6 after 8000. Newton converges
-    quadratically inside the basin and reuses exactly the machinery the
-    Laplace covariance needs anyway (one dense Hessian per iteration, ~D
-    gradient-equivalents each).
+    after 300 steps and still 84.6 after 8000. The polish is the shared
+    damped saddle-free Newton of :mod:`tengri.inference.newton`, the same one
+    the Laplace backend uses, so there is one Newton implementation.
 
-    Levenberg-Marquardt damping: the step solves ``(H + lambda*I) dx = g``
-    with ``lambda`` adapted, far from the mode the negative Hessian is
-    typically indefinite (measured: a pure-Newton polish from Adam(300)'s
-    endpoint stalled at |grad|=228 on the D=516 fixture), and a large
-    ``lambda`` degrades the step gracefully toward plain gradient ascent,
-    while near the mode ``lambda`` shrinks and Newton's quadratic finish
-    takes over. A step is accepted only when it increases ``log_prob`` and
-    stays finite; persistent failure exits, and the downstream guards then
-    refuse the unconverged point rather than silently sampling it.
+    Returns the polished mode. A point no step can improve is returned as is,
+    and the downstream guards then refuse an unconverged point rather than
+    silently sampling it.
     """
-    import numpy as np
-
-    grad_fn = jax.grad(prob.log_prob)
-    lam = 1e-3
-    for _ in range(max_iters):
-        g = grad_fn(mode)
-        if float(np.max(np.abs(np.asarray(g)))) <= tol:
-            break
-        neg_hess = -jax.hessian(prob.log_prob)(mode)
-        lp0 = float(prob.log_prob(mode))
-        eye = jnp.eye(prob.n_dim if hasattr(prob, "n_dim") else g.shape[0])
-        accepted = False
-        for _ in range(12):
-            step = jnp.linalg.solve(neg_hess + lam * eye, g)
-            trial = mode + step
-            lp = float(prob.log_prob(trial))
-            if np.isfinite(lp) and lp > lp0 and bool(np.all(np.isfinite(np.asarray(trial)))):
-                mode = trial
-                lam = max(lam / 3.0, 1e-9)
-                accepted = True
-                break
-            lam *= 10.0
-        if not accepted:
-            break
-    return mode
+    position, _, _, _ = newton_polish(
+        mode,
+        lambda x, _data: prob.log_prob(x),
+        None,
+        max_steps=max_iters,
+        tol=tol,
+    )
+    return position
 
 
 def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
