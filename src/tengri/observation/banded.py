@@ -561,8 +561,9 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     chol : BandedMatrix
         Lower factor from :func:`banded_cholesky`, ``offsets = (0, -1, ..., -p)``,
         ``data`` shape ``(p + 1, n)``.
-    r : array_like, shape (n,)
-        Right-hand side [data units].
+    r : array_like, shape (n,) or (n, k)
+        Right-hand side [data units]. A ``(n, k)`` block is solved in one scan that
+        carries a ``k``-vector, one column per right-hand side.
 
     Returns
     -------
@@ -602,14 +603,14 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     diag = chol.data[0]
     coef = chol.data[1:].T
     if half == 0:
-        return r / diag
+        return r / diag.reshape(diag.shape + (1,) * (r.ndim - 1))
 
     def step(prev, xs):
         r_i, c_i, d_i = xs
-        y_i = (r_i - jnp.dot(c_i, prev)) / d_i
+        y_i = (r_i - jnp.tensordot(c_i, prev, axes=1)) / d_i
         return jnp.concatenate([y_i[None], prev[:-1]]), y_i
 
-    init = jnp.zeros(half, dtype=jnp.result_type(r, diag))
+    init = jnp.zeros((half, *r.shape[1:]), dtype=jnp.result_type(r, diag))
     _, y = jax.lax.scan(step, init, (r, coef, diag))
     return y
 

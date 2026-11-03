@@ -892,6 +892,26 @@ class LaplaceNotAtModeWarning(UserWarning):
     """
 
 
+class ImportanceSamplingUnreliableWarning(UserWarning):
+    """The importance-sampled posterior and evidence are unreliable.
+
+    The Student-t proposal centered on the mode with the Laplace covariance
+    gives importance ratios whose upper tail is heavy: the Pareto shape
+    :math:`\\hat{k}` of the PSIS fit exceeds the reliability threshold for the
+    number of draws. A few draws then dominate the reweighted posterior, and
+    the evidence estimate inherits that variance. The Gaussian/Student-t
+    approximation misses posterior mass, so the reweighted samples and the
+    importance log-evidence should not be trusted.
+
+    Use ``mcmc_nuts`` or ``nss`` for this model.
+
+    See Also
+    --------
+    tengri.inference.backends.laplace.run_laplace
+        Emits this warning when ``importance_draws > 0``.
+    """
+
+
 class ShockPhotoionizedMixedWarning(UserWarning):
     """Shock component's discrete line emission is invisible to predict_line_fluxes (#927).
 

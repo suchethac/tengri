@@ -2,7 +2,7 @@
 """The hot-flow luminosity the corona radiates is what its annuli dissipate (K&D 2018 Eq. 2).
 
 ``R_hot`` is solved from ``L_diss,hot(R_hot) = L_hot`` (Page-Thorne dissipation
-``L0 h(x)``, ``x = R_hot / R_isco``) and then clipped to ``0.5 R_out`` by the zone
+``L0 h(x)``, ``x = R_hot / R_isco``) and then clipped to ``R_out`` by the zone
 clip. Where the disc cannot supply ``f_hard L_Edd`` inside that clip (``lambda_Edd``
 below ``f_hard``, which the ``agn_f_hard`` prior ``Uniform(0, 0.1)`` reaches up to
 ``lambda_Edd ~ 0.1``), ``L_hot`` must be limited to ``L0 h(x_clip)``: the corona then
@@ -81,7 +81,7 @@ def test_corona_radiates_what_the_hot_flow_dissipates(
     """``L_diss(R_hot) / L_hot = 1`` to 1e-6 wherever ``R_hot`` is not at its inner clip.
 
     ``L_hot`` is the luminosity the disc passes to its corona. Saturated (``R_hot`` at
-    ``0.5 R_out``) or interior alike; at the inner clip (``1.01 R_isco``) the annuli inside
+    ``R_out``) or interior alike; at the inner clip (``1.01 R_isco``) the annuli inside
     ``R_hot`` dissipate at least ``L_hot``.
     """
     r_g, r_isco_rg, r_isco_cm, t_in, log10_l_edd, log_lbol = _setup(log_mbh, lambda_edd, a_spin)
@@ -108,4 +108,4 @@ def test_saturated_corona_is_pinned_at_the_zone_clip():
     r_hot, _r_warm, r_out = D._compute_zone_radii(
         r_g, r_isco_rg, r_isco_cm, t_in, 9.0, log_lbol, 0.1, 2.0, log10_l_edd, False, 0.0
     )
-    assert float(r_hot / (0.5 * r_out)) == pytest.approx(1.0, rel=1e-9)
+    assert float(r_hot / r_out) == pytest.approx(1.0, rel=1e-9)
