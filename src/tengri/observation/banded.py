@@ -33,12 +33,16 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy import linalg as jax_linalg
 from scipy import linalg as scipy_linalg
 
 # Speed of light and Gaussian FWHM conversion, mirror observation/spectrum.py
 # so the banded Gaussian LSF matches apply_lsf exactly.
 _C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = 2.354820045030949  # 2 * sqrt(2 * ln(2))
+# Pixels per block of the blocked forward substitution; the block is widened to the
+# band's half-bandwidth when that is larger.
+_SUBSTITUTION_BLOCK = 64
 
 
 class BandedMatrix(NamedTuple):
@@ -562,12 +566,12 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
         Lower factor from :func:`banded_cholesky`, ``offsets = (0, -1, ..., -p)``,
         ``data`` shape ``(p + 1, n)``.
     r : array_like, shape (n,) or (n, k)
-        Right-hand side [data units]. A ``(n, k)`` block is solved in one scan that
-        carries a ``k``-vector, one column per right-hand side.
+        Right-hand side [data units]. A ``(n, k)`` block is solved in one blocked scan,
+        one column per right-hand side.
 
     Returns
     -------
-    ndarray, shape (n,)
+    ndarray, shape (n,) or (n, m)
         :math:`y = L^{-1} r` [data units of ``r`` divided by the factor units].
 
     Raises
@@ -577,9 +581,10 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
 
     Notes
     -----
-    **JIT-compatible**: yes; the scan length is ``n`` and the band width comes from the
-    static ``offsets``. **Gradient-safe**: yes, linear in ``r``. **vmap**: yes; ``vmap``
-    over the columns of a matrix gives :math:`L^{-1} X`.
+    **JIT-compatible**: yes; the scan length is the block count
+    :math:`\lceil n / b \rceil` and the band width comes from the static ``offsets``.
+    **Gradient-safe**: yes, linear in ``r``. **vmap**: yes; ``vmap`` over the columns of
+    a matrix gives :math:`L^{-1} X`.
 
     The recurrence is
 
@@ -587,9 +592,17 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
 
         y_i = \frac{1}{L_{ii}}\Bigl(r_i - \sum_{k=1}^{p} L_{i,i-k}\, y_{i-k}\Bigr),
 
-    evaluated with :func:`jax.lax.scan` over pixels with a carry of the last :math:`p`
-    values, costing :math:`O(n p)`. Rows of a masked pixel are identity rows, so
-    :math:`y_i = r_i = 0` there.
+    evaluated in blocks of :math:`b = \max(64, p)` pixels. Within block :math:`j`, the
+    coupling to the previous block is one matrix product, and the block is then solved
+    as a dense lower-triangular system,
+
+    .. math::
+
+        L_{jj}\, y_j = r_j - L_{j,j-1}\, y_{j-1},
+
+    with :func:`jax.lax.scan` over blocks. The result equals the pixel recurrence at
+    round-off. The last block is padded with identity rows and the padding is dropped.
+    Rows of a masked pixel are identity rows, so :math:`y_i = r_i = 0` there.
 
     References
     ----------
@@ -600,19 +613,42 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     half = -int(offs.min())
     if not np.array_equal(offs, -np.arange(half + 1)):
         raise ValueError("banded_forward_substitution needs offsets (0, -1, ..., -p)")
-    diag = chol.data[0]
-    coef = chol.data[1:].T
+    r = jnp.asarray(r)
     if half == 0:
-        return r / diag.reshape(diag.shape + (1,) * (r.ndim - 1))
+        diag = chol.data[0]
+        return r / diag.reshape((-1,) + (1,) * (r.ndim - 1))
+
+    block = max(_SUBSTITUTION_BLOCK, half)
+    n = r.shape[0]
+    n_blocks = -(-n // block)
+    n_pad = n_blocks * block
+    dtype = jnp.result_type(r, chol.data)
+    # Identity rows past n: unit diagonal, no coupling.
+    data = jnp.zeros((half + 1, n_pad), dtype=dtype)
+    data = data.at[:, :n].set(jnp.asarray(chol.data, dtype=dtype)).at[0, n:].set(1.0)
+
+    # Dense blocks gathered from the band: rows of block j against the columns of
+    # blocks j-1 (coupling) and j (lower-triangular diagonal block).
+    rows = jnp.arange(n_pad).reshape(n_blocks, block)
+    cols = rows[:, :1] - block + jnp.arange(2 * block)[None, :]
+    lag = rows[:, :, None] - cols[:, None, :]
+    valid = (lag >= 0) & (lag <= half) & (cols[:, None, :] >= 0)
+    band = jnp.where(valid, data[jnp.clip(lag, 0, half), rows[:, :, None]], 0.0)
+    coupling = band[:, :, :block]
+    diag_blocks = band[:, :, block:]
+
+    tail_shape = r.shape[1:]
+    r_pad = jnp.zeros((n_pad, *tail_shape), dtype=dtype).at[:n].set(r)
+    r_blocks = r_pad.reshape((n_blocks, block, *tail_shape))
 
     def step(prev, xs):
-        r_i, c_i, d_i = xs
-        y_i = (r_i - jnp.tensordot(c_i, prev, axes=1)) / d_i
-        return jnp.concatenate([y_i[None], prev[:-1]]), y_i
+        d_blk, c_blk, r_blk = xs
+        y_blk = jax_linalg.solve_triangular(d_blk, r_blk - c_blk @ prev, lower=True)
+        return y_blk, y_blk
 
-    init = jnp.zeros((half, *r.shape[1:]), dtype=jnp.result_type(r, diag))
-    _, y = jax.lax.scan(step, init, (r, coef, diag))
-    return y
+    init = jnp.zeros((block, *tail_shape), dtype=dtype)
+    _, y = jax.lax.scan(step, init, (diag_blocks, coupling, r_blocks))
+    return y.reshape((n_pad, *tail_shape))[:n]
 
 
 def dense_to_banded(dense: np.ndarray, rtol: float = 1e-12) -> BandedMatrix | None:
