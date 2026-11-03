@@ -68,7 +68,6 @@ from tengri.components.agn._phys import (
     COS_INC_ISOTROPIC_REFERENCE as _COS_INC_ISOTROPIC_REFERENCE,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
-    TWO_FACES as _TWO_FACES,
     planck_lnu as _planck_lnu,
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
@@ -88,7 +87,6 @@ from tengri.utils.physics_constants import (
 )
 from tengri.utils.scale import (
     apply_log10_scale,
-    log10_weighted_sum,
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
     representable_exponent,
@@ -1433,7 +1431,7 @@ def _hot_flow_luminosity(
 
     tengri cannot drop zones (static shapes), so the unreachable case is represented by
     saturating: ``L_hot`` is limited to what the annuli inside the largest admissible
-    ``R_hot`` dissipate, ``L0 h(x_hot_max)`` with ``x_hot_max = 0.5 R_out / R_isco`` (the zone
+    ``R_hot`` dissipate, ``L0 h(x_hot_max)`` with ``x_hot_max = R_out / R_isco`` (the zone
     clip of :func:`_compute_zone_radii`), and never above ``L0 h_ceiling(a)`` (99% of the
     disc's total dissipation ``L0 h(inf)``, the bisection's own ceiling). The corona then
     radiates exactly the power the hot flow dissipates inside ``R_hot``:
@@ -1444,7 +1442,7 @@ def _hot_flow_luminosity(
     Parameters
     ----------
     x_hot_max : float, optional
-        ``0.5 R_out / R_isco``, the largest ``R_hot / R_isco`` the zone clip allows
+        ``R_out / R_isco``, the largest ``R_hot / R_isco`` the zone clip allows
         [dimensionless]. Omitted, only the bisection's ceiling applies.
 
     Both ``R_hot`` (the zone radii) and the corona normalization (the SED) use THIS
@@ -1542,7 +1540,7 @@ def _hot_flow_fraction(
     a_spin : float
         Dimensionless black hole spin [dimensionless].
     x_hot_max : float, optional
-        ``0.5 R_out / R_isco`` zone clip [dimensionless].
+        ``R_out / R_isco`` zone clip [dimensionless].
 
     Returns
     -------
@@ -1564,12 +1562,89 @@ def _hot_flow_fraction(
     return jnp.minimum(f_hard_safe * _pow10(log10_edd_over_bol), cap / h_inf)
 
 
-def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
-    """Largest admissible ``R_hot / R_isco``: the zone clip ``0.5 R_out`` in units of ``R_isco``.
+#: Smallest ``R_out / R_ISCO`` [dimensionless]. A numerical bound, not physics: it keeps
+#: ``R_hot`` (which is at least ``1.01 R_ISCO``) inside the disc when the self-gravity radius is
+#: smaller than the ISCO, which only a very massive, very sub-Eddington hole reaches. Above it
+#: ``R_out = r_sg`` exactly, as in RELAGN (``r_out = r_sg``, Hagen & Done 2023, arXiv:2304.01253).
+_R_OUT_MIN_OVER_ISCO = 1.01
 
-    ``R_out = max(r_sg, 10 R_isco)`` (both in ``R_g``), so the ratio needs no physical constants.
+#: Relative distance from ``R_out`` within which ``R_hot`` is ``R_out`` [dimensionless].
+#: The bisection converges to 1e-12 (``_bisect_log_x``), so this is five decades above it.
+_R_HOT_SNAP_RTOL = 1e-7
+
+#: Width, as a fraction of ``R_out``, below which a K&D zone is empty [dimensionless].
+_ZONE_WIDTH_RTOL = 1e-7
+
+
+def _zone_outer_radius_rg(r_sg_rg: float, r_isco_rg: float) -> float:
+    """Outer disc radius of the K&D zones in ``R_g``: the self-gravity radius.
+
+    ``R_out = r_sg`` (Laor & Netzer 1989; K&D 2018 Sec. 2.2), bounded below by
+    ``_R_OUT_MIN_OVER_ISCO * R_ISCO`` for numerical safety only.
     """
-    return 0.5 * jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
+    return jnp.maximum(r_sg_rg, r_isco_rg * _R_OUT_MIN_OVER_ISCO)
+
+
+def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
+    """Largest admissible ``R_hot / R_isco``: the outer radius ``R_out`` in units of ``R_isco``.
+
+    ``R_out = r_sg`` (see :func:`_zone_outer_radius_rg`), so the ratio needs no physical constants.
+    The clip of :func:`_clip_zone_radii` admits ``R_hot`` up to ``R_out``.
+    """
+    return _zone_outer_radius_rg(r_sg_rg, r_isco_rg) / r_isco_rg
+
+
+def kubota_done_unemitted_fraction(
+    agn_log_mbh: float, agn_log_lbol: float, agn_a_spin: float = 0.0
+) -> float:
+    r"""Share of the accretion power the K&D disc does not emit, :math:`R_{\rm unem}/L_{\rm bol}`.
+
+    The disc's total Page-Thorne dissipation is :math:`L_0 h(\infty)` and equals
+    :math:`L_{\rm bol}` (:func:`_disc_dissipation_per_mdot_c2`). The zones emit down to
+    :math:`R_{\rm out}`, so the dissipation beyond it is not emitted (K&D 2018 Sec. 2.2, which
+    stops the disc at the self-gravity radius):
+
+    .. math::
+
+        \frac{R_{\rm unem}}{L_{\rm bol}} = 1 - \frac{h(R_{\rm out}/R_{\rm ISCO})}{h(\infty)},
+
+    with :math:`h` the dimensionless Novikov-Thorne integral (:func:`_nt_h`) and
+    :math:`R_{\rm out} = R_{\rm sg}` as in :func:`_compute_zone_radii`.
+    The remainder is published as ``log_L_agn_disc_unemitted`` by the composable runner (#3015).
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        log10 black hole mass [log10(Msun)].
+    agn_log_lbol : float
+        log10 bolometric (accretion) power [log10(Lsun)].
+    agn_a_spin : float, optional
+        Dimensionless spin [dimensionless].
+
+    Returns
+    -------
+    float
+        :math:`R_{\rm unem}/L_{\rm bol}` [dimensionless], in ``[0, 1)``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The Eddington ratio is formed in log space, as in
+    :func:`_compute_zone_radii`.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, MNRAS, 480, 1247 (2018), arXiv:1804.00171.
+    """
+    l_edd_ratio = jnp.clip(
+        _pow10(agn_log_lbol + _LOG10_LSUN_ERG - _log10_eddington_luminosity(agn_log_mbh)),
+        1e-10,
+        1.0,
+    )
+    r_isco_rg = _isco_radius(agn_a_spin)
+    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
+    x_out = _hot_zone_x_max(r_isco_rg, r_sg_rg)
+    h_inf = _nt_h(jnp.log(_NT_X_MAX), agn_a_spin)
+    return 1.0 - _nt_h(jnp.log(x_out), agn_a_spin) / h_inf
 
 
 def _compute_zone_radii(
@@ -1647,10 +1722,10 @@ def _compute_zone_radii(
     # ``L_Edd`` (the former form overflows float32 for a cotangent of ~1e32, #2767).
     l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+    r_out_cm = _zone_outer_radius_rg(r_sg_rg, r_isco_rg) * r_g
 
     # R_hot is solved from the SAME L_hot the corona radiates (#2572), limited to what the
-    # annuli inside the zone clip (0.5 R_out) dissipate.
+    # annuli inside the outer radius R_out dissipate.
     l_hot_target = _hot_flow_luminosity(
         agn_f_hard,
         log10_l_edd,
@@ -1669,10 +1744,49 @@ def _compute_zone_radii(
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
 
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
-
+    r_hot_cm, r_warm_cm = _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm)
     return r_hot_cm, r_warm_cm, r_out_cm
+
+
+def _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm):
+    r"""Clip ``R_hot`` and ``R_warm`` into their ordered ranges, shared by every disc path.
+
+    .. math::
+
+        R_{\rm ISCO} < R_{\rm hot} \le R_{\rm out}, \qquad
+        R_{\rm hot} \le R_{\rm warm} \le R_{\rm out}
+
+    The upper bounds are the outer radius itself, as in K&D 2018 (Sec. 2.2, ``r_warm = r_out``
+    is their "entire outer disc" geometry) and the RELQSO source, which sets
+    ``r_h = r_out`` when the dissipation never reaches ``f_hard L_Edd``. Equal radii are
+    allowed: a zone of zero width carries zero power (:func:`_zone_ring_reference`).
+
+    Parameters
+    ----------
+    r_hot_cm, r_warm_cm : float
+        Unclipped hot-flow and warm-zone radii [cm].
+    r_isco_cm : float
+        ISCO radius [cm].
+    r_out_cm : float
+        Outer disc radius [cm].
+
+    Returns
+    -------
+    tuple
+        ``(r_hot_cm, r_warm_cm)`` clipped [cm].
+    """
+    # Where the hot flow fills the disc the bisection lands within its tolerance of ``R_out`` but
+    # not on it; the left-over width (~1e-12 R_out) would carry a disc and warm zone of noise-level
+    # power whose logarithm is a difference of near-equal numbers, with forward- and reverse-mode
+    # derivatives that differ by the round-off amplified 1e12-fold (#3015). Snap it onto ``R_out``,
+    # a zero-width zone that contributes exactly zero.
+    r_hot_cm = jnp.where(
+        r_hot_cm >= r_out_cm * (1.0 - _R_HOT_SNAP_RTOL),
+        r_out_cm,
+        jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm),
+    )
+    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm, r_out_cm)
+    return r_hot_cm, r_warm_cm
 
 
 def _ring_area_relative(r_cm, dr_cm, cos_inc, r_ref_cm, dr_ref_cm):
@@ -1688,6 +1802,21 @@ def _ring_area_relative(r_cm, dr_cm, cos_inc, r_ref_cm, dr_ref_cm):
 def _log10_ring_area_unit(r_ref_cm, dr_ref_cm):
     """``log10(ring_area(r_ref, dr_ref, 1))`` [dex], the unit of :func:`_ring_area_relative`."""
     return math.log10(_ring_area(1.0, 1.0, 1.0)) + jnp.log10(r_ref_cm) + jnp.log10(dr_ref_cm)
+
+
+def _zone_ring_reference(r_cm, dr_cm):
+    """Factorization reference ``(r_ref, dr_ref)`` of a zone's rings, safe at zero width [cm].
+
+    ``r_ref`` is the largest radius and ``dr_ref`` the largest ring width, both held under
+    ``stop_gradient``: they are a pure factorization constant that cancels between
+    :func:`_ring_area_relative` and :func:`_log10_ring_area_unit`. A zero-width zone (its
+    inner and outer radii coincide, #3015) has ``max(dr) = 0``, so ``dr_ref`` falls back to 1
+    there; its rings then have zero area and contribute exactly zero, with no 0/0.
+    """
+    r_ref = jax.lax.stop_gradient(jnp.max(r_cm))
+    dr_max = jax.lax.stop_gradient(jnp.max(dr_cm))
+    dr_ref = jnp.where(dr_max > 0.0, dr_max, 1.0)
+    return r_ref, dr_ref
 
 
 def _compute_zone_luminosities(
@@ -1766,38 +1895,36 @@ def _compute_zone_luminosities(
 
         - l_nu_total : Total L_ν(i) = 2 cos i D_ν + H_ν, scaled so that its power at
           ``cos i = 0.5`` is ``l_bol_erg`` [erg s^-1 Hz^-1]
-        - scale : Disc scale ``(l_bol_erg - l_hot) / D``, the factor the disc and warm zones
-          are multiplied by; independent of ``agn_cos_inc``. Informative only: the spectra
-          are scaled through ``log10_scale``, never by this linear factor [dimensionless]
+        - scale : The shape-to-output factor ``k = l_bol_erg / L_shape``, the factor the disc
+          and warm zones and the corona are multiplied by. It is not a rescale of the zones:
+          their own dissipations are kept (#3015). [dimensionless]
         - l_nu_disc : Disc and warm-zone part of the line-of-sight spectrum, ``2 cos i D_ν``,
           normalized [erg s^-1 Hz^-1]
         - l_nu_hot : Corona ``H_ν``, isotropic, normalized [erg s^-1 Hz^-1]
-        - corona_fraction : ``H / (D + H)``, the share of the accretion power the corona
-          carries, in closed form from the radial integration (no spectral grid)
-          [dimensionless]
-        - log10_scale : ``log10(scale)``, formed as a difference of logarithms so the
-          normalization can be applied to an unnormalized spectrum without leaving
-          the float32 range in either autodiff mode [dex]
+        - corona_fraction : ``L_hot / L_bol``, the corona's share of the accretion power, in
+          closed form from the radial integration (no spectral grid) [dimensionless]
+        - log10_scale : ``log10(k)``, formed as a difference of logarithms so the
+          conversion can be applied to an unnormalized spectrum without leaving the float32
+          range in either autodiff mode [dex]
 
     Notes
     -----
     **JIT-compatible**: yes, uses ``jax.vmap`` for radial integration.
 
-    **Energy conservation**: The accretion rate is inferred so that the disc's own total
-    Page-Thorne dissipation equals ``l_bol`` (:func:`_disc_dissipation_per_mdot_c2`). The
-    corona carries its counted power ``l_hot`` exactly and the disc and warm zones carry
-    ``l_bol - l_hot``, so the total closes on ``l_bol``. The disc power is the radial integral
-    of the zone rings (Gauss-Legendre in ``ln r``, independent of ``n_radii``), and the warm
-    shape is normalized by its own integral, so the spectra integrate to their counted powers on
-    any grid that covers the template band.
+    **Energy budget (no rescale, #3015)**: The accretion rate is inferred so that the disc's own
+    total Page-Thorne dissipation to infinity equals ``l_bol``
+    (:func:`_disc_dissipation_per_mdot_c2`). Each zone emits its own dissipation: the corona
+    ``l_hot`` (K&D 2018 Eq. 2), the warm and outer zones ``L0 (h(x_out) - h(x_hot))``. Nothing
+    is rescaled to absorb the rest, so the dissipation beyond ``R_out`` is not emitted and is
+    published separately (:func:`kubota_done_unemitted_fraction`). The warm shape is normalized
+    by its own integral, so the spectra integrate to their zone powers on any grid that covers
+    the template band.
 
     The corona power is :math:`L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}}
     \sigma T_{\rm NT}^4\, 2\pi R\, {\rm d}R` (Kubota & Done 2018, Sec. 2.2, Eq. 2), set to
-    :math:`f_{\rm hard} L_{\rm Edd}` (fixed in Sec. 5.1, Table 3). Its share of
-    :math:`L_{\rm bol}`,
-    :math:`s = L_{\rm hot}/L_{\rm bol}`, is at most 0.99 (:func:`_hot_flow_fraction`), and the
-    disc budget is :math:`L_{\rm bol}(1 - s)`, formed from O(1) numbers, not from two float32
-    logarithms of ~1e11 powers.
+    :math:`\min(f_{\rm hard} L_{\rm Edd}, L_0 h(R_{\rm out}/R_{\rm ISCO}))` (Sec. 5.1,
+    Table 3). Its share of :math:`L_{\rm bol}` is at most 0.99 (:func:`_hot_flow_fraction`),
+    formed from O(1) numbers, not from two float32 logarithms of ~1e11 powers.
 
     References
     ----------
@@ -1822,8 +1949,7 @@ def _compute_zone_luminosities(
     # and gets ``inf * 0 = NaN`` (#2767). The ring areas are therefore carried relative to
     # their largest value, a pure factorization constant held under ``stop_gradient``, and
     # that scale is applied once, in log10, to the ring sum.
-    r_outer_ref = jax.lax.stop_gradient(jnp.max(r_outer))
-    dr_outer_ref = jax.lax.stop_gradient(jnp.max(dr_outer))
+    r_outer_ref, dr_outer_ref = _zone_ring_reference(r_outer, dr_outer)
     log10_ring_area_ref = _log10_ring_area_unit(r_outer_ref, dr_outer_ref)
 
     def _outer_ring(r_cm, t_ring, dr_ring):
@@ -1834,6 +1960,12 @@ def _compute_zone_luminosities(
     l_nu_outer = apply_log10_scale(
         jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0), log10_ring_area_ref
     )
+    # A zone narrower than ``_ZONE_WIDTH_RTOL R_out`` is empty (R_warm = R_out, or R_hot = R_out
+    # where the hot flow fills the disc). Its ring widths are zero in exact arithmetic but ~1e-16
+    # R_out after the log10/power round trip, differently under jit and eager; the noise-level
+    # power and its derivative are not the model's (forward and reverse mode disagreed by 2-12%
+    # on the log-derivative, and jit differed from eager, #3015). An exact zero instead.
+    l_nu_outer = jnp.where(r_out_cm - r_warm_cm > _ZONE_WIDTH_RTOL * r_out_cm, l_nu_outer, 0.0)
 
     # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
     if not _NTHCOMP_AVAILABLE:
@@ -1856,8 +1988,7 @@ def _compute_zone_luminosities(
     # Ring areas are carried relative to the largest one, as in the outer zone, and the scale is
     # applied once to the ring sum (#2767): ``p_plain * area`` is ~1e47 and the template shape is
     # ~1e-17 per Hz, so neither product nor cotangent is formed at its own magnitude.
-    r_warm_ref = jax.lax.stop_gradient(jnp.max(r_warm_grid))
-    dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
+    r_warm_ref, dr_warm_ref = _zone_ring_reference(r_warm_grid, dr_warm)
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
 
     nu_norm = _warm_norm_grid()
@@ -1894,6 +2025,7 @@ def _compute_zone_luminosities(
         jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0),
         log10_warm_area_ref + _LOG10_NTHCOMP_UNIT,
     )
+    l_nu_warm = jnp.where(r_warm_cm - r_hot_cm > _ZONE_WIDTH_RTOL * r_out_cm, l_nu_warm, 0.0)
 
     # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
     # Float32 (#1206): l_hot_erg ~5e43 and l_seed ~1e44 erg/s overflow. Work both
@@ -1912,7 +2044,7 @@ def _compute_zone_luminosities(
         agn_f_hard,
         log10_edd_over_bol,
         agn_a_spin,
-        x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        x_hot_max=r_out_cm / r_isco_cm,
         h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * _pow10(log10_bol_shape)
@@ -1961,49 +2093,18 @@ def _compute_zone_luminosities(
     # ── Normalize ─────────────────────────────────────────────────
     l_nu_disc = l_nu_outer + l_nu_warm
 
-    # Zone bolometric integrals (sigma T^4 * 2*pi*r*dr) reach ~1e44 erg/s and
-    # overflow float32; work them in L_sun (pre-divided 2*pi*sigma/L_sun folds
-    # first). l_hot_erg is already L_sun on this path, and ``l_bol_erg`` is passed
-    # in L_sun too (the reference normalization), so ``scale`` is a clean ratio.
-    # The accretion power of the disc and warm zones, D, is both faces of every annulus
-    # (``_TWO_FACES``); it carries no cos i, so ``scale`` does not depend on the inclination.
+    # No rescale (#3015). Each zone carries its own Novikov-Thorne dissipation, the disc and warm
+    # zones ``L0 (h(x_out) - h(x_hot))`` and the corona ``L_hot`` (K&D 2018 Sec. 2.2, Eq. 2), and
+    # the spectra are only converted from the shape's luminosity units to the output magnitude by
+    # ``k = L_ref / L_shape``. The dissipation the disc would have beyond ``R_out`` is not
+    # emitted; :func:`kubota_done_unemitted_fraction` gives it.
     #
-    # The sum is carried as a log10 exponent: every ring term ``c T^4 r dr`` is formed as a sum of
-    # logarithms and the rings are combined in a base-10 logsumexp, so no product of the large
-    # (``T^4``, ``r``, ``dr``) and small (``c``) factors is ever formed, and the reverse pass
-    # carries O(1) weights instead of the ~1e28-scale unnormalized spectra (#2767).
-    log10_c = math.log10(_2PI_SIGMA_SB_OVER_LSUN if float32 else 2.0 * math.pi * _SIGMA_SB)
-    r_both = jnp.concatenate([r_outer, r_warm_grid])
-    t_both = jnp.concatenate([t_outer, t_warm])
-    dr_both = jnp.concatenate([dr_outer, dr_warm])
-    log10_rings = (
-        log10_c
-        + 4.0 * jnp.log10(jnp.maximum(t_both, _representable_floor(1e-30)))
-        + jnp.log10(r_both)
-        + jnp.log10(dr_both)
-    )
-    log10_disc_power = math.log10(_TWO_FACES) + log10_weighted_sum(log10_rings, 1.0)
-    # The corona carries its counted power exactly, ``l_hot_erg``. The disc and warm zones carry
-    # the rest of the accretion power, ``L_bol - l_hot``, so the disc gets its own scale. A single
-    # scale over both zones would take the corona's share away from its counted power (#2733).
-    # Mdot is inferred so the disc's total Page-Thorne dissipation is L_bol, so the total closes.
-    # The budget is ``L_bol (1 - l_hot / L_bol)``: the share is
-    # formed from O(1) ratios, so it is not a difference of two ~1e11 powers, and no
-    # unnormalized ~1e28 spectrum is formed in float32 (#2767).
     # Units: the shape powers (disc, corona) are in the shape's own luminosity units, and
     # ``l_bol_erg`` is the output magnitude, which the float32 path sets to a reference. The
-    # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude; within the
-    # shape, the disc carries ``L_shape - l_hot``. The corona carries ``k * l_hot`` exactly.
+    # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude.
     log10_k = jnp.log10(l_bol_erg) - log10_bol_shape
-    # ``(1 - s) L_bol`` with ``s <= 0.99`` the corona's share of L_bol, so
-    # the argument of the log is positive by construction (no abs, no guarded where).
-    log10_disc_share = jnp.log10(1.0 - hot_fraction)
-    log10_budget_disc = jnp.maximum(
-        log10_bol_shape + log10_disc_share,
-        jnp.log10(_representable_denominator(1e-100)),
-    )
-    log10_scale = log10_k + log10_budget_disc - log10_disc_power
-    scale = _pow10(log10_scale)
+    scale = _pow10(log10_k)
+    log10_scale = log10_k
 
     # Applied once, to spectra whose own peak is factored out, so no unnormalized ~1e28 spectrum
     # (or the cotangent that would multiply it in reverse mode) is formed in float32 (#2767).
@@ -2149,12 +2250,11 @@ def kubota_done_disc_split(
     l_nu_hot : ndarray, shape (n_wave,)
         The corona :math:`H_\nu` [erg/s/Hz].
     corona_fraction : float
-        :math:`P_H / (P_D + P_H)`, with :math:`P_H = \int H_\nu\,d\nu` and
-        :math:`P_D = \int D_\nu\,d\nu` the angle-integrated powers of the corona and of the
-        two-face disc. It follows from the radial dissipation integrals (the Page-Thorne
-        profile for :math:`D`, the hot-flow dissipation :math:`f_{\rm hard} L_{\rm Edd}` for
-        :math:`H`) and is independent of the wavelength grid and of ``agn_cos_inc``
-        [dimensionless].
+        :math:`P_H / L_{\rm bol}`, the corona's share of the accretion power, with
+        :math:`P_H = \int H_\nu\,d\nu` the angle-integrated corona power. It is the closed-form
+        hot-flow share (:func:`_hot_flow_fraction`) and is independent of the wavelength grid and
+        of ``agn_cos_inc``. The disc and warm zones carry their own dissipation, so
+        ``P_D + P_H`` is below ``L_bol`` by the unemitted share [dimensionless].
 
     Notes
     -----
@@ -2235,6 +2335,39 @@ def kubota_done_disc(
     - **R_warm**: Parameterized as a multiple of R_hot (default 2, per K&D).
     - **R_out**: Set to the Laor & Netzer (1989) self-gravity (Toomre) radius,
       beyond which the disc becomes unstable and fragments.
+
+    The radii obey :math:`R_{\\rm ISCO} < R_{\\rm hot} \\le R_{\\rm out}` and
+    :math:`R_{\\rm hot} < R_{\\rm warm} \\le R_{\\rm out}`. Where the disc cannot dissipate
+    :math:`f_{\\rm hard} L_{\\rm Edd}` inside :math:`R_{\\rm out}`,
+    :math:`R_{\\rm hot} = R_{\\rm out}` and the whole flow is hot, as in the RELQSO source
+    of Hagen & Done (see
+    :func:`_clip_zone_radii`). The corona power then saturates at the disc's dissipation
+    inside :math:`R_{\\rm out}`, which gives a slope change in :math:`L_{\\rm hot}` at
+    :math:`f_{\\rm hard}/\\lambda_{\\rm Edd} = h(R_{\\rm out}/R_{\\rm ISCO})/h(\\infty)`
+    (about 0.93); the steep optical disc share just above that point is the corona taking
+    most of :math:`L_{\\rm bol}`.
+
+    **Emission per zone (no rescale, #3015).** Each zone emits its own Page-Thorne dissipation
+    (Kubota & Done 2018, Sec. 2.2): the corona :math:`L_{\\rm hot}`, the warm zone and the outer
+    disc :math:`L_0\\,[h(x_{\\rm out}) - h(x_{\\rm hot})]`, with
+    :math:`x = R/R_{\\rm ISCO}` and :math:`L_0 h(\\infty) = L_{\\rm bol}`. Their sum is
+    :math:`L_{\\rm bol}` less the unemitted share
+
+    .. math::
+
+        L_{\\rm unemitted} = L_0\\,[h(\\infty) - h(x_{\\rm out})]
+        = L_{\\rm bol}\\,\\frac{h(\\infty) - h(R_{\\rm out}/R_{\\rm ISCO})}{h(\\infty)},
+
+    the dissipation the disc would have beyond its self-gravity radius, which K&D do not emit.
+    It is published as ``log_L_agn_disc_unemitted`` (:func:`kubota_done_unemitted_fraction`).
+
+    **Validity domain.** The three-zone geometry of Kubota & Done (2018) applies for
+    :math:`\\lambda_{\\rm Edd}` above about :math:`f_{\\rm hard}` (~0.02), where the disc can
+    dissipate :math:`f_{\\rm hard} L_{\\rm Edd}` inside :math:`R_{\\rm out}`. Below it the disc
+    truncates: there are no disc or warm zones, as in RELQSO, and the hot flow is modeled as
+    radiatively efficient Comptonization of all the dissipation inside :math:`R_{\\rm out}`
+    (K&D 2018 do not model radiative inefficiency). For that regime ``disc='adaf'`` is the
+    radiatively inefficient alternative. No warning is issued.
 
     The hard X-ray photon index Γ_hot is derived self-consistently from the
     Beloborodov (1999) energy-balance relation if requested; otherwise uses

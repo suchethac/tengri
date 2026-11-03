@@ -120,13 +120,19 @@ _CONTROLS: dict[str, tuple[str, float, float]] = {
 #: a parameter that genuinely does nothing.
 _MIN_RESPONSE = 1e-9
 
-#: Parameters whose response is swept from a shifted base point. ``agn_r_warm_ratio`` sets the
+#: Parameters whose response is swept from a shifted base point. ``agn_kt_warm`` is the electron
+#: temperature of the warm Comptonization zone, which has zero width wherever the hot flow fills
+#: the disc (``R_warm = R_hot = R_out``, Kubota & Done 2018 Sec. 2.2 and the RELQSO source, #3015),
+#: so it shares the base point of ``agn_r_warm_ratio`` below. ``agn_r_warm_ratio`` sets the
 #: warm-zone radius relative to ``R_hot``; at the fixture's sampled draw (``agn_log_lbol`` 9.0,
 #: ``log M_BH`` 7.59, ``f_hard`` 0.096, so lambda_Edd = 7.8e-4) the hot flow fills the disc and
 #: ``R_hot`` and ``R_warm`` both clip to ``R_out`` for ratio 1 and 5 alike, where the parameter
 #: has no effect by physics. At ``agn_log_lbol`` 11.5 the zones are separate (``R_warm`` 17.1 vs
 #: 77.8 r_g, response 0.145; at 12.9 it is 0.60).
-_SWEPT_AT: dict[str, dict[str, float]] = {"agn_r_warm_ratio": {"agn_log_lbol": 11.5}}
+_SWEPT_AT: dict[str, dict[str, float]] = {
+    "agn_r_warm_ratio": {"agn_log_lbol": 11.5},
+    "agn_kt_warm": {"agn_log_lbol": 11.5},
+}
 
 
 # ── Measurement ───────────────────────────────────────────────────

@@ -92,12 +92,18 @@ from tengri.forward.batched_spectrum import (
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference.backends.mcmc.catalog import (
     CATALOG_CHEES_ENSEMBLE,
+    GHMC_DEFAULT_FOLDS,
     GHMC_DEFAULT_SUPERCHAINS,
     _catalog_live_chains,
     build_catalog_mcmc_engine,
+    ghmc_default_chains,
     map_with_shared,
 )
-from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.inference.lbfgs_driver import lbfgs_to_gtol
+from tengri.inference.likelihoods.gaussian import (
+    diag_gaussian_log_prob,
+    standardized_residual,
+)
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
@@ -217,7 +223,8 @@ def _refuse_calibration_order(model) -> None:
 def _log_q_log_normal(obs: SpectroBatch, log_q) -> jax.Array:
     """Log of the galaxy's log-normal prior on ``ln q``, ``N(ln10 * center, (ln10 * sigma)^2)``."""
     center, width = _LN10 * obs.cal_scale_center, _LN10 * obs.cal_scale_sigma
-    return -0.5 * ((log_q - center) / width) ** 2 - jnp.log(width * math.sqrt(2.0 * math.pi))
+    z = standardized_residual(log_q, center, width)
+    return -0.5 * z**2 - jnp.log(width * math.sqrt(2.0 * math.pi))
 
 
 def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | None:
@@ -739,44 +746,6 @@ def _fit_chunk(nlp, batch, init, threaded, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
-def _max_abs(tree) -> jax.Array:
-    """Largest absolute entry over every leaf of a pytree."""
-    return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
-
-
-def _lbfgs_one(nlp, obs, tables, init, *, n_steps, gtol):
-    """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
-    import optax
-
-    optimizer = optax.lbfgs()
-
-    def value_fn(params):
-        return nlp(params, obs, tables)
-
-    value_and_grad = optax.value_and_grad_from_state(value_fn)
-    state = optimizer.init(init)
-    value, grad = value_and_grad(init, state=state)
-
-    def not_converged(carry):
-        _, _, _, grad_now, it, _ = carry
-        return (it < n_steps) & jnp.logical_not(_max_abs(grad_now) < gtol)
-
-    def advance(carry):
-        params, opt_state, value_now, grad_now, it, trace = carry
-        trace = trace.at[it].set(value_now)
-        updates, opt_state = optimizer.update(
-            grad_now, opt_state, params, value=value_now, grad=grad_now, value_fn=value_fn
-        )
-        params = optax.apply_updates(params, updates)
-        value_next, grad_next = value_and_grad(params, state=opt_state)
-        return params, opt_state, value_next, grad_next, it + 1, trace
-
-    carry = (init, state, value, grad, jnp.asarray(0), jnp.zeros((n_steps,), dtype=value.dtype))
-    params, _, value, _, n_done, trace = jax.lax.while_loop(not_converged, advance, carry)
-    trace = jnp.where(jnp.arange(n_steps) < n_done, trace, value)
-    return params, value, trace
-
-
 def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
 
@@ -787,7 +756,9 @@ def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """
 
     def one(obs, init_one, tables):
-        return _lbfgs_one(nlp, obs, tables, init_one, n_steps=n_steps, gtol=gtol)
+        return lbfgs_to_gtol(
+            lambda params: nlp(params, obs, tables), init_one, n_steps=n_steps, gtol=gtol
+        )
 
     params_final, final_nlp, trace = jax.vmap(one, in_axes=(0, 0, None))(batch, init, threaded)
     return params_final, final_nlp, trace.T
@@ -1081,10 +1052,6 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     return jnp.where(keep, map_rows, prior_rows)
 
 
-#: Chains per galaxy the driver uses for the MEADS sampler when none are given.
-_GHMC_DRIVER_CHAINS = 32
-
-
 def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     """Largest nested R-hat over the coordinates of one galaxy's chains.
 
@@ -1203,8 +1170,12 @@ def fit_spectra_catalog_mcmc(
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
         ``target_accept_rate`` or ``use_dense``. With ``sampler="ghmc"`` the defaults are
-        ``n_chains=32`` and ``n_superchains=8``; ``n_chains`` must be a multiple of
-        ``n_superchains``.
+        ``n_superchains=8`` and the smallest ``n_chains`` of at least 32 that is a multiple
+        of ``n_superchains`` and of ``n_folds`` and gives each MEADS fold at least ``2 D``
+        chains (:func:`~tengri.inference.backends.mcmc.catalog.ghmc_default_chains`, D = the
+        galaxy's sampled coordinates); an explicit ``n_chains`` below that raises
+        :class:`~tengri.config.exceptions.ConfigError`. ``rewhiten_at`` (default 0.5) sets
+        when MEADS re-estimates its coordinates from the ensemble.
 
     Returns
     -------
@@ -1261,9 +1232,6 @@ def fit_spectra_catalog_mcmc(
         )["params"]
 
     options = dict(engine_kwargs)
-    if sampler == "ghmc":
-        options.setdefault("n_chains", _GHMC_DRIVER_CHAINS)
-    n_chains = int(options.get("n_chains", 1))
     n_superchains = int(options.get("n_superchains", GHMC_DEFAULT_SUPERCHAINS))
 
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
@@ -1281,6 +1249,13 @@ def fit_spectra_catalog_mcmc(
             threaded=threaded,
         )
         unravel_fn = flat[1]
+        if sampler == "ghmc" and "n_chains" not in engine_kwargs:
+            options["n_chains"] = ghmc_default_chains(
+                int(flat[2].shape[0]),
+                n_superchains,
+                int(options.get("n_folds", GHMC_DEFAULT_FOLDS)),
+            )
+        n_chains = int(options.get("n_chains", 1))
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
         bucket_batch = _resolve_bucket_batch_size(

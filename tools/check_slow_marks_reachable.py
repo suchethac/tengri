@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -164,6 +165,41 @@ def find_slow_marked_files(tests_dir: Path = TESTS_DIR) -> list[Path]:
     )
 
 
+_WEEKLY_RUN = re.compile(r"-m\s+['\"]?weekly['\"]?(?=\s|$)")
+
+
+def weekly_selected_paths(workflows_dir: Path = WORKFLOW_PATH.parent) -> list[str]:
+    """Test paths named on the pytest lines of every workflow step that selects ``-m weekly``."""
+    paths: list[str] = []
+    for wf in sorted(workflows_dir.glob("*.yml")):
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        for job in (doc.get("jobs") or {}).values():
+            for step in job.get("steps") or []:
+                run = step.get("run") or ""
+                if _WEEKLY_RUN.search(run):
+                    paths.extend(t for t in run.split() if t == "tests" or t.startswith("tests/"))
+    return paths
+
+
+def unreachable_weekly_files(tests_dir: Path = TESTS_DIR) -> list[Path]:
+    """``weekly``-marked test files no ``-m weekly`` workflow step collects."""
+    selected = weekly_selected_paths()
+    marked = [
+        p
+        for p in sorted(tests_dir.rglob("test_*.py"))
+        if "pytest.mark.weekly" in p.read_text(encoding="utf-8")
+    ]
+    return [
+        p
+        for p in marked
+        if not any(
+            p.relative_to(REPO_ROOT).as_posix() == s
+            or p.relative_to(REPO_ROOT).as_posix().startswith(s.rstrip("/") + "/")
+            for s in selected
+        )
+    ]
+
+
 def file_tree(path: Path, tests_dir: Path = TESTS_DIR) -> str:
     """The top-level tree a test file lives under (first path part under tests/)."""
     return path.relative_to(tests_dir).parts[0]
@@ -197,6 +233,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             status = "covered" if ok else "UNREACHABLE"
             print(f"  {status:12s} tree={tree:12s} {rel}")
         return 0
+
+    orphan_weekly = unreachable_weekly_files()
+    if orphan_weekly:
+        for p in orphan_weekly:
+            print(
+                f"check_slow_marks_reachable: FAIL -- {p.relative_to(REPO_ROOT)} carries "
+                "pytest.mark.weekly but no workflow step selects it with `-m weekly`.",
+                file=sys.stderr,
+            )
+        return 1
 
     unreachable = [(rel, tree) for rel, tree, ok in census if not ok]
     if not unreachable:

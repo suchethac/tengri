@@ -18,9 +18,12 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from jax.scipy.optimize import minimize as _jax_minimize
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
+from tengri.inference.lbfgs_driver import lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import inv_noise_std
+from tengri.inference.map_stationarity import MAP_DECREMENT_BAR, stationarity
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,11 @@ _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 #: grad norm at that point is round-off noise that depends on the XLA build
 #: (2e-5 to 4e-4, #3083), so it is not a convergence measure.
 _SCIPY_FTOL = 1e-15
+
+#: Optax L-BFGS runs allowed after scipy's stop when the point is not stationary (#3205).
+#: scipy stops at a crease of the objective on some galaxies with ``ABNORMAL``; the
+#: shared driver continues from there to the smooth optimum.
+_MAP_CONTINUATION_ROUNDS = 2
 
 # Short-form name aliases used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
@@ -366,11 +374,30 @@ def _run_map_scipy(
     )
     wall_time = time.time() - t0
 
-    best_params = unravel_fn(jnp.asarray(result.x))
+    _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
+
+    def flat_loss(vec):
+        return loss_fn(unravel_fn(vec), data_args)
+
+    x_final, final_loss, grad_norm, decrement, converged, attempts = _certify_map_point(
+        flat_loss,
+        jnp.asarray(result.x),
+        scipy_success=bool(result.success),
+        n_steps=n_steps,
+        gtol=tol,
+    )
+    if not converged:
+        warn_measured(
+            f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
+            f"decrement {decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}. "
+            f"scipy reported {result.message!r}. The returned point is not a minimum.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
+
+    best_params = unravel_fn(x_final)
     _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
-    final_loss = float(result.fun)
-    converged = result.success
 
     if verbose:
         cv_msg = " (converged)" if converged else ""
@@ -379,8 +406,6 @@ def _run_map_scipy(
             f"{result.nit} iters, {n_evals[0]} evals{cv_msg}, "
             f"loss={final_loss:.6f}"
         )
-
-    grad_norm = float(jnp.linalg.norm(jnp.asarray(result.jac)))
 
     # ``losses`` always has at least the seeded initial-point value (above),
     # even when scipy converges in zero iterations and ``callback`` never
@@ -399,10 +424,69 @@ def _run_map_scipy(
             "optimizer": opt_name,
             "converged": converged,
             "grad_norm": grad_norm,
+            "map_converged": converged,
+            "map_decrement": decrement,
+            "map_attempts": attempts,
+            "map_message": str(result.message),
         },
         loss_history=loss_hist,
         _model=context.model,
     )
+
+
+def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
+    """Return the point to report after scipy's stop, continuing with the shared driver if needed.
+
+    Parameters
+    ----------
+    flat_loss : callable
+        ``flat_loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector.
+    x : jax.Array, shape (D,)
+        scipy's stopping point.
+    scipy_success : bool
+        Whether scipy reported success at ``x``.
+    n_steps : int
+        Iteration cap of each continuation run.
+    gtol : float
+        Gradient tolerance of each continuation run.
+
+    Returns
+    -------
+    x : jax.Array, shape (D,)
+        The reported point.
+    nlp : float
+        Negative log-posterior at ``x`` [nats].
+    grad_norm : float
+        Euclidean norm of the gradient at ``x`` in standardized coordinates.
+    decrement : float or None
+        Newton decrement at ``x`` [nats], ``None`` when the certificate was not needed.
+    stationary : bool
+        Whether ``x`` is accepted as a MAP point.
+    attempts : int
+        Optimizer runs spent, scipy's included.
+
+    Notes
+    -----
+    The Hessian certificate runs only when it can change the answer. When scipy reports
+    success and the re-evaluated max |grad| at ``x`` is below ``gtol``, the point is
+    accepted without the Hessian (``stat`` is ``None``, one attempt). Otherwise the
+    Newton decrement is measured, and a point that is not stationary is continued with
+    the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs.
+    """
+    value, grad = jax.jit(jax.value_and_grad(flat_loss))(x)
+    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
+        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1
+    stat = stationarity(flat_loss, x)
+    attempts = 1
+    if scipy_success and stat.stationary:
+        return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts
+    for _ in range(_MAP_CONTINUATION_ROUNDS):
+        x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
+        attempts += 1
+        stat = stationarity(flat_loss, x)
+        if stat.stationary:
+            break
+    return x, stat.nlp, stat.grad_norm, stat.decrement, stat.stationary, attempts
 
 
 def _best_finite_restart(final_losses) -> int:
@@ -1149,14 +1233,22 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
         # unbounded point the Hessian is evaluated at, the same space the runners use.
         _reject_nonfinite_map(map_params)
 
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
+    # Same flat log-posterior the samplers and run_pathfinder use.
+    log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
+        context.fitter,
+        map_params,
+    )
+
     return run_laplace(
         key=key,
-        loss_fn=context.neg_log_posterior_fn,
-        data_args=context.data_args,
-        map_params_unbounded=map_params,
+        logdensity_fn=log_posterior_flat_2arg,
+        data_args=data_args,
+        position=init_flat,
+        unravel_fn=unravel_fn,
         to_physical_fn=context.to_physical,
         model=context.model,
-        grad_fn=context.grad_fn,
         **kwargs,
     )
 

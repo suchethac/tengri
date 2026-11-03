@@ -140,13 +140,6 @@ def test_hard_wall_keeps_adapted_step_size_and_damping_finite():
     assert divergent.shape == (_N_CHAINS, n_chain)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "MEADS in the catalog engine does not adapt to a sigma=1e-3 target: "
-        "step 5e-7, sd 0.4 at 300 warmup (#3135)"
-    ),
-)
 def test_default_recovers_a_sigma_1e3_gaussian():
     sigma = 1e-3
 
