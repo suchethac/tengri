@@ -53,6 +53,7 @@ measures both.
 from __future__ import annotations
 
 import math
+import weakref
 
 import jax
 import jax.numpy as jnp
@@ -493,14 +494,34 @@ def map_with_shared(fn, xs, shared, *, batch_size):
 
     Notes
     -----
-    **JIT-compatible**: yes; the map is compiled once per call.
+    **JIT-compatible**: yes; the map is compiled once per ``(fn, batch_size)``. A
+    cached ``fn`` (the batched catalog sampler keeps one per bucket spec) reuses its
+    compiled map on every later call.
     """
+    return _mapped_program(fn, batch_size)(shared, xs)
 
-    @jax.jit
-    def mapped(shared_arg, xs_arg):
-        return jax.lax.map(lambda x: fn(*x, shared_arg), xs_arg, batch_size=batch_size)
 
-    return mapped(shared, xs)
+#: Jitted maps keyed weakly on the mapped function, then on ``batch_size``. The jitted
+#: map holds ``fn`` only through a weak reference, so a dropped ``fn`` frees its entry.
+_MAPPED: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _mapped_program(fn, batch_size):
+    """Return the jitted ``(shared, xs) -> lax.map`` program of ``fn``, built once."""
+    programs = _MAPPED.setdefault(fn, {})
+    program = programs.get(batch_size)
+    if program is None:
+        fn_ref = weakref.ref(fn)
+
+        def mapped(shared_arg, xs_arg):
+            f = fn_ref()
+            if f is None:
+                raise RuntimeError("the sampler was collected while its map was in use")
+            return jax.lax.map(lambda x: f(*x, shared_arg), xs_arg, batch_size=batch_size)
+
+        program = jax.jit(mapped)
+        programs[batch_size] = program
+    return program
 
 
 def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) -> int:

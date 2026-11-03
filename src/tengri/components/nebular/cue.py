@@ -530,6 +530,15 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     enforces it instead of trusting every call site to honor it.
     """
     npz = dict(np.load(npz_path, allow_pickle=True))
+    # The file stores the emulator in float32. Widen those arrays once, here, to float64:
+    # the widening is exact, and the process dtype is applied at the device boundary,
+    # so a float64 trace runs the network in float64 and an x64-off process narrows back
+    # to the same float32 values it always used. The per-line sigma is a host output,
+    # cast by its own loader.
+    npz = {
+        k: (np.asarray(v, dtype=np.float64) if v.dtype == np.float32 else v)
+        for k, v in npz.items()
+    }
 
     # Line sub-networks
     line_nets = []
@@ -728,17 +737,38 @@ def _speculator_log_spectrum(
 CUE_NITROGEN_MODES: tuple[str, ...] = NITROGEN_MODES
 
 
+def _param_input(value) -> jnp.ndarray:
+    """A Cue input in the dtype of its parameter.
+
+    ``jnp.result_type`` canonicalizes to the process dtype, so a Python float or a
+    float64 array becomes float64 under x64 and float32 with x64 off, exactly as the
+    former hard ``float32`` cast did in the x64-off process. A float32 parameter
+    stays float32 under x64. The dtype is strong, so it promotes nothing.
+
+    Parameters
+    ----------
+    value : array_like
+        One Cue input parameter, scalar or array.
+
+    Returns
+    -------
+    jnp.ndarray
+        ``value`` as a strongly typed array in its own (canonical) dtype.
+    """
+    return jnp.asarray(value, dtype=jnp.result_type(value))
+
+
 def _effective_gas_logno(p: dict, nitrogen: str = "absolute") -> jnp.ndarray:
     """The absolute [N/O] fed to the network (#2693).
 
     ``"absolute"``: ``gas_logno`` itself, untouched (Li+2025's parameterization).
     A relation name: that relation at ``gas_logz`` plus ``gas_logno``.
     """
-    gas_logno = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
+    gas_logno = _param_input(p["gas_logno"])
     if nitrogen == "absolute":
         return gas_logno
-    gas_logz = jnp.asarray(p["gas_logz"], dtype=jnp.float32)
-    return relation_offset(nitrogen, gas_logz).astype(jnp.float32) + gas_logno
+    gas_logz = _param_input(p["gas_logz"])
+    return relation_offset(nitrogen, gas_logz).astype(gas_logno.dtype) + gas_logno
 
 
 def _logq_from_logu(
@@ -1654,28 +1684,28 @@ class CueBackend:
         """Low-level line prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
-            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            _param_input(p["ionspec_index1"]),
+            _param_input(p["ionspec_index2"]),
+            _param_input(p["ionspec_index3"]),
+            _param_input(p["ionspec_index4"]),
+            _param_input(p["ionspec_logLratio1"]),
+            _param_input(p["ionspec_logLratio2"]),
+            _param_input(p["ionspec_logLratio3"]),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
+            _param_input(p["gas_logz"]),
             _effective_gas_logno(p, self.nitrogen),
-            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+            _param_input(p["gas_logco"]),
         )
         gas_logq = _logq_from_logu(
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
         )
         wav, lum = predict_all_lines(
             nn_params,
             weights,
             gas_logq,
-            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+            _param_input(p["gas_logqion"]),
         )
         # Apply nebular emission scaling from ionizing photon loss.
         # Following CIGALE nebular.py, use the k-factor (Inoue 2011) which
@@ -1814,28 +1844,28 @@ class CueBackend:
         """Low-level continuum prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
-            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            _param_input(p["ionspec_index1"]),
+            _param_input(p["ionspec_index2"]),
+            _param_input(p["ionspec_index3"]),
+            _param_input(p["ionspec_index4"]),
+            _param_input(p["ionspec_logLratio1"]),
+            _param_input(p["ionspec_logLratio2"]),
+            _param_input(p["ionspec_logLratio3"]),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
+            _param_input(p["gas_logz"]),
             _effective_gas_logno(p, self.nitrogen),
-            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+            _param_input(p["gas_logco"]),
         )
         gas_logq = _logq_from_logu(
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
         )
         return predict_continuum(
             nn_params,
             weights,
             gas_logq,
-            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+            _param_input(p["gas_logqion"]),
         )
 
     def _compute_weighted_cue_params(

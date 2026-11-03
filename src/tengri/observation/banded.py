@@ -565,8 +565,9 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     chol : BandedMatrix
         Lower factor from :func:`banded_cholesky`, ``offsets = (0, -1, ..., -p)``,
         ``data`` shape ``(p + 1, n)``.
-    r : array_like, shape (n,) or (n, m)
-        Right-hand side [data units]; a matrix is solved column by column.
+    r : array_like, shape (n,) or (n, k)
+        Right-hand side [data units]. A ``(n, k)`` block is solved in one blocked scan,
+        one column per right-hand side.
 
     Returns
     -------
