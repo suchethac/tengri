@@ -1162,6 +1162,55 @@ def _resolve_bucket_batch_size(
     )
 
 
+#: Per-galaxy catalog samplers, one per (bucket spec, sampler, every option that changes
+#: the traced sampler). The entries hold the model through their closures, so the cache
+#: keeps the most recent model only; see :func:`_catalog_one_galaxy`.
+_CATALOG_PROGRAMS: dict = {}
+_CATALOG_MODEL: dict = {"model": None}
+
+
+def _catalog_one_galaxy(
+    model, spec, flat, substitute, *, calibration, sampler, n_warmup, n_burnin, n_samples, options
+):
+    """Return one bucket's per-galaxy sampler, built once per (spec, options) (#3252).
+
+    The sampler closes over the flat log-density of the first batch of this spec. The
+    galaxy data, the start points, the keys and the template tables are its arguments,
+    so a later batch of the same spec reuses the sampler and its compiled map. A new
+    model clears the cache, because the cached closures hold the model.
+    """
+
+    def build():
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            sampler,
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            flat_logdensity=flat,
+            substitute=substitute,
+            **options,
+        )
+
+        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
+            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
+
+        return one_galaxy
+
+    if _CATALOG_MODEL["model"] is not model:
+        _CATALOG_PROGRAMS.clear()
+        _CATALOG_MODEL["model"] = model
+    run_key = (sampler, n_warmup, n_burnin, n_samples, tuple(sorted(options.items())))
+    key = (spec, calibration, run_key)
+    try:
+        hash(key)
+    except TypeError:
+        return build()
+    if key not in _CATALOG_PROGRAMS:
+        _CATALOG_PROGRAMS[key] = build()
+    return _CATALOG_PROGRAMS[key]
+
+
 def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
@@ -1333,19 +1382,18 @@ def fit_spectra_catalog_mcmc(
             n_chains=n_chains,
             n_ensemble=options.get("n_ensemble", CATALOG_CHEES_ENSEMBLE),
         )
-        run_one, _ = build_catalog_mcmc_engine(
-            None,
-            sampler,
+        one_galaxy = _catalog_one_galaxy(
+            model,
+            spec,
+            flat,
+            substitute,
+            calibration=(calibration_marginalize, cal_n_poly, cal_prior_sigma),
+            sampler=sampler,
             n_warmup=n_warmup,
             n_burnin=n_burnin,
             n_samples=n_samples,
-            flat_logdensity=flat,
-            substitute=substitute,
-            **options,
+            options=options,
         )
-
-        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
-            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
 
         positions, divergent = map_with_shared(
             one_galaxy,
