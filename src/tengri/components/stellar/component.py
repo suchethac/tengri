@@ -1013,8 +1013,43 @@ def _flux_weighted_node_jvp(primals, tangents):
     """
     num, den = primals
     d_num, d_den = tangents
-    quotient = num / den
-    return quotient, (d_num - quotient * d_den) / den
+    # The primal goes through the rule itself, not ``num / den``: a plain
+    # quotient differentiates (when this rule is differentiated) to
+    # ``-num / den**2``, the very overflow the rule exists to avoid.
+    quotient = _flux_weighted_node(num, den)
+    # Divide each element by its own power of two (exact in binary floating
+    # point, held under stop_gradient) so that ``den`` is O(1) when this rule is
+    # itself differentiated. A per-Msun band luminosity is 3e-21 to 1e-17, and
+    # the second derivative carries ``1/den**2``, which exceeds float32's
+    # maximum for ``den < 1e-19``: every entry of a float32 Hessian through the
+    # WavePrecomp LUT was NaN (``0 * inf``).
+    scale = _power_of_two_scale(den)
+    # The barrier keeps XLA from re-associating ``(x / s) / (y / s)`` into a
+    # product ``y * s`` that underflows.
+    scale, den_scaled = jax.lax.optimization_barrier((scale, den / scale))
+    return quotient, (d_num / scale - quotient * (d_den / scale)) / den_scaled
+
+
+def _power_of_two_scale(x):
+    """``2**floor(log2|x|)`` per element, exactly, under ``stop_gradient``; 1 where ``x`` is 0.
+
+    Parameters
+    ----------
+    x : array_like
+        Values to scale; sign ignored.
+
+    Returns
+    -------
+    ndarray
+        Same shape and dtype as ``x``; a power of two, so dividing by it is exact.
+    """
+    x = jnp.asarray(x)
+    is_f64 = x.dtype == jnp.float64
+    bits = jnp.uint64 if is_f64 else jnp.uint32
+    mask = bits(0x7FF0000000000000 if is_f64 else 0x7F800000)
+    # Clearing the sign and mantissa bits leaves exactly 2**floor(log2|x|).
+    power = jax.lax.bitcast_convert_type(jax.lax.bitcast_convert_type(x, bits) & mask, x.dtype)
+    return jax.lax.stop_gradient(jnp.where(power > 0, power, jnp.ones_like(power)))
 
 
 def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
