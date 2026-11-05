@@ -37,6 +37,7 @@
 - **`importance_draws=` on Laplace: a Student-t importance check at the mode with Pareto-smoothed weights (Vehtari et al. 2024).** The check reports `pareto_k`, an importance-sampling evidence and reweighted draws, and warns with `ImportanceSamplingUnreliableWarning` when k-hat exceeds min(1 - 1/log10 n, 0.7). `hmc_is` shares the same importance-sampling code and log-density and now reports `pareto_k`; a NaN log-ratio now raises instead of returning a NaN evidence.
 
 ### Changed
+- perf(inference): MAP certification compiles its value-and-gradient and Hessian once per objective, and the multistart shares one objective across restarts; a float64 joint MAP (`Fitter.run("map", n_steps=1500)`) fell from 13.97 s to 10.79 s, certification from 7.43 s to 4.57 s (load-dependent).
 - perf(observation): blocked banded forward substitution (#3256).
 - perf(inference): the batched MAP driver compiles once per bucket and the compiled program is reused, so a second call on a same-spec batch compiles nothing; 0.11 s against 2.15 s for the second call of a 60-step, 3-galaxy fit (#3247)
 - perf(inference): the batched catalog sampler compiles once per bucket and is reused, so a second call on a same-spec batch compiles nothing; 0.05 s against 2.25 s for the second call of a 5-warmup, 3-galaxy catalog fit (#3252)
