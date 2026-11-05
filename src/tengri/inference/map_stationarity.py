@@ -33,17 +33,24 @@ class Stationarity:
         eigendirections [nats].
     positive_definite : bool
         True when every Hessian eigenvalue is positive.
+    hessian_finite : bool
+        True when every Hessian entry is finite. False is a distinct status: the
+        curvature is unknown, so ``decrement`` is NaN and ``positive_definite`` is
+        False, and the point cannot be certified.
     """
 
     nlp: float
     grad_norm: float
     decrement: float
     positive_definite: bool
+    hessian_finite: bool
 
     @property
     def stationary(self) -> bool:
-        """True when the Hessian is positive definite and the decrement is below the bar."""
-        return self.positive_definite and self.decrement < MAP_DECREMENT_BAR
+        """True when the Hessian is finite, positive definite and decrement is below the bar."""
+        return (
+            self.hessian_finite and self.positive_definite and self.decrement < MAP_DECREMENT_BAR
+        )
 
 
 def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Stationarity:
@@ -69,11 +76,21 @@ def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Statio
     ``positive_definite``); the value, gradient and Hessian are each jitted. The
     decrement is summed over the positive-curvature eigendirections only, so a
     non-positive-definite point reports a finite decrement next to
-    ``positive_definite=False``.
+    ``positive_definite=False``. A non-finite Hessian is reported as
+    ``hessian_finite=False`` with a NaN decrement, never as a zero decrement.
     """
     x = jnp.asarray(x)
     value, grad = jax.jit(jax.value_and_grad(loss))(x)
     hessian = jax.jit(jax.hessian(loss))(x)
+    grad_norm = float(jnp.linalg.norm(grad))
+    if not bool(jnp.all(jnp.isfinite(hessian))):
+        return Stationarity(
+            nlp=float(value),
+            grad_norm=grad_norm,
+            decrement=float("nan"),
+            positive_definite=False,
+            hessian_finite=False,
+        )
     eigenvalues, eigenvectors = jnp.linalg.eigh(hessian)
     positive = eigenvalues > 0
     safe = jnp.where(positive, eigenvalues, 1.0)
@@ -81,7 +98,8 @@ def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Statio
     decrement = 0.5 * jnp.sum(jnp.where(positive, projected / safe, 0.0))
     return Stationarity(
         nlp=float(value),
-        grad_norm=float(jnp.linalg.norm(grad)),
+        grad_norm=grad_norm,
         decrement=float(decrement),
         positive_definite=bool(jnp.all(positive)),
+        hessian_finite=True,
     )
