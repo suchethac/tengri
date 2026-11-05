@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Record the x64-off Cue reference spectrum, gradient and NLL.
 
 Run under CI's pinned JAX (``.github/ci-constraints.txt``, jax 0.12.0) from the repository
