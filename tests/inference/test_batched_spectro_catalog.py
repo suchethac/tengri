@@ -125,6 +125,9 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
     """batch_size must be the lax.map chunk size, not a dropped keyword."""
     import jax
 
+    from tengri.inference.backends.mcmc.catalog import _MAPPED
+    from tengri.inference.batched_spectro import _CATALOG_PROGRAMS
+
     seen = []
     original = jax.lax.map
 
@@ -132,16 +135,24 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
         seen.append(kwargs.get("batch_size"))
         return original(f, xs, *args, **kwargs)
 
+    def forget_compiled_programs():
+        # lax.map runs while a program is traced, and a compiled program is reused, so
+        # each phase starts with no program to observe its own chunk size.
+        seen.clear()
+        _MAPPED.clear()
+        _CATALOG_PROGRAMS.clear()
+
     monkeypatch.setattr(jax.lax, "map", recording)
     kwargs = dict(sampler="nuts", n_warmup=4, n_burnin=0, n_samples=4, init="prior", seed=0)
+    forget_compiled_programs()
     fit_spectra_catalog_mcmc(template, two_buckets, batch_size=2, **kwargs)
     assert seen == [2, 2]
-    seen.clear()
+    forget_compiled_programs()
     # The default is batch_size="auto": the budget covers these small buckets, so
     # each bucket runs as one lax.map chunk of its own galaxies (K = n_gal).
     fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
     assert seen == [int(batch.z.shape[0]) for _, batch, _ in two_buckets]
-    seen.clear()
+    forget_compiled_programs()
     fit_spectra_catalog_mcmc(template, two_buckets, batch_size=None, **kwargs)
     assert seen == [None, None]
 

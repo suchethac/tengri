@@ -165,7 +165,7 @@ def test_jitted_map_program_holds_no_shared_array_as_a_constant(
     map_with_shared(run_one, xs, shared, batch_size=2)
     monkeypatch.undo()
 
-    assert recorded["fn"].__qualname__ == "map_with_shared.<locals>.mapped"
+    assert recorded["fn"].__qualname__ == "_mapped_program.<locals>.mapped"
     jaxpr = jax.make_jaxpr(recorded["fn"])(*recorded["args"])
     ssp_nbytes = np.asarray(ssp.ssp_flux).nbytes
     big = [

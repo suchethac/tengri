@@ -63,6 +63,10 @@ from tests.contract._heap import release_heap
 
 pytestmark = pytest.mark.contract
 
+#: Ledger on vs off differ by rounding only: compiled in one graph the compiler fuses the
+#: arithmetic differently (measured on the Linux runner: at most 1.5e-14 relative).
+_LEDGER_ROUNDING_RTOL = 1e-13
+
 
 @pytest.fixture(autouse=True)
 def _release_compiled_ledgers():
@@ -706,9 +710,11 @@ def test_ledger_leaves_the_sed_unchanged(name):
     _skip_without_library(sel)
     sed_off, comps_off = _evaluate(_WAVE, sel, params, ledger=False)
     sed_on, comps_on = _evaluate(_WAVE, sel, params, ledger=True)
-    np.testing.assert_allclose(sed_on, sed_off, rtol=1e-15, atol=0.0)
+    np.testing.assert_allclose(sed_on, sed_off, rtol=_LEDGER_ROUNDING_RTOL, atol=0.0)
     for key in ("disc", "torus", "lines", "polar", "log_L_agn_direct_los"):
-        np.testing.assert_allclose(comps_on[key], comps_off[key], rtol=1e-15, atol=0.0)
+        np.testing.assert_allclose(
+            comps_on[key], comps_off[key], rtol=_LEDGER_ROUNDING_RTOL, atol=0.0
+        )
 
 
 #: Recipes documented as non-conserving (decision 3 of the 2026-10-13 rulings) and the

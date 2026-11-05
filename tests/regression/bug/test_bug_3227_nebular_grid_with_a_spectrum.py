@@ -15,7 +15,7 @@ Pinned here, against ``approx=None`` on the same model:
 
 * joint photometry and spectrum, and a spectrum-only model;
 * ``nebular_grid_can_serve_photometry()`` answers False whenever a spectrum is configured,
-  and still True for the photometry-only control, so the fitter advice and the behaviour
+  and still True for the photometry-only control, so the fitter advice and the behavior
   agree.
 """
 
