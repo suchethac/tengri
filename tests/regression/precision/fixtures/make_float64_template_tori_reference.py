@@ -94,6 +94,7 @@ def library_arrays(name):
         # The six-axis table is 190 kB as float64: keep its digest, and one sightline
         # column for a readable diff.
         table = np.asarray(mod.fritz_anisotropy(grid).values)
+        out["fritz/anisotropy"] = table
         out["fritz/anisotropy_sha256"] = np.array(table_digest(table))
         out["fritz/anisotropy_column"] = table[0, 0, 0, 0, 0, :]
     return out
