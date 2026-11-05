@@ -121,12 +121,22 @@ def test_batch_size_does_not_change_the_draws(template, two_buckets, batch_size)
     np.testing.assert_array_equal(chunked["divergences"], serial["divergences"])
 
 
-def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
-    """batch_size must be the lax.map chunk size, not a dropped keyword."""
-    import jax
+def _forget_compiled_programs():
+    """Drop the cached per-bucket samplers and maps, so the next call traces every bucket.
 
-    from tengri.inference.backends.mcmc.catalog import _MAPPED
+    The lax.map spy below records at trace time, and a cached program is not traced
+    again, so a call served from the cache records nothing.
+    """
+    from tengri.inference.backends.mcmc import catalog
     from tengri.inference.batched_spectro import _CATALOG_PROGRAMS
+
+    _CATALOG_PROGRAMS.clear()
+    catalog._MAPPED.clear()
+
+
+def _record_lax_map(monkeypatch):
+    """Patch ``jax.lax.map`` to log the ``batch_size`` of each traced call."""
+    import jax
 
     seen = []
     original = jax.lax.map
@@ -135,26 +145,43 @@ def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
         seen.append(kwargs.get("batch_size"))
         return original(f, xs, *args, **kwargs)
 
-    def forget_compiled_programs():
-        # lax.map runs while a program is traced, and a compiled program is reused, so
-        # each phase starts with no program to observe its own chunk size.
-        seen.clear()
-        _MAPPED.clear()
-        _CATALOG_PROGRAMS.clear()
-
     monkeypatch.setattr(jax.lax, "map", recording)
+    return seen
+
+
+def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
+    """batch_size must be the lax.map chunk size, not a dropped keyword."""
+    seen = _record_lax_map(monkeypatch)
     kwargs = dict(sampler="nuts", n_warmup=4, n_burnin=0, n_samples=4, init="prior", seed=0)
-    forget_compiled_programs()
+    _forget_compiled_programs()
     fit_spectra_catalog_mcmc(template, two_buckets, batch_size=2, **kwargs)
     assert seen == [2, 2]
-    forget_compiled_programs()
+    seen.clear()
     # The default is batch_size="auto": the budget covers these small buckets, so
     # each bucket runs as one lax.map chunk of its own galaxies (K = n_gal).
+    _forget_compiled_programs()
     fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
     assert seen == [int(batch.z.shape[0]) for _, batch, _ in two_buckets]
-    forget_compiled_programs()
+    seen.clear()
+    _forget_compiled_programs()
     fit_spectra_catalog_mcmc(template, two_buckets, batch_size=None, **kwargs)
     assert seen == [None, None]
+
+
+def test_batch_size_is_part_of_the_compiled_key(template, two_buckets, monkeypatch):
+    """A new batch_size compiles a new map, and a repeated one reuses it (no stale program)."""
+    seen = _record_lax_map(monkeypatch)
+    kwargs = dict(sampler="nuts", n_warmup=4, n_burnin=0, n_samples=4, init="prior", seed=0)
+    _forget_compiled_programs()
+    fit_spectra_catalog_mcmc(template, two_buckets, batch_size=2, **kwargs)
+    assert seen == [2, 2]
+    seen.clear()
+    # The sampler does not depend on batch_size, but the map does: batch 1 must trace.
+    fit_spectra_catalog_mcmc(template, two_buckets, batch_size=1, **kwargs)
+    assert seen == [1, 1]
+    seen.clear()
+    fit_spectra_catalog_mcmc(template, two_buckets, batch_size=1, **kwargs)
+    assert seen == []
 
 
 # ── Joint calibration + emission-line marginalization: batched vs per-galaxy NUTS (#3117) ──

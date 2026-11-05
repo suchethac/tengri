@@ -165,7 +165,9 @@ def test_jitted_map_program_holds_no_shared_array_as_a_constant(
     map_with_shared(run_one, xs, shared, batch_size=2)
     monkeypatch.undo()
 
-    assert recorded["fn"].__qualname__ == "_mapped_program.<locals>.mapped"
+    # The jitted map is the inner ``mapped`` of ``_mapped_program`` (cached per fn and
+    # batch_size) or of ``map_with_shared``; the name is not the contract, the recording is.
+    assert recorded["fn"].__qualname__.endswith(".<locals>.mapped"), recorded["fn"].__qualname__
     jaxpr = jax.make_jaxpr(recorded["fn"])(*recorded["args"])
     ssp_nbytes = np.asarray(ssp.ssp_flux).nbytes
     big = [
