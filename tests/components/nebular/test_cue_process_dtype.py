@@ -17,6 +17,9 @@ NLL against a recorded reference within measured bounds.
 
 from __future__ import annotations
 
+import hashlib
+import re
+import sys
 import warnings
 from pathlib import Path
 
@@ -98,6 +101,16 @@ _X64_OFF_REFERENCE = (
 _X64_OFF_SPEC_PEAK_RTOL = 5e-5
 _X64_OFF_GRAD_PEAK_RTOL = 3.7e-3
 _X64_OFF_NLL_RTOL = 1.4e-4
+#: The jax version CI pins, read from the constraints file so a bump cannot leave the digest
+#: below stale unnoticed.
+_CI_CONSTRAINTS = Path(__file__).resolve().parents[3] / ".github" / "ci-constraints.txt"
+_CI_JAX = re.search(r"^jax==(\S+)$", _CI_CONSTRAINTS.read_text(), re.MULTILINE).group(1)
+#: Spectrum digest CI Linux printed for jax 0.12.0 with the x64-off Cue path. This test came in
+#: with #3253, and the digest it replaced was recorded on macOS at jax 0.11.1, so it never held
+#: in CI. An exact digest holds only at one platform and JAX version; the reference bounds above
+#: cover everywhere else. Checked only on Linux at the pinned version; a stale pin fails.
+_CI_LINUX_SPEC_JAX = "0.12.0"
+_CI_LINUX_SPEC_SHA256 = "697f52a76b402428cc153a88ae8c76facf79356354e6c202ad302a1d1da80e0f"
 
 
 def _build(ssp, *, neb: str = "cue"):
@@ -290,3 +303,13 @@ def test_x64_off_cue_matches_float32_reference():
     assert spec_rel <= _X64_OFF_SPEC_PEAK_RTOL, f"spectrum peak-relative {spec_rel:.3e}"
     assert grad_rel <= _X64_OFF_GRAD_PEAK_RTOL, f"gradient peak-relative {grad_rel:.3e}"
     assert nll_rel <= _X64_OFF_NLL_RTOL, f"NLL relative {nll_rel:.3e}"
+    if sys.platform != "linux" or jax.__version__ != _CI_JAX:
+        return
+    # Exact check at the CI platform and JAX version only. A pin bump fails here (the digest
+    # below is for _CI_LINUX_SPEC_JAX), so a stale digest cannot pass silently.
+    assert _CI_JAX == _CI_LINUX_SPEC_JAX, (
+        f"CI pins jax {_CI_JAX} but the Linux spectrum digest was recorded at "
+        f"{_CI_LINUX_SPEC_JAX}: re-record it from CI"
+    )
+    digest = hashlib.sha256(np.ascontiguousarray(spec).tobytes()).hexdigest()
+    assert digest == _CI_LINUX_SPEC_SHA256, f"spectrum sha256 {digest}"

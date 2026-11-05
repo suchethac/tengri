@@ -7,11 +7,18 @@ root::
 
 It reuses the fixture and helpers of ``tests/components/nebular/test_cue_process_dtype.py``
 so the recipe is the one the test replays. The output is ``cue_x64_off_reference.npz``.
+
+The exact spectrum digest that the test asserts on Linux at jax 0.12.0 (697f52...) is CI's
+printed value, not this script's: this script runs on macOS and prints its own digest, which
+differs. The bit-exact check applies only at the CI platform and JAX version, and the
+reference bound covers everywhere else.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import sys
 from pathlib import Path
 
 import jax
@@ -56,7 +63,8 @@ def main() -> None:
         grad = np.asarray(jax.grad(lambda u: nlp(unravel(u), ctx.data_args))(flat))
     assert spec.dtype == np.float32 and grad.dtype == np.float32
     np.savez(OUT, spec=spec, grad=grad, nll=np.asarray(float(nll), dtype=np.float64))
-    print(f"wrote {OUT} (jax {jax.__version__})")
+    digest = hashlib.sha256(np.ascontiguousarray(spec).tobytes()).hexdigest()
+    print(f"wrote {OUT} (jax {jax.__version__}, platform {sys.platform}, spec sha256 {digest})")
 
 
 if __name__ == "__main__":
