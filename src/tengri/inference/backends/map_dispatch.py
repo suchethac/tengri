@@ -379,14 +379,23 @@ def _run_map_scipy(
     def flat_loss(vec):
         return loss_fn(unravel_fn(vec), data_args)
 
-    x_final, final_loss, grad_norm, decrement, converged, attempts = _certify_map_point(
+    x_final, final_loss, grad_norm, decrement, converged, attempts, reason = _certify_map_point(
         flat_loss,
         jnp.asarray(result.x),
         scipy_success=bool(result.success),
         n_steps=n_steps,
         gtol=tol,
     )
-    if not converged:
+    if reason == "hessian_not_finite":
+        warn_measured(
+            f"MAP point not certified: the Hessian at the returned point has non-finite "
+            f"entries after {attempts} optimizer run(s), so its curvature and Newton "
+            f"decrement are unknown. The point is reported with map_converged=False. "
+            f"scipy reported {result.message!r}.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
+    elif not converged:
         warn_measured(
             f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
             f"decrement {decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}. "
@@ -427,6 +436,7 @@ def _run_map_scipy(
             "map_converged": converged,
             "map_decrement": decrement,
             "map_attempts": attempts,
+            "map_reason": reason,
             "map_message": str(result.message),
         },
         loss_history=loss_hist,
@@ -461,9 +471,15 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     decrement : float or None
         Newton decrement at ``x`` [nats], ``None`` when the certificate was not needed.
     stationary : bool
-        Whether ``x`` is accepted as a MAP point.
+        Whether ``x`` is accepted as a MAP point. False whenever the Hessian is not
+        finite: curvature is then unknown, so no point is certified.
     attempts : int
         Optimizer runs spent, scipy's included.
+    reason : str or None
+        ``"hessian_not_finite"`` when the Hessian at the reported point has a
+        non-finite entry, ``None`` otherwise. The continuation rounds stop at once
+        for that status, because another L-BFGS run from the same point does not
+        restore a finite Hessian.
 
     Notes
     -----
@@ -471,22 +487,35 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     success and the re-evaluated max |grad| at ``x`` is below ``gtol``, the point is
     accepted without the Hessian (``stat`` is ``None``, one attempt). Otherwise the
     Newton decrement is measured, and a point that is not stationary is continued with
-    the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs.
+    the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs. A non-finite
+    Hessian is never read as a zero decrement: it yields ``stationary=False`` with a NaN
+    decrement and ``reason="hessian_not_finite"``.
     """
     value, grad = jax.jit(jax.value_and_grad(flat_loss))(x)
     if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
-        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1
+        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
     stat = stationarity(flat_loss, x)
     attempts = 1
     if scipy_success and stat.stationary:
-        return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts
+        return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
     for _ in range(_MAP_CONTINUATION_ROUNDS):
+        if not stat.hessian_finite:
+            break
         x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
         attempts += 1
         stat = stationarity(flat_loss, x)
         if stat.stationary:
             break
-    return x, stat.nlp, stat.grad_norm, stat.decrement, stat.stationary, attempts
+    reason = None if stat.hessian_finite else "hessian_not_finite"
+    return (
+        x,
+        stat.nlp,
+        stat.grad_norm,
+        stat.decrement,
+        stat.stationary,
+        attempts,
+        reason,
+    )
 
 
 def _best_finite_restart(final_losses) -> int:
