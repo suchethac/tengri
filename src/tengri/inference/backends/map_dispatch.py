@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import logging
 import time
+import weakref
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
@@ -273,8 +276,45 @@ def _flat_map_loss(loss_fn, data_args, unravel_fn):
     return flat_loss
 
 
-def _run_map_scipy(
-    context: InferenceContext,
+@dataclass(frozen=True)
+class _ScipyRestart:
+    """One scipy L-BFGS-B run, stopped and not yet certified (see :func:`_scipy_restart`).
+
+    Attributes
+    ----------
+    x : ndarray, shape (D,)
+        Flat standardized point at scipy's stop.
+    unravel_fn : callable
+        Maps the flat vector back to the parameter pytree.
+    nit : int
+        scipy iterations.
+    n_evals : int
+        Objective-and-gradient evaluations.
+    losses : list of float
+        Loss at the initial point, then at each iterate.
+    wall_time : float
+        Seconds spent in scipy's loop.
+    success : bool
+        scipy's own success flag.
+    message : str
+        scipy's stop message.
+    final_loss : float
+        Loss at ``x`` before any certificate [nats]. Multistart ranks restarts on it.
+    """
+
+    x: np.ndarray
+    unravel_fn: Callable
+    nit: int
+    n_evals: int
+    losses: list
+    wall_time: float
+    success: bool
+    message: str
+    final_loss: float
+
+
+def _scipy_restart(
+    context,
     *,
     init_params,
     grad_fn,
@@ -283,67 +323,20 @@ def _run_map_scipy(
     optimizer,
     n_steps,
     tol,
-    verbose,
     verbose_steps=False,
     print_every=50,
-    certify_loss=None,
-):
-    """MAP optimization via scipy quasi-Newton solvers.
+) -> _ScipyRestart:
+    """Run scipy's L-BFGS-B from ``init_params`` and stop there, with no certificate.
 
-    Uses scipy's L-BFGS-B / BFGS, pure Fortran optimizer with zero
-    JAX compilation.  Only the forward model + gradient evaluation is
-    JIT-compiled (via the cached ``grad_fn``).
-
-    This is ~100x faster cold-start than jaxopt's ``solver.run(jit=True)``,
-    which compiles the entire while_loop + line-search into one monolithic
-    XLA program.
+    The optimizer half of :func:`_run_map_scipy`. Every multistart restart runs this,
+    and only the winning restart is certified. It needs at least one free parameter:
+    scipy does not call the objective on an empty ``x0``, so the caller handles the
+    zero-parameter case.
     """
     from scipy.optimize import minimize as scipy_minimize
 
-    from tengri.inference.posterior import Posterior
-
     scipy_method = {"lbfgs": "L-BFGS-B", "lbfgs_scipy": "L-BFGS-B"}[optimizer]
-    opt_name = {"lbfgs": "L-BFGS", "lbfgs_scipy": "L-BFGS"}[optimizer]
-
-    # Flatten params to 1D array for scipy
     init_flat, unravel_fn = ravel_pytree(init_params)
-
-    # Zero free parameters (every parameter Fixed): scipy's L-BFGS-B refuses to
-    # call the objective on an empty x0 -- confirmed by direct test, it returns
-    # a placeholder ``OptimizeResult(fun=0.0, nit=0)`` no matter what the
-    # objective would report, silently discarding the real loss (#lbfgs-default).
-    # Evaluate the (single, fixed) point directly instead of asking scipy to
-    # "optimize" nothing. jax.scipy.optimize.minimize does not share this bug
-    # (verified: it returns the true value), so only this scipy path needs it.
-    if init_flat.size == 0:
-        t0 = time.time()
-        final_loss_val, grad_val = grad_fn(init_params, data_args)
-        jax.block_until_ready((final_loss_val, grad_val))
-        wall_time = time.time() - t0
-        _reject_nonfinite_map(init_params)
-        best_params_physical = context.to_physical(init_params)
-        final_loss = float(final_loss_val)
-        if verbose:
-            print(
-                f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
-                f"0 free parameters (nothing to optimize), loss={final_loss:.6f}"
-            )
-        return Posterior(
-            samples=None,
-            params=best_params_physical,
-            method=f"MAP ({opt_name})",
-            wall_time_s=wall_time,
-            diagnostics={
-                "n_steps": 0,
-                "n_evals": 1,
-                "final_loss": final_loss,
-                "optimizer": opt_name,
-                "converged": True,
-                "grad_norm": 0.0,
-            },
-            loss_history=jnp.asarray([final_loss]),
-            _model=context.model,
-        )
 
     # Warmup: ensure grad_fn is compiled before timing
     _warmup = grad_fn(init_params, data_args)
@@ -389,14 +382,42 @@ def _run_map_scipy(
     wall_time = time.time() - t0
 
     _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
+    return _ScipyRestart(
+        x=np.asarray(result.x),
+        unravel_fn=unravel_fn,
+        nit=int(result.nit),
+        n_evals=n_evals[0],
+        losses=losses,
+        wall_time=wall_time,
+        success=bool(result.success),
+        message=str(result.message),
+        final_loss=float(result.fun),
+    )
 
-    if certify_loss is None:
-        certify_loss = _flat_map_loss(loss_fn, data_args, unravel_fn)
+
+def _certified_scipy_posterior(
+    context,
+    restart,
+    *,
+    certify_loss,
+    n_steps,
+    tol,
+    opt_name,
+    method,
+    wall_time,
+    extra_diagnostics=None,
+):
+    """Certify one stopped restart's point, warn if it is not stationary, and build its MAP Posterior.
+
+    The diagnostics describe this point: its loss after any continuation, its
+    certificate, and scipy's message. ``extra_diagnostics`` adds keys to them.
+    """
+    from tengri.inference.posterior import Posterior
 
     x_final, final_loss, grad_norm, decrement, converged, attempts, reason = _certify_map_point(
         certify_loss,
-        jnp.asarray(result.x),
-        scipy_success=bool(result.success),
+        jnp.asarray(restart.x),
+        scipy_success=restart.success,
         n_steps=n_steps,
         gtol=tol,
     )
@@ -405,7 +426,7 @@ def _run_map_scipy(
             f"MAP point not certified: the Hessian at the returned point has non-finite "
             f"entries after {attempts} optimizer run(s), so its curvature and Newton "
             f"decrement are unknown. The point is reported with map_converged=False. "
-            f"scipy reported {result.message!r}.",
+            f"scipy reported {restart.message!r}.",
             decrement=decrement,
             grad_norm=grad_norm,
         )
@@ -413,49 +434,173 @@ def _run_map_scipy(
         warn_measured(
             f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
             f"decrement {decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}. "
-            f"scipy reported {result.message!r}. The returned point is not a minimum.",
+            f"scipy reported {restart.message!r}. The returned point is not a minimum.",
             decrement=decrement,
             grad_norm=grad_norm,
         )
 
-    best_params = unravel_fn(x_final)
+    best_params = restart.unravel_fn(x_final)
     _reject_nonfinite_map(best_params)
-    best_params_physical = context.to_physical(best_params)
 
-    if verbose:
-        cv_msg = " (converged)" if converged else ""
-        print(
-            f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
-            f"{result.nit} iters, {n_evals[0]} evals{cv_msg}, "
-            f"loss={final_loss:.6f}"
-        )
-
-    # ``losses`` always has at least the seeded initial-point value (above),
-    # even when scipy converges in zero iterations and ``callback`` never
-    # fires, so no ``if losses else`` fallback is needed here.
-    loss_hist = jnp.asarray(losses)
-
+    diagnostics = {
+        "n_steps": restart.nit,
+        "n_evals": restart.n_evals,
+        "final_loss": final_loss,
+        "optimizer": opt_name,
+        "converged": converged,
+        "grad_norm": grad_norm,
+        "map_converged": converged,
+        "map_decrement": decrement,
+        "map_attempts": attempts,
+        "map_reason": reason,
+        "map_message": restart.message,
+    }
+    diagnostics.update(extra_diagnostics or {})
+    # ``loss_history`` always has at least the seeded initial-point value, even when
+    # scipy converges in zero iterations and ``callback`` never fires.
     return Posterior(
         samples=None,
-        params=best_params_physical,
-        method=f"MAP ({opt_name})",
+        params=context.to_physical(best_params),
+        method=method,
         wall_time_s=wall_time,
-        diagnostics={
-            "n_steps": result.nit,
-            "n_evals": n_evals[0],
-            "final_loss": final_loss,
-            "optimizer": opt_name,
-            "converged": converged,
-            "grad_norm": grad_norm,
-            "map_converged": converged,
-            "map_decrement": decrement,
-            "map_attempts": attempts,
-            "map_reason": reason,
-            "map_message": str(result.message),
-        },
-        loss_history=loss_hist,
+        diagnostics=diagnostics,
+        loss_history=jnp.asarray(restart.losses),
         _model=context.model,
     )
+
+
+def _run_map_scipy(
+    context: InferenceContext,
+    *,
+    init_params,
+    grad_fn,
+    loss_fn,
+    data_args,
+    optimizer,
+    n_steps,
+    tol,
+    verbose,
+    verbose_steps=False,
+    print_every=50,
+):
+    """MAP optimization via scipy quasi-Newton solvers.
+
+    Uses scipy's L-BFGS-B / BFGS, pure Fortran optimizer with zero
+    JAX compilation.  Only the forward model + gradient evaluation is
+    JIT-compiled (via the cached ``grad_fn``).
+
+    This is ~100x faster cold-start than jaxopt's ``solver.run(jit=True)``,
+    which compiles the entire while_loop + line-search into one monolithic
+    XLA program.
+
+    The single start is certified (see :func:`_certify_map_point`). The multistart
+    certifies only its winning restart, through the same helpers.
+    """
+    from tengri.inference.posterior import Posterior
+
+    opt_name = {"lbfgs": "L-BFGS", "lbfgs_scipy": "L-BFGS"}[optimizer]
+
+    # Flatten params to 1D array for scipy
+    init_flat, unravel_fn = ravel_pytree(init_params)
+
+    # Zero free parameters (every parameter Fixed): scipy's L-BFGS-B refuses to
+    # call the objective on an empty x0 -- confirmed by direct test, it returns
+    # a placeholder ``OptimizeResult(fun=0.0, nit=0)`` no matter what the
+    # objective would report, silently discarding the real loss (#lbfgs-default).
+    # Evaluate the (single, fixed) point directly instead of asking scipy to
+    # "optimize" nothing. jax.scipy.optimize.minimize does not share this bug
+    # (verified: it returns the true value), so only this scipy path needs it.
+    if init_flat.size == 0:
+        t0 = time.time()
+        final_loss_val, grad_val = grad_fn(init_params, data_args)
+        jax.block_until_ready((final_loss_val, grad_val))
+        wall_time = time.time() - t0
+        _reject_nonfinite_map(init_params)
+        best_params_physical = context.to_physical(init_params)
+        final_loss = float(final_loss_val)
+        if verbose:
+            print(
+                f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
+                f"0 free parameters (nothing to optimize), loss={final_loss:.6f}"
+            )
+        return Posterior(
+            samples=None,
+            params=best_params_physical,
+            method=f"MAP ({opt_name})",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_steps": 0,
+                "n_evals": 1,
+                "final_loss": final_loss,
+                "optimizer": opt_name,
+                "converged": True,
+                "grad_norm": 0.0,
+            },
+            loss_history=jnp.asarray([final_loss]),
+            _model=context.model,
+        )
+
+    restart = _scipy_restart(
+        context,
+        init_params=init_params,
+        grad_fn=grad_fn,
+        loss_fn=loss_fn,
+        data_args=data_args,
+        optimizer=optimizer,
+        n_steps=n_steps,
+        tol=tol,
+        verbose_steps=verbose_steps,
+        print_every=print_every,
+    )
+    posterior = _certified_scipy_posterior(
+        context,
+        restart,
+        certify_loss=_flat_map_loss(loss_fn, data_args, unravel_fn),
+        n_steps=n_steps,
+        tol=tol,
+        opt_name=opt_name,
+        method=f"MAP ({opt_name})",
+        wall_time=restart.wall_time,
+    )
+
+    if verbose:
+        cv_msg = " (converged)" if posterior.diagnostics["converged"] else ""
+        print(
+            f"  MAP ({opt_name}) complete in {restart.wall_time:.1f}s, "
+            f"{restart.nit} iters, {restart.n_evals} evals{cv_msg}, "
+            f"loss={posterior.diagnostics['final_loss']:.6f}"
+        )
+    return posterior
+
+
+#: Jitted continuation rounds keyed weakly on the objective, as ``compiled_derivatives``.
+_ROUND_RUNNERS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _compiled_round(flat_loss):
+    """Return ``run(x, *, n_steps, gtol) -> (x, value, trace)``, jitted once per objective.
+
+    The round is :func:`lbfgs_to_gtol`. Its while loop is built from fresh closures on
+    every call, so run un-jitted each round compiled its condition and body again. Keyed
+    weakly on ``flat_loss``, a later round on the same objective reuses the program.
+    ``n_steps`` and ``gtol`` are static, so the constants match the un-jitted call.
+    """
+    runner = _ROUND_RUNNERS.get(flat_loss)
+    if runner is None:
+        loss_ref = weakref.ref(flat_loss)
+
+        def live(vec):
+            f = loss_ref()
+            if f is None:
+                raise RuntimeError("the MAP objective was collected while its continuation ran")
+            return f(vec)
+
+        def run(x, n_steps, gtol):
+            return lbfgs_to_gtol(live, x, n_steps=n_steps, gtol=gtol)
+
+        runner = jax.jit(run, static_argnames=("n_steps", "gtol"))
+        _ROUND_RUNNERS[flat_loss] = runner
+    return runner
 
 
 def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
@@ -506,6 +651,7 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     decrement and ``reason="hessian_not_finite"``.
     """
     value_and_grad, _ = compiled_derivatives(flat_loss)
+    run_round = _compiled_round(flat_loss)
     value, grad = value_and_grad(x)
     if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
         return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
@@ -516,7 +662,7 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     for _ in range(_MAP_CONTINUATION_ROUNDS):
         if not stat.hessian_finite:
             break
-        x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
+        x, _, _ = run_round(x, n_steps=n_steps, gtol=gtol)
         attempts += 1
         stat = stationarity(flat_loss, x)
         if stat.stationary:
@@ -688,7 +834,7 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
 def _run_map_multistart_scipy(
     context, *, key, n_restarts, n_steps, tol, optimizer, verbose, loss_fn, data_args
 ):
-    """Run ``n_restarts`` scipy L-BFGS-B optimizations one after another; keep the best.
+    """Run ``n_restarts`` scipy L-BFGS-B optimizations one after another; certify the best.
 
     The multistart that :func:`_maybe_map_init` seeds every sampler with.
     Measured 2026-09-12 on notebooks/07's tsnorm photometry model: the vmapped
@@ -700,63 +846,89 @@ def _run_map_multistart_scipy(
     L-BFGS-B is not JAX-traceable, so the restarts cannot be vmapped; at
     ~0.4 s per start on a D <= 12 photometry fit a sequential loop is cheap,
     and unlike JAX BFGS every start actually converges. Each restart draws
-    its own init from a split of ``key``; the lowest finite final loss wins
-    (:func:`_best_finite_restart` semantics: a start that diverged to a
-    non-finite loss never wins).
+    its own init from a split of ``key``.
+
+    The selection rule: every restart runs scipy's optimizer only, with no
+    certificate. The winner is the lowest finite loss at scipy's stop
+    (:func:`_best_finite_restart`; a restart that diverged to a non-finite loss never
+    wins). Only the winner is then certified (:func:`_certify_map_point`), and the
+    returned point, ``map_converged``, ``map_reason`` and the diagnostics describe that
+    winner. Continuation runs after the winner is chosen, so it cannot change which
+    restart won. Certification costs one restart's worth of work, not ``n_restarts``
+    times that.
+
+    With zero free parameters every restart is the same fixed point, so a single
+    run is returned.
     """
-    from tengri.inference.posterior import Posterior
+    import dataclasses
 
     keys = jax.random.split(key, n_restarts)
-    results = []
-    certify_loss = None
     t0 = time.time()
-    for k in keys:
-        init_params = context.initial_params(k, init_from=None)
-        if certify_loss is None:
-            # One objective for every restart: the restarts share a pytree structure, so
-            # the first restart's unravel serves all, and the certificate compiles once.
-            certify_loss = _flat_map_loss(loss_fn, data_args, ravel_pytree(init_params)[1])
-        results.append(
-            _run_map_scipy(
-                context,
-                init_params=init_params,
-                grad_fn=context.grad_fn,
-                loss_fn=loss_fn,
-                data_args=data_args,
-                optimizer=optimizer,
-                n_steps=n_steps,
-                tol=tol,
-                verbose=False,
-                certify_loss=certify_loss,
-            )
+    if ravel_pytree(context.initial_params(keys[0], init_from=None))[0].size == 0:
+        single = _run_map_scipy(
+            context,
+            init_params=context.initial_params(keys[0], init_from=None),
+            grad_fn=context.grad_fn,
+            loss_fn=loss_fn,
+            data_args=data_args,
+            optimizer=optimizer,
+            n_steps=n_steps,
+            tol=tol,
+            verbose=verbose,
         )
-    final_losses = jnp.asarray([float(r.diagnostics["final_loss"]) for r in results])
+        return dataclasses.replace(
+            single,
+            method=f"MAP (L-BFGS, {n_restarts} restarts)",
+            diagnostics={
+                **single.diagnostics,
+                "n_restarts": int(n_restarts),
+                "backend": "scipy_lbfgsb_sequential",
+                "restart": 0,
+            },
+        )
+
+    restarts = [
+        _scipy_restart(
+            context,
+            init_params=context.initial_params(k, init_from=None),
+            grad_fn=context.grad_fn,
+            loss_fn=loss_fn,
+            data_args=data_args,
+            optimizer=optimizer,
+            n_steps=n_steps,
+            tol=tol,
+        )
+        for k in keys
+    ]
+    final_losses = jnp.asarray([r.final_loss for r in restarts])
     best = int(_best_finite_restart(final_losses))
-    winner = results[best]
-    wall_time = time.time() - t0
+    winner = restarts[best]
+    posterior = _certified_scipy_posterior(
+        context,
+        winner,
+        certify_loss=_flat_map_loss(loss_fn, data_args, winner.unravel_fn),
+        n_steps=n_steps,
+        tol=tol,
+        opt_name="L-BFGS",
+        method=f"MAP (L-BFGS, {n_restarts} restarts)",
+        wall_time=time.time() - t0,
+        extra_diagnostics={
+            "n_restarts": int(n_restarts),
+            "backend": "scipy_lbfgsb_sequential",
+            "restart": best,
+        },
+    )
     if verbose:
         finite = np.asarray(final_losses, dtype=float)
         n_diverged = int(np.sum(~np.isfinite(finite)))
         worst = float(np.max(finite[np.isfinite(finite)]))
         diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
         print(
-            f"  MAP (L-BFGS x{n_restarts} restarts, scipy) complete in {wall_time:.1f}s, "
-            f"best loss={float(final_losses[best]):.4f} (restart {best}; "
+            f"  MAP (L-BFGS x{n_restarts} restarts, scipy) complete in {posterior.wall_time_s:.1f}s, "
+            f"best loss={posterior.diagnostics['final_loss']:.4f} (restart {best}; "
             f"worst finite={worst:.1f}{diverged_note})"
         )
-    diagnostics = dict(winner.diagnostics)
-    diagnostics.update(
-        {"n_restarts": int(n_restarts), "backend": "scipy_lbfgsb_sequential", "restart": best}
-    )
-    return Posterior(
-        samples=None,
-        params=winner.params,
-        method=f"MAP (L-BFGS, {n_restarts} restarts)",
-        wall_time_s=wall_time,
-        diagnostics=diagnostics,
-        loss_history=winner.loss_history,
-        _model=context.model,
-    )
+    return posterior
 
 
 def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer, verbose):
