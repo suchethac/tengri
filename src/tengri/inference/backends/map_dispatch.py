@@ -407,7 +407,7 @@ def _certified_scipy_posterior(
     wall_time,
     extra_diagnostics=None,
 ):
-    """Certify one stopped restart's point, warn if it is not stationary, and build its MAP Posterior.
+    """Certify one stopped restart's point, warn if not stationary, and build its MAP Posterior.
 
     The diagnostics describe this point: its loss after any continuation, its
     certificate, and scipy's message. ``extra_diagnostics`` adds keys to them.
@@ -924,7 +924,8 @@ def _run_map_multistart_scipy(
         worst = float(np.max(finite[np.isfinite(finite)]))
         diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
         print(
-            f"  MAP (L-BFGS x{n_restarts} restarts, scipy) complete in {posterior.wall_time_s:.1f}s, "
+            f"  MAP (L-BFGS x{n_restarts} restarts, scipy) complete in "
+            f"{posterior.wall_time_s:.1f}s, "
             f"best loss={posterior.diagnostics['final_loss']:.4f} (restart {best}; "
             f"worst finite={worst:.1f}{diverged_note})"
         )

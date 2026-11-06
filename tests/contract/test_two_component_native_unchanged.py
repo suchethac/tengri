@@ -14,8 +14,6 @@ regenerating the literals means running the same build on ``fb0aa11c0``.
 
 from __future__ import annotations
 
-import sys
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -182,16 +180,15 @@ def native_outputs(ssp):
 
 
 def _assert_matches_base(values, base):
-    """Bit identity on the recording platform; agreement to 1e-12 elsewhere.
+    """Agreement to rtol 1e-12, not bit identity.
 
-    The literals were recorded on macOS. The same build on Linux (glibc libm) differs
-    from them in the last bits, as the continuity digests do (#3242), so off Darwin the
-    comparison is at rtol 1e-12. A changed native build moves these values by far more.
+    The literals were recorded at JAX 0.11.1 on macOS. Measured on the same Mac: at 0.11.1
+    the outputs are bit-identical to them; at 0.12.0 the photometry differs by at most
+    2.9e-14 relative (5 of 5 values) and the rest-frame SED by at most 5.4e-16 (16 of 60).
+    The gap follows the JAX version, not the platform, so there is no platform split.
+    A changed native build moves these values by far more than 1e-12.
     """
-    if sys.platform == "darwin":
-        assert np.array_equal(values, base)
-    else:
-        np.testing.assert_allclose(values, base, rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(values, base, rtol=1e-12, atol=0.0)
 
 
 def test_native_photometry_bit_identical_to_base(native_outputs):
