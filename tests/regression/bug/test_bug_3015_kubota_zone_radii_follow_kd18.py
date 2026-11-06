@@ -148,6 +148,7 @@ def test_sed_is_finite_with_finite_gradient_across_the_switch(log_mbh):
         assert np.all(np.isfinite(nu_values)), (log_lbol, nu_values)
         _, grad = value_and_grad(lb)
         assert np.isfinite(float(grad)), log_lbol
+        assert float(grad) != 0.0, log_lbol
 
 
 def test_unreachable_regime_emits_no_disc_or_warm_light_and_corona_is_the_disc_share():

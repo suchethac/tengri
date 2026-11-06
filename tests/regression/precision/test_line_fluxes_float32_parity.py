@@ -121,23 +121,28 @@ _DUST_FREE = {
 #: share of Q_H and the line fluxes move by up to 4.4e-7 relative. The previous
 #: values are kept as ``_CUE_F64_REF_100MYR_CUT`` and are reproduced exactly with
 #: ``neb={'lyc_max_age_yr': 1e8}``.
+#: Re-pinned after the Cue float64 move (#3253): float64 Cue no longer rounds its weights
+#: to float32, so every line moves by -8e-8 to -2.9e-7 relative (values before:
+#: 4.895990747024662e-16, 5.986024961156531e-16, 1.7280498511462056e-15, 5.406742570472271e-16).
 _CUE_F64_REF = np.array(
     [
-        4.895990747024662e-16,
-        5.986024961156531e-16,
-        1.7280498511462056e-15,
-        5.406742570472271e-16,
+        4.895990319599183e-16,
+        5.986023216024387e-16,
+        1.728049709748532e-15,
+        5.406741105192729e-16,
     ]
 )
 
 #: The 100 Myr-cut reference: ``_CUE_F64_REF`` as captured before Cue counted every
-#: stellar age. ``lyc_max_age_yr=1e8`` must reproduce it exactly.
+#: stellar age. ``lyc_max_age_yr=1e8`` must reproduce it exactly. Re-pinned after the Cue
+#: float64 move (#3253): -3e-7 to -5e-7 relative (values before: 4.895990718894339e-16,
+#: 5.986027602596631e-16, 1.7280498380004032e-15, 5.406742978989404e-16).
 _CUE_F64_REF_100MYR_CUT = np.array(
     [
-        4.895990718894339e-16,
-        5.986027602596631e-16,
-        1.7280498380004032e-15,
-        5.406742978989404e-16,
+        4.895989211624023e-16,
+        5.986024530552999e-16,
+        1.7280493151633745e-15,
+        5.406740404021367e-16,
     ]
 )
 

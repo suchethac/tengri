@@ -43,10 +43,13 @@ _QUENCHED = (0.3, 10.0)
 
 #: ``Halpha`` and ``nion`` of the 100 Myr cut, measured on the unmodified tree (commit 71021d4eb)
 #: on the old-LyC grid above. {(tau_gyr, age_gyr): (L_Halpha [erg/s], Q_H [photons/s])}.
+#: Halpha re-pinned after the Cue float64 move (the float32 Cue pins were 9.566812979748e29,
+#: 1.161122427375e39, 4.544649942429e42; the new Halpha is -3.4e-6, -2.0e-6, +2.4e-6 relative,
+#: the float32 to float64 Cue rounding). Q_H is bit-identical: it does not go through Cue.
 _CUT_BASELINE = {
-    (0.3, 10.0): (9.56681297974834e29, 5.022708261307399e50),
-    (1.0, 10.0): (1.1611224273751623e39, 1.3372329010187178e51),
-    (3.0, 1.0): (4.544649942429051e42, 3.269331004026739e54),
+    (0.3, 10.0): (9.566780466105229e29, 5.022708261307399e50),
+    (1.0, 10.0): (1.1611200717310071e39, 1.3372329010187178e51),
+    (3.0, 1.0): (4.5446609399766484e42, 3.269331004026739e54),
     (1.0, 5.0): (8.968849307789703e40, 6.499872e52),
 }
 #: Combine output of the cut at the last case above (tau = 1, age = 5): frozen from the tree
@@ -195,10 +198,13 @@ def test_quenched_population_has_emission_by_default_and_none_under_the_cut():
 #: Relative change of Halpha from the 100 Myr cut to all ages, measured on the old-LyC grid.
 #: {(tau_gyr, age_gyr): change}. The old-star share of Q_H is 5e-7 (tau 3, age 1 Gyr) to
 #: 0.12% (tau 3, age 5 Gyr); tau 1 Gyr at 5 Gyr is a mixed population (0.74%).
+#: The two 1 Gyr values were re-pinned after the Cue float64 move (float32 Cue gave
+#: 4.6171e-07 and 8.5761e-07). They are differences of two Halpha values that each move by
+#: ~3e-6 relative, so they sit at the Cue rounding floor; the < 0.5% bound is the physics.
 _YOUNG_SF_CHANGE = {
-    (3.0, 1.0): 4.6171309242559744e-07,
-    (1.0, 1.0): 8.576091550249743e-07,
-    (3.0, 5.0): 0.0012259490058386113,
+    (3.0, 1.0): 1.3909137182022135e-06,
+    (1.0, 1.0): 2.459933101217615e-06,
+    (3.0, 5.0): 0.0012222082098272136,
 }
 _MIXED_CHANGE = {(1.0, 5.0): 0.00742887834618533}
 

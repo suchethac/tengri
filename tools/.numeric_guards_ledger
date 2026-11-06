@@ -111,7 +111,9 @@ src/tengri/forward/emission_helpers.py | jnp.maximum with floor 1e-30 < 1e-20 ->
 src/tengri/forward/prediction.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/inference/backends/nested/utils.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/inference/posterior.py | jnp.maximum with floor 1e-30 < 1e-20 -> 4
-src/tengri/observation/banded.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+# banded_forward_substitution (#3256): clip(lag, 0, half) bounds an integer band index for the
+# gather; the out-of-band entries are masked by `valid`, and it is never a divisor or logged.
+src/tengri/observation/banded.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/observation/eline_priors.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/observation/eline_priors.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/line_ratio_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1

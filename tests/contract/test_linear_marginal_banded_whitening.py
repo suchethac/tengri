@@ -227,6 +227,7 @@ def test_float32_value_and_gradient_are_finite_and_nonzero():
         val, grads = jax.value_and_grad(value, argnums=(0, 1, 2))(*args)
         assert val.dtype == jnp.float32
         assert np.isfinite(float(val))
+        assert float(val) != 0.0
         for g in grads:
             g_np = np.asarray(g)
             assert np.all(np.isfinite(g_np))
