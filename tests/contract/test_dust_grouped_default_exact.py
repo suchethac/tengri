@@ -199,7 +199,9 @@ def _assert_agree(model_ref, model_new, p, kind, label, names=_PROPERTY_NAMES):
     obj = _objective(kind, names)
     v0, g0 = jax.value_and_grad(lambda q: obj(model_ref, q))(p)
     v1, g1 = jax.value_and_grad(lambda q: obj(model_new, q))(p)
-    assert np.isfinite(float(v0)), f"{label}: non-finite reference value"
+    assert np.isfinite(float(v0)) and abs(float(v0)) > 0.0, (
+        f"{label}: reference value is non-finite or identically zero"
+    )
     value_rel = _max_rel(v1, v0)
     assert value_rel <= RTOL, f"{label}: value rel diff {value_rel:.3e}"
     grad_rel = 0.0
@@ -207,6 +209,12 @@ def _assert_agree(model_ref, model_new, p, kind, label, names=_PROPERTY_NAMES):
     for k in g0:
         a, b = np.asarray(g1[k]), np.asarray(g0[k])
         assert np.all(np.isfinite(b)), f"{label}: non-finite reference gradient {k}"
+        # The grouped gradient must be finite, and non-zero wherever the reference is:
+        # a parameter whose reference gradient is exactly zero may stay zero.
+        assert np.all(np.isfinite(a)), f"{label}: non-finite grouped gradient {k}"
+        assert np.all(np.abs(a[b != 0.0]) > 0.0), (
+            f"{label}: grouped gradient {k} vanishes where the reference does not"
+        )
         rel = float(np.max(np.abs(a - b)) / scale)
         grad_rel = max(grad_rel, rel)
         assert rel <= RTOL, f"{label}: d/d{k} rel diff {rel:.3e}"
@@ -482,7 +490,9 @@ def test_grouped_float32_gradient_is_finite_and_nonzero(ssp_fsps, ssp_obs):
         }
         obj = _objective("phot")
         value, grads = jax.value_and_grad(lambda q: obj(model, q))(p)
-    assert np.isfinite(float(value))
+    assert np.isfinite(float(value)) and abs(float(value)) > 0.0, (
+        "float32 photometric objective is non-finite or identically zero"
+    )
     for k, g in grads.items():
         assert np.all(np.isfinite(np.asarray(g))), k
     assert any(np.any(np.asarray(g) != 0.0) for g in grads.values())
