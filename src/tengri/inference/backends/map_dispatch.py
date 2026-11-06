@@ -444,6 +444,17 @@ def _run_map_scipy(
     )
 
 
+def _lower_loss(candidate, best) -> bool:
+    """Whether ``candidate`` is a finite loss strictly below ``best``'s.
+
+    Both losses come from one objective at one dtype, so the comparison is exact. A
+    non-finite candidate never replaces a finite best.
+    """
+    if not np.isfinite(candidate.nlp):
+        return False
+    return (not np.isfinite(best.nlp)) or candidate.nlp < best.nlp
+
+
 def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     """Return the point to report after scipy's stop, continuing with the shared driver if needed.
 
@@ -498,14 +509,18 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     attempts = 1
     if scipy_success and stat.stationary:
         return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
+    best_x, best = x, stat
     for _ in range(_MAP_CONTINUATION_ROUNDS):
-        if not stat.hessian_finite:
+        if not best.hessian_finite:
             break
-        x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
+        x, _, _ = lbfgs_to_gtol(flat_loss, best_x, n_steps=n_steps, gtol=gtol)
         attempts += 1
         stat = stationarity(flat_loss, x)
-        if stat.stationary:
+        if _lower_loss(stat, best):
+            best_x, best = x, stat
+        if best.stationary:
             break
+    x, stat = best_x, best
     reason = None if stat.hessian_finite else "hessian_not_finite"
     return (
         x,
