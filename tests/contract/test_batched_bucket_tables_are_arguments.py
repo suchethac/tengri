@@ -41,9 +41,9 @@ pytestmark = pytest.mark.contract
 
 # Numeric agreement tolerance of the argument and closure programs, in ulp. Measured
 # on macOS arm64 (jax 0.11.1, CPU): 0, 9, 6 ulp across the three galaxies. Measured on
-# linux/amd64 (python:3.12-slim container, jax 0.11.1, CPU): 55, 1, 13 ulp. The
-# tolerance is the next power of two above the largest of those measurements (55).
-_MAX_ULP = 64
+# an emulated linux/amd64 container: 55, 1, 13 ulp. Measured on the native GitHub runner
+# (run 41568044832): at most 297 ulp. The tolerance is the next power of two above 297.
+_MAX_ULP = 512
 
 # Constant regex for the f64 constants of a StableHLO module: ``dense<payload> :
 # tensor<dims x f64>`` at the end of the line.
@@ -246,7 +246,7 @@ def test_batched_log_likelihood_lowered_program_takes_tables_as_arguments(
     assert missing == [], f"table shapes not among the parameters: {missing}"
 
 
-def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_64_ulp(template, bucket):
+def test_batched_log_likelihood_jitted_argument_and_closure_agree_within_max_ulp(template, bucket):
     """The jitted float64 value with the tables as an argument matches the jitted closure.
 
     The tables are the ``threaded`` tuple of ``model.threaded_template_inputs()``. Both

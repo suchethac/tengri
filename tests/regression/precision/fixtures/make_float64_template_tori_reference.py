@@ -11,11 +11,12 @@ results must not move from (the main commit before the float32 fix), with that t
         python tests/regression/precision/fixtures/make_float64_template_tori_reference.py \\
         --sha <commit of the reference tree>
 
-Every array is float64; the large Fritz anisotropy table is kept as a SHA-256 digest of its
-bytes (:func:`table_digest`) plus one column.
-``test_bug_3101_3084_float32_template_tori.py`` compares the current tree against it bit
-for bit. The script reads only the public kernels and loaders, whose signatures the fix
-left unchanged.
+Every array is float64. The Fritz anisotropy table is stored in full as ``fritz/anisotropy``
+and also as a SHA-256 digest of its bytes (:func:`table_digest`), plus one sightline column.
+``test_bug_3101_3084_float32_template_tori.py`` compares the current tree against these: the
+digest is asserted bit for bit on macOS only, and every array, the full table included, is
+compared bit for bit on macOS and at rtol 1e-12 elsewhere. The script reads only the public
+kernels and loaders, whose signatures the fix left unchanged.
 """
 
 import argparse
@@ -94,6 +95,7 @@ def library_arrays(name):
         # The six-axis table is 190 kB as float64: keep its digest, and one sightline
         # column for a readable diff.
         table = np.asarray(mod.fritz_anisotropy(grid).values)
+        out["fritz/anisotropy"] = table
         out["fritz/anisotropy_sha256"] = np.array(table_digest(table))
         out["fritz/anisotropy_column"] = table[0, 0, 0, 0, 0, :]
     return out

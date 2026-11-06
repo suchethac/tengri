@@ -238,7 +238,13 @@ from collections.abc import Sequence
 #: 79 -> 78 (#2806): the Schreiber CMB boost and the analytic closures now share one
 #: closed-form ``cmb_luminosity_boost``, which takes ``jnp.maximum(T_dust, 1.0)`` once. The
 #: old helper's clamped division is gone; the floor is unchanged.
-EXPECTED_SITES = 78
+#:
+#: 78 -> 77 (#3232, kubota_done zones): ``components/agn/kd_precompute.py`` no longer rescales
+#: the disc by ``l_bol_unit * |1 - f_hot| / jnp.maximum(l_disc_unnorm, ...)``. The zones carry
+#: their own Page-Thorne dissipation (#3015), so there is no denominator left to clamp. A removal
+#: with no clamp moved elsewhere; ``--list`` at fdeaee1a3 differs from ``--list`` at 0c751bdb5
+#: only by that one site and by line shifts.
+EXPECTED_SITES = 77
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

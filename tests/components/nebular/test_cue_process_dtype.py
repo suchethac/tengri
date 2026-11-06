@@ -10,14 +10,18 @@ disagreed with the AD gradient by about 1 %.
 
 Under x64 the emulator now runs in float64. The weights are widened once at load
 (an exact float32 -> float64 widening) and the inputs follow their parameter's
-dtype. Under x64-off every value stays float32 and bit-identical to before, which
-``test_x64_off_cue_is_bit_identical_to_float32_reference`` pins.
+dtype. Under x64-off every value stays float32, and
+``test_x64_off_cue_matches_float32_reference`` checks the float32 spectrum, gradient and
+NLL against a recorded reference within measured bounds.
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
+import sys
 import warnings
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -83,11 +87,30 @@ _NET_INPUTS = {
     "gas_logco": -0.4,
 }
 _NET_LOGQION = 50.0
-#: sha256 of the float32 spectrum and the float32 gradient bytes, recorded from the
-#: unchanged code (before the Cue dtype change) on this fixture. Pinned, not tolerant.
-_X64_OFF_SPEC_SHA256 = "d277a5a6ac0d792aa9a00a7640f0ea11ebd896380e7c218b2f9ea201db60a974"
-_X64_OFF_GRAD_HEX = "288ccdc514f102c6e083d4431d5cee4610e10546"
-_X64_OFF_NLL = 724.5125122070312
+#: Float32 x64-off reference (spectrum, gradient, NLL) recorded at CI's pinned JAX 0.12.0 by
+#: ``fixtures/make_cue_x64_off_reference.py``. Measured on one Mac, JAX 0.11.1 against 0.12.0,
+#: the spread is: spectrum 1.63e-5 of peak (62 of 1500 values differ, max 1100 ulp), gradient
+#: 1.23e-3 of peak, NLL 4.70e-5 relative. The Cue emulator's own outputs were bit-identical
+#: across those two versions, so the spread sits in the JAX/XLA spectrum and gradient path,
+#: not in Cue. The bounds below are about 3x those measurements. The platform (macOS against
+#: Linux CI) may add to the spread; the Linux CI run is the check of these bounds.
+_X64_OFF_REFERENCE = (
+    Path(__file__).resolve().parents[2] / "regression" / "precision" / "fixtures"
+    / "cue_x64_off_reference.npz"
+)  # fmt: skip
+_X64_OFF_SPEC_PEAK_RTOL = 5e-5
+_X64_OFF_GRAD_PEAK_RTOL = 3.7e-3
+_X64_OFF_NLL_RTOL = 1.4e-4
+#: The jax version CI pins, read from the constraints file so a bump cannot leave the digest
+#: below stale unnoticed.
+_CI_CONSTRAINTS = Path(__file__).resolve().parents[3] / ".github" / "ci-constraints.txt"
+_CI_JAX = re.search(r"^jax==(\S+)$", _CI_CONSTRAINTS.read_text(), re.MULTILINE).group(1)
+#: Spectrum digest CI Linux printed for jax 0.12.0 with the x64-off Cue path. This test came in
+#: with #3253, and the digest it replaced was recorded on macOS at jax 0.11.1, so it never held
+#: in CI. An exact digest holds only at one platform and JAX version; the reference bounds above
+#: cover everywhere else. Checked only on Linux at the pinned version; a stale pin fails.
+_CI_LINUX_SPEC_JAX = "0.12.0"
+_CI_LINUX_SPEC_SHA256 = "697f52a76b402428cc153a88ae8c76facf79356354e6c202ad302a1d1da80e0f"
 
 
 def _build(ssp, *, neb: str = "cue"):
@@ -247,8 +270,9 @@ def test_objective_slope_along_log_mass_agrees_with_ad_at_float64_level(fitter64
     assert abs(fd - g) <= _FD_RTOL * abs(g), f"FD {fd:+.6e} vs AD {g:+.6e} at t={_FD_STEP:.0e}"
 
 
-def test_x64_off_cue_is_bit_identical_to_float32_reference():
-    """Under x64-off the Cue value and gradient are finite, non-zero and unchanged."""
+def test_x64_off_cue_matches_float32_reference():
+    """Under x64-off the Cue spectrum, gradient and NLL match the recorded float32 reference."""
+    ref = np.load(_X64_OFF_REFERENCE)
     with jax.enable_x64(False):
         model = _build(load_ssp_data(_SSP))
         fitter = _mock_fitter(model)
@@ -259,10 +283,6 @@ def test_x64_off_cue_is_bit_identical_to_float32_reference():
         }
         spec = np.asarray(model.predict_observables(truth32).spec_fnu)
         assert spec.dtype == np.float32
-        assert (
-            hashlib.sha256(np.ascontiguousarray(spec).tobytes()).hexdigest()
-            == _X64_OFF_SPEC_SHA256
-        )
         flat, unravel = ravel_pytree(
             {
                 n: fitter.spec.get_distribution(n).standardize(truth32[n])
@@ -273,7 +293,23 @@ def test_x64_off_cue_is_bit_identical_to_float32_reference():
         nlp = ctx.neg_log_posterior_fn
         nll = nlp(unravel(flat), ctx.data_args)
         grad = jax.grad(lambda u: nlp(unravel(u), ctx.data_args))(flat)
+    grad = np.asarray(grad)
     assert grad.dtype == np.float32
     assert bool(jnp.all(jnp.isfinite(grad))) and bool(jnp.any(grad != 0))
-    assert float(nll) == _X64_OFF_NLL
-    assert np.asarray(grad).tobytes().hex() == _X64_OFF_GRAD_HEX
+    assert ref["spec"].dtype == np.float32 and ref["grad"].dtype == np.float32
+    spec_rel = np.max(np.abs(spec.astype(np.float64) - ref["spec"])) / np.max(np.abs(ref["spec"]))
+    grad_rel = np.max(np.abs(grad.astype(np.float64) - ref["grad"])) / np.max(np.abs(ref["grad"]))
+    nll_rel = abs(float(nll) - float(ref["nll"])) / abs(float(ref["nll"]))
+    assert spec_rel <= _X64_OFF_SPEC_PEAK_RTOL, f"spectrum peak-relative {spec_rel:.3e}"
+    assert grad_rel <= _X64_OFF_GRAD_PEAK_RTOL, f"gradient peak-relative {grad_rel:.3e}"
+    assert nll_rel <= _X64_OFF_NLL_RTOL, f"NLL relative {nll_rel:.3e}"
+    if sys.platform != "linux" or jax.__version__ != _CI_JAX:
+        return
+    # Exact check at the CI platform and JAX version only. A pin bump fails here (the digest
+    # below is for _CI_LINUX_SPEC_JAX), so a stale digest cannot pass silently.
+    assert _CI_JAX == _CI_LINUX_SPEC_JAX, (
+        f"CI pins jax {_CI_JAX} but the Linux spectrum digest was recorded at "
+        f"{_CI_LINUX_SPEC_JAX}: re-record it from CI"
+    )
+    digest = hashlib.sha256(np.ascontiguousarray(spec).tobytes()).hexdigest()
+    assert digest == _CI_LINUX_SPEC_SHA256, f"spectrum sha256 {digest}"
