@@ -72,6 +72,9 @@ def _two_component_model(ssp, obs, *, law_bc, law_diff, tau_bc, tau_diff, sfh_ty
             "tau_bc": tau_bc,
             "tau_diff": tau_diff,
             "other_params": Fixed(DEFAULT),
+            # The bit-exact identity below is against the per-node op sequence that
+            # age_binned reproduces; the grouped default is equal to round-off only.
+            "age_mixture": "per_node",
         },
         neb={"type": "none"},
         redshift=Fixed(0.0),
@@ -717,7 +720,9 @@ def test_age_binned_n2_lyc_family_matches_two_component(mode, geometry, lyc_in_e
         lyc_reprocessed_by=mode, lyc_escape_geometry=geometry, lyc_in_energy_balance=lyc_in_eb
     )
     two = DustSEDComponent(
-        config=DustSEDComponentConfig(law_bc="calzetti", law_diff="cardelli", **kw)
+        config=DustSEDComponentConfig(
+            law_bc="calzetti", law_diff="cardelli", age_mixture="per_node", **kw
+        )
     )
     ab = AgeBinnedDustComponent(
         config=AgeBinnedDustComponentConfig(
