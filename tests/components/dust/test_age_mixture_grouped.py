@@ -9,7 +9,7 @@ node's formed-mass share in age interval ``j``), so the attenuated stellar SED
 is the same sum taken in the other order. ``age_mixture='grouped'`` forms the two
 interval spectra ``L_j`` (folded into the stellar weight contraction, before any
 projection to the pipeline grid) and attenuates two spectra instead of every node;
-``'per_node'`` (the default) is the original path. The identity holds for the soft
+``'per_node'`` is the original path and stays selectable. The identity holds for the soft
 (``transition_width_dex > 0``) boundary and for the Lyman-continuum branch, whose
 observed/intrinsic factors are per-interval arrays mixed by the same ``F_j``. Agreement
 is to floating-point reassociation, so the tolerance is 1e-12 relative in float64.
@@ -242,19 +242,19 @@ def test_grouped_without_stellar_interval_spectra_warns_and_agrees(
         assert _max_rel(s1.derived[key], s0.derived[key]) <= RTOL, key
 
 
-def test_age_mixture_default_is_per_node(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Leaving ``age_mixture`` unset is the per-node path, bit for bit, and one compiled kernel."""
+def test_age_mixture_default_is_grouped(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Leaving ``age_mixture`` unset is the grouped path (the default), one compiled kernel."""
     m_default = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, None)
-    m_per_node = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "per_node")
-    assert m_default.compile_signature() == m_per_node.compile_signature()
+    m_grouped = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "grouped")
+    assert m_default.compile_signature() == m_grouped.compile_signature()
     p = {k: jnp.asarray(v) for k, v in _SYNTH_POINTS[1].items()}
     np.testing.assert_array_equal(
-        np.asarray(m_default.predict_photometry(p)), np.asarray(m_per_node.predict_photometry(p))
+        np.asarray(m_default.predict_photometry(p)), np.asarray(m_grouped.predict_photometry(p))
     )
-    # The non-default setting survives the grammar round trip; the default is not emitted.
-    m_grouped = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "grouped")
-    assert m_grouped.spec.to_groups()["dust_attenuation"]["age_mixture"] == "grouped"
-    assert "age_mixture" not in m_per_node.spec.to_groups()["dust_attenuation"]
+    # The default is not emitted by the round trip; the non-default 'per_node' is.
+    m_per_node = _synthetic_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.3, "per_node")
+    assert "age_mixture" not in m_grouped.spec.to_groups()["dust_attenuation"]
+    assert m_per_node.spec.to_groups()["dust_attenuation"]["age_mixture"] == "per_node"
 
 
 def test_age_mixture_refuses_unknown_value_and_other_dust_types(

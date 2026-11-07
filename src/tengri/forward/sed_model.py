@@ -2931,7 +2931,11 @@ def feature_lut_serves_line_channel(model) -> bool:
     dust component takes the continuum from it (#1770), and which does not set the
     ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
     know whether a Cue model's photometry gains leverage must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. That predicate
+    reads the model before ``FeaturePrecomp`` is configured, and a dusty no-IR chain
+    sets its grid flag only once it is, so on a WavePrecomp-built dusty model it reads
+    False while the explicit pair buys 4.77x (#3267). Consult it for the top-up
+    decision with that in mind; this predicate is not the photometry answer.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -4924,7 +4928,7 @@ class SEDModel:
         self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
         # Evaluation order of the two-component age mixture (same model; a
         # different graph). See DustSEDComponentConfig.age_mixture.
-        self._dust_age_mixture = str(getattr(spec, "dust_age_mixture", "per_node"))
+        self._dust_age_mixture = str(getattr(spec, "dust_age_mixture", "grouped"))
         # Young/old split: birth-cloud dispersal age [yr] and the dispersal width
         # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
         self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
@@ -13818,7 +13822,7 @@ class SEDModel:
             dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
             dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
-            dust_age_mixture=getattr(self, "_dust_age_mixture", "per_node"),
+            dust_age_mixture=getattr(self, "_dust_age_mixture", "grouped"),
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_parameterization=getattr(self, "_dust_parameterization", "tau_bc_diff"),

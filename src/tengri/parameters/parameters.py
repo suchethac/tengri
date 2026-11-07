@@ -1608,12 +1608,14 @@ class Parameters:
                     f"double-counts its escaping photons. 'lyc_escape_geometry' only "
                     f"composes with dust_lyc_reprocessed_by='young'{_why}."
                 )
-        # Evaluation order of the two-component age mixture: 'per_node'
-        # (default) or 'grouped' (the exact interval-sum regrouping). Same
-        # validation as the grammar layer, repeated for the flat surface.
+        # Evaluation order of the two-component age mixture: 'grouped' (default
+        # for two_component, the exact interval-sum regrouping) or 'per_node'.
+        # Other dust models have no age mixture and resolve to 'per_node'.
+        # Same validation as the grammar layer, repeated for the flat surface.
         from tengri.components.dust.two_component import AGE_MIXTURES
 
-        self.dust_age_mixture = str(kwargs.pop("dust_age_mixture", "per_node"))
+        _age_mixture_default = "grouped" if self.dust_model == "two_component" else "per_node"
+        self.dust_age_mixture = str(kwargs.pop("dust_age_mixture", _age_mixture_default))
         if self.dust_age_mixture not in AGE_MIXTURES:
             raise ValueError(
                 f"dust_age_mixture={self.dust_age_mixture!r} must be one of {AGE_MIXTURES}."

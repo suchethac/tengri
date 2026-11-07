@@ -823,8 +823,12 @@ def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
     """
     from tengri.forward.sed_model import feature_lut_serves_line_channel
 
-    if serves_line_channel and feature_lut_serves_line_channel(model):
-        return True
+    if serves_line_channel:
+        # A line-flux fit keeps the raw answer: the Cue photometry pair is a
+        # photometry-only default (2026-11-06), so a dusty Cue line fit stays refused.
+        if feature_lut_serves_line_channel(model):
+            return True
+        return fast_nebular_can_engage(model)
     return _photometry_grid_engages(model)
 
 
