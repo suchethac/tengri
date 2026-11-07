@@ -409,6 +409,15 @@ def _run_map_scipy(
             decrement=decrement,
             grad_norm=grad_norm,
         )
+    elif reason == "precision_limit":
+        warn_measured(
+            f"MAP point not certified: float32 precision can't verify the Newton-decrement bar "
+            f"{MAP_DECREMENT_BAR:.0e} nats (decrement {decrement:.3e}). The point is the "
+            f"optimizer's stop, reported with map_converged=False; use float64 to certify. "
+            f"scipy reported {result.message!r}.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
     elif not converged:
         warn_measured(
             f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
@@ -476,6 +485,24 @@ def _round_off_bar(best_nlp: float, dtype) -> float:
     return max(MAP_DECREMENT_BAR, _ROUND_OFF_EPS_MULTIPLE * eps * abs(float(best_nlp)))
 
 
+#: Multiple of ``eps(dtype)`` below which the Newton-decrement bar cannot be resolved. A
+#: decrement is a quadratic form of loss-scale rounding; 8 eps is the same few-eps multiple
+#: as the round-off bar above. Provisional: it reproduces the measured float32 floor of
+#: about 5.6e-5 nats on the joint fixture, with a 1e-8 bar that float32 cannot reach.
+_PRECISION_EPS_MULTIPLE = 8
+
+
+def _bar_reachable(dtype) -> bool:
+    """Whether ``dtype`` can resolve ``MAP_DECREMENT_BAR``.
+
+    False when ``MAP_DECREMENT_BAR <= _PRECISION_EPS_MULTIPLE * eps(dtype)``. Float64 at
+    1e-8 nats is about 4e6 times its 1.8e-15 floor, so it is reachable; float32's floor is
+    about 9.5e-7 nats, which the 1e-8 bar sits below, so it is not.
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return _PRECISION_EPS_MULTIPLE * eps < MAP_DECREMENT_BAR
+
+
 def _accept_round(candidate, best, bar: float) -> bool:
     """Whether a continuation round's end replaces the current best iterate.
 
@@ -525,9 +552,11 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
         Optimizer runs spent, scipy's included.
     reason : str or None
         ``"hessian_not_finite"`` when the Hessian at the reported point has a
-        non-finite entry, ``None`` otherwise. The continuation rounds stop at once
-        for that status, because another L-BFGS run from the same point does not
-        restore a finite Hessian.
+        non-finite entry; ``"precision_limit"`` when the dtype cannot resolve
+        ``MAP_DECREMENT_BAR`` and the point is not stationary, so scipy's stop is
+        reported with no continuation round; ``None`` otherwise. The continuation
+        rounds stop at once for a non-finite Hessian, because another L-BFGS run from
+        the same point does not restore a finite Hessian.
 
     Notes
     -----
@@ -538,6 +567,12 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs. A non-finite
     Hessian is never read as a zero decrement: it yields ``stationary=False`` with a NaN
     decrement and ``reason="hessian_not_finite"``.
+
+    Float32 precision rule: when ``MAP_DECREMENT_BAR <= _PRECISION_EPS_MULTIPLE * eps``
+    (K = 8, provisional), the dtype cannot resolve the bar, so no continuation round
+    runs. Stationarity is measured once at scipy's stop and that point is returned with
+    ``reason="precision_limit"`` unless it is genuinely stationary. Measured float32
+    floor on the joint fixture: about 5.6e-5 nats. Float64 is unchanged.
     """
     value_and_grad, _ = compiled_derivatives(flat_loss)
     value, grad = value_and_grad(x)
@@ -547,8 +582,21 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     attempts = 1
     if scipy_success and stat.stationary:
         return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
-    best_x, best = x, stat
     dtype = jnp.asarray(x).dtype
+    if not _bar_reachable(dtype):
+        # The continuation rounds could only replay round-off here, so scipy's stop is the
+        # answer. A non-finite Hessian keeps its own reason.
+        reason = None if stat.hessian_finite else "hessian_not_finite"
+        return (
+            x,
+            stat.nlp,
+            stat.grad_norm,
+            stat.decrement,
+            False,
+            attempts,
+            reason or "precision_limit",
+        )
+    best_x, best = x, stat
     for _ in range(_MAP_CONTINUATION_ROUNDS):
         if not best.hessian_finite:
             break

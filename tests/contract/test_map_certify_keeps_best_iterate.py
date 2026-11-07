@@ -107,18 +107,19 @@ def test_map_certify_rejects_stationary_rise_above_the_bar(monkeypatch):
     assert attempts == 2
 
 
-def test_map_certify_round_off_bar_float32_uses_the_eps_term(monkeypatch):
+def test_map_certify_float32_runs_no_round_so_no_round_off_bar_is_needed(monkeypatch):
     nlp0 = 163.0
     x0, x_c = jnp.zeros(3, dtype=jnp.float32), jnp.full(3, 0.5, dtype=jnp.float32)
-    # Float32 bar at nlp 163 is 8 eps32 |nlp| (about 1.6e-4 nats). A 1e-4 rise is round-off
-    # for float32 and is taken; without the eps term the 1e-8 bar would reject it.
+    # Float32 cannot resolve the 1e-8 nats bar, so no continuation round runs and the
+    # round-off bar is never applied: scipy's stop is reported with precision_limit.
     _script_certify(monkeypatch, [_stat(nlp0, 1e-3), _stat(nlp0 + 1e-4, 1e-12)], [x_c])
-    x, _, _, _, stationary, attempts, _ = map_dispatch._certify_map_point(
+    x, _, _, _, stationary, attempts, reason = map_dispatch._certify_map_point(
         _quad, x0, scipy_success=True, n_steps=10, gtol=1e-12
     )
-    np.testing.assert_allclose(np.asarray(x), np.asarray(x_c))
-    assert stationary is True
-    assert attempts == 2
+    np.testing.assert_allclose(np.asarray(x), np.asarray(x0))
+    assert stationary is False
+    assert attempts == 1
+    assert reason == "precision_limit"
 
 
 def test_map_certify_rejects_stationary_with_real_rise(monkeypatch):
