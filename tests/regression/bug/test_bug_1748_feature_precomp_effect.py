@@ -4,7 +4,7 @@ r"""``FeaturePrecomp`` must not be attached to a model it cannot help (#1748).
 Since #1281 the fast nebular grid may serve photometry only when nothing downstream
 reads ``sed_nebular``, because serving it requires zeroing the continuum. A dust
 component reads it unless it can take the nebular from the grid, which needs the
-stellar energy-balance LUT. Until c4f897d43 (2026-11-06) that LUT was gated on an IR
+stellar energy-balance LUT. Until #3267 that LUT was gated on an IR
 consumer, so **a dusty model with no dust emission was disarmed**: its pair cost the
 same FLOPs as WavePrecomp alone (1.00x, bit-identical compiled FLOPs), while the advice,
 two resolvers and ``CLAUDE.md`` still advertised a ~21x line speedup (#1748).
@@ -128,11 +128,16 @@ def test_feature_precomp_still_pays_on_a_dust_free_model(ssp_data_fsps):
 
 
 def test_feature_precomp_pays_on_a_dusty_model_without_ir(ssp_data_fsps):
-    """A dusty model with no IR emission engages the grid (c4f897d43, #1748, #1673).
+    """A dusty model with no IR emission engages the grid (#3267, #1748, #1673).
 
     The grid's accuracy on this model is pinned in ``tests/contract``; this guard pins
     the speed contract: the pair's gradient must cost less than a third of WavePrecomp
-    alone. Measured on the same fixture: see the commit message.
+    alone. Measured 2026-11-07 with the grouped default on the fixture below
+    (sdss g, r, i; delayed SFH; two-component Calzetti, tau_diff Uniform(0, 1.5);
+    z 0.1): gradient FLOPs 55,609,696 (WavePrecomp alone) to 2,684,997 (pair), 20.7x.
+    The forward photometry of the continuity probe with five DES/WISE bands costs
+    49.55 MFLOP alone and 1.57 MFLOP as the pair, about 31x, with minimum wall times of
+    4.46 ms and 0.31 ms (medians 6.3 ms and 0.56 ms on a loaded machine).
     """
     from tengri import FeaturePrecomp, WavePrecomp
 
