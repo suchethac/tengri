@@ -2931,7 +2931,11 @@ def feature_lut_serves_line_channel(model) -> bool:
     dust component takes the continuum from it (#1770), and which does not set the
     ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
     know whether a Cue model's photometry gains leverage must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. That predicate
+    reads the model before ``FeaturePrecomp`` is configured, and a dusty no-IR chain
+    sets its grid flag only once it is, so on a WavePrecomp-built dusty model it reads
+    False while the explicit pair buys 4.77x (#3267). Consult it for the top-up
+    decision with that in mind; this predicate is not the photometry answer.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -12028,6 +12032,40 @@ class SEDModel:
             for c in chain
         ]
 
+    def _nebular_grid_will_serve_dust(self, chain) -> bool:
+        """Whether a per-Q_H nebular grid will be built and will serve this chain's dust.
+
+        The grid is built by ``approx=FeaturePrecomp()`` on a Q_H-linear backend
+        (:meth:`_resolve_feature_precomp`). It serves the dust's nebular only when no
+        other component reads the continuum, no spectrum is projected, and no free
+        nebular parameter is baked at its build value: the same conditions
+        :meth:`nebular_grid_can_serve_photometry` applies, read here before the LUT
+        exists, so the LUT is built exactly when the grid will use it. Without
+        ``FeaturePrecomp`` this is False, and the exact absorbed integral is kept.
+
+        Parameters
+        ----------
+        chain : sequence
+            The component chain.
+
+        Returns
+        -------
+        bool
+            True when the dust should read the grid's absorbed-energy channel.
+        """
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import grid_baked_free_params
+
+        if getattr(self, "_approx_config_feature", None) is None:
+            return False
+        if not _is_q_h_linear_backend(self._nebular_backend):
+            return False
+        if grid_baked_free_params(self.spec) or self._observation_reads_nebular_continuum():
+            return False
+        dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
+        return not any(not isinstance(c, dust_types) for c in _nebular_continuum_consumers(chain))
+
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
 
@@ -12091,6 +12129,11 @@ class SEDModel:
         # contract (ADR-0009) who consumes L_ir rather than hardcoding a list, so a
         # future L_ir consumer inherits the LUT instead of silently forfeiting it.
         needs_l_ir = has_dust_emission or _chain_consumes(chain, "L_ir")
+        # Without an IR consumer the LUT is still the grid's dust channel: the
+        # per-Q_H grid's absorbed-energy channel and its optical-depth axes are
+        # tabulated on it (:meth:`_nebular_grid_will_serve_dust`). Built only then,
+        # so a model without the grid keeps its exact absorbed integral.
+        needs_l_ir = needs_l_ir or self._nebular_grid_will_serve_dust(chain)
         if (
             needs_l_ir
             and dust is not None
