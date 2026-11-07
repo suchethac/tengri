@@ -2931,7 +2931,11 @@ def feature_lut_serves_line_channel(model) -> bool:
     dust component takes the continuum from it (#1770), and which does not set the
     ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
     know whether a Cue model's photometry gains leverage must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. That predicate
+    reads the model before ``FeaturePrecomp`` is configured, and a dusty no-IR chain
+    sets its grid flag only once it is, so on a WavePrecomp-built dusty model it reads
+    False while the explicit pair buys 4.77x (#3267). Consult it for the top-up
+    decision with that in mind; this predicate is not the photometry answer.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):

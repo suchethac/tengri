@@ -10,25 +10,30 @@ for nothing.
 
 **The root cause:** a Cue backend does not run the SSP-window branch of
 ``_resolve_feature_precomp``, so there is no ``_fast_line_measurement`` flag and no line
-lever at all. The per-Q_H grid serves photometry only, and that lever is disarmed by dust.
-A decision "dusty Cue fits should get the line LUT" is "the dusty Cue fits should get a
-grid worth 0 compiled FLOPs".
+lever at all. The per-Q_H grid serves the photometry half, and that half is disarmed only
+when the dust cannot take its nebular from the grid. Since #3267 a dusty chain with no IR
+emission can take it (two-component dust with no ``dust_emission``), so a dusty Cue
+line-flux fit is no longer a grid worth 0 compiled FLOPs. Measured on this file's
+fixture (3 bands and 3 line fluxes, gradient FLOPs of the fit objective, float64):
 
-**Measured on a Cue model with 3 bands and 3 line fluxes, gradient FLOPs of the fit
-objective:**
+==========================  ====================  ====================  ========
+model                       ``WavePrecomp``       ``+FeaturePrecomp``   ratio
+==========================  ====================  ====================  ========
+dust-free                   54,103,816            2,241,922             **24.13x**
+two-component, no IR        61,318,708            12,859,558            **4.77x**
+WG00, shape free (control)  54,128,280            54,128,280            **1.00x**
+==========================  ====================  ====================  ========
 
-==========  ====================  ====================  ========
-dust        ``WavePrecomp``       ``+FeaturePrecomp``   ratio
-==========  ====================  ====================  ========
-none        50,664,616            2,954,374             **17.15x**
-yes         58,497,272            58,497,272            **1.00x**
-==========  ====================  ====================  ========
+The explicit pair is what the grid buys. The ``auto`` policy still refuses the top-up on
+the two-component, no-IR row (``test_the_top_up_is_refused_on_a_dusty_cue_line_fit``):
+``fast_nebular_can_engage`` reads the model before ``FeaturePrecomp`` is configured, when
+the grid's dust flag is not yet set, so it reads False there. That refusal is a known gap
+(a missed 4.77x), not a justified zero; widening ``auto`` is a later PR. The WG00 row is
+the control: where the grid cannot engage the two objectives are equal to the digit.
 
-The dust-free Cue model shows the per-Q_H grid's line channel benefit (17.15x). Dust
-disarms the grid's photometry lever, leaving only an inert line attachment. The grid is
-built and changes ``compile_signature()`` despite producing byte-identical compiled HLO
-(measured same SHA-256 as exact path), costing a 7.2 s ``enable_fast_nebular`` build
-and an in-process re-trace.
+Before #3267 the two-component row measured 1.00x (58,497,272 both arms), and the grid's
+build cost (7.2 s ``enable_fast_nebular``, an in-process re-trace) bought nothing. That
+was the grid disarmed by dust, not the line channel.
 
 This is not a regression to undo. Pre-#2377 a dusty Cue line-flux fit paid:
 
@@ -53,6 +58,7 @@ import pytest
 
 from tengri import (
     DEFAULT,
+    FREE,
     FeaturePrecomp,
     Fitter,
     Fixed,
@@ -71,8 +77,13 @@ _LINES = ("Halpha", "Hbeta", "OIII_5007")
 _WAVES = jnp.array([6564.61, 4862.71, 5008.24])
 
 
-def _model(ssp, obs, approx, *, dust_attenuation: bool):
-    """Build a Cue SED model with optional dust."""
+def _model(ssp, obs, approx, *, dust_attenuation: bool, wg00: bool = False):
+    """Build a Cue SED model with optional dust.
+
+    ``wg00=True`` swaps the two-component screen for WG00 with its shape free: a
+    dust that has no stellar energy-balance LUT, so the per-Q_H grid cannot take its
+    nebular and stays disarmed (the control arm of the compiled-graph test).
+    """
     dust_block = (
         {
             "type": "two_component",
@@ -86,6 +97,8 @@ def _model(ssp, obs, approx, *, dust_attenuation: bool):
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        if wg00:
+            dust_block = {"type": "wg00", "all_params": FREE}
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
@@ -147,7 +160,7 @@ def _objective_flops(fitter) -> int:
     )
 
 
-def _arm(ssp, obs, phot, policy, *, dust_attenuation: bool):
+def _arm(ssp, obs, phot, policy, *, dust_attenuation: bool, wg00: bool = False):
     """One benchmark arm, set at the surface it is measured on.
 
     The ``approx=`` that governs a FIT is the fit-time one: ``Fitter`` defaults to
@@ -160,7 +173,7 @@ def _arm(ssp, obs, phot, policy, *, dust_attenuation: bool):
     Returns ``(flops, feature_precomp_resolved, fits_lines)`` so a caller can prove
     the arms differ before it compares their cost.
     """
-    model = _model(ssp, obs, None, dust_attenuation=dust_attenuation)
+    model = _model(ssp, obs, None, dust_attenuation=dust_attenuation, wg00=wg00)
     fitter = _fitter(model, phot, approx=policy)
     state = getattr(fitter.model, "approx", None)
     return (
@@ -223,32 +236,39 @@ def test_feature_precomp_still_pays_on_a_dust_free_cue_line_fit(ssp_data_fsps):
 
 
 def test_the_top_up_is_refused_on_a_dusty_cue_line_fit(ssp_data_fsps):
-    """The resolver must refuse the grid on dusty Cue, where it measures 1.00x.
+    """``auto`` keeps refusing the top-up on a dusty no-IR Cue line-flux fit (a known gap).
 
-    This is the assertion that #2377 added: a Cue model has only one lever
-    (photometry, disarmed by dust), and the line channel should not get offered
-    a grid with zero compiled FLOPs.
+    Pins the current refusal on the user path: built with ``WavePrecomp()``, then fit
+    under the default ``"auto"`` policy. The refusal is no longer justified by the 1.00x
+    measured in #2377: the explicit pair buys 4.77x here (see the compiled-graph test).
+    It is a gap because ``fast_nebular_can_engage`` reads the model before
+    ``FeaturePrecomp`` is configured, and the dusty grid flag is only set once it is.
+    Closing it is a later PR, and this test flips then (#3267).
     """
     obs, phot = _line_flux_setup(ssp_data_fsps, dust_attenuation=True)
 
-    # Resolve under the default "auto" policy
-    resolved = _fitter(_model(ssp_data_fsps, obs, None, dust_attenuation=True), phot).model
+    # Resolve under the default "auto" policy, on the build-time WavePrecomp path
+    resolved = _fitter(
+        _model(ssp_data_fsps, obs, WavePrecomp(), dust_attenuation=True), phot
+    ).model
 
     state = getattr(resolved, "approx", None)
     attached = state is not None and getattr(state, "feature_precomp", False)
     assert not attached, (
-        "the resolver attached FeaturePrecomp to a dusty Cue model's line-flux fit, "
-        "where it measures 1.00x in compiled FLOPs — a second compiled kernel for "
-        "nothing (#2377)."
+        "the resolver now attaches FeaturePrecomp to a dusty no-IR Cue line-flux fit. "
+        "That closes the known gap (#3267): flip this pin and the premise in the "
+        "compiled-graph test together."
     )
 
 
-def test_the_refusal_is_justified_by_the_compiled_graph(ssp_data_fsps):
-    """The ENGAGEMENT half: on dusty Cue the grid brings exactly zero compiled FLOPs.
+def test_the_grid_pays_on_dusty_no_ir_cue_and_equality_holds_where_disarmed(ssp_data_fsps):
+    """The ENGAGEMENT half, measured on the objective (not the photometry alone).
 
-    This is the objective measurement that makes the refusal in the previous test
-    more than an arbitrary rule. If this ever stops being equal, the refusal must
-    be revisited.
+    Dusty no-IR two-component Cue: the explicit pair pays 4.77x in gradient FLOPs (the
+    photometry half, served from the per-Q_H grid since #3267). Control: WG00 with a
+    free shape, where the dust has no stellar LUT and the grid stays disarmed, the two
+    objectives are equal. If the control stops being equal, the grid engages where it
+    should not; if the ratio collapses, the grid stopped serving.
     """
     obs, phot = _line_flux_setup(ssp_data_fsps, dust_attenuation=True)
 
@@ -266,14 +286,33 @@ def test_the_refusal_is_justified_by_the_compiled_graph(ssp_data_fsps):
     assert explicit_feat, "the explicit arm resolved WITHOUT FeaturePrecomp"
     assert not auto_feat, "the WavePrecomp arm resolved WITH FeaturePrecomp"
 
-    assert explicit == auto, (
-        f"appending FeaturePrecomp to a dusty Cue line-flux fit changed the "
-        f"objective's compiled gradient FLOPs: {auto:,} (auto) vs {explicit:,} "
-        f"(explicit). If the line lever became available for a chain that reads "
-        "sed_nebular, that is a real change. Measure and update the guards that "
-        "refuse the top-up (#2377)."
+    assert explicit * 4 <= auto, (
+        f"explicit FeaturePrecomp on a dusty no-IR Cue line-flux fit buys only "
+        f"{auto / explicit:.2f}x ({auto:,} -> {explicit:,} gradient FLOPs of the "
+        "objective); measured 4.77x under #3267. If the grid no longer serves this "
+        "photometry, revisit the top-up predicate (#2377)."
     )
-    print(f"Dusty Cue line-flux fit: {auto:,} FLOPs (exactly equal with/without FeaturePrecomp)")
+    print(f"Dusty no-IR Cue line-flux fit: {auto:,} -> {explicit:,} FLOPs")
+
+    # Control: WG00 (free shape, no stellar LUT) disarms the grid, so the pair and the
+    # build-time WavePrecomp must compile to the same objective.
+    wg_wave, wg_feat_w, wg_lines_w = _arm(
+        ssp_data_fsps, obs, phot, WavePrecomp(), dust_attenuation=True, wg00=True
+    )
+    wg_pair, wg_feat_p, wg_lines_p = _arm(
+        ssp_data_fsps,
+        obs,
+        phot,
+        (WavePrecomp(), FeaturePrecomp()),
+        dust_attenuation=True,
+        wg00=True,
+    )
+    assert wg_lines_w and wg_lines_p, "the line-flux channel never reached the objective"
+    assert wg_feat_p and not wg_feat_w, "the WG00 arms did not resolve as two configurations"
+    assert wg_pair == wg_wave, (
+        f"on WG00 (grid disarmed) FeaturePrecomp changed the objective's gradient FLOPs: "
+        f"{wg_wave:,} vs {wg_pair:,}. The grid engaged where it cannot serve (#3267)."
+    )
 
 
 def test_the_batch_surface_refuses_it_too(ssp_data_fsps):
