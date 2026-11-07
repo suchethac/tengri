@@ -479,16 +479,16 @@ def _round_off_bar(best_nlp: float, dtype) -> float:
     nats), so a rise below that is below what certification can resolve. The eps term
     only keeps the bar above loss rounding at large ``|nlp|``; neither term is fitted.
     Float64 at nlp 163: 1e-8, about 140 times the largest measured rise (6.96e-11).
-    Float32 at nlp 163: about 1.6e-4.
     """
     eps = float(jnp.finfo(dtype).eps)
     return max(MAP_DECREMENT_BAR, _ROUND_OFF_EPS_MULTIPLE * eps * abs(float(best_nlp)))
 
 
-#: Multiple of ``eps(dtype)`` below which the Newton-decrement bar cannot be resolved. A
-#: decrement is a quadratic form of loss-scale rounding; 8 eps is the same few-eps multiple
-#: as the round-off bar above. Provisional: it reproduces the measured float32 floor of
-#: about 5.6e-5 nats on the joint fixture, with a 1e-8 bar that float32 cannot reach.
+#: Multiple K of ``eps(dtype)`` below which the Newton-decrement bar cannot be resolved.
+#: K is not tuned: every K from about 0.09 to about 4.5e7 gives the same decision for both
+#: dtypes. Float32 (eps 1.19e-7) is unreachable for K >= 0.09 (K eps >= 1e-8); float64
+#: (eps 2.22e-16) is reachable for K < 4.5e7 (K eps < 1e-8). K = 8 is the same few-eps
+#: multiple as the round-off bar above.
 _PRECISION_EPS_MULTIPLE = 8
 
 
@@ -569,10 +569,10 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     decrement and ``reason="hessian_not_finite"``.
 
     Float32 precision rule: when ``MAP_DECREMENT_BAR <= _PRECISION_EPS_MULTIPLE * eps``
-    (K = 8, provisional), the dtype cannot resolve the bar, so no continuation round
-    runs. Stationarity is measured once at scipy's stop and that point is returned with
-    ``reason="precision_limit"`` unless it is genuinely stationary. Measured float32
-    floor on the joint fixture: about 5.6e-5 nats. Float64 is unchanged.
+    (K = 8, see ``_PRECISION_EPS_MULTIPLE``), the dtype cannot resolve the bar, so no
+    continuation round runs. Stationarity is measured once at scipy's stop and that point
+    is returned, converged when it is genuinely stationary, otherwise with
+    ``reason="precision_limit"``. Float64 keeps its continuation rounds.
     """
     value_and_grad, _ = compiled_derivatives(flat_loss)
     value, grad = value_and_grad(x)
@@ -585,16 +585,22 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     dtype = jnp.asarray(x).dtype
     if not _bar_reachable(dtype):
         # The continuation rounds could only replay round-off here, so scipy's stop is the
-        # answer. A non-finite Hessian keeps its own reason.
-        reason = None if stat.hessian_finite else "hessian_not_finite"
+        # answer. A genuinely stationary point is converged whatever scipy reported; a
+        # non-finite Hessian keeps its own reason.
+        if not stat.hessian_finite:
+            reason = "hessian_not_finite"
+        elif stat.stationary:
+            reason = None
+        else:
+            reason = "precision_limit"
         return (
             x,
             stat.nlp,
             stat.grad_norm,
             stat.decrement,
-            False,
+            stat.stationary,
             attempts,
-            reason or "precision_limit",
+            reason,
         )
     best_x, best = x, stat
     for _ in range(_MAP_CONTINUATION_ROUNDS):

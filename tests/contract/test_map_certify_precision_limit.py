@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.inference.backends import map_dispatch
+from tengri.inference.map_stationarity import Stationarity
 
 pytestmark = pytest.mark.contract
 
@@ -54,6 +55,20 @@ def test_float32_certification_runs_no_round_and_reports_precision_limit(monkeyp
     assert stationary is False
     assert attempts == 1
     assert x.dtype == jnp.float32
+
+
+def test_float32_stationary_point_is_converged_even_when_scipy_failed(monkeypatch):
+    loss, x0 = _quadratic(jnp.float32)
+    stationary = Stationarity(
+        nlp=1.0, grad_norm=0.0, decrement=1e-12, positive_definite=True, hessian_finite=True
+    )
+    monkeypatch.setattr(map_dispatch, "stationarity", lambda flat_loss, x: stationary)
+    _, _, _, _, converged, attempts, reason = map_dispatch._certify_map_point(
+        loss, x0, scipy_success=False, n_steps=50, gtol=1e-6
+    )
+    assert converged is True
+    assert reason is None
+    assert attempts == 1
 
 
 def test_float64_certification_keeps_its_continuation_rounds(monkeypatch):
