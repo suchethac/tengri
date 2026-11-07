@@ -235,29 +235,59 @@ def test_feature_precomp_still_pays_on_a_dust_free_cue_line_fit(ssp_data_fsps):
     print(f"Dust-free Cue line-flux fit: {wave:,} -> {pair:,} FLOPs ({wave / pair:.2f}x speedup)")
 
 
-def test_the_top_up_is_refused_on_a_dusty_cue_line_fit(ssp_data_fsps):
+def _feature_attached(model) -> bool:
+    """The one read of "FeaturePrecomp is attached": ``model.approx.feature_precomp``."""
+    state = getattr(model, "approx", None)
+    return bool(state is not None and getattr(state, "feature_precomp", False))
+
+
+@pytest.mark.parametrize(
+    "build_approx", [None, WavePrecomp()], ids=["build-None", "build-WavePrecomp"]
+)
+def test_the_top_up_is_refused_on_a_dusty_cue_line_fit(ssp_data_fsps, build_approx):
     """``auto`` keeps refusing the top-up on a dusty no-IR Cue line-flux fit (a known gap).
 
-    Pins the current refusal on the user path: built with ``WavePrecomp()``, then fit
-    under the default ``"auto"`` policy. The refusal is no longer justified by the 1.00x
-    measured in #2377: the explicit pair buys 4.77x here (see the compiled-graph test).
-    It is a gap because ``fast_nebular_can_engage`` reads the model before
-    ``FeaturePrecomp`` is configured, and the dusty grid flag is only set once it is.
-    Closing it is a later PR, and this test flips then (#3267).
+    Pinned on both build paths. ``build_approx=None`` followed by ``Fitter`` with the
+    default ``approx="auto"`` is the default path; ``WavePrecomp()`` is the explicit-build
+    path. Both must refuse. The refusal is no longer justified by the 1.00x measured in
+    #2377: the explicit pair buys 4.77x here (see the compiled-graph test). It is a gap
+    because ``fast_nebular_can_engage`` reads the model before ``FeaturePrecomp`` is
+    configured, and the dusty grid flag is only set once it is. Closing it is a later PR,
+    and this test flips then (#3267).
     """
     obs, phot = _line_flux_setup(ssp_data_fsps, dust_attenuation=True)
 
-    # Resolve under the default "auto" policy, on the build-time WavePrecomp path
-    resolved = _fitter(
-        _model(ssp_data_fsps, obs, WavePrecomp(), dust_attenuation=True), phot
-    ).model
+    resolved = _fitter(_model(ssp_data_fsps, obs, build_approx, dust_attenuation=True), phot).model
 
-    state = getattr(resolved, "approx", None)
-    attached = state is not None and getattr(state, "feature_precomp", False)
-    assert not attached, (
+    assert not _feature_attached(resolved), (
         "the resolver now attaches FeaturePrecomp to a dusty no-IR Cue line-flux fit. "
         "That closes the known gap (#3267): flip this pin and the premise in the "
         "compiled-graph test together."
+    )
+
+
+def test_positive_control_the_attached_read_can_be_true(ssp_data_fsps):
+    """The read used above must be able to report True, or the refusal pins prove nothing.
+
+    Two cases read through the same ``_feature_attached``: a dust-free Cue line-flux fit
+    under ``auto`` (attaches, measured 24x), and an explicitly built dusty pair (attaches
+    by construction). If either reads False, the refusal assertions are vacuous.
+    """
+    obs_clean, phot_clean = _line_flux_setup(ssp_data_fsps, dust_attenuation=False)
+    clean_auto = _fitter(
+        _model(ssp_data_fsps, obs_clean, WavePrecomp(), dust_attenuation=False), phot_clean
+    ).model
+    assert _feature_attached(clean_auto), (
+        "positive control failed: auto did not attach FeaturePrecomp to a dust-free Cue "
+        "line-flux fit, so _feature_attached cannot be trusted to read True"
+    )
+
+    obs, _phot = _line_flux_setup(ssp_data_fsps, dust_attenuation=True)
+    dusty_pair = _model(
+        ssp_data_fsps, obs, (WavePrecomp(), FeaturePrecomp()), dust_attenuation=True
+    )
+    assert _feature_attached(dusty_pair), (
+        "positive control failed: an explicitly built pair does not read as attached"
     )
 
 
