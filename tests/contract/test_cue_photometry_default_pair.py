@@ -228,3 +228,179 @@ def test_batch_explicit_none_stays_exact(ssp):
     model = _build(ssp, _cue(), dust=True)
     resolved = _resolve_batch_fit_approx(model, None, "photometry")
     assert not resolved.approx.wave_precomp and not resolved.approx.feature_precomp
+
+
+# --- cheap exits before the pair clone -----------------------------------------------
+#
+# The photometry predicate is answered on the (WavePrecomp, FeaturePrecomp) clone. A
+# model the spec already rules out (WG00, a free attenuation-curve shape) must answer
+# False without building that clone: measured ~5 s and ~400 MB extra on five bands.
+
+
+def _dust_model_with(ssp, dust_attenuation, dust_emission=None):
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+
+    kwargs = dict(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(_BANDS)),
+        redshift=Fixed(0.15),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        neb=_cue(),
+        dust_attenuation=dust_attenuation,
+    )
+    if dust_emission is not None:
+        kwargs["dust_emission"] = dust_emission
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(**kwargs)
+
+
+def _wg00_model(ssp):
+    from tengri import DEFAULT, Fixed
+
+    return _dust_model_with(ssp, {"type": "wg00", "all_params": Fixed(DEFAULT)})
+
+
+def _free_shape_model(ssp):
+    from tengri import DEFAULT, Fixed, Uniform
+
+    return _dust_model_with(
+        ssp,
+        {
+            "type": "two_component",
+            "law": "cardelli",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": Uniform(0.0, 2.0),
+            "tau_diff": Uniform(0.0, 2.0),
+            "Rv": Uniform(2.0, 5.0),
+        },
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    )
+
+
+_EXIT_CASES = [("wg00", _wg00_model), ("free_shape", _free_shape_model)]
+
+
+class _CloneSpy:
+    """Records every clone request of ``fitter._memoized_approx_clone``."""
+
+    def __init__(self, real):
+        self.real = real
+        self.calls = []
+
+    def __call__(self, model, cfg):
+        self.calls.append((model, cfg))
+        return self.real(model, cfg)
+
+    def pair_calls(self):
+        from tengri.forward.sed_model import FeaturePrecomp
+
+        return [
+            (m, c)
+            for m, c in self.calls
+            if isinstance(c, tuple) and any(isinstance(x, FeaturePrecomp) for x in c)
+        ]
+
+
+@pytest.fixture
+def clone_spy(monkeypatch):
+    from tengri.inference import fitter as fitmod
+
+    spy = _CloneSpy(fitmod._memoized_approx_clone)
+    monkeypatch.setattr(fitmod, "_memoized_approx_clone", spy)
+    return spy
+
+
+def _photometry_fitter(model, data):
+    from tengri.inference import Fitter
+
+    fnu, sigma = data
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return Fitter(model, data=fnu, noise=sigma, data_type="photometry", approx="auto")
+
+
+@pytest.mark.parametrize(("label", "build"), _EXIT_CASES)
+def test_spec_ruled_out_photometry_builds_no_pair_clone(ssp, data, clone_spy, label, build):
+    fitter = _photometry_fitter(build(ssp), data)
+    assert clone_spy.pair_calls() == [], label
+    assert fitter.model.approx.wave_precomp and not fitter.model.approx.feature_precomp
+
+
+@pytest.mark.parametrize(("label", "build"), _EXIT_CASES)
+def test_spec_ruled_out_photometry_retains_no_pair_clone(ssp, data, clone_spy, label, build):
+    from tengri.inference import fitter as fitmod
+
+    _photometry_fitter(build(ssp), data)
+    for owner, _cfg in clone_spy.calls:
+        bucket = fitmod._APPROX_CLONE_CACHE.get(owner, {})
+        assert all("FeaturePrecomp" not in repr(key) for key in bucket), label
+
+
+@pytest.mark.parametrize(("label", "build"), _EXIT_CASES)
+def test_cheap_exit_agrees_with_the_clone_answer(ssp, label, build):
+    from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+    from tengri.inference.fitter import _photometry_grid_engages, fast_nebular_can_engage
+
+    model = build(ssp)
+    clone = model.with_approx((WavePrecomp(), FeaturePrecomp()))
+    assert _photometry_grid_engages(model) is False, label
+    assert fast_nebular_can_engage(clone) is False, label
+
+
+@pytest.mark.parametrize(
+    ("build_approx", "ir", "expect_pair"),
+    [
+        ("unset", True, True),
+        ("unset", False, True),
+        ("none", True, True),
+        ("none", False, True),
+        ("wave", True, True),
+        # Observed: an explicit build-time WavePrecomp on a dusty no-IR model is
+        # respected, so the auto top-up is refused there (the #3267 known gap, see
+        # CLAUDE.md). This pins the observed answer, not a claim that it is right.
+        ("wave", False, False),
+    ],
+)
+def test_build_time_approx_under_auto_on_dusty_cue(ssp, data, build_approx, ir, expect_pair):
+    from tengri import WavePrecomp
+
+    approx = {"unset": "unset", "none": None, "wave": WavePrecomp()}[build_approx]
+    model = _build(ssp, _cue(), dust=True, ir=ir, approx=approx)
+    state = _fitter_state(model, data)
+    assert _pair(state) is expect_pair
+    assert state.wave_precomp
+
+
+def test_negative_probe_clone_is_not_retained(ssp, monkeypatch):
+    """A probe clone that answers False is dropped from the memo, not kept alive."""
+    from tengri.inference import fitter as fitmod
+
+    model = _build(ssp, _cue(), dust=True)
+    monkeypatch.setattr(fitmod, "fast_nebular_can_engage", lambda _m: False)
+    assert fitmod._photometry_grid_engages(model) is False
+    bucket = fitmod._APPROX_CLONE_CACHE.get(model, {})
+    assert all("FeaturePrecomp" not in repr(key) for key in bucket)
+
+
+@pytest.mark.parametrize("data_type", ["joint", "spectroscopy"])
+def test_spectroscopy_and_joint_never_reach_the_pair_predicate(
+    ssp, data, clone_spy, monkeypatch, data_type
+):
+    from tengri.inference import Fitter, fitter as fitmod
+
+    seen = []
+    real = fitmod._photometry_grid_engages
+
+    def _spy(model):
+        seen.append(model)
+        return real(model)
+
+    monkeypatch.setattr(fitmod, "_photometry_grid_engages", _spy)
+    model = _build(ssp, _cue(), dust=True)
+    fnu, sigma = data
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        Fitter(model, data=fnu, noise=sigma, data_type=data_type, approx="auto")
+    assert seen == []
+    assert clone_spy.pair_calls() == []

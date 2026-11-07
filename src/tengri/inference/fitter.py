@@ -515,12 +515,32 @@ def _memoized_approx_clone(model, cfg):
         return model.with_approx(cfg)
     # repr, not hash: the precompute configs are dataclasses whose repr covers
     # every field, and not all of them are guaranteed hashable.
-    key = (type(cfg).__name__, repr(cfg))
+    key = _approx_clone_key(cfg)
     clone = bucket.get(key)
     if clone is None:
         clone = model.with_approx(cfg)
         bucket[key] = clone
     return clone
+
+
+def _approx_clone_key(cfg) -> tuple[str, str]:
+    """Memo key of one resolved precompute config, shared by store and forget."""
+    return (type(cfg).__name__, repr(cfg))
+
+
+def _forget_memoized_approx_clone(model, cfg) -> None:
+    """Drop the memo entry for ``(model, cfg)``, if any.
+
+    Used for a probe clone whose answer was negative, so that it is not kept alive
+    by the weak-keyed memo for as long as ``model`` lives.
+    """
+    try:
+        bucket = _APPROX_CLONE_CACHE.get(model)
+    except TypeError:
+        # Not hashable or not weak-referenceable: it was never memoized.
+        return
+    if bucket is not None:
+        bucket.pop(_approx_clone_key(cfg), None)
 
 
 # Redshift-override clones, memoized per (source model, override z).
@@ -779,12 +799,20 @@ def _photometry_grid_engages(model) -> bool:
         return False
     if any(grid_baked_free_params(sed.spec) for sed in seds):
         return False
+    # Cheap exits, read off the spec before any clone is built: WG00 dust and a free
+    # attenuation-curve shape never get the energy-balance LUT, so the clone would
+    # answer False. Same predicate the energy-balance LUT itself uses (#2570).
+    if any(sed._spec_rules_out_energy_balance_lut() for sed in seds):
+        return False
     # The pair, not WavePrecomp alone: without IR emission the dust keeps the grid
-    # only when FeaturePrecomp is configured (c4f897d43, d5a3f86ba). This is also the
-    # config the resolvers attach, so the memoized clone is reused, not rebuilt.
-    return fast_nebular_can_engage(
-        _memoized_approx_clone(model, (WavePrecomp(), FeaturePrecomp()))
-    )
+    # only when FeaturePrecomp is configured (#3267). This is also the config the
+    # resolvers attach, so a positive answer reuses the memoized clone. A negative
+    # one is forgotten, so the probe is not kept alive by the memo.
+    pair = (WavePrecomp(), FeaturePrecomp())
+    engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    if not engages:
+        _forget_memoized_approx_clone(model, pair)
+    return engages
 
 
 def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:

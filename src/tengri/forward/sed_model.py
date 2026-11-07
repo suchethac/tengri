@@ -12066,6 +12066,46 @@ class SEDModel:
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
         return not any(not isinstance(c, dust_types) for c in _nebular_continuum_consumers(chain))
 
+    def _unsafe_free_dust_params(self) -> frozenset:
+        """Free ``dust_*`` parameters that move the attenuation curve itself.
+
+        Every free ``dust_*`` parameter other than an optical depth, an eta scaling
+        or an emission-shape knob. The energy-balance LUT is built only when this is
+        empty (:meth:`_energy_balance_lut`).
+
+        Returns
+        -------
+        frozenset of str
+            The offending parameter names; empty when the curve is shape-fixed.
+        """
+        return frozenset(
+            p
+            for p in self.spec.free_params
+            if p.startswith("dust_")
+            and p not in self._EB_ATTEN_FREE_OK
+            and p not in self._EB_EMISSION_PARAMS
+        )
+
+    def _spec_rules_out_energy_balance_lut(self) -> bool:
+        """Whether the spec alone rules out the stellar energy-balance LUT.
+
+        A pure read of the spec, so it costs no clone and no table build. True for
+        WG00 dust (no two-component energy balance) and for a free attenuation-curve
+        shape (:meth:`_unsafe_free_dust_params`). Either one makes
+        :meth:`_energy_balance_lut` return ``None``, so the nebular grid cannot serve
+        the dust's photometry; the converse does not hold, so False means "not ruled
+        out", not "served".
+
+        Returns
+        -------
+        bool
+            True when the LUT is certainly absent for every ``WavePrecomp`` clone of
+            this model.
+        """
+        if getattr(self.spec, "dust_model", None) == "wg00":
+            return True
+        return bool(self._unsafe_free_dust_params())
+
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
 
@@ -12110,13 +12150,7 @@ class SEDModel:
         )
 
         free = set(self.spec.free_params)
-        unsafe_free = {
-            p
-            for p in free
-            if p.startswith("dust_")
-            and p not in self._EB_ATTEN_FREE_OK
-            and p not in self._EB_EMISSION_PARAMS
-        }
+        unsafe_free = self._unsafe_free_dust_params()
         # Detect dust emission: check if dust emission is configured.
         # After the component migration, dust_emission_model is set from the spec
         # and is the source of truth for whether dust emission is active.
