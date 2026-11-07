@@ -8,6 +8,7 @@ stationary when its Hessian is positive definite and its Newton decrement is bel
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -16,6 +17,46 @@ import jax.numpy as jnp
 
 #: Newton-decrement bar [nats] below which a MAP point counts as stationary (#3205).
 MAP_DECREMENT_BAR = 1e-8
+
+#: Jitted (value-and-gradient, Hessian) pairs keyed weakly on the loss, so a repeated
+#: certificate on one objective reuses its compiled programs. The jitted pair holds the
+#: loss only through a weak reference, so a dropped loss frees its entry.
+_DERIVATIVES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def compiled_derivatives(loss: Callable[[jax.Array], jax.Array]):
+    """Return the jitted ``(value_and_grad, hessian)`` pair of ``loss``, built once.
+
+    Parameters
+    ----------
+    loss : callable
+        ``loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector.
+
+    Returns
+    -------
+    value_and_grad : callable
+        ``value_and_grad(x) -> (value, grad)``, jitted.
+    hessian : callable
+        ``hessian(x) -> ndarray, shape (D, D)``, jitted.
+
+    Notes
+    -----
+    Keyed on the identity of ``loss``: pass the same object to reuse the compiled
+    programs, a new object compiles afresh. The entry is dropped with ``loss``.
+    """
+    pair = _DERIVATIVES.get(loss)
+    if pair is None:
+        loss_ref = weakref.ref(loss)
+
+        def live(vec):
+            f = loss_ref()
+            if f is None:
+                raise RuntimeError("the loss was collected while its derivatives were in use")
+            return f(vec)
+
+        pair = (jax.jit(jax.value_and_grad(live)), jax.jit(jax.hessian(live)))
+        _DERIVATIVES[loss] = pair
+    return pair
 
 
 @dataclass(frozen=True)
@@ -80,8 +121,9 @@ def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Statio
     ``hessian_finite=False`` with a NaN decrement, never as a zero decrement.
     """
     x = jnp.asarray(x)
-    value, grad = jax.jit(jax.value_and_grad(loss))(x)
-    hessian = jax.jit(jax.hessian(loss))(x)
+    value_and_grad, hessian_fn = compiled_derivatives(loss)
+    value, grad = value_and_grad(x)
+    hessian = hessian_fn(x)
     grad_norm = float(jnp.linalg.norm(grad))
     if not bool(jnp.all(jnp.isfinite(hessian))):
         return Stationarity(

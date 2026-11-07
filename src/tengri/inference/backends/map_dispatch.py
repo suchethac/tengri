@@ -23,7 +23,11 @@ from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
 from tengri.inference.lbfgs_driver import lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import inv_noise_std
-from tengri.inference.map_stationarity import MAP_DECREMENT_BAR, stationarity
+from tengri.inference.map_stationarity import (
+    MAP_DECREMENT_BAR,
+    compiled_derivatives,
+    stationarity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +264,15 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 # ── scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
 
 
+def _flat_map_loss(loss_fn, data_args, unravel_fn):
+    """Return ``flat_loss(vec)``, the negative log-posterior of a flat standardized vector."""
+
+    def flat_loss(vec):
+        return loss_fn(unravel_fn(vec), data_args)
+
+    return flat_loss
+
+
 def _run_map_scipy(
     context: InferenceContext,
     *,
@@ -273,6 +286,7 @@ def _run_map_scipy(
     verbose,
     verbose_steps=False,
     print_every=50,
+    certify_loss=None,
 ):
     """MAP optimization via scipy quasi-Newton solvers.
 
@@ -376,11 +390,11 @@ def _run_map_scipy(
 
     _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
 
-    def flat_loss(vec):
-        return loss_fn(unravel_fn(vec), data_args)
+    if certify_loss is None:
+        certify_loss = _flat_map_loss(loss_fn, data_args, unravel_fn)
 
     x_final, final_loss, grad_norm, decrement, converged, attempts, reason = _certify_map_point(
-        flat_loss,
+        certify_loss,
         jnp.asarray(result.x),
         scipy_success=bool(result.success),
         n_steps=n_steps,
@@ -525,7 +539,8 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     Hessian is never read as a zero decrement: it yields ``stationary=False`` with a NaN
     decrement and ``reason="hessian_not_finite"``.
     """
-    value, grad = jax.jit(jax.value_and_grad(flat_loss))(x)
+    value_and_grad, _ = compiled_derivatives(flat_loss)
+    value, grad = value_and_grad(x)
     if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
         return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
     stat = stationarity(flat_loss, x)
@@ -735,9 +750,14 @@ def _run_map_multistart_scipy(
 
     keys = jax.random.split(key, n_restarts)
     results = []
+    certify_loss = None
     t0 = time.time()
     for k in keys:
         init_params = context.initial_params(k, init_from=None)
+        if certify_loss is None:
+            # One objective for every restart: the restarts share a pytree structure, so
+            # the first restart's unravel serves all, and the certificate compiles once.
+            certify_loss = _flat_map_loss(loss_fn, data_args, ravel_pytree(init_params)[1])
         results.append(
             _run_map_scipy(
                 context,
@@ -749,6 +769,7 @@ def _run_map_multistart_scipy(
                 n_steps=n_steps,
                 tol=tol,
                 verbose=False,
+                certify_loss=certify_loss,
             )
         )
     final_losses = jnp.asarray([float(r.diagnostics["final_loss"]) for r in results])
