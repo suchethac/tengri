@@ -71,25 +71,54 @@ def _script_certify(monkeypatch, stats, points):
     return calls
 
 
+#: Largest stationary rise measured on the joint fixture (seed 2, float64), nats.
+MEASURED_ROUND_OFF_RISE = 6.957634468562901e-11
+
+
 def test_map_certify_accepts_stationary_within_round_off(monkeypatch):
     nlp0 = 163.24656257987317
-    eps = float(jnp.finfo(jnp.float64).eps)
     x0, x_c = jnp.zeros(3), jnp.full(3, 0.5)
-    # Round 1 reaches a stationary point whose loss is 3 eps |nlp| above the start's.
-    calls = _script_certify(
-        monkeypatch,
-        [_stat(nlp0, 1e-3), _stat(nlp0 + 3 * eps * abs(nlp0), 1e-12)],
-        [x_c],
-    )
+    rise = MEASURED_ROUND_OFF_RISE
+    # Round 1 reaches a stationary point whose loss rose by the measured round-off.
+    calls = _script_certify(monkeypatch, [_stat(nlp0, 1e-3), _stat(nlp0 + rise, 1e-12)], [x_c])
     x, nlp, _, _, stationary, attempts, reason = map_dispatch._certify_map_point(
         _quad, x0, scipy_success=True, n_steps=10, gtol=1e-12
     )
     np.testing.assert_allclose(np.asarray(x), np.asarray(x_c))
-    assert nlp == pytest.approx(nlp0 + 3 * eps * abs(nlp0), rel=1e-12)
+    assert nlp == pytest.approx(nlp0 + rise, rel=1e-12)
     assert stationary is True
     assert attempts == 2
     assert reason is None
     assert len(calls) == 1
+
+
+def test_map_certify_rejects_stationary_rise_above_the_bar(monkeypatch):
+    nlp0 = 163.24656257987317
+    x0, x_c = jnp.zeros(3), jnp.full(3, 0.5)
+    # 2e-8 nats is above the 1e-8 bar (MAP_DECREMENT_BAR at nlp 163, float64), so the
+    # stationary candidate is a real rise and the start is kept.
+    _script_certify(monkeypatch, [_stat(nlp0, 1e-3), _stat(nlp0 + 2e-8, 1e-12)], [x_c])
+    x, nlp, _, _, stationary, attempts, _ = map_dispatch._certify_map_point(
+        _quad, x0, scipy_success=True, n_steps=10, gtol=1e-12
+    )
+    np.testing.assert_allclose(np.asarray(x), np.asarray(x0))
+    assert nlp == pytest.approx(nlp0)
+    assert stationary is False
+    assert attempts == 2
+
+
+def test_map_certify_round_off_bar_float32_uses_the_eps_term(monkeypatch):
+    nlp0 = 163.0
+    x0, x_c = jnp.zeros(3, dtype=jnp.float32), jnp.full(3, 0.5, dtype=jnp.float32)
+    # Float32 bar at nlp 163 is 8 eps32 |nlp| (about 1.6e-4 nats). A 1e-4 rise is round-off
+    # for float32 and is taken; without the eps term the 1e-8 bar would reject it.
+    _script_certify(monkeypatch, [_stat(nlp0, 1e-3), _stat(nlp0 + 1e-4, 1e-12)], [x_c])
+    x, _, _, _, stationary, attempts, _ = map_dispatch._certify_map_point(
+        _quad, x0, scipy_success=True, n_steps=10, gtol=1e-12
+    )
+    np.testing.assert_allclose(np.asarray(x), np.asarray(x_c))
+    assert stationary is True
+    assert attempts == 2
 
 
 def test_map_certify_rejects_stationary_with_real_rise(monkeypatch):

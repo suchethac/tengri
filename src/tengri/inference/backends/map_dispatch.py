@@ -444,17 +444,22 @@ def _run_map_scipy(
     )
 
 
-#: Round-off allowance for a stationary candidate, in units of ``eps(dtype) * |nlp|``.
-#: Measured on the joint fixture (seed 2, float64): the stationary rounds rose the loss by
-#: 2.04e-11 and 6.96e-11 at nlp 163.25, that is 564 and 1922 eps |nlp|. 2048 = 2**11 covers
-#: the largest with 6 % margin, and matches the linear-in-N summation scale of the 2004
-#: data points (N eps |nlp|). One fixture fixes the number; it is not a general bound.
-_ROUND_OFF_FACTOR = 2048
+#: Coefficient of ``eps(dtype) * |nlp|`` in the round-off bar. Loss rounding in a sum of
+#: this size is a few eps |nlp|; 8 keeps the bar above it.
+_ROUND_OFF_EPS_MULTIPLE = 8
 
 
 def _round_off_bar(best_nlp: float, dtype) -> float:
-    """Largest loss rise [nats] a stationary candidate may carry over ``best_nlp``."""
-    return _ROUND_OFF_FACTOR * float(jnp.finfo(dtype).eps) * abs(float(best_nlp))
+    """Largest loss rise [nats] a stationary candidate may carry over ``best_nlp``.
+
+    ``stationary`` already means the Newton decrement is below MAP_DECREMENT_BAR (1e-8
+    nats), so a rise below that is below what certification can resolve. The eps term
+    only keeps the bar above loss rounding at large ``|nlp|``; neither term is fitted.
+    Float64 at nlp 163: 1e-8, about 140 times the largest measured rise (6.96e-11).
+    Float32 at nlp 163: about 1.6e-4.
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return max(MAP_DECREMENT_BAR, _ROUND_OFF_EPS_MULTIPLE * eps * abs(float(best_nlp)))
 
 
 def _accept_round(candidate, best, bar: float) -> bool:
