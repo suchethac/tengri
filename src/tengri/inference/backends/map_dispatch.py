@@ -444,6 +444,40 @@ def _run_map_scipy(
     )
 
 
+#: Coefficient of ``eps(dtype) * |nlp|`` in the round-off bar. Loss rounding in a sum of
+#: this size is a few eps |nlp|; 8 keeps the bar above it.
+_ROUND_OFF_EPS_MULTIPLE = 8
+
+
+def _round_off_bar(best_nlp: float, dtype) -> float:
+    """Largest loss rise [nats] a stationary candidate may carry over ``best_nlp``.
+
+    ``stationary`` already means the Newton decrement is below MAP_DECREMENT_BAR (1e-8
+    nats), so a rise below that is below what certification can resolve. The eps term
+    only keeps the bar above loss rounding at large ``|nlp|``; neither term is fitted.
+    Float64 at nlp 163: 1e-8, about 140 times the largest measured rise (6.96e-11).
+    Float32 at nlp 163: about 1.6e-4.
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return max(MAP_DECREMENT_BAR, _ROUND_OFF_EPS_MULTIPLE * eps * abs(float(best_nlp)))
+
+
+def _accept_round(candidate, best, bar: float) -> bool:
+    """Whether a continuation round's end replaces the current best iterate.
+
+    A finite candidate below ``best``'s loss is accepted. A stationary candidate within
+    ``bar`` above it is accepted too, because the rise is round-off of a converged point.
+    A non-stationary candidate with any rise, and a stationary one with a real rise, is
+    rejected: that point is a different minimum, or a worse one, and the best stays.
+    A non-finite candidate is never accepted.
+    """
+    if not np.isfinite(candidate.nlp):
+        return False
+    if not np.isfinite(best.nlp) or candidate.nlp < best.nlp:
+        return True
+    return candidate.stationary and candidate.nlp - best.nlp <= bar
+
+
 def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     """Return the point to report after scipy's stop, continuing with the shared driver if needed.
 
@@ -498,14 +532,22 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     attempts = 1
     if scipy_success and stat.stationary:
         return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
+    best_x, best = x, stat
+    dtype = jnp.asarray(x).dtype
     for _ in range(_MAP_CONTINUATION_ROUNDS):
-        if not stat.hessian_finite:
+        if not best.hessian_finite:
             break
-        x, _, _ = lbfgs_to_gtol(flat_loss, x, n_steps=n_steps, gtol=gtol)
+        x, _, _ = lbfgs_to_gtol(flat_loss, best_x, n_steps=n_steps, gtol=gtol)
         attempts += 1
         stat = stationarity(flat_loss, x)
-        if stat.stationary:
+        if not _accept_round(stat, best, _round_off_bar(best.nlp, dtype)):
+            # The next round would start from the same best point, and lbfgs_to_gtol is
+            # deterministic (bytes identical, float32 and float64), so it would replay this one.
             break
+        best_x, best = x, stat
+        if best.stationary:
+            break
+    x, stat = best_x, best
     reason = None if stat.hessian_finite else "hessian_not_finite"
     return (
         x,
