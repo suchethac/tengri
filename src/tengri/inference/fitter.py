@@ -515,12 +515,32 @@ def _memoized_approx_clone(model, cfg):
         return model.with_approx(cfg)
     # repr, not hash: the precompute configs are dataclasses whose repr covers
     # every field, and not all of them are guaranteed hashable.
-    key = (type(cfg).__name__, repr(cfg))
+    key = _approx_clone_key(cfg)
     clone = bucket.get(key)
     if clone is None:
         clone = model.with_approx(cfg)
         bucket[key] = clone
     return clone
+
+
+def _approx_clone_key(cfg) -> tuple[str, str]:
+    """Memo key of one resolved precompute config, shared by store and forget."""
+    return (type(cfg).__name__, repr(cfg))
+
+
+def _forget_memoized_approx_clone(model, cfg) -> None:
+    """Drop the memo entry for ``(model, cfg)``, if any.
+
+    Used for a probe clone whose answer was negative, so that it is not kept alive
+    by the weak-keyed memo for as long as ``model`` lives.
+    """
+    try:
+        bucket = _APPROX_CLONE_CACHE.get(model)
+    except TypeError:
+        # Not hashable or not weak-referenceable: it was never memoized.
+        return
+    if bucket is not None:
+        bucket.pop(_approx_clone_key(cfg), None)
 
 
 # Redshift-override clones, memoized per (source model, override z).
@@ -732,6 +752,69 @@ def fast_nebular_can_engage(model) -> bool:
     return not any(_nebular_continuum_consumers(chain) for chain in chains)
 
 
+#: Nebular backend whose photometry takes the ``(WavePrecomp, FeaturePrecomp)`` pair
+#: by default under ``approx="auto"`` (owner decision, 2026-11-06).
+_PAIR_NEBULAR_MODE = "cue"
+
+
+def _photometry_grid_engages(model) -> bool:
+    """Whether the per-Q_H photometry grid engages for ``model`` or its WavePrecomp clone.
+
+    :func:`fast_nebular_can_engage` on the raw model is False for a dusty Cue
+    model, because the dust energy-balance LUT that lets the dust read the grid
+    only exists once ``WavePrecomp`` is attached (#2570). The grid does serve that
+    photometry, so for a Cue model without ``WavePrecomp`` the predicate is
+    evaluated on the memoized ``(WavePrecomp, FeaturePrecomp)`` clone, which is the
+    config the resolvers attach. Any other backend, and any free nebular parameter the
+    grid bakes (``grid_baked_free_params``), keeps the raw answer.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The fit's model. Never mutated.
+
+    Returns
+    -------
+    bool
+        ``True`` when the grid serves photometry for the raw model, or for the
+        Cue ``WavePrecomp`` clone of it.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import grid_baked_free_params
+    from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+
+    if fast_nebular_can_engage(model):
+        return True
+    state = getattr(model, "approx", None)
+    if state is not None and state.wave_precomp:
+        # The raw model already is the WavePrecomp clone; the answer above is final.
+        return False
+    if not callable(getattr(model, "with_approx", None)):
+        return False
+    populations = getattr(model, "populations", None) or ()
+    seds = [getattr(pop, "sed", None) for pop in populations] or [model]
+    if not all(
+        getattr(getattr(sed, "spec", None), "nebular_mode", None) == _PAIR_NEBULAR_MODE
+        for sed in seds
+    ):
+        return False
+    if any(grid_baked_free_params(sed.spec) for sed in seds):
+        return False
+    # Cheap exits, read off the spec before any clone is built: WG00 dust and a free
+    # attenuation-curve shape never get the energy-balance LUT, so the clone would
+    # answer False. Same predicate the energy-balance LUT itself uses (#2570).
+    if any(sed._spec_rules_out_energy_balance_lut() for sed in seds):
+        return False
+    # The pair, not WavePrecomp alone: without IR emission the dust keeps the grid
+    # only when FeaturePrecomp is configured (#3267). This is also the config the
+    # resolvers attach, so a positive answer reuses the memoized clone. A negative
+    # one is forgotten, so the probe is not kept alive by the memo.
+    pair = (WavePrecomp(), FeaturePrecomp())
+    engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    if not engages:
+        _forget_memoized_approx_clone(model, pair)
+    return engages
+
+
 def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
     """Whether appending ``FeaturePrecomp`` can change this fit's compiled graph.
 
@@ -768,9 +851,13 @@ def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
     """
     from tengri.forward.sed_model import feature_lut_serves_line_channel
 
-    if serves_line_channel and feature_lut_serves_line_channel(model):
-        return True
-    return fast_nebular_can_engage(model)
+    if serves_line_channel:
+        # A line-flux fit keeps the raw answer: the Cue photometry pair is a
+        # photometry-only default (2026-11-06), so a dusty Cue line fit stays refused.
+        if feature_lut_serves_line_channel(model):
+            return True
+        return fast_nebular_can_engage(model)
+    return _photometry_grid_engages(model)
 
 
 def _observation_serves_line_channel(model) -> bool:
@@ -2440,7 +2527,10 @@ class Fitter:
         """Select the fit-time forward model per the ``approx`` policy.
 
         - ``"auto"`` (default): route the fit through the precompute LUT chosen
-          by data type (see :meth:`_auto_approx_config`). A build-time
+          by data type (see :meth:`_auto_approx_config`). A Cue photometry fit
+          also takes ``FeaturePrecomp`` on top of ``WavePrecomp``, dusty or not:
+          the predicate is evaluated on the ``WavePrecomp`` clone for a dusty
+          model (see :func:`_photometry_grid_engages`; 2026-11-06). A build-time
           ``approx=`` is respected, but is **topped up** with ``FeaturePrecomp``
           when a line channel is fit and it is missing, otherwise naming
           ``WavePrecomp()`` at build time would make a lines fit slower than
@@ -2512,7 +2602,9 @@ class Fitter:
                 # This branch appends the config directly rather than through
                 # ``_add_feature_precomp``, so it needs the predicate of its own;
                 # guarding only the helper left this path attaching it anyway.
-                and fast_nebular_can_engage(model)
+                # 2026-11-06: evaluated on the WavePrecomp clone for Cue, see
+                # ``_photometry_grid_engages``.
+                and _photometry_grid_engages(model)
             ):
                 # #1596: a photometry-only Cue fit measured ~4x SLOWER than
                 # the same fit WITH a line channel, because FeaturePrecomp,
