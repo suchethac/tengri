@@ -44,7 +44,7 @@ pytestmark = pytest.mark.regression_bug
 _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
 
 
-def _build(ssp, approx, *, dust_attenuation: bool):
+def _build(ssp, approx, *, dust_attenuation: bool, extra_neb: dict | None = None):
     from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     dust_group = (
@@ -71,7 +71,7 @@ def _build(ssp, approx, *, dust_attenuation: bool):
             "age_gyr": 5.0,
         },
         dust_attenuation=dust_group,
-        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), **(extra_neb or {})},
         redshift=Fixed(0.1),
         approx=approx,
     )
@@ -200,27 +200,48 @@ def test_feature_precomp_stays_exact_on_a_dusty_model_that_cannot_engage(ssp_dat
 
 
 def test_the_resolver_does_not_attach_a_config_that_cannot_engage(ssp_data_fsps):
-    """No fit may pay a second compiled kernel for a no-op config.
+    """The resolver attaches ``FeaturePrecomp`` exactly when the grid engages.
 
     ``compile_signature()`` includes the approx state, so appending an inert
     ``FeaturePrecomp`` costs a distinct compiled kernel while changing no FLOPs.
+    The rule is the one :func:`_photometry_grid_engages` states: a dusty Cue model
+    now engages (the grid serves its dust through the WavePrecomp clone, owner
+    2026-11-06), so the resolver attaches; a model the grid cannot serve, a free
+    nebular parameter the grid bakes, must not.
     """
     import jax.numpy as jnp_
 
-    from tengri.inference.fitter import Fitter, fast_nebular_can_engage
+    from tengri import Uniform
+    from tengri.inference.fitter import (
+        Fitter,
+        _photometry_grid_engages,
+        fast_nebular_can_engage,
+    )
 
+    def _attached(model) -> bool:
+        fitter = Fitter(model, jnp_.ones(3), jnp_.ones(3))
+        # "auto" is the default policy every fit surface resolves through.
+        resolved = fitter._resolve_fit_approx(model, "auto")
+        state = getattr(resolved, "approx", None)
+        return state is not None and bool(getattr(state, "feature_precomp", False))
+
+    # The raw model is False: the dust LUT only exists once WavePrecomp is attached.
     dusty = _build(ssp_data_fsps, None, dust_attenuation=True)
     assert not fast_nebular_can_engage(dusty)
+    assert _photometry_grid_engages(dusty)
+    assert _attached(dusty) == _photometry_grid_engages(dusty)
+    assert _attached(dusty), "a dusty Cue fit must take the pair under 'auto'"
 
-    n_bands = 3
-    fitter = Fitter(dusty, jnp_.ones(n_bands), jnp_.ones(n_bands))
-    # "auto" is the default policy every fit surface resolves through.
-    resolved = fitter._resolve_fit_approx(dusty, "auto")
-
-    state = getattr(resolved, "approx", None)
-    attached = state is not None and getattr(state, "feature_precomp", False)
-    assert not attached, (
-        "the resolver attached FeaturePrecomp to a dusty model, where it is measured "
-        "bit-identical in compiled FLOPs — a separate compiled kernel for no effect "
+    # No-op guard: a model the grid cannot serve must not get an inert config.
+    blocked = _build(
+        ssp_data_fsps,
+        None,
+        dust_attenuation=True,
+        extra_neb={"gas_logn": Uniform(1.0, 3.0)},
+    )
+    assert not _photometry_grid_engages(blocked)
+    assert not _attached(blocked), (
+        "the resolver attached FeaturePrecomp to a model the grid cannot serve "
+        "(a baked free nebular parameter), a separate compiled kernel for no effect "
         "(#1748)."
     )
