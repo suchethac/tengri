@@ -53,7 +53,9 @@ from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.chain_program import (
     DYNAMIC_HMC,
     DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+    GHMC,
     HMC,
+    MEADS,
     NUTS,
     WINDOW_HMC,
     nuts_adaptation,
@@ -423,6 +425,17 @@ register_backend(
     adaptation_rule=_dynamic_hmc_adaptation_rule,
 )(_ctx_run_dynamic_hmc)
 
+
+def _ghmc_adaptation_rule(kwargs: dict):
+    """Return the MEADS adaptation GHMC always runs; its ``dense_mass_matrix`` is inert.
+
+    GHMC's momentum generator is diagonal whatever the mass policy, so no policy in
+    ``kwargs`` changes the adaptation.
+    """
+    # compile() and the flat seam use WINDOW_GHMC via the _ghmc_full_scan shim, not this rule.
+    return MEADS
+
+
 register_backend(
     "mcmc_ghmc",
     tier="broken",
@@ -439,6 +452,8 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    chain_program=GHMC,
+    adaptation_rule=_ghmc_adaptation_rule,
 )(_ctx_run_ghmc)
 
 register_backend(

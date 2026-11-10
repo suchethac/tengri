@@ -1088,7 +1088,6 @@ def _dynamic_hmc_full_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9))
 def _ghmc_full_scan(
     init_flat,
     warmup_key,
@@ -1101,12 +1100,10 @@ def _ghmc_full_scan(
     alpha,
     delta,
 ):
-    """Outer JIT: HMC warmup + GHMC init + sampling chain.
+    """Run GHMC window warmup then sampling from a fresh state; a shim over ``run_chain``.
 
-    GHMC requires a diagonal mass matrix (momentum generator constraint),
-    so HMC warmup always uses diagonal regardless of the ``dense_mass_matrix``
-    flag. Returns step size and diagonal momentum inverse scale. Burnin
-    discard happens caller-side.
+    GHMC requires a diagonal mass matrix (momentum generator constraint), so the warmup
+    is always a diagonal HMC window adaptation, whatever ``dense_mass_matrix`` says.
 
     Parameters
     ----------
@@ -1139,96 +1136,27 @@ def _ghmc_full_scan(
     step_size : scalar
     momentum_inv_scale : ndarray, shape (D,)
     """
-    import blackjax
-
-    def ld_1arg(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    warmup = blackjax.window_adaptation(
-        blackjax.hmc,
-        ld_1arg,
-        is_mass_matrix_diagonal=True,
-        target_acceptance_rate=target_accept_rate,
-        num_integration_steps=10,
+    from tengri.inference.backends.mcmc.chain_program import (
+        GHMC,
+        WINDOW_GHMC,
+        GHMCConfig,
+        run_chain,
     )
-    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    step_size = parameters["step_size"]
-    momentum_inv_scale = parameters["inverse_mass_matrix"]
 
-    # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
-    # between 1.3 and 1.6, keywords are correct on both.
-    state = blackjax.mcmc.ghmc.init(
-        position=init_flat, logdensity_fn=ld_1arg, rng_key=ghmc_init_key
+    cfg = GHMCConfig(alpha=alpha, delta=delta, target_accept_rate=target_accept_rate)
+    draws, (step_size, momentum_inv_scale) = run_chain(
+        GHMC,
+        WINDOW_GHMC,
+        init_flat,
+        warmup_key,
+        ghmc_init_key,
+        chain_keys,
+        logdensity_fn_2arg,
+        data_args,
+        n_warmup,
+        cfg,
     )
-    kernel = _get_ghmc_kernel()
-
-    def _step(s, k):
-        """Advance GHMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, momentum_inv_scale
-
-
-@functools.partial(jax.jit, static_argnums=(2, 8, 9))
-def _ghmc_chain_scan(
-    state,
-    chain_keys,
-    logdensity_fn_2arg,
-    data_args,
-    step_size,
-    momentum_inv_scale,
-    alpha,
-    delta,
-    alpha_static,
-    delta_static,
-):
-    """Outer JIT: GHMC sampling chain with pre-computed adaptation params.
-
-    Parameters
-    ----------
-    state : GHMCState
-        Initial chain state (from ``blackjax.mcmc.ghmc.init``).
-    chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg : callable (static)
-        ``log_p(position, data_args)``.
-    data_args : pytree (traced)
-        Observed data tensors.
-    step_size : scalar (traced)
-        Step size from HMC window adaptation.
-    momentum_inv_scale : ndarray (traced), shape (D,)
-        Diagonal inverse mass matrix from HMC window adaptation.
-    alpha : float (traced)
-        Momentum persistence passed to the GHMC kernel.
-    delta : float (traced)
-        Step size scaling passed to the GHMC kernel.
-    alpha_static : float (static)
-        Mirrors ``alpha`` as a static arg; belongs in the XLA cache key
-        because it controls the momentum-refresh geometry. Pass the same value.
-    delta_static : float (static)
-        Mirrors ``delta`` as a static arg. Pass the same value as ``delta``.
-
-    Returns
-    -------
-    positions : ndarray, shape (n_chain, D)
-    divergent : ndarray, shape (n_chain,)
-        Caller slices ``[n_burnin:]``.
-    """
-
-    def ld(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    kernel = _get_ghmc_kernel()
-
-    def _step(s, k):
-        """Advance GHMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent
+    return draws.position, draws.divergent, step_size, momentum_inv_scale
 
 
 # ---------------------------------------------------------------------------
@@ -1351,156 +1279,6 @@ def _resolve_meads_ensemble(n_ensemble, n_chains, n_folds):
     if remainder:
         resolved += n_folds - remainder
     return resolved
-
-
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9, 10, 11, 12))
-def _ghmc_meads_scan(
-    init_flat,
-    warmup_key,
-    chain_keys,
-    logdensity_fn_2arg,
-    data_args,
-    n_warmup,
-    n_ensemble,
-    n_folds,
-    alpha_override,
-    delta_override,
-    jitter_scale,
-    low_rank_rank,
-    low_rank_window_fraction,
-):
-    """Outer JIT: MEADS ensemble adaptation + GHMC sampling, one XLA program.
-
-    Replaces the ``blackjax.window_adaptation`` path GHMC used to borrow from
-    HMC. Window adaptation dual-averages a step size against a *target acceptance
-    rate* for a reversible Metropolis step; generalized HMC has no such step (it
-    uses a non-reversible slice update) and its mixing is governed by the damping
-    ``alpha``, which window adaptation cannot see and therefore left at a
-    hand-set constant. MEADS derives both from the ensemble.
-
-    The warmup ensemble's final states are *reused* as the sampling chains'
-    initial states rather than discarded and re-seeded from ``init_flat``. That
-    is why this is one function and not two: MEADS has no separate warmup phase
-    by construction, so throwing its ensemble away would mean paying for warmup
-    and then starting cold anyway.
-
-    Parameters
-    ----------
-    init_flat : ndarray, shape (D,)
-        Seed position in unbounded latent space; the ensemble is dispersed
-        around it [dimensionless].
-    warmup_key : PRNGKey (traced)
-        Split into the ensemble-dispersion key and the MEADS adaptation key.
-    chain_keys : ndarray, shape (n_chains, n_iter, 2)
-        Pre-split per-chain keys. ``n_chains`` is read off this array's leading
-        axis and must not exceed ``n_ensemble``; the caller guarantees that via
-        :func:`_resolve_meads_ensemble`.
-    logdensity_fn_2arg : callable (static)
-        ``log_p(position, data_args)``, the galaxy-agnostic log-posterior.
-    data_args : pytree (traced)
-        Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup : int (static)
-        MEADS adaptation steps. One leapfrog per step per ensemble chain, so the
-        gradient budget is exactly ``n_warmup * n_ensemble`` and flat -- unlike a
-        NUTS warmup, whose cost per step is posterior-dependent.
-    n_ensemble : int (static)
-        Adaptation-ensemble width; see :func:`_resolve_meads_ensemble`.
-    n_folds : int (static)
-        MEADS folds K.
-    alpha_override, delta_override : float or None (static)
-        ``None`` uses the adapted value [dimensionless]. A float pins it, which
-        is what the old ``alpha=0.8, delta=0.65`` defaults did unconditionally.
-    jitter_scale : float (static)
-        Ensemble dispersion; see :data:`_MEADS_JITTER_SCALE` [dimensionless].
-    low_rank_rank : int or None (static)
-        MEADS-LRD. ``None`` (the default, and BlackJAX's) adapts the *diagonal*
-        momentum metric from each fold. An int instead adapts a rank-``k``
-        ``LowRankInverseMassMatrix`` from the pooled ensemble, which is the
-        obvious thing to reach for given the 1e5-1e8 latent condition numbers
-        ``inference/preconditioning.py`` documents. **Measured, and it does not
-        help**: at ``rank = D`` (i.e. a full dense metric) nb05's best split-R-hat
-        is 1.81 and nb01's 1.46, against a bar of 1.01 -- see
-        ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``. It is exposed so
-        the experiment can be re-run without editing source, and it is off by
-        default because a knob that does not help must not be a default.
-    low_rank_window_fraction : float (static)
-        Only read when ``low_rank_rank`` is set. Fraction of warmup, counted
-        from the end, over which the low-rank covariance accumulates.
-
-    Returns
-    -------
-    positions : ndarray, shape (n_chains, n_iter, D)
-    divergent : ndarray, shape (n_chains, n_iter)
-        Caller trims ``[:, n_burnin:]`` and flattens, matching
-        :func:`_vmap_chains`.
-    step_size : ndarray, shape ()
-    momentum_inv_scale : ndarray, shape (D,)
-        Adapted diagonal momentum scale. GHMC's momentum generator treats this as
-        a diagonal vector, which is why GHMC is always diagonal-metric regardless
-        of ``dense_mass_matrix``.
-    alpha, delta : ndarray, shape ()
-        The adapted (or overridden) damping and slice translation.
-
-    Notes
-    -----
-    JIT: this *is* the jitted entry point. Not vmappable over galaxies as-is --
-    the batched catalog path still uses :func:`_ghmc_full_scan`.
-
-    References
-    ----------
-    .. [1] M. D. Hoffman and P. Sountsov, "Tuning-Free Generalized Hamiltonian
-       Monte Carlo", Proceedings of the 25th International Conference on
-       Artificial Intelligence and Statistics (AISTATS), PMLR 151:7799-7813,
-       2022. https://proceedings.mlr.press/v151/hoffman22a.html
-    """
-    import blackjax
-    from blackjax.adaptation.base import get_filter_adapt_info_fn
-
-    def ld_1arg(pos):
-        """Bind the traced data to the galaxy-agnostic log-posterior."""
-        return logdensity_fn_2arg(pos, data_args)
-
-    jitter_key, adapt_key = jax.random.split(warmup_key)
-    ensemble = init_flat[None, :] + jitter_scale * jax.random.normal(
-        jitter_key, (n_ensemble, init_flat.shape[0]), dtype=init_flat.dtype
-    )
-
-    # ``get_filter_adapt_info_fn()`` with no arguments keeps *nothing*. The
-    # default, ``return_all_adapt_info``, stacks every ensemble state and every
-    # HMCInfo for every warmup step -- n_warmup * n_ensemble * D floats plus the
-    # momentum and the proposal, which at 300 x 32 is already larger than the
-    # posterior being estimated, and is pure overhead here: the adapted values
-    # come back in ``parameters``, not in the info.
-    warmup = blackjax.meads_adaptation(
-        ld_1arg,
-        num_chains=n_ensemble,
-        num_folds=n_folds,
-        adaptation_info_fn=get_filter_adapt_info_fn(),
-        low_rank_rank=low_rank_rank,
-        low_rank_window_fraction=low_rank_window_fraction,
-    )
-    (last_states, parameters), _ = warmup.run(adapt_key, ensemble, num_steps=n_warmup)
-
-    step_size = parameters["step_size"]
-    momentum_inv_scale = parameters["momentum_inverse_scale"]
-    alpha = parameters["alpha"] if alpha_override is None else jnp.asarray(alpha_override)
-    delta = parameters["delta"] if delta_override is None else jnp.asarray(delta_override)
-
-    n_chains = chain_keys.shape[0]
-    states = jax.tree.map(lambda leaf: leaf[:n_chains], last_states)
-    kernel = _get_ghmc_kernel()
-
-    def _step(s, k):
-        """Advance GHMC by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
-        return s, (s.position, info.is_divergent)
-
-    def _chain(state, keys):
-        """Run one chain's scan; vmapped over the sampling chains."""
-        return jax.lax.scan(_step, state, keys)[1]
-
-    positions, divergent = jax.vmap(_chain)(states, chain_keys)
-    return positions, divergent, step_size, momentum_inv_scale, alpha, delta
 
 
 def _walled_logdensity(logdensity_fn_2arg, data_args):
@@ -1795,7 +1573,7 @@ def _chees_scan(
 
     Underneath is an ordinary ``dynamic_hmc`` kernel: a full Metropolis accept
     step and a dual-averaged step size. That matters, and it is the difference
-    between this and :func:`_ghmc_meads_scan`. MEADS derives its momentum metric
+    between this and ``chain_program.MEADS``. MEADS derives its momentum metric
     from the adapting ensemble's own per-fold standard deviation, which closes a
     loop -- wider ensemble to larger momentum to longer excursions to wider
     ensemble -- that acceptance cannot object to, because energy really is
@@ -1817,7 +1595,7 @@ def _chees_scan(
     nothing.
 
     The warmup ensemble's final states are reused as the sampling chains' initial
-    states rather than discarded, for the reason :func:`_ghmc_meads_scan` gives:
+    states rather than discarded, for the reason ``chain_program.MEADS`` gives:
     the adaptation has no separate warmup phase to throw away.
 
     Parameters
@@ -1934,7 +1712,7 @@ def _chees_scan(
     )
 
     # ``get_filter_adapt_info_fn()`` with no arguments keeps *nothing*, for the
-    # reason ``_ghmc_meads_scan`` states: the default stacks every ensemble state
+    # reason ``chain_program.MEADS`` states: the default stacks every ensemble state
     # and every HMCInfo for every warmup step, which at 500 x 32 is far larger
     # than the posterior being estimated and is pure overhead -- the adapted
     # values come back in ``parameters``.

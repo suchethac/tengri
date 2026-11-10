@@ -147,11 +147,16 @@ class Adaptation:
     run : callable
         ``run(warmup_key, init_flat, log_density, n_warmup, cfg, info_fn)`` returning
         ``(state, parameters, info)`` with ``parameters`` a dict holding
-        ``step_size`` and ``inverse_mass_matrix``.
+        ``step_size`` and ``inverse_mass_matrix``, and ``alpha`` and ``delta`` when the
+        family tunes them.
+    ensemble : bool
+        True when ``state`` is a batch of warmed states, one per sampling chain, that
+        the sampling chains start from (MEADS); False when it is one state.
     """
 
     name: str
     run: Any
+    ensemble: bool = False
 
 
 def bind_logdensity(ld2, data_args, wall: bool = False):
@@ -388,6 +393,128 @@ DYNAMIC_HMC = ChainProgram(
 )
 
 
+@dataclass(frozen=True)
+class GHMCConfig:
+    """Static statics of the GHMC family.
+
+    Parameters
+    ----------
+    alpha : float or None
+        Momentum persistence. A float is a static argument of the kernel; None reads the
+        traced value from the tuned parameters.
+    delta : float or None
+        Slice-translation scaling. Same convention as ``alpha``.
+    use_dense : bool
+        Must be False: GHMC's momentum generator takes a diagonal inverse scale.
+    target_accept_rate : float or None
+        Target acceptance rate of the window adaptation; unused by MEADS.
+    n_ensemble : int
+        MEADS ensemble width; unused by the window adaptation.
+    n_folds : int
+        MEADS folds K.
+    jitter_scale : float
+        Gaussian dispersion of the MEADS ensemble around the seed position.
+    low_rank_rank : int or None
+        MEADS-LRD rank; None adapts the diagonal metric.
+    low_rank_window_fraction : float
+        Fraction of warmup over which the low-rank covariance accumulates.
+    """
+
+    alpha: float | None
+    delta: float | None
+    use_dense: bool = False
+    target_accept_rate: float | None = None
+    n_ensemble: int = 0
+    n_folds: int = 4
+    jitter_scale: float = 0.0
+    low_rank_rank: int | None = None
+    low_rank_window_fraction: float = 0.5
+
+    def __post_init__(self):
+        """Refuse a dense metric: GHMC's momentum generator is diagonal."""
+        if self.use_dense:
+            raise ValueError("GHMC refuses use_dense=True: its momentum generator is diagonal")
+
+
+def _ghmc_init(position, ld, key):
+    """Return the GHMC state at ``position``, with momentum drawn from ``key``."""
+    import blackjax
+
+    # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn) between 1.3 and 1.6.
+    return blackjax.mcmc.ghmc.init(position=position, logdensity_fn=ld, rng_key=key)
+
+
+def _ghmc_step(kernel, state, key, ld, params, cfg):
+    """Advance GHMC one step; alpha and delta come from ``cfg`` when pinned, else ``params``."""
+    step_size, momentum_inv_scale = params[0], params[1]
+    alpha = params[2] if cfg.alpha is None else cfg.alpha
+    delta = params[3] if cfg.delta is None else cfg.delta
+    return kernel(key, state, ld, step_size, momentum_inv_scale, alpha, delta)
+
+
+def _ghmc_collect(state, info) -> Draw:
+    """Collect the position and divergence flag of a GHMC step."""
+    return Draw(position=state.position, divergent=info.is_divergent, extras={})
+
+
+#: Generalized HMC sampler. The kernel is the cached BlackJAX GHMC kernel.
+GHMC = ChainProgram(
+    name="ghmc",
+    kernel=_shared._get_ghmc_kernel,
+    init=_ghmc_init,
+    step=_ghmc_step,
+    collect=_ghmc_collect,
+    starts_from_warmup=False,
+)
+
+#: Integration steps of the HMC window that tunes GHMC's diagonal metric.
+GHMC_TUNING_LEAPFROG_STEPS = 10
+
+#: Window adaptation for GHMC: diagonal HMC window adaptation, since GHMC's momentum
+#: generator takes a diagonal metric. Sampling re-initializes at ``init_flat``.
+WINDOW_GHMC = WINDOW_HMC(GHMC_TUNING_LEAPFROG_STEPS, True)
+
+
+def _meads_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
+    """Run MEADS over a jittered ensemble; return the warmed ensemble, its parameters and info.
+
+    The key is split into the ensemble-dispersion key and the MEADS adaptation key here,
+    so the runner never splits keys itself.
+    """
+    import blackjax
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    jitter_key, adapt_key = jax.random.split(warmup_key)
+    ensemble = init_flat[None, :] + cfg.jitter_scale * jax.random.normal(
+        jitter_key, (cfg.n_ensemble, init_flat.shape[0]), dtype=init_flat.dtype
+    )
+    # An empty info filter: the adapted values come back in ``parameters``, and keeping
+    # every ensemble state per warmup step would cost n_warmup * n_ensemble * D floats.
+    warmup = blackjax.meads_adaptation(
+        ld,
+        num_chains=cfg.n_ensemble,
+        num_folds=cfg.n_folds,
+        adaptation_info_fn=get_filter_adapt_info_fn(),
+        low_rank_rank=cfg.low_rank_rank,
+        low_rank_window_fraction=cfg.low_rank_window_fraction,
+    )
+    (last_states, parameters), info = warmup.run(adapt_key, ensemble, num_steps=n_warmup)
+    alpha = parameters["alpha"] if cfg.alpha is None else jnp.asarray(cfg.alpha)
+    delta = parameters["delta"] if cfg.delta is None else jnp.asarray(cfg.delta)
+    tuned = {
+        "step_size": parameters["step_size"],
+        "inverse_mass_matrix": parameters["momentum_inverse_scale"],
+        "alpha": alpha,
+        "delta": delta,
+    }
+    return last_states, tuned, info
+
+
+#: MEADS adaptation (Hoffman and Sountsov 2022): the ensemble's warmed states become the
+#: sampling chains' starting states, and alpha and delta are tuned from the ensemble.
+MEADS = Adaptation(name="meads", run=_meads_run, ensemble=True)
+
+
 def _adapt_body(
     program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, keep_info
 ):
@@ -397,6 +524,8 @@ def _adapt_body(
         warmup_key, init_flat, ld, n_warmup, cfg, _adapt_info_fn(keep_info)
     )
     params = (parameters["step_size"], parameters["inverse_mass_matrix"])
+    if "alpha" in parameters:
+        params += (parameters["alpha"], parameters["delta"])
     return state, params, info
 
 
@@ -512,8 +641,10 @@ def run_chain(
     init_key : PRNGKey or None
         Key of the sampler state, read only by families that start from a fresh state
         (``starts_from_warmup=False``); None otherwise.
-    chain_keys : ndarray, shape (n_iter, 2)
-        One key per sampling step, used as given.
+    chain_keys : ndarray, shape (n_iter, 2) or (n_chains, n_iter, 2)
+        One key per sampling step, used as given. The three-dimensional form, for an
+        ensemble adaptation, runs one chain per leading index from the first ``n_chains``
+        warmed states.
     ld2 : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree
@@ -526,14 +657,26 @@ def run_chain(
     Returns
     -------
     draws : Draw
-        Sampling outputs with leading axis ``n_iter``.
+        Sampling outputs with leading axis ``n_iter``, or ``(n_chains, n_iter)`` for the
+        ensemble form.
     params : tuple
         ``(step_size, inverse_mass_matrix)`` tuned by the adaptation.
     """
+    if adaptation.ensemble and program is not GHMC:
+        raise ValueError(
+            f"the {adaptation.name} ensemble adaptation runs only with GHMC, not {program.name}"
+        )
     ld = bind_logdensity(ld2, data_args, wall=program.wall)
     state, params, _ = _adapt_body(
         program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, False
     )
+    if adaptation.ensemble:
+        n_chains = chain_keys.shape[0]
+        states = jax.tree.map(lambda leaf: leaf[:n_chains], state)
+        draws = jax.vmap(lambda s, k: _sample_body(program, s, k, ld, params, cfg))(
+            states, chain_keys
+        )
+        return draws, params
     if not program.starts_from_warmup:
         state = program.init(init_flat, ld, init_key)
     return _sample_body(program, state, chain_keys, ld, params, cfg), params
