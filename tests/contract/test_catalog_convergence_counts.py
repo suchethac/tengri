@@ -217,3 +217,45 @@ class TestNonFiniteDiagnosticsAreNotConverged:
         health = galaxy_health(post)
         assert health.verdict == "unconverged"
         assert "b" in health.reason
+
+
+class TestAFailedEstimatorIsNeverConverged:
+    """An estimator that fails must not be read as a converged galaxy.
+
+    The ESS loop used to swallow any exception and treat the missing value as
+    "no ESS". With the default ``ess_floor=None`` nothing gated on that, so a
+    galaxy whose ESS computation broke was counted converged.
+    """
+
+    @pytest.mark.parametrize("seed", [0, 1, 2, 3])
+    def test_a_converged_verdict_always_carries_a_finite_min_ess(self, seed):
+        rng = np.random.default_rng(seed)
+        posteriors = [
+            _healthy(seed=seed),
+            _posterior({"a": rng.normal(size=600), "b": rng.normal(size=600)}),
+            _posterior({"a": rng.normal(size=8)}),
+        ]
+        for post in posteriors:
+            health = galaxy_health(post)
+            if health.verdict == "converged":
+                assert health.min_ess is not None
+                assert np.isfinite(health.min_ess)
+
+    def test_an_estimator_bug_propagates(self, monkeypatch):
+        from tengri.analysis.diagnostics import autocorrelation
+
+        def _broken(columns, *args, **kwargs):
+            raise RuntimeError("estimator bug")
+
+        monkeypatch.setattr(autocorrelation, "effective_sample_size", _broken)
+        with pytest.raises(RuntimeError, match="estimator bug"):
+            galaxy_health(_healthy(seed=7))
+
+    def test_an_uncomputable_ess_is_unconverged_with_a_reason(self):
+        """A non-1D column is skipped by the ESS estimator, so no ESS exists for it."""
+        rng = np.random.default_rng(9)
+        post = _posterior({"vec": rng.normal(size=(400, 2))})
+        health = galaxy_health(post)
+        assert health.min_ess is None
+        assert health.verdict == "unconverged"
+        assert "ESS not computed" in health.reason

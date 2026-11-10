@@ -126,6 +126,40 @@ class; hierarchical initialization is automatic per-galaxy MAP).
 | `DegenerateChainError` in raytrace | near-zero acceptance chains returned as posteriors | #1530/#1569 |
 | unknown-kwarg `TypeError` | typo'd fit options running defaults silently | #1378 |
 
+## The data term
+
+Each galaxy is scored by the one data term in `inference/data_term.py`, built once from
+the first galaxy's shapes and mapped over the galaxy rows with `lax.map` under
+`jax.checkpoint`. A galaxy record carries:
+
+- `flux_obs`, `noise`: the observed values and their uncertainties.
+- `presence` (optional): 0 or 1 per band. A zero drops the band exactly, as `CatalogFitter`
+  does. Non-finite values at absent bands are replaced by placeholders first.
+- `data_mask` (optional): censoring flags per band, 0 detected, 1 upper limit, -1 lower
+  limit, as `Fitter` reads them. Refused by name together with a free noise model
+  (`noise_frac_cal` or `noise_dof`).
+
+A key present on any galaxy applies to every galaxy. A galaxy that omits it reads as every
+band detected (`presence` 1, `data_mask` 0).
+
+`FlatProblem.data_args` holds arrays only: `{"per_galaxy": {...}, "shared": {...}}`.
+`per_galaxy` has `(N, n)` rows (`data`, `noise`, `sqrt_noise_inv`, and the optional keys);
+`shared` has the catalog-wide term arrays. The drivers pass it through untouched, and
+changing its values does not recompile.
+
+A stochastic SFH needs the threaded forward (`_jit_inputs` in `data_args`). Without it the
+seam refuses by name, because the eager prediction path filters to `model.spec.free_params`
+and drops `sfh_field_xi`.
+
+The parity bar: `log_likelihood_with_data` equals the sum of the per-galaxy `Fitter`
+log-likelihoods at rtol 1e-10 without a mask, equals the `Fitter` built with `presence` when
+a band is absent, and equals the closed-form censored likelihood with a `data_mask`. The
+tests are in `tests/contract/test_data_term.py`.
+
+Record keys other than `flux_obs`, `noise`, `presence` and `data_mask` are ignored today.
+Refusing unrecognized keys by name is a follow-up: existing callers may carry other keys, so
+that refusal needs a sweep of the notebooks and examples first.
+
 ## Execution-verification status (2026-08-10)
 
 Verified by real fits (cold process, A/A-controlled): map, hmc, nuts (via

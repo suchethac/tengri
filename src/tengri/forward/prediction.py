@@ -2165,15 +2165,13 @@ class Prediction:
 
         self._cache["sed_total"] = state.sed_intrinsic
 
-        lnu_age = derived.get("lnu_age")
-        if lnu_age is not None:
-            from tengri.utils.physics_constants import L_SUN
+        from tengri.utils.physics_constants import L_SUN
 
-            lnu_age_arr = jnp.asarray(lnu_age)
-            self._cache["sed_intrinsic"] = jnp.sum(lnu_age_arr, axis=0)
-            aw = jnp.asarray(self._cache["weights"])
-            aw_safe = jnp.maximum(aw, 1e-30)
-            self._cache["ssp_flux_at_z"] = lnu_age_arr / (aw_safe[:, None] * L_SUN)
+        lnu_age_arr = jnp.asarray(derived["lnu_age"])
+        self._cache["sed_intrinsic"] = jnp.sum(lnu_age_arr, axis=0)
+        aw = jnp.asarray(self._cache["weights"])
+        aw_safe = jnp.maximum(aw, 1e-30)
+        self._cache["ssp_flux_at_z"] = lnu_age_arr / (aw_safe[:, None] * L_SUN)
 
         sed_attenuated = derived.get("sed_dust_attenuated")
         if sed_attenuated is not None:
