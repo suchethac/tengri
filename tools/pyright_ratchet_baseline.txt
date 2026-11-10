@@ -7,9 +7,9 @@ pyright	src/tengri/inference/_registration.py	12
 pyright	src/tengri/inference/backends/_psis.py	1
 pyright	src/tengri/inference/backends/evidence.py	2
 pyright	src/tengri/inference/backends/mcmc/_meads.py	10
-pyright	src/tengri/inference/backends/mcmc/_shared.py	21
+pyright	src/tengri/inference/backends/mcmc/_shared.py	17
 pyright	src/tengri/inference/backends/mcmc/catalog.py	3
-pyright	src/tengri/inference/backends/mcmc/chain_program.py	3
+pyright	src/tengri/inference/backends/mcmc/chain_program.py	4
 pyright	src/tengri/inference/backends/mcmc/elliptical_slice.py	1
 pyright	src/tengri/inference/backends/mcmc/hmc_is.py	1
 pyright	src/tengri/inference/backends/mcmc/mclmc.py	2

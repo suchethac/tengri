@@ -23,11 +23,15 @@ import pytest
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
     DYNAMIC_HMC,
+    GHMC,
     HMC,
+    MEADS,
     NUTS,
     PATHFINDER_NUTS,
+    WINDOW_GHMC,
     WINDOW_HMC,
     WINDOW_NUTS,
+    GHMCConfig,
     HMCConfig,
     NUTSConfig,
     adapt_chain,
@@ -428,3 +432,197 @@ def test_dynamic_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
     dense = entry.adaptation_for({"dense_mass_matrix": True})
     diagonal = entry.adaptation_for({"dense_mass_matrix": False})
     assert dense.name != diagonal.name
+
+
+GHMC_ALPHA = 0.8
+GHMC_DELTA = 0.65
+GHMC_CFG = GHMCConfig(alpha=GHMC_ALPHA, delta=GHMC_DELTA, target_accept_rate=0.85)
+MEADS_CFG = GHMCConfig(alpha=None, delta=None, n_ensemble=16, n_folds=4, jitter_scale=0.5)
+MEADS_WARMUP = 100
+MEADS_CHAINS = 2
+MEADS_ITER = 100
+#: Mildly anisotropic target: at the setup fixture's 10^i scales MEADS' step collapses to
+#: ~0.009, every proposal diverges and no chain moves, so it cannot test the sampler.
+MEADS_SCALES = jnp.asarray([1.0, 1.5, 2.0, 2.5])
+
+
+def _raw_ghmc_sampling_scan(state, chain_keys, scales, step_size, inv_mass):
+    """Raw BlackJAX GHMC scan with static alpha and delta: the oracle for sample_chain."""
+    kernel = blackjax.mcmc.ghmc.build_kernel()
+
+    def log_density(position):
+        return _target(position, scales)
+
+    def _step(s, k):
+        s, info = kernel(k, s, log_density, step_size, inv_mass, GHMC_ALPHA, GHMC_DELTA)
+        return s, (s.position, info.is_divergent)
+
+    _, outputs = jax.lax.scan(_step, state, chain_keys)
+    return outputs
+
+
+def _raw_ghmc_init(init, init_key, scales):
+    """Raw BlackJAX GHMC state at ``init``: the oracle for ``GHMC.init``."""
+
+    def log_density(position):
+        return _target(position, scales)
+
+    return blackjax.mcmc.ghmc.init(position=init, logdensity_fn=log_density, rng_key=init_key)
+
+
+def test_ghmc_sample_chain_matches_raw_ghmc_scan(setup):
+    """Sampling GHMC with fixed tuning equals the raw BlackJAX scan, output for output."""
+    init, _, keys, scales = setup
+    step_size = jnp.asarray(0.2)
+    inv_mass = 1.0 / scales**2
+    state = _raw_ghmc_init(init, jax.random.PRNGKey(7), scales)
+
+    expected = _raw_ghmc_sampling_scan(state, keys, scales, step_size, inv_mass)
+    assert np.any(np.asarray(expected[0]) != np.asarray(init)), "the chain must move"
+    got = sample_chain(GHMC, state, keys, _target, scales, (step_size, inv_mass), GHMC_CFG)
+    actual = (got.position, got.divergent)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_ghmc_run_chain_window_matches_raw_warmup_then_sampling(setup):
+    """Fused GHMC with window tuning equals the raw HMC window warmup then the raw scan."""
+    init, wkey, keys, scales = setup
+    ghmc_key = jax.random.PRNGKey(7)
+    _, step_size, inv_mass, _ = _raw_hmc_warmup(init, wkey, scales, N_WARMUP)
+    state = _raw_ghmc_init(init, ghmc_key, scales)
+    expected = _raw_ghmc_sampling_scan(state, keys, scales, step_size, inv_mass)
+
+    draws, (got_step, got_mass) = run_chain(
+        GHMC,
+        WINDOW_GHMC,
+        init,
+        wkey,
+        ghmc_key,
+        keys,
+        _target,
+        scales,
+        N_WARMUP,
+        GHMC_CFG,
+    )
+    assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
+    assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
+    actual = (draws.position, draws.divergent)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def _raw_meads_chains(init, warmup_key, scales, chain_keys):
+    """Raw BlackJAX MEADS over a jittered ensemble, then vmapped GHMC scans from its first states.
+
+    The oracle for ``run_chain(GHMC, MEADS, ...)``: it reproduces the key split of the
+    ensemble dispersion and the adaptation, and the start from the first ``n_chains``
+    warmed states, with alpha and delta taken from the adaptation.
+    """
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    def log_density(position):
+        return _target(position, scales)
+
+    jitter_key, adapt_key = jax.random.split(warmup_key)
+    ensemble = init[None, :] + _shared._MEADS_JITTER_SCALE * jax.random.normal(
+        jitter_key, (MEADS_CFG.n_ensemble, N_DIM), dtype=init.dtype
+    )
+    warmup = blackjax.meads_adaptation(
+        log_density,
+        num_chains=MEADS_CFG.n_ensemble,
+        num_folds=MEADS_CFG.n_folds,
+        adaptation_info_fn=get_filter_adapt_info_fn(),
+    )
+    (last_states, parameters), _ = warmup.run(adapt_key, ensemble, num_steps=MEADS_WARMUP)
+    n_chains = chain_keys.shape[0]
+    states = jax.tree.map(lambda leaf: leaf[:n_chains], last_states)
+    kernel = blackjax.mcmc.ghmc.build_kernel()
+
+    def _chain(state, keys):
+        def _step(s, k):
+            s, info = kernel(
+                k,
+                s,
+                log_density,
+                parameters["step_size"],
+                parameters["momentum_inverse_scale"],
+                parameters["alpha"],
+                parameters["delta"],
+            )
+            return s, (s.position, info.is_divergent)
+
+        return jax.lax.scan(_step, state, keys)[1]
+
+    positions, divergent = jax.vmap(_chain)(states, chain_keys)
+    return positions, divergent, parameters
+
+
+def test_ghmc_run_chain_meads_matches_raw_ensemble_program(setup):
+    """Fused GHMC under MEADS equals the raw ensemble program, output for output.
+
+    The regime must move: most proposals accepted and every chain away from its start,
+    so a kernel that swaps alpha and delta changes the draws and fails this test.
+    """
+    init, wkey, _, _ = setup
+    scales = MEADS_SCALES
+    chain_keys = jax.random.split(jax.random.PRNGKey(1), MEADS_CHAINS * MEADS_ITER)
+    chain_keys = chain_keys.reshape(MEADS_CHAINS, MEADS_ITER, 2)
+    positions, divergent, parameters = _raw_meads_chains(init, wkey, scales, chain_keys)
+
+    draws, tuned = run_chain(
+        GHMC,
+        MEADS,
+        init,
+        wkey,
+        None,
+        chain_keys,
+        _target,
+        scales,
+        MEADS_WARMUP,
+        MEADS_CFG,
+    )
+    assert float(np.asarray(draws.divergent).mean()) < 0.5
+    assert float(np.asarray(draws.position).std(axis=1).min()) > 1e-3
+    assert np.array_equal(np.asarray(draws.position), np.asarray(positions))
+    assert np.array_equal(np.asarray(draws.divergent), np.asarray(divergent))
+    assert np.array_equal(np.asarray(tuned[0]), np.asarray(parameters["step_size"]))
+    assert np.array_equal(np.asarray(tuned[1]), np.asarray(parameters["momentum_inverse_scale"]))
+    assert np.array_equal(np.asarray(tuned[2]), np.asarray(parameters["alpha"]))
+    assert np.array_equal(np.asarray(tuned[3]), np.asarray(parameters["delta"]))
+
+
+def test_ghmc_meads_pinned_alpha_and_delta_replace_the_adapted_values(setup):
+    """A pinned alpha and delta are the values the sampler and the diagnostics report."""
+    init, wkey, keys, scales = setup
+    chain_keys = keys[: MEADS_CHAINS * 10].reshape(MEADS_CHAINS, 10, 2)
+    pinned = GHMCConfig(alpha=GHMC_ALPHA, delta=GHMC_DELTA, n_ensemble=8, n_folds=4)
+    _, tuned = run_chain(
+        GHMC, MEADS, init, wkey, None, chain_keys, _target, scales, MEADS_WARMUP, pinned
+    )
+    assert float(tuned[2]) == pytest.approx(GHMC_ALPHA)
+    assert float(tuned[3]) == pytest.approx(GHMC_DELTA)
+
+
+def test_ghmc_refuses_a_dense_metric():
+    """GHMC's momentum generator is diagonal, so a dense request is refused by name."""
+    with pytest.raises(ValueError, match="use_dense=True"):
+        GHMCConfig(alpha=0.8, delta=0.65, use_dense=True)
+
+
+def test_ghmc_adaptation_rule_is_meads_for_every_mass_policy():
+    """The registered GHMC rule always runs MEADS: its mass policy is inert."""
+    from tengri.inference._backend_registry import get_backend
+
+    entry = get_backend("mcmc_ghmc")
+    assert entry.chain_program is GHMC
+    assert entry.adaptation_for({"dense_mass_matrix": None}) is MEADS
+    assert entry.adaptation_for({"dense_mass_matrix": True}) is MEADS
+
+
+def test_run_chain_refuses_the_meads_ensemble_for_a_non_ghmc_program(setup):
+    """The MEADS ensemble state feeds GHMC only; any other program is refused by name."""
+    init, wkey, _, scales = setup
+    chain_keys = jnp.zeros((2, 4, 2), dtype=jnp.uint32)
+    with pytest.raises(ValueError, match="runs only with GHMC, not hmc"):
+        run_chain(HMC, MEADS, init, wkey, None, chain_keys, _target, scales, 4, MEADS_CFG)
