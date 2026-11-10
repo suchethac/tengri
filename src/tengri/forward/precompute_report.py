@@ -14,6 +14,8 @@ References
 
 from typing import Any, NamedTuple
 
+from tengri.forward.precompute.band_table import BandTable
+
 
 class PrecomputeEngagementReport(NamedTuple):
     """Structured report of precompute mechanism engagement.
@@ -132,10 +134,14 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     else:
         eb_state_obj = PrecomputeState(state="engaged")
 
-    # Determine state and reason for dust band response
-    if dust_response_cached == "unset":
+    # Determine state and reason for dust band response. The memo of the band tables is read
+    # first; the old attribute answers only for a slot the memo has not seen.
+    dust_state = _state_from_memo_or_attr(
+        _memo_entry(model, "dust_emission", "emission_band_response"), dust_response_cached
+    )
+    if dust_state == "never_attempted":
         dust_state_obj = PrecomputeState(state="never_attempted")
-    elif dust_response_cached is None:
+    elif dust_state == "declined":
         reason = _infer_dust_response_decline_reason(model)
         dust_state_obj = PrecomputeState(state="declined", reason=reason)
     else:
@@ -148,10 +154,13 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
             # Extract emitter name: _<name>_term_response_cache -> <name>
             emitter_name = attr_name[1 : -len("_term_response_cache")]
             cached = getattr(model, attr_name, "unset")
+            state = _state_from_memo_or_attr(
+                _memo_entry(model, emitter_name, "term_band_response"), cached
+            )
 
-            if cached == "unset":
+            if state == "never_attempted":
                 emitter_caches[emitter_name] = PrecomputeState(state="never_attempted")
-            elif cached is None:
+            elif state == "declined":
                 reason = _infer_term_response_decline_reason(model, emitter_name)
                 emitter_caches[emitter_name] = PrecomputeState(state="declined", reason=reason)
             else:
@@ -166,6 +175,33 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
         emitter_term_responses=emitter_caches,
         observed_facts=observed_facts,
     )
+
+
+def _memo_entry(model: Any, name: str, slot: str) -> Any:
+    """Return the band-table memo entry of one component slot, or None when absent."""
+    return getattr(model, "_band_tables", {}).get(name, {}).get(slot)
+
+
+def _state_from_memo_or_attr(entry: Any, cached: Any) -> str:
+    """Return the engagement state of a mechanism from its memo entry, else from its attribute.
+
+    Parameters
+    ----------
+    entry : BandTable, Decline or None
+        The memo entry of the slot; None when the memo has not seen the slot.
+    cached : object
+        The legacy cache attribute, or the string ``"unset"``.
+
+    Returns
+    -------
+    str
+        One of ``"never_attempted"``, ``"declined"`` or ``"engaged"``.
+    """
+    if entry is not None:
+        return "engaged" if isinstance(entry, BandTable) else "declined"
+    if cached == "unset":
+        return "never_attempted"
+    return "declined" if cached is None else "engaged"
 
 
 def _infer_lut_decline_reason(model: Any) -> str | None:

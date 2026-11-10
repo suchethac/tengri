@@ -1,0 +1,59 @@
+{
+ "params": {
+  "agn_log_lbol": 12.45911003379033
+ },
+ "signature_sha256": "943126ab0725ae275997c04904301eab5ec4f309b832ec6715e10d648ecd2880",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: unknown reason (gate conditions appear satisfied)\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, agn\n  dust_emission_configured: False\n  free_params: agn_log_lbol\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
+ "tree": [
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/ln1pz",
+   "sha256": "3a920166bf8bf9a88d02f410062ca2e60ff6811be34374c4c841acae23a275fd",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/R",
+   "sha256": "ee03b353981e0bc7a87f81ebc95d2e20adc0ec1da09f62b90aa67f72d7fc9831",
+   "shape": [
+    1,
+    4,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/S_ref",
+   "sha256": "affdda65e4b62f8af05bfc3244db02f2df2dec680def4b8dbd2031855a565cb6",
+   "shape": [
+    1,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/lam_ref",
+   "sha256": "ad079e07e58b821046d86904faf525d2bd73a3d2d681943886712a449203672a",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/S_diag",
+   "sha256": "358030e7c702dfe0aa8e2baad479e4510b160cfa2797c1642a1f68d083740142",
+   "shape": [
+    1,
+    4,
+    2
+   ]
+  }
+ ]
+}
