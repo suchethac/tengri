@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Band-table adapters tested through their own ``band_table`` alone, without an SEDModel.
 
-Each test hands an adapter a hand-built :class:`BandTableContext`: the spec, the rest-frame
+Most tests hand an adapter a hand-built :class:`BandTableContext`: the spec, the rest-frame
 grid, the WavePrecomp setting and the component chain. The chain holds stub components built
 with ``object.__new__``, so no model, SSP grid or observation is constructed.
 """
@@ -470,3 +470,106 @@ def test_agn_table_is_accurate_and_matches_the_direct_band_flux_at_a_node(monkey
     model._band_tables["agn"]["band_table"] = Decline("test")
     direct = np.asarray(model.predict_state(params).derived["agn_phot_lnu_precomp"])
     np.testing.assert_allclose(table_row, direct, rtol=1e-6)
+
+
+# -- the generic term path: radio and X-ray (#3290, step 5) -------------------
+
+
+@pytest.fixture(scope="module")
+def _free_z_radio_xray():
+    """A free-redshift model whose radio and X-ray emitters have every parameter fixed.
+
+    The free X-ray slope of ``_band_table_cases.build_free_z_radio_xray`` makes its term
+    response decline by design, so the rows are checked on this fixed-shape variant.
+    """
+    return SEDModel.build(
+        ssp_data=cases._bare_ssp(),
+        observation=Observation(photometry=Photometry.from_names(list(cases.FILTERS))),
+        approx=WavePrecomp(),
+        redshift=Uniform(0.05, 0.3),
+        sfh=cases._dpl_sfh(),
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": Fixed(DEFAULT),
+        },
+        xray={"type": "simple", "all_params": Fixed(DEFAULT)},
+    )
+
+
+@pytest.mark.parametrize("name", ["radio", "xray"])
+def test_term_band_response_row_is_the_dense_filter_integral_of_its_shape(
+    _free_z_radio_xray, name
+):
+    """A term's row at one redshift node is the dense filter integral of that term, bit for bit.
+
+    The adapter builds the table through the generic path; this recomputes one live term's
+    integral with ``lnu_filter_integral_batch`` at the same node and compares every filter.
+    """
+    from tengri.forward.precompute.band_table import arrays_of
+
+    model = _free_z_radio_xray
+    table = arrays_of(model.band_table(name, "term_band_response"))
+    assert table is not None, f"the {name} term band response is not engaged in the fixture"
+
+    chain = model._cached_component_chain
+    comp = next(c for c in chain if getattr(c, "name", "") == name)
+    ctx = model._band_table_context(chain)
+    fw_pad, ft_pad = ctx.padded_filters
+    fixed = {k: jnp.asarray(v) for k, v in ctx.spec.get_fixed_values().items()}
+
+    node = table["ln1pz"].shape[0] // 2
+    z = jnp.expm1(table["ln1pz"][node])
+    terms = comp.emission_terms({**fixed, "redshift": z}, ctx.wave, **comp.EMITTER_PROBE_INPUTS[0])
+    live = [k for k, shape in terms.items() if float(jnp.max(jnp.abs(shape))) > 0.0]
+    assert live, f"the {name} fixture has no live term at the node"
+    nonzero = 0
+    for key in live:
+        dense = np.asarray(lnu_filter_integral_batch(terms[key], ctx.wave, fw_pad, ft_pad, z))
+        row = np.asarray(table["R"][node, list(terms).index(key)])
+        assert np.array_equal(row, dense), (name, key, np.max(np.abs(row - dense)))
+        nonzero += int(np.any(dense != 0.0))
+    if name == "radio":
+        assert nonzero, "the radio terms integrate to zero against the fixture's filters"
+
+
+def test_every_component_with_emission_terms_or_precompute_key_has_a_band_table_provider():
+    """Starts #2981: each emitter and each dust-emission template has a band-table owner.
+
+    An additive emitter (one declaring ``emission_terms``) is owned by its own name. The
+    dust-emission templates (one declaring ``precompute_key``) are built by the
+    ``dust_emission`` provider. A new component that declares either attribute with no owner
+    in ``BAND_TABLE_PROVIDERS`` fails here rather than falling back to the dense integral.
+    """
+    import importlib
+    import inspect
+    import pkgutil
+
+    import tengri.components as components
+    from tengri.forward.precompute.registry import BAND_TABLE_PROVIDERS
+
+    owners: dict[str, str | None] = {}
+    for info in pkgutil.walk_packages(components.__path__, components.__name__ + "."):
+        module = importlib.import_module(info.name)
+        for cls in vars(module).values():
+            if not (inspect.isclass(cls) and cls.__module__ == module.__name__):
+                continue
+            if hasattr(cls, "emission_terms"):
+                owners[f"{cls.__module__}.{cls.__qualname__}"] = getattr(cls, "name", None)
+            elif hasattr(cls, "precompute_key"):
+                owners[f"{cls.__module__}.{cls.__qualname__}"] = "dust_emission"
+
+    assert any(v == "radio" for v in owners.values()), "the census found no radio emitter"
+    missing = sorted(
+        f"{qualname} -> {owner!r}"
+        for qualname, owner in owners.items()
+        if owner not in BAND_TABLE_PROVIDERS
+    )
+    assert missing == [], missing
