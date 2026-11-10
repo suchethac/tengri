@@ -46,7 +46,7 @@ assembly, which is written out again in `inference/likelihoods/marginalized.py`.
   `data_args` moves the value and does not add a compile.
 - `params` is the resolved physical dictionary: free and fixed values, with mirrors merged.
 - The term is positive. The loss builders negate it.
-- `presence` (exact 0 or 1) and `data_mask` (censoring flags) are honoured whenever the key
+- `presence` (exact 0 or 1) and `data_mask` (censoring flags) are honored whenever the key
   is present in `data_args`. The keys are structure and the values are data.
 - Every marginal goes through `observation/linear_marginal.py`.
 - The term is not memoized on the Fitter in this change, so no cache-key policy row moves.
@@ -90,7 +90,7 @@ assembly, which is written out again in `inference/likelihoods/marginalized.py`.
 - The existing contract tests for the cache keys, the unified loss builders and the
   banded covariance stay unchanged and green.
 
-## Expected behaviour change
+## Expected behavior change
 
 The flat seam gains masks and censoring when a population record carries them. Populations
 without those keys are unaffected. The threaded forward used by the term can change the

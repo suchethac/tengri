@@ -127,3 +127,28 @@ def test_positive_log_likelihood_is_minus_half_the_chi_square_of_the_data():
     expected = -0.5 * float(np.sum((data / 0.1) ** 2))
 
     assert float(term.log_prob(physical, fitter._data_args)) == pytest.approx(expected)
+
+
+def test_precheck_reference_point_takes_the_fixed_values_it_is_given(monkeypatch):
+    """The channel-scale reference draw uses the caller's fixed values, else the spec's."""
+    from tengri.inference import data_term
+
+    fitter = fitter_photometry()
+    seen = {}
+
+    def record(*_args, **kwargs):
+        seen["fixed_values"] = kwargs["fixed_values"]
+
+    monkeypatch.setattr(data_term, "_check_reference_channel_scales", record)
+    common = dict(
+        spec=fitter.spec,
+        data_args=fitter._data_args,
+        options=fitter.data_term_options(),
+        likelihood=fitter._user_likelihood,
+    )
+
+    build_data_term(fitter.model, fixed_values={"redshift": 0.3}, **common)
+    assert seen["fixed_values"] == {"redshift": 0.3}
+
+    build_data_term(fitter.model, **common)
+    assert seen["fixed_values"] == dict(fitter.spec.get_fixed_values())

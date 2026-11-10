@@ -29,7 +29,7 @@ three times.
    arguments, and closes over structure only.
 4. The traced bundle comes from `build_data_args`. Its key set is structure: a key is
    present exactly when its channel is configured. Its values are data.
-5. `presence` (exact 0 or 1) and `data_mask` (censoring flags) are honoured whenever their
+5. `presence` (exact 0 or 1) and `data_mask` (censoring flags) are honored whenever their
    key is present. No separate branch is needed for either.
 6. Every marginal still goes through `observation/linear_marginal.py`. The term adds no
    marginalization math of its own.
@@ -57,6 +57,8 @@ three times.
   resolution and the data-argument builder move out of `Fitter`, which is a net reduction
   in that class.
 - Callers that imported private helpers from `loss_functions` keep working through
-  re-exports and a thin shim. The shim is removed once the callers move.
+  re-exports and a thin shim. The shim exists today for the `SimpleNamespace` fitter in
+  `test_unified_loss.py` and for `mass_profile.py`; removing it is a follow-up once those
+  callers take the term directly.
 - Trade-off: each loss builder call constructs a new term. The compiled engine cache
   keys are unchanged, so the cost is one Python-side construction per build.

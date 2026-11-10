@@ -203,10 +203,12 @@ def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, 
     return spec.resolve_mirrors(params)
 
 
-from tengri.inference.data_term import (  # noqa: F401 (re-exported for callers)
-    DataTermOptions,
+from tengri.inference._prediction import (  # noqa: F401 (re-exported for callers)
     _build_prediction,
     _resolve_measured_line_defs,
+)
+from tengri.inference.data_term import (
+    DataTermOptions,
     build_data_term,
 )
 
@@ -226,6 +228,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         data_args=fitter._data_args,
         options=DataTermOptions.from_fitter(fitter),
         likelihood=getattr(fitter, "_user_likelihood", None),
+        fixed_values=getattr(fitter, "_fixed_values", None),
     )
 
     def neg_log_lik(params, data_args):
