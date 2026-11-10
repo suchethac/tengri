@@ -20,6 +20,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.config.exceptions import BackendError
+from tengri.inference._backend_registry import all_backends, get_backend
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
     DUAL_AVERAGING,
@@ -42,6 +44,7 @@ from tengri.inference.backends.mcmc.chain_program import (
     run_chain,
     sample_chain,
 )
+from tests.contract.test_inference_cache_keys import fitter_photometry
 
 pytestmark = pytest.mark.contract
 
@@ -766,3 +769,91 @@ def test_first_order_oracle_runs_a_moving_regime(setup, proposal):
     mean_accept = float(np.mean(np.asarray(accept)))
     assert 0.0 < mean_accept < 1.0, f"{proposal}: mean acceptance {mean_accept}"
     assert float(np.std(np.asarray(positions), axis=0).max()) > 1e-3
+
+
+_RESOLVED_KWARGS = {
+    "dense_mass_matrix": False,
+    "n_leapfrog_steps": 10,
+    "pathfinder_warmstart": False,
+}
+
+
+@pytest.mark.parametrize("path", ["run", "compile"])
+def test_every_registered_chain_program_yields_an_adaptation_on_both_paths(path):
+    """Every registered MCMC entry with a chain program names an adaptation on each path."""
+    programs = [e for e in all_backends() if e.chain_program is not None]
+    assert {e.name for e in programs} >= {
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "mcmc_mala",
+        "mcmc_barker",
+    }
+    for entry in programs:
+        assert entry.adaptation_for(_RESOLVED_KWARGS, path=path) is not None, entry.name
+
+
+def test_ghmc_compile_warms_the_window_and_run_samples_with_meads():
+    """GHMC names two adaptations, and an unknown path is refused by name."""
+    entry = get_backend("mcmc_ghmc")
+    assert entry.adaptation_for(_RESOLVED_KWARGS, path="run") is MEADS
+    assert entry.adaptation_for(_RESOLVED_KWARGS, path="compile") is WINDOW_GHMC
+    with pytest.raises(ValueError, match="path must be"):
+        entry.adaptation_for(_RESOLVED_KWARGS, path="sample")
+
+
+@pytest.mark.parametrize("method", ["mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_mala"])
+def test_compile_warms_the_programs_run_then_hits(method):
+    """A run() after compile() adds no adaptation or sampling compilation."""
+    fitter = fitter_photometry()
+    fitter.compile(
+        mcmc_methods=[method],
+        modes=(),
+        n_warmup=20,
+        n_burnin=20,
+        n_mcmc_samples=20,
+        verbose=False,
+    )
+    sizes = (adapt_chain._cache_size(), sample_chain._cache_size())
+    fitter.run(method, key=jax.random.PRNGKey(0), n_warmup=20, n_burnin=20, n_samples=20)
+    assert (adapt_chain._cache_size(), sample_chain._cache_size()) == sizes
+
+
+def test_dynamic_hmc_compile_warms_the_policy_run_adapts_under_a_dense_basis_spec(monkeypatch):
+    """A compile under a dense_basis spec warms the dense metric dynamic HMC run adapts.
+
+    ``run_dynamic_hmc`` defaults to ``dense_mass_matrix=True``; compile must resolve the
+    same policy, not the NUTS/HMC ``None`` default.
+    """
+    from tengri.inference.backends.mcmc import nuts as nuts_backend
+
+    monkeypatch.setattr(nuts_backend, "_spec_uses_dense_basis", lambda spec: True)
+    fitter = fitter_photometry()
+    fitter.compile(
+        mcmc_methods=["mcmc_dynamic_hmc"],
+        modes=(),
+        n_warmup=20,
+        n_burnin=20,
+        n_mcmc_samples=20,
+        verbose=False,
+    )
+    sizes = (adapt_chain._cache_size(), sample_chain._cache_size())
+    fitter.run(
+        "mcmc_dynamic_hmc", key=jax.random.PRNGKey(0), n_warmup=20, n_burnin=20, n_samples=20
+    )
+    assert (adapt_chain._cache_size(), sample_chain._cache_size()) == sizes
+
+
+def test_compile_refuses_a_registered_method_without_a_program_by_name():
+    """A registered MCMC method with no chain program is refused by name, not warned about."""
+    fitter = fitter_photometry()
+    with pytest.raises(BackendError, match="mcmc_mclmc"):
+        fitter._warm_mcmc_program(
+            "mcmc_mclmc",
+            init_flat=jnp.zeros(3),
+            ld2=None,
+            data_args=None,
+            n_warmup=1,
+            n_chain=1,
+        )

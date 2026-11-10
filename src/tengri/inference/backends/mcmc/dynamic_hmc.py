@@ -29,7 +29,6 @@ from tengri.inference.backends.mcmc._shared import (
 from tengri.inference.backends.mcmc.chain_program import (
     DYNAMIC_HMC,
     DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
-    HMC,
     WINDOW_HMC,
     HMCConfig,
     adapt_chain,
@@ -203,8 +202,8 @@ def run_dynamic_hmc(
     # so one pinned `key` returned two different posteriors.
     #
     # The adaptation is plain HMC window adaptation (dynamic_hmc.init needs a
-    # random_generator_arg, which window_adaptation cannot supply), so this is
-    # `adapt_chain(HMC, ...)` rather than a third near-identical helper. The
+    # random_generator_arg, which window_adaptation cannot supply). It runs under this
+    # family's own program, so compile() warms the same adapt entry this path calls. The
     # integration-step count is `DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`, shared with
     # the fused `run_chain(DYNAMIC_HMC, ...)` path.
     if cached is not None:
@@ -223,7 +222,7 @@ def run_dynamic_hmc(
             )
     else:
         (step_size, inv_mass_matrix), warmup_divergent, _ = adapt_chain(
-            HMC,
+            DYNAMIC_HMC,
             WINDOW_HMC(_DHMC_WARMUP_LEAPFROG_STEPS, not use_dense),
             init_flat,
             warmup_key,

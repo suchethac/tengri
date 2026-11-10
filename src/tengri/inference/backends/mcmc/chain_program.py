@@ -175,6 +175,28 @@ class Adaptation:
     ensemble: bool = False
 
 
+class CompilePlan(NamedTuple):
+    """The statics a precompilation pass warms for one registered family.
+
+    Parameters
+    ----------
+    kwargs : dict
+        Resolved runner kwargs, passed to ``BackendEntry.adaptation_for``.
+    adapt_cfg : object
+        Statics of the warmup program (and of the fused program when ``fused``).
+    sample_cfg : object or None
+        Statics of the sampling program; None for families that read none.
+    fused : bool
+        True to warm one fused ``run_chain`` program instead of ``adapt_chain``
+        followed by ``sample_chain``.
+    """
+
+    kwargs: dict
+    adapt_cfg: Any
+    sample_cfg: Any
+    fused: bool = False
+
+
 def bind_logdensity(ld2, data_args, wall: bool = False):
     """Return the one-argument log density of ``position`` with ``data_args`` bound.
 

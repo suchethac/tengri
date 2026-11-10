@@ -59,6 +59,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.config.exceptions import ConfigError
+from tengri.inference._backend_registry import get_backend
 from tengri.inference.backends.mcmc._shared import (
     _CHEES_JITTER_SCALE,
     _CHEES_LEARNING_RATE,
@@ -67,10 +68,13 @@ from tengri.inference.backends.mcmc._shared import (
     DEFAULT_MAX_NUM_DOUBLINGS,
     _chees_scan,
     _get_flat_logdensity,
-    _hmc_full_scan,
-    _nuts_full_scan,
     _resolve_chees_ensemble,
     ghmc_catalog_scan,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    HMCConfig,
+    NUTSConfig,
+    run_chain,
 )
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.preconditioning import (
@@ -721,8 +725,8 @@ def build_catalog_mcmc_engine(
     ``_jit_inputs`` arrays) enters as the ``shared`` argument, so a jitted caller
     compiles it as an input rather than a constant. Each call substitutes the
     galaxy's ``data``/``noise`` and its derived ``sqrt_noise_inv``. The underlying scan cores
-    (``_nuts_full_scan`` / ``_hmc_full_scan``) are pre-JIT'd with ``data_args``
-    traced, so different galaxies never trigger recompilation.
+    (``run_chain`` for the NUTS and HMC chain programs) takes ``data_args`` traced,
+    so different galaxies never trigger recompilation.
     """
     if sampler not in _SAMPLERS:
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
@@ -899,30 +903,36 @@ def build_catalog_mcmc_engine(
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
         if sampler == "nuts":
-            positions, divergent, _expansions, _step_size, _inv_mass = _nuts_full_scan(
-                sample_init,
-                warmup_key,
-                chain_keys,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                max_num_doublings,
-                use_dense,
-                target_accept_rate,
-                False,  # use_pathfinder_warmup
+            entry = get_backend("mcmc_nuts")
+            adaptation = entry.adaptation_for({"pathfinder_warmstart": False})
+            cfg = NUTSConfig(
+                max_doublings=max_num_doublings,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
             )
         else:  # "hmc"
-            positions, divergent, _step_size, _inv_mass = _hmc_full_scan(
-                sample_init,
-                warmup_key,
-                chain_keys,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                n_leapfrog,
-                use_dense,
-                target_accept_rate,
+            entry = get_backend("mcmc_hmc")
+            adaptation = entry.adaptation_for(
+                {"dense_mass_matrix": bool(use_dense), "n_leapfrog_steps": n_leapfrog}
             )
+            cfg = HMCConfig(
+                n_leapfrog=n_leapfrog,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
+            )
+        draws, _ = run_chain(
+            entry.chain_program,
+            adaptation,
+            sample_init,
+            warmup_key,
+            None,
+            chain_keys,
+            sample_logdensity,
+            sample_args,
+            n_warmup,
+            cfg,
+        )
+        positions, divergent = draws.position, draws.divergent
 
         # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
         return restore(positions[n_burnin:]), divergent[n_burnin:]
