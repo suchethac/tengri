@@ -14,7 +14,6 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
-    _dynamic_hmc_chain_scan,
     _get_cached_adaptation,
     _get_flat_logdensity,
     _resolve_chain_parallel,
@@ -28,10 +27,14 @@ from tengri.inference.backends.mcmc._shared import (
     sampling_diagnostics,
 )
 from tengri.inference.backends.mcmc.chain_program import (
+    DYNAMIC_HMC,
+    DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
     HMC,
     WINDOW_HMC,
     HMCConfig,
     adapt_chain,
+    divergence_record,
+    sample_chain,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 
@@ -48,7 +51,7 @@ logger = logging.getLogger(__name__)
 #: which the prewarm, hierarchical and catalog paths still call, the two
 #: disagreeing would mean a cached adaptation tuned against a different
 #: trajectory length than the fused path produces.
-_DHMC_WARMUP_LEAPFROG_STEPS = 10
+_DHMC_WARMUP_LEAPFROG_STEPS = DYNAMIC_HMC_TUNING_LEAPFROG_STEPS
 
 
 def run_dynamic_hmc(
@@ -304,17 +307,19 @@ def run_dynamic_hmc(
         chain_parallel_effective = "pmap" if use_pmap else "vmap"
 
         def _init(p, init_key):
-            return blackjax.mcmc.dynamic_hmc.init(p, ld_1arg, init_key)
+            return DYNAMIC_HMC.init(p, ld_1arg, init_key)
 
         def _scan(s, ks):
-            return _dynamic_hmc_chain_scan(
+            draws = sample_chain(
+                DYNAMIC_HMC,
                 s,
                 ks,
                 log_posterior_flat_2arg,
                 data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
+                (parameters["step_size"], parameters["inverse_mass_matrix"]),
+                None,
             )
+            return draws.position, draws.divergent
 
         positions, divergent = _vmap_chains(
             _init,
@@ -329,16 +334,18 @@ def run_dynamic_hmc(
         _multichain_burnin_done = True
     else:
         chain_parallel_effective = "n/a (n_chains=1)"
-        state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, dhmc_init_key)
+        state = DYNAMIC_HMC.init(init_flat, ld_1arg, dhmc_init_key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent = _dynamic_hmc_chain_scan(
+        draws = sample_chain(
+            DYNAMIC_HMC,
             state,
             chain_keys,
             log_posterior_flat_2arg,
             data_args,
-            parameters["step_size"],
-            parameters["inverse_mass_matrix"],
+            (parameters["step_size"], parameters["inverse_mass_matrix"]),
+            None,
         )
+        positions, divergent = draws.position, draws.divergent
         _multichain_burnin_done = False
 
     # Burnin discarded Python-side. Multichain branch already handled
@@ -346,7 +353,9 @@ def run_dynamic_hmc(
     if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
-    n_divergent = int(jnp.sum(divergent))
+    divergence = divergence_record(divergent)
+    n_divergent = int(divergence["n_divergent"])
+    divergent_mask = jnp.asarray(divergence["divergent_mask"]).astype(bool)
 
     # Post-hoc dead-fit detection: any chain's draws mostly divergent (#2093).
     # Complements the pre-hoc warmup check for fits that collapse after warmup.
@@ -392,6 +401,7 @@ def run_dynamic_hmc(
             "n_chains": n_chains,
             "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
+            "divergent_mask": divergent_mask,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
             **diag,

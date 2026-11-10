@@ -126,7 +126,7 @@ def nuts_text(call_args):
     init, wkey, keys, scales = call_args
     cfg = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8)
     return _lowered_text(
-        run_chain, NUTS, WINDOW_NUTS, init, wkey, keys, _target, scales, N_WARMUP, cfg
+        run_chain, NUTS, WINDOW_NUTS, init, wkey, None, keys, _target, scales, N_WARMUP, cfg
     )
 
 

@@ -915,6 +915,7 @@ def _nuts_full_scan(
         nuts_adaptation(use_pathfinder_warmup),
         init_flat,
         warmup_key,
+        None,
         chain_keys,
         logdensity_fn_2arg,
         data_args,
@@ -996,6 +997,7 @@ def _hmc_full_scan(
         WINDOW_HMC(n_leapfrog, not use_dense),
         init_flat,
         warmup_key,
+        None,
         chain_keys,
         logdensity_fn_2arg,
         data_args,
@@ -1010,7 +1012,6 @@ def _hmc_full_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8))
 def _dynamic_hmc_full_scan(
     init_flat,
     warmup_key,
@@ -1022,13 +1023,7 @@ def _dynamic_hmc_full_scan(
     use_dense,
     target_accept_rate,
 ):
-    """Outer JIT: HMC warmup + dynamic HMC init + sampling chain.
-
-    Uses HMC window adaptation to tune step size and mass matrix, then
-    initializes a dynamic HMC state inside the same JIT so the kernel is
-    compiled once. Burnin discard is done by the caller Python-side, so
-    changing ``n_burnin`` while keeping ``n_chain`` constant does not
-    trigger recompilation.
+    """Run HMC window warmup then dynamic HMC sampling; a shim over ``run_chain``.
 
     Parameters
     ----------
@@ -1040,15 +1035,15 @@ def _dynamic_hmc_full_scan(
         Random key for ``dynamic_hmc.init`` (requires a random generator arg).
     chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg : callable (static)
+    logdensity_fn_2arg : callable
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
     data_args : pytree (traced)
-        Observed data tensors; changing these does NOT trigger recompilation.
+        Observed data tensors.
     n_warmup : int (static)
         Window adaptation steps.
-    use_dense : bool (static)
+    use_dense : bool
         Dense vs diagonal mass matrix for HMC warmup.
-    target_accept_rate : float (static)
+    target_accept_rate : float
         Target acceptance rate for dual averaging.
 
     Returns
@@ -1059,79 +1054,32 @@ def _dynamic_hmc_full_scan(
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
-    import blackjax
-
-    def ld_1arg(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    warmup = blackjax.window_adaptation(
-        blackjax.hmc,
-        ld_1arg,
-        is_mass_matrix_diagonal=not use_dense,
-        target_acceptance_rate=target_accept_rate,
-        num_integration_steps=10,
+    from tengri.inference.backends.mcmc.chain_program import (
+        DYNAMIC_HMC,
+        DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+        WINDOW_HMC,
+        HMCConfig,
+        run_chain,
     )
-    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
 
-    state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, dhmc_init_key)
-    kernel = _get_dynamic_hmc_kernel()
-
-    def _step(s, k):
-        """Advance dynamic HMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, inv_mass_matrix
-
-
-@functools.partial(jax.jit, static_argnums=(2,))
-def _dynamic_hmc_chain_scan(
-    state,
-    chain_keys,
-    logdensity_fn_2arg,
-    data_args,
-    step_size,
-    inv_mass_matrix,
-):
-    """Outer JIT: dynamic HMC sampling with pre-computed adaptation params.
-
-    Parameters
-    ----------
-    state : DynamicHMCState
-        Initial chain state (from ``blackjax.mcmc.dynamic_hmc.init``).
-    chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg : callable (static)
-        ``log_p(position, data_args)``.
-    data_args : pytree (traced)
-        Observed data tensors.
-    step_size : scalar (traced)
-        Step size from HMC window adaptation.
-    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
-        Inverse mass matrix from HMC window adaptation.
-
-    Returns
-    -------
-    positions : ndarray, shape (n_chain, D)
-    divergent : ndarray, shape (n_chain,)
-        Caller slices ``[n_burnin:]``.
-    """
-
-    def ld(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    kernel = _get_dynamic_hmc_kernel()
-
-    def _step(s, k):
-        """Advance dynamic HMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent
+    cfg = HMCConfig(
+        n_leapfrog=DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+        use_dense=use_dense,
+        target_accept_rate=target_accept_rate,
+    )
+    draws, (step_size, inv_mass_matrix) = run_chain(
+        DYNAMIC_HMC,
+        WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, not use_dense),
+        init_flat,
+        warmup_key,
+        dhmc_init_key,
+        chain_keys,
+        logdensity_fn_2arg,
+        data_args,
+        n_warmup,
+        cfg,
+    )
+    return draws.position, draws.divergent, step_size, inv_mass_matrix
 
 
 # ---------------------------------------------------------------------------
