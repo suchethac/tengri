@@ -156,7 +156,7 @@ Key directories:
 - `protocols/` — Protocols (`SEDComponent`, `ObservationModel`, `Likelihood`, `DerivedState`) + `SEDModelComponent` contract; consumed by the forward pipeline (ADR-0009/0011/0019)
 - `parameters/` — Parameters class, priors, param translation
 - `components/` — SED physics: sfh/, sps/, dust/, nebular/, agn/, igm/, radio/, xray/
-- `forward/` — SEDModel, pipeline, component_factory (the `_REGISTRY` dispatch seam), precompute/ (protocol+registry)
+- `forward/` — SEDModel, pipeline, component_factory (the `_REGISTRY` dispatch seam), precompute/ (protocol+registry). Band tables are built by each component's precompute adapter through `forward/precompute/band_table.py`, memoized in `SEDModel._band_tables`, with decline reasons owned by the adapter (ADR-0021).
 - `observation/` — photometry, spectroscopy, filters, noise, emission lines, `linear_marginal` (the one linear-Gaussian marginal)
 - `inference/` — fitter, posterior, all inference methods (vi, mcmc, nss, map, etc.)
 - `analysis/` — diagnostics, plotting, simulate, mock
