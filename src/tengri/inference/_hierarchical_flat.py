@@ -834,9 +834,15 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
     )
 
 
-#: Registry entry whose chain program a flat name runs, where the names differ. Pathfinder
-#: is the NUTS family with the Pathfinder warmup, so it runs the ``mcmc_nuts`` program.
-_FLAT_CHAIN_ENTRY_ALIAS: dict[str, str] = {"pathfinder": "mcmc_nuts"}
+#: Registry entry that owns each chain driver's program and adaptation. Pathfinder is the
+#: NUTS family with the Pathfinder warmup, so it resolves to the ``mcmc_nuts`` entry.
+_CHAIN_ENTRY_OF_DRIVER: dict[str, str] = {
+    "nuts": "mcmc_nuts",
+    "nuts_pathfinder": "mcmc_nuts",
+    "hmc": "mcmc_hmc",
+    "dynamic_hmc": "mcmc_dynamic_hmc",
+    "ghmc": "mcmc_ghmc",
+}
 
 
 @functools.cache
@@ -844,27 +850,25 @@ def flat_chain_drivers() -> frozenset[str]:
     """Return the flat drivers that run one chain through ``chain_program.run_chain``.
 
     A driver qualifies when its registry entry declares both a chain program and a
-    compile plan, so a registered MCMC family joins the seam by registration alone.
-    Names with no registry entry (the VI and nested families) fall out here.
+    compile plan. Drivers without a chain entry (the VI and nested families) fall out.
     """
-    from tengri.inference._backend_registry import get_backend
+    from tengri.inference._backend_registry import all_backends
 
-    drivers = set()
-    for method, driver in FLAT_SAMPLERS.items():
-        with contextlib.suppress(KeyError):
-            entry = get_backend(_FLAT_CHAIN_ENTRY_ALIAS.get(method, method))
-            if entry.chain_program is not None and entry.compile_plan is not None:
-                drivers.add(driver)
-    return frozenset(drivers)
+    ready = {
+        entry.name
+        for entry in all_backends()
+        if entry.chain_program is not None and entry.compile_plan is not None
+    }
+    return frozenset(
+        driver
+        for driver, entry_name in _CHAIN_ENTRY_OF_DRIVER.items()
+        if entry_name in ready and driver in FLAT_SAMPLERS.values()
+    )
 
 
 def _flat_chain_statics(
     driver: str,
-    method: str,
-    n_dim: int,
-    spec,
     *,
-    verbose,
     n_leapfrog,
     max_num_doublings,
     dense_mass_matrix,
@@ -874,10 +878,11 @@ def _flat_chain_statics(
 ):
     """Return the chain program, window adaptation and statics for one flat driver.
 
-    The statics come from the caller's kwargs, as the flat seam always read them: a
+    The statics come from the caller's kwargs as the flat seam always read them: a
     user's ``n_leapfrog`` or GHMC ``alpha`` is the value that runs, not the registry's
-    compile-plan default. The program and the adaptation come from the registry entry
-    of the same family, on its compile-path rule.
+    compile-plan default, and ``dense_mass_matrix`` goes through as a plain flag with no
+    auto policy. The program and the adaptation come from the registry entry that owns
+    the driver, on its compile-path rule.
     """
     from tengri.inference._backend_registry import get_backend
     from tengri.inference.backends.mcmc.chain_program import (
@@ -890,11 +895,8 @@ def _flat_chain_statics(
         HMCConfig,
         NUTSConfig,
     )
-    from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
 
-    use_dense = resolve_dense_mass_gate(
-        dense_mass_matrix, n_dim, method=method, verbose=verbose, spec=spec
-    )
+    use_dense = bool(dense_mass_matrix)
     if driver in ("nuts", "nuts_pathfinder"):
         program = NUTS
         cfg = NUTSConfig(
@@ -922,14 +924,19 @@ def _flat_chain_statics(
             f"flat driver {driver!r} has no chain statics; the chain drivers are "
             f"{sorted(flat_chain_drivers())}."
         )
-    entry_name: str = _FLAT_CHAIN_ENTRY_ALIAS.get(method, method)
+    entry_name = _CHAIN_ENTRY_OF_DRIVER[driver]
     entry = get_backend(entry_name)
     kwargs = {
         "dense_mass_matrix": use_dense,
         "n_leapfrog_steps": n_leapfrog,
         "pathfinder_warmstart": driver == "nuts_pathfinder",
     }
-    return program, entry.adaptation_for(kwargs, path="compile"), cfg
+    adaptation = entry.adaptation_for(kwargs, path="compile")
+    if adaptation is None:
+        raise ValueError(
+            f"flat driver {driver!r}: registry entry {entry_name!r} has no compile adaptation rule"
+        )
+    return program, adaptation, cfg
 
 
 def run_flat_sampler(
@@ -1150,10 +1157,6 @@ def run_flat_sampler(
 
         program, adaptation, cfg = _flat_chain_statics(
             driver,
-            method,
-            prob.n_dim,
-            fitter._spec,
-            verbose=verbose,
             n_leapfrog=n_leapfrog,
             max_num_doublings=max_num_doublings,
             dense_mass_matrix=dense_mass_matrix,

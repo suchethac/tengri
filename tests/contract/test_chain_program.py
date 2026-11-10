@@ -860,14 +860,46 @@ def test_compile_refuses_a_registered_method_without_a_program_by_name():
         )
 
 
-# The flat seam's defaults (run_flat_sampler) for the four MCMC drivers that run one chain.
+# The flat seam's statics for every chain driver and name. Each row is the seam call's
+# method and keyword statics, with the ``run_chain`` program, adaptation and cfg that the
+# same statics must reproduce. The defaults match run_flat_sampler's; the others move one
+# static off its default so the caller's kwargs are shown to reach the chain.
 _FLAT_SEAM_CASES = [
-    pytest.param("mcmc_nuts", NUTS, WINDOW_NUTS, NUTSConfig(5, False, 0.8), False, id="nuts"),
+    pytest.param("mcmc_nuts", {}, NUTS, WINDOW_NUTS, NUTSConfig(5, False, 0.8), False, id="nuts"),
     pytest.param(
-        "mcmc_hmc", HMC, WINDOW_HMC(10, True), HMCConfig(10, False, 0.8), False, id="hmc"
+        "pathfinder",
+        {},
+        NUTS,
+        PATHFINDER_NUTS,
+        NUTSConfig(5, False, 0.8),
+        False,
+        id="nuts_pathfinder",
+    ),
+    pytest.param("mcmc", {}, NUTS, WINDOW_NUTS, NUTSConfig(5, False, 0.8), False, id="mcmc_alias"),
+    pytest.param(
+        "mcmc_nuts",
+        {"dense_mass_matrix": True},
+        NUTS,
+        WINDOW_NUTS,
+        NUTSConfig(5, True, 0.8),
+        False,
+        id="nuts_dense",
+    ),
+    pytest.param(
+        "mcmc_hmc", {}, HMC, WINDOW_HMC(10, True), HMCConfig(10, False, 0.8), False, id="hmc"
+    ),
+    pytest.param(
+        "mcmc_hmc",
+        {"n_leapfrog": 7},
+        HMC,
+        WINDOW_HMC(7, True),
+        HMCConfig(7, False, 0.8),
+        False,
+        id="hmc_leapfrog7",
     ),
     pytest.param(
         "mcmc_dynamic_hmc",
+        {},
         DYNAMIC_HMC,
         WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, True),
         HMCConfig(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, False, 0.8),
@@ -875,12 +907,31 @@ _FLAT_SEAM_CASES = [
         id="dynamic_hmc",
     ),
     pytest.param(
+        "mcmc_dynamic_hmc",
+        {"dense_mass_matrix": True},
+        DYNAMIC_HMC,
+        WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, False),
+        HMCConfig(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, True, 0.8),
+        True,
+        id="dynamic_hmc_dense",
+    ),
+    pytest.param(
         "mcmc_ghmc",
+        {},
         GHMC,
         WINDOW_GHMC,
         GHMCConfig(alpha=0.8, delta=0.65, target_accept_rate=0.8),
         True,
         id="ghmc",
+    ),
+    pytest.param(
+        "mcmc_ghmc",
+        {"ghmc_alpha": 0.5, "ghmc_delta": 0.4},
+        GHMC,
+        WINDOW_GHMC,
+        GHMCConfig(alpha=0.5, delta=0.4, target_accept_rate=0.8),
+        True,
+        id="ghmc_alpha05",
     ),
 ]
 
@@ -949,9 +1000,9 @@ def flat_seam_population(synthetic_ssp_wide_physical):
     return factory, galaxies
 
 
-@pytest.mark.parametrize("method, program, adaptation, cfg, fresh_init", _FLAT_SEAM_CASES)
+@pytest.mark.parametrize("method, statics, program, adaptation, cfg, fresh_init", _FLAT_SEAM_CASES)
 def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
-    flat_seam_population, method, program, adaptation, cfg, fresh_init
+    flat_seam_population, method, statics, program, adaptation, cfg, fresh_init
 ):
     """The hierarchical flat seam feeds run_chain the keys and statics it always did.
 
@@ -976,6 +1027,7 @@ def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
         n_samples=n_samples,
         allow_unvalidated=True,
         verbose=False,
+        **statics,
     )
     sigma = np.asarray(seam.shared_samples["psd_sigma"])
     tau = np.asarray(seam.shared_samples["psd_tau_myr"])
