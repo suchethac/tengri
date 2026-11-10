@@ -5,7 +5,7 @@ The unit tier pins the stats helper and the warning gate in isolation;
 this test runs the real sampler on the synthetic SSP and asserts the
 per-iteration trajectory-expansion counts actually reach the Posterior's
 diagnostics dict — the plumbing a unit test cannot see (scan payload
-through ``_nuts_chain_scan`` and the burnin slice in ``run_nuts``).
+through ``sample_chain`` and the burnin slice in ``run_nuts``).
 """
 
 import jax
