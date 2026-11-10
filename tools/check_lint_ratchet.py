@@ -193,20 +193,16 @@ SUBCOMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {"ruff": _run_ruff
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Dispatch on the first argument to a subcommand; the rest are its options."""
-    args = list(sys.argv[1:] if argv is None else argv)
-    if not args or args[0] not in SUBCOMMANDS:
-        print(
-            f"usage: check_lint_ratchet.py {{{','.join(SUBCOMMANDS)}}} [options]", file=sys.stderr
-        )
-        return 2
-    parser = argparse.ArgumentParser(prog=f"check_lint_ratchet.py {args[0]}")
+    """Parse the subcommand and its mode flag, then run the subcommand."""
+    parser = argparse.ArgumentParser(prog="check_lint_ratchet.py")
+    parser.add_argument("subcommand", choices=sorted(SUBCOMMANDS))
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--list", action="store_true", help="print current counts")
     mode.add_argument(
         "--write-baseline", action="store_true", help="rewrite the baseline from current counts"
     )
-    return SUBCOMMANDS[args[0]](parser.parse_args(args[1:]))
+    args = parser.parse_args(argv)
+    return SUBCOMMANDS[args.subcommand](args)
 
 
 if __name__ == "__main__":
