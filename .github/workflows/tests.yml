@@ -338,6 +338,12 @@ jobs:
       # twenty of which made data/filters/ unreachable for the gallery (#1857).
       # Stdlib-only.
       - run: python tools/check_tracked_not_ignored.py
+      # Python keeps the second of two same-scope `def`s and drops the first, so
+      # an edit to the dropped copy changes nothing and every test still passes.
+      # SEDModel carried `_additive_term_shape_table` twice (#2819 and #2824 each
+      # added a copy). F811 misses it when the first binding is unused in
+      # between, which is always the case for a method. Stdlib-only.
+      - run: python tools/check_duplicate_defs.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
