@@ -32,7 +32,7 @@ pip install -e ".[all]"
 
 ## Requirements
 
-- Python ≥ 3.11
+- Python ≥ 3.12
 - JAX ≥ 0.4.20 and jaxlib ≥ 0.4.20
 - DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time)
 - NumPy ≥ 1.24

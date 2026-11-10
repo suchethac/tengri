@@ -66,6 +66,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference.backends.evidence import _require_converged_evidence
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.newton import newton_polish
 from tengri.utils.transforms import to_bounded, to_unbounded
@@ -829,31 +830,6 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
         f"grows with both), or use mcmc_nuts / mcmc_hmc, which need no live "
         f"set. Stochastic-field hierarchies put every field latent into D "
         f"(n_grid per galaxy); a coarser n_grid at build time shrinks D."
-    )
-
-
-def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
-    """Refuse a nested run that hit its iteration cap before the evidence converged.
-
-    Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
-    live set still holds unintegrated posterior mass; resampling then returns
-    a silently truncated (therefore biased) sample set, which is precisely
-    the failure that kept this name refused (the blind-rejection stand-in
-    terminated at iteration 147 of a requested 200 and handed back a
-    plausible-looking answer, #1429). Same state, different road, same loud
-    refusal.
-    """
-    if remaining < tol:
-        return
-    raise RuntimeError(
-        f"{method}: nested sampling hit nss_max_iterations={max_iterations} "
-        f"(n_iter={n_iter}) while the unintegrated evidence fraction "
-        f"log(Z_live/Z) = {remaining:.2f} still exceeds "
-        f"nss_log_evidence_tol={tol}. The live set still holds posterior "
-        f"mass, so resampling now would return the silently truncated, "
-        f"biased sample set that kept this name refused (#1429). Raise "
-        f"nss_max_iterations, or raise nss_num_delete to retire more points "
-        f"per iteration."
     )
 
 
