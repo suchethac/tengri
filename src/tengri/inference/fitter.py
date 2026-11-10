@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri._cache_keys import derive_key
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import BackendError, ParameterError, TengriError
 from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
@@ -234,11 +234,9 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
     test stub, …) also passes through silently, we don't want to
     warn on legitimate non-SEDModel uses.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.sed_model import SEDModel
-    except ImportError:
-        return
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.sed_model import SEDModel
+
     if isinstance(model, ForwardModel):
         return
     if isinstance(model, SEDModel):
@@ -270,11 +268,8 @@ def _population_sed(model):
         The population SubModel when ``model`` is a ``ForwardModel`` wrapping
         exactly one, otherwise ``None``.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
-        return None
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.population_sed_model import PopulationSEDModel
 
     if not isinstance(model, ForwardModel):
         return None
@@ -1156,7 +1151,7 @@ def _warn_if_lut_bias_amplified(
                         return f"photometry band {channel_idx}"
                     else:
                         return f"spectrum pixel {channel_idx - n_phot}"
-                except Exception:
+                except TengriError:
                     return f"channel {channel_idx}"
 
         if user_likelihood:
@@ -1217,7 +1212,7 @@ def _warn_if_lut_bias_amplified(
                 forward_bias=bias_at,
                 snr=snr_at,
             )
-    except Exception:
+    except TengriError:
         logger.warning(
             "LUT-bias advisory skipped for %s; the fit proceeds without it.",
             surface,
@@ -4575,21 +4570,9 @@ class Fitter:
                 verbose=verbose,
             )
         if method == "blackjax":
-            try:
-                return self._draw_blackjax_samples(
-                    likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
-                )
-            except ImportError:
-                if verbose:
-                    logger.info("  blackjax not installed, falling back to JIT sampling")
-                return self._draw_jit_samples(
-                    pos_dict,
-                    key,
-                    n_samples,
-                    existing_samples,
-                    posterior_chunk_size=posterior_chunk_size,
-                    verbose=verbose,
-                )
+            return self._draw_blackjax_samples(
+                likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
+            )
         return self._draw_nifty_samples(
             likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
         )
@@ -4733,7 +4716,16 @@ class Fitter:
         from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
 
         _check_blackjax_floor()
-        import blackjax
+        try:
+            import blackjax
+        except ImportError as exc:
+            from tengri.inference._backend_registry import pip_hint
+
+            raise BackendError(
+                'posterior_method="blackjax" requires blackjax, which is not installed.  '
+                f"Install it with:\n    {pip_hint('blackjax')}\n"
+                'or pass posterior_method="jit" for the JIT-compiled CG sampler.'
+            ) from exc
 
         if verbose:
             logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)
