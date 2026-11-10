@@ -1,0 +1,205 @@
+{
+ "params": {
+  "sfh_dpl_log_total_mass": 8.444870947551594
+ },
+ "signature_sha256": "409e659811e4545f4577fa46f02b5a4ce0dc8de8fea4243a7ae8eded2fc96ff3",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
+ "tree": [
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/0",
+   "sha256": "3844ff3d1f0e82399005d642756461f07b6a63c6162b43488b3dc2422fa077ab",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/1",
+   "sha256": "d3e9253606015a6b243656c57f89f2e2cd15c42a3bd2deb6778ff74808afb0bb",
+   "shape": [
+    5,
+    6,
+    6,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/2",
+   "sha256": "3f1e702813bfd28b59dda60b0b0487ba2117474ed523917d1fcdbacb4f33be03",
+   "shape": [
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/3",
+   "sha256": "5af0684e481dd95691a41433acaf358a8953f8bd248be435829841ab1aa198a7",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/4",
+   "sha256": "4604415fe05989fff15c1ad12015f93279f7c1f1caee02b6e99cd8924218b23a",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/5",
+   "sha256": "51e2ca9f8595d227ca5b662c3fd2389f1622ed2d82600aa6f6013ce10df44067",
+   "shape": [
+    60
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/6",
+   "sha256": "f62da0dd84afdd75ade4e50b541ca29a5e46a83d2c32b87cb39801fad02b4d81",
+   "shape": [
+    5,
+    6,
+    6,
+    60
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/7",
+   "sha256": "3f1e702813bfd28b59dda60b0b0487ba2117474ed523917d1fcdbacb4f33be03",
+   "shape": [
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/8",
+   "sha256": "5af0684e481dd95691a41433acaf358a8953f8bd248be435829841ab1aa198a7",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular/9",
+   "sha256": "4604415fe05989fff15c1ad12015f93279f7c1f1caee02b6e99cd8924218b23a",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/0",
+   "sha256": "de0a2312d06666b67cbc6cdb9b94e772f41a80689731f9667175f6f3a1e814fc",
+   "shape": [
+    12
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/1",
+   "sha256": "3f1e702813bfd28b59dda60b0b0487ba2117474ed523917d1fcdbacb4f33be03",
+   "shape": [
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/2",
+   "sha256": "4604415fe05989fff15c1ad12015f93279f7c1f1caee02b6e99cd8924218b23a",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/3",
+   "sha256": "3f1e702813bfd28b59dda60b0b0487ba2117474ed523917d1fcdbacb4f33be03",
+   "shape": [
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/4",
+   "sha256": "4604415fe05989fff15c1ad12015f93279f7c1f1caee02b6e99cd8924218b23a",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/5",
+   "sha256": "4f4341293806268a372b03f4ca3f16300c7c62089081e9a1cad65719b9419858",
+   "shape": [
+    2,
+    12,
+    5,
+    6,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/6",
+   "sha256": "31176de553ae1d1cc7761576585db7827b14aec273bdba332619a14ecc643893",
+   "shape": [
+    12,
+    5,
+    6,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/7",
+   "sha256": "da358de0ead586d88e4221a84f8022a888cafbdf05e9bee2366f2d725e1cbcc1",
+   "shape": [
+    6,
+    2,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/nebular_band_table/8",
+   "sha256": "3844ff3d1f0e82399005d642756461f07b6a63c6162b43488b3dc2422fa077ab",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "kind": "scalar",
+   "path": "/nebular_band_table/9",
+   "repr": "100.0"
+  },
+  {
+   "kind": "scalar",
+   "path": "/nebular_band_table/10",
+   "repr": "0.1"
+  }
+ ]
+}

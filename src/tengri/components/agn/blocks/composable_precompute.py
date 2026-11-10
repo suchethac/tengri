@@ -48,6 +48,7 @@ from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
+from tengri.forward.precompute.band_table import BandTable, BandTableContext, Decline
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -72,7 +73,7 @@ __all__ = [
 #: fluxes through a feature narrower than the node spacing is not represented to a usable
 #: accuracy by any node count the build can afford. Empty: whether an axis is represented depends
 #: on the recipe and the prior, so the build measures each table at its cell centers instead
-#: (``SEDModel._agn_table_cell_center_error``). It declines, for example, SKIRTOR's agn_cos_inc
+#: (``_agn_table_cell_center_error``). It declines, for example, SKIRTOR's agn_cos_inc
 #: (the disc passes behind the torus: 4.2e-1 at 17 nodes) and the kubota_done disc over its whole
 #: agn_log_lbol prior (its flux jumps near lbol 9.8: 3.9e-1 at 33 nodes), see
 #: ``tests/contract/test_agn_precompute_table_wired.py``.
@@ -80,7 +81,7 @@ UNWIRED_AXES: dict[str, str] = {}
 
 #: Blocks the table is never built over, keyed ``"<category>/<name>"`` (``category`` one of the
 #: composable stages), each with the reason. Empty: every block builds, and the build measures
-#: each table at its cell centers and declines one that misses ``SEDModel._AGN_TABLE_RTOL``, so a
+#: each table at its cell centers and declines one that misses ``_AGN_TABLE_RTOL``, so a
 #: block needs an entry here only if its table cannot be built at all.
 UNWIRED_BLOCKS: dict[str, str] = {}
 
@@ -655,3 +656,217 @@ def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
     axes = tuple(table["axes"][name] for name in sorted(table["axes"]))
     normed = jnp.exp(library_lookup(ln_phot, axes, tuple(axis_values)))
     return amplitude * normed
+
+
+#: Band-table slots this adapter provides, read through :func:`band_table`.
+BAND_SLOTS: tuple[str, ...] = ("band_table",)
+
+#: Per-axis node count of the composable AGN band table, by the number of free axes. The
+#: build evaluates the recipe at every node of the cartesian product, so the count falls
+#: with the dimension and more than four free axes is refused.
+_AGN_TABLE_NODES: dict[int, int] = {1: 129, 2: 17, 3: 11, 4: 7}
+
+#: Largest relative error of a band flux the AGN table may carry, measured at build.
+_AGN_TABLE_RTOL: float = 1e-3
+
+
+def band_table(ctx: BandTableContext, *, component: str, slot: str) -> BandTable | Decline:
+    """Build the composable AGN band table of the model, or the reason it is declined.
+
+    Parameters
+    ----------
+    ctx : BandTableContext
+        The model state the table is built from.
+    component : str
+        The component whose slot is requested; the AGN is found in ``ctx.chain``.
+    slot : str
+        Must be ``"band_table"``.
+
+    Returns
+    -------
+    BandTable or Decline
+        The table, or the refusal with the reason it gives.
+
+    Raises
+    ------
+    ValueError
+        If ``slot`` is not one of ``BAND_SLOTS``.
+    """
+    if slot not in BAND_SLOTS:
+        raise ValueError(f"the composable AGN adapter has no band-table slot {slot!r}")
+    reason = _agn_band_table_gate(ctx)
+    if reason is not None:
+        return Decline(reason)
+    table, reason = _build_agn_band_table(ctx)
+    if table is None:
+        return Decline(reason)
+    return BandTable(table)
+
+
+def _agn_band_table_gate(ctx: BandTableContext) -> str | None:
+    """Reason the composable AGN band table cannot represent this model, or ``None``.
+
+    A ``composable`` model and a deprecated preset (``agn={'type': 'skirtor'}``) both run
+    the composable runner, so both are eligible. The selectors and norm are read from
+    :meth:`AGNSEDComponent.resolved_recipe`, not the config, which holds the grammar's
+    defaults for a preset. A self-contained model is declined as not composable.
+    """
+    from tengri.components.agn.component import AGNSEDComponent
+    from tengri.components.agn.unified import is_composable_recipe
+
+    spec = ctx.spec
+    agn = next((c for c in ctx.chain if isinstance(c, AGNSEDComponent)), None)
+    fixed = spec.get_fixed_values()
+    ir_frac = fixed.get("agn_ir_frac")
+    free = sorted(p for p in spec.free_params if p.startswith("agn_"))
+    axes = [p for p in free if p != "agn_lum_ratio"]
+
+    if agn is None or not is_composable_recipe(getattr(agn.config, "model", None)):
+        return "the AGN is not a composable recipe"
+    recipe = agn.resolved_recipe()
+    if not ctx.wave_precomp:
+        return "WavePrecomp is off"
+    if ctx.padded_filters[0] is None:
+        return "no padded filter curves"
+    if ctx.z_nodes is not None:
+        return "the registry adapter is built at one redshift and the redshift is not Fixed"
+    if recipe["norm"] != "cigale_joint" or recipe["polar_law"] != "smc":
+        return (
+            "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc' "
+            f"(this AGN resolves to norm={recipe['norm']!r}, "
+            f"polar_law={recipe['polar_law']!r})"
+        )
+    if ir_frac is None or float(ir_frac) != 0.0:
+        return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
+    if len(axes) > max(_AGN_TABLE_NODES):
+        return f"{len(axes)} free AGN parameters exceed the {max(_AGN_TABLE_NODES)}-axis cap"
+    unwired = [p for p in axes if p in UNWIRED_AXES]
+    if unwired:
+        return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
+    for category in ("disc", "nlr", "blr", "feii", "torus", "attenuation"):
+        key = f"{category}/{recipe[category]}"
+        if key in UNWIRED_BLOCKS:
+            return f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
+    unbounded = [
+        p for p in axes if not all(np.isfinite(b) for b in spec.get_distribution(p).bounds)
+    ]
+    if unbounded:
+        return f"the priors of {unbounded} have no finite bounds to span with nodes"
+    if isinstance(ctx.ask("agn", "term_band_response"), BandTable):
+        # Every sub-block is a fixed shape times its amplitude, so the per-term band
+        # response (#1118) is exact at the same per-call cost; a table would only add
+        # interpolation error.
+        return "the rank-1 term band response serves this AGN exactly"
+    return None
+
+
+def _build_agn_band_table(ctx: BandTableContext) -> tuple[dict | None, str | None]:
+    """Run the ``composable_agn`` adapter over the free axes; ``(table, reason)``."""
+    from tengri.components.agn.component import AGNSEDComponent, numeric_agn_kwargs
+    from tengri.forward.precompute import reach_axes, registry
+
+    spec = ctx.spec
+    agn = next(c for c in ctx.chain if isinstance(c, AGNSEDComponent))
+    module = registry.resolve("composable_agn")
+    fixed = spec.get_fixed_values()
+    axes_names = sorted(
+        p for p in spec.free_params if p.startswith("agn_") and p != "agn_lum_ratio"
+    )
+    user_grids = dict(ctx.agn_axis_grids or {})
+    not_free = sorted(set(user_grids) - set(axes_names))
+    if not_free:
+        return None, (
+            f"agn_axis_grids names {not_free}, which are not free AGN parameters of this model"
+        )
+    # A fully Fixed AGN has no free axis: its band fluxes are one exact evaluation at the
+    # fixed agn_log_lbol, held as a single node (the table is then a constant row).
+    fixed_only = not axes_names
+    n_nodes = 1 if fixed_only else _AGN_TABLE_NODES[len(axes_names)]
+    axis_grids = {}
+    for name in axes_names:
+        bounds = tuple(float(b) for b in spec.get_distribution(name).bounds)
+        support = reach_axes.active_support(name, spec, bounds)
+        if name in user_grids:
+            axis = np.asarray(user_grids[name], dtype=np.float64)
+            reach_axes.check_user_axis(name, axis, support)
+        else:
+            axis = reach_axes.default_axis(name, n_nodes, support, declared=bounds)
+        axis_grids[name] = axis
+
+    agn_fixed = {k: v for k, v in fixed.items() if k.startswith("agn_") and np.ndim(v) == 0}
+    call_fixed = numeric_agn_kwargs(agn_fixed, agn_fixed.get("agn_torus_frac", 0.5))
+    fixed_values = {
+        k: float(v) for k, v in call_fixed.items() if k not in axis_grids and k != "agn_lum_ratio"
+    }
+    if "agn_log_lbol" in fixed:
+        fixed_values["agn_log_lbol"] = float(fixed["agn_log_lbol"])
+    if fixed_only:
+        lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
+        axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
+        fixed_values.pop("agn_log_lbol", None)
+    selectors = agn.resolved_recipe()
+    recipe = Recipe.from_selectors(
+        disc=selectors["disc"],
+        nlr=selectors["nlr"],
+        blr=selectors["blr"],
+        feii=selectors["feii"],
+        torus=selectors["torus"],
+        attenuation=selectors["attenuation"],
+        axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names),
+    )
+    filter_waves, filter_trans = ctx.filters
+
+    def _tabulate(grids):
+        return module.table_arrays(
+            module.precompute(
+                [np.asarray(w, dtype=np.float64) for w in filter_waves],
+                [np.asarray(t, dtype=np.float64) for t in filter_trans],
+                float(fixed["redshift"]),
+                None,
+                recipe=recipe,
+                axis_grids=grids,
+                fixed_values=fixed_values,
+                wave_rest=np.asarray(ctx.wave, dtype=np.float64),
+                extra_redshifts=(0.0,),
+            ),
+            "composable_agn",
+        )
+
+    table = _tabulate(axis_grids)
+    if fixed_only:
+        # One node per axis and no free axis: the table is the single row of band fluxes.
+        return {"ln_phot": jnp.reshape(table["ln_phot"], (-1,)), "axes": {}}, None
+    worst = _agn_table_cell_center_error(module, table, _tabulate, axis_grids)
+    if not worst <= _AGN_TABLE_RTOL:
+        return None, (
+            f"the table misses its {_AGN_TABLE_RTOL:g} accuracy: {worst:.2e} at the cell "
+            f"centers of its {dict((k, len(v)) for k, v in axis_grids.items())} nodes (a band "
+            "flux that is not smooth over the priors, e.g. a regime switch in the disc or the "
+            "disc passing behind the torus)"
+        )
+    return table, None
+
+
+def _agn_table_cell_center_error(module, table, tabulate, axis_grids) -> float:
+    """Worst relative error of the AGN table at the centers of its cells.
+
+    The recipe is evaluated once more at every cell center (each axis at the midpoints of
+    its nodes), the point farthest from the nodes the table passes through, and compared
+    with the table read there. A band flux that is smooth over the axes is reproduced far
+    below the bound; a kink or a step between nodes is not, whatever its cause.
+    """
+    centers = {k: 0.5 * (v[1:] + v[:-1]) for k, v in axis_grids.items()}
+    probe = np.asarray(tabulate(centers)["ln_phot"])
+    names = sorted(centers)
+    mesh = np.meshgrid(*(centers[k] for k in names), indexing="ij")
+    points = np.stack([m.ravel() for m in mesh], axis=-1)
+    read = jax.vmap(lambda q: module.lookup_from_table(table, "composable_agn", 1.0, *q))(
+        jnp.asarray(points)
+    )
+    want = probe.reshape(points.shape[0], -1)
+    got = np.log(np.asarray(read))
+    # Bands the recipe leaves empty sit at the ln floor in both; they carry no flux to compare.
+    live = want > _LN_PHOT_FLOOR + 1.0
+    if not np.any(live):
+        return 0.0
+    return float(np.max(np.abs(np.expm1(got[live] - want[live]))))
