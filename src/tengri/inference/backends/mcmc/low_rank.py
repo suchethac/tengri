@@ -314,6 +314,8 @@ def run_hmc_low_rank(
                 (step_size, inv_mass_matrix),
                 HMCConfig(
                     n_leapfrog=int(n_leapfrog_steps),
+                    # Sampling reads the adapted (step_size, inv_mass_matrix) pair;
+                    # use_dense only steers adaptation, which low-rank runs itself.
                     use_dense=True,
                     target_accept_rate=float(target_accept_rate),
                 ),

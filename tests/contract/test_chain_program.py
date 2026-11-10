@@ -326,3 +326,15 @@ def test_hmc_run_chain_matches_raw_warmup_then_sampling(setup):
     actual = (draws.position, draws.divergent)
     for want, have in zip(expected, actual, strict=True):
         assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
+    """The registered HMC rule takes a decided mass policy, never the auto ``None``."""
+    from tengri.inference._backend_registry import get_backend
+
+    entry = get_backend("mcmc_hmc")
+    with pytest.raises(ValueError, match="resolve_dense_mass_gate"):
+        entry.adaptation_for({"dense_mass_matrix": None})
+    dense = entry.adaptation_for({"dense_mass_matrix": True, "n_leapfrog_steps": 7})
+    diagonal = entry.adaptation_for({"dense_mass_matrix": False, "n_leapfrog_steps": 7})
+    assert dense.name != diagonal.name

@@ -253,9 +253,23 @@ def _nuts_adaptation_rule(kwargs: dict):
 
 
 def _hmc_adaptation_rule(kwargs: dict):
-    """Return the HMC window adaptation for the leapfrog count and mass policy in ``kwargs``."""
-    dense = bool(kwargs.get("dense_mass_matrix") or False)
-    return WINDOW_HMC(int(kwargs.get("n_leapfrog_steps", _HMC_DEFAULT_LEAPFROG_STEPS)), not dense)
+    """Return the HMC window adaptation for the leapfrog count and mass policy in ``kwargs``.
+
+    ``dense_mass_matrix`` must already be resolved to a bool: ``run_hmc`` turns
+    the ``None`` (auto) policy into a decision through
+    :func:`~tengri.inference.backends.mcmc.nuts.resolve_dense_mass_gate`, which
+    needs the parameter count, so this rule refuses ``None`` rather than
+    adapting a diagonal metric where the backend would adapt a dense one.
+    """
+    dense = kwargs.get("dense_mass_matrix")
+    if dense is None:
+        raise ValueError(
+            "mcmc_hmc adaptation rule needs dense_mass_matrix resolved to True or "
+            "False; resolve the auto policy with resolve_dense_mass_gate first"
+        )
+    return WINDOW_HMC(
+        int(kwargs.get("n_leapfrog_steps", _HMC_DEFAULT_LEAPFROG_STEPS)), not bool(dense)
+    )
 
 
 register_backend(
