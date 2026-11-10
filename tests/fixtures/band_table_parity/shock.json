@@ -1,0 +1,74 @@
+{
+ "params": {
+  "sfh_dpl_log_total_mass": 8.444870947551594,
+  "shock_log_density": 1.5536868104347465,
+  "shock_log_lhalpha": 40.001893079304004,
+  "shock_velocity": 782.0199742671562
+ },
+ "signature_sha256": "9c1b7682a837c675ceabe059c1dbb37d6e9b7ab1040480870d0518e05ca3dbef",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
+ "tree": [
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/shock_band_table",
+   "sha256": "6ce7d60ea13b05ef810add2f78cfeba139a5c5b6d51ae0716e2ce7b4a1edaed2",
+   "shape": [
+    24,
+    2,
+    4
+   ]
+  },
+  {
+   "dtype": "float32",
+   "kind": "array",
+   "path": "/shock/shock/0",
+   "sha256": "b0c940a21c749ff8cc56401e99565adeb200ade422c4514afe6d1f1decda44be",
+   "shape": [
+    5,
+    6,
+    37,
+    35,
+    24
+   ]
+  },
+  {
+   "dtype": "float32",
+   "kind": "array",
+   "path": "/shock/shock/1",
+   "sha256": "7d73705b7e2b5a3066e2d204ed50b9bbed7d828ddf12e743d0fc7d931f8b0530",
+   "shape": [
+    5,
+    6,
+    37,
+    35,
+    24
+   ]
+  },
+  {
+   "dtype": "float32",
+   "kind": "array",
+   "path": "/shock/shock/2",
+   "sha256": "ffa54e50ea6a84643c2e8e1fa27ca2936a00d717882d3107012aba5a553ceba3",
+   "shape": [
+    5,
+    6,
+    37,
+    35,
+    24
+   ]
+  },
+  {
+   "dtype": "float32",
+   "kind": "array",
+   "path": "/shock/shock/3",
+   "sha256": "5ee05c17a558958a031468b9673d528d3caf8574cadefd740270e1c608041cd8",
+   "shape": [
+    5,
+    6,
+    37,
+    35
+   ]
+  }
+ ]
+}

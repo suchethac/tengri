@@ -665,3 +665,49 @@ def test_per_galaxy_and_batched_marginals_both_call_the_one_helper(synthetic_ssp
         joint.log_prob({"spec_fnu": m_single}, params={})
     with pytest.raises(RuntimeError, match="shared line-prior helper"):
         loglik(params, batch.galaxy(0))
+
+
+def test_joint_calibration_line_helper_is_the_block_prior_marginal():
+    """The shared helper equals the explicit block-prior marginal over calibration and lines.
+
+    Both per-galaxy and batched joint paths call the helper, so their parity cannot see a
+    fault in it. This oracle builds the block prior by hand.
+    """
+    import types
+
+    from tengri.observation.calibration import joint_calibration_line_marginal
+    from tengri.observation.linear_marginal import marginalize_linear_nuisance
+
+    rng = np.random.default_rng(3)
+    n_pix, n_poly, n_lines, prior_sigma = 40, 2, 3, 1.5
+    wave = np.linspace(4000.0, 6000.0, n_pix)
+    basis = jnp.asarray(np.stack([np.ones(n_pix), (wave - 5000.0) / 1000.0], axis=1))
+    model0 = jnp.asarray(1.0 + 0.3 * np.sin(wave / 300.0))
+    design_lines = jnp.asarray(rng.normal(size=(n_pix, n_lines)))
+    data = model0 + jnp.asarray(rng.normal(size=n_pix))
+    sigma = jnp.full(n_pix, 0.5)
+    line_precision = jnp.eye(n_lines) * 4.0
+    line = types.SimpleNamespace(
+        design=design_lines,
+        prior_mean=jnp.zeros(n_lines),
+        prior_precision=line_precision,
+        scale=None,
+    )
+
+    got = joint_calibration_line_marginal(
+        data, model0, basis, line, prior_sigma, whitening={"sigma": sigma}
+    )
+
+    full_design = jnp.concatenate([model0[:, None] * basis, design_lines], axis=1)
+    precision = jnp.zeros((n_poly + n_lines, n_poly + n_lines))
+    precision = precision.at[:n_poly, :n_poly].set(jnp.eye(n_poly) / prior_sigma**2)
+    precision = precision.at[n_poly:, n_poly:].set(line_precision)
+    want = marginalize_linear_nuisance(
+        data,
+        model0,
+        full_design,
+        sigma=sigma,
+        prior_mean=jnp.zeros(n_poly + n_lines),
+        prior_precision=precision,
+    )
+    np.testing.assert_allclose(float(got.log_like), float(want.log_like), rtol=1e-10)

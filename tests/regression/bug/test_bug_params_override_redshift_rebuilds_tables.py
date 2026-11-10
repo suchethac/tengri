@@ -218,7 +218,7 @@ def test_dust_emission_band_response_override_matches_direct_build(synthetic_ssp
     """T3: the dust-IR band response R and energy-balance LUT are built at the override z."""
     f_over, _ = _assert_matches_direct(_dust_emission, synthetic_ssp_wide, IR_BANDS, WavePrecomp())
     sed = _inner(f_over.model)
-    assert sed._dust_band_response_cache is not None, (
+    assert sed.band_table("dust_emission", "emission_band_response") is not None, (
         "no band response was built, so T3 does not exercise R"
     )
 
