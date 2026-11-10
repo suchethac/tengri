@@ -74,7 +74,7 @@ class _ToyFitter:
 
 
 def _gaussian_loglik(params, data_args):
-    """Finite Gaussian log-likelihood centred inside the prior."""
+    """Finite Gaussian log-likelihood centered inside the prior."""
     return -0.5 * ((params["x0"] - 0.75) ** 2 + (params["x1"] - 0.5) ** 2) / 0.05**2
 
 
