@@ -50,6 +50,7 @@ from tengri.inference.backends.mcmc import (
     run_smc as _ctx_run_smc,
 )
 from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
+from tengri.inference.backends.mcmc.chain_program import NUTS, nuts_adaptation
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
@@ -236,6 +237,12 @@ register_backend(
     accepts_precondition=True,
 )(_mcmc_auto_pick)
 
+
+def _nuts_adaptation_rule(kwargs: dict):
+    """Return the NUTS adaptation for ``kwargs``: Pathfinder when its flag is set."""
+    return nuts_adaptation(bool(kwargs.get("pathfinder_warmstart", False)))
+
+
 register_backend(
     "mcmc_nuts",
     tier="primary",
@@ -246,6 +253,8 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=NUTS,
+    adaptation_rule=_nuts_adaptation_rule,
 )(_ctx_run_nuts)
 
 register_backend(
