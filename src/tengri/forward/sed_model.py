@@ -89,7 +89,12 @@ from tengri.config.exceptions import (
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
-from tengri.forward.precompute.band_table import BandTable, Decline, arrays_of
+from tengri.forward.precompute.band_table import (
+    BandTable,
+    BandTableContext,
+    Decline,
+    arrays_of,
+)
 from tengri.forward.sed_model_types import (
     MockData,
     PriorPredictive,
@@ -11847,6 +11852,11 @@ class SEDModel:
     #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
     #: adding a new attenuation parameter that does not reshape the emission.
     #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
+    #: Band-table slots whose adapter keeps no cache of its own, so the memo is their cache.
+    _PROVIDED_SLOTS: ClassVar[frozenset[tuple[str, str]]] = frozenset(
+        {("nebular", "band_table"), ("shock", "band_table")}
+    )
+
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
@@ -12469,6 +12479,10 @@ class SEDModel:
         The builder answers from its own cache, so a call is cheap, and a cache that was
         cleared after the build is seen here rather than served from the memo.
         """
+        if (name, slot) in self._PROVIDED_SLOTS:
+            memo = self._band_tables.get(name, {}).get(slot)
+            if memo is not None:
+                return memo
         entry = self._build_band_table(name, slot)
         self._band_tables.setdefault(name, {})[slot] = entry
         return entry
@@ -12512,6 +12526,8 @@ class SEDModel:
     def _build_band_table(self, name: str, slot: str) -> BandTable | Decline:
         """Run the existing builder for one slot and wrap its value, or the refusal it recorded."""
         chain = self._cached_component_chain
+        if (name, slot) in self._PROVIDED_SLOTS:
+            return self._provided_band_table(name, slot)
         if slot == "term_band_response":
             value = self._additive_term_band_response(chain, name)
             decline = getattr(self, f"_{name}_term_response_decline", None)
@@ -12529,11 +12545,6 @@ class SEDModel:
                     "_dust_shape_table_decline",
                 ),
                 ("agn", "band_table"): (self._agn_band_table, "_agn_band_table_decline"),
-                ("nebular", "band_table"): (
-                    self._cloudy_band_table,
-                    "_cloudy_band_table_decline",
-                ),
-                ("shock", "band_table"): (self._shock_band_table, "_shock_band_table_decline"),
             }
             builder, decline_attr = builders[(name, slot)]
             value = builder(chain)
@@ -12541,6 +12552,34 @@ class SEDModel:
         if value is None:
             return Decline(decline)
         return BandTable(value)
+
+    def _provided_band_table(self, name: str, slot: str) -> BandTable | Decline:
+        """Ask the component's band-table provider for one slot, with the model's state."""
+        from tengri.forward.precompute.registry import resolve_band_table_provider
+
+        provider = resolve_band_table_provider(name)
+        ctx = self._band_table_context(self._cached_component_chain)
+        return provider.band_table(ctx, component=name, slot=slot)
+
+    def _band_table_context(self, chain) -> BandTableContext:
+        """The model state a band-table adapter builds from, with ``ask`` bound to the memo.
+
+        ``filters``, ``padded_filters``, ``z_nodes`` and ``agn_axis_grids`` are None: the
+        adapters migrated so far read the chain and the spec instead.
+        """
+        return BandTableContext(
+            spec=self.spec,
+            wave=self._rest_wavelength,
+            filters=None,
+            padded_filters=None,
+            z_nodes=None,
+            wave_precomp=self._approx.get("wave_precomp"),
+            chain=chain,
+            dust_ir_diffuse_screen=self._dust_ir_diffuse_screen,
+            atten_free_ok=self._BAND_RESPONSE_ATTEN_FREE_OK,
+            agn_axis_grids=None,
+            ask=lambda name, slot: self._band_tables.get(name, {}).get(slot),
+        )
 
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
@@ -13049,135 +13088,6 @@ class SEDModel:
         if not np.any(live):
             return 0.0
         return float(np.max(np.abs(np.expm1(got[live] - want[live]))))
-
-    #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
-    #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
-    _CLOUDY_TABLE_FREE_OK = frozenset(
-        {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
-    )
-
-    def _cloudy_band_refusal(self, nebular) -> str | None:
-        """Why the CLOUDY band table must not engage, or None when it may.
-
-        The gate of #2324: every condition under which the table would differ
-        from the per-call path, or would not be built from the same inputs.
-        """
-        from tengri.components.nebular.cloudy_grid import CloudyGridBackend
-        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
-
-        if not self._approx.get("wave_precomp"):
-            return "approx=WavePrecomp() not enabled"
-        if (
-            nebular is None
-            or nebular.config.backend != "cloudy_grid"
-            or not isinstance(nebular.backend, CloudyGridBackend)
-        ):
-            return "the nebular backend is not the CLOUDY grid"
-        # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
-        # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
-        # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
-        if nebular.backend._grid_interp not in ("pchip", "linear"):
-            return (
-                f"the CLOUDY backend interpolates with grid_interp="
-                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
-                f"and 'linear'"
-            )
-        if _dig_may_be_active(self.spec):
-            return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
-        if "redshift" not in self.spec.fixed_params:
-            return "redshift is free (the band table is built at one redshift)"
-        if "neb_eline_sigma_kms" not in self.spec.fixed_params:
-            return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
-        bad = sorted(
-            p
-            for p in self.spec.free_params
-            if p.startswith(("neb_", "gas_", "ionspec_")) and p not in self._CLOUDY_TABLE_FREE_OK
-        )
-        if bad:
-            return f"free nebular parameters outside the table's axes: {bad}"
-        state = nebular._state
-        if state is None or state.filter_waves is None:
-            return "the nebular filter cache is absent (no WavePrecomp filters)"
-        return None
-
-    def _cloudy_band_table(self, chain):
-        """Build-time CLOUDY band table through the precompute registry, memoized.
-
-        Records why it declined in ``_cloudy_band_table_decline``. Returns None
-        when the table does not engage.
-        """
-        cached = getattr(self, "_cloudy_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        from tengri.components.nebular.component import NebularSEDComponent
-        from tengri.forward.precompute.registry import resolve
-
-        nebular = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
-        table = None
-        reason = self._cloudy_band_refusal(nebular)
-        if reason is None:
-            table = resolve("cloudy").precompute(
-                nebular._state.filter_waves,
-                nebular._state.filter_trans,
-                float(self.spec.fixed_value("redshift")),
-                parameters=self.spec,
-                backend=nebular.backend,
-                wave=self._rest_wavelength,
-                line_sigma_kms=float(self.spec.fixed_value("neb_eline_sigma_kms")),
-            )
-            if table is None:
-                reason = (
-                    "the table's (Z_gas, logU) axes do not contain the spec's priors "
-                    "for neb_logZ_gas and neb_logU"
-                )
-        self._cloudy_band_table_decline = reason
-        self._cloudy_band_table_cache = table
-        return table
-
-    def _shock_band_refusal(self, shock, stellar) -> str | None:
-        """Why the shock line-band coefficients must not engage, or None (#2324)."""
-        if not self._approx.get("wave_precomp"):
-            return "approx=WavePrecomp() not enabled"
-        if shock is None:
-            return "no composable shock component"
-        if "redshift" not in self.spec.fixed_params:
-            return "redshift is free (the band coefficients are built at one redshift)"
-        st = getattr(stellar, "_state", None)
-        if st is None or getattr(st, "phot_fw_padded", None) is None:
-            return "the photometry filter cache is absent (no WavePrecomp filters)"
-        return None
-
-    def _shock_band_table(self, chain):
-        """Build-time shock line-band coefficients through the registry, memoized.
-
-        Records why it declined in ``_shock_band_table_decline``. Returns None when
-        it does not engage.
-        """
-        cached = getattr(self, "_shock_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        from tengri.components.nebular.shock_model import ShockNebular
-        from tengri.forward.precompute.registry import resolve
-
-        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
-        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        coeff = None
-        reason = self._shock_band_refusal(shock, stellar)
-        if reason is None:
-            st = stellar._state
-            coeff = resolve("mappings_shock").shock_band_coefficients(
-                st.phot_fw_padded,
-                st.phot_ft_padded,
-                float(self.spec.fixed_value("redshift")),
-                self._rest_wavelength,
-            )
-            if coeff is None:
-                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
-        self._shock_band_table_decline = reason
-        self._shock_band_table_cache = coeff
-        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
