@@ -67,7 +67,7 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference.backends.evidence import _require_converged_evidence
-from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.newton import newton_polish
 from tengri.utils.transforms import to_bounded, to_unbounded
 
@@ -283,7 +283,9 @@ class FlatProblem:
     log_prob: Callable
     prior_transform: Callable
     extract_shared: Callable
-    #: ``(all_data, all_noise)``, the observed vectors, kept OUT of the closure.
+    #: ``{"per_galaxy": {...}, "shared": {...}}``: the observed arrays, one row per galaxy
+    #: (``data``, ``noise``, ``sqrt_noise_inv``, and ``presence`` / ``data_mask`` when a record
+    #: carries them), and the catalog-wide term arrays. Arrays only, kept OUT of the closure.
     data_args: Any = ()
     #: ``(flat, data_args) -> scalar``. The form samplers must use: with the data
     #: supplied as a traced argument, one compiled program serves every catalog.
@@ -293,6 +295,59 @@ class FlatProblem:
     #: (elliptical slice encodes the exact N(0,1) prior in its ellipse; handing
     #: it ``log_prob_with_data`` would double-count the prior).
     log_likelihood_with_data: Callable | None = None
+
+
+#: Optional per-band record keys and the value an absent key takes. An absent key means every
+#: band is detected: ``presence`` 1 and ``data_mask`` 0, as ``Fitter`` reads them.
+_RECORD_NEUTRAL = {"presence": 1.0, "data_mask": 0}
+#: The values each optional record key may take (``presence`` exact 0/1, ``data_mask`` trinary).
+_RECORD_ALLOWED = {"presence": (0.0, 1.0), "data_mask": (-1, 0, 1)}
+
+
+def _stack_record_key(galaxies, key):
+    """Stack one optional record key over the galaxies, neutral where a galaxy omits it."""
+    from tengri.config.exceptions import ConfigError
+
+    rows = []
+    for gal in galaxies:
+        shape = jnp.shape(gal["flux_obs"])
+        value = jnp.asarray(gal[key]) if key in gal else jnp.full(shape, _RECORD_NEUTRAL[key])
+        if value.shape != shape:
+            raise ConfigError(
+                f"record key {key!r} has shape {value.shape}, flux_obs has shape {shape}; "
+                "the key is one value per band."
+            )
+        if not bool(jnp.all(jnp.isin(value, jnp.asarray(_RECORD_ALLOWED[key])))):
+            raise ConfigError(f"record key {key!r} takes values in {_RECORD_ALLOWED[key]} only.")
+        rows.append(value)
+    return jnp.stack(rows)
+
+
+def _per_galaxy_channels(galaxies):
+    """Stack the galaxy records into ``(N, n)`` arrays, including the optional record keys.
+
+    Bands whose ``presence`` is 0 get the placeholder values of ``Fitter``, so a non-finite
+    flux there cannot poison the sum.
+    """
+    from tengri.inference.fitter import _neutralize_absent
+
+    data = [jnp.asarray(gal["flux_obs"]) for gal in galaxies]
+    noise = [jnp.asarray(gal["noise"]) for gal in galaxies]
+    channels = {
+        key: _stack_record_key(galaxies, key)
+        for key in _RECORD_NEUTRAL
+        if any(key in gal for gal in galaxies)
+    }
+    if "presence" in channels:
+        cleaned = [
+            _neutralize_absent(d, n, p)
+            for d, n, p in zip(data, noise, channels["presence"], strict=True)
+        ]
+        data = [d for d, _ in cleaned]
+        noise = [n for _, n in cleaned]
+    stacked = {"data": jnp.stack(data), "noise": jnp.stack(noise)}
+    stacked["sqrt_noise_inv"] = jax.vmap(inv_noise_std)(stacked["noise"])
+    return {**stacked, **channels}
 
 
 def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_steps=80):
@@ -364,12 +419,14 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     if verbose:
         print("  Initializing per-galaxy params via vectorized MAP...")
 
-    _template_gal = fitter.galaxies[0]
+    per_galaxy = _per_galaxy_channels(fitter.galaxies)
+    _template_channels = {k: v[0] for k, v in per_galaxy.items() if k in _RECORD_NEUTRAL}
     _template_fitter = Fitter(
         model,
-        _template_gal["flux_obs"],
-        _template_gal["noise"],
+        per_galaxy["data"][0],
+        per_galaxy["noise"][0],
         data_type=data_type,
+        **_template_channels,
     )
     map_solve_one = build_vectorized_map_solver(
         _template_fitter, n_steps=map_steps, learning_rate=0.05
@@ -423,40 +480,59 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                     surface="PopulationFitter",
                 )
 
-    def _predict(params):
-        # predict_photometry/predict_spectrum self-merge the model's own
-        # Fixed values internally and refuse a params key the spec declared
-        # Fixed (#2296). ``params`` here already carries every genuinely
-        # free name -- the per-galaxy ones (``free_names``, via
-        # ``physical[name](...)``) plus the two population-shared PSD names
-        # (set explicitly below, free on ``model.spec``) -- plus, when the
-        # SFH is a GP field, ``sfh_field_xi``: a runtime latent array that is
-        # neither free nor Fixed on the spec (it never appears in
-        # ``model.spec.free_params``). A positive filter on
-        # ``model.spec.free_params`` silently dropped that key, and
-        # ``predict_photometry``/``predict_spectrum`` do not refuse or
-        # require it, so the loss was silent: zero gradient on every
-        # per-galaxy latent and on both PSD hyperparameters (#2296 fix-round
-        # 3). Pass ``params`` through unfiltered -- there is nothing left in
-        # it to refuse.
-        if data_type == "photometry":
-            return model.predict_photometry(params)
-        return model.predict_spectrum(params)
+    from tengri.config.exceptions import ConfigError, ParameterError
+    from tengri.inference.data_term import DataTermOptions, build_data_args, build_data_term
+    from tengri.observation.noise import has_noise_model
+
+    mask_stack = per_galaxy.get("data_mask")
+    if mask_stack is not None and has_noise_model(spec) and bool(jnp.any(mask_stack != 0)):
+        raise ParameterError(
+            "PopulationFitter(data_mask=...) flags upper or lower limits, and the hierarchical "
+            "flat seam cannot score them with a free noise model (noise_frac_cal / noise_dof): "
+            "the band's sigma would depend on the parameters while the censored term assumes a "
+            "fixed one. Fix the noise parameters, or drop the limits."
+        )
+
+    presence_row = per_galaxy["presence"][0] if "presence" in per_galaxy else None
+    mask_row = mask_stack[0] if mask_stack is not None else None
+    data_args0 = build_data_args(
+        model,
+        per_galaxy["data"][0],
+        per_galaxy["noise"][0],
+        data_mask=mask_row,
+        presence=presence_row,
+    )
+    if stochastic and "_jit_inputs" not in data_args0:
+        raise ConfigError(
+            "the hierarchical flat seam needs the threaded forward (_jit_inputs) for a stochastic "
+            "SFH: without it the eager prediction path filters to model.spec.free_params and "
+            "drops sfh_field_xi, so every per-galaxy latent gets a zero gradient (#2296 round 3). "
+            "Refused by name rather than fitted silently."
+        )
+
+    likelihood = _template_fitter._maybe_build_default_likelihood()
+    term = build_data_term(
+        model,
+        data_args=data_args0,
+        options=DataTermOptions(data_type),
+        likelihood=likelihood,
+    )
+    shared_args = {k: v for k, v in data_args0.items() if k not in per_galaxy}
+    _data_args = {"per_galaxy": per_galaxy, "shared": shared_args}
 
     def log_likelihood_with_data(flat_params, data_args):
-        """Gaussian data term, -chi^2/2, with the data supplied as an ARGUMENT.
+        """Gaussian data term, log p(d | theta), with the data supplied as an ARGUMENT.
 
-        Taking ``(all_data, all_noise)`` as a traced argument rather than
-        capturing them is what lets one compiled NUTS program serve different
-        galaxies. Capturing them bakes them in as constants, so every new
-        catalog is a new program, measured at one full recompile per fit.
+        ``data_args`` holds the per-galaxy rows (``per_galaxy``) and the catalog-wide
+        arrays (``shared``). Each galaxy's row is scored by the one data term, mapped with
+        ``lax.map`` under ``jax.checkpoint``. Taking the arrays as traced arguments lets one
+        compiled program serve different catalogs.
         """
-        all_data, all_noise = data_args
         p = unravel_fn(flat_params)
         psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
         psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
 
-        def forward_one(ub_scalars, xi):
+        def forward_one(ub_scalars, xi, row):
             params = {}
             for name in free_names:
                 # The declared prior's own N(0,1) pushforward, Uniform's is
@@ -465,34 +541,28 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                 # (#1651). Same convention as the per-galaxy MAP init and the
                 # single-galaxy unbounded machinery.
                 params[name] = physical[name](ub_scalars[name])
-            # Every OTHER Fixed value (dust, met, sfh_dpl, noise, redshift,
-            # ...) is self-merged by predict_photometry/predict_spectrum
-            # internally (#2296) -- no need to spread spec.get_fixed_values()
-            # here, and doing so would be refused (a params key the spec
-            # declared Fixed is refused on presence). The two PSD names are
-            # different: they are declared FREE on ``model.spec`` (the
-            # population-shared parameters this fit actually varies), just
-            # excluded from the per-galaxy ``free_names`` set above, so
-            # setting them explicitly to this step's shared value is a plain
-            # free-key write, not an override of anything Fixed.
+            # The two PSD names are declared FREE on ``model.spec`` (the
+            # population-shared parameters this fit varies), so setting them to
+            # this step's shared value is a plain free-key write. The threaded
+            # forward self-merges every other Fixed value (#2296), and
+            # ``sfh_field_xi`` is a runtime latent that is neither free nor Fixed
+            # on the spec, so it is passed through unfiltered.
             params["sfh_field_psd_sigma"] = psd_sigma
             params["sfh_field_psd_tau_myr"] = psd_tau
             if stochastic:
                 params["sfh_field_xi"] = xi
             params = spec.resolve_mirrors(params)
-            return _predict(params)
+            return term.log_prob(params, {**data_args["shared"], **row})
 
-        # lax.map keeps the compiled graph O(1) in N_gal.
         fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
+        rows = data_args["per_galaxy"]
         if stochastic:
-            predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), (p["gal"], p["gal_xi"]))
+            loglik = jax.lax.map(
+                lambda args: fwd(args[0], args[1], args[2]), (p["gal"], p["gal_xi"], rows)
+            )
         else:
-            predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-
-        chi2 = jnp.sum(standardized_residual(all_data, predictions.reshape(-1), all_noise) ** 2)
-        return -0.5 * chi2
-
-    _data_args = (all_data_arr, all_noise_arr)
+            loglik = jax.lax.map(lambda args: fwd(args[0], None, args[1]), (p["gal"], rows))
+        return jnp.sum(loglik)
 
     def log_likelihood(flat_params):
         """Convenience alias with this fit's data bound. NOT for samplers."""
