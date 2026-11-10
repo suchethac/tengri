@@ -475,5 +475,7 @@ BAND_SLOTS: tuple[str, ...] = ("term_band_response", "term_shape_table")
 
 
 def band_table(ctx, *, component: str, slot: str):
-    """Return one band-table slot of ``component`` from the model's memo, through ``ctx.ask``."""
-    return ctx.ask(component, slot)
+    """Build one term slot of ``component``: the rank-1 band response or the shape tables."""
+    from tengri.components._term_response_table import term_band_table
+
+    return term_band_table(ctx, component=component, slot=slot)
