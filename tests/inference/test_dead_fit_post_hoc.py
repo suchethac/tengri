@@ -468,11 +468,11 @@ def test_hmc_raises_on_sampling_collapse_after_healthy_warmup(
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
     original_chain_scan = hmc_backend.sample_chain
 
-    def patched_hmc_chain_scan(program, state, chain_keys, ld2, data_args, params, cfg):
+    def patched_hmc_sample_chain(program, state, chain_keys, ld2, data_args, params, cfg):
         draws = original_chain_scan(program, state, chain_keys, ld2, data_args, params, cfg)
         return draws._replace(divergent=jnp.ones_like(draws.divergent, dtype=bool))
 
-    monkeypatch.setattr(hmc_backend, "sample_chain", patched_hmc_chain_scan)
+    monkeypatch.setattr(hmc_backend, "sample_chain", patched_hmc_sample_chain)
 
     # Single-chain fit should raise DeadFitError.
     with pytest.raises(DeadFitError) as excinfo:
