@@ -295,3 +295,178 @@ def test_bosa_dust_band_table_is_declined_with_the_homogeneity_reason():
         "dust emission template is not homogeneous in L_ir: its shape depends on luminosity, "
         "so a constant per-filter response cannot represent it"
     )
+
+
+class _AGNSpec:
+    """The spec surface the AGN gate reads: free names, fixed values and prior bounds."""
+
+    def __init__(self, free, fixed, bounds):
+        self.free_params = list(free)
+        self._fixed = dict(fixed)
+        self._bounds = dict(bounds)
+
+    def get_fixed_values(self):
+        return dict(self._fixed)
+
+    def get_distribution(self, name):
+        return types.SimpleNamespace(bounds=self._bounds[name])
+
+
+_AGN_RECIPE = {
+    "norm": "cigale_joint",
+    "polar_law": "smc",
+    "disc": "powerlaw",
+    "nlr": "none",
+    "blr": "none",
+    "feii": "none",
+    "torus": "simple",
+    "attenuation": "none",
+}
+
+
+def _agn_stub(model: str, recipe: dict):
+    """A composable AGN component stub: the gate reads only its config and its resolved recipe."""
+    from tengri.components.agn.component import AGNSEDComponent
+
+    agn = object.__new__(AGNSEDComponent)
+    object.__setattr__(agn, "config", types.SimpleNamespace(model=model))
+    object.__setattr__(agn, "resolved_recipe", lambda: recipe)
+    return agn
+
+
+def _agn_context(
+    *,
+    model="composable",
+    recipe=None,
+    free=("agn_log_lbol",),
+    fixed=None,
+    bounds=None,
+    wave_precomp=True,
+    padded=True,
+    z_nodes=None,
+    rank1=None,
+) -> BandTableContext:
+    """A stub context whose gates all pass, except the one a test changes."""
+    if bounds is None:
+        bounds = {name: (8.0, 14.0) for name in free}
+    if fixed is None:
+        fixed = {"agn_ir_frac": 0.0}
+    return BandTableContext(
+        spec=_AGNSpec(free, fixed, bounds),
+        wave=_WAVE,
+        filters=None,
+        padded_filters=(np.ones((2, 3)), np.ones((2, 3))) if padded else (None, None),
+        z_nodes=z_nodes,
+        wave_precomp=WavePrecomp() if wave_precomp else None,
+        chain=[_agn_stub(model, recipe or _AGN_RECIPE)],
+        dust_ir_diffuse_screen=False,
+        atten_free_ok=frozenset(),
+        agn_axis_grids=None,
+        ask=lambda name, slot: rank1 if (name, slot) == ("agn", "term_band_response") else None,
+    )
+
+
+def _agn_decline(ctx: BandTableContext) -> str:
+    from tengri.components.agn.blocks import composable_precompute
+
+    result = composable_precompute.band_table(ctx, component="agn", slot="band_table")
+    assert isinstance(result, Decline)
+    assert result.reason is not None
+    return result.reason
+
+
+def test_agn_declines_a_self_contained_model_as_not_composable():
+    assert _agn_decline(_agn_context(model="grahsp")) == "the AGN is not a composable recipe"
+
+
+def test_agn_declines_without_wave_precomp():
+    assert _agn_decline(_agn_context(wave_precomp=False)) == "WavePrecomp is off"
+
+
+def test_agn_declines_without_padded_filter_curves():
+    assert _agn_decline(_agn_context(padded=False)) == "no padded filter curves"
+
+
+def test_agn_declines_on_a_free_redshift():
+    ctx = _agn_context(z_nodes=np.array([0.0, 1.0]))
+    assert _agn_decline(ctx) == (
+        "the registry adapter is built at one redshift and the redshift is not Fixed"
+    )
+
+
+def test_agn_declines_a_normalization_other_than_cigale_joint():
+    recipe = {**_AGN_RECIPE, "norm": "independent"}
+    assert _agn_decline(_agn_context(recipe=recipe)) == (
+        "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc' "
+        "(this AGN resolves to norm='independent', polar_law='smc')"
+    )
+
+
+def test_agn_declines_a_torus_fraction_that_is_not_fixed_at_zero():
+    assert _agn_decline(_agn_context(fixed={"agn_ir_frac": 0.1})) == (
+        "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
+    )
+
+
+def test_agn_declines_more_free_axes_than_the_node_table_takes():
+    free = ("agn_log_lbol", "agn_p1", "agn_p2", "agn_p3", "agn_p4")
+    assert _agn_decline(_agn_context(free=free)) == ("5 free AGN parameters exceed the 4-axis cap")
+
+
+def test_agn_declines_a_prior_without_finite_bounds():
+    ctx = _agn_context(bounds={"agn_log_lbol": (-np.inf, np.inf)})
+    assert _agn_decline(ctx) == (
+        "the priors of ['agn_log_lbol'] have no finite bounds to span with nodes"
+    )
+
+
+def test_agn_declines_when_the_rank_one_term_response_serves_it_exactly():
+    rank1 = BandTable({"values": np.zeros((1, 2))})
+    assert _agn_decline(_agn_context(rank1=rank1)) == (
+        "the rank-1 term band response serves this AGN exactly"
+    )
+
+
+def test_agn_table_is_accurate_and_matches_the_direct_band_flux_at_a_node(monkeypatch):
+    """The table passes its cell-center check, and at a node it is the component's own flux."""
+    from tengri.components.agn.blocks import composable_precompute as adapter
+    from tengri.components.agn.component import AGNSEDComponent
+
+    model = cases.build_composable_agn()
+    chain = model._build_component_chain()
+    state = next(c for c in chain if getattr(c, "name", "") == "stellar")._state
+    ctx = BandTableContext(
+        spec=model.spec,
+        wave=model._rest_wavelength,
+        filters=(model.filter_waves, model.filter_trans),
+        padded_filters=(state.phot_fw_padded, state.phot_ft_padded),
+        z_nodes=None,
+        wave_precomp=WavePrecomp(),
+        chain=chain,
+        dust_ir_diffuse_screen=False,
+        atten_free_ok=SEDModel._BAND_RESPONSE_ATTEN_FREE_OK,
+        agn_axis_grids=None,
+        ask=lambda name, slot: None,
+    )
+    reports = []
+    worst_of = adapter._agn_table_cell_center_error
+
+    def spy(*args):
+        worst = worst_of(*args)
+        reports.append(worst)
+        return worst
+
+    monkeypatch.setattr(adapter, "_agn_table_cell_center_error", spy)
+    result = adapter.band_table(ctx, component="agn", slot="band_table")
+    assert isinstance(result, BandTable)
+    assert len(reports) == 1
+    assert reports[0] < adapter._AGN_TABLE_RTOL
+
+    table = result.arrays
+    grid = np.asarray(table["axes"]["agn_log_lbol"])
+    params = {"agn_log_lbol": float(grid[len(grid) // 2])}
+    full = {**model.spec.get_fixed_values(), **params}
+    table_row = np.asarray(AGNSEDComponent._band_table_phot(full, table)[0])
+    model._band_tables["agn"]["band_table"] = Decline("test")
+    direct = np.asarray(model.predict_state(params).derived["agn_phot_lnu_precomp"])
+    np.testing.assert_allclose(table_row, direct, rtol=1e-6)
