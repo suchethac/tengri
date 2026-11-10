@@ -14,10 +14,8 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
-    _dynamic_hmc_chain_scan,
     _get_cached_adaptation,
     _get_flat_logdensity,
-    _hmc_warmup_only,
     _resolve_chain_parallel,
     _set_cached_adaptation,
     _stabilize_dense_mass_step,
@@ -28,6 +26,16 @@ from tengri.inference.backends.mcmc._shared import (
     refuse_dead_warmup,
     sampling_diagnostics,
 )
+from tengri.inference.backends.mcmc.chain_program import (
+    DYNAMIC_HMC,
+    DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+    HMC,
+    WINDOW_HMC,
+    HMCConfig,
+    adapt_chain,
+    divergence_record,
+    sample_chain,
+)
 from tengri.inference.preconditioning import prepare_preconditioning
 
 logger = logging.getLogger(__name__)
@@ -37,13 +45,12 @@ logger = logging.getLogger(__name__)
 #: ``dynamic_hmc.init`` needs a ``random_generator_arg`` that
 #: ``window_adaptation`` cannot supply, so the step size and mass matrix come
 #: from plain HMC window adaptation at this fixed trajectory length; the
-#: dynamic kernel then draws its own per-step length while sampling. Must stay
-#: equal to the ``num_integration_steps`` in
-#: ``tengri.inference.backends.mcmc._shared._dynamic_hmc_full_scan``,
-#: which the prewarm, hierarchical and catalog paths still call, the two
-#: disagreeing would mean a cached adaptation tuned against a different
-#: trajectory length than the fused path produces.
-_DHMC_WARMUP_LEAPFROG_STEPS = 10
+#: dynamic kernel then draws its own per-step length while sampling. It is the
+#: one ``DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`` constant that the fused
+#: ``run_chain(DYNAMIC_HMC, ...)`` path (behind ``_dynamic_hmc_full_scan``, which
+#: the prewarm, hierarchical and catalog paths call) also adapts with, so a
+#: cached adaptation and the fused path tune at the same trajectory length.
+_DHMC_WARMUP_LEAPFROG_STEPS = DYNAMIC_HMC_TUNING_LEAPFROG_STEPS
 
 
 def run_dynamic_hmc(
@@ -191,14 +198,15 @@ def run_dynamic_hmc(
     # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
     # Split from sampling so a fresh call and a cached one end in the SAME
     # sampling scan. While the two were fused, a first fit ran warmup+sampling
-    # inside `_dynamic_hmc_full_scan` and every later fit ran a sampling-only
+    # in one fused scan and every later fit ran a sampling-only
     # scan against the cached parameters, structurally different computations,
     # so one pinned `key` returned two different posteriors.
     #
     # The adaptation is plain HMC window adaptation (dynamic_hmc.init needs a
     # random_generator_arg, which window_adaptation cannot supply), so this is
-    # `_hmc_warmup_only` rather than a third near-identical helper. The
-    # integration-step count matches the one `_dynamic_hmc_full_scan` hardcodes.
+    # `adapt_chain(HMC, ...)` rather than a third near-identical helper. The
+    # integration-step count is `DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`, shared with
+    # the fused `run_chain(DYNAMIC_HMC, ...)` path.
     if cached is not None:
         parameters = cached
         # A reused adaptation was tuned in an earlier call, so this fit measured no
@@ -214,15 +222,19 @@ def run_dynamic_hmc(
                 float(parameters["step_size"]),
             )
     else:
-        step_size, inv_mass_matrix, warmup_divergent = _hmc_warmup_only(
+        (step_size, inv_mass_matrix), warmup_divergent, _ = adapt_chain(
+            HMC,
+            WINDOW_HMC(_DHMC_WARMUP_LEAPFROG_STEPS, not use_dense),
             init_flat,
             warmup_key,
             log_posterior_flat_2arg,
             data_args,
             n_warmup,
-            _DHMC_WARMUP_LEAPFROG_STEPS,
-            use_dense,
-            target_accept_rate,
+            HMCConfig(
+                n_leapfrog=_DHMC_WARMUP_LEAPFROG_STEPS,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
+            ),
         )
         jax.block_until_ready(step_size)
 
@@ -295,17 +307,19 @@ def run_dynamic_hmc(
         chain_parallel_effective = "pmap" if use_pmap else "vmap"
 
         def _init(p, init_key):
-            return blackjax.mcmc.dynamic_hmc.init(p, ld_1arg, init_key)
+            return DYNAMIC_HMC.init(p, ld_1arg, init_key)
 
         def _scan(s, ks):
-            return _dynamic_hmc_chain_scan(
+            draws = sample_chain(
+                DYNAMIC_HMC,
                 s,
                 ks,
                 log_posterior_flat_2arg,
                 data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
+                (parameters["step_size"], parameters["inverse_mass_matrix"]),
+                None,
             )
+            return draws.position, draws.divergent
 
         positions, divergent = _vmap_chains(
             _init,
@@ -320,16 +334,18 @@ def run_dynamic_hmc(
         _multichain_burnin_done = True
     else:
         chain_parallel_effective = "n/a (n_chains=1)"
-        state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, dhmc_init_key)
+        state = DYNAMIC_HMC.init(init_flat, ld_1arg, dhmc_init_key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent = _dynamic_hmc_chain_scan(
+        draws = sample_chain(
+            DYNAMIC_HMC,
             state,
             chain_keys,
             log_posterior_flat_2arg,
             data_args,
-            parameters["step_size"],
-            parameters["inverse_mass_matrix"],
+            (parameters["step_size"], parameters["inverse_mass_matrix"]),
+            None,
         )
+        positions, divergent = draws.position, draws.divergent
         _multichain_burnin_done = False
 
     # Burnin discarded Python-side. Multichain branch already handled
@@ -337,7 +353,9 @@ def run_dynamic_hmc(
     if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
-    n_divergent = int(jnp.sum(divergent))
+    divergence = divergence_record(divergent)
+    n_divergent = int(divergence["n_divergent"])
+    divergent_mask = jnp.asarray(divergence["divergent_mask"]).astype(bool)
 
     # Post-hoc dead-fit detection: any chain's draws mostly divergent (#2093).
     # Complements the pre-hoc warmup check for fits that collapse after warmup.
@@ -383,6 +401,7 @@ def run_dynamic_hmc(
             "n_chains": n_chains,
             "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
+            "divergent_mask": divergent_mask,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
             **diag,
