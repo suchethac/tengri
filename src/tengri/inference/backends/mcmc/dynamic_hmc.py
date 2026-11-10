@@ -17,7 +17,6 @@ from tengri.inference.backends.mcmc._shared import (
     _dynamic_hmc_chain_scan,
     _get_cached_adaptation,
     _get_flat_logdensity,
-    _hmc_warmup_only,
     _resolve_chain_parallel,
     _set_cached_adaptation,
     _stabilize_dense_mass_step,
@@ -27,6 +26,12 @@ from tengri.inference.backends.mcmc._shared import (
     refuse_dead_sampling,
     refuse_dead_warmup,
     sampling_diagnostics,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    HMC,
+    WINDOW_HMC,
+    HMCConfig,
+    adapt_chain,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 
@@ -197,7 +202,7 @@ def run_dynamic_hmc(
     #
     # The adaptation is plain HMC window adaptation (dynamic_hmc.init needs a
     # random_generator_arg, which window_adaptation cannot supply), so this is
-    # `_hmc_warmup_only` rather than a third near-identical helper. The
+    # `adapt_chain(HMC, ...)` rather than a third near-identical helper. The
     # integration-step count matches the one `_dynamic_hmc_full_scan` hardcodes.
     if cached is not None:
         parameters = cached
@@ -214,15 +219,19 @@ def run_dynamic_hmc(
                 float(parameters["step_size"]),
             )
     else:
-        step_size, inv_mass_matrix, warmup_divergent = _hmc_warmup_only(
+        (step_size, inv_mass_matrix), warmup_divergent, _ = adapt_chain(
+            HMC,
+            WINDOW_HMC(_DHMC_WARMUP_LEAPFROG_STEPS, not use_dense),
             init_flat,
             warmup_key,
             log_posterior_flat_2arg,
             data_args,
             n_warmup,
-            _DHMC_WARMUP_LEAPFROG_STEPS,
-            use_dense,
-            target_accept_rate,
+            HMCConfig(
+                n_leapfrog=_DHMC_WARMUP_LEAPFROG_STEPS,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
+            ),
         )
         jax.block_until_ready(step_size)
 
