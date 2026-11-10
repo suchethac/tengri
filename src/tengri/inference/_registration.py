@@ -27,6 +27,8 @@ See ADR-0010 for the full Protocol contract.
 
 from __future__ import annotations
 
+import inspect
+
 from tengri.inference._backend_registry import register_backend
 from tengri.inference.backends.evidence import run_nss as _ctx_run_nss
 from tengri.inference.backends.map_dispatch import (
@@ -51,14 +53,28 @@ from tengri.inference.backends.mcmc import (
 )
 from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
+    DYNAMIC_HMC,
+    DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+    FIRST_ORDER,
+    GHMC,
     HMC,
+    MEADS,
     NUTS,
+    WINDOW_GHMC,
     WINDOW_HMC,
+    CompilePlan,
+    FirstOrderConfig,
+    GHMCConfig,
+    HMCConfig,
+    NUTSConfig,
+    NUTSSamplerConfig,
     nuts_adaptation,
 )
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
+from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
 from tengri.inference.backends.vi.gaussian import (
     run_gaussian_vi_fitter as _ctx_run_gaussian_vi,
 )
@@ -272,6 +288,91 @@ def _hmc_adaptation_rule(kwargs: dict):
     )
 
 
+def _runner_default(entry, name: str):
+    """Return the default of ``name`` on the runner ``entry`` registers.
+
+    ``compile()`` must warm the policy the run it precompiles for would adapt, so the
+    statics are read from the runner's signature rather than restated here.
+    """
+    return inspect.signature(entry.runner).parameters[name].default
+
+
+def _nuts_compile_plan(entry, n_dim, spec):
+    """Return the NUTS statics of the window warmup and the sampling scan."""
+    use_dense = resolve_dense_mass_gate(
+        _runner_default(entry, "dense_mass_matrix"),
+        n_dim,
+        method=entry.name,
+        verbose=False,
+        spec=spec,
+    )
+    cap = _runner_default(entry, "max_num_doublings")
+    target = _runner_default(entry, "target_accept_rate")
+    return CompilePlan(
+        kwargs={"dense_mass_matrix": use_dense, "pathfinder_warmstart": False},
+        adapt_cfg=NUTSConfig(max_doublings=cap, use_dense=use_dense, target_accept_rate=target),
+        sample_cfg=NUTSSamplerConfig(max_doublings=cap),
+    )
+
+
+def _hmc_compile_plan(entry, n_dim, spec):
+    """Return the HMC statics, which the warmup and the sampling scan share."""
+    use_dense = resolve_dense_mass_gate(
+        _runner_default(entry, "dense_mass_matrix"),
+        n_dim,
+        method=entry.name,
+        verbose=False,
+        spec=spec,
+    )
+    n_leapfrog = _runner_default(entry, "n_leapfrog_steps")
+    cfg = HMCConfig(
+        n_leapfrog=n_leapfrog,
+        use_dense=use_dense,
+        target_accept_rate=_runner_default(entry, "target_accept_rate"),
+    )
+    return CompilePlan(
+        kwargs={"dense_mass_matrix": use_dense, "n_leapfrog_steps": n_leapfrog},
+        adapt_cfg=cfg,
+        sample_cfg=cfg,
+    )
+
+
+def _dynamic_hmc_compile_plan(entry, n_dim, spec):
+    """Return the dynamic HMC statics: window warmup at the tuning length, no sampling statics."""
+    use_dense = resolve_dense_mass_gate(
+        _runner_default(entry, "dense_mass_matrix"),
+        n_dim,
+        method=entry.name,
+        verbose=False,
+        spec=spec,
+    )
+    cfg = HMCConfig(
+        n_leapfrog=DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+        use_dense=use_dense,
+        target_accept_rate=_runner_default(entry, "target_accept_rate"),
+    )
+    return CompilePlan(kwargs={"dense_mass_matrix": use_dense}, adapt_cfg=cfg, sample_cfg=None)
+
+
+def _ghmc_compile_plan(entry, n_dim, spec):
+    """Return the GHMC window statics that the flat seam's fused window program runs."""
+    cfg = GHMCConfig(alpha=0.85, delta=0.8, target_accept_rate=0.65)
+    return CompilePlan(kwargs={}, adapt_cfg=cfg, sample_cfg=cfg, fused=True)
+
+
+def _first_order_compile_plan_for(proposal: str):
+    """Return the compile plan of one first-order proposal, with the runner's target rate."""
+
+    def _plan(entry, n_dim, spec):
+        cfg = FirstOrderConfig(
+            proposal=proposal,
+            target_accept_rate=float(_runner_default(entry, "target_accept_rate")),
+        )
+        return CompilePlan(kwargs={}, adapt_cfg=cfg, sample_cfg=cfg, fused=True)
+
+    return _plan
+
+
 register_backend(
     "mcmc_nuts",
     tier="primary",
@@ -284,6 +385,7 @@ register_backend(
     accepts_precondition=True,
     chain_program=NUTS,
     adaptation_rule=_nuts_adaptation_rule,
+    compile_plan=_nuts_compile_plan,
 )(_ctx_run_nuts)
 
 register_backend(
@@ -376,6 +478,7 @@ register_backend(
     accepts_precondition=True,
     chain_program=HMC,
     adaptation_rule=_hmc_adaptation_rule,
+    compile_plan=_hmc_compile_plan,
 )(_ctx_run_hmc)
 
 register_backend(
@@ -390,6 +493,22 @@ register_backend(
     accepts_precondition=True,
 )(_ctx_run_hmc_is)
 
+
+def _dynamic_hmc_adaptation_rule(kwargs: dict):
+    """Return the HMC window adaptation dynamic HMC tunes with, for the mass policy in ``kwargs``.
+
+    As for :func:`_hmc_adaptation_rule`, ``dense_mass_matrix`` must already be resolved to
+    a bool; the ``None`` (auto) policy goes through ``resolve_dense_mass_gate`` first.
+    """
+    dense = kwargs.get("dense_mass_matrix")
+    if dense is None:
+        raise ValueError(
+            "mcmc_dynamic_hmc adaptation rule needs dense_mass_matrix resolved to True or "
+            "False; resolve the auto policy with resolve_dense_mass_gate first"
+        )
+    return WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, not bool(dense))
+
+
 register_backend(
     "mcmc_dynamic_hmc",
     tier="experimental",
@@ -401,7 +520,29 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=DYNAMIC_HMC,
+    adaptation_rule=_dynamic_hmc_adaptation_rule,
+    compile_plan=_dynamic_hmc_compile_plan,
 )(_ctx_run_dynamic_hmc)
+
+
+def _ghmc_adaptation_rule(kwargs: dict):
+    """Return the MEADS adaptation GHMC always runs; its ``dense_mass_matrix`` is inert.
+
+    GHMC's momentum generator is diagonal whatever the mass policy, so no policy in
+    ``kwargs`` changes the adaptation.
+    """
+    return MEADS
+
+
+def _ghmc_compile_adaptation_rule(kwargs: dict):
+    """Return the diagonal HMC window that ``compile()`` warms GHMC with.
+
+    The precompilation pass has always warmed the window pairing, which the flat seam
+    also runs; ``run()`` uses MEADS (:func:`_ghmc_adaptation_rule`).
+    """
+    return WINDOW_GHMC
+
 
 register_backend(
     "mcmc_ghmc",
@@ -419,6 +560,10 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    chain_program=GHMC,
+    adaptation_rule=_ghmc_adaptation_rule,
+    compile_adaptation_rule=_ghmc_compile_adaptation_rule,
+    compile_plan=_ghmc_compile_plan,
 )(_ctx_run_ghmc)
 
 register_backend(
@@ -491,6 +636,16 @@ register_backend(
     accepts_precondition=True,
 )(_ctx_run_smc)
 
+
+def _first_order_adaptation_rule(kwargs: dict):
+    """Return dual averaging on the step size: the first-order family has no mass to tune.
+
+    Barker and MALA keep the identity metric whatever ``precondition`` says, so no
+    policy in ``kwargs`` changes the adaptation.
+    """
+    return DUAL_AVERAGING
+
+
 register_backend(
     "mcmc_barker",
     tier="experimental",
@@ -505,6 +660,9 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=FIRST_ORDER,
+    adaptation_rule=_first_order_adaptation_rule,
+    compile_plan=_first_order_compile_plan_for("barker"),
 )(_ctx_run_barker)
 
 register_backend(
@@ -520,6 +678,9 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=FIRST_ORDER,
+    adaptation_rule=_first_order_adaptation_rule,
+    compile_plan=_first_order_compile_plan_for("mala"),
 )(_ctx_run_mala)
 
 register_backend(
