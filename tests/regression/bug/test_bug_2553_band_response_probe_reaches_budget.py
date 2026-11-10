@@ -115,9 +115,9 @@ def test_lut_photometry_matches_exact(dust_emission_type: str, synthetic_ssp_wid
         f"The band-response probe may not reach the emitter's luminosity budget."
     )
 
-    cache = getattr(lut_model, "_dust_band_response_cache", "unset")
+    cache = lut_model.band_table("dust_emission", "emission_band_response")
     if cache is not None:
-        values = cache["values"]
+        values = cache.arrays["values"]
         assert jnp.any(values != 0.0), (
             f"{dust_emission_type}: band response is all-zero; the probe did not reach "
             f"the emitter's luminosity budget (#2553)."
@@ -133,14 +133,17 @@ def test_energy_balance_split_gets_a_nonzero_band_response(synthetic_ssp_wide):
     model = _build(synthetic_ssp_wide, "energy_balance_split", approx=WavePrecomp())
     _ = model.predict_photometry({})
 
-    cache = getattr(model, "_dust_band_response_cache", "unset")
-    decline = getattr(model, "_dust_band_response_decline", None)
+    cache = model.band_table("dust_emission", "emission_band_response")
+    entry = model.band_table_decline("dust_emission", "emission_band_response")
+    decline = entry.reason if entry is not None else None
 
     assert cache is not None, (
         f"energy_balance_split band response was declined ({decline}); the log_L_ir "
         f"probe is not reaching the emitter."
     )
-    assert jnp.any(cache["values"] != 0.0), "energy_balance_split band response is all-zero."
+    assert jnp.any(cache.arrays["values"] != 0.0), (
+        "energy_balance_split band response is all-zero."
+    )
     assert decline is None, f"energy_balance_split band response was declined: {decline}"
 
 
@@ -166,13 +169,11 @@ def test_zero_emitting_probe_is_declined_with_reason(synthetic_ssp_wide, monkeyp
 
     monkeypatch.setattr(emitter, "predict", zero_emitting_predict)
 
-    model._dust_band_response_cache = "unset"
-    model._dust_band_response_decline = None
+    model._band_tables["dust_emission"].pop("emission_band_response", None)
+    result = model._band_table("dust_emission", "emission_band_response")
 
-    result = model._dust_emission_band_response(chain)
-
-    assert result is None, "a zero-emitting probe was not declined"
-    decline = getattr(model, "_dust_band_response_decline", None)
+    assert getattr(result, "arrays", None) is None, "a zero-emitting probe was not declined"
+    decline = result.reason
     assert decline, "a zero probe was declined but no reason was recorded"
     assert "zero" in decline.lower() or "non-finite" in decline.lower(), (
         f"decline reason does not name the zero or non-finite probe: {decline}"
