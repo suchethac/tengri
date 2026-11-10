@@ -243,6 +243,11 @@ WINDOW_NUTS = Adaptation(name="window_nuts", run=_window_nuts)
 PATHFINDER_NUTS = Adaptation(name="pathfinder_nuts", run=_pathfinder_nuts)
 
 
+def nuts_adaptation(pathfinder: bool) -> Adaptation:
+    """Return the NUTS adaptation selected by the Pathfinder flag."""
+    return PATHFINDER_NUTS if pathfinder else WINDOW_NUTS
+
+
 def _adapt_body(
     program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, keep_info
 ):

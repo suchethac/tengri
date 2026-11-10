@@ -20,8 +20,6 @@ from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
     _get_nuts_kernel,
-    _nuts_chain_scan,
-    _nuts_warmup_only,
     _resolve_chain_parallel,
     _set_cached_adaptation,
     _stabilize_dense_mass_step,
@@ -31,6 +29,13 @@ from tengri.inference.backends.mcmc._shared import (
     refuse_dead_sampling,
     refuse_dead_warmup,
     sampling_diagnostics,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    NUTS,
+    NUTSConfig,
+    adapt_chain,
+    nuts_adaptation,
+    sample_chain,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -370,6 +375,17 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
         "convergence cost) or switch to `method='mcmc_hmc'` "
         "(fixed-length trajectory; lighter warmup). See issue #319.",
         stacklevel=3,
+    )
+
+
+def _nuts_scan_arrays(draws):
+    """Return the five per-draw arrays of a NUTS ``Draw`` in diagnostics order."""
+    return (
+        draws.position,
+        draws.divergent,
+        draws.extras["expansions"],
+        draws.extras["n_leapfrog"],
+        draws.extras["energy"],
     )
 
 
@@ -800,17 +816,21 @@ def run_nuts(
                 float(parameters["step_size"]),
             )
     else:
+        warmup_cfg = NUTSConfig(
+            max_doublings=warmup_max_doublings,
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
         with compile_timer("nuts_warmup", fitter.compile_signature(), method="mcmc_nuts"):
-            step_size, inv_mass_matrix, warmup_divergent, warmup_n_grad = _nuts_warmup_only(
+            (step_size, inv_mass_matrix), warmup_divergent, warmup_n_grad = adapt_chain(
+                NUTS,
+                nuts_adaptation(bool(pathfinder_warmstart)),
                 init_flat,
                 warmup_key,
                 log_posterior_flat_2arg,
                 data_args,
                 n_warmup,
-                use_dense,
-                target_accept_rate,
-                bool(pathfinder_warmstart),
-                warmup_max_doublings,
+                warmup_cfg,
             )
             jax.block_until_ready(step_size)
         n_grad_adapt = int(warmup_n_grad)
@@ -875,6 +895,12 @@ def run_nuts(
 
     # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
     key, chain_key = jax.random.split(key)
+    sample_cfg = NUTSConfig(
+        max_doublings=max_num_doublings,
+        use_dense=use_dense,
+        target_accept_rate=target_accept_rate,
+    )
+    sample_params = (parameters["step_size"], parameters["inverse_mass_matrix"])
     if n_chains > 1:
         # Resolved once here (rather than left to _vmap_chains) so an
         # unsatisfiable explicit "pmap" raises before the chain scan compiles,
@@ -887,14 +913,10 @@ def run_nuts(
             return blackjax.mcmc.nuts.init(p, ld_1arg)
 
         def _scan(s, ks):
-            return _nuts_chain_scan(
-                s,
-                ks,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                max_num_doublings,
+            return _nuts_scan_arrays(
+                sample_chain(
+                    NUTS, s, ks, log_posterior_flat_2arg, data_args, sample_params, sample_cfg
+                )
             )
 
         with compile_timer("nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"):
@@ -915,14 +937,16 @@ def run_nuts(
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions, n_leapfrog, energy = _nuts_chain_scan(
-                state,
-                chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                max_num_doublings,
+            positions, divergent, expansions, n_leapfrog, energy = _nuts_scan_arrays(
+                sample_chain(
+                    NUTS,
+                    state,
+                    chain_keys,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    sample_params,
+                    sample_cfg,
+                )
             )
             jax.block_until_ready(positions)
         _multichain_burnin_done = False

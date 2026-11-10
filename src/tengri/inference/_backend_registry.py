@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from tengri.inference.backends.mcmc.chain_program import ChainProgram
+    from tengri.inference.backends.mcmc.chain_program import Adaptation, ChainProgram
 
 
 @dataclass(frozen=True)
@@ -79,12 +79,16 @@ class BackendEntry:
     # Returns True if this backend can run for the given target's spec/dims/dtypes.
     # Default ``None`` means "no compatibility constraint" (always usable).
     is_compatible: Callable[[Any], bool] | None = None
-    # The adapted-chain program for MCMC families; None until one registers.
+    # The adapted-chain program for MCMC families; None for the rest.
     chain_program: ChainProgram | None = None
+    # Maps the runner's kwargs to the Adaptation it runs; None when no program is registered.
+    adaptation_rule: Callable[[dict], Adaptation] | None = None
 
-    def adaptation_for(self, kwargs: dict) -> None:
-        """Return the adaptation this entry runs for ``kwargs``; none is registered yet."""
-        return None
+    def adaptation_for(self, kwargs: dict) -> Adaptation | None:
+        """Return the adaptation this entry runs for ``kwargs``, or None without a rule."""
+        if self.adaptation_rule is None:
+            return None
+        return self.adaptation_rule(kwargs)
 
 
 #: The tiers a backend may declare.
@@ -133,6 +137,8 @@ def register_backend(
     is_compatible: Callable[[Any], bool] | None = None,
     accepts_precondition: bool = False,
     self_whitening: bool = False,
+    chain_program=None,
+    adaptation_rule=None,
 ):
     """Decorator to register an inference backend.
 
@@ -182,6 +188,8 @@ def register_backend(
             is_compatible=is_compatible,
             accepts_precondition=accepts_precondition,
             self_whitening=self_whitening,
+            chain_program=chain_program,
+            adaptation_rule=adaptation_rule,
         )
         _BACKENDS[name] = entry
         for a in aliases:

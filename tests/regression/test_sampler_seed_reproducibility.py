@@ -16,7 +16,7 @@ a reused model silently steered a fit whose seed the caller had pinned.
    for on the MAP cache (#1529); its sibling never got the guard.
 4. NUTS and dynamic HMC fused warmup into the sampling scan, so a first fit
    and a cached one ran *different computations* whatever the key. NUTS gets
-   ``_nuts_warmup_only``; dynamic HMC reuses ``_hmc_warmup_only``, since its
+   ``adapt_chain``; dynamic HMC reuses ``_hmc_warmup_only``, since its
    adaptation was always plain HMC window adaptation. Both mirror the split
    HMC already had -- which is why HMC alone was reproducible to begin with.
 """
