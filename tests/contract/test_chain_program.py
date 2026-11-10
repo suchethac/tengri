@@ -22,7 +22,9 @@ import pytest
 
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
     DYNAMIC_HMC,
+    FIRST_ORDER,
     GHMC,
     HMC,
     MEADS,
@@ -31,6 +33,7 @@ from tengri.inference.backends.mcmc.chain_program import (
     WINDOW_GHMC,
     WINDOW_HMC,
     WINDOW_NUTS,
+    FirstOrderConfig,
     GHMCConfig,
     HMCConfig,
     NUTSConfig,
@@ -626,3 +629,140 @@ def test_run_chain_refuses_the_meads_ensemble_for_a_non_ghmc_program(setup):
     chain_keys = jnp.zeros((2, 4, 2), dtype=jnp.uint32)
     with pytest.raises(ValueError, match="runs only with GHMC, not hmc"):
         run_chain(HMC, MEADS, init, wkey, None, chain_keys, _target, scales, 4, MEADS_CFG)
+
+
+FIRST_ORDER_TARGET = 0.574
+FIRST_ORDER_START = 0.1
+FIRST_ORDER_CFG = {
+    proposal: FirstOrderConfig(proposal=proposal, target_accept_rate=FIRST_ORDER_TARGET)
+    for proposal in ("mala", "barker")
+}
+
+
+def _raw_first_order_kernel(proposal):
+    """Raw BlackJAX Barker or MALA kernel with the step size as the only tuned input."""
+    if proposal == "barker":
+        base = blackjax.mcmc.barker.build_kernel()
+        return lambda k, s, ld, step_size: base(k, s, ld, step_size, None)
+    base = blackjax.mcmc.mala.build_kernel()
+    return lambda k, s, ld, step_size: base(k, s, ld, step_size)
+
+
+def _raw_first_order_state(proposal, init, scales):
+    """Raw BlackJAX Barker or MALA state at ``init``."""
+    module = blackjax.mcmc.barker if proposal == "barker" else blackjax.mcmc.mala
+    return module.init(init, lambda p: _target(p, scales))
+
+
+def _raw_first_order_warmup(init, warmup_key, scales, n_warmup, proposal):
+    """Raw dual-averaging step-size warmup: the oracle for ``run_chain(FIRST_ORDER, ...)``."""
+    from blackjax.adaptation.step_size import dual_averaging_adaptation
+
+    kernel = _raw_first_order_kernel(proposal)
+
+    def log_density(position):
+        return _target(position, scales)
+
+    da_init, da_update, da_final = dual_averaging_adaptation(FIRST_ORDER_TARGET)
+    state = _raw_first_order_state(proposal, init, scales)
+    warmup_keys = jax.random.split(warmup_key, n_warmup)
+
+    def _step(carry, k):
+        s, da = carry
+        s, info = kernel(k, s, log_density, jnp.exp(da.log_step_size))
+        return (s, da_update(da, info.acceptance_rate)), None
+
+    (state, da), _ = jax.lax.scan(_step, (state, da_init(FIRST_ORDER_START)), warmup_keys)
+    return state, da_final(da)
+
+
+def _raw_first_order_sampling_scan(state, chain_keys, scales, step_size, proposal):
+    """Raw BlackJAX sampling scan at a fixed step: the oracle for ``sample_chain(FIRST_ORDER)``."""
+    kernel = _raw_first_order_kernel(proposal)
+
+    def log_density(position):
+        return _target(position, scales)
+
+    def _step(s, k):
+        s, info = kernel(k, s, log_density, step_size)
+        return s, (s.position, info.acceptance_rate)
+
+    _, outputs = jax.lax.scan(_step, state, chain_keys)
+    return outputs
+
+
+@pytest.mark.parametrize("proposal", ["mala", "barker"])
+def test_first_order_sample_chain_matches_raw_scan(setup, proposal):
+    """Sampling a first-order chain at a fixed step equals the raw BlackJAX scan."""
+    init, _, keys, scales = setup
+    step_size = jnp.asarray(0.05)
+    cfg = FIRST_ORDER_CFG[proposal]
+    state = FIRST_ORDER.init(init, lambda p: _target(p, scales), None, cfg)
+
+    pos_want, acc_want = _raw_first_order_sampling_scan(state, keys, scales, step_size, proposal)
+    got = sample_chain(FIRST_ORDER, state, keys, _target, scales, (step_size, None), cfg)
+    assert np.array_equal(np.asarray(got.position), np.asarray(pos_want))
+    assert np.array_equal(np.asarray(got.extras["accept"]), np.asarray(acc_want))
+    assert got.divergent is None
+
+
+@pytest.mark.parametrize("proposal", ["mala", "barker"])
+def test_first_order_adapt_chain_matches_raw_dual_averaging(setup, proposal):
+    """Dual-averaging warmup equals the raw BlackJAX warmup: the step size, nothing else."""
+    init, wkey, _keys, scales = setup
+    _, want_step = _raw_first_order_warmup(init, wkey, scales, N_WARMUP, proposal)
+    (got_step, got_mass), got_divergent, got_n_grad = adapt_chain(
+        FIRST_ORDER,
+        DUAL_AVERAGING,
+        init,
+        wkey,
+        _target,
+        scales,
+        N_WARMUP,
+        FIRST_ORDER_CFG[proposal],
+    )
+    assert np.array_equal(np.asarray(got_step), np.asarray(want_step))
+    assert got_mass is None
+    assert got_divergent is None and got_n_grad is None
+
+
+@pytest.mark.parametrize("proposal", ["mala", "barker"])
+def test_first_order_run_chain_matches_raw_warmup_then_sampling(setup, proposal):
+    """Fused first-order equals the raw warmup followed by the raw scan, on the same keys.
+
+    The sampling scan starts from the warmup's final state, as the fused scan always did.
+    """
+    init, wkey, keys, scales = setup
+    state, want_step = _raw_first_order_warmup(init, wkey, scales, N_WARMUP, proposal)
+    want_pos, want_acc = _raw_first_order_sampling_scan(state, keys, scales, want_step, proposal)
+
+    draws, params = run_chain(
+        FIRST_ORDER,
+        DUAL_AVERAGING,
+        init,
+        wkey,
+        None,
+        keys,
+        _target,
+        scales,
+        N_WARMUP,
+        FIRST_ORDER_CFG[proposal],
+    )
+    assert np.array_equal(np.asarray(params[0]), np.asarray(want_step))
+    assert np.array_equal(np.asarray(draws.position), np.asarray(want_pos))
+    assert np.array_equal(np.asarray(draws.extras["accept"]), np.asarray(want_acc))
+
+
+@pytest.mark.parametrize("proposal", ["mala", "barker"])
+def test_first_order_oracle_runs_a_moving_regime(setup, proposal):
+    """The parity oracle samples a regime where proposals are accepted and rejected.
+
+    A parity test over a chain that never moves passes for any keys. The mean
+    acceptance must sit strictly inside (0, 1) and the chain must move.
+    """
+    init, wkey, keys, scales = setup
+    state, step_size = _raw_first_order_warmup(init, wkey, scales, N_WARMUP, proposal)
+    positions, accept = _raw_first_order_sampling_scan(state, keys, scales, step_size, proposal)
+    mean_accept = float(np.mean(np.asarray(accept)))
+    assert 0.0 < mean_accept < 1.0, f"{proposal}: mean acceptance {mean_accept}"
+    assert float(np.std(np.asarray(positions), axis=0).max()) > 1e-3

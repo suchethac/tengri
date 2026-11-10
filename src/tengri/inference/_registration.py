@@ -51,8 +51,10 @@ from tengri.inference.backends.mcmc import (
 )
 from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
     DYNAMIC_HMC,
     DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+    FIRST_ORDER,
     GHMC,
     HMC,
     MEADS,
@@ -526,6 +528,16 @@ register_backend(
     accepts_precondition=True,
 )(_ctx_run_smc)
 
+
+def _first_order_adaptation_rule(kwargs: dict):
+    """Return dual averaging on the step size: the first-order family has no mass to tune.
+
+    Barker and MALA keep the identity metric whatever ``precondition`` says, so no
+    policy in ``kwargs`` changes the adaptation.
+    """
+    return DUAL_AVERAGING
+
+
 register_backend(
     "mcmc_barker",
     tier="experimental",
@@ -540,6 +552,8 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=FIRST_ORDER,
+    adaptation_rule=_first_order_adaptation_rule,
 )(_ctx_run_barker)
 
 register_backend(
@@ -555,6 +569,8 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=FIRST_ORDER,
+    adaptation_rule=_first_order_adaptation_rule,
 )(_ctx_run_mala)
 
 register_backend(

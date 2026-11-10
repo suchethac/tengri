@@ -51,10 +51,13 @@ import pytest
 
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
+    FIRST_ORDER,
     HMC,
     NUTS,
     WINDOW_HMC,
     WINDOW_NUTS,
+    FirstOrderConfig,
     HMCConfig,
     NUTSConfig,
     adapt_chain,
@@ -163,16 +166,21 @@ def test_first_order_program_is_smaller_than_nuts(call_args, nuts_text, proposal
     run at the speed of its deepest tree.
     """
     init, wkey, keys, scales = call_args
+    cfg = FirstOrderConfig(
+        proposal=proposal, target_accept_rate=_shared.FIRST_ORDER_TARGET_ACCEPT_RATE
+    )
     text = _lowered_text(
-        _shared._first_order_full_scan,
+        run_chain,
+        FIRST_ORDER,
+        DUAL_AVERAGING,
         init,
         wkey,
+        None,
         keys,
         _target,
         scales,
         N_WARMUP,
-        proposal,
-        _shared.FIRST_ORDER_TARGET_ACCEPT_RATE,
+        cfg,
     )
     assert _n_while(text) <= MAX_FIRST_ORDER_WHILE_OPS, (
         f"{proposal} lowered to {_n_while(text)} while ops against NUTS's "
@@ -290,7 +298,7 @@ def test_barker_and_mala_share_one_adaptation():
     every other respect. ``bench/reports/2026-08-31_catalog_preconditioning.md``
     Finding 5 is what an uncontrolled comparison costs: 40% of an apparent
     sampler deficit turned out to be a mass matrix one arm had and the other
-    did not. If the two proposals ever stop sharing ``_first_order_full_scan``,
+    did not. If the two proposals ever stop sharing ``run_chain(FIRST_ORDER, ...)``,
     that guarantee is gone and the comparison stops meaning anything.
     """
     import inspect
@@ -316,10 +324,10 @@ def test_barker_and_mala_share_one_adaptation():
     # they verify that the function composition (full_scan for warmup,
     # chain_scan for sampling) is present. The control flow is not
     # observable at runtime without reading the implementation in detail.
-    source = inspect.getsource(run_first_order)
-    assert "_first_order_full_scan(" in source, (
-        "run_first_order must compose _first_order_full_scan for the warmup phase"
+    source = "".join(inspect.getsource(run_first_order).split())
+    assert "run_chain(FIRST_ORDER,DUAL_AVERAGING," in source, (
+        "run_first_order must compose run_chain(FIRST_ORDER, DUAL_AVERAGING) for the fused warmup"
     )
-    assert "_first_order_chain_scan(" in source, (
-        "run_first_order must compose _first_order_chain_scan for the sampling phase"
+    assert "sample_chain(FIRST_ORDER," in source, (
+        "run_first_order must compose sample_chain(FIRST_ORDER, ...) for the cached sampling"
     )
