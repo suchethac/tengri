@@ -129,6 +129,159 @@ def test_positive_log_likelihood_is_minus_half_the_chi_square_of_the_data():
     assert float(term.log_prob(physical, fitter._data_args)) == pytest.approx(expected)
 
 
+# ── The hierarchical flat seam over the one data term ────────────────────────────────
+
+_BANDS = ["sdss_g", "sdss_r", "sdss_i"]
+_FLAT_FREE = ("sfh_dpl_alpha", "sfh_dpl_beta")
+_NOISE = np.array([0.1, 0.2, 0.3])
+_FLUXES = (np.array([3.0, 2.0, 1.0]), np.array([1.5, 2.5, 0.5]))
+
+
+def _population_model_factory():
+    """A stochastic photometry factory on the small grid; the PSD and the shape are free."""
+    ssp = _small_ssp()
+    obs = Observation(photometry=Photometry.from_names(_BANDS))
+
+    def factory(psd_sigma, psd_tau_myr):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(0.05),
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Fixed(10.0),
+                "alpha": Uniform(0.5, 4.0),
+                "beta": Uniform(0.3, 3.0),
+                "psd_sigma": Uniform(0.1, 4.0, default=float(psd_sigma)),
+                "psd_tau_myr": Uniform(1.0, 300.0, default=float(psd_tau_myr)),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+        )
+
+    return factory
+
+
+def _galaxies(**channels):
+    """Two galaxy records; ``channels`` adds per-band keys to each."""
+    return [{"flux_obs": flux, "noise": _NOISE, **channels} for flux in _FLUXES]
+
+
+def _flat_problem(galaxies, factory=None):
+    """Build the flat problem for a two-galaxy photometry population."""
+    from tengri.inference._hierarchical_flat import build_flat_problem
+    from tengri.inference.hierarchical import PopulationFitter
+
+    factory = _population_model_factory() if factory is None else factory
+    fitter = PopulationFitter(factory, galaxies, _via_routing=True)
+    prob = build_flat_problem(fitter, key=jax.random.PRNGKey(0), map_steps=0)
+    return prob, factory
+
+
+def _galaxy_physical_params(prob, factory):
+    """Physical free parameters of each galaxy at the problem's start point."""
+    from tengri.inference._hierarchical_flat import _physical_map
+
+    model = factory(psd_sigma=1.0, psd_tau_myr=50.0)
+    physical = _physical_map(model.spec, _FLAT_FREE)
+    unbounded = prob.unravel(prob.init_flat)["gal"]
+    sigma, tau = np.asarray(prob.extract_shared(prob.init_flat))
+    xi = prob.unravel(prob.init_flat)["gal_xi"]
+    return model, [
+        {
+            **{name: physical[name](unbounded[name][i]) for name in _FLAT_FREE},
+            "sfh_field_psd_sigma": sigma,
+            "sfh_field_psd_tau_myr": tau,
+            "sfh_field_xi": xi[i],
+        }
+        for i in range(len(_FLUXES))
+    ]
+
+
+def _fitter_for(model, gal):
+    """A ``Fitter`` on one galaxy record, carrying its presence and mask keys."""
+    channels = {k: gal[k] for k in ("presence", "data_mask") if k in gal}
+    return Fitter(model, gal["flux_obs"], gal["noise"], data_type="photometry", **channels)
+
+
+def _fitter_reference(prob, factory, galaxies) -> float:
+    """Sum of the per-galaxy ``Fitter`` log-likelihoods at the flat problem's point."""
+    model, params = _galaxy_physical_params(prob, factory)
+    total = 0.0
+    for gal, free in zip(galaxies, params, strict=True):
+        fitter = _fitter_for(model, gal)
+        total += float(build_loglikelihood_fn(fitter)(free, fitter._data_args))
+    return total
+
+
+def test_flat_likelihood_is_the_sum_of_the_per_galaxy_fitter_values():
+    galaxies = _galaxies()
+    prob, factory = _flat_problem(galaxies)
+
+    actual = prob.log_likelihood_with_data(prob.init_flat, prob.data_args)
+
+    assert np.isfinite(float(actual))
+    np.testing.assert_allclose(
+        float(actual), _fitter_reference(prob, factory, galaxies), rtol=1e-10
+    )
+
+
+def test_presence_zeroing_one_band_matches_the_fitter_built_with_that_presence():
+    galaxies = _galaxies(presence=np.array([1.0, 1.0, 0.0]))
+    prob, factory = _flat_problem(galaxies)
+
+    actual = prob.log_likelihood_with_data(prob.init_flat, prob.data_args)
+
+    assert np.isfinite(float(actual))
+    np.testing.assert_allclose(
+        float(actual), _fitter_reference(prob, factory, galaxies), rtol=1e-10
+    )
+
+
+def test_data_mask_matches_the_closed_form_of_the_censored_likelihood():
+    from tests.regression.bug.test_bug_2667_2668_vi_censoring_and_likelihood_cache import (
+        _closed_form,
+    )
+
+    mask = np.array([0, 0, 1])
+    galaxies = _galaxies(data_mask=mask)
+    prob, factory = _flat_problem(galaxies)
+    model, params = _galaxy_physical_params(prob, factory)
+    expected = 0.0
+    for gal, free in zip(galaxies, params, strict=True):
+        pred = np.asarray(model.predict_photometry(free), dtype=float)
+        expected -= _closed_form(gal["flux_obs"], gal["noise"], pred, mask)
+
+    actual = prob.log_likelihood_with_data(prob.init_flat, prob.data_args)
+
+    np.testing.assert_allclose(float(actual), expected, rtol=1e-10)
+
+
+def test_changing_the_per_galaxy_data_through_the_flat_term_changes_the_value():
+    prob, _factory = _flat_problem(_galaxies())
+    base = float(prob.log_likelihood_with_data(prob.init_flat, prob.data_args))
+    per_galaxy = {**prob.data_args["per_galaxy"]}
+    per_galaxy["data"] = per_galaxy["data"] * 1.5
+    moved = {**prob.data_args, "per_galaxy": per_galaxy}
+
+    assert float(prob.log_likelihood_with_data(prob.init_flat, moved)) != base
+
+
+def test_stochastic_flat_problem_without_jit_inputs_is_refused_by_name(monkeypatch):
+    import tengri.inference.data_term as data_term_module
+    from tengri.config.exceptions import ConfigError
+
+    monkeypatch.setattr(data_term_module, "_add_jit_inputs", lambda args, model, override: None)
+
+    with pytest.raises(ConfigError, match="sfh_field_xi"):
+        _flat_problem(_galaxies(), factory=_population_model_factory())
+
+
 def test_precheck_reference_point_takes_the_fixed_values_it_is_given(monkeypatch):
     """The channel-scale reference draw uses the caller's fixed values, else the spec's."""
     from tengri.inference import data_term
