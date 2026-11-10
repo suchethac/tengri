@@ -59,6 +59,7 @@ from tengri.inference.backends.mcmc.chain_program import (
     HMC,
     MEADS,
     NUTS,
+    WINDOW_GHMC,
     WINDOW_HMC,
     nuts_adaptation,
 )
@@ -434,8 +435,16 @@ def _ghmc_adaptation_rule(kwargs: dict):
     GHMC's momentum generator is diagonal whatever the mass policy, so no policy in
     ``kwargs`` changes the adaptation.
     """
-    # compile() and the flat seam use WINDOW_GHMC via the _ghmc_full_scan shim, not this rule.
     return MEADS
+
+
+def _ghmc_compile_adaptation_rule(kwargs: dict):
+    """Return the diagonal HMC window that ``compile()`` warms GHMC with.
+
+    The precompilation pass has always warmed the window pairing, which the flat seam
+    also runs; ``run()`` uses MEADS (:func:`_ghmc_adaptation_rule`).
+    """
+    return WINDOW_GHMC
 
 
 register_backend(
@@ -456,6 +465,7 @@ register_backend(
     legacy_fitter=False,
     chain_program=GHMC,
     adaptation_rule=_ghmc_adaptation_rule,
+    compile_adaptation_rule=_ghmc_compile_adaptation_rule,
 )(_ctx_run_ghmc)
 
 register_backend(

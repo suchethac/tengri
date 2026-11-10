@@ -81,14 +81,43 @@ class BackendEntry:
     is_compatible: Callable[[Any], bool] | None = None
     # The adapted-chain program for MCMC families; None for the rest.
     chain_program: ChainProgram | None = None
-    # Maps the runner's kwargs to the Adaptation it runs; None when no program is registered.
+    # Maps the runner's kwargs to the Adaptation the run path (``run()``) executes;
+    # None when no program is registered.
     adaptation_rule: Callable[[dict], Adaptation] | None = None
+    # Maps the kwargs to the Adaptation ``compile()`` warms, when it differs from the run
+    # path (GHMC: window for compile, MEADS for run). None means the run rule serves both.
+    compile_adaptation_rule: Callable[[dict], Adaptation] | None = None
 
-    def adaptation_for(self, kwargs: dict) -> Adaptation | None:
-        """Return the adaptation this entry runs for ``kwargs``, or None without a rule."""
-        if self.adaptation_rule is None:
+    def adaptation_for(self, kwargs: dict, *, path: str = "run") -> Adaptation | None:
+        """Return the adaptation this entry runs on ``path`` for ``kwargs``.
+
+        Parameters
+        ----------
+        kwargs : dict
+            The resolved runner kwargs; ``dense_mass_matrix`` already a bool where a rule
+            needs it.
+        path : {"run", "compile"}
+            ``"run"`` for the fit, ``"compile"`` for the precompilation pass. The compile
+            path falls back to the run rule when no compile rule is registered.
+
+        Returns
+        -------
+        Adaptation or None
+            None when the entry registers no adaptation rule.
+
+        Raises
+        ------
+        ValueError
+            If ``path`` is neither ``"run"`` nor ``"compile"``.
+        """
+        if path not in ("run", "compile"):
+            raise ValueError(f"path must be 'run' or 'compile', got {path!r}")
+        rule = self.adaptation_rule
+        if path == "compile" and self.compile_adaptation_rule is not None:
+            rule = self.compile_adaptation_rule
+        if rule is None:
             return None
-        return self.adaptation_rule(kwargs)
+        return rule(kwargs)
 
 
 #: The tiers a backend may declare.
@@ -139,6 +168,7 @@ def register_backend(
     self_whitening: bool = False,
     chain_program=None,
     adaptation_rule=None,
+    compile_adaptation_rule=None,
 ):
     """Decorator to register an inference backend.
 
@@ -190,6 +220,7 @@ def register_backend(
             self_whitening=self_whitening,
             chain_program=chain_program,
             adaptation_rule=adaptation_rule,
+            compile_adaptation_rule=compile_adaptation_rule,
         )
         _BACKENDS[name] = entry
         for a in aliases:
