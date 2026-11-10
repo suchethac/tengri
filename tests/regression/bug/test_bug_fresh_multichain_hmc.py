@@ -3,7 +3,7 @@
 
 Bug: ``Fitter.run(method="mcmc_hmc", n_chains=N)`` on a first (cold-cache)
 call silently sampled a **single** chain — the ``else`` branch of
-``run_hmc`` ran ``_hmc_full_scan`` (one chain, warmup+sampling bundled) and
+``run_hmc`` ran one fused warmup+sampling chain (``run_chain``) and
 returned, while still reporting ``diagnostics["n_chains"] = N``. The genuine
 vmap/pmap multi-chain path lived only in the *cached-warmup* branch, so it
 fired on the 2nd+ call. Effect: a notebook's "N chains, R-hat X" was really a

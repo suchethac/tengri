@@ -972,44 +972,58 @@ of the input values, not burned into the XLA bytecode. This means:
   filter count, SFH grid size) matters.
 - Benchmark evidence: `A1_new_gal mcmc_nuts = 0.08s` — a new galaxy runs at cached speed.
 
-#### Why `logdensity_fn_2arg` is a static argument
+#### Why the log density is a static argument
 
 ```python
-@functools.partial(jax.jit, static_argnums=(3, ...))
-def _nuts_full_scan(init_flat, warmup_key, chain_keys, logdensity_fn_2arg, data_args, ...):
+@functools.partial(jax.jit, static_argnums=(0, 1, 6, 8, 9))
+def run_chain(program, adaptation, init_flat, warmup_key, init_key, chain_keys,
+              ld2, data_args, n_warmup, cfg): ...
 ```
 
 JAX uses **function identity** (Python object `id`) as part of the XLA cache key for
-static arguments. Marking `logdensity_fn_2arg` as static ensures:
+static arguments. The two-argument log density `ld2`, the program, the adaptation and the
+family config `cfg` are static. This means:
 
-1. The XLA program is model-specific — two different models with the same D get separate
+1. The XLA program is model-specific: two different models with the same D get separate
    compiled programs (correct behavior).
-2. The same model reuses the same compiled program — no recompilation when `data_args` change.
-3. `functools.cache` on `_get_nuts_kernel()` guarantees kernel object identity across calls.
+2. The same model reuses the same compiled program: no recompilation when `data_args` change.
+3. The kernels are cached per family and per proposal (`functools.cache`), so the kernel
+   object, and therefore the compiled program, keeps its identity across calls.
 
-#### Previous design (3 JITs) vs current design (1–2 JITs)
+#### One runner for every MCMC family
 
-Old architecture per cold NUTS run:
+`backends/mcmc/chain_program.py` holds the one adapted-chain runner. A sampler family is a
+frozen `ChainProgram` (`NUTS`, `HMC`, `DYNAMIC_HMC`, `GHMC`, `FIRST_ORDER`). A warmup strategy
+is an `Adaptation` (`WINDOW_NUTS`, `PATHFINDER_NUTS`, `WINDOW_HMC(n_leapfrog, diag)`,
+`WINDOW_GHMC`, `MEADS`, `DUAL_AVERAGING`). Each family's statics are a frozen config
+(`NUTSConfig`, `NUTSSamplerConfig`, `HMCConfig`, `GHMCConfig`, `FirstOrderConfig`). Three
+module-level jitted entries cover every path:
 
-| Phase | Function | JIT trigger |
-|-------|----------|-------------|
-| Warmup | `blackjax.window_adaptation.run()` | Internal `lax.scan`, compiles NUTS kernel |
-| Burn-in | `_nuts_burnin_scan()` | `@jax.jit`, recompiles NUTS kernel |
-| Sampling | `_nuts_sample_scan()` | `@jax.jit`, recompiles NUTS kernel |
+| Entry | Does | Used by |
+|-------|------|---------|
+| `adapt_chain` | warmup only; returns `(params, warmup_divergent, warmup_n_grad)` | warm-cache runs, `compile()` |
+| `sample_chain` | sampling only, with fixed `params` | every warm-cache chain |
+| `run_chain` | warmup then sampling in one program | cold runs, the flat seam, catalog lanes |
 
-The NUTS tree-builder (`lax.while_loop`) compiled **3×** per cold run.
+The runner never splits keys. `warmup_key`, `init_key` and `chain_keys` are used as given, so
+each family's PRNG order is set by the caller's key choreography. A cold run traces warmup and
+sampling as one program, so the NUTS tree builder (`lax.while_loop`) is emitted once and both
+phases see the same kernel.
 
-New architecture:
+Registry entries (`inference/_registration.py`) carry the family's `chain_program`, the
+run-path adaptation rule (`BackendEntry.adaptation_for(kwargs)`), and a compile plan for
+`fitter.compile()`. Each compile plan reads its runner's own dense-mass default, so
+`compile()` warms the same dense or diagonal program that `run()` executes.
 
-| Path | Function | JIT trigger |
-|------|----------|-------------|
-| Cold (no cached adaptation) | `_nuts_full_scan()` | Single outer `jax.jit` — kernel compiled **once** |
-| Warm (cached adaptation) | `_nuts_chain_scan()` | Single outer `jax.jit` — kernel compiled **once** |
+`fitter.compile()`, the batched vmap path (`_fit_batch_vmap_mcmc`) and the catalog lanes
+resolve their program through the registry rather than by family name. The hierarchical flat
+seam runs one `run_chain` branch for every driver in `flat_chain_drivers()`.
 
-`_nuts_full_scan` wraps `window_adaptation.run()` **and** the chain scan inside a single
-outer `jax.jit`. Because JAX traces the entire body as one program, `blackjax`'s internal
-`lax.scan` (warmup) and the chain `lax.scan` see the same compiled NUTS kernel — the
-`lax.while_loop` tree-builder is emitted once into the XLA bytecode.
+**Compile exception (GHMC).** `compile()` warms GHMC with the window pairing that the
+hierarchical lane runs (`WINDOW_GHMC`, diagonal mass). `run()` samples GHMC with MEADS, whose
+warming needs a chain count that `compile()` does not take. A GHMC `compile()` therefore warms
+a different program from the one `run()` executes. The other families' `compile()` warms the
+program that `run()` executes.
 
 #### XLA persistent disk cache
 
@@ -1020,7 +1034,7 @@ recompiling. This means:
 - **First run** (cold, no disk cache): ~23s for NUTS D=7 (down from ~69s with 3 JITs).
 - **Second run** (disk cache hit): <1s deserialization.
 - The cache survives across Python restarts as long as JAX version and function identity
-  (`logdensity_fn_2arg`) are stable.
+  (`ld2`) are stable.
 
 #### Pre-warming with `fitter.compile()`
 
@@ -1036,7 +1050,7 @@ fitter.compile(
 result = fitter.run("mcmc_nuts", n_warmup=300, n_burnin=100, n_samples=1000)
 ```
 
-**Cache key contract**: The XLA program is keyed on `logdensity_fn_2arg` identity,
+**Cache key contract**: The XLA program is keyed on `ld2` identity,
 `n_warmup`, `n_burnin`, `n_mcmc_samples` (chain length = n_burnin + n_samples), `use_dense`,
 and `max_doublings`. Use the same values in `compile()` as in `run()` to guarantee a hit.
 

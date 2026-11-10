@@ -3077,6 +3077,82 @@ class Fitter:
         """Build JIT-compiled inference engine. See ``jit_engine.build_jit_engine``."""
         return build_jit_engine(self, pos_dict)
 
+    def _warm_mcmc_program(self, canonical, *, init_flat, ld2, data_args, n_warmup, n_chain):
+        """Compile the programs a ``run()`` of ``canonical`` executes, at the run's statics.
+
+        The chain program, adaptation and statics come from the backend registry's
+        compile plan, which reads each runner's own defaults. The mass policy is
+        resolved from the parameter count and the spec, as the run does. Families that
+        run ``adapt_chain`` and ``sample_chain`` warm those two entries; families whose
+        plan is fused warm ``run_chain``.
+
+        GHMC's compile serves the hierarchical window lane: the flat seam runs the same
+        diagonal window pairing. ``run()`` samples GHMC with MEADS, which needs an
+        ``n_chains`` argument to warm, so compile() does not warm it yet. Step 8 records
+        this in ``inference_methods.md`` section 7.5.
+
+        Parameters
+        ----------
+        canonical : str
+            Registered MCMC method name, e.g. ``"mcmc_nuts"``.
+        init_flat : ndarray, shape (n_dim,)
+            Start position in unbounded latent space.
+        ld2 : callable
+            ``log_p(position, data_args)``.
+        data_args : pytree
+            Observed data.
+        n_warmup : int
+            Warmup steps.
+        n_chain : int
+            Sampling steps per chain (``n_burnin + n_mcmc_samples``).
+
+        Raises
+        ------
+        BackendError
+            If the registered entry has no chain program or no compile plan.
+        """
+        from tengri.config.exceptions import BackendError
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.chain_program import (
+            adapt_chain,
+            bind_logdensity,
+            run_chain,
+            sample_chain,
+        )
+
+        entry = get_backend(canonical)
+        if entry.chain_program is None or entry.compile_plan is None:
+            raise BackendError(f"{canonical} has no compile plan, so compile() cannot warm it")
+        program = entry.chain_program
+        plan = entry.compile_plan(entry, int(init_flat.shape[0]), self.spec)
+        adaptation = entry.adaptation_for(plan.kwargs, path="compile")
+        warmup_key = jax.random.PRNGKey(1)
+        chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
+        init_key = None
+        if not program.starts_from_warmup:
+            init_key = jax.random.PRNGKey(4)
+            chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
+
+        if plan.fused:
+            run_chain(
+                program,
+                adaptation,
+                init_flat,
+                warmup_key,
+                init_key,
+                chain_keys,
+                ld2,
+                data_args,
+                n_warmup,
+                plan.adapt_cfg,
+            )
+            return
+        params = adapt_chain(
+            program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, plan.adapt_cfg
+        )[0]
+        state = program.init(init_flat, bind_logdensity(ld2, data_args), init_key, plan.sample_cfg)
+        sample_chain(program, state, chain_keys, ld2, data_args, params, plan.sample_cfg)
+
     def compile(
         self,
         *,
@@ -3233,89 +3309,30 @@ class Fitter:
             )
 
         if mcmc_methods:
-            from tengri.inference.backends.mcmc._shared import (
-                DEFAULT_MAX_NUM_DOUBLINGS,
-                _dynamic_hmc_full_scan,
-                _get_flat_logdensity,
-                _ghmc_full_scan,
-                _hmc_full_scan,
-                _nuts_full_scan,
-            )
-            from tengri.inference.backends.mcmc.nuts import DENSE_MASS_MAX_DIM
+            from tengri.inference._backend_registry import lookup_backend
+            from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 
             log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
                 self, dummy_pos
             )
             n_chain = n_burnin + n_mcmc_samples
-            warmup_key = jax.random.PRNGKey(1)
-            chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
-            n_dim = len(init_flat)
-            # Which program shape to WARM, not which to fit with, so this
-            # reads the shared cap rather than calling the gate: a
-            # precompilation pass has no user request to refuse and must not
-            # warn about one.
-            use_dense = n_dim <= DENSE_MASS_MAX_DIM
 
             for method in mcmc_methods:
+                canonical = method if method.startswith("mcmc_") else f"mcmc_{method}"
+                if lookup_backend(canonical) is None:
+                    logger.warning("  Unknown MCMC method for compile: %s", method)
+                    continue
                 if verbose:
                     logger.info("  Compiling MCMC %s...", method)
                 t0 = time.time()
-                if method in ("nuts", "mcmc_nuts"):
-                    _nuts_full_scan(
-                        init_flat,
-                        warmup_key,
-                        chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        DEFAULT_MAX_NUM_DOUBLINGS,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("hmc", "mcmc_hmc"):
-                    _hmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        10,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("dynamic_hmc", "mcmc_dynamic_hmc"):
-                    dhmc_init_key = jax.random.PRNGKey(4)
-                    dhmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
-                    _dynamic_hmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        dhmc_init_key,
-                        dhmc_chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("ghmc", "mcmc_ghmc"):
-                    ghmc_init_key = jax.random.PRNGKey(4)
-                    ghmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
-                    _ghmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        ghmc_init_key,
-                        ghmc_chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        0.85,
-                        0.8,
-                        0.65,
-                    )
-                else:
-                    logger.warning("  Unknown MCMC method for compile: %s", method)
-                    continue
+                self._warm_mcmc_program(
+                    canonical,
+                    init_flat=init_flat,
+                    ld2=log_posterior_flat_2arg,
+                    data_args=data_args,
+                    n_warmup=n_warmup,
+                    n_chain=n_chain,
+                )
                 if verbose:
                     logger.info("  Compiling MCMC %s... %.1fs", method, time.time() - t0)
 
@@ -5019,9 +5036,7 @@ class Fitter:
         from tengri.inference.backends.mcmc._shared import (
             DEFAULT_MAX_NUM_DOUBLINGS,
             _check_blackjax_floor,
-            _get_dynamic_hmc_kernel,
             _get_flat_logdensity,
-            _get_ghmc_kernel,
             _get_hmc_kernel,
             _get_nuts_kernel,
             _stabilize_dense_mass_step,
@@ -5100,7 +5115,7 @@ class Fitter:
         # reused, so it retained one warmup executable per call (~20 MB/call leak on
         # a long-lived Fitter). Data enters traced, so the adaptation still runs on
         # the current galaxy each call and the numbers are unchanged; this mirrors
-        # the single-galaxy path's module-level ``_hmc_full_scan`` jit.
+        # the single-galaxy path's module-level ``run_chain`` jit.
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
         if method == "mcmc_hmc":
@@ -5210,178 +5225,62 @@ class Fitter:
                 float(step_size),
             )
 
-        # Raw scan functions (no @jax.jit, the outer jit+vmap handles it)
+        # One sampling scan for every family: the registry's chain program supplies the
+        # kernel, the step and the collected draw, so the scan body is written once.
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.chain_program import (
+            GHMCConfig,
+            HMCConfig,
+            NUTSSamplerConfig,
+            bind_logdensity,
+        )
+
+        program = get_backend(method).chain_program
         if method == "mcmc_nuts":
-            kernel = _get_nuts_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (NUTS variant).
-
-                ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed
-                over) so the compiled kernel is independent of the adapted
-                values, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for NUTS kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one NUTS kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        inv_mass_matrix,
-                        max_num_doublings,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
+            sample_cfg = NUTSSamplerConfig(max_doublings=max_num_doublings)
         elif method == "mcmc_hmc":
-            kernel = _get_hmc_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (HMC variant).
-
-                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for HMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one HMC kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        inv_mass_matrix,
-                        n_leapfrog_steps,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
-        elif method == "mcmc_dynamic_hmc":
-            kernel = _get_dynamic_hmc_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (dynamic HMC variant).
-
-                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for dynamic HMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one dynamic HMC kernel step."""
-                    s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
+            sample_cfg = HMCConfig(
+                n_leapfrog=n_leapfrog_steps,
+                use_dense=bool(use_dense),
+                target_accept_rate=target_accept_rate,
+            )
         elif method == "mcmc_ghmc":
-            kernel = _get_ghmc_kernel()
+            sample_cfg = GHMCConfig(
+                alpha=alpha, delta=delta, target_accept_rate=target_accept_rate
+            )
+        else:
+            sample_cfg = None
+        kernel = program.kernel(sample_cfg)
 
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (GHMC variant).
+        def _sampler_params(step_size, inv_mass_matrix):
+            """Return the ``params`` tuple the family's chain step reads.
 
-                Adaptation is threaded in, not closed over, see
-                :meth:`_fit_batch_vmap_mcmc`. The GHMC momentum scale is derived
-                from the passed ``inv_mass_matrix``.
-                """
-                if inv_mass_matrix.ndim == 2:
-                    momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
-                else:
-                    momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
+            GHMC's step takes the momentum scale, the square root of the inverse mass
+            matrix; the other families take the inverse mass matrix as it is.
+            """
+            if method != "mcmc_ghmc":
+                return (step_size, inv_mass_matrix)
+            if inv_mass_matrix.ndim == 2:
+                return (step_size, jnp.sqrt(jnp.diag(inv_mass_matrix)))
+            return (step_size, jnp.sqrt(inv_mass_matrix))
 
-                def ld(pos):
-                    """Log-density for this galaxy.
+        def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+            """Scan the chain program over ``keys`` for one galaxy, from ``state``.
 
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
+            ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed over) so the
+            compiled kernel is independent of the adapted values, see
+            :meth:`_fit_batch_vmap_mcmc`. Not part of public API.
+            """
+            ld = bind_logdensity(logdensity_flat_2arg, data_args_i)
+            params = _sampler_params(step_size, inv_mass_matrix)
 
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
+            def _step(s, k):
+                """Advance one step and keep the position and divergence flag."""
+                s, info = program.step(kernel, s, k, ld, params, sample_cfg)
+                draw = program.collect(s, info)
+                return s, (draw.position, draw.divergent)
 
-                    Notes
-                    -----
-                    Inner closure for GHMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one GHMC kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        momentum_inv_scale,
-                        alpha,
-                        delta,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
+            return jax.lax.scan(_step, state, keys)
 
         # Single-galaxy function to vmap
         def single_galaxy(gal_key, init_flat_i, data_args_i, step_size, inv_mass_matrix):
@@ -5404,47 +5303,14 @@ class Fitter:
             Notes
             -----
             Designed for use with ``jax.vmap`` in batch MCMC. Captures
-            ``kernel``, ``_sample_scan`` from outer scope; the adapted
+            ``program``, ``kernel`` and ``_sample_scan`` from outer scope; the adapted
             ``step_size`` / ``inv_mass_matrix`` are passed as arguments
             (broadcast via the vmap ``in_axes``) so the compiled kernel is
             reusable across ``fit_batch`` calls. Not part of public API.
             """
-
-            def ld(pos):
-                """Log-density for this galaxy.
-
-                Parameters
-                ----------
-                pos : ndarray, shape (n_dim,)
-                    Flattened unbounded parameters.
-
-                Returns
-                -------
-                float
-                    Log posterior density.
-
-                Notes
-                -----
-                Inner closure. Not part of public API.
-                """
-                return logdensity_flat_2arg(pos, data_args_i)
-
             init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
-
-            if method == "mcmc_ghmc":
-                # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
-                # between 1.3 and 1.6, keywords are correct on both. (The single-galaxy
-                # GHMC paths were already fixed this way; this batch path was missed
-                # because it had no test.)
-                state = blackjax.mcmc.ghmc.init(
-                    position=init_flat_i, logdensity_fn=ld, rng_key=init_key
-                )
-            elif method == "mcmc_hmc":
-                state = blackjax.mcmc.hmc.init(init_flat_i, ld)
-            elif method == "mcmc_dynamic_hmc":
-                state = blackjax.mcmc.dynamic_hmc.init(init_flat_i, ld, init_key)
-            else:
-                state = blackjax.mcmc.nuts.init(init_flat_i, ld)
+            ld = bind_logdensity(logdensity_flat_2arg, data_args_i)
+            state = program.init(init_flat_i, ld, init_key, sample_cfg)
 
             # Burn-in (discarded)
             if n_burnin > 0:
