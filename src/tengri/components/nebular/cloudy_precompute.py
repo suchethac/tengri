@@ -160,7 +160,83 @@ def build_lookup(preint: object, **kwargs: object) -> object:
 #: Band-table slots this adapter provides, read through :func:`band_table`.
 BAND_SLOTS: tuple[str, ...] = ("band_table",)
 
+#: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
+#: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
+CLOUDY_TABLE_FREE_OK: frozenset[str] = frozenset(
+    {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
+)
+
+
+def _band_table_refusal(ctx, nebular) -> str | None:
+    """Why the CLOUDY band table must not engage, or None when it may.
+
+    The gate of #2324: every condition under which the table would differ
+    from the per-call path, or would not be built from the same inputs.
+    """
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
+
+    if not ctx.wave_precomp:
+        return "approx=WavePrecomp() not enabled"
+    if (
+        nebular is None
+        or nebular.config.backend != "cloudy_grid"
+        or not isinstance(nebular.backend, CloudyGridBackend)
+    ):
+        return "the nebular backend is not the CLOUDY grid"
+    # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
+    # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
+    # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
+    if nebular.backend._grid_interp not in ("pchip", "linear"):
+        return (
+            f"the CLOUDY backend interpolates with grid_interp="
+            f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
+            f"and 'linear'"
+        )
+    if _dig_may_be_active(ctx.spec):
+        return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
+    if "redshift" not in ctx.spec.fixed_params:
+        return "redshift is free (the band table is built at one redshift)"
+    if "neb_eline_sigma_kms" not in ctx.spec.fixed_params:
+        return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
+    bad = sorted(
+        p
+        for p in ctx.spec.free_params
+        if p.startswith(("neb_", "gas_", "ionspec_")) and p not in CLOUDY_TABLE_FREE_OK
+    )
+    if bad:
+        return f"free nebular parameters outside the table's axes: {bad}"
+    state = nebular._state
+    if state is None or state.filter_waves is None:
+        return "the nebular filter cache is absent (no WavePrecomp filters)"
+    return None
+
 
 def band_table(ctx, *, component: str, slot: str):
-    """Return one band-table slot of ``component`` from the model's memo, through ``ctx.ask``."""
-    return ctx.ask(component, slot)
+    """Build the CLOUDY band table of ``component``, or the refusal that says why it is absent.
+
+    The table is built at the model's one fixed redshift from the nebular backend of the
+    chain, and returned only when its (Z_gas, logU) axes contain the spec's priors.
+    """
+    from tengri.components.nebular.component import NebularSEDComponent
+    from tengri.forward.precompute.band_table import BandTable, Decline
+
+    nebular = next((c for c in ctx.chain if isinstance(c, NebularSEDComponent)), None)
+    reason = _band_table_refusal(ctx, nebular)
+    if reason is not None:
+        return Decline(reason)
+    table = precompute(
+        nebular._state.filter_waves,
+        nebular._state.filter_trans,
+        float(ctx.spec.fixed_value("redshift")),
+        parameters=ctx.spec,
+        backend=nebular.backend,
+        wave=ctx.wave,
+        line_sigma_kms=float(ctx.spec.fixed_value("neb_eline_sigma_kms")),
+    )
+    if table is None:
+        return Decline(
+            "the table's (Z_gas, logU) axes do not contain the spec's priors "
+            "for neb_logZ_gas and neb_logU"
+        )
+    return BandTable(table)
