@@ -51,6 +51,8 @@ from tengri.inference.backends.mcmc import (
 )
 from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.chain_program import (
+    DYNAMIC_HMC,
+    DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
     HMC,
     NUTS,
     WINDOW_HMC,
@@ -390,6 +392,22 @@ register_backend(
     accepts_precondition=True,
 )(_ctx_run_hmc_is)
 
+
+def _dynamic_hmc_adaptation_rule(kwargs: dict):
+    """Return the HMC window adaptation dynamic HMC tunes with, for the mass policy in ``kwargs``.
+
+    As for :func:`_hmc_adaptation_rule`, ``dense_mass_matrix`` must already be resolved to
+    a bool; the ``None`` (auto) policy goes through ``resolve_dense_mass_gate`` first.
+    """
+    dense = kwargs.get("dense_mass_matrix")
+    if dense is None:
+        raise ValueError(
+            "mcmc_dynamic_hmc adaptation rule needs dense_mass_matrix resolved to True or "
+            "False; resolve the auto policy with resolve_dense_mass_gate first"
+        )
+    return WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, not bool(dense))
+
+
 register_backend(
     "mcmc_dynamic_hmc",
     tier="experimental",
@@ -401,6 +419,8 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=DYNAMIC_HMC,
+    adaptation_rule=_dynamic_hmc_adaptation_rule,
 )(_ctx_run_dynamic_hmc)
 
 register_backend(
