@@ -508,9 +508,27 @@ GHMC = ChainProgram(
 #: Integration steps of the HMC window that tunes GHMC's diagonal metric.
 GHMC_TUNING_LEAPFROG_STEPS = 10
 
+
+def _window_ghmc_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
+    """Run the diagonal HMC window and hand GHMC the square root of its adapted variance.
+
+    BlackJAX's GHMC kernel squares a one-dimensional ``momentum_inverse_scale`` into an
+    inverse mass matrix, so the window's inverse mass (a variance) must enter as its square
+    root. The window pairing is diagonal by construction, so the result is always a vector.
+    """
+    state, parameters, info = _window_hmc_run(
+        GHMC_TUNING_LEAPFROG_STEPS, True, warmup_key, init_flat, ld, n_warmup, cfg, info_fn
+    )
+    variance = parameters["inverse_mass_matrix"]
+    assert variance.ndim == 1, "GHMC's window pairing is diagonal"
+    return state, {**parameters, "inverse_mass_matrix": jnp.sqrt(variance)}, info
+
+
 #: Window adaptation for GHMC: diagonal HMC window adaptation, since GHMC's momentum
-#: generator takes a diagonal metric. Sampling re-initializes at ``init_flat``.
-WINDOW_GHMC = WINDOW_HMC(GHMC_TUNING_LEAPFROG_STEPS, True)
+#: generator takes a diagonal metric. Its ``inverse_mass_matrix`` is the momentum inverse
+#: scale, the square root of the adapted variance (#3318). Sampling re-initializes at
+#: ``init_flat``.
+WINDOW_GHMC = Adaptation(name="window_ghmc_10_diag", run=_window_ghmc_run)
 
 
 def _meads_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
