@@ -155,3 +155,12 @@ def build_lookup(preint: object, **kwargs: object) -> object:
 
     """
     return None
+
+
+#: Band-table slots this adapter provides, read through :func:`band_table`.
+BAND_SLOTS: tuple[str, ...] = ("band_table",)
+
+
+def band_table(ctx, *, component: str, slot: str):
+    """Return one band-table slot of ``component`` from the model's memo, through ``ctx.ask``."""
+    return ctx.ask(component, slot)

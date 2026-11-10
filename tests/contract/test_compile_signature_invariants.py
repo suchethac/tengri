@@ -207,6 +207,8 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._Observables = None
             self._cached_component_chain = None
             self._cached_full_state_chain = None
+            # Literal policy entry from #3290 (the band-table memo): the mock must carry it.
+            self._band_tables = {}
             self._dust_band_response_cache = None
             self._dust_band_response_decline = None
             self._dust_shape_table_cache = None

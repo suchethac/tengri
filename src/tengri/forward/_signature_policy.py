@@ -272,6 +272,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_cached_full_state_chain": exclude(
         "memo of the built chain; the chain's configs are keyed through _component_configs instead"
     ),
+    "_band_tables": exclude(
+        "the one memo of every component band table and its decline verdict, keyed "
+        "[component][slot]; built from keyed structure, read by no numerical path"
+    ),
     "_dust_band_response_cache": exclude("memo cache computed from keyed structure"),
     "_cloudy_band_table_cache": exclude(
         "memo of the CLOUDY band table, built from the keyed nebular backend, the "
