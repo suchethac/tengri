@@ -220,10 +220,14 @@ ignore = [
 "src/tengri/components/dust/laws/**" = ["E501"]  # split from attenuation.py (#843)
 "src/tengri/components/igm/igm.py" = ["E501"]
 "src/tengri/components/nebular/_shared.py" = ["E501"]
-"src/tengri/components/sfh/mean_sfh.py" = ["E501"]
-"src/tengri/components/sfh/psd_models.py" = ["E501"]
 "src/tengri/components/stellar/sfh/mean_sfh.py" = ["E501"]
 "src/tengri/components/stellar/sfh/psd_models.py" = ["E501"]
+# T201: print is the interface in these modules, not a leak (excluded from the ratchet).
+"src/tengri/cli.py" = ["T201"]
+"src/tengri/__main__.py" = ["T201"]
+"src/tengri/_display.py" = ["T201"]
+"src/tengri/_tutorials.py" = ["T201"]
+"src/tengri/bench/**" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tengri"]
