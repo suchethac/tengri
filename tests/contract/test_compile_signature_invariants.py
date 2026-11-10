@@ -209,8 +209,6 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._cached_full_state_chain = None
             # Literal policy entry from #3290 (the band-table memo): the mock must carry it.
             self._band_tables = {}
-            self._agn_band_table_cache = None
-            self._agn_band_table_decline = None
             # Literal policy entry from #2974 (radio AGN loudness anchor): the mock must carry it.
             self._radio_agn_loudness_ref = None
             self._energy_balance_lut_cache = None

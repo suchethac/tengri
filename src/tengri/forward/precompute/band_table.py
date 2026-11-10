@@ -76,7 +76,8 @@ class BandTableContext:
     agn_axis_grids : object
         The AGN axis-grid overrides, or ``None``.
     ask : callable
-        ``ask(name, slot)`` returns the memo entry of another slot of the same component.
+        ``ask(name, slot)`` returns the entry of another slot of the same component,
+        building it on first ask.
     """
 
     spec: Any
