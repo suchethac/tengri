@@ -479,7 +479,7 @@ class RadioSEDComponent(TemplateThreading):
 
     #: Cross-component scalars this emitter reads off ``state.derived``, with two
     #: deliberately distant probe draws. The build-time band-response builder
-    #: (``tengri.SEDModel._additive_term_band_response``) evaluates
+    #: (``tengri.components._term_response_table.additive_term_band_response``) evaluates
     #: :meth:`emission_terms` at both and requires every term to come back
     #: *proportional*: a term whose spectral **shape** (not merely its amplitude)
     #: responds to a runtime input is not rank-1, so no constant band response
