@@ -47,6 +47,7 @@ from packaging.requirements import Requirement
 from tengri._cache_keys import baked
 from tengri.config.exceptions import BackendError, DeadFitError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference._walls import _wall_value
 
 # ---------------------------------------------------------------------------
 # BlackJAX version floor validation
@@ -1278,11 +1279,6 @@ def _resolve_meads_ensemble(n_ensemble, n_chains, n_folds):
     if remainder:
         resolved += n_folds - remainder
     return resolved
-
-
-def _wall_value(value):
-    """Map a non-finite log-density to -inf, which GHMC rejects as a divergent proposal."""
-    return jnp.where(jnp.isfinite(value), value, -jnp.inf)
 
 
 def _walled_logdensity(logdensity_fn_2arg, data_args):

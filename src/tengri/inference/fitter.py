@@ -65,10 +65,16 @@ logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri._cache_keys import derive_key
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import BackendError, ParameterError, TengriError
 from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference.data_term import (
+    DataTermContext,
+    DataTermOptions,
+    build_data_args,
+    resolve_data_term_options,
+)
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.loss_functions import (
@@ -78,7 +84,7 @@ from tengri.inference.loss_functions import (
     build_loss_fn,
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
-from tengri.parameters.priors import Gaussian, Uniform
+from tengri.parameters.priors import Gaussian
 from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
@@ -228,11 +234,9 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
     test stub, …) also passes through silently, we don't want to
     warn on legitimate non-SEDModel uses.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.sed_model import SEDModel
-    except ImportError:
-        return
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.sed_model import SEDModel
+
     if isinstance(model, ForwardModel):
         return
     if isinstance(model, SEDModel):
@@ -264,11 +268,8 @@ def _population_sed(model):
         The population SubModel when ``model`` is a ``ForwardModel`` wrapping
         exactly one, otherwise ``None``.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
-        return None
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.population_sed_model import PopulationSEDModel
 
     if not isinstance(model, ForwardModel):
         return None
@@ -1150,7 +1151,7 @@ def _warn_if_lut_bias_amplified(
                         return f"photometry band {channel_idx}"
                     else:
                         return f"spectrum pixel {channel_idx - n_phot}"
-                except Exception:
+                except TengriError:
                     return f"channel {channel_idx}"
 
         if user_likelihood:
@@ -1211,7 +1212,7 @@ def _warn_if_lut_bias_amplified(
                 forward_bias=bias_at,
                 snr=snr_at,
             )
-    except Exception:
+    except TengriError:
         logger.warning(
             "LUT-bias advisory skipped for %s; the fit proceeds without it.",
             surface,
@@ -2228,13 +2229,12 @@ class Fitter:
         amplitudes (line amplitudes are fit, not marginalized).
         """
         from tengri.inference.composite_likelihood import CompositeLikelihood
-        from tengri.inference.context import InferenceContext
         from tengri.inference.likelihood import (
             build_base_likelihood,
             build_likelihood_extras,
         )
 
-        context = InferenceContext.from_target(self)
+        context = DataTermContext.from_fitter(self)
         base = build_base_likelihood(context)
         if base is None:
             return None
@@ -2672,45 +2672,18 @@ class Fitter:
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
+        resolved = resolve_data_term_options(
+            model,
+            DataTermOptions(
+                data_type=self.data_type,
+                eline_marginalize=eline_marginalize,
+                eline_prior_type=eline_prior_type,
+            ),
+        )
+        self._init_eline_arrays(resolved)
+
         obs = model.observation
         _spec_config = obs.spectroscopy if obs is not None else None
-
-        # Marginalization mode
-        if eline_marginalize is None:
-            if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
-                eline_marginalize = _spec_config.eline_mode == "marginalized"
-            else:
-                eline_marginalize = False
-        self._eline_marginalize = bool(eline_marginalize) and self._has_spectroscopy
-
-        # Fitted emission line mode, amplitudes become explicit latent params
-        if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
-            _eline_fitted = _spec_config.eline_mode == "fitted"
-        else:
-            _eline_fitted = False
-        self._eline_fitted = bool(_eline_fitted) and self._has_spectroscopy
-
-        # Prior type
-        if eline_prior_type is None:
-            if _spec_config is not None and hasattr(_spec_config, "eline_prior_type"):
-                _raw = _spec_config.eline_prior_type
-                eline_prior_type = _raw if isinstance(_raw, str) else "flat"
-            else:
-                eline_prior_type = "flat"
-        self._eline_prior_type = eline_prior_type
-
-        # Precompute static arrays for emission line fitting
-        if self._eline_marginalize or self._eline_fitted:
-            self._init_eline_arrays(_spec_config)
-        else:
-            self._eline_wavelengths = None
-            self._eline_independent_wavelengths = None
-            self._eline_names = None
-            self._eline_constraint_matrix = None
-            self._eline_prior_sigma = 100.0
-            self._eline_prior_width_dex = 0.3
-            self._eline_amplitude_names = []
-
         # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
         if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
             spec_has_broad = getattr(self.spec, "eline_broad", False)
@@ -2726,164 +2699,55 @@ class Fitter:
                     stacklevel=2,
                 )
 
-    def _init_eline_arrays(self, _spec_config):
-        """Build catalog arrays and constraint matrices for emission line fitting."""
-        from tengri.observation.line_list import LineList
-
-        if _spec_config is not None and _spec_config.eline_catalog is not None:
-            _catalog = _spec_config.effective_catalog
-        else:
-            _catalog = LineList.default_13()
-
-        self._eline_wavelengths = _catalog.wavelengths
-        self._eline_independent_wavelengths = _catalog.independent_wavelengths
-        self._eline_names = _catalog.names
-
-        fix_doublets = True
-        if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
-            fix_doublets = _spec_config.eline_fix_doublets
-        if fix_doublets:
-            self._eline_constraint_matrix = _catalog.build_constraint_matrix()
-        else:
-            self._eline_constraint_matrix = jnp.eye(_catalog.n_lines)
-
-        self._eline_prior_sigma = (
-            getattr(_spec_config, "eline_prior_sigma", 100.0) if _spec_config else 100.0
-        )
-        self._eline_prior_width_dex = (
-            getattr(_spec_config, "eline_prior_width_dex", 0.3) if _spec_config else 0.3
-        )
-
+    def _init_eline_arrays(self, resolved):
+        """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""
+        self._eline_marginalize = resolved.options.eline_marginalize
+        self._eline_fitted = resolved.eline_fitted
+        self._eline_prior_type = resolved.options.eline_prior_type
+        self._eline_wavelengths = resolved.eline_wavelengths
+        self._eline_independent_wavelengths = resolved.eline_independent_wavelengths
+        self._eline_names = resolved.eline_names
+        self._eline_constraint_matrix = resolved.eline_constraint_matrix
+        self._eline_prior_sigma = resolved.eline_prior_sigma
+        self._eline_prior_width_dex = resolved.eline_prior_width_dex
+        self._eline_amplitude_names = resolved.eline_amplitude_names
+        if self._eline_marginalize or self._eline_fitted:
+            # Retained so the merge can be re-applied after the fit-time approx policy
+            # reassigns ``self.spec`` (see __init__): that reassignment drops params
+            # merged here otherwise.
+            self._eline_amp_priors = resolved.eline_amp_priors
         if self._eline_fitted:
-            from tengri.observation.eline_marginalization import eline_amplitude_names
+            self.spec = self.spec.merge_observation_params(**resolved.eline_amp_priors)
 
-            self._eline_amplitude_names = eline_amplitude_names(_catalog)
-            _amp_bound = 10.0 * self._eline_prior_sigma
-            _amp_priors = {
-                nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
-            }
-            # Retained so the merge can be re-applied after the fit-time
-            # approx policy reassigns ``self.spec`` (see __init__): that
-            # reassignment drops params merged here otherwise.
-            self._eline_amp_priors = _amp_priors
-            self.spec = self.spec.merge_observation_params(**_amp_priors)
-        else:
-            self._eline_amplitude_names = []
-            self._eline_amp_priors = {}
+    def data_term_options(self) -> DataTermOptions:
+        """Return the structural options the data term is built from.
+
+        Returns
+        -------
+        DataTermOptions
+            The options read from this fitter's resolved attributes.
+        """
+        return DataTermOptions.from_fitter(self)
 
     def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
 
-        These are passed as explicit arguments (not closed over) so that
-        engines compiled for one galaxy can be reused for another with
-        the same model + parameter structure.
-
-        2026-05-23 (issue #250 follow-up): also threads the
-        big template arrays (SSP grid, nebular templates, dust IR / AGN
-        template data, fixed-value dict) so the **outer** JIT used by
-        loss-fn-based samplers (HMC, NUTS, raytrace) sees them as
-        Parameters, not Constants. Without this, the outer JIT inlines
-        ``model.predict_observables_jit(params)`` and bakes the SSP
-        flux grid (15×93×5994 floats) into the HLO as a constant,
-        ballooning compile time from <5 s to 40 s on photometry.
+        Delegates to :func:`~tengri.inference.data_term.build_data_args`, passing this
+        fit's data, mask, presence, resolved line-flux configuration and overrides.
+        The bundle is passed as explicit arguments so engines compiled for one galaxy
+        can be reused for another with the same model and parameter structure.
         """
-        args = {
-            "data": self.data,
-            "noise": self.noise,
-            "sqrt_noise_inv": inv_noise_std(self.noise),
-            "n_data": jnp.int32(len(self.data)),
-        }
-        if self.data_mask is not None:
-            args["data_mask"] = self.data_mask
-        if self.presence is not None:
-            args["presence"] = self.presence
-        if self._runtime_redshift is not None:
-            # Runtime-routed redshift override (#1316): the loss replaces the
-            # baked fixed value with this traced input (#1349's injection).
-            args["redshift"] = jnp.asarray(self._runtime_redshift)
-
-        obs = getattr(model, "observation", None)
-        if obs is not None:
-            spec_cfg = getattr(obs, "spectroscopy", None)
-            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-                if spec_cfg.has_banded_covariance:
-                    args["spec_chol_data"] = spec_cfg.chol_data
-                else:
-                    args["spec_cov_inv"] = spec_cfg.cov_inv
-
-            line_flux_cfg = self._resolved_line_fluxes()
-            if line_flux_cfg is not None:
-                args["line_flux_obs"] = line_flux_cfg.fluxes
-                args["line_flux_err"] = line_flux_cfg.errors
-                args["line_flux_waves"] = line_flux_cfg.wavelengths
-                limit_mask = getattr(line_flux_cfg, "limit_mask", None)
-                if limit_mask is not None:
-                    args["line_flux_limit_mask"] = limit_mask
-                model_sigma = self._resolved_line_model_sigma()
-                if model_sigma is not None:
-                    args["line_flux_model_sigma_frac"] = jnp.asarray(model_sigma)
-
-            line_ratio_cfg = getattr(obs, "line_ratios", None)
-            if line_ratio_cfg is not None:
-                # The model ratio is computed from model.observation.line_ratios
-                # in the loss closure; only the observed ratio + error need to
-                # ride along for the Gaussian comparison.
-                args["line_ratio_obs"] = line_ratio_cfg.ratios
-                args["line_ratio_err"] = line_ratio_cfg.errors
-
-            index_cfg = getattr(obs, "spectral_indices", None)
-            if index_cfg is not None:
-                args["index_obs"] = index_cfg.values
-                args["index_err"] = index_cfg.errors
-
-        # Outer-JIT threading: big arrays go in here so loss-fn callers
-        # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
-        # under a private "_jit_inputs" sub-dict so existing data_args
-        # consumers don't have to skip new keys.
-        # Some test/dummy models don't implement the threading API. Decide that by
-        # ASKING (hasattr) rather than by catching AttributeError out of the body:
-        # a blanket ``suppress(AttributeError, TypeError)`` around the whole block
-        # also swallows an AttributeError raised *from inside* a real model, and
-        # then silently ships an un-threaded fit. That is exactly what happened,
-        # ``ForwardModel`` (the canonical surface) did not delegate ``ssp_data``, so
-        # every fit through it baked the SSP grid into the compiled program as a
-        # constant and XLA was OOM-killed on large grids. A guard that fails open
-        # turns a one-line omission into an invisible performance cliff.
-        #
-        # The topology gate is separate and asked of the model: the threaded
-        # forward is written for a single-population SED forward and mis-broadcasts
-        # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
-        # has always been valid, so default True.
-        #
-        # Consequence worth stating: excluded topologies fall back to the eager
-        # ``_build_prediction`` path, which closure-captures the SSP grid, so
-        # hierarchical fits keep paying the baking cost #1496 removed for
-        # single-galaxy ones (measured 5.7 h / 6.25 GB for a joint NUTS at N=4,
-        # D=98). Fixing that needs the batched forward (#211), not a wider gate.
-        _supports = getattr(model, "_supports_jit_threading", None)
-        _threadable = _supports() if callable(_supports) else True
-        if _threadable and all(
-            hasattr(model, attr)
-            for attr in ("spec", "ssp_data", "_template_data_for_jit", "_ztable_data_for_jit")
-        ):
-            # Per-fit params override (#1329): the forward pass reads fixed values
-            # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
-            # runtime, so the override MUST be merged here, not only in
-            # ``_to_physical`` (the output-conversion path). Merging only there is a
-            # silent relabel: the loss still runs at the model's fixed value while the
-            # returned ``params`` echo the override. Keys are already validated in
-            # ``__init__`` (fixed-only, real names).
-            jit_fixed_values = dict(model.spec.get_fixed_values())
-            if self._params_override is not None:
-                jit_fixed_values.update(self._params_override)
-            args["_jit_inputs"] = {
-                "fixed_values": jit_fixed_values,
-                "ssp_data": model.ssp_data,
-                "template_data": model._template_data_for_jit(),
-                "ztable_data": model._ztable_data_for_jit(),
-            }
-
-        return args
+        return build_data_args(
+            model,
+            self.data,
+            self.noise,
+            data_mask=self.data_mask,
+            presence=self.presence,
+            line_flux_data=self._resolved_line_fluxes(),
+            runtime_redshift=self._runtime_redshift,
+            params_override=self._params_override,
+            line_model_sigma=self._resolved_line_model_sigma() is not None,
+        )
 
     # ── Compilation ───────────────────────────────────────────────────
 
@@ -4723,21 +4587,9 @@ class Fitter:
                 verbose=verbose,
             )
         if method == "blackjax":
-            try:
-                return self._draw_blackjax_samples(
-                    likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
-                )
-            except ImportError:
-                if verbose:
-                    logger.info("  blackjax not installed, falling back to JIT sampling")
-                return self._draw_jit_samples(
-                    pos_dict,
-                    key,
-                    n_samples,
-                    existing_samples,
-                    posterior_chunk_size=posterior_chunk_size,
-                    verbose=verbose,
-                )
+            return self._draw_blackjax_samples(
+                likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
+            )
         return self._draw_nifty_samples(
             likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
         )
@@ -4881,7 +4733,16 @@ class Fitter:
         from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
 
         _check_blackjax_floor()
-        import blackjax
+        try:
+            import blackjax
+        except ImportError as exc:
+            from tengri.inference._backend_registry import pip_hint
+
+            raise BackendError(
+                'posterior_method="blackjax" requires blackjax, which is not installed.  '
+                f"Install it with:\n    {pip_hint('blackjax')}\n"
+                'or pass posterior_method="jit" for the JIT-compiled CG sampler.'
+            ) from exc
 
         if verbose:
             logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)

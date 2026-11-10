@@ -204,7 +204,9 @@ def test_dust_ir_response_follows_the_catalog_runtime_redshift(catalog_model, re
 
 def test_a_free_redshift_engages_the_dust_ir_band_response(free_model):
     """A free z must use the fast path: the table exists and spans the prior."""
-    table = free_model._dust_band_response_cache
+    table = getattr(
+        free_model.band_table("dust_emission", "emission_band_response"), "arrays", None
+    )
     assert table is not None, (
         "a free redshift left the dust-IR band response off: the model fell back to "
         "the per-call dense filter integral"
@@ -305,7 +307,9 @@ def test_the_sequential_catalog_engine_loss_follows_each_galaxys_redshift(
         assert abs(loss - exact[i]) < LOSS_RTOL * abs(exact[i]), (
             f"galaxy {i} (z={z}): loss {loss:.4f} vs exact Fixed(z) {exact[i]:.4f}"
         )
-    assert catalog_model._dust_band_response_cache is not None, "the fast path fell off"
+    assert catalog_model.band_table("dust_emission", "emission_band_response") is not None, (
+        "the fast path fell off"
+    )
 
 
 #: Relative budget on the loss (chi^2/2 + prior) at a shared start point, 2 % noise.
@@ -339,7 +343,9 @@ def test_the_batched_catalog_engine_loss_follows_each_galaxys_redshift(
         jax.vmap(loss_one)(jnp.asarray(flux), jnp.asarray(noise), presence, jnp.asarray(CATALOG_Z))
     )
     np.testing.assert_allclose(losses, exact, rtol=LOSS_RTOL)
-    assert catalog_model._dust_band_response_cache is not None, "the fast path fell off"
+    assert catalog_model.band_table("dust_emission", "emission_band_response") is not None, (
+        "the fast path fell off"
+    )
 
 
 def test_the_batched_map_warm_start_runs_with_the_tables_threaded(catalog_model, catalog_data):
@@ -622,7 +628,10 @@ def test_catalog_models_share_a_signature_and_a_grid_not_keyed_on_the_placeholde
     signatures = {m.compile_signature() for m in models}
     assert len(signatures) == 1, "placeholder redshifts must not split the compile signature"
 
-    tables = [m._dust_band_response_cache for m in models]
+    tables = [
+        getattr(m.band_table("dust_emission", "emission_band_response"), "arrays", None)
+        for m in models
+    ]
     assert all(t is not None for t in tables)
     for table in tables[1:]:
         np.testing.assert_array_equal(np.asarray(table["ln1pz"]), np.asarray(tables[0]["ln1pz"]))

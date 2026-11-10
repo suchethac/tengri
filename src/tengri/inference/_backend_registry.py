@@ -271,6 +271,20 @@ def get_backend(name: str) -> BackendEntry:
     return _BACKENDS[name]
 
 
+_PIP_EXTRA: dict[str, str] = {
+    "blackjax": 'pip install "tengri[blackjax]"  (or:  pip install blackjax)',
+    "nifty8": "pip install nifty8.re",
+    "optax": "pip install optax",
+    "jaxopt": "pip install jaxopt",
+    "dynesty": "pip install dynesty",
+}
+
+
+def pip_hint(pkg: str) -> str:
+    """Return the install command that provides the optional dependency ``pkg``."""
+    return _PIP_EXTRA.get(pkg, f"pip install {pkg}")
+
+
 def check_requires(entry: BackendEntry) -> None:
     """Verify the backend's optional dependencies are importable.
 
@@ -290,18 +304,11 @@ def check_requires(entry: BackendEntry) -> None:
     """
     import importlib
 
-    _PIP_EXTRA: dict[str, str] = {
-        "blackjax": 'pip install "tengri[blackjax]"  (or:  pip install blackjax)',
-        "nifty8": "pip install nifty8.re",
-        "optax": "pip install optax",
-        "jaxopt": "pip install jaxopt",
-        "dynesty": "pip install dynesty",
-    }
     for pkg in entry.requires:
         try:
             importlib.import_module(pkg)
         except ImportError as exc:
-            hint = _PIP_EXTRA.get(pkg, f"pip install {pkg}")
+            hint = pip_hint(pkg)
             raise ImportError(
                 f"Inference method '{entry.name}' requires {pkg!r}, "
                 f"which is not installed.  Install it with:\n    {hint}"

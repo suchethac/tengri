@@ -1,0 +1,8 @@
+{
+ "params": {
+  "sfh_dpl_log_total_mass": 8.444870947551594
+ },
+ "signature_sha256": "3a4d31e9ab588d2f3e18b6b2ed5d5d35ccea2bb6bb6d30844b63f4164f8006dd",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: approx=WavePrecomp() not enabled\n\u2022 Dust band response: DECLINED\n  Reason: approx=WavePrecomp() not enabled\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=None, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: False\n  ztable_enabled: False",
+ "tree": []
+}
