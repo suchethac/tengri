@@ -58,6 +58,7 @@ inside the likelihood, via ``to_bounded``.
 from __future__ import annotations
 
 import contextlib
+import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -833,6 +834,111 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
     )
 
 
+#: Registry entry that owns each chain driver's program and adaptation. Pathfinder is the
+#: NUTS family with the Pathfinder warmup, so it resolves to the ``mcmc_nuts`` entry.
+_CHAIN_ENTRY_OF_DRIVER: dict[str, str] = {
+    "nuts": "mcmc_nuts",
+    "nuts_pathfinder": "mcmc_nuts",
+    "hmc": "mcmc_hmc",
+    "dynamic_hmc": "mcmc_dynamic_hmc",
+    "ghmc": "mcmc_ghmc",
+}
+
+
+@functools.cache
+def flat_chain_drivers() -> frozenset[str]:
+    """Return the flat drivers that run one chain through ``chain_program.run_chain``.
+
+    A driver qualifies when its registry entry declares both a chain program and a
+    compile plan. Drivers without a chain entry (the VI and nested families) fall out.
+    """
+    from tengri.inference._backend_registry import all_backends
+
+    ready = {
+        entry.name
+        for entry in all_backends()
+        if entry.chain_program is not None and entry.compile_plan is not None
+    }
+    return frozenset(
+        driver
+        for driver, entry_name in _CHAIN_ENTRY_OF_DRIVER.items()
+        if entry_name in ready and driver in FLAT_SAMPLERS.values()
+    )
+
+
+def _flat_chain_statics(
+    driver: str,
+    *,
+    n_leapfrog,
+    max_num_doublings,
+    dense_mass_matrix,
+    target_accept_rate,
+    ghmc_alpha,
+    ghmc_delta,
+):
+    """Return the chain program, window adaptation and statics for one flat driver.
+
+    The statics come from the caller's kwargs as the flat seam always read them: a
+    user's ``n_leapfrog`` or GHMC ``alpha`` is the value that runs, not the registry's
+    compile-plan default, and ``dense_mass_matrix`` goes through as a plain flag with no
+    auto policy. The program and the adaptation come from the registry entry that owns
+    the driver, on its compile-path rule.
+    """
+    from tengri.inference._backend_registry import get_backend
+    from tengri.inference.backends.mcmc.chain_program import (
+        DYNAMIC_HMC,
+        DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+        GHMC,
+        HMC,
+        NUTS,
+        GHMCConfig,
+        HMCConfig,
+        NUTSConfig,
+    )
+
+    use_dense = bool(dense_mass_matrix)
+    if driver in ("nuts", "nuts_pathfinder"):
+        program = NUTS
+        cfg = NUTSConfig(
+            max_doublings=max_num_doublings,
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+    elif driver == "hmc":
+        program = HMC
+        cfg = HMCConfig(
+            n_leapfrog=n_leapfrog, use_dense=use_dense, target_accept_rate=target_accept_rate
+        )
+    elif driver == "dynamic_hmc":
+        program = DYNAMIC_HMC
+        cfg = HMCConfig(
+            n_leapfrog=DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+    elif driver == "ghmc":
+        program = GHMC
+        cfg = GHMCConfig(alpha=ghmc_alpha, delta=ghmc_delta, target_accept_rate=target_accept_rate)
+    else:
+        raise ValueError(
+            f"flat driver {driver!r} has no chain statics; the chain drivers are "
+            f"{sorted(flat_chain_drivers())}."
+        )
+    entry_name = _CHAIN_ENTRY_OF_DRIVER[driver]
+    entry = get_backend(entry_name)
+    kwargs = {
+        "dense_mass_matrix": use_dense,
+        "n_leapfrog_steps": n_leapfrog,
+        "pathfinder_warmstart": driver == "nuts_pathfinder",
+    }
+    adaptation = entry.adaptation_for(kwargs, path="compile")
+    if adaptation is None:
+        raise ValueError(
+            f"flat driver {driver!r}: registry entry {entry_name!r} has no compile adaptation rule"
+        )
+    return program, adaptation, cfg
+
+
 def run_flat_sampler(
     fitter,
     method,
@@ -1044,71 +1150,44 @@ def run_flat_sampler(
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
 
-    if driver in ("nuts", "nuts_pathfinder", "hmc", "dynamic_hmc", "ghmc"):
-        from tengri.inference.backends.mcmc._shared import (
-            _dynamic_hmc_full_scan,
-            _ghmc_full_scan,
-            _hmc_full_scan,
-            _nuts_full_scan,
-        )
+    if driver in flat_chain_drivers():
+        import numpy as np
 
+        from tengri.inference.backends.mcmc.chain_program import divergence_record, run_chain
+
+        program, adaptation, cfg = _flat_chain_statics(
+            driver,
+            n_leapfrog=n_leapfrog,
+            max_num_doublings=max_num_doublings,
+            dense_mass_matrix=dense_mass_matrix,
+            target_accept_rate=target_accept_rate,
+            ghmc_alpha=ghmc_alpha,
+            ghmc_delta=ghmc_delta,
+        )
         n_chain = n_burnin + n_samples
         wkey, ckey = jax.random.split(key_run)
         chain_keys = jax.random.split(ckey, n_chain)
-        if driver == "hmc":
-            positions, divergent, step_size, _imm = _hmc_full_scan(
-                prob.init_flat,
-                wkey,
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                n_leapfrog,
-                dense_mass_matrix,
-                target_accept_rate,
-            )
-        elif driver == "dynamic_hmc":
-            positions, divergent, step_size, _imm = _dynamic_hmc_full_scan(
-                prob.init_flat,
-                wkey,
-                jax.random.fold_in(wkey, 1),
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                dense_mass_matrix,
-                target_accept_rate,
-            )
-        elif driver == "ghmc":
-            positions, divergent, step_size, _imm = _ghmc_full_scan(
-                prob.init_flat,
-                wkey,
-                jax.random.fold_in(wkey, 1),
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                target_accept_rate,
-                ghmc_alpha,
-                ghmc_delta,
-            )
-        else:
-            positions, divergent, _expansions, step_size, _imm = _nuts_full_scan(
-                prob.init_flat,
-                wkey,
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                max_num_doublings,
-                dense_mass_matrix,
-                target_accept_rate,
-                driver == "nuts_pathfinder",
-            )
-        chain = positions[n_burnin:]
+        # Families that start from a fresh state read the init key; the others
+        # continue from the warmup state and take none.
+        init_key = None if program.starts_from_warmup else jax.random.fold_in(wkey, 1)
+        draws, (step_size, _inverse_scale) = run_chain(
+            program,
+            adaptation,
+            prob.init_flat,
+            wkey,
+            init_key,
+            chain_keys,
+            ld2,
+            data_args,
+            n_warmup,
+            cfg,
+        )
+        chain = draws.position[n_burnin:]
+        record = divergence_record(draws.divergent[n_burnin:])
         extra = {
             "step_size": float(step_size),
-            "divergent": int(jnp.sum(divergent[n_burnin:])),
+            "divergent": int(record["n_divergent"]),
+            "divergent_mask": np.asarray(record["divergent_mask"]),
             "n_warmup": n_warmup,
         }
 

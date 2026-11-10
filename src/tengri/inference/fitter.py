@@ -5115,7 +5115,7 @@ class Fitter:
         # reused, so it retained one warmup executable per call (~20 MB/call leak on
         # a long-lived Fitter). Data enters traced, so the adaptation still runs on
         # the current galaxy each call and the numbers are unchanged; this mirrors
-        # the single-galaxy path's module-level ``_hmc_full_scan`` jit.
+        # the single-galaxy path's module-level ``run_chain`` jit.
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
         if method == "mcmc_hmc":

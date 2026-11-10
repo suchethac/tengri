@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 #: from plain HMC window adaptation at this fixed trajectory length; the
 #: dynamic kernel then draws its own per-step length while sampling. It is the
 #: one ``DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`` constant that the fused
-#: ``run_chain(DYNAMIC_HMC, ...)`` path (behind ``_dynamic_hmc_full_scan``, which
+#: ``run_chain(DYNAMIC_HMC, ...)`` path (behind ``run_chain``, which
 #: the prewarm, hierarchical and catalog paths call) also adapts with, so a
 #: cached adaptation and the fused path tune at the same trajectory length.
 _DHMC_WARMUP_LEAPFROG_STEPS = DYNAMIC_HMC_TUNING_LEAPFROG_STEPS
