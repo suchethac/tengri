@@ -1638,8 +1638,13 @@ def build_jit_engine(fitter, pos_dict):
     # take from scalar parameters. The hierarchical paths build their own
     # population-aware jft.Model (hierarchical.py), and the nifty VI backend
     # builds one when the engine carries none.
+    # ``_supports_jit_threading`` lives on ForwardModel; a plain SEDModel has no
+    # galaxy axis, so threading has always been valid there (the same reading
+    # Fitter._build_data_args makes).
+    _supports = getattr(fitter.model, "_supports_jit_threading", None)
+    _single_galaxy = _supports() if callable(_supports) else True
     _nifty_model = None
-    if _has_nifty and fitter.model._supports_jit_threading():
+    if _has_nifty and _single_galaxy:
         import nifty8.re as jft
 
         _, _sr_jit = get_or_build_signal_response(fitter)
