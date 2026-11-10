@@ -86,6 +86,22 @@ class HMCConfig:
     target_accept_rate: float
 
 
+@dataclass(frozen=True)
+class FirstOrderConfig:
+    """Static statics of the first-order family (Barker and MALA).
+
+    Parameters
+    ----------
+    proposal : str
+        ``"barker"`` or ``"mala"``.
+    target_accept_rate : float
+        Target acceptance rate of the dual-averaging step-size adaptation.
+    """
+
+    proposal: str
+    target_accept_rate: float
+
+
 class Draw(NamedTuple):
     """Per-draw outputs of a sampling scan.
 
@@ -113,10 +129,10 @@ class ChainProgram:
     name : str
         Family name.
     kernel : callable
-        Zero-argument getter returning the cached BlackJAX kernel.
+        ``kernel(cfg)`` returning the BlackJAX kernel for the statics; cached per family.
     init : callable
-        ``init(position, log_density, key)`` returning the initial sampler state; families
-        that take no key ignore it.
+        ``init(position, log_density, key, cfg)`` returning the initial sampler state;
+        families that take no key or no statics ignore them.
     step : callable
         ``step(kernel, state, key, log_density, params, cfg)`` returning ``(state, info)``.
     collect : callable
@@ -245,7 +261,7 @@ def _pathfinder_nuts(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
     return state, parameters, info
 
 
-def _nuts_init(position, ld, key=None):
+def _nuts_init(position, ld, key=None, cfg=None):
     """Return the NUTS state at ``position``; the key is unused."""
     import blackjax
 
@@ -274,7 +290,7 @@ def _nuts_collect(state, info) -> Draw:
 #: NUTS sampler. The kernel is the cached BlackJAX NUTS kernel, so it is identity-stable.
 NUTS = ChainProgram(
     name="nuts",
-    kernel=_shared._get_nuts_kernel,
+    kernel=lambda cfg: _shared._get_nuts_kernel(),
     init=_nuts_init,
     step=_nuts_step,
     collect=_nuts_collect,
@@ -293,7 +309,7 @@ def nuts_adaptation(pathfinder: bool) -> Adaptation:
     return PATHFINDER_NUTS if pathfinder else WINDOW_NUTS
 
 
-def _hmc_init(position, ld, key=None):
+def _hmc_init(position, ld, key=None, cfg=None):
     """Return the HMC state at ``position``; the key is unused."""
     import blackjax
 
@@ -314,7 +330,7 @@ def _hmc_collect(state, info) -> Draw:
 #: HMC sampler with a fixed trajectory length. The kernel is the cached BlackJAX HMC kernel.
 HMC = ChainProgram(
     name="hmc",
-    kernel=_shared._get_hmc_kernel,
+    kernel=lambda cfg: _shared._get_hmc_kernel(),
     init=_hmc_init,
     step=_hmc_step,
     collect=_hmc_collect,
@@ -358,7 +374,7 @@ def WINDOW_HMC(n_leapfrog: int, diag: bool) -> Adaptation:
     return Adaptation(name=name, run=functools.partial(_window_hmc_run, n_leapfrog, diag))
 
 
-def _dynamic_hmc_init(position, ld, key):
+def _dynamic_hmc_init(position, ld, key, cfg=None):
     """Return the dynamic HMC state at ``position``, seeded from ``key``."""
     import blackjax
 
@@ -385,7 +401,7 @@ DYNAMIC_HMC_TUNING_LEAPFROG_STEPS = 10
 #: state at ``init_flat`` built with the caller's init key, not from the warmup state.
 DYNAMIC_HMC = ChainProgram(
     name="dynamic_hmc",
-    kernel=_shared._get_dynamic_hmc_kernel,
+    kernel=lambda cfg: _shared._get_dynamic_hmc_kernel(),
     init=_dynamic_hmc_init,
     step=_dynamic_hmc_step,
     collect=_dynamic_hmc_collect,
@@ -436,7 +452,7 @@ class GHMCConfig:
             raise ValueError("GHMC refuses use_dense=True: its momentum generator is diagonal")
 
 
-def _ghmc_init(position, ld, key):
+def _ghmc_init(position, ld, key, cfg=None):
     """Return the GHMC state at ``position``, with momentum drawn from ``key``."""
     import blackjax
 
@@ -460,7 +476,7 @@ def _ghmc_collect(state, info) -> Draw:
 #: Generalized HMC sampler. The kernel is the cached BlackJAX GHMC kernel.
 GHMC = ChainProgram(
     name="ghmc",
-    kernel=_shared._get_ghmc_kernel,
+    kernel=lambda cfg: _shared._get_ghmc_kernel(),
     init=_ghmc_init,
     step=_ghmc_step,
     collect=_ghmc_collect,
@@ -515,6 +531,67 @@ def _meads_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
 MEADS = Adaptation(name="meads", run=_meads_run, ensemble=True)
 
 
+def _first_order_init_state(position, ld, key, cfg):
+    """Return the Barker or MALA state at ``position``; the key is unused."""
+    return _shared._first_order_init(cfg.proposal, position, ld)
+
+
+def _first_order_step(kernel, state, key, ld, params, cfg):
+    """Advance a first-order sampler one step with the tuned step size; the mass is unused."""
+    step_size, _ = params
+    return kernel(key, state, ld, step_size)
+
+
+def _first_order_collect(state, info) -> Draw:
+    """Collect the position and Metropolis acceptance probability of a first-order step."""
+    return Draw(position=state.position, divergent=None, extras={"accept": info.acceptance_rate})
+
+
+#: Barker or MALA sampler, selected by ``cfg.proposal``. Metropolis-corrected, so a rejected
+#: step is counted as acceptance rather than divergence: ``divergent`` is None.
+FIRST_ORDER = ChainProgram(
+    name="first_order",
+    kernel=lambda cfg: _shared._get_first_order_kernel(cfg.proposal),
+    init=_first_order_init_state,
+    step=_first_order_step,
+    collect=_first_order_collect,
+    starts_from_warmup=True,
+)
+
+
+def _dual_averaging_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
+    """Run dual averaging on the step size from ``init_flat``; return the warmed state.
+
+    The warmup key is split into ``n_warmup`` step keys here, so the runner never splits
+    keys itself. The mass is the identity, which is why ``inverse_mass_matrix`` is None.
+    """
+    from blackjax.adaptation.step_size import dual_averaging_adaptation
+
+    kernel = _shared._get_first_order_kernel(cfg.proposal)
+    da_init, da_update, da_final = dual_averaging_adaptation(cfg.target_accept_rate)
+    state = _first_order_init_state(init_flat, ld, None, cfg)
+    warmup_keys = jax.random.split(warmup_key, n_warmup)
+
+    def _warmup_step(carry, k):
+        """Advance one kernel step and feed its acceptance to dual averaging."""
+        s, da = carry
+        step_size = jnp.exp(da.log_step_size)
+        s, info = kernel(k, s, ld, step_size)
+        da = da_update(da, info.acceptance_rate)
+        return (s, da), info.acceptance_rate
+
+    (state, da_state), _ = jax.lax.scan(
+        _warmup_step, (state, da_init(_shared.FIRST_ORDER_INITIAL_STEP_SIZE)), warmup_keys
+    )
+    parameters = {"step_size": da_final(da_state), "inverse_mass_matrix": None}
+    return state, parameters, None
+
+
+#: Dual-averaging step-size adaptation for the first-order family. Adapts the step size
+#: only, with the identity mass matrix, and reports no adaptation info.
+DUAL_AVERAGING = Adaptation(name="dual_averaging", run=_dual_averaging_run)
+
+
 def _adapt_body(
     program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, keep_info
 ):
@@ -531,7 +608,7 @@ def _adapt_body(
 
 def _sample_body(program, state, chain_keys, ld, params, cfg):
     """Scan the sampler over ``chain_keys`` from ``state`` and return the stacked draws."""
-    kernel = program.kernel()
+    kernel = program.kernel(cfg)
 
     def _step(s, k):
         s, info = program.step(kernel, s, k, ld, params, cfg)
@@ -578,6 +655,8 @@ def adapt_chain(
     _, params, info = _adapt_body(
         program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, True
     )
+    if info is None:
+        return params, None, None
     warmup_divergent = jnp.asarray(info.info.is_divergent)
     warmup_n_grad = jnp.sum(jnp.asarray(info.info.num_integration_steps))
     return params, warmup_divergent, warmup_n_grad
@@ -678,5 +757,5 @@ def run_chain(
         )
         return draws, params
     if not program.starts_from_warmup:
-        state = program.init(init_flat, ld, init_key)
+        state = program.init(init_flat, ld, init_key, cfg)
     return _sample_body(program, state, chain_keys, ld, params, cfg), params
