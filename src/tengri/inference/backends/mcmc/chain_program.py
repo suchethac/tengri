@@ -115,7 +115,8 @@ class ChainProgram:
     kernel : callable
         Zero-argument getter returning the cached BlackJAX kernel.
     init : callable
-        ``init(position, log_density)`` returning the initial sampler state.
+        ``init(position, log_density, key)`` returning the initial sampler state; families
+        that take no key ignore it.
     step : callable
         ``step(kernel, state, key, log_density, params, cfg)`` returning ``(state, info)``.
     collect : callable
@@ -239,8 +240,8 @@ def _pathfinder_nuts(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
     return state, parameters, info
 
 
-def _nuts_init(position, ld):
-    """Return the NUTS state at ``position``."""
+def _nuts_init(position, ld, key=None):
+    """Return the NUTS state at ``position``; the key is unused."""
     import blackjax
 
     return blackjax.mcmc.nuts.init(position, ld)
@@ -287,8 +288,8 @@ def nuts_adaptation(pathfinder: bool) -> Adaptation:
     return PATHFINDER_NUTS if pathfinder else WINDOW_NUTS
 
 
-def _hmc_init(position, ld):
-    """Return the HMC state at ``position``."""
+def _hmc_init(position, ld, key=None):
+    """Return the HMC state at ``position``; the key is unused."""
     import blackjax
 
     return blackjax.mcmc.hmc.init(position, ld)
@@ -350,6 +351,41 @@ def WINDOW_HMC(n_leapfrog: int, diag: bool) -> Adaptation:
     """
     name = f"window_hmc_{n_leapfrog}_{'diag' if diag else 'dense'}"
     return Adaptation(name=name, run=functools.partial(_window_hmc_run, n_leapfrog, diag))
+
+
+def _dynamic_hmc_init(position, ld, key):
+    """Return the dynamic HMC state at ``position``, seeded from ``key``."""
+    import blackjax
+
+    return blackjax.mcmc.dynamic_hmc.init(position, ld, key)
+
+
+def _dynamic_hmc_step(kernel, state, key, ld, params, cfg):
+    """Advance dynamic HMC one step; the trajectory length is drawn per step, ``cfg`` unused."""
+    step_size, inv_mass_matrix = params
+    return kernel(key, state, ld, step_size, inv_mass_matrix)
+
+
+def _dynamic_hmc_collect(state, info) -> Draw:
+    """Collect the position and divergence flag of a dynamic HMC step."""
+    return Draw(position=state.position, divergent=info.is_divergent, extras={})
+
+
+#: Integration steps used to tune dynamic HMC, not to sample with. ``dynamic_hmc.init``
+#: needs a random generator that window adaptation cannot supply, so the step size and
+#: mass matrix come from plain HMC window adaptation at this fixed trajectory length.
+DYNAMIC_HMC_TUNING_LEAPFROG_STEPS = 10
+
+#: Dynamic HMC sampler: the trajectory length is drawn each step. Starts from a fresh
+#: state at ``init_flat`` built with the caller's init key, not from the warmup state.
+DYNAMIC_HMC = ChainProgram(
+    name="dynamic_hmc",
+    kernel=_shared._get_dynamic_hmc_kernel,
+    init=_dynamic_hmc_init,
+    step=_dynamic_hmc_step,
+    collect=_dynamic_hmc_collect,
+    starts_from_warmup=False,
+)
 
 
 def _adapt_body(
@@ -448,9 +484,18 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
     return _sample_body(program, state, chain_keys, ld, params, cfg)
 
 
-@functools.partial(jax.jit, static_argnums=(0, 1, 5, 7, 8))
+@functools.partial(jax.jit, static_argnums=(0, 1, 6, 8, 9))
 def run_chain(
-    program, adaptation, init_flat, warmup_key, chain_keys, ld2, data_args, n_warmup, cfg
+    program,
+    adaptation,
+    init_flat,
+    warmup_key,
+    init_key,
+    chain_keys,
+    ld2,
+    data_args,
+    n_warmup,
+    cfg,
 ) -> tuple[Draw, tuple]:
     """Adapt, then sample, in one program; return ``(draws, params)``.
 
@@ -464,6 +509,9 @@ def run_chain(
         Start position in unbounded latent space.
     warmup_key : PRNGKey
         Key of the adaptation.
+    init_key : PRNGKey or None
+        Key of the sampler state, read only by families that start from a fresh state
+        (``starts_from_warmup=False``); None otherwise.
     chain_keys : ndarray, shape (n_iter, 2)
         One key per sampling step, used as given.
     ld2 : callable (static)
@@ -487,5 +535,5 @@ def run_chain(
         program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, False
     )
     if not program.starts_from_warmup:
-        state = program.init(init_flat, ld)
+        state = program.init(init_flat, ld, init_key)
     return _sample_body(program, state, chain_keys, ld, params, cfg), params

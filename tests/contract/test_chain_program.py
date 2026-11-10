@@ -22,6 +22,7 @@ import pytest
 
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
+    DYNAMIC_HMC,
     HMC,
     NUTS,
     PATHFINDER_NUTS,
@@ -176,7 +177,9 @@ def test_run_chain_matches_raw_warmup_then_sampling(setup):
     handoff inside ``run_chain`` shows up as a failed equality.
     """
     init, wkey, keys, scales = setup
-    draws, params = run_chain(NUTS, WINDOW_NUTS, init, wkey, keys, _target, scales, N_WARMUP, CFG)
+    draws, params = run_chain(
+        NUTS, WINDOW_NUTS, init, wkey, None, keys, _target, scales, N_WARMUP, CFG
+    )
     state, step_size, inv_mass, _, _ = _raw_warmup(init, wkey, scales, N_WARMUP, pathfinder=False)
     expected = _raw_sampling_scan(state, keys, scales, step_size, inv_mass)
     actual = (
@@ -227,11 +230,11 @@ def test_sample_and_run_lower_to_the_same_control_flow(setup):
 def test_run_chain_does_not_recompile_for_new_keys(setup):
     """Repeated calls with the same statics and new keys reuse one compiled entry."""
     init, wkey, keys, scales = setup
-    run_chain(NUTS, WINDOW_NUTS, init, wkey, keys, _target, scales, N_WARMUP, CFG)
+    run_chain(NUTS, WINDOW_NUTS, init, wkey, None, keys, _target, scales, N_WARMUP, CFG)
     size_after_first = run_chain._cache_size()
     for seed in (2, 3):
         new_keys = jax.random.split(jax.random.PRNGKey(seed), N_ITER)
-        run_chain(NUTS, WINDOW_NUTS, init, wkey, new_keys, _target, scales, N_WARMUP, CFG)
+        run_chain(NUTS, WINDOW_NUTS, init, wkey, None, new_keys, _target, scales, N_WARMUP, CFG)
     assert run_chain._cache_size() == size_after_first
 
 
@@ -319,7 +322,16 @@ def test_hmc_run_chain_matches_raw_warmup_then_sampling(setup):
     expected = _raw_hmc_sampling_scan(state, keys, scales, step_size, inv_mass)
 
     draws, (got_step, got_mass) = run_chain(
-        HMC, WINDOW_HMC(HMC_LEAPFROG, True), init, wkey, keys, _target, scales, N_WARMUP, HMC_CFG
+        HMC,
+        WINDOW_HMC(HMC_LEAPFROG, True),
+        init,
+        wkey,
+        None,
+        keys,
+        _target,
+        scales,
+        N_WARMUP,
+        HMC_CFG,
     )
     assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
     assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
@@ -337,4 +349,82 @@ def test_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
         entry.adaptation_for({"dense_mass_matrix": None})
     dense = entry.adaptation_for({"dense_mass_matrix": True, "n_leapfrog_steps": 7})
     diagonal = entry.adaptation_for({"dense_mass_matrix": False, "n_leapfrog_steps": 7})
+    assert dense.name != diagonal.name
+
+
+def _raw_dynamic_hmc_scan(state, chain_keys, scales, step_size, inv_mass):
+    """Raw BlackJAX dynamic HMC scan with fixed tuning: the oracle for ``sample_chain``."""
+    kernel = blackjax.mcmc.dynamic_hmc.build_kernel()
+
+    def log_density(position):
+        return _target(position, scales)
+
+    def _step(s, k):
+        s, info = kernel(k, s, log_density, step_size, inv_mass)
+        return s, (s.position, info.is_divergent)
+
+    _, outputs = jax.lax.scan(_step, state, chain_keys)
+    return outputs
+
+
+def _raw_dynamic_hmc_state(init, init_key, scales):
+    """Raw BlackJAX dynamic HMC state at ``init``, built from ``init_key``."""
+
+    def log_density(position):
+        return _target(position, scales)
+
+    return blackjax.mcmc.dynamic_hmc.init(init, log_density, init_key)
+
+
+def test_dynamic_hmc_sample_chain_matches_raw_scan(setup):
+    """Sampling dynamic HMC from a fresh state equals the raw BlackJAX scan, output for output."""
+    init, _, keys, scales = setup
+    step_size = jnp.asarray(0.5)
+    inv_mass = scales**2
+    state = _raw_dynamic_hmc_state(init, jax.random.PRNGKey(7), scales)
+
+    expected = _raw_dynamic_hmc_scan(state, keys, scales, step_size, inv_mass)
+    got = sample_chain(DYNAMIC_HMC, state, keys, _target, scales, (step_size, inv_mass), None)
+    actual = (got.position, got.divergent)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_dynamic_hmc_run_chain_matches_raw_warmup_then_sampling(setup):
+    """Fused dynamic HMC equals HMC warmup, then a raw dynamic state built from the init key."""
+    init, wkey, keys, scales = setup
+    init_key = jax.random.PRNGKey(7)
+    _, step_size, inv_mass, _ = _raw_hmc_warmup(init, wkey, scales, N_WARMUP)
+    state = _raw_dynamic_hmc_state(init, init_key, scales)
+    expected = _raw_dynamic_hmc_scan(state, keys, scales, step_size, inv_mass)
+
+    draws, (got_step, got_mass) = run_chain(
+        DYNAMIC_HMC,
+        WINDOW_HMC(HMC_LEAPFROG, True),
+        init,
+        wkey,
+        init_key,
+        keys,
+        _target,
+        scales,
+        N_WARMUP,
+        HMC_CFG,
+    )
+    assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
+    assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
+    actual = (draws.position, draws.divergent)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_dynamic_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
+    """The registered dynamic HMC rule takes a decided mass policy, never the auto ``None``."""
+    from tengri.inference._backend_registry import get_backend
+
+    entry = get_backend("mcmc_dynamic_hmc")
+    assert entry.chain_program is DYNAMIC_HMC
+    with pytest.raises(ValueError, match="resolve_dense_mass_gate"):
+        entry.adaptation_for({"dense_mass_matrix": None})
+    dense = entry.adaptation_for({"dense_mass_matrix": True})
+    diagonal = entry.adaptation_for({"dense_mass_matrix": False})
     assert dense.name != diagonal.name
