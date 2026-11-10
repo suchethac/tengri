@@ -5,7 +5,7 @@
 with one adaptation and one sampling body. Each entry point here is compared with
 a raw BlackJAX oracle on the same keys and the same statics, so a change in key
 handling, scan carry or collected outputs shows up as a failed equality rather
-than as a shifted posterior. The fused ``_nuts_full_scan`` shim is compared with
+than as a shifted posterior. The fused ``run_chain`` call is compared with
 ``run_chain`` directly. The compiled-program checks pin the shape of the lowered
 control flow and the number of compiled entries.
 
@@ -26,6 +26,7 @@ from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
     DUAL_AVERAGING,
     DYNAMIC_HMC,
+    DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
     FIRST_ORDER,
     GHMC,
     HMC,
@@ -44,6 +45,7 @@ from tengri.inference.backends.mcmc.chain_program import (
     run_chain,
     sample_chain,
 )
+from tests.contract.test_data_term import _galaxies, _population_model_factory
 from tests.contract.test_inference_cache_keys import fitter_photometry
 
 pytestmark = pytest.mark.contract
@@ -857,3 +859,79 @@ def test_compile_refuses_a_registered_method_without_a_program_by_name():
             n_warmup=1,
             n_chain=1,
         )
+
+
+# The flat seam's defaults (run_flat_sampler) for the four MCMC drivers that run one chain.
+_FLAT_SEAM_CASES = [
+    pytest.param("mcmc_nuts", NUTS, WINDOW_NUTS, NUTSConfig(5, False, 0.8), False, id="nuts"),
+    pytest.param(
+        "mcmc_hmc", HMC, WINDOW_HMC(10, True), HMCConfig(10, False, 0.8), False, id="hmc"
+    ),
+    pytest.param(
+        "mcmc_dynamic_hmc",
+        DYNAMIC_HMC,
+        WINDOW_HMC(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, True),
+        HMCConfig(DYNAMIC_HMC_TUNING_LEAPFROG_STEPS, False, 0.8),
+        True,
+        id="dynamic_hmc",
+    ),
+    pytest.param(
+        "mcmc_ghmc",
+        GHMC,
+        WINDOW_GHMC,
+        GHMCConfig(alpha=0.8, delta=0.65, target_accept_rate=0.8),
+        True,
+        id="ghmc",
+    ),
+]
+
+
+@pytest.mark.parametrize("method, program, adaptation, cfg, fresh_init", _FLAT_SEAM_CASES)
+def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
+    method, program, adaptation, cfg, fresh_init
+):
+    """The hierarchical flat seam feeds run_chain the keys and statics it always did.
+
+    Two galaxies on the stochastic population fixture; the seam's shared-parameter draws
+    must equal a direct ``run_chain`` call with the same warmup, init and chain keys and
+    the same statics. Only the key and config plumbing is under test here.
+    """
+    from tengri.inference._hierarchical_flat import build_flat_problem, run_flat_sampler
+    from tengri.inference.hierarchical import PopulationFitter
+
+    key = jax.random.PRNGKey(0)
+    n_warmup, n_burnin, n_samples = 20, 5, 10
+    fitter = PopulationFitter(_population_model_factory(), _galaxies(), _via_routing=True)
+    seam = run_flat_sampler(
+        fitter,
+        method,
+        key=key,
+        n_warmup=n_warmup,
+        n_burnin=n_burnin,
+        n_samples=n_samples,
+        allow_unvalidated=True,
+        verbose=False,
+    )
+    prob = build_flat_problem(fitter, key=key, memory_mode="low", verbose=False)
+    wkey, ckey = jax.random.split(jax.random.fold_in(key, 1))
+    chain_keys = jax.random.split(ckey, n_burnin + n_samples)
+    init_key = jax.random.fold_in(wkey, 1) if fresh_init else None
+    draws, _ = run_chain(
+        program,
+        adaptation,
+        prob.init_flat,
+        wkey,
+        init_key,
+        chain_keys,
+        prob.log_prob_with_data,
+        prob.data_args,
+        n_warmup,
+        cfg,
+    )
+    shared = np.asarray(jax.vmap(prob.extract_shared)(draws.position[n_burnin:]))
+    assert np.array_equal(seam.shared_samples["psd_sigma"], shared[:, 0])
+    assert np.array_equal(seam.shared_samples["psd_tau_myr"], shared[:, 1])
+    assert seam.diagnostics["divergent"] == int(np.sum(np.asarray(draws.divergent)[n_burnin:]))
+    assert np.array_equal(
+        seam.diagnostics["divergent_mask"], np.asarray(draws.divergent)[n_burnin:]
+    )

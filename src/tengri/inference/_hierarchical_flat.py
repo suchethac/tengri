@@ -833,6 +833,77 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
     )
 
 
+#: Flat-seam drivers that run one chain through ``chain_program.run_chain``.
+FLAT_CHAIN_PROGRAMS: tuple[str, ...] = ("nuts", "nuts_pathfinder", "hmc", "dynamic_hmc", "ghmc")
+
+
+def _flat_chain_statics(
+    driver,
+    method,
+    n_dim,
+    spec,
+    *,
+    verbose,
+    n_leapfrog,
+    max_num_doublings,
+    dense_mass_matrix,
+    target_accept_rate,
+    ghmc_alpha,
+    ghmc_delta,
+):
+    """Return the chain program, window adaptation and statics for one flat driver.
+
+    The statics come from the caller's kwargs, as the flat seam always read them; the
+    adaptation comes from the registry's compile-path rule for the same family.
+    """
+    from tengri.inference._backend_registry import get_backend
+    from tengri.inference.backends.mcmc.chain_program import (
+        DYNAMIC_HMC,
+        DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+        GHMC,
+        HMC,
+        NUTS,
+        GHMCConfig,
+        HMCConfig,
+        NUTSConfig,
+    )
+    from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
+
+    use_dense = resolve_dense_mass_gate(
+        dense_mass_matrix, n_dim, method=method, verbose=verbose, spec=spec
+    )
+    if driver in ("nuts", "nuts_pathfinder"):
+        program = NUTS
+        cfg = NUTSConfig(
+            max_doublings=max_num_doublings,
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+    elif driver == "hmc":
+        program = HMC
+        cfg = HMCConfig(
+            n_leapfrog=n_leapfrog, use_dense=use_dense, target_accept_rate=target_accept_rate
+        )
+    elif driver == "dynamic_hmc":
+        program = DYNAMIC_HMC
+        cfg = HMCConfig(
+            n_leapfrog=DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+    else:
+        program = GHMC
+        cfg = GHMCConfig(alpha=ghmc_alpha, delta=ghmc_delta, target_accept_rate=target_accept_rate)
+    # The pathfinder driver is the registry's "pathfinder" name, whose NUTS family is "mcmc_nuts".
+    entry = get_backend("mcmc_nuts" if driver == "nuts_pathfinder" else method)
+    kwargs = {
+        "dense_mass_matrix": use_dense,
+        "n_leapfrog_steps": n_leapfrog,
+        "pathfinder_warmstart": driver == "nuts_pathfinder",
+    }
+    return program, entry.adaptation_for(kwargs, path="compile"), cfg
+
+
 def run_flat_sampler(
     fitter,
     method,
@@ -1044,71 +1115,48 @@ def run_flat_sampler(
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
 
-    if driver in ("nuts", "nuts_pathfinder", "hmc", "dynamic_hmc", "ghmc"):
-        from tengri.inference.backends.mcmc._shared import (
-            _dynamic_hmc_full_scan,
-            _ghmc_full_scan,
-            _hmc_full_scan,
-            _nuts_full_scan,
-        )
+    if driver in FLAT_CHAIN_PROGRAMS:
+        import numpy as np
 
+        from tengri.inference.backends.mcmc.chain_program import divergence_record, run_chain
+
+        program, adaptation, cfg = _flat_chain_statics(
+            driver,
+            method,
+            prob.n_dim,
+            fitter._spec,
+            verbose=verbose,
+            n_leapfrog=n_leapfrog,
+            max_num_doublings=max_num_doublings,
+            dense_mass_matrix=dense_mass_matrix,
+            target_accept_rate=target_accept_rate,
+            ghmc_alpha=ghmc_alpha,
+            ghmc_delta=ghmc_delta,
+        )
         n_chain = n_burnin + n_samples
         wkey, ckey = jax.random.split(key_run)
         chain_keys = jax.random.split(ckey, n_chain)
-        if driver == "hmc":
-            positions, divergent, step_size, _imm = _hmc_full_scan(
-                prob.init_flat,
-                wkey,
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                n_leapfrog,
-                dense_mass_matrix,
-                target_accept_rate,
-            )
-        elif driver == "dynamic_hmc":
-            positions, divergent, step_size, _imm = _dynamic_hmc_full_scan(
-                prob.init_flat,
-                wkey,
-                jax.random.fold_in(wkey, 1),
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                dense_mass_matrix,
-                target_accept_rate,
-            )
-        elif driver == "ghmc":
-            positions, divergent, step_size, _imm = _ghmc_full_scan(
-                prob.init_flat,
-                wkey,
-                jax.random.fold_in(wkey, 1),
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                target_accept_rate,
-                ghmc_alpha,
-                ghmc_delta,
-            )
-        else:
-            positions, divergent, _expansions, step_size, _imm = _nuts_full_scan(
-                prob.init_flat,
-                wkey,
-                chain_keys,
-                ld2,
-                data_args,
-                n_warmup,
-                max_num_doublings,
-                dense_mass_matrix,
-                target_accept_rate,
-                driver == "nuts_pathfinder",
-            )
-        chain = positions[n_burnin:]
+        # Families that start from a fresh state read the init key; the others
+        # continue from the warmup state and take none.
+        init_key = None if program.starts_from_warmup else jax.random.fold_in(wkey, 1)
+        draws, (step_size, _inverse_scale) = run_chain(
+            program,
+            adaptation,
+            prob.init_flat,
+            wkey,
+            init_key,
+            chain_keys,
+            ld2,
+            data_args,
+            n_warmup,
+            cfg,
+        )
+        chain = draws.position[n_burnin:]
+        record = divergence_record(draws.divergent[n_burnin:])
         extra = {
             "step_size": float(step_size),
-            "divergent": int(jnp.sum(divergent[n_burnin:])),
+            "divergent": int(record["n_divergent"]),
+            "divergent_mask": np.asarray(record["divergent_mask"]),
             "n_warmup": n_warmup,
         }
 
