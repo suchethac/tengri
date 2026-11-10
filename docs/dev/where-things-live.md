@@ -85,6 +85,7 @@ Each component owns its own `_params.py` (see the list above and the
 | Instrument LSF (Gaussian) and the DESI/PFS banded resolution matrix | `observation/spectrum.py` (`apply_lsf`), `observation/banded.py` (`banded_matvec`, `resolution_bands_from_desi`, `block_diagonal_bands`) |
 | Loading a DESI coadd (per-camera b/r/z grids + their resolution matrices) | `io/desi.py` (`read_desi`, `read_desi_cameras`, `desi_spectroscopy`) |
 | The `Fitter` class and JIT-cached engines | `inference/fitter.py`, `inference/jit_engine.py` |
+| The one data term (positive log-likelihood of one structure, shared by `Fitter` and the hierarchical flat seam) | `inference/data_term.py` (`build_data_term`, `build_data_args`) |
 | MCMC / VI / Pathfinder backends | `inference/backends/` |
 | Likelihood implementations | `inference/likelihoods/` |
 | Batched spectroscopic likelihood and MAP across a catalog (one compile per bucket) | `inference/batched_spectro.py`, `observation/batched.py`; see [`batched-spectroscopy.md`](batched-spectroscopy.md) |

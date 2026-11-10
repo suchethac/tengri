@@ -291,18 +291,19 @@ class TestTheTreeDepthCapReachesWarmup:
             f"max_doublings={cap_arg} != {sentinel_cap}; cap dropped or default used"
         )
 
-    def test_the_warmup_only_entry_point_takes_the_cap(self):
-        from tengri.inference.backends.mcmc._shared import (
-            DEFAULT_MAX_NUM_DOUBLINGS,
-            _nuts_warmup_only,
-        )
+    def test_the_warmup_config_carries_the_cap(self):
+        import dataclasses
 
-        sig = inspect.signature(_nuts_warmup_only.__wrapped__)
-        assert "max_doublings" in sig.parameters
+        from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
+        from tengri.inference.backends.mcmc.chain_program import NUTSConfig
+
         # Defaulting to BlackJAX's own 10 is what makes this change a no-op for
         # a caller who never asked for a cap.
-        assert sig.parameters["max_doublings"].default == DEFAULT_MAX_NUM_DOUBLINGS
-        assert DEFAULT_MAX_NUM_DOUBLINGS == 10
+        assert "max_doublings" in {field.name for field in dataclasses.fields(NUTSConfig)}
+        cfg = NUTSConfig(
+            max_doublings=DEFAULT_MAX_NUM_DOUBLINGS, use_dense=False, target_accept_rate=0.85
+        )
+        assert cfg.max_doublings == 10
 
     def test_the_cap_is_in_the_adaptation_cache_key(self):
         """A step size adapted under one cap is not the one another would find.
