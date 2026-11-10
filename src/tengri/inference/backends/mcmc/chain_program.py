@@ -662,6 +662,10 @@ def run_chain(
     params : tuple
         ``(step_size, inverse_mass_matrix)`` tuned by the adaptation.
     """
+    if adaptation.ensemble and program is not GHMC:
+        raise ValueError(
+            f"the {adaptation.name} ensemble adaptation runs only with GHMC, not {program.name}"
+        )
     ld = bind_logdensity(ld2, data_args, wall=program.wall)
     state, params, _ = _adapt_body(
         program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, cfg, False

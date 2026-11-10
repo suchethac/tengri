@@ -437,9 +437,13 @@ def test_dynamic_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
 GHMC_ALPHA = 0.8
 GHMC_DELTA = 0.65
 GHMC_CFG = GHMCConfig(alpha=GHMC_ALPHA, delta=GHMC_DELTA, target_accept_rate=0.85)
-MEADS_CFG = GHMCConfig(alpha=None, delta=None, n_ensemble=8, n_folds=4, jitter_scale=0.5)
-MEADS_WARMUP = 30
+MEADS_CFG = GHMCConfig(alpha=None, delta=None, n_ensemble=16, n_folds=4, jitter_scale=0.5)
+MEADS_WARMUP = 100
 MEADS_CHAINS = 2
+MEADS_ITER = 100
+#: Mildly anisotropic target: at the setup fixture's 10^i scales MEADS' step collapses to
+#: ~0.009, every proposal diverges and no chain moves, so it cannot test the sampler.
+MEADS_SCALES = jnp.asarray([1.0, 1.5, 2.0, 2.5])
 
 
 def _raw_ghmc_sampling_scan(state, chain_keys, scales, step_size, inv_mass):
@@ -555,9 +559,15 @@ def _raw_meads_chains(init, warmup_key, scales, chain_keys):
 
 
 def test_ghmc_run_chain_meads_matches_raw_ensemble_program(setup):
-    """Fused GHMC under MEADS equals the raw ensemble program, output for output."""
-    init, wkey, keys, scales = setup
-    chain_keys = keys[: MEADS_CHAINS * 10].reshape(MEADS_CHAINS, 10, 2)
+    """Fused GHMC under MEADS equals the raw ensemble program, output for output.
+
+    The regime must move: most proposals accepted and every chain away from its start,
+    so a kernel that swaps alpha and delta changes the draws and fails this test.
+    """
+    init, wkey, _, _ = setup
+    scales = MEADS_SCALES
+    chain_keys = jax.random.split(jax.random.PRNGKey(1), MEADS_CHAINS * MEADS_ITER)
+    chain_keys = chain_keys.reshape(MEADS_CHAINS, MEADS_ITER, 2)
     positions, divergent, parameters = _raw_meads_chains(init, wkey, scales, chain_keys)
 
     draws, tuned = run_chain(
@@ -572,6 +582,8 @@ def test_ghmc_run_chain_meads_matches_raw_ensemble_program(setup):
         MEADS_WARMUP,
         MEADS_CFG,
     )
+    assert float(np.asarray(draws.divergent).mean()) < 0.5
+    assert float(np.asarray(draws.position).std(axis=1).min()) > 1e-3
     assert np.array_equal(np.asarray(draws.position), np.asarray(positions))
     assert np.array_equal(np.asarray(draws.divergent), np.asarray(divergent))
     assert np.array_equal(np.asarray(tuned[0]), np.asarray(parameters["step_size"]))
@@ -606,3 +618,11 @@ def test_ghmc_adaptation_rule_is_meads_for_every_mass_policy():
     assert entry.chain_program is GHMC
     assert entry.adaptation_for({"dense_mass_matrix": None}) is MEADS
     assert entry.adaptation_for({"dense_mass_matrix": True}) is MEADS
+
+
+def test_run_chain_refuses_the_meads_ensemble_for_a_non_ghmc_program(setup):
+    """The MEADS ensemble state feeds GHMC only; any other program is refused by name."""
+    init, wkey, _, scales = setup
+    chain_keys = jnp.zeros((2, 4, 2), dtype=jnp.uint32)
+    with pytest.raises(ValueError, match="runs only with GHMC, not hmc"):
+        run_chain(HMC, MEADS, init, wkey, None, chain_keys, _target, scales, 4, MEADS_CFG)
