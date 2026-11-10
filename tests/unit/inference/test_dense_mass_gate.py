@@ -61,7 +61,7 @@ def test_explicit_requests_round_trip_below_the_cap(n_dim):
         assert resolve_dense_mass_gate(False, n_dim, method="mcmc_hmc") is False
 
 
-@pytest.mark.parametrize("n_dim", [31, 74, 137])
+@pytest.mark.parametrize("n_dim", [31, 36, 74, 137])
 def test_dense_above_the_cap_falls_back_and_warns(n_dim):
     """Above the cap the request is refused, and the caller is told."""
     with warnings.catch_warnings(record=True) as caught:
@@ -117,7 +117,7 @@ def test_no_dense_capable_seam_re_spells_the_cap():
         root / "catalog_fitter.py",
         root / "fitter.py",
     ]
-    respelled = re.compile(r"use_dense\s*=.*n_dim\s*<=\s*30")
+    respelled = re.compile(r"use_dense\s*=.*n_dim\s*<=\s*\d+")
     for path in seams:
         text = path.read_text()
         assert "DENSE_MASS_MAX_DIM" in text or "resolve_dense_mass_gate" in text, (

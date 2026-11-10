@@ -1,0 +1,4 @@
+2026-09-24 01:54:25,025 - __main__ - INFO - IGM node fold adequate: sample z_max=1.0970, bluest band ctio_u would admit the Lyman break at z=1.503
+2026-09-24 01:54:25,026 - __main__ - INFO - Running 20 cells: 20 galaxies x 1 configurations ['VI'] at --jobs 2
+2026-09-24 01:54:25,035 - __main__ - INFO - Started job 1/2: galaxy 79 config VI (cells: 0/20 completed)
+2026-09-24 01:54:45,045 - __main__ - INFO - Started job 2/2: galaxy 267 config VI (cells: 0/20 completed)

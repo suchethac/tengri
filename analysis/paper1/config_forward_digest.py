@@ -49,6 +49,8 @@ for entry in (str(HERE.parent), str(HERE)):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
+from _paths import repo_relative
+
 #: Sampling key. Any fixed value works; it is pinned so a rerun of one arm
 #: reproduces its own vector rather than silently drawing a new one.
 SAMPLE_SEED = 0
@@ -140,7 +142,7 @@ def digest(
         "config": np.array(config_key),
         "gal_id": np.array(int(cell["gal_id"])),
         "z": np.array(float(cell["z"])),
-        "tengri_path": np.array(str(Path(tengri.__file__).resolve().parent)),
+        "tengri_path": np.array(repo_relative(Path(tengri.__file__).resolve().parent)),
     }
 
 

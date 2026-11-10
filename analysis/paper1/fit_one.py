@@ -48,8 +48,17 @@ import numpy as np
 from tengri import Data, ForwardModel, Observation, Photometry
 from tengri.inference.mass_profile import REINSERT_LOCK_ENV
 
+from ._adoption import (
+    RELAXED_CONFIGS,
+    RELAXED_DIVERGENCE_RATE,
+    RELAXED_RHAT_MAX,
+    divergence_rate,
+)
+from ._atomic_io import _atomic_replace_write
+from ._paths import repo_relative
 from ._posterior_utils import build_npz_payload, divergent_draw_payload, thin_samples
 from .candels_io import load_candels_z1, photometry_for_row
+from .config_metadata import XLIKE_CONFIGS
 from .configs import (
     CONFIGS,
     config_I,
@@ -60,6 +69,7 @@ from .configs import (
     config_VI,
     load_ssp_for,
 )
+from .xlike_configs import XLIKE_BUILDERS, load_ssp_for_xlike
 
 jax.config.update("jax_enable_x64", True)
 
@@ -118,6 +128,47 @@ ESS_FLOOR = 100.0
 #: 3-5x the first rung and adopted none of cells 79/II, 15336/II, 16455/II, 13097/VI
 #: (2026-09-14 audit of grid results), so it is opt-in via --retune-attempts 3.
 DEFAULT_TARGET_ACCEPT = 0.85
+
+#: Metric preconditioning strength for every NUTS attempt (#1301; enabled
+#: 2026-09-24 on the owner's call). Every tengri parameter is standardized, so
+#: the prior contributes exactly I to the metric and what remains is the
+#: likelihood's curvature. Preconditioning supplies that analytically as a
+#: linear change of variables, which leaves the sampled distribution unchanged:
+#: the Jacobian is constant, draws are recovered exactly, no importance weights
+#: and no bias. Only the efficiency changes.
+#:
+#: It is a general transform, not a per-problem knob. Measured across
+#: parametric and stochastic SFHs, photometry / emission lines / spectroscopy
+#: and D = 7 to 73, the raw posterior condition number ran 8.5e4 to 3.1e8 in
+#: every configuration tested and whitened to 1.0 at the MAP.
+#:
+#: 0.5 is DEFAULT_WHITENING_STRENGTH, and the value whose gradients-per-draw
+#: win replicated (8.16x and 2.34x on two seeds) in
+#: bench/reports/2026-08-31_fast_nuts.md. The knob that report refutes twice
+#: over, warmup_max_num_doublings, is deliberately left unset.
+#:
+#: Cells that ran before this: rows III and V entire, the first six of row I,
+#: and the row II / row IV cells finished earlier on 2026-09-24. The
+#: per-attempt record carries ``precondition`` so that split is auditable
+#: rather than inferred from file timestamps.
+#: MEASURED ON THIS GRID 2026-09-24 AND TURNED BACK OFF. Enabling it produced
+#: divergences where the plain runs had none, which the adoption bar forbids.
+#: Row I: plain cells peaked at 5 and 3 divergences (2 of 5 affected); the
+#: preconditioned cell gave 31. Row VI: 107 and 72, both cells, neither
+#: adopted. Rows I, II and VI went 0 of 4 adopted preconditioned.
+#:
+#: On a paired test -- galaxy 79, Configuration IV, seed 42, same machine, one
+#: variable -- it halved the wall clock (2077 s -> 1010 s) by taking a step
+#: 2.3x larger (0.0536 -> 0.1230), and paid for it in mixing: min ESS 445 ->
+#: 189 and max split R-hat 1.0031 -> 1.0100, landing exactly on the bar. Per
+#: effective sample it was 15% WORSE (4.67 -> 5.35 s/ESS). Wall clock alone
+#: reads as a 2x win and is the wrong metric.
+#:
+#: This does not contradict bench/reports/2026-08-31_fast_nuts.md, which
+#: measured gradients per draw on a different fixture; it says the win does not
+#: carry to these six configurations at z ~ 1 on real photometry. Left wired
+#: and recorded per attempt so the next attempt at it starts from evidence.
+PRECONDITION_STRENGTH: float | None = None
 RETUNE_TARGET_ACCEPT_1 = 0.95
 RETUNE_TARGET_ACCEPT_2 = 0.99
 
@@ -184,8 +235,11 @@ RETUNE_ATTEMPTS_BY_CONFIG: dict[str, int] = {}
 #: the first two rungs say nothing about the third, and an attempt's cost while
 #: it is still running is not evidence about its outcome. Do not cap a rung
 #: from the shape of the rungs below it; cap it only on observed failures of
-#: that rung. Config III's cap stands because attempt 3 there was observed to
-#: exhaust a 21600 s cell timeout without clearing (R60/#2089).
+#: that rung. Configuration III's cap was the case that measurement supported
+#: (R60/#2089: attempt 3 exhausted a 21600 s cell timeout without clearing),
+#: and it was nevertheless removed in bd773bbb3 -- the measurement was taken
+#: when "III" named the continuity history, and today's III shares no component
+#: with it. RETUNE_ATTEMPTS_BY_CONFIG is empty and no configuration is capped.
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
@@ -211,12 +265,16 @@ def dust_parameter_name(config_key: str) -> str:
     """
     try:
         return CONFIGS[config_key]["dust_param"]
-    except KeyError as exc:  # pragma: no cover - configuration wiring error
-        raise KeyError(
-            f"No dust_param declared for configuration {config_key!r}. "
-            f"Every row of configs.CONFIGS must name the free parameter carrying "
-            f"its dust optical depth; known rows: {sorted(CONFIGS)}."
-        ) from exc
+    except KeyError:
+        try:
+            return XLIKE_CONFIGS[config_key]["dust_param"]
+        except KeyError as exc:  # pragma: no cover - configuration wiring error
+            all_keys = sorted(list(CONFIGS.keys()) + list(XLIKE_CONFIGS.keys()))
+            raise KeyError(
+                f"No dust_param declared for configuration {config_key!r}. "
+                f"Every row of CONFIGS and XLIKE_CONFIGS must name the free parameter carrying "
+                f"its dust optical depth; known rows: {all_keys}."
+            ) from exc
 
 
 def code_revision() -> str | None:
@@ -572,45 +630,8 @@ def diagnostics_payload(
     return {**diagnostics, "attempts": attempts, "retune_history": retune_history}
 
 
-def _atomic_replace_write(
-    path: Path,
-    write: Callable[[Path], object],
-    *,
-    tmp_suffix: str = "",
-) -> Path:
-    """Write through a temporary sibling and ``os.replace`` it onto ``path``.
-
-    ``os.replace`` is atomic within one filesystem, so a reader -- or the next
-    process to look, after the driver's per-cell timeout killed this one -- sees
-    either the previous complete file or the new complete one, never a truncated
-    one. Writing in place gave no such guarantee: the best attempt so far is now
-    saved mid-run, and a timeout landing inside that write would destroy a file
-    that had been complete a moment earlier, which is precisely the hours of NUTS
-    the interim save exists to protect (#2089).
-
-    The temporary file is a sibling, so the rename never crosses filesystems, and
-    it is removed if ``write`` raises, leaving the directory as it was found.
-
-    Args:
-        path: Final path; only ever created by the rename.
-        write: Called with the temporary path; must write the whole payload there.
-        tmp_suffix: Appended to the temporary name for writers that insist on an
-            extension. ``np.savez`` appends ``.npz`` to any path lacking it, so
-            without ``tmp_suffix=".npz"`` the payload would land beside the name
-            it was handed and the rename would find nothing to move.
-
-    Returns:
-        ``path``.
-    """
-    path = Path(path)
-    tmp_path = path.with_name(f"{path.name}.tmp{tmp_suffix}")
-    try:
-        write(tmp_path)
-        os.replace(tmp_path, path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
-    return path
+# Re-export from _atomic_io for backward compatibility (postprocess_ppd imports from here)
+__all__ = ["_atomic_replace_write"]
 
 
 def write_diagnostics_json(
@@ -825,11 +846,11 @@ def save_fit_outputs(
     _atomic_replace_write(
         output_npz, lambda tmp_path: np.savez(tmp_path, **npz_payload), tmp_suffix=".npz"
     )
-    logger.info(f"Saved results to {output_npz}")
+    logger.info(f"Saved results to {repo_relative(output_npz)}")
 
     # Save JSON with diagnostics (same shape as the per-attempt writes)
     write_diagnostics_json(output_json, best_diagnostics, attempts, retune_history)
-    logger.info(f"Saved diagnostics to {output_json}")
+    logger.info(f"Saved diagnostics to {repo_relative(output_json)}")
 
     return output_npz, output_json
 
@@ -904,8 +925,9 @@ def run_fit(
         seed: Random seed for reproducibility
         retune_attempts: Attempts made before the best one is kept (see
             :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS, unless
-            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG). An
-            explicitly passed value always wins over the per-config default.
+            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG, which
+            is empty today). An explicitly passed value always wins over the
+            per-config default.
         n_warmup: NUTS warmup draws per chain (default: 150, the advertised recipe)
         n_samples: NUTS kept draws per chain (default: 300, the advertised recipe)
         n_chains: NUTS chains (default: the paper's 4)
@@ -917,8 +939,10 @@ def run_fit(
         Dict with fit result and diagnostics
     """
     # An explicit caller override (a value other than the module default) wins;
-    # otherwise the per-config table applies (RETUNE_ATTEMPTS_BY_CONFIG) --
-    # e.g. Config III caps at 2 (#2089, ruling R60).
+    # otherwise the per-config table applies. RETUNE_ATTEMPTS_BY_CONFIG is
+    # currently empty, so every configuration runs the full ladder; the lookup
+    # stays because a cap restored from a measurement on the current suite
+    # belongs there.
     if retune_attempts == DEFAULT_RETUNE_ATTEMPTS:
         retune_attempts = RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, DEFAULT_RETUNE_ATTEMPTS)
 
@@ -978,15 +1002,19 @@ def run_fit(
     obs = Observation(photometry=Photometry.from_names(filter_names))
 
     # Load SSP and build model
-    ssp = load_ssp_for(config_key)
-    config_builder = {
-        "I": config_I,
-        "II": config_II,
-        "III": config_III,
-        "IV": config_IV,
-        "V": config_V,
-        "VI": config_VI,
-    }[config_key]
+    if config_key in XLIKE_CONFIGS:
+        ssp = load_ssp_for_xlike(config_key)
+        config_builder = XLIKE_BUILDERS[config_key]
+    else:
+        ssp = load_ssp_for(config_key)
+        config_builder = {
+            "I": config_I,
+            "II": config_II,
+            "III": config_III,
+            "IV": config_IV,
+            "V": config_V,
+            "VI": config_VI,
+        }[config_key]
     sed_model = config_builder(ssp, obs, z)
     forward = ForwardModel.build(sed=sed_model)
 
@@ -1006,6 +1034,7 @@ def run_fit(
         n_burnin=0,
         dense_mass_matrix=False,
         target_accept_rate=DEFAULT_TARGET_ACCEPT,
+        precondition=PRECONDITION_STRENGTH,
     )
 
     # Run fit with retune logic
@@ -1095,6 +1124,7 @@ def run_fit(
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
+                "precondition": nuts_kwargs.get("precondition"),
                 **profile_mass_record,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 # The CLI seed and the key this attempt actually ran at:
@@ -1130,7 +1160,33 @@ def run_fit(
             # Check adoption bar: 0 divergences, max R̂ < 1.01 and min ESS at
             # or above ESS_FLOOR. A non-chain sampler has none of these; its
             # backend raises when the run is cut off, so reaching here is the bar.
-            if chain_sampler:
+            if chain_sampler and config_key in RELAXED_CONFIGS:
+                # The relaxed bar judges a divergence *rate* instead of demanding
+                # zero, for the configurations whose SFH does not reach a
+                # zero-divergence bar at this dimensionality. Read from _adoption
+                # rather than restated, because that module judges the saved cell:
+                # if the two drifted apart the ladder would keep retuning a cell
+                # the census already counts as adopted, and a later rung can carry
+                # fewer effective samples than the one it replaces.
+                rate = divergence_rate(
+                    {
+                        "divergences": n_divergent,
+                        "n_samples": n_samples,
+                        "n_chains": n_chains,
+                    }
+                )
+                adoption_pass = (
+                    rhat_max < RELAXED_RHAT_MAX
+                    and rate <= RELAXED_DIVERGENCE_RATE
+                    and ess_min is not None
+                    and ess_min >= ESS_FLOOR
+                )
+                bar = (
+                    f"divergence rate={rate:.4f} (n={n_divergent}), "
+                    f"rhat_max={rhat_max:.4f}, ess_min={ess_min:.0f} "
+                    f"[relaxed bar, configuration {config_key}]"
+                )
+            elif chain_sampler:
                 adoption_pass = (
                     n_divergent == 0
                     and rhat_max < 1.01
@@ -1264,8 +1320,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=str,
         required=True,
-        choices=sorted(CONFIGS),
-        help="Configuration (I, II, III, IV, V, or VI)",
+        choices=sorted(list(CONFIGS.keys()) + list(XLIKE_CONFIGS.keys())),
+        help="Configuration (I, II, III, IV, V, VI, or X-like keys)",
     )
     parser.add_argument(
         "--method",

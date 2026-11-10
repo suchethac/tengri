@@ -15,12 +15,12 @@ round the mistake went. Both are reported below so the text can name which it
 means.
 
 **The definitions.** The codes do not all report the same quantity. Prospector
-reports formed stellar mass while the other four report survived; BAGPIPES
-reports instantaneous SFR while the other four report a 100 Myr average. Those
-are different physical quantities, so part of any "inter-code spread" is
-definitional. Measured, the mass effect is small (+0.026 dex) but the SFR one is
-not: dropping the instantaneous code takes the 90th-percentile range from 4.57
-to 1.91 dex, so the disagreement lives in the tail rather than the median.
+reports formed stellar mass while the other four report survived. For SFR,
+BAGPIPES, BEAGLE, and Dense_Basis publish a 100 Myr average, while CIGALE and
+Prospector do not record a timescale. Those are different physical quantities
+or incompletely specified ones, so part of any "inter-code spread" is
+definitional or definitional-by-absence. Measured, the mass effect is small
+(+0.026 dex).
 
 tengri's own ``stellar_mass`` is FORMED mass (``prediction.py``: "Total formed
 stellar mass"), with ``stellar_mass_surviving`` as a separate property, and
@@ -46,8 +46,23 @@ CATALOG = Path(__file__).parent / "results" / "art_sedfitting_z1.csv"
 #: Codes reporting survived stellar mass; Prospector reports formed.
 SURVIVED_MASS_CODES = frozenset({"BAGPIPES", "BEAGLE", "CIGALE", "Dense_Basis"})
 
-#: Codes reporting a 100 Myr averaged SFR; BAGPIPES reports instantaneous.
-AVERAGED_SFR_CODES = frozenset({"BEAGLE", "CIGALE", "Dense_Basis", "Prospector"})
+#: SFR timescale and source for each code.
+SFR_TIMESCALE = {
+    "BAGPIPES": {
+        "timescale": "100 Myr",
+        "source": "bagpipes 0.7.12 star_formation_history.py:122-124",
+    },
+    "BEAGLE": {
+        "timescale": "100 Myr",
+        "source": "SFR_100 column in BEAGLE_summary_catalog_z1.fits HDU2",
+    },
+    "Dense_Basis": {"timescale": "100 Myr", "source": "log_SFR_100 column (column 10)"},
+    "CIGALE": {"timescale": None, "source": "logSFR column carries no documented timescale"},
+    "Prospector": {"timescale": None, "source": "logsfr column carries no documented timescale"},
+}
+
+#: Codes documenting a 100 Myr average SFR.
+SFR_100MYR_DOCUMENTED_CODES = frozenset({"BAGPIPES", "BEAGLE", "Dense_Basis"})
 
 
 def load(path: Path):
@@ -115,11 +130,21 @@ def main() -> int:
 
     print(f"\n{'quantity':<34}{'n':>5}{'median range':>15}{'median stdev':>15}{'p90 range':>12}")
     print("-" * 81)
+    # Codes with "100 Myr" in their sfr_timescale_note
+    codes_100myr = frozenset(
+        code for note, code_set in sfr_notes.items() if "100 Myr" in note for code in code_set
+    )
+
     for label, codes, index, need in (
         ("log M*, all codes", all_codes, 0, len(all_codes)),
         ("log M*, survived-mass codes only", SURVIVED_MASS_CODES, 0, len(SURVIVED_MASS_CODES)),
         ("log SFR, all codes", all_codes, 1, len(all_codes)),
-        ("log SFR, 100 Myr codes only", AVERAGED_SFR_CODES, 1, len(AVERAGED_SFR_CODES)),
+        (
+            "log SFR, codes with 100 Myr documented",
+            codes_100myr,
+            1,
+            max(1, len(codes_100myr)) if codes_100myr else 1,
+        ),
     ):
         stats = spread_stats(per_galaxy, codes, index, need)
         if stats:
@@ -133,9 +158,11 @@ def main() -> int:
     mass = offset_against(per_galaxy, "Prospector", SURVIVED_MASS_CODES, 0, 3)
     if mass:
         print(f"   Prospector (formed) - median(survived codes) : {mass[0]:+.3f} dex, n={mass[1]}")
-    sfr = offset_against(per_galaxy, "BAGPIPES", AVERAGED_SFR_CODES, 1, 3)
+    sfr = offset_against(per_galaxy, "BAGPIPES", all_codes - {"BAGPIPES"}, 1, 3)
     if sfr:
-        print(f"   BAGPIPES (instantaneous) - median(100 Myr)   : {sfr[0]:+.3f} dex, n={sfr[1]}")
+        print(
+            f"   BAGPIPES - median(other four codes), inter-code disagreement (not definitional) : {sfr[0]:+.3f} dex, n={sfr[1]}"
+        )
 
     print(
         "\nThe ~0.1 and ~0.3 dex the section quotes are the STDEV column, not the range.\n"

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Test that all time-like priors respect cosmic age at sample redshift.
 
-Validates that parameters with time-like units (tau_gyr, age_gyr, peak_gyr, etc.)
-never have priors whose upper bounds exceed the age of the universe at the sample's
+Validates that parameters with time-like units (tau_gyr, peak_gyr, etc.) and the
+age fractions (``*_age_frac``: age = fraction x age of the universe at z) never have priors whose upper bounds exceed the age of the universe at the sample's
 maximum redshift. Such unbounded turnover times or positions render the parameter
 unobservable and can degrade sampler conditioning.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from analysis.paper1 import configs
+from tengri.components.stellar.sfh.registry import _AGE_FRAC_PRIORS
 from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.unit
@@ -60,6 +61,9 @@ def _extract_time_bounds(config_builder, z: float) -> dict[str, tuple[float, flo
 
     Iterates over the SEDModel build arguments to find parameters with 'gyr'
     in their name (excluding 'bin_edges_gyr', which is handled separately).
+    The age-like parameters are fractions of the age of the universe (the keys
+    of ``_AGE_FRAC_PRIORS``); their bounds are converted to Gyr at ``z`` and
+    reported under the fraction's name, so every bound returned is in Gyr.
 
     Parameters
     ----------
@@ -106,6 +110,19 @@ def _extract_time_bounds(config_builder, z: float) -> dict[str, tuple[float, flo
 
     # Iterate over all parameters and extract those with time-like units
     for param_name in spec.all_params:
+        if param_name in _AGE_FRAC_PRIORS:
+            try:
+                frac_dist = spec.get_distribution(param_name)
+            except (KeyError, AttributeError):
+                continue
+            if hasattr(frac_dist, "lo") and hasattr(frac_dist, "hi"):
+                age_z = float(age_at_z(z))
+                time_bounds[param_name] = (
+                    float(frac_dist.lo) * age_z,
+                    float(frac_dist.hi) * age_z,
+                )
+            continue
+
         # Skip parameters that don't suggest time semantics
         if "gyr" not in param_name.lower() and "yr" not in param_name.lower():
             continue
@@ -209,16 +226,17 @@ def test_extractor_actually_finds_the_known_time_priors():
     priors, so the extractor going silent is a failure rather than a skip.
     """
     expected = {
-        "II": "sfh_dpl_tau_gyr",
-        "III": "sfh_delayed_tau_gyr",
-        "V": "sfh_lnorm_peak_gyr",
+        "II": ("sfh_dpl_tau_gyr", "sfh_dpl_age_frac"),
+        "III": ("sfh_delayed_tau_gyr", "sfh_delayed_age_frac"),
+        "V": ("sfh_lnorm_peak_gyr", "sfh_lnorm_age_frac"),
     }
     missing = []
-    for config_key, param_name in expected.items():
+    for config_key, param_names in expected.items():
         builder = getattr(configs, f"config_{config_key}")
         found = _extract_time_bounds(builder, Z_SAMPLE_MAX)
-        if param_name not in found:
-            missing.append(f"config {config_key}: expected {param_name}, got {sorted(found)}")
+        for param_name in param_names:
+            if param_name not in found:
+                missing.append(f"config {config_key}: expected {param_name}, got {sorted(found)}")
     assert not missing, (
         "the time-prior extractor found nothing where it should have:\n"
         + "\n".join(f"  {m}" for m in missing)

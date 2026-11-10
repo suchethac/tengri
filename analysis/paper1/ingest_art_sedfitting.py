@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+
 from .candels_io import CANDELS_CATALOG
 
 # ART_SEDFITTING_DIR must be set to the local checkout of the art_sedfitting
@@ -39,8 +40,7 @@ def parse_prospector_z1() -> list[dict]:
     """Parse Prospector results."""
     filepath = CODE_OUTPUTS / "prospector_output_z1.dat"
     if not filepath.exists():
-        print(f"Skipping Prospector: {filepath} not found")
-        return []
+        raise FileNotFoundError(f"Prospector input file not found: {filepath}")
 
     data = np.genfromtxt(filepath, delimiter=",", skip_header=1)
     result = []
@@ -55,7 +55,7 @@ def parse_prospector_z1() -> list[dict]:
                 "logsfr_lo": row[4] - row[6],
                 "logsfr_hi": row[4] + row[5],
                 "mass_definition_note": "formed stellar mass",
-                "sfr_timescale_note": "100 Myr",
+                "sfr_timescale_note": "not recorded",
             }
         )
     print(f"Prospector: {len(result)} galaxies")
@@ -70,8 +70,7 @@ def parse_bagpipes_z1() -> list[dict]:
     """
     filepath = CODE_OUTPUTS / "bagpipes_11_3_19_z1_noir.cat"
     if not filepath.exists():
-        print(f"Skipping BAGPIPES: {filepath} not found")
-        return []
+        raise FileNotFoundError(f"BAGPIPES input file not found: {filepath}")
 
     with open(filepath) as f:
         header = f.readline().strip("#").split("\t")
@@ -98,7 +97,7 @@ def parse_bagpipes_z1() -> list[dict]:
                 "logsfr_lo": np.log10(row[sfr_16_idx]),
                 "logsfr_hi": np.log10(row[sfr_84_idx]),
                 "mass_definition_note": "survived stellar mass",
-                "sfr_timescale_note": "instantaneous",
+                "sfr_timescale_note": "100 Myr (bagpipes source)",
             }
         )
     print(f"BAGPIPES: {len(result)} galaxies")
@@ -109,8 +108,7 @@ def parse_cigale_z1() -> list[dict]:
     """Parse CIGALE results."""
     filepath = CODE_OUTPUTS / "cigale_UV_NIR_2020.fits"
     if not filepath.exists():
-        print(f"Skipping CIGALE: {filepath} not found")
-        return []
+        raise FileNotFoundError(f"CIGALE input file not found: {filepath}")
 
     try:
         from astropy.io import fits
@@ -138,7 +136,7 @@ def parse_cigale_z1() -> list[dict]:
                 "logsfr_lo": logsfr - sfr_err,
                 "logsfr_hi": logsfr + sfr_err,
                 "mass_definition_note": "survived stellar mass",
-                "sfr_timescale_note": "100 Myr mean",
+                "sfr_timescale_note": "not recorded",
             }
         )
     print(f"CIGALE: {len(result)} galaxies")
@@ -147,10 +145,9 @@ def parse_cigale_z1() -> list[dict]:
 
 def parse_beagle_z1() -> list[dict]:
     """Parse BEAGLE results."""
-    filepath = CODE_OUTPUTS / "BEAGLE_summary_catalog_z1.fits"
+    filepath = CODE_OUTPUTS / "BEAGLE_summary_catalogue_z1.fits"
     if not filepath.exists():
-        print(f"Skipping BEAGLE: {filepath} not found")
-        return []
+        raise FileNotFoundError(f"BEAGLE input file not found: {filepath}")
 
     try:
         from astropy.io import fits
@@ -180,7 +177,7 @@ def parse_beagle_z1() -> list[dict]:
                 "logsfr_lo": sfr_68[i, 0],
                 "logsfr_hi": sfr_68[i, 1],
                 "mass_definition_note": "survived stellar mass",
-                "sfr_timescale_note": "100 Myr averaged",
+                "sfr_timescale_note": "100 Myr (SFR_100 column)",
             }
         )
     print(f"BEAGLE: {len(result)} galaxies")
@@ -200,8 +197,7 @@ def parse_dense_basis_z1() -> list[dict]:
     """
     filepath = CODE_OUTPUTS / "Dense_Basis_GOODS-S_v1.2.dat"
     if not filepath.exists():
-        print(f"Skipping Dense Basis: {filepath} not found")
-        return []
+        raise FileNotFoundError(f"Dense Basis input file not found: {filepath}")
 
     candels_ids = get_candels_ids()
 
@@ -242,7 +238,7 @@ def parse_dense_basis_z1() -> list[dict]:
                 "logsfr_lo": np.nan,
                 "logsfr_hi": np.nan,
                 "mass_definition_note": "survived stellar mass",
-                "sfr_timescale_note": "100 Myr",
+                "sfr_timescale_note": "100 Myr (log_SFR_100 column)",
             }
         )
     print(f"Dense Basis: {len(result)} galaxies")

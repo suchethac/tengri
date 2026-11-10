@@ -84,19 +84,32 @@ def _require_selection():
 
 
 def test_a_partial_grid_exits_nonzero_and_says_so(tmp_path):
-    """The guard against row III's numbers being read as the grid's."""
+    """The guard against row III's numbers being read as the grid's.
+
+    The expected total is DERIVED from the census and the locked selection, not
+    written here as a literal. It was ``"3 of 120"`` until Configuration VI was
+    held out of ``CONFIG_ORDER`` (owner, 2026-09-28), and then this test failed
+    for the one reason a guard must not: the grid it describes changed shape and
+    the guard was still asserting the old one. A restated constant tests the
+    transcription; a derived one tests the census.
+    """
+    from _figure_style import CONFIG_ORDER
+    from _grid_completeness import load_expected_galaxy_ids
+
+    expected_total = len(load_expected_galaxy_ids(SELECTION_20)) * len(CONFIG_ORDER)
+
     results = tmp_path / "fits"
     _write(results, {f"{gid}_III": _cell(gid) for gid in (79, 4171, 13097)})
 
     result = _run(results)
 
     assert result.returncode != 0, (
-        "a three-cell grid was reported as if it answered for one hundred and twenty"
+        f"a three-cell grid was reported as if it answered for {expected_total}"
     )
     assert PARTIAL_BANNER in result.stdout, (
         f"no partial-grid banner in the output.\nstdout:\n{result.stdout[-1200:]}"
     )
-    assert "3 of 120" in result.stdout, (
+    assert f"3 of {expected_total}" in result.stdout, (
         f"the count was not stated.\nstdout:\n{result.stdout[-1200:]}"
     )
 
@@ -276,3 +289,32 @@ def test_one_bad_band_is_distinguished_from_a_model_that_misses_broadly(tmp_path
         "the trimmed range should span the outlier-driven cell (0.00) and the "
         f"broadly-wrong one (9.00); got {line.strip()!r}"
     )
+
+
+def test_cells_outside_the_requested_configurations_do_not_fill_the_quota(tmp_path, capsys):
+    """A foreign-configuration cell must not be counted toward a subset view.
+
+    ``report`` decides completeness with ``have == total``, and both sides can
+    be wrong in opposite directions: a cell from a configuration the caller did
+    not ask for inflates ``have``, while the shorter ``config_keys`` shrinks
+    ``total``. The two errors cancel, and the census prints COMPLETE for a grid
+    with a hole in it -- the reassuring answer, which is the dangerous one.
+
+    Here two galaxies and two configurations want four cells. Three are present
+    and ``2_II`` is missing, so the honest answer is partial; a single stray
+    Configuration VI cell brings the unfiltered count to four.
+    """
+    import grid_census as gc
+
+    cells = {
+        "1_I": _cell(1, "I"),
+        "2_I": _cell(2, "I"),
+        "1_II": _cell(1, "II"),
+        "1_VI": _cell(1, "VI"),  # not asked for; must not fill 2_II's slot
+    }
+    complete = gc.report(cells, [1, 2], ["I", "II"], tmp_path)
+    out = capsys.readouterr().out
+
+    assert complete is False, "a grid missing 2_II was reported complete"
+    assert "3 of 4" in out, f"foreign cell counted toward the quota:\n{out}"
+    assert "VI" not in out.split("configurations seen")[1].split("\n")[0]

@@ -29,7 +29,7 @@ This is a prior-geometry defect, not a sampler-tuning one, and not a
 dimensional one: the DPL row is the LOWEST-dimensional in the suite (D=7) and
 scored 381/1200 divergences at ess_min 1.9 against 22 for delayed-tau at
 higher D. The indicated fix is to cap tau_gyr near the cosmic age, as
-age_gyr already is, so the turnover stays reachable.
+age_frac (age <= the cosmic age) already is, so the turnover stays reachable.
 
 NOTE ON THE LIBRARY: Configuration II's own grid (fsps_prsc_c3k_a_chabrier)
 is not present on every machine; this script substitutes a C3K grid that is.
@@ -62,7 +62,7 @@ def build(sfh_type):
         "type": sfh_type,
         "all_params": Fixed(DEFAULT),
         "tau_gyr": Uniform(0.5, 13.0),
-        "age_gyr": Uniform(1.0, AGE),
+        "age_frac": Uniform(1.0 / AGE, 1.0),  # formation age >= 1 Gyr
         "log_total_mass": Uniform(8.0, 12.5),
         "met_logzsol": configs.met_prior_for(ssp),
     }
@@ -95,9 +95,7 @@ for sfh_type in ("dpl", "delayed"):
         p = {
             k: float(np.asarray(v)) for k, v in model.spec.sample(jax.random.PRNGKey(seed)).items()
         }
-        p[pre + "age_gyr"] = min(
-            p[pre + "age_gyr"], 0.35 * AGE
-        )  # young: turnover clearly escapable
+        p[pre + "age_frac"] = min(p[pre + "age_frac"], 0.35)  # young: turnover clearly escapable
         out = []
         for lo, hi in ((0.5, 3.0), (7.0, 13.0)):
             a = dict(p)

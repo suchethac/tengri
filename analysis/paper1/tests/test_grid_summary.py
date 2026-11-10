@@ -28,6 +28,8 @@ for entry in (str(ANALYSIS), str(PAPER1)):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
+from paper1._adoption import RELAXED_CONFIGS
+from paper1._figure_style import CONFIG_ORDER
 from paper1.grid_summary import (
     EXPECTED_CONFIGS,
     EXPECTED_GALAXIES,
@@ -236,11 +238,16 @@ def test_a_checked_directory_reports_how_many_cells_it_examined(tmp_path):
 # ---------------------------------------------------------------------------
 # Is the relaxed bar still needed by the configuration it names?
 #
-# RELAXED_CONFIGS holds "III" because 0 of 17 Configuration III cells cleared a
-# zero-divergence bar in the superseded suite -- measured when III was the
-# nonparametric continuity model. The 20x6 scheme made III delayed-tau and
-# moved continuity to I and VI, so the key selects a different model than the
-# exemption was measured on.
+# RELAXED_CONFIGS held "III" alone because 0 of 17 Configuration III cells
+# cleared a zero-divergence bar in the superseded suite -- measured when III
+# was the nonparametric continuity model. The 20x6 scheme made III delayed-tau
+# and moved continuity to I and VI, so the key selected a different model than
+# the exemption was measured on.
+#
+# RESOLVED, owner 2026-09-24 on #2496: the set is now {"I", "III", "VI"}, so it
+# covers both continuity rows. III keeps it although it clears the strict bar
+# 19 times in 20 and no longer needs it. Nothing below may name a row as
+# relaxed or unrelaxed by hand -- derive it, or this drifts again.
 
 
 def test_a_relaxed_configuration_whose_cells_clear_the_strict_bar_is_reported_inert():
@@ -269,8 +276,15 @@ def test_a_relaxed_configuration_that_needs_it_says_so():
 
 
 def test_an_unrelaxed_configuration_is_not_reported():
-    """The audit speaks only about configurations carrying an exemption."""
-    rows = _rows([_cell(g, "I") for g in range(1, 21)])
+    """The audit speaks only about configurations carrying an exemption.
+
+    The unrelaxed row is derived, not named: this test asserted "I" until the
+    owner moved the exemption onto it, and then failed for a reason that had
+    nothing to do with what it checks.
+    """
+    unrelaxed = [key for key in CONFIG_ORDER if key not in RELAXED_CONFIGS]
+    assert unrelaxed, "every configuration is relaxed; this test has no subject"
+    rows = _rows([_cell(g, unrelaxed[0]) for g in range(1, 21)])
     assert relaxation_audit(rows) == {}
 
 
