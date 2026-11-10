@@ -114,3 +114,21 @@ component with `emission_terms` or `precompute_key` has a provider.
 - `_template_data_for_jit` reads the memo for the six slots of the five families.
 - The report reads the memo for the dust band response and the term responses. Other mechanisms keep
   reading their attributes.
+
+## Outcome
+
+Landed as #3305, #3307, #3309, #3312 and #3323 (step 5). Each step was bit-identical on the six
+fixtures (template data, photometry, compile signature, report text).
+
+What differs from the plan:
+
+- **Step 4 shim.** The AGN gate asked `ctx.ask("agn", "term_band_response")` through the old term
+  builder for one PR. Step 5 removed the old builder and the shim together.
+- **`BAND_SLOTS`.** The tuple is declarative and per adapter. Each `band_table` refuses a slot outside
+  its `BAND_SLOTS`, and the dispatch goes by component name through `BAND_TABLE_PROVIDERS`, then by slot
+  inside the adapter. The census therefore lists components, not slots.
+- **`ctx.ask` is on demand.** The design had `ask` read the memo only. As built it builds a missing
+  entry on first use, through the same memo, so the AGN gate can ask for the term response. Values and
+  decline strings are unchanged.
+- **Memo read.** From step 5, `_band_table` returns the memo entry for every slot. Step 0 rebuilt on each
+  call, to keep external cache changes visible to the AGN tests.
