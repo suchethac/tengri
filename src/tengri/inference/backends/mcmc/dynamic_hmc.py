@@ -45,12 +45,11 @@ logger = logging.getLogger(__name__)
 #: ``dynamic_hmc.init`` needs a ``random_generator_arg`` that
 #: ``window_adaptation`` cannot supply, so the step size and mass matrix come
 #: from plain HMC window adaptation at this fixed trajectory length; the
-#: dynamic kernel then draws its own per-step length while sampling. Must stay
-#: equal to the ``num_integration_steps`` in
-#: ``tengri.inference.backends.mcmc._shared._dynamic_hmc_full_scan``,
-#: which the prewarm, hierarchical and catalog paths still call, the two
-#: disagreeing would mean a cached adaptation tuned against a different
-#: trajectory length than the fused path produces.
+#: dynamic kernel then draws its own per-step length while sampling. It is the
+#: one ``DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`` constant that the fused
+#: ``run_chain(DYNAMIC_HMC, ...)`` path (behind ``_dynamic_hmc_full_scan``, which
+#: the prewarm, hierarchical and catalog paths call) also adapts with, so a
+#: cached adaptation and the fused path tune at the same trajectory length.
 _DHMC_WARMUP_LEAPFROG_STEPS = DYNAMIC_HMC_TUNING_LEAPFROG_STEPS
 
 
@@ -199,14 +198,15 @@ def run_dynamic_hmc(
     # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
     # Split from sampling so a fresh call and a cached one end in the SAME
     # sampling scan. While the two were fused, a first fit ran warmup+sampling
-    # inside `_dynamic_hmc_full_scan` and every later fit ran a sampling-only
+    # in one fused scan and every later fit ran a sampling-only
     # scan against the cached parameters, structurally different computations,
     # so one pinned `key` returned two different posteriors.
     #
     # The adaptation is plain HMC window adaptation (dynamic_hmc.init needs a
     # random_generator_arg, which window_adaptation cannot supply), so this is
     # `adapt_chain(HMC, ...)` rather than a third near-identical helper. The
-    # integration-step count matches the one `_dynamic_hmc_full_scan` hardcodes.
+    # integration-step count is `DYNAMIC_HMC_TUNING_LEAPFROG_STEPS`, shared with
+    # the fused `run_chain(DYNAMIC_HMC, ...)` path.
     if cached is not None:
         parameters = cached
         # A reused adaptation was tuned in an earlier call, so this fit measured no
