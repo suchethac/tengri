@@ -971,17 +971,14 @@ def test_every_structural_mutator_invalidates_the_signature():
 
 
 def test_the_pattern_rule_did_not_make_the_policy_permissive():
-    """The other half of the pattern change, and the one worth guarding.
+    """The policy must refuse an attribute it does not classify.
 
-    Admitting ``_*_term_response_cache`` by pattern is only safe while every
-    *other* attribute still needs an explicit entry. The cheap way to make the
-    phantom-emitter test above pass is to let the policy match anything, and
-    that would silently retire the whole contract: ``assert_policy_complete``
-    exists so that an attribute nobody classified is caught rather than
-    defaulting into the compile signature.
+    The band caches are one explicit memo row (``_band_tables``), with no pattern that could
+    match other attributes. A policy that matched anything would silently retire the whole
+    contract: ``assert_policy_complete`` exists so that an attribute nobody classified is caught
+    rather than defaulting into the compile signature.
 
-    So: an attribute that matches no literal key and no pattern must still be
-    refused.
+    So: an attribute that matches no literal key and no pattern must still be refused.
     """
     from tengri._cache_keys import assert_policy_complete
     from tengri.forward._signature_policy import SIGNATURE_POLICY

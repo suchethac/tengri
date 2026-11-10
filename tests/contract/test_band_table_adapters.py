@@ -480,11 +480,18 @@ def _free_z_radio_xray():
     """A free-redshift model whose radio and X-ray emitters have every parameter fixed.
 
     The free X-ray slope of ``_band_table_cases.build_free_z_radio_xray`` makes its term
-    response decline by design, so the rows are checked on this fixed-shape variant.
+    response decline by design, so the rows are checked on this fixed-shape variant. Its bands
+    include one X-ray band (1 to 9 Å) and two radio bands (1e8 and 1e9 Å), so every X-ray and
+    radio term integrates to a nonzero row; the optical bands alone reach neither.
     """
+    bands = (
+        cases._tophat(5.0, frac_width=0.8),
+        cases._tophat(1.0e8),
+        cases._tophat(1.0e9),
+    )
     return SEDModel.build(
         ssp_data=cases._bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(cases.FILTERS))),
+        observation=Observation(photometry=Photometry(filters=bands)),
         approx=WavePrecomp(),
         redshift=Uniform(0.05, 0.3),
         sfh=cases._dpl_sfh(),
@@ -530,14 +537,14 @@ def test_term_band_response_row_is_the_dense_filter_integral_of_its_shape(
     terms = comp.emission_terms({**fixed, "redshift": z}, ctx.wave, **comp.EMITTER_PROBE_INPUTS[0])
     live = [k for k, shape in terms.items() if float(jnp.max(jnp.abs(shape))) > 0.0]
     assert live, f"the {name} fixture has no live term at the node"
-    nonzero = 0
-    for key in live:
+    assert len(live) == len(terms), (name, live, list(terms))
+    for key in terms:
         dense = np.asarray(lnu_filter_integral_batch(terms[key], ctx.wave, fw_pad, ft_pad, z))
         row = np.asarray(table["R"][node, list(terms).index(key)])
-        assert np.array_equal(row, dense), (name, key, np.max(np.abs(row - dense)))
-        nonzero += int(np.any(dense != 0.0))
-    if name == "radio":
-        assert nonzero, "the radio terms integrate to zero against the fixture's filters"
+        assert np.any(row != 0.0), (name, key, "the term's band row is zero")
+        # The table is built inside the batched node evaluation; the dense integral here is
+        # eager, so the two differ in the last bit (measured relative gap 2e-16).
+        np.testing.assert_allclose(row, dense, rtol=1e-12, atol=0.0, err_msg=f"{name} {key}")
 
 
 def test_every_component_with_emission_terms_or_precompute_key_has_a_band_table_provider():
