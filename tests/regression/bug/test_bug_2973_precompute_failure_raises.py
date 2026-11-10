@@ -66,12 +66,12 @@ def _build_wave_precomp_dust_model():
 
 def test_failing_dust_emission_table_builder_raises(monkeypatch):
     """A KeyError inside a dust-emission table builder must surface, not warn."""
-    from tengri import SEDModel
+    from tengri.components.dust import dust_emission_precompute
 
-    def _boom(self, chain):
+    def _boom(ctx):
         raise KeyError("ln_phot")
 
-    monkeypatch.setattr(SEDModel, "_dust_emission_band_response", _boom)
+    monkeypatch.setattr(dust_emission_precompute, "_emission_band_response", _boom)
 
     with pytest.raises(KeyError, match="ln_phot"):
         _build_wave_precomp_dust_model()
