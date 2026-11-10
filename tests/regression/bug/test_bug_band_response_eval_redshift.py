@@ -234,7 +234,9 @@ def test_the_emitter_bands_are_not_vacuous(references):
 def test_radio_and_xray_responses_are_engaged_under_both_redshift_modes(catalog_model, free_model):
     for label, model in (("catalog", catalog_model), ("free", free_model)):
         for name in ("radio", "xray"):
-            table = getattr(model, f"_{name}_term_response_cache")
+            from tengri.forward.precompute.band_table import arrays_of
+
+            table = arrays_of(model.band_table(name, "term_band_response"))
             assert table is not None, f"{label} z: the {name} term response is off"
             assert table["ln1pz"].shape[0] == N_Z, (label, name)
 

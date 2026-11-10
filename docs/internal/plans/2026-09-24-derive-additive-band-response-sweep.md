@@ -1,5 +1,7 @@
 # 2026-09-24: Derive additive emission_terms sweep instead of hardcoding it
 
+> **Superseded by ADR-0021.** The additive band responses now sit behind the provider seam: the generic term builder is `src/tengri/components/_term_response_table.py`, the census is `BAND_TABLE_PROVIDERS` in `src/tengri/forward/precompute/registry.py`, and the tables are memoized in `SEDModel._band_tables`. The text below is the record of the 2026-09-24 decision.
+
 **Status:** Implemented  
 **Author:** Claude Haiku 4.5  
 **Date:** 2026-09-24
