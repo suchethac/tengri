@@ -79,12 +79,12 @@ def test_the_single_screen_model_builds_its_band_response(synthetic_ssp, synthet
     """The defect. Fails before ``dust_tau_v`` joins the band-response allowlist."""
     model = _single_screen(synthetic_ssp, synthetic_tophat_obs)
 
-    response = model._dust_band_response_cache
+    response = model.band_table("dust_emission", "emission_band_response")
     assert response is not None, (
         "the band response was not built, so this model pays the dense per-call "
         "filter integral on every gradient evaluation"
     )
-    assert np.all(np.isfinite(response["values"]))
+    assert np.all(np.isfinite(response.arrays["values"]))
 
 
 def test_the_band_response_does_not_change_the_photometry(
@@ -98,7 +98,9 @@ def test_the_band_response_does_not_change_the_photometry(
     factorization of a linear integral has no error budget to spend.
     """
     fast = _single_screen(synthetic_ssp, synthetic_tophat_obs)
-    assert fast._dust_band_response_cache is not None, "fast arm did not take the fast path"
+    assert fast.band_table("dust_emission", "emission_band_response") is not None, (
+        "fast arm did not take the fast path"
+    )
     phot_fast = np.asarray(fast.predict_photometry(_params(fast)))
 
     monkeypatch.setattr(
@@ -107,7 +109,7 @@ def test_the_band_response_does_not_change_the_photometry(
         frozenset(SEDModel._BAND_RESPONSE_ATTEN_FREE_OK - {"dust_tau_v"}),
     )
     exact = _single_screen(synthetic_ssp, synthetic_tophat_obs)
-    assert exact._dust_band_response_cache is None, (
+    assert exact.band_table("dust_emission", "emission_band_response") is None, (
         "control arm still took the fast path, so this test compares a path with "
         "itself and cannot observe a difference"
     )
@@ -147,5 +149,5 @@ def test_the_two_component_path_is_unchanged(synthetic_ssp, synthetic_tophat_obs
     """The four configurations that were already fast must stay fast."""
     model = _two_component(synthetic_ssp, synthetic_tophat_obs)
 
-    assert model._dust_band_response_cache is not None
+    assert model.band_table("dust_emission", "emission_band_response") is not None
     assert model._energy_balance_lut_cache is not None

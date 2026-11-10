@@ -142,8 +142,31 @@ change any real pixel. `build_spectro_batches` checks the second part and raises
 hint to use `quantum=None`. A new static field belongs in `SpectroBatchSpec`, not in
 a leaf, if it changes a shape or a branch.
 
+## One data term
+
+The batched log-likelihood resolves its emission-line options through
+`resolve_data_term_options` in `tengri.inference.data_term`, the same table the per-galaxy
+`Fitter` uses, so `eline_mode` and `eline_prior_type` mean one thing on both paths. The
+spectral Gaussian terms are the `GaussianLikelihood` adapter (`presence_key="presence"`)
+when the spectrum is diagonal and `MultivariateGaussianLikelihood` (with the same
+`presence_key`, applied before the banded whitening) when it carries a factor, both read
+over the `SpectroBatch` leaves. The joint calibration-and-line design is built once in
+`joint_calibration_line_marginal` in `tengri.observation.calibration`, which the per-galaxy
+`CalibrationELineMarginalizedLikelihood` and the batched path both call; each keeps its own
+normalization, `n_pix` on the per-galaxy side and `sum(pix_mask)` on the batched side. The
+per-galaxy classes still take their own `wave`, `cal_lo`, `cal_hi` and segment inputs, so
+the batched path does not yet call them directly.
+
 ## Record
 
+- 2026-11-10, #3293 (part 3): the batched spectroscopic path shares the data-term option
+  table and the joint calibration-and-line helper. `batched_log_likelihood` resolves its
+  emission-line options through `resolve_data_term_options`; the plain and banded spectral
+  terms are the `GaussianLikelihood` and `MultivariateGaussianLikelihood` adapters over the
+  `SpectroBatch` leaves, with `presence_key` routing the pixel mask (a no-op when absent);
+  the calibration-and-line design moves to `joint_calibration_line_marginal`, called by
+  both paths. `tests/contract/test_batched_eline_marginal.py` pins that both joint paths
+  go through that helper. Values are unchanged.
 - 2026-11-01, #3205: the optax L-BFGS driver moved out of `batched_spectro.py` into `tengri.inference.lbfgs_driver.lbfgs_to_gtol`, so the per-galaxy `Fitter` MAP continues from scipy's stop with the same stopping rule (`max |grad| < gtol`). The Newton-decrement measure (`tengri.inference.map_stationarity.stationarity`) is shared by both paths and by the tests.
 - 2026-11-01, #3212: the template tables (SSP grid, template data, z-table) reach the batched log-likelihood, the negative log-posterior, the MAP chunks and the catalog bucket log-density as explicit arguments, not closure constants. A bucket's compiled program therefore embeds no SSP-sized constant, so its executable can be serialized by the persistent compile cache. The float64 value at a fixed standardized point is unchanged.
 - 2026-11-01, #3118: `docs/batched_spectroscopy.md` rewritten against main at `fb0aa11c0`: banded covariance, per-segment calibration scales and priors, the extended Balmer series, young-fraction coordinates, 4-D [alpha/Fe] grids and `sampler="ghmc"` described as shipped; all 20 `SpectroBatch` leaves listed; links kept only for open issues.
