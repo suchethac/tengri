@@ -24,7 +24,7 @@ import warnings
 import numpy as np
 import pytest
 
-from tengri.config.exceptions import PrecompBiasWarning
+from tengri.config.exceptions import PrecompBiasWarning, TengriError
 from tengri.inference.fitter import (
     _central_params,
     _lut_forward_bias,
@@ -123,7 +123,7 @@ def test_the_probe_never_breaks_a_fit():
 
     class _Broken(_StubModel):
         def predict_photometry(self, params):
-            raise RuntimeError("no forward at central params")
+            raise TengriError("no forward at central params")
 
     exact = _Broken(np.ones(4))
     _, lut = _pair(2e-3)
@@ -254,6 +254,81 @@ def test_joint_low_snr_stays_silent():
     with warnings.catch_warnings():
         warnings.simplefilter("error", PrecompBiasWarning)
         _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
+
+
+def _lut_fixture(ssp, obs):
+    """Free-redshift photometry model and its ForwardModel, as in #2105."""
+    from tengri import DEFAULT, Fixed, ForwardModel, SEDModel, Uniform
+
+    sed = SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": Uniform(0.0, 1.5),
+        },
+        dust_emission=None,
+        neb={"type": "none"},
+        redshift=Uniform(0.02, 0.30),
+    )
+    return sed, ForwardModel.build(sed=sed, observation=obs)
+
+
+def _lut_fit_inputs(ssp, obs):
+    """(ForwardModel, flux, noise) for a LUT-resolving fit at SNR 30."""
+    import jax
+
+    sed, fwd = _lut_fixture(ssp, obs)
+    truth = sed.spec.sample(jax.random.PRNGKey(0))
+    mock = sed.mock(truth, snr=30.0, key=jax.random.PRNGKey(0))
+    return fwd, mock.flux_obs, mock.noise
+
+
+def test_a_probe_bug_raises_instead_of_switching_the_advisory_off(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
+):
+    """A TypeError inside the bias estimator is a bug in the probe and must surface.
+
+    Only tengri's own expected failures (TengriError) degrade to a logged skip. A
+    TypeError, AttributeError or KeyError from the probe used to be swallowed by a bare
+    ``except Exception``, which switched the advisory off without a trace (#2900).
+    """
+    from tengri import WavePrecomp
+    from tengri.inference import fitter as fitter_mod
+
+    fwd, flux, noise = _lut_fit_inputs(synthetic_ssp_wide, synthetic_tophat_obs)
+    monkeypatch.setattr(fitter_mod, "_LUT_BIAS_GRAD_WARN", 0.0)
+
+    def _probe_bug(exact, lut, data_type, **_kwargs):
+        raise TypeError("probe bug")
+
+    monkeypatch.setattr(fitter_mod, "_lut_forward_bias", _probe_bug)
+    f = fitter_mod.Fitter(fwd, flux, noise, approx=WavePrecomp(n_z=17))
+    with pytest.raises(TypeError, match="probe bug"):
+        f.run("map", n_steps=2)
+
+
+def test_an_expected_tengri_error_skips_the_advisory_and_the_fit_completes(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch, caplog
+):
+    """A TengriError from the estimator is logged, and the fit still runs to completion."""
+    from tengri import WavePrecomp
+    from tengri.inference import fitter as fitter_mod
+
+    fwd, flux, noise = _lut_fit_inputs(synthetic_ssp_wide, synthetic_tophat_obs)
+    monkeypatch.setattr(fitter_mod, "_LUT_BIAS_GRAD_WARN", 0.0)
+
+    def _expected(exact, lut, data_type, **_kwargs):
+        raise TengriError("expected")
+
+    monkeypatch.setattr(fitter_mod, "_lut_forward_bias", _expected)
+    with caplog.at_level("WARNING"):
+        f = fitter_mod.Fitter(fwd, flux, noise, approx=WavePrecomp(n_z=17))
+        f.run("map", n_steps=2)
+    assert any("LUT-bias advisory skipped" in r.getMessage() for r in caplog.records)
 
 
 def test_cache_distinguishes_data_type():
