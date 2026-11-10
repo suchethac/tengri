@@ -11856,7 +11856,9 @@ class SEDModel:
     #: adding a new attenuation parameter that does not reshape the emission.
     #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
     #: Band-table slots whose adapter keeps no cache of its own, so the memo is their cache.
-    _PROVIDED_SLOTS: ClassVar[frozenset[tuple[str, str]]] = frozenset({("nebular", "band_table")})
+    _PROVIDED_SLOTS: ClassVar[frozenset[tuple[str, str]]] = frozenset(
+        {("nebular", "band_table"), ("shock", "band_table")}
+    )
 
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
         {
@@ -12546,7 +12548,6 @@ class SEDModel:
                     "_dust_shape_table_decline",
                 ),
                 ("agn", "band_table"): (self._agn_band_table, "_agn_band_table_decline"),
-                ("shock", "band_table"): (self._shock_band_table, "_shock_band_table_decline"),
             }
             builder, decline_attr = builders[(name, slot)]
             value = builder(chain)
@@ -13090,50 +13091,6 @@ class SEDModel:
         if not np.any(live):
             return 0.0
         return float(np.max(np.abs(np.expm1(got[live] - want[live]))))
-
-    def _shock_band_refusal(self, shock, stellar) -> str | None:
-        """Why the shock line-band coefficients must not engage, or None (#2324)."""
-        if not self._approx.get("wave_precomp"):
-            return "approx=WavePrecomp() not enabled"
-        if shock is None:
-            return "no composable shock component"
-        if "redshift" not in self.spec.fixed_params:
-            return "redshift is free (the band coefficients are built at one redshift)"
-        st = getattr(stellar, "_state", None)
-        if st is None or getattr(st, "phot_fw_padded", None) is None:
-            return "the photometry filter cache is absent (no WavePrecomp filters)"
-        return None
-
-    def _shock_band_table(self, chain):
-        """Build-time shock line-band coefficients through the registry, memoized.
-
-        Records why it declined in ``_shock_band_table_decline``. Returns None when
-        it does not engage.
-        """
-        cached = getattr(self, "_shock_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        from tengri.components.nebular.shock_model import ShockNebular
-        from tengri.forward.precompute.registry import resolve
-
-        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
-        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        coeff = None
-        reason = self._shock_band_refusal(shock, stellar)
-        if reason is None:
-            st = stellar._state
-            coeff = resolve("mappings_shock").shock_band_coefficients(
-                st.phot_fw_padded,
-                st.phot_ft_padded,
-                float(self.spec.fixed_value("redshift")),
-                self._rest_wavelength,
-            )
-            if coeff is None:
-                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
-        self._shock_band_table_decline = reason
-        self._shock_band_table_cache = coeff
-        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.

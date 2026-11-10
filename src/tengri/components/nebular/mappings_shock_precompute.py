@@ -332,6 +332,41 @@ def shock_band_coefficients(
 BAND_SLOTS: tuple[str, ...] = ("band_table",)
 
 
+def _band_table_refusal(ctx, shock, stellar) -> str | None:
+    """Why the shock line-band coefficients must not engage, or None (#2324)."""
+    if not ctx.wave_precomp:
+        return "approx=WavePrecomp() not enabled"
+    if shock is None:
+        return "no composable shock component"
+    if "redshift" not in ctx.spec.fixed_params:
+        return "redshift is free (the band coefficients are built at one redshift)"
+    st = getattr(stellar, "_state", None)
+    if st is None or getattr(st, "phot_fw_padded", None) is None:
+        return "the photometry filter cache is absent (no WavePrecomp filters)"
+    return None
+
+
 def band_table(ctx, *, component: str, slot: str):
-    """Return one band-table slot of ``component`` from the model's memo, through ``ctx.ask``."""
-    return ctx.ask(component, slot)
+    """Build the shock line-band coefficients, or the refusal that says why they are absent.
+
+    The coefficients are built at the model's one fixed redshift on the chain's photometry
+    filter cache, and the line list is the MAPPINGS V grid's.
+    """
+    from tengri.components.nebular.shock_model import ShockNebular
+    from tengri.forward.precompute.band_table import BandTable, Decline
+
+    shock = next((c for c in ctx.chain if isinstance(c, ShockNebular)), None)
+    stellar = next((c for c in ctx.chain if getattr(c, "name", "") == "stellar"), None)
+    reason = _band_table_refusal(ctx, shock, stellar)
+    if reason is not None:
+        return Decline(reason)
+    st = stellar._state
+    coeff = shock_band_coefficients(
+        st.phot_fw_padded,
+        st.phot_ft_padded,
+        float(ctx.spec.fixed_value("redshift")),
+        ctx.wave,
+    )
+    if coeff is None:
+        return Decline("the MAPPINGS V line grid is absent, so the line list is not fixed")
+    return BandTable(coeff)

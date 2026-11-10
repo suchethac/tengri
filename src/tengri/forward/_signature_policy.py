@@ -277,14 +277,6 @@ SIGNATURE_POLICY: KeyPolicy = {
         "[component][slot]; built from keyed structure, read by no numerical path"
     ),
     "_dust_band_response_cache": exclude("memo cache computed from keyed structure"),
-    "_shock_band_table_cache": exclude(
-        "memo of the shock line-band coefficients, built from the keyed shock component, "
-        "the filters, the fixed redshift and the rest grid"
-    ),
-    "_shock_band_table_decline": exclude(
-        "the verdict that accompanies _shock_band_table_cache: why the coefficients were "
-        "refused, recorded for precompute_report. Read by no numerical path"
-    ),
     "_dust_band_response_decline": exclude(
         "the verdict that accompanies _dust_band_response_cache: why the response "
         "was refused, recorded for precompute_report. Derived from the same keyed "
