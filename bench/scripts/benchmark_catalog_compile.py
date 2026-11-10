@@ -260,7 +260,8 @@ def adaptation_spread(
     import jax.numpy as jnp
     from jax.flatten_util import ravel_pytree
 
-    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity, _nuts_warmup_only
+    from tengri.inference.backends.mcmc import chain_program as cp
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.backends.mcmc.catalog import (
         _make_substitute,
         _preconditioned_logdensity,
@@ -293,16 +294,19 @@ def adaptation_spread(
             precond, _ok = traced_preconditioner(ld, init_flat, data_args, strength=strength)
             sample_args = (precond.matrix, data_args)
             sample_init = precond.to_latent(init_flat)
-        step_size, inv_mass, _div = _nuts_warmup_only(
+        (step_size, inv_mass), _div, _n_grad = cp.adapt_chain(
+            cp.NUTS,
+            cp.WINDOW_NUTS,
             sample_init,
             gal_key,
             sample_ld,
             sample_args,
             n_warmup,
-            use_dense,
-            target_accept_rate,
-            False,
-            int(max_doublings),
+            cp.NUTSConfig(
+                max_doublings=int(max_doublings),
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
+            ),
         )
         return step_size, inv_mass
 
