@@ -124,7 +124,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       # Install with both dev (jupytext) and docs (jupyter/ipykernel) extras
       # so that nbclient and ipykernel are available for notebook execution.
       # The --list path uses only stdlib, but execution needs nbclient, nbformat,
