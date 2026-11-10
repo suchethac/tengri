@@ -67,7 +67,7 @@ adjusted-MCLMC, NSS; PRs #1531/#1624/#1644 and the #1429 wiring):
    `PopulationFitter.run` dispatch all follow automatically.
 2. **One `elif driver == ...` branch in `run_flat_sampler`** calling the
    algorithm on the standardized problem. A chain-program family (NUTS, HMC,
-   dynamic HMC, GHMC) joins `FLAT_CHAIN_PROGRAMS` instead and runs through
+   dynamic HMC, GHMC) joins `flat_chain_drivers()` instead and runs through
    `chain_program.run_chain`, with its program, window adaptation and statics
    read from the registry entry; the fused warmup-and-sampling shims are gone.
    Other drivers call their algorithm directly. Gradient samplers use

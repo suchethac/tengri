@@ -45,7 +45,6 @@ from tengri.inference.backends.mcmc.chain_program import (
     run_chain,
     sample_chain,
 )
-from tests.contract.test_data_term import _galaxies, _population_model_factory
 from tests.contract.test_inference_cache_keys import fitter_photometry
 
 pytestmark = pytest.mark.contract
@@ -885,23 +884,89 @@ _FLAT_SEAM_CASES = [
     ),
 ]
 
+_FLAT_SEAM_BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+_FLAT_SEAM_TRUTH = {
+    "alpha": 1.5,
+    "beta": 1.0,
+    "log_total_mass": 10.0,
+    "psd_sigma": 1.0,
+    "psd_tau_myr": 50.0,
+}
+_FLAT_SEAM_N = (60, 10, 40)  # n_warmup, n_burnin, n_samples
+
+
+def _flat_seam_factory(ssp):
+    """A stochastic two-component SFH on ``ssp``: the shared PSD pair is always free."""
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+
+    obs = Observation(photometry=Photometry.from_names(_FLAT_SEAM_BANDS))
+
+    def factory(psd_sigma, psd_tau_myr):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(9.0, 11.0),
+                "alpha": Uniform(0.5, 4.0),
+                "beta": Uniform(0.3, 3.0),
+                "psd_sigma": Uniform(0.1, 4.0, default=float(psd_sigma)),
+                "psd_tau_myr": Uniform(1.0, 300.0, default=float(psd_tau_myr)),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+
+    return factory
+
+
+@pytest.fixture(scope="module")
+def flat_seam_population(synthetic_ssp_wide_physical):
+    """Two galaxies generated from the model at a truth point, so the posterior is proper.
+
+    The data-term fixture (``test_data_term._population_model_factory``) starts the
+    flat problem at a NaN log density on this SSP grid, and its chains never move, so
+    it cannot tell one key order from another. The physical-peak SSP keeps photometry
+    in float64 range, which makes the start point finite and the chains move.
+    """
+
+    factory = _flat_seam_factory(synthetic_ssp_wide_physical)
+    template = factory(1.0, 50.0)
+    truth = {
+        name: next(v for suffix, v in _FLAT_SEAM_TRUTH.items() if name.endswith(suffix))
+        for name in template.spec.free_params
+    }
+    flux = np.asarray(template.predict_photometry(truth))
+    galaxies = [
+        {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)
+    ]
+    return factory, galaxies
+
 
 @pytest.mark.parametrize("method, program, adaptation, cfg, fresh_init", _FLAT_SEAM_CASES)
 def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
-    method, program, adaptation, cfg, fresh_init
+    flat_seam_population, method, program, adaptation, cfg, fresh_init
 ):
     """The hierarchical flat seam feeds run_chain the keys and statics it always did.
 
-    Two galaxies on the stochastic population fixture; the seam's shared-parameter draws
-    must equal a direct ``run_chain`` call with the same warmup, init and chain keys and
-    the same statics. Only the key and config plumbing is under test here.
+    The chain must move (shared-parameter std above 1e-6) and must not be all
+    divergent, so that equality is evidence about the sampler rather than about a
+    frozen chain. The seam's shared draws must then equal a direct ``run_chain`` call
+    with the same warmup, init and chain keys and the same statics.
     """
     from tengri.inference._hierarchical_flat import build_flat_problem, run_flat_sampler
     from tengri.inference.hierarchical import PopulationFitter
 
+    factory, galaxies = flat_seam_population
     key = jax.random.PRNGKey(0)
-    n_warmup, n_burnin, n_samples = 20, 5, 10
-    fitter = PopulationFitter(_population_model_factory(), _galaxies(), _via_routing=True)
+    n_warmup, n_burnin, n_samples = _FLAT_SEAM_N
+    fitter = PopulationFitter(factory, galaxies, _via_routing=True)
     seam = run_flat_sampler(
         fitter,
         method,
@@ -912,6 +977,11 @@ def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
         allow_unvalidated=True,
         verbose=False,
     )
+    sigma = np.asarray(seam.shared_samples["psd_sigma"])
+    tau = np.asarray(seam.shared_samples["psd_tau_myr"])
+    assert min(sigma.std(), tau.std()) > 1e-6, "the chain did not move"
+    assert seam.diagnostics["divergent"] < n_samples, "every draw diverged"
+
     prob = build_flat_problem(fitter, key=key, memory_mode="low", verbose=False)
     wkey, ckey = jax.random.split(jax.random.fold_in(key, 1))
     chain_keys = jax.random.split(ckey, n_burnin + n_samples)
@@ -929,9 +999,8 @@ def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
         cfg,
     )
     shared = np.asarray(jax.vmap(prob.extract_shared)(draws.position[n_burnin:]))
-    assert np.array_equal(seam.shared_samples["psd_sigma"], shared[:, 0])
-    assert np.array_equal(seam.shared_samples["psd_tau_myr"], shared[:, 1])
-    assert seam.diagnostics["divergent"] == int(np.sum(np.asarray(draws.divergent)[n_burnin:]))
-    assert np.array_equal(
-        seam.diagnostics["divergent_mask"], np.asarray(draws.divergent)[n_burnin:]
-    )
+    assert np.array_equal(sigma, shared[:, 0])
+    assert np.array_equal(tau, shared[:, 1])
+    divergent = np.asarray(draws.divergent)[n_burnin:]
+    assert seam.diagnostics["divergent"] == int(np.sum(divergent))
+    assert np.array_equal(seam.diagnostics["divergent_mask"], divergent)

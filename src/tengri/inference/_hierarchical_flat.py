@@ -58,6 +58,7 @@ inside the likelihood, via ``to_bounded``.
 from __future__ import annotations
 
 import contextlib
+import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -833,8 +834,28 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
     )
 
 
-#: Flat-seam drivers that run one chain through ``chain_program.run_chain``.
-FLAT_CHAIN_PROGRAMS: tuple[str, ...] = ("nuts", "nuts_pathfinder", "hmc", "dynamic_hmc", "ghmc")
+#: Registry entry whose chain program a flat name runs, where the names differ. Pathfinder
+#: is the NUTS family with the Pathfinder warmup, so it runs the ``mcmc_nuts`` program.
+_FLAT_CHAIN_ENTRY_ALIAS: dict[str, str] = {"pathfinder": "mcmc_nuts"}
+
+
+@functools.cache
+def flat_chain_drivers() -> frozenset[str]:
+    """Return the flat drivers that run one chain through ``chain_program.run_chain``.
+
+    A driver qualifies when its registry entry declares both a chain program and a
+    compile plan, so a registered MCMC family joins the seam by registration alone.
+    Names with no registry entry (the VI and nested families) fall out here.
+    """
+    from tengri.inference._backend_registry import get_backend
+
+    drivers = set()
+    for method, driver in FLAT_SAMPLERS.items():
+        with contextlib.suppress(KeyError):
+            entry = get_backend(_FLAT_CHAIN_ENTRY_ALIAS.get(method, method))
+            if entry.chain_program is not None and entry.compile_plan is not None:
+                drivers.add(driver)
+    return frozenset(drivers)
 
 
 def _flat_chain_statics(
@@ -853,8 +874,10 @@ def _flat_chain_statics(
 ):
     """Return the chain program, window adaptation and statics for one flat driver.
 
-    The statics come from the caller's kwargs, as the flat seam always read them; the
-    adaptation comes from the registry's compile-path rule for the same family.
+    The statics come from the caller's kwargs, as the flat seam always read them: a
+    user's ``n_leapfrog`` or GHMC ``alpha`` is the value that runs, not the registry's
+    compile-plan default. The program and the adaptation come from the registry entry
+    of the same family, on its compile-path rule.
     """
     from tengri.inference._backend_registry import get_backend
     from tengri.inference.backends.mcmc.chain_program import (
@@ -891,11 +914,13 @@ def _flat_chain_statics(
             use_dense=use_dense,
             target_accept_rate=target_accept_rate,
         )
-    else:
+    elif driver == "ghmc":
         program = GHMC
         cfg = GHMCConfig(alpha=ghmc_alpha, delta=ghmc_delta, target_accept_rate=target_accept_rate)
+    else:
+        raise ValueError(f"no flat-seam statics for driver {driver!r}")
     # The pathfinder driver is the registry's "pathfinder" name, whose NUTS family is "mcmc_nuts".
-    entry = get_backend("mcmc_nuts" if driver == "nuts_pathfinder" else method)
+    entry = get_backend(_FLAT_CHAIN_ENTRY_ALIAS.get(method, method))
     kwargs = {
         "dense_mass_matrix": use_dense,
         "n_leapfrog_steps": n_leapfrog,
@@ -1115,7 +1140,7 @@ def run_flat_sampler(
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
 
-    if driver in FLAT_CHAIN_PROGRAMS:
+    if driver in flat_chain_drivers():
         import numpy as np
 
         from tengri.inference.backends.mcmc.chain_program import divergence_record, run_chain
