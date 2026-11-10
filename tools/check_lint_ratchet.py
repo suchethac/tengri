@@ -30,7 +30,10 @@ each file under the ``include`` list of ``[tool.pyright]`` (observation/ and
 inference/ only, basic mode) and holds them in :data:`PYRIGHT_BASELINE_PATH`
 under the same shrink-only rule. The executable is the one named by the
 ``PYRIGHT`` environment variable, else ``pyright`` on PATH, else the one beside
-the running interpreter; the OK line names its version.
+the running interpreter; the OK line names its version. The measurement always
+passes ``--pythonpath`` set to the running interpreter, because pyright otherwise
+reads the ``python`` on PATH for its installed packages and so analyzes an
+environment other than the one that built the baseline.
 
 Usage
 -----
@@ -225,7 +228,8 @@ def _pyright_version(pyright: str) -> str:
 
 def _measure_pyright(pyright: str) -> Counter[Key]:
     """Count the error diagnostics per repository-relative file in pyright's JSON report."""
-    proc = subprocess.run([pyright, "--outputjson"], cwd=ROOT, capture_output=True, text=True)
+    command = [pyright, "--pythonpath", sys.executable, "--outputjson"]
+    proc = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
     try:
         report = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
