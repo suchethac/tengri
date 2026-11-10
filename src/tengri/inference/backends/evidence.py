@@ -13,7 +13,9 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.special import logsumexp
 
+from tengri.config.exceptions import DeadFitError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference._walls import _wall_value
 
 _N_VOLUME_REALIZATIONS = 100  # simulated prior-volume sequences for H and log Z scatter
 
@@ -158,6 +160,43 @@ def _resolve_nss_settings(preset, n_live, num_delete, log_evidence_tol, max_shri
     )
 
 
+def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
+    """Refuse a nested run that hit its iteration cap before the evidence converged.
+
+    Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
+    live set still holds unintegrated posterior mass; resampling then returns
+    a silently truncated (therefore biased) sample set, which is precisely
+    the failure that kept this name refused (the blind-rejection stand-in
+    terminated at iteration 147 of a requested 200 and handed back a
+    plausible-looking answer, #1429). Same state, different road, same loud
+    refusal.
+    """
+    if remaining < tol:
+        return
+    raise RuntimeError(
+        f"{method}: nested sampling hit nss_max_iterations={max_iterations} "
+        f"(n_iter={n_iter}) while the unintegrated evidence fraction "
+        f"log(Z_live/Z) = {remaining:.2f} still exceeds "
+        f"nss_log_evidence_tol={tol}. The live set still holds posterior "
+        f"mass, so resampling now would return the silently truncated, "
+        f"biased sample set that kept this name refused (#1429). Raise "
+        f"nss_max_iterations, or raise nss_num_delete to retire more points "
+        f"per iteration."
+    )
+
+
+def _require_finite_live_set(n_finite, n_live):
+    """Refuse a nested run whose initial live set is mostly non-finite."""
+    if n_finite >= 0.1 * n_live:
+        return
+    raise DeadFitError(
+        f"nested sampling: {n_finite} of {n_live} initial live points have a finite "
+        f"log-likelihood (at least 10% are needed). The likelihood is non-finite across "
+        f"most of the prior, so there is no posterior mass to integrate. Check the "
+        f"parameters' prior ranges against the support of the model."
+    )
+
+
 def _get_nss_fns(
     fitter,
     *,
@@ -189,7 +228,11 @@ def _get_nss_fns(
         from tengri.inference.backends.nested.nss import as_top_level_api
 
         logprior_fn = fitter._build_logprior_fn()
-        loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
+        raw_loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
+
+        def loglikelihood_fn(params, data_args):
+            """Return the log-likelihood with non-finite values walled to -inf."""
+            return _wall_value(raw_loglikelihood_fn(params, data_args))
 
         # Build algo *inside* the JIT-traced function so that data_args is
         # abstract (traced) rather than a Python constant.  JAX traces these
@@ -375,6 +418,9 @@ def run_nss(
     all_samples = context.spec.sample_batch(init_key, n_live)
     particles = {name: all_samples[name] for name in context.free_names}
     live = init_jit(particles, data_args)
+    _require_finite_live_set(
+        int(np.isfinite(np.asarray(live.particles.loglikelihood)).sum()), n_live
+    )
 
     # Collect only dead particles, not the full NSInfo (update_info is MCMC internals
     # of the replacement step, 3-4× larger than particles but unused by ns_sample/ns_ess).
@@ -399,12 +445,10 @@ def run_nss(
                 f"elapsed={elapsed:.1f}s"
             )
 
-        if remaining < log_evidence_tol:
+        if remaining < log_evidence_tol or n_iter >= max_iterations:
             break
-        if n_iter >= max_iterations:
-            if verbose:
-                print("  NSS: max iterations reached")
-            break
+
+    _require_converged_evidence(n_iter, max_iterations, remaining, log_evidence_tol, "nss")
 
     wall_time = time.time() - t0
     logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))

@@ -79,7 +79,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
-from jax.scipy.linalg import block_diag
 
 from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
@@ -102,19 +101,25 @@ from tengri.inference.backends.mcmc.catalog import (
     ghmc_default_chains,
     map_with_shared,
 )
+from tengri.inference.data_term import DataTermOptions, resolve_data_term_options
 from tengri.inference.lbfgs_driver import lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_log_prob,
     standardized_residual,
 )
+from tengri.inference.likelihoods.protocol import (
+    GaussianLikelihood,
+    MultivariateGaussianLikelihood,
+)
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
 )
-from tengri.observation.banded import BandedMatrix, banded_forward_substitution
+from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.observation.calibration import (
     calibration_basis,
+    joint_calibration_line_marginal,
     marginalize_calibration_segments,
 )
 from tengri.observation.calibration_segments import R_BAND_EFFECTIVE_AA
@@ -235,6 +240,11 @@ def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | N
     if not spec.cov_offsets:
         return None
     return BandedMatrix(offsets=np.asarray(spec.cov_offsets, dtype=int), data=obs.chol_data)
+
+
+def _spectral_data_args(obs: SpectroBatch) -> dict:
+    """Data-args entries the spectral likelihood adapters read: flux, sigma and presence."""
+    return {"flux": obs.flux, "sigma": obs.sigma, "presence": obs.pix_mask}
 
 
 def _whitening(obs: SpectroBatch, chol: BandedMatrix | None) -> dict:
@@ -402,27 +412,32 @@ def _marginal_lines_loglik(
         )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
-        design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
         col_mask = jnp.concatenate([jnp.ones(cal_n_poly, dtype=bool), line_cols])
-        prior_mean = jnp.concatenate([jnp.zeros(cal_n_poly), line.prior_mean])
-        precision = block_diag(jnp.eye(cal_n_poly) / cal_prior_sigma**2, line.prior_precision)
+        result = joint_calibration_line_marginal(
+            obs.flux,
+            model0,
+            basis,
+            line,
+            cal_prior_sigma,
+            whitening=_whitening(obs, chol),
+            pix_mask=obs.pix_mask,
+            col_mask=col_mask,
+        )
     else:
-        design, col_mask = line.design, line_cols
-        prior_mean, precision = line.prior_mean, line.prior_precision
+        result = marginalize_linear_nuisance(
+            obs.flux,
+            model0,
+            line.design,
+            **_whitening(obs, chol),
+            pix_mask=obs.pix_mask,
+            prior_mean=line.prior_mean,
+            prior_precision=line.prior_precision,
+            col_mask=line_cols.astype(line.design.dtype),
+            scale=line.scale,
+        )
     weight = obs.pix_mask
     n_eff = jnp.sum(weight)
     log_sigma_sum = jnp.sum(weight * jnp.log(scatter))
-    result = marginalize_linear_nuisance(
-        obs.flux,
-        model0,
-        design,
-        **_whitening(obs, chol),
-        pix_mask=obs.pix_mask,
-        prior_mean=prior_mean,
-        prior_precision=precision,
-        col_mask=col_mask.astype(design.dtype),
-        scale=line.scale,
-    )
     return result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_sigma_sum
 
 
@@ -502,15 +517,24 @@ def batched_log_likelihood(
     threaded_default = _prepare_template(model) if threaded is None else threaded
     require_model_spec(model, spec)
     spectroscopy = model.observation.spectroscopy
-    if spectroscopy.eline_mode == "fitted" and spec.cov_offsets:
+    resolved = resolve_data_term_options(
+        model,
+        DataTermOptions(
+            data_type="spectroscopy",
+            calibration_marginalize=calibration_marginalize,
+            cal_n_poly=cal_n_poly,
+            cal_prior_sigma=cal_prior_sigma,
+        ),
+    )
+    if resolved.eline_fitted and spec.cov_offsets:
         raise NotImplementedError(
             "fitted emission-line amplitudes with a pixel covariance are not evaluated; "
             "use eline_mode='marginalized', or drop the covariance"
         )
-    marginal_lines = spectroscopy.eline_mode == "marginalized"
+    marginal_lines = resolved.options.eline_marginalize
     if calibration_marginalize:
         _refuse_calibration_order(model)
-        if spectroscopy.eline_mode == "fitted":
+        if resolved.eline_fitted:
             raise NotImplementedError(
                 "Combined calibration marginalization + fitted (non-marginalized) "
                 "emission-line amplitudes is not currently supported. Use "
@@ -520,7 +544,7 @@ def batched_log_likelihood(
     line_set = batched_line_set(model)
     match = (
         model_line_match(model, line_set.independent_wavelengths)
-        if marginal_lines and spectroscopy.eline_prior_type == "model"
+        if marginal_lines and resolved.options.eline_prior_type == "model"
         else None
     )
     has_q = spectroscopy.cal_scale_prior is not None
@@ -560,14 +584,23 @@ def batched_log_likelihood(
                 out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, segment_args, chol
             )
         elif chol is not None:
-            whitened = banded_forward_substitution(
-                chol, obs.pix_mask * (obs.flux - out["spec_fnu"])
-            )
-            total = -0.5 * jnp.dot(whitened, whitened)
+            total = MultivariateGaussianLikelihood(
+                obs=obs.flux,
+                chol_data=chol.data,
+                chol_offsets=tuple(np.asarray(chol.offsets, dtype=int).tolist()),
+                channel="spec_fnu",
+                obs_key="flux",
+                presence_key="presence",
+            ).log_prob(out, data_args=_spectral_data_args(obs))
         else:
-            total = diag_gaussian_log_prob(
-                out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask
-            )
+            total = GaussianLikelihood(
+                obs=obs.flux,
+                err=obs.sigma,
+                channel="spec_fnu",
+                obs_key="flux",
+                err_key="sigma",
+                presence_key="presence",
+            ).log_prob(out, data_args=_spectral_data_args(obs))
         if spec.has_phot:
             total = total + diag_gaussian_log_prob(
                 out["phot_fnu"], obs.phot_flux, obs.phot_err, presence=obs.phot_presence

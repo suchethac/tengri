@@ -208,9 +208,9 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
     nonfinite_rhat: list = []
     try:
         rh = posterior.rhat()
-    except Exception:
-        # ``Posterior.rhat`` raises on a zero-variance chain by design (#1438).
-        # That is a frozen-chain signature, not a missing measurement.
+    except ValueError:
+        # ``Posterior.rhat`` raises ValueError on a zero-variance chain by design
+        # (#1438). That is a frozen-chain signature, not a missing measurement.
         rhat_failed = True
     else:
         nonfinite_rhat = sorted((k for k, v in rh.items() if not np.isfinite(v)), key=str)
@@ -223,10 +223,7 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
     if columns and n_total >= 4:
         from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 
-        try:
-            ess = effective_sample_size(columns)
-        except Exception:
-            ess = {}
+        ess = effective_sample_size(columns)
         for name, rec in ess.items():
             val = rec["ess"] if isinstance(rec, dict) else rec
             if not np.isfinite(val):
@@ -263,6 +260,8 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
         unconverged_reasons.append(f"R-hat non-finite for {', '.join(map(str, nonfinite_rhat))}")
     if nonfinite_ess:
         unconverged_reasons.append(f"ESS non-finite for {', '.join(map(str, nonfinite_ess))}")
+    if columns and n_total >= 4 and min_ess is None:
+        unconverged_reasons.append("ESS not computed")
 
     converged = (
         max_rhat is not None
