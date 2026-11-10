@@ -797,7 +797,7 @@ def run_nuts(
     # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
     # Split from sampling so a fresh call and a cached one end in the SAME
     # sampling scan. While the two were fused, a first fit ran warmup+sampling
-    # inside `_nuts_full_scan` and every later fit on the same model ran a
+    # inside `run_chain` and every later fit on the same model ran a
     # sampling-only scan against the cached parameters, structurally different
     # computations, so one pinned `key` returned two different posteriors. HMC
     # had already been split this way and was reproducible; NUTS had not.
