@@ -87,6 +87,7 @@ Each component owns its own `_params.py` (see the list above and the
 | The `Fitter` class and JIT-cached engines | `inference/fitter.py`, `inference/jit_engine.py` |
 | The one data term (positive log-likelihood of one structure, shared by `Fitter` and the hierarchical flat seam) | `inference/data_term.py` (`build_data_term`, `build_data_args`) |
 | MCMC / VI / Pathfinder backends | `inference/backends/` |
+| The one adapted-chain runner for the MCMC families (`ChainProgram`, `Adaptation`, `adapt_chain` / `sample_chain` / `run_chain`) | `inference/backends/mcmc/chain_program.py` |
 | Likelihood implementations | `inference/likelihoods/` |
 | Batched spectroscopic likelihood and MAP across a catalog (one compile per bucket) | `inference/batched_spectro.py`, `observation/batched.py`; see [`batched-spectroscopy.md`](batched-spectroscopy.md) |
 | Posterior containers + diagnostics | `inference/posterior.py` |
