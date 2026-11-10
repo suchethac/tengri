@@ -65,7 +65,9 @@ def test_table_rows_are_in_the_emitters_term_order(free_z_emitters, name):
     """``S_ref`` at the first node equals the terms at ``lam_ref``, paired by position."""
     model = free_z_emitters
     comp = next(c for c in model._cached_component_chain if getattr(c, "name", "") == name)
-    table = getattr(model, f"_{name}_term_response_cache", None)
+    from tengri.forward.precompute.band_table import arrays_of
+
+    table = arrays_of(model.band_table(name, "term_band_response"))
     assert isinstance(table, dict), f"the {name} term-response table was not built"
 
     fixed = {k: jnp.asarray(v) for k, v in model.spec.get_fixed_values().items()}

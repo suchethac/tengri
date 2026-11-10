@@ -658,8 +658,9 @@ def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
     return amplitude * normed
 
 
-#: Band-table slots this adapter provides, read through :func:`band_table`.
-BAND_SLOTS: tuple[str, ...] = ("band_table",)
+#: Band-table slots this adapter provides, read through :func:`band_table`. The two term
+#: slots are the generic rank-1 path shared with the radio and X-ray adapters.
+BAND_SLOTS: tuple[str, ...] = ("band_table", "term_band_response", "term_shape_table")
 
 #: Per-axis node count of the composable AGN band table, by the number of free axes. The
 #: build evaluates the recipe at every node of the cartesian product, so the count falls
@@ -680,7 +681,7 @@ def band_table(ctx: BandTableContext, *, component: str, slot: str) -> BandTable
     component : str
         The component whose slot is requested; the AGN is found in ``ctx.chain``.
     slot : str
-        Must be ``"band_table"``.
+        ``"band_table"``, or a term slot of the AGN, which the generic path builds.
 
     Returns
     -------
@@ -692,8 +693,10 @@ def band_table(ctx: BandTableContext, *, component: str, slot: str) -> BandTable
     ValueError
         If ``slot`` is not one of ``BAND_SLOTS``.
     """
-    if slot not in BAND_SLOTS:
-        raise ValueError(f"the composable AGN adapter has no band-table slot {slot!r}")
+    if slot != "band_table":
+        from tengri.components._term_response_table import term_band_table
+
+        return term_band_table(ctx, component=component, slot=slot)
     reason = _agn_band_table_gate(ctx)
     if reason is not None:
         return Decline(reason)
