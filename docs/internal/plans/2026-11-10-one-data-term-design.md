@@ -103,3 +103,7 @@ state the addition.
 - The hierarchical path at `inference/hierarchical.py` and the native VI path at
   `inference/backends/vi/native.py` each have a copy of a similar term. They are a
   follow-up issue.
+- Batched per-galaxy classes: threading each galaxy's `wave`, `cal_lo`, `cal_hi` and
+  segment through `data_args` so the batched path can call the per-galaxy classes
+  outright, as `chol_key` already does for the banded factor. Part 3 of #3293 shares the
+  option table and the joint helper instead; this is a follow-up.
