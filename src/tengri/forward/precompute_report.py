@@ -14,7 +14,7 @@ References
 
 from typing import Any, NamedTuple
 
-from tengri.forward.precompute.band_table import BandTable
+from tengri.forward.precompute.band_table import BandTable, Decline
 
 
 class PrecomputeEngagementReport(NamedTuple):
@@ -123,7 +123,6 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     """
     # Check each mechanism's cache attribute
     eb_lut_cached = getattr(model, "_energy_balance_lut_cache", "unset")
-    dust_response_cached = getattr(model, "_dust_band_response_cache", "unset")
 
     # Determine state and reason for energy balance LUT
     if eb_lut_cached == "unset":
@@ -137,7 +136,7 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     # Determine state and reason for dust band response. The memo of the band tables is read
     # first; the old attribute answers only for a slot the memo has not seen.
     dust_state = _state_from_memo_or_attr(
-        _memo_entry(model, "dust_emission", "emission_band_response"), dust_response_cached
+        _memo_entry(model, "dust_emission", "emission_band_response"), "unset"
     )
     if dust_state == "never_attempted":
         dust_state_obj = PrecomputeState(state="never_attempted")
@@ -262,7 +261,8 @@ def _infer_dust_response_decline_reason(model: Any) -> str | None:
     # homogeneity probe is the only gate a caller cannot re-check, because it
     # evaluates the template rather than reading the spec, so without this the
     # report calls a refusal it cannot see "unknown reason" (#2497).
-    recorded = getattr(model, "_dust_band_response_decline", None)
+    entry = _memo_entry(model, "dust_emission", "emission_band_response")
+    recorded = entry.reason if isinstance(entry, Decline) else None
     if recorded:
         return str(recorded)
 

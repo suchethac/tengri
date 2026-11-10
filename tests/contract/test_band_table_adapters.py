@@ -10,11 +10,21 @@ from __future__ import annotations
 
 import types
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import Fixed, Parameters, Uniform
+from tengri import (
+    DEFAULT,
+    Fixed,
+    Observation,
+    Parameters,
+    Photometry,
+    SEDModel,
+    Uniform,
+    WavePrecomp,
+)
 from tengri.components.nebular import cloudy_precompute, mappings_shock_precompute
 from tengri.components.nebular._shared import render_nebular_lines
 from tengri.components.nebular.cloudy_grid import CloudyGridBackend
@@ -22,6 +32,7 @@ from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.nebular.shock_model import ShockNebular
 from tengri.forward.precompute.band_table import BandTable, BandTableContext, Decline
 from tengri.observation.photometry import lnu_filter_integral_batch
+from tests.contract import _band_table_cases as cases
 
 pytestmark = pytest.mark.contract
 
@@ -199,3 +210,88 @@ def test_shock_coefficients_equal_the_integral_of_each_delta_line():
             ]
         )
         np.testing.assert_allclose(coeff[i], np.asarray(expected), rtol=1e-12, atol=0)
+
+
+def _dust_context(model, z_nodes=None) -> BandTableContext:
+    """A context around one real dust emitter and the real stellar padded filters.
+
+    The adapter reads only this context: the model's own memo is not consulted, and ``ask``
+    answers nothing.
+    """
+    chain = model._build_component_chain()
+    stellar = next(c for c in chain if getattr(c, "name", "") == "stellar")
+    state = stellar._state
+    return BandTableContext(
+        spec=model.spec,
+        wave=model._rest_wavelength,
+        filters=(model.filter_waves, model.filter_trans),
+        padded_filters=(state.phot_fw_padded, state.phot_ft_padded),
+        z_nodes=z_nodes,
+        wave_precomp=WavePrecomp(),
+        chain=chain,
+        dust_ir_diffuse_screen=False,
+        atten_free_ok=SEDModel._BAND_RESPONSE_ATTEN_FREE_OK,
+        agn_axis_grids=None,
+        ask=lambda name, slot: None,
+    )
+
+
+def _dust_emitter(ctx: BandTableContext):
+    return next(c for c in ctx.chain if getattr(c, "name", "") == "dust_emission")
+
+
+def test_dust_band_table_equals_the_filter_integral_at_each_node_bit_for_bit():
+    """Each R[z] row is the filter integral of the emitter's unit-luminosity SED at that z."""
+    from tengri.components.dust import dust_emission_precompute as adapter
+
+    ctx = _dust_context(cases.build_dust_fixed_z(), z_nodes=jnp.log1p(jnp.array([0.0, 0.5, 1.0])))
+    entry = adapter.band_table(ctx, component="dust_emission", slot="emission_band_response")
+    assert isinstance(entry, BandTable)
+    values = np.asarray(entry.arrays["values"])
+
+    emitter = _dust_emitter(ctx)
+    fixed = {k: jnp.asarray(v) for k, v in ctx.spec.get_fixed_values().items()}
+    fw, ft = ctx.padded_filters
+    zeros = jnp.zeros_like(ctx.wave)
+    takes_log_budget = "log_L_ir" in adapter._declared_input_names(emitter)
+
+    def unit_response(z):
+        budget = {"L_ir": 1.0}
+        if takes_log_budget:
+            budget["log_L_ir"] = jnp.log10(1.0)
+        p = emitter.slice_params({**fixed, "redshift": z})
+        sed, _ = emitter.predict(p, zeros, ctx.wave, **budget)
+        return lnu_filter_integral_batch(sed, ctx.wave, fw, ft, z)
+
+    assert values.shape == (3, fw.shape[0])
+    for row, z in enumerate(jnp.expm1(ctx.z_nodes)):
+        expected = np.asarray(jax.jit(unit_response)(z))
+        assert np.array_equal(values[row], expected), f"R[z] row {row} differs from the integral"
+
+
+def test_bosa_dust_band_table_is_declined_with_the_homogeneity_reason():
+    """BOSA's template depends on L_ir, so no constant per-filter response is built."""
+    from tengri.components.dust import dust_emission_precompute as adapter
+
+    model = SEDModel.build(
+        ssp_data=cases._bare_ssp(),
+        observation=Observation(photometry=Photometry.from_names(list(cases.FILTERS))),
+        approx=WavePrecomp(),
+        redshift=Fixed(0.1),
+        sfh=cases._dpl_sfh(),
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "bosa", "log_L_ir": Fixed(11.0), "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+    )
+    entry = adapter.band_table(
+        _dust_context(model), component="dust_emission", slot="emission_band_response"
+    )
+    assert isinstance(entry, Decline)
+    assert entry.reason == (
+        "dust emission template is not homogeneous in L_ir: its shape depends on luminosity, "
+        "so a constant per-filter response cannot represent it"
+    )

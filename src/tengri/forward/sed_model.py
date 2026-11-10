@@ -127,30 +127,6 @@ from tengri.utils.grid import (
 from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
-#: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
-#: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
-#: (~1e44 erg/s ≈ 2.6e10 Lsun, a LIRG), paired with the L=1 unit probe. An emitter
-#: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
-#: between the two and is refused a constant band response.
-_L_IR_PROBE = 1.0e44
-
-
-def _declared_input_names(component) -> frozenset[str]:
-    """Names of the optional inputs a component declares, in one spelling.
-
-    Dust-emission components keep ``optional_inputs`` as a dict (its keys are the
-    names); a :class:`SEDModelComponent` exposes a method returning ``DerivedKey``
-    tuples (each with a ``.name``). Both forms are normalized to plain strings so a
-    caller can test for one name regardless of which form the emitter uses (#2553).
-    """
-    declared = getattr(component, "optional_inputs", None)
-    if callable(declared):
-        declared = declared()
-    if declared is None:
-        return frozenset()
-    return frozenset(getattr(key, "name", key) for key in declared)
-
-
 #: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
 #: (#2520): a line is not a delta function in observed wavelength, so the
 #: IGM transmission is profile-averaged over +/- N sigma_gas rather than
@@ -11815,7 +11791,7 @@ class SEDModel:
     #: like ``dust_eta_balance`` it only rescales the overall ``L_ir`` amplitude
     #: fed to the (fixed-shape) emission template, so a build-time per-filter
     #: response ``R`` computed at one ``L_ir`` and reused for any other (the
-    #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    #: homogeneity check in the dust adapter's ``_emission_band_response``) stays valid.
     #:
     #: **TRAP: This set is consulted by TWO mechanisms with DIFFERENT correctness
     #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
@@ -11854,7 +11830,12 @@ class SEDModel:
     #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
     #: Band-table slots whose adapter keeps no cache of its own, so the memo is their cache.
     _PROVIDED_SLOTS: ClassVar[frozenset[tuple[str, str]]] = frozenset(
-        {("nebular", "band_table"), ("shock", "band_table")}
+        {
+            ("dust_emission", "emission_band_response"),
+            ("dust_emission", "emission_shape_table"),
+            ("nebular", "band_table"),
+            ("shock", "band_table"),
+        }
     )
 
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
@@ -12536,14 +12517,6 @@ class SEDModel:
             decline = None
         else:
             builders = {
-                ("dust_emission", "emission_band_response"): (
-                    self._dust_emission_band_response,
-                    "_dust_band_response_decline",
-                ),
-                ("dust_emission", "emission_shape_table"): (
-                    self._dust_emission_shape_table,
-                    "_dust_shape_table_decline",
-                ),
                 ("agn", "band_table"): (self._agn_band_table, "_agn_band_table_decline"),
             }
             builder, decline_attr = builders[(name, slot)]
@@ -12564,309 +12537,29 @@ class SEDModel:
     def _band_table_context(self, chain) -> BandTableContext:
         """The model state a band-table adapter builds from, with ``ask`` bound to the memo.
 
-        ``filters``, ``padded_filters``, ``z_nodes`` and ``agn_axis_grids`` are None: the
-        adapters migrated so far read the chain and the spec instead.
+        ``padded_filters`` are the stellar block's padded curves (None without a stellar
+        block). ``z_nodes`` is the response redshift axis, None at one Fixed redshift and
+        without WavePrecomp. ``agn_axis_grids`` stays None until the AGN adapter reads it.
         """
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        state = getattr(stellar, "_state", None)
+        wave_precomp = self._approx.get("wave_precomp")
         return BandTableContext(
             spec=self.spec,
             wave=self._rest_wavelength,
-            filters=None,
-            padded_filters=None,
-            z_nodes=None,
-            wave_precomp=self._approx.get("wave_precomp"),
+            filters=(self.filter_waves, self.filter_trans),
+            padded_filters=(
+                getattr(state, "phot_fw_padded", None),
+                getattr(state, "phot_ft_padded", None),
+            ),
+            z_nodes=self._response_z_nodes(self._rest_wavelength.dtype) if wave_precomp else None,
+            wave_precomp=wave_precomp,
             chain=chain,
             dust_ir_diffuse_screen=self._dust_ir_diffuse_screen,
             atten_free_ok=self._BAND_RESPONSE_ATTEN_FREE_OK,
             agn_axis_grids=None,
             ask=lambda name, slot: self._band_tables.get(name, {}).get(slot),
         )
-
-    def _dust_emission_band_response(self, chain):
-        """Build-time filter-integrated dust-IR response per unit ``L_ir``.
-
-        CIGALE's ``dl2014``/``dale2014`` normalize the IR template to unit
-        luminosity and scale by ``dust.luminosity`` (emission = ``L_dust ×
-        template``); the band fluxes are therefore ``L_ir × R`` with ``R`` the
-        template's per-filter integral. When the emission *shape* (``dust_T``,
-        ``dust_beta_ir``, ``dust_epsilon_mbb``) is fixed, ``R`` depends only on
-        the redshift the model is evaluated at (the filters sit at
-        ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
-        redshift range, uniform in ``ln(1+z)``, and returned as
-        ``{"ln1pz": (n_z,), "values": (n_z, n_filter), "rest_values": (n_filter,)}``
-        (``rest_values`` is the same probe at z = 0, #2559) so
-        :meth:`DustSEDComponent.apply` replaces the per-call dense filter
-        integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
-        evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
-
-        A free redshift, and a ``catalog_z_range`` redshift that is a
-        per-galaxy runtime value while the spec carries a placeholder, both use
-        this path. Returns ``None`` when the emission shape is free (keep the
-        per-call integral, or ``fast_dust_emission``).
-        """
-        cached = getattr(self, "_dust_band_response_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        response = None
-        emitter = next(
-            (c for c in chain if getattr(c, "name", "") == "dust_emission"),
-            None,
-        )
-        stellar = next((c for c in chain if c.name == "stellar"), None)
-        st = getattr(stellar, "_state", None)
-        fw_pad = getattr(st, "phot_fw_padded", None)
-        ft_pad = getattr(st, "phot_ft_padded", None)
-
-        # ALLOWLIST, not a denylist. R is a function of z alone only if the emission
-        # *shape* is fixed. Gating on "no free param from a known shape-param set"
-        # fails DANGEROUS when a param is missing from that set (dust_log_ssfr was);
-        # gating on "no free dust_* param outside the known attenuation knobs" fails
-        # SAFE, an unrecognized free parameter simply disables the optimization.
-        # ``redshift`` is deliberately NOT in this gate: R is tabulated over it.
-        free = set(self.spec.free_params)
-        free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK)
-
-        if (
-            emitter is not None
-            and self._approx.get("wave_precomp")
-            and not shape_free
-            and fw_pad is not None
-            and ft_pad is not None
-            and hasattr(emitter, "predict")
-            and hasattr(emitter, "slice_params")
-        ):
-            from tengri.components._z_response import build_z_table, single_node
-            from tengri.observation.photometry import lnu_filter_integral_batch
-
-            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
-            wave = self._rest_wavelength
-            nodes = self._response_z_nodes(wave.dtype)
-            single = nodes is None
-            if single:
-                # One Fixed redshift: a single node, at the spec value (no other
-                # redshift can reach this model).
-                nodes = single_node(fixed["redshift"], wave.dtype)
-            zeros = jnp.zeros_like(wave)
-
-            # An emitter may read its budget through the log form ``log_L_ir`` (the
-            # float32-safe one). When it declares that input, the probe passes it
-            # alongside ``L_ir``; otherwise the probe would see the -inf default and
-            # return an all-zero SED (#2553).
-            accepts_log_l_ir = "log_L_ir" in _declared_input_names(emitter)
-
-            def _template_at(z, luminosity):
-                # Slice with the component's OWN rule, the same one apply() uses. A
-                # precompute that slices differently silently builds R from default
-                # template parameters and returns confidently wrong IR photometry.
-                # The redshift rides in ``p`` because a template may read it
-                # (the CMB temperature floor); it is the NODE redshift here.
-                p = emitter.slice_params({**fixed, "redshift": z})
-                budget = {"L_ir": luminosity}
-                if accepts_log_l_ir:
-                    budget["log_L_ir"] = jnp.log10(luminosity)
-                sed, _ = emitter.predict(p, zeros, wave, **budget)
-                return sed
-
-            # HOMOGENEITY CHECK. The band response is exact only because an additive
-            # emitter is linear (degree-1 homogeneous) in its luminosity:
-            #
-            #     sed(L) = L * S_unit(lambda)   =>   int sed(L) R_f = L * int S_unit R_f
-            #
-            # Not every IR model obeys this. BOSA parameterizes its template by
-            # (L_TIR, sSFR), so its *shape* is a function of L_ir, probing it at
-            # L_ir = 1 erg/s samples a template ~44 dex from anything physical and
-            # builds a response that is wrong by ~13% in W4. Luminosity-dependent
-            # shapes (L-T relations) are common in IR SED models, so verify the
-            # property rather than maintaining a list of which models have it:
-            # probe at two luminosities and require the SED to scale.
-            def _probe_is_live(sed):
-                return jnp.all(jnp.isfinite(sed)) & jnp.any(sed != 0.0)
-
-            def _probe_at(z):
-                """Return ``(live, ok)`` for the two probes at redshift ``z``.
-
-                ``live``: both probe SEDs are finite and not identically zero. A zero
-                SED satisfies ``allclose(0, k * 0)`` vacuously, so it must be caught
-                here, not by the homogeneity test. ``ok``: live, and the SED scales
-                linearly between the two luminosities.
-                """
-                lo = _template_at(z, 1.0)
-                hi = _template_at(z, _L_IR_PROBE)
-                live = _probe_is_live(lo) & _probe_is_live(hi)
-                return live, live & jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
-
-            zero_probe_reason = (
-                "the probe SED is identically zero or contains non-finite values; "
-                "the emitter did not reach its emission budget (e.g., a required "
-                "log-luminosity input was not provided)"
-            )
-            z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            # One traced program for the two probe SEDs (#2914): evaluated eagerly,
-            # the template's primitives dispatched ~60 XLA compiles per build, each
-            # below the persistent cache's floor. The verdicts are two booleans.
-            live_first, ok_first = jax.jit(_probe_at)(z_first)
-            if not bool(live_first):
-                # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
-                # was never activated, so decline and let the exact integral run.
-                self._dust_band_response_decline = zero_probe_reason
-                self._dust_band_response_cache = None
-                return None
-            if not bool(ok_first):
-                # Record WHY, or the refusal is invisible. Every gate a caller
-                # can re-check from outside is satisfied here, so
-                # precompute_engagement_report reported "unknown reason (gate
-                # conditions appear satisfied)" and the natural next move --
-                # widening the gate -- is the one that produces silently wrong
-                # IR photometry (#2497, #2485).
-                self._dust_band_response_decline = (
-                    "dust emission template is not homogeneous in L_ir: its shape "
-                    "depends on luminosity, so a constant per-filter response "
-                    "cannot represent it"
-                )
-                self._dust_band_response_cache = None
-                return None
-
-            # Decline band response when diffuse screen is active: the emission
-            # passes through the dust screen, so the effective response depends
-            # on the diffuse dust transmission T(λ), which varies with wavelength
-            # and cannot be factored into a constant per-filter response.
-            if self._dust_ir_diffuse_screen:
-                self._dust_band_response_decline = (
-                    "the IR emission passes through the diffuse screen "
-                    "(dust_emission diffuse_screen=True), so its band response depends on tau"
-                )
-                self._dust_band_response_cache = None
-                return None
-
-            # The radio block normalizes on the luminosity inside an IR window
-            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
-            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
-            # an O(1) constant of the fixed shape, tabulated here in log space. The
-            # radio block then reads a scalar, as it reads ``L_ir``, instead of
-            # integrating the dust SED on the full grid on every call. A window the
-            # rest grid does not span is left out, so the radio block's own check
-            # raises at evaluation.
-            from tengri.components.radio.component import IR_WINDOWS_AA
-            from tengri.utils.sed_quantities import log10_band_luminosity
-
-            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
-            windows = {
-                name: edges
-                for name, edges in IR_WINDOWS_AA.items()
-                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
-            }
-
-            def _node(z):
-                unit = _template_at(z, 1.0)
-                live, ok = _probe_at(z)
-                return {
-                    "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
-                    "live": live,
-                    "ok": ok,
-                    "log_window_fraction": {
-                        name: log10_band_luminosity(unit, wave, lo, hi)
-                        for name, (lo, hi) in windows.items()
-                    },
-                }
-
-            built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
-            if not bool(jnp.all(built["values"]["live"])):
-                self._dust_band_response_decline = zero_probe_reason
-                self._dust_band_response_cache = None
-                return None
-            if not bool(jnp.all(built["values"]["ok"])):
-                self._dust_band_response_decline = (
-                    "dust emission template is not homogeneous in L_ir at every "
-                    "redshift of the model's range, so a per-filter response "
-                    "cannot represent it"
-                )
-                self._dust_band_response_cache = None
-                return None
-            # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
-            # probe is integrated through the filters at z = 0 (#2559). The homogeneity
-            # check above already covers the template, so it is not repeated here.
-            # One traced program (#2914); the grids ride in as arguments so XLA does
-            # not constant-fold the union-grid sort of a baked filter array. Evaluated
-            # eagerly, the template and the per-filter sort dispatched ~60 compiles.
-            rest_values = jax.jit(
-                lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
-            )(wave, fw_pad, ft_pad)
-            response = {
-                "ln1pz": built["ln1pz"],
-                "values": built["values"]["R"],
-                "rest_values": rest_values,
-                "log_window_fraction": built["values"]["log_window_fraction"],
-            }
-
-        self._dust_band_response_decline = None
-        self._dust_band_response_cache = response
-        return response
-
-    def _dust_emission_shape_table(self, chain):
-        """Registry-adapter band fluxes of the dust emission over its free shape axes.
-
-        :meth:`_dust_emission_band_response` is exact but needs every shape parameter fixed.
-        With ``dust_T``, ``dust_beta_ir``, ``dust_alpha_mir`` or ``dust_lambda_0_um`` free
-        the band flux depends on them, and the component would integrate the filters on every
-        call. The registry adapter for the emitter's ``precompute_key`` tabulates the band
-        fluxes over those axes at build, spanning the priors, and the component reads the table
-        at the current shape parameters (``EmissionComponent._shape_table_phot``).
-
-        The adapter is built at one redshift, so the table is built only for a single ``Fixed``
-        redshift. Returns the adapter's ``table_arrays`` dict (its band array and ``"axes"``)
-        with a ``"rest"`` entry holding the same arrays for the adapter at z = 0, the rest band
-        the photometry publishes beside the observed one (#2559), so a free-shape predict
-        integrates no filter. Arrays only, so it threads through ``jit``; ``None`` with the
-        reason in ``_dust_shape_table_decline`` otherwise.
-        """
-        cached = getattr(self, "_dust_shape_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        table = None
-        reason = None
-        emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
-        key = getattr(emitter, "precompute_key", None)
-        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        st = getattr(stellar, "_state", None)
-        free_dust = {p for p in self.spec.free_params if p.startswith("dust_")}
-
-        if emitter is None or key is None or not self._approx.get("wave_precomp"):
-            reason = "no registry adapter for this dust emission model"
-        elif getattr(st, "phot_fw_padded", None) is None:
-            reason = "no padded filter curves"
-        elif getattr(emitter, "fast_emission", False) or self._dust_ir_diffuse_screen:
-            reason = "fast_emission or diffuse_screen is set"
-        elif not (free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK):
-            reason = "the emission shape is fixed; the exact band response applies"
-        elif self._response_z_nodes() is not None:
-            reason = "the registry adapter is built at one redshift and the redshift is not Fixed"
-        else:
-            from tengri.forward.precompute import registry
-
-            module = registry.resolve(key)
-            axes = set(module.AXIS_PARAMS[key])
-            amplitude = set(getattr(emitter, "lookup_amplitude_params", ()))
-            unknown = free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK - axes - amplitude
-            if unknown:
-                reason = f"free parameters {sorted(unknown)} are not axes of the {key} table"
-            else:
-                redshift = float(self.spec.get_fixed_values()["redshift"])
-                filter_args = (
-                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
-                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
-                )
-                preint = module.precompute(*filter_args, redshift, self.spec, model=key)
-                rest_preint = module.precompute(*filter_args, 0.0, self.spec, model=key)
-                table = {
-                    **module.table_arrays(preint, key),
-                    "rest": module.table_arrays(rest_preint, key),
-                }
-
-        self._dust_shape_table_decline = reason
-        self._dust_shape_table_cache = table
-        return table
 
     #: Per-axis node count of the composable AGN band table, by the number of free axes. The
     #: build evaluates the recipe at every node of the cartesian product, so the count falls
@@ -13092,7 +12785,8 @@ class SEDModel:
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
 
-        Generalizes :meth:`_dust_emission_band_response` from one term to many. An
+        Generalizes the dust band response (``_emission_band_response``) from one term to
+        many. An
         additive emitter is a *sum of rank-1 terms*, each a scalar amplitude times a
         spectral shape that depends only on the emitter's own (fixed) shape parameters:
 

@@ -527,7 +527,7 @@ class RadioSEDComponent(TemplateThreading):
         log_window_fraction : array_like, optional
             ``log10`` of the share of the dust power inside the window [dex], the
             build-time constant the dust-emission block tabulates for a fixed shape
-            (``SEDModel._dust_emission_band_response``). When given, the
+            (the dust adapter's ``_emission_band_response``). When given, the
             windowed luminosity is ``L_ir`` times that share and the dust SED is not
             integrated.
 
