@@ -24,11 +24,22 @@ source. The per-file ignores in ``pyproject.toml`` for the T201 interface
 modules (the CLI, the display and the benchmarks) are the one place a print is
 not a defect, and they are excluded by ruff itself, so they never reach here.
 
+Pyright is ratcheted per file rather than per rule. The ``pyright`` subcommand
+counts the error-severity diagnostics that ``pyright --outputjson`` reports for
+each file under the ``include`` list of ``[tool.pyright]`` (observation/ and
+inference/ only, basic mode) and holds them in :data:`PYRIGHT_BASELINE_PATH`
+under the same shrink-only rule. The executable is the one named by the
+``PYRIGHT`` environment variable, else ``pyright`` on PATH, else the one beside
+the running interpreter; the OK line names its version.
+
 Usage
 -----
     python tools/check_lint_ratchet.py ruff
     python tools/check_lint_ratchet.py ruff --list            # print current counts
     python tools/check_lint_ratchet.py ruff --write-baseline  # rewrite the baseline
+    python tools/check_lint_ratchet.py pyright
+    python tools/check_lint_ratchet.py pyright --list
+    python tools/check_lint_ratchet.py pyright --write-baseline
 
 Exit code 0 when every count matches its baseline line; 1 when a count is above
 or below its baseline or a file is missing from it; 2 on a usage or ruff error.
@@ -39,6 +50,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -49,6 +62,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 #: Recorded counts, one ``RULE<TAB>path<TAB>count`` line per (rule, file).
 BASELINE_PATH = ROOT / "tools" / "lint_ratchet_baseline.txt"
+
+#: Recorded pyright error counts, one ``pyright<TAB>path<TAB>count`` line per file.
+PYRIGHT_BASELINE_PATH = ROOT / "tools" / "pyright_ratchet_baseline.txt"
 
 #: The tree the rules are measured on.
 SCAN_PATH = "src/tengri"
@@ -189,7 +205,108 @@ def _run_ruff(args: argparse.Namespace) -> int:
     return 1
 
 
-SUBCOMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {"ruff": _run_ruff}
+def _pyright_executable() -> str:
+    """The pyright named by ``PYRIGHT``, else the one on PATH, else the one beside the interpreter."""
+    override = os.environ.get("PYRIGHT")
+    if override:
+        return override
+    found = shutil.which("pyright")
+    if found:
+        return found
+    sibling = Path(sys.executable).with_name("pyright")
+    return str(sibling) if sibling.exists() else "pyright"
+
+
+def _pyright_version(pyright: str) -> str:
+    """The version string pyright reports, so a drift between CI and a local run is visible."""
+    proc = subprocess.run([pyright, "--version"], capture_output=True, text=True, check=True)
+    return proc.stdout.strip()
+
+
+def _measure_pyright(pyright: str) -> Counter[Key]:
+    """Count the error diagnostics per repository-relative file in pyright's JSON report."""
+    proc = subprocess.run(
+        [pyright, "--outputjson"], cwd=ROOT, capture_output=True, text=True
+    )
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"pyright exited {proc.returncode} without a JSON report: {proc.stderr.strip()}"
+        ) from exc
+    counts: Counter[Key] = Counter()
+    for item in report.get("generalDiagnostics", []):
+        if item.get("severity") == "error":
+            rel = Path(item["file"]).resolve().relative_to(ROOT).as_posix()
+            counts[("pyright", rel)] += 1
+    return counts
+
+
+def _format_pyright_baseline(counts: Mapping[Key, int]) -> str:
+    """The pyright baseline text: a header, then one ``pyright<TAB>path<TAB>count`` line per file."""
+    header = (
+        "# Pyright ratchet baseline (tools/check_lint_ratchet.py pyright): error counts\n"
+        "# per file under [tool.pyright] include, one pyright<TAB>path<TAB>count line each.\n"
+        "# This list may only shrink: fix a file's errors, then rerun with --write-baseline.\n"
+    )
+    body = "".join(f"{rule}\t{rel}\t{count}\n" for (rule, rel), count in sorted(counts.items()))
+    return header + body
+
+
+def _run_pyright(args: argparse.Namespace) -> int:
+    """Measure, then compare, write or list, for the pyright subcommand."""
+    pyright = _pyright_executable()
+    try:
+        version = _pyright_version(pyright)
+        counts = _measure_pyright(pyright)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f"check_lint_ratchet pyright: could not measure: {exc}", file=sys.stderr)
+        return 2
+    total = sum(counts.values())
+
+    if args.write_baseline:
+        PYRIGHT_BASELINE_PATH.write_text(_format_pyright_baseline(counts))
+        print(
+            f"check_lint_ratchet: wrote {len(counts)} entries to "
+            f"{PYRIGHT_BASELINE_PATH.name} ({version})"
+        )
+        return 0
+
+    if args.list:
+        print(f"{version}  {total} errors in {len(counts)} files")
+        for (rule, rel), count in sorted(counts.items()):
+            print(f"  {rule}\t{rel}\t{count}")
+        return 0
+
+    recorded = _read_baseline(PYRIGHT_BASELINE_PATH)
+    problems = _compare(counts, recorded)
+    if not problems:
+        print(
+            f"check_lint_ratchet: OK -- {version}; {total} errors in {len(counts)} files; "
+            f"baseline matches ({len(recorded)} entries)."
+        )
+        return 0
+
+    print(
+        f"check_lint_ratchet: {len(problems)} mismatch(es) (pyright path now/baseline)\n",
+        file=sys.stderr,
+    )
+    for line in problems:
+        print(line, file=sys.stderr)
+    print(
+        "\nA count above its baseline is a new type error: fix it before merging.\n"
+        "A stale line means the file has fewer errors: shrink the baseline with\n"
+        "    python tools/check_lint_ratchet.py pyright --write-baseline\n"
+        "and commit the smaller file.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+SUBCOMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "ruff": _run_ruff,
+    "pyright": _run_pyright,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

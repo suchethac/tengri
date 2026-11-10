@@ -237,6 +237,11 @@ combine-as-imports = true
 [tool.ruff.format]
 docstring-code-format = true
 
+[tool.pyright]
+include = ["src/tengri/observation", "src/tengri/inference"]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
