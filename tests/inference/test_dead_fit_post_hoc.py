@@ -323,28 +323,19 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
 
     # Monkeypatch both paths that can call the scan: the single-chain path
-    # uses _nuts_chain_scan directly; the multi-chain path uses _vmap_chains.
+    # uses sample_chain directly; the multi-chain path uses _vmap_chains.
     # Both must return all-divergent flags.
-    original_chain_scan = nuts_backend._nuts_chain_scan
+    original_chain_scan = nuts_backend.sample_chain
     original_vmap_chains = nuts_backend._vmap_chains
     chain_scan_called = []
     vmap_chains_called = []
 
-    def patched_chain_scan(
-        state, chain_keys, logdensity_fn_2arg, data_args, step_size, inv_mass_matrix, max_doublings
-    ):
+    def patched_chain_scan(program, state, chain_keys, logdensity_fn_2arg, data_args, params, cfg):
         chain_scan_called.append(True)
-        positions, divergent_real, *rest = original_chain_scan(
-            state,
-            chain_keys,
-            logdensity_fn_2arg,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
+        draws = original_chain_scan(
+            program, state, chain_keys, logdensity_fn_2arg, data_args, params, cfg
         )
-        divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched, *rest
+        return draws._replace(divergent=jnp.ones_like(draws.divergent, dtype=bool))
 
     def patched_vmap_chains(_init, _scan, **kwargs):
         vmap_chains_called.append((kwargs["n_chains"], kwargs["n_iter"], kwargs["n_burnin"]))
@@ -366,7 +357,7 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
             divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
         return positions, divergent_patched, *rest
 
-    monkeypatch.setattr(nuts_backend, "_nuts_chain_scan", patched_chain_scan)
+    monkeypatch.setattr(nuts_backend, "sample_chain", patched_chain_scan)
     monkeypatch.setattr(nuts_backend, "_vmap_chains", patched_vmap_chains)
 
     # Test 1: Single-chain fit with all divergent should raise DeadFitError.
@@ -376,7 +367,7 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
     assert err.sampling_divergence_frac == pytest.approx(1.0)
     assert "sampling completed dead" in str(err)
     assert "different sampler" in str(err).lower() or "sampler" in str(err)
-    assert chain_scan_called, "Patched _nuts_chain_scan was never called"
+    assert chain_scan_called, "Patched sample_chain was never called"
 
     # Test 2: Two-chain fit where chain 0 is dead should raise and call vmap_chains.
     chain_scan_called.clear()
@@ -428,25 +419,16 @@ def test_a_dead_sampling_evicts_the_cached_adaptation(
     refuse_dead_sampling and this test fails (second fit silently reuses cache).
     """
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    original_chain_scan = nuts_backend._nuts_chain_scan
+    original_chain_scan = nuts_backend.sample_chain
 
-    def patched_chain_scan(
-        state, chain_keys, logdensity_fn_2arg, data_args, step_size, inv_mass_matrix, max_doublings
-    ):
-        positions, divergent_real, *rest = original_chain_scan(
-            state,
-            chain_keys,
-            logdensity_fn_2arg,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
+    def patched_chain_scan(program, state, chain_keys, logdensity_fn_2arg, data_args, params, cfg):
+        draws = original_chain_scan(
+            program, state, chain_keys, logdensity_fn_2arg, data_args, params, cfg
         )
-        divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched, *rest
+        return draws._replace(divergent=jnp.ones_like(draws.divergent, dtype=bool))
 
     # Patch to force all divergent, run, expect DeadFitError
-    monkeypatch.setattr(nuts_backend, "_nuts_chain_scan", patched_chain_scan)
+    monkeypatch.setattr(nuts_backend, "sample_chain", patched_chain_scan)
     with pytest.raises(DeadFitError):
         _fit(forward, flux_obs, noise, n_chains=1, verbose=False)
 
@@ -477,21 +459,20 @@ def test_hmc_raises_on_sampling_collapse_after_healthy_warmup(
 ):
     """HMC wiring: refusal when sampling diverges despite healthy warmup.
 
-    Patched _hmc_chain_scan forces all divergent flags. HMC's refuse_dead_sampling
+    Patched sample_chain forces all divergent flags. HMC's refuse_dead_sampling
     call should catch this and raise DeadFitError. Mutation check: remove the
     refuse_dead_sampling call in hmc.py and this test fails.
     """
     from tengri.inference.backends.mcmc import hmc as hmc_backend
 
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    original_chain_scan = hmc_backend._hmc_chain_scan
+    original_chain_scan = hmc_backend.sample_chain
 
-    def patched_hmc_chain_scan(*args, **kwargs):
-        positions, divergent_real = original_chain_scan(*args, **kwargs)
-        divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched
+    def patched_hmc_chain_scan(program, state, chain_keys, ld2, data_args, params, cfg):
+        draws = original_chain_scan(program, state, chain_keys, ld2, data_args, params, cfg)
+        return draws._replace(divergent=jnp.ones_like(draws.divergent, dtype=bool))
 
-    monkeypatch.setattr(hmc_backend, "_hmc_chain_scan", patched_hmc_chain_scan)
+    monkeypatch.setattr(hmc_backend, "sample_chain", patched_hmc_chain_scan)
 
     # Single-chain fit should raise DeadFitError.
     with pytest.raises(DeadFitError) as excinfo:
