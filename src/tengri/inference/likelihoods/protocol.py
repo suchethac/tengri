@@ -445,6 +445,7 @@ class MultivariateGaussianLikelihood:
     channel: str = "spec_fnu"
     name: str = "mvn_gaussian"
     obs_key: str | None = None
+    presence_key: str | None = None
     data_slice: tuple[int, int] | None = None
 
     def log_prob(
@@ -461,6 +462,16 @@ class MultivariateGaussianLikelihood:
         del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         diff = obs - prediction[self.channel]
+        # Presence zeroes absent pixels before whitening; with no key it is a no-op.
+        if (
+            data_args is not None
+            and self.presence_key is not None
+            and self.presence_key in data_args
+        ):
+            presence = data_args[self.presence_key]
+            if self.data_slice is not None:
+                presence = presence[self.data_slice[0] : self.data_slice[1]]
+            diff = presence * diff
         if self.chol_data is None:
             return -0.5 * (diff @ self.cov_inv @ diff)
         factor = BandedMatrix(
@@ -496,5 +507,6 @@ _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "obs_key": content("data_args routing key changes which traced input is read"),
+    "presence_key": content("presence-masking routing key changes the likelihood"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
 }
