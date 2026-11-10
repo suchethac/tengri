@@ -497,8 +497,9 @@ def test_ghmc_run_chain_window_matches_raw_warmup_then_sampling(setup):
     init, wkey, keys, scales = setup
     ghmc_key = jax.random.PRNGKey(7)
     _, step_size, inv_mass, _ = _raw_hmc_warmup(init, wkey, scales, N_WARMUP)
+    momentum_scale = jnp.sqrt(inv_mass)
     state = _raw_ghmc_init(init, ghmc_key, scales)
-    expected = _raw_ghmc_sampling_scan(state, keys, scales, step_size, inv_mass)
+    expected = _raw_ghmc_sampling_scan(state, keys, scales, step_size, momentum_scale)
 
     draws, (got_step, got_mass) = run_chain(
         GHMC,
@@ -513,10 +514,69 @@ def test_ghmc_run_chain_window_matches_raw_warmup_then_sampling(setup):
         GHMC_CFG,
     )
     assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
-    assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
+    assert np.array_equal(np.asarray(got_mass), np.asarray(momentum_scale))
     actual = (draws.position, draws.divergent)
     for want, have in zip(expected, actual, strict=True):
         assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+#: Known per-coordinate variances of the diagonal Gaussian behind the GHMC hand-off test.
+_GHMC_HANDOFF_VARIANCE = jnp.asarray([0.04, 1.0, 25.0])
+
+
+def _diagonal_gaussian(position, variance):
+    """Log density of a zero-mean Gaussian with per-coordinate ``variance``."""
+    return -0.5 * jnp.sum(position**2 / variance)
+
+
+def _kernel_inverse_mass(momentum_scale):
+    """Inverse mass that BlackJAX's GHMC metric implies for ``momentum_scale``.
+
+    Read from the momentum the kernel's own metric helper samples: a momentum of
+    covariance ``1 / m`` is the inverse mass ``m``.
+    """
+    from blackjax.mcmc.ghmc import _metric_from_momentum_inverse_scale
+
+    metric = _metric_from_momentum_inverse_scale(momentum_scale)
+    keys = jax.random.split(jax.random.PRNGKey(3), 20_000)
+    momenta = jax.vmap(lambda k: metric.sample_momentum(k, jnp.zeros(momentum_scale.shape[0])))(
+        keys
+    )
+    return 1.0 / np.var(np.asarray(momenta), axis=0)
+
+
+def test_window_ghmc_hands_the_kernel_the_adapted_variance_as_inverse_mass():
+    """The GHMC kernel built from window tuning has the adapted variance as its inverse mass.
+
+    The window's own variance estimate is the oracle, taken from raw BlackJAX window
+    adaptation on the same key. The runner's hand-off must give a kernel whose inverse mass
+    equals that variance to 8 percent (Monte Carlo error of 20,000 momentum draws is about
+    1 percent per coordinate). Passing the variance itself as the momentum scale makes
+    BlackJAX square it, so the kernel's inverse mass would be the variance squared, which
+    misses this tolerance on every coordinate here.
+    """
+    variance = _GHMC_HANDOFF_VARIANCE
+    init = jnp.zeros(3)
+    warmup_key = jax.random.PRNGKey(0)
+
+    def log_density(position):
+        return _diagonal_gaussian(position, variance)
+
+    raw = blackjax.window_adaptation(
+        blackjax.hmc,
+        log_density,
+        is_mass_matrix_diagonal=True,
+        target_acceptance_rate=GHMC_CFG.target_accept_rate,
+        num_integration_steps=10,
+    )
+    (_, raw_params), _ = raw.run(warmup_key, init, num_steps=1000)
+    adapted_variance = np.asarray(raw_params["inverse_mass_matrix"])
+
+    params, _, _ = adapt_chain(
+        GHMC, WINDOW_GHMC, init, warmup_key, _diagonal_gaussian, variance, 1000, GHMC_CFG
+    )
+    kernel_inverse_mass = _kernel_inverse_mass(params[1])
+    assert kernel_inverse_mass == pytest.approx(adapted_variance, rel=0.08)
 
 
 def _raw_meads_chains(init, warmup_key, scales, chain_keys):
