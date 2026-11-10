@@ -263,8 +263,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install "ruff==0.15.6" "jupytext>=1.16"
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
+      - run: pip install ruff jupytext
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
@@ -606,7 +608,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install bandit pip-audit
       - name: Static security scan (bandit, medium+ severity)
         run: bandit -r src/ -ll
@@ -957,7 +961,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Every grid the examples need is committed (#1146), so there is no download
       # step and a fresh clone behaves exactly like CI.
@@ -996,7 +1002,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Validate that all grammar blocks in documentation are complete and consistent.
       - run: python tools/check_doc_grammar_keys.py
@@ -1256,7 +1264,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the XLA compile cache. Measured locally at -n 2: 468 s cold vs 307 s
       # warm -- a ~1.5x saving.
@@ -1699,7 +1709,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # `${{ matrix.nproc }}` (not `-n auto`): `--cov` adds ~30–50 % memory on top of
       # the test job, so this job OOM-killed the runner even more often than `test`
@@ -1845,7 +1857,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the JAX/XLA compilation cache across slow-tier runs.
       # `import tengri` auto-enables the on-disk cache
@@ -1975,7 +1989,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the JAX compile cache (same pattern as the `test` job).
       - id: jaxver
