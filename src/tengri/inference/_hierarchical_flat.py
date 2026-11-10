@@ -859,9 +859,9 @@ def flat_chain_drivers() -> frozenset[str]:
 
 
 def _flat_chain_statics(
-    driver,
-    method,
-    n_dim,
+    driver: str,
+    method: str,
+    n_dim: int,
     spec,
     *,
     verbose,
@@ -918,9 +918,12 @@ def _flat_chain_statics(
         program = GHMC
         cfg = GHMCConfig(alpha=ghmc_alpha, delta=ghmc_delta, target_accept_rate=target_accept_rate)
     else:
-        raise ValueError(f"no flat-seam statics for driver {driver!r}")
-    # The pathfinder driver is the registry's "pathfinder" name, whose NUTS family is "mcmc_nuts".
-    entry = get_backend(_FLAT_CHAIN_ENTRY_ALIAS.get(method, method))
+        raise ValueError(
+            f"flat driver {driver!r} has no chain statics; the chain drivers are "
+            f"{sorted(flat_chain_drivers())}."
+        )
+    entry_name: str = _FLAT_CHAIN_ENTRY_ALIAS.get(method, method)
+    entry = get_backend(entry_name)
     kwargs = {
         "dense_mass_matrix": use_dense,
         "n_leapfrog_steps": n_leapfrog,

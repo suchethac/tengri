@@ -1004,3 +1004,11 @@ def test_flat_seam_draws_equal_run_chain_with_the_same_keys(
     divergent = np.asarray(draws.divergent)[n_burnin:]
     assert seam.diagnostics["divergent"] == int(np.sum(divergent))
     assert np.array_equal(seam.diagnostics["divergent_mask"], divergent)
+
+
+def test_flat_seam_refuses_an_unknown_method_by_name():
+    """An unknown flat method is refused by name before any problem is built."""
+    from tengri.inference._hierarchical_flat import run_flat_sampler
+
+    with pytest.raises(ValueError, match="mcmc_no_such_driver"):
+        run_flat_sampler(None, "mcmc_no_such_driver", key=jax.random.PRNGKey(0))
