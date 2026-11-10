@@ -156,6 +156,10 @@ log-likelihoods at rtol 1e-10 without a mask, equals the `Fitter` built with `pr
 a band is absent, and equals the closed-form censored likelihood with a `data_mask`. The
 tests are in `tests/contract/test_data_term.py`.
 
+Record keys other than `flux_obs`, `noise`, `presence` and `data_mask` are ignored today.
+Refusing unrecognized keys by name is a follow-up: existing callers may carry other keys, so
+that refusal needs a sweep of the notebooks and examples first.
+
 ## Execution-verification status (2026-08-10)
 
 Verified by real fits (cold process, A/A-controlled): map, hmc, nuts (via
