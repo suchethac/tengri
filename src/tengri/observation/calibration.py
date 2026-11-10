@@ -242,6 +242,68 @@ def calibration_basis(
     return jnp.concatenate([indicator, chebyshev], axis=-1)
 
 
+def joint_calibration_line_marginal(
+    data,
+    model0,
+    basis,
+    line,
+    prior_sigma,
+    *,
+    whitening,
+    pix_mask=None,
+    col_mask=None,
+):
+    """Return the linear-Gaussian marginal over the calibration polynomial and the lines.
+
+    The design is ``model0 * basis`` in front of ``line.design``. The calibration block
+    carries a zero-mean Gaussian prior of width ``prior_sigma``, and the line block carries
+    the prior of ``line``. Normalization constants are left to the caller.
+
+    Parameters
+    ----------
+    data : ndarray, shape (n_pix,)
+        Observed values.
+    model0 : ndarray, shape (n_pix,)
+        Unscaled model values that the calibration multiplies.
+    basis : ndarray, shape (n_pix, n_poly)
+        Calibration basis evaluated on the pixels.
+    line : object
+        Unit line prior with ``design``, ``prior_mean``, ``prior_precision`` and ``scale``,
+        as returned by :func:`~tengri.observation.eline_marginalization.unit_line_prior`.
+    prior_sigma : float
+        Standard deviation of the Gaussian prior on each calibration coefficient.
+    whitening : dict
+        Noise keyword of :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`,
+        either ``{"sigma": ...}`` or ``{"chol_lower": ...}``.
+    pix_mask : ndarray, shape (n_pix,), optional
+        Pixel weights; zero drops a pixel.
+    col_mask : ndarray, shape (n_poly + n_lines,), optional
+        Column weights over the calibration and line columns together.
+
+    Returns
+    -------
+    MarginalResult
+        The marginal returned by ``marginalize_linear_nuisance``.
+    """
+    n_poly = basis.shape[1]
+    design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
+    prior_mean = jnp.concatenate([jnp.zeros(n_poly), line.prior_mean])
+    prior_precision = block_diag(jnp.eye(n_poly) / prior_sigma**2, line.prior_precision)
+    if col_mask is not None:
+        col_mask = col_mask.astype(design.dtype)
+    return marginalize_linear_nuisance(
+        data,
+        model0,
+        design,
+        **whitening,
+        pix_mask=pix_mask,
+        prior_mean=prior_mean,
+        prior_precision=prior_precision,
+        col_mask=col_mask,
+        scale=line.scale,
+    )
+
+
 @partial(jax.jit, static_argnames=("n_poly", "chol_offsets"))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
