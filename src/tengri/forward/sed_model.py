@@ -89,6 +89,12 @@ from tengri.config.exceptions import (
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
+from tengri.forward.precompute.band_table import (
+    BandTable,
+    BandTableContext,
+    Decline,
+    arrays_of,
+)
 from tengri.forward.sed_model_types import (
     MockData,
     PriorPredictive,
@@ -120,30 +126,6 @@ from tengri.utils.grid import (
 )
 from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
-
-#: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
-#: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
-#: (~1e44 erg/s ≈ 2.6e10 Lsun, a LIRG), paired with the L=1 unit probe. An emitter
-#: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
-#: between the two and is refused a constant band response.
-_L_IR_PROBE = 1.0e44
-
-
-def _declared_input_names(component) -> frozenset[str]:
-    """Names of the optional inputs a component declares, in one spelling.
-
-    Dust-emission components keep ``optional_inputs`` as a dict (its keys are the
-    names); a :class:`SEDModelComponent` exposes a method returning ``DerivedKey``
-    tuples (each with a ``.name``). Both forms are normalized to plain strings so a
-    caller can test for one name regardless of which form the emitter uses (#2553).
-    """
-    declared = getattr(component, "optional_inputs", None)
-    if callable(declared):
-        declared = declared()
-    if declared is None:
-        return frozenset()
-    return frozenset(getattr(key, "name", key) for key in declared)
-
 
 #: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
 #: (#2520): a line is not a delta function in observed wavelength, so the
@@ -285,10 +267,7 @@ def _chain_consumes(chain, key: str) -> bool:
             declared = getattr(comp, attr, None)
             if declared is None:
                 continue
-            try:
-                items = declared() if callable(declared) else declared
-            except Exception:
-                continue
+            items = declared() if callable(declared) else declared
             if not items:
                 continue
             names = items if isinstance(items, Mapping) else [getattr(i, "name", i) for i in items]
@@ -3427,6 +3406,7 @@ class SEDModel:
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
+        self._band_tables: dict[str, dict[str, BandTable | Decline]] = {}
 
         # AGB circumstellar dust-shell weighting (#2534): a Fixed weight is
         # baked directly into a NEW ssp_data here, before anything (the
@@ -3819,21 +3799,24 @@ class SEDModel:
             # this way).
             chain = self._cached_component_chain = self._build_component_chain()
             self._energy_balance_lut(chain)
-            self._dust_emission_band_response(chain)
-            self._dust_emission_shape_table(chain)
-            self._agn_band_table(chain)
+            # Every band table is filled into the memo here, eagerly, from chain0: a
+            # build inside a jit trace would see tracers, and the grid chain attached
+            # below must not be the one a table is built from.
+            self._band_table("dust_emission", "emission_band_response")
+            self._band_table("dust_emission", "emission_shape_table")
+            self._band_table("agn", "band_table")
             # The CLOUDY band table is built here, eagerly, as the dust response
             # above is: a build inside a jit trace would see tracers.
-            self._cloudy_band_table(chain)
-            self._shock_band_table(chain)
+            self._band_table("nebular", "band_table")
+            self._band_table("shock", "band_table")
 
             # Derive which emitters in the chain implement the emission_terms
             # contract rather than hardcoding ("xray", "radio"). Any additive
             # emitter added in future automatically inherits the band-response
             # optimization without silent performance regression.
             for _emitter in _chain_implements_emission_terms(chain):
-                self._additive_term_band_response(chain, _emitter)
-                self._additive_term_shape_table(chain, _emitter)
+                self._band_table(_emitter, "term_band_response")
+                self._band_table(_emitter, "term_shape_table")
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -11665,7 +11648,7 @@ class SEDModel:
             if blocks:
                 agn_templates["blocks"] = blocks
 
-            band_table = self._agn_band_table(cached)
+            band_table = arrays_of(self._band_table("agn", "band_table"))
             if band_table is not None:
                 agn_templates["band_table"] = band_table
 
@@ -11682,23 +11665,23 @@ class SEDModel:
         if eb_lut is not None:
             result.setdefault("dust_ir", {})["energy_balance_lut"] = eb_lut
 
-        band_response = self._dust_emission_band_response(cached)
+        band_response = arrays_of(self._band_table("dust_emission", "emission_band_response"))
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
-        shape_table = self._dust_emission_shape_table(cached)
+        shape_table = arrays_of(self._band_table("dust_emission", "emission_shape_table"))
         if shape_table is not None:
             result.setdefault("dust_ir", {})["emission_shape_table"] = shape_table
         # ── CLOUDY age-resolved band table (WavePrecomp, #2324) ──
         # A sibling of ``nebular_grid``, not a slot of ``nebular``: the backend's
         # grid lives under ``nebular`` and :meth:`NebularSEDComponent.apply` peels
         # that slot, so the table is read from its own key.
-        cloudy_band = self._cloudy_band_table(cached)
+        cloudy_band = arrays_of(self._band_table("nebular", "band_table"))
         if cloudy_band is not None:
             result["nebular_band_table"] = cloudy_band
 
         # ── Composable shock line-band coefficients (WavePrecomp, #2324) ──
-        shock_band = self._shock_band_table(cached)
+        shock_band = arrays_of(self._band_table("shock", "band_table"))
         if shock_band is not None:
             result["shock_band_table"] = shock_band
 
@@ -11760,10 +11743,10 @@ class SEDModel:
         # sums of rank-1 terms, so they get a response *per term* rather than the single
         # L_ir * R that dust's one-term SED admits. Same exactness, same build-time integral.
         for emitter in _chain_implements_emission_terms(cached):
-            term_response = self._additive_term_band_response(cached, emitter)
+            term_response = arrays_of(self._band_table(emitter, "term_band_response"))
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
-            term_shape = self._additive_term_shape_table(cached, emitter)
+            term_shape = arrays_of(self._band_table(emitter, "term_shape_table"))
             if term_shape is not None:
                 result.setdefault(emitter, {})["term_shape_table"] = term_shape
 
@@ -11808,7 +11791,7 @@ class SEDModel:
     #: like ``dust_eta_balance`` it only rescales the overall ``L_ir`` amplitude
     #: fed to the (fixed-shape) emission template, so a build-time per-filter
     #: response ``R`` computed at one ``L_ir`` and reused for any other (the
-    #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    #: homogeneity check in the dust adapter's ``_emission_band_response``) stays valid.
     #:
     #: **TRAP: This set is consulted by TWO mechanisms with DIFFERENT correctness
     #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
@@ -11845,6 +11828,17 @@ class SEDModel:
     #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
     #: adding a new attenuation parameter that does not reshape the emission.
     #: ``dust_mu`` exists only under two_component, so the one-component requirement holds.
+    #: Band-table slots whose adapter keeps no cache of its own, so the memo is their cache.
+    _PROVIDED_SLOTS: ClassVar[frozenset[tuple[str, str]]] = frozenset(
+        {
+            ("dust_emission", "emission_band_response"),
+            ("dust_emission", "emission_shape_table"),
+            ("nebular", "band_table"),
+            ("shock", "band_table"),
+            ("agn", "band_table"),
+        }
+    )
+
     _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
@@ -12461,647 +12455,113 @@ class SEDModel:
             warn_if_z_table_narrower_than_prior(nodes, (float(prior[0]), float(prior[1])))
         return nodes
 
-    def _dust_emission_band_response(self, chain):
-        """Build-time filter-integrated dust-IR response per unit ``L_ir``.
+    def _band_table(self, name: str, slot: str) -> BandTable | Decline:
+        """Fill the memo entry of one component slot from its builder, and return it.
 
-        CIGALE's ``dl2014``/``dale2014`` normalize the IR template to unit
-        luminosity and scale by ``dust.luminosity`` (emission = ``L_dust ×
-        template``); the band fluxes are therefore ``L_ir × R`` with ``R`` the
-        template's per-filter integral. When the emission *shape* (``dust_T``,
-        ``dust_beta_ir``, ``dust_epsilon_mbb``) is fixed, ``R`` depends only on
-        the redshift the model is evaluated at (the filters sit at
-        ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
-        redshift range, uniform in ``ln(1+z)``, and returned as
-        ``{"ln1pz": (n_z,), "values": (n_z, n_filter), "rest_values": (n_filter,)}``
-        (``rest_values`` is the same probe at z = 0, #2559) so
-        :meth:`DustSEDComponent.apply` replaces the per-call dense filter
-        integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
-        evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
-
-        A free redshift, and a ``catalog_z_range`` redshift that is a
-        per-galaxy runtime value while the spec carries a placeholder, both use
-        this path. Returns ``None`` when the emission shape is free (keep the
-        per-call integral, or ``fast_dust_emission``).
+        The builder answers from its own cache, so a call is cheap, and a cache that was
+        cleared after the build is seen here rather than served from the memo.
         """
-        cached = getattr(self, "_dust_band_response_cache", "unset")
-        if cached != "unset":
-            return cached
+        if (name, slot) in self._PROVIDED_SLOTS:
+            memo = self._band_tables.get(name, {}).get(slot)
+            if memo is not None:
+                return memo
+        entry = self._build_band_table(name, slot)
+        self._band_tables.setdefault(name, {})[slot] = entry
+        return entry
 
-        response = None
-        emitter = next(
-            (c for c in chain if getattr(c, "name", "") == "dust_emission"),
-            None,
-        )
-        stellar = next((c for c in chain if c.name == "stellar"), None)
-        st = getattr(stellar, "_state", None)
-        fw_pad = getattr(st, "phot_fw_padded", None)
-        ft_pad = getattr(st, "phot_ft_padded", None)
+    def band_table(self, name: str, slot: str) -> BandTable | None:
+        """Return the built band table of one component slot.
 
-        # ALLOWLIST, not a denylist. R is a function of z alone only if the emission
-        # *shape* is fixed. Gating on "no free param from a known shape-param set"
-        # fails DANGEROUS when a param is missing from that set (dust_log_ssfr was);
-        # gating on "no free dust_* param outside the known attenuation knobs" fails
-        # SAFE, an unrecognized free parameter simply disables the optimization.
-        # ``redshift`` is deliberately NOT in this gate: R is tabulated over it.
-        free = set(self.spec.free_params)
-        free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK)
+        Parameters
+        ----------
+        name : str
+            Component name, a key of ``BAND_TABLE_PROVIDERS``.
+        slot : str
+            A band-table slot of that component, for example ``"band_table"``.
 
-        if (
-            emitter is not None
-            and self._approx.get("wave_precomp")
-            and not shape_free
-            and fw_pad is not None
-            and ft_pad is not None
-            and hasattr(emitter, "predict")
-            and hasattr(emitter, "slice_params")
-        ):
-            from tengri.components._z_response import build_z_table, single_node
-            from tengri.observation.photometry import lnu_filter_integral_batch
-
-            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
-            wave = self._rest_wavelength
-            nodes = self._response_z_nodes(wave.dtype)
-            single = nodes is None
-            if single:
-                # One Fixed redshift: a single node, at the spec value (no other
-                # redshift can reach this model).
-                nodes = single_node(fixed["redshift"], wave.dtype)
-            zeros = jnp.zeros_like(wave)
-
-            # An emitter may read its budget through the log form ``log_L_ir`` (the
-            # float32-safe one). When it declares that input, the probe passes it
-            # alongside ``L_ir``; otherwise the probe would see the -inf default and
-            # return an all-zero SED (#2553).
-            accepts_log_l_ir = "log_L_ir" in _declared_input_names(emitter)
-
-            def _template_at(z, luminosity):
-                # Slice with the component's OWN rule, the same one apply() uses. A
-                # precompute that slices differently silently builds R from default
-                # template parameters and returns confidently wrong IR photometry.
-                # The redshift rides in ``p`` because a template may read it
-                # (the CMB temperature floor); it is the NODE redshift here.
-                p = emitter.slice_params({**fixed, "redshift": z})
-                budget = {"L_ir": luminosity}
-                if accepts_log_l_ir:
-                    budget["log_L_ir"] = jnp.log10(luminosity)
-                sed, _ = emitter.predict(p, zeros, wave, **budget)
-                return sed
-
-            # HOMOGENEITY CHECK. The band response is exact only because an additive
-            # emitter is linear (degree-1 homogeneous) in its luminosity:
-            #
-            #     sed(L) = L * S_unit(lambda)   =>   int sed(L) R_f = L * int S_unit R_f
-            #
-            # Not every IR model obeys this. BOSA parameterizes its template by
-            # (L_TIR, sSFR), so its *shape* is a function of L_ir, probing it at
-            # L_ir = 1 erg/s samples a template ~44 dex from anything physical and
-            # builds a response that is wrong by ~13% in W4. Luminosity-dependent
-            # shapes (L-T relations) are common in IR SED models, so verify the
-            # property rather than maintaining a list of which models have it:
-            # probe at two luminosities and require the SED to scale.
-            def _probe_is_live(sed):
-                return jnp.all(jnp.isfinite(sed)) & jnp.any(sed != 0.0)
-
-            def _probe_at(z):
-                """Return ``(live, ok)`` for the two probes at redshift ``z``.
-
-                ``live``: both probe SEDs are finite and not identically zero. A zero
-                SED satisfies ``allclose(0, k * 0)`` vacuously, so it must be caught
-                here, not by the homogeneity test. ``ok``: live, and the SED scales
-                linearly between the two luminosities.
-                """
-                lo = _template_at(z, 1.0)
-                hi = _template_at(z, _L_IR_PROBE)
-                live = _probe_is_live(lo) & _probe_is_live(hi)
-                return live, live & jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
-
-            zero_probe_reason = (
-                "the probe SED is identically zero or contains non-finite values; "
-                "the emitter did not reach its emission budget (e.g., a required "
-                "log-luminosity input was not provided)"
-            )
-            z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            # One traced program for the two probe SEDs (#2914): evaluated eagerly,
-            # the template's primitives dispatched ~60 XLA compiles per build, each
-            # below the persistent cache's floor. The verdicts are two booleans.
-            live_first, ok_first = jax.jit(_probe_at)(z_first)
-            if not bool(live_first):
-                # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
-                # was never activated, so decline and let the exact integral run.
-                self._dust_band_response_decline = zero_probe_reason
-                self._dust_band_response_cache = None
-                return None
-            if not bool(ok_first):
-                # Record WHY, or the refusal is invisible. Every gate a caller
-                # can re-check from outside is satisfied here, so
-                # precompute_engagement_report reported "unknown reason (gate
-                # conditions appear satisfied)" and the natural next move --
-                # widening the gate -- is the one that produces silently wrong
-                # IR photometry (#2497, #2485).
-                self._dust_band_response_decline = (
-                    "dust emission template is not homogeneous in L_ir: its shape "
-                    "depends on luminosity, so a constant per-filter response "
-                    "cannot represent it"
-                )
-                self._dust_band_response_cache = None
-                return None
-
-            # Decline band response when diffuse screen is active: the emission
-            # passes through the dust screen, so the effective response depends
-            # on the diffuse dust transmission T(λ), which varies with wavelength
-            # and cannot be factored into a constant per-filter response.
-            if self._dust_ir_diffuse_screen:
-                self._dust_band_response_decline = (
-                    "the IR emission passes through the diffuse screen "
-                    "(dust_emission diffuse_screen=True), so its band response depends on tau"
-                )
-                self._dust_band_response_cache = None
-                return None
-
-            # The radio block normalizes on the luminosity inside an IR window
-            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
-            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
-            # an O(1) constant of the fixed shape, tabulated here in log space. The
-            # radio block then reads a scalar, as it reads ``L_ir``, instead of
-            # integrating the dust SED on the full grid on every call. A window the
-            # rest grid does not span is left out, so the radio block's own check
-            # raises at evaluation.
-            from tengri.components.radio.component import IR_WINDOWS_AA
-            from tengri.utils.sed_quantities import log10_band_luminosity
-
-            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
-            windows = {
-                name: edges
-                for name, edges in IR_WINDOWS_AA.items()
-                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
-            }
-
-            def _node(z):
-                unit = _template_at(z, 1.0)
-                live, ok = _probe_at(z)
-                return {
-                    "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
-                    "live": live,
-                    "ok": ok,
-                    "log_window_fraction": {
-                        name: log10_band_luminosity(unit, wave, lo, hi)
-                        for name, (lo, hi) in windows.items()
-                    },
-                }
-
-            built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
-            if not bool(jnp.all(built["values"]["live"])):
-                self._dust_band_response_decline = zero_probe_reason
-                self._dust_band_response_cache = None
-                return None
-            if not bool(jnp.all(built["values"]["ok"])):
-                self._dust_band_response_decline = (
-                    "dust emission template is not homogeneous in L_ir at every "
-                    "redshift of the model's range, so a per-filter response "
-                    "cannot represent it"
-                )
-                self._dust_band_response_cache = None
-                return None
-            # The rest band sits at z = 0 (``phot_rest_fnu``), so the same unit-luminosity
-            # probe is integrated through the filters at z = 0 (#2559). The homogeneity
-            # check above already covers the template, so it is not repeated here.
-            # One traced program (#2914); the grids ride in as arguments so XLA does
-            # not constant-fold the union-grid sort of a baked filter array. Evaluated
-            # eagerly, the template and the per-filter sort dispatched ~60 compiles.
-            rest_values = jax.jit(
-                lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
-            )(wave, fw_pad, ft_pad)
-            response = {
-                "ln1pz": built["ln1pz"],
-                "values": built["values"]["R"],
-                "rest_values": rest_values,
-                "log_window_fraction": built["values"]["log_window_fraction"],
-            }
-
-        self._dust_band_response_decline = None
-        self._dust_band_response_cache = response
-        return response
-
-    def _dust_emission_shape_table(self, chain):
-        """Registry-adapter band fluxes of the dust emission over its free shape axes.
-
-        :meth:`_dust_emission_band_response` is exact but needs every shape parameter fixed.
-        With ``dust_T``, ``dust_beta_ir``, ``dust_alpha_mir`` or ``dust_lambda_0_um`` free
-        the band flux depends on them, and the component would integrate the filters on every
-        call. The registry adapter for the emitter's ``precompute_key`` tabulates the band
-        fluxes over those axes at build, spanning the priors, and the component reads the table
-        at the current shape parameters (``EmissionComponent._shape_table_phot``).
-
-        The adapter is built at one redshift, so the table is built only for a single ``Fixed``
-        redshift. Returns the adapter's ``table_arrays`` dict (its band array and ``"axes"``)
-        with a ``"rest"`` entry holding the same arrays for the adapter at z = 0, the rest band
-        the photometry publishes beside the observed one (#2559), so a free-shape predict
-        integrates no filter. Arrays only, so it threads through ``jit``; ``None`` with the
-        reason in ``_dust_shape_table_decline`` otherwise.
+        Returns
+        -------
+        BandTable or None
+            The table, or None when the slot was refused or has not been built.
         """
-        cached = getattr(self, "_dust_shape_table_cache", "unset")
-        if cached != "unset":
-            return cached
+        entry = self._band_tables.get(name, {}).get(slot)
+        return entry if isinstance(entry, BandTable) else None
 
-        table = None
-        reason = None
-        emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
-        key = getattr(emitter, "precompute_key", None)
-        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        st = getattr(stellar, "_state", None)
-        free_dust = {p for p in self.spec.free_params if p.startswith("dust_")}
+    def band_table_decline(self, name: str, slot: str) -> Decline | None:
+        """Return the refusal of one component slot.
 
-        if emitter is None or key is None or not self._approx.get("wave_precomp"):
-            reason = "no registry adapter for this dust emission model"
-        elif getattr(st, "phot_fw_padded", None) is None:
-            reason = "no padded filter curves"
-        elif getattr(emitter, "fast_emission", False) or self._dust_ir_diffuse_screen:
-            reason = "fast_emission or diffuse_screen is set"
-        elif not (free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK):
-            reason = "the emission shape is fixed; the exact band response applies"
-        elif self._response_z_nodes() is not None:
-            reason = "the registry adapter is built at one redshift and the redshift is not Fixed"
+        Parameters
+        ----------
+        name : str
+            Component name, a key of ``BAND_TABLE_PROVIDERS``.
+        slot : str
+            A band-table slot of that component, for example ``"band_table"``.
+
+        Returns
+        -------
+        Decline or None
+            The refusal with its reason, or None when the slot built a table or was never built.
+        """
+        entry = self._band_tables.get(name, {}).get(slot)
+        return entry if isinstance(entry, Decline) else None
+
+    def _build_band_table(self, name: str, slot: str) -> BandTable | Decline:
+        """Run the existing builder for one slot and wrap its value, or the refusal it recorded."""
+        chain = self._cached_component_chain
+        if (name, slot) in self._PROVIDED_SLOTS:
+            return self._provided_band_table(name, slot)
+        if slot == "term_band_response":
+            value = self._additive_term_band_response(chain, name)
+            decline = getattr(self, f"_{name}_term_response_decline", None)
+        elif slot == "term_shape_table":
+            value = self._additive_term_shape_table(chain, name)
+            decline = None
         else:
-            from tengri.forward.precompute import registry
+            raise ValueError(f"no band-table slot {slot!r} of component {name!r} is built here")
+        if value is None:
+            return Decline(decline)
+        return BandTable(value)
 
-            module = registry.resolve(key)
-            axes = set(module.AXIS_PARAMS[key])
-            amplitude = set(getattr(emitter, "lookup_amplitude_params", ()))
-            unknown = free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK - axes - amplitude
-            if unknown:
-                reason = f"free parameters {sorted(unknown)} are not axes of the {key} table"
-            else:
-                redshift = float(self.spec.get_fixed_values()["redshift"])
-                filter_args = (
-                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
-                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
-                )
-                preint = module.precompute(*filter_args, redshift, self.spec, model=key)
-                rest_preint = module.precompute(*filter_args, 0.0, self.spec, model=key)
-                table = {
-                    **module.table_arrays(preint, key),
-                    "rest": module.table_arrays(rest_preint, key),
-                }
+    def _provided_band_table(self, name: str, slot: str) -> BandTable | Decline:
+        """Ask the component's band-table provider for one slot, with the model's state."""
+        from tengri.forward.precompute.registry import resolve_band_table_provider
 
-        self._dust_shape_table_decline = reason
-        self._dust_shape_table_cache = table
-        return table
+        provider = resolve_band_table_provider(name)
+        ctx = self._band_table_context(self._cached_component_chain)
+        return provider.band_table(ctx, component=name, slot=slot)
 
-    #: Per-axis node count of the composable AGN band table, by the number of free axes. The
-    #: build evaluates the recipe at every node of the cartesian product, so the count falls
-    #: with the dimension and more than four free axes is refused.
-    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 129, 2: 17, 3: 11, 4: 7}
+    def _band_table_context(self, chain) -> BandTableContext:
+        """The model state a band-table adapter builds from, with ``ask`` bound to the memo.
 
-    def _agn_band_table(self, chain):
-        """Registry-adapter band fluxes of the composable AGN over its free parameters.
-
-        The AGN component builds its whole SED through the block runner on every call and then
-        integrates it through each filter. The registry adapter ``composable_agn`` tabulates the
-        band fluxes (at the model redshift and at ``z = 0`` for the rest band) over the free
-        ``agn_*`` parameters at build, with every other parameter at its spec value, and the
-        component reads the table at the current parameters (``AGNSEDComponent._band_table_phot``)
-        scaled by ``agn_lum_ratio``, the one amplitude the runner applies linearly.
-
-        The SED the component still builds feeds ``sed_agn``, ``log_L_12um`` and the other
-        outputs, so a graph that does not consume them drops the SED build as dead code.
-
-        The axes are the prior bounds of each free parameter, or the grids given as
-        ``agn_axis_grids``. The adapter is built at one redshift, so the table is built only for
-        a single ``Fixed`` redshift. Returns ``{"ln_phot", "axes"}`` (arrays only, so it threads
-        through ``jit``), or ``None`` with the reason in ``_agn_band_table_decline``.
+        ``padded_filters`` are the stellar block's padded curves (None without a stellar
+        block). ``z_nodes`` is the response redshift axis, None at one Fixed redshift and
+        without WavePrecomp. ``ask`` builds another slot of the model on first ask.
         """
-        cached = getattr(self, "_agn_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        table = None
-        reason = self._agn_band_table_gate(chain)
-        if reason is None:
-            table, reason = self._build_agn_band_table(chain)
-
-        self._agn_band_table_decline = reason
-        self._agn_band_table_cache = table
-        return table
-
-    def _agn_band_table_gate(self, chain):
-        """Reason the composable AGN band table cannot represent this model, or ``None``.
-
-        A ``composable`` model and a deprecated preset (``agn={'type': 'skirtor'}``) both run
-        the composable runner, so both are eligible. The selectors and norm are read from
-        :meth:`AGNSEDComponent.resolved_recipe`, not the config, which holds the grammar's
-        defaults for a preset. A self-contained model is declined as not composable.
-        """
-        from tengri.components.agn.component import AGNSEDComponent
-        from tengri.components.agn.unified import is_composable_recipe
-
-        agn = next((c for c in chain if isinstance(c, AGNSEDComponent)), None)
         stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        st = getattr(stellar, "_state", None)
-        fixed = self.spec.get_fixed_values()
-        ir_frac = fixed.get("agn_ir_frac")
-        free = sorted(p for p in self.spec.free_params if p.startswith("agn_"))
-        axes = [p for p in free if p != "agn_lum_ratio"]
-
-        if agn is None or not is_composable_recipe(getattr(agn.config, "model", None)):
-            return "the AGN is not a composable recipe"
-        recipe = agn.resolved_recipe()
-        if not self._approx.get("wave_precomp"):
-            return "WavePrecomp is off"
-        if getattr(st, "phot_fw_padded", None) is None:
-            return "no padded filter curves"
-        if self._response_z_nodes() is not None:
-            return "the registry adapter is built at one redshift and the redshift is not Fixed"
-        if recipe["norm"] != "cigale_joint" or recipe["polar_law"] != "smc":
-            return (
-                "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc' "
-                f"(this AGN resolves to norm={recipe['norm']!r}, "
-                f"polar_law={recipe['polar_law']!r})"
-            )
-        if ir_frac is None or float(ir_frac) != 0.0:
-            return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
-        if len(axes) > max(self._AGN_TABLE_NODES):
-            return (
-                f"{len(axes)} free AGN parameters exceed the {max(self._AGN_TABLE_NODES)}-axis cap"
-            )
-        from tengri.components.agn.blocks.composable_precompute import (
-            UNWIRED_AXES,
-            UNWIRED_BLOCKS,
+        state = getattr(stellar, "_state", None)
+        wave_precomp = self._approx.get("wave_precomp")
+        return BandTableContext(
+            spec=self.spec,
+            wave=self._rest_wavelength,
+            filters=(self.filter_waves, self.filter_trans),
+            padded_filters=(
+                getattr(state, "phot_fw_padded", None),
+                getattr(state, "phot_ft_padded", None),
+            ),
+            z_nodes=self._response_z_nodes(self._rest_wavelength.dtype) if wave_precomp else None,
+            wave_precomp=wave_precomp,
+            chain=chain,
+            dust_ir_diffuse_screen=self._dust_ir_diffuse_screen,
+            atten_free_ok=self._BAND_RESPONSE_ATTEN_FREE_OK,
+            agn_axis_grids=getattr(self.spec, "agn_axis_grids", None),
+            ask=self._band_table,
         )
-
-        unwired = [p for p in axes if p in UNWIRED_AXES]
-        if unwired:
-            return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
-        for category in ("disc", "nlr", "blr", "feii", "torus", "attenuation"):
-            key = f"{category}/{recipe[category]}"
-            if key in UNWIRED_BLOCKS:
-                return f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
-        unbounded = [
-            p
-            for p in axes
-            if not all(np.isfinite(b) for b in self.spec.get_distribution(p).bounds)
-        ]
-        if unbounded:
-            return f"the priors of {unbounded} have no finite bounds to span with nodes"
-        if self._additive_term_band_response(chain, "agn") is not None:
-            # Every sub-block is a fixed shape times its amplitude, so the per-term band
-            # response (#1118) is exact at the same per-call cost; a table would only add
-            # interpolation error.
-            return "the rank-1 term band response serves this AGN exactly"
-        return None
-
-    def _build_agn_band_table(self, chain):
-        """Run the ``composable_agn`` adapter over the free axes; ``(table, reason)``."""
-        from tengri.components.agn.blocks.recipe import Recipe
-        from tengri.components.agn.component import AGNSEDComponent, numeric_agn_kwargs
-        from tengri.forward.precompute import reach_axes, registry
-
-        agn = next(c for c in chain if isinstance(c, AGNSEDComponent))
-        module = registry.resolve("composable_agn")
-        fixed = self.spec.get_fixed_values()
-        axes_names = sorted(
-            p for p in self.spec.free_params if p.startswith("agn_") and p != "agn_lum_ratio"
-        )
-        user_grids = dict(getattr(self.spec, "agn_axis_grids", None) or {})
-        not_free = sorted(set(user_grids) - set(axes_names))
-        if not_free:
-            return None, (
-                f"agn_axis_grids names {not_free}, which are not free AGN parameters of this model"
-            )
-        # A fully Fixed AGN has no free axis: its band fluxes are one exact evaluation at the
-        # fixed agn_log_lbol, held as a single node (the table is then a constant row).
-        fixed_only = not axes_names
-        n_nodes = 1 if fixed_only else self._AGN_TABLE_NODES[len(axes_names)]
-        axis_grids = {}
-        for name in axes_names:
-            bounds = tuple(float(b) for b in self.spec.get_distribution(name).bounds)
-            support = reach_axes.active_support(name, self.spec, bounds)
-            if name in user_grids:
-                axis = np.asarray(user_grids[name], dtype=np.float64)
-                reach_axes.check_user_axis(name, axis, support)
-            else:
-                axis = reach_axes.default_axis(name, n_nodes, support, declared=bounds)
-            axis_grids[name] = axis
-
-        agn_fixed = {k: v for k, v in fixed.items() if k.startswith("agn_") and np.ndim(v) == 0}
-        call_fixed = numeric_agn_kwargs(agn_fixed, agn_fixed.get("agn_torus_frac", 0.5))
-        fixed_values = {
-            k: float(v)
-            for k, v in call_fixed.items()
-            if k not in axis_grids and k != "agn_lum_ratio"
-        }
-        if "agn_log_lbol" in fixed:
-            fixed_values["agn_log_lbol"] = float(fixed["agn_log_lbol"])
-        if fixed_only:
-            from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-
-            lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
-            axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
-            fixed_values.pop("agn_log_lbol", None)
-        selectors = agn.resolved_recipe()
-        recipe = Recipe.from_selectors(
-            disc=selectors["disc"],
-            nlr=selectors["nlr"],
-            blr=selectors["blr"],
-            feii=selectors["feii"],
-            torus=selectors["torus"],
-            attenuation=selectors["attenuation"],
-            axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names),
-        )
-
-        def _tabulate(grids):
-            return module.table_arrays(
-                module.precompute(
-                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
-                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
-                    float(fixed["redshift"]),
-                    None,
-                    recipe=recipe,
-                    axis_grids=grids,
-                    fixed_values=fixed_values,
-                    wave_rest=np.asarray(self._rest_wavelength, dtype=np.float64),
-                    extra_redshifts=(0.0,),
-                ),
-                "composable_agn",
-            )
-
-        table = _tabulate(axis_grids)
-        if fixed_only:
-            # One node per axis and no free axis: the table is the single row of band fluxes.
-            return {"ln_phot": jnp.reshape(table["ln_phot"], (-1,)), "axes": {}}, None
-        worst = self._agn_table_cell_center_error(module, table, _tabulate, axis_grids)
-        if not worst <= self._AGN_TABLE_RTOL:
-            return None, (
-                f"the table misses its {self._AGN_TABLE_RTOL:g} accuracy: {worst:.2e} at the cell "
-                f"centers of its {dict((k, len(v)) for k, v in axis_grids.items())} nodes (a band "
-                "flux that is not smooth over the priors, e.g. a regime switch in the disc or the "
-                "disc passing behind the torus)"
-            )
-        return table, None
-
-    #: Largest relative error of a band flux the AGN table may carry, measured at build.
-    _AGN_TABLE_RTOL: ClassVar[float] = 1e-3
-
-    @staticmethod
-    def _agn_table_cell_center_error(module, table, tabulate, axis_grids) -> float:
-        """Worst relative error of the AGN table at the centers of its cells.
-
-        The recipe is evaluated once more at every cell center (each axis at the midpoints of
-        its nodes), the point farthest from the nodes the table passes through, and compared
-        with the table read there. A band flux that is smooth over the axes is reproduced far
-        below the bound; a kink or a step between nodes is not, whatever its cause.
-        """
-        from tengri.components.agn.blocks.composable_precompute import _LN_PHOT_FLOOR
-
-        centers = {k: 0.5 * (v[1:] + v[:-1]) for k, v in axis_grids.items()}
-        probe = np.asarray(tabulate(centers)["ln_phot"])
-        names = sorted(centers)
-        mesh = np.meshgrid(*(centers[k] for k in names), indexing="ij")
-        points = np.stack([m.ravel() for m in mesh], axis=-1)
-        read = jax.vmap(lambda q: module.lookup_from_table(table, "composable_agn", 1.0, *q))(
-            jnp.asarray(points)
-        )
-        want = probe.reshape(points.shape[0], -1)
-        got = np.log(np.asarray(read))
-        # Bands the recipe leaves empty sit at the ln floor in both; they carry no flux to compare.
-        live = want > _LN_PHOT_FLOOR + 1.0
-        if not np.any(live):
-            return 0.0
-        return float(np.max(np.abs(np.expm1(got[live] - want[live]))))
-
-    #: Free ``neb_*`` / ``gas_*`` / ``ionspec_*`` parameters the CLOUDY band table
-    #: can absorb. Its axes are (Z_gas, logU); Q_H and the k-factor are runtime.
-    _CLOUDY_TABLE_FREE_OK = frozenset(
-        {"neb_logU", "neb_logZ_gas", "neb_fesc", "neb_fesc_lya", "neb_fdust_frac"}
-    )
-
-    def _cloudy_band_refusal(self, nebular) -> str | None:
-        """Why the CLOUDY band table must not engage, or None when it may.
-
-        The gate of #2324: every condition under which the table would differ
-        from the per-call path, or would not be built from the same inputs.
-        """
-        from tengri.components.nebular.cloudy_grid import CloudyGridBackend
-        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
-
-        if not self._approx.get("wave_precomp"):
-            return "approx=WavePrecomp() not enabled"
-        if (
-            nebular is None
-            or nebular.config.backend != "cloudy_grid"
-            or not isinstance(nebular.backend, CloudyGridBackend)
-        ):
-            return "the nebular backend is not the CLOUDY grid"
-        # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
-        # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",
-        # cloudy_band_table._bilinear_log). Triweight has no table read, so it is refused.
-        if nebular.backend._grid_interp not in ("pchip", "linear"):
-            return (
-                f"the CLOUDY backend interpolates with grid_interp="
-                f"{nebular.backend._grid_interp!r}; the band table reproduces only 'pchip' "
-                f"and 'linear'"
-            )
-        if _dig_may_be_active(self.spec):
-            return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
-        if "redshift" not in self.spec.fixed_params:
-            return "redshift is free (the band table is built at one redshift)"
-        if "neb_eline_sigma_kms" not in self.spec.fixed_params:
-            return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
-        bad = sorted(
-            p
-            for p in self.spec.free_params
-            if p.startswith(("neb_", "gas_", "ionspec_")) and p not in self._CLOUDY_TABLE_FREE_OK
-        )
-        if bad:
-            return f"free nebular parameters outside the table's axes: {bad}"
-        state = nebular._state
-        if state is None or state.filter_waves is None:
-            return "the nebular filter cache is absent (no WavePrecomp filters)"
-        return None
-
-    def _cloudy_band_table(self, chain):
-        """Build-time CLOUDY band table through the precompute registry, memoized.
-
-        Records why it declined in ``_cloudy_band_table_decline``. Returns None
-        when the table does not engage.
-        """
-        cached = getattr(self, "_cloudy_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        from tengri.components.nebular.component import NebularSEDComponent
-        from tengri.forward.precompute.registry import resolve
-
-        nebular = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
-        table = None
-        reason = self._cloudy_band_refusal(nebular)
-        if reason is None:
-            table = resolve("cloudy").precompute(
-                nebular._state.filter_waves,
-                nebular._state.filter_trans,
-                float(self.spec.fixed_value("redshift")),
-                parameters=self.spec,
-                backend=nebular.backend,
-                wave=self._rest_wavelength,
-                line_sigma_kms=float(self.spec.fixed_value("neb_eline_sigma_kms")),
-            )
-            if table is None:
-                reason = (
-                    "the table's (Z_gas, logU) axes do not contain the spec's priors "
-                    "for neb_logZ_gas and neb_logU"
-                )
-        self._cloudy_band_table_decline = reason
-        self._cloudy_band_table_cache = table
-        return table
-
-    def _shock_band_refusal(self, shock, stellar) -> str | None:
-        """Why the shock line-band coefficients must not engage, or None (#2324)."""
-        if not self._approx.get("wave_precomp"):
-            return "approx=WavePrecomp() not enabled"
-        if shock is None:
-            return "no composable shock component"
-        if "redshift" not in self.spec.fixed_params:
-            return "redshift is free (the band coefficients are built at one redshift)"
-        st = getattr(stellar, "_state", None)
-        if st is None or getattr(st, "phot_fw_padded", None) is None:
-            return "the photometry filter cache is absent (no WavePrecomp filters)"
-        return None
-
-    def _shock_band_table(self, chain):
-        """Build-time shock line-band coefficients through the registry, memoized.
-
-        Records why it declined in ``_shock_band_table_decline``. Returns None when
-        it does not engage.
-        """
-        cached = getattr(self, "_shock_band_table_cache", "unset")
-        if cached != "unset":
-            return cached
-
-        from tengri.components.nebular.shock_model import ShockNebular
-        from tengri.forward.precompute.registry import resolve
-
-        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
-        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
-        coeff = None
-        reason = self._shock_band_refusal(shock, stellar)
-        if reason is None:
-            st = stellar._state
-            coeff = resolve("mappings_shock").shock_band_coefficients(
-                st.phot_fw_padded,
-                st.phot_ft_padded,
-                float(self.spec.fixed_value("redshift")),
-                self._rest_wavelength,
-            )
-            if coeff is None:
-                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
-        self._shock_band_table_decline = reason
-        self._shock_band_table_cache = coeff
-        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
 
-        Generalizes :meth:`_dust_emission_band_response` from one term to many. An
+        Generalizes the dust band response (``_emission_band_response``) from one term to
+        many. An
         additive emitter is a *sum of rank-1 terms*, each a scalar amplitude times a
         spectral shape that depends only on the emitter's own (fixed) shape parameters:
 

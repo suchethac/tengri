@@ -133,7 +133,7 @@ def test_adaptation_memo_preserves_samples(fitter):
 # ``**extra_parameters`` into it, so a caller's ``max_num_doublings`` is honored
 # by warmup only if it is passed there. PR #2101 fixed that for the
 # single-galaxy and catalog entry points (``_nuts_full_scan`` /
-# ``_nuts_warmup_only``) and measured one 50 + 50 catalog cell going from
+# ``adapt_chain``) and measured one 50 + 50 catalog cell going from
 # 54.88 s to 2.14 s. ``_fit_batch_vmap_mcmc`` is the third entry point and was
 # missed: it forwarded the cap to the sampling kernel and nothing else, so every
 # ``fit_batch(vmap=True)`` warmup ran at BlackJAX's default of 10 -- up to 1023

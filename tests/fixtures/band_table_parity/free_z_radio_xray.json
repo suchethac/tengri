@@ -1,0 +1,243 @@
+{
+ "params": {
+  "redshift": 0.20484291872682836,
+  "sfh_dpl_log_total_mass": 8.444870947551594,
+  "xray_delta_alpha_ox": -1.8986232452627305
+ },
+ "signature_sha256": "1248587b2289a970db650fd82e52f0a1f3952860f4dfdd47b84dacfbbfb8809b",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n  - radio: ENGAGED\n  - xray: DECLINED\n    Reason: free xray parameters: ['xray_delta_alpha_ox']\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission, agn, radio, xray\n  dust_emission_configured: True\n  free_params: redshift, sfh_dpl_log_total_mass, xray_delta_alpha_ox\n  igm_fold: declared=auto, resolved=None\n  redshift_free: True\n  wave_precomp_enabled: True\n  ztable_enabled: True",
+ "tree": [
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/0",
+   "sha256": "58bb756667638965ca5961ceedf38586fe2f5906d41a9f50bb594e790a83213b",
+   "shape": [
+    15,
+    93
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/1",
+   "sha256": "15ed2392a3bb340dca2e8657e9cbc2c609c4d3a54fe8249e74c93ab45f67da99",
+   "shape": [
+    15,
+    93,
+    1,
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/2",
+   "sha256": "6c3c396ed6b5c36dcae172271f462051b1266b851e92df3deea8ac65478fd712",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/3",
+   "sha256": "785532c46fac2acf9272cc7399f550747206622e1d56fc7379f34628e071c80a",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/4",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/5",
+   "repr": "None"
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/6",
+   "sha256": "58bb756667638965ca5961ceedf38586fe2f5906d41a9f50bb594e790a83213b",
+   "shape": [
+    15,
+    93
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/7",
+   "sha256": "1382ba6e2aedd0b54333fc7a87d7b58b00b268570ba4ffd4727a4330a7df21e4",
+   "shape": [
+    15,
+    93,
+    1,
+    1
+   ]
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/8",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/9",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/10",
+   "repr": "None"
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/emission_band_response/ln1pz",
+   "sha256": "f56badc064c0f8cef0faa76610219871a91acba84fab684592657a7dc06269dc",
+   "shape": [
+    250
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/emission_band_response/values",
+   "sha256": "4f4a9477831c58e7f24ce18762ffc0d5edcf3933828aa96a3da8a8162ab5cd59",
+   "shape": [
+    250,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/emission_band_response/rest_values",
+   "sha256": "51d8c88f952aaaa173fd9d7cb05f158dac52afe355b0255736eb6129d1e4a43a",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/emission_band_response/log_window_fraction/fir",
+   "sha256": "91bfea36c2463cec73883ecb814f9645b9afa1b6a29eb107260d47149ce042f1",
+   "shape": [
+    250
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/emission_band_response/log_window_fraction/tir",
+   "sha256": "bb9986d83ec1e3a08d4fb333a634f401002c266fc27f73fb124496d5d62df7d4",
+   "shape": [
+    250
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/ln1pz",
+   "sha256": "f56badc064c0f8cef0faa76610219871a91acba84fab684592657a7dc06269dc",
+   "shape": [
+    250
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/R",
+   "sha256": "17e83a4ed8d3f69af259d33ab5fab169ce414495ecf4311a07eb3cd8b952997e",
+   "shape": [
+    250,
+    4,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/S_ref",
+   "sha256": "6b8de332bce1155ed544e762516dcf42e630fc4c64c299e8ef12298a015e230e",
+   "shape": [
+    250,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/lam_ref",
+   "sha256": "9cc2121f0dc9923c4f4ffbd82bd3ad8d1d9c070215576d8588edee578dea3c93",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/S_diag",
+   "sha256": "ef5125b960be57a61bad1c3d7f6fab40697eeb4566b744e2c7f586ac989fe637",
+   "shape": [
+    250,
+    4,
+    2
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/agn/term_band_response/amp",
+   "sha256": "868c648fa63bde5e8581b9be79c70d902b68576f6cd1fa8edcbff058ef816660",
+   "shape": [
+    250,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/radio/term_band_response/ln1pz",
+   "sha256": "f56badc064c0f8cef0faa76610219871a91acba84fab684592657a7dc06269dc",
+   "shape": [
+    250
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/radio/term_band_response/R",
+   "sha256": "a9871bb63cf13635a2210722d2f05e21939f1fa908b9c86b8054b92ea24d12c1",
+   "shape": [
+    250,
+    3,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/radio/term_band_response/S_ref",
+   "sha256": "10cece07b036d930ca5b6f8600aee5d3a70e99d27367a7dfbd259f3b841228a0",
+   "shape": [
+    250,
+    3
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/radio/term_band_response/lam_ref",
+   "sha256": "a28a0349c102f1c5b8d56850e6e275084892d155b7c56420f5bb54589532346f",
+   "shape": [
+    3
+   ]
+  }
+ ]
+}
