@@ -1296,6 +1296,7 @@ def build_lookup(preint, *, model_name: str):
     if model_name == "draine2021_pah":
         return build_draine2021_pah_photometry_lookup(preint)
     return build_template_photometry_lookup(preint)
+<<<<<<< HEAD
 
 
 # ── Turnkey loader + preintegrator: used by SEDModel.__init__ ────
@@ -1467,3 +1468,5 @@ BAND_SLOTS: tuple[str, ...] = ("emission_band_response", "emission_shape_table")
 def band_table(ctx, *, component: str, slot: str):
     """Return one band-table slot of ``component`` from the model's memo, through ``ctx.ask``."""
     return ctx.ask(component, slot)
+=======
+>>>>>>> d0c0ba8b54fe04fc6ae9358043f7f7df1a28ebd9

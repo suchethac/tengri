@@ -286,10 +286,7 @@ def _chain_consumes(chain, key: str) -> bool:
             declared = getattr(comp, attr, None)
             if declared is None:
                 continue
-            try:
-                items = declared() if callable(declared) else declared
-            except Exception:
-                continue
+            items = declared() if callable(declared) else declared
             if not items:
                 continue
             names = items if isinstance(items, Mapping) else [getattr(i, "name", i) for i in items]
