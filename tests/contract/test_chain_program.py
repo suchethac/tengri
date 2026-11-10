@@ -3,10 +3,11 @@
 
 ``chain_program`` replaces the per-family scans in ``backends/mcmc/_shared.py``
 with one adaptation and one sampling body. Each entry point here is compared with
-the scan it replaces on the same keys and the same statics, so a change in key
+a raw BlackJAX oracle on the same keys and the same statics, so a change in key
 handling, scan carry or collected outputs shows up as a failed equality rather
-than as a shifted posterior. The compiled-program checks pin the shape of the
-lowered control flow and the number of compiled entries.
+than as a shifted posterior. The fused ``_nuts_full_scan`` shim is compared with
+``run_chain`` directly. The compiled-program checks pin the shape of the lowered
+control flow and the number of compiled entries.
 
 The target is the anisotropic Gaussian of ``test_branch_free_samplers.py``.
 """
@@ -44,6 +45,66 @@ def _target(position, data_args):
     return -0.5 * jnp.sum((position / data_args) ** 2)
 
 
+def _raw_sampling_scan(state, chain_keys, scales, step_size, inv_mass):
+    """Raw BlackJAX NUTS scan with fixed tuning: the oracle for ``sample_chain``."""
+    kernel = blackjax.nuts.build_kernel()
+
+    def log_density(position):
+        return _target(position, scales)
+
+    def _step(s, k):
+        s, info = kernel(k, s, log_density, step_size, inv_mass, CFG.max_doublings)
+        return s, (
+            s.position,
+            info.is_divergent,
+            info.num_trajectory_expansions,
+            info.num_integration_steps,
+            info.energy,
+        )
+
+    _, outputs = jax.lax.scan(_step, state, chain_keys)
+    return outputs
+
+
+def _raw_warmup(init, warmup_key, scales, n_warmup, pathfinder):
+    """Raw BlackJAX adaptation: the oracle for ``adapt_chain`` and ``run_chain``.
+
+    Returns the adapted state, the step size, inverse mass matrix, per-step
+    divergence flags and the leapfrog count summed over the adaptation.
+    """
+
+    def log_density(position):
+        return _target(position, scales)
+
+    if pathfinder:
+        from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
+
+        warmup = pathfinder_adaptation(
+            blackjax.nuts,
+            log_density,
+            target_acceptance_rate=CFG.target_accept_rate,
+            max_num_doublings=CFG.max_doublings,
+        )
+        with _shared._bounded_pathfinder_elbo_draws():
+            (state, params), info = warmup.run(warmup_key, init, num_steps=n_warmup)
+    else:
+        warmup = blackjax.window_adaptation(
+            blackjax.nuts,
+            log_density,
+            is_mass_matrix_diagonal=True,
+            target_acceptance_rate=CFG.target_accept_rate,
+            max_num_doublings=CFG.max_doublings,
+        )
+        (state, params), info = warmup.run(warmup_key, init, num_steps=n_warmup)
+    return (
+        state,
+        params["step_size"],
+        params["inverse_mass_matrix"],
+        info.info.is_divergent,
+        jnp.sum(info.info.num_integration_steps),
+    )
+
+
 @pytest.fixture(scope="module")
 def setup():
     """Start position, warmup key, per-iteration keys and per-coordinate scales."""
@@ -56,17 +117,15 @@ def setup():
     )
 
 
-def test_sample_chain_matches_nuts_chain_scan(setup):
-    """Sampling with fixed adaptation equals ``_nuts_chain_scan`` output for output."""
+def test_sample_chain_matches_raw_nuts_scan(setup):
+    """Sampling with fixed adaptation equals the raw BlackJAX scan, output for output."""
     init, _, keys, scales = setup
     step_size = jnp.asarray(0.5)
     inv_mass = scales**2
     state = blackjax.mcmc.nuts.init(init, lambda p: _target(p, scales))
 
-    expected = _shared._nuts_chain_scan(
-        state, keys, _target, scales, step_size, inv_mass, CFG.max_doublings
-    )
-    got = sample_chain(NUTS, state, keys, _target, scales, (step_size, inv_mass), CFG)
+    expected = _raw_sampling_scan(state, keys, scales, step_size, inv_mass)
+    got = sample_chain(NUTS, state, keys, _target, scales, (step_size, inv_mass), CFG.sampling())
     actual = (
         got.position,
         got.divergent,
@@ -79,15 +138,13 @@ def test_sample_chain_matches_nuts_chain_scan(setup):
         assert np.array_equal(np.asarray(have), np.asarray(want))
 
 
-def test_adapt_chain_matches_nuts_warmup_only(setup):
-    """Window adaptation equals ``_nuts_warmup_only``: step size, mass, flags and cost."""
+def test_adapt_chain_matches_raw_window_adaptation(setup):
+    """Window adaptation equals the raw BlackJAX adaptation: step size, mass, flags and cost."""
     init, wkey, _, scales = setup
     params, warmup_divergent, warmup_n_grad = adapt_chain(
         NUTS, WINDOW_NUTS, init, wkey, _target, scales, N_WARMUP, CFG
     )
-    expected = _shared._nuts_warmup_only(
-        init, wkey, _target, scales, N_WARMUP, CFG.use_dense, CFG.target_accept_rate, False, 10
-    )
+    expected = _raw_warmup(init, wkey, scales, N_WARMUP, pathfinder=False)[1:]
     step_size, inv_mass = params
     for want, have in zip(
         expected, (step_size, inv_mass, warmup_divergent, warmup_n_grad), strict=True
@@ -95,15 +152,13 @@ def test_adapt_chain_matches_nuts_warmup_only(setup):
         assert np.array_equal(np.asarray(have), np.asarray(want))
 
 
-def test_pathfinder_adaptation_matches_nuts_warmup_only(setup):
-    """Pathfinder adaptation equals ``_nuts_warmup_only`` with the pathfinder flag set."""
+def test_pathfinder_adaptation_matches_raw_pathfinder(setup):
+    """Pathfinder adaptation equals the raw BlackJAX Pathfinder adaptation."""
     init, wkey, _, scales = setup
     params, warmup_divergent, warmup_n_grad = adapt_chain(
         NUTS, PATHFINDER_NUTS, init, wkey, _target, scales, N_WARMUP, CFG
     )
-    expected = _shared._nuts_warmup_only(
-        init, wkey, _target, scales, N_WARMUP, CFG.use_dense, CFG.target_accept_rate, True, 10
-    )
+    expected = _raw_warmup(init, wkey, scales, N_WARMUP, pathfinder=True)[1:]
     step_size, inv_mass = params
     for want, have in zip(
         expected, (step_size, inv_mass, warmup_divergent, warmup_n_grad), strict=True
@@ -111,42 +166,55 @@ def test_pathfinder_adaptation_matches_nuts_warmup_only(setup):
         assert np.array_equal(np.asarray(have), np.asarray(want))
 
 
-def test_run_chain_matches_nuts_full_scan(setup):
-    """The fused warmup-then-sampling program equals ``_nuts_full_scan`` output for output."""
+def test_run_chain_matches_raw_warmup_then_sampling(setup):
+    """The fused program equals the raw adaptation followed by the raw scan on the same keys.
+
+    The raw adaptation's final state is the sampling scan's start, so a wrong state
+    handoff inside ``run_chain`` shows up as a failed equality.
+    """
     init, wkey, keys, scales = setup
     draws, params = run_chain(NUTS, WINDOW_NUTS, init, wkey, keys, _target, scales, N_WARMUP, CFG)
-    expected = _shared._nuts_full_scan(
-        init,
-        wkey,
-        keys,
-        _target,
-        scales,
-        N_WARMUP,
-        CFG.max_doublings,
-        CFG.use_dense,
-        CFG.target_accept_rate,
-        False,
+    state, step_size, inv_mass, _, _ = _raw_warmup(init, wkey, scales, N_WARMUP, pathfinder=False)
+    expected = _raw_sampling_scan(state, keys, scales, step_size, inv_mass)
+    actual = (
+        draws.position,
+        draws.divergent,
+        draws.extras["expansions"],
+        draws.extras["n_leapfrog"],
+        draws.extras["energy"],
     )
-    positions, divergent, expansions, step_size, inv_mass = expected
-    step, mass = params
-    actual = (draws.position, draws.divergent, draws.extras["expansions"], step, mass)
-    for want, have in zip(
-        (positions, divergent, expansions, step_size, inv_mass), actual, strict=True
-    ):
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+    for want, have in zip((step_size, inv_mass), params, strict=True):
         assert np.array_equal(np.asarray(have), np.asarray(want))
 
 
+def test_sampling_scan_ignores_the_adaptation_only_statics(setup):
+    """Two sampling configs that differ only in target acceptance share one compiled scan."""
+    init, _, keys, scales = setup
+    step_size = jnp.asarray(0.5)
+    inv_mass = scales**2
+    state = blackjax.mcmc.nuts.init(init, lambda p: _target(p, scales))
+    tuned = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8)
+    retargeted = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.9)
+
+    sample_chain(NUTS, state, keys, _target, scales, (step_size, inv_mass), tuned.sampling())
+    size_before = sample_chain._cache_size()
+    sample_chain(NUTS, state, keys, _target, scales, (step_size, inv_mass), retargeted.sampling())
+    assert sample_chain._cache_size() == size_before
+
+
 def test_sample_and_run_lower_to_the_same_control_flow(setup):
-    """The sampling entry lowers to the same while ops and lines as ``_nuts_chain_scan``."""
+    """The sampling entry lowers to the same while ops and lines as the raw scan."""
     init, _, keys, scales = setup
     step_size = jnp.asarray(0.5)
     inv_mass = scales**2
     state = blackjax.mcmc.nuts.init(init, lambda p: _target(p, scales))
 
-    ours = sample_chain.lower(NUTS, state, keys, _target, scales, (step_size, inv_mass), CFG)
-    theirs = _shared._nuts_chain_scan.lower(
-        state, keys, _target, scales, step_size, inv_mass, CFG.max_doublings
+    ours = sample_chain.lower(
+        NUTS, state, keys, _target, scales, (step_size, inv_mass), CFG.sampling()
     )
+    theirs = jax.jit(_raw_sampling_scan).lower(state, keys, scales, step_size, inv_mass)
     ours_text = ours.as_text()
     theirs_text = theirs.as_text()
     assert ours_text.count("stablehlo.while") == theirs_text.count("stablehlo.while")

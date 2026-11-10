@@ -3645,8 +3645,8 @@ class Fitter:
             matched to the fit it is warming. **This matters more than it
             looks.** A pre-warm only removes compile from a later fit if it
             compiles the *same program*, and for NUTS the program is keyed on
-            the budget: ``_nuts_warmup_only`` takes ``n_warmup`` as a static
-            argument (it is the ``lax.scan`` length) and ``_nuts_chain_scan``
+            the budget: ``adapt_chain`` takes ``n_warmup`` as a static
+            argument (it is the ``lax.scan`` length) and ``sample_chain``
             traces against a ``chain_keys`` array of length
             ``n_burnin + n_samples``. So a default pre-warm (``n_samples=10``,
             ``n_warmup=300``) and a fit at ``n_warmup=600, n_samples=600``
@@ -3681,9 +3681,9 @@ class Fitter:
             key = _jax.random.PRNGKey(0)
         sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
         # A prewarm only warms the program the real fit will run, and for NUTS
-        # that program depends on the budget: ``_nuts_warmup_only`` takes
+        # that program depends on the budget: ``adapt_chain`` takes
         # ``n_warmup`` as a static argument (it is the ``lax.scan`` length) and
-        # ``_nuts_chain_scan`` is traced against a ``chain_keys`` array of length
+        # ``sample_chain`` is traced against a ``chain_keys`` array of length
         # ``n_burnin + n_samples``. Both are part of the compile key, so a
         # prewarm hardcoded at ``n_samples=10`` and the default ``n_warmup=300``
         # compiles two programs a fit at 600/600 never asks for, and the fit
