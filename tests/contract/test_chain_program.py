@@ -22,9 +22,12 @@ import pytest
 
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
+    HMC,
     NUTS,
     PATHFINDER_NUTS,
+    WINDOW_HMC,
     WINDOW_NUTS,
+    HMCConfig,
     NUTSConfig,
     adapt_chain,
     divergence_record,
@@ -239,3 +242,99 @@ def test_divergence_record_reduces_the_mask_once():
     record = divergence_record(mask)
     assert int(record["n_divergent"]) == 2
     assert np.array_equal(np.asarray(record["divergent_mask"]), np.asarray(mask))
+
+
+HMC_LEAPFROG = 10
+HMC_CFG = HMCConfig(n_leapfrog=HMC_LEAPFROG, use_dense=False, target_accept_rate=0.85)
+
+
+def _raw_hmc_sampling_scan(state, chain_keys, scales, step_size, inv_mass):
+    """Raw BlackJAX HMC scan with fixed tuning: the oracle for ``sample_chain(HMC)``."""
+    kernel = blackjax.mcmc.hmc.build_kernel()
+
+    def log_density(position):
+        return _target(position, scales)
+
+    def _step(s, k):
+        s, info = kernel(k, s, log_density, step_size, inv_mass, HMC_LEAPFROG)
+        return s, (s.position, info.is_divergent)
+
+    _, outputs = jax.lax.scan(_step, state, chain_keys)
+    return outputs
+
+
+def _raw_hmc_warmup(init, warmup_key, scales, n_warmup):
+    """Raw BlackJAX HMC window adaptation: the oracle for ``adapt_chain(HMC, ...)``."""
+
+    def log_density(position):
+        return _target(position, scales)
+
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        log_density,
+        is_mass_matrix_diagonal=True,
+        target_acceptance_rate=HMC_CFG.target_accept_rate,
+        num_integration_steps=HMC_LEAPFROG,
+    )
+    (state, params), info = warmup.run(warmup_key, init, num_steps=n_warmup)
+    return (
+        state,
+        params["step_size"],
+        params["inverse_mass_matrix"],
+        info.info.is_divergent,
+    )
+
+
+def test_hmc_sample_chain_matches_raw_hmc_scan(setup):
+    """Sampling HMC with fixed adaptation equals the raw BlackJAX scan, output for output."""
+    init, _, keys, scales = setup
+    step_size = jnp.asarray(0.5)
+    inv_mass = scales**2
+    state = blackjax.mcmc.hmc.init(init, lambda p: _target(p, scales))
+
+    expected = _raw_hmc_sampling_scan(state, keys, scales, step_size, inv_mass)
+    got = sample_chain(HMC, state, keys, _target, scales, (step_size, inv_mass), HMC_CFG)
+    actual = (got.position, got.divergent)
+    assert len(actual) == len(expected)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_hmc_adapt_chain_matches_raw_window_adaptation(setup):
+    """HMC window adaptation equals the raw BlackJAX adaptation: step, mass and flags."""
+    init, wkey, _keys, scales = setup
+    _, step_size, inv_mass, divergent = _raw_hmc_warmup(init, wkey, scales, N_WARMUP)
+    (got_step, got_mass), got_divergent, _ = adapt_chain(
+        HMC, WINDOW_HMC(HMC_LEAPFROG, True), init, wkey, _target, scales, N_WARMUP, HMC_CFG
+    )
+    assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
+    assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
+    assert np.array_equal(np.asarray(got_divergent), np.asarray(divergent))
+
+
+def test_hmc_run_chain_matches_raw_warmup_then_sampling(setup):
+    """Fused HMC equals the raw adaptation followed by the raw scan, on the same keys."""
+    init, wkey, keys, scales = setup
+    state, step_size, inv_mass, _ = _raw_hmc_warmup(init, wkey, scales, N_WARMUP)
+    expected = _raw_hmc_sampling_scan(state, keys, scales, step_size, inv_mass)
+
+    draws, (got_step, got_mass) = run_chain(
+        HMC, WINDOW_HMC(HMC_LEAPFROG, True), init, wkey, keys, _target, scales, N_WARMUP, HMC_CFG
+    )
+    assert np.array_equal(np.asarray(got_step), np.asarray(step_size))
+    assert np.array_equal(np.asarray(got_mass), np.asarray(inv_mass))
+    actual = (draws.position, draws.divergent)
+    for want, have in zip(expected, actual, strict=True):
+        assert np.array_equal(np.asarray(have), np.asarray(want))
+
+
+def test_hmc_adaptation_rule_refuses_an_unresolved_dense_policy():
+    """The registered HMC rule takes a decided mass policy, never the auto ``None``."""
+    from tengri.inference._backend_registry import get_backend
+
+    entry = get_backend("mcmc_hmc")
+    with pytest.raises(ValueError, match="resolve_dense_mass_gate"):
+        entry.adaptation_for({"dense_mass_matrix": None})
+    dense = entry.adaptation_for({"dense_mass_matrix": True, "n_leapfrog_steps": 7})
+    diagonal = entry.adaptation_for({"dense_mass_matrix": False, "n_leapfrog_steps": 7})
+    assert dense.name != diagonal.name

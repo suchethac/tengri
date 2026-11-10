@@ -50,7 +50,12 @@ from tengri.inference.backends.mcmc import (
     run_smc as _ctx_run_smc,
 )
 from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
-from tengri.inference.backends.mcmc.chain_program import NUTS, nuts_adaptation
+from tengri.inference.backends.mcmc.chain_program import (
+    HMC,
+    NUTS,
+    WINDOW_HMC,
+    nuts_adaptation,
+)
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
@@ -238,9 +243,33 @@ register_backend(
 )(_mcmc_auto_pick)
 
 
+#: Leapfrog steps per HMC proposal when the caller names none (``run_hmc`` default).
+_HMC_DEFAULT_LEAPFROG_STEPS = 10
+
+
 def _nuts_adaptation_rule(kwargs: dict):
     """Return the NUTS adaptation for ``kwargs``: Pathfinder when its flag is set."""
     return nuts_adaptation(bool(kwargs.get("pathfinder_warmstart", False)))
+
+
+def _hmc_adaptation_rule(kwargs: dict):
+    """Return the HMC window adaptation for the leapfrog count and mass policy in ``kwargs``.
+
+    ``dense_mass_matrix`` must already be resolved to a bool: ``run_hmc`` turns
+    the ``None`` (auto) policy into a decision through
+    :func:`~tengri.inference.backends.mcmc.nuts.resolve_dense_mass_gate`, which
+    needs the parameter count, so this rule refuses ``None`` rather than
+    adapting a diagonal metric where the backend would adapt a dense one.
+    """
+    dense = kwargs.get("dense_mass_matrix")
+    if dense is None:
+        raise ValueError(
+            "mcmc_hmc adaptation rule needs dense_mass_matrix resolved to True or "
+            "False; resolve the auto policy with resolve_dense_mass_gate first"
+        )
+    return WINDOW_HMC(
+        int(kwargs.get("n_leapfrog_steps", _HMC_DEFAULT_LEAPFROG_STEPS)), not bool(dense)
+    )
 
 
 register_backend(
@@ -345,6 +374,8 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    chain_program=HMC,
+    adaptation_rule=_hmc_adaptation_rule,
 )(_ctx_run_hmc)
 
 register_backend(
