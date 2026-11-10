@@ -206,7 +206,7 @@ def _run_ruff(args: argparse.Namespace) -> int:
 
 
 def _pyright_executable() -> str:
-    """The pyright named by ``PYRIGHT``, else the one on PATH, else the one beside the interpreter."""
+    """The pyright named by ``PYRIGHT``, else the one on PATH, else the one beside Python."""
     override = os.environ.get("PYRIGHT")
     if override:
         return override
@@ -225,9 +225,7 @@ def _pyright_version(pyright: str) -> str:
 
 def _measure_pyright(pyright: str) -> Counter[Key]:
     """Count the error diagnostics per repository-relative file in pyright's JSON report."""
-    proc = subprocess.run(
-        [pyright, "--outputjson"], cwd=ROOT, capture_output=True, text=True
-    )
+    proc = subprocess.run([pyright, "--outputjson"], cwd=ROOT, capture_output=True, text=True)
     try:
         report = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
@@ -243,7 +241,7 @@ def _measure_pyright(pyright: str) -> Counter[Key]:
 
 
 def _format_pyright_baseline(counts: Mapping[Key, int]) -> str:
-    """The pyright baseline text: a header, then one ``pyright<TAB>path<TAB>count`` line per file."""
+    """The pyright baseline text: a header, then one ``pyright<TAB>path<TAB>count`` line each."""
     header = (
         "# Pyright ratchet baseline (tools/check_lint_ratchet.py pyright): error counts\n"
         "# per file under [tool.pyright] include, one pyright<TAB>path<TAB>count line each.\n"

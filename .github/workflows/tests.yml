@@ -1132,6 +1132,12 @@ jobs:
       # `--strict-markers`: an unregistered mark is a collection error here rather
       # than a warning nobody reads — `-m unit` matched 0 tests while 157 files
       # declared it.
+      # Pyright in basic mode over observation/ and inference/ (the include list in
+      # [tool.pyright]), ratcheted per file: the error count may only shrink against
+      # tools/pyright_ratchet_baseline.txt. Pinned in ci-constraints.txt. Measured
+      # locally at ~12 s of pyright wall time on 127 files.
+      - run: pip install pyright
+      - run: python tools/check_lint_ratchet.py pyright
       - run: pytest --collect-only -q -m "" tests/ > /dev/null
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
