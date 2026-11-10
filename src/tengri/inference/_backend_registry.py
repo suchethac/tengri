@@ -5,7 +5,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from tengri.inference.backends.mcmc.chain_program import ChainProgram
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,12 @@ class BackendEntry:
     # Returns True if this backend can run for the given target's spec/dims/dtypes.
     # Default ``None`` means "no compatibility constraint" (always usable).
     is_compatible: Callable[[Any], bool] | None = None
+    # The adapted-chain program for MCMC families; None until one registers.
+    chain_program: ChainProgram | None = None
+
+    def adaptation_for(self, kwargs: dict) -> None:
+        """Return the adaptation this entry runs for ``kwargs``; none is registered yet."""
+        return None
 
 
 #: The tiers a backend may declare.
