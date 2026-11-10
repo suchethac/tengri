@@ -18,8 +18,6 @@ from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
     _get_hmc_kernel,
-    _hmc_chain_scan,
-    _hmc_warmup_only,
     _parallel_chains,
     _sequential_chains,
     _set_cached_adaptation,
@@ -30,6 +28,14 @@ from tengri.inference.backends.mcmc._shared import (
     refuse_dead_sampling,
     refuse_dead_warmup,
     sampling_diagnostics,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    HMC,
+    WINDOW_HMC,
+    HMCConfig,
+    adapt_chain,
+    divergence_record,
+    sample_chain,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -258,6 +264,11 @@ def run_hmc(
     # return different chains. ``warmup_key`` is unused on the cached path.
     key, warmup_key = jax.random.split(key)
 
+    hmc_cfg = HMCConfig(
+        n_leapfrog=n_leapfrog_steps,
+        use_dense=use_dense,
+        target_accept_rate=target_accept_rate,
+    )
     dense_mass_backoffs = 0
     if cached is not None:
         parameters = cached
@@ -275,15 +286,15 @@ def run_hmc(
             )
     else:
         with compile_timer("hmc_warmup", fitter.compile_signature(), method="mcmc_hmc"):
-            step_size, inv_mass_matrix, warmup_divergent = _hmc_warmup_only(
+            (step_size, inv_mass_matrix), warmup_divergent, _ = adapt_chain(
+                HMC,
+                WINDOW_HMC(n_leapfrog_steps, not use_dense),
                 init_flat,
                 warmup_key,
                 log_posterior_flat_2arg,
                 data_args,
                 n_warmup,
-                n_leapfrog_steps,
-                use_dense,
-                target_accept_rate,
+                hmc_cfg,
             )
             jax.block_until_ready(step_size)
 
@@ -346,21 +357,17 @@ def run_hmc(
 
     # ── Sampling: single- or multi-chain, honored on first AND cached calls. ──
     key, chain_key = jax.random.split(key)
+    sample_params = (parameters["step_size"], parameters["inverse_mass_matrix"])
     if n_chains > 1:
 
         def _init(p):
             return blackjax.mcmc.hmc.init(p, ld_1arg)
 
         def _scan(s, ks):
-            return _hmc_chain_scan(
-                s,
-                ks,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                n_leapfrog_steps,
+            draws = sample_chain(
+                HMC, s, ks, log_posterior_flat_2arg, data_args, sample_params, hmc_cfg
             )
+            return draws.position, draws.divergent
 
         chain_runner = _resolve_chain_runner(chain_method, n_chains)
         with compile_timer("hmc_chain_scan_vmap", fitter.compile_signature(), method="mcmc_hmc"):
@@ -379,15 +386,16 @@ def run_hmc(
         state = blackjax.mcmc.hmc.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("hmc_chain_scan", fitter.compile_signature(), method="mcmc_hmc"):
-            positions, divergent = _hmc_chain_scan(
+            draws = sample_chain(
+                HMC,
                 state,
                 chain_keys,
                 log_posterior_flat_2arg,
                 data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                n_leapfrog_steps,
+                sample_params,
+                hmc_cfg,
             )
+            positions, divergent = draws.position, draws.divergent
             jax.block_until_ready(positions)
         _multichain_burnin_done = False
 
@@ -396,7 +404,8 @@ def run_hmc(
     if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
-    n_divergent = int(jnp.sum(divergent))
+    divergence = divergence_record(divergent)
+    n_divergent = int(divergence["n_divergent"])
 
     # Post-hoc dead-fit detection: any chain's draws mostly divergent (#2093).
     # Complements the pre-hoc warmup check for fits that collapse after warmup.
@@ -442,6 +451,7 @@ def run_hmc(
             "n_chains": n_chains,
             "n_leapfrog_steps": n_leapfrog_steps,
             "n_divergent": n_divergent,
+            "divergent_mask": jnp.asarray(divergence["divergent_mask"]).astype(bool),
             "dense_mass_step_backoffs": dense_mass_backoffs,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
