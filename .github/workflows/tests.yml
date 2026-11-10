@@ -70,6 +70,9 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Supersede stale runs -- but never on `main`.
 #
 # **Every push to `main` runs the FULL suite, and no push run is cancelled.**
@@ -257,9 +260,10 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -600,9 +604,10 @@ jobs:
   # that finds nothing.
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -952,8 +957,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -961,7 +966,7 @@ jobs:
       - run: pip install -e ".[dev]"
       # Every grid the examples need is committed (#1146), so there is no download
       # step and a fresh clone behaves exactly like CI.
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: gallery_jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -972,7 +977,7 @@ jobs:
           JAX_PLATFORMS: cpu
           MPLBACKEND: Agg
         run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
@@ -991,8 +996,8 @@ jobs:
     # own timeout under load reports as a failure of the thing it guards.
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -1251,8 +1256,8 @@ jobs:
       #     Re-measure from a completed run's job durations before changing one.
       matrix: ${{ fromJSON(needs.gallery-changes.outputs.shards) }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -1286,7 +1291,7 @@ jobs:
       # again and the snapshot went stale for as long as neither changed.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1373,7 +1378,7 @@ jobs:
         # It bounds total wall clock; the per-test `--timeout=600` above is what
         # catches a real hang.
         timeout-minutes: ${{ matrix.timeout }}
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1439,7 +1444,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The `test (<shard>)` jobs of THIS run, latest attempt. A failure to list
       # them leaves the file absent and `ci_ok.py` reports it; it is never read
       # as "no shard ran".
@@ -1694,8 +1699,8 @@ jobs:
             budget: 50
             coverage_budget: 75
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -1738,7 +1743,7 @@ jobs:
         # combined regression-a shard had.
         timeout-minutes: ${{ matrix.coverage_budget }}
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./coverage.xml
           flags: ${{ matrix.shard }}
@@ -1840,8 +1845,8 @@ jobs:
       TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.4","inference-2":"0.4","inference-3":"0.25","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
     timeout-minutes: 185
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -1870,7 +1875,7 @@ jobs:
       # depended only on pyproject.toml and JAX left the snapshot stale.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1925,7 +1930,7 @@ jobs:
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
         run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit and not weekly' -n 0 --durations=30
         timeout-minutes: 30
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1970,8 +1975,8 @@ jobs:
       TENGRI_JAX_CACHE_MAX_GB: "0.05"
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
@@ -1984,7 +1989,7 @@ jobs:
       # the nightly re-saves the snapshot.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -2060,11 +2065,11 @@ jobs:
           fi
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crossval-test-results
           path: crossval-results/
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
