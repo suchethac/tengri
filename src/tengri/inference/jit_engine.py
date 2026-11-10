@@ -1632,21 +1632,23 @@ def build_jit_engine(fitter, pos_dict):
     # (which captures galaxy data) is built in run_nifty_fast_vi via
     # _get_or_build_nifty_likelihood, NOT here, so the shared engine
     # never holds a stale reference to any galaxy's flux/noise arrays.
+    # The wrapper's domain is one scalar per free name, so it is valid only for
+    # the single-galaxy topology the threaded signal response supports; a
+    # PopulationSEDModel forward batches galaxies and its vmap has no axis to
+    # take from scalar parameters. The hierarchical paths build their own
+    # population-aware jft.Model (hierarchical.py), and the nifty VI backend
+    # builds one when the engine carries none.
     _nifty_model = None
-    if _has_nifty:
-        try:
-            import nifty8.re as jft
+    if _has_nifty and fitter.model._supports_jit_threading():
+        import nifty8.re as jft
 
-            _, _sr_jit = get_or_build_signal_response(fitter)
-            _nifty_domain = {}
-            for name in fitter._free_names:
-                _nifty_domain[name] = jft.ShapeWithDtype(())
-            if fitter.spec.stochastic:
-                _nifty_domain["psd_xi"] = jft.ShapeWithDtype((fitter.spec.n_grid,))
-            _nifty_model = jft.Model(_sr_jit, domain=_nifty_domain)
-        except ImportError:
-            _has_nifty = False
-            _nifty_model = None
+        _, _sr_jit = get_or_build_signal_response(fitter)
+        _nifty_domain = {}
+        for name in fitter._free_names:
+            _nifty_domain[name] = jft.ShapeWithDtype(())
+        if fitter.spec.stochastic:
+            _nifty_domain["psd_xi"] = jft.ShapeWithDtype((fitter.spec.n_grid,))
+        _nifty_model = jft.Model(_sr_jit, domain=_nifty_domain)
 
     # Wrap core functions in JIT but do NOT pre-compile (no dummy calls).
     # Compilation happens lazily on first real call, avoids the 2+ GB
