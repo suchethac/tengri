@@ -1644,7 +1644,7 @@ def build_jit_engine(fitter, pos_dict):
             if fitter.spec.stochastic:
                 _nifty_domain["psd_xi"] = jft.ShapeWithDtype((fitter.spec.n_grid,))
             _nifty_model = jft.Model(_sr_jit, domain=_nifty_domain)
-        except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
+        except ImportError:
             _has_nifty = False
             _nifty_model = None
 
