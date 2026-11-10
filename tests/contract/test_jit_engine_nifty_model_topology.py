@@ -28,9 +28,12 @@ _N_GAL = 2
 
 def _spec() -> Parameters:
     return Parameters(
-        sfh_type="dpl",
-        dust_type="calzetti",
-        redshift=Fixed(0.5),
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Fixed(1.5),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Fixed(2.0),
+        sfh_dpl_log_total_mass=Uniform(9.0, 11.0),
+        redshift=Fixed(0.05),
         noise_frac_cal=Uniform(0.01, 0.2),
     )
 
