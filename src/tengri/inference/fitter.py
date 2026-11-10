@@ -3213,18 +3213,19 @@ class Fitter:
         """Build JIT-compiled inference engine. See ``jit_engine.build_jit_engine``."""
         return build_jit_engine(self, pos_dict)
 
-    _COMPILE_MCMC_METHODS = ("mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_ghmc")
-
     def _warm_mcmc_program(self, canonical, *, init_flat, ld2, data_args, n_warmup, n_chain):
         """Compile the programs a ``run()`` of ``canonical`` executes, at the run's statics.
 
-        The chain program and adaptation come from the backend registry. The mass
-        policy is resolved from the parameter count before the adaptation is asked
-        for, as ``run_hmc`` does, so the warmed metric is the one ``run()`` adapts.
-        NUTS, HMC and dynamic HMC warm ``adapt_chain`` and ``sample_chain`` with the
-        statics their ``run()`` passes, since ``run()`` calls those entries and not
-        ``run_chain``. GHMC warms ``run_chain`` with the window pairing, which
-        ``compile()`` has always used; ``run()`` samples with MEADS.
+        The chain program, adaptation and statics come from the backend registry's
+        compile plan, which reads each runner's own defaults. The mass policy is
+        resolved from the parameter count and the spec, as the run does. Families that
+        run ``adapt_chain`` and ``sample_chain`` warm those two entries; families whose
+        plan is fused warm ``run_chain``.
+
+        GHMC's compile serves the hierarchical window lane: the flat seam runs the same
+        diagonal window pairing. ``run()`` samples GHMC with MEADS, which needs an
+        ``n_chains`` argument to warm, so compile() does not warm it yet. Step 8 records
+        this in ``inference_methods.md`` section 7.5.
 
         Parameters
         ----------
@@ -3244,79 +3245,49 @@ class Fitter:
         Raises
         ------
         BackendError
-            If the registered entry has no chain program.
+            If the registered entry has no chain program or no compile plan.
         """
         from tengri.config.exceptions import BackendError
         from tengri.inference._backend_registry import get_backend
-        from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
         from tengri.inference.backends.mcmc.chain_program import (
-            GHMCConfig,
-            HMCConfig,
-            NUTSConfig,
-            NUTSSamplerConfig,
             adapt_chain,
             bind_logdensity,
             run_chain,
             sample_chain,
         )
-        from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
 
         entry = get_backend(canonical)
-        if entry.chain_program is None:
-            raise BackendError(f"{canonical} has no chain program, so compile() cannot warm it")
+        if entry.chain_program is None or entry.compile_plan is None:
+            raise BackendError(f"{canonical} has no compile plan, so compile() cannot warm it")
         program = entry.chain_program
+        plan = entry.compile_plan(entry, int(init_flat.shape[0]), self.spec)
+        adaptation = entry.adaptation_for(plan.kwargs, path="compile")
         warmup_key = jax.random.PRNGKey(1)
         chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
+        init_key = None
+        if not program.starts_from_warmup:
+            init_key = jax.random.PRNGKey(4)
+            chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
 
-        if canonical == "mcmc_ghmc":
-            adaptation = entry.adaptation_for({}, path="compile")
-            cfg = GHMCConfig(alpha=0.85, delta=0.8, target_accept_rate=0.65)
-            ghmc_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
+        if plan.fused:
             run_chain(
                 program,
                 adaptation,
                 init_flat,
                 warmup_key,
-                jax.random.PRNGKey(4),
-                ghmc_keys,
+                init_key,
+                chain_keys,
                 ld2,
                 data_args,
                 n_warmup,
-                cfg,
+                plan.adapt_cfg,
             )
             return
-
-        n_dim = int(init_flat.shape[0])
-        use_dense = resolve_dense_mass_gate(
-            None, n_dim, method=canonical, verbose=False, spec=self.spec
-        )
-        init_key = None
-        if canonical == "mcmc_nuts":
-            kwargs = {"dense_mass_matrix": use_dense, "pathfinder_warmstart": False}
-            adapt_cfg = NUTSConfig(
-                max_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
-                use_dense=use_dense,
-                target_accept_rate=0.85,
-            )
-            sample_cfg = NUTSSamplerConfig(max_doublings=DEFAULT_MAX_NUM_DOUBLINGS)
-        else:
-            n_leapfrog = 10
-            kwargs = {"dense_mass_matrix": use_dense, "n_leapfrog_steps": n_leapfrog}
-            adapt_cfg = HMCConfig(
-                n_leapfrog=n_leapfrog, use_dense=use_dense, target_accept_rate=0.85
-            )
-            sample_cfg = adapt_cfg
-            if canonical == "mcmc_dynamic_hmc":
-                init_key = jax.random.PRNGKey(4)
-                chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
-                sample_cfg = None
-
-        adaptation = entry.adaptation_for(kwargs, path="compile")
         params = adapt_chain(
-            program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, adapt_cfg
+            program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, plan.adapt_cfg
         )[0]
-        state = program.init(init_flat, bind_logdensity(ld2, data_args), init_key, sample_cfg)
-        sample_chain(program, state, chain_keys, ld2, data_args, params, sample_cfg)
+        state = program.init(init_flat, bind_logdensity(ld2, data_args), init_key, plan.sample_cfg)
+        sample_chain(program, state, chain_keys, ld2, data_args, params, plan.sample_cfg)
 
     def compile(
         self,
@@ -3474,6 +3445,7 @@ class Fitter:
             )
 
         if mcmc_methods:
+            from tengri.inference._backend_registry import lookup_backend
             from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 
             log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
@@ -3483,7 +3455,7 @@ class Fitter:
 
             for method in mcmc_methods:
                 canonical = method if method.startswith("mcmc_") else f"mcmc_{method}"
-                if canonical not in self._COMPILE_MCMC_METHODS:
+                if lookup_backend(canonical) is None:
                     logger.warning("  Unknown MCMC method for compile: %s", method)
                     continue
                 if verbose:

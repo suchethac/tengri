@@ -8,7 +8,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from tengri.inference.backends.mcmc.chain_program import Adaptation, ChainProgram
+    from tengri.inference.backends.mcmc.chain_program import (
+        Adaptation,
+        ChainProgram,
+        CompilePlan,
+    )
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,9 @@ class BackendEntry:
     # Maps the kwargs to the Adaptation ``compile()`` warms, when it differs from the run
     # path (GHMC: window for compile, MEADS for run). None means the run rule serves both.
     compile_adaptation_rule: Callable[[dict], Adaptation] | None = None
+    # Builds the statics ``compile()`` warms, from (entry, n_dim, spec). None when
+    # the entry has no compile plan, and ``compile()`` then refuses it by name.
+    compile_plan: Callable[[Any, int, Any], CompilePlan] | None = None
 
     def adaptation_for(self, kwargs: dict, *, path: str = "run") -> Adaptation | None:
         """Return the adaptation this entry runs on ``path`` for ``kwargs``.
@@ -169,6 +176,7 @@ def register_backend(
     chain_program=None,
     adaptation_rule=None,
     compile_adaptation_rule=None,
+    compile_plan=None,
 ):
     """Decorator to register an inference backend.
 
@@ -221,6 +229,7 @@ def register_backend(
             chain_program=chain_program,
             adaptation_rule=adaptation_rule,
             compile_adaptation_rule=compile_adaptation_rule,
+            compile_plan=compile_plan,
         )
         _BACKENDS[name] = entry
         for a in aliases:

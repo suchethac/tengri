@@ -20,6 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.config.exceptions import BackendError
 from tengri.inference._backend_registry import all_backends, get_backend
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
@@ -802,7 +803,7 @@ def test_ghmc_compile_warms_the_window_and_run_samples_with_meads():
         entry.adaptation_for(_RESOLVED_KWARGS, path="sample")
 
 
-@pytest.mark.parametrize("method", ["mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc"])
+@pytest.mark.parametrize("method", ["mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_mala"])
 def test_compile_warms_the_programs_run_then_hits(method):
     """A run() after compile() adds no adaptation or sampling compilation."""
     fitter = fitter_photometry()
@@ -817,3 +818,42 @@ def test_compile_warms_the_programs_run_then_hits(method):
     sizes = (adapt_chain._cache_size(), sample_chain._cache_size())
     fitter.run(method, key=jax.random.PRNGKey(0), n_warmup=20, n_burnin=20, n_samples=20)
     assert (adapt_chain._cache_size(), sample_chain._cache_size()) == sizes
+
+
+def test_dynamic_hmc_compile_warms_the_policy_run_adapts_under_a_dense_basis_spec(monkeypatch):
+    """A compile under a dense_basis spec warms the dense metric dynamic HMC run adapts.
+
+    ``run_dynamic_hmc`` defaults to ``dense_mass_matrix=True``; compile must resolve the
+    same policy, not the NUTS/HMC ``None`` default.
+    """
+    from tengri.inference.backends.mcmc import nuts as nuts_backend
+
+    monkeypatch.setattr(nuts_backend, "_spec_uses_dense_basis", lambda spec: True)
+    fitter = fitter_photometry()
+    fitter.compile(
+        mcmc_methods=["mcmc_dynamic_hmc"],
+        modes=(),
+        n_warmup=20,
+        n_burnin=20,
+        n_mcmc_samples=20,
+        verbose=False,
+    )
+    sizes = (adapt_chain._cache_size(), sample_chain._cache_size())
+    fitter.run(
+        "mcmc_dynamic_hmc", key=jax.random.PRNGKey(0), n_warmup=20, n_burnin=20, n_samples=20
+    )
+    assert (adapt_chain._cache_size(), sample_chain._cache_size()) == sizes
+
+
+def test_compile_refuses_a_registered_method_without_a_program_by_name():
+    """A registered MCMC method with no chain program is refused by name, not warned about."""
+    fitter = fitter_photometry()
+    with pytest.raises(BackendError, match="mcmc_mclmc"):
+        fitter._warm_mcmc_program(
+            "mcmc_mclmc",
+            init_flat=jnp.zeros(3),
+            ld2=None,
+            data_args=None,
+            n_warmup=1,
+            n_chain=1,
+        )
