@@ -935,54 +935,6 @@ def _nuts_full_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
-def _hmc_warmup_only(
-    init_flat,
-    warmup_key,
-    logdensity_fn_2arg,
-    data_args,
-    n_warmup,
-    n_leapfrog,
-    use_dense,
-    target_accept_rate,
-):
-    """BlackJAX HMC window adaptation only, returns tuned (step_size, inv_mass).
-
-    The warmup half of :func:`_hmc_full_scan`, split out so a *fresh*
-    ``run_hmc`` call can adapt once and then dispatch sampling through the
-    single- or multi-chain path (vmap/parallel) that honors ``n_chains``,
-    without the old behavior of silently sampling a single chain on the first
-    call. Same static-arg / traced-``data_args`` contract as
-    :func:`_hmc_full_scan`.
-
-    Returns
-    -------
-    step_size : scalar
-    inv_mass_matrix : ndarray, shape (D,) or (D, D)
-    warmup_divergent : ndarray of bool, shape (n_warmup,)
-        Per-step ``is_divergent`` flags from the adaptation, for the
-        dead-warmup refusal (#2088).
-    """
-    import blackjax
-    from blackjax.adaptation.base import get_filter_adapt_info_fn
-
-    def ld_1arg(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    warmup = blackjax.window_adaptation(
-        blackjax.hmc,
-        ld_1arg,
-        is_mass_matrix_diagonal=not use_dense,
-        target_acceptance_rate=target_accept_rate,
-        num_integration_steps=n_leapfrog,
-        adaptation_info_fn=get_filter_adapt_info_fn(info_keys={"is_divergent"}),
-    )
-    (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    warmup_divergent = jnp.asarray(info.info.is_divergent)
-    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent
-
-
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
 def _hmc_full_scan(
     init_flat,
     warmup_key,
@@ -994,12 +946,10 @@ def _hmc_full_scan(
     use_dense,
     target_accept_rate,
 ):
-    """Outer JIT: BlackJAX HMC window adaptation + sampling chain.
+    """Window-adapt HMC, then sample one chain; the caller slices ``[n_burnin:]``.
 
-    Wraps warmup and the leapfrog scan in a single ``jax.jit`` so the
-    HMC kernel is compiled once. Burnin discard is done by the caller
-    Python-side, so changing ``n_burnin`` while keeping ``n_chain``
-    constant does not trigger recompilation.
+    A thin shim over :func:`tengri.inference.backends.mcmc.chain_program.run_chain`.
+    The positions and divergence flags cover every iteration, burn-in included.
 
     Parameters
     ----------
@@ -1008,103 +958,51 @@ def _hmc_full_scan(
     warmup_key : PRNGKey
         Random key for warmup adaptation.
     chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys (``n_chain = n_burnin + n_samples``).
-    logdensity_fn_2arg : callable (static)
+        Pre-split keys (``n_chain = n_burnin + n_samples``), used as given.
+    logdensity_fn_2arg : callable
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
-    data_args : pytree (traced)
-        Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup : int (static)
+    data_args : pytree
+        Observed data tensors, traced.
+    n_warmup : int
         Window adaptation steps.
-    n_leapfrog : int (static)
+    n_leapfrog : int
         Leapfrog integration steps per HMC proposal.
-    use_dense : bool (static)
+    use_dense : bool
         Dense vs diagonal mass matrix.
-    target_accept_rate : float (static)
+    target_accept_rate : float
         Target acceptance rate for dual averaging.
 
     Returns
     -------
     positions : ndarray, shape (n_chain, D)
     divergent : ndarray, shape (n_chain,)
-        Caller slices ``[n_burnin:]``.
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
-    import blackjax
-
-    def ld_1arg(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    warmup = blackjax.window_adaptation(
-        blackjax.hmc,
-        ld_1arg,
-        is_mass_matrix_diagonal=not use_dense,
-        target_acceptance_rate=target_accept_rate,
-        num_integration_steps=n_leapfrog,
+    from tengri.inference.backends.mcmc.chain_program import (
+        HMC,
+        WINDOW_HMC,
+        HMCConfig,
+        run_chain,
     )
-    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
 
-    kernel = _get_hmc_kernel()
-
-    def _step(s, k):
-        """Advance HMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, inv_mass_matrix
-
-
-@functools.partial(jax.jit, static_argnums=(2, 6))
-def _hmc_chain_scan(
-    state,
-    chain_keys,
-    logdensity_fn_2arg,
-    data_args,
-    step_size,
-    inv_mass_matrix,
-    n_leapfrog,
-):
-    """Outer JIT: HMC burn-in + sampling with pre-computed adaptation params.
-
-    Parameters
-    ----------
-    state : HMCState
-        Initial chain state (from ``blackjax.mcmc.hmc.init``).
-    chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg : callable (static)
-        ``log_p(position, data_args)``.
-    data_args : pytree (traced)
-        Observed data tensors.
-    step_size : scalar (traced)
-        Step size from warmup adaptation.
-    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
-        Inverse mass matrix from warmup adaptation.
-    n_leapfrog : int (static)
-        Leapfrog integration steps per proposal.
-
-    Returns
-    -------
-    positions : ndarray, shape (n_chain, D)
-    divergent : ndarray, shape (n_chain,)
-        Caller slices ``[n_burnin:]``.
-    """
-
-    def ld(pos):
-        return logdensity_fn_2arg(pos, data_args)
-
-    kernel = _get_hmc_kernel()
-
-    def _step(s, k):
-        """Advance HMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent
+    cfg = HMCConfig(
+        n_leapfrog=n_leapfrog,
+        use_dense=use_dense,
+        target_accept_rate=target_accept_rate,
+    )
+    draws, (step_size, inv_mass_matrix) = run_chain(
+        HMC,
+        WINDOW_HMC(n_leapfrog, not use_dense),
+        init_flat,
+        warmup_key,
+        chain_keys,
+        logdensity_fn_2arg,
+        data_args,
+        n_warmup,
+        cfg,
+    )
+    return draws.position, draws.divergent, step_size, inv_mass_matrix
 
 
 # ---------------------------------------------------------------------------
@@ -3721,7 +3619,7 @@ def _hmc_low_rank_warmup_only(
 
     **One sampling program for every chain.** While the two halves were fused,
     chain 0 sampled inside the warmup program and chains 1..n-1 ran the separate
-    :func:`_hmc_chain_scan`, so a multi-chain fit ran two structurally different
+    :func:`sample_chain`, so a multi-chain fit ran two structurally different
     compiled computations over one adaptation. That is the shape that made NUTS
     irreproducible under a pinned key before its own split.
 

@@ -67,6 +67,25 @@ class NUTSSamplerConfig:
     max_doublings: int
 
 
+@dataclass(frozen=True)
+class HMCConfig:
+    """Static statics of the HMC family.
+
+    Parameters
+    ----------
+    n_leapfrog : int
+        Leapfrog integration steps per proposal.
+    use_dense : bool
+        Dense mass matrix when True, diagonal when False.
+    target_accept_rate : float
+        Target acceptance rate of the step-size adaptation.
+    """
+
+    n_leapfrog: int
+    use_dense: bool
+    target_accept_rate: float
+
+
 class Draw(NamedTuple):
     """Per-draw outputs of a sampling scan.
 
@@ -266,6 +285,71 @@ PATHFINDER_NUTS = Adaptation(name="pathfinder_nuts", run=_pathfinder_nuts)
 def nuts_adaptation(pathfinder: bool) -> Adaptation:
     """Return the NUTS adaptation selected by the Pathfinder flag."""
     return PATHFINDER_NUTS if pathfinder else WINDOW_NUTS
+
+
+def _hmc_init(position, ld):
+    """Return the HMC state at ``position``."""
+    import blackjax
+
+    return blackjax.mcmc.hmc.init(position, ld)
+
+
+def _hmc_step(kernel, state, key, ld, params, cfg):
+    """Advance HMC one step with the tuned step size and mass matrix."""
+    step_size, inv_mass_matrix = params
+    return kernel(key, state, ld, step_size, inv_mass_matrix, cfg.n_leapfrog)
+
+
+def _hmc_collect(state, info) -> Draw:
+    """Collect the position and divergence flag of an HMC step."""
+    return Draw(position=state.position, divergent=info.is_divergent, extras={})
+
+
+#: HMC sampler with a fixed trajectory length. The kernel is the cached BlackJAX HMC kernel.
+HMC = ChainProgram(
+    name="hmc",
+    kernel=_shared._get_hmc_kernel,
+    init=_hmc_init,
+    step=_hmc_step,
+    collect=_hmc_collect,
+    starts_from_warmup=True,
+)
+
+
+def _window_hmc_run(n_leapfrog, diag, warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
+    """Run BlackJAX window adaptation around the HMC kernel with ``n_leapfrog`` steps."""
+    import blackjax
+
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld,
+        is_mass_matrix_diagonal=diag,
+        target_acceptance_rate=cfg.target_accept_rate,
+        num_integration_steps=n_leapfrog,
+        adaptation_info_fn=info_fn,
+    )
+    (state, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    return state, parameters, info
+
+
+@functools.cache
+def WINDOW_HMC(n_leapfrog: int, diag: bool) -> Adaptation:
+    """Return the HMC window adaptation with ``n_leapfrog`` steps and a diagonal or dense metric.
+
+    Parameters
+    ----------
+    n_leapfrog : int
+        Leapfrog steps per proposal during adaptation.
+    diag : bool
+        True for a diagonal mass matrix, False for a dense one.
+
+    Returns
+    -------
+    Adaptation
+        Cached per argument pair, so the same pair is the same static object under jit.
+    """
+    name = f"window_hmc_{n_leapfrog}_{'diag' if diag else 'dense'}"
+    return Adaptation(name=name, run=functools.partial(_window_hmc_run, n_leapfrog, diag))
 
 
 def _adapt_body(

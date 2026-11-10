@@ -56,12 +56,12 @@ from tengri.inference._sample_utils import (
 from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _get_hmc_kernel,
-    _hmc_chain_scan,
     _hmc_low_rank_warmup_only,
     _stabilize_dense_mass_step,
     final_window_divergence_frac,
     refuse_dead_warmup,
 )
+from tengri.inference.backends.mcmc.chain_program import HMC, HMCConfig, sample_chain
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
@@ -164,7 +164,7 @@ def run_hmc_low_rank(
     Notes
     -----
     Warmup is split from sampling, so every chain -- chain 0 included -- runs
-    the same compiled ``_hmc_chain_scan``, and the #1999 post-adaptation
+    the same compiled ``sample_chain(HMC, ...)``, and the #1999 post-adaptation
     stability probe has a Python seam to run in. A low-rank metric is a full
     metric with structure and carries the same mis-scaling failure mode a dense
     one does; ``bench/reports/2026-09-06_low_rank_metric_d74.md`` measured it
@@ -305,15 +305,20 @@ def run_hmc_low_rank(
             fitter.compile_signature(),
             method="mcmc_hmc_lowrank",
         ):
-            pos, div = _hmc_chain_scan(
+            draws = sample_chain(
+                HMC,
                 state,
                 chain_keys[c],
                 log_posterior_flat_2arg,
                 data_args,
-                step_size,
-                inv_mass_matrix,
-                int(n_leapfrog_steps),
+                (step_size, inv_mass_matrix),
+                HMCConfig(
+                    n_leapfrog=int(n_leapfrog_steps),
+                    use_dense=True,
+                    target_accept_rate=float(target_accept_rate),
+                ),
             )
+            pos, div = draws.position, draws.divergent
             jax.block_until_ready(pos)
         positions_per_chain.append(pos)
         divergent_per_chain.append(div)
