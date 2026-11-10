@@ -33,7 +33,9 @@ from tengri.inference.backends.mcmc._shared import (
 from tengri.inference.backends.mcmc.chain_program import (
     NUTS,
     NUTSConfig,
+    NUTSSamplerConfig,
     adapt_chain,
+    divergence_record,
     nuts_adaptation,
     sample_chain,
 )
@@ -895,11 +897,7 @@ def run_nuts(
 
     # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
     key, chain_key = jax.random.split(key)
-    sample_cfg = NUTSConfig(
-        max_doublings=max_num_doublings,
-        use_dense=use_dense,
-        target_accept_rate=target_accept_rate,
-    )
+    sample_cfg = NUTSSamplerConfig(max_doublings=max_num_doublings)
     sample_params = (parameters["step_size"], parameters["inverse_mass_matrix"])
     if n_chains > 1:
         # Resolved once here (rather than left to _vmap_chains) so an
@@ -961,7 +959,8 @@ def run_nuts(
         expansions = expansions[n_burnin:]
         n_leapfrog = n_leapfrog[n_burnin:]
         energy = energy[n_burnin:]
-    n_divergent = int(jnp.sum(divergent))
+    divergence = divergence_record(divergent)
+    n_divergent = int(divergence["n_divergent"])
     n_grad_sample = int(jnp.sum(n_leapfrog))
     depth_stats = _tree_depth_stats(expansions, max_num_doublings)
     _warn_if_tree_depth_saturated(depth_stats)
@@ -1037,7 +1036,7 @@ def run_nuts(
             # rather than a JAX one because every consumer so far serializes
             # it. Additive: nothing reads this key yet, and the aggregate
             # ``n_divergent`` above is unchanged.
-            "divergent_mask": jnp.asarray(divergent).astype(bool),
+            "divergent_mask": jnp.asarray(divergence["divergent_mask"]).astype(bool),
             # The energy trace, on the same flattened draw axis as ``samples``
             # and ``divergent_mask`` so the three can be joined row-wise.
             "energy": jnp.asarray(energy),

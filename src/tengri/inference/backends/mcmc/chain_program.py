@@ -46,6 +46,26 @@ class NUTSConfig:
     use_dense: bool
     target_accept_rate: float
 
+    def sampling(self) -> NUTSSamplerConfig:
+        """Return the sampling-scan config: the tree-depth cap, nothing else."""
+        return NUTSSamplerConfig(max_doublings=self.max_doublings)
+
+
+@dataclass(frozen=True)
+class NUTSSamplerConfig:
+    """Static statics of the NUTS sampling scan: the only field the sampler reads.
+
+    Keeping the sampling scan's static argument to the tree-depth cap means a change
+    in the adaptation's target acceptance rate or mass policy does not recompile it.
+
+    Parameters
+    ----------
+    max_doublings : int
+        Maximum tree doublings per sampling step.
+    """
+
+    max_doublings: int
+
 
 class Draw(NamedTuple):
     """Per-draw outputs of a sampling scan.
@@ -332,8 +352,8 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
         Observed data, traced.
     params : tuple
         ``(step_size, inverse_mass_matrix)`` from :func:`adapt_chain`.
-    cfg : NUTSConfig (static)
-        Family statics.
+    cfg : NUTSSamplerConfig (static)
+        Sampling statics, only the fields the sampler reads.
 
     Returns
     -------
