@@ -11,12 +11,13 @@ a reversible Metropolis step), and it has no way to see the damping ``alpha`` at
 all. The damping is what sets GHMC's mixing, so the one knob that mattered was
 the one nothing tuned. That is the diagnosis behind ``tier="broken"``.
 
-``_shared._ghmc_meads_scan`` replaces it with ``blackjax.meads_adaptation``, the
+``chain_program.MEADS`` replaces it with ``blackjax.meads_adaptation``, the
 adaptation BlackJAX ships *for* this kernel.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import time
 import warnings
@@ -30,12 +31,18 @@ from tengri.inference.backends.mcmc._shared import (
     _MEADS_JITTER_SCALE,
     _get_cached_adaptation,
     _get_flat_logdensity,
-    _ghmc_chain_scan,
-    _ghmc_meads_scan,
     _resolve_meads_ensemble,
     _set_cached_adaptation,
     _vmap_chains,
     adaptation_method_key,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    GHMC,
+    MEADS,
+    GHMCConfig,
+    divergence_record,
+    run_chain,
+    sample_chain,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,10 +180,8 @@ def run_ghmc(
        Artificial Intelligence and Statistics (AISTATS), PMLR 151:7799-7813,
        2022. https://proceedings.mlr.press/v151/hoffman22a.html
     """
-    try:
-        import blackjax
-    except ImportError:
-        raise ImportError("blackjax required: pip install blackjax") from None
+    if importlib.util.find_spec("blackjax") is None:
+        raise ImportError("blackjax required: pip install blackjax")
 
     from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
@@ -296,27 +301,26 @@ def run_ghmc(
                 used_alpha,
             )
 
+        cached_params = (step_size, momentum_inv_scale, used_alpha, used_delta)
+        sampler_cfg = GHMCConfig(alpha=None, delta=None)
+
         def _scan(state, keys):
             """Sample one chain from the cached adaptation."""
-            return _ghmc_chain_scan(
+            draws = sample_chain(
+                GHMC,
                 state,
                 keys,
                 log_posterior_flat_2arg,
                 data_args,
-                step_size,
-                momentum_inv_scale,
-                used_alpha,
-                used_delta,
-                used_alpha,
-                used_delta,
+                cached_params,
+                sampler_cfg,
             )
+            return draws.position, draws.divergent
 
         if n_chains > 1:
 
             def _init(p, init_key):
-                # Keyword args: blackjax reordered ghmc.init's (rng_key,
-                # logdensity_fn) between 1.3 and 1.6, keywords work on both.
-                return blackjax.mcmc.ghmc.init(position=p, logdensity_fn=ld_1arg, rng_key=init_key)
+                return GHMC.init(p, ld_1arg, init_key)
 
             positions, divergent = _vmap_chains(
                 _init,
@@ -329,32 +333,38 @@ def run_ghmc(
             )
         else:
             sample_key, ghmc_init_key = jax.random.split(chain_key)
-            state = blackjax.mcmc.ghmc.init(
-                position=init_flat, logdensity_fn=ld_1arg, rng_key=ghmc_init_key
-            )
+            state = GHMC.init(init_flat, ld_1arg, ghmc_init_key)
             positions, divergent = _scan(state, jax.random.split(sample_key, n_iter))
             if n_burnin > 0:
                 positions = positions[n_burnin:]
                 divergent = divergent[n_burnin:]
     else:
         chain_keys = jax.random.split(chain_key, n_chains * n_iter).reshape(n_chains, n_iter, 2)
-        positions, divergent, step_size, momentum_inv_scale, alpha_a, delta_a = _ghmc_meads_scan(
+        meads_cfg = GHMCConfig(
+            alpha=None if alpha is None else float(alpha),
+            delta=None if delta is None else float(delta),
+            n_ensemble=int(ensemble_size),
+            n_folds=int(n_folds),
+            jitter_scale=float(ensemble_jitter),
+            low_rank_rank=None if low_rank_rank is None else int(low_rank_rank),
+            low_rank_window_fraction=float(low_rank_window_fraction),
+        )
+        draws, tuned = run_chain(
+            GHMC,
+            MEADS,
             init_flat,
             warmup_key,
+            None,
             chain_keys,
             log_posterior_flat_2arg,
             data_args,
             int(n_warmup),
-            int(ensemble_size),
-            int(n_folds),
-            None if alpha is None else float(alpha),
-            None if delta is None else float(delta),
-            float(ensemble_jitter),
-            None if low_rank_rank is None else int(low_rank_rank),
-            float(low_rank_window_fraction),
+            meads_cfg,
         )
-        used_alpha = float(alpha_a)
-        used_delta = float(delta_a)
+        positions, divergent = draws.position, draws.divergent
+        step_size, momentum_inv_scale = tuned[0], tuned[1]
+        used_alpha = float(tuned[2])
+        used_delta = float(tuned[3])
         parameters = {
             "step_size": step_size,
             "inverse_mass_matrix": momentum_inv_scale,
@@ -380,7 +390,9 @@ def run_ghmc(
                 used_delta,
             )
 
-    n_divergent = int(jnp.sum(divergent))
+    divergence = divergence_record(divergent)
+    n_divergent = int(divergence["n_divergent"])
+    divergent_mask = jnp.asarray(divergence["divergent_mask"]).astype(bool)
 
     wall_time = time.time() - t0
 
@@ -418,6 +430,7 @@ def run_ghmc(
             "delta_adapted": delta is None,
             "low_rank_rank": None if low_rank_rank is None else int(low_rank_rank),
             "n_divergent": n_divergent,
+            "divergent_mask": divergent_mask,
             "step_size": float(parameters["step_size"]),
         },
         loss_history=None,

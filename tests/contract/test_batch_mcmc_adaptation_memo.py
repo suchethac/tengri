@@ -7,7 +7,7 @@ every ``fit_batch`` call. A fresh closure has a fresh function identity, so JAX'
 in-memory compilation cache compiled and *retained* a new warmup executable each
 call and never evicted it — a ~20 MB/call leak on a long-lived Fitter (measured;
 present since before the memo). The single-galaxy MCMC path never had this because
-it wraps warmup+scan in a module-level ``jax.jit`` (``_hmc_full_scan``) with the
+it wraps warmup+scan in a module-level ``jax.jit`` (``run_chain``) with the
 data threaded as a traced argument.
 
 The fix mirrors that pattern for the batch path: the warmup is wrapped in a
@@ -132,7 +132,7 @@ def test_adaptation_memo_preserves_samples(fitter):
 # ``window_adaptation`` runs its OWN NUTS kernel and forwards
 # ``**extra_parameters`` into it, so a caller's ``max_num_doublings`` is honored
 # by warmup only if it is passed there. PR #2101 fixed that for the
-# single-galaxy and catalog entry points (``_nuts_full_scan`` /
+# single-galaxy and catalog entry points (``run_chain`` /
 # ``adapt_chain``) and measured one 50 + 50 catalog cell going from
 # 54.88 s to 2.14 s. ``_fit_batch_vmap_mcmc`` is the third entry point and was
 # missed: it forwarded the cap to the sampling kernel and nothing else, so every

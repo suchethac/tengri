@@ -66,7 +66,11 @@ adjusted-MCLMC, NSS; PRs #1531/#1624/#1644 and the #1429 wiring):
    the advertised supported list (#1576's derived, tier-filtered helper), and
    `PopulationFitter.run` dispatch all follow automatically.
 2. **One `elif driver == ...` branch in `run_flat_sampler`** calling the
-   algorithm on the standardized problem. Gradient samplers use
+   algorithm on the standardized problem. A chain-program family (NUTS, HMC,
+   dynamic HMC, GHMC) joins `flat_chain_drivers()` instead and runs through
+   `chain_program.run_chain`, with its program, window adaptation and statics
+   read from the registry entry; the fused warmup-and-sampling shims are gone.
+   Other drivers call their algorithm directly. Gradient samplers use
    `prob.log_prob_with_data` with `prob.data_args` traced (the compile-reuse
    contract: one compiled program serves every catalog); prior-aware samplers
    use `prob.log_likelihood_with_data` alone; a nested sampler would take the

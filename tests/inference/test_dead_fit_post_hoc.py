@@ -487,21 +487,20 @@ def test_dynamic_hmc_raises_on_sampling_collapse_after_healthy_warmup(
 ):
     """Dynamic HMC wiring: refusal when sampling diverges despite healthy warmup.
 
-    Patched _dynamic_hmc_chain_scan forces all divergent flags. Dynamic HMC's
+    Patched sample_chain forces all divergent flags. Dynamic HMC's
     refuse_dead_sampling call should catch this and raise DeadFitError. Mutation
     check: remove the refuse_dead_sampling call in dynamic_hmc.py and this test fails.
     """
     from tengri.inference.backends.mcmc import dynamic_hmc as dhmc_backend
 
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    original_chain_scan = dhmc_backend._dynamic_hmc_chain_scan
+    original_chain_scan = dhmc_backend.sample_chain
 
-    def patched_dhmc_chain_scan(*args, **kwargs):
-        positions, divergent_real = original_chain_scan(*args, **kwargs)
-        divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched
+    def patched_dhmc_chain_scan(program, state, chain_keys, *args, **kwargs):
+        draws = original_chain_scan(program, state, chain_keys, *args, **kwargs)
+        return draws._replace(divergent=jnp.ones_like(draws.divergent, dtype=bool))
 
-    monkeypatch.setattr(dhmc_backend, "_dynamic_hmc_chain_scan", patched_dhmc_chain_scan)
+    monkeypatch.setattr(dhmc_backend, "sample_chain", patched_dhmc_chain_scan)
 
     # Single-chain fit should raise DeadFitError.
     with pytest.raises(DeadFitError) as excinfo:

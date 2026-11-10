@@ -79,12 +79,18 @@ from tengri.inference._sample_utils import (
 )
 from tengri.inference.backends.mcmc._shared import (
     FIRST_ORDER_TARGET_ACCEPT_RATE,
-    _first_order_chain_scan,
-    _first_order_full_scan,
     _get_cached_adaptation,
     _get_flat_logdensity,
     _set_cached_adaptation,
     adaptation_method_key,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
+    FIRST_ORDER,
+    FirstOrderConfig,
+    bind_logdensity,
+    run_chain,
+    sample_chain,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -261,6 +267,7 @@ def run_first_order(
     jitter_key, key = jax.random.split(key)
     starts = init_flat[None, :] + 1e-3 * jax.random.normal(jitter_key, shape=(n_chains, n_dim))
 
+    cfg = FirstOrderConfig(proposal=proposal, target_accept_rate=float(target_accept_rate))
     positions_per_chain = []
     accept_per_chain = []
 
@@ -278,14 +285,18 @@ def run_first_order(
                 fitter.compile_signature(),
                 method=f"mcmc_{proposal}",
             ):
-                pos, acc = _first_order_chain_scan(
-                    starts[c],
+                ld = bind_logdensity(log_posterior_flat_2arg, data_args)
+                state = FIRST_ORDER.init(starts[c], ld, None, cfg)
+                draws = sample_chain(
+                    FIRST_ORDER,
+                    state,
                     chain_keys[c],
-                    step_size,
                     log_posterior_flat_2arg,
                     data_args,
-                    proposal,
+                    (step_size, None),
+                    cfg,
                 )
+                pos, acc = draws.position, draws.extras["accept"]
                 jax.block_until_ready(pos)
             positions_per_chain.append(pos)
             accept_per_chain.append(acc)
@@ -295,16 +306,20 @@ def run_first_order(
             fitter.compile_signature(),
             method=f"mcmc_{proposal}",
         ):
-            pos, acc, step_size = _first_order_full_scan(
+            draws, params = run_chain(
+                FIRST_ORDER,
+                DUAL_AVERAGING,
                 starts[0],
                 warmup_key,
+                None,
                 chain_keys[0],
                 log_posterior_flat_2arg,
                 data_args,
                 int(n_warmup),
-                proposal,
-                float(target_accept_rate),
+                cfg,
             )
+            pos, acc = draws.position, draws.extras["accept"]
+            step_size = params[0]
             jax.block_until_ready(pos)
         positions_per_chain.append(pos)
         accept_per_chain.append(acc)
@@ -321,14 +336,18 @@ def run_first_order(
                 fitter.compile_signature(),
                 method=f"mcmc_{proposal}",
             ):
-                pos, acc = _first_order_chain_scan(
-                    starts[c],
+                ld = bind_logdensity(log_posterior_flat_2arg, data_args)
+                state = FIRST_ORDER.init(starts[c], ld, None, cfg)
+                draws = sample_chain(
+                    FIRST_ORDER,
+                    state,
                     chain_keys[c],
-                    step_size,
                     log_posterior_flat_2arg,
                     data_args,
-                    proposal,
+                    (step_size, None),
+                    cfg,
                 )
+                pos, acc = draws.position, draws.extras["accept"]
                 jax.block_until_ready(pos)
             positions_per_chain.append(pos)
             accept_per_chain.append(acc)
