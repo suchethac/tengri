@@ -50,6 +50,12 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.inference.backends.mcmc import _shared
+from tengri.inference.backends.mcmc.chain_program import (
+    NUTS,
+    WINDOW_NUTS,
+    NUTSConfig,
+    run_chain,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -114,18 +120,9 @@ def call_args():
 def nuts_text(call_args):
     """NUTS's lowered program: the reference every other row is read against."""
     init, wkey, keys, scales = call_args
+    cfg = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8)
     return _lowered_text(
-        _shared._nuts_full_scan,
-        init,
-        wkey,
-        keys,
-        _target,
-        scales,
-        N_WARMUP,
-        10,
-        False,
-        0.8,
-        False,
+        run_chain, NUTS, WINDOW_NUTS, init, wkey, keys, _target, scales, N_WARMUP, cfg
     )
 
 
