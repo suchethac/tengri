@@ -4,20 +4,39 @@
 A golden is two files per case under ``tests/fixtures/band_table_parity/``: ``<case>.json``
 (the engagement summary, the SHA-256 of ``compile_signature()``, the structure of
 ``_template_data_for_jit()`` with a SHA-256 of the raw bytes of every array leaf, and the sampled
-parameters) and ``<case>.npz`` (the ``predict_photometry`` output at the sampled point). Hashing
-the raw bytes of a leaf is an exact, dtype- and shape-aware equality, and it keeps the goldens
-small: the CLOUDY band tables alone run to about 11 MB as values.
+parameters, and the ``platform`` that captured it) and ``<case>.npz`` (the ``predict_photometry``
+output at the sampled point, and every array leaf of ``_template_data_for_jit()`` under
+``leaf_NNN``, indexed as the ``tree`` lists them). The record's digests are exact, dtype- and
+shape-aware equalities on the capturing platform. Other platforms compare the stored values
+within a tolerance, because XLA on x86-64 rounds the same program in the last bit.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import platform as _platform
+import sys
 from pathlib import Path
 
 import numpy as np
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "band_table_parity"
+
+
+def current_platform() -> str:
+    """The platform string a golden records, such as ``darwin-arm64`` or ``linux-x86_64``."""
+    return f"{sys.platform}-{_platform.machine()}"
+
+
+def leaf_key(index: int) -> str:
+    """The ``.npz`` key of the array leaf at position ``index`` of the ``tree`` list."""
+    return f"leaf_{index:03d}"
+
+
+def signature_sha256(model) -> str:
+    """SHA-256 of the repr of ``model.compile_signature()``."""
+    return hashlib.sha256(repr(model.compile_signature()).encode()).hexdigest()
 
 
 def _flatten(tree, prefix: str = ""):
@@ -43,10 +62,11 @@ def capture(model) -> tuple[dict, dict]:
     Returns
     -------
     record : dict
-        ``summary``, ``signature_sha256``, ``tree`` (path, kind, dtype, shape or repr per
-        leaf) and ``params`` (the sampled point).
+        ``platform``, ``summary``, ``signature_sha256``, ``tree`` (path, kind, dtype, shape or
+        repr per leaf, with a digest of the bytes of each array leaf) and ``params`` (the
+        sampled point).
     arrays : dict of ndarray
-        Only ``photometry``; array leaves are recorded by digest in ``record["tree"]``.
+        ``photometry``, and each array leaf under ``leaf_NNN`` (its position in ``tree``).
     """
     import jax
 
@@ -59,6 +79,7 @@ def capture(model) -> tuple[dict, dict]:
     for path, leaf in _flatten(template):
         if hasattr(leaf, "shape") and hasattr(leaf, "dtype"):
             value = np.ascontiguousarray(np.asarray(leaf))
+            arrays[leaf_key(len(tree))] = value
             tree.append(
                 {
                     "path": path,
@@ -70,10 +91,10 @@ def capture(model) -> tuple[dict, dict]:
             )
         else:
             tree.append({"path": path, "kind": "scalar", "repr": repr(leaf)})
-    signature = repr(model.compile_signature())
     record = {
+        "platform": current_platform(),
         "summary": precompute_engagement_report(model).summary_text(),
-        "signature_sha256": hashlib.sha256(signature.encode()).hexdigest(),
+        "signature_sha256": signature_sha256(model),
         "tree": tree,
         "params": {k: np.asarray(v).tolist() for k, v in params.items()},
     }
