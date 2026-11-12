@@ -236,9 +236,9 @@ def test_capstone_filter_configuration_follows_the_fit_example() -> None:
     for line, spec in zip(band_lines, run.filters, strict=True):
         assert line == (
             f"name:{spec.name} fileName:$BEAGLE_FILTERS/{run.name}_{spec.name}.dat "
-            f"flux:colName:flux_{spec.name} fluxErr:colName:fluxerr_{spec.name}"
+            f"min_rel_err:0.02 flux:colName:flux_{spec.name} fluxErr:colName:fluxerr_{spec.name}"
         )
-    assert "min_rel_err" not in "\n".join(lines)
+    assert all(spec.min_rel_err == 0.02 for spec in run.filters)
 
 
 def test_photometry_only_configuration_has_no_object_id_line() -> None:

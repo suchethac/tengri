@@ -69,6 +69,7 @@ ZSUN = 0.01524  # BEAGLE's solar metallicity (log Z/0.01524 in the input tables)
 MPC_CM = 3.0856775814913673e24
 AIR_VACUUM_CUTOFF_AA = 2000.0
 ID_COLUMN = "ID"
+DEFAULT_MIN_REL_ERR = 0.02  # BEAGLE floor on the relative flux error, added in quadrature
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 
 SF_NAMES = frozenset(
@@ -268,6 +269,8 @@ class FilterSpec:
         Throughput curve in Angstrom (ascending) and dimensionless transmission.
     flux_col, err_col : str, optional
         Catalog columns for fluxes [microJy] and their errors (fitting only).
+    min_rel_err : float
+        Minimum relative error added in quadrature to the catalog error (fitting only).
     """
 
     name: str
@@ -275,6 +278,7 @@ class FilterSpec:
     transmission: np.ndarray
     flux_col: str | None = None
     err_col: str | None = None
+    min_rel_err: float = DEFAULT_MIN_REL_ERR
 
 
 def _filter_digest(filters: Sequence[FilterSpec]) -> list[bytes]:
@@ -298,7 +302,11 @@ def _filter_config(run_name: str, filters: Sequence[FilterSpec], *, fitting: boo
     for filt in filters:
         tokens = [f"name:{filt.name}", f"fileName:$BEAGLE_FILTERS/{run_name}_{filt.name}.dat"]
         if fitting and filt.flux_col and filt.err_col:
-            tokens += [f"flux:colName:{filt.flux_col}", f"fluxErr:colName:{filt.err_col}"]
+            tokens += [
+                f"min_rel_err:{_fmt(filt.min_rel_err)}",
+                f"flux:colName:{filt.flux_col}",
+                f"fluxErr:colName:{filt.err_col}",
+            ]
         lines.append(" ".join(tokens))
     return "\n".join(lines) + "\n"
 
