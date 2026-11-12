@@ -341,6 +341,32 @@ class Gutkin16Backend(NebularBackendDefaults):
         """Free-parameter declarations this backend contributes [see class docs]."""
         return list(NEBULAR_STANDARD_PARAMS)
 
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the Gutkin+2016 backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads the optional ``nebular_gutkin16_grid_path``, ``_mup``
+            and ``_continuum`` values.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        Gutkin16Backend
+            The backend instance.
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_gutkin16_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
+        if spec.nebular_gutkin16_mup is not None:
+            kwargs["mup"] = spec.nebular_gutkin16_mup
+        if spec.nebular_gutkin16_continuum is not None:
+            kwargs["continuum"] = spec.nebular_gutkin16_continuum
+        return cls(**kwargs)
+
     def __init__(
         self,
         mup: float = 100.0,

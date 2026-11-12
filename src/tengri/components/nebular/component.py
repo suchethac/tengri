@@ -303,6 +303,11 @@ class NebularSEDComponent(TemplateThreading):
         """Resolve the backend class from the config string once; the component keeps it."""
         object.__setattr__(self, "_backend_cls", resolve_nebular_backend(self.config.backend))
 
+    @property
+    def backend_class(self) -> type:
+        """The backend class this component selected, for capability checks."""
+        return self._backend_cls
+
     def materialized(self) -> NebularSEDComponent:
         """Variant that computes the nebular continuum instead of zeroing it.
 
