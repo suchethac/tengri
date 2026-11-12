@@ -120,7 +120,7 @@ carry them in this step (see Risks).
    backend.
 3. **Construction and naming in `sed_model.py`.** The `spec.nebular_mode` if/elif (`:4970-5144`)
    becomes the registry factory. Delete the class-name inference (`:12730-12746`) and read
-   `backend.config_name`. Named behaviour change: `MappingsPhotoAGNBackend` stops reading as
+   `backend.config_name`. Named behavior change: `MappingsPhotoAGNBackend` stops reading as
    `"mappings"`, and `NebularContinuumFallback` stops reading as `"baked_in"`. Consumers of that
    string to census: `sed_model.py:9305`, `sed_model.py:1213`, `cloudy_precompute.py:183`,
    `inference/catalog.py:225`.
