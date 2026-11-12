@@ -117,6 +117,7 @@ from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
 from tengri.components.nebular._line_ingest import (
@@ -125,7 +126,6 @@ from tengri.components.nebular._line_ingest import (
 from tengri.components.nebular._params import (
     CUE_GAS_EXTRA_PARAMS,
     CUE_IONSPEC_PARAMS,
-    NEBULAR_STANDARD_PARAMS,
 )
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
