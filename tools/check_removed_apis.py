@@ -121,6 +121,13 @@ _PRECOMPUTE_FOR_MODEL_REASON = (
 )
 
 
+_TRANSLATE_MODULE = "tengri.parameters.translate"
+_PARAM_MAP_REASON = (
+    "`tengri.parameters.translate.PARAM_MAP` was removed in #3296 -- "
+    "call `_build_param_map(...)` for the live table"
+)
+
+
 def scan_tree(tree: ast.AST):
     """Yield (lineno, reason) for each removed spelling used as real syntax."""
     for node in ast.walk(tree):
@@ -173,6 +180,19 @@ def scan_tree(tree: ast.AST):
                     f"`{name}()` returns a _RegistryTable since #1574 -- "
                     'string-index `.to_dict("fn")` instead',
                 )
+        # #3296 -- the module-level PARAM_MAP is gone; _build_param_map() is the table.
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == _TRANSLATE_MODULE
+            and any(alias.name == "PARAM_MAP" for alias in node.names)
+        ):
+            yield node.lineno, _PARAM_MAP_REASON
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "PARAM_MAP"
+            and ast.unparse(node.value) == _TRANSLATE_MODULE
+        ):
+            yield node.lineno, _PARAM_MAP_REASON
         if isinstance(node, ast.Attribute) and node.attr in _DICT_CONTRACT_ATTRS:
             name = _lister_name(node.value)
             if name:
