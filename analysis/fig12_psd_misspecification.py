@@ -27,18 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (
     FIG_DIR,
     PAPER_FIG_DIR,
-    get_observation,
-    get_ssp,
+    make_model,
     posterior_sfr_full,
     setup_matplotlib,
 )
 
 from tengri import (
     Fitter,
-    Gaussian,
-    Model,
-    ParamSpec,
-    Uniform,
     make_log_age_grid,
 )
 
@@ -118,33 +113,15 @@ def main():
     print(f"  True PSD: Matérn (nu={nu_true}, sigma={sigma_true}, tau={tau_myr_true} Myr)")
     print("  Fit PSD: DRW (nu=0.5)")
 
-    ssp = get_ssp()
-    obs = get_observation()
-
-    # Create model with DRW PSD (the wrong model)
-    spec = ParamSpec(
-        sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
-        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
-        met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
-        dust_tau_bc=Uniform(0.0, 2.0),
-        dust_tau_diff=Uniform(0.0, 1.0),
-        dust_slope=-0.7,
-        sfh_field_psd_sigma=Uniform(0.1, 4.0),
-        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-        redshift=0.1,
-        stochastic=True,
-        n_grid=n_grid,
-    )
-    model = Model(spec, ssp, observation=obs)
+    # Create model with DRW PSD (the wrong model): free PSD, same priors as make_model
+    model = make_model("moderate", redshift=0.1, stochastic=True, n_grid=n_grid, free_psd=True)
 
     # Generate mock with Matérn PSD
     key = jax.random.PRNGKey(314)
     key_sfh, key_params, key_noise, key_fit = jax.random.split(key, 4)
 
     # Sample non-PSD params from priors
-    true_params = spec.sample(key_params)
+    true_params = model.spec.sample(key_params)
 
     # Override the xi field with Matérn-generated GP
     _, _matern_field, _psd_true_vals, _freqs = generate_matern_sfh(
