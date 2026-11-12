@@ -652,9 +652,23 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
 
     The tied disc takes the library ratio :math:`{\rm disk}_i/{\rm disk}_0` on the caller's grid,
     which the library holds at zero below its first node, so the tied disc would emit nothing in
-    the X-rays. Shortward of that node the untied path's factor :math:`2\cos i\,T_X` is taken
-    instead (:attr:`LibrarySightline.disc_factor`, the Morrison & McCammon (1983) column of
-    :func:`library_torus_sightline`); every other sample keeps ``incl_ratio``.
+    the X-rays. Shortward of that node the tied disc takes the ratio held at the library's first
+    node times the Morrison & McCammon (1983) X-ray transmission :math:`T_X` of
+    :func:`library_torus_sightline` (:attr:`LibrarySightline.ratio` times
+    :attr:`LibrarySightline.transmission`); every other sample keeps ``incl_ratio``. The angular
+    law is therefore the library's on both sides of the edge and the disc is continuous there
+    up to :math:`T_X`. For Fritz et al. (2006) the library disc is isotropic, and CIGALE's
+    ``fritz2006`` (``sed_modules/fritz2006.py``, ``AGN1.disk * norm`` reweighted by
+    :math:`{\rm disk}(\psi)/{\rm disk}(89.99^\circ)`) applies no :math:`2\cos i` factor anywhere;
+    the repository's Lambertian :math:`2\cos i` belongs to the untied disc only (owner ruling,
+    #3062, 2026-11-12, option B; it replaces the :math:`2\cos i\,T_X` of #2760 for the tied
+    Fritz disc). The same holds for every tied library torus: for SKIRTOR the library disc is
+    anisotropic, :math:`\eta\propto\cos i\,(1+2\cos i)/3` (Stalevski et al. 2016, MNRAS 458,
+    2288), and CIGALE's ``skirtor2016`` (``sed_modules/skirtor2016.py``) forms the disc as the
+    new disc spectrum times :math:`{\rm disk}_i/{\rm disk}_0` of the library and ``nan_to_num``
+    sets the ratio to zero below the library's first node, so it carries no :math:`2\cos i`
+    and no disc there; the tied disc keeps the library's angular law on both sides of the edge
+    (owner ruling extended to SKIRTOR, 2026-11-12, after #3062).
 
     Parameters
     ----------
@@ -679,7 +693,8 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
     """
     edge = library_edge_wavelength(torus_block)
     wave = jnp.asarray(wavelength)
-    return jnp.where(wave < edge, sight.disc_factor, jnp.asarray(incl_ratio))
+    below = sight.ratio * sight.transmission
+    return jnp.where(wave < edge, below, jnp.asarray(incl_ratio))
 
 
 def library_torus_transmission(
