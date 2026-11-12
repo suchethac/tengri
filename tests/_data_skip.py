@@ -118,8 +118,8 @@ def has_pahspec() -> bool:
 requires_pahspec = pytest.mark.skipif(
     not has_pahspec(),
     reason=f"Draine+2021 PAHspec grid ({PAHSPEC_GRID_NAME}) not found. Absent it "
-    "the component warns and contributes nothing -- the designed response to "
-    "missing data (#1278), so its emission cannot be measured here. Build it "
+    "the requested component raises TengriIOError (#3284), so its emission cannot "
+    "be measured here. Build it "
     "with scripts/build_pahspec_hdf5.py or point $TENGRI_PAHSPEC_PATH at a copy.",
 )
 
