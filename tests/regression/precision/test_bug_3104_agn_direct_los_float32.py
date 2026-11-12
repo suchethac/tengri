@@ -109,5 +109,6 @@ def test_planck_ring_sum_is_finite_under_jit():
         nu32 = C_AA / jnp.asarray(wave, dtype=jnp.float32)
         t32 = jnp.asarray(temps, jnp.float32)
         out = np.asarray(jax.jit(ring_sum)(nu32, t32), np.float64)
-    assert np.all(np.isfinite(out)), f"{int((~np.isfinite(out)).sum())} non-finite points under jit"
+    n_bad = int((~np.isfinite(out)).sum())
+    assert n_bad == 0, f"{n_bad} non-finite points under jit"
     assert np.max(np.abs(out - ref)) / np.max(np.abs(ref)) <= _RTOL_SED
