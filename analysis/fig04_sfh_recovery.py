@@ -29,6 +29,7 @@ from common import (
     fit_galaxy,
     generate_mock_galaxy,
     make_model,
+    posterior_sfr_full,
     setup_matplotlib,
     sfh_residuals,
 )
@@ -90,13 +91,7 @@ def plot_sfh_recovery_grid(results_phot, results_spec, n_mocks: int, method: str
                     continue
 
                 n_draw = min(posterior.diagnostics.get("n_samples", 30), 30)
-                sfr_draws = []
-                for i in range(n_draw):
-                    s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                    sfh_i = model.predict_sfh(s_i)
-                    sfr_draws.append(np.array(sfh_i["sfr_full"]))
-
-                sfr_arr = np.array(sfr_draws)
+                sfr_arr = posterior_sfr_full(model, posterior.samples, n_draw)
 
                 # Truth
                 ax.plot(
