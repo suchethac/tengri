@@ -43,6 +43,7 @@ from tengri import DEFAULT, Fixed, Observation, Photometry
 from tengri.components.nebular.baked_in import BakedInNebularBareError, BakedInNebularWarning
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation.line_flux_data import LineFluxData
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.regression_bug
 
@@ -60,7 +61,7 @@ def _synthetic_ssp(nebular: str) -> SSPData:
     """
     return SSPData(
         ssp_wave=jnp.linspace(100.0, 20000.0, 100),
-        ssp_flux=jnp.full((3, 6, 100), 1e-4),
+        ssp_flux=nonsplat_flux((3, 6, 100)),
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.0, 6),
         ssp_lgmet=jnp.array([-2.5, -1.8, -1.0]),
         ssp_mass_remaining=jnp.full((3, 6), 0.7),

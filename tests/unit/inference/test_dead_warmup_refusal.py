@@ -168,10 +168,10 @@ def test_step_size_none_does_not_trigger_floor():
     refuse_dead_warmup(None, sampler="HMC", step_size=None, n_warmup=600, n_samples=600)
 
 
-def test_step_size_nan_does_not_trigger_floor():
-    """Absence check: NaN step_size (no measurement) does not trigger floor check."""
-    # NaN step_size should not raise (isfinite guard catches it)
-    refuse_dead_warmup(0.1, sampler="HMC", step_size=float("nan"), n_warmup=600, n_samples=600)
+def test_step_size_nan_refuses_as_non_finite():
+    """A NaN step size is a dead warmup, not an absence, so it refuses (#3317)."""
+    with pytest.raises(DeadFitError, match="non-finite"):
+        refuse_dead_warmup(0.1, sampler="HMC", step_size=float("nan"), n_warmup=600, n_samples=600)
 
 
 def test_step_size_zero_triggers_floor():

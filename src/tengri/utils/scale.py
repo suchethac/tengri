@@ -273,6 +273,35 @@ def safe_ratio(num, den):
     return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
 
+def ratio_or_nan(num, den):
+    """Return ``num / den`` where ``den`` exceeds its representable floor, NaN elsewhere.
+
+    The zero-hiding normalizer (#1404): ``num / jnp.maximum(den, floor)`` returns
+    ``num / floor`` (garbage) or ``0.0`` (when ``num`` is also zero) for a
+    degenerate ``den``. A NaN states that the quantity is undefined and lets it
+    propagate to the caller. The denominator is selected before the divide, so
+    the unselected quotient never divides by a near-zero value and its
+    reverse-mode term stays finite.
+
+    Parameters
+    ----------
+    num : array_like
+        Numerator.
+    den : array_like
+        Denominator; entries at or below ``representable_denominator(1e-30)``
+        give NaN.
+
+    Returns
+    -------
+    ndarray
+        ``num / den`` where ``den > representable_denominator(1e-30)``, else NaN.
+        Bit-identical to ``num / jnp.maximum(den, floor)`` wherever ``den`` exceeds
+        the floor.
+    """
+    ok = den > representable_denominator(1e-30)
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
+
+
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 
