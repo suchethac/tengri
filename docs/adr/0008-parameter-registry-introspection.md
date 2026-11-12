@@ -142,6 +142,15 @@ contract layers.
    answering "which subset of the flat registry would land?"
    without instantiating SSP-data-bound objects.
 
+## Translation triple on the declaration (2026-11-13, #3296)
+
+`ParamDeclaration` carries the public-to-internal translation `internal = public * scale + offset`
+as optional `internal_name`, `scale` and `offset` fields, and `ParameterRecord` carries them
+through. `tengri.parameters.translate` derives its non-SFH and evolving-alpha tables from the
+registry records that set a translation. `_EVOLVING_MET_PARAM_MAP` stays a literal, because its
+names are declared in `MET_REGISTRY` and `met_registry` imports `LOG10_ZSUN` from translate.
+`as_param_map()` keeps its identity route and ignores the new fields.
+
 ## Alternatives considered
 
 - **Re-centralize to `_param_defs.py`.** The original brief.

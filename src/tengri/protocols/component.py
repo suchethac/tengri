@@ -139,6 +139,18 @@ class ParamDeclaration(NamedTuple):
         ``bound_check(free_prior.lo, free_prior.hi)`` holds). ``None`` means
         "no defensible range declared"; ``FREE`` then refuses loudly rather
         than pretending, and the caller passes an explicit prior instead.
+    internal_name : str, optional
+        Name the model reads this parameter under, when it differs from
+        :attr:`name`. ``None`` (default) means the internal name is the public
+        name. Set it, with :attr:`scale` and :attr:`offset`, wherever the
+        public-to-internal translation is not the identity (#3296).
+    scale : float, optional
+        Multiplicative factor of the translation. Default ``1.0``.
+    offset : float, optional
+        Additive term of the translation. Default ``0.0``. The translation is
+        ``internal = public * scale + offset`` (the convention of
+        :func:`tengri.parameters.translate.get_internal_params`), so a
+        log-metallicity relative to solar takes ``offset=LOG10_ZSUN``.
     """
 
     name: str
@@ -148,6 +160,9 @@ class ParamDeclaration(NamedTuple):
     bound_error: str = ""
     units: str = ""
     free_prior: Any = None
+    internal_name: str | None = None
+    scale: float = 1.0
+    offset: float = 0.0
 
 
 def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:

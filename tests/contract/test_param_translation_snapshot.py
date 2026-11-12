@@ -7,6 +7,11 @@ name, unit scale and offset, and the seeded prior draw keeps its name order and
 count. A changed scale, a changed offset or a reordered draw fails here first.
 Float values of the draw are not pinned, so platform last-bit differences do not
 move the snapshot.
+
+The non-SFH and evolving-alpha translation tables are views of the registry (#3296).
+Their values and key sets are pinned here against literal copies. The iteration order
+of the derived views is not a contract: it follows registry order, and the forward
+outputs and compile signatures do not depend on it.
 """
 
 from __future__ import annotations
@@ -15,8 +20,12 @@ import jax
 import pytest
 
 from tengri import FREE, Fixed
+from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+from tengri.parameters import translate
 from tengri.parameters.groups import parse_groups
+from tengri.parameters.registry import registry
 from tengri.parameters.translate import _build_param_map
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 pytestmark = pytest.mark.contract
 
@@ -609,3 +618,83 @@ def test_translation_table_is_pinned(case, sfh_type, expected):
 @pytest.mark.parametrize("case", list(_SEEDED_DRAW_NAMES))
 def test_seeded_draw_names_and_order_are_pinned(case):
     assert list(_spec(case).sample(jax.random.PRNGKey(0))) == _SEEDED_DRAW_NAMES[case]
+
+
+_NON_SFH_LITERAL = {
+    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
+    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),
+    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
+    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
+    "dust_slope": ("dust_slope", 1.0, 0.0),
+    "redshift": ("redshift", 1.0, 0.0),
+    "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
+    "dust_f_obscuration": ("f_obscuration", 1.0, 0.0),
+    "dust_bump_strength": ("dust_bump_strength", 1.0, 0.0),
+    "dust_delta": ("dust_delta", 1.0, 0.0),
+    "dust_Rv": ("dust_Rv", 1.0, 0.0),
+    "noise_dof": ("noise_dof", 1.0, 0.0),
+    "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
+    "lsf_scale": ("lsf_scale", 1.0, 0.0),
+    "neb_logZ_gas": ("neb_logZ_gas", 1.0, LOG10_ZSUN),
+}
+
+_EVOLVING_ALPHA_LITERAL = {
+    "met_alpha_fe_old": ("alpha_fe_old", 1.0, 0.0),
+    "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),
+}
+
+
+def _declares_translation(record) -> bool:
+    """Return whether a registry record carries a non-identity or explicit triple."""
+    return record.internal_name is not None or record.scale != 1.0 or record.offset != 0.0
+
+
+def test_derived_non_sfh_table_equals_today_literal():
+    assert translate._non_sfh_param_map() == _NON_SFH_LITERAL
+
+
+def test_derived_evolving_alpha_table_equals_today_literal():
+    assert translate._evolving_alpha_param_map() == _EVOLVING_ALPHA_LITERAL
+
+
+def test_module_names_serve_the_derived_views():
+    assert translate._NON_SFH_PARAM_MAP == _NON_SFH_LITERAL
+    assert translate._EVOLVING_ALPHA_PARAM_MAP == _EVOLVING_ALPHA_LITERAL
+
+
+def test_every_declared_translation_is_in_exactly_one_view_with_its_triple():
+    non_sfh = translate._non_sfh_param_map()
+    alpha = translate._evolving_alpha_param_map()
+    for name, record in registry().items():
+        if not _declares_translation(record):
+            continue
+        triple = (record.internal_name or name, record.scale, record.offset)
+        homes = [table for table in (non_sfh, alpha) if name in table]
+        assert len(homes) == 1, name
+        assert homes[0][name] == triple, name
+
+
+def test_every_view_entry_has_a_registry_record_with_the_same_triple():
+    reg = registry()
+    for table in (translate._non_sfh_param_map(), translate._evolving_alpha_param_map()):
+        for name, triple in table.items():
+            record = reg[name]
+            assert _declares_translation(record), name
+            assert (record.internal_name or name, record.scale, record.offset) == triple, name
+
+
+@pytest.mark.parametrize("key", ["met_logzsol_0", "met_logzsol_final"])
+def test_evolving_met_literal_matches_every_met_registry_entry(key):
+    """Pin the literal ``_EVOLVING_MET_PARAM_MAP`` against every MET_REGISTRY carrier.
+
+    The dict stays literal because ``met_registry`` imports LOG10_ZSUN from
+    translate, so deriving it from the registry would be a cycle. Every
+    MET_REGISTRY entry that carries the key must state the same triple.
+    """
+    carriers = [
+        spec.internal_param_map[key]
+        for spec in MET_REGISTRY.values()
+        if key in (getattr(spec, "internal_param_map", None) or {})
+    ]
+    assert carriers, key
+    assert all(triple == translate._EVOLVING_MET_PARAM_MAP[key] for triple in carriers)
