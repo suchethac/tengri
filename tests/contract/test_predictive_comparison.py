@@ -271,9 +271,130 @@ def test_draw_subset_and_missing_parameters():
         pointwise_log_likelihood(fitter, {})
 
 
-def test_marginalized_lines_are_refused_by_name():
-    _, fitter, samples, _, _ = _spectral_fit(eline_mode="marginalized")
-    with pytest.raises(ValueError, match="independent Gaussians"):
+def _line_mock(lines, *, eline_prior_type="flat", sample=True):
+    """A marginalized-line fit on a mock with H-beta and H-alpha in emission."""
+    spectroscopy = Spectroscopy(
+        wave_obs=jnp.asarray(_WAVE),
+        resolution=500.0,
+        eline_mode="marginalized",
+        eline_catalog=LineList.from_names(lines),
+        eline_prior_sigma=1.0e-14,
+        eline_prior_type=eline_prior_type,
+    )
+    model = SEDModel.build(
+        ssp_data=_ssp(),
+        observation=Observation(spectroscopy=spectroscopy),
+        sfh={
+            "type": "dpl",
+            "all_params": Fixed(DEFAULT),
+            "sfh_dpl_log_total_mass": Uniform(8.0, 12.0),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(_Z),
+    )
+    continuum = np.asarray(model.predict_spectrum({"sfh_dpl_log_total_mass": 10.0}))
+    lam = np.array([4862.68, 6564.61]) * (1 + _Z)
+    width = lam / (2.355 * 500.0)
+    gauss = np.exp(-0.5 * ((_WAVE[:, None] - lam) / width) ** 2) / (np.sqrt(2 * np.pi) * width)
+    amps = np.array([0.05, 0.15]) * np.abs(continuum).max() * 20.0
+    noise = 0.02 * np.abs(continuum) + 1e-3 * np.abs(continuum).max()
+    rng = np.random.default_rng(12)
+    data = continuum + gauss @ amps + rng.normal(0.0, 1.0, _WAVE.size) * noise
+    fitter = Fitter(
+        model, jnp.asarray(data), jnp.asarray(noise), data_type="spectroscopy", approx=None
+    )
+    draws = (
+        _posterior_draws(fitter, rng) if sample else {"sfh_dpl_log_total_mass": np.full(20, 10.0)}
+    )
+    return model, fitter, draws, data, noise
+
+
+def _posterior_draws(fitter, rng, n_draws=400):
+    """Draws of the one free parameter from its exact posterior, by inverse CDF on a grid.
+
+    The prior is flat, so the posterior is the marginal likelihood the fitter evaluates.
+    """
+    log_lik = build_loglikelihood_fn(fitter)
+    coarse = np.linspace(8.0, 12.0, 401)
+    values = np.array(
+        [float(log_lik({"sfh_dpl_log_total_mass": m}, fitter._data_args)) for m in coarse]
+    )
+    center = coarse[int(np.argmax(values))]
+    grid = np.linspace(center - 0.02, center + 0.02, 801)
+    values = np.array(
+        [float(log_lik({"sfh_dpl_log_total_mass": m}, fitter._data_args)) for m in grid]
+    )
+    weights = np.exp(values - values.max())
+    assert weights[0] < 1e-6 and weights[-1] < 1e-6, "posterior is wider than the grid"
+    cdf = np.cumsum(weights) / np.sum(weights)
+    return {"sfh_dpl_log_total_mass": np.interp(rng.uniform(size=n_draws), cdf, grid)}
+
+
+def test_conditional_line_moments_match_the_marginalization_primitive():
+    """The Hessian route reproduces marginalize_emission_lines' amplitude posterior."""
+    from tengri.inference.predictive import _conditional_line_moments, _fitted_line_sibling
+    from tengri.observation.eline_marginalization import (
+        apply_doublet_constraints,
+        build_eline_design_matrix,
+        marginalize_emission_lines,
+    )
+
+    model, fitter, _, data, noise = _line_mock(["Hbeta", "Halpha"])
+    sibling = _fitted_line_sibling(fitter)
+    names = tuple(sibling._eline_amplitude_names)
+    log_lik = build_loglikelihood_fn(sibling)
+    theta = {"sfh_dpl_log_total_mass": 10.0}
+    mean, cov = _conditional_line_moments(
+        lambda p: log_lik(p, sibling._data_args), theta, names, 1.0e-14
+    )
+    catalog = model.observation.spectroscopy.effective_catalog
+    design = apply_doublet_constraints(
+        build_eline_design_matrix(jnp.asarray(_WAVE), catalog.wavelengths, 500.0, _Z),
+        catalog.build_constraint_matrix(),
+    )
+    residual = jnp.asarray(data) - model.predict_spectrum(theta)
+    _, a_hat, a_cov = marginalize_emission_lines(
+        residual, jnp.asarray(noise), design, prior_sigma=1.0e-14
+    )
+    np.testing.assert_allclose(np.asarray(mean), np.asarray(a_hat), rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(cov), np.asarray(a_cov), rtol=1e-6)
+
+
+def test_marginalized_lines_give_pointwise_terms_of_the_joint_posterior():
+    _, fitter, samples, _, _ = _line_mock(["Hbeta", "Halpha"])
+    matrix = pointwise_log_likelihood(fitter, samples)
+    assert matrix.shape == (400, _WAVE.size)
+    result = loo(matrix)
+    # One stellar mass plus two amplitudes.
+    assert result.p_eff == pytest.approx(3.0, abs=0.6)
+    again = pointwise_log_likelihood(fitter, samples)
+    np.testing.assert_array_equal(matrix, again)
+
+
+def test_compare_prefers_the_catalog_with_the_emitting_line():
+    """Data with H-alpha in emission: the catalog that omits it loses.
+
+    The loss sits in the few pixels under H-alpha, so the paired standard error of
+    the difference is of the same order as the difference: a localized feature
+    is decided by the size of the loss, not by its ratio to that error.
+    """
+    _, with_line, samples_with, _, _ = _line_mock(["Hbeta", "Halpha"])
+    _, without, samples_without, _, _ = _line_mock(["Hbeta"])
+    rows = compare_models(
+        {
+            "hbeta_only": pointwise_log_likelihood(without, samples_without),
+            "both": pointwise_log_likelihood(with_line, samples_with),
+        }
+    )
+    assert rows[0]["name"] == "both"
+    assert rows[1]["delta_elpd"] < -100.0
+
+
+def test_marginalized_lines_with_a_centered_prior_are_refused():
+    _, fitter, samples, _, _ = _line_mock(
+        ["Hbeta", "Halpha"], eline_prior_type="cloudy", sample=False
+    )
+    with pytest.raises(ValueError, match="eline_prior_type='flat' only"):
         pointwise_log_likelihood(fitter, samples)
 
 

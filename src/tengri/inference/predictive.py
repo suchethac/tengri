@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Mapping
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -32,6 +33,10 @@ import numpy as np
 from scipy.special import logsumexp
 
 from tengri.inference.backends._psis import pareto_k_threshold, psis
+
+#: ``Fitter(approx=None)``: the exact forward path. ``Fitter`` infers ``approx`` as
+#: ``str`` from its ``"auto"`` default, though ``None`` is documented and accepted.
+_EXACT: Any = None
 
 __all__ = [
     "ElpdResult",
@@ -239,10 +244,21 @@ def pointwise_log_likelihood(fitter, samples: Mapping, *, n_draws: int | None = 
     Gaussian normalization: a likelihood with fixed noise may drop that constant,
     and the returned terms always include it.
 
-    Likelihoods that couple data points or are not Gaussian fail that check and
-    are refused: analytically marginalized emission lines or calibration (fit the
-    amplitudes instead, ``eline_mode="fitted"``), a full pixel covariance,
-    Student-t noise, and upper limits.
+    **Marginalized emission lines.** Integrating the line amplitudes out couples
+    the pixels, so the marginal likelihood has no pointwise terms. With the flat
+    amplitude prior (``eline_prior_type="flat"``), each draw :math:`\theta_s` is
+    paired with amplitudes :math:`a_s` drawn from their Gaussian conditional
+    posterior :math:`p(a \mid \theta_s, d)`, which makes :math:`(\theta_s, a_s)`
+    a draw of the joint posterior, and the terms are those of the same model
+    with the amplitudes as parameters (``eline_mode="fitted"``). The conditional
+    moments come from that model's own likelihood (one gradient and one Hessian
+    with respect to the amplitudes, exact because it is quadratic in them) and
+    the Gaussian prior of width ``eline_prior_sigma``.
+
+    Likelihoods that couple data points or are not Gaussian otherwise fail the
+    check and are refused: the model- or Cloudy-centered line priors,
+    analytically marginalized calibration, a full pixel covariance, Student-t
+    noise, and upper limits.
 
     Draws are evaluated one at a time with ``jax.lax.map``, so memory stays at
     the single-draw footprint.
@@ -262,6 +278,12 @@ def pointwise_log_likelihood(fitter, samples: Mapping, *, n_draws: int | None = 
         key = jax.random.PRNGKey(0) if key is None else key
         index = jax.random.choice(key, n_total, (int(n_draws),), replace=False)
         draws = {name: value[index] for name, value in draws.items()}
+
+    if getattr(fitter, "_eline_marginalize", False):
+        key = jax.random.PRNGKey(0) if key is None else key
+        fitter, draws = _with_conditional_line_amplitudes(
+            fitter, draws, jax.random.fold_in(key, 1)
+        )
 
     log_lik = build_loglikelihood_fn(fitter)
     data_args = fitter._data_args
@@ -300,6 +322,113 @@ def pointwise_log_likelihood(fitter, samples: Mapping, *, n_draws: int | None = 
         )
     matrix = jax.lax.map(lambda params: terms(params)[0], draws)
     return np.asarray(matrix)[:, np.asarray(used0)]
+
+
+def _fitted_line_sibling(fitter):
+    """The fitter's model with the emission-line amplitudes as parameters.
+
+    Same model, data and noise, with ``eline_mode="fitted"`` on the spectroscopy and
+    the exact forward path. Refuses a line prior other than the flat one, whose
+    conditional posterior has no closed form here.
+    """
+    from tengri.forward.sed_model import SEDModel
+    from tengri.inference.fitter import Fitter
+
+    spectroscopy = fitter.model.observation.spectroscopy
+    prior_type = getattr(fitter, "_eline_prior_type", None) or "flat"
+    if prior_type != "flat":
+        raise ValueError(
+            "pointwise log-likelihood with marginalized emission lines supports "
+            f"eline_prior_type='flat' only, got {prior_type!r}; its amplitudes are "
+            "redrawn from their conditional posterior, which has no closed form under "
+            "the model- or Cloudy-centered prior"
+        )
+    if getattr(fitter, "_cal_marginalize", False) or getattr(spectroscopy, "calibration_order", 0):
+        raise ValueError(
+            "pointwise log-likelihood does not support a marginalized calibration "
+            "polynomial together with marginalized emission lines"
+        )
+    observation = dataclasses.replace(
+        fitter.model.observation,
+        spectroscopy=dataclasses.replace(spectroscopy, eline_mode="fitted"),
+    )
+    model = SEDModel(fitter.model.spec, fitter.model.ssp_data, observation=observation)
+    data_args = fitter._data_args
+    return Fitter(
+        model,
+        data_args["data"],
+        data_args["noise"],
+        data_type=fitter.data_type,
+        approx=_EXACT,
+    )
+
+
+def _conditional_line_moments(log_lik, theta, names, width):
+    """Mean and covariance of the line amplitudes given ``theta`` and the data.
+
+    Parameters
+    ----------
+    log_lik : callable
+        ``log_lik(params) -> scalar``, the fitted-amplitude log-likelihood.
+    theta : dict
+        Physical parameters of one draw.
+    names : tuple of str
+        Amplitude parameter names.
+    width : float
+        Prior standard deviation of every amplitude (prior mean zero).
+
+    Returns
+    -------
+    mean : Array, shape (n_lines,)
+    cov : Array, shape (n_lines, n_lines)
+
+    Notes
+    -----
+    The log-likelihood is quadratic in the amplitudes, so its gradient ``g`` and
+    Hessian ``H`` at zero define it exactly. In units of the prior width,
+    ``u = a / width``, the posterior precision is ``I - width**2 H`` and the mean
+    solves ``(I - width**2 H) u = width g``; working in ``u`` keeps the matrix of
+    order unity at F_nu scale.
+    """
+    n = len(names)
+
+    def scaled(u):
+        return log_lik({**theta, **{nm: width * u[k] for k, nm in enumerate(names)}})
+
+    zero = jnp.zeros(n, dtype=jnp.float64)
+    grad = jax.grad(scaled)(zero)
+    hess = jax.hessian(scaled)(zero)
+    precision = jnp.eye(n) - hess
+    chol = jnp.linalg.cholesky(precision)
+    mean_u = jax.scipy.linalg.cho_solve((chol, True), grad)
+    cov_u = jax.scipy.linalg.cho_solve((chol, True), jnp.eye(n))
+    return width * mean_u, width**2 * cov_u
+
+
+def _with_conditional_line_amplitudes(fitter, draws, key):
+    """Return the fitted-amplitude sibling and the draws extended with amplitudes."""
+    from tengri.inference.loss_functions import build_loglikelihood_fn
+
+    sibling = _fitted_line_sibling(fitter)
+    names = tuple(sibling._eline_amplitude_names)
+    width = float(fitter._eline_prior_sigma or 1.0e10)
+    sibling_log_lik = build_loglikelihood_fn(sibling)
+    data_args = sibling._data_args
+
+    def one(args):
+        theta, draw_key = args
+        mean, cov = _conditional_line_moments(
+            lambda params: sibling_log_lik(params, data_args), theta, names, width
+        )
+        z = jax.random.normal(draw_key, mean.shape, dtype=mean.dtype)
+        return mean + jnp.linalg.cholesky(cov) @ z
+
+    n_draws = int(next(iter(draws.values())).shape[0])
+    keys = jax.random.split(key, n_draws)
+    amplitudes = jax.lax.map(one, (draws, keys))
+    extended = dict(draws)
+    extended.update({nm: amplitudes[:, k] for k, nm in enumerate(names)})
+    return sibling, extended
 
 
 # ── Comparison ────────────────────────────────────────────────────
