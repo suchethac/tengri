@@ -155,8 +155,9 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "``optimization_barrier(total_mass * per_msun_lsun) * L_sun`` and its "
         "``custom_jvp`` carries the same barrier on ``primal_out`` and on both "
         "tangent terms, so neither pass ever forms the scalar alone. "
-        "``StellarSEDComponent.apply`` no longer forms the scalar: the 4-D grid's "
-        "interval spectra split it by an exact power of two. The spectral-index "
+        "``StellarSEDComponent.apply`` no longer forms the scalar: its interval "
+        "spectra contract the erg-scaled per-Msun age cube and multiply by "
+        "``total_mass``, the same factorization as ``lnu_age``. The spectral-index "
         "LUT left this family with #3149: the scale cancels in its ratios and is "
         "no longer formed. "
         "``measure_line_fluxes`` left this family with the float32 line-channel fix "
@@ -193,16 +194,13 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.disc:_compute_bh_params",
             "tengri.components.agn.disc:kubota_done_disc",
             "tengri.components.agn.disc:multicolor_disc",
-            "tengri.components.agn.disc:relagn_disc_from_grid",
             "tengri.components.agn.grahsp.model:compute_grahsp_sed",
-            "tengri.components.agn.kd18_agnfitter:_renormalize",
             "tengri.components.agn.kd_precompute:_compute_bh_and_radii",
             "tengri.components.agn.kd_precompute:kubota_done_disc_preintegrated",
             "tengri.components.agn.qsogen:_qsogen_components",
             "tengri.components.agn.skirtor:_skirtor_grid_sed",
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",
             "tengri.components.agn.skirtor:create_skirtor_raw_total_from_grid.fn",
-            "tengri.components.agn.slone_netzer:slone_netzer_sed_from_grid",
             "tengri.components.agn.torus:create_nenkova_from_grid.nenkova_grid",
             "tengri.components.agn.torus:simple_torus",
             "tengri.components.agn.torus:two_temperature_torus",

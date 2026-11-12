@@ -47,7 +47,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.break_windows import BREAK_VACUUM_WINDOWS
-from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.scale import ratio_or_nan, representable_denominator, representable_floor
 
 #: Reference wavelength [Å] of the F_λ conversion ``F_λ ∝ F_ν (λ_ref/λ)²``. The
 #: proportionality constant cancels in every EW and magnitude index; the
@@ -716,10 +716,11 @@ def _measure_slope(
     sy = jnp.sum(w * log_fnu)
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
-    denom = sxx - sx**2 / jnp.maximum(sw, representable_denominator(1e-30))
-    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, representable_denominator(1e-30))) / jnp.maximum(
-        denom, representable_denominator(1e-30)
-    )
+    # Undefined (NaN, not -2) when the window holds fewer than two grid points (#1404).
+    sw_ok = sw > representable_denominator(1e-30)
+    safe_sw = jnp.where(sw_ok, sw, 1.0)
+    denom = sxx - sx**2 / safe_sw
+    slope_fnu = ratio_or_nan(sxy - sx * sy / safe_sw, denom)
     return slope_fnu - 2.0
 
 
