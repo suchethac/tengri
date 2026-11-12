@@ -7,12 +7,15 @@ variable is found by the loaders, the downloaders, and ``tengri.doctor()``
 alike.
 """
 
+import hashlib
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
 from pathlib import Path
+
+from tengri.config.exceptions import TengriIOError
 
 __all__ = [
     "KNOWN_SSP_FILENAMES",
@@ -514,6 +517,152 @@ _KNOWN_SSPS = {
 # directory by writing the grid into it (#1553).
 KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
 
+# Pinned identity of each hosted file, keyed by basename: ``(byte length,
+# sha256)``. The length is the upstream Content-Length from a HEAD request on
+# 2026-11-12. ``None`` for the sha256 means no digest could be established; the
+# code then checks the length alone and warns. Provenance of the digests:
+#
+# * A digest is taken only from a copy in ``data/`` whose size equals the
+#   upstream Content-Length. ``bpss_stars_c3k_a_chabrier.h5`` was also
+#   downloaded in full on 2026-11-12 and matched that copy byte for byte.
+#   The other size-matched copies were not re-downloaded, so for them a size
+#   match is the only evidence of identity with the hosted file.
+# * ``fsps_prsc_miles_chabrier.h5`` has no digest: the local copy is 66967352
+#   bytes against an upstream 66950048, so it is not the hosted file.
+_DATA_PINS: dict[str, tuple[int, str | None]] = {
+    "fsps_prsc_miles_chabrier.h5": (66950048, None),
+    "fsps_mist_c3k_a_chabrier.h5": (
+        114620864,
+        "75bf8c9909ece0dae8a6be4ac81e5e3c25a02aa5415853b0eb60b89552c449f3",
+    ),
+    "fsps_mist_miles_chabrier.h5": (
+        61627464,
+        "65c5378ebb36f15cd8241513ef9df7524cc5198e0db6a74704132d39a5b4fa47",
+    ),
+    "fsps_pdva_miles_chabrier.h5": (99221808, None),
+    "fsps_pdva_c3k_a_chabrier.h5": (184547368, None),
+    "fsps_bsti_miles_chabrier.h5": (45131856, None),
+    "fsps_bsti_c3k_a_chabrier.h5": (83938696, None),
+    "fsps_bsti_basel_chabrier.h5": (14786488, None),
+    "fsps_mist_basel_chabrier.h5": (20188784, None),
+    "fsps_pdva_basel_chabrier.h5": (32500696, None),
+    "fsps_prsc_basel_chabrier.h5": (21931840, None),
+    "fsps_prsc_c3k_a_chabrier.h5": (
+        124521088,
+        "727d0b85bcd676798b4b8a7ecdcb53b817e7106d649c4cf707b5d725a88364f4",
+    ),
+    "bc03_pdva_stelib_chabrier.h5": (
+        36634300,
+        "5c5d6cdb4ab2a7a464e328c516b4dad3e934873688ec203a83c751ca0f16f7e4",
+    ),
+    "bpss_stars_c3k_a_chabrier.h5": (
+        3251424,
+        "9411b90e451c33d28dd7f8296dfe9d2a620cb5f86def457d9e56b8b0da9e1296",
+    ),
+    "pgny_mist_c3k_chabrier.h5": (
+        108587128,
+        "666c8151b30b1a355a79b04874dcd82fba050ff9fd433666d06dd01954af17b2",
+    ),
+    "fsps_bsti_basel_kroupa.h5": (14786488, None),
+    "fsps_bsti_basel_salpeter.h5": (14786488, None),
+    "fsps_bsti_c3k_a_kroupa.h5": (83938696, None),
+    "fsps_bsti_c3k_a_salpeter.h5": (83938696, None),
+    "fsps_bsti_miles_kroupa.h5": (45131856, None),
+    "fsps_bsti_miles_salpeter.h5": (45131856, None),
+    "fsps_mist_basel_kroupa.h5": (20188784, None),
+    "fsps_mist_basel_salpeter.h5": (20188784, None),
+    "fsps_mist_c3k_a_kroupa.h5": (
+        114620864,
+        "ddd4fb962ad543ad337559b2e1fc5c8c7182fb936fe4cbb9d1c93bc6591b675c",
+    ),
+    "fsps_mist_c3k_a_salpeter.h5": (
+        114620864,
+        "de6a740bd44142b5219a48578c82d5a19f4091b3a9eb42ef6c24efb94cfa061c",
+    ),
+    "fsps_mist_miles_kroupa.h5": (61627464, None),
+    "fsps_mist_miles_salpeter.h5": (61627464, None),
+    "fsps_pdva_basel_kroupa.h5": (32500696, None),
+    "fsps_pdva_basel_salpeter.h5": (32500696, None),
+    "fsps_pdva_c3k_a_kroupa.h5": (184547368, None),
+    "fsps_pdva_miles_kroupa.h5": (99221808, None),
+    "fsps_pdva_miles_salpeter.h5": (99221808, None),
+    "fsps_prsc_basel_kroupa.h5": (21931840, None),
+    "fsps_prsc_basel_salpeter.h5": (21931840, None),
+    "fsps_prsc_c3k_a_kroupa.h5": (124521088, None),
+    "fsps_prsc_c3k_a_salpeter.h5": (124521088, None),
+    "fsps_prsc_miles_kroupa.h5": (
+        66950048,
+        "dafc8b7225235918457bd3a43921dc37eadabe70d00ade0b77821542737a03c5",
+    ),
+    "fsps_prsc_miles_salpeter.h5": (
+        66950048,
+        "378d96f021001df213ff925fdbdba3b8341c040b290965fc63d662c465bead9a",
+    ),
+}
+
+
+def _sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
+    """Return the hex sha256 of ``path``, read ``chunk_size`` bytes at a time."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _pin_mismatch(path: Path, filename: str) -> str | None:
+    """Return why ``path`` is not the hosted ``filename``, or None if it is.
+
+    A filename with no entry in :data:`_DATA_PINS` is accepted with a warning,
+    as is an entry whose digest is None: the unverified part is named, not
+    hidden.
+    """
+    pin = _DATA_PINS.get(filename)
+    if pin is None:
+        warnings.warn(
+            f"No pinned length or sha256 for {filename}; it is used unverified. "
+            f"Add it to _DATA_PINS.",
+            stacklevel=3,
+        )
+        return None
+    length, digest = pin
+    size = path.stat().st_size
+    if size != length:
+        return f"{path.name} is {size} bytes; the hosted {filename} is {length} bytes"
+    if digest is None:
+        warnings.warn(
+            f"No pinned sha256 for {filename}; only its length ({length} bytes) was checked.",
+            stacklevel=3,
+        )
+        return None
+    actual = _sha256_file(path)
+    if actual != digest:
+        return f"{path.name} has sha256 {actual}; the pinned digest for {filename} is {digest}"
+    return None
+
+
+def _fetch_verified(url: str, filepath: Path, filename: str, progress: bool = True) -> None:
+    """Download ``url`` to ``filepath``, which is created only if it passes the pin.
+
+    The bytes go to a ``.partial`` file first. On any failure the partial file
+    is removed before the exception propagates, so no file is left behind.
+    """
+    partial = filepath.with_suffix(filepath.suffix + ".partial")
+    try:
+        _download_file(url, partial, progress=progress)
+        problem = _pin_mismatch(partial, filename)
+        if problem is not None:
+            raise TengriIOError(f"Refusing {url}: {problem}.")
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(f"Failed to download {url}: {e}") from e
+    except BaseException:
+        # BaseException so KeyboardInterrupt/SystemExit also clean up. A surviving
+        # .partial shadows complete caches in other directories (#1546).
+        partial.unlink(missing_ok=True)
+        raise
+    partial.replace(filepath)
+
 
 def find_ssp_files() -> list[Path]:
     """Every SSP grid visible to tengri, across :func:`data_dirs`.
@@ -752,36 +901,18 @@ def download_ssp(
     filename = _resolve_ssp_filename(name)
     filepath = dest / filename
 
-    # Skip if already exists and force=False
-    if filepath.exists() and filepath.stat().st_size > 0 and not force:
-        from tengri._display import _display
-
-        _display(f"SSP file already exists at {_display_path(filepath)}; skipping download.")
-        return filepath
-
-    # Download with progress
-    url = SSP_BASE_URL + filename
-    partial_filepath = filepath.with_suffix(filepath.suffix + ".partial")
-
-    try:
-        _download_file(url, partial_filepath, progress=progress)
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        # Clean up partial file on error
-        if partial_filepath.exists():
-            partial_filepath.unlink()
-        raise RuntimeError(f"Failed to download {url}: {e}") from e
-    except BaseException:
-        # Clean up the partial file on ANY other interruption -- BaseException so
-        # KeyboardInterrupt/SystemExit are covered too -- then re-raise. A surviving
-        # .partial shadows complete caches in other directories (#1546).
-        if partial_filepath.exists():
-            partial_filepath.unlink()
-        raise
-
-    # Atomic rename
-    partial_filepath.replace(filepath)
-
     from tengri._display import _display
+
+    # A cache hit is trusted only if it matches its pin (#3282); a mismatch is
+    # fetched again, and the fresh copy replaces it by atomic rename.
+    if not force and filepath.is_file() and filepath.stat().st_size > 0:
+        problem = _pin_mismatch(filepath, filename)
+        if problem is None:
+            _display(f"SSP file already exists at {_display_path(filepath)}; skipping download.")
+            return filepath
+        _display(f"Cached SSP is not the hosted file ({problem}); downloading it again.")
+
+    _fetch_verified(SSP_BASE_URL + filename, filepath, filename, progress=progress)
 
     _display(f"Downloaded SSP to {_display_path(filepath)}")
     return filepath
@@ -833,27 +964,16 @@ def download_template(
     dest.mkdir(parents=True, exist_ok=True)
 
     filepath = dest / filename
-    if filepath.exists() and filepath.stat().st_size > 0 and not force:
-        from tengri._display import _display
-
-        _display(f"Template already exists at {_display_path(filepath)}; skipping download.")
-        return filepath
-
-    url = TEMPLATE_BASE_URL + filename
-    partial_filepath = filepath.with_suffix(filepath.suffix + ".partial")
-    try:
-        _download_file(url, partial_filepath)
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        if partial_filepath.exists():
-            partial_filepath.unlink()
-        raise RuntimeError(f"Failed to download {url}: {e}") from e
-    except KeyboardInterrupt:
-        if partial_filepath.exists():
-            partial_filepath.unlink()
-        raise
-
-    partial_filepath.replace(filepath)
     from tengri._display import _display
+
+    if not force and filepath.is_file() and filepath.stat().st_size > 0:
+        problem = _pin_mismatch(filepath, filename)
+        if problem is None:
+            _display(f"Template already exists at {_display_path(filepath)}; skipping download.")
+            return filepath
+        _display(f"Cached template is not the hosted file ({problem}); downloading it again.")
+
+    _fetch_verified(TEMPLATE_BASE_URL + filename, filepath, filename)
 
     _display(f"Downloaded template to {_display_path(filepath)}")
     return filepath
@@ -968,3 +1088,12 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool 
                     from tengri._display import _display
 
                     _display(f"Downloaded {downloaded / (1024 * 1024):.1f} MB...")
+
+        # A server that closes early ends the read without an error, so compare
+        # the bytes received with the Content-Length of this response (#3282).
+        expected = response.headers.get("Content-Length")
+        if expected is not None and downloaded != int(expected):
+            raise TengriIOError(
+                f"download of {url} is truncated: received {downloaded} bytes, "
+                f"Content-Length says {expected}"
+            )
