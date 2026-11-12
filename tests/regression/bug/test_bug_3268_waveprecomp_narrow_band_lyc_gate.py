@@ -100,7 +100,7 @@ def test_dust_tau_diff_4_with_cue_meets_contract(ssp_data_fsps, nb816_obs):
 #     des_r             -3.250e-03                     -3.250e-03
 #
 # The Lyman-edge fix does not touch these: the error is the dust screen's sub-band
-# quadrature over the broad band, which the issue's cause measurements localise to
+# quadrature over the broad band, which the issue's cause measurements localize to
 # blue bands. Strict xfail until that design change lands, so an accidental pass
 # is reported.
 

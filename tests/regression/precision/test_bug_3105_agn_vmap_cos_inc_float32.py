@@ -47,6 +47,7 @@ def test_multicolor_disc_vmap_over_cos_inc_matches_single_in_float32():
 
     assert single.dtype == np.float32
     assert np.all(np.isfinite(batched))
+    assert np.max(np.abs(batched)) > 0.0, "vmapped multicolor disc collapsed to zero"
     rel = _peak_rel(batched, single)
     assert rel < _TOL, (
         f"vmap over agn_cos_inc changes the float32 multicolor disc: peak-relative error "
@@ -77,6 +78,7 @@ def test_composable_agn_disc_vmap_over_cos_inc_matches_single_in_float32():
         batched = np.asarray(jax.jit(jax.vmap(disc))(mu))[0]
 
     assert np.all(np.isfinite(batched))
+    assert np.max(np.abs(batched)) > 0.0, "vmapped composable disc collapsed to zero"
     rel = _peak_rel(batched, single)
     assert rel < _TOL, (
         f"vmap over agn_cos_inc changes the float32 composable disc behind smc_prevot: "
