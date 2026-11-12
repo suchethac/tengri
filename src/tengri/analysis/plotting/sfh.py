@@ -8,6 +8,8 @@ Inspired by BAGPIPES (Carnall+2018) and Prospector (Johnson+2021).
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.forward.draw_maps import map_draws
+
 from .styles import COLORS, SAMPLER_STYLE
 
 # ═══════════════════════════════════════════════════════════════════
@@ -103,14 +105,10 @@ def plot_sfh(
     if posterior.samples is not None:
         # Compute SFH draws
         n_total = len(next(iter(posterior.samples.values())))
-        sfh_draws = []
-        for i in range(n_total):
-            s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-            sfh_i = model.predict_sfh(s_i)
-            key = "sfr_full" if model.spec.stochastic else "sfr_mean"
-            sfh_draws.append(sfh_i[key])
-
-        sfh_arr = np.array(sfh_draws)
+        # ``model`` is any object with ``predict_sfh``, so the per-draw map is a closure
+        # over it: the kernel is compiled once per plot call, not reused across calls.
+        key = "sfr_full" if model.spec.stochastic else "sfr_mean"
+        sfh_arr = map_draws(lambda p: model.predict_sfh(p)[key], posterior.samples)
         t_gyr = np.array(model.predict_sfh(posterior.params)["t_gyr"])
 
         # Credible interval fill

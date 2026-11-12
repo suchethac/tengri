@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
+from tengri.forward.draw_maps import map_draws
+
 from .styles import (
     COLORS,
     REFERENCE_STYLE,
@@ -670,13 +672,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
     # Left panel: SED
     if result.samples is not None:
         # Compute SED for each sample
-        n_samples = next(iter(result.samples.values())).shape[0]
-        sed_samples = []
-        for i in range(n_samples):
-            sample_i = {k: v[i] for k, v in result.samples.items()}
-            sed_i = result._model._predict_rest_sed(sample_i).sed
-            sed_samples.append(sed_i)
-        sed_array = np.array(sed_samples)
+        sed_array = map_draws(result._model._rest_sed_draw, result.samples)
 
         # Get wavelengths
         wave_rest = np.array(result._model.ssp_data.ssp_wave)
@@ -725,12 +721,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
 
     if result.samples is not None:
         # Compute SFH for each sample
-        sfh_samples = []
-        for i in range(n_samples):
-            sample_i = {k: v[i] for k, v in result.samples.items()}
-            sfh_i = result._model.predict_sfh(sample_i)
-            sfh_samples.append(np.array(sfh_i["sfr_mean"]))
-        sfh_array = np.array(sfh_samples)
+        sfh_array = map_draws(result._model._sfr_mean_draw, result.samples)
 
         # Plot posterior band
         sfr_lo = np.percentile(sfh_array, 16, axis=0)

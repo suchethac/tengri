@@ -6765,6 +6765,22 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
+    # Per-draw maps for posterior plots. Bound methods compare equal across
+    # accesses, so :func:`tengri.forward.draw_maps.map_draws` reuses one compiled
+    # kernel per model instead of recompiling on every plot call.
+
+    def _sfr_mean_draw(self, params):
+        """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
+        return self.predict_sfh(params)["sfr_mean"]
+
+    def _sfr_full_draw(self, params):
+        """SFR [Msun/yr] of one draw: ``sfr_full`` if stochastic, else ``sfr_mean``."""
+        return self.predict_sfh(params)["sfr_full" if self.spec.stochastic else "sfr_mean"]
+
+    def _rest_sed_draw(self, params):
+        """Rest-frame SED L_nu [erg/s/Hz] of one draw, on the model's rest grid."""
+        return self._predict_rest_sed(params).sed
+
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
         """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
@@ -14217,17 +14233,12 @@ class SEDModel:
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)
+            from tengri.forward.draw_maps import map_draws
+
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_arr = map_draws(self._sfr_full_draw, posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)
