@@ -50,11 +50,12 @@ def test_alternate_err_convention(tmp_path: Path) -> None:
     np.testing.assert_allclose(cat["bands"]["jwst_f200w"]["err"], [0.6, 0.5])
 
 
-def test_missing_err_columns_are_dropped(tmp_path: Path) -> None:
-    """A flux column without a matching error column must not appear."""
+def test_missing_err_columns_are_dropped_on_opt_in(tmp_path: Path) -> None:
+    """A flux column without a matching error column is dropped only when asked (#3285)."""
     p = tmp_path / "partial.csv"
     p.write_text("z,flux_a,flux_err_a,flux_b\n0.1,1.0,0.1,2.0\n0.2,0.9,0.1,1.8\n")
-    cat = load_catalog(p)
+    with pytest.warns(UserWarning, match="'b'"):
+        cat = load_catalog(p, allow_unpaired_bands=True)
     assert "a" in cat["bands"]
     assert "b" not in cat["bands"]
 
