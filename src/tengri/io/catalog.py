@@ -28,6 +28,7 @@ Examples
 from __future__ import annotations
 
 import re
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -61,14 +62,22 @@ def _detect_redshift_column(columns: list[str]) -> str | None:
     return None
 
 
-def _detect_flux_columns(columns: list[str]) -> dict[str, dict[str, str]]:
+def _detect_flux_columns(columns: list[str]) -> tuple[dict[str, dict[str, str]], list[str]]:
     """Pair each ``flux_<band>`` column with its matching error column.
 
     Recognizes three error-column conventions: ``flux_err_<band>``,
     ``ferr_<band>``, and ``<band>_err`` (case-insensitive).
+
+    Returns
+    -------
+    bands : dict
+        Paired bands, ``{band: {"flux": col, "err": col}}``.
+    unpaired : list of str
+        Bands with a ``flux_<band>`` column and no error column, sorted.
     """
     norm_to_orig = {_norm(c): c for c in columns}
     bands: dict[str, dict[str, str]] = {}
+    unpaired: list[str] = []
 
     for n, original in norm_to_orig.items():
         if not n.startswith("flux_") or n.startswith("flux_err_"):
@@ -78,9 +87,10 @@ def _detect_flux_columns(columns: list[str]) -> dict[str, dict[str, str]]:
         candidates = (f"flux_err_{band}", f"ferr_{band}", f"{band}_err", f"flux_{band}_err")
         err_col = next((norm_to_orig[c] for c in candidates if c in norm_to_orig), None)
         if err_col is None:
+            unpaired.append(band)
             continue
         bands[band] = {"flux": original, "err": err_col}
-    return bands
+    return bands, sorted(unpaired)
 
 
 def _read_table(path: Path) -> tuple[list[str], list[Any]]:
@@ -127,6 +137,8 @@ def _read_table(path: Path) -> tuple[list[str], list[Any]]:
 def load_catalog(
     path: str | Path,
     redshift_col: str | None = None,
+    *,
+    allow_unpaired_bands: bool = False,
 ) -> dict[str, Any]:
     """Load a photometric catalog with auto-detected flux/error columns.
 
@@ -141,6 +153,10 @@ def load_catalog(
         Name of the redshift column. If ``None`` (default), tries the
         common names: ``redshift``, ``z``, ``z_phot``, ``z_spec``,
         ``z_best``, ``zphot``, ``zspec``, ``z_peak``.
+    allow_unpaired_bands : bool, optional
+        If ``False`` (default), a ``flux_<band>`` column with no error
+        column raises ``ValueError``. If ``True``, such bands are dropped
+        with a ``UserWarning`` and listed under ``"dropped_bands"``.
 
     Returns
     -------
@@ -152,6 +168,8 @@ def load_catalog(
         - ``"bands"`` : dict mapping each detected band (e.g.
           ``"sdss_g"``) to ``{"flux": ndarray, "err": ndarray}``,
           one ndarray per row.
+        - ``"dropped_bands"`` : sorted list of band names dropped for
+          lacking an error column; empty unless ``allow_unpaired_bands``.
 
         When a redshift column is detected:
 
@@ -178,9 +196,11 @@ def load_catalog(
     - ``flux_<band>`` paired with ``<band>_err``
     - ``flux_<band>`` paired with ``flux_<band>_err``
 
-    Bands without a matching error column are silently dropped; this
-    is by design, since SED fitting needs (flux, err) pairs. If a
-    catalog uses a different convention, rename columns before
+    A band without a matching error column cannot enter an SED fit, so it
+    raises ``ValueError`` naming every such band. Pass
+    ``allow_unpaired_bands=True`` to drop them instead; the drop is then
+    announced with a ``UserWarning`` and listed under ``"dropped_bands"``.
+    If a catalog uses a different convention, rename columns before
     calling.
 
     Examples
@@ -210,13 +230,27 @@ def load_catalog(
         out["redshift"] = np.asarray(by_name[z_col], dtype=float)
         out["redshift_col"] = z_col
 
-    # Flux/err pairs.
-    band_cols = _detect_flux_columns(columns)
+    # Flux/err pairs. A flux column with no error column is a band the fit
+    # would silently lose, so it is an error unless the caller opted in (#3285).
+    band_cols, unpaired = _detect_flux_columns(columns)
     if not band_cols:
         raise ValueError(
             f"No flux / error column pairs found in {path.name}. "
             f"Expected columns of the form flux_<band> + flux_err_<band> "
             f"(or ferr_<band>, <band>_err, flux_<band>_err)."
+            + (f" Unpaired flux columns: {unpaired}." if unpaired else "")
+        )
+    if unpaired and not allow_unpaired_bands:
+        raise ValueError(
+            f"{path.name}: flux columns without a matching error column, which "
+            f"cannot enter an SED fit: {unpaired}. Add the error columns, or pass "
+            f"allow_unpaired_bands=True to drop these bands."
+        )
+    if unpaired:
+        warnings.warn(
+            f"{path.name}: dropped bands without a matching error column: {unpaired}.",
+            UserWarning,
+            stacklevel=2,
         )
 
     bands: dict[str, dict[str, np.ndarray]] = {}
@@ -226,4 +260,5 @@ def load_catalog(
             "err": np.asarray(by_name[cols["err"]], dtype=float),
         }
     out["bands"] = bands
+    out["dropped_bands"] = unpaired
     return out
