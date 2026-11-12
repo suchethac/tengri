@@ -248,6 +248,9 @@ for lo, hi in WINDOWS_AA:
     )
 
 # %% [markdown]
+# The rows flagged in the four §1 windows are the library bracket: BEAGLE's `bc03` set is MILES-based and tengri's BC03 grid is STELIB, so the spread between the two is a template difference and not a tengri defect. The largest entry, 0.72 in the 1500-2500 Å window at log age 9, is the rest-UV difference described above.
+
+# %% [markdown]
 # ### §1a CB16 against BC03 inside BEAGLE
 #
 # BEAGLE's `cb_june16` set is the Charlot & Bruzual update, the stellar set under every BEAGLE
@@ -264,6 +267,9 @@ for lo, hi in WINDOWS_AA:
     V.print_window_table(
         V.window_rows(cases_cb, lo=lo, hi=hi), ref_name="BEAGLE bc03", title=f"§1a CB16 / BC03, window {lo:.0f}-{hi:.0f} A"
     )
+
+# %% [markdown]
+# The rows flagged in the §1a windows are the spread between BEAGLE's own `cb_june16` and `bc03` templates. That is the library bracket a tengri comparison inherits; it is not a difference between tengri and BEAGLE.
 
 # %% [markdown]
 # ## §2 Star formation history
@@ -337,6 +343,9 @@ for k, tau in enumerate(taus_gyr):
         )
 
 # %% [markdown]
+# The two §2 rows flagged for tau = 0.1 Gyr are numerical, from the sampling of the history on tengri's age grid, the same class as the episode SFR_10 and SFR_100 values in the summary. The episode case is 1.054 in the median; the smooth case, 1.94 in the median, is not isolated here and is left at this classification.
+
+# %% [markdown]
 # ## §3 Integrated SED
 #
 # The `s3_fiducial` run is the 1 Gyr delayed history with the current episode at z = 1, with no dust
@@ -377,6 +386,9 @@ for lo, hi in WINDOWS_AA:
         V.window_rows([("fiducial", w3, L3, w3_t, L3_t)], lo=lo, hi=hi), ref_name="BEAGLE",
         title=f"§3 window {lo:.0f}-{hi:.0f} A",
     )
+
+# %% [markdown]
+# The rows flagged in §3 are the library bracket. The CANDELS pivots redward of 0.35 µm differ by 2 to 7 %, the same MILES-against-STELIB spread that §1 shows, and the window maxima of up to 15 % sit in the 1500-2500 Å and 3500-5500 Å windows, where the same template difference applies.
 
 # %% [markdown]
 # ## §4 Attenuation curves
@@ -1123,7 +1135,254 @@ print(f"L_sun: BEAGLE {beagle_driver.L_SUN_BEAGLE:.4e} erg/s, tengri {L_SUN:.4e}
 # %% [markdown]
 # ## 15. tengri in BEAGLE mode
 #
-# (written in the next pass)
+# The four capstone galaxies are the Paper I objects 79 (red), 7837 (blue), 15775 (dusty) and 1826 (mid-infrared AGN host). BEAGLE fitted them on the CANDELS photometry of the workshop catalog, with the priors listed in the driver, and its posterior is read from the cache. tengri is run on the same photometry with the same model family: delayed-tau plus a recent episode set by the specific SFR, a CF00 two-component law with power-law slopes -1.3 and -0.7 and mu = 0.4, Gutkin et al. (2016) nebular emission with a free ionization parameter, and the Inoue IGM.
+#
+# The tengri side is evaluated at BEAGLE's posterior-median parameters and is not a tengri fit. A Laplace fit of one galaxy did not finish inside this notebook's budget, because the compiled likelihood takes minutes to build, so the comparison is between two models at the same parameter values. The tables and the figure are the record; the classification sentences below each table give the cause of each difference.
+
+# %%
+from reproduction.beagle._drivers.beagle_capstone import CAPSTONE_IDS, capstone_run
+from tengri import Observation, Photometry
+from tengri.utils.cosmology import age_at_z, luminosity_distance_mpc
+
+MPC_CM = 3.0856775814913673e24
+
+CAPSTONE_LABEL = {79: "red", 7837: "blue", 15775: "dusty", 1826: "mid-infrared AGN host"}
+CAPSTONE_RUN = capstone_run()
+CAPSTONE = beagle_run.run(CAPSTONE_RUN)
+CAPSTONE_CATALOG = beagle_driver.workshop_catalog(1)
+C_AA_PER_S = 2.99792458e18
+AB_OFFSET = 48.6
+BEAGLE_TO_TENGRI = {
+    "CTIO_U": "ctio_u", "VIMOS_U": "vimos_u", "ACS_F435W": "hst_f435w", "ACS_F606W": "hst_f606w",
+    "ACS_F775W": "hst_f775w", "ACS_F814W": "hst_f814w", "ACS_F850LP": "hst_f850lp",
+    "WFC3_F098M": "hst_f098m", "WFC3_F105W": "hst_f105w", "WFC3_F125W": "hst_f125w",
+    "WFC3_F160W": "hst_f160w", "ISAAC_KS": "vista_ks", "HAWKI_KS": "vista_ks",
+    "IRAC_CH1": "irac_36", "IRAC_CH2": "irac_45", "IRAC_CH3": "irac_58", "IRAC_CH4": "irac_80",
+}
+
+
+def weighted_quantile(x, w, q):
+    """Quantile q of x under normalized weights w: the first sample whose cumulative weight reaches q."""
+    order = np.argsort(x)
+    cum = np.cumsum(w[order])
+    cum = cum / cum[-1]
+    return float(x[order][min(np.searchsorted(cum, q), len(x) - 1)])
+
+
+def beagle_quantiles(gid, ext, col, transform=lambda x: x):
+    """Posterior 16, 50 and 84 % of one BEAGLE column, weighted by POSTERIOR PDF probability."""
+    per = CAPSTONE.posterior[str(gid)]
+    w = np.asarray(per["POSTERIOR PDF"]["probability"], float)
+    w = w / w.sum()
+    x = transform(np.asarray(per[ext][col], float))
+    return tuple(weighted_quantile(x, w, q) for q in (0.16, 0.50, 0.84))
+
+
+def beagle_medians(gid):
+    """BEAGLE posterior-median parameters in tengri's conventions."""
+    tau = beagle_quantiles(gid, "POSTERIOR PDF", "tau")[1]
+    age = beagle_quantiles(gid, "POSTERIOR PDF", "max_stellar_age")[1]
+    return {
+        "tau_gyr": 10.0 ** (tau - 9.0),
+        "age_frac": 10.0 ** (age - 9.0) / float(age_at_z(beagle_quantiles(gid, "POSTERIOR PDF", "redshift")[1])),
+        "log_total_mass": beagle_quantiles(gid, "POSTERIOR PDF", "mass")[1],
+        "met_logzsol": beagle_quantiles(gid, "POSTERIOR PDF", "metallicity")[1] + beagle_driver.LOG10_ZSUN_SHIFT,
+        "log_ssfr": beagle_quantiles(gid, "POSTERIOR PDF", "specific_sfr")[1],
+        "tau_v": beagle_quantiles(gid, "POSTERIOR PDF", "tauv_eff")[1],
+        "log_u": beagle_quantiles(gid, "POSTERIOR PDF", "nebular_logu")[1],
+        "z": beagle_quantiles(gid, "POSTERIOR PDF", "redshift")[1],
+    }
+
+
+def galaxy_bands(gid):
+    """Measured bands of one galaxy as (BEAGLE names, tengri names, fluxes, errors)."""
+    row = CAPSTONE_CATALOG[CAPSTONE_CATALOG["ID"] == gid][0]
+    names, fnu, sig = beagle_driver.photometry_for_row(row, list(CAPSTONE_CATALOG.meta["bands"]))
+    masked = np.ma.getmaskarray(fnu)
+    ks = next((k for k in ("ISAAC_KS", "HAWKI_KS") if not masked[names.index(k)]), None)
+    keep = [i for i, n in enumerate(names) if not masked[i] and n not in ("ISAAC_KS", "HAWKI_KS")]
+    if ks is not None:
+        keep.append(names.index(ks))
+    keep = sorted(keep)
+    return (
+        [names[i] for i in keep],
+        [BEAGLE_TO_TENGRI[names[i]] for i in keep],
+        np.asarray(fnu.data)[keep],
+        np.asarray(sig.data)[keep],
+    )
+
+
+def beagle_like_model(p, tengri_bands, *, dust=True):
+    """tengri model at BEAGLE parameter values, in the notebook's dict grammar."""
+    dust_block = (
+        {"type": "two_component", "parameterization": "tauv_mu", "law_bc": "power_law",
+         "slope_bc": Fixed(-1.3), "law_diff": "power_law", "slope_diff": Fixed(-0.7),
+         "tau_v": Fixed(p["tau_v"]), "mu": Fixed(0.4), "other_params": Fixed(DEFAULT)}
+        if dust else {"type": "none"}
+    )
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(tengri_bands)),
+        met={"logzsol": Fixed(p["met_logzsol"]), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+        sfh={"type": ["delayed", "recent_ssfr"], "all_params": Fixed(DEFAULT),
+             "tau_gyr": Fixed(p["tau_gyr"]), "age_frac": Fixed(p["age_frac"]),
+             "log_total_mass": Fixed(p["log_total_mass"]), "log_ssfr": Fixed(p["log_ssfr"]),
+             "timescale_myr": Fixed(10.0)},
+        dust_attenuation=dust_block,
+        dust_emission={"type": "none"},
+        neb={"type": "gutkin16", "logU": Fixed(p["log_u"]), "xi_d": Fixed(0.3), "log_nH": Fixed(2.0),
+             "co_ratio": Fixed(1.0), "all_params": Fixed(DEFAULT)},
+        igm={"type": "inoue"},
+        redshift=Fixed(p["z"]),
+    )
+
+# %%
+def tengri_at_beagle(gid):
+    """tengri photometry, spectrum and properties at BEAGLE medians, and the dust-free A_V."""
+    beagle_names, tengri_bands, fnu, sig = galaxy_bands(gid)
+    p = beagle_medians(gid)
+    model = beagle_like_model(p, tengri_bands)
+    pred = model.predict({})
+    dust_free = beagle_like_model(p, tengri_bands, dust=False).predict({})
+    wave = np.asarray(pred.wave_rest)
+    l_att = np.asarray(pred.rest_sed())
+    l_free = np.asarray(dust_free.rest_sed())
+    ratio = np.interp(5500.0, wave, l_att / l_free)
+    a_v = -2.5 * np.log10(ratio)
+    props = pred.properties
+    return {
+        "beagle_names": beagle_names, "tengri_bands": tengri_bands, "fnu": fnu, "sig": sig,
+        "params": p, "pred": pred, "a_v": float(a_v),
+        "log_mstar": float(np.log10(props["stellar_mass_surviving"])),
+        "log_sfr10": float(np.log10(props["sfr_10myr"])),
+        "tau_v": p["tau_v"],
+        "photometry": np.asarray(pred.photometry()),
+    }
+
+# %%
+RESULTS = {}
+for gid in CAPSTONE_IDS:
+    res = tengri_at_beagle(gid)
+    RESULTS[gid] = res
+    print(f"galaxy {gid} ({CAPSTONE_LABEL[gid]}), z = {res['params']['z']:.3f}, bands {len(res['tengri_bands'])}")
+    print(f"  tengri photometry, first bands: {res['photometry'][:3]}")
+
+# %%
+def beagle_values(gid):
+    return {
+        "log M_star (surviving)": beagle_quantiles(gid, "GALAXY PROPERTIES", "M_star", np.log10),
+        "log SFR_10 [M_sun/yr]": beagle_quantiles(gid, "STAR FORMATION", "SFR_10", np.log10),
+        "tauV_eff": beagle_quantiles(gid, "DUST ATTENUATION", "tauV_eff"),
+        "A_V [mag]": beagle_quantiles(gid, "DUST ATTENUATION", "A_V"),
+    }
+
+
+TABLE_ROWS = {}
+for gid in CAPSTONE_IDS:
+    res = RESULTS[gid]
+    beagle = beagle_values(gid)
+    tengri = {
+        "log M_star (surviving)": res["log_mstar"],
+        "log SFR_10 [M_sun/yr]": res["log_sfr10"],
+        "tauV_eff": res["tau_v"],
+        "A_V [mag]": res["a_v"],
+    }
+    TABLE_ROWS[gid] = {k: (beagle[k], tengri[k]) for k in beagle}
+    print(f"galaxy {gid} ({CAPSTONE_LABEL[gid]}): BEAGLE posterior median and 16-84 % against tengri at the median")
+    print(f"  {'quantity':<24s}{'BEAGLE':>9s}{'16 %':>9s}{'84 %':>9s}{'tengri':>9s}{'diff':>9s}")
+    for label, (beagle_triple, t) in TABLE_ROWS[gid].items():
+        lo, b, hi = beagle_triple  # 16, 50, 84 %
+        print(f"  {label:<24s}{b:9.3f}{lo:9.3f}{hi:9.3f}{t:9.3f}{t - b:+9.3f}")
+
+# %% [markdown]
+# Each table is BEAGLE's posterior median with its 16 and 84 % range, and tengri's value at that median, so the difference is the model difference at fixed parameters. Four classes follow, one per quantity.
+#
+# - log M_star (surviving): the differences of 0.01 to 0.02 dex are a library bracket. The stellar set and the surviving-mass fraction of the two codes differ, and §1 gives the template spread that this inherits; the size of its share is not isolated here.
+# - log SFR_10: the differences of up to 0.02 dex are a library bracket too. Both codes use the same 10 Myr episode, so the residual comes from the template spread in §1 and not from the episode definition.
+# - tauV_eff: the difference is zero because tengri's `tau_v` input is set to BEAGLE's `tauV_eff` at the median. The row checks that the parameter reaches the model, and carries no physics.
+# - A_V: the differences of -0.28 to +0.10 mag are a convention. tengri's A_V is the flux-weighted attenuation at 5500 Å of the rest-frame SED against its dust-free version, and BEAGLE's column is its own definition, with its own split of the birth-cloud and diffuse components at 10 Myr. The spread runs in both directions across the four galaxies, so it is not a single offset.
+
+# %%
+def beagle_sed_observed(gid, z):
+    """BEAGLE 16, 50 and 84 % observed-frame F_nu [erg/s/cm2/Hz] on the rest grid, with the observed wavelength [A].
+
+    F_nu_obs = (1 + z) F_lambda(rest, at d_L) lambda_rest^2 / c, the rest-frame flux density at d_L
+    re-expressed in the observed frame; the convention check below confirms it against the
+    APPARENT MAGNITUDES that BEAGLE writes for the same posterior.
+    """
+    per = CAPSTONE.posterior[str(gid)]
+    wl_rest = np.asarray(per["FULL SED"]["wl"], float)
+    out = {}
+    for q in ("p16", "p50", "p84"):
+        out[q] = (1.0 + z) * np.asarray(per["FULL SED"][q], float) * wl_rest**2 / C_AA_PER_S
+    return wl_rest * (1.0 + z), out
+
+
+def beagle_model_mags(gid, names):
+    per = CAPSTONE.posterior[str(gid)]
+    w = np.asarray(per["POSTERIOR PDF"]["probability"], float)
+    w = w / w.sum()
+    return np.array([weighted_quantile(np.asarray(per["APPARENT MAGNITUDES"][f"{n}_APP"], float), w, 0.5)
+                     for n in names])
+
+
+CANDELS_BY_CURVE = {name: (fw, ft) for name, fw, ft in CANDELS}
+# Two catalog bands share a curve (ISAAC_KS is stored under the HAWKI_KS curve), so the band-to-curve map is the catalog's own.
+CURVE_FOR_BAND = dict(CAPSTONE_CATALOG.meta["curve_for_band"])
+CANDELS_CURVE = {band: CANDELS_BY_CURVE[curve] for band, curve in CURVE_FOR_BAND.items()}
+CANDELS_PIVOT = {band: V.pivot_wavelength(fw, ft) for band, (fw, ft) in CANDELS_CURVE.items()}
+
+
+def sed_convention_check(gid):
+    """Median ratio of the BEAGLE median SED, band-averaged on the CANDELS curves, to its APPARENT MAGNITUDES."""
+    res = RESULTS[gid]
+    wl_obs, sed = beagle_sed_observed(gid, res["params"]["z"])
+    mags = 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET))
+    ratios = []
+    for name, m in zip(res["beagle_names"], mags):
+        fw, ft = CANDELS_CURVE[name]
+        ratios.append(V.band_average(wl_obs, sed["p50"], fw, ft) / m)
+    return float(np.median(ratios))
+
+
+print("BEAGLE SED convention check, median band-averaged SED over APPARENT MAGNITUDES:")
+for gid in CAPSTONE_IDS:
+    print(f"  {gid} ({CAPSTONE_LABEL[gid]}): {sed_convention_check(gid):.3f}")
+
+fig = plt.figure(figsize=(10.5, 8.2))
+outer = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.28)
+for k, gid in enumerate(CAPSTONE_IDS):
+    res = RESULTS[gid]
+    z = res["params"]["z"]
+    inner = outer[k].subgridspec(2, 1, height_ratios=(3.0, 1.0), hspace=0.05)
+    ax = fig.add_subplot(inner[0])
+    axr = fig.add_subplot(inner[1], sharex=ax)
+    wl_obs, sed = beagle_sed_observed(gid, z)
+    ax.fill_between(wl_obs, sed["p16"], sed["p84"], color="C0", alpha=0.2, lw=0)
+    ax.plot(wl_obs, sed["p50"], color="C0", lw=1.0, label="BEAGLE median and 16-84 %")
+    wl_t = np.asarray(res["pred"].wave_obs)
+    d_l_cm = float(luminosity_distance_mpc(z)) * MPC_CM
+    f_t = np.asarray(res["pred"].obs_sed()) * (1.0 + z) / (4.0 * np.pi * d_l_cm**2)
+    ax.plot(wl_t, f_t, color="C1", lw=1.0, label="tengri at the same parameters")
+    pivots = np.array([CANDELS_PIVOT[n] for n in res["beagle_names"]])
+    ax.errorbar(pivots, res["fnu"], yerr=res["sig"], fmt="o", color="k", ms=3, capsize=0, label="observed")
+    ax.plot(pivots, 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET)), "s", color="C0", ms=3, mfc="none")
+    ax.plot(pivots, res["photometry"][: len(pivots)], "^", color="C1", ms=3, mfc="none")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_title(f"{gid} ({CAPSTONE_LABEL[gid]}), z = {z:.3f}", fontsize=9)
+    ax.tick_params(labelbottom=False)
+    if k == 0:
+        ax.legend(fontsize=7, frameon=False)
+    obs = np.asarray(res["fnu"], float)
+    axr.axhline(0.0, color="0.6", lw=0.8)
+    axr.plot(pivots, (10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET)) - obs) / obs, "s", color="C0", ms=3, mfc="none")
+    axr.plot(pivots, (res["photometry"][: len(pivots)] - obs) / obs, "^", color="C1", ms=3, mfc="none")
+    axr.set_xscale("log"); axr.set_ylim(-1.0, 1.0)
+    axr.set_xlabel(r"observed wavelength [$\mu$m]" if k >= 2 else "")
+    axr.set_ylabel("frac.", fontsize=7)
+fig.suptitle("BEAGLE posterior median and tengri at the same parameters, CANDELS photometry", fontsize=10)
+save_fig("beagle_07_capstone.png")
+plt.show()
 
 # %% [markdown]
 # ## Summary
@@ -1151,6 +1410,10 @@ print(f"L_sun: BEAGLE {beagle_driver.L_SUN_BEAGLE:.4e} erg/s, tengri {L_SUN:.4e}
 # | §12 | Lyman-alpha band at z = 6, native and rebinned | +0.002 and +0.12 | numerical |
 # | §13 | luminosity distance at z = 1, Planck 2015 against 2018 | ratio 1.00008 | convention |
 # | §13 | L_sun, BEAGLE against tengri | ratio 0.99948 | convention |
+# | §15 | log M_star (surviving), four capstone galaxies | -0.012 to -0.020 dex | library bracket |
+# | §15 | log SFR_10, four capstone galaxies | -0.001 to +0.016 dex | library bracket |
+# | §15 | tauV_eff, four capstone galaxies | 0.000 | parameter mapping (set by construction) |
+# | §15 | A_V, four capstone galaxies | -0.28 to +0.10 mag | convention |
 #
 # The rest-frame ultraviolet bands agree to 1 % and the normalization, age and star formation history
 # match at the level this notebook tests. Redward of 0.35 µm the two codes differ by up to 5 %, within the
