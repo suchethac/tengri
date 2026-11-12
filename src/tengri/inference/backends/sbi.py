@@ -48,6 +48,7 @@ import jax.numpy as jnp
 
 from tengri.parameters.parameters import Parameters
 from tengri.utils.atomic_io import atomic_path
+from tengri.utils.batching import vmap_chunked
 
 
 def generate_sbi_training_data(
@@ -58,6 +59,7 @@ def generate_sbi_training_data(
     obs_type: str = "photometry",
     noise_model: str = "gaussian",
     snr_range: tuple[float, float] = (5.0, 50.0),
+    chunk_size: int = 1024,
 ) -> dict[str, Any]:
     """Generate training data for simulation-based inference.
 
@@ -81,6 +83,9 @@ def generate_sbi_training_data(
         ``"gaussian"`` (default) or ``"heteroscedastic"``.
     snr_range : tuple of float
         Range of S/N ratios to sample uniformly.
+    chunk_size : int, default 1024
+        Draws per compiled forward-model call. Bounds peak memory; the result does
+        not depend on it beyond round-off.
 
     Returns
     -------
@@ -133,10 +138,10 @@ def generate_sbi_training_data(
     else:
         predict_fn = model.predict_spectrum
 
-    # Use vmap for batched prediction; fall back to a loop for
-    # non-traceable callables (e.g., mocks in tests).
+    # Batched prediction in memory-bounded chunks (one compiled kernel per chunk);
+    # fall back to a loop for non-traceable callables (e.g., mocks in tests).
     try:
-        x_clean = jax.vmap(predict_fn)(theta_dict)
+        x_clean = vmap_chunked(predict_fn, chunk_size=chunk_size)(theta_dict)
     except (TypeError, ValueError, RuntimeError, AttributeError):
         # TypeError: predict_fn isn't vmappable (non-traceable callable)
         # ValueError: theta_dict structure incompatible with vmap
