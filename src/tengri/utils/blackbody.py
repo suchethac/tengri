@@ -93,7 +93,17 @@ def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
     # float32 the Wien-tail gradient goes from a silent ``-0.0`` to the correct
     # value (x=44: -7.78e-08, x=60: -8.76e-15, x=87: -1.65e-26), each matching
     # float64.
-    return 2.0 * _H_PLANCK * nu_w * (nu_w / _C_CGS) ** 2 * jnp.exp(-x) / -jnp.expm1(-x)
+    # Float32 groups the prefactor as ``(2h (nu/c)) (nu/c)``, not ``2h nu (nu/c)**2``: under jit XLA
+    # re-associates the constant products of the vmapped ring sum, and the ``nu * (nu/c)**2`` order
+    # gave NaN for every frequency where ``exp(-x)`` underflows (the Wien tail, lambda < 0.05 A for
+    # a 2e5 K ring) on the multicolor and kubota_done discs (#3104). The float64 order is kept, so
+    # float64 is bit-identical.
+    if nu_w.dtype == jnp.float32:
+        _r = nu_w / _C_CGS
+        _pre = 2.0 * _H_PLANCK * (nu_w * _r) * _r
+    else:
+        _pre = (2.0 * _H_PLANCK * nu_w) * ((nu_w / _C_CGS) ** 2)
+    return _pre * jnp.exp(-x) / -jnp.expm1(-x)
 
 
 @_planck_core.defjvp

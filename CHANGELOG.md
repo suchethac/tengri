@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(agn): the Planck prefactor is float32-safe under jit, so `log_L_agn_direct_los` is finite for the `kubota_done` and `multicolor` discs in pure float32 (#3104). Under jit XLA re-associated `2h nu (nu/c)**2` inside the vmapped ring sum, and the Wien tail (`exp(-x)` underflowing to zero) went `inf * 0 = NaN`, so the line-of-sight power was NaN. The float32 grouping changes; float64 is bit-identical.
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
