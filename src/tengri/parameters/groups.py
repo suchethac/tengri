@@ -9614,6 +9614,15 @@ def parameters_to_groups(spec: Parameters) -> dict:
         if not (aperture.is_fixed and aperture.value == 1.0):
             result["eline_aperture_frac"] = aperture
 
+    # Emission-line widths and offsets, default group and named kinematic groups
+    # (#3332). They default to Fixed(0.0); anything else is the user's choice and
+    # must survive the round trip, or a rebuilt model pins the lines at zero width.
+    for name in sorted(spec.all_params):
+        if name.startswith(_ELINE_KINEMATIC_STEMS):
+            dist = spec.get_distribution(name)
+            if not (dist.is_fixed and dist.value == 0.0):
+                result[name] = dist
+
     if spec.n_grid != 256:
         # Only include if non-default
         result["n_grid"] = spec.n_grid

@@ -398,6 +398,26 @@ def test_automatic_precompute_builds_without_a_nebular_backend(mock):
     assert float(fn(truth, auto._data_args)) == pytest.approx(float(exact(truth)), rel=1e-9)
 
 
+def test_kinematic_priors_survive_a_round_trip(synthetic_ssp_module):
+    """parameters_to_groups emits the line widths and offsets a rebuild needs."""
+    from tengri.parameters.groups import parameters_to_groups
+
+    model = _model(
+        synthetic_ssp_module,
+        eline_sigma_kms=Uniform(0.0, 300.0),
+        eline_sigma_kms_broad=Uniform(300.0, 3000.0),
+        eline_delta_v_kms_balmer=Fixed(120.0),
+    )
+    groups = parameters_to_groups(model.spec)
+    assert {"eline_sigma_kms", "eline_sigma_kms_broad", "eline_delta_v_kms_balmer"} <= set(groups)
+    assert "eline_delta_v_kms" not in groups  # default Fixed(0.0) stays implicit
+    rebuilt = SEDModel.build(
+        ssp_data=synthetic_ssp_module, observation=model.observation, **groups
+    )
+    for name in ("eline_sigma_kms", "eline_sigma_kms_broad", "eline_delta_v_kms_balmer"):
+        assert rebuilt.spec.get_distribution(name) == model.spec.get_distribution(name), name
+
+
 # ── Refusals ──────────────────────────────────────────────────────
 
 
