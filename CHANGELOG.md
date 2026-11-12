@@ -77,6 +77,7 @@
 - **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
 
 ### Fixed
+- **Results and SBI readers check their schema version and parameter names (#3283).** `FitResult.load` refuses a file whose `schema_version` is missing or not `v1` (a `ValueError` naming the file and the expected version), since it read such files as if they matched. `SBIPosterior.from_file(path, expected_param_names=...)` refuses a posterior whose stored parameter names are missing or differ, in order, from the model it is loaded into; without `expected_param_names` the check is skipped, as before.
 
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
