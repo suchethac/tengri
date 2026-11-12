@@ -652,9 +652,17 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
 
     The tied disc takes the library ratio :math:`{\rm disk}_i/{\rm disk}_0` on the caller's grid,
     which the library holds at zero below its first node, so the tied disc would emit nothing in
-    the X-rays. Shortward of that node the untied path's factor :math:`2\cos i\,T_X` is taken
-    instead (:attr:`LibrarySightline.disc_factor`, the Morrison & McCammon (1983) column of
-    :func:`library_torus_sightline`); every other sample keeps ``incl_ratio``.
+    the X-rays. Shortward of that node the tied disc takes the ratio held at the library's first
+    node times the Morrison & McCammon (1983) X-ray transmission :math:`T_X` of
+    :func:`library_torus_sightline` (:attr:`LibrarySightline.ratio` times
+    :attr:`LibrarySightline.transmission`); every other sample keeps ``incl_ratio``. The angular
+    law is therefore the library's on both sides of the edge and the disc is continuous there
+    up to :math:`T_X`. For Fritz et al. (2006) the library disc is isotropic, and CIGALE's
+    ``fritz2006`` (``sed_modules/fritz2006.py``, ``AGN1.disk * norm`` reweighted by
+    :math:`{\rm disk}(\psi)/{\rm disk}(89.99^\circ)`) applies no :math:`2\cos i` factor anywhere;
+    the repository's Lambertian :math:`2\cos i` belongs to the untied disc only (owner ruling,
+    #3062, 2026-11-12, option B; it replaces the :math:`2\cos i\,T_X` of #2760 for the tied
+    Fritz disc). SKIRTOR keeps :math:`2\cos i\,T_X` below the edge.
 
     Parameters
     ----------
@@ -679,7 +687,8 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
     """
     edge = library_edge_wavelength(torus_block)
     wave = jnp.asarray(wavelength)
-    return jnp.where(wave < edge, sight.disc_factor, jnp.asarray(incl_ratio))
+    below = sight.ratio * sight.transmission if torus_block == "fritz" else sight.disc_factor
+    return jnp.where(wave < edge, below, jnp.asarray(incl_ratio))
 
 
 def library_torus_transmission(
