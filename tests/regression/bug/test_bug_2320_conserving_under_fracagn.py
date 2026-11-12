@@ -22,7 +22,7 @@ Checked here: admission and the screened refusal (both build paths); the realize
 (total dust, two windows, the polar-dust window at the review's points) against what the
 model emitted; the saturation flag at both bounds, beside the line bound; the ledger closure;
 gradients against central finite differences, inside and at a bound; the Fritz + polar-dust
-exception (#3100); and ``'cigale_joint'`` against a reference frozen on main.
+closure (#3100); and ``'cigale_joint'`` against a reference frozen on main.
 
 The synthetic SSP's flux scale is arbitrary: at ``log_total_mass = -7`` it absorbs
 ``L_absorbed ~ 1.3e43 erg/s``, the order of an ``agn_log_lbol = 10`` AGN, which puts ``t``
@@ -506,14 +506,14 @@ def test_ledger_closes_on_agn_log_lbol(synthetic_ssp_wide):
     assert _closure(ledger) == pytest.approx(0.0, abs=_RTOL)
 
 
-def test_fritz_polar_dust_total_mapping_is_bounded(synthetic_ssp_wide):
-    """Fritz + polar dust: the ledger does not close (#3100), and the realized total-dust
-    fraction exceeds ``f`` by at most the measured 3.25%; the property reports it."""
+def test_fritz_polar_dust_total_mapping_reaches_f(synthetic_ssp_wide):
+    """Fritz + polar dust: the polar split budgets on the angle-integrated torus power (#3100),
+    so the ledger closes and the realized total-dust fraction is ``f``."""
     model = _build(synthetic_ssp_wide, ir_frac=0.3, torus="fritz", polar_ebv=0.1)
-    assert _ledger(model)["agn_ledger_closed"] == 0.0
+    assert _ledger(model)["agn_ledger_closed"] == 1.0
     realized = _realized(model)
     assert realized == pytest.approx(_dust_fraction(model), rel=1e-9)
-    assert 0.0 < realized / 0.3 - 1.0 <= 0.0325
+    assert realized == pytest.approx(0.3, rel=_RTOL)
 
 
 # ── gradients ──────────────────────────────────────────────────────────────

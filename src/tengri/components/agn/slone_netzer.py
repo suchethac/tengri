@@ -39,10 +39,9 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._template_grid import scale_to_lbol_native
+from tengri.components.agn._template_grid import scale_to_torus_power_native
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.host_array import device_table
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "SloneNetzerGrid",
@@ -243,7 +242,8 @@ def slone_netzer_sed_from_grid(
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
     # Normalize on the template's native grid, before resampling (the caller's
     # grid never enters); the float32 factorization lives in the helper.
-    return scale_to_lbol_native(template, wave_grid, sed, 10.0**agn_log_lbol * _LSUN_ERG)
+    # Log-space power (#3183): the erg/s-scale linear power is never formed in float32.
+    return scale_to_torus_power_native(template, wave_grid, sed, agn_log_lbol, 1.0)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
