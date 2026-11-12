@@ -77,6 +77,23 @@ def _slice_batch(batch, start: int, stop: int):
     return jax.tree_util.tree_map(lambda x: x[start:stop], batch)
 
 
+class _Kernel:
+    """The ``jit(vmap(fn))`` for one call of :func:`vmap_chunked`, and its verdict.
+
+    ``can_jit`` is tri-state: ``None`` until the first chunk probes ``fn``, then
+    ``True``/``False``. The state lives only in the closure returned by
+    :func:`vmap_chunked`, so nothing global references ``fn`` (and whatever model it
+    closes over). Owners that need the compiled program reused across calls cache
+    the returned callable themselves; see :func:`tengri.forward.draw_maps.map_draws`.
+    """
+
+    __slots__ = ("can_jit", "jitted")
+
+    def __init__(self, fn) -> None:
+        self.jitted = jax.jit(jax.vmap(fn))
+        self.can_jit: bool | None = None
+
+
 def vmap_chunked(fn, chunk_size: int = 16):
     r"""Map ``fn`` over a batch in memory-bounded chunks.
 
@@ -89,6 +106,10 @@ def vmap_chunked(fn, chunk_size: int = 16):
     call degrades to an **eager per-draw loop** rather than raising, and warns
     once so the ~7x slowdown is never silent. The jittability probe runs **once**
     per returned callable, not once per draw.
+
+    No state is kept between calls: each call to :func:`vmap_chunked` compiles its
+    own kernel. To reuse a compiled program across calls, hold on to the returned
+    callable (an owner caches it, keyed on its compile signature), not the function.
 
     Only genuine *tracing* failures count as "not jittable". A typo'd key, a shape
     mismatch, or any other real bug propagates rather than being quietly
@@ -150,11 +171,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
     if chunk_size < 1:
         raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
 
-    jitted = jax.jit(jax.vmap(fn))
-    # Tri-state: None = not yet probed; True/False = the settled answer. The
-    # probe is per-callable, so a non-jittable fn costs ONE failed trace, not
-    # one per draw.
-    can_jit: list[bool | None] = [None]
+    kernel = _Kernel(fn)
 
     def _eager(batch, n):
         """Per-draw Python loop: the fallback for non-traceable ``fn``.
@@ -172,12 +189,12 @@ def vmap_chunked(fn, chunk_size: int = 16):
     def mapped(batch):
         n = _leading_axis_size(batch)
 
-        if can_jit[0] is None:
+        if kernel.can_jit is None:
             try:
-                jitted(_slice_batch(batch, 0, min(chunk_size, n)))
-                can_jit[0] = True
+                kernel.jitted(_slice_batch(batch, 0, min(chunk_size, n)))
+                kernel.can_jit = True
             except _NOT_TRACEABLE as exc:
-                can_jit[0] = False
+                kernel.can_jit = False
                 warnings.warn(
                     f"vmap_chunked: {getattr(fn, '__name__', 'the mapped function')} "
                     f"cannot be traced ({type(exc).__name__}), so it will be evaluated "
@@ -188,11 +205,12 @@ def vmap_chunked(fn, chunk_size: int = 16):
                     stacklevel=2,
                 )
 
-        if not can_jit[0]:
+        if not kernel.can_jit:
             return _eager(batch, n)
 
         parts = [
-            jitted(_slice_batch(batch, s, min(s + chunk_size, n))) for s in range(0, n, chunk_size)
+            kernel.jitted(_slice_batch(batch, s, min(s + chunk_size, n)))
+            for s in range(0, n, chunk_size)
         ]
         if len(parts) == 1:
             return parts[0]

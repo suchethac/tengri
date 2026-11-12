@@ -453,8 +453,8 @@ class CloudyELineMarginalizedLikelihood:
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         residual = fnu_obs - prediction[self.channel]
-        log_z = params.get("met_logzsol", 0.0)
-        neb_logU = params.get("neb_logU", -3.0)
+        log_z = params["met_logzsol"]
+        neb_logU = params["neb_logU"]
         ln_l, _a_hat, _a_err = marginalize_emission_lines_cloudy(
             residual,
             fnu_err,
@@ -822,8 +822,8 @@ class CalibrationELineMarginalizedLikelihood:
             from tengri.observation.eline_priors import cloudy_line_priors
 
             means, sigmas = cloudy_line_priors(
-                log_z=params.get("met_logzsol", 0.0),
-                neb_logU=params.get("neb_logU", -3.0),
+                log_z=params["met_logzsol"],
+                neb_logU=params["neb_logU"],
                 line_wavelengths=self.eline_line_wavelengths,
                 prior_width_dex=self.eline_prior_width_dex,
             )

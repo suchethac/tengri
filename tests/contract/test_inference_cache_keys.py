@@ -60,7 +60,7 @@ def _small_ssp() -> SSPData:
     return SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
         ssp_flux=jnp.asarray(rng.uniform(0.5, 1.5, (n_met, n_age, n_wave)), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
 
@@ -511,3 +511,32 @@ def test_preconditioned_problem_cache_key_is_hashable_and_strength_only():
     assert set(_PRECONDITIONED_PROBLEM_CACHE_KEY_POLICY) == set(
         PreconditionedProblem.__dataclass_fields__
     )
+
+
+def test_fixture_logp_and_gradient_finite_across_age_frac():
+    """logp and its gradient are finite over the DPL age prior with log10(Gyr) SSP ages (#3337 a).
+
+    The fixture used to pass log10(yr) ages, so every DPL history younger than 1 Gyr
+    fell in no SSP bin and the log posterior was NaN for age_frac <= 0.0804.
+    """
+    from tengri.inference.context import InferenceContext
+    from tengri.utils.transforms import to_unbounded
+
+    fitter = fitter_photometry()
+    lo, hi = fitter.spec.get_distribution("sfh_dpl_age_frac").bounds
+    assert lo == pytest.approx(0.036, abs=1e-3)
+    assert hi == pytest.approx(1.0)
+
+    ctx = InferenceContext.from_target(fitter)
+    nlp, data_args = ctx.neg_log_posterior_fn, ctx.data_args
+    base = ctx.initial_params(jax.random.PRNGKey(0))
+
+    for frac in np.linspace(lo, hi, 10)[:-1]:
+        params = dict(base)
+        params["sfh_dpl_age_frac"] = to_unbounded(jnp.asarray(frac), lo, hi)
+        value = nlp(params, data_args)
+        grad = jax.grad(nlp)(params, data_args)
+        assert np.isfinite(float(value)), f"non-finite logp at age_frac={frac:.4f}"
+        for name, g in grad.items():
+            assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad {name} at {frac:.4f}"
+            assert np.any(np.asarray(g) != 0.0), f"zero grad {name} at {frac:.4f}"

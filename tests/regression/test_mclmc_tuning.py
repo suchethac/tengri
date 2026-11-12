@@ -33,6 +33,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests.contract._nonsplat_ssp import nonsplat_flux
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -74,7 +76,7 @@ def tiny_fitter():
     wave = jnp.linspace(3000.0, 10000.0, 60)
     ages = jnp.linspace(-1.0, 1.14, 12)
     lgmet = jnp.array([-1.5, -0.5, 0.0])
-    flux_grid = jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5
+    flux_grid = jnp.abs(nonsplat_flux((3, 12, 60))) * 1e-3 + 1e-5
     ssp = SSPData(ssp_wave=wave, ssp_flux=flux_grid, ssp_lg_age_gyr=ages, ssp_lgmet=lgmet)
     curves = tuple(
         FilterCurve(wave=jnp.linspace(lo, hi, 30), trans=jnp.ones(30) * 0.5, name=f"b{i}")

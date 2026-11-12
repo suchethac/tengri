@@ -19,6 +19,8 @@ import warnings
 import jax.numpy as jnp
 import pytest
 
+from tests.contract._nonsplat_ssp import nonsplat_flux
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -28,7 +30,7 @@ def _synthetic_ssp(nebular: str):
 
     return SSPData(
         ssp_wave=jnp.linspace(100.0, 20000.0, 50),
-        ssp_flux=jnp.full((2, 4, 50), 1e-4),
+        ssp_flux=nonsplat_flux((2, 4, 50)),
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.0, 4),
         ssp_lgmet=jnp.array([-2.5, -1.8]),
         nebular=nebular,

@@ -279,7 +279,12 @@ def equivalent_width(
     .. [1] Vollmann, K. & Eversberg, T., 2006, AN, 327, 862.
            Standard definition of spectroscopic equivalent width.
     """
-    f_lambda = l_nu * (C_AA / (wavelength_aa**2))
+    # The width is a ratio, so the overall flux scale cancels. Divide L_nu by its peak
+    # before the C_AA / lambda**2 multiply: at galaxy scale (1e33 erg/s/Hz, 100 Angstrom)
+    # the unscaled product (~6e47) overflows float32. A zero spectrum keeps scale 1.
+    scale = jnp.max(jnp.abs(l_nu))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    f_lambda = (l_nu / scale) * (C_AA / (wavelength_aa**2))
 
     blue_lo = line_center_aa - window_aa - continuum_width_aa
     blue_hi = line_center_aa - window_aa
