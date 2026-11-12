@@ -662,7 +662,13 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
     :math:`{\rm disk}(\psi)/{\rm disk}(89.99^\circ)`) applies no :math:`2\cos i` factor anywhere;
     the repository's Lambertian :math:`2\cos i` belongs to the untied disc only (owner ruling,
     #3062, 2026-11-12, option B; it replaces the :math:`2\cos i\,T_X` of #2760 for the tied
-    Fritz disc). SKIRTOR keeps :math:`2\cos i\,T_X` below the edge.
+    Fritz disc). The same holds for every tied library torus: for SKIRTOR the library disc is
+    anisotropic, :math:`\eta\propto\cos i\,(1+2\cos i)/3` (Stalevski et al. 2016, MNRAS 458,
+    2288), and CIGALE's ``skirtor2016`` (``sed_modules/skirtor2016.py``) forms the disc as the
+    new disc spectrum times :math:`{\rm disk}_i/{\rm disk}_0` of the library and ``nan_to_num``
+    sets the ratio to zero below the library's first node, so it carries no :math:`2\cos i`
+    and no disc there; the tied disc keeps the library's angular law on both sides of the edge
+    (owner ruling extended to SKIRTOR, 2026-11-12, after #3062).
 
     Parameters
     ----------
@@ -687,7 +693,7 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
     """
     edge = library_edge_wavelength(torus_block)
     wave = jnp.asarray(wavelength)
-    below = sight.ratio * sight.transmission if torus_block == "fritz" else sight.disc_factor
+    below = sight.ratio * sight.transmission
     return jnp.where(wave < edge, below, jnp.asarray(incl_ratio))
 
 
