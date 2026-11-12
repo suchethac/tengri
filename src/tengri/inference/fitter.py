@@ -84,16 +84,14 @@ from tengri.inference.loss_functions import (
     build_loss_fn,
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
+from tengri.parameters.defaults import get_mcmc_auto_d
 from tengri.parameters.priors import Gaussian
 from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
-# D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
-_AUTO_D_THRESHOLD = 20
-
-# D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
-_MCMC_AUTO_D_THRESHOLD = 20
+# The auto/mcmc dimensionality threshold lives only in the defaults file
+# ([inference] mcmc_auto_d); read it with tengri.parameters.defaults.get_mcmc_auto_d.
 
 # Samplers that evaluate the forward model thousands of times per fit. On the
 # exact wave-grid photometry path (no WavePrecomp LUT) each evaluation costs
@@ -2684,20 +2682,18 @@ class Fitter:
 
         obs = model.observation
         _spec_config = obs.spectroscopy if obs is not None else None
-        # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
-        if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
-            spec_has_broad = getattr(self.spec, "eline_broad", False)
-            if not spec_has_broad:
-                import warnings
-
-                warnings.warn(
-                    "Spectroscopy has eline_broad=True but Parameters was built with "
-                    "eline_broad=False. The broad-component velocity dispersion parameter "
-                    "'eline_broad_sigma_kms' will not be sampled. "
-                    "Pass eline_broad=True to Parameters() to fix this.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        # The broad component is not evaluated by any emission-line likelihood
+        # (no broad design-matrix columns are built), so its parameter would be
+        # sampled and change nothing (#3332). Refuse rather than run inert.
+        spec_broad = bool(getattr(_spec_config, "eline_broad", False))
+        params_broad = bool(getattr(self.spec, "eline_broad", False))
+        if spec_broad or params_broad:
+            raise ValueError(
+                "The broad emission-line component (eline_broad=True) is not implemented: "
+                "no likelihood builds its design-matrix columns, so 'eline_broad_sigma_kms' "
+                "would be sampled and change nothing. Set eline_broad=False on both "
+                "Spectroscopy and Parameters (tracked in #3332)."
+            )
 
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""
@@ -4343,16 +4339,11 @@ class Fitter:
         prewarm = kwargs.pop("prewarm", True)
 
         # --- "auto" method: dimensionality-based selection ---
+        # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
+        # The threshold is [inference] mcmc_auto_d; an unreadable defaults file raises.
         if method == "auto":
             d = self.spec.n_latent
-            try:
-                from tengri.parameters.defaults import get_inference_defaults
-
-                threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
-            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
-                # Config unavailable, missing key, or non-integer value, use hardcoded fallback
-                threshold = _AUTO_D_THRESHOLD
-            method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
+            method = "mcmc_nuts" if d <= get_mcmc_auto_d() else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods via registry ---
         from tengri.inference._backend_registry import (
@@ -4363,33 +4354,14 @@ class Fitter:
             get_backend,
         )
 
-        if method == "auto":
-            # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
-            # Dimensionality threshold is configurable via inference defaults.
-            d = self.spec.n_latent
-            try:
-                from tengri.parameters.defaults import get_inference_defaults
-
-                threshold = int(
-                    get_inference_defaults().get("mcmc_auto_d", _MCMC_AUTO_D_THRESHOLD)
-                )
-            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
-                threshold = _MCMC_AUTO_D_THRESHOLD
-            chosen = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
-            print(
-                f"  [auto-pick]  D={d} (threshold {threshold}) → "
-                f"using '{chosen}'.  Pass an explicit method= to override."
-            )
-            entry = get_backend(chosen)
-        elif method == "mcmc":
+        if method == "mcmc":
             # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
+            # Same configured threshold as method="auto".
             d = self.spec.n_latent
-            if d <= _MCMC_AUTO_D_THRESHOLD:
-                chosen = "mcmc_nuts"
-            else:
-                chosen = "mcmc_raytrace"
+            threshold = get_mcmc_auto_d()
+            chosen = "mcmc_nuts" if d <= threshold else "mcmc_raytrace"
             print(
-                f"  [mcmc auto-pick]  D={d} (threshold {_MCMC_AUTO_D_THRESHOLD}) → "
+                f"  [mcmc auto-pick]  D={d} (threshold {threshold}) → "
                 f"using '{chosen}'.  Pass method='mcmc_nuts' or 'mcmc_raytrace' to override."
             )
             entry = get_backend(chosen)

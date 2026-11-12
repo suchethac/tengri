@@ -175,6 +175,28 @@ class MappingsStellarGridData(NamedTuple):
     line_ratios: jnp.ndarray
 
 
+class MappingsStellarLoad(NamedTuple):
+    """Result of :func:`_load_stellar_grid`: the grid and its SFH selection.
+
+    Attributes
+    ----------
+    grid : MappingsStellarGridData
+        JAX-traceable grid arrays.
+    sfh_labels : list of str
+        SFH row labels of the grid (plain Python, kept off the JIT pytree).
+    sfh_idx_inst : int
+        Index of the ``"inst"`` SFH row.
+    sfh_idx_cont : int
+        Index of the ``"cont"`` SFH row.
+
+    """
+
+    grid: MappingsStellarGridData
+    sfh_labels: list[str]
+    sfh_idx_inst: int
+    sfh_idx_cont: int
+
+
 class MappingsAGNGridData(NamedTuple):
     """Pre-loaded AGN (OPTXAGNF) MAPPINGS V grid.
 
@@ -219,13 +241,11 @@ def _require_current_schema(f: h5py.File, filepath: str | Path) -> None:
         )
 
 
-def _load_stellar_grid(
-    filepath: str | Path, model: str, density: str
-) -> tuple[MappingsStellarGridData, list[str], int, int]:
+def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> MappingsStellarLoad:
     """Load a stellar MAPPINGS V grid from the HDF5 file.
 
     Returns the grid data (JAX-traceable arrays only) plus SFH metadata
-    (plain Python strings and ints, kept off the grid).
+    (plain Python strings and ints, kept off the grid), read by field name.
 
     Parameters
     ----------
@@ -238,8 +258,8 @@ def _load_stellar_grid(
 
     Returns
     -------
-    tuple
-        (grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont)
+    MappingsStellarLoad
+        Fields ``grid``, ``sfh_labels``, ``sfh_idx_inst`` and ``sfh_idx_cont``.
 
     """
     with h5py.File(filepath, "r") as f:
@@ -283,7 +303,12 @@ def _load_stellar_grid(
         logHB_per_logq=logHB_per_logq,
         line_ratios=line_ratios,
     )
-    return grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont
+    return MappingsStellarLoad(
+        grid=grid_data,
+        sfh_labels=sfh_labels,
+        sfh_idx_inst=sfh_idx_inst,
+        sfh_idx_cont=sfh_idx_cont,
+    )
 
 
 def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
@@ -497,7 +522,6 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = True
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
     additive: ClassVar[bool] = True
     requires_instance: ClassVar[bool] = True
@@ -592,16 +616,14 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         self.model = model
         self.density = density
         self.sfh_mode = sfh_mode
-        grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont = _load_stellar_grid(
-            grid_path, model, density
-        )
-        self.grid = grid_data
+        loaded = _load_stellar_grid(grid_path, model, density)
+        self.grid = loaded.grid
 
         # Store SFH metadata as plain Python attributes (not in the grid).
         # This keeps strings out of the JAX-traced pytree.
-        self.sfh_labels = sfh_labels
-        self.sfh_idx_inst = sfh_idx_inst
-        self.sfh_idx_cont = sfh_idx_cont
+        self.sfh_labels = loaded.sfh_labels
+        self.sfh_idx_inst = loaded.sfh_idx_inst
+        self.sfh_idx_cont = loaded.sfh_idx_cont
 
         # Select discrete SFH index
         try:

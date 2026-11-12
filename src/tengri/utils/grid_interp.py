@@ -251,6 +251,17 @@ def fold_integrand_T(
     return _FoldedIntegrand(grid, tw_grid, src_T, lead_shape, c1, w1, c2, w2)
 
 
+def _edge_inside_grid(grid: np.ndarray, edge_aa: float) -> bool:
+    """Whether the Lyman edge lies strictly inside the quadrature domain of ``grid``.
+
+    The union grid is trimmed to the filter's support (#2817), so an edge below
+    the support (every narrow band at z of a few tenths) is outside it. Inserting
+    the zero-width edge pair there puts it in front of the grid, where the
+    trapezoid integrates across the empty gap (#3268).
+    """
+    return grid.size > 1 and float(grid[0]) < edge_aa < float(grid[-1])
+
+
 def _lyc_augmented_operator(
     grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
 ):
@@ -272,6 +283,11 @@ def _lyc_augmented_operator(
     w1 = np.where(in_bracket, 1.0, w1)
     w2 = np.where(in_bracket, 0.0, w2)
 
+    if not _edge_inside_grid(grid, edge_aa):
+        # No step inside the integration domain (#3268): a pair at an edge outside
+        # the trimmed union grid would sort in front of it, and the trapezoid would
+        # draw a spurious ramp from the edge to the first node.
+        return grid, tw_grid, c1, w1, c2, w2
     tw_edge = float(
         np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
         * _filter_weight_np(np.array([edge_aa]), convention)[0]
@@ -654,6 +670,9 @@ def lyc_augment_grid_for_step(
     step_vals = np.where(grid < edge_aa, y_a[..., None], y_b[..., None])
     templates_edge_aware = np.where(in_bracket, step_vals, templates_on_grid)
 
+    if not _edge_inside_grid(grid, edge_aa):
+        # No step inside the integration domain (#3268): see _lyc_augmented_operator.
+        return grid, templates_edge_aware * tw_grid, tw_grid
     tw_edge = float(
         np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
         * _filter_weight_np(np.array([edge_aa]), convention)[0]

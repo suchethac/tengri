@@ -108,6 +108,13 @@ def _lister_name(node: ast.AST) -> str | None:
     return name
 
 
+_SHOCK_BACKEND_REASON = (
+    "the nebular `ShockBackend` route was removed in #3364 -- "
+    "use `shock={...}`, which builds `ShockNebular`"
+)
+_REMOVED_SHOCK_NAMES = frozenset({"ShockBackend", "SHOCK_INLINE_PARAMS"})
+
+
 _PRECOMPUTE_FOR_MODEL_REASON = (
     "`precompute_for_model` was removed -- "
     "use the registry module's `precompute` and `build_lookup`"
@@ -142,6 +149,20 @@ def scan_tree(tree: ast.AST):
             called = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
             if called == "precompute_for_model":
                 yield node.lineno, _PRECOMPUTE_FOR_MODEL_REASON
+
+        # #3364 -- the nebular shock backend route is gone; the shock group is `shock={...}`.
+        if isinstance(node, ast.ImportFrom) and any(
+            alias.name in _REMOVED_SHOCK_NAMES for alias in node.names
+        ):
+            yield node.lineno, _SHOCK_BACKEND_REASON
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if (
+                    kw.arg == "backend"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value == "shock"
+                ):
+                    yield node.lineno, _SHOCK_BACKEND_REASON
 
         # #1574 -- every list_* returns a _RegistryTable, not {label: callable}.
         if isinstance(node, ast.Subscript):

@@ -193,11 +193,13 @@ the composable path already uses.
 - **Step 3** (e3131cafc): the build goes through the registry, and the name comes from `config_name`. Named
   changes: `MappingsPhotoAGNBackend` reads `mappings_agn` (unreachable, the build refuses it), and
   `NebularContinuumFallback` reads the name of the backend it wraps (unreachable from `SEDModel.build`).
-- **Step 4** (not landed): the two shock declarations differ in names and values (`shock_frac` is in
+- **Step 4** (#3364, deletes the unreachable shock route): the two shock declarations differed in names and values (`shock_frac` is in
   `SHOCK_PARAMS` only; `shock_log_lhalpha` 41.0 against 40.0; `shock_velocity` 300 against 250, `Fixed` against
   `Uniform`). The `shock={...}` build reads `SHOCK_PARAMS`, so it is unchanged by any merge that keeps those
   values. The choice of values is the owner's ruling; the measurement above gives the photometry effect of 40/250
   against 41/300 with `norm="lhalpha"` (about 8e-6 relative in `sdss_g`).
+  Landed: `ShockBackend`, `SHOCK_INLINE_PARAMS`, `publishes_shock` and the component's shock branch are deleted; the
+  `shock={...}` build (`SHOCK_PARAMS`) is bit-identical to the base on `norm="frac"` and `norm="lhalpha"`, alone and with Cue.
 - **Step 5** (ADR-0024, this commit): the ADR, the docs and the CLAUDE.md sentence follow the registry. The
   `gutkin16` entry is added to the dispatch test. The CHANGELOG bullet covers steps 0 to 3, because step 4 is not
   in the stack.

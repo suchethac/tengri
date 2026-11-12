@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-11-12
-**Related**: #3295 (this ADR closes it; step 4, the shock declarations, is open for an owner ruling), #2436, #2539, #851, #2213, #3297, ADR-0019 (unified component dispatch), ADR-0021 (band-table providers), ADR-0023 (one adapted-chain runner)
+**Related**: #3295 (this ADR closes it; step 4, the shock declarations, landed in #3364), #2436, #2539, #851, #2213, #3297, ADR-0019 (unified component dispatch), ADR-0021 (band-table providers), ADR-0023 (one adapted-chain runner)
 **Landed in**: steps 0 to 3 of the C7 stack (60ed7946a, 3df82ba11, ad77d5f92, 684c5d25f, e3131cafc), and this ADR's commit (step 5)
 
 ## Context
@@ -39,7 +39,6 @@ The cost was that a new backend had to be added in four places, and a misspelt n
    - `line_fraction_policy: ClassVar[bool]`: `publish_line_fraction=True` is allowed. True for Cue only.
    - `reads: ClassVar[tuple[str, ...]]`: the `state.derived` keys the component adds to its inputs, in
      order. The component maps these names to typed keys through one table (`_READ_KEYS`).
-   - `publishes_shock: ClassVar[bool]`: the component publishes `sed_shock`. True for shock only.
    - `carries_freefree: ClassVar[bool]`: the continuum carries thermal free-free emission. An instance
      attribute of the same meaning takes precedence (Gutkin16 sets it from its `continuum=` argument).
    - `additive: ClassVar[bool]`: the emission is added to `sed_intrinsic`. False for baked-in only, whose
@@ -94,12 +93,7 @@ The cost was that a new backend had to be added in four places, and a misspelt n
      `CueBackend | CloudyGridBackend`. No capability expresses that exact pair; `supports_split_sed` also
      covers CB19, Gutkin16 and the MAPPINGS stellar backend.
 
-8. **Shock declarations are not yet one (step 4, open).** The shock backend's `parameters()` returns
-   `SHOCK_INLINE_PARAMS`, and the `shock={...}` build reads `SHOCK_PARAMS`. The two lists differ in names and
-   values: `SHOCK_PARAMS` has `shock_frac`, which the inline list lacks; `shock_log_lhalpha` is 41.0 in one and
-   40.0 in the other; `shock_velocity` is 300 km/s in one and 250 km/s in the other, and it is a `Fixed` value
-   in one and a `Uniform` default in the other. The `shock={...}` build is the path users reach, so its values are
-   the ones that stand. Reconciling the two is a physics ruling, and this ADR does not make it.
+8. **Shock declarations are one (step 4, landed in #3364).** The route that read `SHOCK_INLINE_PARAMS` was unreachable from the grammar and from `src/`, so it was deleted. The `shock={...}` build reads `SHOCK_PARAMS` alone and is unchanged. The values the two lists disagreed on (`shock_log_lhalpha` 41.0 against 40.0, `shock_velocity` 300 against 250 km/s, `Fixed` against `Uniform`) are settled by keeping `SHOCK_PARAMS`. Whether 41/300 is the right physical choice remains the owner's to confirm.
 
 ## Parity evidence
 
@@ -121,7 +115,7 @@ The cost was that a new backend had to be added in four places, and a misspelt n
 ## Non-goals
 
 - No change to any grid, to any default, or to any band-table gate.
-- Step 4 (one shock declaration) is not in this ADR. #3284 and #3074 are separate.
+- Step 4 (one shock declaration) landed in #3364, which deleted the unreachable shock route. #3284 and #3074 are separate.
 - The `carries_freefree` name is not the instance attribute name (`carries_freefree_continuum`), so the
   class member and the instance attribute do not shadow each other.
 
@@ -135,5 +129,4 @@ The cost was that a new backend had to be added in four places, and a misspelt n
   one file.
 - The two named tolerances are visible to a caller who reads `config_name` on the fallback or on the AGN
   backend. Neither changes a build result.
-- Until step 4 is ruled on, the shock path keeps two declarations. A test that asserts they are one would fail
-  today, so none is added in this commit.
+- Since #3364 the shock path has one declaration; the `shock={...}` build is the only route that publishes `sed_shock` from the nebular side.

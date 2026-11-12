@@ -61,14 +61,13 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 
 @functools.cache
 def _nebular_backend_classes() -> tuple[type[Any], ...]:
-    """Return the seven nebular backend classes, imported on first use."""
+    """Return the six nebular backend classes, imported on first use."""
     from tengri.components.nebular.baked_in import BakedInBackend
     from tengri.components.nebular.cloudy_cb19 import CB19Backend
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
     from tengri.components.nebular.cue import CueBackend
     from tengri.components.nebular.gutkin16 import Gutkin16Backend
     from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
-    from tengri.components.nebular.shock import ShockBackend
 
     return (
         BakedInBackend,
@@ -77,7 +76,6 @@ def _nebular_backend_classes() -> tuple[type[Any], ...]:
         CueBackend,
         Gutkin16Backend,
         MappingsPhotoStellarBackend,
-        ShockBackend,
     )
 
 

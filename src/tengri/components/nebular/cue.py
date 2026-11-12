@@ -535,7 +535,7 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     caller. The docstring above already promised ``JIT-compatible: no``; this
     enforces it instead of trusting every call site to honor it.
     """
-    npz = dict(np.load(npz_path, allow_pickle=True))
+    npz = dict(np.load(npz_path, allow_pickle=False))
     # The file stores the emulator in float32. Widen those arrays once, here, to float64:
     # the widening is exact, and the process dtype is applied at the device boundary,
     # so a float64 trace runs the network in float64 and an x64-off process narrows back
@@ -1281,7 +1281,6 @@ class CueBackend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = True
     line_fraction_policy: ClassVar[bool] = True
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = True
     additive: ClassVar[bool] = True
     requires_instance: ClassVar[bool] = True

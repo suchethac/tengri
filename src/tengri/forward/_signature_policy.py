@@ -265,6 +265,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     # x64 tail passed to derive_key(), not through any instance attribute.
     # ── The memo, and true no-ops ──────────────────────────────────────
     "_signature_memo": exclude("the memo itself: compile_signature() reads/writes this"),
+    "_draw_kernels": exclude(
+        "owner-cached plot kernels (draw_maps.map_draws), keyed BY compile_signature(); "
+        "keying the signature on them would be circular"
+    ),
     "_Observables": exclude("class object assembling accessors; no structure of its own"),
     "_cached_component_chain": exclude(
         "memo of the built chain; the chain's configs are keyed through _component_configs instead"
