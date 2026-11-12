@@ -82,6 +82,7 @@ from __future__ import annotations
 
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -120,6 +121,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(
             -1.30, 0.20, "Gas-phase metallicity", units="log10(Z/Zsun)", default=-0.3
         ),
+        internal_name="neb_logZ_gas",
+        offset=LOG10_ZSUN,
     ),
     ParamDeclaration(
         "neb_fesc",
