@@ -311,7 +311,12 @@ def subband_fold_table(
     )
     cached = _subband_cache.memo_get(key)
     if cached is None:
-        cached = _subband_cache.load(key, prefix=_subband_cache.EXACT_FOLD_PREFIX)
+        # (ratio, nodes) stacked on axis 0, then (n_z, n_met, n_age, n_filters, n_chunks).
+        cached = _subband_cache.load(
+            key,
+            prefix=_subband_cache.EXACT_FOLD_PREFIX,
+            expected_shape=(2, z_grid.size, None, None, len(filters), None),
+        )
         if cached is not None:
             _subband_cache.memo_put(key, cached)
     if cached is not None:

@@ -328,7 +328,7 @@ class IGMSEDComponent(TemplateThreading):
         )
         cached = _subband_cache.memo_get(key)
         if cached is None:
-            cached = _subband_cache.load(key)
+            cached = _subband_cache.load(key, expected_shape=(len(zgrid), n_filters))
             if cached is not None:
                 _subband_cache.memo_put(key, cached)
         rest = self._rest_transmission_state(wave_rest, zgrid, fws)
@@ -414,7 +414,7 @@ class IGMSEDComponent(TemplateThreading):
         key = _subband_cache.cache_key(blue, zs, self.config.igm_model)
         table = _subband_cache.memo_get(key)
         if table is None:
-            table = _subband_cache.load(key, prefix="igm_rest")
+            table = _subband_cache.load(key, prefix="igm_rest", expected_shape=(zs.size, n_blue))
         if table is None or table.shape != (zs.size, n_blue):
             igm_model = self.config.igm_model
 
@@ -634,7 +634,7 @@ class IGMSEDComponent(TemplateThreading):
         )
         cached = _subband_cache.memo_get(key)
         if cached is None:
-            cached = _subband_cache.load(key)
+            cached = _subband_cache.load(key, expected_shape=tuple(waves.shape))
             if cached is not None:
                 _subband_cache.memo_put(key, cached)
         if cached is not None and cached.shape == waves.shape:
