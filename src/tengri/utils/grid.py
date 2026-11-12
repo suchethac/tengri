@@ -143,8 +143,6 @@ def interpolate_to_linear_time(
     """
     # No ``float()``: under jit a constant grid's element is a staged tracer, and
     # ``float`` on it is a ConcretizationTypeError (#715). ``**`` stays on the array.
-    # No ``float()``: under jit a constant grid's element is a staged tracer, and
-    # ``float`` on it is a ConcretizationTypeError (#715). ``**`` stays on the array.
     age_yr_min = 10.0 ** log_age_grid[0]
     age_yr_max = 10.0 ** log_age_grid[-1]
     t_linear_yr = jnp.linspace(age_yr_min, age_yr_max, n_linear)
