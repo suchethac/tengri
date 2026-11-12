@@ -77,6 +77,7 @@
 - **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
 
 ### Fixed
+- **Cue's [Ar IV] 7332.15 line renders at its own wavelength again (#3113 follow-up).** The [O II] 7330 blend-label map also listed Cloudy's label 7332.15, which is `Ar 4 7332.15A`, a measured air wavelength: [Ar IV] sat 1.96 Angstrom blue at the blend center 7332.21, on the same wavelength as the [O II] 7330 line. It now takes the ordinary air-to-vacuum conversion (7334.17). The Cue crossval against the TensorFlow reference reads the reference labels with the same ingestion rule.
 
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
