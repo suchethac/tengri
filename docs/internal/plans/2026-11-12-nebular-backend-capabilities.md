@@ -1,6 +1,6 @@
 # 2026-11-12: Nebular backends declare their own capabilities
 
-**Status:** Proposed (ADR-0024, step 5)
+**Status:** Accepted as ADR-0024 (2026-11-12); steps 0 to 3 landed; step 4 open for the owner's ruling
 **Issue:** #3295
 **Related:** #2436, #2539, #851, #2213, `2026-11-10-band-table-providers-design.md`
 
@@ -42,10 +42,11 @@ origin/main `0c71cc4fb`.
 **The shared standard knobs and the shock list**
 
 - The standard knobs were built inline in `declared_parameters` (`component.py:344-...` before this
-  step). They now live in `NEBULAR_STANDARD_PARAMS` (`_params.py:547`).
+  step). They now live in `NEBULAR_STANDARD_PARAMS` (`_component_params.py`, outside the registry's
+  `_params.py` walk so the registry records stay those of `PARAMS`).
 - The shock list was built inline (`component.py:404-...` before this step). It now lives in
-  `SHOCK_INLINE_PARAMS` (`_params.py:588`), with `shock_log_lhalpha` at `Fixed(40.0)` (`:606-607`)
-  and `shock_velocity` at `Uniform(100, 1000, default=250.0)` (`:590-`).
+  `SHOCK_INLINE_PARAMS` (`_component_params.py`), with `shock_log_lhalpha` at `Fixed(40.0)`
+  and `shock_velocity` at `Uniform(100, 1000, default=250.0)`.
 - `SHOCK_PARAMS` (`_params.py:445`) declares `shock_log_lhalpha` at `Fixed(41.0)` (`:456-457`) and
   `shock_velocity` at 300 km/s. `_shock_log_lhalpha` (`component.py:78-87`) falls back to
   `SHOCK_PARAMS`, so it returns 41.0 when no value is supplied.
@@ -178,3 +179,26 @@ the composable path already uses.
 - **Test coverage.** The parity test runs without data files. The `split_sed` refusal is checked by
   calling it with `state=None`: a `ValueError` carrying the refusal text means refused, and any
   other outcome means accepted. This covers the refusal, not the numerical path.
+
+## Outcome
+
+- **Step 0** (60ed7946a): the members and the shared constants. As planned.
+- **Step 1** (3df82ba11): the registry and the unknown-name refusal. Deviations: the free-free member is
+  `carries_freefree`, not `carries_freefree_continuum`, because Gutkin16 sets an instance attribute of the
+  longer name that would shadow a class member. The photoionized set is derived from `supports_split_sed`.
+  `nebular_backend_classes()` is a cached function, not a module constant, to keep the backend imports lazy.
+- **Step 2** (ad77d5f92, then 684c5d25f): the component asks the backend. The branch sites are gone, and
+  `NebularBackendDefaults` supplies the defaults. Deviation: the `precompute_check` hook is called on every
+  backend, so precompute has one path. 684c5d25f makes the MAPPINGS AGN backend inherit the same defaults.
+- **Step 3** (e3131cafc): the build goes through the registry, and the name comes from `config_name`. Named
+  changes: `MappingsPhotoAGNBackend` reads `mappings_agn` (unreachable, the build refuses it), and
+  `NebularContinuumFallback` reads the name of the backend it wraps (unreachable from `SEDModel.build`).
+- **Step 4** (not landed): the two shock declarations differ in names and values (`shock_frac` is in
+  `SHOCK_PARAMS` only; `shock_log_lhalpha` 41.0 against 40.0; `shock_velocity` 300 against 250, `Fixed` against
+  `Uniform`). The `shock={...}` build reads `SHOCK_PARAMS`, so it is unchanged by any merge that keeps those
+  values. The choice of values is the owner's ruling; the measurement above gives the photometry effect of 40/250
+  against 41/300 with `norm="lhalpha"` (about 8e-6 relative in `sdss_g`).
+- **Step 5** (ADR-0024, this commit): the ADR, the docs and the CLAUDE.md sentence follow the registry. The
+  `gutkin16` entry is added to the dispatch test. The CHANGELOG bullet covers steps 0 to 3, because step 4 is not
+  in the stack.
+
