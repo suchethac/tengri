@@ -98,9 +98,9 @@ def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
     Which one *is* capable comes from the registry, not from a name written here.
     """
     from tengri.inference._backend_registry import check_capabilities, get_backend
-    from tengri.inference.fitter import _MCMC_AUTO_D_THRESHOLD
+    from tengri.parameters.defaults import get_mcmc_auto_d
 
-    if context.spec.n_latent <= _MCMC_AUTO_D_THRESHOLD:
+    if context.spec.n_latent <= get_mcmc_auto_d():
         return _ctx_run_nuts(
             context, key=key, init_from=init_from, precondition=precondition, **kw
         )

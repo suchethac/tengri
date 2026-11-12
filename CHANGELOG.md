@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(inference): `method="auto"` and `method="mcmc"` read the NUTS/high-D threshold only from `[inference] mcmc_auto_d` in the defaults file (#3286). When the defaults file was unreadable, or the key was missing or not an integer, the fitter silently used a hard-coded 20 and the sampler changed without a warning; `method="mcmc"` never read the config at all. Both now raise `ConfigError`. The duplicated module constants are removed, and the threshold has a single reader.
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.

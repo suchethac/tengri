@@ -84,16 +84,14 @@ from tengri.inference.loss_functions import (
     build_loss_fn,
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
+from tengri.parameters.defaults import get_mcmc_auto_d
 from tengri.parameters.priors import Gaussian
 from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
-# D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
-_AUTO_D_THRESHOLD = 20
-
-# D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
-_MCMC_AUTO_D_THRESHOLD = 20
+# The auto/mcmc dimensionality threshold lives only in the defaults file
+# ([inference] mcmc_auto_d); read it with tengri.parameters.defaults.get_mcmc_auto_d.
 
 # Samplers that evaluate the forward model thousands of times per fit. On the
 # exact wave-grid photometry path (no WavePrecomp LUT) each evaluation costs
@@ -4343,16 +4341,11 @@ class Fitter:
         prewarm = kwargs.pop("prewarm", True)
 
         # --- "auto" method: dimensionality-based selection ---
+        # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
+        # The threshold is [inference] mcmc_auto_d; an unreadable defaults file raises.
         if method == "auto":
             d = self.spec.n_latent
-            try:
-                from tengri.parameters.defaults import get_inference_defaults
-
-                threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
-            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
-                # Config unavailable, missing key, or non-integer value, use hardcoded fallback
-                threshold = _AUTO_D_THRESHOLD
-            method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
+            method = "mcmc_nuts" if d <= get_mcmc_auto_d() else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods via registry ---
         from tengri.inference._backend_registry import (
@@ -4363,33 +4356,14 @@ class Fitter:
             get_backend,
         )
 
-        if method == "auto":
-            # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
-            # Dimensionality threshold is configurable via inference defaults.
-            d = self.spec.n_latent
-            try:
-                from tengri.parameters.defaults import get_inference_defaults
-
-                threshold = int(
-                    get_inference_defaults().get("mcmc_auto_d", _MCMC_AUTO_D_THRESHOLD)
-                )
-            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
-                threshold = _MCMC_AUTO_D_THRESHOLD
-            chosen = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
-            print(
-                f"  [auto-pick]  D={d} (threshold {threshold}) → "
-                f"using '{chosen}'.  Pass an explicit method= to override."
-            )
-            entry = get_backend(chosen)
-        elif method == "mcmc":
+        if method == "mcmc":
             # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
+            # Same configured threshold as method="auto".
             d = self.spec.n_latent
-            if d <= _MCMC_AUTO_D_THRESHOLD:
-                chosen = "mcmc_nuts"
-            else:
-                chosen = "mcmc_raytrace"
+            threshold = get_mcmc_auto_d()
+            chosen = "mcmc_nuts" if d <= threshold else "mcmc_raytrace"
             print(
-                f"  [mcmc auto-pick]  D={d} (threshold {_MCMC_AUTO_D_THRESHOLD}) → "
+                f"  [mcmc auto-pick]  D={d} (threshold {threshold}) → "
                 f"using '{chosen}'.  Pass method='mcmc_nuts' or 'mcmc_raytrace' to override."
             )
             entry = get_backend(chosen)
