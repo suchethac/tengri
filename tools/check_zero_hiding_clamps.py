@@ -244,7 +244,14 @@ from collections.abc import Sequence
 #: their own Page-Thorne dissipation (#3015), so there is no denominator left to clamp. A removal
 #: with no clamp moved elsewhere; ``--list`` at fdeaee1a3 differs from ``--list`` at 0c751bdb5
 #: only by that one site and by line shifts.
-EXPECTED_SITES = 77
+#:
+#: 77 -> 74 (#1404): ``_measure_slope`` (``observation/spectral_indices.py``) selects
+#: its window-fit denominators before dividing, via ``utils/scale.ratio_or_nan``, so a
+#: one-point window gives NaN instead of a fitted slope of -2.0. Three divisions retired,
+#: no clamp moved. Not converted, on purpose: ``compute_dn4000``, ``compute_balmer_break``,
+#: ``_break_from_means`` and ``_ew_from_means``. A NaN at a zero denominator severs the
+#: gradient there (zero, not finite-nonzero), which the #2100 precision tests reject.
+EXPECTED_SITES = 74
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

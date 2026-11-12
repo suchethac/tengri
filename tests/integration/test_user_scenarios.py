@@ -94,7 +94,7 @@ def bpass_ssp():
 
     return TengriSSPData(
         ssp_lgmet=np.array([-2.0, -1.5, -1.0, -0.5, 0.0]),
-        ssp_lg_age_gyr=np.array([6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.15]),
+        ssp_lg_age_gyr=np.array([-3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.15]),
         ssp_wave=np.logspace(3, 4, 300),  # 1000-10000 Å
         ssp_flux=nonsplat_flux((5, 10, 300)),  # (n_met, n_age, n_wave)
     )

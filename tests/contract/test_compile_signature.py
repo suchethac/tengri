@@ -29,7 +29,7 @@ def mock_ssp_data():
     ssp = SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
         ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
     return ssp
@@ -88,7 +88,7 @@ class TestSEDModelCompileSignature:
         ssp1 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, 200),
             ssp_flux=nonsplat_flux((8, 15, 200)),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, 15),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, 15),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, 8),
         )
 
@@ -96,7 +96,7 @@ class TestSEDModelCompileSignature:
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, 150),
             ssp_flux=nonsplat_flux((8, 15, 150)),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, 15),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, 15),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, 8),
         )
 

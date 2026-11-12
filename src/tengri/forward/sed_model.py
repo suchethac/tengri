@@ -2666,6 +2666,47 @@ def _fold_igm_into_subbands(
 #: component integrates the CSP with cloud-in-cell age weights for every
 #: configuration, so none of these reaches the SED. Kept so existing calls keep
 #: working; non-default values warn and are slated for removal in v1.0.
+# Largest admissible log10(age / Gyr) on an SSP age axis (#3337). The age of the
+# universe is 13.8 Gyr (log10 = 1.14); 1.2 (15.8 Gyr) leaves a margin. An axis
+# that also starts above 1 Gyr (log10 > 0) is log10(yr) read as log10(Gyr). The
+# youngest-age test keeps the shipped BPASS grid (oldest template 100 Gyr, by
+# design) admissible.
+_SSP_MAX_LG_AGE_GYR = 1.2
+
+
+def _validate_ssp_age_axis_units(ssp_lg_age_gyr) -> None:
+    """Refuse an SSP age axis that is plainly log10(yr), not log10(Gyr) (#3337).
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Template ages as log10(age / Gyr).
+
+    Raises
+    ------
+    ValueError
+        If the axis looks like log10(yr).
+
+    Notes
+    -----
+    Refused when the oldest finite template is older than
+    ``_SSP_MAX_LG_AGE_GYR`` and the youngest is above 1 Gyr. Real log10(Gyr)
+    grids start far below 1 Gyr, so both conditions hold only for log10(yr).
+    """
+    lg_age = np.asarray(ssp_lg_age_gyr, dtype=np.float64)
+    finite = lg_age[np.isfinite(lg_age)]
+    if finite.size == 0:
+        return
+    if float(finite.max()) <= _SSP_MAX_LG_AGE_GYR or float(finite.min()) <= 0.0:
+        return
+    raise ValueError(
+        f"SSP age axis reaches log10(age) = {float(finite.max()):.3f}, i.e. "
+        f"{10.0 ** float(finite.max()):.3g} Gyr, older than the universe. The axis "
+        f"looks like log10(yr), not log10(Gyr): ssp_lg_age_gyr must be log10(age / Gyr) "
+        f"(SEDModel adds 9.0 to get log10(yr)). Subtract 9 from log10(yr) ages."
+    )
+
+
 _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
@@ -3711,6 +3752,9 @@ class SEDModel:
         # structure after construction.
         self._signature_memo = None
 
+        # Owner-cached plot kernels (forward/draw_maps.map_draws), by method name.
+        self._draw_kernels = {}
+
         # AGB circumstellar dust-shell weighting (#2534): a free
         # agb_dust_weight can never build a precompute LUT (see the refusal
         # in StellarSEDComponent.precompute) -- raised here, directly, rather
@@ -4278,6 +4322,7 @@ class SEDModel:
         self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
+        _validate_ssp_age_axis_units(ssp_data.ssp_lg_age_gyr)
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
@@ -6768,6 +6813,21 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
+    # Per-draw maps for posterior plots, evaluated by
+    # :func:`tengri.forward.draw_maps.map_draws` (named by method, cached per model).
+
+    def _sfr_mean_draw(self, params):
+        """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
+        return self.predict_sfh(params)["sfr_mean"]
+
+    def _sfr_full_draw(self, params):
+        """SFR [Msun/yr] of one draw: ``sfr_full`` if stochastic, else ``sfr_mean``."""
+        return self.predict_sfh(params)["sfr_full" if self.spec.stochastic else "sfr_mean"]
+
+    def _rest_sed_draw(self, params):
+        """Rest-frame SED L_nu [erg/s/Hz] of one draw, on the model's rest grid."""
+        return self._predict_rest_sed(params).sed
+
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
         """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
@@ -6809,9 +6869,12 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: no, uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_properties`
-        to get integrated quantities (stellar mass, age, etc.).
+        **JIT/vmap-compatible**: yes (#715). ``jax.jit(jax.vmap(model.predict_sfh))``
+        traces for every SFH family, on both grids, with no host conversion; a
+        batch of draws is evaluated in one compiled call. Use
+        :func:`tengri.vmap_chunked` rather than a bare ``vmap`` over thousands of
+        draws. For integrated quantities (stellar mass, age, etc.) use
+        :meth:`predict_properties`.
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
         uniform linear-time (lookback) grid, not the internal log-age grid. This
@@ -7277,6 +7340,16 @@ class SEDModel:
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
+
+    def __getstate__(self) -> dict:
+        """Pickle state without the owner-cached draw kernels (not picklable).
+
+        :func:`tengri.forward.draw_maps.map_draws` caches compiled kernels on the
+        instance; those are rebuilt on demand after unpickling or copying.
+        """
+        state = self.__dict__.copy()
+        state.pop("_draw_kernels", None)
+        return state
 
     def compile_signature(self) -> tuple:
         """Return a hashable signature identifying JIT-graph shape and structure.
@@ -14217,17 +14290,12 @@ class SEDModel:
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)
+            from tengri.forward.draw_maps import map_draws
+
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_arr = map_draws(self, "_sfr_full_draw", posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)
