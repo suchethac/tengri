@@ -28,35 +28,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (
     FIG_DIR,
     PAPER_FIG_DIR,
-    get_observation,
-    get_ssp,
+    make_model,
     posterior_sfr_full,
     setup_matplotlib,
 )
 
-from tengri import Fitter, Gaussian, Model, ParamSpec, Uniform
+from tengri import Fitter
 
 
 def make_stochastic_model(n_grid=128):
     """Create a D~(7+n_grid) stochastic model with free PSD."""
-    ssp = get_ssp()
-    obs = get_observation()
-    spec = ParamSpec(
-        sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
-        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
-        met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
-        dust_tau_bc=Uniform(0.0, 2.0),
-        dust_tau_diff=Uniform(0.0, 1.0),
-        dust_slope=-0.7,
-        sfh_field_psd_sigma=Uniform(0.1, 4.0),
-        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-        redshift=0.1,
-        stochastic=True,
-        n_grid=n_grid,
-    )
-    return Model(spec, ssp, observation=obs)
+    return make_model("moderate", redshift=0.1, stochastic=True, n_grid=n_grid, free_psd=True)
 
 
 def run_comparison(model, n_rt_steps=2000, n_rt_burnin=200, n_vi_iter=15, quick=False):
