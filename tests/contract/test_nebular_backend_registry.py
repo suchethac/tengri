@@ -89,7 +89,7 @@ def test_grammar_names_lower_to_the_expected_config_backend():
         "cb19": "cb19",
         "gutkin16": "gutkin16",
         "mappings": "mappings",
-        "mappings_agn": "mappings",
+        "mappings_agn": None,
     }
 
 

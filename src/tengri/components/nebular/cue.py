@@ -1370,6 +1370,33 @@ class CueBackend(NebularBackendDefaults):
     #: which is exactly the kind of error that survives.
     lsun_erg: float = _LSUN_ERG
 
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the Cue backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``cue_weights_path`` and the optional ``cue_nitrogen``,
+            ``cue_lyc_max_age_yr`` and ``cue_balmer_series_n_max`` values.
+        ssp_data : SSPData
+            Stellar grid the emulator is evaluated on.
+
+        Returns
+        -------
+        CueBackend
+            The backend instance.
+        """
+        return cls(
+            spec.cue_weights_path,
+            ssp_data=ssp_data,
+            nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+            lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
+            balmer_series_n_max=getattr(
+                spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
+            ),
+        )
+
     def __init__(
         self,
         weights_path: str,

@@ -192,7 +192,7 @@ register_nebular_model(
     citation="Flury et al. 2024 (MAPPINGS V AGN grids, Zenodo 14140949)",
     status="experimental",
     short_doc="AGN: refuses until #2082 (model protocol incomplete)",
-    config_backend="mappings",
+    config_backend=None,
 )(MappingsPhotoAGNBackend)
 
 

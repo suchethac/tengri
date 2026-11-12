@@ -542,6 +542,24 @@ class CloudyGridBackend(NebularBackendDefaults):
     #: backend that deviates.
     lsun_erg: float = _LSUN_ERG
 
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CLOUDY grid backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``cloudy_grid_path``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CloudyGridBackend
+            The backend instance.
+        """
+        return cls(spec.cloudy_grid_path, ssp_data)
+
     def __init__(
         self,
         grid_path: str,
