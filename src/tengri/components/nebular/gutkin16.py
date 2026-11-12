@@ -69,11 +69,11 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._params import (
     CB19_PARAMS,
     GUTKIN16_PARAMS,
-    NEBULAR_STANDARD_PARAMS,
     PARAMS as _NEB_PARAMS,
 )
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor

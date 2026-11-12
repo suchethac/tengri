@@ -42,10 +42,11 @@ origin/main `0c71cc4fb`.
 **The shared standard knobs and the shock list**
 
 - The standard knobs were built inline in `declared_parameters` (`component.py:344-...` before this
-  step). They now live in `NEBULAR_STANDARD_PARAMS` (`_params.py:547`).
+  step). They now live in `NEBULAR_STANDARD_PARAMS` (`_component_params.py`, outside the registry's
+  `_params.py` walk so the registry records stay those of `PARAMS`).
 - The shock list was built inline (`component.py:404-...` before this step). It now lives in
-  `SHOCK_INLINE_PARAMS` (`_params.py:588`), with `shock_log_lhalpha` at `Fixed(40.0)` (`:606-607`)
-  and `shock_velocity` at `Uniform(100, 1000, default=250.0)` (`:590-`).
+  `SHOCK_INLINE_PARAMS` (`_component_params.py`), with `shock_log_lhalpha` at `Fixed(40.0)`
+  and `shock_velocity` at `Uniform(100, 1000, default=250.0)`.
 - `SHOCK_PARAMS` (`_params.py:445`) declares `shock_log_lhalpha` at `Fixed(41.0)` (`:456-457`) and
   `shock_velocity` at 300 km/s. `_shock_log_lhalpha` (`component.py:78-87`) falls back to
   `SHOCK_PARAMS`, so it returns 41.0 when no value is supplied.

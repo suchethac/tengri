@@ -26,10 +26,13 @@ The cost was that a new backend had to be added in four places, and a misspelt n
    - `config_name: ClassVar[str]`, the `config.backend` string that selects it (`"cb19"`, not
      `"cb19_grid"`).
    - `parameters() -> list[ParamDeclaration]`, a classmethod returning the free parameters the
-     component declares for that backend. It returns the module-level declarations of
-     `components/nebular/_params.py` (`NEBULAR_STANDARD_PARAMS`, `CUE_IONSPEC_PARAMS`,
-     `CUE_GAS_EXTRA_PARAMS`, `GUTKIN16_PARAMS`, and so on), so the same objects reach both
-     construction paths.
+     component declares for that backend. It returns module-level declarations
+     (`CUE_IONSPEC_PARAMS`, `CUE_GAS_EXTRA_PARAMS`, `GUTKIN16_PARAMS` in
+     `components/nebular/_params.py`; `NEBULAR_STANDARD_PARAMS` in
+     `components/nebular/_component_params.py`), so the same objects reach both construction
+     paths. The standard list restates names `_params.py` already declares, with the component's
+     own priors; it stays out of `_params.py` because the parameter registry reads every
+     declaration tuple there as the record of a name.
    - `supports_split_sed: ClassVar[bool]`: the backend has a continuum and a line-catalog split, so
      `split_sed` accepts it. True for Cue, CloudyGrid, CB19, Gutkin16 and the MAPPINGS stellar backend.
      False for baked-in and shock.
