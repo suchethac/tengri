@@ -108,6 +108,12 @@ def _lister_name(node: ast.AST) -> str | None:
     return name
 
 
+_PRECOMPUTE_FOR_MODEL_REASON = (
+    "`precompute_for_model` was removed -- "
+    "use the registry module's `precompute` and `build_lookup`"
+)
+
+
 def scan_tree(tree: ast.AST):
     """Yield (lineno, reason) for each removed spelling used as real syntax."""
     for node in ast.walk(tree):
@@ -124,6 +130,18 @@ def scan_tree(tree: ast.AST):
                                 node.lineno,
                                 "`met_mode` was removed in #1720 -- write `'type':`",
                             )
+
+        # Dust-emission turnkey loader, deleted with its env knobs -- the registry module's
+        # precompute / build_lookup are the live pair.
+        if isinstance(node, ast.ImportFrom) and any(
+            alias.name == "precompute_for_model" for alias in node.names
+        ):
+            yield node.lineno, _PRECOMPUTE_FOR_MODEL_REASON
+        if isinstance(node, ast.Call):
+            fn = node.func
+            called = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if called == "precompute_for_model":
+                yield node.lineno, _PRECOMPUTE_FOR_MODEL_REASON
 
         # #1574 -- every list_* returns a _RegistryTable, not {label: callable}.
         if isinstance(node, ast.Subscript):

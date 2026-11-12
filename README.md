@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/suchethac/tengri/actions/workflows/tests.yml/badge.svg)](https://github.com/suchethac/tengri/actions/workflows/tests.yml)
 [![Docs](https://github.com/suchethac/tengri/actions/workflows/docs.yml/badge.svg)](https://suchethacooray.com/tengri/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
 Tengri is a panchromatic galaxy SED inference library, written in
@@ -78,7 +78,7 @@ pip install -e ".[all]"
 
 The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackjax`) that the quick start below uses. A bare install can build models and predict but not fit.
 
-**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time), NIFTy 8.5+ with the `re` extra.
+**Requirements:** Python ≥ 3.12, JAX ≥ 0.4.20, DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time), NIFTy 8.5+ with the `re` extra.
 
 (The planned PyPI distribution name will be `astro-tengri`, with import name `tengri`.)
 

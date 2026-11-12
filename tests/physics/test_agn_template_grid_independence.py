@@ -434,13 +434,24 @@ def test_kd18_los_to_angle_integrated_ratio_is_two_cos_i_for_the_disc():
 
 
 def test_kd18_angle_integrated_power_matches_the_accretion_power():
-    """log_L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut."""
+    """log_L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut.
+
+    The zones emit their own dissipation, so the power beyond R_out is not emitted
+    (Kubota & Done 2018, Sec. 2.2).
+    """
+    from tengri.components.agn.disc import kubota_done_unemitted_fraction
+
     l_sun = 3.828e33
     wave = jnp.asarray(_PUB_COARSE)
     for lum_ratio in (1.0, 0.4):
         comp, params = _kd18_with(lum_ratio=lum_ratio)
         total, _ = _kd18_published(comp, params, wave)
-        expected = lum_ratio * 10.0 ** float(params["log_lbol"]) * l_sun
+        emitted = 1.0 - float(
+            kubota_done_unemitted_fraction(
+                params["log_mbh"], params["log_lbol"], params.get("a_spin", 0.0)
+            )
+        )
+        expected = lum_ratio * emitted * 10.0 ** float(params["log_lbol"]) * l_sun
         assert total / expected == pytest.approx(1.0, abs=2e-3), (lum_ratio, total / expected)
 
 

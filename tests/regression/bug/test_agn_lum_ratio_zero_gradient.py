@@ -51,6 +51,12 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: 2-13% larger than that), sum 3.8327907332299085e31 -> 3.9045697300814117e31 (+1.87%); the eight
 #: points move between -1.2% and +4.6%, recomputed from the final model (main with #2919 plus the
 #: ruling).
+#: (3) #3015: the zones emit their own dissipation (no rescale) and the disc stops at R_out =
+#: r_sg, as in Kubota & Done (2018) and RELQSO; the unemitted share R = 0.0493 of L_bol (closed
+#: form, `kubota_done_unemitted_fraction`) is left out. sum 3.9045697300814117e31 ->
+#: 3.362566147245588e31 (-13.88%); the disc-dominated points 4-7 move by exactly
+#: -R/(1 - s) = -14.408% (s = 0.02/lambda_Edd = 0.658 the corona's share, lambda_Edd = 0.0304),
+#: the corona-dominated points 0-3 by -8.0% to -14.2%.
 #: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
@@ -62,16 +68,16 @@ _GOLDEN = {
     # Only the corona term is rescaled, so the shift is largest where the corona dominates
     # (point 0, the hard end) and vanishes where the disc does (points 4-7).
     "kubota_done": {
-        "sum": 3.9045697300814117e31,
+        "sum": 3.362566147245588e31,
         "pts": (
-            1.0524406625878232e27,
-            1.909944857660813e27,
-            1.0423137254779246e28,
-            6.390821642214103e28,
-            6.303598437612621e27,
-            2.067491256102662e26,
-            5.873925496299859e24,
-            1.6126422255910787e23,
+            9.686038503584478e26,
+            1.7318754531592472e27,
+            9.136688273713684e27,
+            5.4858078965803e28,
+            5.395391113776079e27,
+            1.7696067332311095e26,
+            5.027609223530362e24,
+            1.3802924352281135e23,
         ),
     },
     "multicolor": {

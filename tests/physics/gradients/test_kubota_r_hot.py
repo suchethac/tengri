@@ -128,7 +128,7 @@ def test_dissipated_hot_flow_luminosity_is_f_hard_l_edd(log_lbol, f_hard, a_spin
     x_hot, x_out, l_diss, l_edd_term, reach = _hot_zone(8.5, log_lbol, f_hard, a_spin)
     print(f"L_bol={log_lbol} f={f_hard} a={a_spin}: x_hot={x_hot:.4f} L_diss={l_diss:.6e}")
     assert l_edd_term < reach, "point must be in the reachable regime"
-    assert 1.001 < x_hot < 0.5 * x_out
+    assert 1.001 < x_hot < x_out
     np.testing.assert_allclose(l_diss, l_edd_term, rtol=1e-6)
     _, _, r_isco, t_in, ledd = _disc_scalars(8.5, log_lbol, a_spin)
     l0 = float(_l0(r_isco, t_in))
@@ -142,14 +142,14 @@ def test_unreachable_hot_flow_saturates_instead_of_inventing_a_cap():
     (RELQSO: "Ldiss never reaches 0.02Ledd => No upper limit for r_hot", rh = rout).
 
     tengri keeps static zone shapes, so L_hot saturates at ``L0 h_ceiling`` (99% of the disc's
-    total) and R_hot sits at its zone ceiling 0.5 R_out; no L_bol-dependent switch.
+    total) and R_hot sits at its zone ceiling R_out (#3015); no L_bol-dependent switch.
     """
     x_hot, x_out, _, l_edd_term, reach = _hot_zone(8.5, 9.0, 0.02)
     assert l_edd_term > reach
     _, _, r_isco, t_in, ledd = _disc_scalars(8.5, 9.0)
     l0 = float(_l0(r_isco, t_in))
     np.testing.assert_allclose(float(D._hot_flow_luminosity(0.02, ledd, l0)), reach, rtol=1e-12)
-    np.testing.assert_allclose(x_hot, 0.5 * x_out, rtol=1e-12)
+    np.testing.assert_allclose(x_hot, x_out, rtol=1e-12)
 
 
 @pytest.mark.parametrize("a_spin", [0.0, 0.5, 0.998])

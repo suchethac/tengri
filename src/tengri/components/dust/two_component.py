@@ -325,15 +325,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
         ``tengri.components.dust._params.DUST_PARAMETERIZATIONS``. Static.
     age_mixture : str
         How the per-node mixture of the two populations' transmissions is
-        evaluated; the same model either way. ``"per_node"`` (default)
-        attenuates every SSP node, ``sum_a L(a) [y(a) T_young + (1 - y(a))
-        T_old]``. ``"grouped"`` takes the sum in the other order, ``T_young
-        L_young + T_old L_old`` with ``L_young = sum_a y(a) L(a)`` and
-        ``L_old = sum_a (1 - y(a)) L(a)`` formed by the stellar component
-        (``lnu_interval``): two attenuated spectra instead of ``n_age``, equal
-        to floating-point reassociation, including the soft boundary and the
-        Lyman-continuum branch. Grammar key ``dust_attenuation={'age_mixture':
-        ...}``. Static; enters ``compile_signature``.
+        evaluated; the same model either way. ``"grouped"`` (default) takes
+        the sum in the order ``T_young L_young + T_old L_old`` with ``L_young =
+        sum_a y(a) L(a)`` and ``L_old = sum_a (1 - y(a)) L(a)`` formed by the
+        stellar component (``lnu_interval``): two attenuated spectra instead of
+        ``n_age``, equal to floating-point reassociation, including the soft
+        boundary and the Lyman-continuum branch. ``"per_node"`` attenuates every
+        SSP node, ``sum_a L(a) [y(a) T_young + (1 - y(a)) T_old]``, and stays
+        selectable. Grammar key ``dust_attenuation={'age_mixture': ...}``.
+        Static; enters ``compile_signature``.
     """
 
     # Defaults are a low-level construction convenience only (component
@@ -457,7 +457,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: with no spec to ask) keeps the smooth combine, unchanged.
     fdust_credit_active: bool = True
     #: ``"per_node"`` or ``"grouped"``: see the class docstring.
-    age_mixture: str = "per_node"
+    age_mixture: str = "grouped"
     #: Screen-depth parameterization (#3176); see :class:`DustSEDComponent`.
     parameterization: str = "tau_bc_diff"
 

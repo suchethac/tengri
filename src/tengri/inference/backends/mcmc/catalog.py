@@ -52,9 +52,14 @@ measures both.
 
 from __future__ import annotations
 
+import math
+import weakref
+
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import ConfigError
+from tengri.inference._backend_registry import get_backend
 from tengri.inference.backends.mcmc._shared import (
     _CHEES_JITTER_SCALE,
     _CHEES_LEARNING_RATE,
@@ -63,10 +68,13 @@ from tengri.inference.backends.mcmc._shared import (
     DEFAULT_MAX_NUM_DOUBLINGS,
     _chees_scan,
     _get_flat_logdensity,
-    _hmc_full_scan,
-    _nuts_full_scan,
     _resolve_chees_ensemble,
     ghmc_catalog_scan,
+)
+from tengri.inference.backends.mcmc.chain_program import (
+    HMCConfig,
+    NUTSConfig,
+    run_chain,
 )
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.preconditioning import (
@@ -129,6 +137,46 @@ GHMC_DEFAULT_SUPERCHAINS = 8
 #: Default MEADS fold count K for the ("ghmc") catalog sampler, as in ``run_ghmc``.
 GHMC_DEFAULT_FOLDS = 4
 
+#: Whitening exponent of the ghmc catalog sampler when ``precondition`` is None: full
+#: whitening at the MAP, the first coordinates of the MEADS schedule.
+GHMC_WHITENING_STRENGTH = 1.0
+
+#: Fraction of the MEADS warmup after which the sampled coordinates are re-estimated from the
+#: ensemble. The first half adapts in the MAP-whitened coordinates; the second half adapts in
+#: the coordinates of the ensemble's own covariance.
+GHMC_DEFAULT_REWHITEN_AT = 0.5
+
+#: Smallest number of MEADS chains per fold, per sampled coordinate. A fold's standard
+#: deviation becomes the next fold's momentum scale, so one outlying chain in a fold of
+#: fewer than this many per coordinate sets that scale.
+GHMC_MIN_CHAINS_PER_FOLD_PER_DIM = 2
+
+#: Default total chains for the ghmc catalog sampler before the per-dimension rule applies.
+GHMC_DEFAULT_CHAINS = 32
+
+
+def ghmc_default_chains(n_dim, n_superchains=GHMC_DEFAULT_SUPERCHAINS, n_folds=GHMC_DEFAULT_FOLDS):
+    """Return the smallest default MEADS ensemble that satisfies the chains-per-fold rule.
+
+    Parameters
+    ----------
+    n_dim : int
+        Number of sampled coordinates D.
+    n_superchains : int
+        Number of superchains; the result is a multiple of it.
+    n_folds : int
+        MEADS fold count K; the result is a multiple of it.
+
+    Returns
+    -------
+    int
+        The smallest multiple of ``lcm(n_superchains, n_folds)`` that is at least
+        ``max(GHMC_DEFAULT_CHAINS, 2 * D * n_folds)``.
+    """
+    unit = math.lcm(int(n_superchains), int(n_folds))
+    need = max(GHMC_DEFAULT_CHAINS, GHMC_MIN_CHAINS_PER_FOLD_PER_DIM * int(n_dim) * int(n_folds))
+    return -(-need // unit) * unit
+
 
 def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale):
     """Return the MEADS ensemble's starting positions, one distinct draw per superchain.
@@ -178,6 +226,21 @@ def _check_ghmc_counts(n_chains, n_superchains, n_folds):
             f"n_chains={n_chains} gives {n_chains // n_folds} chains per fold across "
             f"n_folds={n_folds}; MEADS needs at least {_MEADS_MIN_CHAINS_PER_FOLD} per fold "
             "to estimate its adaptation."
+        )
+
+
+def _check_ghmc_chains_per_fold(n_chains, n_folds, n_dim):
+    """Refuse a MEADS ensemble with fewer than ``2 D`` chains per fold."""
+    per_fold = n_chains // n_folds
+    minimum = GHMC_MIN_CHAINS_PER_FOLD_PER_DIM * n_dim
+    if per_fold < minimum:
+        raise ConfigError(
+            f"n_chains={n_chains} gives {per_fold} chains per fold across n_folds={n_folds}, "
+            f"below the {minimum} (2 per sampled coordinate, D={n_dim}) that MEADS needs: one "
+            "outlying chain sets the next fold's momentum scale, and with so few chains per "
+            "fold that scale runs away and the step size collapses. "
+            f"Pass n_chains >= {minimum * n_folds} (the default for this problem is "
+            f"{ghmc_default_chains(n_dim, GHMC_DEFAULT_SUPERCHAINS, n_folds)}), or lower n_folds."
         )
 
 
@@ -435,14 +498,34 @@ def map_with_shared(fn, xs, shared, *, batch_size):
 
     Notes
     -----
-    **JIT-compatible**: yes; the map is compiled once per call.
+    **JIT-compatible**: yes; the map is compiled once per ``(fn, batch_size)``. A
+    cached ``fn`` (the batched catalog sampler keeps one per bucket spec) reuses its
+    compiled map on every later call.
     """
+    return _mapped_program(fn, batch_size)(shared, xs)
 
-    @jax.jit
-    def mapped(shared_arg, xs_arg):
-        return jax.lax.map(lambda x: fn(*x, shared_arg), xs_arg, batch_size=batch_size)
 
-    return mapped(shared, xs)
+#: Jitted maps keyed weakly on the mapped function, then on ``batch_size``. The jitted
+#: map holds ``fn`` only through a weak reference, so a dropped ``fn`` frees its entry.
+_MAPPED: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _mapped_program(fn, batch_size):
+    """Return the jitted ``(shared, xs) -> lax.map`` program of ``fn``, built once."""
+    programs = _MAPPED.setdefault(fn, {})
+    program = programs.get(batch_size)
+    if program is None:
+        fn_ref = weakref.ref(fn)
+
+        def mapped(shared_arg, xs_arg):
+            f = fn_ref()
+            if f is None:
+                raise RuntimeError("the sampler was collected while its map was in use")
+            return jax.lax.map(lambda x: f(*x, shared_arg), xs_arg, batch_size=batch_size)
+
+        program = jax.jit(mapped)
+        programs[batch_size] = program
+    return program
 
 
 def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) -> int:
@@ -486,6 +569,7 @@ def build_catalog_mcmc_engine(
     n_chains: int = 1,
     n_superchains: int = GHMC_DEFAULT_SUPERCHAINS,
     n_folds: int = GHMC_DEFAULT_FOLDS,
+    rewhiten_at: float = GHMC_DEFAULT_REWHITEN_AT,
     n_ensemble: int | str = CATALOG_CHEES_ENSEMBLE,
     ensemble_jitter: float | None = None,
     chain_jitter: float | None = None,
@@ -510,14 +594,18 @@ def build_catalog_mcmc_engine(
         program is reused across galaxies. May be
         None when ``flat_logdensity`` is given; it is then never read.
     sampler : {"nuts", "hmc", "chees", "ghmc"}
-        Which BlackJAX sampler to vectorize. ``"ghmc"`` runs the MEADS adaptation for a fixed
-        ``n_warmup`` steps; an adaptive stop needs a resumable MEADS step.
-        On a sigma = 1e-3 Gaussian in standardized units, MEADS with 300 warmup steps from an
-        ensemble jitter of 0.5 does not adapt (step 5e-7, chain sd 0.4); with the analytic
-        preconditioner at strength 0.5 or 1.0 the chains freeze with every transition
-        divergent (measured 2026-11-01, #3135). At DESI-like S/N on the catalog mock the
-        median gap to NUTS is 0.48 full widths with chains 7x wider. The per-galaxy
-        backend's tier stays broken.
+        Which BlackJAX sampler to vectorize. ``"ghmc"`` runs MEADS adaptation (Hoffman and
+        Sountsov 2022) for a fixed ``n_warmup`` steps in two phases. The first samples in
+        coordinates whitened at the galaxy's MAP with the analytic metric of ``precondition=``
+        (full strength unless ``precondition`` names another), MEADS adapting a diagonal scale
+        per fold, the step size, the damping and the slice translation on top. At
+        ``rewhiten_at * n_warmup`` the coordinates are re-estimated from the ensemble (mean and
+        Stan-regularized covariance of every chain's positions over the second half of the
+        first phase), the chains are mapped into them, the momenta are redrawn and the
+        adaptation continues with its state carried over. Sampling is plain GHMC with the
+        warmup's fold-averaged parameters held fixed. A galaxy whose metric or ensemble
+        covariance cannot be factorized returns NaN draws with every transition flagged
+        divergent.
     n_warmup : int
         Adaptation steps, run per galaxy. Window adaptation for ``"nuts"`` /
         ``"hmc"``; ChEES adaptation over this galaxy's own chain ensemble for
@@ -557,7 +645,14 @@ def build_catalog_mcmc_engine(
         split evenly among them, and ``n_chains`` must be a multiple of it.
     n_folds : int, default 4
         ``"ghmc"`` only. MEADS fold count K; ``n_chains`` must be a multiple of it, with at
-        least four chains per fold.
+        least ``2 D`` chains per fold (D = the number of sampled coordinates), so ``n_chains``
+        is at least ``2 D K``. Fewer raises :class:`~tengri.config.exceptions.ConfigError`: a
+        fold's scale becomes the next fold's momentum scale, and one outlying chain among too
+        few sets it. :func:`ghmc_default_chains` gives the smallest default ensemble.
+    rewhiten_at : float, default 0.5
+        ``"ghmc"`` only. Fraction of ``n_warmup`` after which the coordinates are re-estimated
+        from the ensemble; ``0`` keeps the MAP-whitened coordinates throughout. Must lie in
+        ``[0, 1)``.
     ensemble_jitter : float or None, default None
         Dispersion of that ensemble around the galaxy's seed position. ``None`` resolves to
         the ChEES value for ``"chees"`` and to the MEADS value for ``"ghmc"``.
@@ -579,7 +674,9 @@ def build_catalog_mcmc_engine(
         Analytic metric preconditioning, **per galaxy**. ``None``/``False`` is
         off and is the default (#1397: whitening is opt-in). ``True`` whitens at
         :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`
-        (0.5, not 1.0 -- see #1442); a float in ``[0, 1]`` names the exponent.
+        (0.5, not 1.0 -- see #1442); a float in ``[0, 1]`` names the exponent. For
+        ``"ghmc"``, ``None`` means full whitening (1.0) and ``False`` turns the MAP
+        whitening off, leaving the ensemble re-whitening.
 
         Each lane builds its **own** ``J^T N^-1 J + I`` at its **own** MAP warm
         start, factorizes it, samples in the whitened coordinates and maps the
@@ -589,7 +686,8 @@ def build_catalog_mcmc_engine(
 
         A lane whose metric is non-finite or not factorizable falls back to the
         identity for that galaxy alone rather than aborting the catalog; see
-        :func:`~tengri.inference.preconditioning.traced_preconditioner`.
+        :func:`~tengri.inference.preconditioning.traced_preconditioner`. With
+        ``"ghmc"`` such a lane returns NaN draws, every transition flagged divergent.
     precondition_floor, precondition_max_condition : float, optional
         Eigenvalue floor and condition-number cap on the metric, as for
         :func:`~tengri.inference.preconditioning.prepare_preconditioning`.
@@ -627,8 +725,8 @@ def build_catalog_mcmc_engine(
     ``_jit_inputs`` arrays) enters as the ``shared`` argument, so a jitted caller
     compiles it as an input rather than a constant. Each call substitutes the
     galaxy's ``data``/``noise`` and its derived ``sqrt_noise_inv``. The underlying scan cores
-    (``_nuts_full_scan`` / ``_hmc_full_scan``) are pre-JIT'd with ``data_args``
-    traced, so different galaxies never trigger recompilation.
+    (``run_chain`` for the NUTS and HMC chain programs) takes ``data_args`` traced,
+    so different galaxies never trigger recompilation.
     """
     if sampler not in _SAMPLERS:
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
@@ -644,6 +742,8 @@ def build_catalog_mcmc_engine(
         )
     if sampler == "ghmc":
         _check_ghmc_counts(n_chains, int(n_superchains), int(n_folds))
+        if not 0.0 <= float(rewhiten_at) < 1.0:
+            raise ValueError(f"rewhiten_at must lie in [0, 1), got {rewhiten_at!r}")
     ensemble_size = _resolve_chees_ensemble(n_ensemble, n_chains) if sampler == "chees" else 0
     if ensemble_jitter is None:
         ensemble_scale = _MEADS_JITTER_SCALE if sampler == "ghmc" else _CHEES_JITTER_SCALE
@@ -671,7 +771,13 @@ def build_catalog_mcmc_engine(
     # the unpreconditioned program is byte-for-byte the one this module compiled
     # before preconditioning existed.
     n_dim = int(_init_flat.shape[0])
-    strength = _resolve_whitening_strength(precondition, n_dim)
+    if sampler == "ghmc":
+        _check_ghmc_chains_per_fold(n_chains, int(n_folds), n_dim)
+    strength = (
+        GHMC_WHITENING_STRENGTH
+        if sampler == "ghmc" and precondition is None
+        else _resolve_whitening_strength(precondition, n_dim)
+    )
     if strength is not None and n_dim > PRECONDITION_MAX_DIM:
         import warnings
 
@@ -704,7 +810,7 @@ def build_catalog_mcmc_engine(
             # start from THIS lane's noise, and carried as a traced leaf of the
             # pytree the scan cores forward to the log-density -- so it batches
             # with the data instead of being a constant shared by every galaxy.
-            precond, _ok = traced_preconditioner(
+            precond, metric_ok = traced_preconditioner(
                 log_posterior_flat_2arg,
                 init_flat,
                 data_args,
@@ -747,9 +853,15 @@ def build_catalog_mcmc_engine(
                 sample_args,
                 n_warmup,
                 int(n_folds),
+                float(rewhiten_at),
             )
             positions = restore(positions[:, n_burnin:])
             divergent = divergent[:, n_burnin:]
+            if precond is not None:
+                # A galaxy whose metric could not be factorized is reported, not sampled in a
+                # different basis: its draws are NaN and every transition is flagged divergent.
+                positions = jnp.where(metric_ok, positions, jnp.nan)
+                divergent = divergent | ~metric_ok
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
         if sampler == "chees":
@@ -791,30 +903,36 @@ def build_catalog_mcmc_engine(
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
         if sampler == "nuts":
-            positions, divergent, _expansions, _step_size, _inv_mass = _nuts_full_scan(
-                sample_init,
-                warmup_key,
-                chain_keys,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                max_num_doublings,
-                use_dense,
-                target_accept_rate,
-                False,  # use_pathfinder_warmup
+            entry = get_backend("mcmc_nuts")
+            adaptation = entry.adaptation_for({"pathfinder_warmstart": False})
+            cfg = NUTSConfig(
+                max_doublings=max_num_doublings,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
             )
         else:  # "hmc"
-            positions, divergent, _step_size, _inv_mass = _hmc_full_scan(
-                sample_init,
-                warmup_key,
-                chain_keys,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                n_leapfrog,
-                use_dense,
-                target_accept_rate,
+            entry = get_backend("mcmc_hmc")
+            adaptation = entry.adaptation_for(
+                {"dense_mass_matrix": bool(use_dense), "n_leapfrog_steps": n_leapfrog}
             )
+            cfg = HMCConfig(
+                n_leapfrog=n_leapfrog,
+                use_dense=use_dense,
+                target_accept_rate=target_accept_rate,
+            )
+        draws, _ = run_chain(
+            entry.chain_program,
+            adaptation,
+            sample_init,
+            warmup_key,
+            None,
+            chain_keys,
+            sample_logdensity,
+            sample_args,
+            n_warmup,
+            cfg,
+        )
+        positions, divergent = draws.position, draws.divergent
 
         # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
         return restore(positions[n_burnin:]), divergent[n_burnin:]
