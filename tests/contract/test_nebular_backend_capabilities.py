@@ -310,3 +310,26 @@ def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
         for name in methods:
             assert callable(getattr(cls, name, None)), f"{cls.__name__}.{name}"
     assert "__getattr__" in vars(NebularContinuumFallback)
+
+
+def test_component_parameter_lists_do_not_replace_the_registry_records():
+    """The registry record of a nebular name is the one ``_params.py`` owns.
+
+    The component's own lists restate ``neb_logU``, ``shock_log_lhalpha`` and
+    their siblings with other priors and no ``free_prior``. Exported from
+    ``_params.py`` they became the registry record of each name, so
+    ``all_params: FREE`` left ``neb_fesc`` pinned and the registry default of
+    ``shock_log_lhalpha`` read 40.0 instead of 41.0.
+    """
+    from tengri.components.nebular._component_params import (
+        NEBULAR_STANDARD_PARAMS,
+        SHOCK_INLINE_PARAMS,
+    )
+    from tengri.parameters.registry import registry
+
+    records = registry()
+    restated = [d.name for d in (*NEBULAR_STANDARD_PARAMS, *SHOCK_INLINE_PARAMS)]
+    owners = {name: records[name].group for name in restated}
+    assert set(owners.values()) <= {"PARAMS", "SHOCK_PARAMS"}, owners
+    assert records["neb_fesc"].free_prior is not None
+    assert records["shock_log_lhalpha"].prior.value == 41.0
