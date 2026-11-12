@@ -823,6 +823,7 @@ class CB19Backend:
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = False
 
     @classmethod
     def parameters(cls) -> list:

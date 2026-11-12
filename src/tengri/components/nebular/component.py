@@ -28,6 +28,7 @@ import numpy as np
 
 from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._models import resolve_nebular_backend
 from tengri.components.nebular._shared import render_nebular_lines
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
@@ -208,6 +209,7 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     publish_line_fraction: bool = False
 
     def __post_init__(self) -> None:
+        resolve_nebular_backend(self.backend)
         if self.publish_line_fraction and self.backend != "cue":
             raise ValueError(
                 f"publish_line_fraction is only available for the 'cue' nebular backend "

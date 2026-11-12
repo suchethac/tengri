@@ -77,6 +77,11 @@ class NebularBackend(Protocol):
     publishes_shock : ClassVar[bool]
         Whether the component publishes ``sed_shock`` in ``outputs()``. True
         only for the shock backend.
+    carries_freefree : ClassVar[bool]
+        Whether the backend's continuum carries thermal free-free when no instance
+        overrides it. An instance attribute ``carries_freefree_continuum`` (set by
+        Gutkin16 from ``continuum=``) takes precedence. Feeds
+        :func:`nebular_backends_with_freefree_continuum`.
 
     Class-level members are readable without an instance, so the component can
     answer for a configuration string before any backend object exists.
@@ -121,6 +126,7 @@ class NebularBackend(Protocol):
     line_fraction_policy: ClassVar[bool]
     reads: ClassVar[tuple[str, ...]]
     publishes_shock: ClassVar[bool]
+    carries_freefree: ClassVar[bool]
 
     @classmethod
     def parameters(cls) -> "list[ParamDeclaration]":

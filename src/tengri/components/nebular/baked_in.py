@@ -97,6 +97,7 @@ class BakedInBackend:
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ()
     publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = False
 
     @classmethod
     def parameters(cls) -> list:
