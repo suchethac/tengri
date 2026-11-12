@@ -19,8 +19,6 @@ References
 .. [2] Vehtari, A., Gelman, A., & Gabry, J. 2017, Statistics and Computing, 27, 1413,
        doi:10.1007/s11222-016-9696-4.
 .. [3] Vehtari, A., Simpson, D., Gelman, A., Yao, Y., & Gabry, J. 2024, JMLR, 25, 72.
-.. [4] Zhang, J., & Stephens, M. A. 2009, Technometrics, 51, 316,
-       doi:10.1198/tech.2009.08017.
 """
 
 from __future__ import annotations
@@ -32,6 +30,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy.special import logsumexp
+
+from tengri.inference.backends._psis import pareto_k_threshold, psis
 
 __all__ = [
     "ElpdResult",
@@ -45,12 +45,6 @@ __all__ = [
 _DATA_KEYS = ("data", "line_flux_obs", "line_ratio_obs", "index_obs")
 #: Relative tolerance of the check that the pointwise terms sum to the log-likelihood.
 _SUM_RTOL = 1.0e-6
-#: Pareto shape above which a PSIS-LOO pointwise estimate is unreliable [3]_.
-PARETO_K_THRESHOLD = 0.7
-#: Weak prior of the generalized-Pareto shape estimate [3]_: ten draws at k = 0.5.
-_PRIOR_K_COUNT = 10.0
-#: Prior scale of the profile grid of the Zhang & Stephens estimator [4]_.
-_PRIOR_BS = 3.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -95,10 +89,16 @@ class ElpdResult:
 
     @property
     def n_bad_k(self) -> int:
-        """Number of points with Pareto k above 0.7; zero for WAIC."""
+        """Number of points whose Pareto k is above the reliability threshold.
+
+        The threshold is ``min(1 - 1/log10(S), 0.7)`` for ``S`` draws (Vehtari et
+        al. 2024). A point whose tail could not be fitted counts as unreliable.
+        Zero for WAIC.
+        """
         if self.pareto_k is None:
             return 0
-        return int(np.sum(self.pareto_k > PARETO_K_THRESHOLD))
+        threshold = pareto_k_threshold(self.n_draws)
+        return int(np.sum(~(self.pareto_k <= threshold)))
 
 
 def _as_matrix(log_lik) -> np.ndarray:
@@ -164,17 +164,20 @@ def loo(log_lik) -> ElpdResult:
     The importance ratios :math:`r_{si} = 1 / p(d_i\mid\theta_s)` of each point have
     their largest :math:`M = \min(S/5,\, 3\sqrt{S})` values replaced by the order
     statistics of a generalized Pareto distribution fitted to them, and are
-    truncated at the largest raw ratio (Vehtari et al. 2024). A point with
-    :math:`\hat k > 0.7` has an unreliable estimate; ``n_bad_k`` counts them.
-    NumPy, not JIT-compatible. Draws are treated as independent.
+    truncated at the largest raw ratio (Vehtari et al. 2024). The smoothing is
+    ``tengri.inference.backends._psis.psis``, the routine the Laplace and
+    HMC-IS evidence estimates use, so at least ten draws are needed. A point with
+    :math:`\hat k` above the threshold has an unreliable estimate; ``n_bad_k``
+    counts them. NumPy, not JIT-compatible. Draws are treated as independent.
     """
     matrix = _as_matrix(log_lik)
     n_draws, n_data = matrix.shape
     elpd_i = np.empty(n_data)
     pareto_k = np.empty(n_data)
     for i in range(n_data):
-        log_weights, pareto_k[i] = _psis_log_weights(-matrix[:, i])
-        elpd_i[i] = logsumexp(log_weights + matrix[:, i])
+        smoothed = psis(-matrix[:, i])
+        pareto_k[i] = smoothed.pareto_k
+        elpd_i[i] = logsumexp(smoothed.log_weights + matrix[:, i])
     return _result("loo", elpd_i, _lppd(matrix), pareto_k, n_draws)
 
 
@@ -190,69 +193,6 @@ def _result(criterion, elpd_i, lppd, pareto_k, n_draws) -> ElpdResult:
         pareto_k=pareto_k,
         n_draws=int(n_draws),
     )
-
-
-def _psis_log_weights(log_ratios: np.ndarray) -> tuple[np.ndarray, float]:
-    """Pareto-smoothed, self-normalized log importance weights of one data point.
-
-    Parameters
-    ----------
-    log_ratios : ndarray, shape (n_draws,)
-        Log importance ratios, ``-log_lik`` of the point.
-
-    Returns
-    -------
-    log_weights : ndarray, shape (n_draws,)
-        Smoothed log weights, normalized so their exponentials sum to one.
-    pareto_k : float
-        Fitted generalized-Pareto shape; ``inf`` when the tail is too short to fit.
-    """
-    n_draws = log_ratios.size
-    shifted = log_ratios - np.max(log_ratios)
-    n_tail = int(min(n_draws / 5.0, 3.0 * np.sqrt(n_draws)))
-    pareto_k = np.inf
-    if n_tail >= 5:
-        order = np.argsort(shifted)
-        tail = order[-n_tail:]
-        cutoff = np.exp(shifted[order[-n_tail - 1]])
-        excess = np.exp(shifted[tail]) - cutoff
-        if excess[-1] > 0.0:
-            pareto_k, sigma = _gpd_fit(excess)
-            if np.isfinite(pareto_k):
-                probs = (np.arange(n_tail) + 0.5) / n_tail
-                smoothed = np.log(_gpd_quantile(probs, pareto_k, sigma) + cutoff)
-                shifted = shifted.copy()
-                shifted[tail] = np.minimum(smoothed, 0.0)
-    return shifted - logsumexp(shifted), float(pareto_k)
-
-
-def _gpd_fit(excess: np.ndarray) -> tuple[float, float]:
-    """Shape and scale of a generalized Pareto fit to sorted positive exceedances.
-
-    The empirical-Bayes estimator of Zhang & Stephens (2009) [4]_, with the weak
-    prior on the shape of Vehtari et al. (2024) [3]_.
-    """
-    n = excess.size
-    n_grid = 30 + int(np.sqrt(n))
-    grid = 1.0 - np.sqrt(n_grid / (np.arange(1, n_grid + 1) - 0.5))
-    grid = grid / (_PRIOR_BS * excess[int(n / 4.0 + 0.5) - 1]) + 1.0 / excess[-1]
-    shape = np.mean(np.log1p(-grid[:, None] * excess), axis=1)
-    profile = n * (np.log(-grid / shape) - shape - 1.0)
-    weights = 1.0 / np.sum(np.exp(profile - profile[:, None]), axis=1)
-    keep = weights >= 10.0 * np.finfo(float).eps
-    grid, weights = grid[keep], weights[keep] / np.sum(weights[keep])
-    b_post = np.sum(grid * weights)
-    k_post = np.mean(np.log1p(-b_post * excess))
-    sigma = -k_post / b_post
-    k_post = (n * k_post + _PRIOR_K_COUNT * 0.5) / (n + _PRIOR_K_COUNT)
-    return float(k_post), float(sigma)
-
-
-def _gpd_quantile(probs: np.ndarray, shape: float, scale: float) -> np.ndarray:
-    """Quantile function of the generalized Pareto distribution (location zero)."""
-    if abs(shape) < np.finfo(float).eps:
-        return -scale * np.log1p(-probs)
-    return scale * np.expm1(-shape * np.log1p(-probs)) / shape
 
 
 # ── Pointwise log-likelihood ──────────────────────────────────────

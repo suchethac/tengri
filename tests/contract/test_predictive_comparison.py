@@ -20,8 +20,6 @@ from tengri.inference.fitter import Fitter
 from tengri.inference.loss_functions import build_loglikelihood_fn
 from tengri.inference.predictive import (
     ElpdResult,
-    _gpd_fit,
-    _psis_log_weights,
     compare_models,
     loo,
     pointwise_log_likelihood,
@@ -86,34 +84,38 @@ def test_waic_formula_on_a_small_matrix():
     assert result.p_eff == pytest.approx(np.sum(penalty))
 
 
-@pytest.mark.parametrize("shape", [0.2, 0.5, 0.9])
-def test_generalized_pareto_fit_recovers_the_shape(shape):
-    sample = np.sort(stats.genpareto.rvs(shape, scale=2.0, size=4000, random_state=7))
-    k_hat, sigma_hat = _gpd_fit(sample)
-    assert k_hat == pytest.approx(shape, abs=0.06)
-    assert sigma_hat == pytest.approx(2.0, rel=0.08)
-
-
-def test_heavy_tailed_ratios_are_flagged():
-    """Ratios with a Pareto tail of shape 1 have no finite variance: k is above 0.7."""
-    ratios = stats.pareto.rvs(1.0, size=4000, random_state=3)
-    weights, k_hat = _psis_log_weights(np.log(ratios))
-    assert k_hat > 0.7
-    assert np.exp(weights).sum() == pytest.approx(1.0)
-    # An influential point, far from the rest, is reported through n_bad_k.
+def test_an_influential_point_has_the_largest_pareto_k():
+    """A point far from the rest dominates its own importance ratios."""
     rng = np.random.default_rng(1)
     y = np.append(rng.normal(0.0, 1.0, 12), 9.0)
     mean, var = np.sum(y) / (y.size + 0.01), 1.0 / (y.size + 0.01)
     mu = rng.normal(mean, np.sqrt(var), 2000)
     result = loo(stats.norm.logpdf(y[None, :], mu[:, None], 1.0))
     assert int(np.argmax(result.pareto_k)) == 12
+    assert result.pareto_k[12] > np.median(result.pareto_k) + 0.2
 
 
-def test_few_draws_give_infinite_k_and_plain_importance_weights():
-    log_ratios = np.log(np.array([1.0, 2.0, 3.0, 4.0]))
-    weights, k_hat = _psis_log_weights(log_ratios)
-    assert np.isinf(k_hat)
-    np.testing.assert_allclose(np.exp(weights), np.array([1.0, 2.0, 3.0, 4.0]) / 10.0)
+def test_loo_uses_the_shared_psis_routine():
+    """The weights are those of ``backends._psis.psis``, not a second smoother."""
+    from scipy.special import logsumexp
+
+    from tengri.inference.backends._psis import psis
+
+    log_lik, _, _ = _normal_case(n_draws=500)
+    result = loo(log_lik)
+    for i in (0, 7, 39):
+        ref = psis(-log_lik[:, i])
+        assert result.pareto_k[i] == ref.pareto_k
+        assert result.pointwise[i] == logsumexp(ref.log_weights + log_lik[:, i])
+
+
+def test_unfitted_tails_count_as_unreliable():
+    """Identical ratios leave no tail to fit: k is nan and the point is flagged."""
+    flat = np.tile(np.log([0.3, 0.4]), (50, 1))
+    result = loo(flat)
+    assert np.all(np.isnan(result.pareto_k))
+    assert result.n_bad_k == 2
+    np.testing.assert_allclose(result.pointwise, np.log([0.3, 0.4]))
 
 
 @pytest.mark.parametrize(
@@ -121,7 +123,7 @@ def test_few_draws_give_infinite_k_and_plain_importance_weights():
     [
         (np.zeros(5), "shape"),
         (np.zeros((1, 5)), "two posterior draws"),
-        (np.array([[0.0, np.nan], [0.0, 0.0]]), "non-finite"),
+        (np.vstack([[0.0, np.nan]] + [[0.0, 0.0]] * 11), "non-finite"),
     ],
 )
 def test_bad_matrices_are_refused(bad, match):
