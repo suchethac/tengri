@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from tengri._cache_keys import baked
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.contract
 
@@ -322,7 +323,7 @@ class TestEngineLevel:
         n_met, n_age, n_wave = 8, 15, 100
         ssp = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
             ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )
@@ -370,7 +371,7 @@ class TestEngineLevel:
         n_met, n_age, n_wave = 8, 15, 100
         ssp = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
             ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )

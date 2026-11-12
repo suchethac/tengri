@@ -20,6 +20,7 @@ from tengri.components.nebular.cue import CueWNESSPError
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.config.exceptions import TengriIOError
 from tengri.observation.filters import load_filter_set
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.contract
 
@@ -41,7 +42,7 @@ def _make_mock_ssp_data(nebular_flag="unknown"):
     n_met, n_age, n_wave = 5, 10, 100
     return SSPData(
         ssp_wave=np.linspace(100, 10000, n_wave),
-        ssp_flux=np.ones((n_met, n_age, n_wave)) * 1e-20,  # arbitrary, not zero
+        ssp_flux=nonsplat_flux((n_met, n_age, n_wave)) * 1e-20,  # arbitrary, not zero
         ssp_lg_age_gyr=np.linspace(-1, 1, n_age),
         ssp_lgmet=np.linspace(-2, 0, n_met),
         ssp_mass_remaining=np.ones((n_met, n_age)),

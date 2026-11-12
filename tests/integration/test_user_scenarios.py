@@ -34,6 +34,8 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip if SSP data not available ────────────────────────────────
+from tests.contract._nonsplat_ssp import nonsplat_flux
+
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _MIST_SSP = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _BPASS_SSP = _DATA_DIR / "ssp_bpass_imf170_300_100.h5"
@@ -94,7 +96,7 @@ def bpass_ssp():
         ssp_lgmet=np.array([-2.0, -1.5, -1.0, -0.5, 0.0]),
         ssp_lg_age_gyr=np.array([6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.15]),
         ssp_wave=np.logspace(3, 4, 300),  # 1000-10000 Å
-        ssp_flux=np.ones((5, 10, 300)),  # (n_met, n_age, n_wave)
+        ssp_flux=nonsplat_flux((5, 10, 300)),  # (n_met, n_age, n_wave)
     )
 
 
