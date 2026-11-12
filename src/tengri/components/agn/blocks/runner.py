@@ -1302,6 +1302,21 @@ agn_torus_block, agn_attenuation_block : str
             _budget_cache["torus_power"] = _power
         return _budget_cache["torus_power"]
 
+    def _angle_integrated_torus_budget(sightline_power):
+        """The torus power the polar-dust split budgets on, over every direction [erg/s].
+
+        A library torus that keeps its anisotropy ``a(mu)`` (``TORUS_ANISOTROPY_BLOCKS``) emits
+        ``f L_bol a(mu)/a_bar`` along the sightline, so its angle-integrated power is the sightline
+        power divided by ``a(mu)/a_bar`` at ``agn_cos_inc``. Any other torus carries the same power
+        along every sightline and passes through unchanged. The polar re-emission is isotropic and
+        observer-independent, so only the angle-integrated budget closes the energy (#3100).
+        """
+        _aniso = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
+        if _aniso is None:
+            return sightline_power
+        _log_ratio = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
+        return sightline_power / jnp.power(10.0, _log_ratio)
+
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
     nlr_aniso, nlr_iso = split_lines_result(
@@ -1882,6 +1897,8 @@ agn_torus_block, agn_attenuation_block : str
                 )
             else:
                 _agn_dust_budget = _torus_power_on_budget()
+            # The split budgets on the angle-integrated torus power, not the sightline (#3100).
+            _agn_dust_budget = _angle_integrated_torus_budget(_agn_dust_budget)
             _polar_power = jnp.abs(_l_absorbed)
             # Degenerate case: BOTH budgets are zero -- no torus emission and
             # no polar re-emission on this grid (agn_polar_ebv = 0 with a

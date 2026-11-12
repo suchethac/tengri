@@ -931,11 +931,8 @@ class AGNSEDComponent(TemplateThreading):
         model reaches.
 
         The mapping reaches ``f`` exactly where the energy ledger closes
-        (``agn_ledger_closed == 1``). The exception is ``polar_dust`` beside a library torus
-        with anisotropy (Fritz): the runner splits the dust budget on the torus's sightline
-        power, not its angle-integrated power (#3100), so the ledger does not close and the
-        realized total-dust fraction exceeds ``f`` by up to 3.25% (measured at ``f = 0.05``,
-        2.5% at ``f = 0.3``); ``agn_ir_frac_realized`` reports it.
+        (``agn_ledger_closed == 1``); ``agn_ir_frac_realized`` reports the fraction the model
+        reaches.
         """
         wave = state.wave
 
