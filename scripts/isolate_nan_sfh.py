@@ -17,7 +17,6 @@ Run from the repo root:
 import os
 import sys
 import time
-import traceback
 
 # ---------------------------------------------------------------------------
 # Path setup (same as quickstart)
@@ -68,7 +67,10 @@ print()
 
 
 def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
-    """Run MAP + vi for a given SFH spec. Returns True on success, False on NaN."""
+    """Run MAP + vi for a given SFH spec. Returns True on success.
+
+    A failure (for example a NaN in the vi fit) propagates with its traceback.
+    """
     print(f"{'=' * 60}")
     print(f"Testing SFH: {sfh_name}  (D = {spec.n_free} free params)")
     print(f"  Free params: {spec.free_params}")
@@ -76,7 +78,6 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
 
     try:
         model = SEDModel(spec, ssp_data, observation=obs)
-        model.precompute_spectroscopy(WAVE_OBS)
 
         # Generate mock
         key = jax.random.PRNGKey(42)
@@ -108,10 +109,6 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
         print(f"  vi done: {t_vi:.1f}s  *** SUCCESS ***")
         return True
 
-    except Exception as e:
-        print(f"  *** FAILED: {type(e).__name__}: {e} ***")
-        traceback.print_exc()
-        return False
     finally:
         print()
 

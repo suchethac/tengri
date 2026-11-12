@@ -29,6 +29,8 @@ in a docstring, and a checker that cries wolf on its own documentation is one
 that gets silenced. Matching call *syntax* instead of call *text* removes that
 whole class: ``.md`` files are not scanned at all, and a docstring is not a call.
 Notebooks are scanned through their code cells, which is where the rot was.
+Markdown under ``docs/`` is scanned through its python fences only (#3358): a
+published page's copy-paste block is code, and its prose is still exempt.
 
 Usage
 -----
@@ -45,6 +47,7 @@ import ast
 import json
 import re
 import sys
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -64,6 +67,16 @@ DEFAULT_ROOTS = (
 #: Executable source only. Prose about a migration is not a call site, and the
 #: changelog and migration guide must be free to name what they replaced.
 SUFFIXES = (".py", ".ipynb")
+
+#: Markdown is scanned only under ``docs/``, and only its fenced python blocks:
+#: that is code a reader copies. Prose outside a fence is never a call site.
+DOC_SUFFIX = ".md"
+DOC_ROOT = "docs"
+#: Repo-relative directories under ``docs/`` that are excluded from the fence scan.
+#: ``archive``/``internal`` are excluded by EXCLUDE_PARTS; ``history`` is a frozen
+#: snapshot of the docs as they were, so its fences name what was true then.
+DOC_EXCLUDE_PREFIXES = ("docs/dev/history/",)
+PY_FENCE = re.compile(r"^```(?:python|py)[ \t]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 # Exact-match on path parts, so a renamed directory stops being excluded
 # without any error. The notebook archives now share one ``archive`` parent, and
@@ -116,6 +129,7 @@ _PRECOMPUTE_FOR_MODEL_REASON = (
 
 def scan_tree(tree: ast.AST):
     """Yield (lineno, reason) for each removed spelling used as real syntax."""
+    yield from _scan_removed_names(tree)
     for node in ast.walk(tree):
         # #1720 -- the metallicity group is `met`; `stellar` is gone.
         if isinstance(node, ast.Call):
@@ -162,6 +176,82 @@ def scan_tree(tree: ast.AST):
                 )
 
 
+#: Public names removed without a shim (#3358). ``from tengri import X`` for these
+#: raises AttributeError. The replacements are the canonical names in
+#: docs/dev/NAMING_CONTRACT.md.
+_REMOVED_TENGRI_NAMES = {
+    "Model": "`tengri.Model` was removed -- build with `SEDModel.build(...)`",
+    "ParamSpec": "`tengri.ParamSpec` was removed -- use `tengri.Parameters`",
+    "HierarchicalFitter": (
+        "`tengri.HierarchicalFitter` was removed -- use `tengri.PopulationFitter`"
+    ),
+    "SpectroscopyConfig": "`tengri.SpectroscopyConfig` was removed -- use `tengri.Spectroscopy`",
+}
+
+_PRECOMPUTE_METHOD_REASON = (
+    "`SEDModel.precompute_spectroscopy` was removed -- the spectrum table is "
+    "built at build time: pass `approx=SpectrumPrecomp()` to `SEDModel.build`"
+)
+
+#: The Gyr timing prior is a Fixed-only alias since #2748; the wording mirrors
+#: ``check_free_gyr_alias`` in src/tengri/parameters/timing.py.
+_GYR_PRIOR_REASON = (
+    "`sfh_tsnorm_peak_lbt_gyr` is now a Fixed-only alias: free the fraction "
+    "`sfh_tsnorm_peak_lbt_frac` instead (age = frac * age_of_universe(z)); convert "
+    "the Gyr bounds by dividing by the age of the universe at the source redshift (#2748)"
+)
+
+
+def _is_free_gyr_prior(node: ast.AST) -> bool:
+    """True for a free prior: any call other than ``Fixed(...)``, or the ``FREE`` sentinel.
+
+    A bare number is a pinned value, not a prior, and is not flagged.
+    """
+    if isinstance(node, ast.Call):
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+        return name != "Fixed"
+    if isinstance(node, ast.Name):
+        return node.id == "FREE"
+    if isinstance(node, ast.Attribute):
+        return node.attr == "FREE"
+    return False
+
+
+def _sps_precompute_names(tree: ast.AST) -> frozenset[str]:
+    """Names bound to the ``sps.precompute`` module, whose function is still valid."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith(".sps"):
+            names.update(a.asname or a.name for a in node.names if a.name == "precompute")
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.endswith(".sps.precompute"):
+                    names.add(alias.asname or alias.name.split(".")[0])
+    return frozenset(names)
+
+
+def _scan_removed_names(tree: ast.AST):
+    """Yield (lineno, reason) for the names removed in #3358."""
+    module_names = _sps_precompute_names(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "tengri" and node.level == 0:
+            for alias in node.names:
+                if alias.name in _REMOVED_TENGRI_NAMES:
+                    yield node.lineno, _REMOVED_TENGRI_NAMES[alias.name]
+        if isinstance(node, ast.Call):
+            fn = node.func
+            if (
+                isinstance(fn, ast.Attribute)
+                and fn.attr == "precompute_spectroscopy"
+                and not (isinstance(fn.value, ast.Name) and fn.value.id in module_names)
+            ):
+                yield node.lineno, _PRECOMPUTE_METHOD_REASON
+            for kw in node.keywords:
+                if kw.arg == "sfh_tsnorm_peak_lbt_gyr" and _is_free_gyr_prior(kw.value):
+                    yield node.lineno, _GYR_PRIOR_REASON
+
+
 _MAGIC = re.compile(r"^\s*[%!]")
 
 
@@ -169,14 +259,26 @@ def _parse(source: str) -> ast.AST | None:
     """Parse Python, tolerating IPython magics. None if it still will not parse."""
     cleaned = "\n".join("" if _MAGIC.match(line) else line for line in source.splitlines())
     try:
-        return ast.parse(cleaned)
+        # Docs fences hold prose-escaped strings; a bad escape is not a removed call.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            return ast.parse(cleaned)
     except SyntaxError:
         return None
 
 
 def scan_file(path: Path):
-    """Yield (lineno, reason) for one .py or .ipynb file."""
+    """Yield (where, reason) for one .py, .ipynb, or docs .md file."""
     text = path.read_text(encoding="utf-8", errors="ignore")
+    if path.suffix == DOC_SUFFIX:
+        for match in PY_FENCE.finditer(text):
+            tree = _parse(match.group(1))
+            if tree is None:
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            for _lineno, reason in scan_tree(tree):
+                yield f"fence at line {line}", reason
+        return
     if path.suffix == ".py":
         tree = _parse(text)
         if tree is not None:
@@ -200,6 +302,13 @@ def scan_file(path: Path):
             yield f"cell {n}", reason
 
 
+def _is_scanned(path: Path, rel: str) -> bool:
+    """Executable source anywhere, or markdown under ``docs/``."""
+    if path.suffix in SUFFIXES:
+        return True
+    return path.suffix == DOC_SUFFIX and rel.startswith(f"{DOC_ROOT}/")
+
+
 def iter_files(roots):
     for root in roots:
         root_path = REPO_ROOT / root
@@ -207,12 +316,14 @@ def iter_files(roots):
             continue
         candidates = [root_path] if root_path.is_file() else sorted(root_path.rglob("*"))
         for path in candidates:
-            if not path.is_file() or path.suffix not in SUFFIXES:
+            if not path.is_file():
                 continue
             rel = path.relative_to(REPO_ROOT).as_posix()
+            if not _is_scanned(path, rel):
+                continue
             if any(part in EXCLUDE_PARTS for part in path.parts):
                 continue
-            if rel in EXCLUDE_FILES:
+            if rel in EXCLUDE_FILES or rel.startswith(DOC_EXCLUDE_PREFIXES):
                 continue
             yield path
 

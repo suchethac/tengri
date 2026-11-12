@@ -76,8 +76,17 @@
 
 - **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
 
+### Removed
+
+- `tengri.Model`, use `SEDModel.build(...)`, or a recipe from `tengri.recipes`. Removed without a changelog entry; `from tengri import Model` raises `AttributeError`.
+- `tengri.ParamSpec`, use `tengri.Parameters` (the flat-kwarg form, the expert escape hatch) or the nested-dict grammar of `SEDModel.build`. Removed without a changelog entry (#3358).
+- `tengri.HierarchicalFitter`, use `tengri.PopulationFitter`. Removed without a changelog entry (#3358).
+- `tengri.SpectroscopyConfig`, use `tengri.Spectroscopy` for the observation's spectroscopic axis, and `approx=SpectrumPrecomp()` at `SEDModel.build` for the build-time spectrum table. Removed without a changelog entry (#3358).
+- `SEDModel.precompute_spectroscopy(wave)`, the spectrum table is built at build time from `Observation.spectroscopy.wave_obs`: pass `approx=SpectrumPrecomp()` to `SEDModel.build`. Removed without a changelog entry (#3358).
+
 ### Fixed
 
+- fix(tools): the removed-API guard (`tools/check_removed_apis.py`) covers the removed names above, the free `sfh_tsnorm_peak_lbt_gyr` prior (a Fixed-only alias since #2748), and the python fences of `docs/` markdown, and it scans `bench/`, `scripts/`, `tools/` and `notebooks/`. The scripts, bench and tool sites it flagged are ported: free Gyr priors become `sfh_tsnorm_peak_lbt_frac` ranges at each script's redshift, and `scripts/isolate_nan_sfh.py` drops its dead `precompute_spectroscopy` call and the `except Exception` that swallowed it, so a failing SFH now raises with its traceback (#3358).
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
 
 - **Behavior change (#3267): a dusty model with no IR emission moves from exact to grid-served photometry under `approx=(WavePrecomp(), FeaturePrecomp())`.** A two-component dusty Cue model with no `dust_emission` was refused the per-Q_H nebular grid, because the energy-balance LUT was gated on an IR consumer; it now keeps the grid and its photometry is grid-served. The grid adds up to 1.94e-3 band error against `WavePrecomp` alone (measured worst at extreme dust, mostly under 1e-3; owner accepted 2026-11-07). The forward cost falls from 49.55 MFLOP to about 1.6 MFLOP per photometry evaluation. Models that already took the grid (IR present), and models without `FeaturePrecomp`, are unchanged. The error of `WavePrecomp` itself against exact is tracked in #3268.
