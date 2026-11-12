@@ -4,10 +4,11 @@
 With an SSP flux constant along wavelength, the batched path returned exact
 zeros while eager and single-draw ``jit`` were correct. The cause is an XLA CPU
 miscompile (a YNNPACK fusion of a dot against a closure-captured broadcast
-constant) in the jax releases listed in
-``tengri._xla_cpu_workaround.AFFECTED_JAX_VERSIONS``; tengri disables that fusion
-type at import. Each comparison runs in a fresh subprocess so the workaround is
-exercised exactly as a user meets it: ``import tengri`` before any jax work,
+constant) in jaxlib releases from ``tengri._xla_cpu_workaround.FIRST_JAXLIB_WITH_FLAG``
+upward; tengri disables that fusion type at import on CPU. The behavioural tests
+assert on whatever jaxlib is installed, with no version skip, so a CI runner on any
+affected release catches the miscompile. Each comparison runs in a fresh subprocess
+so the workaround is exercised exactly as a user meets it: ``import tengri`` before any jax work,
 and no ``XLA_FLAGS`` inherited from the test process.
 """
 
@@ -154,23 +155,40 @@ def _workaround():
     return import_module("tengri._xla_cpu_workaround")
 
 
-def test_gate_leaves_unaffected_jax_alone():
+def _version_str(release: tuple[int, ...]) -> str:
+    return ".".join(str(part) for part in release)
+
+
+def test_gate_reads_jaxlib_below_lower_bound_is_not_affected():
+    """The XLA flag lives in jaxlib, so the gate's version argument is the jaxlib version."""
     wa = _workaround()
     env: dict[str, str] = {}
-    status = wa.apply_ynn_fusion_workaround(env, jax_version="0.10.2", backend_initialised=False)
+    status = wa.apply_ynn_fusion_workaround(env, jaxlib_version="0.0.1", backend_initialised=False)
     assert status == "not_affected"
     assert "XLA_FLAGS" not in env
 
 
-def test_gate_affected_versions_are_the_measured_pair():
-    assert frozenset({"0.11.1", "0.12.0.1"}) == _workaround().AFFECTED_JAX_VERSIONS
+def test_lower_bound_is_the_first_release_that_accepts_the_flag():
+    assert _workaround().FIRST_JAXLIB_WITH_FLAG == (0, 8, 1)
 
 
-@pytest.mark.parametrize("version", ["0.11.1", "0.12.0.1"])
-def test_gate_appends_flag_and_keeps_user_flags(version):
+def test_gate_applies_at_lower_bound_and_above_with_no_upper_bound():
+    wa = _workaround()
+    for version in (_version_str(wa.FIRST_JAXLIB_WITH_FLAG), "0.12.0", "0.12.0.1", "99.0.0"):
+        env: dict[str, str] = {}
+        status = wa.apply_ynn_fusion_workaround(
+            env, jaxlib_version=version, backend_initialised=False
+        )
+        assert status == "applied", version
+        assert env["XLA_FLAGS"] == wa.YNN_FUSION_FLAG
+
+
+def test_gate_keeps_user_flags_and_never_overwrites():
     wa = _workaround()
     env = {"XLA_FLAGS": "--xla_force_host_platform_device_count=4"}
-    status = wa.apply_ynn_fusion_workaround(env, jax_version=version, backend_initialised=False)
+    status = wa.apply_ynn_fusion_workaround(
+        env, jaxlib_version="0.12.0", backend_initialised=False
+    )
     assert status == "applied"
     assert env["XLA_FLAGS"] == f"--xla_force_host_platform_device_count=4 {wa.YNN_FUSION_FLAG}"
 
@@ -179,9 +197,27 @@ def test_gate_respects_user_set_flag():
     wa = _workaround()
     env = {"XLA_FLAGS": "--xla_cpu_experimental_ynn_fusion_type=dot"}
     before = env["XLA_FLAGS"]
-    status = wa.apply_ynn_fusion_workaround(env, jax_version="0.11.1", backend_initialised=False)
+    status = wa.apply_ynn_fusion_workaround(
+        env, jaxlib_version="0.12.0", backend_initialised=False
+    )
     assert status == "user_set"
     assert env["XLA_FLAGS"] == before
+
+
+def test_gate_is_cpu_only():
+    wa = _workaround()
+    for platforms in ("cuda", "gpu", "tpu", "cuda,cpu_fallback"):
+        env = {"JAX_PLATFORMS": platforms}
+        status = wa.apply_ynn_fusion_workaround(
+            env, jaxlib_version="0.12.0", backend_initialised=False
+        )
+        assert status == "not_cpu", platforms
+        assert "XLA_FLAGS" not in env
+    env = {"JAX_PLATFORMS": "cpu"}
+    status = wa.apply_ynn_fusion_workaround(
+        env, jaxlib_version="0.12.0", backend_initialised=False
+    )
+    assert status == "applied"
 
 
 def test_gate_warns_when_backend_already_initialised():
@@ -190,7 +226,7 @@ def test_gate_warns_when_backend_already_initialised():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         status = wa.apply_ynn_fusion_workaround(
-            env, jax_version="0.11.1", backend_initialised=True
+            env, jaxlib_version="0.12.0", backend_initialised=True
         )
     assert status == "too_late"
     assert "XLA_FLAGS" not in env
@@ -200,8 +236,17 @@ def test_gate_warns_when_backend_already_initialised():
 def test_repeated_application_is_idempotent():
     wa = _workaround()
     env: dict[str, str] = {}
-    wa.apply_ynn_fusion_workaround(env, jax_version="0.12.0.1", backend_initialised=False)
+    wa.apply_ynn_fusion_workaround(env, jaxlib_version="0.12.0", backend_initialised=False)
     first = env["XLA_FLAGS"]
-    status = wa.apply_ynn_fusion_workaround(env, jax_version="0.12.0.1", backend_initialised=False)
+    status = wa.apply_ynn_fusion_workaround(
+        env, jaxlib_version="0.12.0", backend_initialised=False
+    )
     assert status == "user_set"
     assert env["XLA_FLAGS"] == first
+
+
+def test_version_tuple_parses_release_digits():
+    wa = _workaround()
+    assert wa.version_tuple("0.12.0.1") == (0, 12, 0, 1)
+    assert wa.version_tuple("0.11.1rc2") == (0, 11, 1)
+    assert wa.version_tuple("0.10.2") > wa.version_tuple("0.9.9")
