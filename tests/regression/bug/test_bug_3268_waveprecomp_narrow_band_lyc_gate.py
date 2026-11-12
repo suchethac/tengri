@@ -123,9 +123,7 @@ _BROAD_CASES = [
 
 
 def _build_broad(ssp, band, z, tau_bc, tau_diff, sfh, logU, logZ, approx):
-    from tengri.observation.photometry import Photometry as _P
-
-    obs = Observation(photometry=_P.from_names([band]))
+    obs = Observation(photometry=Photometry.from_names([band]))
     tau_gyr, age_frac = sfh
     return SEDModel.build(
         ssp_data=ssp,
@@ -147,10 +145,11 @@ def _build_broad(ssp, band, z, tau_bc, tau_diff, sfh, logU, logZ, approx):
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "#3268 dust-driven half, not fixed by the Lyman-edge guard: broad-band "
         "two_component error stays at the main value (see the measurement table "
-        "above the test). Remaining: the dust screen's sub-band quadrature design."
+        "above the test). Cause: the screen is evaluated at each sub-band's flux centroid, exp(-tau(lambda_k)) instead of the chunk mean; Jensen biases it low. Remaining: sub-band design."
     ),
 )
 @pytest.mark.parametrize("band, z, tau_bc, tau_diff, sfh, logU, logZ, measured", _BROAD_CASES)
