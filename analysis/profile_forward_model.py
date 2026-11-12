@@ -9,11 +9,12 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
     Photometry,
+    SEDModel,
     Uniform,
+    WavePrecomp,
+    builders,
     load_ssp_data,
 )
 from tengri.dust.attenuation import two_component_dust
@@ -32,18 +33,23 @@ obs = Observation(
 fw = obs.photometry.filter_waves
 ft = obs.photometry.filter_trans
 
-spec = ParamSpec(
-    sfh_dpl_alpha=Uniform(0.5, 3.0),
-    sfh_dpl_beta=Uniform(0.5, 3.0),
-    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
-    met_logzsol=Uniform(-2.0, 0.5),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 2.0),
-    dust_slope=Fixed(-0.7),
+groups = dict(
+    sfh={
+        "type": "dpl",
+        "alpha": Uniform(0.5, 3.0),
+        "beta": Uniform(0.5, 3.0),
+        "tau_gyr": Uniform(0.5, 13.0),
+        "log_total_mass": Uniform(8.0, 12.0),
+    },
+    met={"logzsol": Uniform(-2.0, 0.5)},
+    dust_attenuation=builders.dust.two_component(
+        law="power_law", tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 2.0), slope=Fixed(-0.7)
+    ),
+    neb={"type": "ssp"},  # wNE SSP: nebular emission is baked in
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp, observation=obs, precompute=False)
+model = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
+spec = model.spec
 params = spec.sample(jax.random.PRNGKey(42))
 p = model._get_internal_params(params)
 
@@ -182,27 +188,21 @@ print("\n" + "=" * 60)
 print("FUSED KERNEL (for comparison)")
 print("=" * 60)
 
-model_fused = Model(spec, ssp, observation=obs, precompute=True)
+model_fused = SEDModel.build(ssp_data=ssp, observation=obs, approx=WavePrecomp(), **groups)
 _ = model_fused.predict_photometry(params)
 t_fused, _ = bench("Fused", lambda: model_fused.predict_photometry(params))
 print(f"  Fused photometry (power_law): {t_fused:8.1f} μs")
 print(f"  Speedup vs exact:             {t_total / t_fused:8.1f}x")
 
 # Calzetti fused
-spec_cal = ParamSpec(
-    sfh_dpl_alpha=Uniform(0.5, 3.0),
-    sfh_dpl_beta=Uniform(0.5, 3.0),
-    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
-    met_logzsol=Uniform(-2.0, 0.5),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 2.0),
-    redshift=Fixed(0.1),
-    dust_law_bc="calzetti",
-    dust_law_diff="calzetti",
+groups_cal = dict(
+    groups,
+    dust_attenuation=builders.dust.two_component(
+        law="calzetti", tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 2.0)
+    ),
 )
-model_cal = Model(spec_cal, ssp, observation=obs, precompute=True)
-params_cal = spec_cal.sample(jax.random.PRNGKey(42))
+model_cal = SEDModel.build(ssp_data=ssp, observation=obs, approx=WavePrecomp(), **groups_cal)
+params_cal = model_cal.spec.sample(jax.random.PRNGKey(42))
 _ = model_cal.predict_photometry(params_cal)
 t_fused_cal, _ = bench("Fused Cal", lambda: model_cal.predict_photometry(params_cal))
 t_total_cal = t_sfh + t_interp + t_weights + t_met + t_dust_cal + t_sed + t_phot
