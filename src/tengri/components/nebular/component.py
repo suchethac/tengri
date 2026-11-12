@@ -343,7 +343,7 @@ class NebularSEDComponent(TemplateThreading):
             return []
 
         # Standard knobs all photoionization backends share.
-        from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
+        from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 
         std_knobs = list(NEBULAR_STANDARD_PARAMS)
 
@@ -365,7 +365,7 @@ class NebularSEDComponent(TemplateThreading):
             return std_knobs + list(CUE_IONSPEC_PARAMS) + list(CUE_GAS_EXTRA_PARAMS)
 
         if self.config.backend == "shock":
-            from tengri.components.nebular._params import SHOCK_INLINE_PARAMS
+            from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
 
             # MAPPINGS V shock-emission free parameters. The string
             # knobs (shock_abundance, shock_component) live on the
