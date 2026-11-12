@@ -523,13 +523,24 @@ def refuse_dead_warmup(
     there is nothing to refuse on, and it returns quietly. The backends do
     not call this at all when they reuse a cached adaptation.
 
-    Also refuses when the adapted step size has collapsed below the floor
-    (DEAD_WARMUP_STEP_SIZE_FLOOR), which renders the sampler incapable of
-    moving in float64 coordinates. Issue #2128: a fit with 16.7% divergent
-    warmup fraction (below the 90% threshold) reached this floor at 1.41e-78
-    and produced 100% divergent sampling draws, caught only by post-hoc guards.
+    Also refuses when the adapted step size is non-finite (#3317), and when it
+    has collapsed below the floor (DEAD_WARMUP_STEP_SIZE_FLOOR), which renders
+    the sampler incapable of moving in float64 coordinates. Issue #2128: a fit
+    with 16.7% divergent warmup fraction (below the 90% threshold) reached this
+    floor at 1.41e-78 and produced 100% divergent sampling draws, caught only by
+    post-hoc guards.
     """
-    # Check step size floor: absence (None/NaN) means no verdict.
+    if step_size is not None and not np.isfinite(float(step_size)):
+        raise DeadFitError(
+            f"{sampler} warmup ended dead: the adapted step size is {float(step_size)} "
+            f"(non-finite), so every later step is a NaN and {n_samples} draws would only "
+            f"return the post-warmup state. Sampling was refused and the adaptation was not "
+            f"cached. A non-finite log density or gradient reached during warmup is the usual "
+            f"cause: check the prior bounds against the MAP initialization, or use mcmc_mala "
+            f"or mcmc_nuts. See issue #3317."
+        )
+
+    # Check step size floor: absence (None) means no verdict.
     if (
         step_size is not None
         and np.isfinite(float(step_size))
@@ -2818,15 +2829,35 @@ def _get_first_order_kernel(proposal: str):
         def kernel(key, state, logdensity_fn, step_size):
             return base(key, state, logdensity_fn, step_size, None)
 
-        return kernel
+        return _reject_non_finite_acceptance(kernel)
     if proposal == "mala":
         base = blackjax.mcmc.mala.build_kernel()
 
         def kernel(key, state, logdensity_fn, step_size):
             return base(key, state, logdensity_fn, step_size)
 
-        return kernel
+        return _reject_non_finite_acceptance(kernel)
     raise ValueError(f"proposal must be 'barker' or 'mala', got {proposal!r}")
+
+
+def _reject_non_finite_acceptance(kernel):
+    """Wrap a first-order kernel so a step with a NaN acceptance is a rejection.
+
+    The incoming state is kept and every info leaf is zeroed (acceptance 0,
+    not accepted), so dual averaging sees a finite rejection. A NaN arises when
+    the proposal lands where the log density or its gradient is NaN, and BlackJAX
+    does not map that to a rejection for Barker (MALA maps it through
+    ``safe_energy_diff``). Finite steps pass through bit for bit (#3317).
+    """
+
+    def guarded(key, state, logdensity_fn, step_size):
+        new_state, info = kernel(key, state, logdensity_fn, step_size)
+        bad = ~jnp.isfinite(info.acceptance_rate)
+        kept_state = jax.tree.map(lambda new, old: jnp.where(bad, old, new), new_state, state)
+        rejected_info = jax.tree.map(lambda leaf: jnp.where(bad, jnp.zeros_like(leaf), leaf), info)
+        return kept_state, rejected_info
+
+    return guarded
 
 
 def _first_order_init(proposal: str, position, logdensity_fn):
