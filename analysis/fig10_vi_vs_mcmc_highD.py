@@ -30,6 +30,7 @@ from common import (
     PAPER_FIG_DIR,
     get_observation,
     get_ssp,
+    posterior_sfr_full,
     setup_matplotlib,
 )
 
@@ -193,12 +194,7 @@ def plot_comparison(model, true_params, true_sfh, rt_post, vi_post, rt_time, vi_
     # RT SFH draws
     if rt_post.samples is not None:
         n_draw = min(50, len(next(iter(rt_post.samples.values()))))
-        sfr_rt = []
-        for j in range(n_draw):
-            s_j = {k: rt_post.samples[k][j] for k in rt_post.samples}
-            sfh_j = model.predict_sfh(s_j)
-            sfr_rt.append(np.array(sfh_j["sfr_full"]))
-        sfr_rt = np.array(sfr_rt)
+        sfr_rt = posterior_sfr_full(model, rt_post.samples, n_draw)
 
         ax_sfh.fill_between(
             t_gyr,
@@ -213,12 +209,7 @@ def plot_comparison(model, true_params, true_sfh, rt_post, vi_post, rt_time, vi_
     # geoVI SFH draws
     if vi_post.samples is not None:
         n_draw = min(50, len(next(iter(vi_post.samples.values()))))
-        sfr_vi = []
-        for j in range(n_draw):
-            s_j = {k: vi_post.samples[k][j] for k in vi_post.samples}
-            sfh_j = model.predict_sfh(s_j)
-            sfr_vi.append(np.array(sfh_j["sfr_full"]))
-        sfr_vi = np.array(sfr_vi)
+        sfr_vi = posterior_sfr_full(model, vi_post.samples, n_draw)
 
         ax_sfh.fill_between(
             t_gyr,

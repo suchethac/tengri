@@ -26,6 +26,7 @@ from tengri import (
     Uniform,
     load_filter_set,
     load_ssp_data,
+    vmap_chunked,
 )
 
 # ── Paths ──────────────────────────────────────────────────────────
@@ -305,6 +306,39 @@ def fit_galaxy(
 
 
 # ── SFH residual metrics ─────────────────────────────────────────
+def posterior_sfr_full(model, samples, n_draw: int, chunk_size: int = 16) -> np.ndarray:
+    """Full SFR history [Msun/yr] of the first ``n_draw`` posterior draws.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Model whose ``predict_sfh`` evaluates each draw.
+    samples : dict
+        Posterior samples, one array of shape ``(n_samples,)`` per parameter.
+    n_draw : int
+        Number of leading draws to evaluate.
+    chunk_size : int, optional
+        Draws per batched call. Bounds the live memory of the vmapped SFH (#715).
+
+    Returns
+    -------
+    ndarray, shape (n_draw, n_linear)
+        Full SFR history [Msun/yr] on the model's linear lookback grid.
+
+    Notes
+    -----
+    Batched with :func:`tengri.vmap_chunked` over the jit-safe
+    ``predict_sfh``, not a per-draw Python loop (#715). The chunked map keeps
+    at most ``chunk_size`` draws in one compiled call.
+    """
+    batch = {k: jnp.asarray(v)[:n_draw] for k, v in samples.items()}
+
+    def sfr_full(p):
+        return model.predict_sfh(p)["sfr_full"]
+
+    return np.asarray(vmap_chunked(sfr_full, chunk_size=chunk_size)(batch))
+
+
 def sfh_residuals(model: Model, fit_result: FitResult, t_max_gyr: float = 1.0) -> dict:
     """Compute SFH recovery metrics.
 
@@ -325,13 +359,7 @@ def sfh_residuals(model: Model, fit_result: FitResult, t_max_gyr: float = 1.0) -
         return {"rmse_log_sfr": np.nan}
 
     n_samples = min(posterior.diagnostics.get("n_samples", 50), 50)
-    sfr_draws = []
-    for i in range(n_samples):
-        s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-        sfh_i = model.predict_sfh(s_i)
-        sfr_draws.append(np.array(sfh_i["sfr_full"]))
-
-    sfr_arr = np.array(sfr_draws)  # (n_samples, n_t)
+    sfr_arr = posterior_sfr_full(model, posterior.samples, n_samples)  # (n_samples, n_t)
     sfr_median = np.median(sfr_arr, axis=0)
 
     # Log-space metrics (avoid log(0))
