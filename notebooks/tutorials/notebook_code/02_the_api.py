@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -41,6 +41,7 @@ from tengri import (
     LogNormal,
     LogUniform,
     Observation,
+    Spectroscopy,
     Parameters,
     Photometry,
     SEDModel,
@@ -78,7 +79,11 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
+)
 
 # %% [markdown]
 # ## Parameters: Defining Your Model
@@ -174,8 +179,6 @@ print(f"Model created: {spec.n_free} free parameters")
 
 # %%
 # Predict a spectrum
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model.precompute_spectroscopy(WAVE_OBS)
 
 params = spec.sample(jax.random.PRNGKey(42))
 spectrum = model.predict_spectrum(params)
@@ -188,7 +191,7 @@ print(f"Photometry ({len(phot)} bands): {np.array(phot)}")
 
 # %%
 # Precomputation speedup
-# Spectroscopy precomputation is already active.
+# The spectrum grid is fixed at build, so each call reuses the cached weighted sum.
 # Photometry precomputation activates automatically when redshift is fixed.
 # Let's measure the speedup:
 jit_spec = jax.jit(model.predict_spectrum)
@@ -290,8 +293,11 @@ print(f"  sfr_full shape: {sfh['sfr_full'].shape}")
 
 # %%
 # Generate mock data
-mock = model.mock_spectrum(params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
-fitter = Fitter(model, mock.flux_obs, mock.noise)
+# The Fitter takes the spectrum alone, so it gets a spectroscopy-only model.
+fit_obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
+fit_model = SEDModel(spec, ssp_data, observation=fit_obs)
+mock = fit_model.mock_spectrum(params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
+fitter = Fitter(fit_model, mock.flux_obs, mock.noise)
 print(f"Fitter: {len(mock.flux_obs)} data points, {spec.n_free} parameters")
 
 # %%
@@ -308,17 +314,17 @@ result_map = fitter.run("map", n_steps=500, verbose=False)
 print(f"MAP: {result_map.wall_time_s:.1f}s, final loss = {float(result_map.loss_history[-1]):.1f}")
 
 # %%
-# native_geovi — approximate posterior
+# vi — approximate posterior
 result_geovi = fitter.run(
-    "native_geovi", n_iterations=15, n_samples=6, n_seeds=3,
+    "vi", n_iterations=15, n_samples=6,
     n_posterior_samples=2000, verbose=False,
 )
-print(f"native_geovi: {result_geovi.wall_time_s:.1f}s, {len(next(iter(result_geovi.samples.values())))} samples")
+print(f"vi: {result_geovi.wall_time_s:.1f}s, {len(next(iter(result_geovi.samples.values())))} samples")
 
 # %%
 # Ray Tracing — exact MCMC
 result_rt = fitter.run(
-    "raytrace", init_from=result_map,
+    "mcmc_raytrace", init_from=result_map,
     n_burnin=100, n_steps=500, verbose=False,
 )
 acc = result_rt.diagnostics.get("acceptance_rate", float("nan"))
@@ -327,9 +333,9 @@ print(f"Ray Tracing: {result_rt.wall_time_s:.1f}s, acceptance = {acc:.1%}")
 # %%
 # Switching methods is trivial
 print("\nSwitching methods is one line:")
-print('  fitter.run("native_geovi")  # approximate, fast')
-print('  fitter.run("raytrace")      # exact, any D')
-print('  fitter.run("nuts")          # exact, D < 20')
+print('  fitter.run("vi")  # approximate, fast')
+print('  fitter.run("mcmc_raytrace")  # exact, any D')
+print('  fitter.run("mcmc_nuts")          # exact, D < 20')
 print("\nSame model, same data, same loss — different exploration strategy.")
 
 # %% [markdown]
@@ -391,7 +397,7 @@ if hasattr(result, "effective_sample_size"):
 #
 # 1. **jit** — compiles functions. Slow first call (tracing), fast after.
 # 2. **vmap** — vectorizes over a batch dimension. Use it for catalogs.
-# 3. **grad** — automatic differentiation. This is why native_geovi works:
+# 3. **grad** — automatic differentiation. This is why vi works:
 #    gradients flow through the entire SPS pipeline for free.
 #
 # The forward model runs in ~40 µs JIT'd. Gradients cost ~1.5× that. Batch
@@ -406,7 +412,7 @@ if hasattr(result, "effective_sample_size"):
 # |--------|---------|-------------|
 # | `Parameters` | Define parameters and priors | `.sample()`, `.standardize()` |
 # | `SEDModel` | Forward model | `.predict_spectrum()`, `.predict_sfh()`, `.mock()` |
-# | `Fitter` | Inference engine | `.run("native_geovi")`, `.run("raytrace")` |
+# | `Fitter` | Inference engine | `.run("vi")`, `.run("mcmc_raytrace")` |
 # | `Posterior` | Results container | `.samples`, `.summary()`, `.diagnostics` |
 #
 # Next: **tutorials/03** explains the IFT/PSD/GP machinery that generates

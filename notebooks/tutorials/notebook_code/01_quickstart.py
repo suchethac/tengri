@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -40,8 +40,8 @@ from tengri import (
     ForwardModel,
     SEDModel,
     Observation,
+    Spectroscopy,
     Parameters,
-    Photometry,
     Uniform,
     load_ssp_data,
 )
@@ -84,7 +84,8 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 print(
     f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
@@ -117,10 +118,8 @@ for name in spec_param.free_params:
     print(f"  {name}")
 
 # %%
-# Create the model with spectroscopic precomputation
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+# Create the model with the spectrum grid fixed at build
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-model_param.precompute_spectroscopy(WAVE_OBS)
 print(f"SEDModel created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
 # %%
@@ -200,9 +199,9 @@ plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum_param.png"), dpi=150, bbox
 plt.show()
 
 # %% [markdown]
-# ### Fitting with native_geovi
+# ### Fitting with vi
 #
-# native_geovi is tengri's default inference method: geometric Variational
+# The `vi` method is geometric Variational
 # Inference (geoVI; Frank et al. 2021) reimplemented as a fully JIT-compiled
 # JAX program. It constructs a coordinate transform that flattens the posterior
 # geometry — straightening curved degeneracies like the age–dust banana — then
@@ -210,7 +209,7 @@ plt.show()
 # 500× speedup over standard implementations.
 
 # %%
-# MAP initialization + native_geovi inference
+# MAP initialization + vi inference
 forward_param = ForwardModel.build(sed=model_param)
 
 t0 = time.perf_counter()
@@ -231,7 +230,6 @@ result_geovi_param = forward_param.fit(
     method="vi",
     n_iterations=15,
     n_samples=6,
-    n_seeds=5,
     n_posterior_samples=10000,
     verbose=False,
 )
@@ -239,7 +237,7 @@ t_geovi = time.perf_counter() - t0
 
 print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
 print(f"MAP init:    {t_map:.1f}s")
-print(f"native_geovi: {t_geovi:.1f}s  ← runtime per galaxy")
+print(f"vi: {t_geovi:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral Fit ---
@@ -269,7 +267,7 @@ ax_fit.errorbar(
 )
 for s in spec_samples[:50]:
     ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5, zorder=2)
-ax_fit.plot(wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="native_geovi median", zorder=3)
+ax_fit.plot(wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="vi median", zorder=3)
 ax_fit.plot(wave_np, true_np, color=COLORS["truth"], lw=1, ls="--", label="Truth", zorder=4)
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -285,7 +283,7 @@ ax_res.set_xlabel("Observed wavelength [Å]")
 ax_res.set_ylim(-4, 4)
 
 chi2 = np.sum(residuals**2) / len(residuals)
-ax_fit.set_title(f"Spectral Fit — native_geovi (reduced $\\chi^2$ = {chi2:.2f})")
+ax_fit.set_title(f"Spectral Fit — vi (reduced $\\chi^2$ = {chi2:.2f})")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -334,7 +332,7 @@ plt.show()
 # --- FIGURE 4: Corner Plot ---
 fig = safe_corner(result_geovi_param, truths=true_params_param)
 if fig is not None:
-    fig.suptitle("Parametric Posterior — native_geovi", y=1.02)
+    fig.suptitle("Parametric Posterior — vi", y=1.02)
     plt.savefig(os.path.join(FIGDIR, "fig04_corner_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
@@ -378,7 +376,7 @@ for name in spec_param.free_params:
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
 # %%
-# --- FIGURE 5: native_geovi vs NUTS ---
+# --- FIGURE 5: vi vs NUTS ---
 fig = plot_corner_comparison(
     [result_geovi_param, result_nuts_param],
     labels=["vi", "NUTS"],
@@ -387,7 +385,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle(
-        f"native_geovi ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
+        f"vi ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
         y=1.02,
     )
     plt.savefig(os.path.join(FIGDIR, "fig05_geovi_vs_nuts.png"), dpi=150, bbox_inches="tight")
@@ -405,8 +403,8 @@ for name, res, t in [
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]
-# **Part A Takeaway**: For a 7-parameter model, native_geovi and NUTS give the
-# same answer. native_geovi is an order of magnitude faster. For low-dimensional
+# **Part A Takeaway**: For a 7-parameter model, vi and NUTS give the
+# same answer. vi is an order of magnitude faster. For low-dimensional
 # problems where you want exact MCMC guarantees, NUTS works — but it doesn't
 # scale. Now let's see what happens when dimensionality explodes.
 
@@ -424,7 +422,7 @@ for name, res, t in [
 # %% [markdown]
 # This high dimensionality is exactly where standard MCMC methods like NUTS
 # break down — the curse of dimensionality means chains mix too slowly. But
-# because our entire model is differentiable, native_geovi exploits gradient
+# because our entire model is differentiable, vi exploits gradient
 # information to navigate this space efficiently.
 
 # %%
@@ -450,9 +448,8 @@ print(f"  Physical: {len([p for p in spec_stoch.free_params if 'xi' not in p])}"
 print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
 
 # %%
-# Create stochastic model with spectroscopic precomputation
+# Create the stochastic model with the spectrum grid fixed at build
 model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
-model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
 # Generate a bursty mock galaxy — supernova-feedback regime
@@ -517,7 +514,7 @@ plt.savefig(os.path.join(FIGDIR, "fig06_bursty_truth.png"), dpi=150, bbox_inches
 plt.show()
 
 # %%
-# MAP + native_geovi on the stochastic model
+# MAP + vi on the stochastic model
 forward_stoch = ForwardModel.build(sed=model_stoch)
 
 t0 = time.perf_counter()
@@ -538,7 +535,6 @@ result_geovi_stoch = forward_stoch.fit(
     method="vi",
     n_iterations=20,
     n_samples=6,
-    n_seeds=5,
     n_posterior_samples=10000,
     verbose=False,
 )
@@ -549,7 +545,7 @@ print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
 print(f"{'=' * 55}")
 print(f"  XLA compile: {t_compile_s:.1f}s (one-time, cached)")
 print(f"  MAP init:    {t_map_s:.1f}s")
-print(f"  native_geovi: {t_geovi_s:.1f}s  ← runtime per galaxy")
+print(f"  vi: {t_geovi_s:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
@@ -617,7 +613,7 @@ true_s = np.array(mock_stoch.flux_true)
 ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
 for s in spec_samples_s[:50]:
     ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="native_geovi median")
+ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -694,7 +690,7 @@ ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_mean"], color=COLORS["truth"],
 
 # Overlay each method's posterior SFH as 68% CI band
 for result, color, label in [
-    (result_geovi_stoch, COLORS["vi"], f"native_geovi ({t_geovi_s:.1f}s)"),
+    (result_geovi_stoch, COLORS["vi"], f"vi ({t_geovi_s:.1f}s)"),
     (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
 ]:
     if result.samples is not None:
@@ -714,7 +710,7 @@ ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
 ax.set_xlim(0, 13.5)
 ax.set_ylim(bottom=0.)
 ax.legend(loc="upper right")
-ax.set_title("Stochastic SFH Recovery — native_geovi vs Ray Tracing (D = 137)")
+ax.set_title("Stochastic SFH Recovery — vi vs Ray Tracing (D = 137)")
 
 # 200 Myr inset with both posteriors
 inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4])
@@ -757,18 +753,18 @@ print("\n  Summary")
 print("  " + "=" * 75)
 print(f"  {'SEDModel':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
 print("  " + "-" * 75)
-print(f"  {'Parametric':<20s} {'7':>4s}  {'native_geovi':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default")
+print(f"  {'Parametric':<20s} {'7':>4s}  {'vi':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default")
 print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard")
-print(f"  {'Stochastic':<20s} {'137':>4s}  {'native_geovi':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default")
+print(f"  {'Stochastic':<20s} {'137':>4s}  {'vi':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default")
 print(f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)")
 print("  " + "=" * 75)
 print("\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
-print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi.")
+print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with vi.")
 
 # %% [markdown]
 # ## What You Just Did
 #
-# 1. Fit a smooth 7D SFH and verified native_geovi matches NUTS.
+# 1. Fit a smooth 7D SFH and verified vi matches NUTS.
 # 2. Fit a bursty 137D SFH — something standard samplers can't handle — in seconds.
 # 3. Recovered star formation burst features from a single galaxy spectrum.
 # 4. Validated with the exact Ray Tracing Sampler (Behroozi 2025).
