@@ -69,7 +69,6 @@ ZSUN = 0.01524  # BEAGLE's solar metallicity (log Z/0.01524 in the input tables)
 MPC_CM = 3.0856775814913673e24
 AIR_VACUUM_CUTOFF_AA = 2000.0
 ID_COLUMN = "ID"
-DEFAULT_MIN_REL_ERR = 0.02
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 
 SF_NAMES = frozenset(
@@ -269,8 +268,6 @@ class FilterSpec:
         Throughput curve in Angstrom (ascending) and dimensionless transmission.
     flux_col, err_col : str, optional
         Catalog columns for fluxes [microJy] and their errors (fitting only).
-    min_rel_err : float
-        Relative error added in quadrature to the catalog error.
     """
 
     name: str
@@ -278,29 +275,30 @@ class FilterSpec:
     transmission: np.ndarray
     flux_col: str | None = None
     err_col: str | None = None
-    min_rel_err: float = DEFAULT_MIN_REL_ERR
 
 
 def _filter_digest(filters: Sequence[FilterSpec]) -> list[bytes]:
     return [
-        f.name.encode() + np.asarray(f.wl_aa, float).tobytes() + np.asarray(f.transmission, float).tobytes()
+        f.name.encode()
+        + np.asarray(f.wl_aa, float).tobytes()
+        + np.asarray(f.transmission, float).tobytes()
         for f in filters
     ]
 
 
 def _filter_config(run_name: str, filters: Sequence[FilterSpec], *, fitting: bool) -> str:
-    """Text of the ``FILTERS CONFIGURATION`` file (per-filter ``fileName`` curves)."""
+    """Text of the ``FILTERS CONFIGURATION`` file, laid out as BEAGLE's fit example.
+
+    Line 1 is the flux unit; a fit adds the ``object_ID`` line naming the catalog ID column;
+    each band then gives its curve and, for a fit, its flux and error columns.
+    """
     lines = ["units:microJy"]
     if fitting:
         lines.append(f"object_ID:colName:{ID_COLUMN}")
     for filt in filters:
         tokens = [f"name:{filt.name}", f"fileName:$BEAGLE_FILTERS/{run_name}_{filt.name}.dat"]
         if fitting and filt.flux_col and filt.err_col:
-            tokens += [
-                f"flux:colName:{filt.flux_col}",
-                f"fluxErr:colName:{filt.err_col}",
-                f"min_rel_err:{_fmt(filt.min_rel_err)}",
-            ]
+            tokens += [f"flux:colName:{filt.flux_col}", f"fluxErr:colName:{filt.err_col}"]
         lines.append(" ".join(tokens))
     return "\n".join(lines) + "\n"
 
@@ -346,7 +344,9 @@ def _table_digest(table: Table) -> bytes:
     return h.digest()
 
 
-def _run_key(body: Sequence[str], files: Sequence[str], table: Table, filters: Sequence[FilterSpec]) -> str:
+def _run_key(
+    body: Sequence[str], files: Sequence[str], table: Table, filters: Sequence[FilterSpec]
+) -> str:
     h = hashlib.sha256()
     for part in ("\n".join(body), "\n".join(sorted(files)), docker_image()):
         h.update(part.encode() + b"\0")
@@ -446,7 +446,10 @@ class MockRun:
             sfh=self.print_sfh and not self._is_ssp(),
             nebular=self.nebular,
         )
-        lines += [f"N_OBJECTS = {len(self.rows)}", "PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_new.param"]
+        lines += [
+            f"N_OBJECTS = {len(self.rows)}",
+            "PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/MCMC_new.param",
+        ]
         return lines
 
     @property
@@ -547,7 +550,9 @@ class FitRun:
         if self.redshift_column:
             dirac = f"prior:distribution:dirac prior:colName:{self.redshift_column}"
             lines.append(Param("redshift", "type:fitted", prior=dirac).render())
-        lines += _output_lines(photometry=True, spectrum=self.print_spectrum, sfh=False, nebular=self.nebular)
+        lines += _output_lines(
+            photometry=True, spectrum=self.print_spectrum, sfh=False, nebular=self.nebular
+        )
         lines.append(f"PDF SAMPLER FILE = $BEAGLE_PARAM_DIR/{self.sampler}")
         return lines
 
@@ -594,14 +599,18 @@ def materialize(run: Run, root: Path) -> None:
     for sub in ("params", "data", "filters"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     (root / "params" / f"{run.name}.param").write_text(run.param_text())
-    run.input_table().write(root / "data" / f"{run.name}_inputs.fits", format="fits", overwrite=True)
+    run.input_table().write(
+        root / "data" / f"{run.name}_inputs.fits", format="fits", overwrite=True
+    )
     if run.filters:
-        fitting = isinstance(run, FitRun)
+        fitting = run.mode == "fit"
         (root / "filters" / f"{run.name}_config.dat").write_text(
             _filter_config(run.name, run.filters, fitting=fitting)
         )
         for filt in run.filters:
-            body = np.column_stack([np.asarray(filt.wl_aa, float), np.asarray(filt.transmission, float)])
+            body = np.column_stack(
+                [np.asarray(filt.wl_aa, float), np.asarray(filt.transmission, float)]
+            )
             np.savetxt(
                 root / "filters" / f"{run.name}_{filt.name}.dat",
                 body,
@@ -660,7 +669,7 @@ def _provenance(run: Run, image: str, version: str) -> dict[str, object]:
 
 
 def _parse(run: Run, results: Path, provenance: dict[str, object]) -> ParsedRun:
-    if isinstance(run, FitRun):
+    if run.mode == "fit":
         return parse_fit_output(results, run.galaxy_ids, provenance=provenance)
     return parse_mock_output(results / f"{run.name}.fits", provenance=provenance)
 
@@ -668,9 +677,13 @@ def _parse(run: Run, results: Path, provenance: dict[str, object]) -> ParsedRun:
 def _execute(root: Path, run: Run) -> ParsedRun:
     templates = templates_dir()
     if not templates.is_dir():
-        raise FileNotFoundError(f"BEAGLE templates not found at {templates}; set BEAGLE_TEMPLATES_DIR")
+        raise FileNotFoundError(
+            f"BEAGLE templates not found at {templates}; set BEAGLE_TEMPLATES_DIR"
+        )
     if shutil.which("docker") is None:
-        raise RuntimeError("docker is not on PATH; BEAGLE runs need Docker (see require_available())")
+        raise RuntimeError(
+            "docker is not on PATH; BEAGLE runs need Docker (see require_available())"
+        )
     image = docker_image()
     materialize(run, root)
     results = root / "results" / run.name
@@ -732,7 +745,9 @@ def _status(runs: Sequence[Run]) -> int:
 def _render(runs: Sequence[Run], out: Path) -> int:
     for item in runs:
         materialize(item, out)
-        print(f"{item.name}: {len(item.input_table())} objects -> {out / 'params' / (item.name + '.param')}")
+        print(
+            f"{item.name}: {len(item.input_table())} objects -> {out / 'params' / (item.name + '.param')}"
+        )
     return 0
 
 
@@ -745,7 +760,6 @@ def _fit_capstone(*, allow_docker: bool) -> int:
         print("add --allow-docker to materialize and fit")
         return 0
     require_available()
-    materialize(item, workdir())
     parsed = run(item, allow_docker=True)
     print(f"{item.name}: posteriors for {len(parsed.posterior or {})} galaxies")
     return 0
@@ -756,11 +770,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .beagle_matrix import RUN_MATRIX, by_section
 
     parser = argparse.ArgumentParser(prog="beagle_run", description=__doc__.splitlines()[0])
-    parser.add_argument("--render-params", action="store_true", help="write parameter files, no Docker")
+    parser.add_argument(
+        "--render-params", action="store_true", help="write parameter files, no Docker"
+    )
     parser.add_argument("--out", type=Path, default=None, help="directory for --render-params")
     parser.add_argument("--run", metavar="SECTION", help="run one matrix section through Docker")
     parser.add_argument("--run-all", action="store_true", help="run every matrix section")
-    parser.add_argument("--fit-capstone", action="store_true", help="fit the four Paper I galaxies")
+    parser.add_argument(
+        "--fit-capstone", action="store_true", help="fit the four Paper I galaxies"
+    )
     parser.add_argument("--status", action="store_true", help="show which runs are cached")
     parser.add_argument("--allow-docker", action="store_true", help="allow runs through Docker")
     args = parser.parse_args(argv)
@@ -771,14 +789,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
 
-def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser, matrix, by_section) -> int:
+def _dispatch(
+    args: argparse.Namespace, parser: argparse.ArgumentParser, matrix, by_section
+) -> int:
+    from .beagle_capstone import capstone_run
+
     if args.render_params:
         out = args.out if args.out is not None else workdir()
-        return _render(matrix, out)
+        return _render([*matrix, capstone_run()], out)
     if args.fit_capstone:
         return _fit_capstone(allow_docker=args.allow_docker)
     if args.status:
-        return _status(matrix)
+        return _status([*matrix, capstone_run()])
     if args.run or args.run_all:
         if not args.allow_docker:
             print("refusing to run BEAGLE without --allow-docker", file=sys.stderr)

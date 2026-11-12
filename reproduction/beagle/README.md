@@ -14,27 +14,39 @@ are the record.
 
 ## Prerequisites
 
-- **A registered BEAGLE user.** Register individually on the BEAGLE homepage (https://www.iap.fr/beagle/),
+1. **A registered BEAGLE user.** Register individually on the BEAGLE homepage (https://www.iap.fr/beagle/),
   as section 2.3 of the BEAGLE Terms of Use requires. The repository does not contain the templates.
-- **Docker Desktop** with amd64 emulation on Apple silicon. The image is pinned to
+2. **Docker Desktop** with amd64 emulation on Apple silicon. The image is pinned to
   `beagletool/beagle:0.29.2` and runs under `--platform linux/amd64`:
 
   ```bash
   docker pull --platform linux/amd64 beagletool/beagle:0.29.2
   ```
 
-- **A BEAGLE working directory.** Clone the public `BEAGLE-general` repository, which holds `params/`,
+3. **A BEAGLE working directory.** Clone the public `BEAGLE-general` repository, which holds `params/`,
   `filters/`, `dust/`, `data/`, `results/` and `Docker_env.list`, then point tengri at it:
 
   ```bash
   export BEAGLE_WORKDIR=~/beagle/BEAGLE-general
   ```
 
-- **The templates**, fetched by you with your own credentials into `~/beagle/files/templates`:
-  `bc03`, `cb_June16/mup100`, `ineb_June16/mup100` with `n2/C100`, and `AGN_NLR`. Keep the
-  credentials in your shell session only; do not write them into a file in this repository.
-- **Optional, for section 15b.** `export ART_SEDFITTING_DIR=...` names a local checkout of
-  `camipacifici/art_sedfitting`, which holds the Paper I summaries.
+4. **The templates**, fetched by you with your own credentials into `~/beagle/files/templates`
+   (the default `BEAGLE_TEMPLATES_DIR`, `<workdir>/../files/templates`):
+   - `bc03/`.
+   - `cb_June16/mup100/`, with the `.ised` and `.4color` copies that the shipped
+     `cp_stellar_emission.sh` writes (run it with `BEAGLE_TEMPLATES` exported).
+   - `ineb_June16/mup100/`: the list file `cb2016_n2_mup100_N015_O01_deplO70_C100_June16`, the line
+     list `cb2016_Jan16_line_wavelengths_may2017.dat`, and the `.ised` and `.4color` copies from
+     `cp_stellar_emission.sh`. Inside `mup100/`, `ln -s n2/C100 ineb_C100_June16` is required,
+     because BEAGLE opens `<dir of list>/ineb_C100_June16/<name>.ineb`. `TEMPLATES NEBULAR` names
+     the list copy in `mup100/`.
+   - `ineb_June16/mup100/n2/C100/`: 300 `.ineb` files of 12,119,336 bytes each. Check the sizes:
+     the server truncates files silently.
+   - `AGN_NLR/`.
+
+   Keep the credentials in your shell session only; do not write them into a file in this repository.
+5. **Optional, for section 15b.** `export ART_SEDFITTING_DIR=...` names a local checkout of
+   `camipacifici/art_sedfitting`, which holds the Paper I summaries.
 
 ## How the comparison is produced
 
@@ -45,7 +57,7 @@ invokes the containerized binary, parses the FITS output into tengri's units and
 python -m reproduction.beagle._drivers.beagle_run --render-params                  # write every parameter file, no Docker
 python -m reproduction.beagle._drivers.beagle_run --status                         # list which sections are cached
 python -m reproduction.beagle._drivers.beagle_run --run s3_fiducial --allow-docker # run one section
-python -m reproduction.beagle._drivers.beagle_run --run-all --allow-docker         # run the 18 matrix sections once
+python -m reproduction.beagle._drivers.beagle_run --run-all --allow-docker         # run the 20 matrix sections once
 python -m reproduction.beagle._drivers.beagle_run --fit-capstone --allow-docker    # the four Paper I fits
 ```
 
