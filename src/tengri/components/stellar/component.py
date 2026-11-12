@@ -149,11 +149,6 @@ from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
 
-#: Exact power of two that splits ``total_mass * L_sun`` (above float32's maximum for a
-#: dwarf) into a representable factor and a restore applied after the SSP contraction.
-#: Scaling by a power of two is exact, so float64 results are bit-identical.
-_MASS_SCALE_SPLIT = 2.0**-64
-
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"``: log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
@@ -3615,41 +3610,20 @@ class StellarSEDComponent:
         lnu_age = total_mass * ssp_flux_at_age
         sed_intrinsic = lnu_age.sum(axis=0)
         # Grouped age mixture (an attenuator with ``age_mixture='grouped'``): the
-        # per-interval spectra ``L_j = sum_a F_j(a) lnu_age(a)`` folded into the
-        # joint-weight contraction, so no (n_age, n_wave) cube is formed for them
-        # (nor its reverse-mode cotangent). The contraction runs over the long
-        # (met, age) axes; the interval axis is a free output axis. The stellar
-        # SED is then their sum, which leaves the per-age cube to the consumers
-        # that ask for it (``lnu_age`` below; pruned by XLA when none does).
+        # per-interval spectra ``L_j = sum_a F_j(a) lnu_age(a)``, contracted from
+        # the per-Msun age cube ``ssp_flux_at_age`` (n_interval x n_age x n_wave).
+        # Folding the interval fractions into the (met, age) contraction instead
+        # repeats that contraction once per interval, n_interval x n_met x n_age x
+        # n_wave: twice the per_node arithmetic, which made a single-galaxy
+        # spectrum gradient ~30 % slower than per_node. Same factorization as
+        # ``lnu_age`` (``total_mass`` times the erg-scaled per-Msun cube), so no
+        # new float32 intermediate. The stellar SED is the sum of the intervals.
         lnu_interval = None
         if self.config.publish_interval_spectra and younger_fraction is not None:
             from tengri.components.dust._age_mixture import interval_fractions
 
             _fractions = interval_fractions(younger_fraction)  # (n_interval, n_age)
-            if _csp_cube_is_4d:
-                from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
-
-                lnu_interval = (
-                    total_mass
-                    * (LSUN_ERG_PER_S * _MASS_SCALE_SPLIT)
-                    * collapse_alpha_axis(
-                        jnp.einsum(
-                            "jma,mkaw->jkw",
-                            _fractions[:, None, :] * joint_weights[None, :, :],
-                            ssp_flux_for_csp,
-                        ),
-                        _alpha_ia,
-                        _alpha_fa,
-                        axis=1,
-                    )
-                    / _MASS_SCALE_SPLIT
-                )
-            else:
-                lnu_interval = total_mass * jnp.einsum(
-                    "jma,maw->jw",
-                    _fractions[:, None, :] * joint_weights[None, :, :],
-                    ssp_flux_for_csp * LSUN_ERG_PER_S,
-                )
+            lnu_interval = total_mass * jnp.einsum("ja,aw->jw", _fractions, ssp_flux_at_age)
             sed_intrinsic = jnp.sum(lnu_interval, axis=0)
 
         # Log10 of the mass scale ``total_mass x L_sun``, folded into the log-domain
