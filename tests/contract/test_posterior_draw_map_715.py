@@ -16,6 +16,7 @@ from __future__ import annotations
 import warnings
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from jax._src import test_util as jtu
@@ -51,6 +52,31 @@ def _assert_close(actual, expected):
 def model(synthetic_ssp_wide_physical):
     return SEDModel.build(
         ssp_data=synthetic_ssp_wide_physical,
+        observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
+        sfh={"type": "dpl", "all_params": FREE, "log_total_mass": Uniform(8.0, 12.0)},
+        neb={"type": "none"},
+        redshift=Fixed(0.1),
+    )
+
+
+@pytest.fixture(scope="module")
+def line_model(synthetic_ssp_wide_physical):
+    """Model whose SSP has an H-alpha bump strongest in the youngest ages.
+
+    The plain synthetic SSP is smooth, so its equivalent widths are the same for every draw
+    and a percentile cannot see a dropped draw. The bump makes the width depend on the
+    age mix that each draw's SFH selects, so lo < med < hi.
+    """
+    ssp = synthetic_ssp_wide_physical
+    wave = np.asarray(ssp.ssp_wave)
+    ages = np.asarray(ssp.ssp_lg_age_gyr)
+    bump = np.exp(-0.5 * ((wave - LINES["Halpha"]) / 5.0) ** 2)
+    young = (ages.max() - ages) / (ages.max() - ages.min())
+    flux = np.asarray(ssp.ssp_flux) * (
+        1.0 + 0.5 * bump[None, None, :] * (1.0 + 4.0 * young)[None, :, None]
+    )
+    return SEDModel.build(
+        ssp_data=ssp._replace(ssp_flux=jnp.asarray(flux)),
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
         sfh={"type": "dpl", "all_params": FREE, "log_total_mass": Uniform(8.0, 12.0)},
         neb={"type": "none"},
@@ -134,16 +160,17 @@ def test_sed_components_match_the_per_draw_loop(model):
     assert ref["sed_total"].shape == (N_DRAWS, np.asarray(wave).shape[0])
 
 
-def test_equivalent_widths_match_the_per_draw_loop(model):
-    post = _posterior(model, seed=0)
+def test_equivalent_widths_match_the_per_draw_loop(line_model):
+    post = _posterior(line_model, seed=0)
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
         out = post.equivalent_widths(window_aa=EW_WINDOW_AA, continuum_width_aa=EW_CONTINUUM_AA)
     assert _no_eager_fallback(record)
 
-    ew = _loop_equivalent_widths(model, post.samples)
+    ew = _loop_equivalent_widths(line_model, post.samples)
     for j, name in enumerate(LINES):
         lo, med, hi = np.percentile(ew[:, j], [16.0, 50.0, 84.0])
+        assert lo < med < hi, f"{name} width does not vary across draws"
         _assert_close(out[name], (med, lo, hi))
 
 
@@ -229,16 +256,11 @@ def test_sed_components_float32_are_finite_nonzero_and_match_float64(model):
         _assert_close_f32(out[key], ref[key])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="float32 overflow in analysis/diagnostics/spectral.py equivalent_width; "
-    "fixed on fix/float32-equivalent-width (4d328fa9a), remove this marker when it lands",
-)
-def test_equivalent_widths_float32_are_finite_nonzero_and_match_float64(model):
-    ref = _posterior(model, seed=0).equivalent_widths(
+def test_equivalent_widths_float32_are_finite_nonzero_and_match_float64(line_model):
+    ref = _posterior(line_model, seed=0).equivalent_widths(
         window_aa=EW_WINDOW_AA, continuum_width_aa=EW_CONTINUUM_AA
     )
-    post32 = _posterior(model, seed=0)
+    post32 = _posterior(line_model, seed=0)
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
         with jax.enable_x64(False):
