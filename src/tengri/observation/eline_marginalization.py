@@ -109,10 +109,10 @@ def _build_eline_design_matrix_per_line_jitted(
 def build_eline_design_matrix(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
-    spectral_resolution: float,
+    spectral_resolution: float | jnp.ndarray,
     redshift: float,
-    eline_sigma_kms: float = 0.0,
-    eline_delta_v_kms: float = 0.0,
+    eline_sigma_kms: float | jnp.ndarray = 0.0,
+    eline_delta_v_kms: float | jnp.ndarray = 0.0,
 ) -> jnp.ndarray:
     """Build the (n_pix, n_lines) Gaussian design matrix.
 

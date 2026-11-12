@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -38,6 +40,25 @@ from tengri.observation.constants import ELINE_BROAD_RETIRED, ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
 from tengri.parameters.priors import Distribution, Gaussian
 from tengri.utils.wave_unit import check_wavelength_plausible, to_angstrom
+
+if TYPE_CHECKING:
+    from tengri.observation.line_list import LineList
+
+
+#: Frozen form of ``eline_kinematics``: ``(group, lines, add)`` per group, hashable.
+KinematicGroups = tuple[tuple[str, tuple[str, ...], bool], ...]
+
+
+def _kinematics_as_mapping(
+    kinematics: Mapping[str, Mapping] | KinematicGroups,
+) -> dict[str, dict]:
+    """Return ``eline_kinematics`` as ``{group: {"lines": [...], "add": bool}}``.
+
+    Accepts the user's mapping or the frozen tuple :class:`Spectroscopy` stores.
+    """
+    if isinstance(kinematics, tuple):
+        return {g: {"lines": list(lines), "add": add} for g, lines, add in kinematics}
+    return {str(g): dict(spec) for g, spec in kinematics.items()}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -264,7 +285,7 @@ class Spectroscopy:
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
     #: ``{group: {"lines": [...], "add": bool}}``; stored as a hashable tuple.
-    eline_kinematics: object | None = None
+    eline_kinematics: Mapping[str, Mapping] | KinematicGroups | None = None
     nebular_lines: bool = True
     covariance: jnp.ndarray | BandedMatrix | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
@@ -344,18 +365,9 @@ class Spectroscopy:
         if self.eline_broad:
             raise ValueError(ELINE_BROAD_RETIRED)
         if self.eline_kinematics is not None:
-            groups = (
-                dict(self.eline_kinematics)
-                if not isinstance(self.eline_kinematics, tuple)
-                else {g: {"lines": lines, "add": add} for g, lines, add in self.eline_kinematics}
-            )
+            groups = _kinematics_as_mapping(self.eline_kinematics)
             # Validate against the catalog now, so a bad group fails at construction.
-            base = self.eline_catalog
-            if base is None:
-                from tengri.observation.line_list import LineList
-
-                base = LineList.default_13()
-            base.with_kinematics(groups)
+            self._base_catalog().with_kinematics(groups)
             has_added = any(spec.get("add", False) for spec in groups.values())
             if has_added and self.eline_prior_type != "flat":
                 raise ValueError(
@@ -778,14 +790,22 @@ class Spectroscopy:
         automatically returns the default 13-line catalog.
 
         """
+        catalog = self._base_catalog()
+        if self.eline_kinematics:
+            return catalog.with_kinematics(_kinematics_as_mapping(self.eline_kinematics))
+        return catalog
+
+    def _base_catalog(self) -> LineList:
+        """The configured catalog before kinematic groups, or ``LineList.default_13()``."""
         from tengri.observation.line_list import LineList
 
-        catalog = self.eline_catalog if self.eline_catalog is not None else LineList.default_13()
-        if self.eline_kinematics:
-            return catalog.with_kinematics(
-                {g: {"lines": lines, "add": add} for g, lines, add in self.eline_kinematics}
+        if self.eline_catalog is None:
+            return LineList.default_13()
+        if not isinstance(self.eline_catalog, LineList):
+            raise TypeError(
+                f"eline_catalog must be a LineList, got {type(self.eline_catalog).__name__}"
             )
-        return catalog
+        return self.eline_catalog
 
     # ── Parameter helpers ─────────────────────────────────────────
 
