@@ -2665,6 +2665,47 @@ def _fold_igm_into_subbands(
 #: component integrates the CSP with cloud-in-cell age weights for every
 #: configuration, so none of these reaches the SED. Kept so existing calls keep
 #: working; non-default values warn and are slated for removal in v1.0.
+# Largest admissible log10(age / Gyr) on an SSP age axis (#3337). The age of the
+# universe is 13.8 Gyr (log10 = 1.14); 1.2 (15.8 Gyr) leaves a margin. An axis
+# that also starts above 1 Gyr (log10 > 0) is log10(yr) read as log10(Gyr). The
+# youngest-age test keeps the shipped BPASS grid (oldest template 100 Gyr, by
+# design) admissible.
+_SSP_MAX_LG_AGE_GYR = 1.2
+
+
+def _validate_ssp_age_axis_units(ssp_lg_age_gyr) -> None:
+    """Refuse an SSP age axis that is plainly log10(yr), not log10(Gyr) (#3337).
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Template ages as log10(age / Gyr).
+
+    Raises
+    ------
+    ValueError
+        If the axis looks like log10(yr).
+
+    Notes
+    -----
+    Refused when the oldest finite template is older than
+    ``_SSP_MAX_LG_AGE_GYR`` and the youngest is above 1 Gyr. Real log10(Gyr)
+    grids start far below 1 Gyr, so both conditions hold only for log10(yr).
+    """
+    lg_age = np.asarray(ssp_lg_age_gyr, dtype=np.float64)
+    finite = lg_age[np.isfinite(lg_age)]
+    if finite.size == 0:
+        return
+    if float(finite.max()) <= _SSP_MAX_LG_AGE_GYR or float(finite.min()) <= 0.0:
+        return
+    raise ValueError(
+        f"SSP age axis reaches log10(age) = {float(finite.max()):.3f}, i.e. "
+        f"{10.0 ** float(finite.max()):.3g} Gyr, older than the universe. The axis "
+        f"looks like log10(yr), not log10(Gyr): ssp_lg_age_gyr must be log10(age / Gyr) "
+        f"(SEDModel adds 9.0 to get log10(yr)). Subtract 9 from log10(yr) ages."
+    )
+
+
 _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
@@ -4278,6 +4319,7 @@ class SEDModel:
         self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
+        _validate_ssp_age_axis_units(ssp_data.ssp_lg_age_gyr)
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
