@@ -42,7 +42,9 @@ def test_mcmc_auto_pick_routes_by_latent_dimension(monkeypatch):
     high-latent spec to NUTS and fails the first assertion.
     """
     from tengri.inference import _registration as reg
-    from tengri.inference.fitter import _MCMC_AUTO_D_THRESHOLD
+    from tengri.parameters.defaults import get_mcmc_auto_d
+
+    threshold = get_mcmc_auto_d()
 
     calls: list[str] = []
     monkeypatch.setattr(reg, "_ctx_run_nuts", lambda context, **kw: calls.append("nuts"))
@@ -53,17 +55,17 @@ def test_mcmc_auto_pick_routes_by_latent_dimension(monkeypatch):
 
     # The #1408 configuration: 3 named parameters, but a latent field far
     # above the threshold. n_free says "low-D"; the truth is high-D.
-    ctx_field = _context(n_free=3, n_latent=_MCMC_AUTO_D_THRESHOLD + 500)
+    ctx_field = _context(n_free=3, n_latent=threshold + 500)
     reg._mcmc_auto_pick(ctx_field, key=None)
     assert calls == ["raytrace"], (
-        f"auto-pick routed a {_MCMC_AUTO_D_THRESHOLD + 500}-latent-dimension "
+        f"auto-pick routed a {threshold + 500}-latent-dimension "
         f"model to {calls}; it must count n_latent, not n_free (#1408)"
     )
 
     # Control: a genuinely low-D spec still gets NUTS. This keeps the first
     # assertion honest — a dispatcher hardcoded to raytrace would fail here.
     calls.clear()
-    ctx_low = _context(n_free=3, n_latent=_MCMC_AUTO_D_THRESHOLD)
+    ctx_low = _context(n_free=3, n_latent=threshold)
     reg._mcmc_auto_pick(ctx_low, key=None)
     assert calls == ["nuts"], f"low-D control routed to {calls}, expected NUTS"
 

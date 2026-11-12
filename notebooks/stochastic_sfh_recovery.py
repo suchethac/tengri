@@ -573,9 +573,9 @@ plt.show()
 # model has 25 free parameters, so a fixed-length HMC trajectory with a dense
 # metric keeps the cost predictable. The posterior is wide and strongly correlated;
 # the non-centered field rotates with $\tau$, so the curvature is position-dependent.
-# This is a single chain, so the split R-hat printed below (about 1.08) is above
-# the 1.01 convergence bar: read the bands as the shape of the recovered history,
-# not as calibrated credible intervals.
+# This is a single chain, and its split R-hat printed below stays above the 1.01
+# convergence bar: read the bands as the shape of the recovered history, not as
+# calibrated credible intervals.
 
 # %%
 # Trajectory length sets the cost; this demonstration budget runs in tens of minutes.
@@ -618,7 +618,7 @@ plt.show()
 # narrow: that is the emission lines doing their work. Between 0.1 and
 # 1 Gyr the band is wide, yet the truth still leaves it at the 0.3 Gyr trough
 # and the 0.6 Gyr peak, so the posterior smooths over the bursts rather than
-# resolving them. The chain's split R-hat of about 1.08 is a further reason to read
+# resolving them. The chain's split R-hat above 1.01 is a further reason to read
 # the band as shape, not as a calibrated interval.
 #
 # That is the concrete reason for the advice in the next section: quote integrated
