@@ -167,10 +167,11 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "(longward of 2000 A), so the six labels beyond 100 micron (121.769, 145.495, "
         "157.636, 205.283, 370, 609 micron) are air labels too; Byler+2017 "
         "(arXiv:1611.08305) convert Cloudy's air labels with Morton 1991; "
-        "scripts/convert_cue_weights.py. The blend labels 7323, 7332 and 7332.15 name the "
+        "scripts/convert_cue_weights.py. The blend labels 7323 and 7332 name the "
         "[O II] 7320 and 7330 blends and are not air wavelengths (the air blends sit near "
         "7320.5 and 7330.2): they take the vacuum blend centers of observation/line_list.py "
-        "(7321.47, 7332.21) instead of the converted label (#3113)",
+        "(7321.47, 7332.21) instead of the converted label (#3113); 7332.15 is "
+        "[Ar IV] and an ordinary air label",
         "tengri.components.nebular.cue._load_cue_weights_eager",
     ),
     WavelengthSource(

@@ -2682,20 +2682,18 @@ class Fitter:
 
         obs = model.observation
         _spec_config = obs.spectroscopy if obs is not None else None
-        # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
-        if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
-            spec_has_broad = getattr(self.spec, "eline_broad", False)
-            if not spec_has_broad:
-                import warnings
-
-                warnings.warn(
-                    "Spectroscopy has eline_broad=True but Parameters was built with "
-                    "eline_broad=False. The broad-component velocity dispersion parameter "
-                    "'eline_broad_sigma_kms' will not be sampled. "
-                    "Pass eline_broad=True to Parameters() to fix this.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        # The broad component is not evaluated by any emission-line likelihood
+        # (no broad design-matrix columns are built), so its parameter would be
+        # sampled and change nothing (#3332). Refuse rather than run inert.
+        spec_broad = bool(getattr(_spec_config, "eline_broad", False))
+        params_broad = bool(getattr(self.spec, "eline_broad", False))
+        if spec_broad or params_broad:
+            raise ValueError(
+                "The broad emission-line component (eline_broad=True) is not implemented: "
+                "no likelihood builds its design-matrix columns, so 'eline_broad_sigma_kms' "
+                "would be sampled and change nothing. Set eline_broad=False on both "
+                "Spectroscopy and Parameters (tracked in #3332)."
+            )
 
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""

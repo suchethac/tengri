@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Rounded line labels land on the line list's vacuum centers at ingestion (#3113).
 
-Cloudy's [O II] 7320/7330 blend labels (7323, 7332, 7332.15) are names, not air
+Cloudy's [O II] 7320/7330 blend labels (7323, 7332) are names, not air
 wavelengths, and PyNeb/MAPPINGS labels (``H1r_6563A``) round the air wavelength
 to the nearest Angstrom. Converting either as an exact air wavelength left the
 rendered lines 0.2 to 3.55 Angstrom red or blue of the vacuum lines of
@@ -49,7 +49,6 @@ _CATALOG = dict(zip(_LINES.names, np.asarray(_LINES.wavelengths, dtype=float)))
 _CUE_COUNTERPARTS = {
     7323.0: "OII_7320",
     7332.0: "OII_7330",
-    7332.15: "OII_7330",
     6562.80: "Halpha",
     4861.32: "Hbeta",
     5006.84: "OIII_5007",
@@ -147,9 +146,28 @@ def test_cue_labels_land_on_the_line_list(key, attr, n_min):
 
 def test_cloudy_blend_labels_serve_the_synthesizer_path_too():
     """The Synthesizer NLR loader ingests through this function (grid not in the repo)."""
-    out = cloudy_labels_to_vacuum(np.array([7323.0, 7332.0, 7332.15, 6562.80]))
-    _assert_on_catalog(out, ["OII_7320", "OII_7330", "OII_7330", "Halpha"], "synthesizer")
+    out = cloudy_labels_to_vacuum(np.array([7323.0, 7332.0, 6562.80]))
+    _assert_on_catalog(out, ["OII_7320", "OII_7330", "Halpha"], "synthesizer")
     assert set(CLOUDY_BLEND_LABEL_LINES.values()) == {"OII_7320", "OII_7330"}
+
+
+@requires_cue_weights
+def test_ar_iv_7332_is_not_the_oii_blend():
+    """Cloudy's ``Ar 4 7332.15A`` is [Ar IV], an air wavelength, not the [O II] 7330 blend.
+
+    Mapping it onto the blend center put two Cue lines on one wavelength (7332.21) and
+    moved [Ar IV] 1.96 Angstrom blue; the TF crossval matched the blend's luminosity to it.
+    Expected vacuum value: Morton (2000) air-to-vacuum of 7332.15, 7334.17 Angstrom.
+    """
+    from tengri.components.nebular.cue import load_cue_weights
+
+    names = np.load(CUE_WEIGHTS)["sorted_line_name"]
+    raw = np.asarray(np.load(CUE_WEIGHTS)["sorted_line_wavelength"], dtype=float)
+    assert str(names[raw == 7332.15][0]).startswith("Ar 4")
+    out = cloudy_labels_to_vacuum(np.array([7332.15]))
+    np.testing.assert_allclose(out, [7334.17], atol=0.01)
+    rendered = np.asarray(load_cue_weights(str(CUE_WEIGHTS)).sorted_line_wav, dtype=float)
+    assert np.unique(rendered).size == rendered.size
 
 
 def _sweep_flury(grid_waves, group):
