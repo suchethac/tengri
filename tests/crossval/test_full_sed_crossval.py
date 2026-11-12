@@ -68,16 +68,21 @@ _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 #: Speed of light [Angstrom / s], for the L_nu integrations below.
 _C_AA = 2.99792458e18
 
-#: pCIGALE 2025.1 ``skirtor2016`` + ``dustatt_calzleit`` quantities for the generator's
-#: ``skirtor_type1`` case (i=30, oa=40, t=3, R=20, fracAGN=0.30, ``disk_type=1``), per
-#: Msun formed, read off ``sed.info`` after running the module on that case.
+#: pCIGALE 2025.1 ``skirtor2016`` + ``dustatt_calzleit`` quantities for the case
+#: ``skirtor_type1`` of ``scripts/generate_external_sed_reference.py`` (i=30, oa=40, t=3,
+#: R=20, fracAGN=0.30, ``disk_type=0``), per Msun formed, read off ``sed.info`` after
+#: running that script's ``_cigale_build_skirtor`` on the case. They are tied to the
+#: stored reference by ``test_tengri_vs_cigale_skirtor_shape`` (absolute V and NIR);
+#: re-derive them whenever the generator or the npz changes.
 #: ``dust.luminosity``, the stellar energy the attenuation absorbs [W]:
 _CIGALE_HOST_DUST_LUMINOSITY_W = 1.0927716717125123e27
+#: ``agn_power`` (torus + polar dust) = fracAGN / (1 - fracAGN) * dust.luminosity [W]:
+_CIGALE_AGN_POWER_W = 4.683307164482196e26
 #: ``agn.accretion_power`` / ``agn_power``: the sphere-integrated intrinsic disc power
 #: over the torus+polar dust power, = 0.493 * lumin_intrin_disk (see the mapping test).
-_CIGALE_ACCRETION_TO_AGN_POWER = 7.683454732571652e26 / 4.683307164482196e26
+_CIGALE_ACCRETION_TO_AGN_POWER = 7.446550054995232e26 / _CIGALE_AGN_POWER_W
 #: ``agn.disk_luminosity`` / ``agn_power`` (disc over torus+polar dust at i=30).
-_CIGALE_DISC_TO_DUST_RATIO = 2.6045
+_CIGALE_DISC_TO_DUST_RATIO = 1.1378382579751423e27 / _CIGALE_AGN_POWER_W
 
 pytestmark = pytest.mark.crossval
 
@@ -2643,10 +2648,11 @@ class TestCIGALESKIRTOR:
         constants measured on the generator's case, so no tengri host enters. The test
         also checks that this mapping reproduces pCIGALE's sightline AGN bolometric.
 
-        Remaining, documented differences: pCIGALE reddens the type-1 disc by
-        E(B-V) = 0.03 (SMC) and adds that energy as polar dust (100 K, far IR), and the
-        stored pCIGALE reference uses its default Schartmann (2005) disc
-        (``disk_type=1``) where tengri emits the SKIRTOR template disc.
+        The pCIGALE reference is generated with ``disk_type=0``, SKIRTOR's own disc, the
+        one tengri emits. The AGN-only absolute V and 1.0-1.2 um levels are compared too,
+        which ties the pinned constants to the stored reference. Remaining difference:
+        pCIGALE reddens the type-1 disc by E(B-V) = 0.03 (SMC) and re-emits that energy
+        as polar dust (100 K, far IR), which tengri does not carry.
         """
         k_cig = "cigale_agn_skirtor_type1"
         k_cig_noagn = "cigale_agn_skirtor_type1_noagn"
@@ -2675,6 +2681,7 @@ class TestCIGALESKIRTOR:
 
         frac_agn = 0.30
         agn_power_w = frac_agn / (1.0 - frac_agn) * _CIGALE_HOST_DUST_LUMINOSITY_W
+        assert agn_power_w == pytest.approx(_CIGALE_AGN_POWER_W, rel=1e-12)
         p_acc_w = _CIGALE_ACCRETION_TO_AGN_POWER * agn_power_w
         agn_log_lbol = float(np.log10(p_acc_w / (L_SUN * 1.0e-7)))
 
@@ -2700,6 +2707,11 @@ class TestCIGALESKIRTOR:
         bol_tengri_w = float(_trapezoid(agn_total[order], nu[order])) * 1.0e-7
         bol_cig_w = (1.0 + _CIGALE_DISC_TO_DUST_RATIO) * agn_power_w
         bol_ratio = bol_tengri_w / bol_cig_w
+        # Bound 0.90-1.10. It is not a back-solved agreement: the two codes
+        # differ structurally. pCIGALE reddens the type-1 disc by E(B-V) = 0.03 (SMC), so
+        # its disc is lower, and re-emits the removed energy as polar dust inside
+        # ``agn_power``; tengri's template disc is unreddened and carries no polar dust.
+        # Measured at i=30: disc 1.192, dust 0.777 (of torus + polar), total 1.071.
         assert 0.90 <= bol_ratio <= 1.10, (
             f"tengri/pCIGALE sightline AGN bolometric at i=30 = {bol_ratio:.3f} "
             "(outside 0.90-1.10): the agn_log_lbol <-> accretion_power mapping is broken."
@@ -2708,6 +2720,14 @@ class TestCIGALESKIRTOR:
         nir_t = (wave_aa > 10000.0) & (wave_aa < 12000.0)
         v_t = (wave_aa > 5400.0) & (wave_aa < 5600.0)
         ratio_tengri = float(np.nanmean(agn_total[nir_t]) / np.nanmean(agn_total[v_t]))
+
+        # Absolute AGN-only levels at the mapped normalization, same tolerance as the shape.
+        abs_v = float(np.nanmean(agn_total[v_t]) / np.nanmean(excess_cig[v_mask]))
+        abs_nir = float(np.nanmean(agn_total[nir_t]) / np.nanmean(excess_cig[nir_mask]))
+        assert 0.80 <= abs_v <= 1.20 and 0.80 <= abs_nir <= 1.20, (
+            f"tengri/pCIGALE absolute AGN-only level: V {abs_v:.3f}, 1.0-1.2 um {abs_nir:.3f} "
+            "(outside ±20%): the pinned pCIGALE constants no longer match the reference."
+        )
 
         ratio = ratio_tengri / max(ratio_cig, 1e-40)
         assert 0.80 <= ratio <= 1.20, (
