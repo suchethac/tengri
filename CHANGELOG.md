@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(forward): an SSP age axis in log10(yr) is refused at model build, and the inference fixture uses log10(Gyr) ages (#3337). `SEDModel` read `ssp_lg_age_gyr` as log10(Gyr) and added 9.0, so ages passed as log10(yr) (6 to 10.1) became 1e15 yr. Every history younger than 1 Gyr then fell in no SSP bin, and the photometry log posterior was NaN below age_frac 0.0804 on the fixture. The build now raises `ValueError` when the oldest template is older than 15.8 Gyr and the youngest is above 1 Gyr. Eleven test fixtures that used log10(yr) ages are corrected to log10(Gyr).
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.

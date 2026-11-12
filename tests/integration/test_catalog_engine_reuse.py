@@ -36,7 +36,7 @@ def base_ssp_data():
     return SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
         ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
 
@@ -70,7 +70,7 @@ def _create_identical_ssp() -> SSPData:
     return SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
         ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
 
@@ -278,7 +278,7 @@ class TestCatalogEngineReuse:
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
             ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64) * 1.1,
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )  # Different content
 
