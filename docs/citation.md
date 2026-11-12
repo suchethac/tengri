@@ -65,6 +65,10 @@ the forward model, and listed oldest first within each group.
 - Pareto-smoothed importance sampling: stabilizes the importance weights and
   checks their reliability with the Pareto k diagnostic. Vehtari et al. (2024),
   [arXiv:1507.02646](https://arxiv.org/abs/1507.02646).
+- Predictive model comparison by WAIC and Pareto-smoothed leave-one-out
+  cross-validation, with the paired standard error of an elpd difference.
+  Vehtari et al. (2017),
+  [doi:10.1007/s11222-016-9696-4](https://doi.org/10.1007/s11222-016-9696-4).
 - The Barker proposal: gradient-based MCMC robust to a step size that is
   wrong for one direction's scale. Livingstone & Zanella (2022),
   [arXiv:1908.11812](https://arxiv.org/abs/1908.11812).
