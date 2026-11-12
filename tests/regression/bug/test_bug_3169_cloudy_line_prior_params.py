@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression for #3169: the Cloudy line prior must use the model's own met_logzsol and neb_logU.
 
 A model that fixes them hands their fixed values to the prior. A model that carries neither
