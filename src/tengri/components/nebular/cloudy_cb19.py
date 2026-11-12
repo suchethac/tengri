@@ -158,7 +158,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -168,10 +168,12 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _qh_bilinear,
     apply_lya_escape,
     compute_qh,
@@ -749,7 +751,7 @@ _compute_log_qh_grid = jax.vmap(
 # ── Main backend class ────────────────────────────────────────────
 
 
-class CB19Backend:
+class CB19Backend(NebularBackendDefaults):
     """CB_19 CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CB_19 CLOUDY photoionization grid (Martinez-Paredes et al.
@@ -817,6 +819,20 @@ class CB19Backend:
 
     """
 
+    config_name: ClassVar[str] = "cb19"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
+
     name = "cb19_grid"
     has_free_params = True
 
@@ -831,6 +847,36 @@ class CB19Backend:
     #: exactly this: still has the identity value rather than an
     #: ``AttributeError``. 0.0 means "table already in photons/s".
     _log_qh_scale: float = 0.0
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CB19 backend that a model spec selects, and check its free parameters.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``nebular_cb19_grid_path`` and ``free_params``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CB19Backend
+            The backend instance.
+
+        Raises
+        ------
+        CB19DegenerateGridError
+            If the grid is the flat placeholder and a nebular parameter is free.
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_cb19_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_cb19_grid_path
+        backend = cls(**kwargs)
+        # The grid's own axes decide which nebular parameters can move the prediction.
+        # Refuse at construction rather than at the end of a fit (#2181).
+        check_cb19_free_params(backend.grid, spec.free_params, grid_path=backend.grid_path)
+        return backend
 
     def __init__(
         self,

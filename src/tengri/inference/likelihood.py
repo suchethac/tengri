@@ -249,6 +249,8 @@ def build_base_likelihood(context: InferenceContext):
             )
 
     if context.calibration_marginalize and context.eline_marginalize:
+        if context.eline_prior_type == "cloudy":
+            _require_cloudy_prior_params(context)
         wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
             raise ValueError(
@@ -381,6 +383,7 @@ def build_base_likelihood(context: InferenceContext):
                 channel="spec_fnu",
             )
         elif context.eline_prior_type == "cloudy":
+            _require_cloudy_prior_params(context)
             eline_lk = CloudyELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
@@ -660,6 +663,36 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
         eline_delta_v_kms=delta_v,
     )
     return apply_doublet_constraints(G, constraint_matrix)
+
+
+_CLOUDY_PRIOR_PARAMS = ("met_logzsol", "neb_logU")
+
+
+def _require_cloudy_prior_params(context: InferenceContext) -> None:
+    """Refuse a Cloudy line prior on a model that does not declare its metallicity and log U.
+
+    The prior evaluates the line ratios at ``met_logzsol`` and ``neb_logU`` read from the
+    model's parameters (fixed values included). A model without them (a ramp, two-step or
+    chemical-evolution metallicity, or a nebular backend with no ionization parameter)
+    would otherwise be priored at silent literals (#3169).
+
+    Raises
+    ------
+    ValueError
+        If the model's parameter spec does not declare every name in
+        ``_CLOUDY_PRIOR_PARAMS``.
+    """
+    declared = set(context.spec.all_params)
+    missing = [name for name in _CLOUDY_PRIOR_PARAMS if name not in declared]
+    if missing:
+        raise ValueError(
+            'eline_prior_type="cloudy" evaluates the line ratios at met_logzsol and neb_logU, '
+            f"and this model declares no {' or '.join(missing)}. A metallicity mode that "
+            "derives or splits Z (ramp, two_step, chem_evol) declares no met_logzsol, and a "
+            "nebular backend without an ionization parameter declares no neb_logU. Use "
+            'eline_prior_type="flat" for this model, or declare the parameter (a Fixed value '
+            "is enough)."
+        )
 
 
 def _model_line_match(context: InferenceContext):

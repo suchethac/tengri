@@ -20,7 +20,7 @@
 # Fit an SDSS-like optical spectrum alone to constrain stellar age and metallicity. You'll see what spectroscopy constrains sharply (age, metallicity via absorption lines) and what stays loose (absolute dust optical depth).
 #
 # ## What you need
-# An SSP grid at R ≳ 2000, an observed optical spectrum (for example, 3800–9200 Å), and a spectroscopic approximation (SpectrumPrecomp) for fast forward passes.
+# An SSP grid at R ≳ 2000, an observed optical spectrum (for example, 3800–9200 Å). The fit uses the exact flux-conserving spectrum: at 260 pixels each pixel spans several resolution elements, so the model is integrated over every pixel rather than sampled at its center.
 #
 # ## What you will have
 # A posterior with tight age and metallicity but loose dust normalization. This shows why combining spectroscopy with photometry helps.
@@ -63,7 +63,6 @@ from tengri import (
     plot,
     SEDModel,
     Spectroscopy,
-    SpectrumPrecomp,
     Uniform,
 )
 
@@ -96,15 +95,9 @@ obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 # This is the same physics as notebooks 05 and 07, so the three are comparable.
 
 # %%
-# approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centers and
-# projects every forward pass through that lookup table — within ~0.03% of the
-# exact wave-grid spectrum but ~30x faster per evaluation, so a posterior takes
-# seconds. It is the spectroscopic analog of WavePrecomp; valid for low-to-medium
-# resolution (R ≲ a few thousand), where the continuum is smooth across a pixel.
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(
         all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_frac=FREE, width_gyr=FREE
     ),
@@ -149,9 +142,9 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # ## Fit
 #
 # Fixed-length Hamiltonian Monte Carlo: four chains, 200 warmup and 300 draws
-# each, 50 leapfrog steps per draw. The sampler runs on the `SpectrumPrecomp`
-# lookup table and is preconditioned with the model's curvature at the best-fit
-# point, which enables a short trajectory to cross this posterior's geometry.
+# each, 50 leapfrog steps per draw. The sampler is preconditioned with the
+# model's curvature at the best-fit point, which enables a
+# short trajectory to cross this posterior's geometry.
 
 # %%
 t0 = time.perf_counter()
@@ -251,7 +244,8 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# The fit takes 35 seconds, with max R-hat 1.000. Spectroscopy alone constrains
-# stellar age, metallicity, and mass sharply from the absorption features, but dust
-# normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
-# adds broadband photometry, which fixes dust and tightens convergence.
+# The fit takes about 400 seconds on a laptop CPU, with max R-hat 1.015. Spectroscopy
+# alone constrains stellar age, metallicity, and mass sharply from the absorption
+# features, but dust normalization remains loose.
+# [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
+# photometry, which fixes dust and tightens convergence.

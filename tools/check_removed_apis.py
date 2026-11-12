@@ -108,9 +108,23 @@ def _lister_name(node: ast.AST) -> str | None:
     return name
 
 
+_SHOCK_BACKEND_REASON = (
+    "the nebular `ShockBackend` route was removed in #3364 -- "
+    "use `shock={...}`, which builds `ShockNebular`"
+)
+_REMOVED_SHOCK_NAMES = frozenset({"ShockBackend", "SHOCK_INLINE_PARAMS"})
+
+
 _PRECOMPUTE_FOR_MODEL_REASON = (
     "`precompute_for_model` was removed -- "
     "use the registry module's `precompute` and `build_lookup`"
+)
+
+
+_TRANSLATE_MODULE = "tengri.parameters.translate"
+_PARAM_MAP_REASON = (
+    "`tengri.parameters.translate.PARAM_MAP` was removed in #3296 -- "
+    "call `_build_param_map(...)` for the live table"
 )
 
 
@@ -143,6 +157,20 @@ def scan_tree(tree: ast.AST):
             if called == "precompute_for_model":
                 yield node.lineno, _PRECOMPUTE_FOR_MODEL_REASON
 
+        # #3364 -- the nebular shock backend route is gone; the shock group is `shock={...}`.
+        if isinstance(node, ast.ImportFrom) and any(
+            alias.name in _REMOVED_SHOCK_NAMES for alias in node.names
+        ):
+            yield node.lineno, _SHOCK_BACKEND_REASON
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if (
+                    kw.arg == "backend"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value == "shock"
+                ):
+                    yield node.lineno, _SHOCK_BACKEND_REASON
+
         # #1574 -- every list_* returns a _RegistryTable, not {label: callable}.
         if isinstance(node, ast.Subscript):
             name = _lister_name(node.value)
@@ -152,6 +180,19 @@ def scan_tree(tree: ast.AST):
                     f"`{name}()` returns a _RegistryTable since #1574 -- "
                     'string-index `.to_dict("fn")` instead',
                 )
+        # #3296 -- the module-level PARAM_MAP is gone; _build_param_map() is the table.
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == _TRANSLATE_MODULE
+            and any(alias.name == "PARAM_MAP" for alias in node.names)
+        ):
+            yield node.lineno, _PARAM_MAP_REASON
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "PARAM_MAP"
+            and ast.unparse(node.value) == _TRANSLATE_MODULE
+        ):
+            yield node.lineno, _PARAM_MAP_REASON
         if isinstance(node, ast.Attribute) and node.attr in _DICT_CONTRACT_ATTRS:
             name = _lister_name(node.value)
             if name:

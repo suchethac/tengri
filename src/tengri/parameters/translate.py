@@ -256,22 +256,6 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
     return expanded
 
 
-# Module-level PARAM_MAP exported for tests and external tooling
-# NOTE: This legacy map has been superseded by the registry-driven _build_param_map()
-# function. Retained here for backwards compatibility with tests that may reference it.
-PARAM_MAP = {
-    "sfh_alpha": ("alpha", 1.0, 0.0),
-    "sfh_beta": ("beta", 1.0, 0.0),
-    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
-    "psd_sigma": ("psd_sigma", 1.0, 0.0),
-    "psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
-    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
-    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
-    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
-    "dust_slope": ("dust_slope", 1.0, 0.0),
-    "redshift": ("redshift", 1.0, 0.0),
-}
-
 # ── Factory ────────────────────────────────────────────────────────
 
 

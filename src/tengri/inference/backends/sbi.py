@@ -39,6 +39,7 @@ References
 from __future__ import annotations
 
 import pickle
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ import jax.numpy as jnp
 
 from tengri.parameters.parameters import Parameters
 from tengri.utils.atomic_io import atomic_path
+from tengri.utils.batching import vmap_chunked
 
 
 def generate_sbi_training_data(
@@ -57,6 +59,7 @@ def generate_sbi_training_data(
     obs_type: str = "photometry",
     noise_model: str = "gaussian",
     snr_range: tuple[float, float] = (5.0, 50.0),
+    chunk_size: int = 1024,
 ) -> dict[str, Any]:
     """Generate training data for simulation-based inference.
 
@@ -80,6 +83,9 @@ def generate_sbi_training_data(
         ``"gaussian"`` (default) or ``"heteroscedastic"``.
     snr_range : tuple of float
         Range of S/N ratios to sample uniformly.
+    chunk_size : int, default 1024
+        Draws per compiled forward-model call. Bounds peak memory; the result does
+        not depend on it beyond round-off.
 
     Returns
     -------
@@ -132,10 +138,10 @@ def generate_sbi_training_data(
     else:
         predict_fn = model.predict_spectrum
 
-    # Use vmap for batched prediction; fall back to a loop for
-    # non-traceable callables (e.g., mocks in tests).
+    # Batched prediction in memory-bounded chunks (one compiled kernel per chunk);
+    # fall back to a loop for non-traceable callables (e.g., mocks in tests).
     try:
-        x_clean = jax.vmap(predict_fn)(theta_dict)
+        x_clean = vmap_chunked(predict_fn, chunk_size=chunk_size)(theta_dict)
     except (TypeError, ValueError, RuntimeError, AttributeError):
         # TypeError: predict_fn isn't vmappable (non-traceable callable)
         # ValueError: theta_dict structure incompatible with vmap
@@ -251,6 +257,46 @@ def load_sbi_training_data(path: str) -> dict[str, Any]:
     }
 
 
+def _check_param_names(
+    stored: Sequence[str] | None,
+    expected: Sequence[str] | None,
+    path: str,
+) -> None:
+    """Refuse a posterior whose stored parameter names are not the expected ones.
+
+    Parameters
+    ----------
+    stored : sequence of str or None
+        Parameter names recorded in the file (``None`` if absent).
+    expected : sequence of str or None
+        Parameter names of the target model; ``None`` skips the check.
+    path : str
+        File path, named in the error message.
+
+    Raises
+    ------
+    ValueError
+        If ``expected`` is given and ``stored`` is missing or not equal to it,
+        in order (theta columns are positional).
+    """
+    if expected is None:
+        return
+    expected_list = list(expected)
+    if stored is None:
+        raise ValueError(
+            f"Posterior at {path} records no parameter names, so it cannot be checked "
+            f"against the model's parameters {expected_list}. Re-save it with "
+            "SBIPosterior.save() from a wrapper built with param_names."
+        )
+    stored_list = list(stored)
+    if stored_list != expected_list:
+        raise ValueError(
+            f"Posterior at {path} was trained on parameters {stored_list}, but the model "
+            f"it is loaded into has parameters {expected_list}. Load it with the model "
+            "it was trained for."
+        )
+
+
 class SBIPosterior:
     """Wrapper for a pre-trained neural posterior estimator.
 
@@ -287,13 +333,23 @@ class SBIPosterior:
         self.metadata = metadata or {}
 
     @classmethod
-    def from_file(cls, path: str) -> SBIPosterior:
+    def from_file(
+        cls,
+        path: str,
+        expected_param_names: Sequence[str] | None = None,
+    ) -> SBIPosterior:
         """Load a pre-trained neural posterior from a pickle file.
 
         Parameters
         ----------
         path : str
             Path to the saved posterior (``.pkl``).
+        expected_param_names : sequence of str or None
+            Parameter names of the model the posterior is loaded into, in theta
+            column order (e.g. ``[name for name in spec.free_params]`` for the
+            sorted training order). When given, the stored names must match
+            exactly; a missing or different list raises (#3283). ``None`` skips
+            the check, so the posterior is not verified against any model.
 
         Returns
         -------
@@ -304,6 +360,10 @@ class SBIPosterior:
         ------
         FileNotFoundError
             If the file does not exist.
+        ValueError
+            If the file is not a posterior written by :meth:`save`, or if
+            ``expected_param_names`` is given and the stored parameter names are
+            missing or differ from it.
         """
         filepath = Path(path)
         if not filepath.is_file():
@@ -322,12 +382,14 @@ class SBIPosterior:
                     f"key (found keys {sorted(state)}); it was not written by "
                     "SBIPosterior.save()."
                 )
+            _check_param_names(state.get("param_names"), expected_param_names, path)
             return cls(
                 posterior=state["posterior"],
                 param_names=state.get("param_names"),
                 metadata=state.get("metadata"),
             )
-        # Assume the whole object is the posterior
+        # Assume the whole object is the posterior: it stores no parameter names.
+        _check_param_names(None, expected_param_names, path)
         return cls(posterior=state)
 
     def save(self, path: str) -> None:
