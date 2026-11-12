@@ -2682,23 +2682,6 @@ class Fitter:
         )
         self._init_eline_arrays(resolved)
 
-        obs = model.observation
-        _spec_config = obs.spectroscopy if obs is not None else None
-        # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
-        if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
-            spec_has_broad = getattr(self.spec, "eline_broad", False)
-            if not spec_has_broad:
-                import warnings
-
-                warnings.warn(
-                    "Spectroscopy has eline_broad=True but Parameters was built with "
-                    "eline_broad=False. The broad-component velocity dispersion parameter "
-                    "'eline_broad_sigma_kms' will not be sampled. "
-                    "Pass eline_broad=True to Parameters() to fix this.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""
         self._eline_marginalize = resolved.options.eline_marginalize

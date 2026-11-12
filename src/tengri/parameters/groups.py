@@ -229,7 +229,25 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
 
     record = registry().get(param_name)
     free_prior = getattr(record, "free_prior", None) if record is not None else None
+    if record is None:
+        free_prior = _eline_group_free_prior(param_name)
     return free_prior if free_prior is not None else registry_default
+
+
+def _eline_group_free_prior(param_name: str) -> Distribution | None:
+    """Free prior of a named kinematic group's width or offset, else ``None``.
+
+    The group names come from the observation, so these parameters are declared
+    per model by ``eline_group_params`` and are absent from the static registry.
+    """
+    for stem in ("eline_sigma_kms_", "eline_delta_v_kms_"):
+        if param_name.startswith(stem):
+            from tengri.components.nebular._params import eline_group_params
+
+            for decl in eline_group_params(param_name[len(stem) :]):
+                if decl.name == param_name:
+                    return decl.free_prior
+    return None
 
 
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
@@ -952,10 +970,27 @@ _TOP_LEVEL_SETTINGS = {
     # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
     # ``Spectroscopy`` observation so it need not be set twice (#653).
     "eline_mode",
+    # Names of the kinematic groups of ``Spectroscopy(eline_kinematics=...)``; each
+    # registers ``eline_sigma_kms_<group>`` and ``eline_delta_v_kms_<group>`` (#3332).
+    "eline_groups",
     # Line aperture factor of the model-centered emission-line prior; registered with
     # ``eline_mode`` and freed or pinned here (``FREE``, ``Fixed(...)``, a prior).
     "eline_aperture_frac",
 }
+
+#: Name stems of the emission-line kinematic parameters: the default group's pair and,
+#: with a ``_<group>`` suffix, each named group's (#3332).
+_ELINE_KINEMATIC_STEMS = ("eline_sigma_kms", "eline_delta_v_kms")
+
+
+def _is_top_level_setting(key: str) -> bool:
+    """True for a top-level setting or an emission-line kinematic parameter.
+
+    The kinematic parameters belong to the observation's line fit, not to a physics
+    group, so they are freed or pinned at top level like ``eline_aperture_frac``.
+    """
+    return key in _TOP_LEVEL_SETTINGS or key.startswith(_ELINE_KINEMATIC_STEMS)
+
 
 #: Top-level kwargs that are SEDModel-only settings (silently ignored here).
 #:
@@ -3341,7 +3376,7 @@ def _translate_structural(groups: dict) -> dict:
     _GATE_SUGGESTED_TYPE = {"radio": "condon92", "xray": "simple", "shock": "mappings"}
 
     for group_name, group_dict in groups.items():
-        if group_name in _TOP_LEVEL_SETTINGS:
+        if _is_top_level_setting(group_name):
             continue
         if group_name in _SEDMODEL_PASSTHROUGH:
             # SEDModel-only kwarg (e.g. ``approx=WavePrecomp()``) splatted
@@ -3468,7 +3503,7 @@ def _translate_structural(groups: dict) -> dict:
     # ``Fixed(DEFAULT)`` because its readers raise until resolved, bare
     # ``DEFAULT`` because it is not a Distribution/scalar/tuple at all.
     for key in list(groups.keys()):
-        if key in _TOP_LEVEL_SETTINGS:
+        if _is_top_level_setting(key):
             val = groups[key]
             is_sentinel_or_token = val is FREE or val is DEFAULT or _is_default_fixed(val)
             if not is_sentinel_or_token:
@@ -7015,7 +7050,7 @@ def _validate_user_keys(
     agn_shared_names = _short_names_for_group("agn", param_partition)
 
     for top_key, top_val in kwargs.items():
-        if top_key in _TOP_LEVEL_SETTINGS:
+        if _is_top_level_setting(top_key):
             continue
         if top_key in _SEDMODEL_PASSTHROUGH:
             continue
@@ -8680,7 +8715,9 @@ def _partition_by_group(
     partition = {}
 
     for name in all_param_names:
-        if name in ("redshift", "apply_igm", "eline_aperture_frac"):
+        if name in ("redshift", "apply_igm", "eline_aperture_frac") or name.startswith(
+            _ELINE_KINEMATIC_STEMS
+        ):
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
             if agn_flat:

@@ -34,7 +34,7 @@ from tengri.observation.calibration_segments import (
     segment_ids,
     window_mask,
 )
-from tengri.observation.constants import ELINE_MODES
+from tengri.observation.constants import ELINE_BROAD_RETIRED, ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
 from tengri.parameters.priors import Distribution, Gaussian
 from tengri.utils.wave_unit import check_wavelength_plausible, to_angstrom
@@ -134,9 +134,16 @@ class Spectroscopy:
     eline_fix_doublets : bool
         Enforce atomic physics doublet ratios. Default: True.
     eline_broad : bool
-        Enable broad component for AGN candidate lines. Default: False.
+        Retired; ``True`` raises. Use ``eline_kinematics`` with ``"add": True``.
     eline_broad_fwhm_min_kms : float
-        Minimum FWHM for the broad component [km/s]. Default: 500.0.
+        Unused; kept so existing configurations load.
+    eline_kinematics : mapping or None
+        Kinematic groups, ``{group: {"lines": [names], "add": bool}}``. Every line
+        of a group shares ``eline_sigma_kms_<group>`` and
+        ``eline_delta_v_kms_<group>``; lines named in no group keep
+        ``eline_sigma_kms`` and ``eline_delta_v_kms``. ``"add": True`` gives the
+        named lines a second component with its own amplitude (a broad component).
+        See :meth:`LineList.with_kinematics`. Default: None (one group).
     nebular_lines : bool
         Whether the predicted spectrum carries the nebular emission lines.
         ``True`` (default) projects the full ``sed_nebular``. ``False`` drops
@@ -256,6 +263,8 @@ class Spectroscopy:
     eline_fix_doublets: bool = True
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
+    #: ``{group: {"lines": [...], "add": bool}}``; stored as a hashable tuple.
+    eline_kinematics: object | None = None
     nebular_lines: bool = True
     covariance: jnp.ndarray | BandedMatrix | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
@@ -331,6 +340,35 @@ class Spectroscopy:
                 raise ValueError(
                     f"eline_mode must be one of {ELINE_MODES}, got {self.eline_mode!r}"
                 )
+
+        if self.eline_broad:
+            raise ValueError(ELINE_BROAD_RETIRED)
+        if self.eline_kinematics is not None:
+            groups = (
+                dict(self.eline_kinematics)
+                if not isinstance(self.eline_kinematics, tuple)
+                else {g: {"lines": lines, "add": add} for g, lines, add in self.eline_kinematics}
+            )
+            # Validate against the catalog now, so a bad group fails at construction.
+            base = self.eline_catalog
+            if base is None:
+                from tengri.observation.line_list import LineList
+
+                base = LineList.default_13()
+            base.with_kinematics(groups)
+            has_added = any(spec.get("add", False) for spec in groups.values())
+            if has_added and self.eline_prior_type != "flat":
+                raise ValueError(
+                    f"eline_prior_type={self.eline_prior_type!r} centers each line's "
+                    "amplitude on a predicted flux, which has no share for a second "
+                    "component ('add': True in eline_kinematics); use "
+                    "eline_prior_type='flat'"
+                )
+            frozen = tuple(
+                (g, tuple(spec.get("lines", ())), bool(spec.get("add", False)))
+                for g, spec in groups.items()
+            )
+            object.__setattr__(self, "eline_kinematics", frozen)
 
         _valid_resample = ("point", "conserving", "auto")
         if self.resample not in _valid_resample:
@@ -742,9 +780,12 @@ class Spectroscopy:
         """
         from tengri.observation.line_list import LineList
 
-        if self.eline_catalog is not None:
-            return self.eline_catalog
-        return LineList.default_13()
+        catalog = self.eline_catalog if self.eline_catalog is not None else LineList.default_13()
+        if self.eline_kinematics:
+            return catalog.with_kinematics(
+                {g: {"lines": lines, "add": add} for g, lines, add in self.eline_kinematics}
+            )
+        return catalog
 
     # ── Parameter helpers ─────────────────────────────────────────
 
@@ -1347,6 +1388,7 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     "eline_fix_doublets": content("doublet ratio constraints affect the likelihood"),
     "eline_broad": content("broad component option affects line fitting model"),
     "eline_broad_fwhm_min_kms": content("minimum broad FWHM affects the fit model"),
+    "eline_kinematics": content("kinematic groups set the line widths, offsets and components"),
     "nebular_lines": content("dropping the nebular lines changes the predicted spectrum"),
     "covariance": exclude(
         "per-galaxy data: keyed through the tail by factor offsets and shape; "

@@ -761,7 +761,11 @@ class Parameters:
                 f"eline_mode must be 'off', 'fixed', 'marginalized', or 'fitted', "
                 f"got '{self.eline_mode}'"
             )
-        self.eline_broad = bool(kwargs.pop("eline_broad", False))
+        if kwargs.pop("eline_broad", False):
+            from tengri.observation.constants import ELINE_BROAD_RETIRED
+
+            raise ValueError(ELINE_BROAD_RETIRED)
+        self.eline_groups = tuple(kwargs.pop("eline_groups", ()))
 
         # --- Resolve short-form parameter aliases ---
         resolved_kwargs = {}
@@ -825,7 +829,7 @@ class Parameters:
             met_mode=self.met_mode,
             alpha_fe_evolving=self.alpha_fe_evolving,
             eline_mode=self.eline_mode,
-            eline_broad=self.eline_broad,
+            eline_groups=self.eline_groups,
         )
 
         # ── met_logzsol_scatter registration seam (#2255) ──
@@ -2713,7 +2717,6 @@ class Parameters:
         >>> spec = Parameters(
         ...     redshift=0.1,
         ...     dust_tau_bc=(0, 4),
-        ...     eline_broad="broad",  # String-valued
         ... )
         >>> fixed = spec.get_fixed_values()
         >>> print(fixed)
@@ -3451,7 +3454,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
     "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
     "dust_wg00_structure": content("WG00 dust structure determines parameters"),
-    "eline_broad": content("broad line component flag determines parameters"),
+    "eline_groups": content("kinematic group names determine the line parameters"),
     "eline_mode": content("emission line fitting mode determines parameters"),
     "evolving_metallicity": content("metallicity evolution choice determines parameters"),
     "field_centering": content("field centering parameter affects SFH model"),

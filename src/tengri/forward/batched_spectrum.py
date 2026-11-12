@@ -107,10 +107,10 @@ def check_template_model(model) -> None:
         Template model. Its redshift must be free, its spectroscopy must be
         configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
         line fluxes, line ratios, spectral indices, emission lines with a Cloudy
-        prior, broad emission lines (``eline_broad``), a spectral covariance or a
+        prior, kinematic groups (``eline_kinematics``), a spectral covariance or a
         Student-t or calibration-floor noise model. Emission lines with
         ``eline_mode='fitted'`` or ``'marginalized'`` (flat or model-centered prior) and
-        ``eline_broad=False`` are accepted. A pixel covariance is a per-galaxy input
+        no ``eline_kinematics`` are accepted. A pixel covariance is a per-galaxy input
         (:class:`~tengri.observation.batched.GalaxySpectrum`) and the template
         must not carry one.
 
@@ -159,10 +159,11 @@ def check_template_model(model) -> None:
         )
     if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
         model_line_match(model, batched_line_set(model).independent_wavelengths)
-    if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
+    if spectroscopy.eline_mode != "off" and spectroscopy.eline_kinematics:
         raise ValueError(
-            "template model fits emission lines with eline_broad=True, which the batched "
-            "likelihood does not evaluate; use eline_broad=False"
+            "template model fits emission lines in kinematic groups (eline_kinematics), "
+            "which the batched likelihood does not evaluate; it gives every line one "
+            "width and one offset. Remove eline_kinematics or fit galaxies one at a time"
         )
     for name in _UNSUPPORTED_CHANNELS:
         if getattr(observation, name, None) is not None:
