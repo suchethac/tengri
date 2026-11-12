@@ -241,8 +241,8 @@ ns = np.array(list(batch_times.keys()))
 ts = np.array(list(batch_times.values()))
 
 fig, ax = plt.subplots(figsize=(6, 4))
-ax.scatter(ns, ts, s=60, color=COLORS["geovi"], zorder=3)
-ax.plot(ns, ts, color=COLORS["geovi"], lw=1)
+ax.scatter(ns, ts, s=60, color=COLORS["sfh_full"], zorder=3)
+ax.plot(ns, ts, color=COLORS["sfh_full"], lw=1)
 
 # Linear reference
 linear = ts[0] / ns[0] * ns
@@ -274,7 +274,7 @@ print(f"Gradient:  {t_grad:.0f} µs  ({t_grad/t_precomp:.1f}× forward pass)")
 J = jax.jacobian(model.predict_spectrum)(params)
 first_key = next(iter(J.keys()))
 print(f"Jacobian: {len(J)} parameter entries, first shape: {J[first_key].shape}")
-print("Gradients cost ~1.5× the forward pass. This is what makes geoVI and RT possible.")
+print("Gradients cost ~1.5× the forward pass. This is what makes Laplace and RT possible.")
 
 # %%
 # SFH and derived quantities
@@ -289,7 +289,9 @@ print(f"  sfr_full shape: {sfh['sfr_full'].shape}")
 #
 # The Fitter connects a SEDModel to observed data and runs inference. It builds
 # the loss function, handles standardization, and dispatches to any of the
-# 5+ inference backends.
+# 5+ inference backends. The `vi` method (geoVI) also exists, but it needs
+# considerably more memory for spectroscopic fits, so this tutorial uses MAP
+# and the Laplace approximation instead.
 
 # %%
 # Generate mock data
@@ -314,12 +316,11 @@ result_map = fitter.run("map", n_steps=500, verbose=False)
 print(f"MAP: {result_map.wall_time_s:.1f}s, final loss = {float(result_map.loss_history[-1]):.1f}")
 
 # %%
-# vi — approximate posterior
-result_geovi = fitter.run(
-    "vi", n_iterations=15, n_samples=6,
-    n_posterior_samples=2000, verbose=False,
+# Laplace — Gaussian approximation centred on the MAP estimate
+result_laplace = fitter.run(
+    "laplace", init_from=result_map, n_samples=2000, verbose=False,
 )
-print(f"vi: {result_geovi.wall_time_s:.1f}s, {len(next(iter(result_geovi.samples.values())))} samples")
+print(f"Laplace: {result_laplace.wall_time_s:.1f}s, {len(next(iter(result_laplace.samples.values())))} samples")
 
 # %%
 # Ray Tracing — exact MCMC
@@ -333,7 +334,7 @@ print(f"Ray Tracing: {result_rt.wall_time_s:.1f}s, acceptance = {acc:.1%}")
 # %%
 # Switching methods is trivial
 print("\nSwitching methods is one line:")
-print('  fitter.run("vi")  # approximate, fast')
+print('  fitter.run("laplace")  # Gaussian around the MAP, fast')
 print('  fitter.run("mcmc_raytrace")  # exact, any D')
 print('  fitter.run("mcmc_nuts")          # exact, D < 20')
 print("\nSame model, same data, same loss — different exploration strategy.")
@@ -346,19 +347,16 @@ print("\nSame model, same data, same loss — different exploration strategy.")
 
 # %%
 # Inspect the Posterior
-result = result_geovi
+result = result_laplace
 print(f"Method:    {result.method}")
 print(f"Wall time: {result.wall_time_s:.1f}s")
 print(f"Samples:   {len(next(iter(result.samples.values())))} draws")
 
-# Summary: median ± 68% CI for each parameter
-summary = result.summary()
+# Median and 68% credible interval for each parameter, from the posterior samples
 print(f"\n{'Parameter':<35s} {'Median':>10s} {'68% CI'}")
-for name, info in summary.items():
-    if "median" in info:
-        med = info["median"]
-        lo, hi = info.get("lo_68", float("nan")), info.get("hi_68", float("nan"))
-        print(f"  {name:<33s} {med:>10.4f}  [{lo:.4f}, {hi:.4f}]")
+for name, draws in result.samples.items():
+    lo, med, hi = np.percentile(np.asarray(draws), [16, 50, 84])
+    print(f"  {name:<33s} {med:>10.4f}  [{lo:.4f}, {hi:.4f}]")
 
 # %%
 # summary_table() gives a nicely formatted overview
@@ -397,7 +395,7 @@ if hasattr(result, "effective_sample_size"):
 #
 # 1. **jit** — compiles functions. Slow first call (tracing), fast after.
 # 2. **vmap** — vectorizes over a batch dimension. Use it for catalogs.
-# 3. **grad** — automatic differentiation. This is why vi works:
+# 3. **grad** — automatic differentiation. This is why gradient-based methods work:
 #    gradients flow through the entire SPS pipeline for free.
 #
 # The forward model runs in ~40 µs JIT'd. Gradients cost ~1.5× that. Batch
@@ -412,7 +410,7 @@ if hasattr(result, "effective_sample_size"):
 # |--------|---------|-------------|
 # | `Parameters` | Define parameters and priors | `.sample()`, `.standardize()` |
 # | `SEDModel` | Forward model | `.predict_spectrum()`, `.predict_sfh()`, `.mock()` |
-# | `Fitter` | Inference engine | `.run("vi")`, `.run("mcmc_raytrace")` |
+# | `Fitter` | Inference engine | `.run("laplace")`, `.run("mcmc_raytrace")` |
 # | `Posterior` | Results container | `.samples`, `.summary()`, `.diagnostics` |
 #
 # Next: **tutorials/03** explains the IFT/PSD/GP machinery that generates
