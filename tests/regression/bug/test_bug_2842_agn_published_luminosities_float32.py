@@ -36,6 +36,12 @@ from tests.physics._agn_published import (
 pytestmark = pytest.mark.regression_bug
 
 FLOAT32_RTOL = 1.0e-4
+#: Owner ruling 2026-11-06: float32 SED tolerance of the kd18 disc near maximal spin.
+#: Measured float32 vs float64 at a_spin = 0.998, log_lbol 11, log_mbh 8: 1.42e-4 on the
+#: Linux runner at jax 0.12.0 (run 42102510509) and 3.75e-4 on macOS at jax 0.11.1. Float64
+#: is the reference path for science at this spin.
+KD18_HIGH_SPIN_SED_RTOL = 5.0e-4
+KD18_HIGH_SPIN = 0.9
 
 #: Draws per component beyond the center and the box edges (SKIRTOR is the slow one).
 _RANDOM_DRAWS = {"skirtor": 3}
@@ -114,7 +120,9 @@ def test_emitted_sed_is_finite_and_accurate_in_float32(component):
         )
         if significant.any():
             err = np.max(np.abs(sed32[significant] / sed64[significant] - 1.0))
-            assert err < FLOAT32_RTOL, f"{name}: float32 SED rel {err:.2e} at {point}"
+            high_spin = name == "kd18" and point.get("a_spin", 0.0) > KD18_HIGH_SPIN
+            rtol = KD18_HIGH_SPIN_SED_RTOL if high_spin else FLOAT32_RTOL
+            assert err < rtol, f"{name}: float32 SED rel {err:.2e} at {point}"
 
 
 def test_exactly_zero_power_publishes_minus_inf_in_both_precisions():

@@ -61,6 +61,8 @@ JIT note
 pure JAX functions, safe under :func:`jax.vmap`, :func:`jax.grad` and
 :func:`jax.jit`. :func:`fit_spectra_map_vmap` is a Python driver: it compiles
 one optimizer run per bucket, and the bucket spec is the compile signature.
+The compiled program is cached per (model, bucket spec, optimizer options), so a
+repeated call with a new batch of the same spec reuses it and compiles nothing (#3247).
 The template tables (SSP grid, template data, z-table) are not closed over by any
 returned function: the drivers pass them as an explicit argument, so a compiled
 program holds no table as a constant and its executable stays small.
@@ -69,6 +71,7 @@ program holds no table as a constant and its executable stays small.
 from __future__ import annotations
 
 import math
+import weakref
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -76,7 +79,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
-from jax.scipy.linalg import block_diag
 
 from tengri.analysis.diagnostics.autocorrelation import nested_rhat
 from tengri.components.stellar.sfh.young_fraction import young_fraction_prior_for_spec
@@ -92,20 +94,32 @@ from tengri.forward.batched_spectrum import (
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference.backends.mcmc.catalog import (
     CATALOG_CHEES_ENSEMBLE,
+    GHMC_DEFAULT_FOLDS,
     GHMC_DEFAULT_SUPERCHAINS,
     _catalog_live_chains,
     build_catalog_mcmc_engine,
+    ghmc_default_chains,
     map_with_shared,
 )
-from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.inference.data_term import DataTermOptions, resolve_data_term_options
+from tengri.inference.lbfgs_driver import lbfgs_to_gtol
+from tengri.inference.likelihoods.gaussian import (
+    diag_gaussian_log_prob,
+    standardized_residual,
+)
+from tengri.inference.likelihoods.protocol import (
+    GaussianLikelihood,
+    MultivariateGaussianLikelihood,
+)
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
 )
-from tengri.observation.banded import BandedMatrix, banded_forward_substitution
+from tengri.observation.banded import BandedMatrix
 from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.observation.calibration import (
     calibration_basis,
+    joint_calibration_line_marginal,
     marginalize_calibration_segments,
 )
 from tengri.observation.calibration_segments import R_BAND_EFFECTIVE_AA
@@ -217,7 +231,8 @@ def _refuse_calibration_order(model) -> None:
 def _log_q_log_normal(obs: SpectroBatch, log_q) -> jax.Array:
     """Log of the galaxy's log-normal prior on ``ln q``, ``N(ln10 * center, (ln10 * sigma)^2)``."""
     center, width = _LN10 * obs.cal_scale_center, _LN10 * obs.cal_scale_sigma
-    return -0.5 * ((log_q - center) / width) ** 2 - jnp.log(width * math.sqrt(2.0 * math.pi))
+    z = standardized_residual(log_q, center, width)
+    return -0.5 * z**2 - jnp.log(width * math.sqrt(2.0 * math.pi))
 
 
 def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | None:
@@ -225,6 +240,11 @@ def _pixel_factor(spec: SpectroBatchSpec, obs: SpectroBatch) -> BandedMatrix | N
     if not spec.cov_offsets:
         return None
     return BandedMatrix(offsets=np.asarray(spec.cov_offsets, dtype=int), data=obs.chol_data)
+
+
+def _spectral_data_args(obs: SpectroBatch) -> dict:
+    """Data-args entries the spectral likelihood adapters read: flux, sigma and presence."""
+    return {"flux": obs.flux, "sigma": obs.sigma, "presence": obs.pix_mask}
 
 
 def _whitening(obs: SpectroBatch, chol: BandedMatrix | None) -> dict:
@@ -392,27 +412,32 @@ def _marginal_lines_loglik(
         )
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
-        design = jnp.concatenate([model0[:, None] * basis, line.design], axis=1)
         col_mask = jnp.concatenate([jnp.ones(cal_n_poly, dtype=bool), line_cols])
-        prior_mean = jnp.concatenate([jnp.zeros(cal_n_poly), line.prior_mean])
-        precision = block_diag(jnp.eye(cal_n_poly) / cal_prior_sigma**2, line.prior_precision)
+        result = joint_calibration_line_marginal(
+            obs.flux,
+            model0,
+            basis,
+            line,
+            cal_prior_sigma,
+            whitening=_whitening(obs, chol),
+            pix_mask=obs.pix_mask,
+            col_mask=col_mask,
+        )
     else:
-        design, col_mask = line.design, line_cols
-        prior_mean, precision = line.prior_mean, line.prior_precision
+        result = marginalize_linear_nuisance(
+            obs.flux,
+            model0,
+            line.design,
+            **_whitening(obs, chol),
+            pix_mask=obs.pix_mask,
+            prior_mean=line.prior_mean,
+            prior_precision=line.prior_precision,
+            col_mask=line_cols.astype(line.design.dtype),
+            scale=line.scale,
+        )
     weight = obs.pix_mask
     n_eff = jnp.sum(weight)
     log_sigma_sum = jnp.sum(weight * jnp.log(scatter))
-    result = marginalize_linear_nuisance(
-        obs.flux,
-        model0,
-        design,
-        **_whitening(obs, chol),
-        pix_mask=obs.pix_mask,
-        prior_mean=prior_mean,
-        prior_precision=precision,
-        col_mask=col_mask.astype(design.dtype),
-        scale=line.scale,
-    )
     return result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_sigma_sum
 
 
@@ -492,15 +517,24 @@ def batched_log_likelihood(
     threaded_default = _prepare_template(model) if threaded is None else threaded
     require_model_spec(model, spec)
     spectroscopy = model.observation.spectroscopy
-    if spectroscopy.eline_mode == "fitted" and spec.cov_offsets:
+    resolved = resolve_data_term_options(
+        model,
+        DataTermOptions(
+            data_type="spectroscopy",
+            calibration_marginalize=calibration_marginalize,
+            cal_n_poly=cal_n_poly,
+            cal_prior_sigma=cal_prior_sigma,
+        ),
+    )
+    if resolved.eline_fitted and spec.cov_offsets:
         raise NotImplementedError(
             "fitted emission-line amplitudes with a pixel covariance are not evaluated; "
             "use eline_mode='marginalized', or drop the covariance"
         )
-    marginal_lines = spectroscopy.eline_mode == "marginalized"
+    marginal_lines = resolved.options.eline_marginalize
     if calibration_marginalize:
         _refuse_calibration_order(model)
-        if spectroscopy.eline_mode == "fitted":
+        if resolved.eline_fitted:
             raise NotImplementedError(
                 "Combined calibration marginalization + fitted (non-marginalized) "
                 "emission-line amplitudes is not currently supported. Use "
@@ -510,7 +544,7 @@ def batched_log_likelihood(
     line_set = batched_line_set(model)
     match = (
         model_line_match(model, line_set.independent_wavelengths)
-        if marginal_lines and spectroscopy.eline_prior_type == "model"
+        if marginal_lines and resolved.options.eline_prior_type == "model"
         else None
     )
     has_q = spectroscopy.cal_scale_prior is not None
@@ -550,14 +584,23 @@ def batched_log_likelihood(
                 out["spec_fnu"], obs, cal_n_poly, cal_prior_sigma, segment_args, chol
             )
         elif chol is not None:
-            whitened = banded_forward_substitution(
-                chol, obs.pix_mask * (obs.flux - out["spec_fnu"])
-            )
-            total = -0.5 * jnp.dot(whitened, whitened)
+            total = MultivariateGaussianLikelihood(
+                obs=obs.flux,
+                chol_data=chol.data,
+                chol_offsets=tuple(np.asarray(chol.offsets, dtype=int).tolist()),
+                channel="spec_fnu",
+                obs_key="flux",
+                presence_key="presence",
+            ).log_prob(out, data_args=_spectral_data_args(obs))
         else:
-            total = diag_gaussian_log_prob(
-                out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask
-            )
+            total = GaussianLikelihood(
+                obs=obs.flux,
+                err=obs.sigma,
+                channel="spec_fnu",
+                obs_key="flux",
+                err_key="sigma",
+                presence_key="presence",
+            ).log_prob(out, data_args=_spectral_data_args(obs))
         if spec.has_phot:
             total = total + diag_gaussian_log_prob(
                 out["phot_fnu"], obs.phot_flux, obs.phot_err, presence=obs.phot_presence
@@ -739,44 +782,6 @@ def _fit_chunk(nlp, batch, init, threaded, *, n_steps, learning_rate):
     return params_final, final_nlp, loss_trace
 
 
-def _max_abs(tree) -> jax.Array:
-    """Largest absolute entry over every leaf of a pytree."""
-    return jnp.max(jnp.stack([jnp.max(jnp.abs(leaf)) for leaf in jax.tree_util.tree_leaves(tree)]))
-
-
-def _lbfgs_one(nlp, obs, tables, init, *, n_steps, gtol):
-    """Run L-BFGS on one galaxy until its gradient is below ``gtol`` or ``n_steps``."""
-    import optax
-
-    optimizer = optax.lbfgs()
-
-    def value_fn(params):
-        return nlp(params, obs, tables)
-
-    value_and_grad = optax.value_and_grad_from_state(value_fn)
-    state = optimizer.init(init)
-    value, grad = value_and_grad(init, state=state)
-
-    def not_converged(carry):
-        _, _, _, grad_now, it, _ = carry
-        return (it < n_steps) & jnp.logical_not(_max_abs(grad_now) < gtol)
-
-    def advance(carry):
-        params, opt_state, value_now, grad_now, it, trace = carry
-        trace = trace.at[it].set(value_now)
-        updates, opt_state = optimizer.update(
-            grad_now, opt_state, params, value=value_now, grad=grad_now, value_fn=value_fn
-        )
-        params = optax.apply_updates(params, updates)
-        value_next, grad_next = value_and_grad(params, state=opt_state)
-        return params, opt_state, value_next, grad_next, it + 1, trace
-
-    carry = (init, state, value, grad, jnp.asarray(0), jnp.zeros((n_steps,), dtype=value.dtype))
-    params, _, value, _, n_done, trace = jax.lax.while_loop(not_converged, advance, carry)
-    trace = jnp.where(jnp.arange(n_steps) < n_done, trace, value)
-    return params, value, trace
-
-
 def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """Run L-BFGS on one chunk of galaxies, each stopping at its own gradient tolerance.
 
@@ -787,7 +792,9 @@ def _lbfgs_chunk(nlp, batch, init, threaded, *, n_steps, gtol):
     """
 
     def one(obs, init_one, tables):
-        return _lbfgs_one(nlp, obs, tables, init_one, n_steps=n_steps, gtol=gtol)
+        return lbfgs_to_gtol(
+            lambda params: nlp(params, obs, tables), init_one, n_steps=n_steps, gtol=gtol
+        )
 
     params_final, final_nlp, trace = jax.vmap(one, in_axes=(0, 0, None))(batch, init, threaded)
     return params_final, final_nlp, trace.T
@@ -798,6 +805,74 @@ def _run_chunk(nlp, batch, init, threaded, *, optimizer, n_steps, learning_rate,
     if optimizer == "adam":
         return _fit_chunk(nlp, batch, init, threaded, n_steps=n_steps, learning_rate=learning_rate)
     return _lbfgs_chunk(nlp, batch, init, threaded, n_steps=n_steps, gtol=gtol)
+
+
+#: Compiled chunk programs, one inner dict per model. Keyed weakly on the model: the
+#: program holds the model only through a weak reference, so dropping the model frees
+#: its entry and no cached program keeps a model alive.
+_CHUNK_PROGRAMS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _chunk_runner(model_ref, spec, options: dict):
+    """Return the un-jitted chunk program for one bucket: builds the objective, then optimizes.
+
+    ``tables`` is the traced template tables, passed to the objective as an argument,
+    so the program holds no table as a constant. The objective's own constants (the
+    emission-line set and the model-centered line match) come from JAX ops on
+    constant arrays; they are built under ``ensure_compile_time_eval`` so they stay
+    concrete, as the eager driver had them, because the line builder reads them with
+    numpy (#3247).
+    """
+
+    def run(batch, init, tables):
+        model = model_ref()
+        if model is None:
+            raise RuntimeError("the template model was collected while its MAP program was in use")
+        with jax.ensure_compile_time_eval():
+            nlp = batched_neg_log_posterior(
+                model,
+                spec,
+                calibration_marginalize=options["calibration_marginalize"],
+                cal_n_poly=options["cal_n_poly"],
+                cal_prior_sigma=options["cal_prior_sigma"],
+                threaded=tables,
+            )
+        return _run_chunk(
+            nlp,
+            batch,
+            init,
+            tables,
+            optimizer=options["optimizer"],
+            n_steps=options["n_steps"],
+            learning_rate=options["learning_rate"],
+            gtol=options["gtol"],
+        )
+
+    return run
+
+
+def _chunk_program(model, spec, options: dict):
+    """Return the jitted chunk program for ``(model, spec, options)``, compiling it once.
+
+    The cache key is the bucket spec and every option that changes the traced program.
+    A new batch of the same spec reuses the compiled executable.
+    """
+    key = (
+        spec,
+        options["calibration_marginalize"],
+        options["cal_n_poly"],
+        options["cal_prior_sigma"],
+        options["optimizer"],
+        options["n_steps"],
+        options["learning_rate"],
+        options["gtol"],
+    )
+    programs = _CHUNK_PROGRAMS.setdefault(model, {})
+    program = programs.get(key)
+    if program is None:
+        program = jax.jit(_chunk_runner(weakref.ref(model), spec, options))
+        programs[key] = program
+    return program
 
 
 def _fit_bucket(
@@ -821,17 +896,20 @@ def _fit_bucket(
     The initial latents are drawn for the whole bucket and then sliced, so the
     result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
     of at most ``chunk_size`` galaxies, which bounds the peak memory of the
-    gradient. ``threaded`` is the template tables, passed to every chunk as an
-    argument.
+    gradient. The chunk program is jitted and cached per (model, spec, options); the
+    batch, the initial latents and ``threaded`` (the template tables) are its
+    arguments.
     """
-    nlp = batched_neg_log_posterior(
-        model,
-        spec,
-        calibration_marginalize=calibration_marginalize,
-        cal_n_poly=cal_n_poly,
-        cal_prior_sigma=cal_prior_sigma,
-        threaded=threaded,
-    )
+    options = {
+        "calibration_marginalize": calibration_marginalize,
+        "cal_n_poly": cal_n_poly,
+        "cal_prior_sigma": cal_prior_sigma,
+        "optimizer": optimizer,
+        "n_steps": n_steps,
+        "learning_rate": learning_rate,
+        "gtol": gtol,
+    }
+    program = _chunk_program(model, spec, options)
     n_gal = int(batch.z.shape[0])
     init = init_unbounded_batch(model, n_gal, key)
     step = n_gal if chunk_size is None else int(chunk_size)
@@ -839,16 +917,7 @@ def _fit_bucket(
     for start in range(0, n_gal, step):
         stop = min(start + step, n_gal)
         parts.append(
-            _run_chunk(
-                nlp,
-                _slice_tree(batch, start, stop),
-                _slice_tree(init, start, stop),
-                threaded,
-                optimizer=optimizer,
-                n_steps=n_steps,
-                learning_rate=learning_rate,
-                gtol=gtol,
-            )
+            program(_slice_tree(batch, start, stop), _slice_tree(init, start, stop), threaded)
         )
     params_final = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs), *[p[0] for p in parts])
     final_nlp = jnp.concatenate([p[1] for p in parts])
@@ -935,7 +1004,9 @@ def fit_spectra_map_vmap(
     Notes
     -----
     **JIT-compatible**: no; this is a Python driver. Each bucket compiles once for
-    its :class:`SpectroBatchSpec` (and once more for a shorter final chunk).
+    its :class:`SpectroBatchSpec` (and once more for a shorter final chunk). The
+    compiled program is cached per (model, spec, optimizer options), so a repeated
+    call on a batch of the same spec compiles nothing (#3247).
     Results are returned in the catalog order by permuting with the concatenated
     bucket index arrays.
     """
@@ -1081,10 +1152,6 @@ def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax
     return jnp.where(keep, map_rows, prior_rows)
 
 
-#: Chains per galaxy the driver uses for the MEADS sampler when none are given.
-_GHMC_DRIVER_CHAINS = 32
-
-
 def _nested_rhat_max(chains: np.ndarray, n_superchains: int) -> float:
     """Largest nested R-hat over the coordinates of one galaxy's chains.
 
@@ -1126,6 +1193,55 @@ def _resolve_bucket_batch_size(
         n_data_per_gal=n_data_per_gal,
         n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
     )
+
+
+#: Per-galaxy catalog samplers, one per (bucket spec, sampler, every option that changes
+#: the traced sampler). The entries hold the model through their closures, so the cache
+#: keeps the most recent model only; see :func:`_catalog_one_galaxy`.
+_CATALOG_PROGRAMS: dict = {}
+_CATALOG_MODEL: dict = {"model": None}
+
+
+def _catalog_one_galaxy(
+    model, spec, flat, substitute, *, calibration, sampler, n_warmup, n_burnin, n_samples, options
+):
+    """Return one bucket's per-galaxy sampler, built once per (spec, options) (#3252).
+
+    The sampler closes over the flat log-density of the first batch of this spec. The
+    galaxy data, the start points, the keys and the template tables are its arguments,
+    so a later batch of the same spec reuses the sampler and its compiled map. A new
+    model clears the cache, because the cached closures hold the model.
+    """
+
+    def build():
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            sampler,
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            flat_logdensity=flat,
+            substitute=substitute,
+            **options,
+        )
+
+        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
+            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
+
+        return one_galaxy
+
+    if _CATALOG_MODEL["model"] is not model:
+        _CATALOG_PROGRAMS.clear()
+        _CATALOG_MODEL["model"] = model
+    run_key = (sampler, n_warmup, n_burnin, n_samples, tuple(sorted(options.items())))
+    key = (spec, calibration, run_key)
+    try:
+        hash(key)
+    except TypeError:
+        return build()
+    if key not in _CATALOG_PROGRAMS:
+        _CATALOG_PROGRAMS[key] = build()
+    return _CATALOG_PROGRAMS[key]
 
 
 def fit_spectra_catalog_mcmc(
@@ -1203,8 +1319,12 @@ def fit_spectra_catalog_mcmc(
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
         ``target_accept_rate`` or ``use_dense``. With ``sampler="ghmc"`` the defaults are
-        ``n_chains=32`` and ``n_superchains=8``; ``n_chains`` must be a multiple of
-        ``n_superchains``.
+        ``n_superchains=8`` and the smallest ``n_chains`` of at least 32 that is a multiple
+        of ``n_superchains`` and of ``n_folds`` and gives each MEADS fold at least ``2 D``
+        chains (:func:`~tengri.inference.backends.mcmc.catalog.ghmc_default_chains`, D = the
+        galaxy's sampled coordinates); an explicit ``n_chains`` below that raises
+        :class:`~tengri.config.exceptions.ConfigError`. ``rewhiten_at`` (default 0.5) sets
+        when MEADS re-estimates its coordinates from the ensemble.
 
     Returns
     -------
@@ -1261,9 +1381,6 @@ def fit_spectra_catalog_mcmc(
         )["params"]
 
     options = dict(engine_kwargs)
-    if sampler == "ghmc":
-        options.setdefault("n_chains", _GHMC_DRIVER_CHAINS)
-    n_chains = int(options.get("n_chains", 1))
     n_superchains = int(options.get("n_superchains", GHMC_DEFAULT_SUPERCHAINS))
 
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
@@ -1281,6 +1398,13 @@ def fit_spectra_catalog_mcmc(
             threaded=threaded,
         )
         unravel_fn = flat[1]
+        if sampler == "ghmc" and "n_chains" not in engine_kwargs:
+            options["n_chains"] = ghmc_default_chains(
+                int(flat[2].shape[0]),
+                n_superchains,
+                int(options.get("n_folds", GHMC_DEFAULT_FOLDS)),
+            )
+        n_chains = int(options.get("n_chains", 1))
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
         bucket_batch = _resolve_bucket_batch_size(
@@ -1291,19 +1415,18 @@ def fit_spectra_catalog_mcmc(
             n_chains=n_chains,
             n_ensemble=options.get("n_ensemble", CATALOG_CHEES_ENSEMBLE),
         )
-        run_one, _ = build_catalog_mcmc_engine(
-            None,
-            sampler,
+        one_galaxy = _catalog_one_galaxy(
+            model,
+            spec,
+            flat,
+            substitute,
+            calibration=(calibration_marginalize, cal_n_poly, cal_prior_sigma),
+            sampler=sampler,
             n_warmup=n_warmup,
             n_burnin=n_burnin,
             n_samples=n_samples,
-            flat_logdensity=flat,
-            substitute=substitute,
-            **options,
+            options=options,
         )
-
-        def one_galaxy(x0, gal_key, obs, shared, run_one=run_one):
-            return run_one(x0, gal_key, obs, None, None, None, None, None, shared)
 
         positions, divergent = map_with_shared(
             one_galaxy,

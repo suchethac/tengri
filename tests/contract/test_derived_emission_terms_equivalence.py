@@ -66,15 +66,18 @@ def test_the_responses_are_actually_built_not_merely_listed(synthetic_ssp, synth
     """A census naming the emitters proves nothing if no response was built."""
     model = _model_with_radio_and_xray(synthetic_ssp, synthetic_tophat_obs)
 
+    from tengri.forward.precompute.band_table import BandTable
+
     for name in HARDCODED_BEFORE:
-        cached = getattr(model, f"_{name}_term_response_cache", "unset")
-        assert cached != "unset", (
-            f"_{name}_term_response_cache was never assigned, so the derived sweep "
-            f"did not reach {name} at all"
+        entry = model._band_tables.get(name, {}).get("term_band_response")
+        assert entry is not None, (
+            f"the band-table memo has no term_band_response entry for {name}, so the derived "
+            "sweep did not reach it at all"
         )
-        assert cached is not None, (
-            f"{name} was named by the census but its band response came back None, "
-            "so the emitter silently fell back to the exact per-call integral"
+        assert isinstance(entry, BandTable), (
+            f"{name} was named by the census but its band response came back declined "
+            f"({model.band_table_decline(name, 'term_band_response')}), so the emitter silently "
+            "fell back to the exact per-call integral"
         )
 
 
@@ -108,8 +111,8 @@ def test_the_build_loop_actually_consults_the_derived_census(
 
     So replace the census with one naming an emitter that is in no chain and in
     no hardcoded tuple, and require the build to have tried it. Reaching the
-    emitter is what leaves ``_phantom_term_response_cache`` behind; a loop
-    iterating a literal tuple never creates that attribute.
+    emitter raises, since no band-table provider is registered for it; a loop
+    iterating a literal tuple never reaches it.
     """
     from tengri.forward import sed_model as sed_model_module
 
@@ -118,9 +121,5 @@ def test_the_build_loop_actually_consults_the_derived_census(
         "_chain_implements_emission_terms",
         lambda chain: ["phantom"],
     )
-    model = _model_with_radio_and_xray(synthetic_ssp, synthetic_tophat_obs)
-
-    assert hasattr(model, "_phantom_term_response_cache"), (
-        "the build never attempted the emitter the census named, so the loop is "
-        "not reading the census"
-    )
+    with pytest.raises(KeyError, match="phantom"):
+        _model_with_radio_and_xray(synthetic_ssp, synthetic_tophat_obs)

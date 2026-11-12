@@ -50,6 +50,19 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.inference.backends.mcmc import _shared
+from tengri.inference.backends.mcmc.chain_program import (
+    DUAL_AVERAGING,
+    FIRST_ORDER,
+    HMC,
+    NUTS,
+    WINDOW_HMC,
+    WINDOW_NUTS,
+    FirstOrderConfig,
+    HMCConfig,
+    NUTSConfig,
+    adapt_chain,
+    run_chain,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -114,18 +127,9 @@ def call_args():
 def nuts_text(call_args):
     """NUTS's lowered program: the reference every other row is read against."""
     init, wkey, keys, scales = call_args
+    cfg = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8)
     return _lowered_text(
-        _shared._nuts_full_scan,
-        init,
-        wkey,
-        keys,
-        _target,
-        scales,
-        N_WARMUP,
-        10,
-        False,
-        0.8,
-        False,
+        run_chain, NUTS, WINDOW_NUTS, init, wkey, None, keys, _target, scales, N_WARMUP, cfg
     )
 
 
@@ -162,16 +166,21 @@ def test_first_order_program_is_smaller_than_nuts(call_args, nuts_text, proposal
     run at the speed of its deepest tree.
     """
     init, wkey, keys, scales = call_args
+    cfg = FirstOrderConfig(
+        proposal=proposal, target_accept_rate=_shared.FIRST_ORDER_TARGET_ACCEPT_RATE
+    )
     text = _lowered_text(
-        _shared._first_order_full_scan,
+        run_chain,
+        FIRST_ORDER,
+        DUAL_AVERAGING,
         init,
         wkey,
+        None,
         keys,
         _target,
         scales,
         N_WARMUP,
-        proposal,
-        _shared.FIRST_ORDER_TARGET_ACCEPT_RATE,
+        cfg,
     )
     assert _n_while(text) <= MAX_FIRST_ORDER_WHILE_OPS, (
         f"{proposal} lowered to {_n_while(text)} while ops against NUTS's "
@@ -195,7 +204,7 @@ def test_low_rank_hmc_does_not_add_a_search(call_args):
     unchanged and only the warmup differs.
 
     Since the low-rank runner was split into a warmup-only adaptation plus the
-    shared :func:`_hmc_chain_scan` (so the #1999 stability probe has a seam),
+    shared :func:`sample_chain` (so the #1999 stability probe has a seam),
     the sampling half of that claim holds **by identity**: both backends call
     the same function object, asserted below. What remains to check is that the
     difference is confined to the adaptation, which is what the two warmup-only
@@ -203,7 +212,15 @@ def test_low_rank_hmc_does_not_add_a_search(call_args):
     """
     init, wkey, _keys, scales = call_args
     diag = _lowered_text(
-        _shared._hmc_warmup_only, init, wkey, _target, scales, N_WARMUP, 10, False, 0.85
+        adapt_chain,
+        HMC,
+        WINDOW_HMC(10, True),
+        init,
+        wkey,
+        _target,
+        scales,
+        N_WARMUP,
+        HMCConfig(n_leapfrog=10, use_dense=False, target_accept_rate=0.85),
     )
     low_rank = _lowered_text(
         _shared._hmc_low_rank_warmup_only, init, wkey, _target, scales, N_WARMUP, 10, 2, 0.85
@@ -217,12 +234,12 @@ def test_low_rank_hmc_does_not_add_a_search(call_args):
 
 
 def test_low_rank_hmc_samples_through_the_same_program_as_hmc():
-    """Both backends sample with ``_hmc_chain_scan`` -- the same object.
+    """Both backends sample through ``sample_chain(HMC, ...)``.
 
     This is the strong form of the "only the warmup differs" claim, and it only
     became assertable when the fused low-rank scan was split. While the two
     halves were fused, chain 0 sampled inside the warmup program and chains
-    1..n-1 ran ``_hmc_chain_scan``, so a multi-chain low-rank fit ran two
+    1..n-1 ran ``sample_chain(HMC, ...)``, so a multi-chain low-rank fit ran two
     structurally different compiled computations over one adaptation -- the
     shape that made NUTS irreproducible under a pinned key before its own split.
     """
@@ -232,8 +249,9 @@ def test_low_rank_hmc_samples_through_the_same_program_as_hmc():
     from tengri.inference.backends.mcmc.low_rank import run_hmc_low_rank
 
     for runner in (run_hmc, run_hmc_low_rank):
-        assert "_hmc_chain_scan(" in inspect.getsource(runner), (
-            f"{runner.__name__} does not sample through the shared chain scan"
+        source = "".join(inspect.getsource(runner).split())
+        assert "sample_chain(HMC," in source, (
+            f"{runner.__name__} does not sample through the shared chain runner"
         )
     assert "_hmc_low_rank_full_scan" not in dir(_shared), (
         "the fused low-rank warmup+sampling scan is back; it leaves the #1999 "
@@ -280,7 +298,7 @@ def test_barker_and_mala_share_one_adaptation():
     every other respect. ``bench/reports/2026-08-31_catalog_preconditioning.md``
     Finding 5 is what an uncontrolled comparison costs: 40% of an apparent
     sampler deficit turned out to be a mass matrix one arm had and the other
-    did not. If the two proposals ever stop sharing ``_first_order_full_scan``,
+    did not. If the two proposals ever stop sharing ``run_chain(FIRST_ORDER, ...)``,
     that guarantee is gone and the comparison stops meaning anything.
     """
     import inspect
@@ -306,10 +324,10 @@ def test_barker_and_mala_share_one_adaptation():
     # they verify that the function composition (full_scan for warmup,
     # chain_scan for sampling) is present. The control flow is not
     # observable at runtime without reading the implementation in detail.
-    source = inspect.getsource(run_first_order)
-    assert "_first_order_full_scan(" in source, (
-        "run_first_order must compose _first_order_full_scan for the warmup phase"
+    source = "".join(inspect.getsource(run_first_order).split())
+    assert "run_chain(FIRST_ORDER,DUAL_AVERAGING," in source, (
+        "run_first_order must compose run_chain(FIRST_ORDER, DUAL_AVERAGING) for the fused warmup"
     )
-    assert "_first_order_chain_scan(" in source, (
-        "run_first_order must compose _first_order_chain_scan for the sampling phase"
+    assert "sample_chain(FIRST_ORDER," in source, (
+        "run_first_order must compose sample_chain(FIRST_ORDER, ...) for the cached sampling"
     )

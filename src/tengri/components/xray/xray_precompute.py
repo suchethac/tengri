@@ -468,3 +468,14 @@ def term_shape_table(
         filter_trans_padded,
         redshift,
     )
+
+
+#: Band-table slots this adapter provides, read through :func:`band_table`.
+BAND_SLOTS: tuple[str, ...] = ("term_band_response", "term_shape_table")
+
+
+def band_table(ctx, *, component: str, slot: str):
+    """Build one term slot of ``component``: the rank-1 band response or the shape tables."""
+    from tengri.components._term_response_table import term_band_table
+
+    return term_band_table(ctx, component=component, slot=slot)

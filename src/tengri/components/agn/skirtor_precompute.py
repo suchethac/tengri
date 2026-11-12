@@ -42,7 +42,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import L_SUN as _L_SUN
-from tengri.components.agn._template_power_table import read_at_fixed_axes
+from tengri.components.agn._template_power_table import (
+    band_fold,
+    quadrature_grid,
+    read_at_fixed_axes,
+)
 from tengri.components.agn.skirtor import (
     _cos_inc_extrapolate,
     _emit_normalized_lnu,
@@ -53,7 +57,6 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.observation.photometry import lnu_filter_integral
 from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral
 
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
@@ -98,47 +101,6 @@ def _torus_cube_at_pinned_radius(grid_path: str) -> tuple[np.ndarray, np.ndarray
         cube = cube[:, :, :, :, r_idx, :]
         axes = axes[:4] + axes[5:]
     return cube, np.asarray(raw["wave"], dtype=np.float64), axes
-
-
-def _quadrature_grid(
-    wave: np.ndarray, filter_waves: list, redshift: float
-) -> tuple[np.ndarray, np.ndarray]:
-    """Template wavelengths the filters read, and the rest-frame quadrature grid.
-
-    Returns the indices of the template nodes that bracket any filter's rest-frame
-    support, and the union of those nodes with every filter node in the rest frame.
-    Every quadrature point then lies between two adjacent kept nodes, so the log-log
-    resampling over the kept nodes equals the runtime's over the whole template.
-    """
-    n_wave = wave.shape[0]
-    keep = np.zeros(n_wave, dtype=bool)
-    rest = [np.asarray(fw, dtype=np.float64) / (1.0 + redshift) for fw in filter_waves]
-    for fw in rest:
-        lo = max(int(np.searchsorted(wave, fw[0], side="right")) - 1, 0)
-        hi = min(int(np.searchsorted(wave, fw[-1], side="left")), n_wave - 1)
-        keep[lo : max(hi, lo + 1) + 1] = True
-    read = np.flatnonzero(keep)
-    return read, np.unique(np.concatenate([wave[read], *rest]))
-
-
-def _band_fold(
-    wave_quad: np.ndarray, filter_waves: list, filter_trans: list, redshift: float
-) -> jnp.ndarray:
-    """The runtime's filter quadrature on ``wave_quad`` as a matrix, shape (n_quad, n_filters).
-
-    ``lnu_filter_integral`` is linear in the SED, so its Jacobian is the quadrature.
-    """
-    wq = jnp.asarray(wave_quad)
-
-    def bands(lnu):
-        return jnp.stack(
-            [
-                lnu_filter_integral(lnu, wq, jnp.asarray(fw), jnp.asarray(ft), redshift)
-                for fw, ft in zip(filter_waves, filter_trans, strict=True)
-            ]
-        )
-
-    return jax.jacrev(bands)(jnp.zeros_like(wq)).T
 
 
 def _record_power(cube: np.ndarray, wave: np.ndarray) -> np.ndarray:
@@ -247,7 +209,7 @@ def precompute_skirtor_photometry(
     represented; the exact path interpolates R (#772).
     """
     cube, wave, axes = _torus_cube_at_pinned_radius(grid_path)
-    read, wave_quad = _quadrature_grid(wave, filter_waves, redshift)
+    read, wave_quad = quadrature_grid(wave, filter_waves, redshift)
     power = _record_power(cube, wave)
     p_ref = float(np.median(power))
     table = jnp.asarray(
@@ -255,7 +217,7 @@ def precompute_skirtor_photometry(
     )
     wave_read = jnp.asarray(wave[read])
     wq = jnp.asarray(wave_quad)
-    fold = _band_fold(wave_quad, filter_waves, filter_trans, redshift)
+    fold = band_fold(wave_quad, filter_waves, filter_trans, redshift)
 
     rows = table.reshape(-1, table.shape[-1])
     node_sed = jax.jit(

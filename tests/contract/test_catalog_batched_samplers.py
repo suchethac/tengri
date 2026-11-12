@@ -210,7 +210,7 @@ class TestTheTreeDepthCapReachesWarmup:
     steps at 36 s; capping both took the whole cell to 2.1 s.
     """
 
-    def test_the_full_scan_forwards_the_cap_to_the_adaptation(self, monkeypatch):
+    def test_run_chain_forwards_the_cap_to_the_adaptation(self, monkeypatch):
         """The max tree-depth cap VALUE reaches window_adaptation, not just sampling.
 
         If it only capped the sampling kernel (not warmup), warmup would use
@@ -218,7 +218,12 @@ class TestTheTreeDepthCapReachesWarmup:
         caller's cap. This test verifies the cap VALUE reaches the adaptation.
         """
 
-        from tengri.inference.backends.mcmc import _shared
+        from tengri.inference.backends.mcmc.chain_program import (
+            NUTS,
+            WINDOW_NUTS,
+            NUTSConfig,
+            run_chain,
+        )
 
         # Recording stub: capture what gets passed to window_adaptation
         class _Reached(Exception):
@@ -246,7 +251,7 @@ class TestTheTreeDepthCapReachesWarmup:
         sentinel_cap = 7
 
         try:
-            # Call _nuts_full_scan with the distinctive cap value
+            # Call run_chain with the distinctive cap value
             # (This will fail when it hits our stub, but that's ok)
             import jax
             import jax.random
@@ -262,16 +267,17 @@ class TestTheTreeDepthCapReachesWarmup:
             def dummy_logdensity_2arg(x, _data):
                 return dummy_logdensity(x)
 
-            _shared._nuts_full_scan(
+            run_chain(
+                NUTS,
+                WINDOW_NUTS,
                 init_flat,
                 key,
+                None,
                 chain_keys,
                 dummy_logdensity_2arg,
                 {},
-                n_warmup=10,
-                max_doublings=sentinel_cap,
-                use_dense=False,
-                target_accept_rate=0.85,
+                10,
+                NUTSConfig(max_doublings=sentinel_cap, use_dense=False, target_accept_rate=0.85),
             )
         except _Reached:
             # Expected: the stub raises once it has recorded the cap.
@@ -291,18 +297,19 @@ class TestTheTreeDepthCapReachesWarmup:
             f"max_doublings={cap_arg} != {sentinel_cap}; cap dropped or default used"
         )
 
-    def test_the_warmup_only_entry_point_takes_the_cap(self):
-        from tengri.inference.backends.mcmc._shared import (
-            DEFAULT_MAX_NUM_DOUBLINGS,
-            _nuts_warmup_only,
-        )
+    def test_the_warmup_config_carries_the_cap(self):
+        import dataclasses
 
-        sig = inspect.signature(_nuts_warmup_only.__wrapped__)
-        assert "max_doublings" in sig.parameters
+        from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
+        from tengri.inference.backends.mcmc.chain_program import NUTSConfig
+
         # Defaulting to BlackJAX's own 10 is what makes this change a no-op for
         # a caller who never asked for a cap.
-        assert sig.parameters["max_doublings"].default == DEFAULT_MAX_NUM_DOUBLINGS
-        assert DEFAULT_MAX_NUM_DOUBLINGS == 10
+        assert "max_doublings" in {field.name for field in dataclasses.fields(NUTSConfig)}
+        cfg = NUTSConfig(
+            max_doublings=DEFAULT_MAX_NUM_DOUBLINGS, use_dense=False, target_accept_rate=0.85
+        )
+        assert cfg.max_doublings == 10
 
     def test_the_cap_is_in_the_adaptation_cache_key(self):
         """A step size adapted under one cap is not the one another would find.
