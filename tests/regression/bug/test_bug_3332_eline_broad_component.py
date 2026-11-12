@@ -4,9 +4,10 @@
 ``eline_broad=True`` registers ``eline_broad_sigma_kms`` and the marginalized /
 fitted line likelihood never builds broad design-matrix columns, so the
 parameter changes the likelihood by exactly zero and its posterior is its
-prior. Wiring the broad columns needs a design decision the issue leaves open
-(which lines get a broad column, how their amplitudes and priors are indexed),
-so enabling the component refuses with a clear error instead of running inert.
+prior. A broad component is now written as a kinematic group with
+``"add": True`` (``Spectroscopy(eline_kinematics=...)``), and ``eline_broad=True``
+is retired: ``Spectroscopy`` and ``Parameters`` refuse it at construction with a
+pointer to the new form, so it can no longer reach a fit and run inert.
 """
 
 from __future__ import annotations

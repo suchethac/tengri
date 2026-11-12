@@ -3674,6 +3674,9 @@ class SEDModel:
         # register plain identity mappings here (#1031: previously the auto-merged
         # ``cal_c*`` were free in the spec with no map entry → ParameterMapError).
         param_map_deltas.append(self._calibration_param_map(observation))
+        # The widths and offsets of named emission-line kinematic groups are
+        # dynamic in the same way: their names come from the observation (#3332).
+        param_map_deltas.append(self._eline_group_param_map(spec))
 
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
@@ -5753,6 +5756,23 @@ class SEDModel:
             return {}
         cal_params = observation.spectroscopy.get_calibration_params()
         return {name: (name, 1.0, 0.0) for name in cal_params}
+
+    @staticmethod
+    def _eline_group_param_map(spec):
+        """Identity param-map entries for the named emission-line kinematic groups.
+
+        Returns ``{name: (name, 1.0, 0.0)}`` for ``eline_sigma_kms_<group>`` and
+        ``eline_delta_v_kms_<group>`` of each group in ``spec.eline_groups``; empty
+        without named groups. The line design matrix reads the values directly.
+        """
+        from tengri.observation.eline_marginalization import kinematic_param_names
+
+        names = [
+            name
+            for group in getattr(spec, "eline_groups", ())
+            for name in kinematic_param_names(group)
+        ]
+        return {name: (name, 1.0, 0.0) for name in names}
 
     def _init_instrument(self, spec, observation):
         """Configure velocity dispersion and LSF settings."""
@@ -13587,6 +13607,14 @@ class SEDModel:
             _obs_eline = getattr(_spec_obs, "eline_mode", None)
             if _obs_eline is not None and _obs_eline != "off":
                 groups["eline_mode"] = _obs_eline
+        # Named kinematic groups of the observation register their width and
+        # offset parameters the same way (#3332).
+        if "eline_groups" not in groups and observation is not None:
+            _spec_obs = getattr(observation, "spectroscopy", None)
+            if getattr(_spec_obs, "eline_kinematics", None):
+                groups["eline_groups"] = tuple(
+                    g for g in _spec_obs.effective_catalog.kinematic_groups if g
+                )
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)

@@ -2359,6 +2359,21 @@ class Fitter:
             or self._fits_line_fluxes(model)
         )
 
+    def _feature_precomp_has_lines(self, model) -> bool:
+        """Whether ``FeaturePrecomp`` has emission lines to tabulate for this fit.
+
+        It tabulates the lines of a measured line-flux channel, or of a nebular
+        backend whose line luminosities scale with the ionizing photon rate. A
+        spectrum whose line amplitudes are nuisance parameters (marginalized or
+        fitted) on a model with neither has nothing to tabulate, and the build
+        refuses: the automatic policy then attaches no line table (#3374).
+        """
+        from tengri.forward.sed_model import _is_q_h_linear_backend
+
+        return self._fits_line_fluxes(model) or _is_q_h_linear_backend(
+            getattr(model, "_nebular_backend", None)
+        )
+
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
@@ -2427,6 +2442,7 @@ class Fitter:
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
+            and self._feature_precomp_has_lines(model)
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
         configs = (*base, FeaturePrecomp()) if wants_lut else base
@@ -2679,21 +2695,6 @@ class Fitter:
             ),
         )
         self._init_eline_arrays(resolved)
-
-        obs = model.observation
-        _spec_config = obs.spectroscopy if obs is not None else None
-        # The broad component is not evaluated by any emission-line likelihood
-        # (no broad design-matrix columns are built), so its parameter would be
-        # sampled and change nothing (#3332). Refuse rather than run inert.
-        spec_broad = bool(getattr(_spec_config, "eline_broad", False))
-        params_broad = bool(getattr(self.spec, "eline_broad", False))
-        if spec_broad or params_broad:
-            raise ValueError(
-                "The broad emission-line component (eline_broad=True) is not implemented: "
-                "no likelihood builds its design-matrix columns, so 'eline_broad_sigma_kms' "
-                "would be sampled and change nothing. Set eline_broad=False on both "
-                "Spectroscopy and Parameters (tracked in #3332)."
-            )
 
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""

@@ -13,7 +13,7 @@ bucket in ``tengri.parameters._builders``:
   declaration of :data:`CB19_PARAMS`).
 - :data:`ELINE_PARAMS` → ``_ELINE_PARAMS`` (line velocity dispersion +
   offset, registered when ``eline_mode`` is active).
-- :data:`ELINE_BROAD_PARAMS` → ``_ELINE_BROAD_PARAMS`` (AGN broad-line
+- :func:`eline_group_params` (per-group width and offset; replaces the broad-line
   component velocity dispersion).
 - :data:`CUE_IONSPEC_PARAMS` → ``_CUE_IONSPEC_PARAMS`` (Cue's
   broken-power-law ionizing spectrum: 4 slopes + 3 ratios).
@@ -294,7 +294,7 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         units="km/s",
         # 0 (the default) means "instrument resolution only" and is a genuine
         # value here, not a sentinel. The ceiling is narrow-line: broad AGN
-        # components have their own ELINE_BROAD_PARAMS block, and the sibling
+        # components are named kinematic groups (eline_group_params), and the sibling
         # ``neb_eline_sigma_kms`` carries the wider [0, 2000] precisely because
         # it must also describe those.
         free_prior=Uniform(0.0, 500.0, "Line velocity dispersion", units="km/s", default=0.0),
@@ -326,17 +326,53 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-# Broad emission line component (AGN), eline_broad=True.
-ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
-    ParamDeclaration(
-        "eline_broad_sigma_kms",
-        Uniform(500.0, 5000.0),
-        "Broad emission line velocity dispersion in km/s",
-        lambda lo, hi: lo >= 200,
-        "must have lo >= 200 km/s (broad component)",
-        units="km/s",
-    ),
-)
+#: Upper edge of the width prior of a named kinematic group [km/s]. A named group
+#: can be a broad component, so its range covers stellar-wind and AGN broad lines
+#: (FWHM to about 12000 km/s), wider than the default group's narrow-line 500 km/s.
+ELINE_GROUP_SIGMA_MAX_KMS = 5000.0
+
+
+def eline_group_params(group: str) -> tuple[ParamDeclaration, ...]:
+    """Return the width and offset declarations of one named kinematic group.
+
+    Parameters
+    ----------
+    group : str
+        Group name from ``Spectroscopy(eline_kinematics=...)``.
+
+    Returns
+    -------
+    tuple of ParamDeclaration
+        ``eline_sigma_kms_<group>`` and ``eline_delta_v_kms_<group>``, both fixed
+        at zero by default like the default group's pair.
+    """
+    return (
+        ParamDeclaration(
+            f"eline_sigma_kms_{group}",
+            Fixed(0.0),
+            f"Velocity dispersion of the lines in kinematic group {group!r} in km/s "
+            "(added in quadrature to instrument resolution)",
+            lambda lo, hi: lo >= 0,
+            "must have lo >= 0",
+            units="km/s",
+            free_prior=Uniform(
+                0.0,
+                ELINE_GROUP_SIGMA_MAX_KMS,
+                "Line velocity dispersion",
+                units="km/s",
+                default=0.0,
+            ),
+        ),
+        ParamDeclaration(
+            f"eline_delta_v_kms_{group}",
+            Fixed(0.0),
+            f"Velocity offset of the lines in kinematic group {group!r} from the "
+            "systemic redshift in km/s",
+            units="km/s",
+            free_prior=Uniform(-1000.0, 1000.0, "Line velocity offset", units="km/s", default=0.0),
+        ),
+    )
+
 
 # Cue-specific optional params: only registered if the user provides
 # them explicitly. The ``None`` prior is intentional: the registry
@@ -549,9 +585,10 @@ __all__ = [
     "CB19_PARAMS",
     "CUE_GAS_EXTRA_PARAMS",
     "CUE_IONSPEC_PARAMS",
-    "ELINE_BROAD_PARAMS",
+    "ELINE_GROUP_SIGMA_MAX_KMS",
     "ELINE_PARAMS",
     "GUTKIN16_PARAMS",
     "PARAMS",
     "SHOCK_PARAMS",
+    "eline_group_params",
 ]

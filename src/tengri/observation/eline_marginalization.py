@@ -78,13 +78,41 @@ def _build_eline_design_matrix_jitted(
     return columns.T
 
 
+@jax.jit
+def _build_eline_design_matrix_per_line_jitted(
+    wave_obs: jnp.ndarray,
+    line_wavelengths: jnp.ndarray,
+    spectral_resolution: jnp.ndarray,
+    redshift: float,
+    eline_sigma_kms: jnp.ndarray,
+    eline_delta_v_kms: jnp.ndarray,
+) -> jnp.ndarray:
+    """The same profile with a resolution, width and offset per line, shape ``(n_lines,)``."""
+    c_kms = 299792.458
+
+    def _single_column(lam_rest, resolution_j, sigma_j, delta_v_j):
+        lam_obs = lam_rest * (1.0 + redshift)
+        lam_center = lam_obs + lam_obs * delta_v_j / c_kms
+        sigma_inst = lam_obs / (2.355 * resolution_j)
+        sigma_vel = lam_obs * sigma_j / c_kms
+        sigma = jnp.sqrt(sigma_inst**2 + sigma_vel**2)
+        return jnp.exp(-0.5 * ((wave_obs - lam_center) / sigma) ** 2) / (
+            jnp.sqrt(2.0 * jnp.pi) * sigma
+        )
+
+    columns = jax.vmap(_single_column)(
+        line_wavelengths, spectral_resolution, eline_sigma_kms, eline_delta_v_kms
+    )
+    return columns.T
+
+
 def build_eline_design_matrix(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
-    spectral_resolution: float,
+    spectral_resolution: float | jnp.ndarray,
     redshift: float,
-    eline_sigma_kms: float = 0.0,
-    eline_delta_v_kms: float = 0.0,
+    eline_sigma_kms: float | jnp.ndarray = 0.0,
+    eline_delta_v_kms: float | jnp.ndarray = 0.0,
 ) -> jnp.ndarray:
     """Build the (n_pix, n_lines) Gaussian design matrix.
 
@@ -104,15 +132,17 @@ def build_eline_design_matrix(
         Observed-frame wavelength grid [Angstrom].
     line_wavelengths : array, shape (n_lines,)
         Rest-frame vacuum wavelengths of the lines [Angstrom].
-    spectral_resolution : float
+    spectral_resolution : float or array, shape (n_lines,)
         Instrument spectral resolution R = lambda / delta_lambda
-        [dimensionless].
+        [dimensionless]. An array gives each line its own resolution.
     redshift : float
         Source redshift [dimensionless].
-    eline_sigma_kms : float
-        Intrinsic velocity broadening [km/s]. Default 0.
-    eline_delta_v_kms : float
-        Velocity offset from systemic [km/s]. Default 0.
+    eline_sigma_kms : float or array, shape (n_lines,)
+        Intrinsic velocity broadening [km/s]. Default 0. An array gives each
+        line its own width (see :func:`line_kinematics`).
+    eline_delta_v_kms : float or array, shape (n_lines,)
+        Velocity offset from systemic [km/s]. Default 0. An array gives each
+        line its own offset.
 
     Returns
     -------
@@ -128,13 +158,23 @@ def build_eline_design_matrix(
     enable proper line amplitude marginalization in
     :func:`marginalize_emission_lines`.
     """
-    return _build_eline_design_matrix_jitted(
-        wave_obs,
-        line_wavelengths,
-        spectral_resolution,
-        redshift,
-        eline_sigma_kms,
-        eline_delta_v_kms,
+    per_line = (spectral_resolution, eline_sigma_kms, eline_delta_v_kms)
+    if all(jnp.ndim(value) == 0 for value in per_line):
+        # One value for every line: the scalar kernel, unchanged.
+        return _build_eline_design_matrix_jitted(
+            wave_obs,
+            line_wavelengths,
+            spectral_resolution,
+            redshift,
+            eline_sigma_kms,
+            eline_delta_v_kms,
+        )
+    n_lines = jnp.shape(line_wavelengths)[0]
+    resolution, sigma_kms, delta_v_kms = (
+        jnp.broadcast_to(jnp.asarray(value), (n_lines,)) for value in per_line
+    )
+    return _build_eline_design_matrix_per_line_jitted(
+        wave_obs, line_wavelengths, resolution, redshift, sigma_kms, delta_v_kms
     )
 
 
@@ -957,6 +997,64 @@ def build_line_design_matrix(
     )
 
     return jnp.concatenate([A_narrow, A_broad], axis=1)
+
+
+def kinematic_param_names(group: str) -> tuple[str, str]:
+    """Return the ``(width, offset)`` parameter names of one kinematic group.
+
+    Parameters
+    ----------
+    group : str
+        Group name; ``""`` is the default group.
+
+    Returns
+    -------
+    tuple of str
+        ``("eline_sigma_kms", "eline_delta_v_kms")`` for the default group, and
+        the same names with ``_<group>`` appended for a named one.
+    """
+    suffix = f"_{group}" if group else ""
+    return f"eline_sigma_kms{suffix}", f"eline_delta_v_kms{suffix}"
+
+
+def line_kinematics(params, fixed_values, catalog) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Return the intrinsic width and velocity offset of every catalog line.
+
+    Parameters
+    ----------
+    params : mapping
+        Sampled parameter values.
+    fixed_values : mapping
+        Fixed parameter values, read when a name is absent from ``params``.
+    catalog : LineList
+        Line catalog; its ``kinematic_groups`` and ``group_index`` set which
+        parameters each line reads.
+
+    Returns
+    -------
+    sigma_kms : ndarray, shape (n_lines,)
+        Intrinsic velocity dispersion of each line [km/s].
+    delta_v_kms : ndarray, shape (n_lines,)
+        Velocity offset of each line from the systemic redshift [km/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The group structure is static; only the parameter
+    values are traced. **Gradient-safe**: yes, the gather is linear. A group whose
+    parameters are absent from both mappings reads zero, the instrument-limited
+    line at the systemic redshift.
+    """
+    values = [
+        tuple(
+            jnp.asarray(params.get(name, fixed_values.get(name, 0.0)))
+            for name in kinematic_param_names(group)
+        )
+        for group in catalog.kinematic_groups
+    ]
+    index = catalog.group_index
+    sigma = jnp.stack([v[0] for v in values])[index]
+    delta_v = jnp.stack([v[1] for v in values])[index]
+    return sigma, delta_v
 
 
 def eline_scalar_resolution(resolution) -> float:

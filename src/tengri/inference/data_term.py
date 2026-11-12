@@ -475,7 +475,7 @@ def _resolve_eline_catalog(resolved: ResolvedDataTerm, spec_config: Any) -> Reso
     """Fill the catalog arrays, constraint matrix and fitted-amplitude priors."""
     from tengri.observation.line_list import LineList
 
-    if spec_config is not None and spec_config.eline_catalog is not None:
+    if spec_config is not None:
         catalog = spec_config.effective_catalog
     else:
         catalog = LineList.default_13()
