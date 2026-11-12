@@ -27,6 +27,8 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 
 from tengri._mapping import ReadOnlyPropertyMapping
+from tengri.config.exceptions import BackendError, TengriError
+from tengri.inference._backend_registry import pip_hint
 from tengri.inference._batching import AUTO, chunking_was_requested, resolve_forward_chunk_size
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
@@ -1192,7 +1194,7 @@ class _CatalogFitterOriginal:
                 all_noise = np.concatenate(
                     [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
                 )
-            except Exception:
+            except TengriError:
                 logging.getLogger(__name__).warning(
                     "LUT-bias advisory skipped: galaxy flux/noise arrays could not be "
                     "concatenated.",
@@ -2521,14 +2523,12 @@ class _CatalogFitterOriginal:
                 thread_redshift=thread_redshift,
                 thread_line_fluxes=thread_line_fluxes,
             )
-        except ImportError:  # pragma: no cover - optax is a declared MAP extra
-            warnings.warn(
-                "init_from='map' needs optax; falling back to random starts. "
-                "Install optax, or pass init_from=None to silence this.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return all_init
+        except ImportError as exc:
+            raise BackendError(
+                "init_from='map' requires optax, which is not installed.  Install it with:\n"
+                f"    {pip_hint('optax')}\n"
+                "or pass init_from=None to start the catalog fit from random points."
+            ) from exc
 
         t0 = time.time()
         warm = map_with_shared(

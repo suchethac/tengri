@@ -103,6 +103,7 @@ from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
+from tengri.components.dust.foreground import FOREGROUND_LAWS
 from tengri.components.dust.laws._registry import refuse_diffuse_only_law
 from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 from tengri.config.exceptions import (
@@ -890,8 +891,8 @@ _VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
 _VALID_AGN_NLR_TYPES = _agn_block_types("nlr")
 
 #: Valid AGN broad-line region block types (derived from ``AGN_BLOCKS['blr']``).
-#: Includes ``"qsogen"`` which lives on the qsogen model.
-_VALID_AGN_BLR_TYPES = _agn_block_types("blr") | {"qsogen"}
+#: ``"qsogen"`` is one of those registrations (``qsogen_blocks.py``).
+_VALID_AGN_BLR_TYPES = _agn_block_types("blr")
 
 #: Valid AGN feii block types (derived from ``AGN_BLOCKS['feii']``: the
 #: block-registration decorator is the single source of truth, so a new feii
@@ -5826,11 +5827,12 @@ _RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_M
 _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_MODEL.values())
 
 
-#: Valid laws for the MW foreground screen (#297). Only the closed-form
-#: laws that take a single ``R_V`` parameter are usable as a foreground
-#: screen: host-dust laws with two free knobs (slope, bump, ...) would
-#: collide with the host ``dust`` block's parameter prefix.
-_VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
+#: Valid laws for the MW foreground screen (#297), derived from the dispatch
+#: table :data:`FOREGROUND_LAWS` that :func:`foreground_transmission` evaluates.
+#: Only the closed-form laws that take a single ``R_V`` parameter are in that
+#: table: host-dust laws with two free knobs (slope, bump, ...) would collide
+#: with the host ``dust`` block's parameter prefix.
+_VALID_FOREGROUND_LAWS = frozenset(FOREGROUND_LAWS)
 
 #: Laws the AGN attenuation-stage block actually implements. One entry, and that
 #: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``

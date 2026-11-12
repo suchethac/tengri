@@ -8,3 +8,14 @@ updates:
       actions:
         patterns:
           - "*"
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "monthly"
+    labels: ["area:ci", "full-tests"]
+    groups:
+      jax:
+        patterns: ["jax", "jaxlib"]
+      ci-tools:
+        patterns: ["*"]
+        exclude-patterns: ["jax", "jaxlib"]
