@@ -29,6 +29,7 @@ from common import (
     PAPER_FIG_DIR,
     get_observation,
     get_ssp,
+    posterior_sfr_full,
     setup_matplotlib,
 )
 
@@ -194,12 +195,7 @@ def main():
 
     if rt_post.samples is not None:
         n_draw = min(50, len(next(iter(rt_post.samples.values()))))
-        sfr_draws = []
-        for j in range(n_draw):
-            s_j = {k: rt_post.samples[k][j] for k in rt_post.samples}
-            sfh_j = model.predict_sfh(s_j)
-            sfr_draws.append(np.array(sfh_j["sfr_full"]))
-        sfr_draws = np.array(sfr_draws)
+        sfr_draws = posterior_sfr_full(model, rt_post.samples, n_draw)
 
         ax1.fill_between(
             t_gyr,
