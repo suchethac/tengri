@@ -296,6 +296,10 @@ class FlatProblem:
     #: (elliptical slice encodes the exact N(0,1) prior in its ellipse; handing
     #: it ``log_prob_with_data`` would double-count the prior).
     log_likelihood_with_data: Callable | None = None
+    #: ``sfh={'field_centering': a}`` of the fit [dimensionless]. Below 1 the
+    #: GP-field latents carry a partially centred prior that ``prior_transform``
+    #: and the nested sampler's live points do not realize (#3161).
+    field_centering: float = 1.0
 
 
 #: Optional per-band record keys and the value an absent key takes. An absent key means every
@@ -400,6 +404,9 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
             "would be dropped. Use coordinates='ratios' there."
         )
     stochastic = spec.stochastic
+    field_centering = float(getattr(spec, "field_centering", 1.0))
+    from tengri.inference.loss_functions import standardized_neg_log_prior
+
     n_grid = spec.n_grid
     free_names = fitter._free_names
     physical = _physical_map(spec, free_names)
@@ -570,14 +577,33 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         return log_likelihood_with_data(flat_params, _data_args)
 
     def log_prior(flat_params):
-        """Unnormalized iid standard normal on every latent."""
+        """Unnormalized log prior of the latents (#3161).
+
+        The population PSD latents are iid N(0, 1). At ``field_centering = a < 1``
+        the per-galaxy GP-field latents take the partially centred prior, through
+        the same ``standardized_neg_log_prior`` the standardized objective calls.
+        The field latents are flattened so the normalizer counts every element.
+        """
         p = unravel_fn(flat_params)
-        penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
-        for name in free_names:
-            penalty += jnp.sum(p["gal"][name] ** 2)
+        psd_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
+        if field_centering == 1.0:
+            penalty = psd_penalty
+            for name in free_names:
+                penalty += jnp.sum(p["gal"][name] ** 2)
+            if stochastic:
+                penalty += jnp.sum(p["gal_xi"] ** 2)
+            return -0.5 * penalty
+        latents = dict(p["gal"])
         if stochastic:
-            penalty += jnp.sum(p["gal_xi"] ** 2)
-        return -0.5 * penalty
+            latents["psd_xi"] = jnp.ravel(p["gal_xi"])
+        neg_log_prior = standardized_neg_log_prior(
+            latents,
+            free_names,
+            stochastic=stochastic,
+            centering=field_centering,
+            psd_sigma_dex=to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
+        )
+        return -0.5 * psd_penalty - neg_log_prior
 
     def log_prob(flat_params):
         return log_likelihood(flat_params) + log_prior(flat_params)
@@ -616,6 +642,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         data_args=_data_args,
         log_prob_with_data=log_prob_with_data,
         log_likelihood_with_data=log_likelihood_with_data,
+        field_centering=field_centering,
     )
 
 
@@ -1294,6 +1321,13 @@ def run_flat_sampler(
             }
 
     elif driver == "nss":
+        if float(getattr(prob, "field_centering", 1.0)) != 1.0:
+            raise ValueError(
+                f"{method}: the nested sampler on the hierarchical flat seam draws its live "
+                "points from the iid N(0,1) prior, which is not the partially centred GP-field "
+                "prior at sfh={'field_centering': a < 1}. Use mcmc_nuts, mcmc_hmc or map there, "
+                "or set field_centering=1."
+            )
         # The real Nested Slice Sampler (Yallup+2026) on the standardized
         # problem, the sampler whose absence kept this name refused (#1429).
         # The prior needs no machinery at all here: live points are DRAWN

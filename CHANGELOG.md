@@ -78,6 +78,7 @@
 
 ### Fixed
 
+- fix(inference): the hierarchical flat seam honours `sfh={'field_centering': a}` below 1 (#3161). Its `log_prior` was the iid N(0, 1) on every latent, so a partially non-centred GP field sampled the wrong prior with no refusal. The flat seam now evaluates the same `standardized_neg_log_prior` as the standardized objective, with the field latents flattened so the normalizer counts every element; `a = 1` is unchanged. `method='nss'` on the flat seam refuses `field_centering < 1` by name, because its live points are drawn from the iid prior.
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
