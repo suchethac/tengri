@@ -149,7 +149,9 @@ def _build_broad(ssp, band, z, tau_bc, tau_diff, sfh, logU, logZ, approx):
     reason=(
         "#3268 dust-driven half, not fixed by the Lyman-edge guard: broad-band "
         "two_component error stays at the main value (see the measurement table "
-        "above the test). Cause: the screen is evaluated at each sub-band's flux centroid, exp(-tau(lambda_k)) instead of the chunk mean; Jensen biases it low. Remaining: sub-band design."
+        "above the test). Cause: the screen is evaluated at each sub-band's flux "
+        "centroid, exp(-tau(lambda_k)) instead of the chunk mean; Jensen biases it "
+        "low. Remaining: sub-band design."
     ),
 )
 @pytest.mark.parametrize("band, z, tau_bc, tau_diff, sfh, logU, logZ, measured", _BROAD_CASES)
