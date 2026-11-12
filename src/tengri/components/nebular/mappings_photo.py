@@ -65,6 +65,7 @@ from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
@@ -472,7 +473,7 @@ def _interp_agn_grid(
 # ── MappingsPhotoStellarBackend ───────────────────────────────────
 
 
-class MappingsPhotoStellarBackend:
+class MappingsPhotoStellarBackend(NebularBackendDefaults):
     """MAPPINGS V stellar photoionization backend (Flury et al. 2024).
 
     Predicts nebular emission line luminosities by interpolating the
@@ -522,6 +523,9 @@ class MappingsPhotoStellarBackend:
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:
@@ -1058,7 +1062,7 @@ _MAPPINGS_STELLAR_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
 # ── MappingsPhotoAGNBackend ───────────────────────────────────────
 
 
-class MappingsPhotoAGNBackend:
+class MappingsPhotoAGNBackend(NebularBackendDefaults):
     """MAPPINGS V AGN photoionization backend (Flury et al. 2024).
 
     Predicts NLR emission line luminosities by interpolating the OPTXAGNF

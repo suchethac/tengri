@@ -45,7 +45,10 @@ import numpy as np
 
 from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
-from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
+from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
+    render_nebular_lines as _place_line_profiles,
+)
 
 # Physical constants
 from tengri.utils.grid_interp import library_lookup as _library_lookup
@@ -865,7 +868,7 @@ def compute_shock_sed(
 
 
 @dataclass
-class ShockBackend:
+class ShockBackend(NebularBackendDefaults):
     """MAPPINGS V shock emission backend satisfying the NebularBackend Protocol.
 
     Wraps :func:`compute_shock_sed` as an object-oriented backend so that shock
@@ -907,6 +910,9 @@ class ShockBackend:
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = True
     carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:

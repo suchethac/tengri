@@ -83,6 +83,22 @@ class NebularBackend(Protocol):
         Gutkin16 from ``continuum=``) takes precedence. Feeds
         :func:`nebular_backends_with_freefree_continuum`.
 
+    additive : ClassVar[bool]
+        Whether the backend adds its emission to ``sed_intrinsic``. False only
+        for the baked-in backend, whose emission is already in the SSP grid.
+    requires_instance : ClassVar[bool]
+        Whether the component needs a constructed backend object at precompute.
+        False only for the baked-in backend.
+    caches_filters : ClassVar[bool]
+        Whether precompute caches the filter passbands for the nebular photometry
+        (``approx["wave_precomp"]``). False only for the baked-in backend.
+
+    The photoionization and line backends also inherit
+    ``NebularBackendDefaults`` (in ``_shared.py``), which
+    supplies the hooks the component calls on every backend: ``call_kwargs``,
+    ``split_nebular``, ``line_catalog_kwargs``, ``extra_derived`` and
+    ``precompute_check``. A backend overrides only the hooks it differs on.
+
     Class-level members are readable without an instance, so the component can
     answer for a configuration string before any backend object exists.
 
@@ -127,6 +143,9 @@ class NebularBackend(Protocol):
     reads: ClassVar[tuple[str, ...]]
     publishes_shock: ClassVar[bool]
     carries_freefree: ClassVar[bool]
+    additive: ClassVar[bool]
+    requires_instance: ClassVar[bool]
+    caches_filters: ClassVar[bool]
 
     @classmethod
     def parameters(cls) -> "list[ParamDeclaration]":
