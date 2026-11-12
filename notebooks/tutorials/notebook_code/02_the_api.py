@@ -314,17 +314,17 @@ result_map = fitter.run("map", n_steps=500, verbose=False)
 print(f"MAP: {result_map.wall_time_s:.1f}s, final loss = {float(result_map.loss_history[-1]):.1f}")
 
 # %%
-# native_geovi — approximate posterior
+# vi — approximate posterior
 result_geovi = fitter.run(
-    "native_geovi", n_iterations=15, n_samples=6, n_seeds=3,
+    "vi", n_iterations=15, n_samples=6,
     n_posterior_samples=2000, verbose=False,
 )
-print(f"native_geovi: {result_geovi.wall_time_s:.1f}s, {len(next(iter(result_geovi.samples.values())))} samples")
+print(f"vi: {result_geovi.wall_time_s:.1f}s, {len(next(iter(result_geovi.samples.values())))} samples")
 
 # %%
 # Ray Tracing — exact MCMC
 result_rt = fitter.run(
-    "raytrace", init_from=result_map,
+    "mcmc_raytrace", init_from=result_map,
     n_burnin=100, n_steps=500, verbose=False,
 )
 acc = result_rt.diagnostics.get("acceptance_rate", float("nan"))
@@ -333,9 +333,9 @@ print(f"Ray Tracing: {result_rt.wall_time_s:.1f}s, acceptance = {acc:.1%}")
 # %%
 # Switching methods is trivial
 print("\nSwitching methods is one line:")
-print('  fitter.run("native_geovi")  # approximate, fast')
-print('  fitter.run("raytrace")      # exact, any D')
-print('  fitter.run("nuts")          # exact, D < 20')
+print('  fitter.run("vi")  # approximate, fast')
+print('  fitter.run("mcmc_raytrace")  # exact, any D')
+print('  fitter.run("mcmc_nuts")          # exact, D < 20')
 print("\nSame model, same data, same loss — different exploration strategy.")
 
 # %% [markdown]
@@ -397,7 +397,7 @@ if hasattr(result, "effective_sample_size"):
 #
 # 1. **jit** — compiles functions. Slow first call (tracing), fast after.
 # 2. **vmap** — vectorizes over a batch dimension. Use it for catalogs.
-# 3. **grad** — automatic differentiation. This is why native_geovi works:
+# 3. **grad** — automatic differentiation. This is why vi works:
 #    gradients flow through the entire SPS pipeline for free.
 #
 # The forward model runs in ~40 µs JIT'd. Gradients cost ~1.5× that. Batch
@@ -412,7 +412,7 @@ if hasattr(result, "effective_sample_size"):
 # |--------|---------|-------------|
 # | `Parameters` | Define parameters and priors | `.sample()`, `.standardize()` |
 # | `SEDModel` | Forward model | `.predict_spectrum()`, `.predict_sfh()`, `.mock()` |
-# | `Fitter` | Inference engine | `.run("native_geovi")`, `.run("raytrace")` |
+# | `Fitter` | Inference engine | `.run("vi")`, `.run("mcmc_raytrace")` |
 # | `Posterior` | Results container | `.samples`, `.summary()`, `.diagnostics` |
 #
 # Next: **tutorials/03** explains the IFT/PSD/GP machinery that generates
