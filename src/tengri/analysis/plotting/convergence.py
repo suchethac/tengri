@@ -116,7 +116,7 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
 
     # If samples available, compute posterior band
     if result.samples is not None:
-        sfh_array = map_draws(result._model._sfr_mean_draw, result.samples)
+        sfh_array = map_draws(result._model, "_sfr_mean_draw", result.samples)
 
         # Plot posterior band
         sfr_lo = np.percentile(sfh_array, 16, axis=0)

@@ -672,7 +672,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
     # Left panel: SED
     if result.samples is not None:
         # Compute SED for each sample
-        sed_array = map_draws(result._model._rest_sed_draw, result.samples)
+        sed_array = map_draws(result._model, "_rest_sed_draw", result.samples)
 
         # Get wavelengths
         wave_rest = np.array(result._model.ssp_data.ssp_wave)
@@ -721,7 +721,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
 
     if result.samples is not None:
         # Compute SFH for each sample
-        sfh_array = map_draws(result._model._sfr_mean_draw, result.samples)
+        sfh_array = map_draws(result._model, "_sfr_mean_draw", result.samples)
 
         # Plot posterior band
         sfr_lo = np.percentile(sfh_array, 16, axis=0)

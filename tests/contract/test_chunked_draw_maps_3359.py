@@ -3,9 +3,10 @@
 
 Contract for three things that changed together:
 
-1. :func:`tengri.utils.batching.vmap_chunked` caches its compiled ``jit(vmap(fn))``
-   per callable, so a stable ``fn`` is compiled once across calls. The cache is
-   bounded, and a fresh lambda per call is recompiled (documented, pinned here).
+1. :func:`tengri.utils.batching.vmap_chunked` keeps no state between calls. The
+   compiled kernel is cached per model by :func:`tengri.forward.draw_maps.map_draws`,
+   keyed by method name and ``compile_signature()``: a stale kernel is never served
+   after a structural mutation, and the model is collectable once dropped.
 2. The posterior plots (``posterior_plot_sfh``, ``posterior_plot_sed``,
    ``plot_sfh``, ``SEDModel.plot_sfh_posterior``) and their helper
    :func:`tengri.forward.draw_maps.map_draws` reproduce the per-draw Python loop
@@ -32,9 +33,8 @@ import numpy as np
 import pytest
 from matplotlib.collections import PolyCollection
 
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.forward.draw_maps import DRAW_CHUNK, map_draws
-from tengri.utils import batching
 from tengri.utils.batching import vmap_chunked
 
 pytestmark = pytest.mark.contract
@@ -109,37 +109,43 @@ def _assert_band(ax, lo, hi):
         assert found, f"{name} percentile curve not found in the plotted band"
 
 
-# ── 1. vmap_chunked kernel cache ──────────────────────────────────
+# ── 1. vmap_chunked keeps no state; owners cache their own kernels ─
 
 
-def test_stable_callable_compiles_once_across_calls():
+def test_vmap_chunked_keeps_no_state_between_calls():
+    """Same callable twice still recompiles: nothing global caches ``fn``."""
     traces = []
 
     def fn(p):
         traces.append(1)  # runs at trace time only
         return p["x"] ** 2
 
-    batch = {"x": jnp.arange(37.0)}
-    first = vmap_chunked(fn, chunk_size=8)(batch)
-    n_after_first = len(traces)
-    second = vmap_chunked(fn, chunk_size=8)(batch)
-    assert len(traces) == n_after_first
+    batch = {"x": jnp.arange(9.0)}  # chunks of 4, 4, 1: two distinct shapes per call
+    first = vmap_chunked(fn, chunk_size=4)(batch)
+    per_call = len(traces)
+    second = vmap_chunked(fn, chunk_size=4)(batch)
+    assert len(traces) == 2 * per_call
     np.testing.assert_array_equal(np.asarray(first), np.asarray(second))
 
 
-def test_fresh_lambda_per_call_is_recompiled_documented_limit():
-    traces = []
-    batch = {"x": jnp.arange(9.0)}  # chunks of 4, 4, 1: two distinct shapes per call
-    vmap_chunked(lambda p: (traces.append(1), p["x"] * 2.0)[1], chunk_size=4)(batch)
-    per_call = len(traces)
-    vmap_chunked(lambda p: (traces.append(1), p["x"] * 2.0)[1], chunk_size=4)(batch)
-    assert len(traces) == 2 * per_call
+def test_map_draws_reuses_the_owner_kernel_for_an_unchanged_model(model, samples):
+    map_draws(model, "_sfr_mean_draw", samples)
+    first = vars(model)["_draw_kernels"]["_sfr_mean_draw"][1]
+    map_draws(model, "_sfr_mean_draw", samples)
+    assert vars(model)["_draw_kernels"]["_sfr_mean_draw"][1] is first
 
 
-def test_kernel_cache_is_bounded():
-    for i in range(batching._KERNEL_CACHE_SIZE + 10):
-        vmap_chunked(lambda p, i=i: p["x"] + i, chunk_size=4)({"x": jnp.arange(3.0)})
-    assert len(batching._KERNELS) <= batching._KERNEL_CACHE_SIZE
+def test_map_draws_stale_kernel_is_replaced_when_the_signature_changes(
+    synthetic_ssp_wide, synthetic_tophat_obs, samples
+):
+    model = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    wl = np.asarray([6564.61, 4862.68])
+    map_draws(model, "predict_photometry", samples)
+    first = vars(model)["_draw_kernels"]["predict_photometry"]
+    model.enable_fast_nebular(wl, n_grid=8)
+    got = map_draws(model, "predict_photometry", samples)
+    assert vars(model)["_draw_kernels"]["predict_photometry"][0] != first[0]
+    np.testing.assert_allclose(got, _loop(model.predict_photometry, samples), rtol=RTOL, atol=0.0)
 
 
 def test_ragged_chunk_matches_unchunked_float64():
@@ -164,20 +170,20 @@ def test_chunk_size_must_be_positive():
 
 def test_map_draws_sfr_mean_matches_loop(model, samples):
     assert N_DRAWS % DRAW_CHUNK != 0  # the ragged chunk is exercised
-    got = map_draws(model._sfr_mean_draw, samples)
+    got = map_draws(model, "_sfr_mean_draw", samples)
     ref = _loop(model._sfr_mean_draw, samples)
     assert got.shape == ref.shape
     np.testing.assert_allclose(got, ref, rtol=RTOL, atol=0.0)
 
 
 def test_map_draws_sfr_full_matches_loop(model, samples):
-    got = map_draws(model._sfr_full_draw, samples)
+    got = map_draws(model, "_sfr_full_draw", samples)
     ref = _loop(model._sfr_full_draw, samples)
     np.testing.assert_allclose(got, ref, rtol=RTOL, atol=0.0)
 
 
 def test_map_draws_rest_sed_matches_loop(model, samples):
-    got = map_draws(model._rest_sed_draw, samples)
+    got = map_draws(model, "_rest_sed_draw", samples)
     ref = _loop(model._rest_sed_draw, samples)
     assert got.shape == (N_DRAWS, ref.shape[1])
     np.testing.assert_allclose(got, ref, rtol=RTOL, atol=0.0)
@@ -247,3 +253,79 @@ def test_sbi_training_data_independent_of_chunk_size(model):
     assert small["x"].shape == large["x"].shape == (N_DRAWS, 5)
     np.testing.assert_allclose(np.asarray(small["x"]), np.asarray(large["x"]), rtol=RTOL, atol=0.0)
     np.testing.assert_array_equal(np.asarray(small["theta"]), np.asarray(large["theta"]))
+
+
+# ── 4. owner-scoped kernels: staleness and retention (#3359 review) ──
+
+
+def _build_cue_model(ssp, obs):
+    """A Cue-nebular model on the WavePrecomp LUT, so enable_fast_nebular moves photometry."""
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        approx=WavePrecomp(),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(DEFAULT),
+    )
+
+
+def _batch(samples):
+    return {k: jnp.asarray(v) for k, v in samples.items()}
+
+
+def test_compile_relevant_mutation_is_not_served_a_stale_kernel(
+    synthetic_ssp_wide, synthetic_tophat_obs, samples
+):
+    """Mutate the model between two mapped calls; the second must equal the eager loop.
+
+    ``enable_fast_nebular`` moves the LUT photometry (about 2e-6 relative here), so the
+    mapped function is the bound ``predict_photometry``, which is what the cache keys on.
+    """
+    wl = np.asarray([6564.61, 4862.68])  # Halpha, Hbeta (vacuum)
+    model = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    vmap_chunked(model.predict_photometry, chunk_size=DRAW_CHUNK)(_batch(samples))  # warm
+
+    before = _loop(model.predict_photometry, samples)
+    sig_before = model.compile_signature()
+    model.enable_fast_nebular(wl, n_grid=8)
+    assert model.compile_signature() != sig_before
+    after = _loop(model.predict_photometry, samples)
+    # The mutation must move the output past rtol 1e-10, or this test cannot discriminate.
+    assert not np.allclose(before, after, rtol=RTOL, atol=0.0)
+
+    got = np.asarray(
+        vmap_chunked(model.predict_photometry, chunk_size=DRAW_CHUNK)(_batch(samples))
+    )
+    np.testing.assert_allclose(got, after, rtol=RTOL, atol=0.0)
+
+
+def test_mapped_kernel_does_not_keep_the_model_alive(
+    synthetic_ssp_wide, synthetic_tophat_obs, samples
+):
+    """After a mapped call and ``del``, nothing global still references the model."""
+    import gc
+    import weakref
+
+    model = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    vmap_chunked(model._rest_sed_draw, chunk_size=DRAW_CHUNK)(_batch(samples))
+    ref = weakref.ref(model)
+    del model
+    gc.collect()
+    assert ref() is None
+
+
+def test_owner_cached_kernel_does_not_keep_the_model_alive(
+    synthetic_ssp_wide, synthetic_tophat_obs, samples
+):
+    """The kernel cached on the model by ``map_draws`` is collected with the model."""
+    import gc
+    import weakref
+
+    model = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    map_draws(model, "_rest_sed_draw", samples)
+    assert "_draw_kernels" in vars(model)
+    ref = weakref.ref(model)
+    del model
+    gc.collect()
+    assert ref() is None

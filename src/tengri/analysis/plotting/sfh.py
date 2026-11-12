@@ -8,7 +8,7 @@ Inspired by BAGPIPES (Carnall+2018) and Prospector (Johnson+2021).
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.forward.draw_maps import map_draws
+from tengri.forward.draw_maps import evaluate_draws
 
 from .styles import COLORS, SAMPLER_STYLE
 
@@ -108,7 +108,7 @@ def plot_sfh(
         # ``model`` is any object with ``predict_sfh``, so the per-draw map is a closure
         # over it: the kernel is compiled once per plot call, not reused across calls.
         key = "sfr_full" if model.spec.stochastic else "sfr_mean"
-        sfh_arr = map_draws(lambda p: model.predict_sfh(p)[key], posterior.samples)
+        sfh_arr = evaluate_draws(lambda p: model.predict_sfh(p)[key], posterior.samples)
         t_gyr = np.array(model.predict_sfh(posterior.params)["t_gyr"])
 
         # Credible interval fill

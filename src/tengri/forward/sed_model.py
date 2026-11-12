@@ -3708,6 +3708,9 @@ class SEDModel:
         # structure after construction.
         self._signature_memo = None
 
+        # Owner-cached plot kernels (forward/draw_maps.map_draws), by method name.
+        self._draw_kernels = {}
+
         # AGB circumstellar dust-shell weighting (#2534): a free
         # agb_dust_weight can never build a precompute LUT (see the refusal
         # in StellarSEDComponent.precompute) -- raised here, directly, rather
@@ -6765,9 +6768,8 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
-    # Per-draw maps for posterior plots. Bound methods compare equal across
-    # accesses, so :func:`tengri.forward.draw_maps.map_draws` reuses one compiled
-    # kernel per model instead of recompiling on every plot call.
+    # Per-draw maps for posterior plots, evaluated by
+    # :func:`tengri.forward.draw_maps.map_draws` (named by method, cached per model).
 
     def _sfr_mean_draw(self, params):
         """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
@@ -7293,6 +7295,16 @@ class SEDModel:
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
+
+    def __getstate__(self) -> dict:
+        """Pickle state without the owner-cached draw kernels (not picklable).
+
+        :func:`tengri.forward.draw_maps.map_draws` caches compiled kernels on the
+        instance; those are rebuilt on demand after unpickling or copying.
+        """
+        state = self.__dict__.copy()
+        state.pop("_draw_kernels", None)
+        return state
 
     def compile_signature(self) -> tuple:
         """Return a hashable signature identifying JIT-graph shape and structure.
@@ -14238,7 +14250,7 @@ class SEDModel:
             from tengri.forward.draw_maps import map_draws
 
             n_total = len(next(iter(posterior.samples.values())))
-            sfh_arr = map_draws(self._sfr_full_draw, posterior.samples)
+            sfh_arr = map_draws(self, "_sfr_full_draw", posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)
