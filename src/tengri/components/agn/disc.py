@@ -72,7 +72,7 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.components.agn._template_grid import scale_to_lbol_native
+from tengri.components.agn._template_grid import scale_to_torus_power_native
 from tengri.utils.grid_interp import library_lookup, loglog_integral, resample_template
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
@@ -2946,6 +2946,5 @@ def relagn_disc_from_grid(
     # disc does not depend on the caller's wavelength sampling or range. The
     # float32 peak-factoring (the template's integral is ~1e45 erg/s and would
     # overflow) lives in the helper.
-    return scale_to_lbol_native(
-        lnu_template, wave_native, lnu_interp, 10.0**agn_log_lbol * _LSUN_ERG
-    )
+    # Log-space power (#3183): the erg/s-scale linear power is never formed in float32.
+    return scale_to_torus_power_native(lnu_template, wave_native, lnu_interp, agn_log_lbol, 1.0)
