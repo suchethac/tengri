@@ -64,7 +64,9 @@ def _catalog_table(table: Table, bands: list[str]) -> Table:
     """Photometric catalog for the four galaxies, fluxes and errors in microJy."""
     columns: dict[str, np.ndarray] = {
         "ID": np.array([int(_single_row(table, g)["ID"]) for g in CAPSTONE_IDS]),
-        REDSHIFT_COLUMN: np.array([float(_single_row(table, g)[REDSHIFT_COLUMN]) for g in CAPSTONE_IDS]),
+        REDSHIFT_COLUMN: np.array(
+            [float(_single_row(table, g)[REDSHIFT_COLUMN]) for g in CAPSTONE_IDS]
+        ),
     }
     per_galaxy = [D.photometry_for_row(_single_row(table, g), bands) for g in CAPSTONE_IDS]
     for j, band in enumerate(bands):

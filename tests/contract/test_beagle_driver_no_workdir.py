@@ -222,3 +222,76 @@ def test_capstone_throughputs_are_dimensionless_and_nonnegative() -> None:
         assert spec.transmission.max() <= 1.0
     k_band = next(f for f in run.filters if f.name == "ISAAC_KS")
     assert 0.0 < k_band.transmission.max() < 1.0
+
+
+def test_capstone_filter_configuration_follows_the_fit_example() -> None:
+    from reproduction.beagle._drivers import beagle_capstone as C
+
+    run = C.capstone_run()
+    lines = B._filter_config(run.name, run.filters, fitting=True).splitlines()
+    assert lines[0] == "units:microJy"
+    assert lines[1] == "object_ID:colName:ID"
+    band_lines = lines[2:]
+    assert len(band_lines) == len(run.filters)
+    for line, spec in zip(band_lines, run.filters, strict=True):
+        assert line == (
+            f"name:{spec.name} fileName:$BEAGLE_FILTERS/{run.name}_{spec.name}.dat "
+            f"min_rel_err:0.02 flux:colName:flux_{spec.name} fluxErr:colName:fluxerr_{spec.name}"
+        )
+    assert all(spec.min_rel_err == 0.02 for spec in run.filters)
+
+
+def test_photometry_only_configuration_has_no_object_id_line() -> None:
+    run = M.by_section("s12_igm_inoue_z3")[0]
+    lines = B._filter_config(run.name, run.filters, fitting=False).splitlines()
+    assert lines[0] == "units:microJy"
+    assert all(not line.startswith("object_ID") for line in lines)
+    assert all("flux:colName" not in line for line in lines)
+
+
+@pytest.mark.parametrize("z", [1, 3, 6])
+@pytest.mark.parametrize("label", ["inoue", "none"])
+def test_igm_sections_run_at_native_template_resolution(label: str, z: int) -> None:
+    run = M.by_section(f"s12_igm_{label}_z{z}")[0]
+    assert run.rebin is None
+    assert "REBIN TEMPLATES" not in run.param_text()
+
+
+@pytest.mark.parametrize("label", ["inoue", "none"])
+def test_rebinned_z6_pair_is_kept_for_comparison(label: str) -> None:
+    run = M.by_section(f"s12_igm_{label}_z6_rebin10")[0]
+    assert run.rebin == 10
+    assert "REBIN TEMPLATES = 10" in run.param_text()
+    native = M.by_section(f"s12_igm_{label}_z6")[0]
+    assert run.rows == native.rows
+    assert [f.name for f in run.filters] == [f.name for f in native.filters]
+    for a, b in zip(run.filters, native.filters, strict=True):
+        assert np.array_equal(a.wl_aa, b.wl_aa)
+        assert np.array_equal(a.transmission, b.transmission)
+
+
+def test_module_entry_point_renders_the_fit_configuration(tmp_path: Path) -> None:
+    """Run as ``python -m``, the driver's module is ``__main__``; a fit must still be recognised."""
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(repo / "src") + ":" + str(repo)}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "reproduction.beagle._drivers.beagle_run",
+            "--render-params",
+            "--out",
+            str(tmp_path),
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    config = next(tmp_path.glob("filters/capstone_paper1_*_config.dat")).read_text().splitlines()
+    assert config[1] == "object_ID:colName:ID"

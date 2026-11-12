@@ -88,7 +88,16 @@ NOTATION_CANON = {
 }
 
 # Reference code canonical casing
-REF_CODE_CANON = {"BAGPIPES", "Prospector", "CIGALE", "AGNfitter", "Synthesizer", "FSPS", "DSPS"}
+REF_CODE_CANON = {
+    "BAGPIPES",
+    "Prospector",
+    "CIGALE",
+    "AGNfitter",
+    "Synthesizer",
+    "FSPS",
+    "DSPS",
+    "BEAGLE",
+}
 
 # Caveat keywords: indicate substantive content, not padding
 CAVEAT_KEYWORDS = {

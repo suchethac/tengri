@@ -36,13 +36,15 @@ def _logz(z_abs: float) -> float:
 
 def _delayed_rows(taus: Sequence[float], z: float, z_abs: float) -> tuple[dict[str, float], ...]:
     return tuple(
-        {"redshift": z, "mass": 10.0, "sfr": 1.0, "metallicity": _logz(z_abs), "tau": tau} for tau in taus
+        {"redshift": z, "mass": 10.0, "sfr": 1.0, "metallicity": _logz(z_abs), "tau": tau}
+        for tau in taus
     )
 
 
 def _ssp_rows(ages: Sequence[float], z_abs: float) -> tuple[dict[str, float], ...]:
     return tuple(
-        {"redshift": 0.001, "mass": 10.0, "metallicity": _logz(z_abs), "ssp_age": age} for age in ages
+        {"redshift": 0.001, "mass": 10.0, "metallicity": _logz(z_abs), "ssp_age": age}
+        for age in ages
     )
 
 
@@ -89,22 +91,32 @@ def _igm_filters(z: float) -> tuple[FilterSpec, ...]:
 
 
 def _igm_sections() -> tuple[MockRun, ...]:
-    """Per redshift, an Inoue run and a no-IGM control; BEAGLE filters are per run, so one run per z."""
+    """Per redshift, an Inoue run and a no-IGM control, at native template resolution.
+
+    BEAGLE filters are per run, so one run per redshift. ``rebin=None`` keeps the native
+    grid: the 2 % top-hats at rest 1216 A sit on a feature that ``REBIN TEMPLATES = 10``
+    smooths (by -0.14 against Inoue+2014 at z = 6; by -0.003 at native resolution). The
+    z = 6 pair is repeated with ``REBIN TEMPLATES = 10`` so the rebinned result stays on record.
+    """
     runs = []
-    for z in (1.0, 3.0, 6.0):
+    cases = [(z, None) for z in (1.0, 3.0, 6.0)] + [(6.0, 10)]
+    for z, rebin in cases:
         row = {"redshift": z, "mass": 10.0, "sfr": 1.0, "metallicity": _logz(0.02), "tau": 9.0}
+        suffix = "" if rebin is None else f"_rebin{rebin}"
         for label, igm in (("inoue", "Inoue"), ("none", None)):
             runs.append(
                 MockRun(
-                    section=f"s12_igm_{label}_z{int(z)}",
+                    section=f"s12_igm_{label}_z{int(z)}{suffix}",
                     rows=(row,),
                     templates="bc03",
                     params=(_DELAYED,),
                     filters=_igm_filters(z),
                     igm=igm,
+                    rebin=rebin,
                 )
             )
     return tuple(runs)
+
 
 # CCWW13_full is not run: its Tuffs et al. (2004) radiative-transfer tables are not distributed
 # with the public BEAGLE package, and BEAGLE stops with "Radiative transfer calculations not
@@ -165,7 +177,9 @@ RUN_MATRIX: tuple[MockRun, ...] = (
     ),
     MockRun(
         section="s5_cf00_tauv",
-        rows=tuple({**_delayed_rows((9.0,), _SAMPLE_Z, 0.02)[0], "tauV_eff": t} for t in (0.3, 1.0, 2.0)),
+        rows=tuple(
+            {**_delayed_rows((9.0,), _SAMPLE_Z, 0.02)[0], "tauV_eff": t} for t in (0.3, 1.0, 2.0)
+        ),
         templates="bc03",
         dust="CF00",
         params=(_DELAYED, mock_fixed("mu", value=0.4)),
@@ -175,11 +189,13 @@ RUN_MATRIX: tuple[MockRun, ...] = (
         rows=_nebular_rows(),
         templates="ineb_june16",
         nebular=True,
-        params=(mock_fixed("sfh_type", char_value="constant"), mock_fixed("max_stellar_age", value=9.0)),
+        params=(
+            mock_fixed("sfh_type", char_value="constant"),
+            mock_fixed("max_stellar_age", value=9.0),
+        ),
     ),
     *_igm_sections(),
 )
-
 
 
 def by_section(section: str) -> list[MockRun]:

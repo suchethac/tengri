@@ -62,9 +62,12 @@ class ParsedRun:
         AB magnitudes keyed by filter name.
     line_lums_lsun : dict or None
         ``HII EMISSION`` line luminosities in :math:`L_\\odot`, keyed
-        ``<line>_<vacuum wl>_lum_<obs|em>``.
+        ``<line>_<vacuum wl>_lum_<obs|em>``. BEAGLE's FITS header labels these
+        columns erg s\\ :sup:`-1`, but the values are :math:`L_\\odot`: the ``*_flux`` column
+        times :math:`4\\pi d_L^2`, divided by :math:`L_\\odot`, reproduces them.
     line_fluxes : dict or None
-        ``HII EMISSION`` ``*_flux`` columns, as BEAGLE writes them.
+        ``HII EMISSION`` ``*_flux`` columns in erg s\\ :sup:`-1` cm\\ :sup:`-2`, as BEAGLE
+        writes them.
     continuum_sed : ndarray or None
         Continuum-only :math:`L_\\nu` on ``wl_rest_aa``, when ``CONTINUUM SED`` is on the same grid.
     posterior : dict or None
@@ -142,9 +145,13 @@ def _line_luminosities(cols: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     return out
 
 
-def _sed_block(hdul: fits.HDUList) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+def _sed_block(
+    hdul: fits.HDUList,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
     """Wavelength (vacuum), raw F_lambda, L_nu and the galaxy-properties columns."""
-    gp_hdu, wl_hdu, sed_hdu = (_hdu(hdul, n) for n in ("GALAXY PROPERTIES", "FULL SED WL", "FULL SED"))
+    gp_hdu, wl_hdu, sed_hdu = (
+        _hdu(hdul, n) for n in ("GALAXY PROPERTIES", "FULL SED WL", "FULL SED")
+    )
     if gp_hdu is None or wl_hdu is None or sed_hdu is None:
         raise ValueError("BEAGLE output needs GALAXY PROPERTIES, FULL SED WL and FULL SED")
     gp = _columns(gp_hdu)
@@ -153,7 +160,9 @@ def _sed_block(hdul: fits.HDUList) -> tuple[np.ndarray, np.ndarray, np.ndarray, 
     return wl, flam, _to_lnu(wl, flam, gp["luminosity_distance"]), gp
 
 
-def parse_mock_output(path: Path | str, *, provenance: Mapping[str, object] | None = None) -> ParsedRun:
+def parse_mock_output(
+    path: Path | str, *, provenance: Mapping[str, object] | None = None
+) -> ParsedRun:
     """Parse one BEAGLE ``--mock`` FITS file into a :class:`ParsedRun`.
 
     Parameters
@@ -189,7 +198,9 @@ def parse_mock_output(path: Path | str, *, provenance: Mapping[str, object] | No
         magnitudes_app=_magnitudes(app, _MAGNITUDES["APPARENT MAGNITUDES"]),
         magnitudes_abs=_magnitudes(abs_, _MAGNITUDES["ABSOLUTE MAGNITUDES"]),
         line_lums_lsun=None if lines is None else _line_luminosities(lines),
-        line_fluxes=None if lines is None else {c: a for c, a in lines.items() if c.endswith("_flux")},
+        line_fluxes=None
+        if lines is None
+        else {c: a for c, a in lines.items() if c.endswith("_flux")},
         continuum_sed=cont,
         provenance=prov,
     )
@@ -289,7 +300,9 @@ def load_cache(root: Path, name: str) -> ParsedRun:
     for name_ in _DICT_FIELDS:
         prefix = f"{name_}__"
         kwargs[name_] = (
-            {k[len(prefix) :]: v for k, v in data.items() if k.startswith(prefix)} if name_ in present else None
+            {k[len(prefix) :]: v for k, v in data.items() if k.startswith(prefix)}
+            if name_ in present
+            else None
         )
     if "posterior" in present:
         post: dict[str, dict[str, dict[str, np.ndarray]]] = {}

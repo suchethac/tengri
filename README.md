@@ -284,11 +284,10 @@ codes: the same models, implemented in one framework, so you can
 check every assumption and compare models side by side. The
 comparisons live in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
-Six are online now ([CIGALE](https://cigale.lam.fr/), BAGPIPES,
-Prospector/FSPS, AGNFITTER-RX, ProSpect, GRAHSP), each putting the two codes
-on the same axes, component by component, ending with a full-SED
-head-to-head. Synthesizer is being revised, and BEAGLE, MAGPHYS,
-and GalaPy are next.
+Seven are online now ([CIGALE](https://cigale.lam.fr/), BAGPIPES,
+Prospector/FSPS, AGNFITTER-RX, ProSpect, GRAHSP, BEAGLE), each putting the two
+codes on the same axes, component by component, ending with a full-SED
+head-to-head. Synthesizer is being revised, and MAGPHYS and GalaPy are next.
 
 ## Citation
 
