@@ -34,6 +34,38 @@ __all__ = [
 
 __version_fallback__ = "0.0.0"
 
+#: Schema version of the HDF5 layout written by :meth:`FitResult.save` and read by
+#: :meth:`FitResult.load`. A file whose ``schema_version`` differs, or is missing,
+#: is refused rather than read as if it matched (#3283).
+RESULTS_SCHEMA_VERSION = "v1"
+
+
+def _require_results_schema(grp: Any, filepath: str) -> None:
+    """Refuse a results file whose ``schema_version`` is not :data:`RESULTS_SCHEMA_VERSION`.
+
+    Parameters
+    ----------
+    grp : h5py.Group
+        The ``tengri_fitresult`` group of the file.
+    filepath : str
+        Path of the file, named in the error message.
+
+    Raises
+    ------
+    ValueError
+        If the attribute is missing (a file from before schema versioning) or
+        names a different version.
+    """
+    found = grp.attrs.get("schema_version")
+    if isinstance(found, bytes):
+        found = found.decode()
+    if found != RESULTS_SCHEMA_VERSION:
+        raise ValueError(
+            f"{filepath!r} has results schema version {found!r} (no version attribute "
+            "means a file from before schema versioning), but this tengri reads "
+            f"version {RESULTS_SCHEMA_VERSION!r}. Re-run the fit and save it again."
+        )
+
 
 class ResultSerializationError(RuntimeError):
     """A saved fit is missing data that was asked to be written.
@@ -413,9 +445,9 @@ class FitResult:
 
         Notes
         -----
-        The HDF5 schema version is ``v1``. The inner result contributes a
-        ``/tengri_fitresult/samples`` group, populated from whichever of these
-        is available:
+        The HDF5 schema version is :data:`RESULTS_SCHEMA_VERSION` (``v1``). The inner
+        result contributes a ``/tengri_fitresult/samples`` group, populated from
+        whichever of these is available:
 
         - ``.samples`` dict -> one dataset per key
         - else ``.to_dict()`` -> one dataset per key
@@ -449,7 +481,7 @@ class FitResult:
         with h5py.File(path, "w") as f:
             # Root group for versioning
             grp = f.create_group("tengri_fitresult")
-            grp.attrs["schema_version"] = "v1"
+            grp.attrs["schema_version"] = RESULTS_SCHEMA_VERSION
 
             # Provenance as attributes
             grp.attrs["tengri_version"] = self.record.tengri_version
@@ -561,6 +593,9 @@ class FitResult:
             If h5py is not installed.
         KeyError
             If required schema elements are missing.
+        ValueError
+            If the file's ``schema_version`` is missing or is not
+            :data:`RESULTS_SCHEMA_VERSION`.
 
         Notes
         -----
@@ -587,6 +622,7 @@ class FitResult:
 
         with h5py.File(path, "r") as f:
             grp = f["tengri_fitresult"]
+            _require_results_schema(grp, path)
 
             # Reconstruct provenance
             extras = {}

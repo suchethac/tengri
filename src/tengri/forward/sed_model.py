@@ -3749,6 +3749,9 @@ class SEDModel:
         # structure after construction.
         self._signature_memo = None
 
+        # Owner-cached plot kernels (forward/draw_maps.map_draws), by method name.
+        self._draw_kernels = {}
+
         # AGB circumstellar dust-shell weighting (#2534): a free
         # agb_dust_weight can never build a precompute LUT (see the refusal
         # in StellarSEDComponent.precompute) -- raised here, directly, rather
@@ -6807,6 +6810,21 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
+    # Per-draw maps for posterior plots, evaluated by
+    # :func:`tengri.forward.draw_maps.map_draws` (named by method, cached per model).
+
+    def _sfr_mean_draw(self, params):
+        """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
+        return self.predict_sfh(params)["sfr_mean"]
+
+    def _sfr_full_draw(self, params):
+        """SFR [Msun/yr] of one draw: ``sfr_full`` if stochastic, else ``sfr_mean``."""
+        return self.predict_sfh(params)["sfr_full" if self.spec.stochastic else "sfr_mean"]
+
+    def _rest_sed_draw(self, params):
+        """Rest-frame SED L_nu [erg/s/Hz] of one draw, on the model's rest grid."""
+        return self._predict_rest_sed(params).sed
+
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
         """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
@@ -6848,9 +6866,12 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: no, uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_properties`
-        to get integrated quantities (stellar mass, age, etc.).
+        **JIT/vmap-compatible**: yes (#715). ``jax.jit(jax.vmap(model.predict_sfh))``
+        traces for every SFH family, on both grids, with no host conversion; a
+        batch of draws is evaluated in one compiled call. Use
+        :func:`tengri.vmap_chunked` rather than a bare ``vmap`` over thousands of
+        draws. For integrated quantities (stellar mass, age, etc.) use
+        :meth:`predict_properties`.
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
         uniform linear-time (lookback) grid, not the internal log-age grid. This
@@ -7316,6 +7337,16 @@ class SEDModel:
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
+
+    def __getstate__(self) -> dict:
+        """Pickle state without the owner-cached draw kernels (not picklable).
+
+        :func:`tengri.forward.draw_maps.map_draws` caches compiled kernels on the
+        instance; those are rebuilt on demand after unpickling or copying.
+        """
+        state = self.__dict__.copy()
+        state.pop("_draw_kernels", None)
+        return state
 
     def compile_signature(self) -> tuple:
         """Return a hashable signature identifying JIT-graph shape and structure.
@@ -14256,17 +14287,12 @@ class SEDModel:
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)
+            from tengri.forward.draw_maps import map_draws
+
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_arr = map_draws(self, "_sfr_full_draw", posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)

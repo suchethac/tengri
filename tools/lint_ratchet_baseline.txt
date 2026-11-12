@@ -100,7 +100,7 @@ T201	src/tengri/inference/backends/pathfinder.py	4
 T201	src/tengri/inference/backends/vi/native.py	12
 T201	src/tengri/inference/backends/vi/nifty.py	5
 T201	src/tengri/inference/catalog_fitter.py	12
-T201	src/tengri/inference/fitter.py	2
+T201	src/tengri/inference/fitter.py	1
 T201	src/tengri/inference/hierarchical.py	34
 T201	src/tengri/inference/posterior.py	1
 T201	src/tengri/utils/devices.py	8
