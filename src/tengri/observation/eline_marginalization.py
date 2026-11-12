@@ -1057,6 +1057,45 @@ def line_kinematics(params, fixed_values, catalog) -> tuple[jnp.ndarray, jnp.nda
     return sigma, delta_v
 
 
+def line_resolution(resolution, wave_obs, line_wavelengths, redshift):
+    r"""Return the spectral resolution at each redshifted emission line.
+
+    Parameters
+    ----------
+    resolution : float, array_like of shape (n_pix,), or None
+        Spectral resolution R = lambda / delta_lambda [dimensionless]: a scalar,
+        a value per pixel of ``wave_obs``, or ``None`` when none is declared.
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame wavelength grid, increasing [Angstrom].
+    line_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum line wavelengths [Angstrom].
+    redshift : float
+        Source redshift [dimensionless]; may be traced.
+
+    Returns
+    -------
+    float or Array, shape (n_lines,)
+        The scalar itself; 2000.0 for ``None``; for a per-pixel array, R linearly
+        interpolated to each line's observed center :math:`\lambda_j (1 + z)`,
+        held at the end values for a line off the grid (such a line has no
+        pixels, so its width does not enter the likelihood).
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the scalar/array branch is on the static shape.
+    **Gradient-safe**: yes with respect to the redshift. The per-galaxy and
+    batched likelihoods both use this rule (#3343); before it, an array was
+    reduced to its median, so the instrumental width of a line at either end of
+    a grating whose R changes by a factor of two was wrong by up to that factor.
+    """
+    if resolution is None:
+        return 2000.0
+    if not getattr(resolution, "ndim", 0):
+        return float(resolution)
+    lam_obs = jnp.asarray(line_wavelengths) * (1.0 + redshift)
+    return jnp.interp(lam_obs, jnp.asarray(wave_obs), jnp.asarray(resolution))
+
+
 def eline_scalar_resolution(resolution) -> float:
     """Return the scalar resolution R that sets the emission-line profile width.
 
@@ -1073,8 +1112,9 @@ def eline_scalar_resolution(resolution) -> float:
 
     Notes
     -----
-    Pure NumPy, evaluated at Python level. An array reduces to its median because
-    the Gaussian design matrix takes one number and R varies slowly across a band.
+    Pure NumPy, evaluated at Python level. Used only where no wavelength grid
+    pairs with the array (a banded-resolution galaxy of the batched path falls back
+    to its template's value). Line profiles use :func:`line_resolution`.
     """
     if resolution is None:
         return 2000.0

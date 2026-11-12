@@ -427,10 +427,11 @@ class SpectroBatch:
         lies inside the galaxy's real (unpadded) grid ``[wave.min(), wave.max()]``,
         else 0.0. Zero-width when the template does not fit lines
         (``spec.n_lines == 0``).
-    eline_resolution : ndarray, shape (B,)
-        Scalar resolution R [dimensionless] that sets the emission-line profile
+    eline_resolution : ndarray, shape (B, n_lines)
+        Resolution R [dimensionless] that sets each emission line's profile
         width: the template's scalar R on a banded-resolution galaxy, otherwise
-        the galaxy's own R over its real pixels (median when per-pixel).
+        the galaxy's own R at the line's observed center (#3343). Zero-width when
+        the template does not fit lines.
     chol_data : ndarray, shape (B, p + 1, n_max)
         Bands of each galaxy's lower Cholesky factor of the pixel covariance,
         ``chol_data[b, k, i] = L[i, i - k]`` [F_nu units], factored on the host with
@@ -851,12 +852,23 @@ def _line_mask(wave: np.ndarray, rest_lines: np.ndarray, z: float) -> np.ndarray
     return inside.astype(np.float64)
 
 
-def _galaxy_eline_resolution(g: GalaxySpectrum, n: int, template_r: float) -> float:
-    """Return the scalar R of the line profiles for one galaxy."""
+def _galaxy_eline_resolution(
+    g: GalaxySpectrum,
+    wave: np.ndarray,
+    rest_lines: np.ndarray,
+    z: float,
+    template_r: float,
+) -> np.ndarray:
+    """Return the R of each catalog line's profile for one galaxy, shape ``(n_lines,)``.
+
+    A banded-resolution galaxy takes the template's scalar R for every line; any
+    other galaxy reads its own R at each line's observed center, the rule of
+    :func:`~tengri.observation.eline_marginalization.line_resolution` (#3343).
+    """
     if isinstance(g.resolution, BandedMatrix):
-        return template_r
-    r = np.broadcast_to(np.asarray(g.resolution, dtype=np.float64), (n,))
-    return eline_scalar_resolution(r)
+        return np.full(rest_lines.shape, float(template_r))
+    r = np.broadcast_to(np.asarray(g.resolution, dtype=np.float64), wave.shape)
+    return np.interp(rest_lines * (1.0 + z), wave, r)
 
 
 def _prepare_segments(g: GalaxySpectrum, n: int, n_max: int) -> tuple[np.ndarray, int]:
@@ -963,7 +975,7 @@ def _prepare_galaxy(
             rest_lines, template_r = eline
             rest_lines = np.asarray(rest_lines, dtype=np.float64)
             line_mask = _line_mask(wave, rest_lines, z)
-        eline_r = _galaxy_eline_resolution(g, n, template_r)
+        eline_r = _galaxy_eline_resolution(g, wave, rest_lines, z, template_r)
         seg_row, n_segments = _prepare_segments(g, n, n_max)
         cal_prior = check_cal_scale_prior(
             g.cal_scale_prior if g.cal_scale_prior is not None else template_cal_prior
