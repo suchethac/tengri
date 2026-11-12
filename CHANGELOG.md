@@ -77,6 +77,7 @@
 - **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
 
 ### Fixed
+- **AGN luminosities and ADAF keys reachable from `pred.properties` and `predict_properties` (#3144).** `L_agn_bol`, `log_L_agn_bol` and `L_agn_bol_lsun` (every AGN), `log_L_agn_direct_los`, `L_agn_direct_los_lsun` and `agn_torus_frac_effective` (composable), and `agn_adaf_mdot`, `log_L_agn_adaf_accretion` and `L_agn_adaf_accretion_lsun` (composable with the ADAF disc) were published by the forward pass but absent from the property catalog. They are registered through the same `Property` path as the ledger keys; the composable and ADAF entries appear only on the models that publish them.
 
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
