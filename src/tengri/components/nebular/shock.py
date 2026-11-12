@@ -43,8 +43,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
-from tengri.components.nebular._params import SHOCK_INLINE_PARAMS
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
