@@ -1266,6 +1266,7 @@ class CueBackend:
     line_fraction_policy: ClassVar[bool] = True
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:

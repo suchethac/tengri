@@ -12298,7 +12298,9 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
+                from tengri.components.nebular._models import nebular_photoionized_backends
+
+                _PHOTOIONIZED_NEB_BACKENDS = nebular_photoionized_backends()
                 _live_neb = any(
                     isinstance(c, NebularSEDComponent)
                     and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
@@ -12968,8 +12970,6 @@ class SEDModel:
 
         from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.igm.component import IGMSEDComponent
-        from tengri.components.nebular.component import NebularSEDComponent
-        from tengri.components.stellar.component import StellarSEDComponent
 
         # Does this model have a LIVE nebular Lyman-continuum mask (#2439,
         # #2427)? A photoionized nebular backend whose ``neb_fesc`` is not
@@ -12995,7 +12995,11 @@ class SEDModel:
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
+        from tengri.components.nebular._models import nebular_photoionized_backends
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        _PHOTOIONIZED_NEB_BACKENDS = nebular_photoionized_backends()
         lyc_mask_live = False
         _live_neb = any(
             isinstance(c, NebularSEDComponent)

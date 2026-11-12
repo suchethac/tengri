@@ -182,9 +182,8 @@ class TestNebularBackendSelection:
         """An unknown backend raises, and the message names the real ones.
 
         This is the check the two ``..._config_declaration`` tests were reaching
-        for. ``NebularSEDComponentConfig(backend=...)`` performs no validation at
-        all -- it accepts ``"bogus_backend"`` -- so asserting the field reads
-        back what was just assigned tested the dataclass, not the wiring.
+        for. ``NebularSEDComponentConfig(backend=...)`` refuses ``"bogus_backend"``
+        at construction, so this test exercises the grammar's own message instead.
         """
         with pytest.raises(ValueError, match="Unknown nebular type") as exc:
             SEDModel.build(

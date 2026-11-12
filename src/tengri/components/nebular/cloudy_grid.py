@@ -522,6 +522,7 @@ class CloudyGridBackend:
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr", "age_weights")
     publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:
