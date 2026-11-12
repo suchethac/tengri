@@ -78,6 +78,7 @@
 
 ### Fixed
 
+- fix(inference): enabling the emission-line broad component refuses instead of running inert (#3332). `eline_broad=True` registered `eline_broad_sigma_kms`, but no likelihood built broad design-matrix columns, so the parameter changed the likelihood by exactly zero and its posterior was its prior. `Fitter` now raises `ValueError` when the broad component is enabled on either `Spectroscopy` or `Parameters`, replacing the mismatch warning. Per-line widths and offsets (kinematic groups) remain open in #3332.
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
