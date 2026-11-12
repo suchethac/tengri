@@ -24,6 +24,7 @@ References
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,7 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
+from tengri.components.nebular._shared import _interp_index_weight
 from tengri.components.nebular.mappings_photo import (
     _DEFAULT_GRID_PATH,
     _load_stellar_grid,
@@ -115,7 +117,8 @@ def precompute(
     if grid_path is None:
         grid_path = _DEFAULT_GRID_PATH
 
-    grid = _load_stellar_grid(grid_path, model=stellar_lib, density=density_structure)
+    loaded = _load_stellar_grid(grid_path, model=stellar_lib, density=density_structure)
+    grid = loaded.grid
 
     # Build the (n_lines, n_filt) filter projection matrix
     n_lines = len(grid.line_wavelengths)
@@ -165,8 +168,39 @@ def precompute(
         "grid_axes": axes_jax,
         "axes": remaining_axes,
         "zo_axis": jnp.asarray(grid.zo_axis),
+        "sfh_idx_cont": loaded.sfh_idx_cont,
         "_collapsed_axes": fixed,
     }
+
+
+def _multilinear_4d(data: jnp.ndarray, axes: tuple, point: tuple) -> jnp.ndarray:
+    """Multilinear interpolation over four leading axes; trailing dimensions pass through.
+
+    Parameters
+    ----------
+    data : ndarray, shape (N_0, N_1, N_2, N_3, ...)
+        Table on the four axes.
+    axes : tuple of ndarray
+        Sorted grid points of each leading axis.
+    point : tuple of float
+        Query coordinates, one per axis.
+
+    Returns
+    -------
+    ndarray
+        Interpolated value, shape ``data.shape[4:]``.
+
+    """
+    brackets = [_interp_index_weight(v, ax) for v, ax in zip(point, axes)]
+    total = 0.0
+    for corner in itertools.product((0, 1), repeat=4):
+        weight = 1.0
+        index = []
+        for (idx, w), c in zip(brackets, corner):
+            weight = weight * (w if c else 1.0 - w)
+            index.append(idx + c)
+        total = total + weight * data[tuple(index)]
+    return total
 
 
 def build_lookup(preint: dict, **kwargs: Any) -> dict:
@@ -195,6 +229,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     zo_axis = preint["zo_axis"]
     grid_axes = preint["grid_axes"]
     collapsed_axes = preint.get("_collapsed_axes", {})
+    sfh_idx_cont = preint["sfh_idx_cont"]
 
     @jax.jit
     def predict_lines(log_qh, *free_axis_vals, neb_fesc=0.0):
@@ -217,8 +252,6 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
             Line luminosities [L_sun], scaled by Q_H and escape fraction.
 
         """
-        from tengri.components.nebular._shared import _interp_index_weight
-
         # Reconstruct full grid point from free params and fixed values
         full_point = []
         free_idx = 0
@@ -229,63 +262,17 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
                 full_point.append(free_axis_vals[free_idx])
                 free_idx += 1
 
-        # Convert absolute log10(Z) back to ζ_O for interpolation
-        logZ_val = full_point[0]
-        zo_val = 10.0 ** (logZ_val - jnp.log10(_LOG10_ZSUN))
-        full_point = (zo_val, *tuple(full_point[1:]))
+        # The table is on ζ_O; the axis handed to the kernel is absolute log10(Z).
+        zo_val = 10.0 ** (full_point[0] - _LOG10_ZSUN)
+        point = (zo_val, full_point[1], full_point[2], full_point[3])
 
-        # Linear interpolation on 4D grid
-        # Grid shape: (N_z, N_a, N_s, N_u, N_n) where N_s is discrete (sfh)
-        # Select cont SFH (index 1)
-        logHB_slice = logHB_per_logq[:, :, 1, :, :]  # (N_z, N_a, N_u, N_n)
-        ratios_slice = line_ratios[:, :, 1, :, :, :]  # (N_z, N_a, N_u, N_n, nl)
+        # Cont SFH row of the (N_z, N_a, N_s, N_u, N_n[, N_lines]) tables.
+        logHB_slice = logHB_per_logq[:, :, sfh_idx_cont]
+        ratios_slice = line_ratios[:, :, sfh_idx_cont]
+        table_axes = (zo_axis, grid_axes[1], grid_axes[2], grid_axes[3])
 
-        # Interpolation on 4 axes: zo, age, logU, logn
-        iz, wz = _interp_index_weight(full_point[0], zo_axis)
-        ia, wa = _interp_index_weight(full_point[1], grid_axes[1])
-        iu, wu = _interp_index_weight(full_point[2], grid_axes[2])
-        in_, wn = _interp_index_weight(full_point[3], grid_axes[3])
-
-        # Bilinear per pair: interp over logn, then logU, then age, then zo
-        def _hb_at(iz_, ia_, iu_, in_):
-            return logHB_slice[iz_, ia_, iu_, in_]
-
-        hb_c00 = _hb_at(iz, ia, iu, in_) * (1 - wn) + _hb_at(iz, ia, iu, in_ + 1) * wn
-        hb_c10 = _hb_at(iz, ia, iu + 1, in_) * (1 - wn) + _hb_at(iz, ia, iu + 1, in_ + 1) * wn
-        hb_c01 = _hb_at(iz + 1, ia, iu, in_) * (1 - wn) + _hb_at(iz + 1, ia, iu, in_ + 1) * wn
-        hb_c11 = (
-            _hb_at(iz + 1, ia, iu + 1, in_) * (1 - wn) + _hb_at(iz + 1, ia, iu + 1, in_ + 1) * wn
-        )
-
-        hb_c0 = hb_c00 * (1 - wu) + hb_c10 * wu
-        hb_c1 = hb_c01 * (1 - wu) + hb_c11 * wu
-
-        hb_c00a = hb_c0 * (1 - wa)
-        hb_c10a = hb_c1 * wa
-        logHB_cu = hb_c00a + hb_c10a
-
-        logHB_interp = logHB_cu * (1 - wz) + logHB_cu * wz
-
-        # Same for line ratios with extra line dimension
-        def _ratio_at(iz_, ia_, iu_, in_):
-            return ratios_slice[iz_, ia_, iu_, in_, :]
-
-        r_c00 = _ratio_at(iz, ia, iu, in_) * (1 - wn) + _ratio_at(iz, ia, iu, in_ + 1) * wn
-        r_c10 = _ratio_at(iz, ia, iu + 1, in_) * (1 - wn) + _ratio_at(iz, ia, iu + 1, in_ + 1) * wn
-        r_c01 = _ratio_at(iz + 1, ia, iu, in_) * (1 - wn) + _ratio_at(iz + 1, ia, iu, in_ + 1) * wn
-        r_c11 = (
-            _ratio_at(iz + 1, ia, iu + 1, in_) * (1 - wn)
-            + _ratio_at(iz + 1, ia, iu + 1, in_ + 1) * wn
-        )
-
-        r_c0 = r_c00 * (1 - wu) + r_c10 * wu
-        r_c1 = r_c01 * (1 - wu) + r_c11 * wu
-
-        r_c00a = r_c0 * (1 - wa)
-        r_c10a = r_c1 * wa
-        ratios_cu = r_c00a + r_c10a
-
-        ratios_interp = ratios_cu * (1 - wz) + ratios_cu * wz
+        logHB_interp = _multilinear_4d(logHB_slice, table_axes, point)
+        ratios_interp = _multilinear_4d(ratios_slice, table_axes, point)
 
         # Convert to luminosity: L_Hβ = 10^{logHB_per_logq} × Q_H
         l_hb_erg = (10.0**logHB_interp) * (10.0**log_qh)
