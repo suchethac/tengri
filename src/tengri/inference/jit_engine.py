@@ -52,7 +52,7 @@ class CompileCache:
     ----------
     max_entries : int, optional
         Maximum number of cache entries to hold before evicting oldest.
-        Default 6; tune via TENGRI_ENGINE_CACHE_MAXSIZE env var or per-instance.
+        Default 2; tune via TENGRI_ENGINE_CACHE_MAXSIZE env var or per-instance.
     mode : {'normal', 'lean', 'persistent'}, optional
         Cache behavior mode. Default 'normal'.
 
@@ -73,7 +73,7 @@ class CompileCache:
     """
 
     max_entries: int = field(
-        default_factory=lambda: int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "6"))
+        default_factory=lambda: int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "2"))
     )
     mode: Literal["normal", "lean", "persistent"] = "normal"
     _store: OrderedDict[Any, Any] = field(default_factory=OrderedDict)
@@ -160,12 +160,12 @@ class CompileCache:
 # helper + an env-var opt-out.
 #
 # Tuning:
-#   TENGRI_ENGINE_CACHE_MAXSIZE   default 6; max number of engines held.
+#   TENGRI_ENGINE_CACHE_MAXSIZE   default 2; max number of engines held.
 #   TENGRI_DISABLE_SHARED_CACHES  if set to "1", caches are never populated
 #                                 (every Fitter compiles fresh). Use this if
 #                                 you can afford the recompile cost and want
 #                                 hard guarantees on memory.
-_ENGINE_CACHE_MAXSIZE = int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "6"))
+_ENGINE_CACHE_MAXSIZE = int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "2"))
 _SHARED_CACHES_DISABLED = os.environ.get("TENGRI_DISABLE_SHARED_CACHES", "") == "1"
 
 # Lean mode: when True, ``Fitter.run()`` calls ``clear_shared_caches()``

@@ -21,7 +21,7 @@ class TestCompileCacheBasics:
     def test_cache_creation_default(self):
         """Test CompileCache creates with sensible defaults."""
         cache = CompileCache()
-        assert cache.max_entries == 6  # default from env or fallback (#715)
+        assert cache.max_entries == 2  # default from env or fallback
         assert cache.mode == "normal"
         assert len(cache._store) == 0
 

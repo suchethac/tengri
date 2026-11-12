@@ -254,7 +254,7 @@ The L1–L3 caches above are also tunable from the environment, which is
 useful when a process is memory-bound rather than compile-bound:
 
 ```bash
-export TENGRI_ENGINE_CACHE_MAXSIZE=1   # default 6; L3 entries held before eviction
+export TENGRI_ENGINE_CACHE_MAXSIZE=1   # default 2; L3 entries held before eviction
 export TENGRI_DISABLE_SHARED_CACHES=1  # never populate the shared caches at all
 export TENGRI_LEAN=1                   # force the sweep policy process-wide
 export TENGRI_PERSISTENT=1             # keep every L3 entry, stale included
