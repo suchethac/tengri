@@ -1281,7 +1281,6 @@ class CueBackend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = True
     line_fraction_policy: ClassVar[bool] = True
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = True
     additive: ClassVar[bool] = True
     requires_instance: ClassVar[bool] = True

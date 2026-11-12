@@ -8,8 +8,10 @@ replace, and check that an unknown name is refused at construction.
 
 from __future__ import annotations
 
+import jax
 import pytest
 
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.components.nebular import NEBULAR_MODELS
 from tengri.components.nebular._models import (
     nebular_backend_classes,
@@ -24,18 +26,15 @@ from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.nebular.cue import CueBackend
 from tengri.components.nebular.gutkin16 import Gutkin16Backend
 from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
-from tengri.components.nebular.shock import ShockBackend
 from tengri.config.exceptions import ConfigError
 
 pytestmark = pytest.mark.contract
 
-_SEVEN_NAMES = frozenset(
-    {"baked_in", "cloudy_grid", "cb19", "gutkin16", "mappings", "cue", "shock"}
-)
+_SIX_NAMES = frozenset({"baked_in", "cloudy_grid", "cb19", "gutkin16", "mappings", "cue"})
 
 
-def test_mapping_has_exactly_the_seven_config_names():
-    assert set(nebular_backend_classes()) == _SEVEN_NAMES
+def test_mapping_has_exactly_the_six_config_names():
+    assert set(nebular_backend_classes()) == _SIX_NAMES
 
 
 def test_mapping_points_each_name_at_its_class():
@@ -46,7 +45,6 @@ def test_mapping_points_each_name_at_its_class():
         "gutkin16": Gutkin16Backend,
         "mappings": MappingsPhotoStellarBackend,
         "cue": CueBackend,
-        "shock": ShockBackend,
     }
 
 
@@ -54,7 +52,7 @@ def test_unknown_name_raises_config_error_naming_the_valid_set():
     with pytest.raises(ConfigError) as exc:
         resolve_nebular_backend("not_a_backend")
     message = str(exc.value)
-    for name in sorted(_SEVEN_NAMES):
+    for name in sorted(_SIX_NAMES):
         assert name in message
 
 
@@ -98,3 +96,28 @@ def test_every_registered_config_backend_resolves():
         if entry.config_backend is None:
             continue
         assert resolve_nebular_backend(entry.config_backend) is not None, name
+
+
+def test_shock_is_not_a_nebular_config_name():
+    with pytest.raises(ConfigError, match="Unknown nebular backend 'shock'"):
+        resolve_nebular_backend("shock")
+
+
+def test_shock_build_still_publishes_its_shock_sed(ssp_data_fsps):
+    model = SEDModel.build(
+        ssp_data=ssp_data_fsps,
+        observation=Observation(photometry=Photometry.from_names(["des_g", "des_r"])),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": Fixed(0.0),
+            "tau_bc": Fixed(0.0),
+        },
+        shock={"norm": "lhalpha", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.1),
+    )
+    state = model.predict_state(model.spec.sample(jax.random.PRNGKey(0)))
+    assert "sed_shock" in state.derived
+    assert float(state.derived["sed_shock"].max()) > 0.0

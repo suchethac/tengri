@@ -6,8 +6,7 @@ declares, with the priors the component has always used when it is asked for
 its ``declared_parameters``. They live outside ``_params.py`` because the
 parameter registry reads every declaration tuple in that module as the
 authoritative record of a name, and these are not: the registry record of
-``neb_logU`` or ``shock_log_lhalpha`` (default, ``free_prior``, units) is the
-one in ``PARAMS`` / ``SHOCK_PARAMS``.
+``neb_logU`` (default, ``free_prior``, units) is the one in ``PARAMS``.
 """
 
 from __future__ import annotations
@@ -54,35 +53,4 @@ NEBULAR_STANDARD_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-#: Shock-emission parameters as the nebular component declares them inline
-#: (MAPPINGS V shock, ``shock={...}`` build). Its ``shock_log_lhalpha`` and
-#: ``shock_velocity`` defaults differ from :data:`SHOCK_PARAMS`; both are
-#: kept until the owner rules on one shock declaration (C7 step 4).
-SHOCK_INLINE_PARAMS: tuple[ParamDeclaration, ...] = (
-    ParamDeclaration(
-        "shock_velocity",
-        # default 250 km/s: representative MAPPINGS shock velocity.
-        Uniform(100.0, 1000.0, default=250.0),
-        "Shock velocity [km/s]",
-    ),
-    ParamDeclaration(
-        "shock_log_density",
-        Fixed(0.0),
-        "log10 pre-shock density [cm^-3]",
-    ),
-    ParamDeclaration(
-        "shock_b_over_sqrt_n",
-        Fixed(1.0),
-        "B/sqrt(n) [μG cm^(3/2)] (MAPPINGS III) or absolute B [μG] (MAPPINGS V)",
-    ),
-    ParamDeclaration(
-        "shock_log_lhalpha",
-        Fixed(40.0),
-        "log10(L_Halpha [erg/s]): MAPPINGS shock luminosity "
-        "normalization. If Fixed, sourced from "
-        "state.derived['shock_log_lhalpha'] when present, "
-        "otherwise the param's Fixed value.",
-    ),
-)
-
-__all__ = ["NEBULAR_STANDARD_PARAMS", "SHOCK_INLINE_PARAMS"]
+__all__ = ["NEBULAR_STANDARD_PARAMS"]

@@ -97,7 +97,6 @@ class BakedInBackend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = False
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ()
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
     additive: ClassVar[bool] = False
     requires_instance: ClassVar[bool] = False

@@ -35,18 +35,15 @@ from __future__ import annotations
 
 import functools
 import warnings
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, NamedTuple
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
 from tengri.components.nebular._shared import (
-    NebularBackendDefaults,
     render_nebular_lines as _place_line_profiles,
 )
 
@@ -862,122 +859,3 @@ def compute_shock_sed(
     )
 
     return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa, line_sigma_kms)
-
-
-# ── Protocol-conformant backend class ─────────────────────────────
-
-
-@dataclass
-class ShockBackend(NebularBackendDefaults):
-    """MAPPINGS V shock emission backend satisfying the NebularBackend Protocol.
-
-    Wraps :func:`compute_shock_sed` as an object-oriented backend so that shock
-    emission can be stored and dispatched using the same interface as other
-    nebular backends (CueBackend, CloudyGridBackend, etc.).
-
-    Static (non-traced) configuration is stored as dataclass fields.
-    JAX-traced continuous parameters (velocity, density, B-field, Hα luminosity)
-    are passed as arguments to :meth:`predict_nebular_sed`.
-
-    Parameters
-    ----------
-    shock_abundance : str
-        Abundance set name: ``"solar"``, ``"2xsolar"``, ``"lmc"``, ``"smc"``, etc.
-    shock_component : str
-        ``"shock"``, ``"precursor"``, or ``"combined"``.
-    has_continuum : bool
-        Always ``False``: MAPPINGS V provides line emission only.
-    has_free_params : bool
-        Always ``True``: velocity, density, B-field are differentiable parameters.
-    name : str
-        Backend identifier string ("shock").
-
-    Notes
-    -----
-    **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
-    All computations use pure functions with no side effects.
-
-    **Attributes**: ``has_continuum`` is always False; MAPPINGS V provides
-    shock-associated emission lines only (no underlying continuum).
-    ``has_free_params`` is always True: all parameters (velocity, density,
-    B-field) are differentiable and suitable for optimization.
-
-    """
-
-    config_name: ClassVar[str] = "shock"
-    supports_split_sed: ClassVar[bool] = False
-    line_fraction_policy: ClassVar[bool] = False
-    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
-    publishes_shock: ClassVar[bool] = True
-    carries_freefree: ClassVar[bool] = False
-    additive: ClassVar[bool] = True
-    requires_instance: ClassVar[bool] = True
-    caches_filters: ClassVar[bool] = True
-
-    @classmethod
-    def parameters(cls) -> list:
-        """Free-parameter declarations this backend contributes [see class docs]."""
-        return list(SHOCK_INLINE_PARAMS)
-
-    shock_abundance: str = "solar"
-    shock_component: str = "combined"
-    has_continuum: bool = field(default=False, init=False)
-    has_free_params: bool = field(default=True, init=False)
-    name: str = field(default="shock", init=False)
-
-    def predict_nebular_sed(
-        self,
-        wavelength: jnp.ndarray,
-        shock_velocity: float,
-        l_shock_halpha: float,
-        shock_log_density: float = 0.0,
-        shock_b_over_sqrt_n: float = 1.0,
-        line_sigma_aa: float = 0.0,
-        line_sigma_kms: float = 0.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """Compute shock emission line SED on a wavelength grid.
-
-        Parameters
-        ----------
-        wavelength : array, shape (n_wave,)
-            Wavelength grid in Å (rest-frame, increasing).
-        shock_velocity : float
-            Shock velocity in km/s.
-        l_shock_halpha : float
-            Total shock Hα luminosity in erg/s (normalization anchor).
-        shock_log_density : float
-            Log10 pre-shock density in cm⁻³.
-        shock_b_over_sqrt_n : float
-            Absolute B-field in μG.
-        line_sigma_aa : float
-            Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
-        **_kwargs
-            Extra keyword arguments silently ignored for protocol compatibility.
-
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Shock emission SED [erg/s/Hz].
-
-        Notes
-        -----
-        **JIT-compatible**: yes, delegates to ``compute_shock_sed``.
-
-        **Abundance and component**: These are fixed at backend initialization
-        via ``shock_abundance`` and ``shock_component`` dataclass fields.
-        Continuous parameters (velocity, density, B-field, H-alpha luminosity)
-        are traced and differentiable under ``jax.jit``.
-
-        """
-        return compute_shock_sed(
-            wavelength,
-            shock_velocity,
-            l_shock_halpha,
-            shock_log_density=shock_log_density,
-            shock_b_over_sqrt_n=shock_b_over_sqrt_n,
-            shock_abundance=self.shock_abundance,
-            shock_component=self.shock_component,
-            line_sigma_aa=line_sigma_aa,
-            line_sigma_kms=line_sigma_kms,
-        )
