@@ -36,6 +36,7 @@ from tengri.components.nebular.dig import (
     mix_dig_line_luminosities,
 )
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.exceptions import BackendError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.forward.energy_balance import log10_fdust_lyc_credit
 from tengri.parameters.priors import Fixed, Uniform
@@ -1166,20 +1167,14 @@ class NebularSEDComponent(TemplateThreading):
                     )
                 )
             except Exception as exc:
-                # Backend's line-luminosity path may fail (e.g. when
-                # ``cloudyfsps_only=True`` filters everything out).
-                # Don't let it block the SED forward pass: but never
-                # swallow silently: a dropped publish disables line-flux
-                # fitting downstream.
-                import warnings
-
-                warnings.warn(
-                    f"nebular backend {self.config.backend!r}: discrete "
-                    f"line-catalog publish failed ({type(exc).__name__}: {exc}); "
-                    "line_waves/line_lums will be absent from state.derived and "
-                    "line-flux fitting will not work for this model.",
-                    stacklevel=2,
-                )
+                # A backend without a line catalog never reaches this block (the
+                # ``hasattr`` gate above). Any failure once the catalog is requested
+                # is raised: a dropped publish would silently disable line-flux
+                # fitting downstream (#3284).
+                raise BackendError(
+                    f"nebular backend {self.config.backend!r}: discrete line-catalog "
+                    f"publish failed ({type(exc).__name__}: {exc})"
+                ) from exc
 
         # Add nebular contribution to sed_intrinsic. Birth-cloud + diffuse
         # dust attenuation of this continuum is the dust component's

@@ -11,11 +11,8 @@ src/tengri/citations/collect.py	_citations_from_components	1
 src/tengri/citations/collect.py	_collect_keys_for_one	1
 src/tengri/components/agn/_nthcomp.py	_load_nthcomp_templates_impl	1
 src/tengri/components/agn/blocks/_protocol.py	collect_block_templates	1
-src/tengri/components/dust/draine2021_pah_ir.py	Draine2021PAHIRSEDComponent.load	1
-src/tengri/components/dust/draine2021_pah_ir.py	Draine2021PAHIRSEDComponent.predict	1
 src/tengri/components/igm/_subband_cache.py	load	1
 src/tengri/components/igm/_subband_cache.py	store	1
-src/tengri/components/nebular/component.py	NebularSEDComponent.apply	1
 src/tengri/config/display.py	_safe_call	1
 src/tengri/forward/sed_model.py	SEDModel.__repr__	1
 src/tengri/inference/_dimension_guard.py	_threshold	1
