@@ -1467,6 +1467,11 @@ class NebularContinuumFallback:
         """Delegate all unknown attributes and methods to the primary backend."""
         return getattr(self.primary, name)
 
+    @property
+    def config_name(self) -> str:
+        """The wrapped backend's ``config.backend`` string, so the wrapper names what it wraps."""
+        return self.primary.config_name
+
     def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
         """Predict nebular SED: lines + continuum via fallback chain.
 
@@ -1586,3 +1591,72 @@ def ssp_log_age_yr_axis(ssp_lg_age_gyr: jnp.ndarray) -> jnp.ndarray:
     shipped SSP) the result is bit-identical to ``ssp_lg_age_gyr + 9.0``.
     """
     return jnp.maximum(jnp.asarray(ssp_lg_age_gyr) + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)
+
+
+class NebularBackendDefaults:
+    """Defaults the nebular component asks of every backend.
+
+    A backend inherits the answer that suits it and overrides only what it
+    differs on: Cue supplies the population keywords, the line-catalog keywords,
+    the derived ``neb_log_no`` and the continuum split; CloudyGrid supplies the
+    continuum split; BakedIn supplies the precompute construction.
+    """
+
+    @classmethod
+    def precompute_check(cls, *, suppress_warning: bool) -> None:
+        """Run the work a backend does when the component precomputes (none by default)."""
+
+    @classmethod
+    def line_catalog_kwargs(cls, *, full_catalog: bool) -> dict:
+        """Extra keywords for the discrete line-catalog call (none by default)."""
+        return {}
+
+    def extra_derived(self, common: dict, params) -> dict:
+        """Derived keys published beyond ``sed_nebular`` and the line catalog (none by default)."""
+        return {}
+
+    def call_kwargs(self, state, params, common: dict) -> dict:
+        """Keyword arguments for the emission and line calls, with the SSP population.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Current pipeline state; ``derived["age_weights"]`` and
+            ``derived["ssp_ages_yr"]`` are required.
+        params : Mapping
+            Prefix-sliced parameter dict this component sees (unused here).
+        common : dict
+            The component's shared kwargs; never mutated.
+
+        Returns
+        -------
+        dict
+            ``common`` plus ``ssp_weights`` (Msun per SSP age bin) and
+            ``ssp_log_ages_yr`` (log10 of the SSP ages in yr).
+
+        Raises
+        ------
+        ValueError
+            If the stellar population was not published upstream.
+        """
+        age_weights = state.derived.get("age_weights")
+        ssp_ages_yr = state.derived.get("ssp_ages_yr")
+        if ssp_ages_yr is None or age_weights is None:
+            raise ValueError(
+                f"{type(self).config_name.upper()} backend requires state.derived['ssp_ages_yr'] "
+                "and state.derived['age_weights'] (CSP mass weights from "
+                "StellarSEDComponent). Build the chain with a stellar "
+                "component upstream."
+            )
+        return {
+            **common,
+            "ssp_weights": jnp.asarray(age_weights),
+            "ssp_log_ages_yr": jnp.log10(jnp.asarray(ssp_ages_yr)),
+        }
+
+    def split_nebular(self, call: dict, template_data):
+        """Return ``(continuum, line_wave, line_lum)`` for ``split_sed``; a line-only backend has a zero continuum."""
+        line_wave, line_lum = self.predict_nebular_line_luminosities(
+            **call, template_data=template_data
+        )
+        return jnp.zeros_like(call["ssp_wave"]), line_wave, line_lum

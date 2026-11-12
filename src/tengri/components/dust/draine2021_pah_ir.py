@@ -34,6 +34,7 @@ from tengri.components.dust.draine2021_pah import (
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
+from tengri.config.exceptions import TengriIOError
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
 from tengri.utils.scale import safe_ratio
@@ -86,6 +87,17 @@ class Draine2021PAHIRConfig(SEDComponentConfig):
     auto_age_myr: float | None = None
     auto_log_z_solar: float | None = None
     auto_sps_family: str | None = None
+
+
+def _pahspec_not_found(name: str) -> TengriIOError:
+    """Return the error for a requested component whose PAHspec grid cannot be located."""
+    from tengri.components.dust.draine2021_pah import DRAINE2021_PAH_DEFAULT_PATH, PAHSPEC_PATH_ENV
+
+    return TengriIOError(
+        f"Draine2021PAHIR component {name!r}: PAHspec template file "
+        f"{DRAINE2021_PAH_DEFAULT_PATH!r} not found in the data directories. "
+        f"Set {PAHSPEC_PATH_ENV} or provide template_path via config (#3284)."
+    )
 
 
 class Draine2021PAHIRSEDComponent(EmissionComponent):
@@ -190,8 +202,8 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
         """Preload PAHspec template grid.
 
         Called at model init time (not JIT-ed). Attempts to locate and load
-        the PAHspec template HDF5 file. If unavailable, returns None and the
-        component will skip gracefully.
+        the PAHspec template HDF5 file. A missing or unreadable file raises
+        :class:`~tengri.config.exceptions.TengriIOError`.
 
         Parameters
         ----------
@@ -239,14 +251,7 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                 template_path = find_data_str(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
 
         if template_path is None:
-            warnings.warn(
-                f"Draine2021PAHIR component {self.name!r}: template file not found. "
-                "Set TENGRI_PAHSPEC_PATH or provide template_path via config. "
-                "Component will skip.",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
+            raise _pahspec_not_found(self.name)
 
         try:
             templates = load_pahspec_or_raise(template_path)
@@ -271,13 +276,10 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                 "norm_per_lgU": norms,
             }
         except Exception as e:
-            warnings.warn(
-                f"Draine2021PAHIR component {self.name!r}: failed to load templates: {e}. "
-                "Component will skip.",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
+            raise TengriIOError(
+                f"Draine2021PAHIR component {self.name!r}: failed to load PAHspec "
+                f"templates from {template_path!r}: {e} (#3284)"
+            ) from e
 
     def predict(
         self, p: Mapping[str, jnp.ndarray], sed_in: jnp.ndarray, wave: jnp.ndarray, **inputs: Any
@@ -330,8 +332,6 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
             # Ensures component works both with precomputation (self.data set)
             # and without (approx=None, default builds). Loads inside a trace
             # via jax.ensure_compile_time_eval() to avoid tracer leakage.
-            import warnings
-
             from tengri.components.dust.draine2021_pah import (
                 load_pahspec_or_raise,
                 resample_lnu_on_aa_grid,
@@ -353,14 +353,7 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                     template_path = find_data_str(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
 
             if template_path is None:
-                warnings.warn(
-                    f"Draine2021PAHIR component {self.name!r}: template file not found. "
-                    "Set TENGRI_PAHSPEC_PATH or provide template_path via config. "
-                    "Component will skip.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                return sed_in, {}
+                raise _pahspec_not_found(self.name)
 
             try:
                 templates = load_pahspec_or_raise(template_path)
@@ -387,13 +380,10 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                     "norm_per_lgU": norms,
                 }
             except Exception as e:
-                warnings.warn(
-                    f"Draine2021PAHIR component {self.name!r}: failed to load templates: {e}. "
-                    "Component will skip.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                return sed_in, {}
+                raise TengriIOError(
+                    f"Draine2021PAHIR component {self.name!r}: failed to load PAHspec "
+                    f"templates from {template_path!r}: {e} (#3284)"
+                ) from e
 
         # Load template grid from precomputed state or just-loaded data
         lgU_grid = precomp["lgU_grid"]
