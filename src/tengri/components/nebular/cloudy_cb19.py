@@ -173,6 +173,7 @@ from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _qh_bilinear,
     apply_lya_escape,
     compute_qh,
@@ -750,7 +751,7 @@ _compute_log_qh_grid = jax.vmap(
 # ── Main backend class ────────────────────────────────────────────
 
 
-class CB19Backend:
+class CB19Backend(NebularBackendDefaults):
     """CB_19 CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CB_19 CLOUDY photoionization grid (Martinez-Paredes et al.
@@ -824,6 +825,9 @@ class CB19Backend:
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:

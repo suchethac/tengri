@@ -116,6 +116,7 @@ from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
@@ -477,7 +478,7 @@ def _trilinear_interp_smooth(
 # ── Main backend class ────────────────────────────────────────────
 
 
-class CloudyGridBackend:
+class CloudyGridBackend(NebularBackendDefaults):
     """CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CLOUDY grid and computes nebular emission
@@ -523,6 +524,13 @@ class CloudyGridBackend:
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr", "age_weights")
     publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = True
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    def split_nebular(self, call: dict, template_data):
+        """Return ``(continuum, line_wave, line_lum)`` from :meth:`predict_nebular_split`."""
+        return self.predict_nebular_split(**call, template_data=template_data)
 
     @classmethod
     def parameters(cls) -> list:

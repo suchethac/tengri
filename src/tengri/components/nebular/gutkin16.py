@@ -78,6 +78,7 @@ from tengri.components.nebular._params import (
 )
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _log10_sum_of_finite,
     _qh_bilinear,
     apply_lya_escape,
@@ -239,7 +240,7 @@ def gutkin16_line_names(filepath: str | Path | None = None) -> tuple[str, ...]:
     return tuple(n.decode() if isinstance(n, bytes) else str(n) for n in names)
 
 
-class Gutkin16Backend:
+class Gutkin16Backend(NebularBackendDefaults):
     r"""Gutkin+2016 NEOGAL nebular line table, normalized per ionizing photon.
 
     Line luminosities are the stellar ionizing photon rate times a table entry:
@@ -331,6 +332,9 @@ class Gutkin16Backend:
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
     publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = True
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
 
     @classmethod
     def parameters(cls) -> list:

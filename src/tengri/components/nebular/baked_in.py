@@ -12,6 +12,7 @@ from typing import ClassVar
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key
+from tengri.components.nebular._shared import NebularBackendDefaults
 
 
 class BakedInNebularWarning(UserWarning):
@@ -57,7 +58,7 @@ class BakedInNebularBareError(ValueError):
     """
 
 
-class BakedInBackend:
+class BakedInBackend(NebularBackendDefaults):
     """Nebular backend for SSP files with pre-included emission.
 
     A no-op backend that returns zero additional nebular flux because the SSP
@@ -98,6 +99,14 @@ class BakedInBackend:
     reads: ClassVar[tuple[str, ...]] = ()
     publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = False
+    requires_instance: ClassVar[bool] = False
+    caches_filters: ClassVar[bool] = False
+
+    @classmethod
+    def precompute_check(cls, *, suppress_warning: bool) -> None:
+        """Construct once, so the ionizing-source warning fires at precompute as before."""
+        cls(ionizing_source_warning="suppress" if suppress_warning else "warn")
 
     @classmethod
     def parameters(cls) -> list:
