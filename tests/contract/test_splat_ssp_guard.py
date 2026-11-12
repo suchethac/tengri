@@ -3,7 +3,7 @@
 
 On jaxlib 0.10.2 through 0.12.0.1 the XLA CPU YNNPACK fusion returns wrong values
 (exact zeros) for ``jit(vmap(...))`` over a splat model constant, so a splat SSP
-(every element equal) is refused at construction. The behavioural tests use a
+(every element equal) is refused at construction. The behavioral tests use a
 non-splat SSP and must hold on every jaxlib. The pure-JAX upstream repro is an
 expected failure on the affected releases, non-strict, so it flags when upstream
 fixes it without blocking CI.
@@ -130,7 +130,7 @@ def test_sed_model_build_refuses_a_splat_ssp():
         )
 
 
-# -- behavioural: unconditional, subprocess with a clean environment ----------
+# -- behavioral: unconditional, subprocess with a clean environment ----------
 
 _MODEL_SCRIPT = r"""
 import json
