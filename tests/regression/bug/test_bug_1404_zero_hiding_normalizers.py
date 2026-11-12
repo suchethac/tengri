@@ -67,4 +67,6 @@ def test_gradient_finite_at_single_point_window():
         return jnp.nan_to_num(_measure_slope(wave, flux, UV))
 
     grad = jax.grad(f)(jnp.asarray([1.0, 2.0, 3.0, 4.0]) * 1e25)
+    # grad-assert: finite-only — nan_to_num clamps the NaN at a zero
+    # denominator, so the gradient is zero by design (see module docstring)
     assert bool(jnp.all(jnp.isfinite(grad)))

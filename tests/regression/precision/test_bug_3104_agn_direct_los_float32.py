@@ -88,7 +88,9 @@ def test_direct_los_is_finite_and_float64_accurate_under_jit(disc):
     lnu64, key64 = _run_f64_eager(disc)
     lnu32, key32 = _run_f32_jit(disc)
     assert np.all(np.isfinite(lnu32)), f"{disc} float32 SED is non-finite under jit"
+    assert np.max(np.abs(lnu32)) > 0.0, f"{disc} float32 SED collapsed to zero under jit"
     assert np.isfinite(key32), f"{disc} log_L_agn_direct_los is {key32} in float32 under jit"
+    assert key32 != 0.0, f"{disc} log_L_agn_direct_los is zero in float32 under jit"
     assert abs(key32 - key64) <= _DEX, f"{disc}: float32 {key32} vs float64 {key64} dex"
     peak_rel = np.max(np.abs(lnu32 - lnu64)) / np.max(np.abs(lnu64))
     assert peak_rel <= _RTOL_SED, f"{disc} float32 SED {peak_rel:.3e} of peak"

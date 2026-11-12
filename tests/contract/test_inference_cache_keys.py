@@ -539,3 +539,4 @@ def test_fixture_logp_and_gradient_finite_across_age_frac():
         assert np.isfinite(float(value)), f"non-finite logp at age_frac={frac:.4f}"
         for name, g in grad.items():
             assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad {name} at {frac:.4f}"
+            assert np.any(np.asarray(g) != 0.0), f"zero grad {name} at {frac:.4f}"
