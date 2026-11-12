@@ -141,8 +141,10 @@ def interpolate_to_linear_time(
     values_linear : array, shape (n_linear,)
         Interpolated values on the linear grid.
     """
-    age_yr_min = 10.0 ** float(log_age_grid[0])
-    age_yr_max = 10.0 ** float(log_age_grid[-1])
+    # No ``float()``: under jit a constant grid's element is a staged tracer, and
+    # ``float`` on it is a ConcretizationTypeError (#715). ``**`` stays on the array.
+    age_yr_min = 10.0 ** log_age_grid[0]
+    age_yr_max = 10.0 ** log_age_grid[-1]
     t_linear_yr = jnp.linspace(age_yr_min, age_yr_max, n_linear)
     log_t_linear = jnp.log10(t_linear_yr)
     values_linear = jnp.interp(log_t_linear, log_age_grid, values)
