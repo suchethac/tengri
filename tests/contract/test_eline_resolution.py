@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.inference.likelihood import _build_eline_G_eff, _eline_scalar_resolution
+from tengri.inference.likelihood import _build_eline_G_eff, _eline_line_resolution
 from tengri.observation.eline_marginalization import build_eline_design_matrix
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -31,18 +31,28 @@ def _stub_model(resolution):
     )
 
 
+_LINES = jnp.array([4862.68, 6564.61])  # Hbeta, Halpha (vacuum)
+
+
 def test_scalar_resolution_passes_through():
-    assert _eline_scalar_resolution(_stub_model(1000.0)) == 1000.0
+    assert _eline_line_resolution(_stub_model(1000.0), _LINES, 0.0) == 1000.0
 
 
-def test_array_resolution_reduces_to_median():
-    model = _stub_model(np.array([800.0, 1000.0, 1200.0]))
-    assert _eline_scalar_resolution(model) == 1000.0
+def test_array_resolution_is_read_at_each_line():
+    """#3343: a per-pixel R is interpolated to each line, not reduced to its median."""
+    model = _stub_model(np.linspace(800.0, 1600.0, 500))
+    got = np.asarray(_eline_line_resolution(model, _LINES, 0.0))
+    expected = np.interp(
+        np.asarray(_LINES), np.asarray(model.wave_obs), np.linspace(800, 1600, 500)
+    )
+    np.testing.assert_allclose(got, expected, rtol=1e-6)
+    assert got[1] / got[0] > 1.4
 
 
 def test_missing_resolution_falls_back_to_2000():
-    assert _eline_scalar_resolution(_stub_model(None)) == 2000.0
-    assert _eline_scalar_resolution(SimpleNamespace()) == 2000.0
+    stub = SimpleNamespace(wave_obs=jnp.linspace(4000.0, 7000.0, 500))
+    assert _eline_line_resolution(_stub_model(None), _LINES, 0.0) == 2000.0
+    assert _eline_line_resolution(stub, _LINES, 0.0) == 2000.0
 
 
 def test_design_matrix_is_built_at_the_declared_resolution():

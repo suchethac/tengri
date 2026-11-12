@@ -618,21 +618,22 @@ def _n_phot_split(context: InferenceContext) -> int:
     return n_phot
 
 
-def _eline_scalar_resolution(model) -> float:
-    """Scalar R for the e-line design matrix, from the model's observation.
+def _eline_line_resolution(model, line_wavelengths, redshift):
+    """R at each line for the e-line design matrix, from the model's observation.
 
     The old probe read ``model._spectral_resolution``, an attribute nothing
     in the codebase has ever set, so the 2000 fallback always won and the
-    instrument's declared resolution never reached the line profiles.
-    ``Spectroscopy.resolution`` may be a scalar or a per-pixel array; the
-    Gaussian design matrix takes one number, so an array reduces to its
-    median (first-order, R varies slowly across a band). 2000 remains the
-    fallback only when the observation declares no resolution at all.
+    instrument's declared resolution never reached the line profiles. A scalar
+    ``Spectroscopy.resolution`` passes through; a per-pixel array is read at each
+    line's observed center (#3343). 2000 remains the fallback only when the
+    observation declares no resolution at all.
     """
-    from tengri.observation.eline_marginalization import eline_scalar_resolution
+    from tengri.observation.eline_marginalization import line_resolution
 
     spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
-    return eline_scalar_resolution(getattr(spec_cfg, "resolution", None))
+    return line_resolution(
+        getattr(spec_cfg, "resolution", None), model.wave_obs, line_wavelengths, redshift
+    )
 
 
 def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
@@ -652,7 +653,7 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
     else:
         sigma_kms = params.get("eline_sigma_kms", 0.0)
         delta_v = params.get("eline_delta_v_kms", 0.0)
-    resolution = _eline_scalar_resolution(model)
+    resolution = _eline_line_resolution(model, eline_wavelengths, z)
     G = build_eline_design_matrix(
         model.wave_obs,
         eline_wavelengths,
