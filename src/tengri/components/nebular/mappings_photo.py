@@ -1039,7 +1039,7 @@ _MAPPINGS_STELLAR_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
 # ── MappingsPhotoAGNBackend ───────────────────────────────────────
 
 
-class MappingsPhotoAGNBackend:
+class MappingsPhotoAGNBackend(NebularBackendDefaults):
     """MAPPINGS V AGN photoionization backend (Flury et al. 2024).
 
     Predicts NLR emission line luminosities by interpolating the OPTXAGNF

@@ -274,3 +274,39 @@ def test_default_split_nebular_has_a_zero_continuum():
     np.testing.assert_array_equal(cont, np.zeros(4))
     np.testing.assert_array_equal(line_wave, [1216.0])
     np.testing.assert_array_equal(line_lum, [3.0])
+
+
+def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
+    """The component calls these on the backend instance, so each constructible class has them.
+
+    The list is written out by hand: the seven registered classes, the MAPPINGS AGN backend
+    (built for ``neb={'type': 'mappings_agn'}`` under the ``mappings`` config name) and the
+    continuum fallback, which forwards attribute lookups to the backend it wraps.
+    """
+    from tengri.components.nebular._shared import NebularContinuumFallback
+    from tengri.components.nebular.baked_in import BakedInBackend
+    from tengri.components.nebular.cloudy_cb19 import CB19Backend
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.nebular.cue import CueBackend
+    from tengri.components.nebular.gutkin16 import Gutkin16Backend
+    from tengri.components.nebular.mappings_photo import (
+        MappingsPhotoAGNBackend,
+        MappingsPhotoStellarBackend,
+    )
+    from tengri.components.nebular.shock import ShockBackend
+
+    methods = ("call_kwargs", "split_nebular", "extra_derived", "line_catalog_kwargs")
+    classes = (
+        BakedInBackend,
+        CloudyGridBackend,
+        CueBackend,
+        CB19Backend,
+        Gutkin16Backend,
+        MappingsPhotoStellarBackend,
+        MappingsPhotoAGNBackend,
+        ShockBackend,
+    )
+    for cls in classes:
+        for name in methods:
+            assert callable(getattr(cls, name, None)), f"{cls.__name__}.{name}"
+    assert "__getattr__" in vars(NebularContinuumFallback)
