@@ -196,7 +196,7 @@ def test_flury_agn_grid_lines_land_on_the_line_list(density):
 def test_flury_stellar_grid_lines_land_on_the_line_list(model, density):
     from tengri.components.nebular.mappings_photo import _load_stellar_grid
 
-    grid = _load_stellar_grid(_FLURY, model, density)[0]
+    grid = _load_stellar_grid(_FLURY, model, density).grid
     _sweep_flury(grid.line_wavelengths, f"{model}/{density}")
 
 
