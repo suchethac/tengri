@@ -36,6 +36,39 @@ from tengri.inference.backends.mcmc._shared import (
 from tengri.inference.backends.mcmc.ghmc import run_ghmc
 
 
+def _meads_scan(
+    init,
+    warmup_key,
+    chain_keys,
+    logdensity,
+    data_args,
+    n_warmup,
+    n_ensemble,
+    n_folds,
+    alpha,
+    delta,
+    jitter_scale,
+    low_rank_rank,
+    low_rank_window_fraction,
+):
+    """Run GHMC under MEADS on the chain runner; return the six diagnostics of run_ghmc."""
+    from tengri.inference.backends.mcmc.chain_program import GHMC, MEADS, GHMCConfig, run_chain
+
+    cfg = GHMCConfig(
+        alpha=alpha,
+        delta=delta,
+        n_ensemble=n_ensemble,
+        n_folds=n_folds,
+        jitter_scale=jitter_scale,
+        low_rank_rank=low_rank_rank,
+        low_rank_window_fraction=low_rank_window_fraction,
+    )
+    draws, tuned = run_chain(
+        GHMC, MEADS, init, warmup_key, None, chain_keys, logdensity, data_args, n_warmup, cfg
+    )
+    return draws.position, draws.divergent, tuned[0], tuned[1], tuned[2], tuned[3]
+
+
 class TestTheEnsembleResolver:
     """The ensemble is a *superset* of the sampling chains, never the same axis."""
 
@@ -144,14 +177,14 @@ class TestTheRunnerNoLongerBorrowsHMCsAdaptation:
             pass
 
     def test_run_ghmc_uses_meads_scan(self):
-        """run_ghmc must call _ghmc_meads_scan for MEADS adaptation.
+        """run_ghmc must run GHMC under the MEADS adaptation on the chain runner.
 
         GHMC's nonreversible kernel requires MEADS for proper tuning,
         which is a structural requirement verified via source.
         """
-        source = inspect.getsource(run_ghmc)
-        assert "_ghmc_meads_scan" in source, (
-            "run_ghmc must invoke _ghmc_meads_scan to adapt alpha and delta; "
+        source = "".join(inspect.getsource(run_ghmc).split())
+        assert "run_chain(GHMC,MEADS," in source, (
+            "run_ghmc must call run_chain(GHMC, MEADS, ...) to adapt alpha and delta; "
             "see the defect in the docstring if this was changed"
         )
 
@@ -232,15 +265,13 @@ class TestTheAdaptedPathSamplesAKnownTarget:
     def test_it_recovers_the_mean_and_the_marginal_scales(self):
         import jax
 
-        from tengri.inference.backends.mcmc._shared import _ghmc_meads_scan
-
         dim = 4
         logdensity, mean, cov = self._target(dim)
         n_chains, n_iter = 4, 3000
         keys = jax.random.split(jax.random.PRNGKey(1), n_chains * n_iter)
         keys = keys.reshape(n_chains, n_iter, 2)
 
-        positions, divergent, step_size, mis, alpha, delta = _ghmc_meads_scan(
+        positions, divergent, step_size, mis, alpha, delta = _meads_scan(
             jax.numpy.zeros(dim),
             jax.random.PRNGKey(0),
             keys,
@@ -279,19 +310,13 @@ class TestTheAdaptedPathSamplesAKnownTarget:
         """The override is what the old hand-set default did unconditionally."""
         import jax
 
-        from tengri.inference.backends.mcmc._shared import _ghmc_meads_scan
-
         dim = 4
         logdensity, _, _ = self._target(dim)
         keys = jax.random.split(jax.random.PRNGKey(1), 2 * 50).reshape(2, 50, 2)
         common = (jax.numpy.zeros(dim), jax.random.PRNGKey(0), keys, logdensity, (), 100, 16, 4)
 
-        _, _, _, _, adapted_alpha, adapted_delta = _ghmc_meads_scan(
-            *common, None, None, 1.0, None, 0.5
-        )
-        _, _, _, _, pinned_alpha, pinned_delta = _ghmc_meads_scan(
-            *common, 0.8, 0.65, 1.0, None, 0.5
-        )
+        _, _, _, _, adapted_alpha, adapted_delta = _meads_scan(*common, None, None, 1.0, None, 0.5)
+        _, _, _, _, pinned_alpha, pinned_delta = _meads_scan(*common, 0.8, 0.65, 1.0, None, 0.5)
 
         assert float(pinned_alpha) == pytest.approx(0.8)
         assert float(pinned_delta) == pytest.approx(0.65)

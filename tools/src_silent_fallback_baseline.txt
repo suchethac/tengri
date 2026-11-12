@@ -1,0 +1,46 @@
+# Silent-fallback ratchet (tools/check_src_silent_fallback.py): broad handlers in
+# src/tengri that drop the exception, one path<TAB>qualname<TAB>count line each.
+# This list may only shrink: narrow a handler, rerun with --write-baseline, commit.
+src/tengri/__init__.py	<module>	2
+src/tengri/_data_setup.py	_download_file	1
+src/tengri/_tutorials.py	examples	2
+src/tengri/analysis/plotting/convergence.py	convergence_check	1
+src/tengri/analysis/plotting/posterior_1d.py	plot_1d_posterior	1
+src/tengri/citations/bibliography.py	Bibliography.from_object	1
+src/tengri/citations/collect.py	_citations_from_components	1
+src/tengri/citations/collect.py	_collect_keys_for_one	1
+src/tengri/components/agn/_nthcomp.py	_load_nthcomp_templates_impl	1
+src/tengri/components/agn/blocks/_protocol.py	collect_block_templates	1
+src/tengri/components/dust/draine2021_pah_ir.py	Draine2021PAHIRSEDComponent.load	1
+src/tengri/components/dust/draine2021_pah_ir.py	Draine2021PAHIRSEDComponent.predict	1
+src/tengri/components/igm/_subband_cache.py	load	1
+src/tengri/components/igm/_subband_cache.py	store	1
+src/tengri/components/nebular/component.py	NebularSEDComponent.apply	1
+src/tengri/config/display.py	_safe_call	1
+src/tengri/forward/sed_model.py	SEDModel.__repr__	1
+src/tengri/inference/_dimension_guard.py	_threshold	1
+src/tengri/inference/_sample_utils.py	_as_posterior_like	1
+src/tengri/inference/_sample_utils.py	_prewarm_forward	1
+src/tengri/inference/_strategy.py	resolve_status	1
+src/tengri/inference/backends/mcmc/_shared.py	_get_blackjax_floor_from_source	2
+src/tengri/inference/catalog_fitter.py	_sample_dict_for_summary	1
+src/tengri/inference/fitter.py	Fitter._add_feature_precomp	1
+src/tengri/inference/fitter.py	Fitter._auto_prewarm	2
+src/tengri/inference/fitter.py	Fitter.prewarm	2
+src/tengri/inference/fitter.py	_resolve_batch_fit_approx	1
+src/tengri/inference/mass_profile.py	_compute_reinsertion_chunk_size	1
+src/tengri/observation/filters/__init__.py	_warn_if_energy_detector	1
+src/tengri/observation/filters/__init__.py	describe	1
+src/tengri/profiling/pipeline.py	_time_step	1
+src/tengri/registry.py	_every_menu_lister	1
+src/tengri/registry.py	_recipe_data_status	1
+src/tengri/registry.py	describe_recipe	1
+src/tengri/registry.py	help	1
+src/tengri/registry.py	list_recipes	1
+src/tengri/registry.py	print_components_bibtex	1
+src/tengri/results.py	FitRecord.capture	1
+src/tengri/utils/compile_log.py	jax_block_until_ready	1
+src/tengri/utils/compile_log.py	record_compile_event	1
+src/tengri/utils/interpolation.py	_check_axis_contract	1
+src/tengri/utils/interpolation.py	_check_uniform	1
+src/tengri/utils/jax_cache.py	cache_stats	1

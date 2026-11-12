@@ -479,7 +479,7 @@ class RadioSEDComponent(TemplateThreading):
 
     #: Cross-component scalars this emitter reads off ``state.derived``, with two
     #: deliberately distant probe draws. The build-time band-response builder
-    #: (``tengri.SEDModel._additive_term_band_response``) evaluates
+    #: (``tengri.components._term_response_table.additive_term_band_response``) evaluates
     #: :meth:`emission_terms` at both and requires every term to come back
     #: *proportional*: a term whose spectral **shape** (not merely its amplitude)
     #: responds to a runtime input is not rank-1, so no constant band response
@@ -527,7 +527,7 @@ class RadioSEDComponent(TemplateThreading):
         log_window_fraction : array_like, optional
             ``log10`` of the share of the dust power inside the window [dex], the
             build-time constant the dust-emission block tabulates for a fixed shape
-            (``SEDModel._dust_emission_band_response``). When given, the
+            (the dust adapter's ``_emission_band_response``). When given, the
             windowed luminosity is ``L_ir`` times that share and the dust SED is not
             integrated.
 
@@ -1110,7 +1110,7 @@ def _l_thermal_fn(state, params):
     from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh
 
     derived = state.derived
-    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    log_nion = jnp.asarray(derived["log_nion"])
     return compute_l_radio_thermal_from_log_qh(log_nion)
 
 
@@ -1126,7 +1126,7 @@ def _l_nonthermal_fn(state, params):
     wave = state.wave
     l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
-    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    log_nion = jnp.asarray(derived["log_nion"])
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     return l_1p4ghz - l_thermal
 

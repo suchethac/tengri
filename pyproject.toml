@@ -7,7 +7,7 @@ name = "astro-tengri"
 version = "0.1.0"
 description = "Differentiable SED fitting with IFT star formation history priors"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = {text = "BSD-3-Clause"}
 authors = [
     {name = "Suchetha Cooray", email = "astro.tengri@gmail.com"},
@@ -28,7 +28,6 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
@@ -221,10 +220,14 @@ ignore = [
 "src/tengri/components/dust/laws/**" = ["E501"]  # split from attenuation.py (#843)
 "src/tengri/components/igm/igm.py" = ["E501"]
 "src/tengri/components/nebular/_shared.py" = ["E501"]
-"src/tengri/components/sfh/mean_sfh.py" = ["E501"]
-"src/tengri/components/sfh/psd_models.py" = ["E501"]
 "src/tengri/components/stellar/sfh/mean_sfh.py" = ["E501"]
 "src/tengri/components/stellar/sfh/psd_models.py" = ["E501"]
+# T201: print is the interface in these modules, not a leak (excluded from the ratchet).
+"src/tengri/cli.py" = ["T201"]
+"src/tengri/__main__.py" = ["T201"]
+"src/tengri/_display.py" = ["T201"]
+"src/tengri/_tutorials.py" = ["T201"]
+"src/tengri/bench/**" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tengri"]
@@ -232,6 +235,11 @@ combine-as-imports = true
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.pyright]
+include = ["src/tengri/observation", "src/tengri/inference"]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
