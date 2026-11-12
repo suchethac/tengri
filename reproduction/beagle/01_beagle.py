@@ -38,6 +38,7 @@ import os
 
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
+import itertools
 import time
 import warnings
 from pathlib import Path
@@ -57,6 +58,9 @@ import tengri
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.utils.physics_constants import L_SUN
 from tengri.components.dust.attenuation import calzetti, cardelli, chevallard13, lmc, power_law, smc
+from tengri import FREE
+from tengri.components.agn import get_feltre_backend
+from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -516,12 +520,445 @@ for k, tv in enumerate(tau_vs):
 # %% [markdown]
 # ## 8. Nebular emission
 #
-# (written in the next pass)
+# The `s8_nebular` run is a constant star formation rate of 10 M_sun/yr over 1 Gyr at z = 0.001, with
+# formed mass 10^10 M_sun and no dust. Its 48 rows vary log U_S from -3.5 to -2, Z from 0.001 to 0.03 and
+# xi_d from 0.1 to 0.5; stellar and gas metallicity are equal, n_H is 100 cm^-3, C/O is solar and m_up is
+# 100 M_sun. tengri runs the same history with the `gutkin16` nebular set. One build per metallicity
+# declares log U and xi_d free and sets them at each prediction, and a check below rebuilds one row with
+# both fixed. The public Gutkin et al. (2016) table is the third column. It is the line set BEAGLE
+# interpolates, with no continuum and no Lyman-alpha. Its values are per unit star formation rate, so only
+# ratios are compared with it.
+
+# %%
+NEB_LOG_U = (-3.5, -3.0, -2.5, -2.0)
+NEB_Z = (0.001, 0.004, 0.014, 0.03)
+NEB_XI = (0.1, 0.3, 0.5)
+NEB_ROWS = tuple(itertools.product(NEB_LOG_U, NEB_Z, NEB_XI))  # BEAGLE's row order
+NEB_CURVE_LOG_U = np.linspace(-3.5, -2.0, 7)  # includes the four BEAGLE log U values
+GK_LABELS = tuple(label for label, _ in beagle_driver.GUTKIN_LINES)
+GK_WAVE_AA = np.array([wave for _, wave in beagle_driver.GUTKIN_LINES])
+HB = GK_LABELS.index("Hb")
+HA = GK_LABELS.index("Ha")
+ALL_LABELS = GK_LABELS + ("He II 4686",)
+Z_SOLAR_TENGRI = 0.0142
+CASE_B_ERG = 4.78e-13  # H-beta per ionizing photon, case B [erg] (Osterbrock & Ferland 2006)
+HEII_4686_AA = (4685.0, 4689.0)  # BEAGLE only: the public table has no He II 4686
+MARKERS = ("o", "s", "^")
+LINESTYLES = ("-", "--", ":")
+
+# BEAGLE vacuum-wavelength windows that select each Gutkin+2016 line; doublet components are summed.
+LINE_WINDOWS_AA = (
+    ((3725.0, 3732.0),),  # [OII] 3727 doublet
+    ((4861.0, 4864.0),),  # H-beta
+    ((4957.0, 4962.0),),  # [OIII] 4959
+    ((5005.0, 5010.0),),  # [OIII] 5007
+    ((6546.0, 6551.0),),  # [NII] 6548
+    ((6562.0, 6566.0),),  # H-alpha
+    ((6582.0, 6587.0),),  # [NII] 6584
+    ((6715.0, 6720.0),),  # [SII] 6717
+    ((6729.0, 6734.0),),  # [SII] 6731
+    ((1236.0, 1245.0),),  # N V 1240 doublet
+    ((1547.0, 1549.5),),  # C IV 1548
+    ((1549.5, 1553.0),),  # C IV 1551
+    ((1638.0, 1642.0),),  # He II 1640
+    ((1659.0, 1663.0),),  # O III] 1661
+    ((1664.0, 1668.0),),  # O III] 1666
+    ((1881.0, 1885.0),),  # [Si III] 1883
+    ((1890.0, 1894.0),),  # Si III] 1888 (vacuum 1892)
+    ((1904.0, 1910.5),),  # C III] 1908 doublet
+)
+assert len(LINE_WINDOWS_AA) == len(GK_LABELS)
+
+
+def beagle_lines(run, windows):
+    """BEAGLE line luminosities [erg/s], shape (rows, len(windows)); each column sums the keys in its windows.
+
+    Keys carry the air label and the vacuum wavelength after the underscore, so the match uses vacuum.
+    """
+    keys = [k for k in run.line_lums_lsun if k.endswith("_lum_em")]
+    vac = {k: float(k.split("@")[1].split("_")[1]) for k in keys}
+    cols = []
+    for groups in windows:
+        sel = [k for k in keys if any(lo <= vac[k] <= hi for lo, hi in groups)]
+        if not sel:
+            raise KeyError(f"no BEAGLE line in {groups}")
+        cols.append(sum(np.asarray(run.line_lums_lsun[k], float) for k in sel))
+    return np.stack(cols, axis=1) * beagle_driver.L_SUN_BEAGLE
+
+
+def neb_model(z_abs, *, continuum="analytic"):
+    """tengri build at one absolute Z: stellar and gas metallicity equal, logU and xi_d free per prediction."""
+    lz = float(np.log10(z_abs / Z_SOLAR_TENGRI))
+    return SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(lz), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "const",
+            "log_total_mass": Fixed(LOG_MASS),
+            "start_gyr": Fixed(1.0),  # onset at lookback 1 Gyr
+            "end_gyr": Fixed(1e-4),  # cessation at lookback 0.1 Myr, so the rate runs to the present
+            "other_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={"type": "none"},
+        neb={
+            "type": "gutkin16",
+            "logU": FREE,
+            "logZ_gas": Fixed(lz),
+            "xi_d": FREE,
+            "log_nH": Fixed(2.0),
+            "co_ratio": Fixed(1.0),
+            "mup": 100,
+            "continuum": continuum,
+            "other_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.001),
+    )
+
+
+def tengri_curves(model):
+    """gutkin16 lines [erg/s], log Q_H and SFR over 10 Myr on the grid NEB_XI x NEB_CURVE_LOG_U."""
+    lines, log_qh, sfr10 = [], [], []
+    for x in NEB_XI:
+        for u in NEB_CURVE_LOG_U:
+            pred = model.predict({"neb_logU": float(u), "neb_xi_d": float(x)})
+            waves = np.asarray(pred.lines.all_waves, float)[: len(GK_LABELS)]
+            if np.max(np.abs(waves - GK_WAVE_AA)) > 5.0:
+                raise ValueError("tengri line order no longer matches the Gutkin+2016 table")
+            lines.append(np.asarray(pred.lines.all_lums, float)[: len(GK_LABELS)])
+            log_qh.append(float(pred.log_q_h))
+            sfr10.append(float(pred.sfh.sfr_10myr))
+    shape = (len(NEB_XI), len(NEB_CURVE_LOG_U))
+    return (
+        np.reshape(lines, shape + (len(GK_LABELS),)),
+        np.reshape(log_qh, shape),
+        np.reshape(sfr10, shape),
+    )
+
+
+NEB_MODELS = {z: neb_model(z) for z in NEB_Z}
+CURVES = {z: tengri_curves(model) for z, model in NEB_MODELS.items()}
+
+
+def tengri_at(z, u, x):
+    """tengri lines [erg/s], log Q_H and SFR_10 at one row, read from the curve grid."""
+    lines, log_qh, sfr10 = CURVES[z]
+    i_x, i_u = NEB_XI.index(x), int(np.argmin(np.abs(NEB_CURVE_LOG_U - u)))
+    return lines[i_x, i_u], log_qh[i_x, i_u], sfr10[i_x, i_u]
+
+
+r_neb = beagle("s8_nebular")
+tab = by_section("s8_nebular")[0].input_table()
+np.testing.assert_allclose(np.asarray(tab["nebular_logU"], float), [u for u, _, _ in NEB_ROWS])
+np.testing.assert_allclose(np.asarray(tab["nebular_xi"], float), [x for _, _, x in NEB_ROWS])
+np.testing.assert_allclose(
+    np.asarray(tab["nebular_Z"], float), np.log10([z / beagle_driver.Z_SUN_BEAGLE for _, z, _ in NEB_ROWS])
+)
+
+B_ALL = beagle_lines(r_neb, LINE_WINDOWS_AA + ((HEII_4686_AA,),))  # [erg/s], 18 Gutkin lines + He II 4686
+B_LINES = B_ALL[:, : len(GK_LABELS)]
+T_ROWS = [tengri_at(z, u, x) for u, z, x in NEB_ROWS]
+T_LINES = np.array([t[0] for t in T_ROWS])
+T_LOG_QH = np.array([t[1] for t in T_ROWS])
+T_SFR10 = np.array([t[2] for t in T_ROWS])
+RAW_LINES = np.array(
+    [
+        [beagle_driver.gutkin_node(z, u, x, 100.0, 1.0, 100.0)[lab] for lab in GK_LABELS]
+        for u, z, x in NEB_ROWS
+    ]
+)
+RB, RT, RR = (a / a[:, [HB]] for a in (B_LINES, T_LINES, RAW_LINES))
+
+# Build check: one row rebuilt with logU and xi_d fixed, against the free build predicted at the same values.
+_fixed = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(float(np.log10(0.014 / Z_SOLAR_TENGRI))), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+    sfh={"type": "const", "log_total_mass": Fixed(LOG_MASS), "start_gyr": Fixed(1.0), "end_gyr": Fixed(1e-4), "other_params": Fixed(DEFAULT)},
+    dust_attenuation={"type": "none"},
+    neb={"type": "gutkin16", "logU": Fixed(-3.0), "logZ_gas": Fixed(float(np.log10(0.014 / Z_SOLAR_TENGRI))),
+         "xi_d": Fixed(0.3), "log_nH": Fixed(2.0), "co_ratio": Fixed(1.0), "mup": 100, "other_params": Fixed(DEFAULT)},
+    redshift=Fixed(0.001),
+)
+_hb_fixed = float(_fixed.predict({}).lines.all_lums[HB])
+_hb_free = float(T_LINES[NEB_ROWS.index((-3.0, 0.014, 0.3)), HB])
+print(f"§8 build check (row logU -3, Z 0.014, xi 0.3): H-beta fixed {_hb_fixed:.6e}, free {_hb_free:.6e} erg/s, "
+      f"relative difference {abs(_hb_free / _hb_fixed - 1.0):.1e}")
+
+print(f"§8 row 0 (logU {NEB_ROWS[0][0]}, Z {NEB_ROWS[0][1]}, xi {NEB_ROWS[0][2]}): BEAGLE H-beta "
+      f"{B_LINES[0, HB] / beagle_driver.L_SUN_BEAGLE:.4e} L_sun, [OIII]5007/H-beta {RB[0, GK_LABELS.index('[OIII]5007')]:.3f}, "
+      f"N_ion {float(np.asarray(r_neb.galaxy_properties['N_ion'])[0]):.3f}")
+
+# %% [markdown]
+# ### §8a Line ratios to H-beta
+#
+# Each dot is one of the 48 rows. The table gives, for each line, the median and the maximum of |log10| of
+# each pair of sources. The raw table and tengri agree to 1e-14 dex on every line, so tengri's interpolation
+# is exact at these nodes. The BEAGLE differences are therefore set by how BEAGLE drives that table (its ionizing
+# spectrum and normalization), not by tengri's build; this is an inference from the agreement, not a separate test. H-alpha/H-beta agrees to 0.002 dex at most,
+# [N II] and [S II] to 0.01 dex in the median, and [O III] to 0.02 dex in the median and 0.24 at most. He II
+# 1640 and Si III] 1888 differ by 0.36 to 0.49 dex in the median and carry the largest spread. This section
+# does not isolate their cause; §8c gives the one-number ionizing comparison.
+
+# %%
+fig, ax = plt.subplots(figsize=(9.0, 3.8))
+xs = np.arange(len(GK_LABELS))
+for i, (arr, off, col, lab) in enumerate(((RB, -0.22, "C0", "BEAGLE"), (RT, 0.0, "C1", "tengri"), (RR, 0.22, "C2", "raw table"))):
+    for j in xs:
+        ax.plot(np.full(len(NEB_ROWS), j + off), np.log10(arr[:, j]), ls="none", marker=("o", "+", "x")[i],
+                ms=3.0, color=col, alpha=0.7, label=lab if j == 0 else None)
+ax.set_xticks(xs, GK_LABELS, rotation=60, fontsize=7)
+ax.set_ylabel(r"$\log_{10}$(line / H$\beta$)")
+ax.legend(fontsize=7, frameon=False, ncol=3, loc="upper right")
+fig.tight_layout()
+save_fig("beagle_08a_line_ratios.png")
+plt.show()
+
+print("§8a line / H-beta over 48 rows: median and max |dlog10| between sources")
+print(f"  {'line':>12s} {'BEAGLE/tengri':>15s} {'max':>7s} {'raw/tengri':>12s} {'max':>7s} {'BEAGLE/raw':>12s} {'max':>7s}")
+for j, lab in enumerate(GK_LABELS):
+    if j == HB:
+        continue
+    d_bt = np.abs(np.log10(RB[:, j] / RT[:, j]))
+    d_rt = np.abs(np.log10(RR[:, j] / RT[:, j]))
+    d_br = np.abs(np.log10(RB[:, j] / RR[:, j]))
+    print(f"  {lab:>12s} {np.median(d_bt):15.3f} {d_bt.max():7.3f} {np.median(d_rt):12.2e} {d_rt.max():7.1e} "
+          f"{np.median(d_br):12.3f} {d_br.max():7.3f}")
+
+# %% [markdown]
+# ### §8b Six ratios against log U_S
+#
+# Points are BEAGLE; lines are tengri on the seven-node log U grid. Color is metallicity and marker or
+# line style is xi_d. He II 4686 is not in the public table, so its panel has BEAGLE points only.
+
+# %%
+PANELS_8B = (
+    (r"[O III] 5007 / H$\beta$", "[OIII]5007", "Hb"),
+    (r"[O II] 3727 / H$\beta$", "[OII]3727", "Hb"),
+    (r"[N II] 6584 / H$\alpha$", "[NII]6584", "Ha"),
+    (r"H$\alpha$ / H$\beta$", "Ha", "Hb"),
+    (r"He II 4686 / H$\beta$", "He II 4686", "Hb"),
+    (r"C III] 1908 / H$\beta$", "CIII]1908", "Hb"),
+)
+fig, axes = plt.subplots(2, 3, figsize=(10.5, 6.0))
+for ax, (title, num, den) in zip(axes.ravel(), PANELS_8B):
+    n, d = ALL_LABELS.index(num), ALL_LABELS.index(den)
+    rb = B_ALL[:, n] / B_ALL[:, d]
+    rt_med = []
+    for iz, z in enumerate(NEB_Z):
+        for ix, x in enumerate(NEB_XI):
+            sel = [i for i, (_, zz, xx) in enumerate(NEB_ROWS) if zz == z and xx == x]
+            ax.plot([NEB_ROWS[i][0] for i in sel], rb[sel], ls="none", marker=MARKERS[ix], ms=3.5, color=f"C{iz}")
+            if n < len(GK_LABELS):
+                lines = CURVES[z][0]
+                curve = lines[ix, :, n] / lines[ix, :, d]
+                ax.plot(NEB_CURVE_LOG_U, curve, ls=LINESTYLES[ix], color=f"C{iz}", lw=1.0)
+                rt_med.append(np.abs(np.log10(rb[sel] / (T_LINES[sel, n] / T_LINES[sel, d]))))
+    ax.set_title(title, fontsize=9)
+    ax.set_xlabel(r"$\log_{10} U_S$", fontsize=8)
+    if rt_med:
+        print(f"§8b {title}: median |dlog10| BEAGLE/tengri over 48 rows {np.median(np.concatenate(rt_med)):.3f}, "
+              f"max {np.concatenate(rt_med).max():.3f}")
+    else:
+        print(f"§8b {title}: BEAGLE only (no line in the public table)")
+for z, c in zip(NEB_Z, range(len(NEB_Z))):
+    axes[0, 0].plot([], [], color=f"C{c}", label=f"Z = {z:g}")
+for ix, x in enumerate(NEB_XI):
+    axes[0, 0].plot([], [], color="0.3", ls=LINESTYLES[ix], marker=MARKERS[ix], label=f"xi_d = {x:g}")
+axes[0, 0].legend(fontsize=6, frameon=False, loc="best")
+fig.tight_layout()
+save_fig("beagle_08b_ratio_panels.png")
+plt.show()
+
+# %% [markdown]
+# ### §8c H-beta per ionizing photon and per SFR
+#
+# BEAGLE's photon rate is `N_ion` and tengri's is `log_q_h`. Case B gives 4.78e-13 erg per photon. The
+# per-SFR column uses each source's own 10 Myr rate, which is 10 M_sun/yr in both. Per photon the two codes
+# agree to 1.4 percent in the median, so the line conversion matches once the photons are counted. The
+# per-SFR ratio (0.73 in the median) is therefore the ionizing photon output per unit SFR, which is the
+# library bracket between CB16 (BEAGLE) and BC03 STELIB (tengri).
+
+# %%
+N_ION_B = np.asarray(r_neb.galaxy_properties["N_ion"], float)
+SFR10_B = np.asarray(r_neb.star_formation["SFR_10"], float)
+PER_PHOTON_B = B_LINES[:, HB] / 10.0**N_ION_B
+PER_PHOTON_T = T_LINES[:, HB] / 10.0**T_LOG_QH
+PER_SFR_B = B_LINES[:, HB] / SFR10_B
+PER_SFR_T = T_LINES[:, HB] / T_SFR10
+
+fig, (ax_p, ax_s) = plt.subplots(1, 2, figsize=(10.0, 3.8))
+for iz, z in enumerate(NEB_Z):
+    sel = [i for i, (_, zz, xx) in enumerate(NEB_ROWS) if zz == z]
+    lu = np.array([NEB_ROWS[i][0] for i in sel])
+    ax_p.plot(lu, PER_PHOTON_B[sel], "o", color=f"C{iz}", ms=3.5)
+    ax_s.plot(lu, PER_SFR_B[sel], "o", color=f"C{iz}", ms=3.5)
+    lines, log_qh, sfr10 = CURVES[z]
+    ix = NEB_XI.index(0.3)
+    ax_p.plot(NEB_CURVE_LOG_U, lines[ix, :, HB] / 10.0**log_qh[ix], color=f"C{iz}", lw=1.0, label=f"Z = {z:g}")
+    ax_s.plot(NEB_CURVE_LOG_U, lines[ix, :, HB] / sfr10[ix], color=f"C{iz}", lw=1.0)
+ax_p.axhline(CASE_B_ERG, color="0.4", ls=":", lw=1.0, label="case B")
+ax_p.set_yscale("log")
+ax_p.set_ylabel("H$\\beta$ per ionizing photon [erg]", fontsize=8)
+ax_s.set_ylabel(r"H$\beta$ per $\mathrm{SFR}_{10}$ [erg/s / (M$_\odot$/yr)]", fontsize=8)
+for ax in (ax_p, ax_s):
+    ax.set_xlabel(r"$\log_{10} U_S$", fontsize=8)
+ax_p.legend(fontsize=6, frameon=False)
+fig.tight_layout()
+save_fig("beagle_08c_per_photon.png")
+plt.show()
+
+print("§8c H-beta per ionizing photon [erg] and per SFR_10, 48 rows")
+print(f"  {'quantity':>24s} {'BEAGLE median':>14s} {'min':>10s} {'max':>10s} {'tengri median':>14s} {'min':>10s} {'max':>10s} {'tengri/BEAGLE':>14s}")
+for lab, b, t in (("per photon", PER_PHOTON_B, PER_PHOTON_T), ("per SFR_10", PER_SFR_B, PER_SFR_T)):
+    print(f"  {lab:>24s} {np.median(b):14.4e} {b.min():10.3e} {b.max():10.3e} {np.median(t):14.4e} {t.min():10.3e} "
+          f"{t.max():10.3e} {np.median(t / b):14.3f}")
+print(f"  Case B per photon {CASE_B_ERG:.3e} erg; BEAGLE median per photon / case B {np.median(PER_PHOTON_B) / CASE_B_ERG:.3f}, "
+      f"tengri median per photon / case B {np.median(PER_PHOTON_T) / CASE_B_ERG:.3f}")
+
+# %% [markdown]
+# ### §8d Continuum in line-free windows
+#
+# BEAGLE's continuum is the stellar plus nebular continuum without lines. tengri's SED includes its
+# analytic continuum and lines; the windows sit between lines, and the table divides out the window mean
+# at 4000 to 4050 A, so only the shape enters. The shape ratio runs from 0.93 to 1.19 across windows and
+# metallicities: it rises toward the red at Z = 0.001 and falls toward the red at Z = 0.03. That is the
+# library bracket between MILES (BEAGLE) and STELIB (tengri) at each metallicity, and the metallicity trend
+# is not separated from it here. The analytic continuum changes the window means by 1 to 3 percent (last column).
+
+# %%
+CONT_WINDOWS_AA = ((3600.0, 3700.0), (4000.0, 4050.0), (5100.0, 5200.0), (6000.0, 6100.0), (7000.0, 7200.0))
+wl_b = np.asarray(r_neb.wl_rest_aa, float)
+SHAPE = {}
+for z in NEB_Z:
+    i_b = NEB_ROWS.index((-3.0, z, 0.3))
+    flux_b = np.array([window_mean(wl_b, np.asarray(r_neb.continuum_sed[i_b], float), lo, hi) for lo, hi in CONT_WINDOWS_AA])
+    sed_t = np.asarray(NEB_MODELS[z].predict({"neb_logU": -3.0, "neb_xi_d": 0.3}).rest_sed(wave=wl_b), float)
+    flux_t = np.array([window_mean(wl_b, sed_t, lo, hi) for lo, hi in CONT_WINDOWS_AA])
+    ratio = flux_b / flux_t
+    SHAPE[z] = ratio / ratio[1]
+neb_none = neb_model(0.014, continuum="none")
+sed_a = np.asarray(NEB_MODELS[0.014].predict({"neb_logU": -3.0, "neb_xi_d": 0.3}).rest_sed(wave=wl_b), float)
+sed_n = np.asarray(neb_none.predict({"neb_logU": -3.0, "neb_xi_d": 0.3}).rest_sed(wave=wl_b), float)
+NONE_OVER_ANALYTIC = np.array([window_mean(wl_b, sed_n, lo, hi) / window_mean(wl_b, sed_a, lo, hi) for lo, hi in CONT_WINDOWS_AA])
+
+fig, (ax_s, ax_n) = plt.subplots(1, 2, figsize=(9.5, 3.4))
+centers = np.arange(len(CONT_WINDOWS_AA))
+for iz, z in enumerate(NEB_Z):
+    ax_s.plot(centers, SHAPE[z], "o-", ms=4, lw=0.9, color=f"C{iz}", label=f"Z = {z:g}")
+ax_s.axhline(1.0, color="0.6", lw=0.8)
+ax_s.set_ylabel("BEAGLE / tengri, shape", fontsize=8)
+ax_n.plot(centers, NONE_OVER_ANALYTIC, "o-", ms=4, lw=0.9, color="C3")
+ax_n.axhline(1.0, color="0.6", lw=0.8)
+ax_n.set_ylabel("tengri continuum none / analytic", fontsize=8)
+for ax in (ax_s, ax_n):
+    ax.set_xticks(centers, [f"{lo / 1e3:.2f}-{hi / 1e3:.2f}" for lo, hi in CONT_WINDOWS_AA], fontsize=7)
+    ax.set_xlabel(r"window [$\mu$m]", fontsize=8)
+ax_s.legend(fontsize=6, frameon=False)
+fig.tight_layout()
+save_fig("beagle_08d_continuum.png")
+plt.show()
+
+print("§8d continuum window means at logU -3, xi_d 0.3; shape = ratio over the 4000-4050 A window")
+print(f"  {'window [A]':>12s} " + " ".join(f"{'Z=' + format(z, 'g'):>10s}" for z in NEB_Z) + f" {'none/analytic':>14s}")
+for k, (lo, hi) in enumerate(CONT_WINDOWS_AA):
+    print(f"  {lo:6.0f}-{hi:5.0f} " + " ".join(f"{SHAPE[z][k]:10.3f}" for z in NEB_Z) + f" {NONE_OVER_ANALYTIC[k]:14.4f}")
+
+# %% [markdown]
+# ### §8 Notes on conventions
+#
+# The gutkin16 `logU` is the ionization parameter at the Stromgren radius, U_S, which is the table's own
+# axis. Cue's `neb_logU` is the inner-face U at 10^19 cm, so no conversion is applied here. Both codes set
+# the ionizing escape fraction to zero (BEAGLE `LyC_f_esc` and tengri `neb_fesc`). The public table has no
+# Lyman-alpha and no continuum, so tengri's Lyman-alpha is the Case B value and its continuum is the analytic
+# free-free plus two-photon term; the continuum is compared with BEAGLE in §8d. BEAGLE writes lines at air
+# wavelengths above 2000 A, and the match above uses the vacuum wavelength in each key.
 
 # %% [markdown]
 # ## 9. AGN narrow-line region
 #
-# (written in the next pass)
+# The narrow-line region block is tengri's Feltre et al. (2016) photoionization grid; Vidal-Garcia et al.
+# (2024) is cited for the narrow-line setup. tengri's ionizing rate comes from an accretion luminosity L_acc
+# and a power-law slope alpha, and the raw table is tabulated at L_acc = 10^45 erg/s. There is no BEAGLE AGN
+# run in this matrix, so this section has no BEAGLE column. Both sources are evaluated at grid nodes: the
+# anchor ratio (1.0000) and the zero differences in the table confirm the normalization and the wiring, but
+# they do not test interpolation between nodes.
+
+# %%
+AGN_ALPHA = -1.7
+AGN_XI = 0.3
+AGN_LOG_N = 3.0
+AGN_Z = (0.002, 0.014)
+AGN_LOG_U = (-3.5, -2.5, -1.5)
+AGN_LINES = ("[OII]3727", "[OIII]5007", "[NII]6584", "Halpha", "[SII]6717")
+FELTRE = get_feltre_backend()
+
+
+def tengri_nlr(z_abs, log_u, *, l_acc=1e45, xi=AGN_XI, log_n=AGN_LOG_N, alpha=AGN_ALPHA):
+    """tengri NLR lines: wavelengths [A] and luminosities [erg/s] from the Feltre backend."""
+    wave, lum_lsun = FELTRE.predict_agn_nlr_lines(
+        alpha_pl=alpha,
+        neb_logU=log_u,
+        neb_logn=log_n,
+        neb_logZ_gas=float(np.log10(z_abs)),  # absolute log10 Z
+        xi_d=xi,
+        log_qh=_log_qh_from_lacc(l_acc, alpha),
+        neb_fesc=0.0,
+    )
+    return np.asarray(wave, float), np.asarray(lum_lsun, float) * L_SUN
+
+
+def line_at(waves, lum, wave_aa):
+    """Luminosity of the line nearest to ``wave_aa``; a miss beyond 1 A raises."""
+    i = int(np.argmin(np.abs(waves - wave_aa)))
+    if abs(waves[i] - wave_aa) > 1.0:
+        raise KeyError(f"no tengri NLR line at {wave_aa} A")
+    return float(lum[i])
+
+
+def feltre_wave(name):
+    return dict(beagle_driver.FELTRE_LINES)[name]
+
+
+hb_wave = feltre_wave("Hbeta")
+anchor_raw = beagle_driver.feltre_node(0.014, -2.5, 0.1, 100.0, -1.2)["Hbeta"]
+w_a, l_a = tengri_nlr(0.014, -2.5, xi=0.1, log_n=2.0, alpha=-1.2)
+anchor_t = line_at(w_a, l_a, hb_wave)
+print(f"§9 anchor node (Z 0.014, logU -2.5, xi 0.1, n_H 100, alpha -1.2, L_acc 1e45 erg/s): "
+      f"H-beta raw {anchor_raw:.4e}, tengri {anchor_t:.4e} erg/s, ratio {anchor_t / anchor_raw:.4f}")
+w1, l1 = tengri_nlr(0.014, -2.5, l_acc=1e44)
+w2, l2 = tengri_nlr(0.014, -2.5, l_acc=1e45)
+print(f"§9 H-beta linear in L_acc: tengri(1e44)/tengri(1e45) = {line_at(w1, l1, hb_wave) / line_at(w2, l2, hb_wave):.4f} "
+      f"(linear: 0.1000)")
+
+print("§9 ratios to H-beta: raw Feltre table vs tengri at L_acc 1e45 erg/s, xi_d 0.3, n_H 1000, alpha -1.7")
+print(f"  {'Z':>6s} {'logU':>6s} {'line':>12s} {'raw':>10s} {'tengri':>10s} {'dlog10':>8s}")
+for z in AGN_Z:
+    for u in AGN_LOG_U:
+        raw = beagle_driver.feltre_node(z, u, AGN_XI, 10.0**AGN_LOG_N, AGN_ALPHA)
+        w, lum = tengri_nlr(z, u)
+        hb_t = line_at(w, lum, hb_wave)
+        for name in AGN_LINES:
+            r_ratio = raw[name] / raw["Hbeta"]
+            t_ratio = line_at(w, lum, feltre_wave(name)) / hb_t
+            print(f"  {z:6.3f} {u:6.1f} {name:>12s} {r_ratio:10.4f} {t_ratio:10.4f} {np.log10(t_ratio / r_ratio):8.4f}")
+
+fine_u = np.linspace(-3.5, -1.5, 9)
+fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.5))
+for ax, name in zip(axes, ("[OIII]5007", "[NII]6584")):
+    for iz, z in enumerate(AGN_Z):
+        t_curve = []
+        for u in fine_u:
+            w, lum = tengri_nlr(z, float(u))
+            t_curve.append(line_at(w, lum, feltre_wave(name)) / line_at(w, lum, hb_wave))
+        ax.plot(fine_u, t_curve, color=f"C{iz}", lw=1.2, label=f"tengri, Z = {z:g}")
+        raw_pts = [beagle_driver.feltre_node(z, u, AGN_XI, 10.0**AGN_LOG_N, AGN_ALPHA) for u in AGN_LOG_U]
+        ax.plot(AGN_LOG_U, [r[name] / r["Hbeta"] for r in raw_pts], "o", color=f"C{iz}", ms=4, label=f"raw table, Z = {z:g}")
+    ax.set_yscale("log")
+    ax.set_title(f"{name} / H$\\beta$", fontsize=9)
+    ax.set_xlabel(r"$\log_{10} U_S$", fontsize=8)
+axes[0].legend(fontsize=6, frameon=False)
+fig.tight_layout()
+save_fig("beagle_09_nlr.png")
+plt.show()
 
 # %% [markdown]
 # ## §12 IGM absorption
