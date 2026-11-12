@@ -1436,20 +1436,7 @@ Outer cycle 5: resample again (prevent staleness)
 
 ### 11.6 Usage
 
-```python
-from tengri import HierarchicalFitter
-
-hfitter = HierarchicalFitter(
-    model_factory=lambda sigma, tau: Model(spec, ssp, psd_sigma=sigma, psd_tau_myr=tau),
-    galaxies=[{"flux_obs": f, "noise": n} for f, n in zip(fluxes, noises)],
-)
-
-# Default: native_geovi with CorrelatedFieldMaker
-result = hfitter.run("vi", n_iterations=25)
-
-# EVI (MGVI first, then geoVI)
-result = hfitter.run("vi", n_iterations=30)
-```
+This section describes the block-wise algorithm. The public entry point that once ran it, `HierarchicalFitter`, has been removed, and it has no current replacement that runs end to end. `PopulationSEDModel` with `ForwardModel.build(population=...)` builds, but its forward-time path is a stub (issue #211), so `Fitter(forward).run(...)` raises. The direct constructor `PopulationFitter(model_factory, galaxies, ...)` is still exported, and it emits a `DeprecationWarning` and is slated for removal in tengri v1.0 (`src/tengri/inference/hierarchical.py`).
 
 ### 11.7 Expected Performance (Hierarchical)
 

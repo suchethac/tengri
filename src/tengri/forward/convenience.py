@@ -214,7 +214,9 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
 def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):
     """Compute spectra for a batch of galaxies via vmap.
 
-    Requires ``precompute_spectroscopy()`` to have been called.
+    Requires a spectrum grid fixed at build: the model must be built with
+    ``observation=Observation(spectroscopy=Spectroscopy(wave_obs=...))``, or
+    this raises ``ValueError``.
 
     Parameters
     ----------

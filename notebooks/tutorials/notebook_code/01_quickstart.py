@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -40,8 +40,8 @@ from tengri import (
     ForwardModel,
     SEDModel,
     Observation,
+    Spectroscopy,
     Parameters,
-    Photometry,
     Uniform,
     load_ssp_data,
 )
@@ -84,7 +84,8 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 print(
     f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
@@ -117,10 +118,8 @@ for name in spec_param.free_params:
     print(f"  {name}")
 
 # %%
-# Create the model with spectroscopic precomputation
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+# Create the model with the spectrum grid fixed at build
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-model_param.precompute_spectroscopy(WAVE_OBS)
 print(f"SEDModel created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
 # %%
@@ -450,9 +449,8 @@ print(f"  Physical: {len([p for p in spec_stoch.free_params if 'xi' not in p])}"
 print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
 
 # %%
-# Create stochastic model with spectroscopic precomputation
+# Create the stochastic model with the spectrum grid fixed at build
 model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
-model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
 # Generate a bursty mock galaxy — supernova-feedback regime

@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -41,6 +41,7 @@ from tengri import (
     LogNormal,
     LogUniform,
     Observation,
+    Spectroscopy,
     Parameters,
     Photometry,
     SEDModel,
@@ -78,7 +79,11 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
+)
 
 # %% [markdown]
 # ## Parameters: Defining Your Model
@@ -174,8 +179,6 @@ print(f"Model created: {spec.n_free} free parameters")
 
 # %%
 # Predict a spectrum
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model.precompute_spectroscopy(WAVE_OBS)
 
 params = spec.sample(jax.random.PRNGKey(42))
 spectrum = model.predict_spectrum(params)
@@ -188,7 +191,7 @@ print(f"Photometry ({len(phot)} bands): {np.array(phot)}")
 
 # %%
 # Precomputation speedup
-# Spectroscopy precomputation is already active.
+# The spectrum grid is fixed at build, so each call reuses the cached weighted sum.
 # Photometry precomputation activates automatically when redshift is fixed.
 # Let's measure the speedup:
 jit_spec = jax.jit(model.predict_spectrum)
@@ -290,8 +293,11 @@ print(f"  sfr_full shape: {sfh['sfr_full'].shape}")
 
 # %%
 # Generate mock data
-mock = model.mock_spectrum(params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
-fitter = Fitter(model, mock.flux_obs, mock.noise)
+# The Fitter takes the spectrum alone, so it gets a spectroscopy-only model.
+fit_obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
+fit_model = SEDModel(spec, ssp_data, observation=fit_obs)
+mock = fit_model.mock_spectrum(params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
+fitter = Fitter(fit_model, mock.flux_obs, mock.noise)
 print(f"Fitter: {len(mock.flux_obs)} data points, {spec.n_free} parameters")
 
 # %%
