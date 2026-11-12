@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(observation): the window power-law fit of a spectral index returned -2.0 for a window holding a single grid point, not NaN (#1404). The fitted slope divided by a zero denominator under a floor, so a degenerate window read as a plausible UV slope. It now returns NaN; normal windows are bit-identical. Partial: other clamped-denominator normalizers (Dn4000, Balmer break, the break and equivalent-width primitives) remain on their clamps, since a NaN there severs the gradient at a zero input (see `tools/check_zero_hiding_clamps.py`).
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
