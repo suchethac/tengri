@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import math
 import time
-import warnings
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy.special import logsumexp
 
-from tengri.config.exceptions import DeadFitError
+from tengri.config.exceptions import DeadFitError, warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._walls import _wall_value
 
@@ -80,11 +79,12 @@ def _resolve_posterior_draws(n_posterior_samples, ess):
         raise ValueError(f"Weight ESS must be finite and positive to set the draws, got {ess!r}.")
     n_draws = math.ceil(ess)
     if ess < _NSS_ESS_WARN_BELOW:
-        warnings.warn(
+        warn_measured(
             f"NSS weight ESS = {ess:.3g} is below {_NSS_ESS_WARN_BELOW:g}; drawing "
             f"{n_draws} posterior sample(s) (not padded). Posterior summaries are unreliable.",
             UserWarning,
             stacklevel=2,
+            weight_ess=float(ess),
         )
     return n_draws
 
