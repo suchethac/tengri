@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(agn): the kd18_agnfitter, kd18_agnfitter_warmindex, slone_netzer and relagn disc kernels are finite and float64-accurate in pure float32 at physical luminosities (#3183). Their template normalization formed the erg/s-scale linear power `10**agn_log_lbol * L_sun`, which is `inf` in float32; they now use the log-space helper `scale_to_torus_power_native` with a unit fraction, as the torus path does (#3166). Measured in float32 at agn_log_lbol 6 and 11, the kernels were non-finite at every wavelength and now agree with float64 to 9e-6 of peak. float64 output is bit-identical. At agn_log_lbol 46 the output itself (about 4e63 erg/s/Hz) is outside float32 range, so no float32 SED is finite there.
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
