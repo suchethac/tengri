@@ -100,6 +100,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.forward.ssp_guard import check_ssp_flux_not_splat
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import (
     FILTER_COVERAGE_TOLERANCE,
@@ -3398,6 +3399,8 @@ class SEDModel:
         _validate_nebular_lines_in_spectrum(spec, observation)
         self.observation = observation
         self.spec = spec
+        # Refuse a splat SSP before anything is built on it (#3350).
+        check_ssp_flux_not_splat(ssp_data.ssp_flux)
         self.ssp_data = ssp_data
         self._band_tables: dict[str, dict[str, BandTable | Decline]] = {}
 
