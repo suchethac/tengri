@@ -56,7 +56,7 @@ def _params(torus: str) -> dict:
 
 @pytest.mark.parametrize(("torus", "i_deg"), [("skirtor", 70.0), ("fritz", 80.0)])
 def test_tied_disc_below_the_library_edge_is_the_untied_absorbed_factor(torus, i_deg):
-    """Tied factor below 10 A is nonzero and equals the untied path's ``2 cos i T_X``."""
+    """Tied factor below 10 A is nonzero: SKIRTOR ``2 cos i T_X``, Fritz ``ratio T_X`` (#3062)."""
     cos_inc = float(np.cos(np.radians(i_deg)))
     wave = jnp.asarray(np.concatenate([_XRAY_WAVE, [_V_WAVE, 1.0e3]]))
     sight = tlt.library_torus_sightline(torus, wave, cos_inc=cos_inc, params=_params(torus))
@@ -64,7 +64,10 @@ def test_tied_disc_below_the_library_edge_is_the_untied_absorbed_factor(torus, i
     # The tied disc's library ratio is zero on the caller's grid below the library's edge.
     tied_ratio = jnp.zeros_like(wave)
     tied = np.asarray(tlt.tied_incl_with_library_edge(tied_ratio, wave, sight, torus))
-    untied = np.asarray(sight.disc_factor)
+    # Fritz (#3062, owner 2026-11-12): the isotropic library ratio times T_X, not 2 cos i T_X.
+    untied = np.asarray(
+        sight.ratio * sight.transmission if torus == "fritz" else sight.disc_factor
+    )
     below = np.asarray(wave) < _EDGE_AA
     assert np.all(tied[below] > 0.0)
     np.testing.assert_allclose(tied[below], untied[below], rtol=1e-12)
@@ -74,7 +77,10 @@ def test_tied_disc_below_the_library_edge_is_the_untied_absorbed_factor(torus, i
 
 @pytest.mark.parametrize("torus", ["skirtor", "fritz"])
 def test_tied_factor_below_the_edge_is_mm83_of_the_library_column(torus):
-    """The absorbed factor is 2 cos i exp(-sigma N_H), N_H = 2.21e21 A_V, to 1e-6."""
+    """The absorbed factor is w exp(-sigma N_H), N_H = 2.21e21 A_V, to 1e-6.
+
+    ``w`` is 2 cos i for SKIRTOR and the held library ratio for Fritz (#3062, owner 2026-11-12).
+    """
     i_deg = 70.0 if torus == "skirtor" else 80.0
     cos_inc = float(np.cos(np.radians(i_deg)))
     wave = jnp.asarray(np.concatenate([_XRAY_WAVE, [_V_WAVE]]))
@@ -82,7 +88,8 @@ def test_tied_factor_below_the_edge_is_mm83_of_the_library_column(torus):
     tied = np.asarray(tlt.tied_incl_with_library_edge(jnp.zeros_like(wave), wave, sight, torus))
     t_v = float(np.asarray(sight.transmission)[-1])
     a_v = -2.5 * np.log10(t_v)
-    expected = 2.0 * cos_inc * np.exp(-sigma_mm83(HC_KEV_AA / _XRAY_WAVE) * NH_PER_AV * a_v)
+    weight = float(np.asarray(sight.ratio)[0]) if torus == "fritz" else 2.0 * cos_inc
+    expected = weight * np.exp(-sigma_mm83(HC_KEV_AA / _XRAY_WAVE) * NH_PER_AV * a_v)
     np.testing.assert_allclose(tied[:2], expected, rtol=1e-6)
 
 
