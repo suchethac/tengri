@@ -8347,7 +8347,7 @@ class SEDModel:
                     "Configured nebular backend did not publish a discrete "
                     "line catalog to state.derived (expected keys "
                     "'line_waves' and 'line_lums'). The BakedIn backend bakes "
-                    "lines into the SSP grid; ShockBackend publishes a "
+                    "lines into the SSP grid; the shock component publishes a "
                     "continuous line SED instead. Switch to Cue or CloudyGrid."
                 )
             all_waves = jnp.asarray(state.derived["line_waves"])
@@ -12753,10 +12753,10 @@ class SEDModel:
         # anything (including ``{'type': 'none'}'``, which resolves to
         # ``backend="baked_in"`` -- "nebular emission already baked into the
         # SSP grid, publish nothing"), so ``isinstance`` alone is not the live
-        # -mask test: ``backend="baked_in"`` and ``backend="shock"`` both
-        # return from ``NebularSEDComponent.apply`` before ever reaching the
-        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- neither
-        # publishes ``lyc_transmission``, so the stellar LUT's whole-band and
+        # -mask test: ``backend="baked_in"`` returns from
+        # ``NebularSEDComponent.apply`` before ever reaching the
+        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- it
+        # does not publish ``lyc_transmission``, so the stellar LUT's whole-band and
         # sub-band LyC split would be pure, uncorrected, wasted compute for
         # them (and, on far-IR filters whose observed-frame footprint sits
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
