@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -63,6 +63,7 @@ from tengri._data_setup import package_or_env_data_path
 from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
+from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -489,6 +490,17 @@ class MappingsPhotoStellarBackend:
     ... )
 
     """
+
+    config_name: ClassVar[str] = "mappings"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    publishes_shock: ClassVar[bool] = False
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
 
     name = "mappings_photo_stellar"
     has_free_params = True

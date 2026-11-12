@@ -122,6 +122,11 @@ from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation
 from tengri.components.nebular._line_ingest import (
     cloudy_labels_to_vacuum,
 )
+from tengri.components.nebular._params import (
+    CUE_GAS_EXTRA_PARAMS,
+    CUE_IONSPEC_PARAMS,
+    NEBULAR_STANDARD_PARAMS,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -1255,6 +1260,17 @@ class CueBackend:
        these parameters as free parameters or using external ionizing spectra.
 
     """
+
+    config_name: ClassVar[str] = "cue"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = True
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    publishes_shock: ClassVar[bool] = False
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return [*NEBULAR_STANDARD_PARAMS, *CUE_IONSPEC_PARAMS, *CUE_GAS_EXTRA_PARAMS]
 
     #: erg/s per [Lsun] for **this backend's** line catalog, read by
     #: :class:`~tengri.components.nebular.component.NebularSEDComponent` at the

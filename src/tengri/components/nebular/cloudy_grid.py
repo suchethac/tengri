@@ -103,7 +103,7 @@ References
 
 import os
 import warnings
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -113,6 +113,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _interp_index_weight,
@@ -515,6 +516,17 @@ class CloudyGridBackend:
         Only used when ``grid_interp="triweight"``.  Default 0.2.
 
     """
+
+    config_name: ClassVar[str] = "cloudy_grid"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr", "age_weights")
+    publishes_shock: ClassVar[bool] = False
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
 
     #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015, the
     #: convention the CLOUDY grid is tabulated in. See CueBackend for the one

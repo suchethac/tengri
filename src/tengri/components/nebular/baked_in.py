@@ -7,6 +7,7 @@ The nebular emission is already part of the SSP flux arrays.
 """
 
 import warnings
+from typing import ClassVar
 
 import jax.numpy as jnp
 
@@ -90,6 +91,17 @@ class BakedInBackend:
     and metallicity.
 
     """
+
+    config_name: ClassVar[str] = "baked_in"
+    supports_split_sed: ClassVar[bool] = False
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ()
+    publishes_shock: ClassVar[bool] = False
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return []
 
     def __init__(self, ionizing_source_warning: str = "warn", ssp_data=None) -> None:
         """Initialize BakedInBackend.
