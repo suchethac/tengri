@@ -295,3 +295,58 @@ def test_module_entry_point_renders_the_fit_configuration(tmp_path: Path) -> Non
     assert proc.returncode == 0, proc.stderr
     config = next(tmp_path.glob("filters/capstone_paper1_*_config.dat")).read_text().splitlines()
     assert config[1] == "object_ID:colName:ID"
+
+
+def _synthetic_fit_file(path: Path, n_samples: int = 5, n_wl: int = 6) -> None:
+    """A tiny ``<ID>_BEAGLE.fits.gz`` with the layout of a real fit (no BEAGLE data)."""
+    from astropy.io import fits
+
+    rng = np.random.default_rng(0)
+    prob = np.arange(1.0, n_samples + 1.0)
+    wl = np.linspace(1000.0, 3000.0, n_wl)
+    image = np.tile(np.arange(n_samples, dtype=np.float32)[:, None], (1, n_wl)) + 1.0
+    image = image + rng.uniform(0.0, 1e-3, size=image.shape).astype(np.float32)
+    cols = [
+        fits.Column(name="probability", format="1E", array=prob),
+        fits.Column(name="tau", format="1E", array=prob * 0.5),
+    ]
+    hdus = [
+        fits.PrimaryHDU(),
+        fits.BinTableHDU.from_columns(cols, name="POSTERIOR PDF"),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="M_star", format="1E", array=prob)], name="GALAXY PROPERTIES"
+        ),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="wl", format=f"{n_wl}E", array=wl[None, :])], name="FULL SED WL"
+        ),
+        fits.ImageHDU(data=image, name="FULL SED"),
+    ]
+    fits.HDUList(hdus).writeto(path, overwrite=True)
+
+
+def test_fit_parser_reduces_image_sed_to_weighted_percentiles(tmp_path: Path) -> None:
+    _synthetic_fit_file(tmp_path / "7_BEAGLE.fits.gz")
+    parsed = O.parse_fit_output(tmp_path, ("7",))
+    per = parsed.posterior["7"]
+    assert set(per) == {"POSTERIOR PDF", "GALAXY PROPERTIES", "FULL SED WL", "FULL SED"}
+    assert np.array_equal(per["POSTERIOR PDF"]["probability"], np.arange(1.0, 6.0))
+    sed = per["FULL SED"]
+    assert set(sed) == {"wl", "p16", "p50", "p84"}
+    assert sed["wl"].shape == (6,)
+    # Row k holds value k+1 with weight k+1, so the normalised cumulative weights are
+    # 1/15, 3/15, 6/15, 10/15, 1. The first row reaching 0.16 is row 1 (value 2), 0.50 is
+    # row 3 (value 4) and 0.84 is row 4 (value 5).
+    assert np.allclose(sed["p16"], 2.0, atol=1e-2)
+    assert np.allclose(sed["p50"], 4.0, atol=1e-2)
+    assert np.allclose(sed["p84"], 5.0, atol=1e-2)
+
+
+def test_fit_parser_survives_a_cache_round_trip(tmp_path: Path) -> None:
+    _synthetic_fit_file(tmp_path / "7_BEAGLE.fits.gz")
+    parsed = O.parse_fit_output(tmp_path, ("7",), provenance={"tag": "test"})
+    O.save_cache(tmp_path, "synthetic", parsed)
+    loaded = O.load_cache(tmp_path, "synthetic")
+    assert np.array_equal(
+        loaded.posterior["7"]["FULL SED"]["p50"], parsed.posterior["7"]["FULL SED"]["p50"]
+    )
+    assert loaded.provenance["tag"] == "test"

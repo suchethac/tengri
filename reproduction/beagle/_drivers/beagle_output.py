@@ -224,6 +224,73 @@ def _continuum(
     return _to_lnu(wl, flam, gp["luminosity_distance"])
 
 
+def _is_table(hdu) -> bool:
+    return isinstance(hdu, (fits.BinTableHDU, fits.TableHDU))
+
+
+def _weighted_quantiles(
+    values: np.ndarray, weights: np.ndarray, quantiles: tuple[float, ...]
+) -> list[np.ndarray]:
+    """Per-column weighted quantiles of ``values`` (rows = samples, weights per row).
+
+    The first sample whose cumulative normalised weight reaches each quantile is taken,
+    so each output is an actual posterior sample value at every wavelength.
+    """
+    order = np.argsort(values, axis=0)
+    sorted_vals = np.take_along_axis(values, order, axis=0)
+    cum = np.cumsum(weights[order], axis=0)
+    cum = cum / cum[-1]
+    last = values.shape[0] - 1
+    out = []
+    for q in quantiles:
+        idx = np.minimum((cum < q).sum(axis=0), last)
+        out.append(np.take_along_axis(sorted_vals, idx[None, :], axis=0)[0])
+    return out
+
+
+def _posterior_weights(per: Mapping[str, Mapping[str, np.ndarray]]) -> np.ndarray:
+    """Normalised ``POSTERIOR PDF`` probabilities; the weights of every image row."""
+    prob = per["POSTERIOR PDF"]["probability"]
+    total = float(np.sum(prob))
+    if not np.isfinite(total) or total <= 0.0:
+        raise ValueError("POSTERIOR PDF probabilities do not sum to a positive finite value")
+    return prob / total
+
+
+def _image_percentiles(
+    hdul: fits.HDUList, hdu, per: Mapping[str, Mapping[str, np.ndarray]]
+) -> dict[str, np.ndarray]:
+    """Probability-weighted median and 16/84 % of a posterior SED image, with its grid.
+
+    The grid comes from the ``<name> WL`` table beside the image. Storing these three
+    curves instead of every sample keeps the cache at a few arrays per object.
+    """
+    image = _image(hdu)
+    weights = _posterior_weights(per)
+    if image.shape[0] != weights.shape[0]:
+        raise ValueError(
+            f"{hdu.name} has {image.shape[0]} rows but POSTERIOR PDF has {weights.shape[0]}"
+        )
+    wl_hdu = _hdu(hdul, f"{hdu.name} WL")
+    if wl_hdu is None:
+        raise ValueError(f"{hdu.name} has no '{hdu.name} WL' table beside it")
+    wl = _air_to_vacuum(np.asarray(wl_hdu.data["wl"][0], dtype=np.float64))
+    p16, p50, p84 = _weighted_quantiles(image, weights, (0.16, 0.5, 0.84))
+    return {"wl": wl, "p16": p16, "p50": p50, "p84": p84}
+
+
+def _object_posterior(hdul: fits.HDUList) -> dict[str, dict[str, np.ndarray]]:
+    """Table extensions as column dicts; image extensions as percentile SEDs."""
+    per: dict[str, dict[str, np.ndarray]] = {}
+    for hdu in hdul[1:]:
+        if _is_table(hdu) and hdu.data is not None:
+            per[hdu.name] = _columns(hdu)
+    for hdu in hdul[1:]:
+        if isinstance(hdu, fits.ImageHDU) and hdu.data is not None:
+            per[hdu.name] = _image_percentiles(hdul, hdu, per)
+    return per
+
+
 def parse_fit_output(
     results_dir: Path | str,
     galaxy_ids: tuple[str, ...],
@@ -232,9 +299,11 @@ def parse_fit_output(
 ) -> ParsedRun:
     """Parse the per-object ``<ID>_BEAGLE.fits.gz`` posteriors of a ``--fit`` run.
 
-    Every table extension becomes a dict of columns and every image extension a dict
-    holding ``"image"``, so ``POSTERIOR PDF`` and any ``MARGINAL`` extensions the
-    keywords requested are all present without a per-extension reader.
+    Table extensions (``GALAXY PROPERTIES``, ``STAR FORMATION``, ``DUST ATTENUATION``,
+    ``HII EMISSION``, the magnitudes, ``POSTERIOR PDF``, the ``* WL`` grids) become
+    dicts of columns. Image extensions (``FULL SED``, ``CONTINUUM SED``; rows are
+    posterior samples) are reduced to their probability-weighted ``p16``, ``p50`` and
+    ``p84`` curves on the ``wl`` grid, stored under the image's name.
     """
     posterior: dict[str, dict[str, dict[str, np.ndarray]]] = {}
     for gid in galaxy_ids:
@@ -242,13 +311,7 @@ def parse_fit_output(
         if not path.is_file():
             raise FileNotFoundError(f"missing BEAGLE posterior for object {gid}: {path}")
         with fits.open(path) as hdul:
-            per: dict[str, dict[str, np.ndarray]] = {}
-            for hdu in hdul[1:]:
-                if hdu.columns is not None:
-                    per[hdu.name] = _columns(hdu)
-                elif hdu.data is not None:
-                    per[hdu.name] = {"image": _image(hdu)}
-        posterior[gid] = per
+            posterior[gid] = _object_posterior(hdul)
     prov = {**dict(provenance or {}), "results_dir": str(results_dir)}
     return ParsedRun(posterior=posterior, provenance=prov)
 
