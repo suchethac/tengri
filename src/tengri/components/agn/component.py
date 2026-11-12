@@ -1537,7 +1537,92 @@ def _register_ledger_properties() -> None:
     )
 
 
+def _is_adaf_composable(component) -> bool:
+    """Whether ``component`` is the composable AGN with the ADAF disc (its accretion keys)."""
+    return _is_composable(component) and component.config.agn_disc_block == "adaf"
+
+
+def _published_scalar(key: str):
+    """A property reading the scalar ``key`` the forward pass published, NaN when absent.
+
+    ``outputs()`` is one static tuple, so a key a monolithic chain does not publish is still
+    declared; the ``available`` predicates keep such an entry out of the catalog, and the NaN
+    is the fallback if one is ever read against a state that lacks the key.
+    """
+
+    def fn(state, params):
+        return state.derived.get(key, jnp.asarray(jnp.nan, dtype=state.wave.dtype))
+
+    return fn
+
+
+#: Declared AGN outputs that were published but not in the catalog (#3144): key -> (units, doc,
+#: available). The ledger keys are registered on request above and are not listed here.
+_PUBLISHED_OUTPUT_PROPERTIES = {
+    "L_agn_bol": ("erg/s", "AGN accretion power 10**agn_log_lbol L_sun", None),
+    "log_L_agn_bol": ("dex", "log10(L_agn_bol / (erg/s)), float32-safe", None),
+    "L_agn_bol_lsun": (
+        "Lsun",
+        "10**agn_log_lbol, the accretion power in solar luminosities",
+        None,
+    ),
+    "log_L_agn_direct_los": (
+        "dex",
+        "log10 of the line-of-sight isotropic-equivalent direct AGN luminosity [dex re erg/s]; "
+        "composable only",
+        _is_composable,
+    ),
+    "L_agn_direct_los_lsun": (
+        "Lsun",
+        "log_L_agn_direct_los in solar luminosities; composable only",
+        _is_composable,
+    ),
+    "agn_torus_frac_effective": (
+        "",
+        "torus fraction the composable AGN was evaluated at; composable only",
+        _is_composable,
+    ),
+    "agn_adaf_mdot": (
+        "",
+        "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd (Mahadevan 1997, "
+        "Eq. 4); composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+    "log_L_agn_adaf_accretion": (
+        "dex",
+        "log10 of the ADAF accretion power eta_eff Mdot c^2 [dex re erg/s], eta_eff = 0.1; "
+        "composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+    "L_agn_adaf_accretion_lsun": (
+        "Lsun",
+        "log_L_agn_adaf_accretion in solar luminosities; composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+}
+
+
+def _register_output_properties() -> None:
+    """Register the AGN's published luminosities and ADAF keys in the property catalog (#3144)."""
+    from tengri.forward.properties import Property, register_properties
+
+    register_properties(
+        "agn",
+        {
+            key: Property(
+                units=units,
+                group="agn",
+                doc=doc,
+                fn=_published_scalar(key),
+                available=available,
+            )
+            for key, (units, doc, available) in _PUBLISHED_OUTPUT_PROPERTIES.items()
+        },
+    )
+
+
 _register_ledger_properties()
+_register_output_properties()
 
 
 def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:

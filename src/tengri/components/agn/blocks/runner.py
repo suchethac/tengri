@@ -1494,8 +1494,8 @@ agn_torus_block, agn_attenuation_block : str
         else:
             _disc_part, _corona_part, _ = _disc_parts(wave)
         # Below the library's first node the tabulated ratio is zero, which would silence the
-        # tied disc in the X-rays; there it takes the library sightline's absorbed factor, the
-        # same Morrison & McCammon column as the untied path (owner ruling 10, #2760).
+        # tied disc in the X-rays; there it takes the library sightline's Morrison & McCammon
+        # column (SKIRTOR 2cos i T_X; Fritz the held isotropic library ratio times T_X, #3062).
         _tie_sight = _library_sightline()
         _disc_incl_tied = (
             _disc_incl

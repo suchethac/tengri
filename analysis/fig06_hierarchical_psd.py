@@ -31,10 +31,10 @@ from tengri import (
     Fitter,
     Fixed,
     ForwardModel,
-    Model,
-    ParamSpec,
     PopulationSEDModel,
+    SEDModel,
     Uniform,
+    builders,
 )
 
 
@@ -45,22 +45,30 @@ def make_sed_template(ssp, obs):
     fixed to the per-iteration values by the hierarchical sampler under
     the hood — PopulationSEDModel publishes them as ``shared``.
     """
-    spec = ParamSpec(
-        sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
-        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
-        sfh_field_psd_sigma=Uniform(0.1, 4.0),
-        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        dust_slope=Fixed(-0.7),
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": ["dpl", "field"],
+            "alpha": Uniform(0.5, 3.0),
+            "beta": Uniform(0.3, 2.0),
+            "tau_gyr": Uniform(1.0, 8.0),
+            "log_total_mass": Uniform(10.0, 11.5),
+            "psd_sigma": Uniform(0.1, 4.0),
+            "psd_tau_myr": Uniform(1.0, 300.0),
+        },
+        met={"logzsol": Fixed(-0.3)},
+        dust_attenuation=builders.dust.two_component(
+            law="power_law",
+            tau_bc=Fixed(0.3),
+            tau_diff=Fixed(0.2),
+            slope=Fixed(-0.7),
+        ),
+        # The wNE SSP carries its nebular emission baked in.
+        neb={"type": "ssp"},
         redshift=Fixed(0.1),
-        stochastic=True,
         n_grid=32,  # keep D manageable for hierarchical raytrace
     )
-    return Model(spec, ssp, observation=obs)
 
 
 def generate_population(sed_template, psd_sigma, psd_tau_myr, n_galaxies, key, snr=20.0):
