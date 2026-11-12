@@ -38,7 +38,6 @@ from tengri.components.nebular.dig import (
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.forward.energy_balance import log10_fdust_lyc_credit
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
@@ -342,43 +341,9 @@ class NebularSEDComponent(TemplateThreading):
             return []
 
         # Standard knobs all photoionization backends share.
-        std_knobs = [
-            ParamDeclaration(
-                "neb_logU",
-                # default -2.5: representative HII-region ionization parameter
-                # (Cue/CLOUDY grids span logU ~ -3..-2). Explicit so '*': Fixed(DEFAULT)
-                # does not silently use the prior midpoint (#477 / #478 / #845).
-                Uniform(-5.0, 0.0, default=-2.5),
-                "log10 ionization parameter U [dimensionless]",
-            ),
-            ParamDeclaration(
-                "neb_logZ_gas",
-                # default 0.0: solar gas-phase metallicity.
-                Uniform(-2.0, 0.5, default=0.0),
-                "log10(Z_gas/Zsun) [dimensionless]; if Fixed, falls back to "
-                "stellar log_z at apply time",
-            ),
-            ParamDeclaration(
-                "neb_fesc",
-                Fixed(0.0),
-                "Lyman-continuum escape fraction [dimensionless, in [0, 1]]",
-            ),
-            ParamDeclaration(
-                "neb_fesc_lya",
-                Fixed(1.0),
-                "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
-            ),
-            ParamDeclaration(
-                "neb_fdust_frac",
-                Fixed(0.0),
-                # #2436: fraction of the NON-escaping budget (1 - neb_fesc),
-                # not an independent absolute share -- see `lyc_shares`
-                # (`_recombination_coeffs.py`), the one place that reads
-                # (neb_fesc, neb_fdust_frac) into the three additive shares.
-                "Fraction of the non-escaping ionizing budget absorbed by "
-                "HII-region dust [dimensionless, in [0, 1]]",
-            ),
-        ]
+        from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
+
+        std_knobs = list(NEBULAR_STANDARD_PARAMS)
 
         if self.config.backend in ("cloudy_grid", "cb19", "gutkin16", "mappings"):
             return std_knobs
@@ -398,35 +363,12 @@ class NebularSEDComponent(TemplateThreading):
             return std_knobs + list(CUE_IONSPEC_PARAMS) + list(CUE_GAS_EXTRA_PARAMS)
 
         if self.config.backend == "shock":
+            from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
+
             # MAPPINGS V shock-emission free parameters. The string
             # knobs (shock_abundance, shock_component) live on the
             # backend instance because they choose grids, not floats.
-            return [
-                ParamDeclaration(
-                    "shock_velocity",
-                    # default 250 km/s: representative MAPPINGS shock velocity.
-                    Uniform(100.0, 1000.0, default=250.0),
-                    "Shock velocity [km/s]",
-                ),
-                ParamDeclaration(
-                    "shock_log_density",
-                    Fixed(0.0),
-                    "log10 pre-shock density [cm^-3]",
-                ),
-                ParamDeclaration(
-                    "shock_b_over_sqrt_n",
-                    Fixed(1.0),
-                    "B/sqrt(n) [μG cm^(3/2)] (MAPPINGS III) or absolute B [μG] (MAPPINGS V)",
-                ),
-                ParamDeclaration(
-                    "shock_log_lhalpha",
-                    Fixed(40.0),
-                    "log10(L_Halpha [erg/s]): MAPPINGS shock luminosity "
-                    "normalization. If Fixed, sourced from "
-                    "state.derived['shock_log_lhalpha'] when present, "
-                    "otherwise the param's Fixed value.",
-                ),
-            ]
+            return list(SHOCK_INLINE_PARAMS)
 
         raise NotImplementedError(
             f"NebularSEDComponent unknown backend {self.config.backend!r}; "

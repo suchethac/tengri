@@ -158,7 +158,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -168,6 +168,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
@@ -816,6 +817,17 @@ class CB19Backend:
         be provided externally via ``_qh_table``.
 
     """
+
+    config_name: ClassVar[str] = "cb19"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    publishes_shock: ClassVar[bool] = False
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
 
     name = "cb19_grid"
     has_free_params = True

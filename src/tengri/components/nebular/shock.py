@@ -37,12 +37,13 @@ import functools
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.nebular._component_params import SHOCK_INLINE_PARAMS
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
@@ -899,6 +900,17 @@ class ShockBackend:
     B-field) are differentiable and suitable for optimization.
 
     """
+
+    config_name: ClassVar[str] = "shock"
+    supports_split_sed: ClassVar[bool] = False
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    publishes_shock: ClassVar[bool] = True
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(SHOCK_INLINE_PARAMS)
 
     shock_abundance: str = "solar"
     shock_component: str = "combined"
