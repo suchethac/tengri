@@ -4,7 +4,7 @@
 Surface protected: ``_resolve_posterior_draws`` in the nested-sampling evidence
 backend. With ``n_posterior_samples=None`` (the default) the number of
 resampled posterior draws is ``ceil`` of the Kish effective sample size of the
-normalized dead-point weights; an explicit integer is honoured exactly; a
+normalized dead-point weights; an explicit integer is honored exactly; a
 weight ESS below the warning floor warns with its value and is never padded.
 
 The toy weighted set uses the real ``nested.utils`` ESS and resampler, so the
@@ -70,7 +70,7 @@ class TestDefaultDrawsFollowEss:
             evidence._resolve_posterior_draws(None, 250.0)
 
 
-class TestExplicitDrawsHonoured:
+class TestExplicitDrawsHonored:
     """An explicit integer is used exactly, whatever the ESS says."""
 
     @pytest.mark.parametrize("n", [1, 7, 1000, 5000])
