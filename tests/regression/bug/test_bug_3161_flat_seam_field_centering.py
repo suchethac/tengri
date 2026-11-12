@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression: the hierarchical flat seam must honour ``field_centering < 1`` (#3161).
+"""Regression: the hierarchical flat seam must honor ``field_centering < 1`` (#3161).
 
 ``_hierarchical_flat.build_flat_problem`` wrote ``log_prior`` as an iid N(0, 1)
 on every latent. At ``field_centering=a < 1`` the per-galaxy GP-field latent
@@ -70,7 +70,7 @@ def _factory(ssp, obs, field_centering):
 
 @pytest.fixture(scope="module")
 def centered_population():
-    """Two galaxies on a partially non-centred stochastic SFH (``field_centering=0.5``)."""
+    """Two galaxies on a partially non-centered stochastic SFH (``field_centering=0.5``)."""
     ssp = tengri.load_ssp()
     obs = Observation(photometry=Photometry.from_names(_BANDS))
     factory = _factory(ssp, obs, _CENTERING)
