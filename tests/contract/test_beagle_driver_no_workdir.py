@@ -271,7 +271,7 @@ def test_rebinned_z6_pair_is_kept_for_comparison(label: str) -> None:
 
 
 def test_module_entry_point_renders_the_fit_configuration(tmp_path: Path) -> None:
-    """Run as ``python -m``, the driver's module is ``__main__``; a fit must still be recognised."""
+    """Run as ``python -m``, the module is ``__main__``; a fit must still be recognized."""
     import subprocess
     import sys
 
@@ -333,7 +333,7 @@ def test_fit_parser_reduces_image_sed_to_weighted_percentiles(tmp_path: Path) ->
     sed = per["FULL SED"]
     assert set(sed) == {"wl", "p16", "p50", "p84"}
     assert sed["wl"].shape == (6,)
-    # Row k holds value k+1 with weight k+1, so the normalised cumulative weights are
+    # Row k holds value k+1 with weight k+1, so the normalized cumulative weights are
     # 1/15, 3/15, 6/15, 10/15, 1. The first row reaching 0.16 is row 1 (value 2), 0.50 is
     # row 3 (value 4) and 0.84 is row 4 (value 5).
     assert np.allclose(sed["p16"], 2.0, atol=1e-2)

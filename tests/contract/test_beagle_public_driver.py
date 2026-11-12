@@ -107,7 +107,7 @@ def test_beagle_workshop_summary_unset_env_names_variable(monkeypatch):
 
 @pytest.mark.skipif(not os.environ.get("ART_SEDFITTING_DIR"), reason="ART_SEDFITTING_DIR is unset")
 @pytest.mark.parametrize(("z", "n_rows"), [(1, 367), (3, 154)])
-def test_beagle_workshop_summary_reads_upstream_catalogue(z, n_rows):
+def test_beagle_workshop_summary_reads_upstream_catalog(z, n_rows):
     table = bd.beagle_workshop_summary(z)
     assert len(table) == n_rows
     assert table.colnames[:6] == ["ID", "M_tot_mean", "M_tot_median", "M_tot_68.00",
