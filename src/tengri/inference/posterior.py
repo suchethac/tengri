@@ -2358,6 +2358,43 @@ class Posterior:
                 "Posterior.load(path, model=model) to reattach it."
             )
 
+    def pointwise_log_likelihood(self, n_draws: int | None = None, key=None):
+        """Log-likelihood of every data point under every posterior draw.
+
+        Parameters
+        ----------
+        n_draws : int, optional
+            Number of draws to use. Default: all.
+        key : jax PRNG key, optional
+            Selects the subset when ``n_draws`` is given.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_points)
+            Input of :func:`tengri.inference.waic`, :func:`tengri.inference.loo`
+            and :func:`tengri.inference.compare_models`.
+
+        Raises
+        ------
+        ValueError
+            If the posterior has no draws or no fitter (a reloaded or hand-built
+            posterior), or the likelihood does not factorize over data points.
+
+        Notes
+        -----
+        See :func:`tengri.inference.predictive.pointwise_log_likelihood`.
+        """
+        from tengri.inference.predictive import pointwise_log_likelihood
+
+        if self._fitter is None or self.samples is None:
+            raise ValueError(
+                "pointwise_log_likelihood needs the posterior's draws and its fitter; a "
+                "reloaded posterior carries no fitter. Call "
+                "tengri.inference.pointwise_log_likelihood(fitter, samples) with a "
+                "rebuilt fitter."
+            )
+        return pointwise_log_likelihood(self._fitter, self.samples, n_draws=n_draws, key=key)
+
     def to_arviz(self):
         """Convert to ArviZ InferenceData for diagnostics.
 

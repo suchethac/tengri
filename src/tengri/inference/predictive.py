@@ -1,0 +1,439 @@
+# SPDX-License-Identifier: BSD-3-Clause
+r"""Predictive model comparison: pointwise log-likelihood, WAIC and PSIS-LOO.
+
+The evidence of :mod:`tengri.inference.backends.evidence` and the weights of
+:mod:`tengri.inference.bma` compare models by their prior predictive density.
+This module gives the posterior predictive counterpart: the expected log
+pointwise predictive density (elpd), estimated by the widely applicable
+information criterion (WAIC; Watanabe 2010 [1]_) or by Pareto-smoothed
+importance-sampling leave-one-out cross-validation (PSIS-LOO; Vehtari, Gelman
+& Gabry 2017 [2]_, Vehtari et al. 2024 [3]_).
+
+Both take the matrix :math:`\ell_{si} = \ln p(d_i \mid \theta_s)` of the
+log-likelihood of data point :math:`i` under posterior draw :math:`s`.
+:func:`pointwise_log_likelihood` builds it from a fitter and its draws.
+
+References
+----------
+.. [1] Watanabe, S. 2010, JMLR, 11, 3571.
+.. [2] Vehtari, A., Gelman, A., & Gabry, J. 2017, Statistics and Computing, 27, 1413,
+       doi:10.1007/s11222-016-9696-4.
+.. [3] Vehtari, A., Simpson, D., Gelman, A., Yao, Y., & Gabry, J. 2024, JMLR, 25, 72.
+.. [4] Zhang, J., & Stephens, M. A. 2009, Technometrics, 51, 316,
+       doi:10.1198/tech.2009.08017.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from collections.abc import Mapping
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from scipy.special import logsumexp
+
+__all__ = [
+    "ElpdResult",
+    "compare_models",
+    "loo",
+    "pointwise_log_likelihood",
+    "waic",
+]
+
+#: Data-vector keys of the fitter's data bundle that carry observed values.
+_DATA_KEYS = ("data", "line_flux_obs", "line_ratio_obs", "index_obs")
+#: Relative tolerance of the check that the pointwise terms sum to the log-likelihood.
+_SUM_RTOL = 1.0e-6
+#: Pareto shape above which a PSIS-LOO pointwise estimate is unreliable [3]_.
+PARETO_K_THRESHOLD = 0.7
+#: Weak prior of the generalized-Pareto shape estimate [3]_: ten draws at k = 0.5.
+_PRIOR_K_COUNT = 10.0
+#: Prior scale of the profile grid of the Zhang & Stephens estimator [4]_.
+_PRIOR_BS = 3.0
+
+
+@dataclasses.dataclass(frozen=True)
+class ElpdResult:
+    r"""Estimate of the expected log pointwise predictive density.
+
+    Attributes
+    ----------
+    criterion : str
+        ``"waic"`` or ``"loo"``.
+    elpd : float
+        Estimated elpd, :math:`\sum_i \widehat{\rm elpd}_i` [nats]. Higher is better.
+    se : float
+        Standard error of ``elpd``, :math:`\sqrt{N\,{\rm Var}_i(\widehat{\rm elpd}_i)}`.
+    p_eff : float
+        Effective number of parameters, ``lppd - elpd``.
+    pointwise : ndarray, shape (n_data,)
+        Per-point elpd contributions [nats].
+    pareto_k : ndarray, shape (n_data,), or None
+        Generalized-Pareto shape of each point's importance ratios (LOO only).
+    n_draws : int
+        Number of posterior draws used.
+    """
+
+    criterion: str
+    elpd: float
+    se: float
+    p_eff: float
+    pointwise: np.ndarray
+    pareto_k: np.ndarray | None
+    n_draws: int
+
+    @property
+    def n_data(self) -> int:
+        """Number of data points."""
+        return int(self.pointwise.size)
+
+    @property
+    def deviance(self) -> float:
+        """The criterion on the deviance scale, ``-2 elpd`` (lower is better)."""
+        return -2.0 * self.elpd
+
+    @property
+    def n_bad_k(self) -> int:
+        """Number of points with Pareto k above 0.7; zero for WAIC."""
+        if self.pareto_k is None:
+            return 0
+        return int(np.sum(self.pareto_k > PARETO_K_THRESHOLD))
+
+
+def _as_matrix(log_lik) -> np.ndarray:
+    """Validate a pointwise log-likelihood matrix, shape ``(n_draws, n_data)``."""
+    matrix = np.asarray(log_lik, dtype=np.float64)
+    if matrix.ndim != 2:
+        raise ValueError(
+            f"log_lik must have shape (n_draws, n_data), got an array of shape {matrix.shape}"
+        )
+    if matrix.shape[0] < 2:
+        raise ValueError(f"at least two posterior draws are needed, got {matrix.shape[0]}")
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError("log_lik contains non-finite values")
+    return matrix
+
+
+def _lppd(matrix: np.ndarray) -> np.ndarray:
+    """Log pointwise predictive density of each point, shape ``(n_data,)``."""
+    return logsumexp(matrix, axis=0) - np.log(matrix.shape[0])
+
+
+def waic(log_lik) -> ElpdResult:
+    r"""Widely applicable information criterion.
+
+    Parameters
+    ----------
+    log_lik : array_like, shape (n_draws, n_data)
+        Pointwise log-likelihood :math:`\ln p(d_i \mid \theta_s)` [nats].
+
+    Returns
+    -------
+    ElpdResult
+        With ``criterion="waic"``.
+
+    Notes
+    -----
+    :math:`\widehat{\rm elpd}_i = \ln\big(\tfrac{1}{S}\sum_s p(d_i\mid\theta_s)\big)
+    - {\rm Var}_s\big[\ln p(d_i\mid\theta_s)\big]`, with the sample variance
+    (divisor :math:`S-1`) as the effective-parameter term (Watanabe 2010;
+    Vehtari, Gelman & Gabry 2017, eqs. 11-12). NumPy, not JIT-compatible.
+    """
+    matrix = _as_matrix(log_lik)
+    lppd = _lppd(matrix)
+    penalty = np.var(matrix, axis=0, ddof=1)
+    return _result("waic", lppd - penalty, lppd, None, matrix.shape[0])
+
+
+def loo(log_lik) -> ElpdResult:
+    r"""Leave-one-out cross-validation by Pareto-smoothed importance sampling.
+
+    Parameters
+    ----------
+    log_lik : array_like, shape (n_draws, n_data)
+        Pointwise log-likelihood :math:`\ln p(d_i \mid \theta_s)` [nats].
+
+    Returns
+    -------
+    ElpdResult
+        With ``criterion="loo"`` and the Pareto shape ``pareto_k`` of every point.
+
+    Notes
+    -----
+    The importance ratios :math:`r_{si} = 1 / p(d_i\mid\theta_s)` of each point have
+    their largest :math:`M = \min(S/5,\, 3\sqrt{S})` values replaced by the order
+    statistics of a generalized Pareto distribution fitted to them, and are
+    truncated at the largest raw ratio (Vehtari et al. 2024). A point with
+    :math:`\hat k > 0.7` has an unreliable estimate; ``n_bad_k`` counts them.
+    NumPy, not JIT-compatible. Draws are treated as independent.
+    """
+    matrix = _as_matrix(log_lik)
+    n_draws, n_data = matrix.shape
+    elpd_i = np.empty(n_data)
+    pareto_k = np.empty(n_data)
+    for i in range(n_data):
+        log_weights, pareto_k[i] = _psis_log_weights(-matrix[:, i])
+        elpd_i[i] = logsumexp(log_weights + matrix[:, i])
+    return _result("loo", elpd_i, _lppd(matrix), pareto_k, n_draws)
+
+
+def _result(criterion, elpd_i, lppd, pareto_k, n_draws) -> ElpdResult:
+    n_data = elpd_i.size
+    se = float(np.sqrt(n_data * np.var(elpd_i))) if n_data > 1 else float("nan")
+    return ElpdResult(
+        criterion=criterion,
+        elpd=float(np.sum(elpd_i)),
+        se=se,
+        p_eff=float(np.sum(lppd) - np.sum(elpd_i)),
+        pointwise=elpd_i,
+        pareto_k=pareto_k,
+        n_draws=int(n_draws),
+    )
+
+
+def _psis_log_weights(log_ratios: np.ndarray) -> tuple[np.ndarray, float]:
+    """Pareto-smoothed, self-normalized log importance weights of one data point.
+
+    Parameters
+    ----------
+    log_ratios : ndarray, shape (n_draws,)
+        Log importance ratios, ``-log_lik`` of the point.
+
+    Returns
+    -------
+    log_weights : ndarray, shape (n_draws,)
+        Smoothed log weights, normalized so their exponentials sum to one.
+    pareto_k : float
+        Fitted generalized-Pareto shape; ``inf`` when the tail is too short to fit.
+    """
+    n_draws = log_ratios.size
+    shifted = log_ratios - np.max(log_ratios)
+    n_tail = int(min(n_draws / 5.0, 3.0 * np.sqrt(n_draws)))
+    pareto_k = np.inf
+    if n_tail >= 5:
+        order = np.argsort(shifted)
+        tail = order[-n_tail:]
+        cutoff = np.exp(shifted[order[-n_tail - 1]])
+        excess = np.exp(shifted[tail]) - cutoff
+        if excess[-1] > 0.0:
+            pareto_k, sigma = _gpd_fit(excess)
+            if np.isfinite(pareto_k):
+                probs = (np.arange(n_tail) + 0.5) / n_tail
+                smoothed = np.log(_gpd_quantile(probs, pareto_k, sigma) + cutoff)
+                shifted = shifted.copy()
+                shifted[tail] = np.minimum(smoothed, 0.0)
+    return shifted - logsumexp(shifted), float(pareto_k)
+
+
+def _gpd_fit(excess: np.ndarray) -> tuple[float, float]:
+    """Shape and scale of a generalized Pareto fit to sorted positive exceedances.
+
+    The empirical-Bayes estimator of Zhang & Stephens (2009) [4]_, with the weak
+    prior on the shape of Vehtari et al. (2024) [3]_.
+    """
+    n = excess.size
+    n_grid = 30 + int(np.sqrt(n))
+    grid = 1.0 - np.sqrt(n_grid / (np.arange(1, n_grid + 1) - 0.5))
+    grid = grid / (_PRIOR_BS * excess[int(n / 4.0 + 0.5) - 1]) + 1.0 / excess[-1]
+    shape = np.mean(np.log1p(-grid[:, None] * excess), axis=1)
+    profile = n * (np.log(-grid / shape) - shape - 1.0)
+    weights = 1.0 / np.sum(np.exp(profile - profile[:, None]), axis=1)
+    keep = weights >= 10.0 * np.finfo(float).eps
+    grid, weights = grid[keep], weights[keep] / np.sum(weights[keep])
+    b_post = np.sum(grid * weights)
+    k_post = np.mean(np.log1p(-b_post * excess))
+    sigma = -k_post / b_post
+    k_post = (n * k_post + _PRIOR_K_COUNT * 0.5) / (n + _PRIOR_K_COUNT)
+    return float(k_post), float(sigma)
+
+
+def _gpd_quantile(probs: np.ndarray, shape: float, scale: float) -> np.ndarray:
+    """Quantile function of the generalized Pareto distribution (location zero)."""
+    if abs(shape) < np.finfo(float).eps:
+        return -scale * np.log1p(-probs)
+    return scale * np.expm1(-shape * np.log1p(-probs)) / shape
+
+
+# ── Pointwise log-likelihood ──────────────────────────────────────
+
+
+def pointwise_log_likelihood(fitter, samples: Mapping, *, n_draws: int | None = None, key=None):
+    r"""Log-likelihood of every data point under every posterior draw.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter that produced the draws; supplies the likelihood and the data.
+    samples : mapping of str to array_like, shape (n_samples,)
+        Posterior draws of the free parameters, in physical units
+        (``posterior.samples``). Other keys are ignored.
+    n_draws : int, optional
+        Number of draws to use, taken without replacement. Default: all.
+    key : jax PRNG key, optional
+        Selects the subset when ``n_draws`` is given. Default: ``PRNGKey(0)``.
+
+    Returns
+    -------
+    ndarray, shape (n_draws, n_points)
+        :math:`\ln p(d_i \mid \theta_s)` [nats]. Points the likelihood does not
+        read (masked, or with infinite noise) are left out, so ``n_points`` can
+        be smaller than the length of the data vector.
+
+    Raises
+    ------
+    ValueError
+        If the likelihood is not a product of independent Gaussians over the
+        data points: the pointwise terms then do not sum to the log-likelihood.
+
+    Notes
+    -----
+    For a Gaussian point, :math:`\ln p(d_i) = -\tfrac12 z_i^2 - \ln s_i -
+    \tfrac12\ln 2\pi`, and the derivatives of the total log-likelihood with
+    respect to the datum are :math:`g_i = -z_i / s_i` and :math:`h_i = -1/s_i^2`.
+    The term is recovered as :math:`\tfrac12 g_i^2/h_i + \tfrac12\ln(-h_i/2\pi)`
+    from one gradient and one Hessian-vector product, whatever the model predicts
+    and however the noise is composed (noise floor, calibration polynomial,
+    sampled line amplitudes, joint channels). The sum over points is checked
+    against the fitter's log-likelihood at the first draw, with or without the
+    Gaussian normalization: a likelihood with fixed noise may drop that constant,
+    and the returned terms always include it.
+
+    Likelihoods that couple data points or are not Gaussian fail that check and
+    are refused: analytically marginalized emission lines or calibration (fit the
+    amplitudes instead, ``eline_mode="fitted"``), a full pixel covariance,
+    Student-t noise, and upper limits.
+
+    Draws are evaluated one at a time with ``jax.lax.map``, so memory stays at
+    the single-draw footprint.
+    """
+    from tengri.inference.loss_functions import build_loglikelihood_fn
+
+    free_names = tuple(fitter._free_names)
+    missing = [name for name in free_names if name not in samples]
+    if missing:
+        raise ValueError(f"samples lack draws of the free parameters {missing}")
+    draws = {name: jnp.asarray(samples[name], dtype=jnp.float64) for name in free_names}
+    n_samples = {int(v.shape[0]) for v in draws.values()}
+    if len(n_samples) != 1:
+        raise ValueError(f"samples have unequal lengths {sorted(n_samples)}")
+    n_total = n_samples.pop()
+    if n_draws is not None and n_draws < n_total:
+        key = jax.random.PRNGKey(0) if key is None else key
+        index = jax.random.choice(key, n_total, (int(n_draws),), replace=False)
+        draws = {name: value[index] for name, value in draws.items()}
+
+    log_lik = build_loglikelihood_fn(fitter)
+    data_args = fitter._data_args
+    data = {k: jnp.asarray(data_args[k], dtype=jnp.float64) for k in _DATA_KEYS if k in data_args}
+    ones = {k: jnp.ones_like(v) for k, v in data.items()}
+
+    def total(observed, params):
+        return log_lik(params, {**data_args, **observed})
+
+    def terms(params):
+        grad_fn = lambda observed: jax.grad(total)(observed, params)  # noqa: E731
+        grad, hess = jax.jvp(grad_fn, (data,), (ones,))
+        g = jnp.concatenate([jnp.ravel(grad[k]) for k in data])
+        h = jnp.concatenate([jnp.ravel(hess[k]) for k in data])
+        used = h < 0.0
+        h_safe = jnp.where(used, h, -1.0)
+        half_chi2 = jnp.where(used, 0.5 * g**2 / h_safe, 0.0)
+        log_norm = jnp.where(used, 0.5 * jnp.log(-h_safe / (2.0 * jnp.pi)), 0.0)
+        return half_chi2 + log_norm, used, jnp.sum(half_chi2)
+
+    first = {name: value[0] for name, value in draws.items()}
+    point0, used0, chi2_sum0 = jax.jit(terms)(first)
+    reference = float(log_lik(first, data_args))
+    # The fitter's Gaussian may drop the normalization -ln s_i - ln(2 pi)/2, which
+    # does not depend on the parameters; either form identifies the same terms.
+    sums = (float(jnp.sum(point0)), float(chi2_sum0))
+    if not any(np.isclose(s, reference, rtol=_SUM_RTOL, atol=_SUM_RTOL) for s in sums):
+        raise ValueError(
+            "the likelihood of this fit is not a product of independent Gaussians over "
+            f"the data points: the pointwise terms sum to {sums[0]:.6g} "
+            f"({sums[1]:.6g} without the normalization) and "
+            f"the log-likelihood is {reference:.6g}. Marginalized emission lines or "
+            "calibration, a pixel covariance, Student-t noise and upper limits are not "
+            "supported; sample the line amplitudes with eline_mode='fitted', or pass your "
+            "own (n_draws, n_data) array to waic() or loo()."
+        )
+    matrix = jax.lax.map(lambda params: terms(params)[0], draws)
+    return np.asarray(matrix)[:, np.asarray(used0)]
+
+
+# ── Comparison ────────────────────────────────────────────────────
+
+
+def compare_models(models: Mapping, *, criterion: str = "loo") -> list[dict]:
+    r"""Rank models fitted to the same data by their elpd.
+
+    Parameters
+    ----------
+    models : mapping of str to Posterior, array_like or ElpdResult
+        Per model, a fitted :class:`~tengri.inference.posterior.Posterior` (its
+        pointwise log-likelihood is computed), a pointwise log-likelihood matrix
+        ``(n_draws, n_data)``, or an :class:`ElpdResult` computed with ``criterion``.
+    criterion : {"loo", "waic"}
+        Estimator applied to the matrices. Default ``"loo"``.
+
+    Returns
+    -------
+    list of dict
+        One row per model, best first, with keys ``name``, ``elpd``, ``se``,
+        ``p_eff``, ``delta_elpd`` (model minus best, zero for the best),
+        ``delta_se``, for LOO ``n_bad_k``, and ``log_evidence`` for a posterior
+        that carries one (``None`` otherwise).
+
+    Raises
+    ------
+    ValueError
+        On an unknown criterion, fewer than two models, or models with different
+        numbers of data points.
+
+    Notes
+    -----
+    ``delta_se`` is the standard error of the paired difference,
+    :math:`\sqrt{N\,{\rm Var}_i(\widehat{\rm elpd}^{A}_i - \widehat{\rm elpd}^{B}_i)}`
+    (Vehtari, Gelman & Gabry 2017, eq. 24), which is smaller than the quadrature
+    sum of the two ``se`` because both models are scored on the same points. A
+    difference of a few ``delta_se`` or less does not separate two models.
+    """
+    estimators = {"loo": loo, "waic": waic}
+    if criterion not in estimators:
+        raise ValueError(f"criterion must be 'loo' or 'waic', got {criterion!r}")
+    if len(models) < 2:
+        raise ValueError("compare needs at least two models")
+    results = {}
+    evidence = {}
+    for name, value in models.items():
+        evidence[name] = getattr(value, "log_evidence", None)
+        if hasattr(value, "pointwise_log_likelihood"):
+            value = value.pointwise_log_likelihood()
+        result = value if isinstance(value, ElpdResult) else estimators[criterion](value)
+        if result.criterion != criterion:
+            raise ValueError(
+                f"model {name!r} carries a {result.criterion!r} result; criterion is {criterion!r}"
+            )
+        results[name] = result
+    sizes = {name: r.n_data for name, r in results.items()}
+    if len(set(sizes.values())) != 1:
+        raise ValueError(f"models are scored on different numbers of data points: {sizes}")
+    ranked = sorted(results.items(), key=lambda item: -item[1].elpd)
+    best = ranked[0][1]
+    rows = []
+    for name, result in ranked:
+        diff = result.pointwise - best.pointwise
+        row = {
+            "name": name,
+            "elpd": result.elpd,
+            "se": result.se,
+            "p_eff": result.p_eff,
+            "delta_elpd": float(np.sum(diff)),
+            "delta_se": float(np.sqrt(diff.size * np.var(diff))),
+        }
+        if criterion == "loo":
+            row["n_bad_k"] = result.n_bad_k
+        row["log_evidence"] = evidence[name]
+        rows.append(row)
+    return rows
