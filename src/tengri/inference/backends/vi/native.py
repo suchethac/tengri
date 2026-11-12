@@ -24,6 +24,49 @@ from tengri.inference.likelihoods.gaussian import (
     standardized_residual,
     whiten,
 )
+from tengri.utils.batching import vmap_chunked
+
+# Draws per compiled call when mapping posterior draws to physical space (#715).
+_PHYSICAL_DRAW_CHUNK = 256
+
+
+def _physical_draws(fitter, unflatten, converged_dict, residuals_flat):
+    """Map flat posterior residuals to physical free-parameter draws.
+
+    One jitted, memory-bounded map over the draw axis (#715). The per-draw
+    Python loop it replaces dispatched several ops for every sample.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        Supplies ``_to_physical`` (unbounded dict -> physical free parameters).
+    unflatten : callable
+        Flat vector -> parameter dict, the engine's inverse of ``flatten``.
+    converged_dict : dict
+        Converged unbounded parameters, shared by every draw.
+    residuals_flat : ndarray, shape (n_draws, n_flat)
+        Posterior residuals, one flat row per draw.
+
+    Returns
+    -------
+    dict
+        Physical free parameters, each leaf of shape ``(n_draws,)``.
+    """
+
+    def one(res_flat):
+        res = unflatten(res_flat)
+        combined = {k: converged_dict[k] + res[k] for k in converged_dict}
+        return fitter._to_physical(combined)
+
+    return vmap_chunked(one, chunk_size=_PHYSICAL_DRAW_CHUNK)(residuals_flat)
+
+
+def _physical_draws_from_dicts(fitter, sample_dicts):
+    """Map a list of unbounded parameter dicts to physical draws (blackjax path)."""
+    if not sample_dicts:
+        return {}
+    stacked = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *sample_dicts)
+    return vmap_chunked(fitter._to_physical, chunk_size=_PHYSICAL_DRAW_CHUNK)(stacked)
 
 
 def _cg_eps() -> float:
@@ -768,6 +811,7 @@ def run_native_vi(
     # --- Draw posterior samples ---
     key, draw_key = jax.random.split(key)
     all_sample_dicts = []
+    samples_phys = {}
     converged_dict = unflatten(converged_flat)
 
     if n_posterior_samples > 0:
@@ -781,6 +825,7 @@ def run_native_vi(
                 all_sample_dicts,
                 verbose=verbose,
             )
+            samples_phys = _physical_draws_from_dicts(fitter, all_sample_dicts)
         else:
             # Use nonlinear draws for geoVI modes, linear for MGVI.
             # For native_vi_nonlinear, use the factory's draw_nonlinear_residuals_jit.
@@ -799,10 +844,6 @@ def run_native_vi(
                 residuals_flat = _nonlinear_draw_fn(converged_flat, draw_keys)
                 # residuals_flat: (2*n_draw_keys, d_total); trim to n_posterior_samples
                 residuals_flat = residuals_flat[:n_posterior_samples]
-                for i in range(residuals_flat.shape[0]):
-                    res = unflatten(residuals_flat[i])
-                    combined = {k: converged_dict[k] + res[k] for k in converged_dict}
-                    all_sample_dicts.append(combined)
             else:
                 if verbose:
                     print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
@@ -810,24 +851,11 @@ def run_native_vi(
                 residuals_flat = engine["native_vi_linear_draw"](
                     converged_flat, draw_keys, data_args
                 )
-                for i in range(n_posterior_samples):
-                    res = unflatten(residuals_flat[i])
-                    combined = {k: converged_dict[k] + res[k] for k in converged_dict}
-                    all_sample_dicts.append(combined)
+            samples_phys = _physical_draws(fitter, unflatten, converged_dict, residuals_flat)
 
     wall_time = time.time() - t0
-    n_posterior = len(all_sample_dicts)
+    n_posterior = next(iter(samples_phys.values())).shape[0] if samples_phys else 0
 
-    # Convert to physical space
-    samples_phys = {}
-    for sample_dict in all_sample_dicts:
-        phys = fitter._to_physical(sample_dict)
-        for k, v in phys.items():
-            if k not in samples_phys:
-                samples_phys[k] = []
-            samples_phys[k].append(v)
-
-    samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
     best_params = _mean_params(samples_phys)
 
     # --- Post-fit diagnostics ---
