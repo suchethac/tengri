@@ -141,6 +141,8 @@ _L_EDD_1MSUN_LSUN: float = float(
 _BNU_BOL_PER_T4: float = float(
     2.0 * math.pi**4 * _K_BOLTZ**4 / (15.0 * _H_PLANCK**3 * _C_LIGHT**2)
 )
+# Temperature unit [K] of the float32 bolometric sum: keeps c * T^4 / L_sun normal (#3105).
+_T_BOL_NORM: float = 1.0e5
 # 4*pi*sigma_SB / L_sun; l0_lsun = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4.
 _4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
 # 2*pi*sigma_SB / L_sun; per-annulus (sigma T^4 * 2*pi*r*dr) energy in L_sun.
@@ -981,9 +983,16 @@ def multicolor_disc(
     def _disc_bol_lsun(cos_inc):
         """Closed-form power of the Wien disc seen at ``cos_inc`` [L_sun]."""
         ring_area_all = jax.vmap(lambda rr, drr: _ring_area(rr, drr, cos_inc))(r_grid, dr)
-        # Group the factors so no float32 intermediate leaves the normal range: (c * T^4) ~ 1e19
-        # and (area / L_sun) ~ 1e0..1e3; the bare ``c / L_sun`` ~ 5e-39 is subnormal, flushed to 0
-        # by XLA.
+        if t_profile.dtype == jnp.float32:
+            # The constant ``c / L_sun`` (c = _BNU_BOL_PER_T4) is ~4.7e-39, subnormal in float32.
+            # Under the vmapped graph XLA folds it to zero (flush-to-zero), so the disc's
+            # bolometric power vanished and the 30-75 A EUV tail with it (#3105). Measuring the
+            # temperature in units of T_NORM keeps every constant pair normal: c * T_NORM^4 / L_sun
+            # ~ 5e-19. Float64 keeps the expression below, bit-identical.
+            t_hat = t_profile / _T_BOL_NORM
+            return jnp.sum(
+                (_BNU_BOL_PER_T4 * _T_BOL_NORM**4 * t_hat**4) * (ring_area_all / float(_LSUN_ERG))
+            )
         return jnp.sum((_BNU_BOL_PER_T4 * t_profile**4) * (ring_area_all / float(_LSUN_ERG)))
 
     disc_bol_lsun = _disc_bol_lsun(agn_cos_inc)
