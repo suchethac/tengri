@@ -79,10 +79,12 @@ def test_disc_kernel_is_float32_finite_and_float64_accurate(name, lbol):
     ref, ref_dtype = _sed(kernel, True, lbol)
     assert ref_dtype == jnp.float64
     assert np.all(np.isfinite(ref))
+    assert np.any(ref != 0.0), f"{name} reference SED is identically zero at agn_log_lbol={lbol}"
 
     f32, f32_dtype = _sed(kernel, False, lbol)
     assert f32_dtype == jnp.float32, "the float32 run did not stay in float32"
     assert np.all(np.isfinite(f32)), f"{name} float32 SED is non-finite at agn_log_lbol={lbol}"
+    assert np.any(f32 != 0.0), f"{name} float32 SED is identically zero at agn_log_lbol={lbol}"
 
     peak_relative = np.max(np.abs(f32 - ref)) / np.max(np.abs(ref))
     assert peak_relative <= _RTOL_SED, (
