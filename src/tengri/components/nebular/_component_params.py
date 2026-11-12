@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Parameter lists the nebular component hands the forward model for a backend.
 
-These restate names that :mod:`tengri.components.nebular._params` already
+These restate names that ``components/nebular/_params.py`` already
 declares, with the priors the component has always used when it is asked for
 its ``declared_parameters``. They live outside ``_params.py`` because the
 parameter registry reads every declaration tuple in that module as the
