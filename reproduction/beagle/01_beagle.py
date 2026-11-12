@@ -272,7 +272,9 @@ for lo, hi in WINDOWS_AA:
 # of 10^10 M_sun and a current SFR of 10 M_sun/yr over the last 10 Myr. tengri builds the same
 # delayed member with the `recent` episode on top, the formed mass set to BEAGLE's `mass`. The figure shows the star formation rate against lookback time, and the tables
 # compare the 10 Myr episode, the smooth history and the integrated properties. BEAGLE's `M_tot` is
-# the total formed mass including the episode and `M_star` the surviving mass.
+# the total formed mass including the episode and `M_star` the surviving mass. For the 10 Myr episode
+# at tau = 0.1 Gyr, tengri's SFR_10 is 5 % above BEAGLE's and SFR_100 is 5 % below; this is numerical on
+# tengri's side, because its history grid starts at 1 Myr lookback.
 
 # %%
 r_sfh = beagle("s2_sfh_delayed")
@@ -388,7 +390,11 @@ for lo, hi in WINDOWS_AA:
 # line is the tengri model's own ratio with the same history. The CCWW13 variant with the
 # radiative-transfer tables (`ccww13_full`) is not run, because those tables are not distributed with
 # BEAGLE. BEAGLE's `Calzetti` is the 1994 curve and tengri's `calzetti` is the 2000 curve, so that
-# panel carries a curve difference; the printed table gives it.
+# panel carries a curve difference; the printed table gives it. The Milky Way panel compares Pei (1992)
+# on BEAGLE's side with Cardelli et al. (1989) on tengri's side. Redward of 1 micron the LMC and SMC
+# depths of tengri exceed BEAGLE's by 24 % and 62 % at 10000 Å; at 20000 Å they are 1.6 and 2.8 times
+# larger. tengri's `lmc` and `smc` are the Pei (1992) Drude-sum curves, so this is a difference on
+# BEAGLE's side of the comparison (its measured LMC and SMC curves), a convention, not a tengri defect.
 
 # %%
 MU = 0.4
@@ -967,19 +973,21 @@ plt.show()
 # bands (full width 2 per cent of the observed center, rest-frame centers 850 to 1216 Å) run with
 # and without `IGM ABSORPTION = Inoue` at z = 1, 3 and 6: T = 10^(-0.4 (m_Inoue - m_none)). tengri's
 # Inoue et al. (2014) transmission is integrated over the same top-hats with the photon weight and the
-# no-IGM BEAGLE spectrum as the source shape. The two bands where the top-hat straddles a step, the
-# Lyman limit at 912 Å and Lyman-alpha at 1216 Å, average the step across their width of 18 to 24 Å
-# (rest frame) and carry the largest differences; the other ten bands agree to 0.6 per cent. The figure shows
-# the three redshifts and the table gives the values.
+# no-IGM BEAGLE spectrum as the source shape. Away from the two bands where the top-hat straddles a step,
+# the Lyman limit at 912 Å and Lyman-alpha at 1216 Å, the two codes agree to 0.0002 in transmission. The
+# step bands average the step across their width of 18 to 24 Å (rest frame) and carry the largest
+# differences: at z = 6 the Lyman-alpha band differs by +0.002 at native template resolution. With the
+# BEAGLE templates rebinned to 10 Å (`REBIN TEMPLATES = 10`), BEAGLE's transmission in that band moves by
+# -0.14 and the difference becomes +0.12. This is numerical, from BEAGLE's 10 Å sampling of the edge inside
+# a 2 per cent band; the native-resolution value is the comparison and the rebinned pair stays on record.
+# The figure shows the three redshifts and the table gives the values.
 
 # %%
-fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.6), sharey=True)
-igm_rows = []
-for ax, zi in zip(axes, (1, 3, 6)):
-    run_i, run_n = by_section(f"s12_igm_inoue_z{zi}")[0], by_section(f"s12_igm_none_z{zi}")[0]
+def igm_tophat_rows(zi, run_i, run_n):
+    """Per top-hat at redshift ``zi``: (rest-frame center [A], BEAGLE transmission, tengri transmission)."""
     pi, pn = beagle_run.run(run_i), beagle_run.run(run_n)
     w_rest, L_n = np.asarray(pn.wl_rest_aa), np.asarray(pn.sed_lnu[0])
-    cen, t_b, t_t = [], [], []
+    rows = []
     for fs in run_i.filters:
         m_i = float(np.asarray(pi.magnitudes_app[fs.name])[0])
         m_n = float(np.asarray(pn.magnitudes_app[fs.name])[0])
@@ -989,11 +997,19 @@ for ax, zi in zip(axes, (1, 3, 6)):
         wgrid = np.linspace(wl_o[live].min(), wl_o[live].max(), 401)
         weight = np.interp(wgrid, wl_o, resp) / wgrid * np.interp(wgrid / (1.0 + zi), w_rest, L_n)
         t_igm = beagle_driver.inoue14_transmission(wgrid, float(zi))
-        cen.append(float(np.sum(wgrid * weight) / np.sum(weight)) / (1.0 + zi))
-        t_b.append(10.0 ** (-0.4 * (m_i - m_n)))
-        t_t.append(float(np.trapezoid(weight * t_igm, wgrid) / np.trapezoid(weight, wgrid)))
-        igm_rows.append((zi, cen[-1], t_b[-1], t_t[-1]))
-    cen, t_b, t_t = np.array(cen), np.array(t_b), np.array(t_t)
+        cen = float(np.sum(wgrid * weight) / np.sum(weight)) / (1.0 + zi)
+        t_b = 10.0 ** (-0.4 * (m_i - m_n))
+        t_t = float(np.trapezoid(weight * t_igm, wgrid) / np.trapezoid(weight, wgrid))
+        rows.append((cen, t_b, t_t))
+    return rows
+
+
+fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.6), sharey=True)
+igm_rows = []
+for ax, zi in zip(axes, (1, 3, 6)):
+    rows = igm_tophat_rows(zi, by_section(f"s12_igm_inoue_z{zi}")[0], by_section(f"s12_igm_none_z{zi}")[0])
+    igm_rows.extend((zi, *r) for r in rows)
+    cen, t_b, t_t = (np.array(v) for v in zip(*rows))
     ax.plot(cen, t_b, "o", color="C0", ms=4, label="BEAGLE")
     ax.plot(cen, t_t, "-", color="C1", lw=1.4, label="tengri")
     ax.axvline(911.8, color="0.6", ls=":", lw=0.8)
@@ -1018,15 +1034,91 @@ for zi in (1, 3, 6):
     print(f"§12 z = {zi}, bands straddling the Lyman limit and Lyman-alpha: differences "
           + ", ".join(f"{x:+.4f}" for x in _d[sel]))
 
+# Lyman-alpha edge band at z = 6, at native template resolution and with REBIN TEMPLATES = 10.
+LYA_REST_AA = 1215.67
+for label, sec_i, sec_n in (
+    ("native", "s12_igm_inoue_z6", "s12_igm_none_z6"),
+    ("REBIN TEMPLATES = 10", "s12_igm_inoue_z6_rebin10", "s12_igm_none_z6_rebin10"),
+):
+    c, tb, tt = min(igm_tophat_rows(6, by_section(sec_i)[0], by_section(sec_n)[0]), key=lambda r: abs(r[0] - LYA_REST_AA))
+    print(f"§12 z = 6 Lyman-alpha edge band (rest {c:.1f} A), {label}: BEAGLE {tb:.4f}, tengri {tt:.4f}, "
+          f"diff {tt - tb:+.4f}")
+
 # %% [markdown]
 # ## 13. Where the codes differ
 #
-# (written in the next pass)
+# Each row names one difference, the BEAGLE and tengri choice, its class, and the size this notebook
+# measures or prints. A row marked "not run here" is a difference this notebook does not exercise.
+#
+# | difference | BEAGLE | tengri | class | size measured in this notebook |
+# |---|---|---|---|---|
+# | stellar template release | MILES-based `bc2003_hr_xmiless` | STELIB-based BC03 | library bracket | §1 window medians 0.72 to 1.07; §3 ratio 1.005 to 1.009 below 0.35 µm and 0.995 to 1.049 redward (tengri/BEAGLE) |
+# | CB16 against BC03 inside BEAGLE | `cb_june16` | `bc03` (both BEAGLE) | library bracket | §1a window medians 0.84 to 1.20 |
+# | nebular templates against the public table | BEAGLE nebular templates, per age | gutkin16 public table, time-integrated, with analytic continuum | library bracket (ionizing output); line set otherwise | §8c H-beta per SFR_10 ratio 0.73 and per photon 0.99 (medians); §8a line medians 0.00 to 0.49 dex, He II 1640 the largest (not isolated here) |
+# | continuum and Lyman-alpha | no continuum or Lyman-alpha in the public table | analytic free-free plus two-photon continuum; Case B Lyman-alpha | convention | §8d none/analytic window means 0.97 to 0.99; shape ratio 0.93 to 1.19 across windows and metallicities |
+# | line wavelengths | air above 2000 Å | vacuum | convention | matched at vacuum in every key; not measured separately |
+# | line luminosity units | L_sun in the HII EMISSION table, header unit erg/s | erg/s | convention | converted at ingestion with BEAGLE's L_sun; §8c uses the converted values |
+# | ionization parameter | U_S at the Strömgren radius | Cue inner-face U at 10^19 cm | convention | not run here (Cue is not in this notebook); no conversion applied to gutkin16 |
+# | c13.03 table interpolants against Cue | c13.03 table interpolated by BEAGLE | Cue network | numerical | not run here |
+# | v0.27 tau_BC split (HII dust) | `ACCOUNT FOR HII DUST` | no HII-dust term in the §4 and §5 runs | convention | not exercised here |
+# | template rebinning at the Lyman-alpha edge | native template sampling | `REBIN TEMPLATES = 10` on BEAGLE's side only | numerical | §12 z = 6 band: +0.002 native; with rebinning BEAGLE moves by -0.14 and the difference is +0.12 |
+# | Calzetti 1994 against 2000 | `Calzetti` (1994) | `calzetti` (2000) | convention | §4 depth ratio 2000/1994: 1.11 at 1200-2200 Å, 1.05 at 2200-5500 Å, 1.00 at 5500-12000 Å |
+# | Milky Way curve | Pei (1992) | CCM89 (`cardelli`) | convention | §4 depth ratio tengri/BEAGLE: 1.06 at 1500 Å, 0.94 at 10000 Å, 1.21 at 20000 Å |
+# | LMC and SMC curves | BEAGLE's measured LMC and SMC curves | Pei (1992) Drude sums | convention (BEAGLE side) | §4 depth ratio at 10000 Å: LMC 1.24, SMC 1.62; at 20000 Å: LMC 1.60, SMC 2.79 |
+# | CCWW13 full law | `ccww13_full` with the inclination law | not run | convention | not run here; the inclination law is not distributed with the public package |
+# | cosmology | Planck 2015 | Planck 2018 (`Planck18`, Setup) | convention | luminosity distance at z = 1: 6791.81 against 6791.27 Mpc, ratio 1.00008 (code cell below) |
+# | noise floor | sigma^2 += (0.02 y)^2 | `noise_frac_cal` | convention | not measured here |
+# | solar luminosity | 3.826e33 erg/s | `L_SUN` in `tengri.utils.physics_constants` | convention | 3.8260e33 against 3.8280e33 erg/s, ratio 0.99948 (code cell below) |
+# | surviving mass | `M_star` | `stellar_mass_surviving` | convention | §2 M_star ratio 0.93 at tau 0.1 Gyr, 0.92 at 1 Gyr, 0.93 at 10 Gyr; residual not separated here |
+# | formed mass | `M_tot`, formed mass including the episode | formed mass set to the same value | convention | §2 M_tot ratio 1.000 at each tau |
+# | specific SFR | `specific_sfr` relative to total formed mass | `recent_ssfr` episode | convention | not compared here |
+# | formation time | `formation_redshift` | `age_gyr` (age at z) | convention | not compared here |
+# | BEAGLE-AGN | not run | not run | convention | not run here; §9 has no BEAGLE column |
+
+# %%
+from astropy.cosmology import Planck15
+
+_dl15 = float(Planck15.luminosity_distance(1.0).to_value("Mpc"))
+_dl18 = float(Planck18.luminosity_distance(1.0).to_value("Mpc"))
+print(f"luminosity distance at z = 1: Planck 2015 {_dl15:.2f} Mpc, Planck 2018 {_dl18:.2f} Mpc, "
+      f"ratio {_dl15 / _dl18:.5f}")
+print(f"L_sun: BEAGLE {beagle_driver.L_SUN_BEAGLE:.4e} erg/s, tengri {L_SUN:.4e} erg/s, "
+      f"ratio {beagle_driver.L_SUN_BEAGLE / L_SUN:.5f}")
 
 # %% [markdown]
 # ## 14. Parameter translation
 #
-# (written in the next pass)
+# Each row maps a BEAGLE keyword to the tengri grammar key in `docs/model_configuration.md`. A row is
+# left out when its tengri key is not on that page. BEAGLE's `mass` is the formed mass including the
+# current episode. nebular_Z + 0.031 gives neb_logZ_gas, because Z_sun is 0.01524 in BEAGLE and 0.0142 in
+# tengri. With `current_sfr_timescale = 8`, BEAGLE reports SFR_100 equal to the episode rate (a BEAGLE
+# behavior, not re-measured in this notebook).
+#
+# | BEAGLE keyword | tengri grammar key | note |
+# |---|---|---|
+# | `sfr` (log ψ over the episode) | `sfh={'type': ['delayed', 'recent'], 'log_sfr': ...}` | episode rate; the configuration page documents `['delayed', 'recent']` |
+# | `specific_sfr` (log ψ_S) | `sfh={'type': ['delayed', 'recent_ssfr'], 'log_ssfr': ...}` | BEAGLE normalizes to total formed mass; the tengri normalization is not restated here |
+# | `current_sfr_timescale` (log yr) | `'timescale_myr'` | 10^7 yr is 10 Myr; the unit changes from log yr to Myr |
+# | `tauV_eff`, `mu` | `dust_attenuation={'type': 'two_component', 'parameterization': 'tauv_mu', 'tau_v': ..., 'mu': ...}` | BEAGLE `mu` default 0.3, workshop run 0.4 |
+# | `attenuation_type` calzetti | `'law': 'calzetti'` | tengri is the 2000 curve, BEAGLE the 1994 curve (§4) |
+# | `attenuation_type` cf00 | `law_bc: 'power_law'`, `law_diff: 'power_law'` | the two-component pair is named together |
+# | `attenuation_type` ccww13_universal | `law_bc: 'power_law'`, `law_diff: 'chevallard13'` | `chevallard13` is accepted as `law_diff` only |
+# | `attenuation_type` mw | `'law': 'ccm89'` | BEAGLE's mw is Pei (1992) (§4) |
+# | `nebular_logU` | `neb={'type': 'gutkin16', 'logU': Uniform(-4.0, -1.0)}` | the table extent is -4 to -1 |
+# | `nebular_Z` | `neb={'type': 'gutkin16', 'logZ_gas': ...}` | log10(Z/Z_sun) with Z_sun 0.0142; BEAGLE value + 0.031 |
+# | `nebular_xi` | `'xi_d'` | the table nodes are 0.1, 0.3 and 0.5 |
+# | `nebular_CO` | `'co_ratio'` | (C/O)/(C/O)_sun |
+# | `IGM ABSORPTION = Inoue` | `igm={'type': 'inoue'}` | the configuration page names `'inoue'`, not `'inoue14'` |
+# | `redshift` | `redshift=Fixed(z)` | a fixed redshift |
+#
+# Rows left out, because their tengri key is not on the configuration page: the delayed-history
+# parameters (`tau`, `mass`, `max_stellar_age`; §2 and §3 pass `tau_gyr`, `age_gyr` and `log_total_mass`
+# by name), `metallicity` (§2 and §3 pass `logzsol`), `LyC_f_esc` (`neb_fesc` is named only in the
+# `lyc_reprocessed_by` context), the AGN keys `agn_*` (no `'feltre'` entry on the page), the `lsf_*` and
+# `continuum_coeff` keys (`Spectroscopy(resolution=...)` and `calibration_order` are not on the page; its
+# `Spectroscopy` options are the calibration marginal ones), `min_rel_err` (`noise_frac_cal` is not on the
+# page), and `cosmology` (§13 prints the Planck difference instead). The `lmc` and `smc` attenuation laws
+# are also left out, because the page does not list either as an attenuation law name.
 
 # %% [markdown]
 # ## 15. tengri in BEAGLE mode
@@ -1036,12 +1128,60 @@ for zi in (1, 3, 6):
 # %% [markdown]
 # ## Summary
 #
-# (written in the next pass)
+# | section | quantity | agreement measured | class |
+# |---|---|---|---|
+# | unit conversion | bolometric round trip | rel_err 3.1e-6 | numerical check |
+# | §1 | SSP window medians, tengri/BEAGLE | 0.72 to 1.07 | library bracket |
+# | §1a | CB16 against BC03 inside BEAGLE, window medians | 0.84 to 1.20 | library bracket |
+# | §2 | SFR_10 and SFR_100, 10 Myr episode at tau 0.1 Gyr | 1.054 and 0.948 | numerical (tengri history grid) |
+# | §2 | M_tot | 1.000 at each tau | agreement |
+# | §3 | CANDELS pivots below 0.35 µm | 1.005 to 1.009 | agreement |
+# | §3 | CANDELS pivots redward of 0.35 µm | 0.995 to 1.049 | library bracket |
+# | §4 | Calzetti 2000 against 1994 depth | 1.00 to 1.11 | convention (curve) |
+# | §4 | Milky Way depth, tengri/BEAGLE | 0.94 to 1.21 | convention (curve) |
+# | §4 | LMC and SMC depth at 10000 Å | 1.24 and 1.62 | convention (BEAGLE side) |
+# | §5 | CF00 attenuation A_1500 and A_V | up to 0.039 and 0.016 mag | inherits the §3 bracket |
+# | §8a | H-alpha/H-beta, median and max | 0.000 and 0.002 dex | agreement |
+# | §8a | [O III] 5007/H-beta, median and max | 0.021 and 0.238 dex | not classified (BEAGLE drive, inferred) |
+# | §8a | He II 1640 and Si III] 1888, median | 0.49 and 0.36 dex | not classified (not isolated) |
+# | §8c | H-beta per photon and per SFR_10, median | 0.99 and 0.73 | agreement (per photon); library bracket (per SFR) |
+# | §8d | continuum shape, window ratios | 0.93 to 1.19 | library bracket |
+# | §9 | AGN anchor node, and H-beta linear in L_acc | 1.0000 and 0.1000 | normalization and wiring only |
+# | §12 | IGM transmission, bands away from the steps | max 0.0002 | agreement |
+# | §12 | Lyman-alpha band at z = 6, native and rebinned | +0.002 and +0.12 | numerical |
+# | §13 | luminosity distance at z = 1, Planck 2015 against 2018 | ratio 1.00008 | convention |
+# | §13 | L_sun, BEAGLE against tengri | ratio 0.99948 | convention |
+#
+# The rest-frame ultraviolet bands agree to 1 % and the normalization, age and star formation history
+# match at the level this notebook tests. Redward of 0.35 µm the two codes differ by up to 5 %, within the
+# spread between BEAGLE's own two template sets in §1a. The attenuation-curve differences are conventions:
+# the curve definitions of Calzetti, Milky Way and the Magellanic Clouds. The strong nebular lines agree to
+# 0.02 dex in the median and H-alpha/H-beta to 0.002 dex, while He II 1640 and Si III] 1888 differ by
+# 0.36 to 0.49 dex and are not isolated here. The IGM agrees to 0.0002 away from the steps, and the one
+# numerical difference, at the z = 6 Lyman-alpha edge, is set by BEAGLE's template sampling. BEAGLE-AGN,
+# CCWW13 full, `ACCOUNT FOR HII DUST` and the noise model are not run in this notebook, and §15 is not
+# written here.
 
 # %% [markdown]
 # ## References
 #
-# (written in the next pass)
+# Entries 1 to 6 are cited as the BEAGLE Terms of Use require.
+#
+# 1. Chevallard J., Charlot S., 2016, "Modelling and interpreting spectral energy distributions of galaxies with BEAGLE", MNRAS 462, 1415. doi:10.1093/mnras/stw1756, arXiv:1603.03037.
+# 2. Bruzual G., Charlot S., 2003, "Stellar population synthesis at the resolution of 2003", MNRAS 344, 1000. doi:10.1046/j.1365-8711.2003.06897.x, arXiv:astro-ph/0309134.
+# 3. Gutkin J., Charlot S., Bruzual G., 2016, "Modelling the nebular emission from primeval to present-day star-forming galaxies", MNRAS 462, 1757. doi:10.1093/mnras/stw1716, arXiv:1607.06086.
+# 4. Calzetti D., Kinney A. L., Storchi-Bergmann T., 1994, "Dust extinction of the stellar continua in starburst galaxies: The ultraviolet and optical extinction law", ApJ 429, 582. doi:10.1086/174346.
+# 5. Charlot S., Fall S. M., 2000, "A Simple Model for the Absorption of Starlight by Dust in Galaxies", ApJ 539, 718. doi:10.1086/309250, arXiv:astro-ph/0003128.
+# 6. Chevallard J., Charlot S., Wandelt B., Wild V., 2013, "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies", MNRAS 432, 2061. doi:10.1093/mnras/stt523, arXiv:1303.6631.
+# 7. Pei Y. C., 1992, "Interstellar dust from the Milky Way to the Magellanic Clouds", ApJ 395, 130. doi:10.1086/171637.
+# 8. Inoue A. K., Shimizu I., Iwata I., Tanaka M., 2014, "An updated analytic model for attenuation by the intergalactic medium", MNRAS 442, 1805. doi:10.1093/mnras/stu936, arXiv:1402.0677.
+# 9. Feltre A., Charlot S., Gutkin J., 2016, "Nuclear activity versus star formation: emission-line diagnostics at ultraviolet and optical wavelengths", MNRAS 456, 3354. doi:10.1093/mnras/stv2794, arXiv:1511.08217.
+# 10. Vidal-García A., Plat A., Curtis-Lake E., Feltre A., Hirschmann M., Chevallard J., Charlot S., 2024, "BEAGLE-AGN I: Simultaneous constraints on the properties of gas in star-forming and AGN narrow-line regions in galaxies", MNRAS 527, 7217. doi:10.1093/mnras/stad3252, arXiv:2211.13648.
+# 11. Plat A., Charlot S., Bruzual G., Feltre A., Vidal-García A., Morisset C., Chevallard J., Todt H., 2019, "Constraints on the production and escape of ionizing radiation from the emission-line spectra of metal-poor star-forming galaxies", MNRAS 490, 978. doi:10.1093/mnras/stz2616, arXiv:1909.07386.
+# 12. Pacifici C. et al., 2023, "The Art of Measuring Physical Parameters in Galaxies: A Critical Assessment of Spectral Energy Distribution Fitting Techniques", ApJ 944, 141. doi:10.3847/1538-4357/acacff, arXiv:2212.01915.
+# 13. Planck Collaboration, 2016, "Planck 2015 results. XIII. Cosmological parameters", A&A 594, A13. doi:10.1051/0004-6361/201525830, arXiv:1502.01589.
+# 14. Ferland G. J. et al., 2017, "The 2017 Release of Cloudy", RMxAA 53, 385, arXiv:1705.10877.
+# 15. Osterbrock D. E., Ferland G. J., 2006, *Astrophysics of Gaseous Nebulae and Active Galactic Nuclei*, 2nd ed., University Science Books.
 
 # %%
 print(f"total execution: {time.perf_counter() - _T0:.1f} s")
