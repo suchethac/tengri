@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(inference): the Cloudy line prior reads the model's own `met_logzsol` and `neb_logU` and refuses at build time when the model declares neither (#3169). Both values were read with `params.get(..., 0.0)` and `params.get(..., -3.0)`, so a ramp, two-step or chemical-evolution metallicity, or a nebular backend without an ionization parameter was priored at solar metallicity and log U = -3 with no warning. `eline_prior_type="cloudy"` now raises `ValueError` naming the missing parameter and the `eline_prior_type="flat"` alternative; a Fixed value was already honored and still is.
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
