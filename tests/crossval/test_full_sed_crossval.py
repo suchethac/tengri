@@ -68,8 +68,15 @@ _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 #: Speed of light [Angstrom / s], for the L_nu integrations below.
 _C_AA = 2.99792458e18
 
-#: pCIGALE skirtor2016 lumin_disk / agn_power (disc bolometric over torus+polar dust
-#: bolometric) for inclination 30 deg, oa=40, t=3, as printed by the pCIGALE module.
+#: pCIGALE 2025.1 ``skirtor2016`` + ``dustatt_calzleit`` quantities for the generator's
+#: ``skirtor_type1`` case (i=30, oa=40, t=3, R=20, fracAGN=0.30, ``disk_type=1``), per
+#: Msun formed, read off ``sed.info`` after running the module on that case.
+#: ``dust.luminosity``, the stellar energy the attenuation absorbs [W]:
+_CIGALE_HOST_DUST_LUMINOSITY_W = 1.0927716717125123e27
+#: ``agn.accretion_power`` / ``agn_power``: the sphere-integrated intrinsic disc power
+#: over the torus+polar dust power, = 0.493 * lumin_intrin_disk (see the mapping test).
+_CIGALE_ACCRETION_TO_AGN_POWER = 7.683454732571652e26 / 4.683307164482196e26
+#: ``agn.disk_luminosity`` / ``agn_power`` (disc over torus+polar dust at i=30).
 _CIGALE_DISC_TO_DUST_RATIO = 2.6045
 
 pytestmark = pytest.mark.crossval
@@ -2605,34 +2612,41 @@ class TestCIGALESKIRTOR:
             "Increasing AGN fraction should boost the NIR torus emission."
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason=(
-            "tengri/pCIGALE AGN NIR/V ratio = 1.968 at 1.0-1.2 um (disc+torus, both "
-            "normalized to their own host V). tengri's sightline bolometric at i=30 is "
-            "2.35x the CIGALE total (9.30 vs 3.96 Lsun): agn_log_lbol is the angle-"
-            "averaged accretion power, so the sightline total is not agn_log_lbol. "
-            "tengri's host V is 0.576x pCIGALE's (not isolated). See #2480"
-        ),
-    )
-    def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
-        """tengri SKIRTOR total-AGN excess vs pCIGALE SKIRTOR2016 excess, NIR over V.
+    def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave):
+        """SKIRTOR AGN-only NIR/V shape: tengri total vs the pCIGALE AGN excess.
 
-        Both sides compare the AGN excess (total with the AGN minus the host alone
-        for pCIGALE; the total SKIRTOR template for tengri) in the 1.0-1.2 um band,
-        normalized to the host stellar V of the same 3 Gyr constant-SFH population.
+        Compared quantity: the AGN-only SED (tengri ``disk + dust``; pCIGALE with the AGN
+        minus the same host without it) averaged over 1.0-1.2 um, divided by the same
+        AGN-only SED averaged over 5500 +- 100 A. Both codes define it identically and
+        no host quantity enters. The pCIGALE reference only extends to 1.2 um.
 
-        CIGALE convention (skirtor2016, lambda_fracAGN=0/0): the AGN torus plus polar
-        dust luminosity is agn_power = fracAGN / (1 - fracAGN) * dust.luminosity,
-        where dust.luminosity is the stellar energy absorbed by the attenuation
-        (intrinsic minus attenuated stellar bolometric). The disc is then
-        lumin_disk = R * agn_power with R = 2.6045 (i=30, oa=40, t=3), so the total
-        AGN bolometric is (1 + R) * agn_power. This test sets tengri's SKIRTOR total
-        to that bolometric. The host attenuation is a single E(B-V)=0.1 Calzetti screen
-        on all stars; pCIGALE uses E(B-V)=0.1 for stars younger than 10 Myr and 0.044
-        for older stars. The pCIGALE reference only extends to 1.2 um, so the NIR
-        window is 1.0-1.2 um.
+        Normalization mapping (cited, then checked below). Stalevski et al. 2016
+        (MNRAS 458, 2288) give the disc anisotropy
+        eta(theta) = cos(theta) (1 + 2 cos(theta)) / 3. pCIGALE (Boquien et al. 2019,
+        A&A 622, A103; ``skirtor2016``, lambda_fracAGN = 0/0) sets
+
+            agn_power  = fracAGN / (1 - fracAGN) * L_dust,host
+            P_acc      = <eta>_sphere / eta(i) * lumin_intrin_disk * agn_power
+                       = 0.493 * lumin_intrin_disk * agn_power  (i = 30 deg),
+
+        with <eta>_sphere = int_0^1 eta(mu) d mu = 7/18, i.e. P_acc is the intrinsic
+        disc power integrated over 4 pi, pCIGALE's ``agn.accretion_power``. tengri's
+        ``agn_log_lbol`` is the same angle-integrated accretion power (the sphere mean
+        of disc plus dust equals ``agn_log_lbol`` L_sun, energy conservation of the
+        radiative transfer), so
+
+            agn_log_lbol = log10(P_acc / L_sun),
+            P_acc = (P_acc / agn_power) * fracAGN / (1 - fracAGN) * L_dust,host,
+
+        and the sightline bolometric (1 + R) * agn_power is *derived* by tengri from
+        ``agn_cos_inc`` rather than set. The pCIGALE host quantities are pinned
+        constants measured on the generator's case, so no tengri host enters. The test
+        also checks that this mapping reproduces pCIGALE's sightline AGN bolometric.
+
+        Remaining, documented differences: pCIGALE reddens the type-1 disc by
+        E(B-V) = 0.03 (SMC) and adds that energy as polar dust (100 K, far IR), and the
+        stored pCIGALE reference uses its default Schartmann (2005) disc
+        (``disk_type=1``) where tengri emits the SKIRTOR template disc.
         """
         k_cig = "cigale_agn_skirtor_type1"
         k_cig_noagn = "cigale_agn_skirtor_type1_noagn"
@@ -2649,70 +2663,56 @@ class TestCIGALESKIRTOR:
             pytest.skip("SKIRTOR v3 template grid not on disk")
 
         nir_mask = (ref_wave > 10000.0) & (ref_wave < 12000.0)
-        if not nir_mask.any():
-            pytest.skip("ref_wave does not cover the 1.0-1.2 um NIR window")
+        v_mask = (ref_wave > 5400.0) & (ref_wave < 5600.0)
+        if not nir_mask.any() or not v_mask.any():
+            pytest.skip("ref_wave does not cover the 1.0-1.2 um and V windows")
 
-        # pCIGALE: AGN excess (total with AGN minus host alone), NIR over host V.
+        # pCIGALE: AGN-only SED (with AGN minus host alone).
         excess_cig = ref[k_cig] - ref[k_cig_noagn]
-        v_cig = _band_avg(ref_wave, ref[k_cig_noagn], 5500.0)
-        ratio_cig = float(np.nanmean(excess_cig[nir_mask])) / max(v_cig, 1e-40)
+        ratio_cig = float(np.nanmean(excess_cig[nir_mask]) / np.nanmean(excess_cig[v_mask]))
 
-        # tengri: host stellar SED per Msun formed, attenuated by a Calzetti screen,
-        # tau_V = A_V / 1.086 with A_V = 4.05 E(B-V), E(B-V) = 0.1, and unattenuated.
-        tau_v_host = 4.05 * 0.1 / 1.086
-        wave_aa, sed_host, _ = _build_tengri_sed(
-            ssp_data,
-            onset_lookback_gyr=3.0,
-            cessation_lookback_gyr=0.0,
-            tau_diff=tau_v_host,
-        )
-        _, sed_host_intrinsic, _ = _build_tengri_sed(
-            ssp_data,
-            onset_lookback_gyr=3.0,
-            cessation_lookback_gyr=0.0,
-            tau_diff=0.0,
-        )
         from tengri.utils.physics_constants import L_SUN
 
-        nu_host = _C_AA / wave_aa
-        order = np.argsort(nu_host)
-
-        def _bolometric_lsun(sed: np.ndarray) -> float:
-            return float(np.trapezoid(sed[order], nu_host[order])) / L_SUN
-
-        v_host = _band_avg(wave_aa, sed_host, 5500.0)
-
-        # pCIGALE dust.luminosity: energy absorbed by the attenuation of the stars,
-        # intrinsic minus attenuated bolometric.
-        l_dust_host = _bolometric_lsun(sed_host_intrinsic) - _bolometric_lsun(sed_host)
-
-        # pCIGALE agn_power (torus + polar dust IR) = fracAGN/(1-fracAGN) * dust.luminosity.
-        # The total AGN is agn_power * (1 + R), R = lumin_disk / agn_power.
         frac_agn = 0.30
-        agn_power = frac_agn / (1.0 - frac_agn) * l_dust_host
-        l_agn_bol = (1.0 + _CIGALE_DISC_TO_DUST_RATIO) * agn_power
+        agn_power_w = frac_agn / (1.0 - frac_agn) * _CIGALE_HOST_DUST_LUMINOSITY_W
+        p_acc_w = _CIGALE_ACCRETION_TO_AGN_POWER * agn_power_w
+        agn_log_lbol = float(np.log10(p_acc_w / (L_SUN * 1.0e-7)))
 
-        # tengri: total SKIRTOR AGN with bolometric = (1 + R) * fracAGN/(1-fracAGN) * L_dust.
+        # Native wavelengths of the template cover 10 A-1e8 A; 1e2-1e7 A holds all but
+        # the far tails and is where the bolometric below is integrated.
+        wave_aa = np.logspace(2.0, 7.0, 6000)
         components = create_skirtor_components_from_grid(str(grid_path))(
             wave_aa,
-            agn_log_lbol=float(np.log10(l_agn_bol)),
+            agn_log_lbol=agn_log_lbol,
             frac_agn=1.0,
             agn_tau_skirtor=3.0,  # CIGALE t=3, the optical depth at 9.7 um
             agn_p_skirtor=1.0,
             agn_q_skirtor=1.0,
             agn_oa_skirtor=40.0,
+            agn_radius_ratio=20.0,
             agn_cos_inc=np.cos(np.radians(30.0)),
         )
         agn_total = np.asarray(components.total)
-        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 12000.0)
-        if not nir_t_mask.any():
-            pytest.skip("tengri SSP grid does not cover the 1.0-1.2 um NIR window")
-        ratio_tengri = float(np.nanmean(agn_total[nir_t_mask])) / max(v_host, 1e-40)
+
+        # Mapping check: the sightline AGN bolometric against pCIGALE's (1 + R) * agn_power.
+        nu = _C_AA / wave_aa
+        order = np.argsort(nu)
+        bol_tengri_w = float(_trapezoid(agn_total[order], nu[order])) * 1.0e-7
+        bol_cig_w = (1.0 + _CIGALE_DISC_TO_DUST_RATIO) * agn_power_w
+        bol_ratio = bol_tengri_w / bol_cig_w
+        assert 0.90 <= bol_ratio <= 1.10, (
+            f"tengri/pCIGALE sightline AGN bolometric at i=30 = {bol_ratio:.3f} "
+            "(outside 0.90-1.10): the agn_log_lbol <-> accretion_power mapping is broken."
+        )
+
+        nir_t = (wave_aa > 10000.0) & (wave_aa < 12000.0)
+        v_t = (wave_aa > 5400.0) & (wave_aa < 5600.0)
+        ratio_tengri = float(np.nanmean(agn_total[nir_t]) / np.nanmean(agn_total[v_t]))
 
         ratio = ratio_tengri / max(ratio_cig, 1e-40)
         assert 0.80 <= ratio <= 1.20, (
-            f"tengri/pCIGALE SKIRTOR AGN NIR/V ratio = {ratio:.3f} (outside ±20%). "
-            "Both use SKIRTOR2016 templates; the AGN excess in the NIR over the host V "
+            f"tengri/pCIGALE SKIRTOR AGN-only NIR/V ratio = {ratio:.3f} (outside ±20%). "
+            "Both use SKIRTOR2016 templates; the AGN SED shape from V to 1.0-1.2 um "
             "should agree at this tolerance."
         )
 
