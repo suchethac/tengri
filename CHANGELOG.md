@@ -78,6 +78,7 @@
 - **perf(observation): banded whitening runs one batched substitution per evaluation (#3250).** The linear marginal whitened the residual with one serial scan and the design columns with a second, every evaluation. The residual now rides as column 0 of the same right-hand side as the scaled design columns, so `banded_forward_substitution` takes an `(n, k)` right-hand side and runs one scan carrying a `k`-vector. The arithmetic per column is unchanged. Marginal value_and_grad at 4,608 px with 40 columns: 16.8 ms to 4.0 ms (median of 7, jitted, same machine state for both runs).
 
 ### Fixed
+- **`Fitter(approx='auto')` no longer raises for a spectrum with nuisance line amplitudes and no nebular backend (#3374).** The automatic policy attached `FeaturePrecomp` whenever lines were fitted, and the build refused it when there was no line-flux channel and no backend to tabulate. It now attaches the line table only when there is something to tabulate.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.
 

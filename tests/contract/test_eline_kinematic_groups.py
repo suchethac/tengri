@@ -388,6 +388,16 @@ def test_fitted_mode_reads_the_group_kinematics(mock, synthetic_ssp_module):
         assert best - float(fn({**truth, name: value}, fitter._data_args)) > 100.0, name
 
 
+def test_automatic_precompute_builds_without_a_nebular_backend(mock):
+    """#3374: nuisance line amplitudes on a model with no nebular backend fit under 'auto'."""
+    model, flux, noise = mock
+    exact = _loglik(model, flux, noise)
+    auto = Fitter(model, jnp.asarray(flux), jnp.asarray(noise), data_type="spectroscopy")
+    fn = build_loglikelihood_fn(auto)
+    truth = _truth_params()
+    assert float(fn(truth, auto._data_args)) == pytest.approx(float(exact(truth)), rel=1e-9)
+
+
 # ── Refusals ──────────────────────────────────────────────────────
 
 

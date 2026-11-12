@@ -117,12 +117,13 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
 
 # ── Resolved ultraviolet catalog (rest-frame vacuum wavelengths in Angstrom)
 # Same tuple layout. The C IV, O III], Si III] and C III] entries are the Cue line
-# catalog's (Cloudy labels, vacuum). The N IV] pair agrees with the Flury et al. (2024)
-# entries of ``eline_catalog.EMISSION_LINES`` to 0.02 A.
+# catalog's (Cloudy labels, vacuum). N V, Si IV, N IV] and N III] are the NIST ASD
+# (version 5.12) vacuum wavelengths, rounded to 0.01 A: observed for N V and Si IV,
+# Ritz for the two intercombination multiplets, which have no observed entry.
 
 _UV_RESOLVED_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
-    ("NV_1239", 1238.82, "N5", False, False, True, "lya_nv"),
+    ("NV_1239", 1238.80, "N5", False, False, True, "lya_nv"),
     ("NV_1243", 1242.80, "N5", False, False, True, "lya_nv"),
     ("SiIV_1394", 1393.76, "Si4", False, False, False, "siliv_1396"),
     ("SiIV_1403", 1402.77, "Si4", False, False, False, "siliv_1396"),
