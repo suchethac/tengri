@@ -195,22 +195,36 @@ _PRECOMPUTE_METHOD_REASON = (
 
 #: The Gyr timing prior is a Fixed-only alias since #2748; the wording mirrors
 #: ``check_free_gyr_alias`` in src/tengri/parameters/timing.py.
-_GYR_PRIOR_REASON = (
-    "`sfh_tsnorm_peak_lbt_gyr` is now a Fixed-only alias: free the fraction "
-    "`sfh_tsnorm_peak_lbt_frac` instead (age = frac * age_of_universe(z)); convert "
-    "the Gyr bounds by dividing by the age of the universe at the source redshift (#2748)"
+#: Spellings of the Gyr timing prior: the flat name, and the ``sfh`` group short name.
+_GYR_PRIOR_KEYS = frozenset({"sfh_tsnorm_peak_lbt_gyr", "peak_lbt_gyr"})
+
+
+def _gyr_prior_reason(name: str) -> str:
+    """The #2748 Fixed-only-alias message for a Gyr timing spelling ``name``."""
+    frac = name.replace("gyr", "frac")
+    return (
+        f"`{name}` is now a Fixed-only alias: free the fraction `{frac}` instead "
+        "(age = frac * age_of_universe(z)); convert the Gyr bounds by dividing by the "
+        "age of the universe at the source redshift (#2748)"
+    )
+
+
+#: The free-prior constructors of tengri.parameters.priors (``Fixed`` is pinned).
+_FREE_PRIOR_CALLS = frozenset(
+    {"Uniform", "Gaussian", "LogUniform", "LogNormal", "StudentT", "Laplace"}
 )
 
 
 def _is_free_gyr_prior(node: ast.AST) -> bool:
-    """True for a free prior: any call other than ``Fixed(...)``, or the ``FREE`` sentinel.
+    """True for a free prior: a prior constructor other than ``Fixed``, or ``FREE``.
 
-    A bare number is a pinned value, not a prior, and is not flagged.
+    A bare number, ``float(...)``, ``jnp.asarray(...)`` or a ``ParamDef(...)`` is not a
+    prior and is not flagged.
     """
     if isinstance(node, ast.Call):
         fn = node.func
         name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
-        return name != "Fixed"
+        return name in _FREE_PRIOR_CALLS
     if isinstance(node, ast.Name):
         return node.id == "FREE"
     if isinstance(node, ast.Attribute):
@@ -248,8 +262,20 @@ def _scan_removed_names(tree: ast.AST):
             ):
                 yield node.lineno, _PRECOMPUTE_METHOD_REASON
             for kw in node.keywords:
-                if kw.arg == "sfh_tsnorm_peak_lbt_gyr" and _is_free_gyr_prior(kw.value):
-                    yield node.lineno, _GYR_PRIOR_REASON
+                # The Gyr spelling as a keyword of any call (Parameters, build, dict).
+                if kw.arg in _GYR_PRIOR_KEYS and _is_free_gyr_prior(kw.value):
+                    yield node.lineno, _gyr_prior_reason(kw.arg)
+        # A dict literal keyed by the Gyr spelling: the ``sfh={...}`` group form, or any
+        # dict handed to SEDModel.build / Parameters. The key is specific enough that
+        # every literal carrying it is flagged, whichever call it reaches.
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value in _GYR_PRIOR_KEYS
+                    and _is_free_gyr_prior(value)
+                ):
+                    yield node.lineno, _gyr_prior_reason(key.value)
 
 
 _MAGIC = re.compile(r"^\s*[%!]")

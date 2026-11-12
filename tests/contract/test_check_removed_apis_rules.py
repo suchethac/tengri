@@ -78,6 +78,56 @@ def test_free_gyr_sentinel_is_flagged(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "src",
+    [
+        'SEDModel.build(sfh={"type": "tsnorm", "peak_lbt_gyr": Uniform(0.5, 12.0)})\n',
+        'sfh = {"type": "tsnorm", "peak_lbt_gyr": tengri.Uniform(0.5, 12.0)}\n',
+        'SEDModel.build(sfh={"type": "tsnorm", "peak_lbt_gyr": FREE})\n',
+        "Parameters(sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0))\n",
+        "dict(peak_lbt_gyr=Gaussian(5.0, 1.0))\n",
+    ],
+    ids=["build-dict", "module-dict", "free-sentinel", "flat-keyword", "dict-call"],
+)
+def test_free_gyr_dict_form_is_flagged(tmp_path, src):
+    found = _reasons(tmp_path, "s.py", src)
+    assert found, f"expected a Gyr-prior hit for {src!r}"
+    assert any("Fixed-only alias" in r for r in found)
+
+
+def test_free_gyr_dict_names_its_frac_twin(tmp_path):
+    found = _reasons(tmp_path, "s.py", 'sfh = {"peak_lbt_gyr": Uniform(1.0, 2.0)}\n')
+    assert len(found) == 1
+    assert "`peak_lbt_frac`" in found[0]
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        'sfh = {"type": "tsnorm", "peak_lbt_gyr": 2.0}\n',
+        'sfh = {"type": "tsnorm", "peak_lbt_gyr": Fixed(2.0)}\n',
+        'sfh = {"type": "tsnorm", "peak_lbt_frac": Uniform(0.1, 0.9)}\n',
+        'sfh = {"type": "tsnorm", "width_gyr": Uniform(0.3, 5.0)}\n',
+        'sfh = {"type": "tsnorm", "peak_lbt_gyr": float(peak)}\n',
+        'sfh = {"type": "tsnorm", "peak_lbt_gyr": jnp.asarray(2.0)}\n',
+        'd = {"sfh_tsnorm_peak_lbt_gyr": ParamDef("doc", _lo_positive, "", Fixed(5.0))}\n',
+        "build(sfh_tsnorm_peak_lbt_gyr=jnp.asarray(2.0))\n",
+    ],
+    ids=[
+        "bare-number",
+        "fixed",
+        "frac-prior",
+        "other-gyr-key",
+        "float-call",
+        "asarray",
+        "paramdef",
+        "keyword-asarray",
+    ],
+)
+def test_pinned_or_frac_dict_form_is_not_flagged(tmp_path, src):
+    assert _reasons(tmp_path, "s.py", src) == []
+
+
+@pytest.mark.parametrize(
     "value", ["Fixed(2.0)", "tengri.Fixed(2.0)", "2.0", "5"], ids=["fixed", "attr", "float", "int"]
 )
 def test_pinned_gyr_value_is_not_flagged(tmp_path, value):
