@@ -116,16 +116,6 @@ if _host_devices and "xla_force_host_platform_device_count" not in _os.environ.g
     ).strip()
 del _host_devices
 
-# XLA CPU miscompile workaround for jit(vmap) over a constant SSP flux (#3350).
-# The flag is read when the XLA backend initialises, so it must be in XLA_FLAGS
-# before the first computation; importing jax alone does not initialise it. The
-# gate, the user-set and too-late cases, and the warning live in
-# ``_xla_cpu_workaround``.
-from tengri._xla_cpu_workaround import apply_ynn_fusion_workaround as _apply_ynn_workaround
-
-_apply_ynn_workaround()
-del _apply_ynn_workaround
-
 # Enable float64 by DEFAULT: required for cosmological distance calculations
 # (dL^2 at z>0.01 overflows float32).
 #
