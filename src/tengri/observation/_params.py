@@ -25,6 +25,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # more than that is telling you the photometry, not the model, is the
         # problem.
         free_prior=Uniform(0.0, 0.2, "Fractional calibration floor", default=0.0),
+        internal_name="noise_frac_cal",
     ),
     ParamDeclaration(
         "noise_dof",
@@ -32,6 +33,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Student-t degrees of freedom for outlier robustness (0=Gaussian)",
         lambda lo, hi: lo >= 0,
         "noise_dof bounds must have lo >= 0",
+        internal_name="noise_dof",
         # Deliberately NO free_prior. 0 is a sentinel, not a value: it selects
         # the Gaussian likelihood rather than naming zero degrees of freedom,
         # and the Student-t only becomes meaningful above ~1. A prior spanning

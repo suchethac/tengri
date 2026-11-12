@@ -1835,11 +1835,10 @@ class Observation:
           the correction below always applies when nebular is present,
           gate or not; live means a PHOTOIONIZED backend, ``cue``/
           ``cloudy_grid``/``cb19``/``mappings`` — ``backend="baked_in"``
-          (``neb={'type': 'none'}``) and ``backend="shock"`` both put a
-          ``NebularSEDComponent`` in the chain but return from ``apply``
-          before ever reaching the ``neb_fesc`` masking block, so neither
-          counts), so no chunk can straddle the break. R2: each
-          consumer multiplies the raw chunks by the SAME shared factor,
+          (``neb={'type': 'none'}``) puts a ``NebularSEDComponent`` in the
+          chain but returns from ``apply`` before ever reaching the
+          ``neb_fesc`` masking block, so it does not count), so no chunk can straddle
+          the break. R2: each consumer multiplies the raw chunks by the SAME shared factor,
           ``stellar_subband_lyc_factor_precomp`` — published flat by
           ``NebularSEDComponent`` (``where(node<912, fesc, 1)``, the only
           rule available where there is no birth-cloud concept, e.g. the

@@ -1206,6 +1206,8 @@ reference-grade estimate.
 **Parameters:** `preset="fast"` (n_live=100, num_delete=20, log_evidence_tol=-2.0, σ_logZ ~0.3–0.5 nat)
 or `preset="accurate"` (n_live=500, num_delete=50, log_evidence_tol=-3.0, σ_logZ ~0.1–0.2 nat).
 
+**Posterior draws:** `n_posterior_samples` defaults to `None`, which resamples `ceil(ESS)` draws, where ESS is the Kish effective sample size of the normalized dead-point weights (`diagnostics["ess"]`). An explicit integer is used exactly. A weight ESS below 10 emits a warning with its value and is not padded.
+
 #### 10.2.2 Laplace Approximation (`method="laplace"`)
 
 **Gaussian approximation at the MAP:**

@@ -221,8 +221,9 @@ def _nebular_backend(fwd):
     neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
     if neb is None:
         return None
-    backend = getattr(neb.config, "backend", None)
-    return None if backend in (None, "none", "baked_in") else backend
+    if not neb.backend_class.additive:
+        return None
+    return neb.config.backend
 
 
 def _has_build_time_met(cfg):

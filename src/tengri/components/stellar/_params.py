@@ -37,6 +37,7 @@ ALPHA_FE_PARAMS: tuple[ParamDeclaration, ...] = (
         "Applied uniformly to all ages unless alpha_fe_evolving=True.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
+        internal_name="alpha_fe",
         # Deliberately NO free_prior. [alpha/Fe] is only constrained when the
         # SSP carries an alpha-enhanced grid (StellarSEDComponent gates on
         # has_alpha_grid), so a wildcard cannot know whether freeing it is
@@ -54,6 +55,7 @@ EVOLVING_ALPHA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Typically +0.3 to +0.5 for massive ellipticals.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
+        internal_name="alpha_fe_old",
     ),
     ParamDeclaration(
         "met_alpha_fe_young",
@@ -61,6 +63,7 @@ EVOLVING_ALPHA_PARAMS: tuple[ParamDeclaration, ...] = (
         "[alpha/Fe] at present day (t_lookback ~ 0). Typically ~0.0 (solar) for disk galaxies.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
+        internal_name="alpha_fe_young",
         # No free_prior, for the same reason as met_alpha_fe above.
     ),
 )

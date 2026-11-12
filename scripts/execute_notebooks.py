@@ -100,6 +100,18 @@ CI_UNEXECUTABLE = {
 for slug in CI_UNEXECUTABLE:
     assert slug in ALL_SLUGS, f"CI_UNEXECUTABLE key {slug!r} not in ALL_SLUGS"
 
+#: Per-cell timeout [s] for notebooks whose longest cell is measured above the
+#: default. Never lowers an explicit ``--timeout``. stochastic_sfh_recovery: its
+#: 25-parameter HMC cell (1,400 iterations x 100 leapfrog steps, dense metric)
+#: takes 1,272 s on a laptop CPU, and a hosted runner runs these notebooks about 3x
+#: slower (06_fitting_spectroscopy: 400 s local, about 21 min on the runner), so ~3,800 s
+#: against the 3,000 s default. A shorter chain or a MAP-preconditioned metric does
+#: not hold the result: 300 warmup steps with precondition=True gave max R-hat 1.46
+#: and 18 divergences.
+CELL_TIMEOUT_S = {"stochastic_sfh_recovery": 5400}
+for slug in CELL_TIMEOUT_S:
+    assert slug in ALL_SLUGS, f"CELL_TIMEOUT_S key {slug!r} not in ALL_SLUGS"
+
 
 def docs_render_path(slug: str) -> Path:
     """Return the published render for ``slug``.
@@ -237,7 +249,7 @@ def main() -> int:
     failed = []
     for slug in slugs:
         print(f"executing {slug} ...", flush=True)
-        ok, dt, figs, errs = execute(slug, args.timeout)
+        ok, dt, figs, errs = execute(slug, max(args.timeout, CELL_TIMEOUT_S.get(slug, 0)))
         status = "ok" if ok else f"FAILED ({errs} cell errors)" if errs > 0 else "FAILED (kernel)"
         print(f"  {status}  {dt / 60:.1f} min  {figs} figure(s)", flush=True)
         if not ok:
