@@ -103,7 +103,7 @@ References
 
 import os
 import warnings
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -113,8 +113,10 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
@@ -476,7 +478,7 @@ def _trilinear_interp_smooth(
 # ── Main backend class ────────────────────────────────────────────
 
 
-class CloudyGridBackend:
+class CloudyGridBackend(NebularBackendDefaults):
     """CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CLOUDY grid and computes nebular emission
@@ -516,10 +518,47 @@ class CloudyGridBackend:
 
     """
 
+    config_name: ClassVar[str] = "cloudy_grid"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr", "age_weights")
+    publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = True
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    def split_nebular(self, call: dict, template_data):
+        """Return ``(continuum, line_wave, line_lum)`` from :meth:`predict_nebular_split`."""
+        return self.predict_nebular_split(**call, template_data=template_data)
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
+
     #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015, the
     #: convention the CLOUDY grid is tabulated in. See CueBackend for the one
     #: backend that deviates.
     lsun_erg: float = _LSUN_ERG
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CLOUDY grid backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``cloudy_grid_path``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CloudyGridBackend
+            The backend instance.
+        """
+        return cls(spec.cloudy_grid_path, ssp_data)
 
     def __init__(
         self,

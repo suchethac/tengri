@@ -11,7 +11,10 @@ Note: The unified line_luminosities / continuum_luminosity API is a future
 step. For now, has_continuum is the only required addition.
 """
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, ClassVar, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from tengri.protocols.component import ParamDeclaration
 
 
 class NebularContinuumUnavailableError(Exception):
@@ -57,11 +60,57 @@ class NebularBackend(Protocol):
         Short human-readable identifier (e.g., "Cue", "CB19", "Cloudy_CB19").
         Used in logging, configuration, and error messages.
 
+    config_name : ClassVar[str]
+        The ``config.backend`` string that selects this backend in
+        :class:`NebularSEDComponentConfig` (e.g. ``"cb19"``). Differs from
+        :attr:`name` for some backends (``CB19Backend.name == "cb19_grid"``).
+    supports_split_sed : ClassVar[bool]
+        Whether ``NebularSEDComponent.split_sed`` accepts this backend. False
+        for the baked-in and shock backends, which have no continuum + line
+        catalog split.
+    line_fraction_policy : ClassVar[bool]
+        Whether ``publish_line_fraction=True`` is allowed with this backend.
+        True only for the Cue backend.
+    reads : ClassVar[tuple[str, ...]]
+        Names of the ``state.derived`` keys this backend adds to the
+        component's ``inputs()``, in the order ``inputs()`` lists them.
+    publishes_shock : ClassVar[bool]
+        Whether the component publishes ``sed_shock`` in ``outputs()``. True
+        only for the shock backend.
+    carries_freefree : ClassVar[bool]
+        Whether the backend's continuum carries thermal free-free when no instance
+        overrides it. An instance attribute ``carries_freefree_continuum`` (set by
+        Gutkin16 from ``continuum=``) takes precedence. Feeds
+        :func:`nebular_backends_with_freefree_continuum`.
+
+    additive : ClassVar[bool]
+        Whether the backend adds its emission to ``sed_intrinsic``. False only
+        for the baked-in backend, whose emission is already in the SSP grid.
+    requires_instance : ClassVar[bool]
+        Whether the component needs a constructed backend object at precompute.
+        False only for the baked-in backend.
+    caches_filters : ClassVar[bool]
+        Whether precompute caches the filter passbands for the nebular photometry
+        (``approx["wave_precomp"]``). False only for the baked-in backend.
+
+    The photoionization and line backends also inherit
+    ``NebularBackendDefaults`` (in ``_shared.py``), which
+    supplies the hooks the component calls on every backend: ``call_kwargs``,
+    ``split_nebular``, ``line_catalog_kwargs``, ``extra_derived`` and
+    ``precompute_check``. A backend overrides only the hooks it differs on.
+
+    Class-level members are readable without an instance, so the component can
+    answer for a configuration string before any backend object exists.
+
     Methods
     -------
     predict_nebular_sed
         Returns nebular emission SED on the SSP wavelength grid [erg/s/Hz].
         Signature varies by backend; see individual backend docstrings.
+
+    parameters
+        Class method returning the free-parameter declarations the component
+        owns for this backend (``NebularSEDComponent.declared_parameters``).
 
     Notes
     -----
@@ -88,3 +137,17 @@ class NebularBackend(Protocol):
     has_continuum: bool
     has_free_params: bool
     name: str
+    config_name: ClassVar[str]
+    supports_split_sed: ClassVar[bool]
+    line_fraction_policy: ClassVar[bool]
+    reads: ClassVar[tuple[str, ...]]
+    publishes_shock: ClassVar[bool]
+    carries_freefree: ClassVar[bool]
+    additive: ClassVar[bool]
+    requires_instance: ClassVar[bool]
+    caches_filters: ClassVar[bool]
+
+    @classmethod
+    def parameters(cls) -> "list[ParamDeclaration]":
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        ...

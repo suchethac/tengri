@@ -12,8 +12,10 @@ not a parallel edit to a validator set.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import functools
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 
@@ -35,12 +37,17 @@ class NebularRegistryEntry:
         ``"production"`` / ``"experimental"`` / ``"demo"`` / ``"deprecated"``.
     short_doc : str
         One-line description.
+    config_backend : str or None
+        The ``config.backend`` string this grammar name lowers to, or ``None``
+        when no component config selects the backend (``'none'``, and
+        ``'mappings_agn'``, whose build refuses before a component exists).
     """
 
     callable: Callable | None
     citation: str = ""
     status: str = "production"
     short_doc: str = ""
+    config_backend: str | None = None
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         fn = object.__getattribute__(self, "callable")
@@ -51,32 +58,158 @@ class NebularRegistryEntry:
 
 NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 
-#: Nebular backends that carry their own thermal free-free continuum (issue #2346).
-#: These backends publish ``sed_nebular`` with a free-free component, so the radio
-#: block's Murphy+2011 ``radio_freefree`` term should not run in addition
-#: (would double-count the thermal emission). Keyed on the factory's ``nebular_backend``
-#: vocabulary: ``"baked_in"``, ``"cb19"``, ``"cloudy_grid"``, ``"gutkin16"``, ``"mappings"``,
-#: ``"cue"``, ``"shock"``, or ``None``.
-#:
-#: - ``"cue"``: Li et al. (2025) neural emulator, carries a Q_H-normalized
-#:   continuum with free-free.
-#: - ``"cloudy_grid"``: tabulated Cloudy grid (Byler+2017 axis), carries
-#:   free-free.
-#: - ``"gutkin16"``: its analytic continuum (``continuum="analytic"``, the default)
-#:   carries free-free plus two-photon emission. A backend instance declares this
-#:   through its own ``carries_freefree_continuum`` attribute, which wins over this
-#:   set (see :func:`nebular_backend_carries_freefree`). With ``continuum="none"`` it
-#:   carries no free-free and the radio thermal term runs.
-#: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``)
-#:   publish no free-free in ``sed_nebular``; ``"cb19"`` publishes zeros (no
-#:   continuum at all).
-#:
-#: A nebular-included SSP carries its free-free inside the SSP flux whatever backend
-#: is declared; the radio factory reads that from the SSP's ``nebular`` stamp, not
-#: from this set (#2574).
-NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset(
-    {"cue", "cloudy_grid", "gutkin16"}
-)
+
+@functools.cache
+def _nebular_backend_classes() -> tuple[type[Any], ...]:
+    """Return the seven nebular backend classes, imported on first use."""
+    from tengri.components.nebular.baked_in import BakedInBackend
+    from tengri.components.nebular.cloudy_cb19 import CB19Backend
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.nebular.cue import CueBackend
+    from tengri.components.nebular.gutkin16 import Gutkin16Backend
+    from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
+    from tengri.components.nebular.shock import ShockBackend
+
+    return (
+        BakedInBackend,
+        CB19Backend,
+        CloudyGridBackend,
+        CueBackend,
+        Gutkin16Backend,
+        MappingsPhotoStellarBackend,
+        ShockBackend,
+    )
+
+
+@functools.cache
+def nebular_backend_classes() -> Mapping[str, type[Any]]:
+    """Map each ``config.backend`` string to the backend class that it selects.
+
+    The keys are the classes' own ``config_name`` values. The mapping is built
+    on first use because the backend modules import heavy dependencies and the
+    package ``__init__`` imports this module first.
+    """
+    return MappingProxyType({cls.config_name: cls for cls in _nebular_backend_classes()})
+
+
+def resolve_nebular_backend(name: str) -> type[Any]:
+    """Return the backend class that ``config.backend == name`` selects.
+
+    Parameters
+    ----------
+    name : str
+        A ``config.backend`` string, for example ``"cloudy_grid"``.
+
+    Returns
+    -------
+    type
+        The backend class registered under ``name``.
+
+    Raises
+    ------
+    ConfigError
+        If ``name`` is not a registered config name. The message lists the valid
+        names and a close match when one exists.
+    """
+    import difflib
+
+    from tengri.config.exceptions import ConfigError
+
+    classes = nebular_backend_classes()
+    if name in classes:
+        return classes[name]
+    valid = sorted(classes)
+    suggestions = difflib.get_close_matches(name, valid, n=2, cutoff=0.6)
+    hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+    raise ConfigError(
+        f"Unknown nebular backend {name!r}; valid names are {', '.join(valid)}.{hint}"
+    )
+
+
+#: Grammar modes that name no registry entry of their own. ``"off"`` (no nebular
+#: emission) builds the baked-in backend, the same backend as ``"ssp"``.
+_MODE_ENTRY_NAME = {"off": "ssp"}
+
+
+def nebular_backend_class_for_mode(mode: str) -> type[Any]:
+    """Return the backend class that a grammar ``nebular_mode`` builds.
+
+    Parameters
+    ----------
+    mode : str
+        The ``spec.nebular_mode`` value: a :data:`NEBULAR_MODELS` key, or ``"off"``.
+
+    Returns
+    -------
+    type
+        The backend class. Its ``from_spec`` builds the instance.
+
+    Raises
+    ------
+    ConfigError
+        If ``mode`` names no buildable backend. The message lists the valid modes.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    entry = NEBULAR_MODELS.get(_MODE_ENTRY_NAME.get(mode, mode))
+    if entry is None or entry.callable is None:
+        valid = sorted(name for name, e in NEBULAR_MODELS.items() if e.callable is not None)
+        raise ConfigError(
+            f"Unknown nebular_mode {mode!r}; valid modes are {', '.join(valid)}, and 'off'."
+        )
+    return entry.callable
+
+
+def build_nebular_backend(spec: Any, ssp_data: Any) -> Any:
+    """Build the nebular backend instance that a model spec selects.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model spec. Its ``nebular_mode`` picks the class, and the class's
+        ``from_spec`` reads the spec attributes it needs.
+    ssp_data : SSPData or None
+        The stellar population grid the backend is built on.
+
+    Returns
+    -------
+    object
+        The backend instance.
+    """
+    return nebular_backend_class_for_mode(spec.nebular_mode).from_spec(spec, ssp_data)
+
+
+@functools.cache
+def nebular_backends_with_freefree_continuum() -> frozenset[str]:
+    """Return the config names whose backend carries a thermal free-free continuum.
+
+    Derived from each class's ``carries_freefree``. A backend instance that sets
+    ``carries_freefree_continuum`` (Gutkin+2016, per ``continuum=``) overrides this
+    set in :func:`nebular_backend_carries_freefree`.
+
+    Notes
+    -----
+    Membership decides whether the radio block's Murphy+2011 ``radio_freefree``
+    term is added on top of the nebular continuum (issue #2346, #2574). A
+    nebular-included SSP carries its free-free inside the SSP flux, and the radio
+    factory reads that from the SSP's ``nebular`` stamp, not from this set.
+    """
+    return frozenset(
+        name for name, cls in nebular_backend_classes().items() if cls.carries_freefree
+    )
+
+
+@functools.cache
+def nebular_photoionized_backends() -> frozenset[str]:
+    """Return the config names of the photoionized nebular backends.
+
+    Derived from ``supports_split_sed``: the photoionized backends are exactly the
+    ones with a continuum plus line-catalog split (Cue, CloudyGrid, CB19, Gutkin16,
+    MAPPINGS). The equality is asserted in the contract tests.
+    """
+    return frozenset(
+        name for name, cls in nebular_backend_classes().items() if cls.supports_split_sed
+    )
 
 
 def nebular_backend_carries_freefree(name: str | None, backend: object | None = None) -> bool:
@@ -110,7 +243,7 @@ def nebular_backend_carries_freefree(name: str | None, backend: object | None = 
     1. A backend instance that declares ``carries_freefree_continuum`` (Gutkin+2016,
        true iff ``continuum="analytic"``) answers for itself.
     2. Otherwise the declared name decides, by membership in
-       :data:`NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM`.
+       :func:`nebular_backends_with_freefree_continuum`.
 
     Neither step reads the published ``sed_nebular`` array or an approximation flag:
     the fast nebular grid path publishes ``sed_nebular`` as all zeros for the same
@@ -120,7 +253,7 @@ def nebular_backend_carries_freefree(name: str | None, backend: object | None = 
     declared = getattr(backend, "carries_freefree_continuum", None)
     if declared is not None:
         return bool(declared)
-    return name in NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM
+    return name in nebular_backends_with_freefree_continuum()
 
 
 def nebular_carries_freefree(name: str | None, instance: object | None = None) -> bool:
@@ -166,12 +299,17 @@ def register_nebular_model(
     citation: str = "",
     status: str = "production",
     short_doc: str = "",
+    config_backend: str | None = None,
 ) -> Callable[[Callable | None], Callable | None]:
     """Register a nebular emission backend in :data:`NEBULAR_MODELS`."""
 
     def decorator(fn: Callable | None) -> Callable | None:
         NEBULAR_MODELS[name] = NebularRegistryEntry(
-            callable=fn, citation=citation, status=status, short_doc=short_doc
+            callable=fn,
+            citation=citation,
+            status=status,
+            short_doc=short_doc,
+            config_backend=config_backend,
         )
         return fn
 

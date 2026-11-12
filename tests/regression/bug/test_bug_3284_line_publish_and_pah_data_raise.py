@@ -14,12 +14,13 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.nebular._shared import NebularBackendDefaults
 from tengri.config.exceptions import BackendError, TengriIOError
 
 pytestmark = pytest.mark.regression_bug
 
 
-class _PublishFailsBackend:
+class _PublishFailsBackend(NebularBackendDefaults):
     """Stand-in photoionization backend whose line catalog publish raises."""
 
     lsun_erg = 3.828e33

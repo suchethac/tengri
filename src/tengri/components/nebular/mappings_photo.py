@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -63,7 +63,9 @@ from tengri._data_setup import package_or_env_data_path
 from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
+from tengri.components.nebular._params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
@@ -73,6 +75,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.config.exceptions import TengriIOError
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -446,7 +449,7 @@ def _interp_agn_grid(
 # ── MappingsPhotoStellarBackend ───────────────────────────────────
 
 
-class MappingsPhotoStellarBackend:
+class MappingsPhotoStellarBackend(NebularBackendDefaults):
     """MAPPINGS V stellar photoionization backend (Flury et al. 2024).
 
     Predicts nebular emission line luminosities by interpolating the
@@ -490,6 +493,21 @@ class MappingsPhotoStellarBackend:
 
     """
 
+    config_name: ClassVar[str] = "mappings"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    publishes_shock: ClassVar[bool] = False
+    carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
+
     name = "mappings_photo_stellar"
     has_free_params = True
 
@@ -501,6 +519,57 @@ class MappingsPhotoStellarBackend:
     #: log10 of the scalar ``_qh_table`` is normalized by (#2853). 0.0 means the
     #: table already holds photons/s, the identity for a table set by hand.
     _log_qh_scale: float = 0.0
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the MAPPINGS V stellar backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads the optional ``nebular_mappings_*`` values and
+            ``nebular_mappings_grid_path``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        MappingsPhotoStellarBackend
+            The backend instance.
+
+        Raises
+        ------
+        TengriIOError
+            If more than 1% of the stellar grid cells are NaN (issue #2082).
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_mappings_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_mappings_grid_path
+        if spec.nebular_mappings_model is not None:
+            kwargs["model"] = spec.nebular_mappings_model
+        if spec.nebular_mappings_density is not None:
+            kwargs["density"] = spec.nebular_mappings_density
+        if spec.nebular_mappings_ionizing_source_warning is not None:
+            kwargs["ionizing_source_warning"] = spec.nebular_mappings_ionizing_source_warning
+        backend = cls(**kwargs)
+
+        # Validate grid completeness (issue #2082): the grid file contains 51.2%
+        # NaN in logHB_per_logq, making it unsuitable for predictions.
+        logHB = np.asarray(backend.grid.logHB_per_logq)
+        nan_count = np.sum(~np.isfinite(logHB))
+        total_count = logHB.size
+        nan_frac = float(nan_count / total_count)
+        if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
+            grid_path = spec.nebular_mappings_grid_path or "data/flury2024_grids.h5"
+            raise TengriIOError(
+                f"MAPPINGS V stellar grid data is incomplete. "
+                f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
+                f"in logHB_per_logq ({nan_count}/{total_count} cells). "
+                f"This indicates the grid was not fully computed. The grid must be "
+                f"regenerated using scripts/build_flury2024_grids.py before this "
+                f"backend can emit valid predictions. See GitHub issue #2082."
+            )
+        return backend
 
     def __init__(
         self,
@@ -1022,7 +1091,7 @@ _MAPPINGS_STELLAR_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
 # ── MappingsPhotoAGNBackend ───────────────────────────────────────
 
 
-class MappingsPhotoAGNBackend:
+class MappingsPhotoAGNBackend(NebularBackendDefaults):
     """MAPPINGS V AGN photoionization backend (Flury et al. 2024).
 
     Predicts NLR emission line luminosities by interpolating the OPTXAGNF
@@ -1063,6 +1132,44 @@ class MappingsPhotoAGNBackend:
 
     name = "mappings_photo_agn"
     has_free_params = True
+
+    config_name: ClassVar[str] = "mappings_agn"
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Refuse the MAPPINGS V AGN backend that a model spec selects (issue #2082).
+
+        The class does not implement ``predict_nebular_sed``, which the forward path
+        calls, so no model can be built on it. It is constructed first so that the
+        grid and option errors surface as they do today.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads the optional ``nebular_mappings_agn_*`` values.
+        ssp_data : SSPData or None
+            Unused: the AGN grid does not depend on the stellar grid.
+
+        Raises
+        ------
+        ValueError
+            Always, naming the missing protocol surface.
+        """
+        kwargs = {}
+        if spec.nebular_mappings_agn_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_mappings_agn_grid_path
+        if spec.nebular_mappings_agn_density is not None:
+            kwargs["density"] = spec.nebular_mappings_agn_density
+        if spec.nebular_mappings_agn_ionizing_source_warning is not None:
+            kwargs["ionizing_source_warning"] = spec.nebular_mappings_agn_ionizing_source_warning
+        cls(**kwargs)
+        raise ValueError(
+            "MappingsPhotoAGNBackend: model protocol surface incomplete. "
+            "The class lacks predict_nebular_sed(agn_log_lbol, agn_logedd, "
+            "agn_logmbh, ...) required by the forward path. The necessary "
+            "AGN ionizing source parameter declarations and protocol adapter "
+            "are pending. See GitHub issue #2082."
+        )
 
     def __init__(
         self,
