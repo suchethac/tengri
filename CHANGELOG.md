@@ -78,6 +78,8 @@
 
 ### Fixed
 
+- fix(data): SSP and template downloads are verified against a pinned length and sha256 (#3282). A cached grid was trusted whenever it existed with size > 0, and the downloader never compared the bytes received with `Content-Length`, so a truncated or substituted file was used forever. Every catalog file now has a pinned byte length (the upstream `Content-Length`); a cache hit is used only if it matches the pin, and a mismatched copy is downloaded again. A download is streamed to a `.partial` file and renamed into place only after it passes; a short read or a wrong digest raises `TengriIOError` and removes the partial file. Digests are pinned for 10 files; the rest check length only and warn, and `fsps_prsc_miles_chabrier.h5` is among them because the local copy is not the hosted file.
+
 - fix(inference): a non-finite first-order acceptance is a rejection, and a non-finite adapted step size refuses (#3317). A Barker warm-up whose proposal landed where the log density was NaN returned a NaN step size and a frozen chain with no warning; the NaN step is now a rejection in warm-up, and a NaN adapted step size raises `DeadFitError` before it is cached.
 
 - fix(inference): window-adapted GHMC passes the momentum inverse scale, not the inverse mass (#3318). BlackJAX squares a one-dimensional `momentum_inverse_scale`, so the window's adapted variance entered the kernel as variance squared; it now enters as its square root. GHMC leaves the target invariant for any mass, so posteriors were not biased, but the hierarchical window-GHMC lane mixed poorly (on a diagonal Gaussian the chain moved on 10 to 16% of steps and now moves on 93 to 94%, recovering the true variances to 1%); hierarchical GHMC draws at a fixed key change.

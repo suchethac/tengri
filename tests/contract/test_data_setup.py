@@ -1,13 +1,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for SSP data setup and download helpers."""
 
+import hashlib
 import os
+from types import MappingProxyType
 
 import pytest
 
+import tengri._data_setup as ds
 from tengri._data_setup import download_ssp, list_known_ssps
 
 pytestmark = pytest.mark.contract
+
+
+def _pin_stand_in(monkeypatch, body: bytes) -> None:
+    """Pin the default grid to ``body`` so a stand-in download passes the #3282 pin."""
+    digest = hashlib.sha256(body).hexdigest()
+    monkeypatch.setitem(ds._DATA_PINS, "fsps_prsc_miles_chabrier.h5", (len(body), digest))
 
 
 @pytest.mark.unit
@@ -33,6 +42,7 @@ def test_download_ssp_skips_existing(tmp_path, monkeypatch):
     """Verify that download_ssp skips existing files without calling urlopen."""
     # Pre-create the target file with non-zero size
     target_file = tmp_path / "fsps_prsc_miles_chabrier.h5"
+    _pin_stand_in(monkeypatch, b"existing data")
     target_file.write_bytes(b"existing data")
     mtime_before = target_file.stat().st_mtime
 
@@ -61,6 +71,7 @@ def test_download_ssp_uses_env_var(tmp_path, monkeypatch):
     def mock_urlopen(url, timeout=None):
         class FakeResponse:
             status = 200
+            headers = MappingProxyType({})
 
             def read(self, chunk_size):
                 # Return 16 bytes total: 2 chunks of 8 bytes
@@ -80,6 +91,7 @@ def test_download_ssp_uses_env_var(tmp_path, monkeypatch):
 
         return FakeResponse()
 
+    _pin_stand_in(monkeypatch, b"x" * 16)
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call download_ssp with force=True (to override any existing file)
@@ -126,6 +138,7 @@ def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
     def mock_urlopen(url, timeout=None):
         class FakeResponse:
             status = 200
+            headers = MappingProxyType({})
 
             def read(self, chunk_size):
                 if not hasattr(self, "_bytes_read"):
@@ -144,6 +157,7 @@ def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
 
         return FakeResponse()
 
+    _pin_stand_in(monkeypatch, b"x" * 8)
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call with force=True to override any existing file
@@ -166,6 +180,7 @@ def test_download_ssp_creates_dest_directory(tmp_path, monkeypatch):
     def mock_urlopen(url, timeout=None):
         class FakeResponse:
             status = 200
+            headers = MappingProxyType({})
 
             def read(self, chunk_size):
                 if not hasattr(self, "_bytes_read"):
@@ -184,6 +199,7 @@ def test_download_ssp_creates_dest_directory(tmp_path, monkeypatch):
 
         return FakeResponse()
 
+    _pin_stand_in(monkeypatch, b"x" * 8)
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call download_ssp
