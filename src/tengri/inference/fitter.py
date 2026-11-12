@@ -65,10 +65,16 @@ logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri._cache_keys import derive_key
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import BackendError, ParameterError, TengriError
 from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference.data_term import (
+    DataTermContext,
+    DataTermOptions,
+    build_data_args,
+    resolve_data_term_options,
+)
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.loss_functions import (
@@ -78,7 +84,7 @@ from tengri.inference.loss_functions import (
     build_loss_fn,
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
-from tengri.parameters.priors import Gaussian, Uniform
+from tengri.parameters.priors import Gaussian
 from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
@@ -228,11 +234,9 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
     test stub, …) also passes through silently, we don't want to
     warn on legitimate non-SEDModel uses.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.sed_model import SEDModel
-    except ImportError:
-        return
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.sed_model import SEDModel
+
     if isinstance(model, ForwardModel):
         return
     if isinstance(model, SEDModel):
@@ -264,11 +268,8 @@ def _population_sed(model):
         The population SubModel when ``model`` is a ``ForwardModel`` wrapping
         exactly one, otherwise ``None``.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
-        return None
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.population_sed_model import PopulationSEDModel
 
     if not isinstance(model, ForwardModel):
         return None
@@ -1150,7 +1151,7 @@ def _warn_if_lut_bias_amplified(
                         return f"photometry band {channel_idx}"
                     else:
                         return f"spectrum pixel {channel_idx - n_phot}"
-                except Exception:
+                except TengriError:
                     return f"channel {channel_idx}"
 
         if user_likelihood:
@@ -1211,7 +1212,7 @@ def _warn_if_lut_bias_amplified(
                 forward_bias=bias_at,
                 snr=snr_at,
             )
-    except Exception:
+    except TengriError:
         logger.warning(
             "LUT-bias advisory skipped for %s; the fit proceeds without it.",
             surface,
@@ -2228,13 +2229,12 @@ class Fitter:
         amplitudes (line amplitudes are fit, not marginalized).
         """
         from tengri.inference.composite_likelihood import CompositeLikelihood
-        from tengri.inference.context import InferenceContext
         from tengri.inference.likelihood import (
             build_base_likelihood,
             build_likelihood_extras,
         )
 
-        context = InferenceContext.from_target(self)
+        context = DataTermContext.from_fitter(self)
         base = build_base_likelihood(context)
         if base is None:
             return None
@@ -2672,45 +2672,18 @@ class Fitter:
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
+        resolved = resolve_data_term_options(
+            model,
+            DataTermOptions(
+                data_type=self.data_type,
+                eline_marginalize=eline_marginalize,
+                eline_prior_type=eline_prior_type,
+            ),
+        )
+        self._init_eline_arrays(resolved)
+
         obs = model.observation
         _spec_config = obs.spectroscopy if obs is not None else None
-
-        # Marginalization mode
-        if eline_marginalize is None:
-            if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
-                eline_marginalize = _spec_config.eline_mode == "marginalized"
-            else:
-                eline_marginalize = False
-        self._eline_marginalize = bool(eline_marginalize) and self._has_spectroscopy
-
-        # Fitted emission line mode, amplitudes become explicit latent params
-        if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
-            _eline_fitted = _spec_config.eline_mode == "fitted"
-        else:
-            _eline_fitted = False
-        self._eline_fitted = bool(_eline_fitted) and self._has_spectroscopy
-
-        # Prior type
-        if eline_prior_type is None:
-            if _spec_config is not None and hasattr(_spec_config, "eline_prior_type"):
-                _raw = _spec_config.eline_prior_type
-                eline_prior_type = _raw if isinstance(_raw, str) else "flat"
-            else:
-                eline_prior_type = "flat"
-        self._eline_prior_type = eline_prior_type
-
-        # Precompute static arrays for emission line fitting
-        if self._eline_marginalize or self._eline_fitted:
-            self._init_eline_arrays(_spec_config)
-        else:
-            self._eline_wavelengths = None
-            self._eline_independent_wavelengths = None
-            self._eline_names = None
-            self._eline_constraint_matrix = None
-            self._eline_prior_sigma = 100.0
-            self._eline_prior_width_dex = 0.3
-            self._eline_amplitude_names = []
-
         # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
         if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
             spec_has_broad = getattr(self.spec, "eline_broad", False)
@@ -2726,164 +2699,55 @@ class Fitter:
                     stacklevel=2,
                 )
 
-    def _init_eline_arrays(self, _spec_config):
-        """Build catalog arrays and constraint matrices for emission line fitting."""
-        from tengri.observation.line_list import LineList
-
-        if _spec_config is not None and _spec_config.eline_catalog is not None:
-            _catalog = _spec_config.effective_catalog
-        else:
-            _catalog = LineList.default_13()
-
-        self._eline_wavelengths = _catalog.wavelengths
-        self._eline_independent_wavelengths = _catalog.independent_wavelengths
-        self._eline_names = _catalog.names
-
-        fix_doublets = True
-        if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
-            fix_doublets = _spec_config.eline_fix_doublets
-        if fix_doublets:
-            self._eline_constraint_matrix = _catalog.build_constraint_matrix()
-        else:
-            self._eline_constraint_matrix = jnp.eye(_catalog.n_lines)
-
-        self._eline_prior_sigma = (
-            getattr(_spec_config, "eline_prior_sigma", 100.0) if _spec_config else 100.0
-        )
-        self._eline_prior_width_dex = (
-            getattr(_spec_config, "eline_prior_width_dex", 0.3) if _spec_config else 0.3
-        )
-
+    def _init_eline_arrays(self, resolved):
+        """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""
+        self._eline_marginalize = resolved.options.eline_marginalize
+        self._eline_fitted = resolved.eline_fitted
+        self._eline_prior_type = resolved.options.eline_prior_type
+        self._eline_wavelengths = resolved.eline_wavelengths
+        self._eline_independent_wavelengths = resolved.eline_independent_wavelengths
+        self._eline_names = resolved.eline_names
+        self._eline_constraint_matrix = resolved.eline_constraint_matrix
+        self._eline_prior_sigma = resolved.eline_prior_sigma
+        self._eline_prior_width_dex = resolved.eline_prior_width_dex
+        self._eline_amplitude_names = resolved.eline_amplitude_names
+        if self._eline_marginalize or self._eline_fitted:
+            # Retained so the merge can be re-applied after the fit-time approx policy
+            # reassigns ``self.spec`` (see __init__): that reassignment drops params
+            # merged here otherwise.
+            self._eline_amp_priors = resolved.eline_amp_priors
         if self._eline_fitted:
-            from tengri.observation.eline_marginalization import eline_amplitude_names
+            self.spec = self.spec.merge_observation_params(**resolved.eline_amp_priors)
 
-            self._eline_amplitude_names = eline_amplitude_names(_catalog)
-            _amp_bound = 10.0 * self._eline_prior_sigma
-            _amp_priors = {
-                nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
-            }
-            # Retained so the merge can be re-applied after the fit-time
-            # approx policy reassigns ``self.spec`` (see __init__): that
-            # reassignment drops params merged here otherwise.
-            self._eline_amp_priors = _amp_priors
-            self.spec = self.spec.merge_observation_params(**_amp_priors)
-        else:
-            self._eline_amplitude_names = []
-            self._eline_amp_priors = {}
+    def data_term_options(self) -> DataTermOptions:
+        """Return the structural options the data term is built from.
+
+        Returns
+        -------
+        DataTermOptions
+            The options read from this fitter's resolved attributes.
+        """
+        return DataTermOptions.from_fitter(self)
 
     def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
 
-        These are passed as explicit arguments (not closed over) so that
-        engines compiled for one galaxy can be reused for another with
-        the same model + parameter structure.
-
-        2026-05-23 (issue #250 follow-up): also threads the
-        big template arrays (SSP grid, nebular templates, dust IR / AGN
-        template data, fixed-value dict) so the **outer** JIT used by
-        loss-fn-based samplers (HMC, NUTS, raytrace) sees them as
-        Parameters, not Constants. Without this, the outer JIT inlines
-        ``model.predict_observables_jit(params)`` and bakes the SSP
-        flux grid (15×93×5994 floats) into the HLO as a constant,
-        ballooning compile time from <5 s to 40 s on photometry.
+        Delegates to :func:`~tengri.inference.data_term.build_data_args`, passing this
+        fit's data, mask, presence, resolved line-flux configuration and overrides.
+        The bundle is passed as explicit arguments so engines compiled for one galaxy
+        can be reused for another with the same model and parameter structure.
         """
-        args = {
-            "data": self.data,
-            "noise": self.noise,
-            "sqrt_noise_inv": inv_noise_std(self.noise),
-            "n_data": jnp.int32(len(self.data)),
-        }
-        if self.data_mask is not None:
-            args["data_mask"] = self.data_mask
-        if self.presence is not None:
-            args["presence"] = self.presence
-        if self._runtime_redshift is not None:
-            # Runtime-routed redshift override (#1316): the loss replaces the
-            # baked fixed value with this traced input (#1349's injection).
-            args["redshift"] = jnp.asarray(self._runtime_redshift)
-
-        obs = getattr(model, "observation", None)
-        if obs is not None:
-            spec_cfg = getattr(obs, "spectroscopy", None)
-            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-                if spec_cfg.has_banded_covariance:
-                    args["spec_chol_data"] = spec_cfg.chol_data
-                else:
-                    args["spec_cov_inv"] = spec_cfg.cov_inv
-
-            line_flux_cfg = self._resolved_line_fluxes()
-            if line_flux_cfg is not None:
-                args["line_flux_obs"] = line_flux_cfg.fluxes
-                args["line_flux_err"] = line_flux_cfg.errors
-                args["line_flux_waves"] = line_flux_cfg.wavelengths
-                limit_mask = getattr(line_flux_cfg, "limit_mask", None)
-                if limit_mask is not None:
-                    args["line_flux_limit_mask"] = limit_mask
-                model_sigma = self._resolved_line_model_sigma()
-                if model_sigma is not None:
-                    args["line_flux_model_sigma_frac"] = jnp.asarray(model_sigma)
-
-            line_ratio_cfg = getattr(obs, "line_ratios", None)
-            if line_ratio_cfg is not None:
-                # The model ratio is computed from model.observation.line_ratios
-                # in the loss closure; only the observed ratio + error need to
-                # ride along for the Gaussian comparison.
-                args["line_ratio_obs"] = line_ratio_cfg.ratios
-                args["line_ratio_err"] = line_ratio_cfg.errors
-
-            index_cfg = getattr(obs, "spectral_indices", None)
-            if index_cfg is not None:
-                args["index_obs"] = index_cfg.values
-                args["index_err"] = index_cfg.errors
-
-        # Outer-JIT threading: big arrays go in here so loss-fn callers
-        # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
-        # under a private "_jit_inputs" sub-dict so existing data_args
-        # consumers don't have to skip new keys.
-        # Some test/dummy models don't implement the threading API. Decide that by
-        # ASKING (hasattr) rather than by catching AttributeError out of the body:
-        # a blanket ``suppress(AttributeError, TypeError)`` around the whole block
-        # also swallows an AttributeError raised *from inside* a real model, and
-        # then silently ships an un-threaded fit. That is exactly what happened,
-        # ``ForwardModel`` (the canonical surface) did not delegate ``ssp_data``, so
-        # every fit through it baked the SSP grid into the compiled program as a
-        # constant and XLA was OOM-killed on large grids. A guard that fails open
-        # turns a one-line omission into an invisible performance cliff.
-        #
-        # The topology gate is separate and asked of the model: the threaded
-        # forward is written for a single-population SED forward and mis-broadcasts
-        # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
-        # has always been valid, so default True.
-        #
-        # Consequence worth stating: excluded topologies fall back to the eager
-        # ``_build_prediction`` path, which closure-captures the SSP grid, so
-        # hierarchical fits keep paying the baking cost #1496 removed for
-        # single-galaxy ones (measured 5.7 h / 6.25 GB for a joint NUTS at N=4,
-        # D=98). Fixing that needs the batched forward (#211), not a wider gate.
-        _supports = getattr(model, "_supports_jit_threading", None)
-        _threadable = _supports() if callable(_supports) else True
-        if _threadable and all(
-            hasattr(model, attr)
-            for attr in ("spec", "ssp_data", "_template_data_for_jit", "_ztable_data_for_jit")
-        ):
-            # Per-fit params override (#1329): the forward pass reads fixed values
-            # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
-            # runtime, so the override MUST be merged here, not only in
-            # ``_to_physical`` (the output-conversion path). Merging only there is a
-            # silent relabel: the loss still runs at the model's fixed value while the
-            # returned ``params`` echo the override. Keys are already validated in
-            # ``__init__`` (fixed-only, real names).
-            jit_fixed_values = dict(model.spec.get_fixed_values())
-            if self._params_override is not None:
-                jit_fixed_values.update(self._params_override)
-            args["_jit_inputs"] = {
-                "fixed_values": jit_fixed_values,
-                "ssp_data": model.ssp_data,
-                "template_data": model._template_data_for_jit(),
-                "ztable_data": model._ztable_data_for_jit(),
-            }
-
-        return args
+        return build_data_args(
+            model,
+            self.data,
+            self.noise,
+            data_mask=self.data_mask,
+            presence=self.presence,
+            line_flux_data=self._resolved_line_fluxes(),
+            runtime_redshift=self._runtime_redshift,
+            params_override=self._params_override,
+            line_model_sigma=self._resolved_line_model_sigma() is not None,
+        )
 
     # ── Compilation ───────────────────────────────────────────────────
 
@@ -3213,6 +3077,82 @@ class Fitter:
         """Build JIT-compiled inference engine. See ``jit_engine.build_jit_engine``."""
         return build_jit_engine(self, pos_dict)
 
+    def _warm_mcmc_program(self, canonical, *, init_flat, ld2, data_args, n_warmup, n_chain):
+        """Compile the programs a ``run()`` of ``canonical`` executes, at the run's statics.
+
+        The chain program, adaptation and statics come from the backend registry's
+        compile plan, which reads each runner's own defaults. The mass policy is
+        resolved from the parameter count and the spec, as the run does. Families that
+        run ``adapt_chain`` and ``sample_chain`` warm those two entries; families whose
+        plan is fused warm ``run_chain``.
+
+        GHMC's compile serves the hierarchical window lane: the flat seam runs the same
+        diagonal window pairing. ``run()`` samples GHMC with MEADS, which needs an
+        ``n_chains`` argument to warm, so compile() does not warm it yet. Step 8 records
+        this in ``inference_methods.md`` section 7.5.
+
+        Parameters
+        ----------
+        canonical : str
+            Registered MCMC method name, e.g. ``"mcmc_nuts"``.
+        init_flat : ndarray, shape (n_dim,)
+            Start position in unbounded latent space.
+        ld2 : callable
+            ``log_p(position, data_args)``.
+        data_args : pytree
+            Observed data.
+        n_warmup : int
+            Warmup steps.
+        n_chain : int
+            Sampling steps per chain (``n_burnin + n_mcmc_samples``).
+
+        Raises
+        ------
+        BackendError
+            If the registered entry has no chain program or no compile plan.
+        """
+        from tengri.config.exceptions import BackendError
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.chain_program import (
+            adapt_chain,
+            bind_logdensity,
+            run_chain,
+            sample_chain,
+        )
+
+        entry = get_backend(canonical)
+        if entry.chain_program is None or entry.compile_plan is None:
+            raise BackendError(f"{canonical} has no compile plan, so compile() cannot warm it")
+        program = entry.chain_program
+        plan = entry.compile_plan(entry, int(init_flat.shape[0]), self.spec)
+        adaptation = entry.adaptation_for(plan.kwargs, path="compile")
+        warmup_key = jax.random.PRNGKey(1)
+        chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
+        init_key = None
+        if not program.starts_from_warmup:
+            init_key = jax.random.PRNGKey(4)
+            chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
+
+        if plan.fused:
+            run_chain(
+                program,
+                adaptation,
+                init_flat,
+                warmup_key,
+                init_key,
+                chain_keys,
+                ld2,
+                data_args,
+                n_warmup,
+                plan.adapt_cfg,
+            )
+            return
+        params = adapt_chain(
+            program, adaptation, init_flat, warmup_key, ld2, data_args, n_warmup, plan.adapt_cfg
+        )[0]
+        state = program.init(init_flat, bind_logdensity(ld2, data_args), init_key, plan.sample_cfg)
+        sample_chain(program, state, chain_keys, ld2, data_args, params, plan.sample_cfg)
+
     def compile(
         self,
         *,
@@ -3369,89 +3309,30 @@ class Fitter:
             )
 
         if mcmc_methods:
-            from tengri.inference.backends.mcmc._shared import (
-                DEFAULT_MAX_NUM_DOUBLINGS,
-                _dynamic_hmc_full_scan,
-                _get_flat_logdensity,
-                _ghmc_full_scan,
-                _hmc_full_scan,
-                _nuts_full_scan,
-            )
-            from tengri.inference.backends.mcmc.nuts import DENSE_MASS_MAX_DIM
+            from tengri.inference._backend_registry import lookup_backend
+            from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 
             log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
                 self, dummy_pos
             )
             n_chain = n_burnin + n_mcmc_samples
-            warmup_key = jax.random.PRNGKey(1)
-            chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
-            n_dim = len(init_flat)
-            # Which program shape to WARM, not which to fit with, so this
-            # reads the shared cap rather than calling the gate: a
-            # precompilation pass has no user request to refuse and must not
-            # warn about one.
-            use_dense = n_dim <= DENSE_MASS_MAX_DIM
 
             for method in mcmc_methods:
+                canonical = method if method.startswith("mcmc_") else f"mcmc_{method}"
+                if lookup_backend(canonical) is None:
+                    logger.warning("  Unknown MCMC method for compile: %s", method)
+                    continue
                 if verbose:
                     logger.info("  Compiling MCMC %s...", method)
                 t0 = time.time()
-                if method in ("nuts", "mcmc_nuts"):
-                    _nuts_full_scan(
-                        init_flat,
-                        warmup_key,
-                        chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        DEFAULT_MAX_NUM_DOUBLINGS,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("hmc", "mcmc_hmc"):
-                    _hmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        10,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("dynamic_hmc", "mcmc_dynamic_hmc"):
-                    dhmc_init_key = jax.random.PRNGKey(4)
-                    dhmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
-                    _dynamic_hmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        dhmc_init_key,
-                        dhmc_chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        use_dense,
-                        0.85,
-                    )
-                elif method in ("ghmc", "mcmc_ghmc"):
-                    ghmc_init_key = jax.random.PRNGKey(4)
-                    ghmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
-                    _ghmc_full_scan(
-                        init_flat,
-                        warmup_key,
-                        ghmc_init_key,
-                        ghmc_chain_keys,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        n_warmup,
-                        0.85,
-                        0.8,
-                        0.65,
-                    )
-                else:
-                    logger.warning("  Unknown MCMC method for compile: %s", method)
-                    continue
+                self._warm_mcmc_program(
+                    canonical,
+                    init_flat=init_flat,
+                    ld2=log_posterior_flat_2arg,
+                    data_args=data_args,
+                    n_warmup=n_warmup,
+                    n_chain=n_chain,
+                )
                 if verbose:
                     logger.info("  Compiling MCMC %s... %.1fs", method, time.time() - t0)
 
@@ -3781,8 +3662,8 @@ class Fitter:
             matched to the fit it is warming. **This matters more than it
             looks.** A pre-warm only removes compile from a later fit if it
             compiles the *same program*, and for NUTS the program is keyed on
-            the budget: ``_nuts_warmup_only`` takes ``n_warmup`` as a static
-            argument (it is the ``lax.scan`` length) and ``_nuts_chain_scan``
+            the budget: ``adapt_chain`` takes ``n_warmup`` as a static
+            argument (it is the ``lax.scan`` length) and ``sample_chain``
             traces against a ``chain_keys`` array of length
             ``n_burnin + n_samples``. So a default pre-warm (``n_samples=10``,
             ``n_warmup=300``) and a fit at ``n_warmup=600, n_samples=600``
@@ -3817,9 +3698,9 @@ class Fitter:
             key = _jax.random.PRNGKey(0)
         sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
         # A prewarm only warms the program the real fit will run, and for NUTS
-        # that program depends on the budget: ``_nuts_warmup_only`` takes
+        # that program depends on the budget: ``adapt_chain`` takes
         # ``n_warmup`` as a static argument (it is the ``lax.scan`` length) and
-        # ``_nuts_chain_scan`` is traced against a ``chain_keys`` array of length
+        # ``sample_chain`` is traced against a ``chain_keys`` array of length
         # ``n_burnin + n_samples``. Both are part of the compile key, so a
         # prewarm hardcoded at ``n_samples=10`` and the default ``n_warmup=300``
         # compiles two programs a fit at 600/600 never asks for, and the fit
@@ -4706,21 +4587,9 @@ class Fitter:
                 verbose=verbose,
             )
         if method == "blackjax":
-            try:
-                return self._draw_blackjax_samples(
-                    likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
-                )
-            except ImportError:
-                if verbose:
-                    logger.info("  blackjax not installed, falling back to JIT sampling")
-                return self._draw_jit_samples(
-                    pos_dict,
-                    key,
-                    n_samples,
-                    existing_samples,
-                    posterior_chunk_size=posterior_chunk_size,
-                    verbose=verbose,
-                )
+            return self._draw_blackjax_samples(
+                likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
+            )
         return self._draw_nifty_samples(
             likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
         )
@@ -4864,7 +4733,16 @@ class Fitter:
         from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
 
         _check_blackjax_floor()
-        import blackjax
+        try:
+            import blackjax
+        except ImportError as exc:
+            from tengri.inference._backend_registry import pip_hint
+
+            raise BackendError(
+                'posterior_method="blackjax" requires blackjax, which is not installed.  '
+                f"Install it with:\n    {pip_hint('blackjax')}\n"
+                'or pass posterior_method="jit" for the JIT-compiled CG sampler.'
+            ) from exc
 
         if verbose:
             logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)
@@ -5158,9 +5036,7 @@ class Fitter:
         from tengri.inference.backends.mcmc._shared import (
             DEFAULT_MAX_NUM_DOUBLINGS,
             _check_blackjax_floor,
-            _get_dynamic_hmc_kernel,
             _get_flat_logdensity,
-            _get_ghmc_kernel,
             _get_hmc_kernel,
             _get_nuts_kernel,
             _stabilize_dense_mass_step,
@@ -5239,7 +5115,7 @@ class Fitter:
         # reused, so it retained one warmup executable per call (~20 MB/call leak on
         # a long-lived Fitter). Data enters traced, so the adaptation still runs on
         # the current galaxy each call and the numbers are unchanged; this mirrors
-        # the single-galaxy path's module-level ``_hmc_full_scan`` jit.
+        # the single-galaxy path's module-level ``run_chain`` jit.
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
         if method == "mcmc_hmc":
@@ -5349,178 +5225,62 @@ class Fitter:
                 float(step_size),
             )
 
-        # Raw scan functions (no @jax.jit, the outer jit+vmap handles it)
+        # One sampling scan for every family: the registry's chain program supplies the
+        # kernel, the step and the collected draw, so the scan body is written once.
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.chain_program import (
+            GHMCConfig,
+            HMCConfig,
+            NUTSSamplerConfig,
+            bind_logdensity,
+        )
+
+        program = get_backend(method).chain_program
         if method == "mcmc_nuts":
-            kernel = _get_nuts_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (NUTS variant).
-
-                ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed
-                over) so the compiled kernel is independent of the adapted
-                values, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for NUTS kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one NUTS kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        inv_mass_matrix,
-                        max_num_doublings,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
+            sample_cfg = NUTSSamplerConfig(max_doublings=max_num_doublings)
         elif method == "mcmc_hmc":
-            kernel = _get_hmc_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (HMC variant).
-
-                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for HMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one HMC kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        inv_mass_matrix,
-                        n_leapfrog_steps,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
-        elif method == "mcmc_dynamic_hmc":
-            kernel = _get_dynamic_hmc_kernel()
-
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (dynamic HMC variant).
-
-                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
-                """
-
-                def ld(pos):
-                    """Log-density for this galaxy.
-
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
-
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
-
-                    Notes
-                    -----
-                    Inner closure for dynamic HMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one dynamic HMC kernel step."""
-                    s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
-
+            sample_cfg = HMCConfig(
+                n_leapfrog=n_leapfrog_steps,
+                use_dense=bool(use_dense),
+                target_accept_rate=target_accept_rate,
+            )
         elif method == "mcmc_ghmc":
-            kernel = _get_ghmc_kernel()
+            sample_cfg = GHMCConfig(
+                alpha=alpha, delta=delta, target_accept_rate=target_accept_rate
+            )
+        else:
+            sample_cfg = None
+        kernel = program.kernel(sample_cfg)
 
-            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
-                """Scan over MCMC steps for a single galaxy (GHMC variant).
+        def _sampler_params(step_size, inv_mass_matrix):
+            """Return the ``params`` tuple the family's chain step reads.
 
-                Adaptation is threaded in, not closed over, see
-                :meth:`_fit_batch_vmap_mcmc`. The GHMC momentum scale is derived
-                from the passed ``inv_mass_matrix``.
-                """
-                if inv_mass_matrix.ndim == 2:
-                    momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
-                else:
-                    momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
+            GHMC's step takes the momentum scale, the square root of the inverse mass
+            matrix; the other families take the inverse mass matrix as it is.
+            """
+            if method != "mcmc_ghmc":
+                return (step_size, inv_mass_matrix)
+            if inv_mass_matrix.ndim == 2:
+                return (step_size, jnp.sqrt(jnp.diag(inv_mass_matrix)))
+            return (step_size, jnp.sqrt(inv_mass_matrix))
 
-                def ld(pos):
-                    """Log-density for this galaxy.
+        def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+            """Scan the chain program over ``keys`` for one galaxy, from ``state``.
 
-                    Parameters
-                    ----------
-                    pos : ndarray, shape (n_dim,)
-                        Flattened unbounded parameters.
+            ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed over) so the
+            compiled kernel is independent of the adapted values, see
+            :meth:`_fit_batch_vmap_mcmc`. Not part of public API.
+            """
+            ld = bind_logdensity(logdensity_flat_2arg, data_args_i)
+            params = _sampler_params(step_size, inv_mass_matrix)
 
-                    Returns
-                    -------
-                    float
-                        Log posterior density.
+            def _step(s, k):
+                """Advance one step and keep the position and divergence flag."""
+                s, info = program.step(kernel, s, k, ld, params, sample_cfg)
+                draw = program.collect(s, info)
+                return s, (draw.position, draw.divergent)
 
-                    Notes
-                    -----
-                    Inner closure for GHMC kernel. Not part of public API.
-                    """
-                    return logdensity_flat_2arg(pos, data_args_i)
-
-                def _step(s, k):
-                    """Execute one GHMC kernel step."""
-                    s, info = kernel(
-                        k,
-                        s,
-                        ld,
-                        step_size,
-                        momentum_inv_scale,
-                        alpha,
-                        delta,
-                    )
-                    return s, (s.position, info.is_divergent)
-
-                return jax.lax.scan(_step, state, keys)
+            return jax.lax.scan(_step, state, keys)
 
         # Single-galaxy function to vmap
         def single_galaxy(gal_key, init_flat_i, data_args_i, step_size, inv_mass_matrix):
@@ -5543,47 +5303,14 @@ class Fitter:
             Notes
             -----
             Designed for use with ``jax.vmap`` in batch MCMC. Captures
-            ``kernel``, ``_sample_scan`` from outer scope; the adapted
+            ``program``, ``kernel`` and ``_sample_scan`` from outer scope; the adapted
             ``step_size`` / ``inv_mass_matrix`` are passed as arguments
             (broadcast via the vmap ``in_axes``) so the compiled kernel is
             reusable across ``fit_batch`` calls. Not part of public API.
             """
-
-            def ld(pos):
-                """Log-density for this galaxy.
-
-                Parameters
-                ----------
-                pos : ndarray, shape (n_dim,)
-                    Flattened unbounded parameters.
-
-                Returns
-                -------
-                float
-                    Log posterior density.
-
-                Notes
-                -----
-                Inner closure. Not part of public API.
-                """
-                return logdensity_flat_2arg(pos, data_args_i)
-
             init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
-
-            if method == "mcmc_ghmc":
-                # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
-                # between 1.3 and 1.6, keywords are correct on both. (The single-galaxy
-                # GHMC paths were already fixed this way; this batch path was missed
-                # because it had no test.)
-                state = blackjax.mcmc.ghmc.init(
-                    position=init_flat_i, logdensity_fn=ld, rng_key=init_key
-                )
-            elif method == "mcmc_hmc":
-                state = blackjax.mcmc.hmc.init(init_flat_i, ld)
-            elif method == "mcmc_dynamic_hmc":
-                state = blackjax.mcmc.dynamic_hmc.init(init_flat_i, ld, init_key)
-            else:
-                state = blackjax.mcmc.nuts.init(init_flat_i, ld)
+            ld = bind_logdensity(logdensity_flat_2arg, data_args_i)
+            state = program.init(init_flat_i, ld, init_key, sample_cfg)
 
             # Burn-in (discarded)
             if n_burnin > 0:

@@ -3,14 +3,14 @@
 
 Bug: ``Fitter.run(method="mcmc_hmc", n_chains=N)`` on a first (cold-cache)
 call silently sampled a **single** chain — the ``else`` branch of
-``run_hmc`` ran ``_hmc_full_scan`` (one chain, warmup+sampling bundled) and
+``run_hmc`` ran one fused warmup+sampling chain (``run_chain``) and
 returned, while still reporting ``diagnostics["n_chains"] = N``. The genuine
 vmap/pmap multi-chain path lived only in the *cached-warmup* branch, so it
 fired on the 2nd+ call. Effect: a notebook's "N chains, R-hat X" was really a
 split-R-hat on one chain — a silent correctness failure in the convergence
 diagnostic.
 
-Fix: split warmup (``_hmc_warmup_only``) from sampling so the first call
+Fix: split warmup (``adapt_chain``) from sampling so the first call
 adapts once and then dispatches through the ``n_chains``-aware sampler.
 
 These tests assert the posterior actually contains ``n_chains * n_samples``

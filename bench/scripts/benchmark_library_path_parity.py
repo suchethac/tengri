@@ -61,7 +61,7 @@ from jax.flatten_util import ravel_pytree
 
 from tengri import Data
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
-from tengri.inference.backends.mcmc import _shared as S
+from tengri.inference.backends.mcmc import _shared as S, chain_program as cp
 from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter
 
@@ -157,9 +157,7 @@ def cmd_warmup(args):
     k_w, _ = jax.random.split(key_fit)
 
     def lib_warmup():
-        return S._nuts_warmup_only(
-            init_flat, k_w, ld2, dargs, N_WARMUP, True, TARGET_ACCEPT, False, MAX_DOUBLINGS
-        )
+        return _nuts_warmup(init_flat, k_w, ld2, dargs)
 
     def lib_probe(step, imm):
         state = blackjax.nuts.init(init_flat, ld1)
@@ -203,9 +201,7 @@ def cmd_scan(args):
         return ld2(x, dargs)
 
     k_w, k_c = jax.random.split(key_fit)
-    step, imm, _, _ = S._nuts_warmup_only(
-        init_flat, k_w, ld2, dargs, N_WARMUP, True, TARGET_ACCEPT, False, MAX_DOUBLINGS
-    )
+    step, imm, _, _ = _nuts_warmup(init_flat, k_w, ld2, dargs)
     keys = jax.random.split(k_c, N_CHAINS + 2)
     starts = init_flat[None, :] + 1e-3 * jax.random.normal(keys[1], (N_CHAINS, init_flat.size))
     chain_keys = jax.random.split(keys[0], N_CHAINS * N_SAMPLES).reshape(N_CHAINS, N_SAMPLES, 2)
@@ -214,7 +210,22 @@ def cmd_scan(args):
         return blackjax.mcmc.nuts.init(p, ld1)
 
     def _scan(s, ks):
-        return S._nuts_chain_scan(s, ks, ld2, dargs, step, imm, MAX_DOUBLINGS)
+        d = cp.sample_chain(
+            cp.NUTS,
+            s,
+            ks,
+            ld2,
+            dargs,
+            (step, imm),
+            cp.NUTSSamplerConfig(max_doublings=MAX_DOUBLINGS),
+        )
+        return (
+            d.position,
+            d.divergent,
+            d.extras["expansions"],
+            d.extras["n_leapfrog"],
+            d.extras["energy"],
+        )
 
     def lib_run():
         return S._vmap_chains(
@@ -259,6 +270,23 @@ def _evict(model):
         mc.pop(k, None)
 
 
+def _nuts_warmup(init_flat, key, ld2, dargs):
+    """Window adaptation through ``adapt_chain``; returns ``(step, inv_mass, div, n_grad)``."""
+    (step, imm), div, n_grad = cp.adapt_chain(
+        cp.NUTS,
+        cp.WINDOW_NUTS,
+        init_flat,
+        key,
+        ld2,
+        dargs,
+        N_WARMUP,
+        cp.NUTSConfig(
+            max_doublings=MAX_DOUBLINGS, use_dense=True, target_accept_rate=TARGET_ACCEPT
+        ),
+    )
+    return step, imm, div, n_grad
+
+
 def cmd_phases(args):
     """Itemize one warm ``forward.fit`` (caches evicted) by wrapping its phases."""
     from tengri.inference import fitter as F, mass_profile as MP
@@ -285,7 +313,7 @@ def cmd_phases(args):
     wrap(F.Fitter, "_auto_prewarm", "Fitter._auto_prewarm")
     wrap(N, "_maybe_map_init", "MAP init (8 scipy L-BFGS-B restarts)")
     wrap(MD, "_run_map_multistart_scipy", "  of which the multistart itself")
-    wrap(N, "_nuts_warmup_only", "warmup (window adaptation)")
+    wrap(N, "adapt_chain", "warmup (window adaptation)")
     wrap(N, "_stabilize_dense_mass_step", "dense-mass step probe (#1999)")
     wrap(N, "_vmap_chains", "sampling (pmap, 4 chains)")
     wrap(N, "_vmap_samples_to_physical", "samples -> physical")

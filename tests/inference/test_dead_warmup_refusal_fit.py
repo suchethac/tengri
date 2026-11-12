@@ -91,26 +91,26 @@ def _fit(forward, flux_obs, noise, **overrides):
     return forward.fit(flux_obs, noise, **kwargs)
 
 
-def _dead_warmup(*args, **kwargs):
-    n_warmup = args[4]
-    return jnp.array(0.01), jnp.ones((1,)), jnp.ones((n_warmup,), dtype=bool)
-
-
-def _dead_nuts_warmup(*args, **kwargs):
-    # NUTS's warmup also returns its gradient count (n_grad_adapt diagnostic).
-    return *_dead_warmup(*args, **kwargs), jnp.array(0)
+def _dead_adaptation(*args, **kwargs):
+    # adapt_chain returns its gradient count too (n_grad_adapt diagnostic), and
+    # takes n_warmup at position 6.
+    n_warmup = args[6]
+    step_size = jnp.array(0.01)
+    inv_mass_matrix = jnp.ones((1,))
+    divergent = jnp.ones((n_warmup,), dtype=bool)
+    return (step_size, inv_mass_matrix), divergent, jnp.array(0)
 
 
 def test_nuts_refuses_a_dead_warmup_before_sampling(
     synthetic_ssp, simple_observation, monkeypatch
 ):
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_nuts_warmup)
+    monkeypatch.setattr(nuts_backend, "adapt_chain", _dead_adaptation)
 
     def _sampling_must_not_run(*args, **kwargs):
         raise AssertionError("the sampling scan ran after a dead warmup")
 
-    monkeypatch.setattr(nuts_backend, "_nuts_chain_scan", _sampling_must_not_run)
+    monkeypatch.setattr(nuts_backend, "sample_chain", _sampling_must_not_run)
     with pytest.raises(DeadFitError) as excinfo:
         _fit(forward, flux_obs, noise)
     assert excinfo.value.warmup_divergence_frac == pytest.approx(1.0)
@@ -119,7 +119,7 @@ def test_nuts_refuses_a_dead_warmup_before_sampling(
 
 def test_a_refused_warmup_is_not_cached(synthetic_ssp, simple_observation, monkeypatch, caplog):
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_nuts_warmup)
+    monkeypatch.setattr(nuts_backend, "adapt_chain", _dead_adaptation)
     with pytest.raises(DeadFitError):
         _fit(forward, flux_obs, noise)
     monkeypatch.undo()
@@ -177,9 +177,8 @@ def test_a_reused_adaptation_carries_no_warmup_record(synthetic_ssp, simple_obse
     assert "warmup_divergence_frac" not in second.diagnostics
 
 
-# Both HMC backends import ``_hmc_warmup_only`` into their own namespace and
-# call it positionally, so ``args[4]`` is ``n_warmup`` in each and one stub
-# serves both seams.
+# Both HMC backends call ``adapt_chain`` positionally, so ``args[6]`` is
+# ``n_warmup`` in each and one stub serves both seams.
 @pytest.mark.parametrize(
     ("method", "backend", "sampler"),
     [
@@ -191,7 +190,7 @@ def test_hmc_refuses_a_dead_warmup_before_sampling(
     synthetic_ssp, simple_observation, monkeypatch, method, backend, sampler
 ):
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    monkeypatch.setattr(backend, "_hmc_warmup_only", _dead_warmup)
+    monkeypatch.setattr(backend, "adapt_chain", _dead_adaptation)
     with pytest.raises(DeadFitError) as excinfo:
         _fit(forward, flux_obs, noise, method=method)
     assert excinfo.value.warmup_divergence_frac == pytest.approx(1.0)

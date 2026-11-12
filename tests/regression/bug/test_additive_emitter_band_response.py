@@ -11,7 +11,7 @@ transmission is still integrated, just once instead of on every call. This is a
 different thing from the two *approximations* nearby: ``fast_emission`` (samples at the
 effective wavelength) and the stellar WavePrecomp dust-attenuation Taylor projection.
 
-``_dust_emission_band_response`` used to be gated on ``modified_blackbody`` only, so
+``_emission_band_response`` used to be gated on ``modified_blackbody`` only, so
 every other model fell through to a per-call dense filter integral over the full 5994-
 point grid: ~1650 us against ~108 us for the same model without emission. The consumer
 (`_component_base._project_photometry`) always supported the response generically -- only
@@ -199,7 +199,7 @@ def test_a_non_homogeneous_emitter_is_refused_a_band_response(emission_type):
     """
     m = _model(emission_type, SHAPES[emission_type], approx=WavePrecomp())
 
-    assert m._dust_band_response_cache is None, (
+    assert m.band_table("dust_emission", "emission_band_response") is None, (
         f"{emission_type} is not homogeneous in L_ir, so no build-time-constant band "
         "response exists — but one was built. Its photometry is now silently wrong."
     )

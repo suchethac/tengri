@@ -1354,7 +1354,7 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     # Delvecchio+2021; NVSS surveys). NOT the 21 cm HI line (1.4204 GHz).
     l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
-    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    log_nion = jnp.asarray(derived["log_nion"])
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     l_nonthermal = l_1p4ghz - l_thermal
 
@@ -1434,7 +1434,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     if sed is None:
         xi_ion = nan_scalar
     else:
-        log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+        log_nion = jnp.asarray(derived["log_nion"])
         xi_ion = compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
     return IonizingQuantities(xi_ion=xi_ion)
@@ -1497,8 +1497,8 @@ def state_to_sed_components(state: Any) -> dict:
 
     # Stellar pre-attenuation: sum the per-age cube. Always present
     # because StellarSEDComponent is mandatory in every chain.
-    lnu_age = derived.get("lnu_age")
-    sed_intrinsic_stellar = jnp.sum(jnp.asarray(lnu_age), axis=0) if lnu_age is not None else zeros
+    lnu_age = derived["lnu_age"]
+    sed_intrinsic_stellar = jnp.sum(jnp.asarray(lnu_age), axis=0)
 
     # Stellar post-attenuation. ``sed_dust_attenuated`` is the canonical
     # key (DustSEDComponent); fall back to stellar intrinsic when no

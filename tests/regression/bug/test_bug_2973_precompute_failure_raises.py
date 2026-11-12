@@ -66,12 +66,12 @@ def _build_wave_precomp_dust_model():
 
 def test_failing_dust_emission_table_builder_raises(monkeypatch):
     """A KeyError inside a dust-emission table builder must surface, not warn."""
-    from tengri import SEDModel
+    from tengri.components.dust import dust_emission_precompute
 
-    def _boom(self, chain):
+    def _boom(ctx):
         raise KeyError("ln_phot")
 
-    monkeypatch.setattr(SEDModel, "_dust_emission_band_response", _boom)
+    monkeypatch.setattr(dust_emission_precompute, "_emission_band_response", _boom)
 
     with pytest.raises(KeyError, match="ln_phot"):
         _build_wave_precomp_dust_model()
@@ -79,14 +79,14 @@ def test_failing_dust_emission_table_builder_raises(monkeypatch):
 
 def test_failing_additive_term_table_builder_raises(monkeypatch):
     """A failure in a per-emitter additive-term builder must surface, not warn."""
+    import tengri.components._term_response_table as term_table
     import tengri.forward.sed_model as sed_model_mod
-    from tengri import SEDModel
 
-    def _boom(self, chain, emitter):
+    def _boom(ctx, name):
         raise KeyError("ln_phot")
 
     monkeypatch.setattr(sed_model_mod, "_chain_implements_emission_terms", lambda chain: ["xray"])
-    monkeypatch.setattr(SEDModel, "_additive_term_band_response", _boom)
+    monkeypatch.setattr(term_table, "additive_term_band_response", _boom)
 
     with pytest.raises(KeyError, match="ln_phot"):
         _build_wave_precomp_dust_model()

@@ -552,8 +552,9 @@ def _classify_nonproportional(
 def _additive_component_names(model) -> tuple[str, ...]:
     """Names of chain components that ADD to the SED, for the refusal message.
 
-    Only used to phrase a diagnosis, never to decide one, so it degrades to
-    ``()`` rather than raising if the chain cannot be read.
+    Only used to phrase a diagnosis, never to decide one. A chain that cannot
+    be built raises: a diagnosis that omits that model's additive emitters
+    would name the wrong contaminants.
     """
     # ``fitter.model`` is a ForwardModel, and ``_build_component_chain`` is NOT
     # in its ``_DELEGATED_TO_INNER_SED`` list, so it has to be reached through
@@ -575,10 +576,7 @@ def _additive_component_names(model) -> tuple[str, ...]:
             builder = getattr(sed, "_build_component_chain", None)
             if builder is None:
                 continue
-            try:
-                chain = builder()
-            except Exception:
-                continue
+            chain = builder()
         for component in chain or ():
             name = str(getattr(component, "name", ""))
             if name in _ADDITIVE_COMPONENT_NAMES:
