@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from typing import NamedTuple
 
 import blackjax
 import chex
@@ -24,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.config.exceptions import BackendError
+from tengri.config.exceptions import BackendError, DeadFitError
 from tengri.inference._backend_registry import all_backends, get_backend
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.backends.mcmc.chain_program import (
@@ -1345,3 +1346,73 @@ def test_warm_started_families_sample_from_the_warmup_state(setup, family):
     position = np.asarray(draws.position)
     assert not np.array_equal(entry[0], np.asarray(init))
     assert np.array_equal(entry[1:], position[:-1])
+
+
+class _StubInfo(NamedTuple):
+    """Stub first-order info: the two leaves the wrapper and the collector read."""
+
+    acceptance_rate: jax.Array
+    is_accepted: jax.Array
+
+
+def _stub_kernel(bad_key):
+    """Stub kernel that moves by 0.5 and reports a NaN acceptance on ``bad_key`` only."""
+
+    def kernel(key, state, logdensity_fn, step_size):
+        acc = jnp.where(jnp.all(key == bad_key), jnp.nan, 0.6)
+        return state._replace(position=state.position + 0.5), _StubInfo(acc, jnp.asarray(True))
+
+    return kernel
+
+
+def test_non_finite_acceptance_keeps_the_state_and_zeroes_the_info(setup):
+    """A NaN-acceptance step returns the incoming state and a finite rejection (#3317)."""
+    init, wkey, _, scales = setup
+    keys = jax.random.split(wkey, 4)
+    kernel = _shared._reject_non_finite_acceptance(_stub_kernel(keys[2]))
+
+    def _step(s, k):
+        s2, info = kernel(k, s, lambda p: _target(p, scales), 0.1)
+        return s2, (s2.position, info.acceptance_rate, info.is_accepted)
+
+    _, (pos, acc, took) = jax.lax.scan(_step, _raw_first_order_state("barker", init, scales), keys)
+    pos, acc, took = np.asarray(pos), np.asarray(acc), np.asarray(took)
+    assert np.array_equal(pos[2], pos[1])
+    assert not np.array_equal(pos[3], pos[2])
+    assert np.all(np.isfinite(acc))
+    assert acc[2] == 0.0 and not took[2]
+    assert np.all(acc[[0, 1, 3]] == 0.6)
+
+
+def test_dual_averaging_stays_finite_past_a_non_finite_acceptance(setup, monkeypatch):
+    """One NaN acceptance in warmup leaves the adapted step size finite (#3317)."""
+    init, wkey, keys, scales = setup
+    bad_key = jax.random.split(wkey, N_WARMUP)[3]
+    monkeypatch.setattr(
+        _shared,
+        "_get_first_order_kernel",
+        lambda proposal: _shared._reject_non_finite_acceptance(_stub_kernel(bad_key)),
+    )
+    jax.clear_caches()
+    _, params = run_chain(
+        FIRST_ORDER,
+        DUAL_AVERAGING,
+        init,
+        wkey,
+        None,
+        keys,
+        _target,
+        scales,
+        N_WARMUP,
+        FIRST_ORDER_CFG["barker"],
+    )
+    assert np.isfinite(float(params[0]))
+
+
+def test_refuse_dead_warmup_raises_on_a_non_finite_step_size():
+    """A NaN adapted step size is a dead warmup, named by backend, and never cached (#3317)."""
+    with pytest.raises(DeadFitError, match=r"Barker warmup ended dead.*non-finite"):
+        _shared.refuse_dead_warmup(
+            None, sampler="Barker", step_size=float("nan"), n_warmup=20, n_samples=20
+        )
+    _shared.refuse_dead_warmup(None, sampler="Barker", step_size=0.5, n_warmup=20, n_samples=20)

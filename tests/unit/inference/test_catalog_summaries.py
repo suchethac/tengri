@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.contract
 
@@ -35,7 +36,7 @@ def _fwd_free_z():
     lgmet = jnp.array([-1.5, -0.5, 0.0])
     ssp = SSPData(
         ssp_wave=wave,
-        ssp_flux=jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5,
+        ssp_flux=jnp.abs(nonsplat_flux((3, 12, 60))) * 1e-3 + 1e-5,
         ssp_lg_age_gyr=ages,
         ssp_lgmet=lgmet,
     )

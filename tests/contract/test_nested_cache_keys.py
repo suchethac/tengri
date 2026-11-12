@@ -263,7 +263,7 @@ class TestSSPDataPolicy:
         ssp = SSPData(
             ssp_wave=jnp.array([1000.0, 2000.0]),
             ssp_flux=jnp.zeros((2, 3, 2)),
-            ssp_lg_age_gyr=jnp.array([6.0, 10.0, 10.1]),
+            ssp_lg_age_gyr=jnp.array([-3.0, 1.0, 1.1]),
             ssp_lgmet=jnp.array([-2.0, 0.0]),
             ssp_mass_remaining=jnp.ones((2, 3)),
             ssp_alpha_fe=None,
@@ -328,7 +328,7 @@ class TestKeyEquivalence:
         """Two SSPData with identical arrays have equal keys."""
         wave = jnp.array([1000.0, 2000.0])
         flux = jnp.zeros((2, 3, 2))
-        age = jnp.array([6.0, 10.0, 10.1])
+        age = jnp.array([-3.0, 1.0, 1.1])
         met = jnp.array([-2.0, 0.0])
         mass = jnp.ones((2, 3))
 
@@ -414,7 +414,7 @@ class TestKeyContentSensitivity:
         """Different ssp_lgmet values produce different keys (content row)."""
         wave = jnp.array([1000.0, 2000.0])
         flux = jnp.zeros((2, 3, 2))
-        age = jnp.array([6.0, 10.0, 10.1])
+        age = jnp.array([-3.0, 1.0, 1.1])
         mass = jnp.ones((2, 3))
 
         ssp1 = SSPData(
