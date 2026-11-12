@@ -131,7 +131,6 @@ EXEMPT_FILES: dict[str, str] = {
 DECLARATION_FILES: dict[str, str] = {
     "components/dust/laws/_registry.py": "declares which parameters each law accepts",
     "components/dust/priors.py": "declares the priors, keyed by parameter name",
-    "parameters/translate.py": "maps external parameter names onto tengri's",
     "presets/synthesizer.py": "a preset's parameter values, not a law evaluation",
 }
 
