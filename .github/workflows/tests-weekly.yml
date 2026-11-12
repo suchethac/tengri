@@ -43,8 +43,11 @@ jobs:
     env:
       TENGRI_JAX_CACHE_MAX_GB: "0.25"
     # The job budget exceeds the step's, which exceeds pytest's per-test --timeout, so
-    # a hung test is named by pytest before the step or the job is cut.
-    timeout-minutes: 90
+    # a hung test is named by pytest before the step or the job is cut. The test's wall
+    # time is set by NUTS trajectory length on the unprofiled arm's mass-SFH ridge, which
+    # moves with round-off (runner: 3,652 s; over 4,500 s; 4,499 s), so the per-test
+    # timeout is twice the largest measured pass (owner ruling 2026-11-12).
+    timeout-minutes: 165
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -70,8 +73,8 @@ jobs:
             tengri-jax-slow-weekly-
       # `-m weekly` replaces the default addopts selector, so the `slow` deselection
       # does not apply; `-n 0` keeps it serial (NUTS peaks at several GB).
-      - run: python -X faulthandler -m pytest tests/inference/test_profile_mass.py -v -m weekly -n 0 --timeout=4500 --timeout-method=signal --durations=30
-        timeout-minutes: 80
+      - run: python -X faulthandler -m pytest tests/inference/test_profile_mass.py -v -m weekly -n 0 --timeout=9000 --timeout-method=signal --durations=30
+        timeout-minutes: 155
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
