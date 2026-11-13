@@ -17,7 +17,9 @@ the real wNE SSP with baked-in nebular lines (lines), at R = 2000 and sigma_v fr
 (c) the LUT matches the exact path at sigma_v = 300 km/s to 2e-3 at every pixel,
     including the Ca II K core, and within 5 Angstrom of H-alpha and H-beta;
 (d) with no instrument (``resolution=None``) the LUT is bit-for-bit the pre-fix LUT;
-(e) the exact path is bit-for-bit the pre-extraction exact path;
+(e) the exact path at sigma_v > 0 with a resolution is pinned to its values on the
+    ln-lambda lattice convention (#3451), which replaced the model-grid broadening of the
+    point-sampled path;
 (f) a banded resolution matrix falls back to the exact path with a warning and is
     bit-for-bit equal to it;
 (g) the fixed-sigma_v pre-broadened table equals the full-grid sum route;
@@ -264,26 +266,26 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
     np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
 
 
-# ── (e) exact path bit-for-bit across the extraction ──────────────────────────
+# ── (e) exact path with sigma_v and a resolution: pinned values ───────────────
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.6005432403292307e-12,
-        1.905869690855171e-12,
-        1.463844810911483e-12,
-        1.162784433602384e-12,
-        9.467437807646447e-13,
-        7.873430053226903e-13,
-        6.6513321392689e-13,
+        2.6005424155012083e-12,
+        1.905868124575161e-12,
+        1.4638435912551385e-12,
+        1.1627834552106037e-12,
+        9.467430352706717e-13,
+        7.873423814202455e-13,
+        6.651326973591564e-13,
     ],
     "wne_B": [
-        8.84153748248348e-29,
-        3.105164351808286e-28,
-        4.976330494264325e-28,
-        7.382143463596137e-28,
-        8.807978458553114e-28,
-        1.1653075487088356e-27,
-        1.4096784141453878e-27,
+        8.948186350528706e-29,
+        3.104917453579309e-28,
+        4.976314565094828e-28,
+        7.381425931743484e-28,
+        8.80451721350821e-28,
+        1.165882648389604e-27,
+        1.4096215172833359e-27,
     ],
 }
 

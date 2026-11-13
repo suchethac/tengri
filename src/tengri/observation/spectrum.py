@@ -1079,11 +1079,13 @@ def apply_lsf(
     return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins, pad=pad)
 
 
-#: Uniform ln-lambda spacing of the lattice the velocity-dispersion correction acts on (#3451).
-#: Halving it from this value moves the pixel output by about 3e-6 of the peak for a
-#: sigma_v of 150 km/s on the reference SED. The first halving from 5e-5 moved it by about
-#: 2e-5, so the spacing is set at the finer value (the model-level cost is unchanged).
-_LATTICE_DLNLAMBDA = 2.5e-5
+#: Uniform ln-lambda spacing of the ln-lambda lattice the resolved and dispersed projections act on
+#: (#3451). Halving it from this value moves the pixel output by about 2e-6 of the peak for a
+#: sigma_v of 150 km/s and R = 2000 on the reference SED, and a 3 Angstrom LSF on a 0.5 Angstrom
+#: line is recovered to 8e-4 of the peak. The model-level cost is about 1.3 times the previous
+#: projection at this spacing, against about 3.4 times at 2.5e-5 (the FFT length and the cell
+#: means scale with the lattice size).
+_LATTICE_DLNLAMBDA = 5e-5
 
 
 def _lattice_pad_cells() -> int:
@@ -1154,16 +1156,30 @@ def _lattice_cell_means(wave_rest, sed_rest, origin, n_cells, edge_aa):
 def _lattice_readout(g, origin, n_cells, wave_query, conserving):
     """Pixel values of lattice cell means ``g`` (mean of lambda F per cell), before dimming.
 
-    Conserving: pixel means of F from the piecewise-linear cumulative in ln lambda.
+    Conserving: pixel means of F from the cumulative integral, which is exact at the lattice
+    nodes (the cell means are its differences) and cubic Hermite between them, with the node
+    slopes taken from the neighbouring cell means. A linear interpolation of the cumulative
+    left the pixel means of a 0.5 Angstrom feature several 1e-3 of the peak off the exact
+    integral (#3451).
     Point: F at the pixel centres from the cell centres.
     """
     h = _LATTICE_DLNLAMBDA
     if conserving:
         edges = _pixel_edges(wave_query)
         le = jnp.log(edges)
-        cum = jnp.concatenate([jnp.zeros((1,), dtype=g.dtype), jnp.cumsum(g * h)])
+        zero = jnp.zeros((1,), dtype=g.dtype)
+        cum = jnp.concatenate([zero, jnp.cumsum(g * h)])
+        slope = jnp.concatenate([g[:1], 0.5 * (g[1:] + g[:-1]), g[-1:]])
         kb = jnp.clip(jnp.floor((le - origin) / h).astype(jnp.int32), 0, n_cells - 1)
-        cum_edge = cum[kb] + g[kb] * (le - (origin + kb * h))
+        t = (le - (origin + kb * h)) / h
+        t2 = t * t
+        t3 = t2 * t
+        cum_edge = (
+            (2.0 * t3 - 3.0 * t2 + 1.0) * cum[kb]
+            + (t3 - 2.0 * t2 + t) * h * slope[kb]
+            + (3.0 * t2 - 2.0 * t3) * cum[kb + 1]
+            + (t3 - t2) * h * slope[kb + 1]
+        )
         return (cum_edge[1:] - cum_edge[:-1]) / (edges[1:] - edges[:-1])
     ell_c = origin + h * (jnp.arange(n_cells, dtype=g.dtype) + 0.5)
     return jnp.interp(jnp.log(wave_query), ell_c, g / jnp.exp(ell_c))
@@ -1358,7 +1374,7 @@ def resolved_conserving_correction(
     lsf_scale,
     n_bins,
 ) -> jnp.ndarray:
-    r"""Lattice term of the resolved conserving projection, on top of the no-instrument baseline (#3451).
+    r"""Lattice term of the resolved conserving projection over the no-instrument baseline (#3451).
 
     The total is :math:`P_0 + C` with :math:`P_0` the exact model-grid pixel means of the
     attenuated SED with no instrument, and
@@ -1410,12 +1426,10 @@ def resolved_conserving_correction(
     origin, n_cells = span
     h = _LATTICE_DLNLAMBDA
     edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    has_instr = instr_rest is not None
     instr = jnp.zeros_like(stellar_rest) if instr_rest is None else instr_rest
     scale_in, scale_out = _peak_factors(stellar_rest, instr)
     plain = _lattice_cell_means(wave_rest, stellar_rest * scale_in, origin, n_cells, edge_aa)
-    broad = _gaussian_fft_convolve(
-        plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
-    )
     lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
     if igm_rest is None:
         t_c = None
@@ -1424,8 +1438,6 @@ def resolved_conserving_correction(
         t_c = jnp.interp(lam_c, wave_rest, igm_rest)
         instr_t = instr * igm_rest * scale_in
     plain_t = plain if t_c is None else plain * t_c
-    broad_t = broad if t_c is None else broad * t_c
-    instr_cells = _lattice_cell_means(wave_rest, instr_t, origin, n_cells, edge_aa)
     lam_obs = lam_c * (1.0 + redshift)
     stellar_instr = {
         "resolution": resolution,
@@ -1435,10 +1447,22 @@ def resolved_conserving_correction(
         "wave_obs": wave_obs,
     }
     sigma_s = _lattice_instrument_sigma(stellar_instr, lam_obs)
-    sigma_i = _lattice_instrument_sigma({**stellar_instr, "sigma_lib_kms": 0.0}, lam_obs)
-    k_broad = _lattice_instrument(broad_t, lam_c, sigma_s, n_bins)
-    k_instr = _lattice_instrument(instr_cells, lam_c, sigma_i, n_bins)
-    cells = k_broad - plain_t + k_instr - instr_cells
+    if t_c is None and jnp.ndim(sigma_s) == 0:
+        # Two Gaussians in ln lambda compose exactly: one convolution of the summed width.
+        sigma_tot = jnp.sqrt(jnp.asarray(sigma_v_kms) ** 2 + sigma_s**2)
+        k_broad = _gaussian_fft_convolve(plain, (sigma_tot / _C_KM_S) / h, _lattice_pad_cells())
+    else:
+        broad = _gaussian_fft_convolve(
+            plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
+        )
+        broad_t = broad if t_c is None else broad * t_c
+        k_broad = _lattice_instrument(broad_t, lam_c, sigma_s, n_bins)
+    cells = k_broad - plain_t
+    if has_instr:
+        # The instrument-only group takes the instrument kernel without the library subtraction.
+        instr_cells = _lattice_cell_means(wave_rest, instr_t, origin, n_cells, edge_aa)
+        sigma_i = _lattice_instrument_sigma({**stellar_instr, "sigma_lib_kms": 0.0}, lam_obs)
+        cells = cells + _lattice_instrument(instr_cells, lam_c, sigma_i, n_bins) - instr_cells
     pixel = _lattice_readout(cells, origin, n_cells, wave_obs / (1.0 + redshift), True)
     return lnu_to_fnu(pixel * scale_out, dl_cm, redshift)
 

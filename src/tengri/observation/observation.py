@@ -576,7 +576,7 @@ def _project_resolved_conserving(
     cal_coeffs,
     cal_wave_range,
 ) -> jnp.ndarray:
-    """Resolved conserving kernel split: the no-instrument projection plus the lattice term (#3451).
+    """Resolved conserving kernel split: no-instrument projection plus the lattice term (#3451).
 
     The total SED (lines removed when requested, attenuated by the IGM) is projected exactly
     with no instrument; the sigma_v, IGM and instrument terms are added on the ln-lambda
@@ -614,7 +614,7 @@ def _project_resolved_conserving(
         has_lyc_edge=has_lyc_edge,
     ) + resolved_conserving_correction(
         sed_stellar,
-        sed_instr,
+        None if not _has_instrument_only_sed(state) and lines_rest is None else sed_instr,
         igm_trans,
         wave_rest,
         wave_obs,

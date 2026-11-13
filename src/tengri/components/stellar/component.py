@@ -841,6 +841,22 @@ def _with_pixel_mean_marker(families, lut):
     return families
 
 
+def _lattice_dispersion_at_pixels(row, wave, centres_rest, sigma_v_kms):
+    """Velocity-dispersion lattice correction of one rest row, read at the pixel centres (#3451).
+
+    The per-draw counterpart of the table's point correction: ``L(B_sigma f) - L(f)`` on the
+    ln-lambda lattice, with ``sigma_v_kms`` traced. A concrete non-positive dispersion adds
+    nothing, so the sigma = 0 draw keeps the unbroadened sample exactly.
+    """
+    import numpy as np
+
+    from tengri.observation.spectrum import _is_traced, lattice_correction_rest
+
+    if not _is_traced(sigma_v_kms) and float(np.max(np.asarray(sigma_v_kms))) <= 0.0:
+        return jnp.zeros(centres_rest.shape, dtype=row.dtype)
+    return lattice_correction_rest(row, wave, centres_rest, sigma_v_kms, conserving=False)
+
+
 @jax.custom_jvp
 def _mass_scale_lnu(per_msun_lsun, total_mass):
     r"""``total_mass * per_msun_lsun * L_sun`` with a float32-safe reverse pass (#1206).
@@ -4334,6 +4350,8 @@ class StellarSEDComponent:
         full-grid route adds one broadening of the summed spectrum plus one per age row
         for the per-age family.
         """
+        import numpy as np
+
         from tengri.observation.spectrum import (
             broaden_velocity_only,
             broaden_velocity_only_window,
@@ -4427,7 +4445,13 @@ class StellarSEDComponent:
             return broaden_velocity_only_window(row, wave, sigma_v, n_bins, *window)
 
         def _broadened_at_pixels(row):
-            return _at_pixels(_broaden(row))
+            if lut is None:
+                return _at_pixels(_broaden(row))
+            # Fixed redshift: the sampled unbroadened row plus the ln-lambda lattice correction,
+            # the same convention as the pre-broadened table and the exact path (#3451).
+            return _at_pixels(row) + _lattice_dispersion_at_pixels(
+                row, wave, np.asarray(lut.wave_rest_pixels), sigma_v
+            )
 
         total = jnp.einsum("ma,maw->w", joint_weights, ssp_flux_for_csp)
         per_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
