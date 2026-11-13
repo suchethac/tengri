@@ -1055,6 +1055,10 @@ def precompute_ionizing_params_table(
         fit_mask[im, chosen] = True
 
     fitted = np.zeros((n_met, n_age), dtype=bool)
+    # The ionizing slice depends on the wavelength axis alone, so it is formed once. Its
+    # reduction is empty only when the axis has no point at or below the Lyman limit; the
+    # backend refuses such a grid by name before it gets here (#3417).
+    ionizing_mask = wave_np <= HI_LIMIT
     with _single_thread_blas():
         for im in range(n_met):
             for ia in range(n_age):
@@ -1063,7 +1067,6 @@ def precompute_ionizing_params_table(
                 flux_np = np.asarray(ssp_flux[im, ia, :])
 
                 # Skip if no ionizing flux
-                ionizing_mask = wave_np <= HI_LIMIT
                 if np.max(flux_np[ionizing_mask]) <= 0:
                     continue
 

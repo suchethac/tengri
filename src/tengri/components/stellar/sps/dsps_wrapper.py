@@ -89,7 +89,10 @@ def canonical_dsps_kwargs(**kwargs):
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
-from tengri.components.stellar.sps.mass_remaining_tables import resolve_mass_remaining
+from tengri.components.stellar.sps.mass_remaining_tables import (
+    fit_imf_params,
+    resolve_mass_remaining,
+)
 from tengri.utils.interpolation import concrete_canonical_numpy
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
@@ -361,6 +364,7 @@ def load_ssp(
     download: bool = False,
     mass_remaining: str = "table",
     top_z: str = "clip",
+    imf: str | None = None,
 ) -> "SSPData":
     """Load an SSP grid by short name, walking parent dirs for ``data/``.
 
@@ -391,6 +395,9 @@ def load_ssp(
         Treatment of a top-metallicity node that lacks young massive stars,
         forwarded to :func:`load_ssp_data` (see there). ``"mist"`` is the opt-in
         that replaces the clip target with a MIST [Z/H] = +0.5 node.
+    imf : str or None, optional
+        The IMF the grid was computed under, forwarded to :func:`load_ssp_data`
+        (see there). ``None`` (default) reads the grid's own IMF statement.
 
     Returns
     -------
@@ -403,6 +410,9 @@ def load_ssp(
         If the grid exists in none of ``tengri._data_setup.data_dirs``
         and either ``download`` is ``False`` or the grid is not one the
         catalog hosts. The message names the directories searched.
+    ValueError
+        As :func:`load_ssp_data`: an empty ``imf``, or a user grid whose IMF is
+        not stated and has no surviving-mass table.
 
     Notes
     -----
@@ -441,7 +451,7 @@ def load_ssp(
         # ``reproduction/<code>/_drivers/data/`` rather than ``<root>/data/``).
         as_path = Path(name)
         if as_path.suffix == ".h5" and as_path.exists():
-            return load_ssp_data(str(as_path), mass_remaining=mass_remaining, top_z=top_z)
+            return load_ssp_data(str(as_path), mass_remaining=mass_remaining, top_z=top_z, imf=imf)
         filename = name if name.endswith(".h5") else name + ".h5"
         catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
 
@@ -450,11 +460,13 @@ def load_ssp(
     for directory in data_dirs():
         candidate = directory / filename
         if candidate.exists():
-            return load_ssp_data(str(candidate), mass_remaining=mass_remaining, top_z=top_z)
+            return load_ssp_data(
+                str(candidate), mass_remaining=mass_remaining, top_z=top_z, imf=imf
+            )
 
     if download and catalog_key is not None:
         return load_ssp_data(
-            str(download_ssp(catalog_key)), mass_remaining=mass_remaining, top_z=top_z
+            str(download_ssp(catalog_key)), mass_remaining=mass_remaining, top_z=top_z, imf=imf
         )
 
     catalog_note = (
@@ -503,6 +515,7 @@ def load_ssp_data(
     download: bool = False,
     mass_remaining: str = "table",
     top_z: str = "clip",
+    imf: str | None = None,
 ) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
@@ -533,9 +546,10 @@ def load_ssp_data(
         Source of ``ssp_mass_remaining``. ``"table"`` (default) takes the
         grid's own table or the companion table registered for its isochrones
         and IMF, and refuses a registered grid that has neither (a ``ValueError``
-        naming the missing table); an unregistered grid with no table warns and
-        uses the fit. ``"dsps_fit"`` is the explicit opt-in to DSPS's
-        metallicity-independent sigmoid fit to FSPS, for any grid.
+        naming the missing table). An unregistered grid with no table warns and
+        uses the fit when its IMF has one; when its IMF is not stated or has no
+        fit, it is refused (see ``imf``). ``"dsps_fit"`` is the explicit opt-in to
+        DSPS's metallicity-independent sigmoid fit to FSPS, for any grid.
     top_z : {"clip", "mist", "raw"}, optional
         What to do with a top-metallicity node known to lack young massive stars
         (the Z = 0.06 node of every PARSEC grid has no stars above 12 Msun for log
@@ -554,6 +568,14 @@ def load_ssp_data(
         metallicity (see :mod:`tengri.components.stellar.sps.top_z_validity` for the
         measured ratios). It is shipped for the MILES grids. ``"raw"`` keeps the file's node as
         shipped, for cross-code parity with FSPS only.
+    imf : str or None, optional
+        The initial mass function the grid was computed under, for example
+        ``"chabrier"``, ``"kroupa"`` or ``"salpeter"``. Normalized with
+        ``strip().lower()``. Takes precedence over the HDF5 ``imf`` attribute and
+        the file-name token. ``None`` (default) reads those two in turn, and a
+        grid that states neither is labeled ``"unknown"``. The label sets
+        ``SSPData.imf`` and, for a user grid with no surviving-mass table, selects
+        the DSPS fit (see Raises).
 
     Returns
     -------
@@ -574,10 +596,14 @@ def load_ssp_data(
     OSError
         If filepath exists but is not readable.
     ValueError
-        If ``mass_remaining`` is not a known mode, or the surviving-mass table
-        cannot be resolved honestly (see :func:`resolve_mass_remaining`):
-        a registered grid with no table, a metallicity-node mismatch with the
-        companion table, or ages that do not match the companion table's nodes.
+        If ``mass_remaining`` is not a known mode, if ``imf`` is an empty string,
+        or the surviving-mass table cannot be resolved honestly (see
+        :func:`resolve_mass_remaining`): a registered grid with no table, a
+        metallicity-node mismatch with the companion table, or ages that do not
+        match the companion table's nodes. A user's own grid with no
+        ``ssp_mass_remaining`` table and an IMF that is not stated or has no DSPS
+        fit is refused too: the message names ``imf=`` (state the IMF) and
+        ``mass_remaining="dsps_fit"`` (accept the Chabrier-parameter fit).
 
     Notes
     -----
@@ -699,16 +725,17 @@ def load_ssp_data(
             f"Already have grids elsewhere? Point ${TENGRI_DATA_ENV} at that directory."
         )
 
+    explicit_imf = _normalize_imf_argument(imf)
     with h5py.File(filepath, "r") as f:
         ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"], dtype=dtype)
         ssp_lgmet = _load_float(f["ssp_lgmet"], dtype=dtype)
 
-        # IMF discovery (#307): HDF5 attribute wins, else parse filename
-        # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
-        # plots can introspect the assumed IMF without grepping the
-        # filename. Resolved before ``ssp_mass_remaining`` so the
+        # IMF discovery (#307, #3285): the ``imf=`` argument wins, then the HDF5
+        # attribute, then the filename tail. Surfaced as ``ssp.imf`` so model
+        # spec / summary / gallery plots can introspect the assumed IMF without
+        # grepping the filename. Resolved before ``ssp_mass_remaining`` so the
         # surviving-mass synthesizer can pick the right DSPS calibration.
-        imf = _detect_imf(f, fp.name)
+        imf = explicit_imf if explicit_imf is not None else _detect_imf(f, fp.name)
 
         # Nebular provenance (#1014): the ``nebular_included`` HDF5
         # attribute wins, else the ``wNE`` filename convention. A wNE grid
@@ -916,6 +943,32 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
 #: IMFs that ship in the public SSP catalog. Parsed out of HDF5 metadata
 #: or filename tails. Extend when a new IMF lands in ``_data_setup._KNOWN_SSPS``.
 _KNOWN_IMFS: tuple[str, ...] = ("chabrier", "kroupa", "salpeter")
+
+
+def _normalize_imf_argument(imf: str | None) -> str | None:
+    """Normalize the ``imf=`` argument of :func:`load_ssp_data` (#3285).
+
+    Parameters
+    ----------
+    imf : str or None
+        The caller's IMF label; ``None`` means not given.
+
+    Returns
+    -------
+    str or None
+        The label stripped and lower-cased, or ``None`` when not given.
+
+    Raises
+    ------
+    ValueError
+        The label is an empty string (after stripping).
+    """
+    if imf is None:
+        return None
+    label = imf.strip().lower()
+    if not label:
+        raise ValueError("imf must name the IMF, got an empty string")
+    return label
 
 
 def _detect_imf(h5_file, filename: str) -> str:
@@ -1169,26 +1222,14 @@ def _synthesize_mass_remaining(
     """
     import warnings
 
+    _IMF_PARAMS = fit_imf_params()
     with hold_x64_preference():
-        from dsps.imf.surviving_mstar import (
-            CHABRIER_PARAMS,
-            KROUPA_PARAMS,
-            SALPETER_PARAMS,
-            VAN_DOKKUM_PARAMS,
-            surviving_mstar,
-        )
-
-    _IMF_PARAMS = {
-        "chabrier": CHABRIER_PARAMS,
-        "salpeter": SALPETER_PARAMS,
-        "kroupa": KROUPA_PARAMS,
-        "van_dokkum": VAN_DOKKUM_PARAMS,
-    }
+        from dsps.imf.surviving_mstar import surviving_mstar
 
     if isinstance(imf_tag, bytes):
         imf_tag = imf_tag.decode("utf-8", errors="replace")
     imf = (imf_tag or "unknown").strip().lower()
-    params = _IMF_PARAMS.get(imf, CHABRIER_PARAMS)
+    params = _IMF_PARAMS.get(imf, _IMF_PARAMS["chabrier"])
     if imf not in _IMF_PARAMS:
         warnings.warn(
             f"SSP file {filepath!s} has no 'ssp_mass_remaining' table and "

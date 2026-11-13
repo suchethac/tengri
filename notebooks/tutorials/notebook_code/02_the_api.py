@@ -219,17 +219,18 @@ print(f"Predict photometry (JIT): {t_phot:.0f} µs")
 
 # %%
 # vmap: Batch prediction
-batch_predict = jax.jit(jax.vmap(model.predict_photometry))
+# Galaxies are evaluated in compiled chunks of 32 to bound memory; pass
+# chunk_size=... to predict_photometry_batch to change the chunk.
 batch_times = {}
 
 for n_batch in [10, 100, 1000]:
     keys = jax.random.split(jax.random.PRNGKey(0), n_batch)
     batch_params = jax.vmap(spec.sample)(keys)
-    _ = batch_predict(batch_params)  # compile
+    _ = model.predict_photometry_batch(batch_params)  # compile
 
     t0 = time.perf_counter()
     for _ in range(50):
-        r = batch_predict(batch_params)
+        r = model.predict_photometry_batch(batch_params)
         r.block_until_ready()
     t = (time.perf_counter() - t0) / 50 * 1e3
     batch_times[n_batch] = t

@@ -102,6 +102,7 @@ from tengri.utils.physics_constants import (
 )
 from tengri.utils.scale import (
     apply_log10_scale,
+    is_float32_arithmetic,
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
     representable_exponent,
@@ -928,7 +929,7 @@ def multicolor_disc(
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
     # r_sg = 2150 * alpha^{2/9} * lambda_Edd^{4/9} * (M/1e9)^{-2/9} R_g.
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
         # numerator never materialize (float32 max 3.4e38). The RESULTS
         # (lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K) are all representable.
@@ -1053,7 +1054,7 @@ def multicolor_disc(
     # ``2 cos i`` disc radiates its angle-integrated power), and the spectrum, which is
     # homogeneous of degree one in cos i, keeps its own ``2 cos i``.
     # The bolometric normalization below is closed-form / on fixed internal nodes (#2572).
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
         # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
         # overflow float32; only their ratio (~1e-33 when normalizing a
@@ -2567,7 +2568,7 @@ def kubota_done_disc(
        https://doi.org/10.1086/311810
     """
     nu = _wavelength_to_nu(wavelength)
-    _f32 = wavelength.dtype == jnp.float32
+    _f32 = is_float32_arithmetic(wavelength)
     # Shape luminosity (temperature, zone structure, corona fraction) vs the
     # normalization luminosity (output magnitude). They coincide by default (the
     # float64 path). On float32 the AGN component passes the TRUE L_bol for the

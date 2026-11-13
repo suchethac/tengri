@@ -28,12 +28,21 @@ along with everything else, or evaluate unchunked.
 
 from __future__ import annotations
 
+import numbers
 import warnings
 
 import jax
 import jax.numpy as jnp
 
-__all__ = ["vmap_chunked"]
+__all__ = ["GALAXY_CHUNK_SIZE", "vmap_chunked"]
+
+#: Default number of galaxies per compiled chunk for every galaxy-batch path
+#: (catalog predict and fits, the SBI simulator, batched spectroscopic MAP, the
+#: batched photometry and spectrum helpers, the prior predictive). Peak memory of
+#: a chunk scales with this, and each galaxy holds one ``(n_age, n_wave)`` per-age
+#: cube, so ~8 MB per galaxy on the tutorial 02 model. Pass ``chunk_size`` to any
+#: of those entry points to override it.
+GALAXY_CHUNK_SIZE = 32
 
 # The failures that genuinely mean "this function cannot be traced": it inspects
 # concrete values, or leaks a tracer. Everything else (a typo'd key, a shape
@@ -72,6 +81,22 @@ def _leading_axis_size(batch) -> int:
     return leaves[0].shape[0]
 
 
+def _check_chunk_size(chunk_size) -> None:
+    """Accept only a positive int; ``None`` (the removed whole-batch form) gets its own message."""
+    if chunk_size is None:
+        raise ValueError(
+            "vmap_chunked: chunk_size=None (one call over the whole batch) is no longer "
+            "accepted. Pass an int: GALAXY_CHUNK_SIZE (32, the galaxy-batch default), or "
+            "chunk_size=len(batch) for one chunk."
+        )
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, numbers.Integral):
+        raise ValueError(
+            f"chunk_size must be an int, got {type(chunk_size).__name__} ({chunk_size!r})"
+        )
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+
+
 def _slice_batch(batch, start: int, stop: int):
     """One contiguous slice of every leaf along the draw axis."""
     return jax.tree_util.tree_map(lambda x: x[start:stop], batch)
@@ -89,12 +114,19 @@ class _Kernel:
 
     __slots__ = ("can_jit", "jitted")
 
-    def __init__(self, fn) -> None:
-        self.jitted = jax.jit(jax.vmap(fn))
+    def __init__(self, fn, shared: bool) -> None:
+        # ``shared``: ``fn`` takes ``(item, shared)`` and the second argument is
+        # broadcast (``in_axes=None``) and passed as a jit argument, so it is a
+        # traced input rather than a constant frozen into the compiled chunk.
+        self.jitted = jax.jit(jax.vmap(fn, in_axes=(0, None))) if shared else jax.jit(jax.vmap(fn))
         self.can_jit: bool | None = None
 
 
-def vmap_chunked(fn, chunk_size: int = 16):
+#: Sentinel: ``mapped(batch)`` uses the ``shared`` bound at construction.
+_BOUND = object()
+
+
+def vmap_chunked(fn, chunk_size: int = 16, *, shared=None):
     r"""Map ``fn`` over a batch in memory-bounded chunks.
 
     Equivalent to ``jax.vmap(fn)`` in its result, but evaluates the batch
@@ -119,10 +151,16 @@ def vmap_chunked(fn, chunk_size: int = 16):
     ----------
     fn : callable
         A function of a single parameter pytree (e.g. ``params -> dict``). It is
-        mapped over the leading axis of every leaf of the batch.
+        mapped over the leading axis of every leaf of the batch. With ``shared``
+        given it is ``(item, shared) -> result``.
     chunk_size : int, default 16
         Draws per compiled call. Larger is faster and hungrier. Values larger
-        than the batch are harmless (one chunk).
+        than the batch are harmless (one chunk). Galaxy-batch entry points use
+        :data:`GALAXY_CHUNK_SIZE` instead.
+    shared : pytree, optional
+        Arguments shared by every item (grids, templates, a wavelength grid). They
+        are broadcast to every item and passed into the compiled chunk as
+        arguments, not closed over, so they are not frozen as constants.
 
     Returns
     -------
@@ -140,7 +178,9 @@ def vmap_chunked(fn, chunk_size: int = 16):
     Raises
     ------
     ValueError
-        If ``chunk_size`` is not positive, or the batch has no leaves.
+        If ``chunk_size`` is ``None`` (use :data:`GALAXY_CHUNK_SIZE` or
+        ``len(batch)``), is not an int, or is not positive; or the batch has no
+        leaves.
     Exception
         Whatever ``fn`` raises, if the failure is not a tracing failure; a real
         bug is never swallowed by the jittability probe.
@@ -168,12 +208,19 @@ def vmap_chunked(fn, chunk_size: int = 16):
     >>> masses["stellar_mass"].shape  # doctest: +SKIP
     (4000,)
     """
-    if chunk_size < 1:
-        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    _check_chunk_size(chunk_size)
 
-    kernel = _Kernel(fn)
+    has_shared = shared is not None
+    shared_bound = shared
+    kernel = _Kernel(fn, has_shared)
 
-    def _eager(batch, n):
+    def _call(x, sh):
+        return fn(x, sh) if has_shared else fn(x)
+
+    def _run_chunk(chunk, sh):
+        return kernel.jitted(chunk, sh) if has_shared else kernel.jitted(chunk)
+
+    def _eager(batch, n, sh):
         """Per-draw Python loop: the fallback for non-traceable ``fn``.
 
         ``jax.vmap`` *removes* the mapped axis before calling ``fn``, so ``fn``
@@ -183,15 +230,21 @@ def vmap_chunked(fn, chunk_size: int = 16):
         a jittable ``fn`` (everything broadcasts) and fatal for exactly the
         concrete-inspecting functions this fallback exists to serve.
         """
-        parts = [fn(jax.tree_util.tree_map(lambda x, i=i: x[i], batch)) for i in range(n)]
+        parts = [_call(jax.tree_util.tree_map(lambda x, i=i: x[i], batch), sh) for i in range(n)]
         return jax.tree_util.tree_map(lambda *xs: jnp.stack(xs, axis=0), *parts)
 
-    def mapped(batch):
+    def mapped(batch, *, shared=_BOUND):
+        """Map over ``batch``; ``shared`` overrides the construction-time value.
+
+        Passing ``shared`` per call lets one compiled kernel serve every call with
+        the same shapes, for example the same model with different grids.
+        """
+        sh = shared_bound if shared is _BOUND else shared
         n = _leading_axis_size(batch)
 
         if kernel.can_jit is None:
             try:
-                kernel.jitted(_slice_batch(batch, 0, min(chunk_size, n)))
+                _run_chunk(_slice_batch(batch, 0, min(chunk_size, n)), sh)
                 kernel.can_jit = True
             except _NOT_TRACEABLE as exc:
                 kernel.can_jit = False
@@ -206,10 +259,10 @@ def vmap_chunked(fn, chunk_size: int = 16):
                 )
 
         if not kernel.can_jit:
-            return _eager(batch, n)
+            return _eager(batch, n, sh)
 
         parts = [
-            kernel.jitted(_slice_batch(batch, s, min(s + chunk_size, n)))
+            _run_chunk(_slice_batch(batch, s, min(s + chunk_size, n)), sh)
             for s in range(0, n, chunk_size)
         ]
         if len(parts) == 1:

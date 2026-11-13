@@ -117,6 +117,7 @@ from tengri.parameters.translate import (
     check_unknown_params,
     get_internal_params,
 )
+from tengri.utils.batching import GALAXY_CHUNK_SIZE
 from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid import (
     grid_spacing,
@@ -7312,7 +7313,18 @@ class SEDModel:
         ``_nebular_grid_table`` and drops the chain memo). A source-level
         guard test enforces that no other method needs to call this: see
         :meth:`compile_signature`'s Notes.
+
+        The structural kernel filed under the outgoing signature is retired
+        with it. That kernel reads the model that built it at trace time, so
+        left in place it would hand this model's new structure to any other
+        model that still has the old signature.
         """
+        # Absent during construction: the first call precedes the memo's own assignment.
+        outgoing = vars(self).get("_signature_memo")
+        if outgoing is not None:
+            from tengri.inference._model_cache import _default_owner
+
+            _default_owner.retire_structural_kernel(outgoing)
         self._signature_memo = None
 
     def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
@@ -13119,8 +13131,10 @@ class SEDModel:
 
     # ── Batch operations ──────────────────────────────────────────────
 
-    def predict_photometry_batch(self, params_batch, *, ssp_data=None, template_data=None):
-        """Compute photometry for a batch of parameter sets via jax.vmap.
+    def predict_photometry_batch(
+        self, params_batch, *, ssp_data=None, template_data=None, chunk_size=GALAXY_CHUNK_SIZE
+    ):
+        """Compute photometry for a batch of parameter sets, in chunks of galaxies.
 
         **Use this method for** posterior chains / mock catalogs (batched
         forward pass). **For interactive single-galaxy use**, access
@@ -13130,6 +13144,9 @@ class SEDModel:
         ----------
         params_batch : dict of arrays
             Each value has shape (N, ...) with leading batch dimension.
+        chunk_size : int, keyword-only, default 32
+            Galaxies per compiled chunk [galaxies]. Peak memory scales with the
+            chunk, about ``n_age * n_wave * 8`` bytes per galaxy [bytes].
 
         Returns
         -------
@@ -13153,9 +13170,17 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
-        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
+        return _fn(
+            self,
+            params_batch,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            chunk_size=chunk_size,
+        )
 
-    def predict_spectrum_batch(self, params_batch, *, ssp_data=None, template_data=None):
+    def predict_spectrum_batch(
+        self, params_batch, *, ssp_data=None, template_data=None, chunk_size=GALAXY_CHUNK_SIZE
+    ):
         """Compute spectra for a batch of parameter sets via jax.vmap.
 
         **Use this method for** batched spectra over posterior chains.
@@ -13189,7 +13214,13 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
-        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
+        return _fn(
+            self,
+            params_batch,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            chunk_size=chunk_size,
+        )
 
     @classmethod
     def from_config(
@@ -13769,7 +13800,9 @@ class SEDModel:
             return ""
         return json_str
 
-    def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
+    def prior_predictive(
+        self, n: int = 500, seed: int = 42, chunk_size: int = GALAXY_CHUNK_SIZE
+    ) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.
 
         Parameters
@@ -13796,7 +13829,7 @@ class SEDModel:
         """
         from tengri.forward.convenience import prior_predictive as _fn
 
-        return _fn(self, n=n, seed=seed)
+        return _fn(self, n=n, seed=seed, chunk_size=chunk_size)
 
     def fit(
         self,
