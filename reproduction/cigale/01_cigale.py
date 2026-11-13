@@ -1884,7 +1884,7 @@ _BC03_CHAIN = ("bc03", dict(imf=1, metallicity=0.02, separation_age=10))
 _DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
 
 
-def _knob_model(emission_type, ssp_data=None, **emkw):
+def _knob_model(emission_type, **emkw):
     """tengri fiducial twin of the matched pcigale chain (1e11 M_sun).
 
     The attenuation is the notebook's fiducial: a **single** screen
@@ -1897,7 +1897,7 @@ def _knob_model(emission_type, ssp_data=None, **emkw):
     missing clip would show up as an IR offset with no dust-side cause.
     """
     return SEDModel.build(
-        ssp_data=ssp if ssp_data is None else ssp_data,
+        ssp_data=ssp,
         met=MET_FIDUCIAL,
         sfh={
             "type": "delayed",
@@ -2458,15 +2458,11 @@ for _name, _cases in (
 # dust emission, as in §6c. The `graybody` medians over 8–1000 μm are 1.0108×, 1.0112× and
 # 1.0114× at 25, 35 and 50 K, the same 1.1 % as the §6 anchor, with a worst filter of 1.015×,
 # 1.015× and 1.016× and no band outside 5 %. The optically thin `mbb` has 8–1000 μm medians of
-# 1.0507×, 1.0466× and 0.789×, and over 100–1000 μm 0.532×, 0.377× and 0.245×.
+# 1.0465×, 1.0466× and 0.789×, and over 100–1000 μm 0.532×, 0.377× and 0.245×.
 
 # %%
-# The BC03 grid's oldest template is 13.70 Gyr and the universe is 13.79 Gyr old at z = 0. The
-# new cells use the same grid with that last template labelled 13.80 Gyr, so the grid reaches
-# the age of the universe; the galaxies here are 5 Gyr old, so no star sits in that bin.
-_lg_age_to_universe = np.array(ssp.ssp_lg_age_gyr, copy=True)
-_lg_age_to_universe[-1] = np.log10(13.8)
-_SSP_TO_UNIVERSE = ssp._replace(ssp_lg_age_gyr=_lg_age_to_universe)
+from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
+
 _T_MBB = (25.0, 35.0, 50.0)
 _MBB_BETA = 1.5
 _MBB_TENGRI = {
@@ -2477,15 +2473,17 @@ _MBB_TENGRI = {
     ),
     "mbb": dict(T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(_MBB_BETA)),
 }
-_m_mbb = {_k: _knob_model(_k, ssp_data=_SSP_TO_UNIVERSE, **_kw) for _k, _kw in _MBB_TENGRI.items()}
+with warnings.catch_warnings():
+    # The grid's oldest template (13.70 Gyr) is younger than the universe at z = 0, which sets
+    # the warning; these galaxies are 5 Gyr old, so no star sits beyond the oldest template.
+    warnings.simplefilter("ignore", SFHBeyondOldestTemplateWarning)
+    _m_mbb = {_k: _knob_model(_k, **_kw) for _k, _kw in _MBB_TENGRI.items()}
 _p_mbb = {_k: dict(_m.spec.sample(jax.random.PRNGKey(0))) for _k, _m in _m_mbb.items()}
 # Dust emission alone: each code's total minus its own twin without dust emission (as §6c).
 _w_twin_mbb_c, _L_twin_mbb_c = C.to_lnu(
     C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN])
 )
-_m_twin_mbb = _knob_model("none", ssp_data=_SSP_TO_UNIVERSE)
-_o_twin_mbb = _m_twin_mbb.predict_rest_sed(dict(_m_twin_mbb.spec.sample(jax.random.PRNGKey(0))))
-_w_twin_mbb_t, _L_twin_mbb_t = np.asarray(_o_twin_mbb.wavelength), np.asarray(_o_twin_mbb.sed)
+_w_twin_mbb_t, _L_twin_mbb_t = _w_twin_t, _L_twin_t  # the "none" twin built in §6c
 
 fig = plt.figure(figsize=(8, 5.6))
 gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.08)
@@ -4379,7 +4377,8 @@ print(f"  {'EBV':>5s} {'NIR/V shape':>12s} {'V level':>8s} {'NIR level':>10s} {'
 for _e, _sh, _lv, _ln, _bl, _chk in _rows_9g:
     print(f"  {_e:5.2f} {_sh:12.3f} {_lv:8.3f} {_ln:10.3f} {_bl:11.3f}")
     assert abs(_chk - 1.0) < 2e-2, _chk  # pcigale's own sightline luminosity closes
-# Regression bounds around the printed values (±0.03 on the shape, ±0.05 on the bolometric ratio).
+# Regression pins around the printed values (±0.03 on the shape, ±0.05 on the bolometric
+# ratio), to catch a change in either code; they are not a physics tolerance.
 for _row_9g, _shape, _bol in zip(_rows_9g, (0.960, 1.005), (1.062, 0.921)):
     assert abs(_row_9g[1] - _shape) < 0.03 and abs(_row_9g[4] - _bol) < 0.05, _row_9g
 
@@ -4728,6 +4727,13 @@ def _cigale_lopez24(alpha_irx):
 
 
 def _tengri_lopez24(alpha_irx, with_agn):
+    with warnings.catch_warnings():
+        # Same as §6d: the 5 Gyr host has no star beyond the grid's oldest template.
+        warnings.simplefilter("ignore", SFHBeyondOldestTemplateWarning)
+        return _build_tengri_lopez24(alpha_irx, with_agn)
+
+
+def _build_tengri_lopez24(alpha_irx, with_agn):
     agn = (
         {
             "type": "composable",
@@ -4742,7 +4748,7 @@ def _tengri_lopez24(alpha_irx, with_agn):
         else {"type": "none"}
     )
     return SEDModel.build(
-        ssp_data=_SSP_TO_UNIVERSE,
+        ssp_data=ssp,
         met=MET_FIDUCIAL,
         sfh={
             "type": "delayed",
@@ -5674,7 +5680,7 @@ plt.show()
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
 # | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0168× intrinsic and 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×); §5b band medians 0.997–1.000×; single-point maxima of 75–942 % over 0.1–1 μm sit on emission-line wings (line profile and grid sampling), not on the continuum |
 # | 6 | dust IR | 10–100 μm energy-weighted 1.013×; `L_absorbed` 1.0114× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0111–1.0143×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0121×, 1.0118×, 1.0118× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
-# | 6d | dust IR, `mbb` | dust emission alone, 8–1000 μm medians 1.0108×, 1.0112×, 1.0114× at T = 25, 35, 50 K with `graybody` (worst filter 1.015×, 1.015×, 1.016×, none outside 5 %); tengri's optically thin `mbb` 1.0507×, 1.0466×, 0.789× and, over 100–1000 μm, 0.532×, 0.377×, 0.245× |
+# | 6d | dust IR, `mbb` | dust emission alone, 8–1000 μm medians 1.0108×, 1.0112×, 1.0114× at T = 25, 35, 50 K with `graybody` (worst filter 1.015×, 1.015×, 1.016×, none outside 5 %); tengri's optically thin `mbb` 1.0465×, 1.0466×, 0.789× and, over 100–1000 μm, 0.532×, 0.377×, 0.245× |
 # | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0125× (0.3–1 μm), 1.0081× (3–8 μm), 1.0127× (10–100 μm), 1.0118× (100–1000 μm) |
 # | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
 # | 9 | AGN, SKIRTOR | disc 1.0101×, torus 1.0113×, polar dust 1.0120× (§9); 1.0076×, 1.0150×, 0.9998× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
