@@ -119,7 +119,7 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
             raise ValueError(f"Unknown data_type: {data_type}")
 
     # Current parameter values as flat array
-    flat = jnp.array([float(params[n]) for n in param_names])
+    flat = jnp.stack([jnp.asarray(params[n], dtype=float) for n in param_names])
 
     # FIM = J^T N^{-1} J with N^{-1} = diag(1/sigma^2), computed as (J/sigma)^T
     # (J/sigma): algebraically identical, and the only spelling that survives

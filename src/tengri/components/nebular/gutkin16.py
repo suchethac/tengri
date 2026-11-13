@@ -87,6 +87,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
 )
 from tengri.components.nebular.cloudy_cb19 import CB19Backend
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import BackendError, ParameterError
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import library_lookup
@@ -400,6 +401,7 @@ class Gutkin16Backend(NebularBackendDefaults):
         Shares the chain with the Cloudy CB19 backend (log-domain Q_H, peak
         normalization, sanitization, age axis, young-age cut).
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="gutkin16 (Gutkin16Backend)")
         CB19Backend._precompute_qh(self, ssp_data)
 
     def _get_log_qh_at(self, log_z, log_age_yr):
