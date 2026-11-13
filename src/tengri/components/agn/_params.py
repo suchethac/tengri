@@ -1018,6 +1018,13 @@ DEFAULT_AGN_TAU_SKIRTOR = declared_default(PARAMS, "agn_tau_skirtor")
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
 DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
 
+#: Declared fallbacks read by the composable kwargs assembly (#2297). ``agn_polar_oa``'s
+#: declared default is the 0 sentinel "follow the torus's own opening angle".
+DEFAULT_AGN_TAU_TORUS = declared_default(PARAMS, "agn_tau_torus")
+DEFAULT_AGN_T_HOT = declared_default(PARAMS, "agn_T_hot")
+DEFAULT_AGN_FRAC_HOT = declared_default(PARAMS, "agn_frac_hot")
+DEFAULT_AGN_POLAR_OA = declared_default(PARAMS, "agn_polar_oa")
+
 #: Grid-backed AGN priors whose declared bound must equal the vendored grid's
 #: own axis extent exactly (Task 1, M-A: "declared priors/defaults disagree
 #: with the data they gate"). Read by ``tools/check_param_grid_extent.py``,
