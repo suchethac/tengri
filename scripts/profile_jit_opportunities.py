@@ -212,7 +212,7 @@ def profile_model_components(model, param_dict):
     params_no_dust_em = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -255,7 +255,7 @@ def profile_model_components(model, param_dict):
     params_no_neb = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -278,7 +278,7 @@ def profile_model_components(model, param_dict):
     params_no_igm = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),
@@ -406,7 +406,7 @@ def main():
     params = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0855, 1.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
         sfh_tsnorm_trunc=Uniform(1.0, 10.0),

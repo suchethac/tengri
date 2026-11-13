@@ -17,7 +17,6 @@ Run from the repo root:
 import os
 import sys
 import time
-import traceback
 
 # ---------------------------------------------------------------------------
 # Path setup (same as quickstart)
@@ -68,7 +67,10 @@ print()
 
 
 def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
-    """Run MAP + vi for a given SFH spec. Returns True on success, False on NaN."""
+    """Run MAP + vi for a given SFH spec. Returns True on success.
+
+    A failure (for example a NaN in the vi fit) propagates with its traceback.
+    """
     print(f"{'=' * 60}")
     print(f"Testing SFH: {sfh_name}  (D = {spec.n_free} free params)")
     print(f"  Free params: {spec.free_params}")
@@ -76,7 +78,6 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
 
     try:
         model = SEDModel(spec, ssp_data, observation=obs)
-        model.precompute_spectroscopy(WAVE_OBS)
 
         # Generate mock
         key = jax.random.PRNGKey(42)
@@ -108,10 +109,6 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
         print(f"  vi done: {t_vi:.1f}s  *** SUCCESS ***")
         return True
 
-    except Exception as e:
-        print(f"  *** FAILED: {type(e).__name__}: {e} ***")
-        traceback.print_exc()
-        return False
     finally:
         print()
 
@@ -120,7 +117,7 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
 # Test 1: exp (single exponential — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_exp = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
+    sfh_exp_log_total_mass=Uniform(7.0, 12.5),
     sfh_exp_tau_gyr=Uniform(0.5, 8.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
@@ -145,7 +142,7 @@ ok_exp = run_sfh_test("exp (single exponential)", spec_exp, true_exp)
 # Test 2: dpl (double power-law — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_dpl = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
     sfh_dpl_alpha=Uniform(0.5, 5.0),
     sfh_dpl_beta=Uniform(0.5, 5.0),
     sfh_dpl_tau_gyr=Uniform(0.1, 5.0),
