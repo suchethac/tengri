@@ -753,6 +753,17 @@ class CatalogProperties(ReadOnlyPropertyMapping):
         )
 
 
+_ALL_ABSENT_REASON = (
+    "catalog row {i}: every band is absent (missing='mask' left no present flux), "
+    "so there is nothing to fit. Drop the row or give it at least one band."
+)
+
+
+def _all_absent(presence) -> bool:
+    """True when a galaxy's presence mask marks every band absent."""
+    return presence is not None and not np.any(np.asarray(presence) != 0)
+
+
 class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
@@ -1607,6 +1618,12 @@ class _CatalogFitterOriginal:
                 )
         return n_data
 
+    def _refuse_all_absent_rows(self):
+        """Raise for an all-absent galaxy: a batched engine cannot record a refusal."""
+        rows = [i for i, g in enumerate(self.galaxies) if _all_absent(g.get("presence"))]
+        if rows:
+            raise ValueError("; ".join(_ALL_ABSENT_REASON.format(i=i) for i in rows))
+
     def _run_native(
         self,
         method_tag,
@@ -1626,6 +1643,7 @@ class _CatalogFitterOriginal:
     ):
         from tengri.inference.posterior import Posterior
 
+        self._refuse_all_absent_rows()
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -1919,6 +1937,7 @@ class _CatalogFitterOriginal:
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
         """
+        self._refuse_all_absent_rows()
         from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
@@ -2606,6 +2625,14 @@ class _CatalogFitterOriginal:
             override = {"redshift": galaxy["redshift"]} if "redshift" in galaxy else None
             # Per-galaxy presence mask for heterogeneous catalogs (missing="mask" in ingestion)
             presence = galaxy.get("presence", None)
+            if _all_absent(presence):
+                # Refused, not fitted: a fit of no present band returns NaN logM
+                # with no error (#3405). Same routing as a DeadFitError below.
+                why = _ALL_ABSENT_REASON.format(i=i)
+                if not record_refusals:
+                    raise ValueError(why)
+                refusals[i] = why
+                continue
             fitter_i = Fitter(
                 self.model,
                 galaxy["flux_obs"],

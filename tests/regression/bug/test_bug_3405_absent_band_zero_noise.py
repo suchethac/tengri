@@ -239,3 +239,178 @@ class TestCatalogAbsentBandEndToEnd:
         for value in galaxy0.params.values():
             assert np.all(np.isfinite(np.asarray(value)))
         assert galaxy0.diagnostics["map_converged"] is True
+
+
+def _ingest_phot(names):
+    from tengri.observation import Photometry
+
+    return Photometry.from_names(names)
+
+
+class TestNonFiniteFluxIsAbsent:
+    """A non-finite flux under ``missing='mask'`` is an absent band, exactly like NaN."""
+
+    @pytest.mark.parametrize("bad", [np.inf, -np.inf])
+    def test_non_finite_flux_and_error_ingest_like_nan(self, bad):
+        from tengri.inference.catalog_ingest import ingest_catalog
+
+        names = ["sdss_g", "sdss_r"]
+
+        def table(flux_bad, err_bad):
+            return {
+                "sdss_g": np.array([1.0, 2.0]),
+                "sdss_g_err": np.array([0.1, 0.1]),
+                "sdss_r": np.array([3.0, flux_bad]),
+                "sdss_r_err": np.array([0.2, err_bad]),
+            }
+
+        ca_nan = ingest_catalog(
+            table(np.nan, np.nan),
+            photometry=_ingest_phot(names),
+            flux_unit="cgs_fnu",
+            missing="mask",
+        )
+        ca_bad = ingest_catalog(
+            table(bad, bad),
+            photometry=_ingest_phot(names),
+            flux_unit="cgs_fnu",
+            missing="mask",
+        )
+
+        assert not bool(ca_bad.presence[1, 1])
+        np.testing.assert_array_equal(ca_bad.presence, ca_nan.presence)
+        np.testing.assert_array_equal(ca_bad.flux, ca_nan.flux)
+        np.testing.assert_array_equal(ca_bad.noise, ca_nan.noise)
+        assert np.all(np.isfinite(ca_bad.flux)) and np.all(np.isfinite(ca_bad.noise))
+
+    @pytest.mark.parametrize("bad", [np.inf, -np.inf])
+    def test_non_finite_flux_is_refused_under_error_policy(self, bad):
+        from tengri.inference.catalog_ingest import ingest_catalog
+
+        t = {
+            "sdss_g": np.array([1.0, 2.0]),
+            "sdss_g_err": np.array([0.1, 0.1]),
+            "sdss_r": np.array([3.0, bad]),
+            "sdss_r_err": np.array([0.2, 0.2]),
+        }
+        with pytest.raises(ValueError, match=r"missing=.mask."):
+            ingest_catalog(t, photometry=_ingest_phot(["sdss_g", "sdss_r"]), flux_unit="cgs_fnu")
+
+    def test_finite_flux_with_infinite_error_is_still_an_error(self):
+        from tengri.inference.catalog_ingest import ingest_catalog
+
+        t = {
+            "sdss_g": np.array([1.0, 2.0]),
+            "sdss_g_err": np.array([0.1, 0.1]),
+            "sdss_r": np.array([3.0, 4.0]),
+            "sdss_r_err": np.array([0.2, np.inf]),
+        }
+        with pytest.raises(ValueError, match="NaN error"):
+            ingest_catalog(
+                t,
+                photometry=_ingest_phot(["sdss_g", "sdss_r"]),
+                flux_unit="cgs_fnu",
+                missing="mask",
+            )
+
+
+_WNE_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"]
+
+
+def _catalog_model(ssp):
+    import warnings
+
+    from tengri import DEFAULT, Fixed, ForwardModel, Observation, Photometry, SEDModel, Uniform
+    from tengri.forward.sed_model import WavePrecomp
+
+    obs = Observation(photometry=Photometry.from_names(_WNE_NAMES))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sed = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": "dpl",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": Fixed(10.0),
+                "log_total_mass": Uniform(8.0, 12.0),
+            },
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "tau_v": Fixed(0.3),
+            },
+            redshift=Fixed(0.1),
+            approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),
+        )
+        model = ForwardModel.build(sed=sed, observation=obs)
+    ref = np.asarray(sed.predict_photometry({"sfh_dpl_log_total_mass": 10.0}))
+    return model, ref, 0.02 * ref
+
+
+def _two_galaxy_table(ref, noise, *, row0_flux, row0_err):
+    """Galaxy 0 takes ``row0_flux``/``row0_err``; galaxy 1 is the clean reference."""
+    table = {"z": np.array([0.1, 0.1])}
+    for j, name in enumerate(_WNE_NAMES):
+        table[name] = np.array([row0_flux[j], ref[j]], dtype=float)
+        table[f"{name}_err"] = np.array([row0_err[j], noise[j]], dtype=float)
+    return table
+
+
+class TestCatalogAllAbsentGalaxy:
+    """A galaxy with every band absent is refused, never fitted to a NaN logM."""
+
+    def test_all_absent_galaxy_is_refused_and_other_galaxy_fits(self, ssp_data_wne):
+        from tengri.inference.catalog import Catalog
+
+        model, ref, noise = _catalog_model(ssp_data_wne)
+        nan6 = np.full(len(_WNE_NAMES), np.nan)
+        table = _two_galaxy_table(ref, noise, row0_flux=nan6, row0_err=nan6)
+        cat = Catalog(model, table, flux_unit="cgs_fnu", missing="mask", redshift_col="z")
+
+        post = cat.fit(key=jax.random.PRNGKey(0), method="map", record_refusals=True)
+
+        assert set(post.refusals) == {0}
+        assert "absent" in post.refusals[0]
+        assert len(post.posteriors) == 1
+        for value in post.posteriors[0].params.values():
+            assert np.all(np.isfinite(np.asarray(value)))
+
+    def test_all_absent_galaxy_raises_by_default(self, ssp_data_wne):
+        from tengri.inference.catalog import Catalog
+
+        model, ref, noise = _catalog_model(ssp_data_wne)
+        nan6 = np.full(len(_WNE_NAMES), np.nan)
+        table = _two_galaxy_table(ref, noise, row0_flux=nan6, row0_err=nan6)
+        cat = Catalog(model, table, flux_unit="cgs_fnu", missing="mask", redshift_col="z")
+
+        with pytest.raises(ValueError, match="absent"):
+            cat.fit(key=jax.random.PRNGKey(0), method="map")
+
+
+class TestCatalogInfiniteFluxMapMatchesNaN:
+    """+inf flux in one band fits to the same MAP as NaN in that band."""
+
+    def test_inf_flux_map_equals_nan_flux_map(self, ssp_data_wne):
+        from tengri.inference.catalog import Catalog
+
+        model, ref, noise = _catalog_model(ssp_data_wne)
+        absent = _WNE_NAMES.index("sdss_i")
+
+        def fit(bad):
+            flux0 = ref.astype(float).copy()
+            err0 = noise.astype(float).copy()
+            flux0[absent] = bad
+            err0[absent] = bad
+            table = _two_galaxy_table(ref, noise, row0_flux=flux0, row0_err=err0)
+            cat = Catalog(model, table, flux_unit="cgs_fnu", missing="mask", redshift_col="z")
+            return cat.fit(key=jax.random.PRNGKey(0), method="map")
+
+        post_nan = fit(np.nan)
+        post_inf = fit(np.inf)
+
+        for name, value in post_nan[0].params.items():
+            assert np.all(np.isfinite(np.asarray(value)))
+            np.testing.assert_allclose(
+                np.asarray(post_inf[0].params[name]), np.asarray(value), rtol=1e-10
+            )
