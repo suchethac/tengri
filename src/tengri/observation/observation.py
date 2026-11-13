@@ -463,6 +463,179 @@ def _project_stellar_on_lattice(
     return flux
 
 
+def _project_stellar_with_instrument(
+    state,
+    sed_rest: jnp.ndarray,
+    igm_trans: jnp.ndarray | None,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift,
+    dl_cm,
+    *,
+    resolution,
+    sigma_lib_kms,
+    sigma_v_kms,
+    lsf_scale,
+    n_bins: int,
+    conserving: bool,
+    lsf_pad_pixels: int | None,
+    nebular_lines: bool,
+    window_z,
+    z_window,
+    lattice_window,
+    cal_coeffs,
+    cal_wave_range,
+    has_lyc_edge: bool,
+) -> jnp.ndarray:
+    """Kernel split with an instrument resolution: the sigma = 0 projection plus the sigma_v term.
+
+    The baseline is the existing split at ``sigma_v = 0``. The stellar piece's sigma_v
+    correction is added in the baseline's own instrument order (#3451), so the sum equals the
+    old projection exactly at sigma_v = 0 and moves only through the correction otherwise.
+    """
+    from tengri.observation.calibration import apply_calibration
+    from tengri.observation.spectrum import (
+        _concrete_z_range,
+        instrument_sigma_v_term,
+        lattice_span,
+    )
+
+    baseline = project_spectrum_kernel_split(
+        state,
+        sed_rest,
+        igm_trans,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        resolution=resolution,
+        sigma_lib_kms=sigma_lib_kms,
+        sigma_v_kms=0.0,
+        lsf_scale=lsf_scale,
+        n_bins=n_bins,
+        conserving=conserving,
+        lsf_pad_pixels=lsf_pad_pixels,
+        window_z=window_z,
+        nebular_lines=nebular_lines,
+        z_window=z_window,
+    )
+    if igm_trans is None:
+        sed_stellar, _ = _split_stellar_and_instrument_only_sed(state, sed_rest, None)
+        transmit = None
+    else:
+        sed_stellar, _ = _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
+        transmit = igm_trans
+    span = (
+        lattice_window
+        if lattice_window is not None
+        else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+    )
+    flux = baseline + instrument_sigma_v_term(
+        sed_stellar,
+        transmit,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        sigma_v_kms=sigma_v_kms,
+        span=span,
+        conserving=conserving,
+        has_lyc_edge=has_lyc_edge,
+        resolution=resolution,
+        sigma_lib_kms=sigma_lib_kms,
+        lsf_scale=lsf_scale,
+        n_bins=n_bins,
+        lsf_pad_pixels=lsf_pad_pixels,
+    )
+    if cal_coeffs is not None:
+        wmin, wmax = (
+            cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+        )
+        flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
+    return flux
+
+
+def _project_resolved_conserving(
+    state,
+    sed_rest: jnp.ndarray,
+    igm_trans: jnp.ndarray | None,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift,
+    dl_cm,
+    *,
+    resolution,
+    sigma_lib_kms,
+    sigma_v_kms,
+    lsf_scale,
+    n_bins: int,
+    lines_rest: jnp.ndarray | None,
+    has_lyc_edge: bool,
+    z_window,
+    lattice_window,
+    cal_coeffs,
+    cal_wave_range,
+) -> jnp.ndarray:
+    """Resolved conserving kernel split: the no-instrument projection plus the lattice term (#3451).
+
+    The total SED (lines removed when requested, attenuated by the IGM) is projected exactly
+    with no instrument; the sigma_v, IGM and instrument terms are added on the ln-lambda
+    lattice by :func:`~tengri.observation.spectrum.resolved_conserving_correction`.
+    """
+    from tengri.observation.calibration import apply_calibration
+    from tengri.observation.spectrum import (
+        _concrete_z_range,
+        lattice_span,
+        project_spectrum,
+        resolved_conserving_correction,
+    )
+
+    if igm_trans is None:
+        sed_stellar, sed_instr = _split_stellar_and_instrument_only_sed(state, sed_rest, None)
+        total = sed_rest
+    else:
+        sed_stellar, sed_instr = _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
+        total = sed_rest * igm_trans
+    if lines_rest is not None:
+        sed_instr = sed_instr - lines_rest
+        total = total - (lines_rest if igm_trans is None else lines_rest * igm_trans)
+    span = (
+        lattice_window
+        if lattice_window is not None
+        else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+    )
+    flux = project_spectrum(
+        total,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        conserving=True,
+        has_lyc_edge=has_lyc_edge,
+    ) + resolved_conserving_correction(
+        sed_stellar,
+        sed_instr,
+        igm_trans,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        sigma_v_kms=sigma_v_kms,
+        span=span,
+        has_lyc_edge=has_lyc_edge,
+        resolution=resolution,
+        sigma_lib_kms=sigma_lib_kms,
+        lsf_scale=lsf_scale,
+        n_bins=n_bins,
+    )
+    if cal_coeffs is not None:
+        wmin, wmax = (
+            cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+        )
+        flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
+    return flux
+
+
 def project_spectrum_kernel_split(
     state,
     sed_rest: jnp.ndarray,
@@ -714,6 +887,7 @@ def project_spectrum_kernel_split(
     """
     from tengri.observation.spectrum import (
         _serves_on_lattice,
+        _serves_with_instrument,
         broaden_velocity_only,
         broaden_velocity_only_window,
         compute_spectrum,
@@ -730,6 +904,55 @@ def project_spectrum_kernel_split(
     # Rest-frame line light to drop from the instrument-only group (None keeps the lines).
     lines_rest = None if nebular_lines else _nebular_lines_rest_sed(state)
 
+    if conserving and resolution is not None and resolution_matrix is None:
+        if z_window is None and window_z is not None:
+            z_window = (float(window_z), float(window_z))
+        return _project_resolved_conserving(
+            state,
+            sed_rest,
+            igm_trans,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=sigma_v_kms,
+            lsf_scale=lsf_scale,
+            n_bins=n_bins,
+            lines_rest=lines_rest,
+            has_lyc_edge=has_lyc_edge,
+            z_window=z_window,
+            lattice_window=lattice_window,
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=cal_wave_range,
+        )
+    if _serves_with_instrument(resolution, resolution_matrix, sigma_v_kms) and not conserving:
+        if z_window is None and window_z is not None:
+            z_window = (float(window_z), float(window_z))
+        return _project_stellar_with_instrument(
+            state,
+            sed_rest,
+            igm_trans,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=sigma_v_kms,
+            lsf_scale=lsf_scale,
+            n_bins=n_bins,
+            conserving=conserving,
+            lsf_pad_pixels=lsf_pad_pixels,
+            nebular_lines=nebular_lines,
+            window_z=window_z,
+            z_window=z_window,
+            lattice_window=lattice_window,
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=cal_wave_range,
+            has_lyc_edge=has_lyc_edge,
+        )
     if _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms):
         # No instrument kernel: sigma_v and the IGM act on the ln-lambda lattice (#3436, #3451).
         if z_window is None and window_z is not None:

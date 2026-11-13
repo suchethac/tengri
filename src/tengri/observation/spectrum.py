@@ -1181,6 +1181,7 @@ def sigma_v_lattice_correction(
     span: tuple[float, int],
     conserving: bool,
     has_lyc_edge: bool = False,
+    instrument: dict | None = None,
 ) -> jnp.ndarray:
     r"""Broadening correction on the ln-lambda lattice: the sigma_v effect on the stellar group (#3451).
 
@@ -1229,16 +1230,54 @@ def sigma_v_lattice_correction(
     broad = _gaussian_fft_convolve(
         plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
     )
+    lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
     if igm_rest is not None:
-        lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
         t_c = jnp.interp(lam_c, wave_rest, igm_rest)
         plain = plain * t_c
         broad = broad * t_c
-    pixel_sed = _lattice_readout(broad - plain, origin, n_cells, wave_obs / (1.0 + redshift), conserving)
+    if instrument is not None and conserving:
+        # The instrument stage follows the IGM and precedes the pixel mean (#3436, #3451).
+        sigma_lsf = _lattice_instrument_sigma(instrument, lam_c * (1.0 + redshift))
+        plain = _lattice_instrument(plain, lam_c, sigma_lsf, instrument["n_bins"])
+        broad = _lattice_instrument(broad, lam_c, sigma_lsf, instrument["n_bins"])
+    pixel_sed = _lattice_readout(
+        broad - plain, origin, n_cells, wave_obs / (1.0 + redshift), conserving
+    )
     return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
 
 
-def lattice_correction_rest(sed_rest, wave_rest, centres_rest, sigma_v_kms, *, conserving=True):
+def _lattice_instrument_sigma(instrument, lam_obs_c):
+    """Instrument-stage sigma_eff [km/s] at the lattice centres, as :func:`apply_lsf` forms it.
+
+    sigma_eff = sqrt(max(sigma_inst^2 - sigma_lib^2, 0)) with sigma_inst from the resolution
+    divided by ``lsf_scale``, exactly as the stellar piece of the instrument stage takes it.
+    A scalar resolution and library dispersion give a scalar; any array is read at the
+    lattice wavelengths by interpolation on the observed pixel grid.
+    """
+    res = jnp.asarray(instrument["resolution"])
+    lib = jnp.asarray(instrument["sigma_lib_kms"])
+    wave_obs = jnp.asarray(instrument["wave_obs"])
+    if res.ndim:
+        res = jnp.interp(lam_obs_c, wave_obs, res)
+    if lib.ndim:
+        lib = jnp.interp(lam_obs_c, wave_obs, lib)
+    res_scaled = res / instrument["lsf_scale"]
+    sigma_inst = _C_KM_S / (_FWHM_TO_SIGMA * res_scaled)
+    return jnp.sqrt(jnp.maximum(sigma_inst**2 - lib**2, 0.0))
+
+
+def _lattice_instrument(g, lam_c, sigma_kms, n_bins):
+    """Instrument Gaussian on lattice cell means: one FFT for a scalar, piecewise otherwise."""
+    h = _LATTICE_DLNLAMBDA
+    if jnp.ndim(sigma_kms) == 0:
+        return _gaussian_fft_convolve(g, (sigma_kms / _C_KM_S) / h, _lattice_pad_cells())
+    sigma = jnp.broadcast_to(sigma_kms, g.shape)
+    return _apply_lsf_variable_r(g, lam_c, sigma, n_bins, pad=_lattice_pad_cells())
+
+
+def lattice_correction_rest(
+    sed_rest, wave_rest, centres_rest, sigma_v_kms, *, conserving=True, instrument=None
+):
     r"""Velocity-dispersion correction of one rest-frame function, pixel means or values (#3451).
 
     The rest-frame counterpart of :func:`sigma_v_lattice_correction` for the spectrum table:
@@ -1257,6 +1296,11 @@ def lattice_correction_rest(sed_rest, wave_rest, centres_rest, sigma_v_kms, *, c
         Velocity dispersion [km/s], concrete and positive.
     conserving : bool, default True
         Pixel means (``True``) or values at the centres (``False``).
+    instrument : dict or None, optional
+        Instrument stage of the exact path, applied on the lattice to the broadened term
+        (conserving only): ``resolution`` and ``sigma_lib_kms`` on ``wave_obs``, the
+        observed-frame grid of the resolution, ``redshift``, ``lsf_scale`` (1 when the
+        resolution is already divided by it) and ``n_bins``.
 
     Returns
     -------
@@ -1270,6 +1314,13 @@ def lattice_correction_rest(sed_rest, wave_rest, centres_rest, sigma_v_kms, *, c
     broad = _gaussian_fft_convolve(
         plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
     )
+    if instrument is not None and conserving:
+        lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
+        lam_obs = lam_c * (1.0 + instrument["redshift"])
+        sigma_lsf = _lattice_instrument_sigma(
+            {k: v for k, v in instrument.items() if k != "redshift"}, lam_obs
+        )
+        broad = _lattice_instrument(broad, lam_c, sigma_lsf, instrument["n_bins"])
     readout = _lattice_readout(
         broad - plain, origin, n_cells, jnp.asarray(centres_rest), conserving
     )
@@ -1284,6 +1335,190 @@ def _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms) -> bool:
     projection. A traced sigma_v takes the lattice.
     """
     if resolution is not None or resolution_matrix is not None:
+        return False
+    if _is_traced(sigma_v_kms):
+        return True
+    return bool(np.max(np.asarray(sigma_v_kms)) > 0.0)
+
+
+def resolved_conserving_correction(
+    stellar_rest,
+    instr_rest,
+    igm_rest,
+    wave_rest,
+    wave_obs,
+    redshift,
+    dl_cm,
+    *,
+    sigma_v_kms,
+    span,
+    has_lyc_edge,
+    resolution,
+    sigma_lib_kms,
+    lsf_scale,
+    n_bins,
+) -> jnp.ndarray:
+    r"""Lattice term of the resolved conserving projection, on top of the no-instrument baseline (#3451).
+
+    The total is :math:`P_0 + C` with :math:`P_0` the exact model-grid pixel means of the
+    attenuated SED with no instrument, and
+
+    .. math::
+
+        C = L\bigl(K_S(T\,B_{\sigma_v} S) - T\,S\bigr)
+          + L\bigl(K_I(T\,I) - T\,I\bigr),
+
+    with :math:`S` the stellar group before the IGM, :math:`I` the instrument-only group,
+    :math:`T` the IGM, :math:`B_{\sigma_v}` the velocity dispersion, and :math:`K_S`,
+    :math:`K_I` the instrument stage on the lattice (the stellar one with the library
+    dispersion subtracted, the instrument-only one without). The order is the exact path's:
+    dispersion, then IGM, then instrument. The second terms are the instrument's own effect,
+    which :math:`P_0` lacks, so :math:`C` is non-zero at :math:`\sigma_v = 0`.
+
+    Parameters
+    ----------
+    stellar_rest : ndarray, shape (n_wave,)
+        Stellar-kernel group before the IGM, rest grid.
+    instr_rest : ndarray, shape (n_wave,) or None
+        Instrument-only group before the IGM (nebular lines already removed if requested).
+    igm_rest : ndarray, shape (n_wave,) or None
+        IGM transmission on the rest grid.
+    wave_rest, wave_obs : ndarray
+        Rest-frame grid and observed pixel centres [Angstrom].
+    redshift, dl_cm : float
+        Source redshift and luminosity distance [cm]; ``redshift`` may be traced.
+    sigma_v_kms : float or ndarray
+        Velocity dispersion [km/s]; may be traced; zero is allowed.
+    span : tuple of (float, int)
+        Static lattice from :func:`lattice_span`.
+    has_lyc_edge : bool
+        The SED is a step at the Lyman edge.
+    resolution : float or ndarray
+        Instrument resolution, scalar or per observed pixel.
+    sigma_lib_kms : float or ndarray
+        Library dispersion subtracted in quadrature from the stellar instrument term only.
+    lsf_scale : float or ndarray
+        Multiplicative scale on the instrument width.
+    n_bins : int
+        Segment count of the variable-resolution kernel.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        The correction to the observed spectral flux density [erg/s/cm^2/Hz].
+    """
+    origin, n_cells = span
+    h = _LATTICE_DLNLAMBDA
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    instr = jnp.zeros_like(stellar_rest) if instr_rest is None else instr_rest
+    scale_in, scale_out = _peak_factors(stellar_rest, instr)
+    plain = _lattice_cell_means(wave_rest, stellar_rest * scale_in, origin, n_cells, edge_aa)
+    broad = _gaussian_fft_convolve(
+        plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
+    )
+    lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
+    if igm_rest is None:
+        t_c = None
+        instr_t = instr * scale_in
+    else:
+        t_c = jnp.interp(lam_c, wave_rest, igm_rest)
+        instr_t = instr * igm_rest * scale_in
+    plain_t = plain if t_c is None else plain * t_c
+    broad_t = broad if t_c is None else broad * t_c
+    instr_cells = _lattice_cell_means(wave_rest, instr_t, origin, n_cells, edge_aa)
+    lam_obs = lam_c * (1.0 + redshift)
+    stellar_instr = {
+        "resolution": resolution,
+        "sigma_lib_kms": sigma_lib_kms,
+        "lsf_scale": lsf_scale,
+        "n_bins": n_bins,
+        "wave_obs": wave_obs,
+    }
+    sigma_s = _lattice_instrument_sigma(stellar_instr, lam_obs)
+    sigma_i = _lattice_instrument_sigma({**stellar_instr, "sigma_lib_kms": 0.0}, lam_obs)
+    k_broad = _lattice_instrument(broad_t, lam_c, sigma_s, n_bins)
+    k_instr = _lattice_instrument(instr_cells, lam_c, sigma_i, n_bins)
+    cells = k_broad - plain_t + k_instr - instr_cells
+    pixel = _lattice_readout(cells, origin, n_cells, wave_obs / (1.0 + redshift), True)
+    return lnu_to_fnu(pixel * scale_out, dl_cm, redshift)
+
+
+def instrument_sigma_v_term(
+    stellar_rest,
+    igm_rest,
+    wave_rest,
+    wave_obs,
+    redshift,
+    dl_cm,
+    *,
+    sigma_v_kms,
+    span,
+    conserving,
+    has_lyc_edge,
+    resolution,
+    sigma_lib_kms,
+    lsf_scale,
+    n_bins,
+    lsf_pad_pixels,
+) -> jnp.ndarray:
+    """The sigma_v correction of a resolved stellar piece, in the baseline's instrument order.
+
+    Conserving: the instrument stage acts on the lattice between the IGM and the pixel mean,
+    where the baseline convolves its model grid. Point: the correction is sampled on the
+    lattice at the pixel centres and the instrument stage acts on those pixel values, as the
+    baseline's point path does (#3451).
+    """
+    if conserving:
+        return sigma_v_lattice_correction(
+            stellar_rest,
+            igm_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            sigma_v_kms=sigma_v_kms,
+            span=span,
+            conserving=True,
+            has_lyc_edge=has_lyc_edge,
+            instrument=dict(
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                lsf_scale=lsf_scale,
+                n_bins=n_bins,
+                wave_obs=wave_obs,
+            ),
+        )
+    point = sigma_v_lattice_correction(
+        stellar_rest,
+        igm_rest,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        sigma_v_kms=sigma_v_kms,
+        span=span,
+        conserving=False,
+        has_lyc_edge=has_lyc_edge,
+    )
+    return instrument_stage_on_pixels(
+        point,
+        jnp.zeros_like(point),
+        wave_obs=wave_obs,
+        resolution=resolution,
+        sigma_lib_kms=sigma_lib_kms,
+        lsf_scale=lsf_scale,
+        n_bins=n_bins,
+        lsf_pad_pixels=lsf_pad_pixels,
+    )
+
+
+def _serves_with_instrument(resolution, resolution_matrix, sigma_v_kms) -> bool:
+    """Whether a resolved call broadens the stellar piece on the lattice (#3451).
+
+    A scalar or per-pixel resolution with a positive or traced dispersion; a banded matrix
+    keeps the pixel-level path.
+    """
+    if resolution is None or resolution_matrix is not None:
         return False
     if _is_traced(sigma_v_kms):
         return True
@@ -1483,6 +1718,78 @@ def project_spectrum(
 
     # ``conserving`` is a static structural flag (resolved from the ``resample``
     # mode before the trace), so this branch resolves at trace time (#1166).
+    if conserving and resolution is not None and resolution_matrix is None:
+        # Resolved pixel means: the no-instrument exact projection plus the lattice term of the
+        # dispersion and the instrument stage (#3451).
+        flux = project_spectrum(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            conserving=True,
+            has_lyc_edge=has_lyc_edge,
+        ) + resolved_conserving_correction(
+            sed_rest,
+            None,
+            None,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            sigma_v_kms=sigma_v_kms,
+            span=lattice_span(wave_obs, *_concrete_z_range(redshift, z_window)),
+            has_lyc_edge=has_lyc_edge,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            lsf_scale=1.0,
+            n_bins=n_bins,
+        )
+        if cal_coeffs is not None:
+            wmin, wmax = (
+                cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+            )
+            flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
+        return flux
+    if _serves_with_instrument(resolution, resolution_matrix, sigma_v_kms) and not conserving:
+        # Point samples with an instrument kernel: the exact projection at sigma_v = 0 plus the
+        # sigma_v correction, pushed through the instrument stage on pixels (#3451).
+        # correction, pushed through the same instrument stage (#3451).
+        flux = project_spectrum(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            n_bins=n_bins,
+            lsf_pad_pixels=lsf_pad_pixels,
+            conserving=conserving,
+            has_lyc_edge=has_lyc_edge,
+        ) + instrument_sigma_v_term(
+            sed_rest,
+            None,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            sigma_v_kms=sigma_v_kms,
+            span=lattice_span(wave_obs, *_concrete_z_range(redshift, z_window)),
+            conserving=conserving,
+            has_lyc_edge=has_lyc_edge,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            lsf_scale=1.0,
+            n_bins=n_bins,
+            lsf_pad_pixels=lsf_pad_pixels,
+        )
+        if cal_coeffs is not None:
+            wmin, wmax = (
+                cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+            )
+            flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
+        return flux
     if _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms):
         # No instrument kernel: the exact unbroadened projection plus the sigma_v correction
         # on the ln-lambda lattice (#3436, #3451). The instrument stage below is absent, so the

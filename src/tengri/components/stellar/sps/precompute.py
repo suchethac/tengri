@@ -593,7 +593,9 @@ def segment_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, centre
     return m0.reshape(lead), m1.reshape(lead)
 
 
-def velocity_correction_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, sigma_v_kms):
+def velocity_correction_moment_cube(
+    ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, sigma_v_kms, instrument=None
+):
     r"""Velocity-dispersion correction to the segment pixel moments, per template (#3451).
 
     The table's segment moments are :math:`A_0 = \bar B(S_s)` and
@@ -620,11 +622,13 @@ def velocity_correction_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n
         for k in range(n_seg):
             masked = row * jnp.asarray(seg == k, dtype=row.dtype)
             c0_cols.append(
-                lattice_correction_rest(masked, wave, centres, sigma_v_kms, conserving=True)
+                lattice_correction_rest(
+                    masked, wave, centres, sigma_v_kms, conserving=True, instrument=instrument
+                )
             )
             c1_cols.append(
                 lattice_correction_rest(
-                    masked * wave, wave, centres, sigma_v_kms, conserving=True
+                    masked * wave, wave, centres, sigma_v_kms, conserving=True, instrument=instrument
                 )
             )
         return jnp.stack(c0_cols, axis=-1).reshape(-1), jnp.stack(c1_cols, axis=-1).reshape(-1)
@@ -728,18 +732,17 @@ def precompute_spectroscopy(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
-    # Without an instrument kernel the velocity dispersion enters as the lattice correction to
-    # the unbroadened table (#3451), so the table and the exact path share one discretisation.
-    lattice_sigma = (
-        sigma_v_kms is not None
-        and float(sigma_v_kms) > 0.0
-        and not sigma_v_on_pixels
-        and no_instrument
-    )
-    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0 and not sigma_v_on_pixels and not lattice_sigma:
-        ssp_flux_np = np.asarray(
-            broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
-        )
+    sigma = 0.0 if sigma_v_kms is None else float(sigma_v_kms)
+    on_grid = not sigma_v_on_pixels
+    # The exact path's instrument stage is applied on the lattice (#3451). A pixel-integral
+    # table with a fixed instrument kernel bakes it in: the unbroadened moments are taken
+    # without it, and the lattice correction (sigma_v and the instrument) is added in the
+    # difference form, also at sigma_v = 0.
+    lsf_baked_diff = pixel_integral and lsf is not None and on_grid
+    lattice_nores = pixel_integral and lsf is None and no_instrument and sigma > 0.0 and on_grid
+    lattice_point = (not pixel_integral) and sigma > 0.0 and on_grid
+    if sigma > 0.0 and on_grid and not (lsf_baked_diff or lattice_nores or lattice_point):
+        ssp_flux_np = np.asarray(broaden_template_cube(ssp_flux_np, wave_ssp_np, sigma, n_bins))
     ssp_on_pixels_m1 = None
     source_breakpoints = None
     if pixel_integral:
@@ -750,11 +753,27 @@ def precompute_spectroscopy(
         seg_ids = source_segment_ids(wave_ssp_np, bps)
         centres_seg = segment_centres(wave_rest_np, bps)
         m0, m1 = segment_moment_cube(
-            ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, centres_seg, lsf
+            ssp_flux_np,
+            wave_ssp_np,
+            wave_rest_np,
+            seg_ids,
+            n_seg,
+            centres_seg,
+            None if lsf_baked_diff else lsf,
         )
-        if lattice_sigma:
+        if lsf_baked_diff or lattice_nores:
+            instrument = None
+            if lsf_baked_diff:
+                instrument = {
+                    "resolution": jnp.asarray(lsf[0]),
+                    "sigma_lib_kms": jnp.asarray(lsf[1]),
+                    "lsf_scale": 1.0,
+                    "n_bins": int(lsf[2]),
+                    "wave_obs": jnp.asarray(wave_ssp_np * (1.0 + redshift)),
+                    "redshift": float(redshift),
+                }
             c0, c1 = velocity_correction_moment_cube(
-                ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, float(sigma_v_kms)
+                ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, sigma, instrument
             )
             c_flat = jnp.asarray(centres_seg.reshape(-1))
             m0 = m0 + c0
@@ -766,9 +785,9 @@ def precompute_spectroscopy(
         wave_rest_np = wave_rest_pixels
     else:
         ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
-        if lattice_sigma:
+        if lattice_point:
             ssp_on_pixels_np = ssp_on_pixels_np + np.asarray(
-                point_correction_cube(ssp_flux_np, wave_ssp_np, wave_rest_np, float(sigma_v_kms))
+                point_correction_cube(ssp_flux_np, wave_ssp_np, wave_rest_np, sigma)
             )
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
