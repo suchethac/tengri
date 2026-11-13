@@ -9,6 +9,68 @@
   {
    "dtype": "float64",
    "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot",
+   "sha256": "12d30946c6e9ae6a6dd10c9c89349d30bdc8bf4601ead9083fe4b95a852bc76a",
+   "shape": [
+    3,
+    25,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths",
+   "sha256": "610864f9b4864c3903d8d80ced2d6ccde6c9a0698dcd588508b521171ab95a5c",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths_rest",
+   "sha256": "0de24dc058ca75e66e26d68e7a6118535cc5fe852d77aad907278bf3d67267cd",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_phot",
+   "sha256": "ad120f4f516410347d219146ad1b1cb2fefedc41006fa820cf5befed90126ec3",
+   "shape": [
+    3,
+    25,
+    6,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
+   "sha256": "fbabea2055c452b6088c0f883fb2deb66fe4340903c69446d2ce0d114bc10e19",
+   "shape": [
+    3,
+    25,
+    6,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
    "path": "/agn/term_band_response/ln1pz",
    "sha256": "3a920166bf8bf9a88d02f410062ca2e60ff6811be34374c4c841acae23a275fd",
    "shape": [

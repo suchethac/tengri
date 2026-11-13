@@ -105,6 +105,90 @@
   {
    "dtype": "float64",
    "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot",
+   "sha256": "f2e29e63d97e4ad18d64bcff50b53dd46d67be58b6d09271d0afb85d87347713",
+   "shape": [
+    3,
+    25,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths",
+   "sha256": "6e8d78b37ad56e72f4ea9d98555db239a27505719c7e0bc87e034ee716397e6b",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths_rest",
+   "sha256": "de451cc96ce0dc1cffc73c5590617e4a4fad7a9ca558433146c7ad68e4883a32",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_phot",
+   "sha256": "eeec8152746088d571ce7d7297d7d04cd70c82ce8b9226bdd9c69488a849e7d1",
+   "shape": [
+    3,
+    25,
+    4,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
+   "sha256": "842e8c8f410ed5c434a84c827771d8d19201447e4fe0c6391424eda1769cae87",
+   "shape": [
+    3,
+    25,
+    4,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot_lyc",
+   "sha256": "a0ee989ed2a0a2e3626520afa4032e06144865c8c8f6357293c9f4cd2069eaf2",
+   "shape": [
+    3,
+    25,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot_nolyc",
+   "sha256": "f2e29e63d97e4ad18d64bcff50b53dd46d67be58b6d09271d0afb85d87347713",
+   "shape": [
+    3,
+    25,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
    "path": "/nebular_band_table/0",
    "sha256": "de0a2312d06666b67cbc6cdb9b94e772f41a80689731f9667175f6f3a1e814fc",
    "shape": [
