@@ -4436,6 +4436,12 @@ class Fitter:
         # key, so the sampler citation cannot be recovered from it later.
         with contextlib.suppress(AttributeError):
             result._backend_key = entry.name
+        # Shared post-run convergence check for every chain and SMC sampler (#3456).
+        # It warns and records the verdict; it never changes the draws.
+        if entry.name.startswith("mcmc") and getattr(result, "samples", None) is not None:
+            from tengri.inference.sampler_health import check_sampler_convergence
+
+            check_sampler_convergence(result, backend=entry.name)
         return result
 
     def summary(self) -> str:

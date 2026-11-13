@@ -274,6 +274,21 @@ def _energy_diagnostics(energy_change, nonans, n_dim, desired_energy_var):
     }
 
 
+def _refuse_one_dimensional(context) -> None:
+    """Refuse a one-dimensional target before any MAP, compile or sampling (#3456).
+
+    MCLMC's BlackJAX kernel needs more than one flattened dimension. Without this
+    check the run starts, compiles, and then fails inside the dependency with an
+    error that does not name the cause.
+    """
+    n_latent = context.spec.n_latent
+    if n_latent < 2:
+        raise ValueError(
+            "MCLMC needs ≥ 2 free parameters; use mcmc_nuts for 1-D models "
+            f"(this model has {n_latent})."
+        )
+
+
 def run_mclmc(
     context,
     *,
@@ -364,6 +379,7 @@ def run_mclmc(
     # ``_shared.py`` helpers still take a Fitter; reach through
     # the context until they migrate.
     context = InferenceContext.from_target(context)
+    _refuse_one_dimensional(context)
     fitter = context.fitter
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -574,6 +590,7 @@ def run_adjusted_mclmc(
     from tengri.inference.posterior import Posterior
 
     context = InferenceContext.from_target(context)
+    _refuse_one_dimensional(context)
     fitter = context.fitter
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
