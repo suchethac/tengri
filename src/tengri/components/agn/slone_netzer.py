@@ -52,7 +52,11 @@ __all__ = [
     "slone_netzer_sed_from_grid",
 ]
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LBOL,
+    SN12_LOG_LEDD_ON_GRID,
+    SN12_LOG_MBH_GRID_CENTER,
+)
 
 
 def _load_slone_netzer_arrays(grid_path: str) -> dict:
@@ -169,13 +173,6 @@ def load_slone_netzer_default_grid() -> SloneNetzerGrid:
         If no SN12 grid HDF5 is present on disk.
     """
     return load_slone_netzer_grid(_find_grid())
-
-
-#: Slone & Netzer (2012) grid-center pins. These differ from the declared
-#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
-#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
-SN12_LOG_MBH_GRID_CENTER = 8.6
-SN12_LOG_LEDD_ON_GRID = -2.0
 
 
 def slone_netzer_sed_from_grid(

@@ -160,6 +160,7 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_TAU_SKIRTOR,
     DEFAULT_AGN_THETA_TORUS,
     DEFAULT_AGN_TORUS_FRAC,
+    POLAR_EBV_OFF,
 )
 from tengri.components.agn._template_grid import cache_per_float_dtype
 from tengri.components.agn.adaf import adaf_spectrum
@@ -1489,11 +1490,6 @@ def _sigmoid_mask(
 # ── Unified AGN with NLR + BLR decomposition ──────────────────────
 
 
-#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
-#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
-_POLAR_EBV_OFF = 0.0
-
-
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
@@ -1511,7 +1507,7 @@ def unified_nlr_blr(
     agn_nlr_fwhm: float = 500.0,
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: polar
     # reddening here is opt-in, so the default is the no-op.
-    agn_polar_ebv: float = _POLAR_EBV_OFF,
+    agn_polar_ebv: float = POLAR_EBV_OFF,
     nlr_fn: "Callable | None" = None,
     blr_fn: "Callable | None" = None,
     include_xray: bool = False,

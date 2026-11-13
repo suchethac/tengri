@@ -69,6 +69,7 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_Q_SKIRTOR,
     DEFAULT_AGN_RADIUS_RATIO,
     DEFAULT_AGN_TORUS_FRAC,
+    POLAR_EBV_OFF,
 )
 from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
 from tengri.components.agn._publication import log10_emitted_bolometric
@@ -369,11 +370,6 @@ DEFAULT_BLOCK_SELECTORS: dict[str, str] = {
 }
 
 
-#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
-#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
-_POLAR_EBV_OFF = 0.0
-
-
 def validate_block_recipe(
     *,
     agn_disc_block: str,
@@ -558,7 +554,7 @@ agn_torus_block, agn_attenuation_block : str
     # any caller even though the forward pass no longer invokes it.
     if selectors["attenuation"] == "polar_dust" and params is not None:
         try:
-            ebv_is_zero = float(params.get("agn_polar_ebv", _POLAR_EBV_OFF)) == 0.0
+            ebv_is_zero = float(params.get("agn_polar_ebv", POLAR_EBV_OFF)) == 0.0
         except (TypeError, ValueError):
             ebv_is_zero = False
         if ebv_is_zero:

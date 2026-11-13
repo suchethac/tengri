@@ -37,6 +37,8 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_Q_SKIRTOR,
     DEFAULT_AGN_R_WARM_RATIO,
     DEFAULT_AGN_TAU_SKIRTOR,
+    SN12_LOG_LEDD_ON_GRID,
+    SN12_LOG_MBH_GRID_CENTER,
 )
 from tengri.components.agn.adaf import (
     adaf_scalar_state,
@@ -1055,13 +1057,6 @@ def richards2006_disc_block(
     wave_aa = jnp.asarray(wavelength)
     L_nu = richards2006_disc(wave_aa, log_lbol=agn_log_lbol)
     return L_nu * _C_AA_PER_S / wave_aa**2
-
-
-#: Slone & Netzer (2012) grid-center pins. These differ from the declared
-#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
-#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
-SN12_LOG_MBH_GRID_CENTER = 8.6
-SN12_LOG_LEDD_ON_GRID = -2.0
 
 
 @register_agn_block(

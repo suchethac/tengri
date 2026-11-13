@@ -1381,6 +1381,16 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
     ),
 }
 
+#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
+#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
+POLAR_EBV_OFF = 0.0
+
+#: Slone & Netzer (2012) grid-center pins. These differ from the declared
+#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
+#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
+SN12_LOG_MBH_GRID_CENTER = 8.6
+SN12_LOG_LEDD_ON_GRID = -2.0
+
 __all__ = [
     "DEFAULT_AGN_ADAF_ALPHA",
     "DEFAULT_AGN_ADAF_BETA",
@@ -1473,4 +1483,7 @@ __all__ = [
     "DEFAULT_AGN_T_WARM",
     "GRID_EXTENT_SOURCES",
     "PARAMS",
+    "POLAR_EBV_OFF",
+    "SN12_LOG_LEDD_ON_GRID",
+    "SN12_LOG_MBH_GRID_CENTER",
 ]
