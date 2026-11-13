@@ -171,6 +171,13 @@ def load_slone_netzer_default_grid() -> SloneNetzerGrid:
     return load_slone_netzer_grid(_find_grid())
 
 
+#: Slone & Netzer (2012) grid-center pins. These differ from the declared
+#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
+#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
+SN12_LOG_MBH_GRID_CENTER = 8.6
+SN12_LOG_LEDD_ON_GRID = -2.0
+
+
 def slone_netzer_sed_from_grid(
     grid: SloneNetzerGrid,
     wavelength: jnp.ndarray,
@@ -178,8 +185,8 @@ def slone_netzer_sed_from_grid(
     # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
     # starts at 7.4, so the declared 7.0 would be silently clipped by the
     # jnp.clip below. 8.6 is the grid's center node.
-    agn_log_mbh: float = 8.6,
-    agn_log_ledd: float = -2.0,
+    agn_log_mbh: float = SN12_LOG_MBH_GRID_CENTER,
+    agn_log_ledd: float = SN12_LOG_LEDD_ON_GRID,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.

@@ -130,10 +130,36 @@ from collections.abc import Callable
 import jax.numpy as jnp
 
 from tengri.components.agn._params import (
+    DEFAULT_AGN_A_CAT3D,
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_ASTAR,
+    DEFAULT_AGN_BLR_CF,
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_EBV_DISC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_FWD_CAT3D,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LOG_MDOT,
+    DEFAULT_AGN_LOG_NH_SILVA,
     DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_NLR_CF,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_R_WARM_RATIO,
+    DEFAULT_AGN_RADIUS_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_THETA_TORUS,
+    DEFAULT_AGN_TORUS_FRAC,
 )
 from tengri.components.agn._template_grid import cache_per_float_dtype
 from tengri.components.agn.adaf import adaf_spectrum
@@ -657,8 +683,8 @@ def unified_agn(
     agn_log_lbol: float,
     disc_model: str = "powerlaw",
     torus_model: str = "silva04",
-    agn_torus_frac: float = 0.5,
-    agn_ebv_disc: float = 0.0,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **kwargs,
 ) -> jnp.ndarray:
     """Compute unified AGN SED: disc + torus.
@@ -748,11 +774,11 @@ def multicolor_agn(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     """Multicolor Shakura-Sunyaev disc + Silva+04 smooth AGN torus.
@@ -824,18 +850,18 @@ def kubota_done_full_agn(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
-    agn_ebv_disc: float = 0.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """Full Kubota & Done (2018) 3-zone disc + Silva+04 torus.
@@ -928,13 +954,13 @@ def skirtor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
-    agn_ebv_disc: float = 0.0,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """SKIRTOR clumpy torus AGN: power-law disc + SKIRTOR torus (analytic).
@@ -1000,11 +1026,11 @@ def skirtor_stalevski_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_radius_ratio: float = 20.0,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -1081,9 +1107,9 @@ def silva04_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
-    agn_ebv_disc: float = 0.0,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """Silva+04 smooth-torus AGN: power-law disc + Silva+04 torus.
@@ -1137,10 +1163,10 @@ def cat3d_wind_agn(
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_a_cat3d: float = -2.0,
-    agn_fwd_cat3d: float = 1.0,
-    agn_torus_frac: float = 0.5,
-    agn_ebv_disc: float = 0.0,
+    agn_a_cat3d: float = DEFAULT_AGN_A_CAT3D,
+    agn_fwd_cat3d: float = DEFAULT_AGN_FWD_CAT3D,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """CAT3D-Wind AGN: power-law disc + clumpy-disc + polar-wind torus.
@@ -1202,12 +1228,12 @@ def adaf_agn(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
-    agn_torus_frac: float = 0.5,
-    agn_log_nh_silva: float = 23.0,
-    agn_ebv_disc: float = 0.0,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """Faithful ADAF (Mahadevan 1997) + Silva+04 torus for low-luminosity AGN.
@@ -1286,12 +1312,12 @@ def adaf_agn(
 def relagn_agn(
     wavelength: jnp.ndarray,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_mdot: float = -1.0,
-    agn_astar: float = 0.0,
+    agn_log_mdot: float = DEFAULT_AGN_LOG_MDOT,
+    agn_astar: float = DEFAULT_AGN_ASTAR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
-    agn_log_nh_silva: float = 23.0,
-    agn_ebv_disc: float = 0.0,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_ebv_disc: float = DEFAULT_AGN_EBV_DISC,
     **_kwargs,
 ) -> jnp.ndarray:
     """RELAGN relativistic outer disc + Silva+04 dust torus.
@@ -1463,24 +1489,29 @@ def _sigmoid_mask(
 # ── Unified AGN with NLR + BLR decomposition ──────────────────────
 
 
+#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
+#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
+_POLAR_EBV_OFF = 0.0
+
+
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_theta_torus: float = 30.0,
-    agn_nlr_cf: float = 0.1,
-    agn_blr_cf: float = 0.1,
+    agn_theta_torus: float = DEFAULT_AGN_THETA_TORUS,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_blr_cf: float = DEFAULT_AGN_BLR_CF,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_blr_fwhm: float = 5000.0,
     agn_nlr_fwhm: float = 500.0,
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: polar
     # reddening here is opt-in, so the default is the no-op.
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = _POLAR_EBV_OFF,
     nlr_fn: "Callable | None" = None,
     blr_fn: "Callable | None" = None,
     include_xray: bool = False,

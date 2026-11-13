@@ -28,6 +28,16 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_ALPHA,
+    DEFAULT_AGN_EBV,
+    DEFAULT_AGN_FRAC_HOT,
+    DEFAULT_AGN_T_HOT,
+    DEFAULT_AGN_T_MAX,
+    DEFAULT_AGN_T_TORUS,
+    DEFAULT_AGN_T_WARM,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn.blocks._protocol import register_agn_block, register_disc_power
 from tengri.components.agn.disc import powerlaw_disc
 from tengri.components.agn.reddening import redden_disc
@@ -55,8 +65,8 @@ def powerlaw_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_alpha: float = -1.0,
-    agn_T_max: float = 1.0e5,
+    agn_alpha: float = DEFAULT_AGN_ALPHA,
+    agn_T_max: float = DEFAULT_AGN_T_MAX,
     **_params,
 ) -> Array:
     r"""tengri ``powerlaw_disc`` as a disc-stage block.
@@ -147,8 +157,8 @@ def simple_torus_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_T_torus: float = 1000.0,
-    agn_torus_frac: float = 0.5,
+    agn_T_torus: float = DEFAULT_AGN_T_TORUS,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_params,
 ) -> Array:
     r"""tengri ``simple_torus`` (single-temperature graybody) block.
@@ -191,10 +201,10 @@ def two_temperature_torus_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_torus_frac: float = 0.5,
+    agn_T_hot: float = DEFAULT_AGN_T_HOT,
+    agn_T_warm: float = DEFAULT_AGN_T_WARM,
+    agn_frac_hot: float = DEFAULT_AGN_FRAC_HOT,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_params,
 ) -> Array:
     r"""tengri ``two_temperature_torus`` block.
@@ -231,7 +241,7 @@ def two_temperature_torus_block(
 def smc_prevot_block(
     wavelength: Array,
     *,
-    agn_ebv: float = 0.0,
+    agn_ebv: float = DEFAULT_AGN_EBV,
     **_params,
 ) -> Array:
     r"""Prevot 1984 SMC attenuation curve as an attenuation-stage block.
@@ -285,7 +295,7 @@ def smc_prevot_block(
 def qsogen_quasar_ext_block(
     wavelength: Array,
     *,
-    agn_ebv: float = 0.0,
+    agn_ebv: float = DEFAULT_AGN_EBV,
     **_params,
 ) -> Array:
     r"""Temple+2021 empirical *quasar* extinction as an attenuation-stage block.

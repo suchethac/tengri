@@ -16,6 +16,28 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn._nthcomp import load_nthcomp_table
+from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_ASTAR,
+    DEFAULT_AGN_CIGALE_ADAF_DELTA,
+    DEFAULT_AGN_CIGALE_DISK_DELTA,
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MDOT,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_R_WARM_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+)
 from tengri.components.agn.adaf import (
     adaf_scalar_state,
     adaf_spectrum_from_state,
@@ -70,7 +92,7 @@ __all__ = [
     "slone_netzer_disc_block",
 ]
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_MBH
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 _L_SUN_ERG: float = L_SUN
@@ -120,9 +142,9 @@ def adaf_disc_state(
     *,
     dtype=None,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     **_params,
 ):
@@ -164,9 +186,9 @@ def adaf_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     disc_state=None,
     **_params,
@@ -277,7 +299,7 @@ def cigale_adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_adaf_delta: float = 0.0,
+    agn_cigale_adaf_delta: float = DEFAULT_AGN_CIGALE_ADAF_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` ADAF↔thin-disc transitional spectrum.
@@ -340,7 +362,7 @@ def cigale_schartmann_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` Schartmann (2005) disc spectrum.
@@ -407,12 +429,12 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_cos_inc: float = 0.86602540378443864,  # cos(30°), CIGALE i=30 default
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,  # cos(30°), CIGALE i=30 default
     templates=None,
     **_params,
 ) -> Array:
@@ -504,7 +526,7 @@ def cigale_skirtor_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` empirical disc spectrum.
@@ -575,15 +597,15 @@ def kubota_done_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     agn_log_lbol_shape: float | None = None,
     templates=None,
     **_params,
@@ -645,15 +667,15 @@ def kubota_done_disc_split_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     agn_log_lbol_shape: float | None = None,
     templates=None,
     **_params,
@@ -746,7 +768,7 @@ def kubota_done_disc_power(agn_log_lbol: float, **_params) -> Array:
     return 1.0 - kubota_done_unemitted_fraction(
         _params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
         agn_log_lbol if shape_log_lbol is None else shape_log_lbol,
-        _params.get("agn_a_spin", 0.0),
+        _params.get("agn_a_spin", DEFAULT_AGN_A_SPIN),
     )
 
 
@@ -762,8 +784,8 @@ def multicolor_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     euv_tail: str | float | None = "powerlaw",
     agn_log_lbol_shape: float | None = None,
@@ -898,8 +920,8 @@ def relagn_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_mdot: float = -1.0,
-    agn_astar: float = 0.0,
+    agn_log_mdot: float = DEFAULT_AGN_LOG_MDOT,
+    agn_astar: float = DEFAULT_AGN_ASTAR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     templates=None,
     **_params,
@@ -1035,6 +1057,13 @@ def richards2006_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
+#: Slone & Netzer (2012) grid-center pins. These differ from the declared
+#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
+#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
+SN12_LOG_MBH_GRID_CENTER = 8.6
+SN12_LOG_LEDD_ON_GRID = -2.0
+
+
 @register_agn_block(
     "disc",
     "slone_netzer",
@@ -1054,8 +1083,8 @@ def slone_netzer_disc_block(
     # center; -2.0 is the on-grid counterpart for log_edd (#1578, #1586).
     # A caller that supplies these explicitly overrides the pins, which is why
     # Rule 9 of validate_block_recipe checks the active support at composition.
-    agn_log_mbh: float = 8.6,
-    agn_log_ledd: float = -2.0,
+    agn_log_mbh: float = SN12_LOG_MBH_GRID_CENTER,
+    agn_log_ledd: float = SN12_LOG_LEDD_ON_GRID,
     templates=None,
     **_params,
 ) -> Array:
@@ -1113,7 +1142,7 @@ def kd18_agnfitter_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     templates=None,
     **_params,
 ) -> Array:
@@ -1179,8 +1208,8 @@ def kd18_agnfitter_warmindex_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_gamma_warm: float = 2.5,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
     templates=None,
     **_params,
 ) -> Array:

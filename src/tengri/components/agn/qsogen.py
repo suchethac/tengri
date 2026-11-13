@@ -100,7 +100,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import (
+    DEFAULT_AGN_BCNORM,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn._template_grid import analytic_bolometric_nu
 from tengri.components.dust.attenuation import smc as smc_curve
 from tengri.utils.host_array import device_table, host_array
@@ -732,7 +736,7 @@ def compute_qsogen_sed(
     agn_ebv: float = _DEFAULT_EBV,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_bcnorm: float = 0.0,
+    agn_bcnorm: float = DEFAULT_AGN_BCNORM,
     **_kwargs,
 ) -> jnp.ndarray:
     """QSOgen quasar SED (Temple, Hewett & Banerji 2021).
@@ -834,7 +838,7 @@ def qsogen(
     agn_bbnorm: float = _DEFAULT_BBNORM,
     agn_emline_scale: float = _DEFAULT_EMLINE_SCALE,
     agn_ebv: float = _DEFAULT_EBV,
-    agn_bcnorm: float = 0.0,
+    agn_bcnorm: float = DEFAULT_AGN_BCNORM,
     **_kwargs,
 ) -> jnp.ndarray:
     """QSOgen quasar SED (Temple+2021): registered model entry point.

@@ -1,4 +1,5 @@
-# Existing literal-copy sites in src/tengri/components/nebular/ (#2297), one per line:
+# Existing literal-copy sites in src/tengri/components/nebular/ (#2297) and the AGN tree
+# (#2265: the three undecided sites only, see the lane report), one per line:
 # <path>, then a tab, then the site description as the guard prints it.
 # Keys omit line numbers so edits above a site do not churn this list. New sites fail the
 # guard; a site fixed in place must be deleted from here (the guard reports stale entries).
@@ -120,3 +121,6 @@ src/tengri/components/nebular/shock.py	_shock_line_arrays(): shock_log_density =
 src/tengri/components/nebular/shock.py	_shock_line_arrays(): shock_b_over_sqrt_n = 1.0  (signature default)
 src/tengri/components/nebular/shock.py	compute_shock_sed(): shock_log_density = 0.0  (signature default)
 src/tengri/components/nebular/shock.py	compute_shock_sed(): shock_b_over_sqrt_n = 1.0  (signature default)
+src/tengri/components/agn/blocks/blr.py	blr_synthesizer_spectra_block(): agn_blr_logZ = -2.0  (signature default)
+src/tengri/components/agn/blocks/nlr.py	nlr_synthesizer_spectra_block(): agn_nlr_logZ = -2.0  (signature default)
+src/tengri/components/agn/component.py	.get("agn_polar_ebv", 0.0)  (fallback)

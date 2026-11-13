@@ -46,7 +46,15 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_FRITZ_BETA,
+    DEFAULT_AGN_FRITZ_GAMMA,
+    DEFAULT_AGN_FRITZ_OA,
+    DEFAULT_AGN_FRITZ_R_RATIO,
+    DEFAULT_AGN_FRITZ_TAU,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._template_grid import (
     cache_per_float_dtype,
     native_bolometric_nu,
@@ -532,13 +540,13 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
 def fritz_sed_from_grid(
     grid: FritzGrid,
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 10.0,
-    agn_torus_frac: float = 0.5,
-    agn_fritz_r_ratio: float = 60.0,
-    agn_fritz_tau: float = 1.0,
-    agn_fritz_beta: float = -0.5,
-    agn_fritz_gamma: float = 4.0,
-    agn_fritz_oa: float = 60.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_fritz_r_ratio: float = DEFAULT_AGN_FRITZ_R_RATIO,
+    agn_fritz_tau: float = DEFAULT_AGN_FRITZ_TAU,
+    agn_fritz_beta: float = DEFAULT_AGN_FRITZ_BETA,
+    agn_fritz_gamma: float = DEFAULT_AGN_FRITZ_GAMMA,
+    agn_fritz_oa: float = DEFAULT_AGN_FRITZ_OA,
     agn_fritz_psy: float = 0.001,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -727,12 +735,12 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
     def fritz_components(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_torus_frac: float = 0.5,
-        agn_fritz_r_ratio: float = 60.0,
-        agn_fritz_tau: float = 1.0,
-        agn_fritz_beta: float = -0.5,
-        agn_fritz_gamma: float = 4.0,
-        agn_fritz_oa: float = 60.0,
+        agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+        agn_fritz_r_ratio: float = DEFAULT_AGN_FRITZ_R_RATIO,
+        agn_fritz_tau: float = DEFAULT_AGN_FRITZ_TAU,
+        agn_fritz_beta: float = DEFAULT_AGN_FRITZ_BETA,
+        agn_fritz_gamma: float = DEFAULT_AGN_FRITZ_GAMMA,
+        agn_fritz_oa: float = DEFAULT_AGN_FRITZ_OA,
         agn_fritz_psy: float = 0.001,
         **_kwargs,
     ) -> FritzComponents:
@@ -860,11 +868,11 @@ def fritz_disc_dust_ratio(
     disc_lambda_unreddened: jnp.ndarray,
     disc_ext_fac: jnp.ndarray,
     *,
-    agn_fritz_r_ratio: float = 60.0,
-    agn_fritz_tau: float = 1.0,
-    agn_fritz_beta: float = -0.5,
-    agn_fritz_gamma: float = 4.0,
-    agn_fritz_oa: float = 60.0,
+    agn_fritz_r_ratio: float = DEFAULT_AGN_FRITZ_R_RATIO,
+    agn_fritz_tau: float = DEFAULT_AGN_FRITZ_TAU,
+    agn_fritz_beta: float = DEFAULT_AGN_FRITZ_BETA,
+    agn_fritz_gamma: float = DEFAULT_AGN_FRITZ_GAMMA,
+    agn_fritz_oa: float = DEFAULT_AGN_FRITZ_OA,
     agn_fritz_psy: float = 0.001,
     incl_wave: jnp.ndarray | None = None,
     _template: FritzGrid | None = None,

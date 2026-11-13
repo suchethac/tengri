@@ -28,6 +28,9 @@ _DEFAULT_AGN_POLAR_OA = declared_default(_AGN_PARAMS, "agn_polar_oa")
 #: The torus angle a stand-alone call follows when ``agn_polar_oa`` is the
 #: "follow the torus" sentinel and no torus block resolved it first.
 _DEFAULT_AGN_OA_SKIRTOR = declared_default(_AGN_PARAMS, "agn_oa_skirtor")
+#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
+#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
+_POLAR_EBV_OFF = 0.0
 
 __all__ = [
     "polar_dust_attenuation_block",
@@ -48,7 +51,7 @@ def polar_dust_attenuation_block(
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = _POLAR_EBV_OFF,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
     agn_polar_law: str = "smc",
@@ -115,7 +118,7 @@ def polar_dust_reemission_lnu(
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = _POLAR_EBV_OFF,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
     agn_polar_T: float = _DEFAULT_AGN_POLAR_T,
