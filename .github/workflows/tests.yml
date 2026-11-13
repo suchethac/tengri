@@ -1776,11 +1776,8 @@ jobs:
         # the three regression-a shards keep the 105 min coverage budget the
         # combined regression-a shard had.
         timeout-minutes: ${{ matrix.coverage_budget }}
-      # The token is required: a tokenless upload is refused by Codecov ("Token
-      # required - not valid tokenless upload") and, with fail_ci_if_error false
-      # and continue-on-error, the step went green while nothing was uploaded.
-      # A failed upload now fails the shard. CODECOV_TOKEN must exist as a
-      # repository secret before the next scheduled run.
+      # Codecov refuses a tokenless upload, so the token is required and a
+      # refused upload fails the shard. CODECOV_TOKEN is a repository secret.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
