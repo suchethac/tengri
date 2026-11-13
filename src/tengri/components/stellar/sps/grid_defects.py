@@ -23,6 +23,9 @@ _KNOWN_GRID_DEFECTS: dict[str, tuple[tuple[float, float], ...]] = {
     "fsps_prsc_miles_kroupa": ((-3.30103, 0.0),),
     "fsps_prsc_miles_salpeter": ((-3.30103, 0.0),),
     "fsps_prsc_c3k_a_chabrier": ((-3.30103, 0.0),),
+    # wNE copy of the Padova MILES Chabrier grid: nebular emission is negligible at 1 Gyr,
+    # and the cell ratio matches the bare grid (2.766 vs age, 2.787 vs metallicity neighbours).
+    "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0": ((-3.30103, 0.0),),
 }
 
 #: Tolerance [dex] for matching a listed (lgmet, lg_age) to a grid node.
@@ -63,8 +66,8 @@ def repair_known_grid_defects(
     Raises
     ------
     ValueError
-        If a listed node is absent, sits on the age edge, or has non-positive
-        neighbour flux (log interpolation undefined).
+        If a listed node sits on the age edge, or has negative neighbour flux
+        (the geometric mean is undefined).
     """
     defects = _KNOWN_GRID_DEFECTS.get(stem, ())
     if not defects or np.ndim(ssp_flux) != 3:
@@ -83,8 +86,9 @@ def repair_known_grid_defects(
         if not 0 < i < flux.shape[1] - 1:
             raise ValueError(f"known grid defect at age edge: {stem} age index {i}")
         neighbours = flux[k, i - 1 : i + 2 : 2]
-        if not np.all(neighbours > 0.0):
-            raise ValueError(f"known grid defect in {stem}: non-positive age-neighbour flux")
+        if np.any(neighbours < 0.0):
+            raise ValueError(f"known grid defect in {stem}: negative age-neighbour flux")
+        # A zero neighbour (float32 underflow of ~1e-70 flux) gives a zero repaired cell.
         flux[k, i] = np.sqrt(neighbours[0] * neighbours[1])
         repaired.append((float(lgmet[k]), float(lg_age_gyr[i])))
 

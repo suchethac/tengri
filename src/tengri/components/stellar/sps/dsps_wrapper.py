@@ -743,7 +743,15 @@ def load_ssp_data(
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = _load_float(f["ssp_flux"], dtype=dtype)
+        # Known single-cell grid defects (#3406) are repaired in float64 from the age
+        # neighbours before the working-precision cast: a float32 cast underflows the wNE
+        # grid's ~1e-70 neighbour flux to zero. The repair commutes with the unit rescale.
+        flux_raw, repaired_cells = repair_known_grid_defects(
+            fp.stem, f["ssp_flux"][:], ssp_lgmet, ssp_lg_age_gyr
+        )
+        ssp_flux = jnp.asarray(
+            flux_raw, dtype=dtype if dtype is not None else jnp.result_type(float)
+        )
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
@@ -751,14 +759,6 @@ def load_ssp_data(
             if abs(native_lsun / L_SUN - 1.0) > 1e-12:
                 # Python-float scalar keeps ssp_flux's dtype under JAX weak typing.
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
-
-        # Known single-cell grid defects (#3406) are repaired from the age neighbours here,
-        # after the unit rescale (the repair commutes with it) and before any top-Z policy.
-        repaired_flux, repaired_cells = repair_known_grid_defects(
-            fp.stem, ssp_flux, ssp_lgmet, ssp_lg_age_gyr
-        )
-        if repaired_cells:
-            ssp_flux = jnp.asarray(repaired_flux, dtype=ssp_flux.dtype)
 
         embedded = np.asarray(f["ssp_mass_remaining"][:]) if "ssp_mass_remaining" in f else None
         resolution = resolve_mass_remaining(

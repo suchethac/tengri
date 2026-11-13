@@ -49,11 +49,8 @@ def _outlier_cells(ssp) -> list[tuple[float, float]]:
 
 #: Grids that still carry flagged cells after the load-time repair (#3406). Each is an
 #: expected failure, strict, so a fix that clears it makes the test fail until the entry goes.
-#: The three are not in the repair table: their provenance is not yet checked.
+#: Neither is in the repair table: their provenance is not yet checked.
 _UNRESOLVED = {
-    "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0": (
-        "wNE copy of the Padova grid; carries the same cell at lgmet -3.301, 1 Gyr"
-    ),
     "bpss_stars_c3k_a_chabrier": "BPASS coarse age grid; 19 flagged cells, not one spike",
     "pgny_mist_c3k_chabrier": "one flagged cell at the lowest metallicity node, 5.6 Gyr",
 }
