@@ -4,3 +4,6 @@
 # guard; a site fixed in place must be deleted from here (the guard reports stale entries).
 # Shrink this list by reading the declared default through declared_default(...).
 # Empty since #2265: every nebular site reads its declared default (see components/nebular/_params.py DEFAULT_*).
+src/tengri/components/agn/blocks/blr.py	blr_synthesizer_spectra_block(): agn_blr_logZ = -2.0  (signature default)
+src/tengri/components/agn/blocks/nlr.py	nlr_synthesizer_spectra_block(): agn_nlr_logZ = -2.0  (signature default)
+src/tengri/components/agn/component.py	.get("agn_polar_ebv", 0.0)  (fallback)

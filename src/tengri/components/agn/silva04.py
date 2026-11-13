@@ -46,7 +46,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_NH_SILVA,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._template_grid import (
     cache_per_float_dtype,
     float32_safe_template,
@@ -202,8 +206,8 @@ def silva04_sed_from_grid(
     grid: Silva04Grid,
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Silva+04 torus SED at a single ``log10(N_H)``.

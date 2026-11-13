@@ -58,10 +58,25 @@ from tengri.components.agn._nthcomp import (
     nthcomp_norm_grid as _nthcomp_norm_grid,
 )
 from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_ALPHA,
+    DEFAULT_AGN_ASTAR,
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LOG_MDOT,
     DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_R_WARM_RATIO,
+    DEFAULT_AGN_T_MAX,
 )
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
@@ -206,8 +221,8 @@ def powerlaw_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_alpha: float = -1.0,
-    agn_T_max: float = 1e5,
+    agn_alpha: float = DEFAULT_AGN_ALPHA,
+    agn_T_max: float = DEFAULT_AGN_T_MAX,
     **_kwargs,
 ) -> jnp.ndarray:
     """Simple power-law accretion disc with exponential UV cutoff (deprecated).
@@ -752,8 +767,8 @@ def multicolor_disc(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     n_radii: int = 50,
     euv_tail: str | float | None = "powerlaw",
@@ -1604,7 +1619,7 @@ def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
 
 
 def kubota_done_unemitted_fraction(
-    agn_log_mbh: float, agn_log_lbol: float, agn_a_spin: float = 0.0
+    agn_log_mbh: float, agn_log_lbol: float, agn_a_spin: float = DEFAULT_AGN_A_SPIN
 ) -> float:
     r"""Share of the accretion power the K&D disc does not emit, :math:`R_{\rm unem}/L_{\rm bol}`.
 
@@ -1667,7 +1682,7 @@ def _compute_zone_radii(
     agn_r_warm_ratio: float,
     log10_l_edd: float,
     float32: bool = False,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     h_inf: float | None = None,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
@@ -1848,7 +1863,7 @@ def _compute_zone_luminosities(
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_lbol_shape: float = 0.0,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     nthcomp_table=None,
     h_inf: float | None = None,
 ) -> tuple:
@@ -2227,15 +2242,15 @@ def kubota_done_disc_split(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
@@ -2296,15 +2311,15 @@ def kubota_done_disc(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
@@ -2656,9 +2671,9 @@ def adaf_disc(
     agn_log_lbol,
     agn_lum_ratio=DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh=DEFAULT_AGN_LOG_MBH,
-    agn_adaf_beta=0.5,
-    agn_adaf_delta=0.1,
-    agn_adaf_alpha=0.3,
+    agn_adaf_beta=DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta=DEFAULT_AGN_ADAF_DELTA,
+    agn_adaf_alpha=DEFAULT_AGN_ADAF_ALPHA,
     **_legacy_kwargs,
 ):
     """DEPRECATED thin alias for the faithful Mahadevan 1997 ADAF (#898).
@@ -2868,8 +2883,8 @@ def relagn_disc_from_grid(
     # own rule.
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_mdot: float = -1.0,
-    agn_astar: float = 0.0,
+    agn_log_mdot: float = DEFAULT_AGN_LOG_MDOT,
+    agn_astar: float = DEFAULT_AGN_ASTAR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_kwargs,
 ) -> jnp.ndarray:

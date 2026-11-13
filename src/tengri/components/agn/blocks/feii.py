@@ -11,6 +11,11 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_BLR_CF,
+    DEFAULT_AGN_BLR_LINE_EFFICIENCY,
+    DEFAULT_AGN_FE2_STRENGTH,
+)
 from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
 from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum, _fe2_total_power
 
@@ -34,11 +39,11 @@ def boroson_green_feii_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_fe2_strength: float = 0.0,
+    agn_fe2_strength: float = DEFAULT_AGN_FE2_STRENGTH,
     agn_blr_fwhm_kms: float = 5000.0,
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
-    agn_blr_cf: float = 0.1,
-    agn_blr_line_efficiency: float = 0.08,
+    agn_blr_cf: float = DEFAULT_AGN_BLR_CF,
+    agn_blr_line_efficiency: float = DEFAULT_AGN_BLR_LINE_EFFICIENCY,
     **_params,
 ) -> Array:
     r"""FeII pseudo-continuum block using Boroson & Green (1992) templates.
@@ -127,11 +132,11 @@ def boroson_green_feii_line_power(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_fe2_strength: float = 0.0,
+    agn_fe2_strength: float = DEFAULT_AGN_FE2_STRENGTH,
     agn_blr_fwhm_kms: float = 5000.0,
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
-    agn_blr_cf: float = 0.1,
-    agn_blr_line_efficiency: float = 0.08,
+    agn_blr_cf: float = DEFAULT_AGN_BLR_CF,
+    agn_blr_line_efficiency: float = DEFAULT_AGN_BLR_LINE_EFFICIENCY,
     **_params,
 ) -> Array:
     r"""Bolometric power of :func:`boroson_green_feii_block` [erg/s].

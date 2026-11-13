@@ -60,7 +60,11 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._template_grid import (
     TorusTemplateGrid,
     cache_per_float_dtype,
@@ -174,7 +178,7 @@ def nenkova_agnfitter_2p_sed_from_grid(
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_oa_nenkova: float = _DEFAULT_AGN_OA_NENKOVA,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""``NK0_mean_2p`` (AGNfitter-rX) torus SED at a single (incl, oa) node.
