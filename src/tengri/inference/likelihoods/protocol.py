@@ -471,7 +471,7 @@ class MultivariateGaussianLikelihood:
             presence = data_args[self.presence_key]
             if self.data_slice is not None:
                 presence = presence[self.data_slice[0] : self.data_slice[1]]
-            diff = presence * diff
+            diff = jnp.where(presence > 0, diff, 0.0)
         if self.chol_data is None:
             return -0.5 * (diff @ self.cov_inv @ diff)
         factor = BandedMatrix(

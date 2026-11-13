@@ -354,6 +354,17 @@ def whiten(x, sigma):
     return jax.lax.optimization_barrier(x / sigma)
 
 
+def present_noise(noise, presence):
+    """``noise`` with absent cells set to 1.0, so whitening them is finite (#3405).
+
+    An absent band is stored with zero noise, and ``whiten`` of it is inf or NaN.
+    Callers mask the absent terms to zero after whitening; this keeps the
+    whitening itself finite, in the value and in the gradient. Where
+    ``presence`` is 1 the noise is returned unchanged, bit for bit.
+    """
+    return noise if presence is None else jnp.where(presence > 0, noise, jnp.ones_like(noise))
+
+
 def pow10(x):
     """10**x, computed as ``exp(x·ln10)`` to preserve the input dtype.
 

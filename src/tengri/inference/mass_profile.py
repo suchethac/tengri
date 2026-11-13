@@ -111,7 +111,7 @@ from jax.scipy.special import logsumexp
 
 from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.utils.scale import pow10, whiten
+from tengri.utils.scale import pow10, present_noise, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -1366,8 +1366,8 @@ def _profile_stats(
     # in float32, though the same derivative is finite -- if tiny -- in float64).
     # The dimensionless form naturally avoids this: mass factors cancel
     # algebraically, so neither is formed.
-    snr_pred = whiten(pred, noise)
-    snr_d = whiten(data, noise)
+    snr_pred = whiten(pred, present_noise(noise, presence))
+    snr_d = whiten(data, present_noise(noise, presence))
 
     if presence is not None:
         # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
