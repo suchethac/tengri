@@ -22,6 +22,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.stellar.sfh.nonparametric import DEFAULT_N_BINS, make_agebins_from_zred
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 from tengri.parameters.priors import Distribution
 from tengri.parameters.timing import resolve_timing_fracs
@@ -47,6 +48,23 @@ def _spec_for(name: str):
         raise KeyError(f"Unknown SFH model '{name}'. Registered: {valid}")
     # SFHRegistryEntry forwards attribute access to the underlying SFHModelSpec.
     return entry
+
+
+def _bin_edges_for(family: str | list[str], redshift: float | None):
+    """Age-bin edges the forward model uses at ``redshift``, or None for the default.
+
+    The binned families are built on the ``make_agebins_from_zred`` ladder, whose
+    last edge is age(z), as the forward model builds it. ``None`` and ``0`` keep
+    the default ladder, which already ends inside age(0) (#3455).
+    """
+    from tengri.parameters.groups import _Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES
+
+    members = [family] if isinstance(family, str) else list(family)
+    if not (_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES & set(members)):
+        return None
+    if not redshift:
+        return None
+    return make_agebins_from_zred(zred=redshift, n_bins=DEFAULT_N_BINS)
 
 
 def _draw_internal_kwargs(
@@ -132,7 +150,10 @@ def sample_sfh_prior(
         age-anchored families (``dense_basis``, ``dense_basis_pure``, ``psb``,
         and composites containing one), whose time axis is set by the age of
         the universe at the galaxy's redshift; there is no default, because
-        no single age is right for every use. Ignored by every other family.
+        no single age is right for every use. The binned families
+        (``continuity``, ``dirichlet``, ...) take their age-bin ladder from
+        the same redshift, so no bin lies beyond age(z) (#3455). Ignored by
+        the other families.
     **prior_overrides : Distribution
         Per-parameter prior overrides keyed by the *public* parameter name
         (e.g. ``sfh_dpl_alpha=Uniform(0.5, 2.0)``). Anything not overridden
@@ -200,7 +221,9 @@ def sample_sfh_prior(
     if age_grid_yr is None:
         age_grid_yr = DEFAULT_AGE_GRID_YR
 
-    composed_fn, _, _, settings = resolve_sfh(family)
+    composed_fn, _, _, settings = resolve_sfh(
+        family, bin_edges_gyr=_bin_edges_for(family, redshift)
+    )
 
     family_list, internal_kwargs = _draw_internal_kwargs(
         family, key, n, prior_overrides, redshift=redshift
