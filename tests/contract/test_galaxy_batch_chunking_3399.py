@@ -114,3 +114,18 @@ def test_chunked_values_match_unchunked_cube():
     ref = np.asarray(jax.vmap(_per_galaxy_cube)(params))
     got = np.asarray(vmap_chunked(_per_galaxy_cube, chunk_size=_CHUNK)(params))
     np.testing.assert_allclose(got, ref, rtol=_RTOL, atol=0)
+
+
+def test_vmap_chunked_rejects_none_chunk_size():
+    """None used to mean one whole-batch call; it is refused with a pointer to the fix."""
+    with pytest.raises(ValueError, match="GALAXY_CHUNK_SIZE"):
+        vmap_chunked(_per_galaxy_cube, None)
+
+
+@pytest.mark.parametrize(
+    ("bad", "type_name"),
+    [(2.5, "float"), ("8", "str"), (True, "bool")],
+)
+def test_vmap_chunked_rejects_non_int_chunk_size(bad, type_name):
+    with pytest.raises(ValueError, match=type_name):
+        vmap_chunked(_per_galaxy_cube, bad)
