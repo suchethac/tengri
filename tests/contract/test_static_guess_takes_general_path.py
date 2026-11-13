@@ -94,6 +94,13 @@ ALLOWLIST: dict[str, str] = {
         "lut.sigma_v_kms None and broadens the summed spectrum on the full model grid every "
         "draw), so no traced dispersion reaches the table route (#2958)"
     ),
+    "forward/ssp_guard.py::check_ssp_flux_not_splat": (
+        "a traced cube returns before the numpy comparison and is passed through unchanged "
+        "(the splat refusal of #3350 needs concrete values, so it runs only at SEDModel.__init__ "
+        "on host ssp_flux); the traced cube takes the ordinary general forward path, which "
+        "never forms a splat model constant, so the jit(vmap) XLA miscompile it guards against "
+        "is not reached by it"
+    ),
     "forward/sed_model.py::SEDModel.__init__": (
         "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),

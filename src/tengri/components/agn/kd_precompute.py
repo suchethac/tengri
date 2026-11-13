@@ -39,9 +39,17 @@ from tengri.components.agn._nt_emissivity import (
     nt_rt as _nt_rt,
 )
 from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
+    DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_R_WARM_RATIO,
 )
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
@@ -901,7 +909,7 @@ def _integrate_outer_zone(
     kd_data: KDPreintegratedData,
     agn_cos_inc: float,
     _SIGMA_SB: float,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Integrate outer standard disc via filter-level Planck lookup.
 
@@ -971,7 +979,7 @@ def _integrate_warm_zone(
     agn_kt_warm: float,
     _SIGMA_SB: float,
     _K_BOLTZ_KEV: float,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Integrate warm Comptonization zone via filter-level nthcomp/Planck lookup.
 
@@ -1061,15 +1069,15 @@ def kubota_done_disc_preintegrated(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     **_kwargs,

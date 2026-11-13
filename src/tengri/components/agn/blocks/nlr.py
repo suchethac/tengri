@@ -34,6 +34,14 @@ from jax import Array
 from tengri.components.agn._params import (
     DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_NLR_ALPHA_PL,
+    DEFAULT_AGN_NLR_CF,
+    DEFAULT_AGN_NLR_FWHM_KMS,
+    DEFAULT_AGN_NLR_LINE_EFFICIENCY,
+    DEFAULT_AGN_NLR_LOGN,
+    DEFAULT_AGN_NLR_LOGU,
+    DEFAULT_AGN_NLR_LOGZ,
+    DEFAULT_AGN_NLR_XI_D,
 )
 from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
 from tengri.components.agn.nlr import compute_nlr_sed
@@ -108,9 +116,9 @@ def nlr_analytic_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_fwhm_kms: float = 500.0,
-    agn_nlr_line_efficiency: float = 0.10,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_fwhm_kms: float = DEFAULT_AGN_NLR_FWHM_KMS,
+    agn_nlr_line_efficiency: float = DEFAULT_AGN_NLR_LINE_EFFICIENCY,
     **_params,
 ) -> tuple[Array, Array]:
     r"""Analytic NLR (Richardson+2014 line ratios + Gaussian broadening).
@@ -139,8 +147,8 @@ def nlr_analytic_line_power(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_line_efficiency: float = 0.10,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_line_efficiency: float = DEFAULT_AGN_NLR_LINE_EFFICIENCY,
     **_params,
 ) -> Array:
     r"""Bolometric line power of :func:`nlr_analytic_block` [erg/s].
@@ -190,13 +198,13 @@ def nlr_feltre_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_fwhm_kms: float = 500.0,
-    agn_nlr_alpha_pl: float = -1.7,
-    agn_nlr_logU: float = -2.0,
-    agn_nlr_logn: float = 3.0,
-    agn_nlr_logZ: float = -1.8477,
-    agn_nlr_xi_d: float = 0.3,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_fwhm_kms: float = DEFAULT_AGN_NLR_FWHM_KMS,
+    agn_nlr_alpha_pl: float = DEFAULT_AGN_NLR_ALPHA_PL,
+    agn_nlr_logU: float = DEFAULT_AGN_NLR_LOGU,
+    agn_nlr_logn: float = DEFAULT_AGN_NLR_LOGN,
+    agn_nlr_logZ: float = DEFAULT_AGN_NLR_LOGZ,
+    agn_nlr_xi_d: float = DEFAULT_AGN_NLR_XI_D,
     **_params,
 ) -> tuple[Array, Array]:
     r"""Physical NLR from the Feltre+2016 CLOUDY grid (BEAGLE parity).
@@ -255,12 +263,12 @@ def nlr_cue_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_fwhm_kms: float = 500.0,
-    agn_nlr_alpha_pl: float = -1.7,
-    agn_nlr_logU: float = -2.0,
-    agn_nlr_logn: float = 3.0,
-    agn_nlr_logZ: float = -1.8477,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_fwhm_kms: float = DEFAULT_AGN_NLR_FWHM_KMS,
+    agn_nlr_alpha_pl: float = DEFAULT_AGN_NLR_ALPHA_PL,
+    agn_nlr_logU: float = DEFAULT_AGN_NLR_LOGU,
+    agn_nlr_logn: float = DEFAULT_AGN_NLR_LOGN,
+    agn_nlr_logZ: float = DEFAULT_AGN_NLR_LOGZ,
     templates=None,
     **_params,
 ) -> tuple[Array, Array]:
@@ -319,10 +327,10 @@ def nlr_synthesizer_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_fwhm_kms: float = 500.0,
-    agn_nlr_logU: float = -2.0,
-    agn_nlr_logZ: float = -1.8477,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_fwhm_kms: float = DEFAULT_AGN_NLR_FWHM_KMS,
+    agn_nlr_logU: float = DEFAULT_AGN_NLR_LOGU,
+    agn_nlr_logZ: float = DEFAULT_AGN_NLR_LOGZ,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
@@ -366,6 +374,12 @@ def nlr_synthesizer_block(
     return jnp.zeros_like(L_lambda), L_lambda
 
 
+#: Synthesizer UnifiedAGN NLR density (log10 n_H). Differs from the declared
+#: ``agn_nlr_logn`` (3.0, the Feltre+2016 grid center) on purpose: 4.0 is that code's
+#: own convention, kept as-is and NOT verified against upstream Synthesizer.
+NLR_SYNTHESIZER_LOGN = 4.0
+
+
 @register_agn_block(
     "nlr",
     "synthesizer_spectra",
@@ -378,13 +392,13 @@ def nlr_synthesizer_spectra_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_nlr_cf: float = 0.1,
-    agn_nlr_logU: float = -2.0,
+    agn_nlr_cf: float = DEFAULT_AGN_NLR_CF,
+    agn_nlr_logU: float = DEFAULT_AGN_NLR_LOGU,
     # Differs from the declared agn_nlr_logn default (3.0, the Feltre+2016 grid
     # center): this block reproduces Synthesizer's UnifiedAGN, and 4.0 sits at
     # the grid edge, which reads as that code's own NLR-density convention.
     # Left as-is rather than unified; NOT verified against upstream Synthesizer.
-    agn_nlr_logn: float = 4.0,
+    agn_nlr_logn: float = NLR_SYNTHESIZER_LOGN,
     agn_nlr_logZ: float = -2.0,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
