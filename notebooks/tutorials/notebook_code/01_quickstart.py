@@ -340,7 +340,8 @@ plt.show()
 # Hoffman & Gelman 2014), the gold-standard exact sampler for low-dimensional
 # problems. For D = 8, the two should agree. The NUTS run is the exact reference
 # that the 15-second Laplace result is compared against; on a laptop CPU it takes
-# about 15 to 20 minutes.
+# about 15 to 20 minutes. The higher target acceptance keeps NUTS from diverging
+# on this posterior's curved SFH-shape degeneracy.
 
 # %%
 # Run NUTS from MAP initialization
@@ -350,6 +351,7 @@ result_nuts_param = forward_param.fit(
     method="mcmc_nuts",
     n_warmup=500,
     n_samples=1000,
+    target_accept_rate=0.95,
     init_from=result_map_param,
     verbose=False,
 )
