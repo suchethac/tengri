@@ -278,6 +278,9 @@ jobs:
       # file in tools/lint_ratchet_baseline.txt and fails on any rise, or on a fall that the
       # baseline has not recorded. Stdlib-only; it runs the ruff installed above.
       - run: python tools/check_lint_ratchet.py ruff
+      # Loose relative tolerances (rel=/rtol= of 1e-2 or more) in tests/. Shrink-only
+      # per-file baseline (tools/test_tolerance_baseline.txt); stdlib-only.
+      - run: python tools/check_test_tolerances.py
       # Broad `except` in src/tengri that falls through without keeping the exception.
       # Shrink-only baseline (tools/src_silent_fallback_baseline.txt); stdlib-only.
       - run: python tools/check_src_silent_fallback.py
