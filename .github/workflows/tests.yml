@@ -1540,8 +1540,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
-  # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
-  # push-to-main, the nightly schedule, and manual dispatch — not on PRs.
+  # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on the
+  # nightly schedule and manual dispatch only — not on pushes or PRs, so a pull
+  # request produces no coverage upload and the codecov.yml patch target is
+  # informational until uploads flow.
   #
   # SHARDED, across the same three trees the `test` job uses (2026-07). This job ran
   # the entire fast tier in ONE process under coverage instrumentation, and it does
@@ -1774,13 +1776,15 @@ jobs:
         # the three regression-a shards keep the 105 min coverage budget the
         # combined regression-a shard had.
         timeout-minutes: ${{ matrix.coverage_budget }}
+      # Codecov refuses a tokenless upload, so the token is required and a
+      # refused upload fails the shard. CODECOV_TOKEN is a repository secret.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./coverage.xml
           flags: ${{ matrix.shard }}
-          fail_ci_if_error: false
-        continue-on-error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
 
   # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).
   # Run on:
