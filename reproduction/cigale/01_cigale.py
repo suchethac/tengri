@@ -3872,9 +3872,7 @@ print(
 # the chosen ψ and multiplies it by `agn_power`, so the library's per-inclination dust flux
 # does not enter the total. The cell prints the torus plus polar luminosity as a multiple of
 # `agn_power`, 1.011× at each of ψ = 0.001°, 40.1° and 89.99°, the same flat value as the
-# SKIRTOR cases above. Before the owner ruling of 2026-11-13 tengri kept the library's
-# per-inclination flux here and the multiples were 0.85×, 1.07× and 1.25× (band medians
-# 0.846×, 1.066× and 1.248×). The per-sightline spectral shape of the torus is unchanged; only
+# SKIRTOR cases above. The per-sightline spectral shape of the torus is the library's; only
 # the total is held. The untied path (`agn_ir_frac = 0`) and `agn_norm="independent"` keep the
 # library's anisotropy.
 
@@ -5686,7 +5684,7 @@ plt.show()
 # | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0125× (0.3–1 μm), 1.0081× (3–8 μm), 1.0127× (10–100 μm), 1.0118× (100–1000 μm) |
 # | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
 # | 9 | AGN, SKIRTOR | disc 1.0101×, torus 1.0113×, polar dust 1.0120× (§9); 1.0076×, 1.0150×, 0.9998× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
-# | 9 | AGN, Fritz | §9e band medians 1.011×, 1.009×, 1.010× (worst bands 0.975×, 0.974×, 0.974×; none of 12 bands outside 5 %): under `cigale_joint` tengri's torus plus polar dust is 1.011× of `agn_power` at every ψ, as pcigale holds it (0.85×, 1.07×, 1.25× before the 2026-11-13 ruling) |
+# | 9 | AGN, Fritz | §9e band medians 1.011×, 1.009×, 1.010× (worst bands 0.975×, 0.974×, 0.974×; none of 12 bands outside 5 %): under `cigale_joint` tengri's torus plus polar dust is 1.011× of `agn_power` at every ψ, as pcigale holds it |
 # | 9 | AGN, tied disc edge | step across the 10 Å library edge, F(10⁻)/[F(10⁺) T_X], 1.0000–1.0032 for Fritz and SKIRTOR at cos i = 0.94, 0.70, 0.30; pcigale `fritz2006` and `skirtor2016` have 0 grid points shortward of 10 Å |
 # | 9 | AGN, SKIRTOR normalization | agn_log_lbol = log10(P_acc / L_sun) with P_acc = 0.4931 L_intrin,disc agn_power; AGN-only NIR/V shape 0.960×, V 1.013×, 1.0–1.2 μm 0.972×, bolometric 1.062× at E(B−V) = 0.03, and 1.005×, 0.936×, 0.940×, 0.921× at E(B−V) = 0 |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
