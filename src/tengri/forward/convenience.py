@@ -16,6 +16,7 @@ import numpy as np
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.parameters._dust_laws import resolve_dust_screen_laws, resolve_from_config_dust_law
 from tengri.parameters.defaults import UNSET as _UNSET
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
 
 if TYPE_CHECKING:
     from tengri.forward.sed_model import MockData, PriorPredictive, SEDModel
@@ -154,8 +155,35 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
 # ── Batch predictions (vmap over galaxies) ────────────────────────
 
 
-def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
-    """vmap ``method_name`` over the batch axis with the grids broadcast, not baked.
+def _batch_kernel(model, method_name, chunk_size):
+    """The chunked mapper for ``model.<method_name>``, compiled once per model and signature.
+
+    The grids are passed per call as the ``shared`` argument, so one compiled kernel
+    serves every call of the same model. A repeated call (a posterior predictive loop,
+    a notebook timing loop) therefore reuses the compiled chunk instead of retracing.
+    The cache lives on the model and follows its ``compile_signature()``, as the draw
+    kernels of :mod:`tengri.forward.draw_maps` do.
+    """
+    signature = model.compile_signature()
+    cache = vars(model).setdefault("_galaxy_batch_kernels", {})
+    key = (method_name, int(chunk_size))
+    hit = cache.get(key)
+    if hit is not None and hit[0] == signature:
+        return hit[1]
+    bound = getattr(model, method_name)
+
+    def _one(params, grids):
+        ssp_arg, template_arg, ztable_arg = grids
+        return bound(params, ssp_data=ssp_arg, template_data=template_arg, ztable_data=ztable_arg)
+
+    # ``shared=()`` marks the grids as a shared argument; the real grids arrive per call.
+    mapped = vmap_chunked(_one, chunk_size=chunk_size, shared=())
+    cache[key] = (signature, mapped)
+    return mapped
+
+
+def _threaded_batch(model, method_name, params_batch, ssp_data, template_data, chunk_size):
+    """Map ``method_name`` over the batch axis in chunks, with the grids broadcast, not baked.
 
     ``jax.vmap(model.predict_photometry)`` closure-captures ``model``, so the SSP
     grid reaches the trace as a constant and a caller who wraps the batch helper
@@ -166,22 +194,29 @@ def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
 
     Resolution goes through ``_resolve_threaded_data`` so the override policy is
     stated once; ``ForwardModel`` delegates that to its inner SED.
+
+    Galaxies run in compiled chunks of ``chunk_size`` through
+    :func:`tengri.utils.batching.vmap_chunked`, so peak memory scales with the
+    chunk, not with the batch. The grids are the chunk's ``shared`` argument.
     """
     resolve = getattr(model, "_resolve_threaded_data", None)
     if resolve is None:  # pragma: no cover - ForwardModel delegates; SEDModel defines it
         inner = model._inner_sed_for_delegation()
         resolve = inner._resolve_threaded_data
     ssp, templates, ztable = resolve(ssp_data, template_data, None)
-    bound = getattr(model, method_name)
-
-    def _one(params, ssp_arg, template_arg, ztable_arg):
-        return bound(params, ssp_data=ssp_arg, template_data=template_arg, ztable_data=ztable_arg)
-
-    return jax.vmap(_one, in_axes=(0, None, None, None))(params_batch, ssp, templates, ztable)
+    mapped = _batch_kernel(model, method_name, chunk_size)
+    return mapped(params_batch, shared=(ssp, templates, ztable))
 
 
-def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):
-    """Compute photometry for a batch of galaxies via vmap.
+def predict_photometry_batch(
+    model: SEDModel,
+    params_batch,
+    *,
+    ssp_data=None,
+    template_data=None,
+    chunk_size: int = GALAXY_CHUNK_SIZE,
+):
+    """Compute photometry for a batch of galaxies, in chunks of galaxies.
 
     Parameters
     ----------
@@ -194,6 +229,10 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
         own arrays, which is correct for every ordinary call. Pass them only
         when wrapping this helper in your own JAX transform, so the grid enters
         as an argument instead of being frozen into your compiled program.
+    chunk_size : int, keyword-only, default 32
+        Galaxies per compiled chunk [galaxies]. Peak memory scales with the chunk:
+        each galaxy holds one ``(n_age, n_wave)`` per-age cube, about
+        ``n_age * n_wave * 8`` bytes [bytes]. Larger is faster and hungrier.
 
     Returns
     -------
@@ -202,17 +241,28 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
-    See :func:`jax.vmap` for vmap internals.
+    **JIT-compatible**: each chunk is one ``jit(vmap)`` kernel, and the chunks are
+    driven from Python, so call this helper rather than wrapping it in ``jit``.
+    The result agrees across chunk sizes to round-off (XLA compiles a different
+    kernel per batch shape); see :func:`tengri.utils.batching.vmap_chunked`.
 
-    The grids are broadcast with ``in_axes=None``: one shared table across the
+    The grids are broadcast to every galaxy: one shared table across the
     batch, never a per-galaxy copy.
     """
-    return _threaded_batch(model, "predict_photometry", params_batch, ssp_data, template_data)
+    return _threaded_batch(
+        model, "predict_photometry", params_batch, ssp_data, template_data, chunk_size
+    )
 
 
-def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):
-    """Compute spectra for a batch of galaxies via vmap.
+def predict_spectrum_batch(
+    model: SEDModel,
+    params_batch,
+    *,
+    ssp_data=None,
+    template_data=None,
+    chunk_size: int = GALAXY_CHUNK_SIZE,
+):
+    """Compute spectra for a batch of galaxies, in chunks of galaxies (see photometry batch).
 
     Requires a spectrum grid fixed at build: the model must be built with
     ``observation=Observation(spectroscopy=Spectroscopy(wave_obs=...))``, or
@@ -226,6 +276,8 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
         Each value has shape (N, ...) with leading batch dimension.
     ssp_data, template_data : Any | None, keyword-only, optional
         The JIT-threading channel, see :func:`predict_photometry_batch` (#1793).
+    chunk_size : int, keyword-only, default 32
+        Galaxies per compiled chunk, see :func:`predict_photometry_batch`.
 
     Returns
     -------
@@ -237,13 +289,17 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
     """
-    return _threaded_batch(model, "predict_spectrum", params_batch, ssp_data, template_data)
+    return _threaded_batch(
+        model, "predict_spectrum", params_batch, ssp_data, template_data, chunk_size
+    )
 
 
 # ── Prior predictive check ────────────────────────────────────────
 
 
-def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPredictive:
+def prior_predictive(
+    model: SEDModel, n: int = 500, seed: int = 42, chunk_size: int = GALAXY_CHUNK_SIZE
+) -> PriorPredictive:
     """Sample prior and evaluate forward model on each draw.
 
     Returns a ``PriorPredictive`` object with draw arrays and convenience
@@ -257,6 +313,9 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
         Number of prior draws. Default 500.
     seed : int, optional
         Random seed for reproducibility. Default 42.
+    chunk_size : int, optional
+        Draws per compiled chunk [draws]. Default 32. Each draw holds one
+        ``(n_age, n_wave)`` per-age cube, about ``n_age * n_wave * 8`` bytes.
 
     Returns
     -------
@@ -277,13 +336,15 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     params_batch = model.spec.sample_batch(key, n)
 
     # SFH draws
-    sfh_batch = jax.vmap(model.predict_sfh)(params_batch)
+    sfh_batch = vmap_chunked(model.predict_sfh, chunk_size=chunk_size)(params_batch)
 
     # Photometry draws (if filters present)
     flux_batch = None
     if model.filter_waves is not None:
         try:
-            flux_batch = jax.vmap(model.predict_photometry)(params_batch)
+            flux_batch = vmap_chunked(model.predict_photometry, chunk_size=chunk_size)(
+                params_batch
+            )
         except (TypeError, ValueError, RuntimeError, AttributeError):
             # TypeError: predict_photometry isn't vmappable
             # ValueError: params_batch structure incompatible with vmap
@@ -311,10 +372,13 @@ def fit_batch_map_vmap(
     learning_rate: float = 0.02,
     seed: int = 0,
     verbose: bool = True,
+    chunk_size: int = GALAXY_CHUNK_SIZE,
 ):
     """Batched MAP inference via vmap across galaxies (photometry-only).
 
-    One XLA program compiles once; Adam runs in parallel over all galaxies.
+    One XLA program compiles once per chunk; Adam runs in parallel over each chunk
+    of galaxies. Galaxies are independent, so the chunking changes memory, not the
+    answer, beyond round-off.
     Typical speedup on catalogs is 10-50x vs sequential MAP fitting.
     Photometry-only: same model (redshift, filters, parameters) for every galaxy.
 
@@ -334,6 +398,10 @@ def fit_batch_map_vmap(
         PRNG seed for Adam initialization. Default 0.
     verbose : bool, optional
         Print batch statistics and wall time. Default True.
+    chunk_size : int, optional
+        Galaxies optimized together per compiled chunk. Default 32. Peak memory
+        scales with the chunk: each galaxy holds one ``(n_age, n_wave)`` per-age
+        cube, about ``n_age * n_wave * 8`` bytes.
 
     Returns
     -------
@@ -354,7 +422,6 @@ def fit_batch_map_vmap(
 
     from tengri.inference.fitter import Fitter
     from tengri.inference.loss_functions import build_loss_fn
-    from tengri.utils.transforms import to_bounded
 
     fluxes = jnp.asarray(fluxes)
     noises = jnp.asarray(noises)
@@ -376,14 +443,51 @@ def fit_batch_map_vmap(
     # template._initialize_unbounded gives one galaxy's init dict; replicate it.
     init_unbounded = template._initialize_unbounded(jax.random.PRNGKey(seed))
 
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    optimizer = optax.adam(learning_rate)
+    t0 = time.time()
+    results = [
+        _fit_map_chunk(
+            template,
+            loss_fn,
+            init_unbounded,
+            optimizer,
+            fluxes[lo : lo + chunk_size],
+            noises[lo : lo + chunk_size],
+            n_steps=n_steps,
+        )
+        for lo in range(0, n_gal, chunk_size)
+    ]
+    physical = {name: jnp.concatenate([r[0][name] for r in results]) for name in results[0][0]}
+    if verbose:
+        last_loss = jnp.concatenate([r[1] for r in results])
+        print(
+            f"fit_batch_map_vmap: N={n_gal}, n_steps={n_steps}, "
+            f"chunks={len(results)} of <= {chunk_size}, wall={time.time() - t0:.2f}s, "
+            f"mean final loss={float(last_loss.mean()):.3f}"
+        )
+    return physical
+
+
+def _fit_map_chunk(template, loss_fn, init_unbounded, optimizer, fluxes, noises, *, n_steps):
+    """Adam MAP for one chunk of galaxies.
+
+    Returns the physical-space values, each shape ``(n_chunk,)``, and the final loss
+    of each galaxy, shape ``(n_chunk,)``.
+    """
+    import optax
+
+    from tengri.utils.transforms import to_bounded
+
+    n_gal = int(fluxes.shape[0])
+
     def _replicate(x):
         """Replicate scalar across batch dimension."""
         return jnp.broadcast_to(x, (n_gal, *jnp.shape(x)))
 
     params_batch = jax.tree.map(_replicate, init_unbounded)
     data_args_batch = {"data": fluxes, "noise": noises}
-
-    optimizer = optax.adam(learning_rate)
 
     def _single_step(carry, _):
         """Execute one Adam iteration across batch via vmap."""
@@ -402,19 +506,10 @@ def fit_batch_map_vmap(
     opt_state_single = optimizer.init(init_unbounded)
     opt_state_batch = jax.tree.map(_replicate, opt_state_single)
 
-    t0 = time.time()
     (params_final, _), loss_trace = jax.lax.scan(
         _single_step, (params_batch, opt_state_batch), None, length=n_steps
     )
     loss_trace.block_until_ready()
-    t_run = time.time() - t0
-
-    if verbose:
-        last_loss = jnp.asarray(loss_trace[-1])
-        print(
-            f"fit_batch_map_vmap: N={n_gal}, n_steps={n_steps}, "
-            f"wall={t_run:.2f}s, mean final loss={float(last_loss.mean()):.3f}"
-        )
 
     # Transform to physical space
     bounds = template._bounds
@@ -427,7 +522,7 @@ def fit_batch_map_vmap(
         physical["psd_xi"] = params_final["psd_xi"]
     for name, val in fixed_values.items():
         physical[name] = jnp.broadcast_to(jnp.asarray(val), (n_gal,))
-    return physical
+    return physical, jnp.asarray(loss_trace[-1])
 
 
 def fit_batch(
