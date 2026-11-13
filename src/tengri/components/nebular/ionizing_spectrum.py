@@ -17,6 +17,7 @@ import numpy as np
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
+from tengri.config.exceptions import ConfigError
 from tengri.utils.host_array import host_array
 
 # numpy < 2.0 compat: numpy 2.0 removed `trapz`; numpy >= 1.26 provides `trapezoid`.
@@ -446,6 +447,44 @@ HI_LIMIT = LYMAN_LIMIT_AA
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
+
+
+def require_ionizing_coverage(ssp_wave, *, backend: str) -> None:
+    """Refuse an SSP wavelength axis with no point at or below the Lyman limit (#3444).
+
+    Parameters
+    ----------
+    ssp_wave : array_like, shape (n_wave,)
+        SSP wavelength axis [Angstrom].
+    backend : str
+        Name of the photoionized backend that asks, quoted in the error.
+
+    Raises
+    ------
+    ConfigError
+        If no wavelength is at or below ``HI_LIMIT`` [Angstrom]. Such a grid has no
+        ionizing spectrum, so the backend cannot predict nebular emission from it.
+
+    Notes
+    -----
+    The mask is the same ``wave <= HI_LIMIT`` the ionizing-table builder uses, so the
+    check and the builder cannot disagree. Pure NumPy, no JAX transform.
+    """
+    wave_axis = np.asarray(ssp_wave, dtype=np.float64)
+    if np.any(wave_axis <= HI_LIMIT):
+        return
+    raise ConfigError(
+        f"neb backend '{backend}' cannot use this SSP grid: its wavelength axis "
+        f"starts at {wave_axis.min():.6g} A, above the Lyman limit at {HI_LIMIT:.0f} A, "
+        "so it carries no ionizing spectrum from which to predict nebular emission. "
+        "A grid truncated above the limit is not a dark grid, so the build is refused.\n"
+        "\n"
+        "Fix (one of):\n"
+        "  1. Use an SSP grid whose wavelength axis extends below 912 A.\n"
+        "  2. Use a nebular backend that does not need the ionizing spectrum.\n"
+        "  3. Drop the nebular emission: neb={'type': 'none'}."
+    )
+
 
 # Cue-emulator range of the 7 ionizing-shape parameters, used to clip the
 # auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is never

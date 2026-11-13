@@ -193,6 +193,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -1109,6 +1110,7 @@ class CB19Backend(NebularBackendDefaults):
         Stores a (n_met, n_age) table of ionizing photon rates. At prediction
         time, bilinear interpolation gives Q_H for each SSP age bin.
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cb19 (CB19Backend)")
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
