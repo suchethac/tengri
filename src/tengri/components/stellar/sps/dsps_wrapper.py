@@ -27,6 +27,7 @@ from jax import dtypes as jax_dtypes
 
 from tengri._cache_keys import KeyPolicy, baked, content
 from tengri._x64_hold import hold_x64_preference
+from tengri.components.stellar.sps.grid_defects import repair_known_grid_defects
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -219,6 +220,10 @@ class SSPData(NamedTuple):
     # applied to it (:class:`~tengri.components.stellar.sps.top_z_validity.TopZValidity`),
     # or ``None`` when the grid has no limit on record. Metadata only: never a JIT leaf.
     top_z: tuple | None = None
+    # Cells ``(lgmet, lg_age_gyr)`` whose flux was replaced at load by
+    # :func:`~tengri.components.stellar.sps.grid_defects.repair_known_grid_defects` (#3406).
+    # Empty for every grid without a recorded defect. Metadata only.
+    repaired_cells: tuple = ()
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this SSPData instance.
@@ -248,7 +253,7 @@ def _sspdata_flatten(s):
         s.ssp_alpha_fe,
         s.ssp_resolution_kms,
     )
-    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z)
+    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z, s.repaired_cells)
     return children, aux
 
 
@@ -270,6 +275,7 @@ def _sspdata_unflatten(aux, children):
         nebular=aux[2],
         mass_remaining_source=aux[3],
         top_z=aux[4],
+        repaired_cells=aux[5],
     )
 
 
@@ -289,6 +295,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
     "mass_remaining_source": content("where the surviving-mass table came from"),
     "top_z": content("top-metallicity validity limit and policy change the node arrays"),
+    "repaired_cells": content("cells repaired at load change the flux templates"),
 }
 
 
@@ -745,6 +752,14 @@ def load_ssp_data(
                 # Python-float scalar keeps ssp_flux's dtype under JAX weak typing.
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
+        # Known single-cell grid defects (#3406) are repaired from the age neighbours here,
+        # after the unit rescale (the repair commutes with it) and before any top-Z policy.
+        repaired_flux, repaired_cells = repair_known_grid_defects(
+            fp.stem, ssp_flux, ssp_lgmet, ssp_lg_age_gyr
+        )
+        if repaired_cells:
+            ssp_flux = jnp.asarray(repaired_flux, dtype=ssp_flux.dtype)
+
         embedded = np.asarray(f["ssp_mass_remaining"][:]) if "ssp_mass_remaining" in f else None
         resolution = resolve_mass_remaining(
             stem=fp.stem,
@@ -824,6 +839,7 @@ def load_ssp_data(
             nebular=nebular,
             mass_remaining_source=resolution.source,
             top_z=top_z_validity,
+            repaired_cells=repaired_cells,
         )
 
 
