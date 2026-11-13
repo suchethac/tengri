@@ -189,14 +189,23 @@ def fwd_table_other(synthetic_ssp_wide, synthetic_tophat_obs):
         return ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
 
 
-def _catalog(fwd, n):
+def _t_grid(z):
+    """The shared n_t grid, ending at the observation time age_at_z(z) (#3468)."""
+    from tengri.cosmology import age_at_z
+
+    top = min(13.0, float(age_at_z(z)))
+    return np.concatenate([np.array([0.0]), np.linspace(1.0, top, 39)])
+
+
+def _catalog(fwd, n, z=_Z_OBS):
     """A tabulated catalog of n galaxies on a shared (fixed) n_t grid."""
     from tengri import Catalog
 
-    n_t = _T_GYR.shape[0]
+    grid = _t_grid(z)
+    n_t = grid.shape[0]
     shape = np.ones(n_t)
     shape[0] = 0.0
-    t = np.broadcast_to(_T_GYR, (n, n_t)).copy()
+    t = np.broadcast_to(grid, (n, n_t)).copy()
     sfr = np.stack([shape * (1.0 + i) for i in range(n)])
     return Catalog.from_histories(fwd, t_gyr=t, sfr=sfr, params={"dust_tau_diff": np.full(n, 0.2)})
 
@@ -371,7 +380,7 @@ def test_a_different_model_never_reuses_another_models_program(fwd_table, fwd_ta
     both models have identical shapes and differ only in dust opacity.
     """
     cat_a = _catalog(fwd_table, 8)
-    cat_b = _catalog(fwd_table_other, 8)
+    cat_b = _catalog(fwd_table_other, 8, z=10.0 * _Z_OBS)
 
     assert cat_a._batched_cache is not cat_b._batched_cache
 
