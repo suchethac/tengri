@@ -28,7 +28,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -2401,6 +2401,26 @@ class StellarSEDComponentState(SEDComponentState):
     igm_fold_resolved: str | None = None
 
 
+class _SfhOnSspAges(NamedTuple):
+    """Outputs of :meth:`StellarSEDComponent._sfh_on_ssp_ages` (phase B of ``apply``)."""
+
+    log_age_grid: Any
+    sfh_lbt_grid: Any
+    z: Any
+    t_obs_gyr: Any
+    is_composite: bool
+    sfh_spec: Any
+    sfh_kwargs: Any
+    sfh_timing_gyr: Any
+    sfh_fn: Any
+    tab_lbt_yr: Any
+    tab_order: Any
+    sfr_history: Any
+    age_sfh_fn: Any
+    age_tab_lbt_yr: Any
+    sfr_on_ssp: Any
+
+
 @dataclass(frozen=True)
 class StellarSEDComponent:
     """SEDComponent adapter for stellar emission.
@@ -3007,161 +3027,22 @@ class StellarSEDComponent:
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
         n_grid = self.config.n_grid
 
-        # ── 1. SFH lookback-time grid ───────────────────────────────────
-        # Use the SAME grid construction as the legacy SEDModel path
-        # (forward/sed_model.py:467). ``make_log_age_grid`` returns a
-        # uniform grid in log10(age/yr) over [6.0, 10.14] (1 Myr →
-        # 13.8 Gyr). This is critical for ``field=True`` parity:
-        # ``compute_field_gp`` keys on n_grid + d_log_age to build
-        # the GP correlation kernel, so both paths must construct
-        # the grid identically. See tests/integration/test_components_vs_legacy.py.
-        log_age_grid = make_log_age_grid(n_grid)
-        sfh_lbt_grid = 10.0**log_age_grid
-
-        # ── 1b. Cosmology: t_obs from redshift (hoisted above the SFH so
-        # the runtime tabular SFH can convert cosmic time → lookback).
-        # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
-        from tengri.cosmology import age_at_z as _age_at_z
-
-        z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
-
-        # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
-        # Translate user-facing public params → SFH-function kwargs via
-        # the registry's ``internal_param_map``: each entry is
-        # ``(internal_name, scale, offset)`` and the conversion is
-        # ``internal = public * scale + offset``. This ensures both this
-        # component and legacy SEDModel paths see the same units and naming.
-        from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
-
-        # A composite SFH (list) is evaluated through ``resolve_sfh``'s composed
-        # closure. That closure dispatches each additive member by PUBLIC
-        # parameter name, so two members sharing an internal kwarg (any two
-        # parametric families both take ``log_total_mass``) keep their own
-        # values (#372), while the burst mixture reads its ``log_fburst`` by
-        # internal name. The composite kwargs therefore carry every value under
-        # both names. A single type keeps the registry callable and internal
-        # names, so the table and dense_basis special cases below are unchanged.
-        sfh_model = self.config.sfh_model
-        is_composite = isinstance(sfh_model, list)
-        if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
-                sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
-            )
-            # Bin-edge knot discovery (#765) inspects the first member's callable.
-            sfh_spec = SFH_REGISTRY[sfh_model[0]]
-        else:
-            sfh_spec = SFH_REGISTRY[sfh_model]
-            sfh_fn_composed = None
-            spec_params = sfh_spec.params
-            internal_param_map = sfh_spec.internal_param_map
-
-        sfh_kwargs = {}
-        for public_name, (internal_name, scale, offset) in internal_param_map.items():
-            if public_name in params:
-                raw = params[public_name]
-            else:
-                # Fall back to the registry default for any declared parameter
-                # the caller omitted. Required so callers that pass a partial
-                # params dict (e.g. the low-level run_components path, or flat-
-                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
-                # still resolve every positional argument of the SFH callable.
-                # Mirrors the dense_basis age_universe injection just below.
-                pdef = spec_params.get(public_name)
-                default_scalar = pdef.default.default if pdef is not None else None
-                if default_scalar is None:
-                    continue
-                raw = default_scalar
-            value = jnp.asarray(raw) * scale + offset
-            sfh_kwargs[internal_name] = value
-            if is_composite:
-                sfh_kwargs[public_name] = value
-
-        # Mode-specific settings that are NOT free parameters.
-        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
-        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
-        # the configured cosmology rather than a static registry default.
-        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
-        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
-        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
-        # (``psb_continuity_flex``) bound their fixed old bins to
-        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
-        # past the Big Bang (#2645). Both routes use the same rule so they
-        # cannot diverge (#982).
-        resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
-        sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
-        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
-
-        # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
-        # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
-        # (cosmic time [Gyr]) + ``params["sfh_sfr"]`` [Msun/yr]. The registry
-        # entry is a placeholder; override it with an interp closure so every
-        # consumer (coarse history, sfr_on_ssp, dense CIC integrand, derived
-        # quantities) sees the table through the one SFH function. Dict-key
-        # presence is static under jit; the array VALUES stay traced, so two
-        # calls with different same-length tables share one compile. SFR is
-        # edge-clamped outside the table (the legacy jnp.interp convention);
-        # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
-        sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
-        _tab_lbt_yr = None
-        _tab_order = None
-        if isinstance(sfh_model, str) and sfh_model == "table":
-            if self.config.field:
-                raise NotImplementedError(
-                    "sfh_model='table' with field=True is not supported: the "
-                    "GP field draw modulates parametric SFHs only (#996)."
-                )
-            # Shared with compute_joint_weights so the exact forward and the
-            # SED-free fast path cannot read a simulation history differently
-            # (#1395/#1396).
-            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
-        elif "sfh_t_gyr" in params or "sfh_sfr" in params:
-            raise NotImplementedError(
-                "sfh_t_gyr/sfh_sfr passed but sfh_model="
-                f"{self.config.sfh_model!r}: the table would be silently "
-                "ignored. Build with mean_sfh_type='table' (#996)."
-            )
-        if "met_history" in params and self.config.metallicity_model != "table":
-            raise NotImplementedError(
-                "met_history passed but metallicity_model="
-                f"{self.config.metallicity_model!r}: it would be silently "
-                "ignored. Build with met_mode='table' (#996)."
-            )
-
-        sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
-
-        # ── 2b. GP-field modulation ───────────────────────────────────
-        # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
-        # exp(x(t) - K(0)/2), where x(t) is a PSD-governed Gaussian
-        # process and K(0)/2 is the lognormal bias correction so the
-        # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
-        # the SFH registry next to the prior on ``sfh_field_xi``.
-        if self.config.field:
-            sfr_history = _apply_gp_field(
-                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
-            )
-            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
-        else:
-            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
-
-        # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
-        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
-        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
-        # cutoffs at ``t_lookback = age`` land on grid points instead of
-        # being smeared across the coarser ~3 % log-spaced bins of
-        # ``sfh_lbt_grid``. The closed form also self-normalizes through
-        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
-        # exactly. See suchethac/tengri#385.
-        #
-        # The GP-field path still goes through the log grid: ``compute_field_gp``
-        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
-        # GP draw lives on the lookback grid by construction.
-        if self.config.field:
-            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
-        else:
-            sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
+        b = self._sfh_on_ssp_ages(params, ssp_ages_yr, n_grid)
+        log_age_grid = b.log_age_grid
+        sfh_lbt_grid = b.sfh_lbt_grid
+        z = b.z
+        t_obs_gyr = b.t_obs_gyr
+        is_composite = b.is_composite
+        sfh_spec = b.sfh_spec
+        sfh_kwargs = b.sfh_kwargs
+        sfh_timing_gyr = b.sfh_timing_gyr
+        sfh_fn = b.sfh_fn
+        _tab_lbt_yr = b.tab_lbt_yr
+        _tab_order = b.tab_order
+        sfr_history = b.sfr_history
+        _age_sfh_fn = b.age_sfh_fn
+        _age_tab_lbt_yr = b.age_tab_lbt_yr
+        sfr_on_ssp = b.sfr_on_ssp
 
         # (t_obs_gyr hoisted to section 1b: needed by the tabular SFH.)
 
@@ -4232,6 +4113,186 @@ class StellarSEDComponent:
         return state.with_(
             sed_intrinsic=sed_intrinsic,
             derived=state.derived.with_(**derived_overrides),
+        )
+
+    def _sfh_on_ssp_ages(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        ssp_ages_yr: jnp.ndarray,
+        n_grid: int,
+    ) -> _SfhOnSspAges:
+        """Evaluate the star formation history on the lookback grid and the SSP age grid."""
+        # ── 1. SFH lookback-time grid ───────────────────────────────────
+        # Use the SAME grid construction as the legacy SEDModel path
+        # (forward/sed_model.py:467). ``make_log_age_grid`` returns a
+        # uniform grid in log10(age/yr) over [6.0, 10.14] (1 Myr →
+        # 13.8 Gyr). This is critical for ``field=True`` parity:
+        # ``compute_field_gp`` keys on n_grid + d_log_age to build
+        # the GP correlation kernel, so both paths must construct
+        # the grid identically. See tests/integration/test_components_vs_legacy.py.
+        log_age_grid = make_log_age_grid(n_grid)
+        sfh_lbt_grid = 10.0**log_age_grid
+
+        # ── 1b. Cosmology: t_obs from redshift (hoisted above the SFH so
+        # the runtime tabular SFH can convert cosmic time → lookback).
+        # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
+        from tengri.cosmology import age_at_z as _age_at_z
+
+        z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
+        # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
+        # Translate user-facing public params → SFH-function kwargs via
+        # the registry's ``internal_param_map``: each entry is
+        # ``(internal_name, scale, offset)`` and the conversion is
+        # ``internal = public * scale + offset``. This ensures both this
+        # component and legacy SEDModel paths see the same units and naming.
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+
+        # A composite SFH (list) is evaluated through ``resolve_sfh``'s composed
+        # closure. That closure dispatches each additive member by PUBLIC
+        # parameter name, so two members sharing an internal kwarg (any two
+        # parametric families both take ``log_total_mass``) keep their own
+        # values (#372), while the burst mixture reads its ``log_fburst`` by
+        # internal name. The composite kwargs therefore carry every value under
+        # both names. A single type keeps the registry callable and internal
+        # names, so the table and dense_basis special cases below are unchanged.
+        sfh_model = self.config.sfh_model
+        is_composite = isinstance(sfh_model, list)
+        if is_composite:
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
+                sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
+            )
+            # Bin-edge knot discovery (#765) inspects the first member's callable.
+            sfh_spec = SFH_REGISTRY[sfh_model[0]]
+        else:
+            sfh_spec = SFH_REGISTRY[sfh_model]
+            sfh_fn_composed = None
+            spec_params = sfh_spec.params
+            internal_param_map = sfh_spec.internal_param_map
+
+        sfh_kwargs = {}
+        for public_name, (internal_name, scale, offset) in internal_param_map.items():
+            if public_name in params:
+                raw = params[public_name]
+            else:
+                # Fall back to the registry default for any declared parameter
+                # the caller omitted. Required so callers that pass a partial
+                # params dict (e.g. the low-level run_components path, or flat-
+                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
+                # still resolve every positional argument of the SFH callable.
+                # Mirrors the dense_basis age_universe injection just below.
+                pdef = spec_params.get(public_name)
+                default_scalar = pdef.default.default if pdef is not None else None
+                if default_scalar is None:
+                    continue
+                raw = default_scalar
+            value = jnp.asarray(raw) * scale + offset
+            sfh_kwargs[internal_name] = value
+            if is_composite:
+                sfh_kwargs[public_name] = value
+
+        # Mode-specific settings that are NOT free parameters.
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
+        resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
+        sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
+
+        # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
+        # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
+        # (cosmic time [Gyr]) + ``params["sfh_sfr"]`` [Msun/yr]. The registry
+        # entry is a placeholder; override it with an interp closure so every
+        # consumer (coarse history, sfr_on_ssp, dense CIC integrand, derived
+        # quantities) sees the table through the one SFH function. Dict-key
+        # presence is static under jit; the array VALUES stay traced, so two
+        # calls with different same-length tables share one compile. SFR is
+        # edge-clamped outside the table (the legacy jnp.interp convention);
+        # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
+        sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
+        _tab_lbt_yr = None
+        _tab_order = None
+        if isinstance(sfh_model, str) and sfh_model == "table":
+            if self.config.field:
+                raise NotImplementedError(
+                    "sfh_model='table' with field=True is not supported: the "
+                    "GP field draw modulates parametric SFHs only (#996)."
+                )
+            # Shared with compute_joint_weights so the exact forward and the
+            # SED-free fast path cannot read a simulation history differently
+            # (#1395/#1396).
+            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
+        elif "sfh_t_gyr" in params or "sfh_sfr" in params:
+            raise NotImplementedError(
+                "sfh_t_gyr/sfh_sfr passed but sfh_model="
+                f"{self.config.sfh_model!r}: the table would be silently "
+                "ignored. Build with mean_sfh_type='table' (#996)."
+            )
+        if "met_history" in params and self.config.metallicity_model != "table":
+            raise NotImplementedError(
+                "met_history passed but metallicity_model="
+                f"{self.config.metallicity_model!r}: it would be silently "
+                "ignored. Build with met_mode='table' (#996)."
+            )
+
+        sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
+
+        # ── 2b. GP-field modulation ───────────────────────────────────
+        # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
+        # exp(x(t) - K(0)/2), where x(t) is a PSD-governed Gaussian
+        # process and K(0)/2 is the lognormal bias correction so the
+        # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
+        # the SFH registry next to the prior on ``sfh_field_xi``.
+        if self.config.field:
+            sfr_history = _apply_gp_field(
+                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
+            )
+            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
+        else:
+            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
+
+        # ── 3. Resample to SSP age grid for CSP integration ─────────────
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalizes through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
+        return _SfhOnSspAges(
+            log_age_grid=log_age_grid,
+            sfh_lbt_grid=sfh_lbt_grid,
+            z=z,
+            t_obs_gyr=t_obs_gyr,
+            is_composite=is_composite,
+            sfh_spec=sfh_spec,
+            sfh_kwargs=sfh_kwargs,
+            sfh_timing_gyr=sfh_timing_gyr,
+            sfh_fn=sfh_fn,
+            tab_lbt_yr=_tab_lbt_yr,
+            tab_order=_tab_order,
+            sfr_history=sfr_history,
+            age_sfh_fn=_age_sfh_fn,
+            age_tab_lbt_yr=_age_tab_lbt_yr,
+            sfr_on_ssp=sfr_on_ssp,
         )
 
     def _spectrum_lut_families(
