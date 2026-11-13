@@ -36,6 +36,7 @@ from tengri.components.nebular.dig import (
     mix_dig_line_luminosities,
 )
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.exceptions import BackendError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.forward.energy_balance import log10_fdust_lyc_credit
 from tengri.parameters.resolve import require_redshift
@@ -45,7 +46,6 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
     SEDComponentState,
-    declared_default,
 )
 from tengri.utils.scale import log10_magnitude
 
@@ -73,18 +73,6 @@ _BACKEND_KWARG_SINKS: tuple[str, ...] = (
     "predict_nebular_sed",
     "predict_nebular_line_luminosities",
 )
-
-
-def _shock_log_lhalpha(state, params) -> float:
-    """Return log10 shock Halpha luminosity [erg/s].
-
-    Prefers the ``state.derived`` publication, then the parameter, then the
-    declared ``SHOCK_PARAMS`` default.
-    """
-    from tengri.components.nebular._params import SHOCK_PARAMS
-
-    declared = declared_default(SHOCK_PARAMS, "shock_log_lhalpha")
-    return state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", declared))
 
 
 @cache
@@ -292,16 +280,20 @@ class NebularSEDComponent(TemplateThreading):
     #: are both such readers. They ask :meth:`materialized` for a publishing
     #: variant instead of being enumerated here (#1673).
     must_materialize_sed: bool = False
-    # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
-    # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
-    # flow through the standard prefix-stripping path. Backends silently
-    # ignore keys they don't consume: passing ``shock_*`` to Cue is
-    # harmless, and vice versa.
+    # Tuple prefix so the photoionization backends (``neb_*``, ``ionspec_*``,
+    # ``gas_*``) flow through the standard prefix-stripping path. Backends
+    # silently ignore keys they don't consume. ``shock_*`` stays in the tuple
+    # so the parameter partition of the nebular component is unchanged.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
 
     def __post_init__(self) -> None:
         """Resolve the backend class from the config string once; the component keeps it."""
         object.__setattr__(self, "_backend_cls", resolve_nebular_backend(self.config.backend))
+
+    @property
+    def backend_class(self) -> type:
+        """The backend class this component selected, for capability checks."""
+        return self._backend_cls
 
     def materialized(self) -> NebularSEDComponent:
         """Variant that computes the nebular continuum instead of zeroing it.
@@ -327,7 +319,7 @@ class NebularSEDComponent(TemplateThreading):
         return replace(self, must_materialize_sed=True)
 
     def citations(self) -> tuple[str, ...]:
-        """Nebular-backend citations (Cue / Cloudy / baked-in / shock) are
+        """Nebular-backend citations (Cue / Cloudy / baked-in) are
         config-driven via
         :data:`tengri.citations.associations.NEBULAR_BACKEND_CITATIONS`."""
         return ()
@@ -345,11 +337,6 @@ class NebularSEDComponent(TemplateThreading):
           ``ionspec_logLratio1..3``) **plus** 3 gas-property knobs
           beyond logU/logZ (``gas_logn``, ``gas_logno``, ``gas_logco``).
           Cue is genuinely 12-parameter.
-        - ``shock`` (MAPPINGS V): shock-emission knobs
-          (``shock_velocity``, ``shock_log_density``,
-          ``shock_b_over_sqrt_n``, ``shock_log_lhalpha``).
-          The string-valued ``shock_abundance`` and ``shock_component``
-          are configured on the backend instance, not free params.
 
         """
         return list(self._backend_cls.parameters())
@@ -414,14 +401,6 @@ class NebularSEDComponent(TemplateThreading):
                 "with a nonzero gradient at f_dust == 0.",
             ),
         ]
-        # ``sed_shock`` is owned by this component ONLY on the mutually-exclusive
-        # ``backend="shock"`` path. When a photoionized backend composes with a
-        # separate additive :class:`ShockNebular` component (#851), that
-        # component owns ``sed_shock``: declaring it here too would trip the
-        # duplicate-publisher guard. Consumers read it via ``.get(..., zeros)``,
-        # so leaving it undeclared for photoionized/baked-in backends is safe.
-        if self._backend_cls.publishes_shock:
-            outs.insert(1, DerivedKey("sed_shock", "erg/s/Hz", "MAPPINGS shock emission"))
         return tuple(outs)
 
     def inputs(self) -> tuple[DerivedKey, ...]:
@@ -433,9 +412,9 @@ class NebularSEDComponent(TemplateThreading):
           ``state.derived``: the backend operates on the SED in-place
           and ignores stellar-age-resolved tensors. Returns ``()``.
         - All other photoionization backends (``"cue"``,
-          ``"cloudy_grid"``) and the MAPPINGS shock backend
-          (``"shock"``) require the age-resolved stellar outputs to
-          weight per-age ionizing rates. Returns ``lnu_age`` +
+          ``"cloudy_grid"``, ``"cb19"``, ``"gutkin16"``, ``"mappings"``)
+          require the age-resolved stellar outputs to weight per-age
+          ionizing rates. Returns ``lnu_age`` +
           ``ssp_ages_yr`` (and ``age_weights`` for the CloudyGrid
           path, which sums the per-bin grid lookups).
 
@@ -705,7 +684,7 @@ class NebularSEDComponent(TemplateThreading):
         -------
         ForwardState
             New state with ``derived["sed_nebular"]`` and ``derived["sed_shock"]``
-            populated (zeros for the non-active branch), except when the grid
+            populated (``sed_shock`` is zeros), except when the grid
             serves nebular emission with dust channels, where ``derived["sed_shock"]``
             is absent. ``sed_intrinsic`` is updated to include the active emission
             for non-BakedIn backends.
@@ -737,12 +716,10 @@ class NebularSEDComponent(TemplateThreading):
         if isinstance(template_data, dict) and "nebular" in template_data:
             template_data = template_data["nebular"]
 
-        # Publish ``sed_nebular`` for every backend; publish ``sed_shock`` only
-        # on the mutually-exclusive ``backend="shock"`` path (#851). When a
-        # photoionized backend composes with a separate :class:`ShockNebular`
-        # component, that component owns ``sed_shock``; ``Posterior`` reads it
-        # via ``.get(..., zeros)`` so an unset key is harmless. ``baked_in``
-        # returns zeros because emission is already in the SSP grid.
+        # Publish ``sed_nebular`` for every backend. ``baked_in`` returns zeros
+        # because emission is already in the SSP grid. ``ShockNebular`` (#851)
+        # owns the shock SED ``sed_shock``; ``Posterior`` reads it via
+        # ``.get(..., zeros)`` so an unset key is harmless.
         zeros = jnp.zeros_like(state.wave)
 
         if not self._backend_cls.additive:
@@ -750,29 +727,6 @@ class NebularSEDComponent(TemplateThreading):
 
         # Stellar metallicity (absolute log10(Z)) for downstream backends.
         log_z = self._stellar_log_z(state, params)
-
-        # ── MAPPINGS V shock backend (different parameter set) ────────
-        if self._backend_cls.publishes_shock:
-            # Source the Halpha luminosity normalization: prefer the
-            # state.derived publication (e.g. from a future stellar
-            # extension) over the param's Fixed default.
-            log_lha = _shock_log_lhalpha(state, params)
-            l_shock_halpha = jnp.power(10.0, jnp.asarray(log_lha))
-            nebular_sed = self.backend.predict_nebular_sed(
-                wavelength=state.wave,
-                shock_velocity=jnp.asarray(params["shock_velocity"]),
-                l_shock_halpha=l_shock_halpha,
-                shock_log_density=jnp.asarray(params.get("shock_log_density", 0.0)),
-                shock_b_over_sqrt_n=jnp.asarray(params.get("shock_b_over_sqrt_n", 1.0)),
-                line_sigma_kms=jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
-            )
-            # Shock backend: shock contribution is logically separate
-            # from photoionized continuum. Publish under ``sed_shock``
-            # and zero out ``sed_nebular`` so the legacy Posterior dict
-            # decomposition matches: photoionized vs shock are distinct.
-            return state.add_intrinsic(nebular_sed).with_(
-                derived=state.derived.with_(sed_shock=nebular_sed, sed_nebular=zeros),
-            )
 
         # ── Photoionization backends (Cue + CloudyGrid) ───────────────
         common_kwargs = self._common_backend_kwargs(state, params, log_z)
@@ -922,20 +876,14 @@ class NebularSEDComponent(TemplateThreading):
                     )
                 )
             except Exception as exc:
-                # Backend's line-luminosity path may fail (e.g. when
-                # ``cloudyfsps_only=True`` filters everything out).
-                # Don't let it block the SED forward pass: but never
-                # swallow silently: a dropped publish disables line-flux
-                # fitting downstream.
-                import warnings
-
-                warnings.warn(
-                    f"nebular backend {self.config.backend!r}: discrete "
-                    f"line-catalog publish failed ({type(exc).__name__}: {exc}); "
-                    "line_waves/line_lums will be absent from state.derived and "
-                    "line-flux fitting will not work for this model.",
-                    stacklevel=2,
-                )
+                # A backend without a line catalog never reaches this block (the
+                # ``hasattr`` gate above). Any failure once the catalog is requested
+                # is raised: a dropped publish would silently disable line-flux
+                # fitting downstream (#3284).
+                raise BackendError(
+                    f"nebular backend {self.config.backend!r}: discrete line-catalog "
+                    f"publish failed ({type(exc).__name__}: {exc})"
+                ) from exc
 
         # Add nebular contribution to sed_intrinsic. Birth-cloud + diffuse
         # dust attenuation of this continuum is the dust component's
@@ -944,7 +892,8 @@ class NebularSEDComponent(TemplateThreading):
         # and reddens the published ``sed_nebular`` with the young-limit screen.
 
         # Photoionized path: ``sed_nebular`` carries continuum + lines;
-        # shock contribution is zero (this branch is not the shock backend).
+        # the shock contribution is published as zeros here (``ShockNebular``
+        # writes the real ``sed_shock`` when its component is present).
         # Filter-integrate the nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)

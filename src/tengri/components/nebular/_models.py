@@ -39,8 +39,8 @@ class NebularRegistryEntry:
         One-line description.
     config_backend : str or None
         The ``config.backend`` string this grammar name lowers to, or ``None``
-        for ``'none'``. ``'mappings_agn'`` carries ``'mappings'``, which is the
-        name the build's class-name inference reads today.
+        when no component config selects the backend (``'none'``, and
+        ``'mappings_agn'``, whose build refuses before a component exists).
     """
 
     callable: Callable | None
@@ -61,14 +61,13 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 
 @functools.cache
 def _nebular_backend_classes() -> tuple[type[Any], ...]:
-    """Return the seven nebular backend classes, imported on first use."""
+    """Return the six nebular backend classes, imported on first use."""
     from tengri.components.nebular.baked_in import BakedInBackend
     from tengri.components.nebular.cloudy_cb19 import CB19Backend
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
     from tengri.components.nebular.cue import CueBackend
     from tengri.components.nebular.gutkin16 import Gutkin16Backend
     from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
-    from tengri.components.nebular.shock import ShockBackend
 
     return (
         BakedInBackend,
@@ -77,7 +76,6 @@ def _nebular_backend_classes() -> tuple[type[Any], ...]:
         CueBackend,
         Gutkin16Backend,
         MappingsPhotoStellarBackend,
-        ShockBackend,
     )
 
 
@@ -124,6 +122,59 @@ def resolve_nebular_backend(name: str) -> type[Any]:
     raise ConfigError(
         f"Unknown nebular backend {name!r}; valid names are {', '.join(valid)}.{hint}"
     )
+
+
+#: Grammar modes that name no registry entry of their own. ``"off"`` (no nebular
+#: emission) builds the baked-in backend, the same backend as ``"ssp"``.
+_MODE_ENTRY_NAME = {"off": "ssp"}
+
+
+def nebular_backend_class_for_mode(mode: str) -> type[Any]:
+    """Return the backend class that a grammar ``nebular_mode`` builds.
+
+    Parameters
+    ----------
+    mode : str
+        The ``spec.nebular_mode`` value: a :data:`NEBULAR_MODELS` key, or ``"off"``.
+
+    Returns
+    -------
+    type
+        The backend class. Its ``from_spec`` builds the instance.
+
+    Raises
+    ------
+    ConfigError
+        If ``mode`` names no buildable backend. The message lists the valid modes.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    entry = NEBULAR_MODELS.get(_MODE_ENTRY_NAME.get(mode, mode))
+    if entry is None or entry.callable is None:
+        valid = sorted(name for name, e in NEBULAR_MODELS.items() if e.callable is not None)
+        raise ConfigError(
+            f"Unknown nebular_mode {mode!r}; valid modes are {', '.join(valid)}, and 'off'."
+        )
+    return entry.callable
+
+
+def build_nebular_backend(spec: Any, ssp_data: Any) -> Any:
+    """Build the nebular backend instance that a model spec selects.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model spec. Its ``nebular_mode`` picks the class, and the class's
+        ``from_spec`` reads the spec attributes it needs.
+    ssp_data : SSPData or None
+        The stellar population grid the backend is built on.
+
+    Returns
+    -------
+    object
+        The backend instance.
+    """
+    return nebular_backend_class_for_mode(spec.nebular_mode).from_spec(spec, ssp_data)
 
 
 @functools.cache

@@ -522,7 +522,6 @@ class CloudyGridBackend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = True
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr", "age_weights")
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = True
     additive: ClassVar[bool] = True
     requires_instance: ClassVar[bool] = True
@@ -541,6 +540,24 @@ class CloudyGridBackend(NebularBackendDefaults):
     #: convention the CLOUDY grid is tabulated in. See CueBackend for the one
     #: backend that deviates.
     lsun_erg: float = _LSUN_ERG
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CLOUDY grid backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``cloudy_grid_path``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CloudyGridBackend
+            The backend instance.
+        """
+        return cls(spec.cloudy_grid_path, ssp_data)
 
     def __init__(
         self,

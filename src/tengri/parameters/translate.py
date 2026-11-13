@@ -55,6 +55,7 @@ Function Prefixes:
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 from tengri.parameters._aliases import (
@@ -93,10 +94,12 @@ _EVOLVING_MET_PARAM_MAP = {
     "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
 }
 
-_EVOLVING_ALPHA_PARAM_MAP = {
-    "met_alpha_fe_old": ("alpha_fe_old", 1.0, 0.0),  # [alpha/Fe] of oldest stars
-    "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
-}
+# ``_NON_SFH_PARAM_MAP`` and ``_EVOLVING_ALPHA_PARAM_MAP`` are not literals: they are
+# views of the registry, built on first use from the translation fields that each
+# ``ParamDeclaration`` carries (#3296). ``_EVOLVING_MET_PARAM_MAP`` stays a literal
+# because its two names are declared in ``MET_REGISTRY``, not in a ``_params.py``
+# tuple, and ``met_registry`` imports ``LOG10_ZSUN`` from this module, so reading the
+# registry here would be a cycle. A contract test pins it against ``MET_REGISTRY``.
 
 # ── Cue identity param lists ──────────────────────────────────────
 #
@@ -120,28 +123,59 @@ _CUE_GAS_IDENTITY_PARAMS: list[str] = sorted(_resolve_lazy_bucket("_CUE_GAS_EXTR
 _CUE_IONSPEC_IDENTITY_PARAMS: list[str] = sorted(_resolve_lazy_bucket("_CUE_IONSPEC_PARAMS"))
 
 
-# ── Non-SFH param map (includes real unit conversions) ───────────────
+# ── Declared translations (the registry views) ───────────────────────
 
-_NON_SFH_PARAM_MAP = {
-    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex (global)
-    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
-    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
-    "dust_slope": ("dust_slope", 1.0, 0.0),
-    "redshift": ("redshift", 1.0, 0.0),
-    "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
-    "dust_f_obscuration": ("f_obscuration", 1.0, 0.0),
-    "dust_bump_strength": ("dust_bump_strength", 1.0, 0.0),
-    "dust_delta": ("dust_delta", 1.0, 0.0),
-    "dust_Rv": ("dust_Rv", 1.0, 0.0),
-    "noise_dof": ("noise_dof", 1.0, 0.0),
-    "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
-    "lsf_scale": ("lsf_scale", 1.0, 0.0),
-    # neb_logZ_gas is declared as log10(Z_gas/Zsun) in _param_defs but
-    # consumed downstream as absolute log10(Z); LOG10_ZSUN bridges the two
-    # (same convention as met_logzsol → log_z_abs).
-    "neb_logZ_gas": ("neb_logZ_gas", 1.0, LOG10_ZSUN),
-}
+_ALPHA_GROUP = ("tengri.components.stellar._params", "EVOLVING_ALPHA_PARAMS")
+
+
+@functools.cache
+def _declared_translation_views() -> tuple[dict, dict]:
+    """Split the declared translations into the non-SFH and evolving-alpha views.
+
+    A registry record takes part when its declaration sets ``internal_name``,
+    ``scale`` or ``offset``. Its triple is ``(internal_name or public, scale,
+    offset)``. Records declared in ``EVOLVING_ALPHA_PARAMS`` form the second
+    view; every other record forms the first.
+
+    Returns
+    -------
+    tuple of dict
+        ``(non_sfh, evolving_alpha)``, each mapping public name to
+        ``(internal_name, scale, offset)``, in registry order.
+    """
+    from tengri.parameters.registry import registry
+
+    non_sfh: dict[str, tuple[str, float, float]] = {}
+    evolving_alpha: dict[str, tuple[str, float, float]] = {}
+    for name, record in registry().items():
+        if record.internal_name is None and record.scale == 1.0 and record.offset == 0.0:
+            continue
+        triple = (record.internal_name or name, record.scale, record.offset)
+        if (record.owner, record.group) == _ALPHA_GROUP:
+            evolving_alpha[name] = triple
+        else:
+            non_sfh[name] = triple
+    return non_sfh, evolving_alpha
+
+
+def _non_sfh_param_map() -> dict[str, tuple[str, float, float]]:
+    """Return the declared non-SFH translations (see ``_declared_translation_views``)."""
+    return _declared_translation_views()[0]
+
+
+def _evolving_alpha_param_map() -> dict[str, tuple[str, float, float]]:
+    """Return the declared ``EVOLVING_ALPHA_PARAMS`` translations."""
+    return _declared_translation_views()[1]
+
+
+def __getattr__(name: str):
+    """Serve the derived tables under their historical module names (PEP 562)."""
+    if name == "_NON_SFH_PARAM_MAP":
+        return _non_sfh_param_map()
+    if name == "_EVOLVING_ALPHA_PARAM_MAP":
+        return _evolving_alpha_param_map()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # (Reverse alias map now managed in _aliases.py: imported at top)
 
@@ -256,22 +290,6 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
     return expanded
 
 
-# Module-level PARAM_MAP exported for tests and external tooling
-# NOTE: This legacy map has been superseded by the registry-driven _build_param_map()
-# function. Retained here for backwards compatibility with tests that may reference it.
-PARAM_MAP = {
-    "sfh_alpha": ("alpha", 1.0, 0.0),
-    "sfh_beta": ("beta", 1.0, 0.0),
-    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
-    "psd_sigma": ("psd_sigma", 1.0, 0.0),
-    "psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
-    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
-    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
-    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
-    "dust_slope": ("dust_slope", 1.0, 0.0),
-    "redshift": ("redshift", 1.0, 0.0),
-}
-
 # ── Factory ────────────────────────────────────────────────────────
 
 
@@ -327,7 +345,7 @@ def _build_param_map(
     result = dict(sfh_param_map)
     if dust_model in ("single_component", "wg00"):
         # Single screen (Calzetti-style or WG00): skip tau_bc/tau_diff, add tau_v.
-        for k, v in _NON_SFH_PARAM_MAP.items():
+        for k, v in _non_sfh_param_map().items():
             if k not in ("dust_tau_bc", "dust_tau_diff"):
                 result[k] = v
         result.update(_SINGLE_COMPONENT_DUST_PARAM_MAP)
@@ -340,7 +358,7 @@ def _build_param_map(
         # cannot see these (it walks STATIC components/*/_params.py module
         # tuples; age_binned's declared parameter set is a per-build
         # variable with no static tuple to walk).
-        for k, v in _NON_SFH_PARAM_MAP.items():
+        for k, v in _non_sfh_param_map().items():
             if k not in ("dust_tau_bc", "dust_tau_diff"):
                 result[k] = v
         from tengri.components.dust.age_binned import (
@@ -359,7 +377,7 @@ def _build_param_map(
         for decl in decls:
             result[decl.name] = (decl.name, 1.0, 0.0)
     else:
-        result.update(_NON_SFH_PARAM_MAP)
+        result.update(_non_sfh_param_map())
 
     # Add manual metallicity param maps that carry unit conversions.
     # These MUST come before auto-derivation so they take precedence.
@@ -367,7 +385,7 @@ def _build_param_map(
     # to alpha_fe_old/young (internal), which would otherwise conflict
     # with identity auto-derivation (#1767).
     result.update(_EVOLVING_MET_PARAM_MAP)
-    result.update(_EVOLVING_ALPHA_PARAM_MAP)
+    result.update(_evolving_alpha_param_map())
 
     # Auto-derive identity entries from the parameter registry (ADR-0008).
     # The registry walks every ``components/*/_params.py`` directly and reads

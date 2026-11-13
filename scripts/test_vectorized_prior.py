@@ -22,7 +22,7 @@ print("\nTest 1: All Uniform priors (vectorized path)")
 params_uniform = Parameters(
     redshift=Fixed(1.0),
     sfh_tsnorm_log_total_mass=Uniform(8, 12),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 10),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0171, 1.0),
     sfh_tsnorm_width_gyr=Uniform(0.1, 5),
     sfh_tsnorm_skew=Uniform(-1, 1),
     sfh_tsnorm_trunc=Uniform(0.01, 1),
@@ -71,7 +71,7 @@ from tengri.parameters.priors import Gaussian
 params_mixed = Parameters(
     redshift=Fixed(1.0),
     sfh_tsnorm_log_total_mass=Gaussian(10.0, 1.0, 8, 12),  # Gaussian prior
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 10),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0171, 1.0),
     sfh_tsnorm_width_gyr=Uniform(0.1, 5),
     sfh_tsnorm_skew=Uniform(-1, 1),
     sfh_tsnorm_trunc=Uniform(0.01, 1),

@@ -823,7 +823,6 @@ class CB19Backend(NebularBackendDefaults):
     supports_split_sed: ClassVar[bool] = True
     line_fraction_policy: ClassVar[bool] = False
     reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
-    publishes_shock: ClassVar[bool] = False
     carries_freefree: ClassVar[bool] = False
     additive: ClassVar[bool] = True
     requires_instance: ClassVar[bool] = True
@@ -848,6 +847,36 @@ class CB19Backend(NebularBackendDefaults):
     #: exactly this: still has the identity value rather than an
     #: ``AttributeError``. 0.0 means "table already in photons/s".
     _log_qh_scale: float = 0.0
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CB19 backend that a model spec selects, and check its free parameters.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``nebular_cb19_grid_path`` and ``free_params``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CB19Backend
+            The backend instance.
+
+        Raises
+        ------
+        CB19DegenerateGridError
+            If the grid is the flat placeholder and a nebular parameter is free.
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_cb19_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_cb19_grid_path
+        backend = cls(**kwargs)
+        # The grid's own axes decide which nebular parameters can move the prediction.
+        # Refuse at construction rather than at the end of a fit (#2181).
+        check_cb19_free_params(backend.grid, spec.free_params, grid_path=backend.grid_path)
+        return backend
 
     def __init__(
         self,

@@ -1467,6 +1467,11 @@ class NebularContinuumFallback:
         """Delegate all unknown attributes and methods to the primary backend."""
         return getattr(self.primary, name)
 
+    @property
+    def config_name(self) -> str:
+        """The wrapped backend's ``config.backend`` string, so the wrapper names what it wraps."""
+        return self.primary.config_name
+
     def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
         """Predict nebular SED: lines + continuum via fallback chain.
 

@@ -74,9 +74,6 @@ class NebularBackend(Protocol):
     reads : ClassVar[tuple[str, ...]]
         Names of the ``state.derived`` keys this backend adds to the
         component's ``inputs()``, in the order ``inputs()`` lists them.
-    publishes_shock : ClassVar[bool]
-        Whether the component publishes ``sed_shock`` in ``outputs()``. True
-        only for the shock backend.
     carries_freefree : ClassVar[bool]
         Whether the backend's continuum carries thermal free-free when no instance
         overrides it. An instance attribute ``carries_freefree_continuum`` (set by
@@ -141,7 +138,6 @@ class NebularBackend(Protocol):
     supports_split_sed: ClassVar[bool]
     line_fraction_policy: ClassVar[bool]
     reads: ClassVar[tuple[str, ...]]
-    publishes_shock: ClassVar[bool]
     carries_freefree: ClassVar[bool]
     additive: ClassVar[bool]
     requires_instance: ClassVar[bool]

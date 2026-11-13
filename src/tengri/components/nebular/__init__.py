@@ -2,7 +2,7 @@
 """Nebular emission models for tengri.
 
 Provides modular backends for adding nebular emission (emission lines +
-continuum) to the stellar SED. Seven backends:
+continuum) to the stellar SED. Six backends:
 
 - **BakedIn** (default): Use SSP files with nebular emission pre-included
   (e.g., wNE files with fixed logU=-3, logZ=0). No free parameters.
@@ -120,7 +120,6 @@ from tengri.components.nebular.mappings_photo import (
     MappingsPhotoStellarBackend,
 )
 from tengri.components.nebular.shock import (
-    ShockBackend,
     compute_shock_sed,
     shock_line_ratios,
 )
@@ -192,7 +191,7 @@ register_nebular_model(
     citation="Flury et al. 2024 (MAPPINGS V AGN grids, Zenodo 14140949)",
     status="experimental",
     short_doc="AGN: refuses until #2082 (model protocol incomplete)",
-    config_backend="mappings",
+    config_backend=None,
 )(MappingsPhotoAGNBackend)
 
 
@@ -224,7 +223,6 @@ __all__ = [
     "NebularContinuumFallback",
     "NebularContinuumUnavailableError",
     "NebularRegistryEntry",
-    "ShockBackend",
     "ShockNebular",
     "ShockNebularConfig",
     "SynthesizerGridData",

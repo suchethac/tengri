@@ -417,5 +417,7 @@ def lines_to_sed(
     l_lambda = profiles @ line_luminosities  # (n_wave,)
 
     # Convert L_lambda [Lsun/A] -> L_nu [erg/s/Hz] via c/lambda^2 factor
-    l_nu = l_lambda * L_SUN * wave_obs**2 * ANGSTROM_CM / C_LIGHT
+    # Ordered so no intermediate leaves float32 range (#3361): L_SUN * lambda^2 is
+    # ~1e41 and overflows, while the final value is ~1e22.
+    l_nu = (l_lambda * wave_obs**2) * (ANGSTROM_CM / C_LIGHT) * L_SUN
     return l_nu

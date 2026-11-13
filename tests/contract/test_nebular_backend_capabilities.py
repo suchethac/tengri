@@ -2,10 +2,10 @@
 """The class-level capabilities of each nebular backend equal what the component computes.
 
 Each backend class answers, without an instance, for its ``config.backend`` string:
-the parameters it contributes, the ``state.derived`` keys it reads, whether the
-component publishes ``sed_shock``, whether ``split_sed`` accepts it, and whether
-``publish_line_fraction`` is allowed. The component still computes the same answers
-from the string; this file pins the two against each other for all seven names.
+the parameters it contributes, the ``state.derived`` keys it reads, whether ``split_sed``
+accepts it, and whether ``publish_line_fraction`` is allowed. The component still computes
+the same answers from the string; this file pins the two against each other for all six
+names.
 
 The name-to-class map is written out by hand, so it is the independent side.
 """
@@ -30,7 +30,6 @@ from tengri.components.nebular.component import (
 from tengri.components.nebular.cue import CueBackend
 from tengri.components.nebular.gutkin16 import Gutkin16Backend
 from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
-from tengri.components.nebular.shock import ShockBackend
 
 pytestmark = pytest.mark.contract
 
@@ -41,7 +40,6 @@ _BACKEND_CLASS_BY_CONFIG = {
     "gutkin16": Gutkin16Backend,
     "mappings": MappingsPhotoStellarBackend,
     "cue": CueBackend,
-    "shock": ShockBackend,
 }
 _NAMES = sorted(_BACKEND_CLASS_BY_CONFIG)
 
@@ -99,7 +97,6 @@ _PARAM_NAMES = {
     "gutkin16": _STD,
     "mappings": _STD,
     "cue": _STD + _CUE_EXTRA,
-    "shock": ("shock_velocity", "shock_log_density", "shock_b_over_sqrt_n", "shock_log_lhalpha"),
 }
 _READS = {
     "baked_in": (),
@@ -108,7 +105,6 @@ _READS = {
     "gutkin16": ("lnu_age", "ssp_ages_yr"),
     "mappings": ("lnu_age", "ssp_ages_yr"),
     "cue": ("lnu_age", "ssp_ages_yr"),
-    "shock": ("lnu_age", "ssp_ages_yr"),
 }
 _ADDITIVE = {n: n != "baked_in" for n in _NAMES}
 _REQUIRES_INSTANCE = {n: n != "baked_in" for n in _NAMES}
@@ -131,13 +127,6 @@ def test_reads_names_are_hand_written(name):
 
 
 @pytest.mark.parametrize("name", _NAMES)
-def test_publishes_shock_is_hand_written(name):
-    publishes = any(key.name == "sed_shock" for key in _component(name).outputs())
-    assert _BACKEND_CLASS_BY_CONFIG[name].publishes_shock is (name == "shock")
-    assert publishes is (name == "shock")
-
-
-@pytest.mark.parametrize("name", _NAMES)
 def test_supports_split_sed_equals_refusal(name):
     supported = not _split_sed_refused(name)
     assert _BACKEND_CLASS_BY_CONFIG[name].supports_split_sed is supported
@@ -150,11 +139,9 @@ def test_line_fraction_policy_is_hand_written(name):
     assert allowed is (name == "cue")
 
 
-def test_only_cue_allows_line_fraction_and_only_shock_publishes_shock():
+def test_only_cue_allows_line_fraction():
     allowed = [n for n in _NAMES if _BACKEND_CLASS_BY_CONFIG[n].line_fraction_policy]
-    shock = [n for n in _NAMES if _BACKEND_CLASS_BY_CONFIG[n].publishes_shock]
     assert allowed == ["cue"]
-    assert shock == ["shock"]
 
 
 @pytest.mark.parametrize("name", _NAMES)
@@ -279,7 +266,7 @@ def test_default_split_nebular_has_a_zero_continuum():
 def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
     """The component calls these on the backend instance, so each constructible class has them.
 
-    The list is written out by hand: the seven registered classes, the MAPPINGS AGN backend
+    The list is written out by hand: the six registered classes, the MAPPINGS AGN backend
     (built for ``neb={'type': 'mappings_agn'}`` under the ``mappings`` config name) and the
     continuum fallback, which forwards attribute lookups to the backend it wraps.
     """
@@ -293,7 +280,6 @@ def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
         MappingsPhotoAGNBackend,
         MappingsPhotoStellarBackend,
     )
-    from tengri.components.nebular.shock import ShockBackend
 
     methods = ("call_kwargs", "split_nebular", "extra_derived", "line_catalog_kwargs")
     classes = (
@@ -304,7 +290,6 @@ def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
         Gutkin16Backend,
         MappingsPhotoStellarBackend,
         MappingsPhotoAGNBackend,
-        ShockBackend,
     )
     for cls in classes:
         for name in methods:
@@ -315,21 +300,18 @@ def test_every_backend_a_build_can_hand_the_component_answers_its_method_set():
 def test_component_parameter_lists_do_not_replace_the_registry_records():
     """The registry record of a nebular name is the one ``_params.py`` owns.
 
-    The component's own lists restate ``neb_logU``, ``shock_log_lhalpha`` and
-    their siblings with other priors and no ``free_prior``. Exported from
+    The component's own list restates ``neb_logU`` and its siblings with other
+    priors and no ``free_prior``. Exported from
     ``_params.py`` they became the registry record of each name, so
     ``all_params: FREE`` left ``neb_fesc`` pinned and the registry default of
     ``shock_log_lhalpha`` read 40.0 instead of 41.0.
     """
-    from tengri.components.nebular._component_params import (
-        NEBULAR_STANDARD_PARAMS,
-        SHOCK_INLINE_PARAMS,
-    )
+    from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
     from tengri.parameters.registry import registry
 
     records = registry()
-    restated = [d.name for d in (*NEBULAR_STANDARD_PARAMS, *SHOCK_INLINE_PARAMS)]
+    restated = [d.name for d in NEBULAR_STANDARD_PARAMS]
     owners = {name: records[name].group for name in restated}
-    assert set(owners.values()) <= {"PARAMS", "SHOCK_PARAMS"}, owners
+    assert set(owners.values()) == {"PARAMS"}, owners
     assert records["neb_fesc"].free_prior is not None
     assert records["shock_log_lhalpha"].prior.value == 41.0
