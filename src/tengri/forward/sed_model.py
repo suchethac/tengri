@@ -3277,10 +3277,11 @@ class SEDModel:
                 raise ValueError(
                     f"approx=SpectrumPrecomp() with resample="
                     f"{observation.spectroscopy.resample!r} needs the flux-conserving pixel "
-                    f"integral, which the table carries only for a fixed redshift, a fixed "
-                    f"sigma_v_kms and no instrument resolution (#2530, #3413). Use approx=None "
-                    f"for the exact "
-                    f"spectrum, or Spectroscopy(resample='point') to accept point sampling."
+                    f"integral, which the table does not carry for this model: a free redshift "
+                    f"or sigma_v_kms, a banded resolution matrix, a free lsf_scale with a "
+                    f"resolution, a nebular family with a resolution or sigma_v_kms != 0, IGM, "
+                    f"AGN, dust emission, radio or X-ray (#2530, #3413). Use approx=None for the "
+                    f"exact spectrum, or Spectroscopy(resample='point') to accept point sampling."
                 )
 
     def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:
@@ -3362,6 +3363,9 @@ class SEDModel:
             # The fixed Gaussian kernel is baked into a stellar-only table (#3413). A nebular
             # family or a free lsf_scale has no such table yet.
             return True
+        if self._spectrum_nebular_family() and self._fixed_sigma_v_kms() != 0.0:
+            # The nebular moments match the exact conserving path only at sigma_v = 0 (#3413).
+            return True
         # A fixed-redshift table with a fixed sigma_v stores the pixel moments itself (#3413).
         # A free redshift or a free sigma_v has no such table.
         return not (self._spectrum_lut_redshift_is_fixed() and self._fixed_sigma_v_kms() is not None)
@@ -3397,8 +3401,7 @@ class SEDModel:
         Returns
         -------
         str or None
-            The first such component, in the order IGM, AGN, dust emission. Radio and X-ray
-            components are not checked here; their families are guarded at predict time.
+            The first such component, in the order IGM, AGN, dust emission, radio, X-ray.
         """
         spec = self.spec
         if getattr(spec, "apply_igm", False):
@@ -3409,7 +3412,21 @@ class SEDModel:
         dust_em = getattr(spec, "dust_emission", None)
         if dust_em not in (None, "off", "none"):
             return f"dust emission ({dust_em})"
+        if getattr(spec, "radio", False):
+            return "radio"
+        if getattr(spec, "xray", False):
+            return "X-ray"
         return None
+
+    def _spectrum_nebular_family(self) -> bool:
+        """Whether the declared spec carries a nebular emission family (#3413).
+
+        Returns
+        -------
+        bool
+            True when ``nebular_mode`` is a backend other than ``off`` or ``ssp``.
+        """
+        return getattr(self.spec, "nebular_mode", "off") not in ("off", "ssp")
 
     def _spectrum_lsf_bakeable(self) -> bool:
         """Whether a fixed instrument kernel can be baked into the stellar spectrum table (#3413).

@@ -136,6 +136,9 @@ _CASES = [
     pytest.param(
         _PRISM, 100.0, 0.0, "two", False, id="prism-2comp-R100-sv0"
     ),
+    pytest.param(
+        _SDSS, None, 0.0, "single", True, id="sdss-1screen-cue-nores-sv0"
+    ),
 ]
 
 
@@ -159,10 +162,83 @@ def test_pixel_integral_lut_matches_conserving_exact(
     ssp = load_ssp_data(_BARE_SSP)
     if resolution is not None and with_cue:
         # A nebular family under a fixed instrument kernel has no per-draw kernel: refused.
-        with pytest.raises(ValueError, match="instrument resolution"):
+        with pytest.raises(ValueError, match="pixel integral"):
             _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, SpectrumPrecomp())
         return
     flux_err, jac_err = pair_errors(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue)
     print(f"\nflux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
     assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
     assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
+
+
+def _family_model(ssp, family, approx):
+    """Two-component dust, a Fixed-z conserving SDSS spectrum, plus one family (#3413)."""
+    from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform
+
+    spectro = {"wave_obs": jnp.asarray(_SDSS), "resample": "conserving"}
+    sigma_v = 0.0
+    extra = {"neb": {"type": "none"}}
+    if family == "banded":
+        from tengri.observation.banded import gaussian_resolution_bands
+
+        spectro["resolution_matrix"] = gaussian_resolution_bands(jnp.asarray(_SDSS), 2000.0)
+        sigma_v = 150.0
+    elif family == "cue-sv150":
+        extra["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
+        sigma_v = 150.0
+    elif family == "agn":
+        extra["agn"] = {
+            "type": "composable",
+            "disc": {"type": "powerlaw"},
+            "all_params": Fixed(DEFAULT),
+        }
+    elif family == "dust-emission":
+        extra["dust_emission"] = {"type": "modified_blackbody", "all_params": Fixed(DEFAULT)}
+    elif family == "radio":
+        extra["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
+    elif family == "xray":
+        extra["xray"] = {"type": "simple", "delta_alpha_ox": Uniform(-2.0, -1.0)}
+    elif family == "igm":
+        extra["igm"] = {"type": "inoue"}
+    obs = Observation(spectroscopy=Spectroscopy(**spectro))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        base = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation=_dust("two"),
+            redshift=Fixed(0.1),
+            **extra,
+        )
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(sigma_v))
+    # Outside the suppression above, so the approx resolution's own warnings reach the caller.
+    return type(base)(spec, ssp, observation=obs, approx=approx)
+
+
+_STATIC_REFUSED = ["cue-sv150", "agn", "dust-emission", "radio", "xray", "igm"]
+
+
+@pytest.mark.parametrize("family", _STATIC_REFUSED)
+def test_refused_family_routes_exact_under_auto(family):
+    """A family the table still refuses is refused statically: auto goes exact, explicit raises."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(family.startswith("cue"))
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, family, None)) is None
+    with pytest.raises(ValueError, match="pixel integral"):
+        _family_model(ssp, family, SpectrumPrecomp())
+
+
+def test_banded_resolution_routes_exact_under_auto():
+    """A banded resolution matrix is not served yet: auto goes exact, explicit falls back."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, "banded", None)) is None
+    with pytest.warns(UserWarning, match="banded resolution matrix"):
+        _family_model(ssp, "banded", SpectrumPrecomp())
