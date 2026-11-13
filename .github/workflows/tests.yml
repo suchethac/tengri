@@ -284,6 +284,10 @@ jobs:
       # Broad `except` in src/tengri that falls through without keeping the exception.
       # Shrink-only baseline (tools/src_silent_fallback_baseline.txt); stdlib-only.
       - run: python tools/check_src_silent_fallback.py
+      # A test gated on a data file that is neither tracked in git nor named by a workflow
+      # download skips on every runner and never says so. Shrink-only baseline
+      # (tools/untracked_data_gates_baseline.txt); stdlib-only.
+      - run: python tools/check_untracked_data_gates.py
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
       # CLAUDE.md says its instructions OVERRIDE default behavior and must be
