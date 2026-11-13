@@ -399,7 +399,7 @@ def nlr_synthesizer_spectra_block(
     # the grid edge, which reads as that code's own NLR-density convention.
     # Left as-is rather than unified; NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = NLR_SYNTHESIZER_LOGN,
-    agn_nlr_logZ: float = -2.0,
+    agn_nlr_logZ: float = DEFAULT_AGN_NLR_LOGZ,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
