@@ -16,6 +16,11 @@ Gate calls, matched by the callee's last name:
   string literal among the arguments, except the ``reason=`` keyword, which is
   prose.
 
+* a path join with a data name on the right, ``DATA_DIR / "x.h5"``: the suite
+  names most of its data this way and tests ``.exists()`` afterwards, often in
+  a fixture, so the join itself is taken as the gate. A join rooted in a name
+  containing ``tmp`` is a file the test makes and is ignored.
+
 A string literal is a data file name only when it is a bare path of word
 characters, dots, dashes and slashes that ends in one of DATA_SUFFIXES, so a
 message with spaces never matches. A module-level string constant that a gate
@@ -24,7 +29,10 @@ is resolved to its literal. Names built at run time or bound inside a function
 are not followed, so the guard is a floor, not a proof.
 
 A gated name is available on CI when its basename appears in ``git ls-files``
-(any directory) or anywhere in ``.github/workflows/*.yml`` (a download step).
+(any directory), anywhere in ``.github/workflows/*.yml`` (a download step), or
+in ``tests/conftest.py::pytest_configure``, which writes stand-ins before collection.
+A scratch file whose path is not rooted in a ``tmp`` name is counted too; such
+lines in the baseline are the guard's imprecision, not skipped tests.
 Every (test file, data file) pair that is gated on a name not available on CI is
 a finding. The findings are recorded in :data:`BASELINE_PATH`, one
 ``tests/path.py<TAB>file_name`` line each, and that list may only shrink. A new
@@ -169,12 +177,55 @@ def _asserted_calls(tree: ast.Module) -> set[int]:
     return under
 
 
+def _is_scratch(node: ast.expr) -> bool:
+    """True when a path expression is rooted in a scratch directory (``tmp_path / ...``)."""
+    for sub in ast.walk(node):
+        name = sub.id if isinstance(sub, ast.Name) else getattr(sub, "attr", "")
+        if "tmp" in name.lower():
+            return True
+    return False
+
+
+def _joined_names(tree: ast.Module) -> set[str]:
+    """Data names on the right of a path join: ``DATA_DIR / "x.h5"``.
+
+    The suite names most of its data this way and gates on ``.exists()`` afterwards,
+    often in a fixture, so the join itself is taken as the gate. A join rooted in a
+    scratch directory is a file the test makes.
+    """
+    joined: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Div):
+            continue
+        right = node.right
+        if not (isinstance(right, ast.Constant) and isinstance(right.value, str)):
+            continue
+        if _is_data_name(right.value) and not _is_scratch(node.left):
+            joined.add(right.value.rsplit("/", 1)[-1])
+    return joined
+
+
+def synthesized_names(conftest_source: str) -> set[str]:
+    """Data names ``tests/conftest.py::pytest_configure`` writes as stand-ins before collection."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(conftest_source)):
+        if isinstance(node, ast.FunctionDef) and node.name == "pytest_configure":
+            names.update(
+                sub.value.rsplit("/", 1)[-1]
+                for sub in ast.walk(node)
+                if isinstance(sub, ast.Constant)
+                and isinstance(sub.value, str)
+                and _is_data_name(sub.value)
+            )
+    return names
+
+
 def collect_gates(source: str) -> set[str]:
-    """The basenames of the data files that gate calls in one test module name."""
+    """The basenames of the data files one test module gates on or joins a path to."""
     tree = ast.parse(source)
     bound = _module_strings(tree)
     asserted = _asserted_calls(tree)
-    found: set[str] = set()
+    found: set[str] = _joined_names(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or id(node) in asserted:
             continue
@@ -266,7 +317,10 @@ def _run(args: argparse.Namespace) -> int:
     """Measure, then compare, write or list the gated data files."""
     try:
         sources = _read_sources(ROOT)
-        tracked = _tracked_basenames(ROOT)
+        # Stand-ins the suite writes before collection are present on every runner.
+        tracked = _tracked_basenames(ROOT) | synthesized_names(
+            sources.get("tests/conftest.py", "")
+        )
         workflow_text = _workflow_text(WORKFLOW_DIR)
         found = find_untracked(sources, tracked, workflow_text)
     except (OSError, SyntaxError, subprocess.CalledProcessError) as exc:

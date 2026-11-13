@@ -88,3 +88,19 @@ def test_scanner_walks_tests_tree(tmp_path):
     sources = guard._read_sources(tmp_path)
     assert list(sources) == ["tests/test_gated.py"]
     assert guard.gate_table(sources) == {"z.h5": {"tests/test_gated.py"}}
+
+
+def test_path_join_names_a_gate_without_a_gate_call():
+    source = 'from pathlib import Path\nGRID = Path("data") / "synth" / "grid_agn.hdf5"\n'
+    assert guard.collect_gates(source) == {"grid_agn.hdf5"}
+
+
+def test_path_join_rooted_in_a_scratch_directory_is_not_a_gate():
+    source = 'def test_x(tmp_path):\n    out = tmp_path / "made_here.h5"\n'
+    assert guard.collect_gates(source) == set()
+
+
+def test_stand_ins_written_before_collection_count_as_available():
+    conftest = 'def pytest_configure(config):\n    path = ROOT / "data" / "stand_in.h5"\n'
+    assert guard.synthesized_names(conftest) == {"stand_in.h5"}
+    assert guard.synthesized_names('def other():\n    p = ROOT / "x.h5"\n') == set()
