@@ -83,7 +83,6 @@ from tengri.config.exceptions import (
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
-    TengriIOError,
     warn_measured,
 )
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
@@ -100,6 +99,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.forward.ssp_guard import check_ssp_flux_not_splat
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import (
     FILTER_COVERAGE_TOLERANCE,
@@ -1210,7 +1210,9 @@ def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
     spectro = getattr(observation, "spectroscopy", None)
     if spectro is None or spectro.nebular_lines:
         return
-    if getattr(spec, "nebular_mode", None) != "cue" or not publishes:
+    from tengri.components.nebular._models import nebular_backend_class_for_mode
+
+    if not publishes or not nebular_backend_class_for_mode(spec.nebular_mode).line_fraction_policy:
         raise ValueError(
             NEBULAR_LINES_OFF_NEEDS_FRACTION
             + f" (got neb type {getattr(spec, 'nebular_mode', None)!r}, "
@@ -2665,6 +2667,47 @@ def _fold_igm_into_subbands(
 #: component integrates the CSP with cloud-in-cell age weights for every
 #: configuration, so none of these reaches the SED. Kept so existing calls keep
 #: working; non-default values warn and are slated for removal in v1.0.
+# Largest admissible log10(age / Gyr) on an SSP age axis (#3337). The age of the
+# universe is 13.8 Gyr (log10 = 1.14); 1.2 (15.8 Gyr) leaves a margin. An axis
+# that also starts above 1 Gyr (log10 > 0) is log10(yr) read as log10(Gyr). The
+# youngest-age test keeps the shipped BPASS grid (oldest template 100 Gyr, by
+# design) admissible.
+_SSP_MAX_LG_AGE_GYR = 1.2
+
+
+def _validate_ssp_age_axis_units(ssp_lg_age_gyr) -> None:
+    """Refuse an SSP age axis that is plainly log10(yr), not log10(Gyr) (#3337).
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Template ages as log10(age / Gyr).
+
+    Raises
+    ------
+    ValueError
+        If the axis looks like log10(yr).
+
+    Notes
+    -----
+    Refused when the oldest finite template is older than
+    ``_SSP_MAX_LG_AGE_GYR`` and the youngest is above 1 Gyr. Real log10(Gyr)
+    grids start far below 1 Gyr, so both conditions hold only for log10(yr).
+    """
+    lg_age = np.asarray(ssp_lg_age_gyr, dtype=np.float64)
+    finite = lg_age[np.isfinite(lg_age)]
+    if finite.size == 0:
+        return
+    if float(finite.max()) <= _SSP_MAX_LG_AGE_GYR or float(finite.min()) <= 0.0:
+        return
+    raise ValueError(
+        f"SSP age axis reaches log10(age) = {float(finite.max()):.3f}, i.e. "
+        f"{10.0 ** float(finite.max()):.3g} Gyr, older than the universe. The axis "
+        f"looks like log10(yr), not log10(Gyr): ssp_lg_age_gyr must be log10(age / Gyr) "
+        f"(SEDModel adds 9.0 to get log10(yr)). Subtract 9 from log10(yr) ages."
+    )
+
+
 _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
@@ -3357,6 +3400,8 @@ class SEDModel:
         _validate_nebular_lines_in_spectrum(spec, observation)
         self.observation = observation
         self.spec = spec
+        # Refuse a splat SSP before anything is built on it (#3350).
+        check_ssp_flux_not_splat(ssp_data.ssp_flux)
         self.ssp_data = ssp_data
         self._band_tables: dict[str, dict[str, BandTable | Decline]] = {}
 
@@ -3707,6 +3752,9 @@ class SEDModel:
         # cleared by _invalidate_signature() from the two methods that change
         # structure after construction.
         self._signature_memo = None
+
+        # Owner-cached plot kernels (forward/draw_maps.map_draws), by method name.
+        self._draw_kernels = {}
 
         # AGB circumstellar dust-shell weighting (#2534): a free
         # agb_dust_weight can never build a precompute LUT (see the refusal
@@ -4275,6 +4323,7 @@ class SEDModel:
         self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
+        _validate_ssp_age_axis_units(ssp_data.ssp_lg_age_gyr)
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
@@ -4965,6 +5014,8 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for nebular components.
         """
+        from tengri.components.nebular._models import build_nebular_backend
+
         delta = {}
 
         if spec.nebular_mode in ("cloudy", "cue", "cb19", "gutkin16"):
@@ -4985,9 +5036,6 @@ class SEDModel:
             spec.nebular_mode if spec.nebular_mode not in ("off", "ssp") else None
         )
         if spec.nebular_mode == "cue":
-            from tengri.components.nebular import CueBackend
-            from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
-
             # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
             # translate.get_internal_params before being registered here.
@@ -5001,149 +5049,10 @@ class SEDModel:
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
                     delta[name] = (name, 1.0, 0.0)
-            self._nebular_backend = CueBackend(
-                spec.cue_weights_path,
-                ssp_data=ssp_data,
-                nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
-                lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
-                balmer_series_n_max=getattr(
-                    spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
-                ),
-            )
-        elif spec.nebular_mode == "cloudy":
-            from tengri.components.nebular import CloudyGridBackend
 
-            self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
-        elif spec.nebular_mode == "cb19":
-            # Bug A in #361: ``neb={'type': 'cb19'}`` used to fall through
-            # to the BakedIn ``else`` branch, leaving the user with a model
-            # whose ``_nebular_backend`` was the wrong class, every line
-            # accessor then returned NaN with no warning. Dispatch explicitly.
-            from tengri.components.nebular import CB19Backend
-            from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
-
-            # Build kwargs from non-None user-supplied values only (#2220),
-            # mirroring the ``mappings`` branch below: constructor defaults
-            # are the single source of truth when ``grid`` was not given.
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_cb19_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_cb19_grid_path
-            self._nebular_backend = CB19Backend(**kwargs)
-            # #2181: the grid's own axes decide which nebular parameters can
-            # move the prediction. On the flat placeholder grid all five are
-            # constant, so a fit explores them against a likelihood that is
-            # bit-exactly flat and reports the prior back as a posterior.
-            # Refuse at construction rather than at the end of a fit.
-            check_cb19_free_params(
-                self._nebular_backend.grid,
-                spec.free_params,
-                grid_path=self._nebular_backend.grid_path,
-            )
-        elif spec.nebular_mode == "gutkin16":
-            # Gutkin+2016 NEOGAL line table (#983). Same failure mode as the cb19
-            # branch above: without this arm the build fell through to BakedIn.
-            # The table stores vacuum labels and absolute log Z, so neb_logZ_gas
-            # takes the unit-converting delta registered above.
-            from tengri.components.nebular import Gutkin16Backend
-
-            # Build kwargs from non-None user-supplied values only (#2220).
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_gutkin16_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
-            if spec.nebular_gutkin16_mup is not None:
-                kwargs["mup"] = spec.nebular_gutkin16_mup
-            if spec.nebular_gutkin16_continuum is not None:
-                kwargs["continuum"] = spec.nebular_gutkin16_continuum
-            self._nebular_backend = Gutkin16Backend(**kwargs)
-        elif spec.nebular_mode == "mappings":
-            # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
-            # density structure, and ionizing source warning are configurable.
-            from tengri.components.nebular import MappingsPhotoStellarBackend
-
-            # Build kwargs from non-None user-supplied values only; constructor defaults
-            # are the single source of truth.
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_mappings_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_mappings_grid_path
-            if spec.nebular_mappings_model is not None:
-                kwargs["model"] = spec.nebular_mappings_model
-            if spec.nebular_mappings_density is not None:
-                kwargs["density"] = spec.nebular_mappings_density
-            if spec.nebular_mappings_ionizing_source_warning is not None:
-                kwargs["ionizing_source_warning"] = spec.nebular_mappings_ionizing_source_warning
-
-            self._nebular_backend = MappingsPhotoStellarBackend(**kwargs)
-
-            # Validate grid completeness (issue #2082): the grid file contains 51.2%
-            # NaN in logHB_per_logq, making it unsuitable for predictions.
-            logHB = np.asarray(self._nebular_backend.grid.logHB_per_logq)
-            nan_count = np.sum(~np.isfinite(logHB))
-            total_count = logHB.size
-            nan_frac = float(nan_count / total_count)
-            if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
-                grid_path = spec.nebular_mappings_grid_path or "data/flury2024_grids.h5"
-                raise TengriIOError(
-                    f"MAPPINGS V stellar grid data is incomplete. "
-                    f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
-                    f"in logHB_per_logq ({nan_count}/{total_count} cells). "
-                    f"This indicates the grid was not fully computed. The grid must be "
-                    f"regenerated using scripts/build_flury2024_grids.py before this "
-                    f"backend can emit valid predictions. See GitHub issue #2082."
-                )
-        elif spec.nebular_mode == "mappings_agn":
-            # MAPPINGS V AGN photoionization grid (Flury et al. 2024). AGN grids
-            # use OPTXAGNF ionizing source, density structure and ionizing source
-            # warning are configurable.
-            from tengri.components.nebular import MappingsPhotoAGNBackend
-
-            # Build kwargs from non-None user-supplied values only; constructor defaults
-            # are the single source of truth.
-            kwargs = {}
-            if spec.nebular_mappings_agn_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_mappings_agn_grid_path
-            if spec.nebular_mappings_agn_density is not None:
-                kwargs["density"] = spec.nebular_mappings_agn_density
-            if spec.nebular_mappings_agn_ionizing_source_warning is not None:
-                warn_setting = spec.nebular_mappings_agn_ionizing_source_warning
-                kwargs["ionizing_source_warning"] = warn_setting
-
-            self._nebular_backend = MappingsPhotoAGNBackend(**kwargs)
-
-            # Model protocol refusal (issue #2082): MappingsPhotoAGNBackend does not
-            # implement predict_nebular_sed(), which the forward path calls. The AGN
-            # ionizing source parameters (agn_log_lbol, agn_logedd, agn_logmbh) are
-            # required to wire the interface.
-            raise ValueError(
-                "MappingsPhotoAGNBackend: model protocol surface incomplete. "
-                "The class lacks predict_nebular_sed(agn_log_lbol, agn_logedd, "
-                "agn_logmbh, ...) required by the forward path. The necessary "
-                "AGN ionizing source parameter declarations and protocol adapter "
-                "are pending. See GitHub issue #2082."
-            )
-        else:
-            from tengri.components.nebular import BakedInBackend
-
-            # R49: an explicit neb={'type': 'ssp'} or neb={'type': 'none'}
-            # (both resolve here -- 'ssp' never falls into any branch above,
-            # 'none' resolves to nebular_mode='off' identically to an omitted
-            # neb=) states the baked-in choice, so the advisory is silenced.
-            # An omitted neb= reaches this same branch with the same
-            # nebular_mode='off' but _nebular_explicit=False, so the
-            # advisory still fires -- it is the only signal that
-            # distinguishes "the user said no nebular emission" from
-            # "the user never mentioned nebular emission at all".
-            warning_mode = "suppress" if spec._nebular_explicit else "warn"
-            # When nebular_mode is 'off' and explicitly stated (neb={'type': 'none'}),
-            # don't pass ssp_data to avoid the bare-grid check. The refusal should not
-            # fire when the user explicitly disabled nebular emission. The
-            # _nebular_explicit attribute is always present and distinguishes explicit
-            # neb={'type': 'none'} from an omitted neb=.
-            ssp_data_for_backend = (
-                None if (spec.nebular_mode == "off" and spec._nebular_explicit) else ssp_data
-            )
-            self._nebular_backend = BakedInBackend(
-                ionizing_source_warning=warning_mode, ssp_data=ssp_data_for_backend
-            )
+        # The registry names the backend class for the grammar mode; the class builds
+        # the instance from the spec (``from_spec``), so no branch here names a backend.
+        self._nebular_backend = build_nebular_backend(spec, ssp_data)
 
         return delta
 
@@ -6765,6 +6674,21 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
+    # Per-draw maps for posterior plots, evaluated by
+    # :func:`tengri.forward.draw_maps.map_draws` (named by method, cached per model).
+
+    def _sfr_mean_draw(self, params):
+        """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
+        return self.predict_sfh(params)["sfr_mean"]
+
+    def _sfr_full_draw(self, params):
+        """SFR [Msun/yr] of one draw: ``sfr_full`` if stochastic, else ``sfr_mean``."""
+        return self.predict_sfh(params)["sfr_full" if self.spec.stochastic else "sfr_mean"]
+
+    def _rest_sed_draw(self, params):
+        """Rest-frame SED L_nu [erg/s/Hz] of one draw, on the model's rest grid."""
+        return self._predict_rest_sed(params).sed
+
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
         """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
@@ -6806,9 +6730,12 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: no, uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_properties`
-        to get integrated quantities (stellar mass, age, etc.).
+        **JIT/vmap-compatible**: yes (#715). ``jax.jit(jax.vmap(model.predict_sfh))``
+        traces for every SFH family, on both grids, with no host conversion; a
+        batch of draws is evaluated in one compiled call. Use
+        :func:`tengri.vmap_chunked` rather than a bare ``vmap`` over thousands of
+        draws. For integrated quantities (stellar mass, age, etc.) use
+        :meth:`predict_properties`.
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
         uniform linear-time (lookback) grid, not the internal log-age grid. This
@@ -7274,6 +7201,16 @@ class SEDModel:
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
+
+    def __getstate__(self) -> dict:
+        """Pickle state without the owner-cached draw kernels (not picklable).
+
+        :func:`tengri.forward.draw_maps.map_draws` caches compiled kernels on the
+        instance; those are rebuilt on demand after unpickling or copying.
+        """
+        state = self.__dict__.copy()
+        state.pop("_draw_kernels", None)
+        return state
 
     def compile_signature(self) -> tuple:
         """Return a hashable signature identifying JIT-graph shape and structure.
@@ -8342,8 +8279,10 @@ class SEDModel:
         # catalog that predict_line_fluxes reads, so shock parameters get zero
         # gradient from line-flux fitting.
         if self._uses_shock:
-            backend_name = type(backend).__name__.lower()
-            is_photoionized = any(name in backend_name for name in ("cue", "cloudygrid"))
+            from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+            from tengri.components.nebular.cue import CueBackend
+
+            is_photoionized = isinstance(backend, CueBackend | CloudyGridBackend)
             if is_photoionized:
                 from tengri.config.exceptions import ShockPhotoionizedMixedWarning
 
@@ -8484,7 +8423,7 @@ class SEDModel:
                     "Configured nebular backend did not publish a discrete "
                     "line catalog to state.derived (expected keys "
                     "'line_waves' and 'line_lums'). The BakedIn backend bakes "
-                    "lines into the SSP grid; ShockBackend publishes a "
+                    "lines into the SSP grid; the shock component publishes a "
                     "continuous line SED instead. Switch to Cue or CloudyGrid."
                 )
             all_waves = jnp.asarray(state.derived["line_waves"])
@@ -9302,7 +9241,7 @@ class SEDModel:
                     f"LUT does not model. Use approx=False for this model."
                 )
         neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
-        if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
+        if neb is not None and neb.backend_class.additive:
             raise ValueError(
                 f"{caller}(approx=True) supports baked-in nebular only "
                 f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
@@ -12222,10 +12161,8 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
                 _live_neb = any(
-                    isinstance(c, NebularSEDComponent)
-                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    isinstance(c, NebularSEDComponent) and c.backend_class.supports_split_sed
                     for c in chain
                 )
                 _fesc_exact = lyc_in_energy_balance and _live_neb
@@ -12727,23 +12664,7 @@ class SEDModel:
             neb_backend_name = None
             neb_backend_instance = None
         else:
-            cls_name = type(neb_inst).__name__.lower()
-            if "bakedin" in cls_name:
-                neb_backend_name = "baked_in"
-            elif "cb19" in cls_name:
-                neb_backend_name = "cb19"
-            elif "cloudygrid" in cls_name:
-                neb_backend_name = "cloudy_grid"
-            elif "mappings" in cls_name:
-                neb_backend_name = "mappings"
-            elif "gutkin16" in cls_name:
-                neb_backend_name = "gutkin16"
-            elif "cue" in cls_name:
-                neb_backend_name = "cue"
-            elif "shock" in cls_name:
-                neb_backend_name = "shock"
-            else:
-                neb_backend_name = "baked_in"  # fallback
+            neb_backend_name = neb_inst.config_name
             neb_backend_instance = neb_inst
 
         # Which attenuation-law shape parameters did somebody actually ask for?
@@ -12892,8 +12813,6 @@ class SEDModel:
 
         from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.igm.component import IGMSEDComponent
-        from tengri.components.nebular.component import NebularSEDComponent
-        from tengri.components.stellar.component import StellarSEDComponent
 
         # Does this model have a LIVE nebular Lyman-continuum mask (#2439,
         # #2427)? A photoionized nebular backend whose ``neb_fesc`` is not
@@ -12910,20 +12829,21 @@ class SEDModel:
         # anything (including ``{'type': 'none'}'``, which resolves to
         # ``backend="baked_in"`` -- "nebular emission already baked into the
         # SSP grid, publish nothing"), so ``isinstance`` alone is not the live
-        # -mask test: ``backend="baked_in"`` and ``backend="shock"`` both
-        # return from ``NebularSEDComponent.apply`` before ever reaching the
-        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- neither
-        # publishes ``lyc_transmission``, so the stellar LUT's whole-band and
+        # -mask test: ``backend="baked_in"`` returns from
+        # ``NebularSEDComponent.apply`` before ever reaching the
+        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- it
+        # does not publish ``lyc_transmission``, so the stellar LUT's whole-band and
         # sub-band LyC split would be pure, uncorrected, wasted compute for
         # them (and, on far-IR filters whose observed-frame footprint sits
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
         lyc_mask_live = False
         _live_neb = any(
-            isinstance(c, NebularSEDComponent)
-            and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+            isinstance(c, NebularSEDComponent) and c.backend_class.supports_split_sed
             for c in chain
         )
         if _live_neb:
@@ -14214,17 +14134,12 @@ class SEDModel:
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)
+            from tengri.forward.draw_maps import map_draws
+
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_arr = map_draws(self, "_sfr_full_draw", posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)

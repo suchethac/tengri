@@ -340,6 +340,7 @@ Deprecated (warn + delegate; do not use, do not teach):
 - **All SED components return erg/s/Hz** (standardized 2026-04-08).
 - **Emission line wavelengths**: vacuum throughout (e.g. H-alpha = 6564.61 A). Do NOT use air wavelengths.
 - **Nebular constants**: `components/nebular/_constants.py` re-exports from `physics_constants` — don't break these re-exports.
+- **Nebular backends**: a new backend subclasses `NebularBackendDefaults`, declares `config_name`, `parameters()` and its capabilities on the class, and registers through `nebular_backend_classes` in `components/nebular/_models.py`. The component asks the class and never compares the name (ADR-0024).
 - **AGN shared physics**: `_planck_lnu` in `components/agn/_phys.py` — do NOT duplicate the Planck function.
 - **Notebooks**: edit `.py` files (jupytext percent format), never `.ipynb`.
 - **No developmental language in a published page.** Every notebook under

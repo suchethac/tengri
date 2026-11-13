@@ -25,7 +25,16 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
+from tengri import (
+    Fixed,
+    Observation,
+    Parameters,
+    Photometry,
+    SEDModel,
+    Uniform,
+    WavePrecomp,
+    load_ssp_data,
+)
 from tengri.dust.attenuation import two_component_dust
 from tengri.observation.photometry import compute_flux_density
 from tengri.profiling.timers import _sync, bench
@@ -93,7 +102,7 @@ _CONFIGS = {
 # ---------------------------------------------------------------------------
 
 
-def _time_exact_steps(model: Model, params: dict, n: int = N_STEADY) -> dict:
+def _time_exact_steps(model: SEDModel, params: dict, n: int = N_STEADY) -> dict:
     """Time each pipeline step independently for the exact (unfused) path."""
     p = model._get_internal_params(params)
     dl_cm = luminosity_distance(REDSHIFT)
@@ -218,7 +227,7 @@ for config_name, spec in _CONFIGS.items():
     print("=" * 66)
 
     # ── EXACT PATH ──────────────────────────────────────────────────────
-    model_exact = Model(spec, ssp, observation=obs, precompute=False)
+    model_exact = SEDModel(spec, ssp, observation=obs)
 
     # Compile time for the full exact pipeline
     exact_pred = jax.jit(model_exact.predict_photometry)
@@ -250,7 +259,7 @@ for config_name, spec in _CONFIGS.items():
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        model_fused = Model(spec, ssp, observation=obs, precompute=True)
+        model_fused = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
     is_fused = (
         model_fused._precomp is not None

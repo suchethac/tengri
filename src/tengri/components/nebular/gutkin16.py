@@ -59,7 +59,7 @@ returned in erg/s/Hz.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -69,10 +69,16 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LSUN_ERG
-from tengri.components.nebular._params import CB19_PARAMS, GUTKIN16_PARAMS, PARAMS as _NEB_PARAMS
+from tengri.components.nebular._params import (
+    CB19_PARAMS,
+    GUTKIN16_PARAMS,
+    PARAMS as _NEB_PARAMS,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _log10_sum_of_finite,
     _qh_bilinear,
     apply_lya_escape,
@@ -234,7 +240,7 @@ def gutkin16_line_names(filepath: str | Path | None = None) -> tuple[str, ...]:
     return tuple(n.decode() if isinstance(n, bytes) else str(n) for n in names)
 
 
-class Gutkin16Backend:
+class Gutkin16Backend(NebularBackendDefaults):
     r"""Gutkin+2016 NEOGAL nebular line table, normalized per ionizing photon.
 
     Line luminosities are the stellar ionizing photon rate times a table entry:
@@ -319,6 +325,46 @@ class Gutkin16Backend:
     name = "gutkin16"
     has_free_params = True
     has_continuum = True
+
+    config_name: ClassVar[str] = "gutkin16"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    carries_freefree: ClassVar[bool] = True
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the Gutkin+2016 backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads the optional ``nebular_gutkin16_grid_path``, ``_mup``
+            and ``_continuum`` values.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        Gutkin16Backend
+            The backend instance.
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_gutkin16_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
+        if spec.nebular_gutkin16_mup is not None:
+            kwargs["mup"] = spec.nebular_gutkin16_mup
+        if spec.nebular_gutkin16_continuum is not None:
+            kwargs["continuum"] = spec.nebular_gutkin16_continuum
+        return cls(**kwargs)
 
     def __init__(
         self,

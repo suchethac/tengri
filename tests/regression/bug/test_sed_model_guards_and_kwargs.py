@@ -34,6 +34,7 @@ from tengri.config.exceptions import ConfigError
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.regression_bug
 
@@ -127,7 +128,7 @@ def synthetic_ssp():
     n_met, n_age, n_wave = 3, 20, 100
     wave = jnp.linspace(3000.0, 10000.0, n_wave)
     ages_gyr = jnp.linspace(-1.0, 1.14, n_age)
-    flux = jnp.full((n_met, n_age, n_wave), 1e-3)
+    flux = nonsplat_flux((n_met, n_age, n_wave))
     lgmet = jnp.array([-1.5, -0.5, 0.0])
     return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 

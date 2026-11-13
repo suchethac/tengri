@@ -268,19 +268,20 @@ def test_mappings_velocity_gradient_matches_finite_difference():
     measured log sensitivity falls to 0.013 and FD and AD disagree by 10%,
     which is the piecewise-linear kink near the low edge, not a defect.
     """
-    from tengri.components.nebular.shock import ShockBackend
+    from tengri.components.nebular.shock import compute_shock_sed
 
-    backend = ShockBackend(shock_abundance="solar", shock_component="combined")
     wavelength = jnp.linspace(3000.0, 7000.0, 100)
 
     def fn(shock_velocity):
         return jnp.sum(
-            backend.predict_nebular_sed(
-                wavelength=wavelength,
-                shock_velocity=shock_velocity,
-                l_shock_halpha=1e40,  # erg/s, a typical warm-ionized SFG level
+            compute_shock_sed(
+                wavelength,
+                shock_velocity,
+                1e40,  # erg/s, a typical warm-ionized SFG level
                 shock_log_density=0.0,
                 shock_b_over_sqrt_n=1.0,
+                shock_abundance="solar",
+                shock_component="combined",
             )
         )
 

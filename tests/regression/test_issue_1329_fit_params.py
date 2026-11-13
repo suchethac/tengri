@@ -17,6 +17,7 @@ import pytest
 from tengri import Fixed, ForwardModel, Observation, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation.photometry import FilterCurve
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 
 def build_test_model(use_waveprecomp=False):
@@ -29,7 +30,7 @@ def build_test_model(use_waveprecomp=False):
     wave = jnp.linspace(1000.0, 12000.0, 60)
     ages = jnp.linspace(-1.0, 1.14, 12)
     lgmet = jnp.array([-1.5, -0.5, 0.0])
-    flux_grid = jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5
+    flux_grid = jnp.abs(nonsplat_flux((3, 12, 60))) * 1e-3 + 1e-5
     ssp = SSPData(ssp_wave=wave, ssp_flux=flux_grid, ssp_lg_age_gyr=ages, ssp_lgmet=lgmet)
     curves = tuple(
         FilterCurve(wave=jnp.linspace(lo, hi, 30), trans=jnp.ones(30) * 0.5, name=f"b{i}")

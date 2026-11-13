@@ -8,6 +8,8 @@ acceptance rates, and other diagnostic metrics.
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.forward.draw_maps import map_draws
+
 # ═══════════════════════════════════════════════════════════════════
 # Diagnostics table
 # ═══════════════════════════════════════════════════════════════════
@@ -114,13 +116,7 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
 
     # If samples available, compute posterior band
     if result.samples is not None:
-        n_samples = next(iter(result.samples.values())).shape[0]
-        sfh_samples = []
-        for i in range(n_samples):
-            sample_i = {k: v[i] for k, v in result.samples.items()}
-            sfh_i = result._model.predict_sfh(sample_i)
-            sfh_samples.append(np.array(sfh_i["sfr_mean"]))
-        sfh_array = np.array(sfh_samples)
+        sfh_array = map_draws(result._model, "_sfr_mean_draw", result.samples)
 
         # Plot posterior band
         sfr_lo = np.percentile(sfh_array, 16, axis=0)
@@ -224,12 +220,13 @@ def convergence_check(result, method_name="", verbose=True):
             info["n_params_low_ess"] = n_low
 
             if ess_min < th["ess_bulk_min"]:
-                low_params = [k for k, v in ess_phys.items() if v < th["ess_bulk_min"]]
+                # Name the parameter(s) holding the global minimum, not the first
+                # below-threshold one (#3397). On a tie, every argmin is named.
+                argmin_params = [k for k, v in ess_phys.items() if v == ess_min]
                 warnings.append(
                     f"Low ESS: {n_low}/{len(ess_phys)} params below "
                     f"{th['ess_bulk_min']} "
-                    f"(min ESS = {ess_min:.0f} for "
-                    f"{low_params[0] if low_params else '?'})"
+                    f"(min ESS = {ess_min:.0f} for {', '.join(argmin_params)})"
                 )
             if ess_med < th["ess_total_target"]:
                 warnings.append(
