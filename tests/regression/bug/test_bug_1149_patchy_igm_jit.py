@@ -186,7 +186,12 @@ def test_waveprecomp_patchy_is_as_accurate_as_the_mean_igm(ssp, x_HI):
         lut = np.asarray(
             _build(ssp, z=7.0, approx=WavePrecomp(), patchy=patchy, x_HI=x).predict_photometry(p)
         )
-        return np.abs(lut / exact - 1.0)
+        # A band the neutral IGM absorbs completely (#3429: blueward of Lyα outside the
+        # bubble) has exact == 0, so a relative error is undefined there. Its error is
+        # the absolute LUT value instead.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            relative = np.abs(lut / exact - 1.0)
+        return np.where(exact == 0.0, np.abs(lut), relative)
 
     worst_patchy = float(np.max(err(True, x_HI)))
     worst_mean = float(np.max(err(False, None)))

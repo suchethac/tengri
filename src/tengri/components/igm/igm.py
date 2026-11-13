@@ -705,10 +705,24 @@ def _damping_wing_tau(
     bubble_mask = jax.nn.sigmoid((x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8))
     tau_wing = tau_wing * bubble_mask
 
-    # Only apply redward of Ly-alpha at source (damping wing side)
+    # Red side: the damping wing, applied only redward of Ly-alpha at source.
     tau_wing = jnp.where(wave_obs > lya_obs, tau_wing, 0.0)
 
-    return jnp.clip(tau_wing, min=0.0)
+    # Blue side (#3429): the neutral IGM outside the bubble absorbs blueward of
+    # Ly-alpha with the Gunn-Peterson optical depth tau_GP * x_HI (Gunn & Peterson
+    # 1965; Miralda-Escude 1998). A photon at x_wave < 0 resonates with gas at a
+    # velocity offset of -x_wave * c from the source, so the bubble cut applies to
+    # -x_wave, mirroring the red-side mask. The term is added on top of the Inoue
+    # forest that igm_transmission supplies. Double counting is bounded: the forest
+    # optical depth at 0.9 Ly-alpha is about 5 at z=7, against tau_GP * x_HI of
+    # about 65 at x_HI = 1e-4, so the sum is set by the trough wherever this term
+    # matters. The optical depth is evaluated at the source redshift, not at the
+    # absorbing redshift of each wavelength, so it overstates the absorption far
+    # blueward of Ly-alpha.
+    blue_mask = jax.nn.sigmoid((-x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8))
+    tau_blue = jnp.where(wave_obs < lya_obs, tau_GP * x_HI * blue_mask, 0.0)
+
+    return jnp.clip(tau_wing + tau_blue, min=0.0)
 
 
 def igm_transmission_patchy(
@@ -766,10 +780,11 @@ def igm_transmission_patchy(
     At z < 5.5, the neutral fraction is effectively zero and this
     function returns the same result as ``igm_transmission``.
 
-    The damping wing extends *redward* of Ly-alpha (unlike the Lyman
-    series forest which absorbs blueward). This means it affects the
-    UV continuum longward of Ly-alpha, which is not captured by the
-    standard Inoue+2014 model.
+    The damping wing extends *redward* of Ly-alpha, affecting the UV
+    continuum longward of Ly-alpha, which the standard Inoue+2014 model
+    does not capture. Blueward of Ly-alpha the neutral gas outside the
+    bubble adds the Gunn-Peterson trough, tau_GP * x_HI (#3429), so the
+    transmission there falls with x_HI as well.
 
     References
     ----------
