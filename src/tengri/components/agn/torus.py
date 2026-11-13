@@ -51,6 +51,7 @@ from tengri.components.agn._template_grid import (
     analytic_bolometric_nu,
     cache_per_float_dtype,
     native_bolometric_nu,
+    scale_by_torus_power,
 )
 from tengri.utils.grid_interp import library_lookup, resample_template
 
@@ -147,7 +148,6 @@ def simple_torus(
             stacklevel=2,
         )
         _WARNED.add("simple_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
 
     def _shape(wave):
         # Modified blackbody with silicate opacity
@@ -159,9 +159,7 @@ def simple_torus(
 
     # Normalize to L_bol * f_torus on a fixed internal grid, never on the caller's.
     integral_safe = _toy_integral(_shape)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
-    return l_nu_erg
+    return scale_by_torus_power(_shape(wavelength), integral_safe, agn_log_lbol, agn_torus_frac)
 
 
 # ── Model 2: Two-temperature torus (SKIRTOR-inspired) ─────────────
@@ -235,7 +233,6 @@ def two_temperature_torus(
             stacklevel=2,
         )
         _WARNED.add("two_temperature_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
 
     def _shape(wave):
         # Weighted mixture of two blackbodies with the silicate opacity.
@@ -250,9 +247,7 @@ def two_temperature_torus(
 
     # Normalize on a fixed internal grid, never on the caller's.
     integral_safe = _toy_integral(_shape)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
-    return l_nu_erg
+    return scale_by_torus_power(_shape(wavelength), integral_safe, agn_log_lbol, agn_torus_frac)
 
 
 # ── Nenkova+2008 CLUMPY torus ─────────────────────────────────────
