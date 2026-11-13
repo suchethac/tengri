@@ -109,6 +109,7 @@ from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
+    C_KM_S as _C_KMS,
     L_SUN as _LSUN_ERG,
 )
 from tengri.utils.scale import representable_denominator, representable_exponent
@@ -407,6 +408,7 @@ def _balmer_continuum(
     tbc: float = 15000.0,
     taube: float = 1.0,
     wavbe: float = 3646.0,
+    vfwhm_kms: float = 5000.0,
 ) -> jnp.ndarray:
     """Balmer continuum emission (Grandi 1982).
 
@@ -414,12 +416,20 @@ def _balmer_continuum(
     Matches the original qsogen prescription: B_nu(T_BC) * (1 - exp(-tau))
     where tau = tau_BE * (nu_BE / nu)^3 = tau_BE * (lambda / lambda_BE)^3.
 
+    The edge is the analytic step at ``wavbe`` convolved with a Gaussian of
+    velocity FWHM ``vfwhm_kms`` (upstream qsogen, Temple+2021, ``vfwhm = 5000``
+    km/s), so above the edge the component falls as
+    ``0.5 * erfc((lambda - wavbe) / (sqrt(2) * sigma_lam))`` with
+    ``sigma_lam = wavbe * (vfwhm_kms / 2.35) / c`` (about 26 A at 3646 A).
+    Only the edge is broadened; the interior shape is not convolved.
+
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     continuum_flam : array, shape (n_wave,)
-        Power-law continuum (for normalization reference at 3000 A).
+        Caller's continuum, in the same units as the output (``qsogen_sed``
+        passes L_nu). Used only as the 3000 A normalization reference.
     bcnorm : float
         Balmer continuum strength relative to power-law at 3000 A.
         Default 1.0 (from original qsogen).
@@ -429,13 +439,17 @@ def _balmer_continuum(
         Optical depth at Balmer edge. Default 1.0.
     wavbe : float
         Balmer edge wavelength [Angstrom]. Default 3646.
+    vfwhm_kms : float
+        Velocity FWHM of the Gaussian that broadens the edge [km/s].
+        Default 5000 (upstream qsogen).
 
     Returns
     -------
     array, shape (n_wave,)
-        Balmer continuum f_lambda **component only** (not the total SED).
-        Returns zero everywhere when ``bcnorm=0`` or above the Balmer edge.
-        The caller (``qsogen_sed``) adds this to the other components.
+        Balmer continuum component in the units of ``continuum_flam``
+        (not the total SED). Zero when ``bcnorm=0``. Falls as the erfc above
+        (see the edge description). The caller (``qsogen_sed``) adds this to
+        the other components.
     """
     # B_nu as function of wavelength (matching original bb() convention)
     # bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
@@ -474,9 +488,10 @@ def _balmer_continuum(
 
     scale = bcnorm * cont_at_3000 / bc_at_3000
 
-    # Only below Balmer edge (smooth sigmoid transition)
-    steepness = 1.0 / _SIGMOID_WIDTH
-    below_edge = jax.nn.sigmoid(-steepness * (jnp.log10(wavelength) - jnp.log10(wavbe)))
+    # Analytic step at wavbe convolved with a Gaussian of velocity FWHM vfwhm_kms
+    # (upstream qsogen). Differentiable; the interior shape is not convolved.
+    sigma_lam = wavbe * (vfwhm_kms / 2.35) / _C_KMS
+    below_edge = 0.5 * jax.scipy.special.erfc((wavelength - wavbe) / (jnp.sqrt(2.0) * sigma_lam))
 
     return scale * bc_flux * below_edge
 
