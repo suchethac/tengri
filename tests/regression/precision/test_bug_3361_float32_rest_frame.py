@@ -68,7 +68,8 @@ def test_phot_rest_fnu_float32_matches_float64(ssp_bare):
     _assert_f32_matches_f64(f32.phot_rest_fnu, ref.phot_rest_fnu)
     mag64 = np.asarray(ref.mag_absolute, dtype=np.float64)
     mag32 = np.asarray(f32.mag_absolute, dtype=np.float64)
-    assert np.all(np.isfinite(mag32))
+    assert np.all(np.isfinite(mag32)), f"float32 mag_absolute non-finite: {mag32}"
+    assert np.all(mag32 != 0.0), f"float32 mag_absolute flushed to zero: {mag32}"
     assert np.max(np.abs(mag32 - mag64)) < MAG_TOL, (mag32, mag64)
 
 
@@ -100,6 +101,7 @@ def test_lines_to_sed_float32_matches_float64():
     # claim is on the line core, where the answer is representable.
     core = ref > 1e-6 * ref.max()
     assert core.any()
+    assert np.all(np.isfinite(f32[core])), "float32 line core non-finite"
     assert np.all(f32[core] != 0.0), "float32 core flushed to zero"
     assert_allclose(f32[core], ref[core], rtol=REL_TOL)
 
@@ -120,6 +122,7 @@ def test_q_ir_float32_matches_float64(l_tir_lsun, l_1p4ghz):
     ref = float(run())
     f32 = float(_float32_arm(run))
     assert np.isfinite(f32), f"float32 q_TIR non-finite: {f32}"
+    assert f32 != 0.0, "float32 q_TIR flushed to zero"
     assert_allclose(f32, ref, rtol=REL_TOL)
 
 
@@ -137,4 +140,5 @@ def test_q_ir_gradient_finite_and_nonzero_in_float32():
     g_pos = float(_float32_arm(lambda: grad_at(1e10)))
     g_zero = float(_float32_arm(lambda: grad_at(0.0)))
     assert np.isfinite(g_pos) and g_pos != 0.0, g_pos
+    # grad-assert: finite-only — at L_TIR = 0 the floor binds, so the exact derivative is 0
     assert np.isfinite(g_zero), g_zero
