@@ -7313,7 +7313,18 @@ class SEDModel:
         ``_nebular_grid_table`` and drops the chain memo). A source-level
         guard test enforces that no other method needs to call this: see
         :meth:`compile_signature`'s Notes.
+
+        The structural kernel filed under the outgoing signature is retired
+        with it. That kernel reads the model that built it at trace time, so
+        left in place it would hand this model's new structure to any other
+        model that still has the old signature.
         """
+        # Absent during construction: the first call precedes the memo's own assignment.
+        outgoing = vars(self).get("_signature_memo")
+        if outgoing is not None:
+            from tengri.inference._model_cache import _default_owner
+
+            _default_owner.retire_structural_kernel(outgoing)
         self._signature_memo = None
 
     def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):

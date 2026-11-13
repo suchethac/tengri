@@ -116,6 +116,17 @@ class ModelCacheOwner:
             self._kernel_cache[signature] = {}
             return self._kernel_cache[signature]
 
+    def retire_structural_kernel(self, signature: tuple) -> None:
+        """Drop the kernel namespace filed under ``signature``, if any.
+
+        A structural kernel reads the model that built it when it is traced. A
+        model mutated in place no longer has the structure its old signature
+        names, so the kernel filed there must not be traced (or retraced) over
+        it for another model. The next model with that signature builds its own.
+        """
+        with self._lock:
+            self._kernel_cache.pop(signature, None)
+
     def clear(self) -> None:
         """Clear all cached entries (both model and kernel caches)."""
         with self._lock:
