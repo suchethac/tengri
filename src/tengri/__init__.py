@@ -257,7 +257,7 @@ def gc() -> None:
 
     Examples
     --------
-    >>> for tau_gyr in (0.1, 0.3, 1.0, 3.0):
+    >>> for tau_gyr in (0.1, 0.3, 1.0, 3.0):  # doctest: +SKIP
     ...     spec = make_spec(tau_gyr)
     ...     result = fit(spec)
     ...     tengri.gc()  # one line of cleanup between configurations
@@ -449,7 +449,13 @@ class _KernelsRemoved:
 
     __call__ = _raise
     __getitem__ = _raise
-    __getattr__ = _raise
+
+    def __getattr__(self, name: str):
+        # Dunder probes (``__wrapped__`` in inspect/doctest) must see the normal
+        # AttributeError, not the migration ImportError (#3452).
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return self._raise()
 
 
 KernelStrategy = _KernelsRemoved("KernelStrategy")

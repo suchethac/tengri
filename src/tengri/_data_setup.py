@@ -202,8 +202,8 @@ def source_tree_root() -> Path:
     --------
     >>> from tengri._data_setup import source_tree_root
     >>> root = source_tree_root()
-    >>> if (root / "pyproject.toml").exists():
-    ...     # Running from source
+    >>> (root / "pyproject.toml").exists()  # True when running from source
+    True
     """
     pkg_root = Path(__file__).resolve().parent  # <src>/tengri
     source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
@@ -287,10 +287,9 @@ def data_path(filename: str) -> Path:
     Examples
     --------
     >>> from tengri import data_path
-    >>> templates = data_path("bosa_templates.h5")
-    >>> import h5py
-    ...
-    ... h5py.File(templates).keys()
+    >>> templates = data_path("bosa_templates.h5")  # doctest: +SKIP
+    >>> import h5py  # doctest: +SKIP
+    >>> h5py.File(templates).keys()  # doctest: +SKIP
     """
     for directory in data_dirs():
         candidate = directory / filename
@@ -763,8 +762,8 @@ def list_available_ssps() -> list[dict]:
 
         >>> import tengri
         >>> rows = tengri.list_available_ssps()
-        >>> {r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"}
-        {'chabrier', 'kroupa', 'salpeter'}
+        >>> sorted({r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"})
+        ['chabrier', 'kroupa', 'salpeter']
 
     See also
     --------
@@ -896,8 +895,8 @@ def download_ssp(
     Examples
     --------
     >>> import tengri
-    >>> tengri.download_ssp()  # default FSPS PARSEC+MILES grid → data/
-    >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")
+    >>> tengri.download_ssp()  # doctest: +SKIP
+    >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")  # doctest: +SKIP
     """
     # Resolve target directory
     if dest is None:

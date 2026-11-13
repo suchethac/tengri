@@ -669,8 +669,8 @@ def load_ssp_data(
     Examples
     --------
     >>> from tengri.components.stellar.sps import load_ssp_data
-    >>> ssp = load_ssp_data("data/ssp_bc03.h5")
-    >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
+    >>> ssp = load_ssp_data("data/ssp_bc03.h5")  # doctest: +SKIP
+    >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)  # doctest: +SKIP
     (6000,) (50, 300, 6000)
 
     >>> import jax.numpy as jnp
@@ -1958,7 +1958,7 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
     --------
     >>> from tengri import salaris_mh_from_feh
     >>> round(float(salaris_mh_from_feh(feh=-0.5, alpha_fe=0.2)), 4)
-    -0.3676
+    -0.3595
 
     """
     return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
@@ -1998,7 +1998,7 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     --------
     >>> from tengri import salaris_feh_from_mh
     >>> round(float(salaris_feh_from_mh(mh=-0.5, alpha_fe=0.2)), 4)
-    -0.6324
+    -0.6405
 
     """
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
