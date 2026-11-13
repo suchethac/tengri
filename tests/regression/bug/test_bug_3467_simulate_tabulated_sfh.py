@@ -177,7 +177,7 @@ def test_off_grid_metallicity_warns_under_warn_policy(grid_ssp):
     assert any(issubclass(w.category, OutOfSSPGridWarning) for w in caught)
 
 
-def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
+def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift, log_z=_LOG_Z):
     """Predicted r-band photometry and formed mass from Catalog.from_histories."""
     from tengri import (
         DEFAULT,
@@ -187,7 +187,7 @@ def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
         Photometry,
         SEDModel,
     )
-    from tengri.inference.catalog import Catalog, _stellar_config
+    from tengri.inference.catalog import Catalog
 
     obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
     sed = SEDModel.build(
@@ -195,7 +195,7 @@ def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
         observation=obs,
         redshift=Fixed(redshift),
         sfh={"type": "table"},
-        met={"logzsol": Fixed(_LOG_Z)},
+        met={"logzsol": Fixed(log_z)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
@@ -211,8 +211,7 @@ def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
     out = cat.simulate(properties=("stellar_mass",), chunk_size=1)
     flux = np.asarray(out.photometry, dtype=float).ravel()
     mass = float(np.asarray(out.properties["stellar_mass"]).ravel()[0])
-    scatter = float(_stellar_config(fwd).lgmet_scatter)
-    return flux, mass, scatter
+    return flux, mass
 
 
 @pytest.mark.parametrize("shape", ["exponential", "box", "rising"])
@@ -231,7 +230,7 @@ def test_sed_from_sfh_matches_the_catalog_path(grid_ssp, shape):
     else:
         sfr = t / 5.0
 
-    flux_cat, mass_cat, scatter = _catalog_photometry(grid_ssp, t, sfr, _Z_OBS)
+    flux_cat, mass_cat = _catalog_photometry(grid_ssp, t, sfr, _Z_OBS)
     import jax.numpy as jnp
 
     res = photometry_from_sfh(
@@ -241,7 +240,6 @@ def test_sed_from_sfh_matches_the_catalog_path(grid_ssp, shape):
         load_filter_set(["sdss_r"]),
         log_z=_LOG_Z,
         redshift=_Z_OBS,
-        lgmet_scatter=scatter,
     )
     assert float(res["stellar_mass"]) == pytest.approx(mass_cat, rel=1e-3)
     np.testing.assert_allclose(np.asarray(res["flux"]), flux_cat, rtol=1e-3)
@@ -294,3 +292,95 @@ def test_scalar_log_z_halfway_between_nodes_stays_in_the_envelope(grid_ssp):
         sed = sed_at(0.5 * (rel[k] + rel[k + 1]))
         assert np.all(sed >= lo - tol), f"below the envelope between nodes {k} and {k + 1}"
         assert np.all(sed <= hi + tol), f"above the envelope between nodes {k} and {k + 1}"
+
+
+def test_catalog_fixed_metallicity_declares_no_scatter(grid_ssp):
+    """A Fixed-metallicity catalog model reads the SSP grid node-exactly (#3434).
+
+    The grammar fills met_logzsol_scatter with its registry default; that fill is
+    not a user declaration, so the catalog path uses the node-exact read, and its
+    photometry equals the sed_from_sfh path at the same undeclared scatter.
+    """
+    import jax.numpy as jnp
+
+    from tengri import (
+        DEFAULT,
+        Fixed,
+        ForwardModel,
+        Observation,
+        Photometry,
+        SEDModel,
+        load_filter_set,
+    )
+    from tengri.analysis.simulate import photometry_from_sfh
+    from tengri.cosmology import age_at_z
+    from tengri.inference.catalog import Catalog, _stellar_config
+
+    node_rel = _node_relative(grid_ssp)[1]
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    sed = SEDModel.build(
+        ssp_data=grid_ssp,
+        observation=obs,
+        redshift=Fixed(_Z_OBS),
+        sfh={"type": "table"},
+        met={"logzsol": Fixed(float(node_rel))},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": 0.0,
+            "tau_diff": 0.0,
+        },
+        neb={"type": "none"},
+    )
+    fwd = ForwardModel.build(sed=sed, observation=obs)
+    assert _stellar_config(fwd).lgmet_scatter_declared is False
+
+    t = np.linspace(0.05, float(age_at_z(_Z_OBS)), 1500)
+    sfr = np.exp(-t / 3.0)
+    cat = Catalog.from_histories(fwd, t_gyr=t, sfr=sfr[None, :])
+    flux = np.asarray(cat.simulate(properties=("stellar_mass",), chunk_size=1).photometry).ravel()
+    ref = photometry_from_sfh(
+        jnp.asarray(t),
+        jnp.asarray(sfr),
+        grid_ssp,
+        load_filter_set(["sdss_r"]),
+        log_z=float(node_rel),
+        redshift=_Z_OBS,
+    )
+    np.testing.assert_allclose(flux, np.asarray(ref["flux"]), rtol=1e-3)
+
+
+def test_per_age_history_with_undeclared_scatter_is_one_hot_on_nodes(grid_ssp):
+    """An evolving Z with no declared scatter reads each age's node Z node-exactly (#3434).
+
+    Every SSP age is given a metallicity that sits on an SSP node; with the
+    scatter undeclared, each age's column of joint weights is one-hot on that node.
+    """
+    from tengri.components.stellar.component import _joint_weights_cic_met_table
+
+    ssp_lgmet = np.asarray(grid_ssp.ssp_lgmet, dtype=float)
+    lg_age = np.asarray(grid_ssp.ssp_lg_age_gyr, dtype=float)
+    ssp_ages_yr = 10.0 ** (lg_age + 9.0)
+    n_age = ssp_ages_yr.shape[0]
+    pattern = np.array([0, 2, 1])[np.arange(n_age) % 3]
+    lgmet_on_ssp_ages = ssp_lgmet[pattern]
+
+    joint, _ = _joint_weights_cic_met_table(
+        ssp_ages_yr,
+        np.ones(n_age),
+        ssp_ages_yr,
+        float(ssp_ages_yr[-1] / 1e9),
+        lgmet_on_ssp_ages,
+        0.0,
+        ssp_lgmet,
+        declared=False,
+    )
+    joint = np.asarray(joint)
+    for a in range(n_age):
+        col = joint[:, a]
+        if col.sum() <= 0.0:
+            continue
+        expected = np.zeros(ssp_lgmet.shape[0])
+        expected[pattern[a]] = 1.0
+        np.testing.assert_allclose(col / col.sum(), expected, atol=1e-9)

@@ -246,14 +246,20 @@ def _nebular_continuum_consumers(chain):
 def _met_scatter_declared(spec) -> bool:
     """True when the user declared the metallicity scatter (#3434).
 
-    A declaration is either ``met_logzsol_scatter`` passed by the user (a value or
-    a prior: recorded in ``_user_provided``) or the flat ``lgmet_scatter`` kwarg.
-    The registry's auto-registered default does not count, so a model that does
-    not declare a scatter reads the SSP grid node-exactly in log Z.
+    A declaration is ``met_logzsol_scatter`` named by the user (a value, a prior,
+    or a wildcard ``FREE``) or the flat ``lgmet_scatter`` kwarg. The grammar fills
+    ``met_logzsol_scatter`` with its registry default whenever a ``met`` block
+    omits it, and that fill-in is recorded in ``_group_provenance`` as
+    ``registry_default``, so it does not count. A spec with no provenance (the flat
+    ``Parameters(...)`` escape hatch) falls back to ``_user_provided``.
     """
-    user_provided = getattr(spec, "_user_provided", frozenset())
     flat_kwarg = getattr(spec, "_lgmet_scatter_for_fix", None) is not None
-    return "met_logzsol_scatter" in user_provided or flat_kwarg
+    if flat_kwarg:
+        return True
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        return "met_logzsol_scatter" in getattr(spec, "_user_provided", frozenset())
+    return provenance.get("met_logzsol_scatter") in _SCATTER_DECLARING_PROVENANCE
 
 
 def _chain_consumes(chain, key: str) -> bool:
@@ -1305,6 +1311,10 @@ def _validate_fracagn_requires_dust(spec) -> None:
 #: the grammar filling a slot in, which a guard about a *stated* value must
 #: not read as a statement.
 _USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+#: Provenance tags under which the user named a metallicity scatter: a value or
+#: prior (``user_*``), or a wildcard ``FREE`` that freed it (``wildcard_free``).
+#: A ``registry_default`` or wildcard ``Fixed(DEFAULT)`` fill-in is not a declaration.
+_SCATTER_DECLARING_PROVENANCE = _USER_PROVIDED_PROVENANCE | {"wildcard_free"}
 
 
 def _param_is_user_provided(spec, name: str) -> bool:
