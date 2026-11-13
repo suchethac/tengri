@@ -1049,6 +1049,9 @@ agn_torus_block, agn_attenuation_block : str
     _tie_intrinsic = None
     _ledger_polar_norm = 1.0
     _tie_active = _agn_norm == "cigale_joint" and agn_torus_block in _TIE_TORI
+    # The Fritz torus's library anisotropy stays on the untied path; where the tie is on the
+    # torus + polar dust carry ``agn_power`` at every inclination, as CIGALE's ``fritz2006`` (#3405).
+    _fritz_tied_flat = _tie_active and agn_torus_block == "fritz"
     # A disc with a corona registers its disc/corona split; the tie normalizes the disc part
     # and carries the corona on top (see ``_disc_parts``). A corona-less disc takes the
     # whole spectrum as its disc part, exactly as before.
@@ -1302,6 +1305,19 @@ agn_torus_block, agn_attenuation_block : str
             _budget_cache["torus_power"] = _power
         return _budget_cache["torus_power"]
 
+    def _tied_log_anisotropy():
+        """``log10(a(mu)/a_bar)`` of the Fritz library at ``agn_cos_inc``, 0 where untied [dex].
+
+        pCIGALE's ``fritz2006`` divides the dust (torus + polar blackbody) by its own integral
+        at every ``psy`` and scales it by ``agn_power``, so under the ``agn_ir_frac`` tie the
+        total dust power does not depend on the viewing angle (Fritz et al. 2006's per-record
+        ``norm`` only sets the disc). The library's ``a/a_bar`` is therefore held out of the
+        tied torus; the untied (``agn_ir_frac = 0``) path keeps it (#2851).
+        """
+        _aniso = TORUS_ANISOTROPY_BLOCKS[agn_torus_block]
+        _log = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
+        return jnp.where(_agn_fracAGN > 0.0, _log, 0.0)
+
     def _angle_integrated_torus_budget(sightline_power):
         """The torus power the polar-dust split budgets on, over every direction [erg/s].
 
@@ -1312,7 +1328,8 @@ agn_torus_block, agn_attenuation_block : str
         observer-independent, so only the angle-integrated budget closes the energy (#3100).
         """
         _aniso = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
-        if _aniso is None:
+        if _aniso is None or _fritz_tied_flat:
+            # A tied Fritz torus carries ``agn_power`` along every sightline (#3405).
             return sightline_power
         _log_ratio = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
         return sightline_power / jnp.power(10.0, _log_ratio)
@@ -1465,7 +1482,15 @@ agn_torus_block, agn_attenuation_block : str
             _disc_scalar = _disc_scalar - _line_fraction
 
     # Stage 4: IR torus.
-    torus_fn = resolve_agn_block("torus", agn_torus_block)
+    _torus_block_fn = resolve_agn_block("torus", agn_torus_block)
+
+    def torus_fn(*args, **kwargs):
+        """The torus block, with a tied Fritz torus's library anisotropy removed (#3405)."""
+        _out = _torus_block_fn(*args, **kwargs)
+        if _fritz_tied_flat:
+            _out = _out / jnp.power(10.0, _tied_log_anisotropy())
+        return _out
+
     L_lambda_torus = torus_fn(
         wave,
         agn_log_lbol=agn_log_lbol_eval,
@@ -2158,6 +2183,9 @@ agn_torus_block, agn_attenuation_block : str
             if _aniso_fn is None
             else _aniso_fn(_templates_for("torus", agn_torus_block), wave.dtype, **params)
         )
+        if _fritz_tied_flat:
+            # Where the tie is on the torus is flat: nothing to divide out (#3405).
+            _log_aniso = jnp.where(_agn_fracAGN > 0.0, 0.0, _log_aniso)
         # A foreground attenuation block screens the torus as well; its power before the screen
         # is the torus block's own emission (``polar_dust`` leaves the torus unscreened).
         _log_torus_intr = None
