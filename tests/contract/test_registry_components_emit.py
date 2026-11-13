@@ -171,8 +171,8 @@ def _template_data_unavailable(name: str) -> bool:
 
     Some components are backed by a large published grid that is not committed
     (``draine2021_pah`` needs a 104 MB PAHspec HDF5). Absent it, the component
-    is behaving *correctly* when it warns and contributes nothing -- that is the
-    designed response, not the silent no-op this census exists to catch. Without
+    raises ``TengriIOError`` naming the file (#3284) -- that is the designed
+    response, not the silent no-op this census exists to catch. Without
     this probe the census reads "production component does not emit" on a
     machine that simply has no grid, which is the wrong accusation.
 
@@ -182,6 +182,10 @@ def _template_data_unavailable(name: str) -> bool:
     import jax.numpy as _jnp
 
     from tengri.components.sed_model_component import _REGISTRY as _COMPONENT_REGISTRY
+    from tests._data_skip import PAHSPEC_EMISSION_TYPES, has_pahspec
+
+    if name in PAHSPEC_EMISSION_TYPES:
+        return not has_pahspec()
 
     for key in (name, f"{name}_ir"):
         cls = _COMPONENT_REGISTRY.get(key)
@@ -424,8 +428,8 @@ class TestRegistryComponentsEmit:
         if not success and _template_data_unavailable(name):
             pytest.skip(
                 f"{kind}:{name}: required template grid is not present on this "
-                f"machine, so contributing nothing is the correct behavior "
-                f"(the component warns). Reported: {msg}"
+                f"machine, so the component refusing to build is the correct "
+                f"behavior. Reported: {msg}"
             )
 
         assert success, (

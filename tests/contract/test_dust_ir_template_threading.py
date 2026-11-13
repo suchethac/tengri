@@ -26,6 +26,7 @@ from tengri import DEFAULT, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, requires_pahspec
 
 from ._jaxpr_consts import baked_mb
 
@@ -98,6 +99,8 @@ def _emission_names():
         marks = []
         if name in _KNOWN_BAKING:
             marks.append(pytest.mark.xfail(reason=_KNOWN_BAKING[name], strict=True))
+        if name in PAHSPEC_EMISSION_TYPES:
+            marks.append(requires_pahspec)
         cases.append(pytest.param(name, marks=marks, id=name))
     return cases
 

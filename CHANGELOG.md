@@ -38,6 +38,7 @@
 
 ### Changed
 - The nebular literal-default baseline is empty (#2265): the 116 signature defaults and `.get` fallbacks that repeated a declared nebular default now read it through `DEFAULT_*` constants in `components/nebular/_params.py`, bit-identical on the nine-model capture. Three of the sites are `.get` fallbacks in `component.py` and `nebular_grid_precompute.py`; the rest are model-function defaults.
+- **AGN `numeric_agn_kwargs` fallbacks read the declared defaults (#2297).** `agn_log_mbh` 8.0 -> 7.0, `agn_tau_torus` 3.0 -> 5.0, `agn_T_hot` 1500 -> 1200, `agn_frac_hot` 0.5 -> 0.3, `agn_cos_inc` 0.5 -> 0.866 (cos 30 deg), `agn_polar_oa` 40 -> 0 (the declared "follow the torus" sentinel). Affected: only direct calls to `numeric_agn_kwargs` that omit these keys. Every `SEDModel.build` path supplies every declared key, so built models and their outputs are unchanged (measured bit-identical).
 - The translation triple `(internal_name, scale, offset)` lives on each `ParamDeclaration`; `translate.py` derives its non-SFH and evolving-alpha tables from the registry (#3296).
 - The legacy module-level `tengri.parameters.translate.PARAM_MAP` is deleted; `_build_param_map(...)` is the translation table, pinned by a snapshot test (#3296).
 - The Cue weights are loaded with `allow_pickle=False` (#3285): the shipped `cue_weights.npz` holds only numeric and fixed-width string arrays, and an archive with an object array now raises `ValueError` instead of loading. Line luminosities are bit-identical.
