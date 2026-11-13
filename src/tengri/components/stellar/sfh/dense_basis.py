@@ -515,38 +515,26 @@ def dense_basis(
     # Prepend zero for the Big Bang bin (matching dense_basis line 168)
     sfr = jnp.concatenate([jnp.array([0.0]), sfr])
 
-    # --- Mass renormalization (dense_basis lines 170-180) ---
-    # The GP+diff path can leave a small residual mismatch with the target
-    # mass 10^logM (GP smoothing pulls the endpoints slightly off 0/1).
-    # The original code splits the SFR into "recent" (last ~10 Myr) and
-    # "initial" bins, then rescales ONLY the initial bins so the total
-    # equals 10^logM. The recent bins are then optionally overridden to
-    # the requested instantaneous SFR.
+    # --- Mass renormalization and recent-SFR override (#3454) ---
+    # The recent (last ~10 Myr) bins take the declared instantaneous level
+    # 10^log_sfr_inst first, and the initial bins take the remaining mass, so the
+    # composed history integrates to 10^logM exactly and no later mass pin moves
+    # the recent level. The GP's own recent values are not used, because the
+    # override is unconditional (equivalent to the original sfr_tolerance = 0).
+    # A recent mass above M* cannot hold (more mass in the last 10 Myr than in
+    # total), so the recent level is capped at M* over the recent width.
     target_mass = 10.0**log_total_mass
     t_cosmic_gyr = t_eval * age_universe_gyr
     threshold_gyr = age_universe_gyr - _DECOUPLE_SFR_TIME_GYR
     recent_mask = t_cosmic_gyr >= threshold_gyr  # boolean, shape (RES,)
 
-    # Integrate using rectangle rule (consistent with sfh_scale = 10^logM / dt_yr,
-    # which assumes uniform dt). This matches the original code closely; trapezoid
-    # vs rectangle differs only at endpoints.
-    mass_recent = jnp.sum(jnp.where(recent_mask, sfr, 0.0)) * dt_yr
+    # Rectangle rule, consistent with sfh_scale = 10^logM / dt_yr (uniform dt).
+    recent_width_yr = jnp.maximum(jnp.sum(recent_mask), 1) * dt_yr
+    sfr_recent = jnp.minimum(10.0**log_sfr_inst, target_mass / recent_width_yr)
     mass_init = jnp.sum(jnp.where(recent_mask, 0.0, sfr)) * dt_yr
-    mass_remaining = jnp.maximum(target_mass - mass_recent, 0.0)
+    mass_remaining = target_mass - sfr_recent * recent_width_yr
     init_scale = mass_remaining / jnp.maximum(mass_init, representable_denominator(1e-30))
-    sfr = jnp.where(recent_mask, sfr, sfr * init_scale)
-
-    # --- Recent-SFR override (dense_basis lines 182-183) ---
-    # The original code triggers the override only when the GP-derived recent
-    # SFR deviates by more than ``sfr_tolerance`` (0.05 dex) from the requested
-    # ``log_sfr_inst``. That conditional creates a non-differentiable step at
-    # the threshold, which breaks gradient-based inference. Since the whole
-    # point of having ``log_sfr_inst`` as an explicit free parameter is to
-    # honor it during fitting, we override unconditionally: equivalent to
-    # ``sfr_tolerance = 0``. This is smooth in both ``log_sfr_inst`` and
-    # ``log_total_mass`` (the override bins are independent of the latter).
-    sfr_override_value = 10.0**log_sfr_inst
-    sfr = jnp.where(recent_mask, sfr_override_value, sfr)
+    sfr = jnp.where(recent_mask, sfr_recent, sfr * init_scale)
 
     # --- Convert cosmic time fraction → lookback time ---
     # dense_basis: timeax = time_arr_interp * cosmo.age(z).value
