@@ -141,7 +141,7 @@ from tengri.components.nebular._shared import (
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
 )
-from tengri.config.exceptions import CueIonizingShapeWarning
+from tengri.config.exceptions import ConfigError, CueIonizingShapeWarning
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.utils.host_array import device_table, host_array
 
@@ -174,6 +174,7 @@ from tengri.components.nebular._balmer_series import (
 )
 from tengri.components.nebular.ionizing_spectrum import (
     _CLIP_RANGES,
+    HI_LIMIT,
     IONSPEC_NAMES,
     LYC_ALL_AGES,
     MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,  # noqa: F401  (re-exported for importers)
@@ -1457,6 +1458,24 @@ class CueBackend(NebularBackendDefaults):
         import numpy as np
 
         from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
+
+        # Coverage check (#3417), first so that no table or cache work runs on a grid that
+        # cannot give one. An axis with no point at or below the Lyman limit has no ionizing
+        # spectrum to fit, and the fit would die inside numpy. The mask is the one the table
+        # builder uses, so the two cannot disagree. A truncated grid is refused, not read as dark.
+        wave_axis = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
+        if not np.any(wave_axis <= HI_LIMIT):
+            raise ConfigError(
+                "neb backend 'cue' (CueBackend) cannot use this SSP grid: its wavelength axis "
+                f"starts at {wave_axis.min():.6g} A, above the Lyman limit at {HI_LIMIT:.0f} A, "
+                "so it carries no ionizing spectrum for Cue to fit. A grid truncated above the "
+                "limit is not a dark grid, so the build is refused.\n"
+                "\n"
+                "Fix (one of):\n"
+                "  1. Use an SSP grid whose wavelength axis extends below 912 A.\n"
+                "  2. Use a nebular backend that does not need the ionizing spectrum.\n"
+                "  3. Drop the nebular emission: neb={'type': 'none'}."
+            )
 
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
