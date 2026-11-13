@@ -33,6 +33,8 @@ from typing import NamedTuple
 import h5py
 import numpy as np
 
+from tengri._x64_hold import hold_x64_preference
+
 #: Registry ``source`` of a grid whose table has not been built yet.
 PENDING = "PENDING"
 #: Registry ``source`` of a grid that carries its own ``ssp_mass_remaining``.
@@ -167,6 +169,36 @@ PENDING_REASON: dict[str, str] = {
         "check_bpass_mass_balance.py and src/tengri/data/ssp_mass_remaining/PROVENANCE.md)"
     ),
 }
+
+
+def fit_imf_params() -> dict[str, tuple]:
+    """DSPS surviving-mass fit parameters, keyed by the IMF label the fit knows.
+
+    Returns
+    -------
+    dict[str, tuple]
+        IMF label -> the parameter tuple of ``dsps.imf.surviving_mstar``. A grid
+        whose IMF is not a key here has no DSPS fit; :func:`resolve_mass_remaining`
+        refuses it unless the caller names a fit explicitly.
+
+    Notes
+    -----
+    Imports DSPS on first call, under ``hold_x64_preference``.
+    """
+    with hold_x64_preference():
+        from dsps.imf.surviving_mstar import (
+            CHABRIER_PARAMS,
+            KROUPA_PARAMS,
+            SALPETER_PARAMS,
+            VAN_DOKKUM_PARAMS,
+        )
+
+    return {
+        "chabrier": CHABRIER_PARAMS,
+        "salpeter": SALPETER_PARAMS,
+        "kroupa": KROUPA_PARAMS,
+        "van_dokkum": VAN_DOKKUM_PARAMS,
+    }
 
 
 def is_hosted_grid(stem: str) -> bool:
@@ -384,10 +416,17 @@ def resolve_mass_remaining(
     3. No table: a registered grid (shipped, PENDING) raises ``ValueError``
        naming the missing table and the opt-in; so does a hosted grid that
        this registry does not list (its isochrones and IMF are not stated
-       here); a user's own grid emits a ``UserWarning`` naming the opt-in and
-       uses the DSPS fit.
+       here). A user's own grid (no registry row, not hosted) is resolved by
+       its IMF label: if the label is one :func:`fit_imf_params` has a fit for,
+       it emits a ``UserWarning`` naming the opt-in and uses that fit; if the
+       IMF is ``"unknown"`` or has no fit, it raises ``ValueError`` naming both
+       remedies, ``imf=`` (state the IMF) and ``mass_remaining="dsps_fit"``
+       (accept the Chabrier-parameter fit). The IMF label is the caller's
+       ``imf=`` argument, else the HDF5 ``imf`` attribute, else the file-name
+       token (``detected_imf``).
 
-    ``mode="dsps_fit"`` skips the tables and uses the fit for any grid.
+    ``mode="dsps_fit"`` skips the tables and uses the fit for any grid, whatever
+    its IMF: that is the explicit acceptance of the fit.
 
     Parameters
     ----------
@@ -421,8 +460,9 @@ def resolve_mass_remaining(
     ------
     ValueError
         Unknown mode; PENDING or table-less registered grid without the opt-in;
-        metallicity mismatch; ages out of range; grid attribute contradicting
-        the registry.
+        a user grid with no table whose IMF is not stated or has no fit; a hosted
+        grid with no table; metallicity mismatch; ages out of range; grid attribute
+        contradicting the registry.
     OSError
         A companion file cannot be read.
 
@@ -456,6 +496,7 @@ def resolve_mass_remaining(
         return MassRemainingResolution(np.asarray(embedded, dtype=np.float64), EMBEDDED, fit_imf)
 
     optin = f"load_ssp_data(..., mass_remaining={MODE_DSPS_FIT!r})"
+    fit_imfs = fit_imf_params()
     if entry is None and not synthetic and is_hosted_grid(stem):
         raise ValueError(
             f"'{stem}' is a hosted SSP grid with no surviving-mass metadata: this package "
@@ -463,6 +504,16 @@ def resolve_mass_remaining(
             "'ssp_mass_remaining' table. Its surviving mass would otherwise come from DSPS's "
             "metallicity-independent fit to FSPS for a Chabrier, Kroupa or Salpeter IMF, which "
             f"may not describe this grid. Pass {optin} to accept that fit."
+        )
+    known = ", ".join(sorted(fit_imfs))
+    if entry is None and imf_norm not in fit_imfs:
+        state = "not stated" if imf_norm == "unknown" else f"{imf_norm!r}, which has no fit"
+        raise ValueError(
+            f"'{stem}' is not a registered SSP grid and carries no ssp_mass_remaining; its IMF "
+            f"is {state} (the DSPS fit knows {known}). Its surviving mass would come from "
+            "DSPS's metallicity-independent fit, which assumes a Chabrier-parameter IMF. Pass "
+            f"load_ssp_data(..., imf=<one of {known}>) to state the IMF, or {optin} to accept "
+            "that fit."
         )
     if entry is None:
         warnings.warn(
