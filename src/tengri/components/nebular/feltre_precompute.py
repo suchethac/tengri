@@ -45,6 +45,7 @@ import numpy as np
 from tengri.components.nebular._constants import (
     _LSUN_ERG,
 )
+from tengri.components.nebular._params import DEFAULT_NEB_FESC
 from tengri.components.nebular.agn_nebular import (
     _DEFAULT_FELTRE_GRID_PATH,
     _load_feltre_grid,
@@ -254,7 +255,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     fixed_idx_to_value = collapsed_axes
 
     @jax.jit
-    def predict_lines(log_qh, *free_axis_vals, neb_fesc=0.0):
+    def predict_lines(log_qh, *free_axis_vals, neb_fesc=DEFAULT_NEB_FESC):
         """Compute Feltre NLR emission lines via node-exact PCHIP (#2861).
 
         Parameters

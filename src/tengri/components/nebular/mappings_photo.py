@@ -64,6 +64,11 @@ from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular._shared import (
     NebularBackendDefaults,
     _interp_index_weight,
@@ -704,11 +709,11 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute emission line luminosities from MAPPINGS V stellar grid.
@@ -979,11 +984,11 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,
@@ -1217,7 +1222,7 @@ class MappingsPhotoAGNBackend(NebularBackendDefaults):
         agn_logmbh: float = 7.0,
         agn_logedd: float = -0.5,
         neb_logn: float = 3.0,
-        neb_fesc: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute AGN NLR emission line luminosities.
@@ -1317,8 +1322,8 @@ class MappingsPhotoAGNBackend(NebularBackendDefaults):
         neb_logU: float | None = None,
         neb_logZ_gas: float | None = None,
         neb_logn: float = 3.0,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,
