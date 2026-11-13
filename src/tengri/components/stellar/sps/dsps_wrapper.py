@@ -16,6 +16,7 @@ Appendix A.1 for metallicity marginalization and precomputation schemes.
 """
 
 import hashlib
+import warnings
 import weakref
 from functools import cache
 from typing import NamedTuple
@@ -90,6 +91,9 @@ def canonical_dsps_kwargs(**kwargs):
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
 from tengri.components.stellar.sps.mass_remaining_tables import (
+    DEFAULT_MASS_REMAINING,
+    GRID_CAVEATS,
+    canonical_grid_name,
     fit_imf_params,
     resolve_mass_remaining,
 )
@@ -222,6 +226,9 @@ class SSPData(NamedTuple):
     # applied to it (:class:`~tengri.components.stellar.sps.top_z_validity.TopZValidity`),
     # or ``None`` when the grid has no limit on record. Metadata only: never a JIT leaf.
     top_z: tuple | None = None
+    # Caveats on the flux of this grid, one string each (#3428), warned once at load
+    # (see ``GRID_CAVEATS``). Metadata only: never a JIT leaf.
+    grid_notes: tuple[str, ...] = ()
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this SSPData instance.
@@ -251,7 +258,7 @@ def _sspdata_flatten(s):
         s.ssp_alpha_fe,
         s.ssp_resolution_kms,
     )
-    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z)
+    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z, s.grid_notes)
     return children, aux
 
 
@@ -273,6 +280,7 @@ def _sspdata_unflatten(aux, children):
         nebular=aux[2],
         mass_remaining_source=aux[3],
         top_z=aux[4],
+        grid_notes=aux[5],
     )
 
 
@@ -292,6 +300,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
     "mass_remaining_source": content("where the surviving-mass table came from"),
     "top_z": content("top-metallicity validity limit and policy change the node arrays"),
+    "grid_notes": content("caveats on the grid's flux identify the library"),
 }
 
 
@@ -358,11 +367,35 @@ _LOAD_SSP_PRESETS: dict[str, str] = {
 }
 
 
+def _default_mass_remaining(name: str | None) -> str:
+    """The ``mass_remaining`` mode a grid loads with when the caller passes none (#3428).
+
+    A grid listed in ``DEFAULT_MASS_REMAINING`` takes that mode and warns, naming the
+    opt-in that accepts it. Every other grid, and the default grid when ``name`` is
+    ``None``, takes ``"table"``.
+    """
+    from pathlib import Path
+
+    if name is None:
+        return "table"
+    grid = canonical_grid_name(Path(name).stem)
+    mode = DEFAULT_MASS_REMAINING.get(grid, "table")
+    if mode != "table":
+        warnings.warn(
+            f"'{grid}' has no shipped surviving-mass table, so load_ssp loads it with "
+            f"mass_remaining={mode!r} (DSPS's Chabrier fit). Pass mass_remaining='table' "
+            "to refuse instead.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return mode
+
+
 def load_ssp(
     name: str | None = None,
     *,
     download: bool = False,
-    mass_remaining: str = "table",
+    mass_remaining: str | None = None,
     top_z: str = "clip",
     imf: str | None = None,
 ) -> "SSPData":
@@ -389,8 +422,12 @@ def load_ssp(
         turn any mistyped grid name into a silent multi-tens-of-megabyte
         download (#1486). Pass ``True`` in tutorials and gallery scripts,
         where a fresh checkout is expected not to have the grid yet.
-    mass_remaining : {"table", "dsps_fit"}, optional
+    mass_remaining : {"table", "dsps_fit"} or None, optional
         Surviving-mass source, forwarded to :func:`load_ssp_data` (see there).
+        ``None`` (default) takes ``"table"``, except for a grid that has no shipped
+        table and is listed in ``DEFAULT_MASS_REMAINING``: BPASS
+        (``bpss_stars_c3k_a_chabrier``) then loads with ``"dsps_fit"`` and warns
+        (#3428). Pass ``"table"`` to refuse instead.
     top_z : {"clip", "mist", "raw"}, optional
         Treatment of a top-metallicity node that lacks young massive stars,
         forwarded to :func:`load_ssp_data` (see there). ``"mist"`` is the opt-in
@@ -434,6 +471,9 @@ def load_ssp(
     from pathlib import Path
 
     from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
+
+    if mass_remaining is None:
+        mass_remaining = _default_mass_remaining(name)
 
     if name is None:
         catalog_key = DEFAULT_SSP
@@ -838,6 +878,10 @@ def load_ssp_data(
         else:
             ssp_resolution_kms = None
 
+        caveat = GRID_CAVEATS.get(canonical_grid_name(fp.stem))
+        if caveat is not None:
+            warnings.warn(caveat, UserWarning, stacklevel=2)
+
         return SSPData(
             ssp_wave=ssp_wave,
             ssp_flux=ssp_flux,
@@ -851,6 +895,7 @@ def load_ssp_data(
             nebular=nebular,
             mass_remaining_source=resolution.source,
             top_z=top_z_validity,
+            grid_notes=(caveat,) if caveat is not None else (),
         )
 
 
