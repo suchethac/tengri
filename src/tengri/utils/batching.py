@@ -28,6 +28,7 @@ along with everything else, or evaluate unchunked.
 
 from __future__ import annotations
 
+import numbers
 import warnings
 
 import jax
@@ -78,6 +79,22 @@ def _leading_axis_size(batch) -> int:
     if not leaves:
         raise ValueError("empty batch: nothing to map over")
     return leaves[0].shape[0]
+
+
+def _check_chunk_size(chunk_size) -> None:
+    """Accept only a positive int; ``None`` (the removed whole-batch form) gets its own message."""
+    if chunk_size is None:
+        raise ValueError(
+            "vmap_chunked: chunk_size=None (one call over the whole batch) is no longer "
+            "accepted. Pass an int: GALAXY_CHUNK_SIZE (32, the galaxy-batch default), or "
+            "chunk_size=len(batch) for one chunk."
+        )
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, numbers.Integral):
+        raise ValueError(
+            f"chunk_size must be an int, got {type(chunk_size).__name__} ({chunk_size!r})"
+        )
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
 
 
 def _slice_batch(batch, start: int, stop: int):
@@ -161,7 +178,9 @@ def vmap_chunked(fn, chunk_size: int = 16, *, shared=None):
     Raises
     ------
     ValueError
-        If ``chunk_size`` is not positive, or the batch has no leaves.
+        If ``chunk_size`` is ``None`` (use :data:`GALAXY_CHUNK_SIZE` or
+        ``len(batch)``), is not an int, or is not positive; or the batch has no
+        leaves.
     Exception
         Whatever ``fn`` raises, if the failure is not a tracing failure; a real
         bug is never swallowed by the jittability probe.
@@ -189,8 +208,7 @@ def vmap_chunked(fn, chunk_size: int = 16, *, shared=None):
     >>> masses["stellar_mass"].shape  # doctest: +SKIP
     (4000,)
     """
-    if chunk_size < 1:
-        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    _check_chunk_size(chunk_size)
 
     has_shared = shared is not None
     shared_bound = shared
