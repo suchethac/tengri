@@ -67,10 +67,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 
 from tengri.protocols.component import ForwardState, ParamDeclaration
-from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, _check_chunk_size
 
 __all__ = ["PopulationSEDModel"]
 
@@ -415,9 +416,11 @@ class PopulationSEDModel:
         has a leading ``N_galaxies`` axis on every array leaf
         (``sed_intrinsic``, ``sed_observed``, ``sed_attenuated``, ...).
 
-        The population is evaluated ``chunk_size`` galaxies per compiled
-        call through :func:`tengri.utils.batching.vmap_chunked`; the
-        per-chunk states are concatenated along the galaxy axis.
+        The population is evaluated ``chunk_size`` galaxies at a time: the
+        per-galaxy axis is padded to a whole number of chunks, reshaped to
+        ``(n_chunks, chunk_size)`` and looped with :func:`jax.lax.map`, each
+        chunk a ``vmap`` of :meth:`predict_one`. The padding is trimmed
+        before return.
 
         See ``docs/internal/plans/2026-05-22-population-sed-batched-forward.md``
         for the design rationale.
@@ -453,10 +456,11 @@ class PopulationSEDModel:
 
         Notes
         -----
-        JIT/grad/vmap-compatible: the chunk kernel is ``jit(vmap(...))``
-        and the per-chunk states are concatenated on the host side of
-        the trace, so ``run`` may sit inside an outer ``jit``, ``grad``
-        or ``vmap`` (a larger outer program unrolls one call per chunk).
+        JIT/grad/vmap-compatible: the chunk loop is one ``lax.map``, so
+        the traced program holds one chunk body whatever N is, and
+        ``run`` may sit inside an outer ``jit``, ``grad`` or ``vmap``
+        with no unrolling. The template's ``run`` must be traceable (the
+        same requirement as the unchunked ``vmap``).
 
         Chunking is not bit-neutral: XLA compiles a different kernel for
         each chunk shape, so changing ``chunk_size`` can move the last
@@ -477,11 +481,29 @@ class PopulationSEDModel:
         per_galaxy = {name: value for name, value in params.items() if in_axes_params[name] == 0}
         shared_params = {name: value for name, value in params.items() if name not in per_galaxy}
 
-        def _one_galaxy(params_one, shared):
-            state_shared, params_shared = shared
-            return self.predict_one(state_shared, {**params_shared, **params_one})
+        _check_chunk_size(chunk_size)
+        leaves = jax.tree_util.tree_leaves(per_galaxy)
+        if not leaves:
+            raise ValueError("PopulationSEDModel.run: no per-galaxy parameter to map over")
+        n_galaxies = leaves[0].shape[0]
+        size = min(chunk_size, n_galaxies)
+        n_chunks = -(-n_galaxies // size)
+        n_padded = n_chunks * size
+        # Padding rows are copies of galaxy 0 (a real, finite row) and are trimmed below.
+        source = jnp.where(jnp.arange(n_padded) < n_galaxies, jnp.arange(n_padded), 0)
+        chunked = jax.tree_util.tree_map(
+            lambda x: x[source].reshape((n_chunks, size, *x.shape[1:])), per_galaxy
+        )
 
-        # The state and the shared parameters are broadcast to every galaxy and passed
-        # into the compiled chunk as arguments, not closed over (the #3439 pattern).
-        mapped = vmap_chunked(_one_galaxy, chunk_size=chunk_size, shared=())
-        return mapped(per_galaxy, shared=(state, shared_params))
+        def _one_chunk(params_chunk):
+            def _one_galaxy(params_one):
+                return self.predict_one(state, {**shared_params, **params_one})
+
+            return jax.vmap(_one_galaxy)(params_chunk)
+
+        # ``lax.map`` compiles one chunk body and loops it: the same program inside or
+        # outside an outer jit/grad, with no per-chunk copies in the trace.
+        out = jax.lax.map(_one_chunk, chunked)
+        return jax.tree_util.tree_map(
+            lambda y: y.reshape((n_padded, *y.shape[2:]))[:n_galaxies], out
+        )

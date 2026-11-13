@@ -125,6 +125,35 @@ def test_chunked_program_holds_no_full_population_cube(synthetic_ssp, simple_obs
     assert chunked.count(f"f64[{_HLO_CHUNK},{n_age},{n_wave}]") > 0
 
 
+def test_padding_does_not_change_results_when_not_divisible(synthetic_ssp, simple_observation):
+    """N=5 with chunk 4 pads to 8 rows of real galaxies and trims back to 5."""
+    template = _template(synthetic_ssp, simple_observation)
+    n = 5
+    pop = _population(template, n)
+    params = _per_galaxy_params(template, n)
+    state = _root_state(synthetic_ssp)
+
+    padded = pop.run(state, params, chunk_size=4)
+    reference = pop.run(state, params, chunk_size=n)
+    assert padded.sed_observed.shape[0] == n
+    _assert_states_close(padded, reference)
+
+
+def test_traced_chunk_loop_is_one_loop_not_unrolled(synthetic_ssp, simple_observation):
+    """The chunks run as one ``lax.map`` loop: the compiled program has a while loop."""
+    template = _template(synthetic_ssp, simple_observation)
+    pop = _population(template, _HLO_N)
+    params = _per_galaxy_params(template, _HLO_N)
+    state = _root_state(synthetic_ssp)
+
+    def _reduced(p):
+        out = pop.run(state, p, chunk_size=_HLO_CHUNK)
+        return sum(jnp.sum(leaf) for leaf in jax.tree_util.tree_leaves(out))
+
+    text = jax.jit(_reduced).lower(params).compile().as_text()
+    assert "while(" in text
+
+
 @pytest.mark.parametrize("bad", [None, 2.5, "8", True])
 def test_run_rejects_non_int_chunk_size(synthetic_ssp, simple_observation, bad):
     template = _template(synthetic_ssp, simple_observation)
