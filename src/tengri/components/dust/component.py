@@ -919,6 +919,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
             k_pix = curve(spec_eff)
             derived_overrides["dust_spec_transmission_precomp"] = jnp.exp(-tau_v * k_pix)
             if state.derived.get("spec_source_breakpoints") is not None:
+                # The screen on the rest grid: the pixel table's nebular residual (#3413).
+                derived_overrides["dust_rest_transmission"] = attenuation
+            if state.derived.get("spec_source_breakpoints") is not None:
                 # First-moment table (#3413): the screen's wavelength slope at the centres.
                 from tengri.observation.spectrum import screen_value_and_slope
 

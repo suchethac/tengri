@@ -748,6 +748,10 @@ class DerivedState:
     # ``dust_spec_diff_transmission_precomp`` (diffuse) applied with the
     # shared ``dust_young_indicator`` age weighting.
     dust_spec_transmission_precomp: jnp.ndarray | None = None
+    # The single-component screen on the full rest grid (#3413). A pixel-moment table takes the
+    # nebular residual (T - 1) * sed_nebular per draw from it, because the exact path's
+    # sed_nebular is unscreened under this screen.
+    dust_rest_transmission: jnp.ndarray | None = None
     dust_spec_bc_transmission_precomp: jnp.ndarray | None = None
     dust_spec_diff_transmission_precomp: jnp.ndarray | None = None
     # Wavelength slopes d(T)/d(lambda) [1/Angstrom] of the screens above at the pixel centres,

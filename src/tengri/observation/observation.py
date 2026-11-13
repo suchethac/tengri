@@ -144,6 +144,10 @@ def _restband_lnu(state) -> jnp.ndarray:
     return total
 
 
+#: The derived keys of the instrument-only group (nebular, shock, AGN lines), #2519.
+_INSTRUMENT_ONLY_KEYS = ("sed_nebular", "sed_shock", "sed_agn_lines_attenuated")
+
+
 def _instrument_only_rest_sed(state) -> jnp.ndarray:
     """Rest-frame light that receives the instrument kernel alone (#2519, #2565).
 
@@ -161,10 +165,7 @@ def _instrument_only_rest_sed(state) -> jnp.ndarray:
     ndarray, shape (n_wave,)
         Instrument-only light [erg/s/Hz], pre-IGM.
     """
-    return sum(
-        jnp.asarray(state.derived.get(key, 0.0))
-        for key in ("sed_nebular", "sed_shock", "sed_agn_lines_attenuated")
-    )
+    return sum(jnp.asarray(state.derived.get(key, 0.0)) for key in _INSTRUMENT_ONLY_KEYS)
 
 
 #: The one wording of the refusal, raised at build time (``SEDModel``) and at
@@ -366,6 +367,16 @@ _SUBINTERVAL_FAMILIES = (
 def _sum_segments(values, n_pix):
     """Sum each pixel's source segments of a ``(n_pix * n_seg,)`` array (#3413)."""
     return jnp.reshape(values, (n_pix, -1)).sum(axis=-1)
+
+
+def _has_instrument_only_sed(state) -> bool:
+    """Whether the full-grid SED publishes an instrument-only group (#3413).
+
+    The nebular, shock or AGN-line SED is on the derived state only when its component
+    is in the chain; without one the group is absent and nothing is projected.
+    """
+    derived = state.derived
+    return any(derived.get(key) is not None for key in _INSTRUMENT_ONLY_KEYS)
 
 
 def _sum_present(*terms):
@@ -2547,6 +2558,82 @@ class Observation:
             operator.offsets, operator.data, instrument_fnu
         )
 
+    def _lut_instrument_only_fnu(
+        self, state, params, *, sigma_lib_kms, lsf_scale, n_bins, screen_residual
+    ):
+        r"""Observed F_nu of the instrument-only group, projected exactly (#3413).
+
+        The nebular, shock and AGN-line light of the full-grid SED goes through the exact
+        path's projector, so its instrument kernel and its banded matrix act on the model
+        grid as they do on ``approx=None``. The stellar piece of the projection is zero by
+        construction (the input is the group itself). Calibration is applied once, by the
+        caller, on the summed flux.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Carries the full-grid ``sed_nebular``, ``sed_shock`` and ``sed_agn_lines_attenuated``.
+        params : Mapping[str, jnp.ndarray]
+            Reads ``redshift``.
+        sigma_lib_kms : float or ndarray, shape (n_pix,)
+            Resolved SSP library resolution on the pixels.
+        lsf_scale : float or traced scalar
+            Multiplicative scale on the instrument width.
+        n_bins : int
+            Piecewise segment count of the velocity broadening of the stellar residual.
+        screen_residual : bool
+            True under a single-component screen, which attenuates the whole rest SED while
+            the published ``sed_nebular`` and ``sed_shock`` stay unscreened. The residual
+            :math:`(T-1)\,S_{\rm neb}` is the stellar-kernel share of the exact path's split
+            and is projected here too. Two-component dust republishes screened nebular light,
+            so it has no residual.
+
+        Returns
+        -------
+        ndarray, shape (n_pix,)
+            Observed F_nu [erg/s/cm^2/Hz] before calibration.
+        """
+        from tengri.utils.cosmology import luminosity_distance
+
+        spectro = self.spectroscopy
+        z = jnp.asarray(
+            require_redshift(params, "observation.observation.predict_spectrum_via_precomp")
+        )
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        instrument_rest = _instrument_only_rest_sed(state)
+        sed_rest = instrument_rest
+        sigma_v = state.derived.get("spec_sigma_v_kms")
+        sigma_v = 0.0 if sigma_v is None else sigma_v
+        if screen_residual:
+            screen = state.derived.get("dust_rest_transmission")
+            if screen is None:
+                raise ValueError(
+                    "the pixel-moment table under a single-component screen needs the rest-grid "
+                    "transmission 'dust_rest_transmission' (#3413)."
+                )
+            group = sum(
+                jnp.asarray(state.derived.get(key, 0.0))
+                for key in ("sed_nebular", "sed_shock")
+            )
+            sed_rest = instrument_rest + (jnp.asarray(screen) - 1.0) * group
+        return project_spectrum_kernel_split(
+            state,
+            sed_rest,
+            None,
+            state.wave,
+            spectro.wave_obs,
+            z,
+            dl_cm,
+            resolution=spectro.resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=sigma_v,
+            lsf_scale=lsf_scale,
+            n_bins=n_bins,
+            conserving=True,
+            resolution_matrix=spectro.resolution_matrix,
+            nebular_lines=spectro.nebular_lines,
+        )
+
     def _lut_lsf_fnu(
         self,
         total_lnu,
@@ -2729,6 +2816,7 @@ class Observation:
         # The instrument-only bucket (nebular emission after dust), mirroring the exact
         # path's ``sed_nebular`` group; the stellar bucket is the remainder.
         nebular_dust = nebular_phi
+        single_screen = False
 
         # First pixel moments of the families and the screens' wavelength slopes (#3413). They
         # are present only for a pixel-integral table; a point table leaves them absent.
@@ -2766,6 +2854,7 @@ class Observation:
             nebular_dust = nebular_attenuated
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
+            single_screen = True
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
             nebular_dust = nebular_phi * t_single
@@ -2783,6 +2872,14 @@ class Observation:
             n_pix = self.spectroscopy.wave_obs.shape[0]
             total_spec_lnu = _sum_segments(total_spec_lnu, n_pix)
             nebular_dust = _sum_segments(nebular_dust, n_pix)
+        # The instrument-only group (nebular, shock, AGN lines) of a pixel table is projected
+        # exactly per draw from the full-grid SED (#3413), so its pixel moments leave the
+        # stellar pixels. The rest-frame output keeps them.
+        exact_instrument_only = sub_table is not None and _has_instrument_only_sed(state)
+        observed_lnu, observed_neb = total_spec_lnu, nebular_dust
+        if exact_instrument_only:
+            observed_lnu = total_spec_lnu - nebular_dust
+            observed_neb = jnp.zeros_like(nebular_dust)
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(
@@ -2844,24 +2941,33 @@ class Observation:
                     "seeds on the derived state (#3413)."
                 )
             spec_fnu = self._lut_banded_fnu(
-                total_spec_lnu,
-                nebular_dust,
+                observed_lnu,
+                observed_neb,
                 log10_cos,
                 sigma_v_kms=sigma_v,
                 n_bins=lsf_n_bins,
             )
         elif spectro.resolution is None or lsf_baked:
-            spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
+            spec_fnu = apply_log10_scale(observed_lnu, log10_cos)
             if igm_factor is not None:
                 spec_fnu = spec_fnu * igm_factor
         else:
             spec_fnu = self._lut_lsf_fnu(
-                total_spec_lnu,
-                nebular_dust,
+                observed_lnu,
+                observed_neb,
                 log10_cos,
                 igm_factor,
                 sigma_lib_kms=sigma_lib_kms,
                 lsf_scale=lsf_scale,
+            )
+        if exact_instrument_only:
+            spec_fnu = spec_fnu + self._lut_instrument_only_fnu(
+                state,
+                params,
+                sigma_lib_kms=sigma_lib_kms,
+                lsf_scale=lsf_scale,
+                n_bins=lsf_n_bins,
+                screen_residual=single_screen,
             )
 
         # Flux calibration, the same Chebyshev polynomial the exact path applies

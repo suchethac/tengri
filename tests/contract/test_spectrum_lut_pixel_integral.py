@@ -159,6 +159,18 @@ _CASES = [
     pytest.param(
         _SDSS, None, 0.0, "single", True, id="sdss-1screen-cue-nores-sv0"
     ),
+    pytest.param(
+        _SDSS, None, 150.0, "single", True, id="sdss-1screen-cue-nores-sv150"
+    ),
+    pytest.param(
+        _SDSS, None, 0.0, "two", True, id="sdss-2comp-cue-nores-sv0"
+    ),
+    pytest.param(
+        _SDSS, None, 150.0, "two", True, id="sdss-2comp-cue-nores-sv150"
+    ),
+    pytest.param(
+        _SDSS, 2000.0, 0.0, "two", True, id="sdss-2comp-cue-R2000-sv0"
+    ),
 ]
 
 
@@ -205,8 +217,9 @@ def _family_model(ssp, family, approx):
         if family == "banded-point":
             spectro["resample"] = "point"
         sigma_v = 150.0
-    elif family == "cue-sv150":
+    elif family == "cue-R2000-sv150":
         extra["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
+        spectro["resolution"] = 2000.0
         sigma_v = 150.0
     elif family == "agn":
         extra["agn"] = {
@@ -238,7 +251,7 @@ def _family_model(ssp, family, approx):
     return type(base)(spec, ssp, observation=obs, approx=approx)
 
 
-_STATIC_REFUSED = ["cue-sv150", "agn", "dust-emission", "radio", "xray", "igm"]
+_STATIC_REFUSED = ["cue-R2000-sv150", "agn", "dust-emission", "radio", "xray", "igm"]
 
 
 @pytest.mark.parametrize("family", _STATIC_REFUSED)
