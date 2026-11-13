@@ -354,6 +354,28 @@ def whiten(x, sigma):
     return jax.lax.optimization_barrier(x / sigma)
 
 
+def is_float32_arithmetic(grid) -> bool:
+    """Whether the forward arithmetic runs in float32 (#3401).
+
+    The float32 branches that avoid float32 overflow are selected by this predicate
+    rather than by the wavelength grid's dtype alone. A model built under float64 keeps
+    a float64 grid when it is evaluated with x64 off, so a grid-only test sends the
+    linear ``10**40`` path through float32 and overflows to inf.
+
+    Parameters
+    ----------
+    grid : array_like
+        Wavelength grid whose dtype is inspected [Angstrom].
+
+    Returns
+    -------
+    bool
+        True when the grid is float32 or ``jnp.result_type(float)`` is float32 (x64 off).
+        Static under tracing: it reads dtypes only.
+    """
+    return jnp.result_type(grid) == jnp.float32 or jnp.result_type(float) == jnp.float32
+
+
 def pow10(x):
     """10**x, computed as ``exp(x·ln10)`` to preserve the input dtype.
 
