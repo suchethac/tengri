@@ -288,7 +288,7 @@ def blr_synthesizer_spectra_block(
     agn_blr_cf: float = DEFAULT_AGN_BLR_CF,
     agn_blr_logU: float = DEFAULT_AGN_BLR_LOGU,
     agn_blr_logn: float = DEFAULT_AGN_BLR_LOGN,
-    agn_blr_logZ: float = -2.0,
+    agn_blr_logZ: float = DEFAULT_AGN_BLR_LOGZ,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,

@@ -101,6 +101,7 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_TAU_TORUS,
     DEFAULT_AGN_TORUS_FRAC,
     PARAMS as _AGN_PARAMS,
+    POLAR_EBV_OFF,
 )
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
@@ -1677,7 +1678,7 @@ def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, j
         "agn_T_warm": jnp.asarray(params.get("agn_T_warm", DEFAULT_AGN_T_WARM)),
         "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", DEFAULT_AGN_FRAC_HOT)),
         "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC)),
-        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", POLAR_EBV_OFF)),
         "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", DEFAULT_AGN_POLAR_OA)),
         "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
     }
