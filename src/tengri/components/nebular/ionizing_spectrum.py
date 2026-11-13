@@ -11,6 +11,9 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -65,7 +68,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: of the key, so the young-only tables written under version 3 are never served.
 _IONSPEC_CACHE_VERSION = 4
 
-_IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
+_IONSPEC_TABLE_CACHE: dict[tuple, Mapping] = {}
 
 #: :func:`~tengri.components.lyc.edge_trapezoid` traced once per integrand shape. The
 #: table builder calls it from NumPy code, once per fitted bin and once per chunk of old
@@ -963,13 +966,30 @@ def _share_nearest_fit(
         logq[im, todo] = exact
 
 
+def _memoize_ionspec_table(key: tuple, table: dict) -> Mapping:
+    """Store ``table`` in the process memo as a read-only mapping and return it.
+
+    The memo is shared by every model built on the same SSP content, and callers
+    key their own bookkeeping on the identity of the entry, so the same object is
+    returned every time. It must therefore not be writable: the mapping refuses
+    assignment and the arrays are marked read-only. A caller that wants to change
+    a field copies first (``dict(table)``).
+    """
+    for value in table.values():
+        if isinstance(value, np.ndarray):
+            value.setflags(write=False)
+    frozen = MappingProxyType(table)
+    _IONSPEC_TABLE_CACHE[key] = frozen
+    return frozen
+
+
 def precompute_ionizing_params_table(
     ssp_wave: np.ndarray,
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
     ssp_log_age_yr: np.ndarray | None = None,
     max_log_age: float | None = None,
-) -> dict:
+) -> Mapping:
     """Precompute Cue ionizing parameters for a full SSP grid.
 
     Batch-fits piecewise power laws to (metallicity, age) SSP spectra. Bins up to
@@ -1059,8 +1079,7 @@ def precompute_ionizing_params_table(
         return cached
     disk_cached = _load_ionspec_disk(key)
     if disk_cached is not None:
-        _IONSPEC_TABLE_CACHE[key] = disk_cached
-        return disk_cached
+        return _memoize_ionspec_table(key, disk_cached)
 
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
@@ -1148,9 +1167,8 @@ def precompute_ionizing_params_table(
         "n_met": n_met,
         "n_age": n_age,
     }
-    _IONSPEC_TABLE_CACHE[key] = result
     _store_ionspec_disk(key, result)
-    return result
+    return _memoize_ionspec_table(key, result)
 
 
 def _cell_fraction(target, grid, idx):
