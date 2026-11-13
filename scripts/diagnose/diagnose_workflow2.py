@@ -23,7 +23,8 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "log_total_mass": 10.0,
-        "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
+        # 0.5-12 Gyr at z=0.1 (age 12.44 Gyr), as a fraction of age(z) (#2748).
+        "peak_lbt_frac": tengri.Uniform(0.0402, 0.9645),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-1.0, 1.5),
         "trunc": tengri.Uniform(1.0, 10.0),

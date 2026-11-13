@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -19,8 +19,10 @@
 # tengri combines Information Field Theory correlated-field priors with
 # differentiable stellar population synthesis and JIT-compiled variational
 # inference. This notebook fits a galaxy spectrum two ways: first a smooth
-# parametric SFH (7 free parameters), then a bursty stochastic SFH
-# (137 free parameters). Both finish in seconds on a laptop CPU. No GPU required.
+# parametric SFH (8 free parameters), then a bursty stochastic SFH
+# (138 free parameters). The MAP and Laplace fits take seconds on a laptop CPU.
+# Part A also runs an exact NUTS reference, which takes about 15 to 20 minutes.
+# No GPU required.
 
 # %%
 import time
@@ -40,8 +42,8 @@ from tengri import (
     ForwardModel,
     SEDModel,
     Observation,
+    Spectroscopy,
     Parameters,
-    Photometry,
     Uniform,
     load_ssp_data,
 )
@@ -84,7 +86,8 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 print(
     f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
@@ -94,7 +97,7 @@ print(
 # ## Part A: A Smooth Galaxy Spectrum
 #
 # We start with the simplest useful model: a truncated skew-normal SFH
-# (Bellstedt+2020) with 7 free parameters. This is comparable to what
+# (Bellstedt+2020) with 8 free parameters. This is comparable to what
 # Prospector or BAGPIPES would fit — but fully differentiable and much faster.
 
 # %%
@@ -117,10 +120,8 @@ for name in spec_param.free_params:
     print(f"  {name}")
 
 # %%
-# Create the model with spectroscopic precomputation
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+# Create the model with the spectrum grid fixed at build
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-model_param.precompute_spectroscopy(WAVE_OBS)
 print(f"SEDModel created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
 # %%
@@ -200,17 +201,19 @@ plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum_param.png"), dpi=150, bbox
 plt.show()
 
 # %% [markdown]
-# ### Fitting with native_geovi
+# ### Fitting with MAP and the Laplace approximation
 #
-# native_geovi is tengri's default inference method: geometric Variational
-# Inference (geoVI; Frank et al. 2021) reimplemented as a fully JIT-compiled
-# JAX program. It constructs a coordinate transform that flattens the posterior
-# geometry — straightening curved degeneracies like the age–dust banana — then
-# draws samples. The JIT engine eliminates all Python overhead, achieving a
-# 500× speedup over standard implementations.
+# The MAP estimate is the point of highest posterior density. The `laplace`
+# method fits a Gaussian centered on that point, with covariance set by the
+# curvature of the log-posterior there (its Hessian). Samples are drawn from
+# that Gaussian, so the cost is one MAP fit plus a linear-algebra step.
+# The `vi` method (geoVI) also exists, but it needs considerably more memory
+# for spectroscopic fits, so these tutorials do not use it.
 
 # %%
-# MAP initialization + native_geovi inference
+# MAP initialization, then the Laplace approximation around it
+LAPLACE_COLOR = "#ff7f0e"  # orange, Laplace (Gaussian around the MAP)
+
 forward_param = ForwardModel.build(sed=model_param)
 
 t0 = time.perf_counter()
@@ -219,27 +222,18 @@ result_map_param = forward_param.fit(
 )
 t_map = time.perf_counter() - t0
 
-# XLA compilation (one-time cost, cached on disk for future sessions)
-t0_compile = time.perf_counter()
-forward_param.prewarm(method="vi")
-t_compile = time.perf_counter() - t0_compile
-
-# Inference runtime (this is what you pay per galaxy after compilation)
 t0 = time.perf_counter()
-result_geovi_param = forward_param.fit(
+result_lap_param = forward_param.fit(
     mock_param.flux_obs, mock_param.noise,
-    method="vi",
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=10000,
+    method="laplace",
+    init_from=result_map_param,
+    n_samples=2000,
     verbose=False,
 )
-t_geovi = time.perf_counter() - t0
+t_lap = time.perf_counter() - t0
 
-print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
-print(f"MAP init:    {t_map:.1f}s")
-print(f"native_geovi: {t_geovi:.1f}s  ← runtime per galaxy")
+print(f"MAP init: {t_map:.1f}s")
+print(f"Laplace:  {t_lap:.1f}s  ← after the MAP fit")
 
 # %%
 # --- FIGURE 2: Spectral Fit ---
@@ -247,8 +241,8 @@ spec_samples = []
 n_draws = 50
 sample_keys = jax.random.split(jax.random.PRNGKey(0), n_draws)
 for i in range(n_draws):
-    idx = i % len(result_geovi_param.samples[spec_param.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_geovi_param.samples.items()}
+    idx = i % len(result_lap_param.samples[spec_param.free_params[0]])
+    draw_params = {k: v[idx] for k, v in result_lap_param.samples.items()}
     spec_draw = model_param.predict_spectrum(draw_params)
     spec_samples.append(np.array(spec_draw))
 spec_samples = np.array(spec_samples)
@@ -268,8 +262,8 @@ ax_fit.errorbar(
     alpha=0.4, zorder=1,
 )
 for s in spec_samples[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5, zorder=2)
-ax_fit.plot(wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="native_geovi median", zorder=3)
+    ax_fit.plot(wave_np, s, color=LAPLACE_COLOR, alpha=0.03, lw=0.5, zorder=2)
+ax_fit.plot(wave_np, spec_median, color=LAPLACE_COLOR, lw=1.5, label="Laplace median", zorder=3)
 ax_fit.plot(wave_np, true_np, color=COLORS["truth"], lw=1, ls="--", label="Truth", zorder=4)
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -285,7 +279,7 @@ ax_res.set_xlabel("Observed wavelength [Å]")
 ax_res.set_ylim(-4, 4)
 
 chi2 = np.sum(residuals**2) / len(residuals)
-ax_fit.set_title(f"Spectral Fit — native_geovi (reduced $\\chi^2$ = {chi2:.2f})")
+ax_fit.set_title(f"Spectral Fit — Laplace (reduced $\\chi^2$ = {chi2:.2f})")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -293,9 +287,9 @@ plt.show()
 # %%
 # --- FIGURE 3: SFH Recovery ---
 fig, ax = plt.subplots(figsize=(8, 4))
-plot_sfh(model_param, result_geovi_param, true_params=true_params_param, ax=ax,
-         color=COLORS["vi"], label="vi", method="geoVI")
-ax.set_title("SFH Recovery — Parametric (D = 7)")
+plot_sfh(model_param, result_lap_param, true_params=true_params_param, ax=ax,
+         color=LAPLACE_COLOR, label="Laplace", method="Laplace")
+ax.set_title("SFH Recovery — Parametric (D = 8)")
 # 200 Myr inset — truth + posterior SFH draws
 sfh_true_param = model_param.predict_sfh(true_params_param)
 t_gyr_p = np.array(sfh_true_param["t_gyr"])
@@ -306,20 +300,20 @@ mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
     t_inset = t_gyr_p[mask_200] * 1e3  # Gyr → Myr
     # Posterior SFH draws
-    if result_geovi_param.samples is not None:
-        n_samp = len(next(iter(result_geovi_param.samples.values())))
+    if result_lap_param.samples is not None:
+        n_samp = len(next(iter(result_lap_param.samples.values())))
         sfh_draws = []
         for i in range(n_samp):
-            s_i = {k: result_geovi_param.samples[k][i] for k in result_geovi_param.samples}
+            s_i = {k: result_lap_param.samples[k][i] for k in result_lap_param.samples}
             sfh_draws.append(np.array(model_param.predict_sfh(s_i)[sfr_key_p])[mask_200])
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=LAPLACE_COLOR, alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=LAPLACE_COLOR, lw=1.2, label="Posterior")
     else:
-        sfh_fit = model_param.predict_sfh(result_geovi_param.params)
-        inset.plot(t_inset, np.array(sfh_fit[sfr_key_p])[mask_200], color=COLORS["vi"], lw=1.2, ls="--", label="MAP")
+        sfh_fit = model_param.predict_sfh(result_lap_param.params)
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_p])[mask_200], color=LAPLACE_COLOR, lw=1.2, ls="--", label="MAP")
     inset.plot(t_inset, sfr_true_p[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
@@ -332,19 +326,22 @@ plt.show()
 
 # %%
 # --- FIGURE 4: Corner Plot ---
-fig = safe_corner(result_geovi_param, truths=true_params_param)
+fig = safe_corner(result_lap_param, truths=true_params_param)
 if fig is not None:
-    fig.suptitle("Parametric Posterior — native_geovi", y=1.02)
+    fig.suptitle("Parametric Posterior — Laplace", y=1.02)
     plt.savefig(os.path.join(FIGDIR, "fig04_corner_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ### Validation: Does geoVI Match Exact MCMC?
+# ### Validation: Does the Laplace Approximation Match Exact MCMC?
 #
-# geoVI is approximate — it's variational, not exact. To verify it's reliable,
-# we compare with NUTS (No-U-Turn Sampler, Hoffman & Gelman 2014), the
-# gold-standard exact sampler for low-dimensional problems. For D = 7,
-# they should agree.
+# The Laplace approximation is Gaussian, so it cannot capture skewed or strongly
+# curved posteriors. To check it, we compare with NUTS (No-U-Turn Sampler,
+# Hoffman & Gelman 2014), the gold-standard exact sampler for low-dimensional
+# problems. For D = 8, the two should agree. The NUTS run is the exact reference
+# that the 15-second Laplace result is compared against; on a laptop CPU it takes
+# about 15 to 20 minutes. The higher target acceptance keeps NUTS from diverging
+# on this posterior's curved SFH-shape degeneracy.
 
 # %%
 # Run NUTS from MAP initialization
@@ -354,6 +351,7 @@ result_nuts_param = forward_param.fit(
     method="mcmc_nuts",
     n_warmup=500,
     n_samples=1000,
+    target_accept_rate=0.95,
     init_from=result_map_param,
     verbose=False,
 )
@@ -362,7 +360,7 @@ print(f"NUTS: {t_nuts:.1f}s")
 
 # Convergence diagnostics
 ct = convergence_table(
-    {"vi": result_geovi_param, "NUTS": result_nuts_param}
+    {"Laplace": result_lap_param, "NUTS": result_nuts_param}
 )
 
 # %% [markdown]
@@ -373,24 +371,24 @@ print(f"{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s} {
 print("-" * 76)
 for name in spec_param.free_params:
     truth = float(true_params_param[name])
-    lo, med, hi = np.percentile(result_geovi_param.samples[name], [16, 50, 84])
+    lo, med, hi = np.percentile(result_lap_param.samples[name], [16, 50, 84])
     covered = "\u2713" if lo <= truth <= hi else "MISS"
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
 # %%
-# --- FIGURE 5: native_geovi vs NUTS ---
+# --- FIGURE 5: Laplace vs NUTS ---
 fig = plot_corner_comparison(
-    [result_geovi_param, result_nuts_param],
-    labels=["vi", "NUTS"],
-    colors=[COLORS["vi"], COLORS["mcmc_nuts"]],
+    [result_lap_param, result_nuts_param],
+    labels=["Laplace", "NUTS"],
+    colors=[LAPLACE_COLOR, COLORS["mcmc_nuts"]],
     truths=true_params_param,
 )
 if fig is not None:
     fig.suptitle(
-        f"native_geovi ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
+        f"Laplace ({t_lap:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 8",
         y=1.02,
     )
-    plt.savefig(os.path.join(FIGDIR, "fig05_geovi_vs_nuts.png"), dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig05_laplace_vs_nuts.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -398,34 +396,36 @@ plt.show()
 print("\n  Method         | Wall Clock | Effective Samples | ESS/sec")
 print("  " + "-" * 60)
 for name, res, t in [
-    ("vi", result_geovi_param, t_geovi),
+    ("Laplace", result_lap_param, t_lap),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
     n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]
-# **Part A Takeaway**: For a 7-parameter model, native_geovi and NUTS give the
-# same answer. native_geovi is an order of magnitude faster. For low-dimensional
-# problems where you want exact MCMC guarantees, NUTS works — but it doesn't
-# scale. Now let's see what happens when dimensionality explodes.
+# **Part A Takeaway**: For an 8-parameter model, the Laplace approximation and
+# NUTS give closely matching posteriors, and the Laplace step adds only seconds
+# to the MAP fit. For low-dimensional problems where you want exact MCMC
+# guarantees, NUTS works, but its cost grows quickly with dimension. Now let's
+# see what happens when dimensionality explodes.
 
 # %% [markdown]
-# ## Part B: A Bursty Galaxy — 137 Parameters
+# ## Part B: A Bursty Galaxy — 138 Parameters
 #
 # Real galaxies don't form stars smoothly. Star formation fluctuates on
 # timescales from ~1 Myr (molecular cloud collapse) to ~1 Gyr (mergers,
 # quenching). tengri models this burstiness as a Gaussian process controlled
 # by a power spectral density (PSD). The PSD has two physical parameters:
 # σ_PS (amplitude of fluctuations) and τ_PS (coherence timescale). The GP
-# field adds 128 correlated latent dimensions. Total: 9 physical + 128 GP = 137
+# field adds 128 correlated latent dimensions. Total: 10 physical + 128 GP = 138
 # free parameters.
 
 # %% [markdown]
 # This high dimensionality is exactly where standard MCMC methods like NUTS
 # break down — the curse of dimensionality means chains mix too slowly. But
-# because our entire model is differentiable, native_geovi exploits gradient
-# information to navigate this space efficiently.
+# because our entire model is differentiable, gradients are available at every
+# point, so the MAP fit and the Laplace approximation can work directly in
+# this space.
 
 # %%
 # Define the stochastic parameter specification
@@ -446,13 +446,12 @@ spec_stoch = Parameters(
     n_grid=128,
 )
 print(f"Stochastic model: {spec_stoch.n_free} free parameters")
-print(f"  Physical: {len([p for p in spec_stoch.free_params if 'xi' not in p])}")
-print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
+print(f"  Physical: {spec_stoch.n_free}")
+print(f"  GP latent: {spec_stoch.n_grid}")
 
 # %%
-# Create stochastic model with spectroscopic precomputation
+# Create the stochastic model with the spectrum grid fixed at build
 model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
-model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
 # Generate a bursty mock galaxy — supernova-feedback regime
@@ -517,7 +516,7 @@ plt.savefig(os.path.join(FIGDIR, "fig06_bursty_truth.png"), dpi=150, bbox_inches
 plt.show()
 
 # %%
-# MAP + native_geovi on the stochastic model
+# MAP, then the Laplace approximation, on the stochastic model
 forward_stoch = ForwardModel.build(sed=model_stoch)
 
 t0 = time.perf_counter()
@@ -526,41 +525,32 @@ result_map_stoch = forward_stoch.fit(
 )
 t_map_s = time.perf_counter() - t0
 
-# XLA compilation (one-time cost, cached on disk)
-t0_compile_s = time.perf_counter()
-forward_stoch.prewarm(method="vi")
-t_compile_s = time.perf_counter() - t0_compile_s
-
-# Inference runtime
 t0 = time.perf_counter()
-result_geovi_stoch = forward_stoch.fit(
+result_lap_stoch = forward_stoch.fit(
     mock_stoch.flux_obs, mock_stoch.noise,
-    method="vi",
-    n_iterations=20,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=10000,
+    method="laplace",
+    init_from=result_map_stoch,
+    n_samples=2000,
     verbose=False,
 )
-t_geovi_s = time.perf_counter() - t0
+t_lap_s = time.perf_counter() - t0
 
 print(f"\n{'=' * 55}")
-print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
+print(f"  138-dimensional posterior in {t_lap_s:.1f}s after the MAP fit")
 print(f"{'=' * 55}")
-print(f"  XLA compile: {t_compile_s:.1f}s (one-time, cached)")
-print(f"  MAP init:    {t_map_s:.1f}s")
-print(f"  native_geovi: {t_geovi_s:.1f}s  ← runtime per galaxy")
+print(f"  MAP init: {t_map_s:.1f}s")
+print(f"  Laplace:  {t_lap_s:.1f}s")
 
 # %%
 # --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(
-    model_stoch, result_geovi_stoch, true_params=true_params_stoch,
-    ax=ax, color=COLORS["vi"], label="vi", method="geoVI",
+    model_stoch, result_lap_stoch, true_params=true_params_stoch,
+    ax=ax, color=LAPLACE_COLOR, label="Laplace", method="Laplace",
     show_mean_sfh=True,
 )
 ax.set_title(
-    f"Stochastic SFH Recovery — 137 parameters, {t_geovi_s:.1f}s",
+    f"Stochastic SFH Recovery — 138 parameters, {t_lap_s:.1f}s",
     fontweight="bold",
 )
 # 200 Myr inset — truth + posterior SFH draws
@@ -572,20 +562,20 @@ inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
 mask_200 = t_gyr_s < 0.2
 if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
     t_inset = t_gyr_s[mask_200] * 1e3
-    if result_geovi_stoch.samples is not None:
-        n_samp = len(next(iter(result_geovi_stoch.samples.values())))
+    if result_lap_stoch.samples is not None:
+        n_samp = len(next(iter(result_lap_stoch.samples.values())))
         sfh_draws = []
         for i in range(n_samp):
-            s_i = {k: result_geovi_stoch.samples[k][i] for k in result_geovi_stoch.samples}
+            s_i = {k: result_lap_stoch.samples[k][i] for k in result_lap_stoch.samples}
             sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)[sfr_key_s])[mask_200])
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=LAPLACE_COLOR, alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=LAPLACE_COLOR, lw=1.2, label="Posterior")
     else:
-        sfh_fit = model_stoch.predict_sfh(result_geovi_stoch.params)
-        inset.plot(t_inset, np.array(sfh_fit[sfr_key_s])[mask_200], color=COLORS["vi"], lw=1.2, ls="--", label="MAP")
+        sfh_fit = model_stoch.predict_sfh(result_lap_stoch.params)
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_s])[mask_200], color=LAPLACE_COLOR, lw=1.2, ls="--", label="MAP")
     inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
@@ -600,8 +590,8 @@ plt.show()
 # --- FIGURE 8: Spectral Fit (stochastic) ---
 spec_samples_s = []
 for i in range(50):
-    idx = i % len(result_geovi_stoch.samples[spec_stoch.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_geovi_stoch.samples.items()}
+    idx = i % len(result_lap_stoch.samples[spec_stoch.free_params[0]])
+    draw_params = {k: v[idx] for k, v in result_lap_stoch.samples.items()}
     spec_draw = model_stoch.predict_spectrum(draw_params)
     spec_samples_s.append(np.array(spec_draw))
 spec_samples_s = np.array(spec_samples_s)
@@ -616,8 +606,8 @@ true_s = np.array(mock_stoch.flux_true)
 
 ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
 for s in spec_samples_s[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="native_geovi median")
+    ax_fit.plot(wave_np, s, color=LAPLACE_COLOR, alpha=0.03, lw=0.5)
+ax_fit.plot(wave_np, spec_median_s, color=LAPLACE_COLOR, lw=1.5, label="Laplace median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -632,7 +622,7 @@ ax_res.set_xlabel("Observed wavelength [Å]")
 ax_res.set_ylim(-4, 4)
 
 chi2_s = np.sum(residuals_s**2) / len(residuals_s)
-ax_fit.set_title(f"Spectral Fit — Stochastic D = 137 (reduced $\\chi^2$ = {chi2_s:.2f})")
+ax_fit.set_title(f"Spectral Fit — Stochastic D = 138 (reduced $\\chi^2$ = {chi2_s:.2f})")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig08_spectral_fit_stochastic.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -640,112 +630,10 @@ plt.show()
 # %%
 # --- FIGURE 9: Physical Parameter Corner ---
 phys_params = [p for p in spec_stoch.free_params if "xi" not in p]
-fig = safe_corner(result_geovi_stoch, truths=true_params_stoch, params=phys_params)
+fig = safe_corner(result_lap_stoch, truths=true_params_stoch, params=phys_params)
 if fig is not None:
-    fig.suptitle("Physical Parameters — Stochastic (D = 137)", y=1.02)
+    fig.suptitle("Physical Parameters — Stochastic (D = 138)", y=1.02)
     plt.savefig(os.path.join(FIGDIR, "fig09_corner_stochastic.png"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ### The Ray Tracing Sampler: Exact MCMC at High D
-#
-# What if you want exact, unbiased posteriors at D = 137? The Ray Tracing
-# Sampler (Behroozi 2025) is a physics-inspired MCMC method that propagates
-# "light rays" through parameter space, using Snell's law to bend trajectories
-# toward high-likelihood regions. Unlike NUTS, it's ~250× more tolerant of
-# gradient noise and works efficiently at D = 137. It's the primary exact
-# MCMC method in tengri.
-
-# %%
-# Ray Tracing on the stochastic model
-t0 = time.perf_counter()
-result_rt_stoch = forward_stoch.fit(
-    mock_stoch.flux_obs, mock_stoch.noise,
-    method="mcmc_raytrace",
-    init_from=result_map_stoch,
-    n_burnin=200,
-    n_steps=2000,
-    step_size=0.05,
-    n_leapfrog_steps=50,
-    verbose=False,
-)
-t_rt_s = time.perf_counter() - t0
-
-acc = result_rt_stoch.diagnostics.get("acceptance_rate", float("nan"))
-print(f"Ray Tracing: {t_rt_s:.1f}s, acceptance = {acc:.1%}")
-
-# %%
-# Convergence diagnostics for D=137 methods
-ct_stoch = convergence_table(
-    {"vi": result_geovi_stoch, "Ray Tracing": result_rt_stoch}
-)
-
-# %%
-# --- FIGURE 10: All methods on one plot ---
-fig, ax = plt.subplots(figsize=(10, 5))
-
-# Truth first — bold, on top
-sfh_true_cmp = model_stoch.predict_sfh(true_params_stoch)
-t_gyr_cmp = np.array(sfh_true_cmp["t_gyr"])
-ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_full"], color=COLORS["truth"],
-        lw=3.0, zorder=10, label="Truth")
-ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_mean"], color=COLORS["truth"],
-        lw=1.5, ls=":", alpha=0.4, zorder=10)
-
-# Overlay each method's posterior SFH as 68% CI band
-for result, color, label in [
-    (result_geovi_stoch, COLORS["vi"], f"native_geovi ({t_geovi_s:.1f}s)"),
-    (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
-]:
-    if result.samples is not None:
-        n_samp = len(next(iter(result.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result.samples[k][i] for k in result.samples}
-            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"]))
-        sfh_arr = np.array(sfh_draws)
-        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
-        median = np.median(sfh_arr, axis=0)
-        ax.fill_between(t_gyr_cmp, lo, hi, color=color, alpha=0.2, lw=0, label=f"{label} (68% CI)")
-        ax.plot(t_gyr_cmp, median, color=color, lw=1.5, zorder=5)
-
-ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
-ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
-ax.set_xlim(0, 13.5)
-ax.set_ylim(bottom=0.)
-ax.legend(loc="upper right")
-ax.set_title("Stochastic SFH Recovery — native_geovi vs Ray Tracing (D = 137)")
-
-# 200 Myr inset with both posteriors
-inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4])
-mask_cmp = t_gyr_cmp < 0.2
-if np.any(mask_cmp):
-    t_inset = t_gyr_cmp[mask_cmp] * 1e3
-    for result, color, label in [
-        (result_geovi_stoch, COLORS["vi"], "geoVI"),
-        (result_rt_stoch, COLORS["rt"], "RT"),
-    ]:
-        if result.samples is not None:
-            n_samp = len(next(iter(result.samples.values())))
-            draws = []
-            for i in range(n_samp):
-                s_i = {k: result.samples[k][i] for k in result.samples}
-                draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"])[mask_cmp])
-            arr = np.array(draws)
-            lo, hi = np.percentile(arr, [16, 84], axis=0)
-            med = np.median(arr, axis=0)
-            inset.fill_between(t_inset, lo, hi, color=color, alpha=0.25, lw=0)
-            inset.plot(t_inset, med, color=color, lw=1.2, label=label)
-    inset.plot(t_inset, np.array(sfh_true_cmp["sfr_full"])[mask_cmp],
-               color=COLORS["truth"], lw=2.0, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
-    inset.tick_params(labelsize=5)
-    inset.set_xlim(0, 200)
-    inset.legend(fontsize=5, loc="upper right")
-
-fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig10_geovi_vs_rt.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -755,23 +643,21 @@ plt.show()
 # Summary timing table
 print("\n  Summary")
 print("  " + "=" * 75)
-print(f"  {'SEDModel':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
+print(f"  {'SEDModel':<20s} {'D':>4s}  {'Method':<16s} {'Runtime':>8s}  Notes")
 print("  " + "-" * 75)
-print(f"  {'Parametric':<20s} {'7':>4s}  {'native_geovi':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default")
-print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard")
-print(f"  {'Stochastic':<20s} {'137':>4s}  {'native_geovi':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default")
-print(f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)")
+print(f"  {'Parametric':<20s} {'8':>4s}  {'Laplace':<16s} {t_lap:>7.1f}s  After MAP")
+print(f"  {'Parametric':<20s} {'8':>4s}  {'NUTS':<16s} {t_nuts:>7.1f}s  Exact, gold standard")
+print(f"  {'Stochastic':<20s} {'138':>4s}  {'Laplace':<16s} {t_lap_s:>7.1f}s  After MAP")
 print("  " + "=" * 75)
-print("\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
-print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi.")
+print("\n  Laplace runtime excludes the MAP fit it starts from.")
+print(f"  Headline: 138D Laplace posterior in {t_lap_s:.0f}s after the MAP fit.")
 
 # %% [markdown]
 # ## What You Just Did
 #
-# 1. Fit a smooth 7D SFH and verified native_geovi matches NUTS.
-# 2. Fit a bursty 137D SFH — something standard samplers can't handle — in seconds.
+# 1. Fit a smooth 8D SFH and verified the Laplace approximation matches NUTS.
+# 2. Fit a bursty 138D SFH — something standard samplers can't handle — in seconds.
 # 3. Recovered star formation burst features from a single galaxy spectrum.
-# 4. Validated with the exact Ray Tracing Sampler (Behroozi 2025).
 
 # %% [markdown]
 # ## What's Next
