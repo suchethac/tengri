@@ -329,7 +329,8 @@ def build_components(
     field: bool = False,
     metallicity_model: str = "delta",
     n_grid: int = 256,
-    lgmet_scatter: float = 0.2,
+    lgmet_scatter: float = 0.1,
+    lgmet_scatter_declared: bool = False,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
     # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
@@ -536,7 +537,9 @@ def build_components(
     n_grid : int
         SFH lookback-time grid resolution.
     lgmet_scatter : float
-        Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
+        Gaussian σ in log10(Z) for the lognormal metallicity kernel [dex].
+    lgmet_scatter_declared : bool
+        True only when the user declared ``met_logzsol_scatter`` (#3434).
     age_kernel : str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
         ``"dsps"`` (the same integration under its historical name, #2683), or
@@ -695,6 +698,7 @@ def build_components(
                 metallicity_model=metallicity_model,
                 n_grid=n_grid,
                 lgmet_scatter=lgmet_scatter,
+                lgmet_scatter_declared=lgmet_scatter_declared,
                 age_kernel=age_kernel,
                 field_centering=field_centering,
                 sfh_bin_edges_gyr=sfh_bin_edges_gyr,

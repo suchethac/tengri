@@ -243,6 +243,19 @@ def _nebular_continuum_consumers(chain):
     ]
 
 
+def _met_scatter_declared(spec) -> bool:
+    """True when the user declared the metallicity scatter (#3434).
+
+    A declaration is either ``met_logzsol_scatter`` passed by the user (a value or
+    a prior: recorded in ``_user_provided``) or the flat ``lgmet_scatter`` kwarg.
+    The registry's auto-registered default does not count, so a model that does
+    not declare a scatter reads the SSP grid node-exactly in log Z.
+    """
+    user_provided = getattr(spec, "_user_provided", frozenset())
+    flat_kwarg = getattr(spec, "_lgmet_scatter_for_fix", None) is not None
+    return "met_logzsol_scatter" in user_provided or flat_kwarg
+
+
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
 
@@ -12729,7 +12742,8 @@ class SEDModel:
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
-            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.1)),
+            lgmet_scatter_declared=_met_scatter_declared(self.spec),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             met_bin_edges_log_yr=getattr(self.spec, "met_bin_edges_log_yr", None),
