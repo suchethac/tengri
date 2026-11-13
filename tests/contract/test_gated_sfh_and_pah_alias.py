@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
+from tests._data_skip import requires_pahspec
 
 pytestmark = pytest.mark.contract
 
@@ -65,6 +66,7 @@ def test_draine2021_pah_resolves_to_tabulated_component_not_pah_drude():
     assert "pah_drude" in DUST_EMISSION_MODELS
 
 
+@requires_pahspec
 def test_draine2021_pah_builds_and_emits(synthetic_ssp_wide):
     """dust.emission='draine2021_pah' builds and produces finite far-IR re-emission."""
     model = SEDModel.build(
