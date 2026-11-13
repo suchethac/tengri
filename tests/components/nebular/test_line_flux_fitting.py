@@ -343,6 +343,7 @@ class TestFitterDataArgsPacking:
         model = MagicMock()
         model.observation = obs
         model.spec = MagicMock()
+        model.spec.eline_broad = False
         model.spec.free_params = []
         model.spec.get_fixed_values.return_value = {}
         model.spec.stochastic = False
@@ -380,6 +381,7 @@ class TestFitterDataArgsPacking:
         model = MagicMock()
         model.observation = obs
         model.spec = MagicMock()
+        model.spec.eline_broad = False
         model.spec.free_params = []
         model.spec.get_fixed_values.return_value = {}
         model.spec.stochastic = False
