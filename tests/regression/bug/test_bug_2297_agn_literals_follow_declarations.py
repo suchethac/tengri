@@ -37,3 +37,27 @@ def test_fallback_absent_equals_declared_default(key, name, old_literal):
     explicit = numeric_agn_kwargs({name: declared}, 0.5)[key]
     assert np.array_equal(np.asarray(absent), np.asarray(explicit))
     assert not np.array_equal(np.asarray(absent), np.asarray(old_literal))
+
+
+@pytest.mark.parametrize(
+    ("module", "function", "argument"),
+    [
+        ("tengri.components.agn.blocks.blr", "blr_synthesizer_spectra_block", "agn_blr_logZ"),
+        ("tengri.components.agn.blocks.nlr", "nlr_synthesizer_spectra_block", "agn_nlr_logZ"),
+    ],
+)
+def test_synthesizer_block_metallicity_default_is_the_declared_one(module, function, argument):
+    """The two Synthesizer-spectra blocks default to the declared solar log Z, not -2.0."""
+    import importlib
+    import inspect
+
+    from tengri.components.agn._params import PARAMS
+    from tengri.protocols.component import declared_default
+
+    default = (
+        inspect.signature(getattr(importlib.import_module(module), function))
+        .parameters[argument]
+        .default
+    )
+    assert default == declared_default(PARAMS, argument)
+    assert default != -2.0
