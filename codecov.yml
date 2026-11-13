@@ -1,0 +1,19 @@
+# Codecov configuration.
+#
+# Coverage uploads happen on the nightly schedule and on manual dispatch only
+# (the `coverage` job in .github/workflows/tests.yml). There is no pull-request
+# coverage job, so the patch target below is informational until uploads are
+# flowing on pull requests; flip `informational` to false once they are.
+coverage:
+  status:
+    patch:
+      default:
+        target: 80%
+        informational: true
+    project:
+      default:
+        informational: true
+flag_management:
+  default_rules:
+    carryforward: true
+comment: false

@@ -37,6 +37,7 @@
 - **`importance_draws=` on Laplace: a Student-t importance check at the mode with Pareto-smoothed weights (Vehtari et al. 2024).** The check reports `pareto_k`, an importance-sampling evidence and reweighted draws, and warns with `ImportanceSamplingUnreliableWarning` when k-hat exceeds min(1 - 1/log10 n, 0.7). `hmc_is` shares the same importance-sampling code and log-density and now reports `pareto_k`; a NaN log-ratio now raises instead of returning a NaN evidence.
 
 ### Changed
+- **Codecov uploads carry the token and fail loudly; `codecov.yml` adds an informational patch target (#3287).** The scheduled `coverage` job passes `CODECOV_TOKEN` and `fail_ci_if_error: true`, with no `continue-on-error`, so a refused upload fails the shard instead of reporting green. `codecov.yml` sets an 80% patch target and project status, both informational.
 - The translation triple `(internal_name, scale, offset)` lives on each `ParamDeclaration`; `translate.py` derives its non-SFH and evolving-alpha tables from the registry (#3296).
 - The legacy module-level `tengri.parameters.translate.PARAM_MAP` is deleted; `_build_param_map(...)` is the translation table, pinned by a snapshot test (#3296).
 - The Cue weights are loaded with `allow_pickle=False` (#3285): the shipped `cue_weights.npz` holds only numeric and fixed-width string arrays, and an archive with an object array now raises `ValueError` instead of loading. Line luminosities are bit-identical.
