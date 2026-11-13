@@ -81,7 +81,7 @@ References
 from __future__ import annotations
 
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.protocols.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration, declared_default
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 PARAMS: tuple[ParamDeclaration, ...] = (
@@ -545,10 +545,47 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
     # surfaced via the ``shock={...}`` grammar group (#851).
 )
 
+# Declared defaults, read off the declarations above (#2265). Signature defaults and
+# ``.get`` fallbacks import these instead of repeating the number: a bare literal is a
+# second copy that drifts silently from its declaration. ``tests/contract/
+# test_nebular_backend_capabilities.py`` pins each one to its declaration.
+DEFAULT_GAS_LOGCO = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logco")
+DEFAULT_GAS_LOGN = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logn")
+DEFAULT_GAS_LOGNO = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logno")
+DEFAULT_NEB_CO = declared_default(CB19_PARAMS, "neb_co")
+DEFAULT_NEB_DIG_DELTA_LOGU = declared_default(PARAMS, "neb_dig_delta_logU")
+DEFAULT_NEB_DIG_FRAC = declared_default(PARAMS, "neb_dig_frac")
+DEFAULT_NEB_DNO = declared_default(CB19_PARAMS, "neb_dno")
+DEFAULT_NEB_ELINE_SIGMA_KMS = declared_default(PARAMS, "neb_eline_sigma_kms")
+DEFAULT_NEB_FDUST_FRAC = declared_default(PARAMS, "neb_fdust_frac")
+DEFAULT_NEB_FESC = declared_default(PARAMS, "neb_fesc")
+DEFAULT_NEB_FESC_LYA = declared_default(PARAMS, "neb_fesc_lya")
+DEFAULT_NEB_HBFRAC = declared_default(CB19_PARAMS, "neb_hbfrac")
+DEFAULT_NEB_LOG_NH = declared_default(CB19_PARAMS, "neb_log_nH")
+DEFAULT_NEB_LOGU = declared_default(PARAMS, "neb_logU")
+DEFAULT_SHOCK_B_OVER_SQRT_N = declared_default(SHOCK_PARAMS, "shock_b_over_sqrt_n")
+DEFAULT_SHOCK_LOG_DENSITY = declared_default(SHOCK_PARAMS, "shock_log_density")
+
 __all__ = [
     "CB19_PARAMS",
     "CUE_GAS_EXTRA_PARAMS",
     "CUE_IONSPEC_PARAMS",
+    "DEFAULT_GAS_LOGCO",
+    "DEFAULT_GAS_LOGN",
+    "DEFAULT_GAS_LOGNO",
+    "DEFAULT_NEB_CO",
+    "DEFAULT_NEB_DIG_DELTA_LOGU",
+    "DEFAULT_NEB_DIG_FRAC",
+    "DEFAULT_NEB_DNO",
+    "DEFAULT_NEB_ELINE_SIGMA_KMS",
+    "DEFAULT_NEB_FDUST_FRAC",
+    "DEFAULT_NEB_FESC",
+    "DEFAULT_NEB_FESC_LYA",
+    "DEFAULT_NEB_HBFRAC",
+    "DEFAULT_NEB_LOGU",
+    "DEFAULT_NEB_LOG_NH",
+    "DEFAULT_SHOCK_B_OVER_SQRT_N",
+    "DEFAULT_SHOCK_LOG_DENSITY",
     "ELINE_BROAD_PARAMS",
     "ELINE_PARAMS",
     "GUTKIN16_PARAMS",

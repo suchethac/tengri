@@ -315,3 +315,42 @@ def test_component_parameter_lists_do_not_replace_the_registry_records():
     assert set(owners.values()) == {"PARAMS"}, owners
     assert records["neb_fesc"].free_prior is not None
     assert records["shock_log_lhalpha"].prior.value == 41.0
+
+
+_DEFAULT_CONSTANT_DECLARATIONS = {
+    "DEFAULT_GAS_LOGCO": ("CUE_GAS_EXTRA_PARAMS", "gas_logco"),
+    "DEFAULT_GAS_LOGN": ("CUE_GAS_EXTRA_PARAMS", "gas_logn"),
+    "DEFAULT_GAS_LOGNO": ("CUE_GAS_EXTRA_PARAMS", "gas_logno"),
+    "DEFAULT_NEB_CO": ("CB19_PARAMS", "neb_co"),
+    "DEFAULT_NEB_DIG_DELTA_LOGU": ("PARAMS", "neb_dig_delta_logU"),
+    "DEFAULT_NEB_DIG_FRAC": ("PARAMS", "neb_dig_frac"),
+    "DEFAULT_NEB_DNO": ("CB19_PARAMS", "neb_dno"),
+    "DEFAULT_NEB_ELINE_SIGMA_KMS": ("PARAMS", "neb_eline_sigma_kms"),
+    "DEFAULT_NEB_FDUST_FRAC": ("PARAMS", "neb_fdust_frac"),
+    "DEFAULT_NEB_FESC": ("PARAMS", "neb_fesc"),
+    "DEFAULT_NEB_FESC_LYA": ("PARAMS", "neb_fesc_lya"),
+    "DEFAULT_NEB_HBFRAC": ("CB19_PARAMS", "neb_hbfrac"),
+    "DEFAULT_NEB_LOG_NH": ("CB19_PARAMS", "neb_log_nH"),
+    "DEFAULT_NEB_LOGU": ("PARAMS", "neb_logU"),
+    "DEFAULT_SHOCK_B_OVER_SQRT_N": ("SHOCK_PARAMS", "shock_b_over_sqrt_n"),
+    "DEFAULT_SHOCK_LOG_DENSITY": ("SHOCK_PARAMS", "shock_log_density"),
+}
+
+
+def test_every_exported_default_constant_is_mapped_to_its_declaration():
+    """A new ``DEFAULT_*`` export must be added to the map below, so it is pinned too."""
+    from tengri.components.nebular import _params
+
+    exported = {name for name in _params.__all__ if name.startswith("DEFAULT_")}
+    assert exported == set(_DEFAULT_CONSTANT_DECLARATIONS)
+
+
+@pytest.mark.parametrize("constant", sorted(_DEFAULT_CONSTANT_DECLARATIONS))
+def test_default_constant_equals_its_declared_default(constant):
+    """A ``DEFAULT_*`` constant cannot drift from the declaration it reads (#2265)."""
+    from tengri.components.nebular import _params
+    from tengri.protocols.component import declared_default
+
+    tuple_name, param_name = _DEFAULT_CONSTANT_DECLARATIONS[constant]
+    declared = declared_default(getattr(_params, tuple_name), param_name)
+    assert getattr(_params, constant) == declared

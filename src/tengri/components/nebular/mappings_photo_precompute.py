@@ -36,6 +36,7 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
+from tengri.components.nebular._params import DEFAULT_NEB_FESC
 from tengri.components.nebular._shared import _interp_index_weight
 from tengri.components.nebular.mappings_photo import (
     _DEFAULT_GRID_PATH,
@@ -232,7 +233,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     sfh_idx_cont = preint["sfh_idx_cont"]
 
     @jax.jit
-    def predict_lines(log_qh, *free_axis_vals, neb_fesc=0.0):
+    def predict_lines(log_qh, *free_axis_vals, neb_fesc=DEFAULT_NEB_FESC):
         """Compute MAPPINGS V stellar NLR emission lines via linear interpolation.
 
         Parameters
