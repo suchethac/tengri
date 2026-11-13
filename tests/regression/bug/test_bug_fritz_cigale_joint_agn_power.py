@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Under ``cigale_joint`` the tied Fritz torus + polar dust carry ``agn_power`` at every psi.
 
-Owner ruling 2026-11-13, narrowing the 2026-10-13 one (#3070, #2851) for ``agn_norm='cigale_joint'``
-with the Fritz torus and the ``agn_ir_frac`` tie only. pCIGALE's ``fritz2006`` divides the dust
+Owner ruling 2026-11-13, narrowing the 2026-10-13 one (#3070, #2851) for
+``agn_norm='cigale_joint'`` with the Fritz torus and the ``agn_ir_frac`` tie only. pCIGALE's
+``fritz2006`` divides the dust
 (torus plus polar blackbody) by its own integral at the chosen ``psy`` and multiplies it by
 ``agn_power``, so the AGN dust total does not depend on the viewing angle (Fritz et al. 2006,
 MNRAS 366, 767; ``pcigale/sed_modules/fritz2006.py``, ``norm = 1/trapz(dust)``). tengri kept the

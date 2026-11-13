@@ -1050,7 +1050,7 @@ agn_torus_block, agn_attenuation_block : str
     _ledger_polar_norm = 1.0
     _tie_active = _agn_norm == "cigale_joint" and agn_torus_block in _TIE_TORI
     # The Fritz torus's library anisotropy stays on the untied path; where the tie is on the
-    # torus + polar dust carry ``agn_power`` at every inclination, as CIGALE's ``fritz2006`` (#3405).
+    # torus + polar dust carry ``agn_power`` at every inclination, as CIGALE's ``fritz2006``.
     _fritz_tied_flat = _tie_active and agn_torus_block == "fritz"
     # A disc with a corona registers its disc/corona split; the tie normalizes the disc part
     # and carries the corona on top (see ``_disc_parts``). A corona-less disc takes the
@@ -1329,7 +1329,7 @@ agn_torus_block, agn_attenuation_block : str
         """
         _aniso = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
         if _aniso is None or _fritz_tied_flat:
-            # A tied Fritz torus carries ``agn_power`` along every sightline (#3405).
+            # A tied Fritz torus carries ``agn_power`` along every sightline (owner 2026-11-13).
             return sightline_power
         _log_ratio = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
         return sightline_power / jnp.power(10.0, _log_ratio)
@@ -1485,7 +1485,7 @@ agn_torus_block, agn_attenuation_block : str
     _torus_block_fn = resolve_agn_block("torus", agn_torus_block)
 
     def torus_fn(*args, **kwargs):
-        """The torus block, with a tied Fritz torus's library anisotropy removed (#3405)."""
+        """The torus block; a tied Fritz torus has its library anisotropy removed (2026-11-13)."""
         _out = _torus_block_fn(*args, **kwargs)
         if _fritz_tied_flat:
             _out = _out / jnp.power(10.0, _tied_log_anisotropy())
@@ -2184,7 +2184,7 @@ agn_torus_block, agn_attenuation_block : str
             else _aniso_fn(_templates_for("torus", agn_torus_block), wave.dtype, **params)
         )
         if _fritz_tied_flat:
-            # Where the tie is on the torus is flat: nothing to divide out (#3405).
+            # Where the tie is on the torus is flat: nothing to divide out (owner 2026-11-13).
             _log_aniso = jnp.where(_agn_fracAGN > 0.0, 0.0, _log_aniso)
         # A foreground attenuation block screens the torus as well; its power before the screen
         # is the torus block's own emission (``polar_dust`` leaves the torus unscreened).
