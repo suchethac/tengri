@@ -593,6 +593,69 @@ def segment_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, centre
     return m0.reshape(lead), m1.reshape(lead)
 
 
+def velocity_correction_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, sigma_v_kms):
+    r"""Velocity-dispersion correction to the segment pixel moments, per template (#3451).
+
+    The table's segment moments are :math:`A_0 = \bar B(S_s)` and
+    :math:`A_1 = \bar B(\mu S_s)` (pixel means, :math:`\mu` the source wavelength), so
+    that the table's :math:`M_0 = A_0` and :math:`M_1 = A_1 - c_{ps} A_0`. Each is split as
+    the exact unbroadened moment plus this correction :math:`L(B f) - L(f)` on the
+    ln-lambda lattice, so the table and the exact path share one discretisation.
+
+    Returns
+    -------
+    c0, c1 : arrays, shape (..., n_pix * n_seg)
+        Correction to :math:`A_0` and to :math:`A_1`, flattened as the moment cubes are.
+    """
+    from tengri.observation.spectrum import lattice_correction_rest
+
+    flux = jnp.asarray(ssp_flux)
+    wave = jnp.asarray(wave_ssp)
+    centres = np.asarray(wave_centres)
+    seg = jnp.asarray(seg_ids)
+    flat = flux.reshape(-1, flux.shape[-1])
+
+    def one(row):
+        c0_cols, c1_cols = [], []
+        for k in range(n_seg):
+            masked = row * jnp.asarray(seg == k, dtype=row.dtype)
+            c0_cols.append(
+                lattice_correction_rest(masked, wave, centres, sigma_v_kms, conserving=True)
+            )
+            c1_cols.append(
+                lattice_correction_rest(
+                    masked * wave, wave, centres, sigma_v_kms, conserving=True
+                )
+            )
+        return jnp.stack(c0_cols, axis=-1).reshape(-1), jnp.stack(c1_cols, axis=-1).reshape(-1)
+
+    c0, c1 = jax.lax.map(one, flat, batch_size=_TEMPLATE_BROADEN_BATCH)
+    lead = flux.shape[:-1] + (centres.shape[0] * n_seg,)
+    return c0.reshape(lead), c1.reshape(lead)
+
+
+def point_correction_cube(ssp_flux, wave_ssp, wave_centres, sigma_v_kms):
+    """Velocity-dispersion correction to the point-sampled template values (#3451).
+
+    The lattice correction :math:`L(B f) - L(f)` read at the pixel centres, per template;
+    the table's point values are the unbroadened interpolation plus this.
+    """
+    from tengri.observation.spectrum import lattice_correction_rest
+
+    flux = jnp.asarray(ssp_flux)
+    wave = jnp.asarray(wave_ssp)
+    centres = np.asarray(wave_centres)
+    flat = flux.reshape(-1, flux.shape[-1])
+    out = jax.lax.map(
+        lambda row: lattice_correction_rest(
+            row, wave, centres, sigma_v_kms, conserving=False
+        ),
+        flat,
+        batch_size=_TEMPLATE_BROADEN_BATCH,
+    )
+    return out.reshape(flux.shape[:-1] + (centres.shape[0],))
+
+
 def precompute_spectroscopy(
     ssp_data,
     wave_obs_pixels,
@@ -605,6 +668,7 @@ def precompute_spectroscopy(
     breakpoints=(),
     lsf=None,
     sigma_v_on_pixels=False,
+    no_instrument=False,
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -664,7 +728,15 @@ def precompute_spectroscopy(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
-    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0 and not sigma_v_on_pixels:
+    # Without an instrument kernel the velocity dispersion enters as the lattice correction to
+    # the unbroadened table (#3451), so the table and the exact path share one discretisation.
+    lattice_sigma = (
+        sigma_v_kms is not None
+        and float(sigma_v_kms) > 0.0
+        and not sigma_v_on_pixels
+        and no_instrument
+    )
+    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0 and not sigma_v_on_pixels and not lattice_sigma:
         ssp_flux_np = np.asarray(
             broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
         )
@@ -680,6 +752,13 @@ def precompute_spectroscopy(
         m0, m1 = segment_moment_cube(
             ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, centres_seg, lsf
         )
+        if lattice_sigma:
+            c0, c1 = velocity_correction_moment_cube(
+                ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, float(sigma_v_kms)
+            )
+            c_flat = jnp.asarray(centres_seg.reshape(-1))
+            m0 = m0 + c0
+            m1 = m1 + c1 - c_flat * c0
         ssp_on_pixels_np = np.asarray(m0)
         ssp_on_pixels_m1 = jnp.asarray(m1)
         source_breakpoints = jnp.asarray(bps)
@@ -687,6 +766,10 @@ def precompute_spectroscopy(
         wave_rest_np = wave_rest_pixels
     else:
         ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
+        if lattice_sigma:
+            ssp_on_pixels_np = ssp_on_pixels_np + np.asarray(
+                point_correction_cube(ssp_flux_np, wave_ssp_np, wave_rest_np, float(sigma_v_kms))
+            )
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
     # The (1+z)/(4π d_L²) geometric scale as a log10 offset, rather than calling

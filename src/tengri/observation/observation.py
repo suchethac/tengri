@@ -390,6 +390,79 @@ def _sum_present(*terms):
     return total
 
 
+def _project_stellar_on_lattice(
+    state,
+    sed_rest: jnp.ndarray,
+    igm_trans: jnp.ndarray | None,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift,
+    dl_cm,
+    *,
+    sigma_v_kms,
+    lines_rest: jnp.ndarray | None,
+    z_window: tuple[float, float] | None,
+    conserving: bool,
+    has_lyc_edge: bool,
+    cal_coeffs: jnp.ndarray | None,
+    cal_wave_range: tuple[float, float] | None,
+    lattice_window: tuple[float, int] | None = None,
+) -> jnp.ndarray:
+    """Kernel split with no instrument resolution (#3436, #3451).
+
+    The exact unbroadened projection of the whole attenuated SED (the sigma = 0 path)
+    carries the baseline. The stellar group's sigma_v and IGM effect is added as a
+    correction on the ln-lambda lattice (:func:`sigma_v_lattice_correction`). The
+    instrument-only group takes the IGM and no broadening.
+    """
+    from tengri.observation.calibration import apply_calibration
+    from tengri.observation.spectrum import (
+        _concrete_z_range,
+        lattice_span,
+        project_spectrum,
+        sigma_v_lattice_correction,
+    )
+
+    if igm_trans is None:
+        sed_stellar, _ = _split_stellar_and_instrument_only_sed(state, sed_rest, None)
+        transmit = None
+    else:
+        sed_stellar, _ = _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
+        transmit = igm_trans
+    sed_lines_removed = sed_rest if lines_rest is None else sed_rest - lines_rest
+    sed_total = sed_lines_removed if transmit is None else sed_lines_removed * transmit
+    flux = project_spectrum(
+        sed_total,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        conserving=conserving,
+        has_lyc_edge=has_lyc_edge,
+    ) + sigma_v_lattice_correction(
+        sed_stellar,
+        transmit,
+        wave_rest,
+        wave_obs,
+        redshift,
+        dl_cm,
+        sigma_v_kms=sigma_v_kms,
+        span=(
+            lattice_window
+            if lattice_window is not None
+            else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+        ),
+        conserving=conserving,
+        has_lyc_edge=has_lyc_edge,
+    )
+    if cal_coeffs is not None:
+        wmin, wmax = (
+            cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+        )
+        flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
+    return flux
+
+
 def project_spectrum_kernel_split(
     state,
     sed_rest: jnp.ndarray,
@@ -411,6 +484,8 @@ def project_spectrum_kernel_split(
     window_z: float | None = None,
     lsf_pad_pixels: int | None = None,
     nebular_lines: bool = True,
+    z_window: tuple[float, float] | None = None,
+    lattice_window: tuple[float, int] | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -510,9 +585,10 @@ def project_spectrum_kernel_split(
       single-kernel :func:`~tengri.observation.spectrum.project_spectrum`
       banded branch and summed -- equal to ``R @ (stellar_broadened +
       instrument_only)`` exactly.
-    - ``resolution`` is ``None``: no LSF is configured at all, so
-      ``sigma_v_kms``/``sigma_lib_kms``/``lsf_scale`` all have zero effect
-      and there is nothing to split.
+    - ``resolution`` is ``None``: no instrument kernel is configured.
+      ``sigma_v_kms`` broadens the stellar group at library resolution on the
+      ln-lambda lattice (#3436, #3451), and the instrument-only group takes no
+      broadening. ``sigma_lib_kms`` and ``lsf_scale`` have no effect.
     - Otherwise, the default Gaussian LSF path: the stellar piece gets the
       full kernel (:math:`\sigma_v,\sigma_{\rm inst}\cdot\text{lsf\_scale},
       \sigma_{\rm lib}`); the instrument-only piece gets
@@ -637,6 +713,7 @@ def project_spectrum_kernel_split(
            ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
     from tengri.observation.spectrum import (
+        _serves_on_lattice,
         broaden_velocity_only,
         broaden_velocity_only_window,
         compute_spectrum,
@@ -652,6 +729,28 @@ def project_spectrum_kernel_split(
     has_lyc_edge = derived is not None and derived.get("lyc_transmission") is not None
     # Rest-frame line light to drop from the instrument-only group (None keeps the lines).
     lines_rest = None if nebular_lines else _nebular_lines_rest_sed(state)
+
+    if _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms):
+        # No instrument kernel: sigma_v and the IGM act on the ln-lambda lattice (#3436, #3451).
+        if z_window is None and window_z is not None:
+            z_window = (float(window_z), float(window_z))
+        return _project_stellar_on_lattice(
+            state,
+            sed_rest,
+            igm_trans,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            sigma_v_kms=sigma_v_kms,
+            lines_rest=lines_rest,
+            z_window=z_window,
+            conserving=conserving,
+            has_lyc_edge=has_lyc_edge,
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=cal_wave_range,
+            lattice_window=lattice_window,
+        )
 
     if igm_trans is None:
         # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
@@ -1505,6 +1604,7 @@ class Observation:
         conserving: bool | None = None,
         observables_type=None,
         window_z: float | None = None,
+        lattice_window: tuple[float, int] | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -1705,6 +1805,7 @@ class Observation:
                 resolution_matrix=self.spectroscopy.resolution_matrix,
                 window_z=window_z,
                 nebular_lines=self.spectroscopy.nebular_lines,
+                lattice_window=lattice_window,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.
@@ -2596,6 +2697,11 @@ class Observation:
         instrument_rest = _instrument_only_rest_sed(state)
         sigma_v = state.derived.get("spec_sigma_v_kms")
         sigma_v = 0.0 if sigma_v is None else sigma_v
+        if spectro.resolution is None and spectro.resolution_matrix is None:
+            # Without an instrument kernel the instrument-only group takes no dispersion here,
+            # as before the no-resolution lattice (#3436): the lattice would need a static
+            # redshift range that this LUT path does not carry.
+            sigma_v = 0.0
         return project_spectrum_kernel_split(
             state,
             instrument_rest,
