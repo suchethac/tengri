@@ -57,14 +57,22 @@ def _dust(kind):
 
 
 def _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, approx):
-    """Exact (``approx=None``) or LUT model on the conserving resample."""
-    from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform
+    """Exact (``approx=None``) or LUT model on the conserving resample.
 
-    obs = Observation(
-        spectroscopy=Spectroscopy(
-            resample="conserving", wave_obs=jnp.asarray(wave_obs), resolution=resolution
+    ``resolution`` is a scalar R, ``None``, or ``("banded", R)`` for a Gaussian banded
+    resolution matrix (DESI-like, #3413).
+    """
+    from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform
+    from tengri.observation.banded import gaussian_resolution_bands
+
+    spectro = {"resample": "conserving", "wave_obs": jnp.asarray(wave_obs)}
+    if isinstance(resolution, tuple):
+        spectro["resolution_matrix"] = gaussian_resolution_bands(
+            jnp.asarray(wave_obs), resolution[1]
         )
-    )
+    else:
+        spectro["resolution"] = resolution
+    obs = Observation(spectroscopy=Spectroscopy(**spectro))
     neb = {"type": "cue", "all_params": Fixed(DEFAULT)} if with_cue else {"type": "none"}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -137,6 +145,18 @@ _CASES = [
         _PRISM, 100.0, 0.0, "two", False, id="prism-2comp-R100-sv0"
     ),
     pytest.param(
+        _SDSS, None, 150.0, "two", False, id="sdss-2comp-nores-sv150"
+    ),
+    pytest.param(
+        _SDSS, ("banded", 2000.0), 0.0, "two", False, id="sdss-2comp-banded-R2000-sv0"
+    ),
+    pytest.param(
+        _SDSS, ("banded", 2000.0), 150.0, "two", False, id="sdss-2comp-banded-R2000-sv150"
+    ),
+    pytest.param(
+        _DESI, ("banded", 3000.0), 150.0, "two", False, id="desi-2comp-banded-R3000-sv150"
+    ),
+    pytest.param(
         _SDSS, None, 0.0, "single", True, id="sdss-1screen-cue-nores-sv0"
     ),
 ]
@@ -178,10 +198,12 @@ def _family_model(ssp, family, approx):
     spectro = {"wave_obs": jnp.asarray(_SDSS), "resample": "conserving"}
     sigma_v = 0.0
     extra = {"neb": {"type": "none"}}
-    if family == "banded":
+    if family in ("banded", "banded-point"):
         from tengri.observation.banded import gaussian_resolution_bands
 
         spectro["resolution_matrix"] = gaussian_resolution_bands(jnp.asarray(_SDSS), 2000.0)
+        if family == "banded-point":
+            spectro["resample"] = "point"
         sigma_v = 150.0
     elif family == "cue-sv150":
         extra["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
@@ -232,13 +254,23 @@ def test_refused_family_routes_exact_under_auto(family):
         _family_model(ssp, family, SpectrumPrecomp())
 
 
-def test_banded_resolution_routes_exact_under_auto():
-    """A banded resolution matrix is not served yet: auto goes exact, explicit falls back."""
+def test_banded_resolution_routes_to_table_under_auto():
+    """A banded resolution matrix on fixed-z pixel means is served: auto takes the table."""
     from tengri import load_ssp_data
     from tengri.inference.fitter import _spectrum_lut_for_auto
 
     _require_data(False)
     ssp = load_ssp_data(_BARE_SSP)
-    assert _spectrum_lut_for_auto(_family_model(ssp, "banded", None)) is None
+    assert _spectrum_lut_for_auto(_family_model(ssp, "banded", None)) is not None
+
+
+def test_banded_resolution_on_point_samples_falls_back_to_exact():
+    """A banded matrix on point samples is not served: auto goes exact, explicit falls back."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, "banded-point", None)) is None
     with pytest.warns(UserWarning, match="banded resolution matrix"):
-        _family_model(ssp, "banded", SpectrumPrecomp())
+        _family_model(ssp, "banded-point", SpectrumPrecomp())

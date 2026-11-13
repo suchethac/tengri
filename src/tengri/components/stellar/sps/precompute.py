@@ -259,6 +259,10 @@ class SpectroscopicPrecomputation(NamedTuple):
     source_breakpoints: "jnp.ndarray | None" = None
     #: True when the stellar instrument kernel is baked into the moments (#3413).
     lsf_baked: bool = False
+    #: True when ``sigma_v_kms`` is NOT baked into the templates: the velocity dispersion is
+    #: applied to the pixel-level stellar sum at each draw, as the exact path does after a
+    #: banded resolution matrix (#3413). ``sigma_v_kms`` then records the fixed value.
+    sigma_v_on_pixels: bool = False
 
 
 def precompute_photometry(
@@ -600,6 +604,7 @@ def precompute_spectroscopy(
     pixel_integral=False,
     breakpoints=(),
     lsf=None,
+    sigma_v_on_pixels=False,
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -633,6 +638,10 @@ def precompute_spectroscopy(
     lsf : tuple or None, default None
         ``(resolution, sigma_lib_kms, n_bins)`` on the native rest grid: the fixed instrument
         kernel, applied to each segment before the pixel mean (#3413). ``None`` for none.
+    sigma_v_on_pixels : bool, default False
+        Leave the templates un-broadened by ``sigma_v_kms``: the caller applies the velocity
+        dispersion to the pixel sum (the exact path's order after a banded resolution
+        matrix, #3413). The table still records ``sigma_v_kms``.
 
     Returns
     -------
@@ -655,7 +664,7 @@ def precompute_spectroscopy(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
-    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0:
+    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0 and not sigma_v_on_pixels:
         ssp_flux_np = np.asarray(
             broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
         )
@@ -708,6 +717,7 @@ def precompute_spectroscopy(
         ssp_on_pixels_m1=ssp_on_pixels_m1,
         source_breakpoints=source_breakpoints,
         lsf_baked=bool(pixel_integral and lsf is not None),
+        sigma_v_on_pixels=bool(sigma_v_on_pixels),
     )
 
 

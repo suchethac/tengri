@@ -2511,6 +2511,42 @@ class Observation:
             return observables_type(phot_fnu, phot_rest_fnu)
         return out
 
+    def _lut_banded_fnu(self, total_lnu, nebular_lnu, log10_cos, *, sigma_v_kms, n_bins):
+        """Observed F_nu on the pixels through a banded resolution matrix (#3413).
+
+        The exact path's stages on the pixel grid: the stellar piece (total minus the
+        instrument-only nebular bucket) is broadened by the galaxy's velocity dispersion,
+        then multiplied by the banded matrix; the instrument-only piece goes through the
+        matrix alone. Same operators as :func:`~tengri.observation.spectrum.project_spectrum`.
+
+        Parameters
+        ----------
+        total_lnu, nebular_lnu : ndarray, shape (n_pix,)
+            Dust-attenuated total and instrument-only buckets [erg/s/Hz].
+        log10_cos : float or traced scalar
+            log10 of the cosmology factor ``(1 + z) / (4 pi d_L^2)``.
+        sigma_v_kms : float or traced scalar
+            The draw's stellar velocity dispersion [km/s].
+        n_bins : int
+            Piecewise segment count of the velocity broadening.
+
+        Returns
+        -------
+        ndarray, shape (n_pix,)
+            Observed F_nu [erg/s/cm^2/Hz] before calibration.
+        """
+        from tengri.observation.banded import banded_matvec
+        from tengri.observation.spectrum import broaden_velocity_only
+
+        spectro = self.spectroscopy
+        operator = spectro.resolution_matrix
+        stellar_fnu = apply_log10_scale(total_lnu - nebular_lnu, log10_cos)
+        instrument_fnu = apply_log10_scale(nebular_lnu, log10_cos)
+        stellar_fnu = broaden_velocity_only(stellar_fnu, spectro.wave_obs, sigma_v_kms, n_bins)
+        return banded_matvec(operator.offsets, operator.data, stellar_fnu) + banded_matvec(
+            operator.offsets, operator.data, instrument_fnu
+        )
+
     def _lut_lsf_fnu(
         self,
         total_lnu,
@@ -2592,6 +2628,7 @@ class Observation:
         observables_type=None,
         sigma_lib_kms=0.0,
         lsf_scale=1.0,
+        lsf_n_bins=16,
     ):
         """Project spectrum observables via the spectrum LUT.
 
@@ -2619,6 +2656,9 @@ class Observation:
             SSP library resolution [km/s] subtracted from the stellar bucket.
         lsf_scale : float or traced scalar, default 1.0
             Multiplicative scale on the instrument width (#2526).
+        lsf_n_bins : int, default 16
+            Piecewise segment count of the velocity broadening on a banded resolution
+            matrix (the exact path's ``n_bins``, #3413).
 
         Returns
         -------
@@ -2773,7 +2813,8 @@ class Observation:
         igm_trans = state.derived.get("igm_transmission")
         if sub_table is not None and (igm_factor is not None or igm_trans is not None):
             # The IGM transmission is a smooth factor with its own sharp features; it has
-            # no first-moment treatment yet (#3413), so it is refused here, not silently point-sampled.
+            # no first-moment treatment yet (#3413), so it is refused here, not silently
+            # point-sampled.
             raise NotImplementedError(
                 "the pixel-moment spectrum table does not carry an IGM transmission yet "
                 "(#3413). Use approx=None for this model."
@@ -2787,7 +2828,29 @@ class Observation:
         # bit-for-bit as before #2958. With one, the exact path's instrument stage runs on
         # the pixel grid (see ``_lut_lsf_fnu``); sigma_v is already in the stellar family.
         lsf_baked = state.derived.get("spec_lsf_baked") is not None
-        if spectro.resolution is None or lsf_baked:
+        if spectro.resolution_matrix is not None:
+            # Banded operator (#3413): the stellar sum is velocity-broadened on the pixels
+            # and then multiplied by R, the exact path's order; the instrument-only bucket
+            # goes through R alone.
+            if sub_table is None:
+                raise NotImplementedError(
+                    "a banded resolution matrix is served by the pixel-moment spectrum table "
+                    "only (#3413). Build with resample='conserving' at a fixed redshift."
+                )
+            sigma_v = state.derived.get("spec_sigma_v_kms")
+            if sigma_v is None:
+                raise ValueError(
+                    "the banded spectrum LUT needs the draw's sigma_v_kms, which the model "
+                    "seeds on the derived state (#3413)."
+                )
+            spec_fnu = self._lut_banded_fnu(
+                total_spec_lnu,
+                nebular_dust,
+                log10_cos,
+                sigma_v_kms=sigma_v,
+                n_bins=lsf_n_bins,
+            )
+        elif spectro.resolution is None or lsf_baked:
             spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
             if igm_factor is not None:
                 spec_fnu = spec_fnu * igm_factor

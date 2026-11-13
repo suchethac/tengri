@@ -2620,6 +2620,7 @@ class StellarSEDComponent:
         spec_pixel_integral: bool = False,
         spec_breakpoints: tuple = (),
         spec_lsf: tuple | None = None,
+        spec_sigma_v_on_pixels: bool = False,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -2718,6 +2719,7 @@ class StellarSEDComponent:
                 pixel_integral=spec_pixel_integral,
                 breakpoints=spec_breakpoints,
                 lsf=spec_lsf,
+                sigma_v_on_pixels=spec_sigma_v_on_pixels,
             )
             state = _replace_state(
                 state,
@@ -2825,6 +2827,7 @@ class StellarSEDComponent:
         pixel_integral: bool = False,
         breakpoints: tuple = (),
         lsf: tuple | None = None,
+        sigma_v_on_pixels: bool = False,
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
@@ -2863,6 +2866,7 @@ class StellarSEDComponent:
                 pixel_integral=pixel_integral,
                 breakpoints=breakpoints,
                 lsf=lsf,
+                sigma_v_on_pixels=sigma_v_on_pixels,
             )
             import numpy as np
 
