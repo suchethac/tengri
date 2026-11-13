@@ -204,7 +204,7 @@ plt.show()
 # ### Fitting with MAP and the Laplace approximation
 #
 # The MAP estimate is the point of highest posterior density. The `laplace`
-# method fits a Gaussian centred on that point, with covariance set by the
+# method fits a Gaussian centered on that point, with covariance set by the
 # curvature of the log-posterior there (its Hessian). Samples are drawn from
 # that Gaussian, so the cost is one MAP fit plus a linear-algebra step.
 # The `vi` method (geoVI) also exists, but it needs considerably more memory

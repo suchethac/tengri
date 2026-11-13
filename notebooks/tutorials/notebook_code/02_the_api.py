@@ -316,7 +316,7 @@ result_map = fitter.run("map", n_steps=500, verbose=False)
 print(f"MAP: {result_map.wall_time_s:.1f}s, final loss = {float(result_map.loss_history[-1]):.1f}")
 
 # %%
-# Laplace — Gaussian approximation centred on the MAP estimate
+# Laplace — Gaussian approximation centered on the MAP estimate
 result_laplace = fitter.run(
     "laplace", init_from=result_map, n_samples=2000, verbose=False,
 )
