@@ -57,6 +57,7 @@ from tengri.components.agn.grahsp.torus import (
     torus_mn12_si,
 )
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG
+from tengri.utils.scale import pow10
 
 __all__ = [
     "GRAHSPSED",
@@ -587,8 +588,10 @@ agn_grahsp_hot_fcov
         # lumBolBBB). The torus re-radiates absorbed accretion light, so adding it here
         # would count that light twice and make l5100 depend on fcov.
         l_bol_unit = bbb_side_unit_power(unit_params, templates)
-        target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio
-        l5100 = target_l_bol / l_bol_unit
+        # Log-space (#3361): 10**agn_log_lbol * L_sun overflows float32 above log L ~ 5 (the
+        # erg/s product, before division by l_bol_unit), so the normalization is formed as one
+        # pow10 of the summed log10 factors.
+        l5100 = pow10(agn_log_lbol + jnp.log10(LSUN_ERG * agn_lum_ratio) - jnp.log10(l_bol_unit))
 
     # Re-scale: GRAHSP outputs are linear in l5100, so a single multiply
     # gives the correctly-normalized SED without a second evaluation.
