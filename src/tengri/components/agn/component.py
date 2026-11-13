@@ -84,7 +84,16 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
-from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_FRAC_HOT,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_POLAR_OA,
+    DEFAULT_AGN_T_HOT,
+    DEFAULT_AGN_TAU_TORUS,
+    PARAMS as _AGN_PARAMS,
+)
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
@@ -1647,18 +1656,18 @@ def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, j
     kwargs = {
         "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
         "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH)),
         "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
         "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
         "agn_torus_frac": jnp.asarray(agn_torus_frac),
         "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", DEFAULT_AGN_TAU_TORUS)),
+        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", DEFAULT_AGN_T_HOT)),
         "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", DEFAULT_AGN_FRAC_HOT)),
+        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC)),
         "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", DEFAULT_AGN_POLAR_OA)),
         "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
     }
     for key, val in params.items():
