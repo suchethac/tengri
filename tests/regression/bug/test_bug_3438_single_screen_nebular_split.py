@@ -223,3 +223,43 @@ def test_two_component_split_uses_its_republished_nebular_light(ssp):
     expected = _expected_spectrum(ssp, model, state, line)
     peak = float(np.max(np.abs(spec)))
     assert np.max(np.abs(spec - expected)) <= 1e-9 * peak
+
+
+def _two_component_shock_model(ssp, *, dust):
+    """Exact model with a shock component, two-component dust or none, R=2000, sigma_v=150."""
+    obs = Observation(
+        spectroscopy=Spectroscopy(
+            resample="conserving", wave_obs=jnp.asarray(_SDSS), resolution=_R
+        )
+    )
+    extra = {"neb": {"type": "none"}, "shock": {"frac": Fixed(0.5), "all_params": Fixed(DEFAULT)}}
+    if dust is not None:
+        extra["dust_attenuation"] = _dust_block(dust)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        base = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": "dpl",
+                "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(_Z),
+            **extra,
+        )
+        spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(_SIGMA_V))
+        return type(base)(spec, ssp, observation=obs, approx=None)
+
+
+def test_two_component_republishes_attenuated_shock_light(ssp):
+    """The published shock light is the screened shock light: below the intrinsic, positive."""
+    state = _two_component_shock_model(ssp, dust="two").predict_state(_TWO_COMP_PARAMS)
+    bare = _two_component_shock_model(ssp, dust=None).predict_state(_PARAMS)
+    intrinsic = np.asarray(bare.derived["sed_shock"])
+    published = np.asarray(state.derived["sed_shock"])
+    assert np.any(intrinsic > 0.0)
+    ratio = published[intrinsic > 0.0] / intrinsic[intrinsic > 0.0]
+    assert np.all(ratio <= 1.0 + 1e-12)
+    assert np.all(ratio > 0.0)
+    assert ratio.min() < 1.0 - 1e-3

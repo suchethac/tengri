@@ -625,6 +625,8 @@ class DustSEDComponent(TemplateThreading):
         - sed_nebular: re-published after dust reddening (same name as nebular,
           not declared to avoid duplicate-publisher conflict; consumed by
           implementations that apply dust-reddened nebular).
+        - sed_shock: re-published after dust reddening when ShockNebular emitted
+          (same name as the intrinsic shock key, not declared, as for sed_nebular).
 
         """
         return (
@@ -2024,6 +2026,11 @@ class DustSEDComponent(TemplateThreading):
         )
         if sed_agn_lines_attenuated is not None:
             derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_attenuated
+        # Shock light sits in sed_intrinsic and is screened with the rest of it; republish it
+        # reddened, as sed_nebular is, so the spectrum split gives its lines the instrument
+        # kernel alone (#3438). Published only when ShockNebular emitted something.
+        if sed_shock_unatt is not None:
+            derived_overrides["sed_shock"] = sed_shock_attenuated
         # Discrete emission-line catalog, reddened in 2c with the same screen
         # as the nebular continuum above (#1867). Absent when no photoionized
         # backend published a catalog; consumers then fall back to the
