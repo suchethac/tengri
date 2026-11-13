@@ -70,6 +70,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.protocols.component import ForwardState, ParamDeclaration
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
 
 __all__ = ["PopulationSEDModel"]
 
@@ -403,15 +404,20 @@ class PopulationSEDModel:
         self,
         state: ForwardState,
         params: Mapping[str, Any],
+        *,
+        chunk_size: int = GALAXY_CHUNK_SIZE,
     ) -> ForwardState:
-        """Forward-time batched SED across the population (via ``jax.vmap``).
+        """Forward-time batched SED across the population, in galaxy chunks.
 
         Each population-level parameter is either ``shared`` (one value,
-        broadcast across the N galaxies via vmap ``in_axes=None``) or
-        per-galaxy (an array of length N, vmap ``in_axes=0``). The
-        returned :class:`ForwardState` has a leading ``N_galaxies``
-        axis on every per-galaxy quantity (``sed_intrinsic``,
-        ``sed_observed``, ``sed_attenuated``, etc.).
+        broadcast to every galaxy) or per-galaxy (an array of length N,
+        mapped over the galaxy axis). The returned :class:`ForwardState`
+        has a leading ``N_galaxies`` axis on every array leaf
+        (``sed_intrinsic``, ``sed_observed``, ``sed_attenuated``, ...).
+
+        The population is evaluated ``chunk_size`` galaxies per compiled
+        call through :func:`tengri.utils.batching.vmap_chunked`; the
+        per-chunk states are concatenated along the galaxy axis.
 
         See ``docs/internal/plans/2026-05-22-population-sed-batched-forward.md``
         for the design rationale.
@@ -425,6 +431,13 @@ class PopulationSEDModel:
             Per-parameter values. Shared params are scalars; per-galaxy
             params are length-N arrays. ``parameter_axes(params)``
             returns the vmap-axis dict.
+        chunk_size : int, default ``GALAXY_CHUNK_SIZE`` (32)
+            Galaxies per compiled chunk. Peak memory scales with this:
+            each galaxy holds one ``(n_age, n_wave)`` per-age cube, about
+            8 MB on the tutorial 02 model, so a chunk of 32 holds about
+            256 MB of cubes where the unchunked population of N = 1000
+            holds about 8 GB. Must be a positive int; ``None`` and
+            non-int values raise ``ValueError``.
 
         Returns
         -------
@@ -432,23 +445,43 @@ class PopulationSEDModel:
             Batched state: every per-galaxy quantity has a leading
             ``N_galaxies`` axis.
 
+        Raises
+        ------
+        ValueError
+            If ``chunk_size`` is not a positive int, or no parameter is
+            per-galaxy (there is no galaxy axis to map over).
+
         Notes
         -----
-        JIT/grad/vmap-compatible.
+        JIT/grad/vmap-compatible: the chunk kernel is ``jit(vmap(...))``
+        and the per-chunk states are concatenated on the host side of
+        the trace, so ``run`` may sit inside an outer ``jit``, ``grad``
+        or ``vmap`` (a larger outer program unrolls one call per chunk).
+
+        Chunking is not bit-neutral: XLA compiles a different kernel for
+        each chunk shape, so changing ``chunk_size`` can move the last
+        bit (about 1 ULP). Pin ``chunk_size`` when bit-for-bit
+        reproducibility matters.
 
         Notes (composability)
         ---------------------
-        This method is the default convenience path; it vmaps
-        :meth:`predict_one` over the galaxy axis. For multi-device
-        sharding, catalog × hierarchical fits, or any case where you
-        need to compose outer batching, call :meth:`predict_one`
+        This method is the default convenience path; it maps
+        :meth:`predict_one` over the galaxy axis in chunks. For
+        multi-device sharding, catalog × hierarchical fits, or any case
+        where you need to compose outer batching, call :meth:`predict_one`
         directly with your own ``vmap`` / ``pmap`` / ``shard_map``.
         The :attr:`batched_axes` property publishes the axis layout
         so external code can stay axis-aware.
         """
-        import jax
-
         in_axes_params = self.parameter_axes(params)
-        # State is broadcast across the population (one wavelength grid,
-        # one upstream state); params follow their per-parameter axes.
-        return jax.vmap(self.predict_one, in_axes=(None, in_axes_params))(state, params)
+        per_galaxy = {name: value for name, value in params.items() if in_axes_params[name] == 0}
+        shared_params = {name: value for name, value in params.items() if name not in per_galaxy}
+
+        def _one_galaxy(params_one, shared):
+            state_shared, params_shared = shared
+            return self.predict_one(state_shared, {**params_shared, **params_one})
+
+        # The state and the shared parameters are broadcast to every galaxy and passed
+        # into the compiled chunk as arguments, not closed over (the #3439 pattern).
+        mapped = vmap_chunked(_one_galaxy, chunk_size=chunk_size, shared=())
+        return mapped(per_galaxy, shared=(state, shared_params))
