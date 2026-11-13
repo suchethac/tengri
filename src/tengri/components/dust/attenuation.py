@@ -110,6 +110,40 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 # ── Attenuation curves ────────────────────────────────────────────
 
 
+#: Rest-frame wavelengths [Angstrom] where a registered law's transmission has a jump (#3413).
+#: The Calzetti polynomial switches at 0.63 um (``wave_um >= 0.63``) between two fits that
+#: differ by about 0.025 in k'; the laws that reuse that switch declare the same break.
+#: Each entry was located by scanning the law on a fine grid. A pixel-moment spectrum table
+#: splits a pixel at each break, so a factor never straddles a jump inside a sub-interval.
+DUST_LAW_BREAKPOINTS_AA: dict[str, tuple[float, ...]] = {
+    "calzetti": (6300.0,),
+    "kriek_conroy": (6300.0,),
+    "salim": (6300.0,),
+    "tea": (6300.0,),
+    "leitherer02": (1800.0, 6300.0),
+    "noll09": (1800.0, 6300.0),
+    "salim_sbl18": (1800.0, 6300.0),
+}
+
+
+def law_breakpoints(name: str | None) -> tuple[float, ...]:
+    """Rest-frame discontinuity wavelengths [Angstrom] of a registered dust law (#3413).
+
+    Parameters
+    ----------
+    name : str or None
+        Registry name of the law (``DUST_LAWS``); ``None`` or an unlisted law has none.
+
+    Returns
+    -------
+    tuple of float
+        Breakpoints in increasing order; empty when the law is continuous (to the scan).
+    """
+    if name is None:
+        return ()
+    return tuple(sorted(DUST_LAW_BREAKPOINTS_AA.get(name, ())))
+
+
 @register_dust_law(
     "power_law",
     citation="Charlot & Fall 2000 (ApJ 539, 718)",

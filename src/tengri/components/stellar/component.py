@@ -825,6 +825,22 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
     return jnp.where(is_youngest, boost, 1.0)
 
 
+def _with_pixel_mean_marker(families, lut):
+    """Publish the source-segment layout of a pixel-moment table (#3413).
+
+    ``spec_source_breakpoints`` lets the nebular family cut its own spectrum at the same
+    breaks, ``spec_pixel_centres`` gives the pixel grid its bin edges come from, and
+    ``spec_lsf_baked`` says the instrument kernel is already in the table. Absent for a
+    point-sampled table or no table.
+    """
+    if lut is not None and lut.pixel_integral:
+        families["spec_source_breakpoints"] = jnp.asarray(lut.source_breakpoints)
+        families["spec_pixel_centres"] = jnp.asarray(lut.wave_obs_pixels) / (1.0 + lut.redshift)
+        if lut.lsf_baked:
+            families["spec_lsf_baked"] = jnp.ones(())
+    return families
+
+
 @jax.custom_jvp
 def _mass_scale_lnu(per_msun_lsun, total_mass):
     r"""``total_mass * per_msun_lsun * L_sun`` with a float32-safe reverse pass (#1206).
@@ -2601,6 +2617,9 @@ class StellarSEDComponent:
         lyc_gate: bool = False,
         spec_sigma_v_fixed: float | None = None,
         spec_lsf_n_bins: int = 16,
+        spec_pixel_integral: bool = False,
+        spec_breakpoints: tuple = (),
+        spec_lsf: tuple | None = None,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -2692,7 +2711,13 @@ class StellarSEDComponent:
         # ``ssp_spec_lut`` (fixed-z) or ``ssp_spec_ztable`` (free-z).
         if approx.get("spectrum_precomp") and spec_wave_obs is not None:
             spec_state = self._precompute_spectrum(
-                spec_wave_obs, redshift_spec, spec_sigma_v_fixed, spec_lsf_n_bins
+                spec_wave_obs,
+                redshift_spec,
+                spec_sigma_v_fixed,
+                spec_lsf_n_bins,
+                pixel_integral=spec_pixel_integral,
+                breakpoints=spec_breakpoints,
+                lsf=spec_lsf,
             )
             state = _replace_state(
                 state,
@@ -2796,6 +2821,10 @@ class StellarSEDComponent:
         redshift_spec: dict[str, Any] | None,
         spec_sigma_v_fixed: float | None = None,
         spec_lsf_n_bins: int = 16,
+        *,
+        pixel_integral: bool = False,
+        breakpoints: tuple = (),
+        lsf: tuple | None = None,
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
@@ -2831,6 +2860,9 @@ class StellarSEDComponent:
                 dl_cm=1.0,  # placeholder; cosmology applied at projection time
                 sigma_v_kms=spec_sigma_v_fixed,
                 n_bins=spec_lsf_n_bins,
+                pixel_integral=pixel_integral,
+                breakpoints=breakpoints,
+                lsf=lsf,
             )
             import numpy as np
 
@@ -4313,7 +4345,7 @@ class StellarSEDComponent:
                     f"the draw has {float(seeded)}; rebuild the model."
                 )
             on_pix = lut.ssp_on_pixels  # (n_met, n_age, n_pix), broadened at build
-            return {
+            families = {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
                     jnp.einsum("ma,map->p", joint_weights, on_pix), total_mass
                 ),
@@ -4322,6 +4354,17 @@ class StellarSEDComponent:
                 ),
                 "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
             }
+            if lut.ssp_on_pixels_m1 is not None:
+                # First pixel moment (#3413): the same weighted sums of the offset-weighted bins.
+                on_m1 = lut.ssp_on_pixels_m1
+                families["stellar_spec_lnu_m1_precomp"] = _mass_scale_lnu(
+                    jnp.einsum("ma,map->p", joint_weights, on_m1), total_mass
+                )
+                families["stellar_spec_lnu_per_age_m1_precomp"] = _mass_scale_lnu(
+                    jnp.einsum("ma,map->ap", joint_weights, on_m1), total_mass
+                )
+                families = _with_pixel_mean_marker(families, lut)
+            return families
 
         if ssp_flux_for_csp.ndim == 4:
             # A 4D [alpha/Fe] grid reaches here uncollapsed (the CSP einsums contract it over

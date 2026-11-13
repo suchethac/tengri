@@ -233,13 +233,12 @@ def test_conserving_models_do_not_collide_in_the_compile_cache(ssp):
 
 
 def test_spectrum_precomp_refuses_a_conserving_resample(ssp):
-    """SpectrumPrecomp samples every component at the pixel centers, so pairing it with a
-    pixel integral must raise rather than silently point-sample (#1166, #2530)."""
+    """SpectrumPrecomp serves a fixed-z conserving resample from its pixel-moment table, so it
+    builds and engages (#1166, #2530, #3413)."""
     from tengri import SpectrumPrecomp
 
     wo = np.geomspace(4000.0, 8500.0, 250)  # coarse → auto/conserving would apply
-    with pytest.raises(ValueError, match="approx=None"):
-        SEDModel.build(
+    m = SEDModel.build(
             ssp_data=ssp,
             observation=Observation(
                 photometry=Photometry.from_names(["des_g"]),
@@ -257,6 +256,7 @@ def test_spectrum_precomp_refuses_a_conserving_resample(ssp):
             redshift=Fixed(0.1),
             approx=SpectrumPrecomp(),
         )
+    assert m._approx.get("spectrum_precomp")
 
 
 @pytest.mark.gradient

@@ -1120,9 +1120,25 @@ class NebularSEDComponent(TemplateThreading):
         # vanished). BakedIn nebular is carried by ``stellar_spec_lnu_precomp``.
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
-            derived_overrides["nebular_spec_lnu_precomp"] = jnp.interp(
-                spec_eff, state.wave, nebular_sed
-            )
+            # A pixel-moment spectrum table (#3413) takes the bin mean over the pixel edges,
+            # per source segment, the exact conserving path's integral; a point table takes
+            # the centre value.
+            if state.derived.get("spec_source_breakpoints") is not None:
+                from tengri.observation.spectrum import segment_pixel_moments
+
+                breaks = jnp.asarray(state.derived["spec_source_breakpoints"])
+                n_seg = int(breaks.shape[0]) + 1
+                centres = state.derived["spec_pixel_centres"]
+                c_seg = jnp.reshape(spec_eff, (centres.shape[0], n_seg))
+                seg_ids = jnp.searchsorted(breaks, state.wave, side="right")
+                m0, m1 = segment_pixel_moments(
+                    state.wave, nebular_sed, seg_ids, n_seg, centres, c_seg
+                )
+                nebular_at_pixels = m0.reshape(-1)
+                derived_overrides["nebular_spec_lnu_m1_precomp"] = m1.reshape(-1)
+            else:
+                nebular_at_pixels = jnp.interp(spec_eff, state.wave, nebular_sed)
+            derived_overrides["nebular_spec_lnu_precomp"] = nebular_at_pixels
 
         # Issue #301: ``neb_fesc`` is the fraction of LyC photons that
         # *escape* the HII region (observed unattenuated); the absorbed

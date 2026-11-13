@@ -70,10 +70,12 @@ def _assert_joint_matches_references(phot_only, joint, seeds=(1, 2, 3)):
             np.asarray(phot_only.predict_photometry(truth)),
             rtol=1e-12,
         )
+        # The spectrum is now served by the pixel-moment table (#3413), so it agrees with the
+        # exact spectrum to the table's bar (1e-4), not to round-off.
         np.testing.assert_allclose(
             np.asarray(joint.predict_spectrum(truth)),
             np.asarray(joint.predict(truth).spectrum()),
-            rtol=1e-12,
+            rtol=1e-4,
         )
 
 
@@ -87,11 +89,11 @@ def models(ssp_data_fsps):
     }
 
 
-def test_setup_the_spectrum_really_is_exact(models):
-    """Guard the guard: if the spectrum LUT engaged, the mixed route is not what is measured."""
+def test_setup_the_spectrum_is_served_by_the_pixel_table(models):
+    """The coarse conserving spectrum of this joint model is served by the pixel-moment table (#3413)."""
     cfg = models["joint"]._approx
     assert cfg.get("wave_precomp")
-    assert not cfg.get("spectrum_precomp")
+    assert cfg.get("spectrum_precomp")
 
 
 def test_joint_photometry_gradient_costs_the_photometry_only_model(models):

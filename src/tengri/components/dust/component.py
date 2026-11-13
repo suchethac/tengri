@@ -918,6 +918,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
         if spec_eff is not None:
             k_pix = curve(spec_eff)
             derived_overrides["dust_spec_transmission_precomp"] = jnp.exp(-tau_v * k_pix)
+            if state.derived.get("spec_source_breakpoints") is not None:
+                # First-moment table (#3413): the screen's wavelength slope at the centres.
+                from tengri.observation.spectrum import screen_value_and_slope
+
+                _, slope = screen_value_and_slope(
+                    lambda w: jnp.exp(-tau_v * curve(w)), spec_eff
+                )
+                derived_overrides["dust_spec_transmission_slope_precomp"] = slope
 
         return state.with_(
             sed_intrinsic=attenuated,

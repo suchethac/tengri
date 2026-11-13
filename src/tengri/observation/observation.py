@@ -356,6 +356,29 @@ def _split_stellar_and_instrument_only_sed_pre_igm(
     return sed_stellar_rest, sed_instrument_only_rest
 
 
+#: Families a pixel-moment table publishes on the sub-interval grid (#3413).
+_SUBINTERVAL_FAMILIES = (
+    "stellar_spec_lnu_precomp",
+    "nebular_spec_lnu_precomp",
+)
+
+
+def _sum_segments(values, n_pix):
+    """Sum each pixel's source segments of a ``(n_pix * n_seg,)`` array (#3413)."""
+    return jnp.reshape(values, (n_pix, -1)).sum(axis=-1)
+
+
+def _sum_present(*terms):
+    """Sum of the non-``None`` terms, or ``None`` when every term is absent (#3413)."""
+    present = [t for t in terms if t is not None]
+    if not present:
+        return None
+    total = present[0]
+    for term in present[1:]:
+        total = total + term
+    return total
+
+
 def project_spectrum_kernel_split(
     state,
     sed_rest: jnp.ndarray,
@@ -2630,6 +2653,23 @@ class Observation:
         for c in precomp_contribs[1:]:
             total_spec_lnu = total_spec_lnu + c
 
+        # A pixel-moment table (#3413) carries two sub-intervals per pixel, so every family
+        # it publishes is on the sub-interval grid and is summed back to pixels below. A
+        # family that is not a stellar or nebular moment cannot be split that way.
+        sub_table = state.derived.get("spec_source_breakpoints")
+        if sub_table is not None:
+            unsplit = [
+                k
+                for k in precomp_keys
+                if state.derived.get(k) is not None and k not in _SUBINTERVAL_FAMILIES
+            ]
+            if unsplit:
+                raise NotImplementedError(
+                    f"the pixel-moment spectrum table carries only the stellar and nebular "
+                    f"families; {unsplit} publish point samples and would be wrong on the "
+                    "sub-interval grid (#3413). Use approx=None for this model."
+                )
+
         # ── Dust attenuation on the pixel grid ──────────────────────────
         # A spectrum pixel is a single wavelength, so transmission T(λ_pix)
         # is exact, no Taylor moment (contrast predict_via_precomp). Dust
@@ -2650,6 +2690,13 @@ class Observation:
         # path's ``sed_nebular`` group; the stellar bucket is the remainder.
         nebular_dust = nebular_phi
 
+        # First pixel moments of the families and the screens' wavelength slopes (#3413). They
+        # are present only for a pixel-integral table; a point table leaves them absent.
+        stellar_m1 = state.derived.get("stellar_spec_lnu_m1_precomp")
+        per_age_m1 = state.derived.get("stellar_spec_lnu_per_age_m1_precomp")
+        nebular_m1 = state.derived.get("nebular_spec_lnu_m1_precomp")
+        dust_attenuable_m1 = _sum_present(stellar_m1, nebular_m1)
+
         if t_bc is not None and t_diff is not None and per_age is not None:
             # Two-component (Charlot & Fall): each node mixes the young population
             # (birth cloud + diffuse) and the old one (diffuse only) by the node's
@@ -2662,14 +2709,40 @@ class Observation:
             # Nebular emission is lit by stars of every age: the dust component
             # publishes its screen at the pixels, the interval mixture weighted by
             # each interval's share of the ionizing luminosity.
-            nebular_attenuated = state.derived["dust_spec_neb_transmission_precomp"] * nebular_phi
+            neb_screen = state.derived["dust_spec_neb_transmission_precomp"]
+            nebular_attenuated = neb_screen * nebular_phi
+            if per_age_m1 is not None:
+                s_bc = state.derived["dust_spec_bc_transmission_slope_precomp"]
+                s_diff = state.derived["dust_spec_diff_transmission_slope_precomp"]
+                s_neb = state.derived["dust_spec_neb_transmission_slope_precomp"]
+                slope_per_age = s_diff[None, :] * (
+                    y_age[:, None] * t_bc[None, :] + (1.0 - y_age[:, None])
+                ) + t_diff[None, :] * y_age[:, None] * s_bc[None, :]
+                stellar_attenuated = stellar_attenuated + jnp.sum(
+                    per_age_m1 * slope_per_age, axis=0
+                )
+                neb_m1 = nebular_m1 if nebular_m1 is not None else jnp.zeros_like(nebular_phi)
+                nebular_attenuated = nebular_attenuated + s_neb * neb_m1
             nebular_dust = nebular_attenuated
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
             nebular_dust = nebular_phi * t_single
+            s_single = state.derived.get("dust_spec_transmission_slope_precomp")
+            if s_single is not None:
+                att_m1 = dust_attenuable_m1 if dust_attenuable_m1 is not None else 0.0
+                neb_m1 = nebular_m1 if nebular_m1 is not None else 0.0
+                total_spec_lnu = total_spec_lnu + att_m1 * s_single
+                nebular_dust = nebular_dust + neb_m1 * s_single
         # else: no dust LUT published, leave total_spec_lnu unattenuated.
+
+        if sub_table is not None:
+            # Sum each pixel's two sub-intervals (#3413); the instrument stage and the
+            # calibration act on pixels.
+            n_pix = self.spectroscopy.wave_obs.shape[0]
+            total_spec_lnu = _sum_segments(total_spec_lnu, n_pix)
+            nebular_dust = _sum_segments(nebular_dust, n_pix)
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(
@@ -2698,6 +2771,13 @@ class Observation:
         # NOTHING (2120 us exact vs 2098 us LUT). Bit-identical at the z-nodes.
         igm_factor = state.derived.get("igm_spec_factor")
         igm_trans = state.derived.get("igm_transmission")
+        if sub_table is not None and (igm_factor is not None or igm_trans is not None):
+            # The IGM transmission is a smooth factor with its own sharp features; it has
+            # no first-moment treatment yet (#3413), so it is refused here, not silently point-sampled.
+            raise NotImplementedError(
+                "the pixel-moment spectrum table does not carry an IGM transmission yet "
+                "(#3413). Use approx=None for this model."
+            )
         eff_waves = state.derived.get("spec_eff_waves")
         if igm_factor is None and igm_trans is not None and eff_waves is not None:
             # Fallback: patchy / DLA read free parameters, so the transmission is
@@ -2706,7 +2786,8 @@ class Observation:
         # Without a resolution there is no instrument kernel: the un-convolved sample,
         # bit-for-bit as before #2958. With one, the exact path's instrument stage runs on
         # the pixel grid (see ``_lut_lsf_fnu``); sigma_v is already in the stellar family.
-        if spectro.resolution is None:
+        lsf_baked = state.derived.get("spec_lsf_baked") is not None
+        if spectro.resolution is None or lsf_baked:
             spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
             if igm_factor is not None:
                 spec_fnu = spec_fnu * igm_factor

@@ -452,6 +452,12 @@ class DerivedState:
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
     # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
     spec_eff_waves: jnp.ndarray | None = None
+    # Set (to the same pixel centres) only when the spectrum LUT stores each template's mean
+    # over the pixel edges, the flux-conserving resample (#3413). Its presence tells the
+    # nebular spectrum family to take the same bin mean; absent means point samples.
+    spec_source_breakpoints: jnp.ndarray | None = None
+    spec_pixel_centres: jnp.ndarray | None = None
+    spec_lsf_baked: jnp.ndarray | None = None
     # Stellar velocity dispersion [km/s] of the draw, seeded by the model before the chain
     # runs when ``approx=SpectrumPrecomp()`` is active. The stellar component broadens its
     # spectrum LUT family with it on the model grid; scalar.
@@ -744,6 +750,16 @@ class DerivedState:
     dust_spec_transmission_precomp: jnp.ndarray | None = None
     dust_spec_bc_transmission_precomp: jnp.ndarray | None = None
     dust_spec_diff_transmission_precomp: jnp.ndarray | None = None
+    # Wavelength slopes d(T)/d(lambda) [1/Angstrom] of the screens above at the pixel centres,
+    # and the first pixel moments of the stellar and nebular families [erg/s/Hz] (#3413). A
+    # first-moment table publishes them; a point table leaves them absent.
+    dust_spec_transmission_slope_precomp: jnp.ndarray | None = None
+    dust_spec_bc_transmission_slope_precomp: jnp.ndarray | None = None
+    dust_spec_diff_transmission_slope_precomp: jnp.ndarray | None = None
+    dust_spec_neb_transmission_slope_precomp: jnp.ndarray | None = None
+    stellar_spec_lnu_m1_precomp: jnp.ndarray | None = None
+    stellar_spec_lnu_per_age_m1_precomp: jnp.ndarray | None = None
+    nebular_spec_lnu_m1_precomp: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

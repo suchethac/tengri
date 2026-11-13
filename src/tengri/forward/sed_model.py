@@ -3275,14 +3275,12 @@ class SEDModel:
                 )
             if self._spectrum_lut_needs_pixel_integral(observation):
                 raise ValueError(
-                    f"approx=SpectrumPrecomp() samples the model at the pixel "
-                    f"centers, but resample="
-                    f"{observation.spectroscopy.resample!r} resolves to the "
-                    f"flux-conserving pixel integral for this model grid and "
-                    f"pixel grid (pixels wider than the model grid), which the LUT "
-                    f"cannot carry (#2530). Use approx=None for the exact "
-                    f"spectrum, or Spectroscopy(resample='point') to accept point "
-                    f"sampling."
+                    f"approx=SpectrumPrecomp() with resample="
+                    f"{observation.spectroscopy.resample!r} needs the flux-conserving pixel "
+                    f"integral, which the table carries only for a fixed redshift, a fixed "
+                    f"sigma_v_kms and no instrument resolution (#2530, #3413). Use approx=None "
+                    f"for the exact "
+                    f"spectrum, or Spectroscopy(resample='point') to accept point sampling."
                 )
 
     def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:
@@ -3353,7 +3351,158 @@ class SEDModel:
         grid = getattr(self, "_rest_wavelength", None)
         if grid is None:
             grid = self.ssp_data.ssp_wave
-        return bool(spectro.resolve_conserving(_np.asarray(grid), self._resample_z_ref()))
+        decided = bool(spectro.resolve_conserving(_np.asarray(grid), self._resample_z_ref()))
+        if not decided:
+            return False
+        if spectro.resolution_matrix is not None:
+            return True
+        if self._spectrum_lut_point_component() is not None:
+            return True
+        if spectro.resolution is not None and not self._spectrum_lsf_bakeable():
+            # The fixed Gaussian kernel is baked into a stellar-only table (#3413). A nebular
+            # family or a free lsf_scale has no such table yet.
+            return True
+        # A fixed-redshift table with a fixed sigma_v stores the pixel moments itself (#3413).
+        # A free redshift or a free sigma_v has no such table.
+        return not (self._spectrum_lut_redshift_is_fixed() and self._fixed_sigma_v_kms() is not None)
+
+    def _spectrum_lut_redshift_is_fixed(self) -> bool:
+        """Whether the spectrum LUT is a fixed-redshift table (one pixel grid, #3413).
+
+        A catalog model carries a runtime redshift even when its spec holds a ``Fixed``
+        placeholder, so it is not fixed. A free redshift interpolates the SSP cube at
+        runtime and cannot store a pixel mean.
+
+        Returns
+        -------
+        bool
+            True when the redshift is a declared fixed value and not a catalog column.
+        """
+        if getattr(self, "_catalog_z_range", None) is not None:
+            return False
+        try:
+            dist = self.spec.get_distribution("redshift")
+        except (AttributeError, KeyError):
+            return False
+        return bool(getattr(dist, "is_fixed", False))
+
+    def _spectrum_lut_point_component(self) -> str | None:
+        """Name of a declared component the pixel-moment table cannot carry, or ``None`` (#3413).
+
+        The table carries the stellar and nebular families with their dust screens. An IGM
+        transmission, an AGN, a radio, an X-ray or a dust-emission component publishes point
+        samples or a factor without a moment treatment, so a conserving table would be wrong
+        for it. Read from the declared spec, because the chain is not built yet.
+
+        Returns
+        -------
+        str or None
+            The first such component, in the order IGM, AGN, dust emission. Radio and X-ray
+            components are not checked here; their families are guarded at predict time.
+        """
+        spec = self.spec
+        if getattr(spec, "apply_igm", False):
+            return "IGM (igm)"
+        agn = getattr(spec, "agn_model", None)
+        if agn not in (None, "off", "none"):
+            return f"AGN ({agn})"
+        dust_em = getattr(spec, "dust_emission", None)
+        if dust_em not in (None, "off", "none"):
+            return f"dust emission ({dust_em})"
+        return None
+
+    def _spectrum_lsf_bakeable(self) -> bool:
+        """Whether a fixed instrument kernel can be baked into the stellar spectrum table (#3413).
+
+        Needs a fixed ``lsf_scale`` and no nebular emission family (its instrument-only bucket
+        would need the kernel per draw).
+
+        Returns
+        -------
+        bool
+        """
+        # The backend is built after the spectrum LUT is resolved, so the declared mode decides.
+        if getattr(self.spec, "nebular_mode", "off") not in ("off", "ssp"):
+            return False
+        try:
+            dist = self.spec.get_distribution("lsf_scale")
+        except (AttributeError, KeyError):
+            return True
+        return bool(getattr(dist, "is_fixed", False))
+
+    def _spectrum_lsf_model(self):
+        """The fixed instrument kernel on the model grid, for the stellar table build (#3413).
+
+        Returns
+        -------
+        tuple or None
+            ``(resolution, sigma_lib_kms, n_bins)`` with the resolution divided by the fixed
+            ``lsf_scale`` and interpolated to the model's observed-frame wavelengths exactly
+            as the exact conserving path does; ``None`` without a resolution.
+        """
+        import numpy as _np
+
+        from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+        spectro = self.observation.spectroscopy
+        if spectro.resolution is None or not self._spectrum_lut_pixel_integral():
+            return None
+        try:
+            scale = float(self.spec.get_distribution("lsf_scale").bounds[0])
+        except (AttributeError, KeyError):
+            scale = 1.0
+        z = self._resample_z_ref()
+        wave_rest = _np.asarray(self.ssp_data.ssp_wave, dtype=_np.float64)
+        wave_obs = _np.asarray(spectro.wave_obs, dtype=_np.float64)
+        wave_model_obs = wave_rest * (1.0 + z)
+
+        def _onto_model(x):
+            x = _np.asarray(x, dtype=_np.float64)
+            return float(x) if x.ndim == 0 else _np.interp(wave_model_obs, wave_obs, x)
+
+        sigma_lib = resolve_sigma_lib_kms(
+            spectro.wave_obs,
+            z,
+            getattr(spectro, "sigma_lib_kms", 0.0),
+            self._sigma_lib_curve_for(self.ssp_data),
+        )
+        resolution = _onto_model(_np.asarray(spectro.resolution, dtype=_np.float64) / scale)
+        return (resolution, _onto_model(_np.asarray(sigma_lib, dtype=_np.float64)), self._lsf_n_bins)
+
+    def _spectrum_breakpoints(self) -> tuple[float, ...]:
+        """Rest-frame dust-law breakpoints a pixel-moment spectrum table splits at (#3413).
+
+        The union over the two screen laws and any age-binned screen laws. Empty when the
+        table is point-sampled or the model has no dust.
+
+        Returns
+        -------
+        tuple of float
+            Increasing rest-frame wavelengths [Angstrom].
+        """
+        if not self._spectrum_lut_pixel_integral():
+            return ()
+        from tengri.components.dust.attenuation import law_breakpoints
+
+        laws = [self._dust_law_bc, self._dust_law_diff]
+        laws += [screen[0] for screen in getattr(self, "_dust_screens", ())]
+        points = {bp for law in laws for bp in law_breakpoints(law)}
+        return tuple(sorted(points))
+
+    def _spectrum_lut_pixel_integral(self) -> bool:
+        """Whether a fixed-redshift spectrum table stores the pixel mean (#3413).
+
+        True when the spectroscopy resolves to the flux-conserving resample at the fixed
+        redshift; the table then holds each template's mean over the pixel edges.
+
+        Returns
+        -------
+        bool
+            True for a pixel-mean table, False for point samples or no spectroscopy.
+        """
+        if not self._spectrum_lut_redshift_is_fixed():
+            return False
+        return bool(self._spectrum_resample_decision())
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -11227,7 +11376,13 @@ class SEDModel:
         # ``*_spec_lnu_precomp`` family via the cached chain, so the projector is
         # fully JAX-traceable, no eager fallback needed. ``phot_lut`` lets a
         # JOINT model also project photometry in the same kernel (Part A).
-        spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
+        # A nebular grid zeroes sed_nebular, which the photometry of the mixed kernel reads, so
+        # the spectrum table is not used with one (the exact kernel serves both channels).
+        spec_lut = (
+            bool(self._approx.get("spectrum_precomp"))
+            and observation.can_do_spectroscopy
+            and getattr(self, "_nebular_grid_table", None) is None
+        )
         phot_lut = bool(self._approx.get("wave_precomp"))
         # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
         # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
@@ -13042,6 +13197,9 @@ class SEDModel:
                         redshift_spec=spec_redshift_spec,
                         spec_sigma_v_fixed=self._fixed_sigma_v_kms(),
                         spec_lsf_n_bins=self._lsf_n_bins,
+                        spec_pixel_integral=self._spectrum_lut_pixel_integral(),
+                        spec_breakpoints=self._spectrum_breakpoints(),
+                        spec_lsf=self._spectrum_lsf_model(),
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:

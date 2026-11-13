@@ -446,8 +446,8 @@ def test_sfh_spectrum_honors_resample(ssp):
     assert np.max(np.abs(point - ref)) / ref.max() > 5e-3
 
 
-def test_spectrum_lut_refuses_a_pixel_integral(ssp):
-    """The spectrum LUT samples at pixel centers; pixels wider than the model must be refused."""
+def test_spectrum_lut_serves_a_pixel_integral(ssp):
+    """The pixel-moment table serves the pixel integral of a fixed-z coarse spectrum (#3413)."""
     from tengri import SpectrumPrecomp
 
     wave, resolution = CASES["2A"]
@@ -466,8 +466,8 @@ def test_spectrum_lut_refuses_a_pixel_integral(ssp):
             ),
         )
 
-    with pytest.raises(ValueError, match=r"approx=None"):
-        SEDModel.build(observation=obs("auto"), **kwargs)
+    assert SEDModel.build(observation=obs("auto"), **kwargs)._approx.get("spectrum_precomp")
+    assert SEDModel.build(observation=obs("conserving"), **kwargs)._approx.get("spectrum_precomp")
     SEDModel.build(observation=obs("point"), **kwargs)
 
 
@@ -486,7 +486,7 @@ def test_joint_photometry_lut_keeps_coarse_spectrum_exact(ssp):
         redshift=Fixed(0.5),
         approx=WavePrecomp(),
     )
-    assert m._approx.get("wave_precomp") and not m._approx.get("spectrum_precomp")
+    assert m._approx.get("wave_precomp") and m._approx.get("spectrum_precomp")
 
 
 # ── 4. smoothness in redshift ──────────────────────────────────────────────────

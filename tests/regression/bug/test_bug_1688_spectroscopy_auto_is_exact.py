@@ -73,12 +73,12 @@ def _line_flux_channel():
     )
 
 
-def test_auto_resolves_coarse_spectroscopy_to_the_exact_path(synthetic_ssp_wide):
-    """Pixels that need the bin integral cannot be served by the LUT, so auto stays exact."""
+def test_auto_resolves_coarse_spectroscopy_to_the_pixel_table(synthetic_ssp_wide):
+    """Fixed-z coarse conserving pixels are served by the pixel-moment table (#3413)."""
     fwd, flux, noise = _spectroscopy_fixture(synthetic_ssp_wide, coarse=True)
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy")  # approx="auto" default
-    assert not fitter.model._has_modern_approx()
-    assert fitter.model is fwd
+    assert fitter.model._has_modern_approx()
+    assert fitter.model.approx.spectrum_precomp
 
 
 def test_auto_keeps_feature_precomp_for_a_spectroscopy_line_channel(synthetic_ssp_wide):
@@ -89,7 +89,7 @@ def test_auto_keeps_feature_precomp_for_a_spectroscopy_line_channel(synthetic_ss
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy")  # approx="auto" default
     state = fitter.model.approx
     assert state.feature_precomp, "a spectroscopy line-channel fit lost FeaturePrecomp"
-    assert not state.spectrum_precomp, "auto engaged the biased pixel LUT"
+    assert state.spectrum_precomp, "auto did not serve the coarse spectrum from the table"
     assert not state.wave_precomp, "auto engaged WavePrecomp on a spectroscopy fit"
 
 

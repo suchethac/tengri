@@ -248,6 +248,17 @@ class SpectroscopicPrecomputation(NamedTuple):
     #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
     #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
     sigma_v_kms: "float | None" = None
+    #: True when ``ssp_on_pixels`` holds each template's mean over the pixel edges (the
+    #: flux-conserving resample, #3413); False for the value at the pixel centre.
+    pixel_integral: bool = False
+    #: First pixel moment ``(n_met, n_age, n_pix)``: the bin mean of each template times its
+    #: offset from the pixel centre (#3413). Set only with ``pixel_integral``.
+    ssp_on_pixels_m1: "jnp.ndarray | None" = None
+    #: Source breakpoints [Angstrom] the pixel-moment table is cut at (#3413); ``wave_rest_pixels``
+    #: holds the per-segment expansion points, pixel-major. ``None`` for a point table.
+    source_breakpoints: "jnp.ndarray | None" = None
+    #: True when the stellar instrument kernel is baked into the moments (#3413).
+    lsf_baked: bool = False
 
 
 def precompute_photometry(
@@ -527,8 +538,68 @@ def broaden_template_cube(ssp_flux, wave_ssp, sigma_v_kms, n_bins=16):
 _TEMPLATE_BROADEN_BATCH = 32  # templates per lax.map step: bounds the FFT working set
 
 
+def segment_moment_cube(ssp_flux, wave_ssp, wave_centres, seg_ids, n_seg, centres_seg, lsf=None):
+    r"""Pixel moments of every template, per source segment (#3413).
+
+    Applies :func:`~tengri.observation.spectrum.segment_pixel_moments` to each
+    ``(metallicity, age)`` template on the native grid. The result is flattened so that
+    virtual pixel ``p * n_seg + s`` holds pixel ``p``'s segment ``s``.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (..., n_wave)
+        Template cube [erg/s/Hz/Msun]; every leading axis is mapped over.
+    wave_ssp : array, shape (n_wave,)
+        Native rest-frame wavelength grid [Angstrom], increasing.
+    wave_centres : array, shape (n_pix,)
+        Rest-frame pixel centres [Angstrom].
+    seg_ids : ndarray of int, shape (n_wave,)
+        Source segment of each native node.
+    n_seg : int
+        Number of source segments.
+    centres_seg : array, shape (n_pix, n_seg)
+        Expansion points of each pixel in each segment.
+    lsf : tuple or None
+        ``(resolution, sigma_lib_kms, n_bins)`` on the native grid, or ``None``.
+
+    Returns
+    -------
+    m0, m1 : arrays, shape (..., n_pix * n_seg)
+
+    Notes
+    -----
+    **JIT-compatible**: yes; templates are mapped in batches with ``jax.lax.map``.
+    **Gradient-safe**: yes, linear in ``ssp_flux``.
+    """
+    from tengri.observation.spectrum import segment_pixel_moments
+
+    flux = jnp.asarray(ssp_flux)
+    wave = jnp.asarray(wave_ssp)
+    centres = jnp.asarray(wave_centres)
+    seg = jnp.asarray(seg_ids)
+    c_seg = jnp.asarray(centres_seg)
+    flat = flux.reshape(-1, flux.shape[-1])
+
+    def one(row):
+        m0, m1 = segment_pixel_moments(wave, row, seg, n_seg, centres, c_seg, lsf)
+        return m0.reshape(-1), m1.reshape(-1)
+
+    m0, m1 = jax.lax.map(one, flat, batch_size=_TEMPLATE_BROADEN_BATCH)
+    lead = flux.shape[:-1] + (centres.shape[0] * n_seg,)
+    return m0.reshape(lead), m1.reshape(lead)
+
+
 def precompute_spectroscopy(
-    ssp_data, wave_obs_pixels, redshift, dl_cm, *, sigma_v_kms=None, n_bins=16
+    ssp_data,
+    wave_obs_pixels,
+    redshift,
+    dl_cm,
+    *,
+    sigma_v_kms=None,
+    n_bins=16,
+    pixel_integral=False,
+    breakpoints=(),
+    lsf=None,
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -552,6 +623,16 @@ def precompute_spectroscopy(
         would alias sharp stellar features. ``None`` leaves the table un-broadened.
     n_bins : int, default 16
         Piecewise segment count of the broadening.
+    pixel_integral : bool, default False
+        Store each template's pixel moments per source segment (the flux-conserving
+        resample, :func:`segment_moment_cube`) instead of its value at the pixel centre
+        (#3413).
+    breakpoints : sequence of float, default ()
+        Rest-frame wavelengths [Angstrom] where a dust law is discontinuous; the source
+        grid is cut there (:func:`~tengri.observation.spectrum.segment_centres`).
+    lsf : tuple or None, default None
+        ``(resolution, sigma_lib_kms, n_bins)`` on the native rest grid: the fixed instrument
+        kernel, applied to each segment before the pixel mean (#3413). ``None`` for none.
 
     Returns
     -------
@@ -578,7 +659,25 @@ def precompute_spectroscopy(
         ssp_flux_np = np.asarray(
             broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
         )
-    ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
+    ssp_on_pixels_m1 = None
+    source_breakpoints = None
+    if pixel_integral:
+        from tengri.observation.spectrum import segment_centres, source_segment_ids
+
+        bps = np.sort(np.asarray(breakpoints, dtype=np.float64))
+        n_seg = bps.size + 1
+        seg_ids = source_segment_ids(wave_ssp_np, bps)
+        centres_seg = segment_centres(wave_rest_np, bps)
+        m0, m1 = segment_moment_cube(
+            ssp_flux_np, wave_ssp_np, wave_rest_np, seg_ids, n_seg, centres_seg, lsf
+        )
+        ssp_on_pixels_np = np.asarray(m0)
+        ssp_on_pixels_m1 = jnp.asarray(m1)
+        source_breakpoints = jnp.asarray(bps)
+        wave_rest_pixels = centres_seg.reshape(-1)
+        wave_rest_np = wave_rest_pixels
+    else:
+        ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
     # The (1+z)/(4π d_L²) geometric scale as a log10 offset, rather than calling
@@ -605,6 +704,10 @@ def precompute_spectroscopy(
         log10_flux_scale=log10_flux_scale_out,
         redshift=redshift_out,
         sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),
+        pixel_integral=bool(pixel_integral),
+        ssp_on_pixels_m1=ssp_on_pixels_m1,
+        source_breakpoints=source_breakpoints,
+        lsf_baked=bool(pixel_integral and lsf is not None),
     )
 
 

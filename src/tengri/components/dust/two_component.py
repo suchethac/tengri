@@ -2425,6 +2425,28 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_spec_neb_transmission_precomp"] = (
                 self.nebular_screen_transmission(params, spec_eff, neb_weights)
             )
+            if state.derived.get("spec_source_breakpoints") is not None:
+                # First-moment table (#3413): the screens' wavelength slopes at the centres.
+                from tengri.observation.spectrum import screen_value_and_slope
+
+                def _bc_screen(w):
+                    return jnp.exp(-tau_bc * law_bc_fn(w, **bc_kw))
+
+                def _diff_screen(w):
+                    return jnp.exp(-tau_diff * law_diff_fn(w, **diff_kw))
+
+                def _neb_screen(w):
+                    return self.nebular_screen_transmission(params, w, neb_weights)
+
+                derived_overrides["dust_spec_bc_transmission_slope_precomp"] = (
+                    screen_value_and_slope(_bc_screen, spec_eff)[1]
+                )
+                derived_overrides["dust_spec_diff_transmission_slope_precomp"] = (
+                    screen_value_and_slope(_diff_screen, spec_eff)[1]
+                )
+                derived_overrides["dust_spec_neb_transmission_slope_precomp"] = (
+                    screen_value_and_slope(_neb_screen, spec_eff)[1]
+                )
 
             # IR re-emission is now handled by separate dust emission components.
 

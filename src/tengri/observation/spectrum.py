@@ -1472,6 +1472,142 @@ def _flux_conserving_resample(
     return means * scale_out
 
 
+#: Offset [Angstrom] keeping a segment's expansion point strictly on its own side of a break.
+_SEGMENT_EPS_AA = 1e-3
+
+
+def source_segment_ids(wave_rest, breakpoints=()):
+    """Source-segment index of every model node, the segments cut at the breakpoints (#3413).
+
+    A node at or above a breakpoint belongs to the segment above it, as a dust law's own
+    ``wave >= break`` switch assigns it, so the segment masks reproduce the exact path's
+    discretisation of the factor.
+
+    Parameters
+    ----------
+    wave_rest : array, shape (n_wave,)
+        Model rest-frame grid [Angstrom].
+    breakpoints : sequence of float
+        Increasing rest-frame wavelengths [Angstrom] where a factor is discontinuous.
+
+    Returns
+    -------
+    ndarray of int, shape (n_wave,)
+        Segment index in ``0 .. len(breakpoints)``.
+    """
+    bps = np.sort(np.asarray(breakpoints, dtype=np.float64))
+    return np.searchsorted(bps, np.asarray(wave_rest, dtype=np.float64), side="right")
+
+
+def segment_centres(wave_centres, breakpoints=()):
+    """Expansion point of every pixel in every source segment (#3413).
+
+    The pixel's rest-frame centre, clipped to lie strictly inside the segment, so that a
+    smooth factor evaluated there takes the branch of that segment.
+
+    Parameters
+    ----------
+    wave_centres : array_like, shape (n_pix,)
+        Rest-frame pixel centres [Angstrom].
+    breakpoints : sequence of float
+        Increasing rest-frame breakpoints [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_pix, n_seg)
+        ``n_seg = len(breakpoints) + 1``.
+    """
+    centres = np.asarray(wave_centres, dtype=np.float64)
+    bps = np.sort(np.asarray(breakpoints, dtype=np.float64))
+    lower = np.concatenate([[-np.inf], bps]) + np.concatenate([[0.0], np.full(bps.size, _SEGMENT_EPS_AA)])
+    upper = np.concatenate([bps, [np.inf]]) - np.concatenate([np.full(bps.size, _SEGMENT_EPS_AA), [0.0]])
+    return np.clip(centres[:, None], lower[None, :], upper[None, :])
+
+
+def segment_pixel_moments(wave_rest, sed_rest, seg_ids, n_seg, wave_centres, centres_seg, lsf=None):
+    r"""Zeroth and first moments of each source segment, binned over the pixels (#3413).
+
+    For segment :math:`s` with masked model :math:`S_s = S\,1_s`, the pixel mean of the
+    exact conserving path is :math:`P_p = \sum_s [F(c_{ps})\,M_{0,ps} + F'(c_{ps})\,M_{1,ps}]`
+    with :math:`M_{0,ps}` the bin mean of :math:`S_s` and :math:`M_{1,ps}` the bin mean of
+    :math:`S_s\,(\mu - c_{ps})`. When ``lsf`` is given, the Gaussian line-spread operator
+    of the exact path is applied to :math:`S_s` and to :math:`\mu S_s` on the model grid
+    before the bin means.
+
+    Parameters
+    ----------
+    wave_rest : array, shape (n_wave,)
+        Model rest-frame grid [Angstrom], increasing.
+    sed_rest : array, shape (n_wave,)
+        Rest-frame flux density on ``wave_rest``.
+    seg_ids : ndarray of int, shape (n_wave,)
+        From :func:`source_segment_ids`.
+    n_seg : int
+        Number of segments.
+    wave_centres : array, shape (n_pix,)
+        Rest-frame pixel centres; the bin edges are the exact path's.
+    centres_seg : array, shape (n_pix, n_seg)
+        Expansion points from :func:`segment_centres`.
+    lsf : tuple or None
+        ``(resolution, sigma_lib_kms, n_bins)`` on the model grid, as :func:`apply_lsf`
+        takes them, or ``None`` for no instrument kernel.
+
+    Returns
+    -------
+    m0, m1 : arrays, shape (n_pix, n_seg)
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``n_seg`` is static. **Gradient-safe**: yes, linear in ``sed_rest``.
+    """
+    centres = jnp.asarray(wave_centres)
+    m0_cols, m1_cols = [], []
+    for seg in range(n_seg):
+        masked = sed_rest * jnp.asarray(seg_ids == seg, dtype=sed_rest.dtype)
+        m0, m_mu = _binned_pair(wave_rest, masked, centres, lsf)
+        m0_cols.append(m0)
+        m1_cols.append(m_mu - jnp.asarray(centres_seg[:, seg]) * m0)
+    return jnp.stack(m0_cols, axis=-1), jnp.stack(m1_cols, axis=-1)
+
+
+def _binned_pair(wave_rest, masked, centres, lsf):
+    """Bin means of ``K(masked)`` and of ``K(mu * masked)``, ``K`` the optional LSF (#3413)."""
+    if lsf is None:
+        return (
+            _flux_conserving_resample(wave_rest, masked, centres),
+            _flux_conserving_resample(wave_rest, masked * wave_rest, centres),
+        )
+    resolution, sigma_lib_kms, n_bins = lsf
+
+    def kernel(x):
+        return apply_lsf(x, wave_rest, resolution, sigma_lib_kms=sigma_lib_kms, n_bins=n_bins)
+
+    return (
+        _flux_conserving_resample(wave_rest, kernel(masked), centres),
+        _flux_conserving_resample(wave_rest, kernel(masked * wave_rest), centres),
+    )
+
+
+def screen_value_and_slope(screen, wave_centres):
+    """Value and wavelength slope of a transmission function at the pixel centres (#3413).
+
+    The slope is exact: forward-mode differentiation of ``screen`` at each centre.
+
+    Parameters
+    ----------
+    screen : callable
+        Maps rest-frame wavelengths [Angstrom] to a transmission; differentiable in them.
+    wave_centres : array, shape (n_pix,)
+        Rest-frame pixel centres [Angstrom].
+
+    Returns
+    -------
+    value, slope : arrays, shape (n_pix,)
+        ``screen(wave_centres)`` and its derivative in [1/Angstrom].
+    """
+    return jax.jvp(screen, (wave_centres,), (jnp.ones_like(wave_centres),))
+
+
 def _resample_peak_factored(
     wave_rest: jnp.ndarray,
     sed_rest: jnp.ndarray,
@@ -1548,30 +1684,44 @@ def _resample_peak_factored(
     .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
            Python", arXiv:1705.05165.
     """
+    edges = _pixel_edges(wave_query)
+    flux_at_edges = _cumulative_flux(wave_rest, sed_rest, edges)
+    if edge_aa is not None:
+        e = jnp.clip(edges, wave_rest[0], wave_rest[-1])
+        flux_at_edges = flux_at_edges + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
+    return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
+
+
+def _pixel_edges(wave_query):
+    """Bin edges of pixel centres: midpoints between neighbours, half a pixel at each end.
+
+    Returns ``(n_pix + 1,)`` edges; the single definition the exact conserving path and the
+    spectrum LUT share (#3413).
+    """
     mid = 0.5 * (wave_query[1:] + wave_query[:-1])
     lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
     hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
-    edges = jnp.concatenate([lo, mid, hi])  # (n_pix + 1,)
+    return jnp.concatenate([lo, mid, hi])
 
-    # Exact cumulative integral of the piecewise-linear model, clamped flat
-    # outside the grid. Inside interval i the integral from its left node is
-    # f_i t + (f_{i+1} - f_i) t^2 / (2 h_i), so its slope is the interpolated
-    # model value and the pixel flux is continuous in the edge position with a
-    # continuous first derivative (a linear interpolation of the node integrals
-    # would leave a slope that jumps each time an edge crosses a node, a step
-    # in the redshift gradient; #2530).
+
+def _cumulative_flux(wave_rest, sed_rest, x):
+    """Exact cumulative integral of the piecewise-linear model, clamped flat outside the grid.
+
+    Inside interval i the integral from its left node is ``f_i t + (f_{i+1} - f_i) t^2 /
+    (2 h_i)``, so its slope is the interpolated model value and the integral is continuous
+    in ``x`` with a continuous first derivative (a linear interpolation of the node integrals
+    would leave a slope that jumps each time an edge crosses a node, a step in the redshift
+    gradient; #2530). Shared by the bin means and the sub-interval moments (#3413).
+    """
     h = jnp.diff(wave_rest)
     node_cum = jnp.concatenate(
         [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * h)]
     )
-    e = jnp.clip(edges, wave_rest[0], wave_rest[-1])
+    e = jnp.clip(x, wave_rest[0], wave_rest[-1])
     i = jnp.clip(jnp.searchsorted(wave_rest, e, side="right") - 1, 0, wave_rest.shape[0] - 2)
     t = e - wave_rest[i]
     f0 = sed_rest[i]
-    flux_at_edges = node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
-    if edge_aa is not None:
-        flux_at_edges = flux_at_edges + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
-    return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
+    return node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
 
 
 def _step_minus_ramp(wave_rest, sed_rest, x, edge_aa):
