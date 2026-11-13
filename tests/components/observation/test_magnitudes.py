@@ -73,15 +73,10 @@ class TestABMagnitudes:
         fnu_output = ab_mag_to_fnu(mag)
         assert jnp.allclose(fnu_output, fnu_input, rtol=1e-12)
 
-    def test_fnu_zero_flux_hits_documented_clamp(self):
-        """Zero flux hits the documented 1e-300 log guard, not NaN.
-
-        The guard is `jnp.maximum(fnu, 1e-300)`, so the limit is exactly
-        m_AB = -2.5 log10(1e-300 / 3.631e-20).
-        """
+    def test_fnu_zero_flux_is_plus_inf(self):
+        """Zero flux has no magnitude: +inf, the limit of -2.5 log10(F_nu) (#3433)."""
         mag = fnu_to_ab_mag(jnp.array(0.0))
-        expected = -2.5 * jnp.log10(1e-300 / 3.631e-20)
-        assert jnp.allclose(mag, expected, rtol=1e-12)
+        assert bool(jnp.isposinf(mag))
 
 
 # ── Test Absolute Magnitude ───────────────────────────────────────
