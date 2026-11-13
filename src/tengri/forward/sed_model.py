@@ -1166,10 +1166,10 @@ def _warn_agn_dust_double_count(spec) -> None:
 
 
 #: Dust models that republish ``sed_nebular`` multiplied by their nebular
-#: transmission, plus the dust-free model. ``single_component`` and ``wg00``
-#: attenuate ``sed_intrinsic`` as a whole and leave ``derived["sed_nebular"]``
-#: intrinsic, so ``nebular_line_frac * sed_nebular`` would be the unattenuated
-#: line light, not the light in the spectrum.
+#: transmission, plus the dust-free model. ``wg00`` attenuates ``sed_intrinsic``
+#: as a whole and leaves ``sed_nebular`` intrinsic. ``single_component`` also
+#: republishes ``sed_nebular`` reddened (#3438), but ``nebular_lines=False`` is not
+#: yet measured under it, so it stays refused here.
 _DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
 
 
@@ -3314,8 +3314,9 @@ class SEDModel:
                     f"{observation.spectroscopy.resample!r} needs the flux-conserving pixel "
                     f"integral, which the table does not carry for this model: a free redshift "
                     f"or sigma_v_kms, a free lsf_scale with a "
-                    f"resolution, a nebular family with a resolution or a banded resolution matrix, IGM, "
-                    f"AGN, dust emission, radio or X-ray (#2530, #3413). Use approx=None for the "
+                    f"resolution, a nebular family with a resolution or a banded resolution "
+                    f"matrix, IGM, AGN, dust emission, radio or X-ray (#2530, #3413). Use "
+                    f"approx=None for the "
                     f"exact spectrum, or Spectroscopy(resample='point') to accept point sampling."
                 )
 

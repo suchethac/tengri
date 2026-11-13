@@ -2559,7 +2559,7 @@ class Observation:
         )
 
     def _lut_instrument_only_fnu(
-        self, state, params, *, sigma_lib_kms, lsf_scale, n_bins, screen_residual
+        self, state, params, *, sigma_lib_kms, lsf_scale, n_bins
     ):
         r"""Observed F_nu of the instrument-only group, projected exactly (#3413).
 
@@ -2581,13 +2581,6 @@ class Observation:
             Multiplicative scale on the instrument width.
         n_bins : int
             Piecewise segment count of the velocity broadening of the stellar residual.
-        screen_residual : bool
-            True under a single-component screen, which attenuates the whole rest SED while
-            the published ``sed_nebular`` and ``sed_shock`` stay unscreened. The residual
-            :math:`(T-1)\,S_{\rm neb}` is the stellar-kernel share of the exact path's split
-            and is projected here too. Two-component dust republishes screened nebular light,
-            so it has no residual.
-
         Returns
         -------
         ndarray, shape (n_pix,)
@@ -2601,24 +2594,11 @@ class Observation:
         )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         instrument_rest = _instrument_only_rest_sed(state)
-        sed_rest = instrument_rest
         sigma_v = state.derived.get("spec_sigma_v_kms")
         sigma_v = 0.0 if sigma_v is None else sigma_v
-        if screen_residual:
-            screen = state.derived.get("dust_rest_transmission")
-            if screen is None:
-                raise ValueError(
-                    "the pixel-moment table under a single-component screen needs the rest-grid "
-                    "transmission 'dust_rest_transmission' (#3413)."
-                )
-            group = sum(
-                jnp.asarray(state.derived.get(key, 0.0))
-                for key in ("sed_nebular", "sed_shock")
-            )
-            sed_rest = instrument_rest + (jnp.asarray(screen) - 1.0) * group
         return project_spectrum_kernel_split(
             state,
-            sed_rest,
+            instrument_rest,
             None,
             state.wave,
             spectro.wave_obs,
@@ -2816,7 +2796,6 @@ class Observation:
         # The instrument-only bucket (nebular emission after dust), mirroring the exact
         # path's ``sed_nebular`` group; the stellar bucket is the remainder.
         nebular_dust = nebular_phi
-        single_screen = False
 
         # First pixel moments of the families and the screens' wavelength slopes (#3413). They
         # are present only for a pixel-integral table; a point table leaves them absent.
@@ -2854,7 +2833,6 @@ class Observation:
             nebular_dust = nebular_attenuated
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
-            single_screen = True
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
             nebular_dust = nebular_phi * t_single
@@ -2967,7 +2945,6 @@ class Observation:
                 sigma_lib_kms=sigma_lib_kms,
                 lsf_scale=lsf_scale,
                 n_bins=lsf_n_bins,
-                screen_residual=single_screen,
             )
 
         # Flux calibration, the same Chebyshev polynomial the exact path applies

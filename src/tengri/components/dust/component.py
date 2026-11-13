@@ -784,6 +784,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
         )
         if sed_agn_lines_unatt is not None:
             derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_unatt * attenuation
+        # Nebular and shock light sit in sed_intrinsic, so the screen reddens them with
+        # the rest of it. Republish them reddened, as two-component dust does, so the
+        # spectrum split gives their lines the instrument kernel alone (#3438). The
+        # energy balance above has already read the unscreened keys.
+        for _key in ("sed_nebular", "sed_shock"):
+            _unatt_light = state.derived.get(_key)
+            if _unatt_light is not None:
+                derived_overrides[_key] = jnp.asarray(_unatt_light) * attenuation
 
         # Discrete emission-line catalog, reddened with this component's single
         # screen (#1867, #2223). The two-component component does the same in
@@ -918,9 +926,6 @@ class DustAttenuationSEDComponent(TemplateThreading):
         if spec_eff is not None:
             k_pix = curve(spec_eff)
             derived_overrides["dust_spec_transmission_precomp"] = jnp.exp(-tau_v * k_pix)
-            if state.derived.get("spec_source_breakpoints") is not None:
-                # The screen on the rest grid: the pixel table's nebular residual (#3413).
-                derived_overrides["dust_rest_transmission"] = attenuation
             if state.derived.get("spec_source_breakpoints") is not None:
                 # First-moment table (#3413): the screen's wavelength slope at the centres.
                 from tengri.observation.spectrum import screen_value_and_slope

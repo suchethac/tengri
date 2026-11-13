@@ -377,7 +377,6 @@ _CANONICAL_UNITS: dict[str, str] = {
     "nebular_spec_lnu_m1_precomp": "erg/s/Hz",
     "stellar_spec_lnu_m1_precomp": "erg/s/Hz",
     "stellar_spec_lnu_per_age_m1_precomp": "erg/s/Hz",
-    "dust_rest_transmission": "",
     "dust_spec_transmission_slope_precomp": "1/Angstrom",
     "dust_spec_bc_transmission_slope_precomp": "1/Angstrom",
     "dust_spec_diff_transmission_slope_precomp": "1/Angstrom",
