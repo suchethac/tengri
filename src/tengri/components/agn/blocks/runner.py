@@ -1328,11 +1328,15 @@ agn_torus_block, agn_attenuation_block : str
         observer-independent, so only the angle-integrated budget closes the energy (#3100).
         """
         _aniso = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
-        if _aniso is None or _fritz_tied_flat:
-            # A tied Fritz torus carries ``agn_power`` along every sightline (owner 2026-11-13).
+        if _aniso is None:
             return sightline_power
         _log_ratio = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
-        return sightline_power / jnp.power(10.0, _log_ratio)
+        _angle_integrated = sightline_power / jnp.power(10.0, _log_ratio)
+        if not _fritz_tied_flat:
+            return _angle_integrated
+        # A tied Fritz torus carries ``agn_power`` along every sightline (owner 2026-11-13);
+        # untied (``agn_ir_frac = 0``) it keeps the library's anisotropy, so the budget divides.
+        return jnp.where(_agn_fracAGN > 0.0, sightline_power, _angle_integrated)
 
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)

@@ -45,8 +45,8 @@ _SELECTORS = {
 }
 
 
-def _dust_over_budget(case, *, agn_norm="cigale_joint", ir_frac=0.3):
-    """Torus + polar bolometric power over ``agn_torus_frac L_bol`` for one (tau, oa, psi) case."""
+def _pieces_over_budget(case, *, agn_norm="cigale_joint", ir_frac=0.3):
+    """(torus, polar) power over ``agn_torus_frac L_bol`` for one (tau, oa, psi) case."""
     tau, oa_full, psi = case
     templates = collect_block_templates(
         {k[len("agn_") : -len("_block")]: v for k, v in _SELECTORS.items()}
@@ -72,8 +72,13 @@ def _dust_over_budget(case, *, agn_norm="cigale_joint", ir_frac=0.3):
             **params,
         )
         nu = _C_AA_PER_S / wave
-        total = sum(float(-jnp.trapezoid(comps[k], nu)) for k in ("torus", "polar"))
-    return total / (_TORUS_FRAC * 10.0**_LOG_LBOL * L_SUN)
+        budget = _TORUS_FRAC * 10.0**_LOG_LBOL * L_SUN
+        return tuple(float(-jnp.trapezoid(comps[k], nu)) / budget for k in ("torus", "polar"))
+
+
+def _dust_over_budget(case, **kwargs):
+    """Torus + polar over ``agn_torus_frac L_bol``."""
+    return sum(_pieces_over_budget(case, **kwargs))
 
 
 def _or_skip(fn, *args, **kwargs):
@@ -85,8 +90,8 @@ def _or_skip(fn, *args, **kwargs):
 
 @pytest.mark.parametrize("case", _CASES)
 def test_tied_fritz_dust_carries_agn_power_at_every_inclination(case):
-    """Torus + polar = ``agn_power`` to 1% under cigale_joint (0.85x to 1.25x before)."""
-    assert _or_skip(_dust_over_budget, case) == pytest.approx(1.0, abs=0.01)
+    """Torus + polar = ``agn_power`` to 1e-4 under cigale_joint (0.85x to 1.25x before)."""
+    assert _or_skip(_dust_over_budget, case) == pytest.approx(1.0, rel=1e-4)
 
 
 def test_untied_fritz_keeps_its_library_anisotropy():
@@ -102,3 +107,28 @@ def test_independent_norm_keeps_its_library_anisotropy():
         for c in (_CASES[0], _CASES[2])
     ]
     assert abs(ratios[0] / ratios[1] - 1.0) > 0.05
+
+
+#: (torus, polar) over ``agn_torus_frac L_bol`` on main before the ruling (origin/main 27bb1034a,
+#: measured with this module's harness),
+#: untied (``agn_ir_frac = 0``), per case in ``_CASES`` order. The ruling must not move them.
+_MAIN_UNTIED = {
+    "cigale_joint": (
+        (0.5028672850298646, 0.20171428371622885),
+        (0.9664195825767926, 0.10573270572657494),
+        (1.234594484644917, 0.2017142811211918),
+    ),
+    "independent": (
+        (0.6299348318422044, 0.36097809835624367),
+        (1.08068376907645, 0.16890566404557464),
+        (1.54655930547788, 0.36097809835624367),
+    ),
+}
+
+
+@pytest.mark.parametrize("agn_norm", ["cigale_joint", "independent"])
+@pytest.mark.parametrize("index", range(len(_CASES)))
+def test_untied_torus_and_polar_totals_are_main_values(agn_norm, index):
+    """Untied torus and polar totals are bit-for-bit what main emitted (1e-10)."""
+    got = _or_skip(_pieces_over_budget, _CASES[index], agn_norm=agn_norm, ir_frac=0.0)
+    assert got == pytest.approx(_MAIN_UNTIED[agn_norm][index], rel=1e-10)
