@@ -1866,7 +1866,15 @@ def tabulated_history_weights(
     age_yr, sfr_grid = _cic_integrand(ssp_ages_yr, sfh_fn, {}, None, tab_lbt_yr, t_obs)
     if jnp.ndim(log_z_abs) == 0:
         age_w, total_mass = _age_weights_cic(age_yr, sfr_grid, ssp_ages_yr, t_obs)
-        lgmet_w = _lgmet_weights(jnp.asarray(log_z_abs), lgmet_scatter, ssp_lgmet)
+        # A fixed or constant Z reads the SSP grid node-exactly unless a scatter is
+        # declared (#3434), exactly as the forward delta path does.
+        try:
+            declared = float(lgmet_scatter) > 0.0
+        except jax.errors.ConcretizationTypeError:
+            declared = True  # traced scatter: the lognormal kernel is the general case
+        lgmet_w = _delta_met_weights(
+            jnp.asarray(log_z_abs), lgmet_scatter, ssp_lgmet, declared=declared
+        )
         return lgmet_w[:, None] * age_w[None, :], total_mass
     # Same history-to-SSP-age mapping as _tabulated_lgmet_on_ssp_ages, with the
     # Z nodes paired to the lookback-sorted SFR nodes by the same ``order``.

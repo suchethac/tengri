@@ -195,7 +195,7 @@ def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
         observation=obs,
         redshift=Fixed(redshift),
         sfh={"type": "table"},
-        met={"type": "table", "all_params": Fixed(DEFAULT)},
+        met={"logzsol": Fixed(_LOG_Z)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
@@ -206,8 +206,8 @@ def _catalog_photometry(grid_ssp, t_gyr, sfr, redshift):
         neb={"type": "none"},
     )
     fwd = ForwardModel.build(sed=sed, observation=obs)
-    met = np.full(t_gyr.shape, _LOG_Z)
-    cat = Catalog.from_histories(fwd, t_gyr=t_gyr, sfr=sfr[None, :], met=met, met_unit="logzsol")
+    # A fixed scalar metallicity: the delta path, the same one sed_from_sfh takes.
+    cat = Catalog.from_histories(fwd, t_gyr=t_gyr, sfr=sfr[None, :])
     out = cat.simulate(properties=("stellar_mass",), chunk_size=1)
     flux = np.asarray(out.photometry, dtype=float).ravel()
     mass = float(np.asarray(out.properties["stellar_mass"]).ravel()[0])
@@ -245,3 +245,52 @@ def test_sed_from_sfh_matches_the_catalog_path(grid_ssp, shape):
     )
     assert float(res["stellar_mass"]) == pytest.approx(mass_cat, rel=1e-3)
     np.testing.assert_allclose(np.asarray(res["flux"]), flux_cat, rtol=1e-3)
+
+
+def _node_sfh():
+    t = np.linspace(0.05, 13.7, 400)
+    return t, np.exp(-t / 3.0)
+
+
+def _node_relative(grid_ssp):
+    from tengri.parameters.translate import LOG10_ZSUN
+
+    return np.asarray(grid_ssp.ssp_lgmet, dtype=float) - LOG10_ZSUN
+
+
+def test_scalar_log_z_at_a_node_gives_that_node_sed(grid_ssp):
+    """A fixed Z exactly on an SSP node reads that node's SED (node-exact, #3434)."""
+    import jax.numpy as jnp
+
+    from tengri.analysis.simulate import sed_from_sfh
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+    t, sfr = _node_sfh()
+    flux = np.asarray(grid_ssp.ssp_flux)
+    for k, log_z in enumerate(_node_relative(grid_ssp)):
+        out = sed_from_sfh(jnp.asarray(t), jnp.asarray(sfr), grid_ssp, log_z=float(log_z))
+        ages_w = np.asarray(out["weights"], dtype=float)
+        expected = LSUN_ERG_PER_S * np.einsum("a,aw->w", ages_w, flux[k])
+        np.testing.assert_allclose(np.asarray(out["sed"]), expected, rtol=1e-10)
+
+
+def test_scalar_log_z_halfway_between_nodes_stays_in_the_envelope(grid_ssp):
+    """Between two nodes the cubic may overshoot slightly, but not by more than 2 %."""
+    import jax.numpy as jnp
+
+    from tengri.analysis.simulate import sed_from_sfh
+
+    t, sfr = _node_sfh()
+    rel = _node_relative(grid_ssp)
+
+    def sed_at(z):
+        out = sed_from_sfh(jnp.asarray(t), jnp.asarray(sfr), grid_ssp, log_z=float(z))
+        return np.asarray(out["sed"])
+
+    node_seds = np.stack([sed_at(z) for z in rel])
+    lo, hi = node_seds.min(axis=0), node_seds.max(axis=0)
+    tol = 0.02 * np.abs(node_seds).max(axis=0)
+    for k in range(len(rel) - 1):
+        sed = sed_at(0.5 * (rel[k] + rel[k + 1]))
+        assert np.all(sed >= lo - tol), f"below the envelope between nodes {k} and {k + 1}"
+        assert np.all(sed <= hi + tol), f"above the envelope between nodes {k} and {k + 1}"
