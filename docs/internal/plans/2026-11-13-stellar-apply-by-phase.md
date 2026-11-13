@@ -1,6 +1,6 @@
 # 2026-11-13: StellarSEDComponent.apply runs by phase
 
-**Status:** Step 2 of #3294. Phase B extracted; phases C to E blocked (see below); phase F untouched.
+**Status:** Step 2 of #3294. Phase B extracted (first commit); phases C to E extracted together as one method (second commit); phase F untouched.
 **Issue:** #3294
 **Related:** #2933 (open draft, edits phase F), `2026-11-12-nebular-backend-capabilities.md`
 
@@ -29,13 +29,16 @@ unpacking and the `return`.
   the SFH grids, cosmology, the registry spec and kwargs, the SFH callables and the table
   lookback arrays. Fields that a NamedTuple cannot name with a leading underscore drop it
   (`tab_lbt_yr`, `age_sfh_fn`); `apply` unpacks them back to the local names.
-- Phases C, D and E are not extracted in this step. Phase C defines two locals on one branch
-  only and phases D and E read them: `log_z_abs_scalar` (defined only when
-  `metallicity_model == "delta"`, read by the delta branch of D) and `_alpha_ia`, `_alpha_fa`
-  (defined only when the SSP grid has an alpha axis, read by D and E under
-  `_csp_cube_is_4d`). A NamedTuple return cannot carry an unbound name, and initializing them
-  is a new statement. The next step decides how to carry them (an explicit `None` on the
-  non-applicable path, or one method for C and D together).
+- `_composite_population(self, ssp, params, state, ssp_ages_yr, n_grid, ...) -> _CompositePopulation`
+  (phases C to E, sections 4 through the `derived_overrides` dict). C, D and E were extracted together
+  because they share names bound on only some branches: `log_z_abs_scalar` (delta branch only, read
+  only in D) and `_alpha_ia`, `_alpha_fa` (alpha-axis grids only, read in D and E). Those names stay
+  local to the method. The NamedTuple carries only what phase F and the tail of `apply` read:
+  `ssp_flux_for_csp`, `alpha_collapse_active`, `agb_dust_cube`, `joint_weights`, `total_mass`, `wave`,
+  `sed_intrinsic`, `derived_overrides`. Each is bound on every branch. The 12b header comment moved
+  with phase F; it is comment text only.
+- The method has no early return. Arguments are the phase-A `ssp`, `ssp_ages_yr`, `n_grid`, the phase-B
+  values, and `self`, `params`, `state`. Nothing is read through closures or `self` scratch attributes.
 
 ## Not touched
 

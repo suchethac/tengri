@@ -2421,6 +2421,19 @@ class _SfhOnSspAges(NamedTuple):
     sfr_on_ssp: Any
 
 
+class _CompositePopulation(NamedTuple):
+    """Outputs of :meth:`StellarSEDComponent._composite_population` used after phase E."""
+
+    ssp_flux_for_csp: Any
+    alpha_collapse_active: bool
+    agb_dust_cube: Any
+    joint_weights: Any
+    total_mass: Any
+    wave: Any
+    sed_intrinsic: Any
+    derived_overrides: Any
+
+
 @dataclass(frozen=True)
 class StellarSEDComponent:
     """SEDComponent adapter for stellar emission.
@@ -3046,6 +3059,576 @@ class StellarSEDComponent:
 
         # (t_obs_gyr hoisted to section 1b: needed by the tabular SFH.)
 
+        c = self._composite_population(
+            ssp,
+            params,
+            state,
+            ssp_ages_yr,
+            n_grid,
+            log_age_grid,
+            sfh_lbt_grid,
+            z,
+            t_obs_gyr,
+            is_composite,
+            sfh_spec,
+            sfh_kwargs,
+            sfh_fn,
+            sfh_timing_gyr,
+            _tab_lbt_yr,
+            _tab_order,
+            sfr_history,
+            sfr_on_ssp,
+            _age_sfh_fn,
+            _age_tab_lbt_yr,
+        )
+        ssp_flux_for_csp = c.ssp_flux_for_csp
+        _alpha_collapse_active = c.alpha_collapse_active
+        _agb_dust_cube = c.agb_dust_cube
+        joint_weights = c.joint_weights
+        total_mass = c.total_mass
+        wave = c.wave
+        sed_intrinsic = c.sed_intrinsic
+        derived_overrides = c.derived_overrides
+
+        # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
+        # When eager precomputation is enabled and the LUT is available,
+        # compute stellar_phot_lnu_precomp and publish it to derived.
+        if self._state is not None and self._state.ssp_phot_lut is not None:
+            # Fixed-z path; LUT built at source's z in precompute()
+            ssp_phot = self._state.ssp_phot_lut.ssp_phot
+            # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
+            # age axes weighted by joint distribution × total mass.
+            # Convert to erg/s/Hz to match sed_intrinsic units.
+            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
+                jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
+            )
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
+            # component to apply the neb_fesc mask (#2439, #2427).
+            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
+            if ssp_phot_lyc is not None:
+                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
+                # The other half of the split, built from the same cumulative
+                # integral: the escape-fraction mask adds to it rather than
+                # subtracting from the whole (see ``PhotometricPrecomputation``).
+                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum(
+                        "ma,maf->f", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
+                    ),
+                    total_mass,
+                )
+            # Age-resolved per-filter LUT for two-component
+            # dust attenuation. Marginalize over metallicity only; preserve
+            # the age axis. Shape (n_age, n_filter). Sum over age == the
+            # marginalized stellar_phot_lnu_precomp above.
+            stellar_phot_lnu_per_age = _mass_scale_lnu(
+                jnp.einsum("ma,maf->af", joint_weights, ssp_phot), total_mass
+            )
+            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
+            # #2427): the DerivedState contract is
+            # ``sum(stellar_phot_lnu_per_age_precomp, axis=age) ==
+            # stellar_phot_lnu_precomp``, and that must still hold once
+            # NebularSEDComponent corrects the marginalized bucket by
+            # subtracting ``(1-fesc)*stellar_phot_lnu_precomp_lyc`` -- the
+            # per-age bucket needs the same per-age correction, or the two
+            # buckets (which the Taylor/no-subband two_component path reads
+            # per-age) silently disagree with the marginalized one.
+            if ssp_phot_lyc is not None:
+                stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_lyc), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
+                    stellar_phot_lnu_per_age_lyc
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum(
+                        "ma,maf->af", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
+                    ),
+                    total_mass,
+                )
+            # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
+            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
+            if ssp_phot_moment is not None:
+                stellar_phot_moment_precomp = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
+                )
+                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
+                stellar_phot_moment_per_age = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment), total_mass
+                )
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
+                    stellar_phot_moment_per_age
+                )
+            # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
+            # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
+            # and it is computed from the unscaled sums.
+            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
+            if ssp_sub_phot is not None:
+                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
+                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
+                    sub_phi, total_mass
+                )
+                # Sub-bands with no usable weight contribute nothing, but their
+                # node still goes through the 1/λ dust law: keep it finite and
+                # positive. The floor (not ``!= 0.0``) is what keeps the node's
+                # DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
+                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
+                    live,
+                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
+                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
+                )
+                # The same tensor with the IGM folded in at the nodes (#1135).
+                # Identical einsum, on a constant that already carries T: the met
+                # axis is contracted here, so T had to be evaluated on it (the node
+                # moves with the free met_logzsol). Kept alongside the IGM-free
+                # tensor rather than replacing it: phot_rest_fnu is projected at
+                # z=0 and carries no IGM.
+                ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
+                if ssp_sub_phot_igm is not None:
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        _mass_scale_lnu(
+                            jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
+                        )
+                    )
+                    waves_igm = self._state.ssp_phot_lut.ssp_subband_waves_rest_igm
+                    _publish_igm_nodes(
+                        derived_overrides,
+                        jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
+                        None
+                        if waves_igm is None
+                        else jnp.einsum(
+                            "ma,mafk->afk", joint_weights, waves_igm * ssp_sub_phot_igm
+                        ),
+                    )
+            # Publish filter pivot wavelengths so the dust LUT
+            # (and future per-filter consumers like AGN and IGM) can use them.
+            derived_overrides["filter_eff_waves"] = jnp.asarray(
+                self._state.ssp_phot_lut.effective_wavelengths_rest
+            )
+            if self._state.phot_fw_padded is not None:
+                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
+                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+
+        elif self._state is not None and self._state.ssp_phot_ztable is not None:
+            # Free-z path: local monotone cubic Hermite (PCHIP) read of the
+            # ztable at runtime z. Publishes the same derived keys as the
+            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
+            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
+            # filter_eff_waves.
+            #
+            # The read is exact at every node, C1 in z, and valid on a graded
+            # grid (nodes added where a spectral edge sweeps a band cutoff,
+            # #2749). It replaces a triweight window (Hearin et al. 2023, #438)
+            # that smoothed the table over +-1.5 cells: it was not exact at the
+            # nodes, so a node placed on a kink could not resolve it, and its
+            # window arithmetic assumed uniform spacing. Only the four rows that
+            # bracket z are read, so the cost does not track n_z (the dense
+            # contraction of the whole table was 87% of the free-redshift
+            # gradient arithmetic, 128 MFLOP at n_z=250 against 2.7 MFLOP at
+            # fixed z).
+            from tengri.utils.grid_interp import pchip_interp_local
+
+            # Use ztable_data if threaded as JIT input, otherwise fall
+            # back to the closure (for non-JIT paths).
+            ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
+            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
+            z_grid = ztable.z_grid
+
+            def _interp(table, reduce=None):
+                # table: (n_z, ...). Cubic Hermite read of axis 0 at z. ``reduce``
+                # contracts the population-weight axes of the four bracketing rows
+                # first, so the cubic is formed on the (n_age, ...) quantity that
+                # is consumed rather than on every (n_met, n_age, ...) entry.
+                return pchip_interp_local(z_grid, table, z, reduce=reduce, extrapolate=True)
+
+            def _per_age(w):
+                return lambda rows: jnp.einsum("ma,zma...->za...", w, rows)
+
+            per_age_rows = _per_age(joint_weights)
+
+            def _interp_phi_num(phot, waves):
+                # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z.
+                def rows(p_rows, w_rows):
+                    return jnp.stack(
+                        [
+                            jnp.einsum("ma,zmafk->zafk", joint_weights, p_rows),
+                            jnp.einsum("ma,zmafk->zafk", joint_weights, w_rows * p_rows),
+                        ],
+                        axis=1,
+                    )
+
+                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows, extrapolate=True)
+                return both[0], both[1]
+
+            # ssp_phot_table: (n_z, n_met, n_age, n_filt) -> per-age (n_age, n_filt).
+            phot_per_age = _interp(ztable.ssp_phot_table, per_age_rows)
+            # Marginalized + age-resolved LUTs (parity with the fixed-z path).
+            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
+                jnp.sum(phot_per_age, axis=0), total_mass
+            )
+            stellar_phot_lnu_per_age = _mass_scale_lnu(phot_per_age, total_mass)
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Lyman continuum photometry at runtime z (#2439, #2427).
+            if ztable.ssp_phot_lyc_table is not None:
+                lyc_per_age = _interp(ztable.ssp_phot_lyc_table, per_age_rows)
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = _mass_scale_lnu(
+                    jnp.sum(lyc_per_age, axis=0), total_mass
+                )
+                # Per-age twin (R3d): see the fixed-z path for why.
+                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = _mass_scale_lnu(
+                    lyc_per_age, total_mass
+                )
+                nolyc_per_age = _interp(ztable.ssp_phot_nolyc_table, per_age_rows)
+                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.sum(nolyc_per_age, axis=0), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
+                    nolyc_per_age, total_mass
+                )
+            # Taylor moment Ψ at runtime z. Interpolate the
+            # moment table the same way and publish marginalized + per-age.
+            if ztable.ssp_phot_moment_table is not None:
+                moment_per_age = _interp(ztable.ssp_phot_moment_table, per_age_rows)
+                derived_overrides["stellar_phot_moment_precomp"] = _mass_scale_lnu(
+                    jnp.sum(moment_per_age, axis=0), total_mass
+                )
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = _mass_scale_lnu(
+                    moment_per_age, total_mass
+                )
+            # Interpolate effective rest-frame wavelengths and publish for
+            # downstream consumers (dust LUT, AGN, IGM).
+            eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
+            derived_overrides["filter_eff_waves"] = eff_waves_at_z
+
+            # Sub-band quadrature tensors at runtime z (#1122), same contract as
+            # the fixed-z path. Φ_k carries the mass and L_sun scaling; the node
+            # λ_k is a RATIO, so those cancel and it comes from the unscaled sums.
+            # The two sums Σ w·φ and Σ w·λ·φ are the quantities read, so each is
+            # contracted over the population weights and then cubic-read in z.
+            if ztable.ssp_subband_phot_table is not None:
+                sub_phi, sub_num = _interp_phi_num(
+                    ztable.ssp_subband_phot_table, ztable.subband_waves_rest_table
+                )
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
+                    sub_phi, total_mass
+                )
+                # Sub-bands with no usable weight cannot change the result, but
+                # their node still goes through the 1/λ dust law: keep it finite
+                # and positive. The floor (not ``!= 0.0``) is what keeps the
+                # node's DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
+                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
+                    live,
+                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
+                    eff_waves_at_z[:, None],
+                )
+                # IGM folded in at the nodes (#1135): tabulated against this same
+                # z grid at build time, so it rides the same cubic read as the
+                # sub-band photometry it multiplies.
+                if ztable.ssp_subband_phot_igm_table is not None:
+                    if ztable.subband_waves_rest_igm_table is not None:
+                        phi_igm, num_igm = _interp_phi_num(
+                            ztable.ssp_subband_phot_igm_table,
+                            ztable.subband_waves_rest_igm_table,
+                        )
+                    else:
+                        phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
+                        num_igm = None
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        _mass_scale_lnu(phi_igm, total_mass)
+                    )
+                    _publish_igm_nodes(derived_overrides, phi_igm, num_igm)
+            if self._state.phot_fw_padded is not None:
+                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
+                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+
+        # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
+        # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc: the galaxy
+        # as it is; so the filter sits in the REST frame and samples the rest SED
+        # at its own pivot. That is a different integral from the observed-band
+        # tensors above, which sample rest λ_eff/(1+z). The LUT used to reuse those
+        # for the rest-frame flux, which put it 769 % from the exact path in des_g
+        # at z=0.5 and orders of magnitude out in the blue.
+        #
+        # Published for the fixed-z and free-z paths alike, from ONE constant: the
+        # rest band does not move with redshift, so there is nothing to interpolate.
+        if self._state is not None and self._state.restband_lut is not None:
+            rb = self._state.restband_lut
+            derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
+                jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
+            )
+            derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
+            if rb.ssp_restband_subband_phot is not None:
+                rb_phi = jnp.einsum("ma,mafk->afk", joint_weights, rb.ssp_restband_subband_phot)
+                rb_num = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_weights,
+                    rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                )
+                derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
+                    _mass_scale_lnu(rb_phi, total_mass)
+                )
+                # The node is a RATIO, so mass and L_sun cancel: take it from the
+                # unscaled sums. Sub-bands with no usable weight keep a finite,
+                # positive node: a zero would go to inf through the 1/λ dust law.
+                # The floor (not ``!= 0.0``) is what keeps the node's DERIVATIVE
+                # finite; see ``_subband_live_floor`` (#1397).
+                rb_live = jnp.abs(rb_phi) > _subband_live_floor()
+                derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
+                    rb_live,
+                    rb_num / jnp.where(rb_live, rb_phi, 1.0),
+                    jnp.asarray(rb.restband_eff_waves)[:, None],
+                )
+
+        # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
+        # The continuum at the spectrum pixel centers in the galaxy rest frame.
+        # Stellar velocity dispersion is stage 1 of the exact path: it acts on the
+        # model grid, BEFORE the pixels are sampled (point sampling aliases sharp
+        # stellar features, so broadening after sampling is not equivalent). Two routes:
+        #   - table pre-broadened at build (fixed z and fixed sigma_v): a weighted sum
+        #     of already-broadened, already-sampled templates;
+        #   - otherwise the weighted sum on the full grid, broadened by the draw's
+        #     sigma_v, then sampled (see ``_spectrum_lut_families``).
+        # Publishes:
+        #   - ``stellar_spec_lnu_precomp`` (n_pix,): rest-frame Lν [erg/s/Hz]
+        #   - ``stellar_spec_lnu_per_age_precomp`` (n_age, n_pix): the per-age split
+        #   - ``spec_eff_waves`` (n_pix,): rest-frame pixel wavelengths [Å]
+        # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
+        # nebular continuum) through their spectrum-LUT branch, mirroring how
+        # ``filter_eff_waves`` drives the photometry LUT path.
+        if self._state is not None and (
+            self._state.ssp_spec_lut is not None or self._state.ssp_spec_ztable is not None
+        ):
+            derived_overrides.update(
+                self._spectrum_lut_families(
+                    params,
+                    state,
+                    wave=wave,
+                    ssp_flux_for_csp=ssp_flux_for_csp,
+                    joint_weights=joint_weights,
+                    total_mass=total_mass,
+                    cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
+                )
+            )
+
+        # ── 12. Assemble new state ──────────────────────────────────────
+        return state.with_(
+            sed_intrinsic=sed_intrinsic,
+            derived=state.derived.with_(**derived_overrides),
+        )
+
+    def _sfh_on_ssp_ages(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        ssp_ages_yr: jnp.ndarray,
+        n_grid: int,
+    ) -> _SfhOnSspAges:
+        """Evaluate the star formation history on the lookback grid and the SSP age grid."""
+        # ── 1. SFH lookback-time grid ───────────────────────────────────
+        # Use the SAME grid construction as the legacy SEDModel path
+        # (forward/sed_model.py:467). ``make_log_age_grid`` returns a
+        # uniform grid in log10(age/yr) over [6.0, 10.14] (1 Myr →
+        # 13.8 Gyr). This is critical for ``field=True`` parity:
+        # ``compute_field_gp`` keys on n_grid + d_log_age to build
+        # the GP correlation kernel, so both paths must construct
+        # the grid identically. See tests/integration/test_components_vs_legacy.py.
+        log_age_grid = make_log_age_grid(n_grid)
+        sfh_lbt_grid = 10.0**log_age_grid
+
+        # ── 1b. Cosmology: t_obs from redshift (hoisted above the SFH so
+        # the runtime tabular SFH can convert cosmic time → lookback).
+        # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
+        from tengri.cosmology import age_at_z as _age_at_z
+
+        z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
+        # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
+        # Translate user-facing public params → SFH-function kwargs via
+        # the registry's ``internal_param_map``: each entry is
+        # ``(internal_name, scale, offset)`` and the conversion is
+        # ``internal = public * scale + offset``. This ensures both this
+        # component and legacy SEDModel paths see the same units and naming.
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+
+        # A composite SFH (list) is evaluated through ``resolve_sfh``'s composed
+        # closure. That closure dispatches each additive member by PUBLIC
+        # parameter name, so two members sharing an internal kwarg (any two
+        # parametric families both take ``log_total_mass``) keep their own
+        # values (#372), while the burst mixture reads its ``log_fburst`` by
+        # internal name. The composite kwargs therefore carry every value under
+        # both names. A single type keeps the registry callable and internal
+        # names, so the table and dense_basis special cases below are unchanged.
+        sfh_model = self.config.sfh_model
+        is_composite = isinstance(sfh_model, list)
+        if is_composite:
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
+                sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
+            )
+            # Bin-edge knot discovery (#765) inspects the first member's callable.
+            sfh_spec = SFH_REGISTRY[sfh_model[0]]
+        else:
+            sfh_spec = SFH_REGISTRY[sfh_model]
+            sfh_fn_composed = None
+            spec_params = sfh_spec.params
+            internal_param_map = sfh_spec.internal_param_map
+
+        sfh_kwargs = {}
+        for public_name, (internal_name, scale, offset) in internal_param_map.items():
+            if public_name in params:
+                raw = params[public_name]
+            else:
+                # Fall back to the registry default for any declared parameter
+                # the caller omitted. Required so callers that pass a partial
+                # params dict (e.g. the low-level run_components path, or flat-
+                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
+                # still resolve every positional argument of the SFH callable.
+                # Mirrors the dense_basis age_universe injection just below.
+                pdef = spec_params.get(public_name)
+                default_scalar = pdef.default.default if pdef is not None else None
+                if default_scalar is None:
+                    continue
+                raw = default_scalar
+            value = jnp.asarray(raw) * scale + offset
+            sfh_kwargs[internal_name] = value
+            if is_composite:
+                sfh_kwargs[public_name] = value
+
+        # Mode-specific settings that are NOT free parameters.
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
+        resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
+        sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
+
+        # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
+        # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
+        # (cosmic time [Gyr]) + ``params["sfh_sfr"]`` [Msun/yr]. The registry
+        # entry is a placeholder; override it with an interp closure so every
+        # consumer (coarse history, sfr_on_ssp, dense CIC integrand, derived
+        # quantities) sees the table through the one SFH function. Dict-key
+        # presence is static under jit; the array VALUES stay traced, so two
+        # calls with different same-length tables share one compile. SFR is
+        # edge-clamped outside the table (the legacy jnp.interp convention);
+        # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
+        sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
+        _tab_lbt_yr = None
+        _tab_order = None
+        if isinstance(sfh_model, str) and sfh_model == "table":
+            if self.config.field:
+                raise NotImplementedError(
+                    "sfh_model='table' with field=True is not supported: the "
+                    "GP field draw modulates parametric SFHs only (#996)."
+                )
+            # Shared with compute_joint_weights so the exact forward and the
+            # SED-free fast path cannot read a simulation history differently
+            # (#1395/#1396).
+            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
+        elif "sfh_t_gyr" in params or "sfh_sfr" in params:
+            raise NotImplementedError(
+                "sfh_t_gyr/sfh_sfr passed but sfh_model="
+                f"{self.config.sfh_model!r}: the table would be silently "
+                "ignored. Build with mean_sfh_type='table' (#996)."
+            )
+        if "met_history" in params and self.config.metallicity_model != "table":
+            raise NotImplementedError(
+                "met_history passed but metallicity_model="
+                f"{self.config.metallicity_model!r}: it would be silently "
+                "ignored. Build with met_mode='table' (#996)."
+            )
+
+        sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
+
+        # ── 2b. GP-field modulation ───────────────────────────────────
+        # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
+        # exp(x(t) - K(0)/2), where x(t) is a PSD-governed Gaussian
+        # process and K(0)/2 is the lognormal bias correction so the
+        # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
+        # the SFH registry next to the prior on ``sfh_field_xi``.
+        if self.config.field:
+            sfr_history = _apply_gp_field(
+                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
+            )
+            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
+        else:
+            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
+
+        # ── 3. Resample to SSP age grid for CSP integration ─────────────
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalizes through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
+        return _SfhOnSspAges(
+            log_age_grid=log_age_grid,
+            sfh_lbt_grid=sfh_lbt_grid,
+            z=z,
+            t_obs_gyr=t_obs_gyr,
+            is_composite=is_composite,
+            sfh_spec=sfh_spec,
+            sfh_kwargs=sfh_kwargs,
+            sfh_timing_gyr=sfh_timing_gyr,
+            sfh_fn=sfh_fn,
+            tab_lbt_yr=_tab_lbt_yr,
+            tab_order=_tab_order,
+            sfr_history=sfr_history,
+            age_sfh_fn=_age_sfh_fn,
+            age_tab_lbt_yr=_age_tab_lbt_yr,
+            sfr_on_ssp=sfr_on_ssp,
+        )
+
+    def _composite_population(
+        self,
+        ssp: Any,
+        params: Mapping[str, jnp.ndarray],
+        state: ForwardState,
+        ssp_ages_yr: jnp.ndarray,
+        n_grid: int,
+        log_age_grid: Any,
+        sfh_lbt_grid: Any,
+        z: Any,
+        t_obs_gyr: Any,
+        is_composite: bool,
+        sfh_spec: Any,
+        sfh_kwargs: Any,
+        sfh_fn: Any,
+        sfh_timing_gyr: Any,
+        _tab_lbt_yr: Any,
+        _tab_order: Any,
+        sfr_history: Any,
+        sfr_on_ssp: Any,
+        _age_sfh_fn: Any,
+        _age_tab_lbt_yr: Any,
+    ) -> _CompositePopulation:
+        """Build the composite stellar population and its derived quantities (phases C to E)."""
         # ── 4. Metallicity history Z(t) on SFH grid + per-SSP-age ───────
         # delta: scalar absolute log10(Z), constant in time.
         # ramp: linear interpolation between two endpoints.
@@ -3724,9 +4307,6 @@ class StellarSEDComponent:
                     vmap(lambda row: jnp.interp(target, ssp_wave_arr, row))(lnu_interval),
                 )
 
-        # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
-        # When eager precomputation is enabled and the LUT is available,
-        # compute stellar_phot_lnu_precomp and publish it to derived.
         derived_overrides = dict(
             sfh_timing_gyr=sfh_timing_gyr,
             log_mstar=log_mstar,
@@ -3782,517 +4362,15 @@ class StellarSEDComponent:
             derived_overrides["age_boundary_younger_fraction"] = younger_fraction
         if lnu_interval is not None:
             derived_overrides["lnu_interval"] = lnu_interval
-
-        if self._state is not None and self._state.ssp_phot_lut is not None:
-            # Fixed-z path; LUT built at source's z in precompute()
-            ssp_phot = self._state.ssp_phot_lut.ssp_phot
-            # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
-            # age axes weighted by joint distribution × total mass.
-            # Convert to erg/s/Hz to match sed_intrinsic units.
-            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
-            )
-            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
-            # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
-            # component to apply the neb_fesc mask (#2439, #2427).
-            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
-            if ssp_phot_lyc is not None:
-                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
-                )
-                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
-                # The other half of the split, built from the same cumulative
-                # integral: the escape-fraction mask adds to it rather than
-                # subtracting from the whole (see ``PhotometricPrecomputation``).
-                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->f", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
-                    total_mass,
-                )
-            # Age-resolved per-filter LUT for two-component
-            # dust attenuation. Marginalize over metallicity only; preserve
-            # the age axis. Shape (n_age, n_filter). Sum over age == the
-            # marginalized stellar_phot_lnu_precomp above.
-            stellar_phot_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,maf->af", joint_weights, ssp_phot), total_mass
-            )
-            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
-            # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
-            # #2427): the DerivedState contract is
-            # ``sum(stellar_phot_lnu_per_age_precomp, axis=age) ==
-            # stellar_phot_lnu_precomp``, and that must still hold once
-            # NebularSEDComponent corrects the marginalized bucket by
-            # subtracting ``(1-fesc)*stellar_phot_lnu_precomp_lyc`` -- the
-            # per-age bucket needs the same per-age correction, or the two
-            # buckets (which the Taylor/no-subband two_component path reads
-            # per-age) silently disagree with the marginalized one.
-            if ssp_phot_lyc is not None:
-                stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_lyc), total_mass
-                )
-                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
-                    stellar_phot_lnu_per_age_lyc
-                )
-                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->af", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
-                    total_mass,
-                )
-            # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
-            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
-            if ssp_phot_moment is not None:
-                stellar_phot_moment_precomp = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
-                )
-                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
-                stellar_phot_moment_per_age = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment), total_mass
-                )
-                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
-                    stellar_phot_moment_per_age
-                )
-            # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
-            # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
-            # and it is computed from the unscaled sums.
-            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
-            if ssp_sub_phot is not None:
-                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
-                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
-                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
-                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
-                    sub_phi, total_mass
-                )
-                # Sub-bands with no usable weight contribute nothing, but their
-                # node still goes through the 1/λ dust law: keep it finite and
-                # positive. The floor (not ``!= 0.0``) is what keeps the node's
-                # DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
-                live = jnp.abs(sub_phi) > _subband_live_floor()
-                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
-                    live,
-                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
-                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
-                )
-                # The same tensor with the IGM folded in at the nodes (#1135).
-                # Identical einsum, on a constant that already carries T: the met
-                # axis is contracted here, so T had to be evaluated on it (the node
-                # moves with the free met_logzsol). Kept alongside the IGM-free
-                # tensor rather than replacing it: phot_rest_fnu is projected at
-                # z=0 and carries no IGM.
-                ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
-                if ssp_sub_phot_igm is not None:
-                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
-                        )
-                    )
-                    waves_igm = self._state.ssp_phot_lut.ssp_subband_waves_rest_igm
-                    _publish_igm_nodes(
-                        derived_overrides,
-                        jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
-                        None
-                        if waves_igm is None
-                        else jnp.einsum(
-                            "ma,mafk->afk", joint_weights, waves_igm * ssp_sub_phot_igm
-                        ),
-                    )
-            # Publish filter pivot wavelengths so the dust LUT
-            # (and future per-filter consumers like AGN and IGM) can use them.
-            derived_overrides["filter_eff_waves"] = jnp.asarray(
-                self._state.ssp_phot_lut.effective_wavelengths_rest
-            )
-            if self._state.phot_fw_padded is not None:
-                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
-                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
-
-        elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path: local monotone cubic Hermite (PCHIP) read of the
-            # ztable at runtime z. Publishes the same derived keys as the
-            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
-            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
-            # filter_eff_waves.
-            #
-            # The read is exact at every node, C1 in z, and valid on a graded
-            # grid (nodes added where a spectral edge sweeps a band cutoff,
-            # #2749). It replaces a triweight window (Hearin et al. 2023, #438)
-            # that smoothed the table over +-1.5 cells: it was not exact at the
-            # nodes, so a node placed on a kink could not resolve it, and its
-            # window arithmetic assumed uniform spacing. Only the four rows that
-            # bracket z are read, so the cost does not track n_z (the dense
-            # contraction of the whole table was 87% of the free-redshift
-            # gradient arithmetic, 128 MFLOP at n_z=250 against 2.7 MFLOP at
-            # fixed z).
-            from tengri.utils.grid_interp import pchip_interp_local
-
-            # Use ztable_data if threaded as JIT input, otherwise fall
-            # back to the closure (for non-JIT paths).
-            ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
-            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
-            z_grid = ztable.z_grid
-
-            def _interp(table, reduce=None):
-                # table: (n_z, ...). Cubic Hermite read of axis 0 at z. ``reduce``
-                # contracts the population-weight axes of the four bracketing rows
-                # first, so the cubic is formed on the (n_age, ...) quantity that
-                # is consumed rather than on every (n_met, n_age, ...) entry.
-                return pchip_interp_local(z_grid, table, z, reduce=reduce, extrapolate=True)
-
-            def _per_age(w):
-                return lambda rows: jnp.einsum("ma,zma...->za...", w, rows)
-
-            per_age_rows = _per_age(joint_weights)
-
-            def _interp_phi_num(phot, waves):
-                # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z.
-                def rows(p_rows, w_rows):
-                    return jnp.stack(
-                        [
-                            jnp.einsum("ma,zmafk->zafk", joint_weights, p_rows),
-                            jnp.einsum("ma,zmafk->zafk", joint_weights, w_rows * p_rows),
-                        ],
-                        axis=1,
-                    )
-
-                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows, extrapolate=True)
-                return both[0], both[1]
-
-            # ssp_phot_table: (n_z, n_met, n_age, n_filt) -> per-age (n_age, n_filt).
-            phot_per_age = _interp(ztable.ssp_phot_table, per_age_rows)
-            # Marginalized + age-resolved LUTs (parity with the fixed-z path).
-            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.sum(phot_per_age, axis=0), total_mass
-            )
-            stellar_phot_lnu_per_age = _mass_scale_lnu(phot_per_age, total_mass)
-            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
-            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
-            # Lyman continuum photometry at runtime z (#2439, #2427).
-            if ztable.ssp_phot_lyc_table is not None:
-                lyc_per_age = _interp(ztable.ssp_phot_lyc_table, per_age_rows)
-                derived_overrides["stellar_phot_lnu_precomp_lyc"] = _mass_scale_lnu(
-                    jnp.sum(lyc_per_age, axis=0), total_mass
-                )
-                # Per-age twin (R3d): see the fixed-z path for why.
-                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = _mass_scale_lnu(
-                    lyc_per_age, total_mass
-                )
-                nolyc_per_age = _interp(ztable.ssp_phot_nolyc_table, per_age_rows)
-                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.sum(nolyc_per_age, axis=0), total_mass
-                )
-                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    nolyc_per_age, total_mass
-                )
-            # Taylor moment Ψ at runtime z. Interpolate the
-            # moment table the same way and publish marginalized + per-age.
-            if ztable.ssp_phot_moment_table is not None:
-                moment_per_age = _interp(ztable.ssp_phot_moment_table, per_age_rows)
-                derived_overrides["stellar_phot_moment_precomp"] = _mass_scale_lnu(
-                    jnp.sum(moment_per_age, axis=0), total_mass
-                )
-                derived_overrides["stellar_phot_moment_per_age_precomp"] = _mass_scale_lnu(
-                    moment_per_age, total_mass
-                )
-            # Interpolate effective rest-frame wavelengths and publish for
-            # downstream consumers (dust LUT, AGN, IGM).
-            eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
-            derived_overrides["filter_eff_waves"] = eff_waves_at_z
-
-            # Sub-band quadrature tensors at runtime z (#1122), same contract as
-            # the fixed-z path. Φ_k carries the mass and L_sun scaling; the node
-            # λ_k is a RATIO, so those cancel and it comes from the unscaled sums.
-            # The two sums Σ w·φ and Σ w·λ·φ are the quantities read, so each is
-            # contracted over the population weights and then cubic-read in z.
-            if ztable.ssp_subband_phot_table is not None:
-                sub_phi, sub_num = _interp_phi_num(
-                    ztable.ssp_subband_phot_table, ztable.subband_waves_rest_table
-                )
-                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
-                    sub_phi, total_mass
-                )
-                # Sub-bands with no usable weight cannot change the result, but
-                # their node still goes through the 1/λ dust law: keep it finite
-                # and positive. The floor (not ``!= 0.0``) is what keeps the
-                # node's DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
-                live = jnp.abs(sub_phi) > _subband_live_floor()
-                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
-                    live,
-                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
-                    eff_waves_at_z[:, None],
-                )
-                # IGM folded in at the nodes (#1135): tabulated against this same
-                # z grid at build time, so it rides the same cubic read as the
-                # sub-band photometry it multiplies.
-                if ztable.ssp_subband_phot_igm_table is not None:
-                    if ztable.subband_waves_rest_igm_table is not None:
-                        phi_igm, num_igm = _interp_phi_num(
-                            ztable.ssp_subband_phot_igm_table,
-                            ztable.subband_waves_rest_igm_table,
-                        )
-                    else:
-                        phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
-                        num_igm = None
-                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        _mass_scale_lnu(phi_igm, total_mass)
-                    )
-                    _publish_igm_nodes(derived_overrides, phi_igm, num_igm)
-            if self._state.phot_fw_padded is not None:
-                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
-                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
-
-        # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
-        # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc: the galaxy
-        # as it is; so the filter sits in the REST frame and samples the rest SED
-        # at its own pivot. That is a different integral from the observed-band
-        # tensors above, which sample rest λ_eff/(1+z). The LUT used to reuse those
-        # for the rest-frame flux, which put it 769 % from the exact path in des_g
-        # at z=0.5 and orders of magnitude out in the blue.
-        #
-        # Published for the fixed-z and free-z paths alike, from ONE constant: the
-        # rest band does not move with redshift, so there is nothing to interpolate.
-        if self._state is not None and self._state.restband_lut is not None:
-            rb = self._state.restband_lut
-            derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
-            )
-            derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
-            if rb.ssp_restband_subband_phot is not None:
-                rb_phi = jnp.einsum("ma,mafk->afk", joint_weights, rb.ssp_restband_subband_phot)
-                rb_num = jnp.einsum(
-                    "ma,mafk->afk",
-                    joint_weights,
-                    rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
-                )
-                derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
-                    _mass_scale_lnu(rb_phi, total_mass)
-                )
-                # The node is a RATIO, so mass and L_sun cancel: take it from the
-                # unscaled sums. Sub-bands with no usable weight keep a finite,
-                # positive node: a zero would go to inf through the 1/λ dust law.
-                # The floor (not ``!= 0.0``) is what keeps the node's DERIVATIVE
-                # finite; see ``_subband_live_floor`` (#1397).
-                rb_live = jnp.abs(rb_phi) > _subband_live_floor()
-                derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
-                    rb_live,
-                    rb_num / jnp.where(rb_live, rb_phi, 1.0),
-                    jnp.asarray(rb.restband_eff_waves)[:, None],
-                )
-
-        # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
-        # The continuum at the spectrum pixel centers in the galaxy rest frame.
-        # Stellar velocity dispersion is stage 1 of the exact path: it acts on the
-        # model grid, BEFORE the pixels are sampled (point sampling aliases sharp
-        # stellar features, so broadening after sampling is not equivalent). Two routes:
-        #   - table pre-broadened at build (fixed z and fixed sigma_v): a weighted sum
-        #     of already-broadened, already-sampled templates;
-        #   - otherwise the weighted sum on the full grid, broadened by the draw's
-        #     sigma_v, then sampled (see ``_spectrum_lut_families``).
-        # Publishes:
-        #   - ``stellar_spec_lnu_precomp`` (n_pix,): rest-frame Lν [erg/s/Hz]
-        #   - ``stellar_spec_lnu_per_age_precomp`` (n_age, n_pix): the per-age split
-        #   - ``spec_eff_waves`` (n_pix,): rest-frame pixel wavelengths [Å]
-        # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
-        # nebular continuum) through their spectrum-LUT branch, mirroring how
-        # ``filter_eff_waves`` drives the photometry LUT path.
-        if self._state is not None and (
-            self._state.ssp_spec_lut is not None or self._state.ssp_spec_ztable is not None
-        ):
-            derived_overrides.update(
-                self._spectrum_lut_families(
-                    params,
-                    state,
-                    wave=wave,
-                    ssp_flux_for_csp=ssp_flux_for_csp,
-                    joint_weights=joint_weights,
-                    total_mass=total_mass,
-                    cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
-                )
-            )
-
-        # ── 12. Assemble new state ──────────────────────────────────────
-        return state.with_(
+        return _CompositePopulation(
+            ssp_flux_for_csp=ssp_flux_for_csp,
+            alpha_collapse_active=_alpha_collapse_active,
+            agb_dust_cube=_agb_dust_cube,
+            joint_weights=joint_weights,
+            total_mass=total_mass,
+            wave=wave,
             sed_intrinsic=sed_intrinsic,
-            derived=state.derived.with_(**derived_overrides),
-        )
-
-    def _sfh_on_ssp_ages(
-        self,
-        params: Mapping[str, jnp.ndarray],
-        ssp_ages_yr: jnp.ndarray,
-        n_grid: int,
-    ) -> _SfhOnSspAges:
-        """Evaluate the star formation history on the lookback grid and the SSP age grid."""
-        # ── 1. SFH lookback-time grid ───────────────────────────────────
-        # Use the SAME grid construction as the legacy SEDModel path
-        # (forward/sed_model.py:467). ``make_log_age_grid`` returns a
-        # uniform grid in log10(age/yr) over [6.0, 10.14] (1 Myr →
-        # 13.8 Gyr). This is critical for ``field=True`` parity:
-        # ``compute_field_gp`` keys on n_grid + d_log_age to build
-        # the GP correlation kernel, so both paths must construct
-        # the grid identically. See tests/integration/test_components_vs_legacy.py.
-        log_age_grid = make_log_age_grid(n_grid)
-        sfh_lbt_grid = 10.0**log_age_grid
-
-        # ── 1b. Cosmology: t_obs from redshift (hoisted above the SFH so
-        # the runtime tabular SFH can convert cosmic time → lookback).
-        # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
-        from tengri.cosmology import age_at_z as _age_at_z
-
-        z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
-
-        # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
-        # Translate user-facing public params → SFH-function kwargs via
-        # the registry's ``internal_param_map``: each entry is
-        # ``(internal_name, scale, offset)`` and the conversion is
-        # ``internal = public * scale + offset``. This ensures both this
-        # component and legacy SEDModel paths see the same units and naming.
-        from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
-
-        # A composite SFH (list) is evaluated through ``resolve_sfh``'s composed
-        # closure. That closure dispatches each additive member by PUBLIC
-        # parameter name, so two members sharing an internal kwarg (any two
-        # parametric families both take ``log_total_mass``) keep their own
-        # values (#372), while the burst mixture reads its ``log_fburst`` by
-        # internal name. The composite kwargs therefore carry every value under
-        # both names. A single type keeps the registry callable and internal
-        # names, so the table and dense_basis special cases below are unchanged.
-        sfh_model = self.config.sfh_model
-        is_composite = isinstance(sfh_model, list)
-        if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
-                sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
-            )
-            # Bin-edge knot discovery (#765) inspects the first member's callable.
-            sfh_spec = SFH_REGISTRY[sfh_model[0]]
-        else:
-            sfh_spec = SFH_REGISTRY[sfh_model]
-            sfh_fn_composed = None
-            spec_params = sfh_spec.params
-            internal_param_map = sfh_spec.internal_param_map
-
-        sfh_kwargs = {}
-        for public_name, (internal_name, scale, offset) in internal_param_map.items():
-            if public_name in params:
-                raw = params[public_name]
-            else:
-                # Fall back to the registry default for any declared parameter
-                # the caller omitted. Required so callers that pass a partial
-                # params dict (e.g. the low-level run_components path, or flat-
-                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
-                # still resolve every positional argument of the SFH callable.
-                # Mirrors the dense_basis age_universe injection just below.
-                pdef = spec_params.get(public_name)
-                default_scalar = pdef.default.default if pdef is not None else None
-                if default_scalar is None:
-                    continue
-                raw = default_scalar
-            value = jnp.asarray(raw) * scale + offset
-            sfh_kwargs[internal_name] = value
-            if is_composite:
-                sfh_kwargs[public_name] = value
-
-        # Mode-specific settings that are NOT free parameters.
-        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
-        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
-        # the configured cosmology rather than a static registry default.
-        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
-        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
-        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
-        # (``psb_continuity_flex``) bound their fixed old bins to
-        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
-        # past the Big Bang (#2645). Both routes use the same rule so they
-        # cannot diverge (#982).
-        resolve_timing_fracs(sfh_kwargs, params, internal_param_map, redshift=z)
-        sfh_timing_gyr = published_timing_gyr(sfh_kwargs, internal_param_map)
-        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
-        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg(params))
-
-        # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
-        # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
-        # (cosmic time [Gyr]) + ``params["sfh_sfr"]`` [Msun/yr]. The registry
-        # entry is a placeholder; override it with an interp closure so every
-        # consumer (coarse history, sfr_on_ssp, dense CIC integrand, derived
-        # quantities) sees the table through the one SFH function. Dict-key
-        # presence is static under jit; the array VALUES stay traced, so two
-        # calls with different same-length tables share one compile. SFR is
-        # edge-clamped outside the table (the legacy jnp.interp convention);
-        # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
-        sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
-        _tab_lbt_yr = None
-        _tab_order = None
-        if isinstance(sfh_model, str) and sfh_model == "table":
-            if self.config.field:
-                raise NotImplementedError(
-                    "sfh_model='table' with field=True is not supported: the "
-                    "GP field draw modulates parametric SFHs only (#996)."
-                )
-            # Shared with compute_joint_weights so the exact forward and the
-            # SED-free fast path cannot read a simulation history differently
-            # (#1395/#1396).
-            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
-        elif "sfh_t_gyr" in params or "sfh_sfr" in params:
-            raise NotImplementedError(
-                "sfh_t_gyr/sfh_sfr passed but sfh_model="
-                f"{self.config.sfh_model!r}: the table would be silently "
-                "ignored. Build with mean_sfh_type='table' (#996)."
-            )
-        if "met_history" in params and self.config.metallicity_model != "table":
-            raise NotImplementedError(
-                "met_history passed but metallicity_model="
-                f"{self.config.metallicity_model!r}: it would be silently "
-                "ignored. Build with met_mode='table' (#996)."
-            )
-
-        sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
-
-        # ── 2b. GP-field modulation ───────────────────────────────────
-        # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
-        # exp(x(t) - K(0)/2), where x(t) is a PSD-governed Gaussian
-        # process and K(0)/2 is the lognormal bias correction so the
-        # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
-        # the SFH registry next to the prior on ``sfh_field_xi``.
-        if self.config.field:
-            sfr_history = _apply_gp_field(
-                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
-            )
-            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
-        else:
-            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
-
-        # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
-        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
-        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
-        # cutoffs at ``t_lookback = age`` land on grid points instead of
-        # being smeared across the coarser ~3 % log-spaced bins of
-        # ``sfh_lbt_grid``. The closed form also self-normalizes through
-        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
-        # exactly. See suchethac/tengri#385.
-        #
-        # The GP-field path still goes through the log grid: ``compute_field_gp``
-        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
-        # GP draw lives on the lookback grid by construction.
-        if self.config.field:
-            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
-        else:
-            sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
-        return _SfhOnSspAges(
-            log_age_grid=log_age_grid,
-            sfh_lbt_grid=sfh_lbt_grid,
-            z=z,
-            t_obs_gyr=t_obs_gyr,
-            is_composite=is_composite,
-            sfh_spec=sfh_spec,
-            sfh_kwargs=sfh_kwargs,
-            sfh_timing_gyr=sfh_timing_gyr,
-            sfh_fn=sfh_fn,
-            tab_lbt_yr=_tab_lbt_yr,
-            tab_order=_tab_order,
-            sfr_history=sfr_history,
-            age_sfh_fn=_age_sfh_fn,
-            age_tab_lbt_yr=_age_tab_lbt_yr,
-            sfr_on_ssp=sfr_on_ssp,
+            derived_overrides=derived_overrides,
         )
 
     def _spectrum_lut_families(
