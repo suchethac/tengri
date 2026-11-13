@@ -1823,6 +1823,63 @@ def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab
     return lgmet_on_ssp_ages, met_log_age_yr, met_log_z_abs
 
 
+def tabulated_history_weights(
+    t_gyr, sfr, ssp_lg_age_gyr, ssp_lgmet, t_obs_gyr, log_z_abs, lgmet_scatter
+):
+    """Joint (metallicity, age) SSP weights and formed mass for a tabulated SFH.
+
+    The SED-free entry point for a simulation history. It runs the same chain as
+    the ``sfh_model='table'`` forward pass: :func:`_tabulated_sfh` (zero outside
+    the table, lookback from ``t_obs_gyr``), :func:`_cic_integrand` (dense grid
+    with the table's nodes as exact knots, extended past the oldest template),
+    then :func:`_age_weights_cic` for a scalar metallicity or
+    :func:`_joint_weights_cic_met_table` for a metallicity history. Callers that
+    want the same formed mass and SED as :meth:`Catalog.from_histories` should
+    come through here rather than building their own weights.
+
+    Parameters
+    ----------
+    t_gyr, sfr : ndarray, shape (n_t,)
+        Cosmic time [Gyr], strictly increasing, and SFR [Msun/yr] at those nodes.
+    ssp_lg_age_gyr : ndarray, shape (n_age,)
+        SSP grid log10(age/Gyr).
+    ssp_lgmet : ndarray, shape (n_met,)
+        SSP metallicity grid, absolute log10(Z).
+    t_obs_gyr : float
+        Cosmic age at the observation redshift [Gyr]: the lookback origin.
+    log_z_abs : float or ndarray, shape (n_t,)
+        Absolute log10(Z). A scalar is a constant metallicity; an array is a
+        metallicity history on the same nodes as ``t_gyr``.
+    lgmet_scatter : float
+        Lognormal metallicity-distribution width [dex], as in the forward model.
+
+    Returns
+    -------
+    joint_weights : ndarray, shape (n_met, n_age)
+        Normalized (sum = 1) joint weights.
+    total_mass : ndarray, shape ()
+        Formed stellar mass [Msun], the trapezoidal integral of the SFR.
+    """
+    ssp_ages_yr = 10.0 ** (jnp.asarray(ssp_lg_age_gyr) + 9.0)
+    t_obs = jnp.asarray(t_obs_gyr)
+    sfh_fn, tab_lbt_yr, tab_order = _tabulated_sfh({"sfh_t_gyr": t_gyr, "sfh_sfr": sfr}, t_obs)
+    age_yr, sfr_grid = _cic_integrand(ssp_ages_yr, sfh_fn, {}, None, tab_lbt_yr, t_obs)
+    if jnp.ndim(log_z_abs) == 0:
+        age_w, total_mass = _age_weights_cic(age_yr, sfr_grid, ssp_ages_yr, t_obs)
+        lgmet_w = _lgmet_weights(jnp.asarray(log_z_abs), lgmet_scatter, ssp_lgmet)
+        return lgmet_w[:, None] * age_w[None, :], total_mass
+    # Same history-to-SSP-age mapping as _tabulated_lgmet_on_ssp_ages, with the
+    # Z nodes paired to the lookback-sorted SFR nodes by the same ``order``.
+    met_log_age_yr = jnp.log10(jnp.maximum(tab_lbt_yr, 1.0))
+    met_log_z_abs = jnp.asarray(log_z_abs)[tab_order]
+    lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
+        ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+    )
+    return _joint_weights_cic_met_table(
+        age_yr, sfr_grid, ssp_ages_yr, t_obs, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet
+    )
+
+
 def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
     """Lowest-index edge within ``eps * edge`` of each node, in O((n + m) log n) (#2869).
 

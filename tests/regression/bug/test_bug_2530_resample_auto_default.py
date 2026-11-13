@@ -424,12 +424,14 @@ def test_auto_equals_conserving_on_coarse_pixels_and_differs_from_point(ssp):
 def test_sfh_spectrum_honors_resample(ssp):
     """``spectrum_from_sfh`` integrates 2 Angstrom pixels under auto, samples under point."""
     from tengri.analysis.simulate import sed_from_sfh, spectrum_from_sfh
-    from tengri.cosmology import luminosity_distance
+    from tengri.cosmology import age_at_z, luminosity_distance
 
     z = 0.5
     wave = jnp.asarray(CASES["2A"][0])
-    t, sfr = jnp.linspace(0.01, 13.7, 60), jnp.ones(60) * 5.0
-    sed = sed_from_sfh(t, sfr, ssp)
+    # The history ends at the observation time, and the reference SED is taken at
+    # the same redshift: the lookback origin is age(z), not a fixed 13.7 Gyr (#3467).
+    t, sfr = jnp.linspace(0.01, float(age_at_z(z)), 60), jnp.ones(60) * 5.0
+    sed = sed_from_sfh(t, sfr, ssp, redshift=z)
     dl = luminosity_distance(z)
     scale = float(lnu_to_fnu(1.0, dl, z))
     wr = np.asarray(sed["wavelength"])
