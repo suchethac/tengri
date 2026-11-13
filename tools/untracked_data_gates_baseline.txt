@@ -1,0 +1,23 @@
+# Untracked data gate baseline (tools/check_untracked_data_gates.py): test files
+# gated on a data file that CI does not have, one path<TAB>file line each. This list
+# may only shrink: track or download the file, or rebuild the test on synthetic data,
+# then rerun with --write-baseline and commit the smaller file.
+tests/_data_skip.py	pahspec_draine2021.h5
+tests/components/dust/test_cb19.py	cloudy_grid_bpss.h5
+tests/components/nebular/test_lya_escape_qh_fixes.py	cloudy_grid_mist.h5
+tests/contract/test_bagpipes_driver_labels.py	bc03_pdva_stelib_chabrier.h5
+tests/contract/test_grid_support_policy.py	cloudy_grid_prsc.h5
+tests/contract/test_nebular_cloudy_band_table_accuracy.py	cloudy_grid_prsc.h5
+tests/contract/test_nebular_precompute_table_wired.py	cloudy_grid_prsc.h5
+tests/contract/test_radio_freefree_switch.py	cb19_templates.h5
+tests/crossval/test_2564_torus_dust_emission_parity.py	bc03_pdva_stelib_chabrier.h5
+tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	cloudy_grid_mist.h5
+tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	cloudy_grid_prsc.h5
+tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	fsps_mist_c3k_a_chabrier.h5
+tests/regression/bug/test_2460_neb_logu_prior_within_grid_axis.py	cloudy_grid_prsc.h5
+tests/regression/bug/test_bug_2346_nebular_freefree_one_thermal_term.py	cloudy_grid_prsc.h5
+tests/regression/bug/test_bug_2418_nebular_age_zero_anchor.py	cb19_templates.h5
+tests/regression/bug/test_bug_2418_nebular_age_zero_anchor.py	cloudy_grid_prsc.h5
+tests/regression/bug/test_issue_1677_metallicity_histories.py	cloudy_grid_prsc.h5
+tests/regression/paper/test_qsogen_extinction.py	bc03_chabrier.h5
+tests/regression/paper/test_qsogen_extinction.py	bc03_pdva_stelib_chabrier.h5
