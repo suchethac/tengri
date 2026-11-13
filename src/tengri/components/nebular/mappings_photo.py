@@ -80,6 +80,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import TengriIOError
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import (
@@ -670,6 +671,9 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         interpolating ``table / scale`` and multiplying back is exact in float64;
         the scale is kept as the scalar ``_log_qh_scale`` rather than materialized.
         """
+        require_ionizing_coverage(
+            ssp_data.ssp_wave, backend="mappings (MappingsPhotoStellarBackend)"
+        )
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
         log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
