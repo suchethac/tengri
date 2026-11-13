@@ -102,3 +102,39 @@ def test_lines_to_sed_float32_matches_float64():
     assert core.any()
     assert np.all(f32[core] != 0.0), "float32 core flushed to zero"
     assert_allclose(f32[core], ref[core], rtol=REL_TOL)
+
+
+# ── Item 3 (AGN luminosity seams): FIR-radio q_TIR in float32 ────────────────
+
+
+@pytest.mark.parametrize(("l_tir_lsun", "l_1p4ghz"), [(2e12, 1e25), (1e11, 1e23), (3e10, 2e22)])
+def test_q_ir_float32_matches_float64(l_tir_lsun, l_1p4ghz):
+    """q_TIR forms L_TIR [W] = L_TIR[Lsun] * L_SUN * 1e-7, which overflows float32 above
+    ~9e4 Lsun (3e10 Lsun gives inf before the log). The log form is finite and agrees
+    with float64 to rtol 1e-4 (measured 2e-7)."""
+    from tengri.utils.sed_quantities import compute_q_ir
+
+    def run():
+        return compute_q_ir(jnp.asarray(l_tir_lsun), jnp.asarray(l_1p4ghz))
+
+    ref = float(run())
+    f32 = float(_float32_arm(run))
+    assert np.isfinite(f32), f"float32 q_TIR non-finite: {f32}"
+    assert_allclose(f32, ref, rtol=REL_TOL)
+
+
+def test_q_ir_gradient_finite_and_nonzero_in_float32():
+    """Gradient w.r.t. L_TIR is finite and nonzero in float32 (positive input), and
+    finite at L_TIR = 0, where the floor applies."""
+    from tengri.utils.sed_quantities import compute_q_ir
+
+    def loss(x):
+        return compute_q_ir(x, jnp.asarray(1e23))
+
+    def grad_at(v):
+        return jax.grad(loss)(jnp.asarray(v))
+
+    g_pos = float(_float32_arm(lambda: grad_at(1e10)))
+    g_zero = float(_float32_arm(lambda: grad_at(0.0)))
+    assert np.isfinite(g_pos) and g_pos != 0.0, g_pos
+    assert np.isfinite(g_zero), g_zero
