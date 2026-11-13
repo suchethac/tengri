@@ -201,8 +201,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",
             "tengri.components.agn.skirtor:create_skirtor_raw_total_from_grid.fn",
             "tengri.components.agn.torus:create_nenkova_from_grid.nenkova_grid",
-            "tengri.components.agn.torus:simple_torus",
-            "tengri.components.agn.torus:two_temperature_torus",
             "tengri.components.agn.unified:unified_nlr_blr",
         ),
     ),
