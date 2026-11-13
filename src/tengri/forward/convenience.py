@@ -595,10 +595,8 @@ def fit_batch(
         stacklevel=2,
     )
 
-    from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.fitter import Fitter
     from tengri.inference.posterior import Posterior
-    from tengri.parameters.priors import Fixed
 
     # Normalize catalog to list of dicts
     rows: list[dict] = []
@@ -715,11 +713,10 @@ def fit_batch(
         noise_i = jnp.array([float(row[c]) for c in err_cols])
 
         if redshift_col is not None:
-            row_z = float(row[redshift_col])
-            row_spec = model.spec.with_params(redshift=Fixed(row_z))
-            row_model = ModelClass.__new__(ModelClass)
-            row_model.__dict__.update(model.__dict__)
-            row_model.spec = row_spec
+            # A fixed redshift is a compile constant: the tables, the component
+            # chain and the compile signature are all built at it, so the row
+            # needs a model rebuilt there (memoized per distinct redshift).
+            row_model = model.with_fixed_redshift(float(row[redshift_col]))
             fitter_i = Fitter(row_model, flux_i, noise_i, approx=approx)
         else:
             fitter_i = Fitter(model, flux_i, noise_i, approx=approx)
