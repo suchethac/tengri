@@ -131,6 +131,8 @@ dev = [
     # emitted every cell as its own row. A check that cannot see the structure
     # reports the same "clean" as one that can, so it has to run in CI.
     "docutils>=0.20",
+    # Property-based tests (tests/physics/conservation/test_conservation_properties.py, #3288).
+    "hypothesis>=6.170",
 ]
 crossval = [
     "bagpipes>=1.0",
