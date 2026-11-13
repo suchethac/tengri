@@ -86,8 +86,11 @@ def _p(isoc: str, imf: str) -> MassRemainingEntry:
     return MassRemainingEntry(isoc, imf, PENDING)
 
 
-#: Canonical grid name -> table. Every grid of ``tengri._data_setup._KNOWN_SSPS``
-#: plus the locally produced ones appears here; a grid absent from it is a
+#: Canonical grid name -> table, for every grid whose isochrones and IMF this
+#: package can state. The hosted catalog (``tengri._data_setup._KNOWN_SSPS``) is
+#: larger: a hosted grid absent from this registry has no surviving-mass
+#: metadata and is refused where the surviving mass is needed, unless its file
+#: carries its own table (:func:`is_hosted_grid`). A grid in neither is a
 #: user-supplied grid. The canonical name is the file stem without the
 #: ``_wNE...`` suffix and with a leading ``ssp_`` read as ``fsps_``
 #: (:func:`canonical_grid_name`). PENDING rows name a table that has not been
@@ -164,6 +167,24 @@ PENDING_REASON: dict[str, str] = {
         "check_bpass_mass_balance.py and src/tengri/data/ssp_mass_remaining/PROVENANCE.md)"
     ),
 }
+
+
+def is_hosted_grid(stem: str) -> bool:
+    """Whether a file stem names a grid of the hosted SSP catalog.
+
+    Parameters
+    ----------
+    stem : str
+        File stem of the grid; a ``_wNE...`` nebular suffix is ignored.
+
+    Returns
+    -------
+    bool
+        True when ``tengri._data_setup._KNOWN_SSPS`` lists the grid.
+    """
+    from tengri._data_setup import _KNOWN_SSPS
+
+    return stem.split("_wNE")[0] in _KNOWN_SSPS
 
 
 def canonical_grid_name(stem: str) -> str:
@@ -361,8 +382,10 @@ def resolve_mass_remaining(
        unregistered (user) grid, a registered grid whose table is still PENDING
        or EMBEDDED, and an [alpha/Fe] grid.
     3. No table: a registered grid (shipped, PENDING) raises ``ValueError``
-       naming the missing table and the opt-in; an unregistered (user) grid
-       emits a ``UserWarning`` naming the opt-in and uses the DSPS fit.
+       naming the missing table and the opt-in; so does a hosted grid that
+       this registry does not list (its isochrones and IMF are not stated
+       here); a user's own grid emits a ``UserWarning`` naming the opt-in and
+       uses the DSPS fit.
 
     ``mode="dsps_fit"`` skips the tables and uses the fit for any grid.
 
@@ -433,6 +456,14 @@ def resolve_mass_remaining(
         return MassRemainingResolution(np.asarray(embedded, dtype=np.float64), EMBEDDED, fit_imf)
 
     optin = f"load_ssp_data(..., mass_remaining={MODE_DSPS_FIT!r})"
+    if entry is None and not synthetic and is_hosted_grid(stem):
+        raise ValueError(
+            f"'{stem}' is a hosted SSP grid with no surviving-mass metadata: this package "
+            "does not state its isochrones and IMF, and the file carries no "
+            "'ssp_mass_remaining' table. Its surviving mass would otherwise come from DSPS's "
+            "metallicity-independent fit to FSPS for a Chabrier, Kroupa or Salpeter IMF, which "
+            f"may not describe this grid. Pass {optin} to accept that fit."
+        )
     if entry is None:
         warnings.warn(
             f"'{stem}' is not a registered SSP grid and carries no ssp_mass_remaining: "
@@ -477,10 +508,16 @@ def describe_source(stem: str) -> str:
     Returns
     -------
     str
-        ``"companion:<file>"``, ``"embedded"``, ``"PENDING (needs mass_remaining='dsps_fit')"``
-        or ``"unregistered (DSPS fit with a warning)"``.
+        ``"companion:<file>"``, ``"embedded"``, ``"PENDING (needs mass_remaining='dsps_fit')"``,
+        ``"hosted, no surviving-mass metadata (needs mass_remaining='dsps_fit' unless the
+        file carries a table)"`` or ``"unregistered (DSPS fit with a warning)"``.
     """
     entry = MASS_REMAINING_REGISTRY.get(canonical_grid_name(stem))
+    if entry is None and is_hosted_grid(stem):
+        return (
+            f"hosted, no surviving-mass metadata (needs mass_remaining={MODE_DSPS_FIT!r} "
+            "unless the file carries a table)"
+        )
     if entry is None:
         return "unregistered (DSPS fit with a warning)"
     if entry.source == PENDING:
