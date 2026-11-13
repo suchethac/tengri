@@ -38,7 +38,9 @@ def fitter_joint_line_fluxes_with_cue() -> Fitter:
     (``predict_line_fluxes`` raises). This variant adds the Cue backend, which serves
     the lines, and is otherwise the same configuration.
     """
-    ssp = _small_ssp()
+    # Cue fits the ionizing spectrum, so this grid must reach below the Lyman limit;
+    # the shared fixture starts at 1000 A.
+    ssp = _small_ssp()._replace(ssp_wave=jnp.logspace(2.0, 4.5, 200))
     wave_obs = np.linspace(3800.0, 9000.0, 300)
     obs = Observation(
         photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]),

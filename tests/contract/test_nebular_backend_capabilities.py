@@ -315,3 +315,19 @@ def test_component_parameter_lists_do_not_replace_the_registry_records():
     assert set(owners.values()) == {"PARAMS"}, owners
     assert records["neb_fesc"].free_prior is not None
     assert records["shock_log_lhalpha"].prior.value == 41.0
+
+
+def test_the_defaults_declare_but_do_not_define_the_line_catalog_method():
+    """A backend publishes lines exactly when it defines the line-catalog method.
+
+    The forward model reads ``hasattr(backend, "predict_nebular_line_luminosities")``
+    as that capability, so the shared defaults must not supply the method: with
+    one, ``BakedInBackend`` would read as publishing a line catalog.
+    """
+    from tengri.components.nebular._shared import NebularBackendDefaults
+    from tengri.components.nebular.baked_in import BakedInBackend
+    from tengri.components.nebular.cue import CueBackend
+
+    assert not hasattr(NebularBackendDefaults, "predict_nebular_line_luminosities")
+    assert not hasattr(BakedInBackend, "predict_nebular_line_luminosities")
+    assert hasattr(CueBackend, "predict_nebular_line_luminosities")
