@@ -32,6 +32,7 @@ from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._x64_hold import hold_x64_preference
 from tengri.components.stellar.age_boundary import (
@@ -2911,6 +2912,46 @@ class StellarSEDComponent:
             spec_ssp_broadened=broadened,
         )
 
+    def fixed_z_luts_for_threading(self) -> dict | None:
+        """Array fields of the fixed-z stellar LUTs, for threading as runtime inputs.
+
+        #2812: the per-redshift SSP x filter / SSP x pixel tables were read off
+        the closure, so under ``jit`` they were baked into the HLO as constants
+        and every fixed redshift compiled from scratch. Threaded through
+        ``template_data`` they are Parameters, not Constants, so two fixed-z
+        models lower to the same HLO. Only array fields are returned; Python
+        scalars (``redshift``, ``n_filters``, ...) and ``None`` fields stay
+        static on the closure.
+        """
+        if self._state is None:
+            return None
+        out: dict[str, dict] = {}
+        for name in ("ssp_phot_lut", "ssp_spec_lut"):
+            lut = getattr(self._state, name)
+            if lut is None:
+                continue
+            arrays = {
+                field_name: value
+                for field_name, value in lut._asdict().items()
+                if isinstance(value, (np.ndarray, jax.Array))
+            }
+            out[name] = arrays
+        return out or None
+
+    def _threaded_lut(self, template_data, name: str):
+        """Return the fixed-z LUT ``name``, with runtime array fields from ``template_data``.
+
+        ``template_data["stellar"][name]`` (#2812) overrides the closure's array
+        fields via ``_replace``; with no threaded entry the closure LUT is
+        returned unchanged.
+        """
+        lut = getattr(self._state, name)
+        if isinstance(template_data, dict):
+            stellar = template_data.get("stellar")
+            if isinstance(stellar, dict) and name in stellar:
+                return lut._replace(**stellar[name])
+        return lut
+
     def apply(
         self,
         state: ForwardState,
@@ -3094,8 +3135,9 @@ class StellarSEDComponent:
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
+            phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
             # Fixed-z path; LUT built at source's z in precompute()
-            ssp_phot = self._state.ssp_phot_lut.ssp_phot
+            ssp_phot = phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
@@ -3105,7 +3147,7 @@ class StellarSEDComponent:
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
             # component to apply the neb_fesc mask (#2439, #2427).
-            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
+            ssp_phot_lyc = phot_lut.ssp_phot_lyc
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
                     jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
@@ -3115,9 +3157,7 @@ class StellarSEDComponent:
                 # integral: the escape-fraction mask adds to it rather than
                 # subtracting from the whole (see ``PhotometricPrecomputation``).
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->f", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
+                    jnp.einsum("ma,maf->f", joint_weights, phot_lut.ssp_phot_nolyc),
                     total_mass,
                 )
             # Age-resolved per-filter LUT for two-component
@@ -3145,13 +3185,11 @@ class StellarSEDComponent:
                     stellar_phot_lnu_per_age_lyc
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->af", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
+                    jnp.einsum("ma,maf->af", joint_weights, phot_lut.ssp_phot_nolyc),
                     total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
-            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
+            ssp_phot_moment = phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = _mass_scale_lnu(
                     jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
@@ -3166,9 +3204,9 @@ class StellarSEDComponent:
             # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
             # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
             # and it is computed from the unscaled sums.
-            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
+            ssp_sub_phot = phot_lut.ssp_subband_phot
             if ssp_sub_phot is not None:
-                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
+                ssp_sub_waves = phot_lut.ssp_subband_waves_rest
                 sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
                 sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
@@ -3182,7 +3220,7 @@ class StellarSEDComponent:
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
                     _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
-                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
+                    jnp.asarray(phot_lut.effective_wavelengths_rest)[:, None],
                 )
                 # The same tensor with the IGM folded in at the nodes (#1135).
                 # Identical einsum, on a constant that already carries T: the met
@@ -3190,14 +3228,14 @@ class StellarSEDComponent:
                 # moves with the free met_logzsol). Kept alongside the IGM-free
                 # tensor rather than replacing it: phot_rest_fnu is projected at
                 # z=0 and carries no IGM.
-                ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
+                ssp_sub_phot_igm = phot_lut.ssp_subband_phot_igm
                 if ssp_sub_phot_igm is not None:
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(
                             jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
                         )
                     )
-                    waves_igm = self._state.ssp_phot_lut.ssp_subband_waves_rest_igm
+                    waves_igm = phot_lut.ssp_subband_waves_rest_igm
                     _publish_igm_nodes(
                         derived_overrides,
                         jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
@@ -3210,7 +3248,7 @@ class StellarSEDComponent:
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
-                self._state.ssp_phot_lut.effective_wavelengths_rest
+                phot_lut.effective_wavelengths_rest
             )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
@@ -3416,6 +3454,7 @@ class StellarSEDComponent:
                     joint_weights=joint_weights,
                     total_mass=total_mass,
                     cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
+                    template_data=template_data,
                 )
             )
 
@@ -4383,6 +4422,7 @@ class StellarSEDComponent:
         joint_weights,
         total_mass,
         cube_modified=False,
+        template_data=None,
     ):
         r"""Stellar spectrum LUT families at the pixels, with the velocity dispersion applied.
 
@@ -4441,7 +4481,11 @@ class StellarSEDComponent:
         )
 
         spec_state = self._state
-        lut = spec_state.ssp_spec_lut
+        lut = (
+            self._threaded_lut(template_data, "ssp_spec_lut")
+            if spec_state.ssp_spec_lut is not None
+            else None
+        )
         seeded = state.derived.get("spec_sigma_v_kms")
         if lut is not None and lut.sigma_v_kms is not None:
             if (
