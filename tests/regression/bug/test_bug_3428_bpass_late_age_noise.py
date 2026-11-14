@@ -2,7 +2,7 @@
 """Regression #3428: the BPASS grid's late-age optical flux is noisy, and says so.
 
 ``bpss_stars_c3k_a_chabrier`` steps by 30-60 % in optical flux per unit mass
-between neighbouring age nodes above about 3 Gyr, at every metallicity. The
+between neighboring age nodes above about 3 Gyr, at every metallicity. The
 grid file is not edited. Loading it warns once, records the caveat in the
 SSPData metadata, and ``load_ssp`` succeeds by default by taking the same
 ``mass_remaining="dsps_fit"`` route that the refusal message names.
@@ -62,9 +62,9 @@ def test_other_grids_carry_no_late_age_note():
     """The caveat is specific to this grid, not a generic warning on every load."""
     from tengri._data_setup import find_data_str
 
-    path = find_data_str("fsps_mist_c3k_a_chabrier.h5")
+    path = find_data_str("fsps_prsc_miles_chabrier.h5")
     if path is None:
-        pytest.skip("fsps_mist_c3k_a_chabrier.h5 is not present")
+        pytest.skip("fsps_prsc_miles_chabrier.h5 is not present")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         ssp = load_ssp_data(str(path))

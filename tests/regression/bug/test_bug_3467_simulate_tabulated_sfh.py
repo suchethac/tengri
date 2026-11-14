@@ -108,19 +108,20 @@ def test_redshift_sets_the_lookback_origin(grid_ssp):
     assert not np.allclose(np.asarray(at_zero["sed"]), np.asarray(by_redshift["sed"]), rtol=1e-3)
 
 
-@pytest.mark.parametrize("centre_gyr", [12.70, 12.7137, 12.75])
-def test_a_box_of_sfr_keeps_its_mass_wherever_it_sits(grid_ssp, centre_gyr):
+@pytest.mark.parametrize("center_gyr", [12.70, 12.7137, 12.75])
+def test_a_box_of_sfr_keeps_its_mass_wherever_it_sits(grid_ssp, center_gyr):
     """1e10 Msun in a 2 Myr box forms 1e10 Msun at any position, not 57.7x or 0."""
     # Nodes on the box edges (and just outside them), so the tabulated history
     # itself integrates to exactly 1e10 Msun; a box between nodes would test the
     # sampling of the input, not the forward model.
     width_gyr = 2e-3
-    lo, hi = centre_gyr - width_gyr / 2, centre_gyr + width_gyr / 2
+    lo, hi = center_gyr - width_gyr / 2, center_gyr + width_gyr / 2
     t = np.unique(np.concatenate([np.linspace(0.05, 13.7, 20000), [lo - 1e-7, lo, hi, hi + 1e-7]]))
     box = np.where((t >= lo) & (t <= hi), 1e10 / (width_gyr * 1e9), 0.0)
     assert _integral(t, box) == pytest.approx(1e10, rel=1e-4)  # 1e-7 Gyr edge ramps
     formed, _ = _formed(t, box, grid_ssp)
-    assert formed == pytest.approx(1e10, rel=1e-2)
+    # measured 5.0e-5 relative (edge ramps as above); 1e-4 leaves a 2x margin
+    assert formed == pytest.approx(1e10, rel=1e-4)
 
 
 def test_a_sharp_onset_keeps_its_mass(grid_ssp):
@@ -128,7 +129,8 @@ def test_a_sharp_onset_keeps_its_mass(grid_ssp):
     t = np.linspace(0.05, 13.7, 2000)
     sfr = np.where(t >= 5.0, 1.0, 0.0)
     formed, _ = _formed(t, sfr, grid_ssp)
-    assert formed == pytest.approx(_integral(t, sfr), rel=1e-2)
+    # measured 1.0e-12 relative: the step integrates exactly on the node grid
+    assert formed == pytest.approx(_integral(t, sfr), rel=1e-6)
 
 
 def test_lgmet_scatter_changes_the_sed(grid_ssp):

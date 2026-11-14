@@ -48,8 +48,7 @@ import numpy as np
 from jax.core import Tracer
 
 from tengri.components.dust.attenuation import select_law_kwargs, two_component_dust
-from tengri.components.stellar.component import tabulated_history_weights
-from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+from tengri.components.stellar.component import _mass_scale_lnu, tabulated_history_weights
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.inference.history_ingest import _check_ssp_grid, _mass_weights
 from tengri.parameters.translate import LOG10_ZSUN
@@ -226,7 +225,9 @@ def sed_from_sfh(
     # CSP integral: the joint weights sum to one, so the mass enters once here.
     # The factor L_sun is applied last, as in the forward model (#1206).
     ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_data.ssp_flux)
-    sed = jnp.einsum("aw,aw->w", ssp_flux_at_age, dust_atten) * total_mass * LSUN_ERG_PER_S
+    # Grouped through _mass_scale_lnu: a standalone total_mass * L_sun reaches
+    # 1.2e46, which is inf in float32.
+    sed = _mass_scale_lnu(jnp.einsum("aw,aw->w", ssp_flux_at_age, dust_atten), total_mass)
     weights = joint_weights.sum(axis=0) * total_mass
 
     return {

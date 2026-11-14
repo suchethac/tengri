@@ -719,6 +719,8 @@ def _damping_wing_tau(
     # matters. The optical depth is evaluated at the source redshift, not at the
     # absorbing redshift of each wavelength, so it overstates the absorption far
     # blueward of Ly-alpha.
+    # Zero-hiding clamp kind 2 (zero is legitimate): R_bubble = 0 is a valid input (no
+    # proximity zone); the 1e-8 floor only keeps the sigmoid width finite, as in bubble_mask.
     blue_mask = jax.nn.sigmoid((-x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8))
     tau_blue = jnp.where(wave_obs < lya_obs, tau_GP * x_HI * blue_mask, 0.0)
 

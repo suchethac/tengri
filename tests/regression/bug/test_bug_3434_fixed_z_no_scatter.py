@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """#3434: fixed or constant metallicity must not carry the lognormal MDF scatter.
 
 Owner ruling (2026-11-13): a fixed met_logzsol, or a constant metallicity
@@ -22,6 +23,8 @@ from tengri.components.stellar.component import (
     _lgmet_hermite_weights,
     _lgmet_weights,
 )
+
+pytestmark = pytest.mark.regression_bug
 
 REPO = Path(__file__).resolve().parents[3]
 GRIDS = ("fsps_mist_c3k_a_chabrier", "fsps_prsc_c3k_a_chabrier")
@@ -116,6 +119,7 @@ def test_gradient_finite_and_continuous_within_interval(lgmet_grid):
     z_mid = 0.5 * (lg[k] + lg[k + 1])
     d_mid = float(g(jnp.asarray(z_mid)))
     assert np.isfinite(d_mid)
+    assert abs(d_mid) > 0.0  # a zero slope is finite too; the cosine data has a nonzero slope here
     eps = 1e-6
     fd = (float(read(jnp.asarray(z_mid + eps))) - float(read(jnp.asarray(z_mid - eps)))) / (
         2 * eps

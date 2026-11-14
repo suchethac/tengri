@@ -54,7 +54,7 @@ class TestSharedConvergenceCheck:
     """The post-run check, on synthetic draws."""
 
     def test_split_chains_that_disagree_warn_once_and_name_the_parameter(self):
-        """Two chains centred far apart: R-hat far above 1.1, one RuntimeWarning."""
+        """Two chains centered far apart: R-hat far above 1.1, one RuntimeWarning."""
         n = 400
         chains = np.concatenate([_RNG.normal(0.0, 1.0, n), _RNG.normal(8.0, 1.0, n)])
         post = _posterior(

@@ -1686,7 +1686,7 @@ def _dsps_kernel_scatter(lgmet_scatter):
     """Scatter passed to the DSPS kernel: the declared value, else a finite nominal.
 
     An undeclared scatter (``None`` or zero) is replaced so DSPS never sees a zero
-    bandwidth. Its kernel output is then discarded in favour of the node-exact read.
+    bandwidth. Its kernel output is then discarded in favor of the node-exact read.
     """
     scatter = _scatter_value(lgmet_scatter)
     return jnp.where(scatter > 0.0, scatter, _NOMINAL_LGMET_SCATTER)
@@ -1700,7 +1700,12 @@ def _native_joint(dsps_joint, lgmet, lgmet_scatter, ssp_lgmet):
     """
     declared = _scatter_value(lgmet_scatter) > 0.0
     age_marginal = dsps_joint.sum(axis=0)
-    age_marginal = age_marginal / jnp.maximum(age_marginal.sum(), 1e-300)
+    # Normalization that can only vanish if DSPS returned a degenerate joint: NaN
+    # propagates to the output instead of a plausible finite zero (zero-hiding clamp
+    # kind 3). The denominator is held at 1 on the dead branch so its gradient stays finite.
+    total = age_marginal.sum()
+    live = total > 1e-20
+    age_marginal = jnp.where(live, age_marginal / jnp.where(live, total, 1.0), jnp.nan)
     met_row = _lgmet_hermite_weights(jnp.asarray(lgmet), ssp_lgmet)
     node_exact = met_row[:, None] * age_marginal[None, :]
     return jnp.where(declared, dsps_joint, node_exact)
@@ -2789,7 +2794,7 @@ def _dsps_lgmet_bin_edges(grid):
     """Metallicity bin edges of the DSPS kernel: ``dsps.utils._get_bin_edges``.
 
     Uses DSPS's own ``LGMET_LO`` / ``LGMET_HI`` outer edges (the same ones
-    :func:`~tengri.components.stellar.component._lgmet_weights_parcels` reads), so
+    ``_lgmet_weights_parcels`` in ``tengri.components.stellar.component`` reads), so
     the wrapper and the component cannot disagree on the bin edges. A local copy
     with a narrower lower edge gave negative weights for nodes below it (#3434).
     """

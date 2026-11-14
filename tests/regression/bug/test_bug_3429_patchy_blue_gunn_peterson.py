@@ -2,7 +2,7 @@
 """Regression #3429: a neutral IGM absorbs blueward of Lyman alpha in the patchy model.
 
 The damping-wing term was zeroed blueward of Lya, so the patchy transmission did
-not depend on x_HI there. Outside the ionised bubble a neutral medium has the
+not depend on x_HI there. Outside the ionized bubble a neutral medium has the
 Gunn-Peterson trough, tau_GP * x_HI >> 1 for x_HI above about 1e-4, so the blue
 side must fall as x_HI grows. The red side is the damping wing and is unchanged.
 """

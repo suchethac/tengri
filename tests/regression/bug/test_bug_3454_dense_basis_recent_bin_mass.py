@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Regression test for #3454: dense_basis honours ``log_sfr_inst`` and conserves M*.
+r"""Regression test for #3454: dense_basis honors ``log_sfr_inst`` and conserves M*.
 
 The recent (last 10 Myr) bins of the dense_basis history are overridden to
 ``10**log_sfr_inst``, but the old bins were scaled to ``M* - M_recent`` before

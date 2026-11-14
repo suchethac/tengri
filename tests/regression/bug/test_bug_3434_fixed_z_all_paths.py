@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """#3434: the fixed-Z rule holds on every metallicity weighting path.
 
 Rule: an undeclared (zero) metallicity scatter reads the SSP grid node-exactly in
@@ -23,6 +24,8 @@ from tengri.components.stellar.component import (
     tabulated_history_weights,
 )
 from tengri.components.stellar.sps import dsps_wrapper as dw
+
+pytestmark = pytest.mark.regression_bug
 
 # Shipped SSP grids with their own metallicity axis. Grids absent from the
 # local data dir are skipped.
