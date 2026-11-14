@@ -300,10 +300,12 @@ class Catalog:
         is never ingested under a guessed unit. One of: ``"cgs_fnu"``
         [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
     redshift_col : str, optional
-        Column name for per-galaxy redshifts. If given, the model must have
-        a ``Fixed`` redshift and a ``catalog_z_range`` that covers the
-        redshift span in the table. If not given, the model must have a
-        free redshift parameter. Exactly one of the two conditions is required.
+        Column name for per-galaxy redshifts. If given, the model's redshift must be
+        ``Fixed`` (a placeholder: each row's value is used at fit time). A model without
+        a ``catalog_z_range`` gets one derived from the table (1% of the span on each
+        side, at least 1e-3, clipped at z=0), set on a configured copy that uses the
+        tabulated ``WavePrecomp`` path; the model passed in is not changed. Without
+        ``redshift_col`` the model must have a free redshift parameter.
     flux_cols : list[str], optional
         Flux column names **in your table**, they need not resemble the band
         names. If None, use ``"{name}"`` for each band in the model's
