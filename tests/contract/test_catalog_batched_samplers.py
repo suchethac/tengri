@@ -493,3 +493,145 @@ def test_stuck_pilot_falls_back_to_its_own_draws(monkeypatch):
         np.asarray(positions), np.full((n_chains * n_samples, dim), pilot_value)
     )
     assert not bool(jnp.any(divergent))
+
+
+def _split_rhat(chains):
+    """Gelman-Rubin R-hat per coordinate for ``chains`` of shape (n_chains, n_draws, D)."""
+    n_draws = chains.shape[1]
+    means = chains.mean(axis=1)
+    within = chains.var(axis=1, ddof=1).mean(axis=0)
+    between = n_draws * means.var(axis=0, ddof=1)
+    var_hat = (n_draws - 1) / n_draws * within + between / n_draws
+    return np.sqrt(var_hat / within)
+
+
+def test_window_chains_start_at_distinct_overdispersed_positions():
+    """Every chain starts somewhere of its own, at about the requested jitter scale."""
+    from tengri.inference.backends.mcmc.chain_program import _jittered_starts
+
+    starts = np.asarray(_jittered_starts(jnp.zeros(2), jax.random.PRNGKey(0), 4, 0.1))
+    assert starts.shape == (4, 2)
+    assert len({tuple(np.round(row, 12)) for row in starts}) == 4
+    assert 0.02 < starts.std() < 0.3, f"start spread {starts.std():.3f} is not ~0.1"
+
+
+@pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+def test_window_chains_mix_on_a_well_posed_target(sampler):
+    """Four chains from one adaptation agree on the target: split R-hat below 1.1."""
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    n_chains, n_samples = 4, 300
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        sampler,
+        n_warmup=200,
+        n_burnin=50,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        flat_logdensity=_gauss_flat(2),
+        substitute=_gauss_substitute,
+    )
+    positions, _ = run_one(
+        jnp.zeros(2), jax.random.PRNGKey(5), jnp.ones(2), None, None, None, None, None, None
+    )
+    chains = np.asarray(positions).reshape(n_chains, n_samples, 2)
+    rhat = _split_rhat(chains)
+    assert np.all(rhat < 1.1), rhat
+
+
+def test_single_chain_matches_the_golden_array_from_before_multichain():
+    """``n_chains=1`` is bit-identical to the array the pre-multichain engine produced.
+
+    The golden was generated at the parent of the first multi-chain commit, with the same
+    key, target and counts, and is pinned as a file so the single-chain path cannot drift
+    without the change being visible.
+    """
+    from pathlib import Path
+
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    golden = np.load(Path(__file__).parent / "data" / "catalog_nuts_single_chain_golden.npy")
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        "nuts",
+        n_warmup=40,
+        n_burnin=5,
+        n_samples=12,
+        flat_logdensity=_gauss_flat(2),
+        substitute=_gauss_substitute,
+    )
+    positions, _ = run_one(
+        jnp.zeros(2), jax.random.PRNGKey(11), jnp.ones(2), None, None, None, None, None, None
+    )
+    np.testing.assert_array_equal(np.asarray(positions), golden)
+
+
+_RHO = 0.95
+_CORR_COV = np.array([[1.0, _RHO], [_RHO, 1.0]])
+_CORR_PREC = np.linalg.inv(_CORR_COV)
+
+
+def _corr_ld(x, data_args):
+    """Log-density of a 2-D Gaussian with unit variances and correlation 0.95."""
+    return -0.5 * x @ jnp.asarray(_CORR_PREC) @ x
+
+
+def _corr_flat():
+    return (_corr_ld, lambda x: x, jnp.zeros(2), {"mu": jnp.zeros(2)})
+
+
+def _ess_1d(chains):
+    """Effective sample size of (n_chains, n_draws) chains, pooled, truncated at the first
+    negative autocorrelation."""
+    m, n = chains.shape
+    centered = chains - chains.mean()
+    var = (centered**2).mean()
+    rho_sum = 0.0
+    for lag in range(1, n // 2):
+        rho = np.mean(centered[:, :-lag] * centered[:, lag:]) / var
+        if rho < 0:
+            break
+        rho_sum += rho
+    return m * n / (1.0 + 2.0 * rho_sum)
+
+
+def test_chees_dense_recovers_a_correlated_gaussian_and_mixes_better_than_diagonal():
+    """Dense ChEES recovers rho=0.95 and resolves the correlated direction better.
+
+    Tolerances: about 2000 draws at ESS of several hundred give a standard error near
+    0.06 on a variance and near 0.004 on a correlation, (1-rho^2)/sqrt(ESS) at rho=0.95,
+    so 0.2 and 0.03 are roughly 3 and 7 standard errors. The mixing comparison is on the
+    projection onto (1,1)/sqrt(2), where the diagonal metric cannot help: the dense run
+    must have at least 1.5 times the diagonal run's ESS.
+    """
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    n_chains, n_samples = 4, 500
+    kwargs = dict(
+        n_warmup=300,
+        n_burnin=100,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        n_ensemble=8,
+        max_leapfrog_steps=64,
+        flat_logdensity=_corr_flat(),
+        substitute=_gauss_substitute,
+    )
+    args = (jnp.zeros(2), jax.random.PRNGKey(21), jnp.ones(2), None, None, None, None, None, None)
+    dense_run, _ = build_catalog_mcmc_engine(None, "chees", chees_dense=True, **kwargs)
+    diag_run, _ = build_catalog_mcmc_engine(None, "chees", **kwargs)
+    dense, _ = dense_run(*args)
+    diagonal, _ = diag_run(*args)
+    dense = np.asarray(dense)
+    assert np.all(np.isfinite(dense))
+
+    draws = dense.reshape(n_chains, n_samples, 2)
+    cov = np.cov(draws.reshape(-1, 2), rowvar=False)
+    np.testing.assert_allclose(np.diag(cov), [1.0, 1.0], atol=0.2)
+    corr = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    assert abs(corr - _RHO) < 0.03, f"sample correlation {corr:.4f} vs {_RHO}"
+
+    direction = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    ess_dense = _ess_1d(draws @ direction)
+    ess_diag = _ess_1d(np.asarray(diagonal).reshape(n_chains, n_samples, 2) @ direction)
+    assert ess_dense >= 1.5 * ess_diag, f"ESS dense {ess_dense:.1f} vs diagonal {ess_diag:.1f}"

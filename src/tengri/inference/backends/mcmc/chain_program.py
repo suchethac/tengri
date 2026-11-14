@@ -732,6 +732,32 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
     return _sample_body(program, state, chain_keys, ld, params, cfg)
 
 
+def _jittered_starts(base, warmup_key, n_chains, chain_jitter):
+    """Return ``n_chains`` independent overdispersed starts around ``base``.
+
+    Parameters
+    ----------
+    base : ndarray, shape (D,)
+        The position every chain is offset from.
+    warmup_key : PRNGKey
+        Key of the adaptation; the offsets are folded off it, independent of the chains'
+        own sampling keys.
+    n_chains : int (static)
+        Number of starts.
+    chain_jitter : float
+        Standard deviation of each offset.
+
+    Returns
+    -------
+    ndarray, shape (n_chains, D)
+        ``base + chain_jitter * z`` with ``z`` standard normal, one row per chain.
+    """
+    chain_init_key = jax.random.fold_in(warmup_key, 0xC4A15)
+    return base[None, :] + chain_jitter * jax.random.normal(
+        chain_init_key, (n_chains, base.shape[0]), dtype=base.dtype
+    )
+
+
 def _run_jittered_chains(
     program, state, init_flat, warmup_key, init_key, chain_keys, ld, params, cfg, chain_jitter
 ):
@@ -741,12 +767,9 @@ def _run_jittered_chains(
     split R-hat over them is a real test. The adaptation is kept: only the positions
     are jittered. Families that do not start from warmup start at ``init_flat``.
     """
-    n_chains, dim = chain_keys.shape[0], init_flat.shape[0]
+    n_chains = chain_keys.shape[0]
     base = state.position if program.starts_from_warmup else init_flat
-    chain_init_key = jax.random.fold_in(warmup_key, 0xC4A15)
-    starts = base[None, :] + chain_jitter * jax.random.normal(
-        chain_init_key, (n_chains, dim), dtype=base.dtype
-    )
+    starts = _jittered_starts(base, warmup_key, n_chains, chain_jitter)
     states = jax.vmap(lambda p: program.init(p, ld, init_key, cfg))(starts)
     return jax.vmap(lambda s, k: _sample_body(program, s, k, ld, params, cfg))(states, chain_keys)
 
