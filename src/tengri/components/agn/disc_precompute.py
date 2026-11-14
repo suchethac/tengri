@@ -44,7 +44,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_T_MAX,
+    PARAMS as _AGN_PARAMS,
+)
 from tengri.components.agn.disc import (
     _PL_BAND_HI_AA,
     _PL_BAND_LO_AA,
@@ -116,7 +120,7 @@ def _build_grid_powerlaw(
     redshift: float,
     alpha_grid: np.ndarray,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_T_max: float = 1e5,
+    agn_T_max: float = DEFAULT_AGN_T_MAX,
 ) -> PreintegratedGrid:
     """Preintegrate powerlaw_disc over a 1D grid of alpha values.
 

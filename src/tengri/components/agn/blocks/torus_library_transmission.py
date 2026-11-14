@@ -63,6 +63,18 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_FRITZ_BETA,
+    DEFAULT_AGN_FRITZ_GAMMA,
+    DEFAULT_AGN_FRITZ_OA,
+    DEFAULT_AGN_FRITZ_R_RATIO,
+    DEFAULT_AGN_FRITZ_TAU,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_RADIUS_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+)
 from tengri.components.agn.fritz import (
     FritzGrid,
     fritz_psy_from_cos_inc,
@@ -445,11 +457,11 @@ def _library_sightline(
         ratio, live = skirtor_line_of_sight_ratio(
             grid,
             wavelength,
-            tau=params.get("agn_tau_skirtor", 7.0),
-            p=params.get("agn_p_skirtor", 1.0),
-            q=params.get("agn_q_skirtor", 1.0),
-            oa=params.get("agn_oa_skirtor", 40.0),
-            radius=params.get("agn_radius_ratio", 20.0),
+            tau=params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
+            p=params.get("agn_p_skirtor", DEFAULT_AGN_P_SKIRTOR),
+            q=params.get("agn_q_skirtor", DEFAULT_AGN_Q_SKIRTOR),
+            oa=params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
+            radius=params.get("agn_radius_ratio", DEFAULT_AGN_RADIUS_RATIO),
             cos_inc=cos_inc,
         )
         transmission = ratio / _skirtor_anisotropy(_floored_cos(c))
@@ -462,11 +474,11 @@ def _library_sightline(
         ratio, live = fritz_line_of_sight_ratio(
             fgrid,
             wavelength,
-            r_ratio=params.get("agn_fritz_r_ratio", 60.0),
-            tau=params.get("agn_fritz_tau", 1.0),
-            beta=params.get("agn_fritz_beta", -0.5),
-            gamma=params.get("agn_fritz_gamma", 4.0),
-            oa=params.get("agn_fritz_oa", 60.0),
+            r_ratio=params.get("agn_fritz_r_ratio", DEFAULT_AGN_FRITZ_R_RATIO),
+            tau=params.get("agn_fritz_tau", DEFAULT_AGN_FRITZ_TAU),
+            beta=params.get("agn_fritz_beta", DEFAULT_AGN_FRITZ_BETA),
+            gamma=params.get("agn_fritz_gamma", DEFAULT_AGN_FRITZ_GAMMA),
+            oa=params.get("agn_fritz_oa", DEFAULT_AGN_FRITZ_OA),
             cos_inc=cos_inc,
         )
         transmission = ratio

@@ -6,9 +6,71 @@
   "shock_velocity": 782.0199742671562
  },
  "platform": "darwin-arm64",
- "signature_sha256": "9c1b7682a837c675ceabe059c1dbb37d6e9b7ab1040480870d0518e05ca3dbef",
+ "signature_sha256": "a891befad42eb0559c835b38334940bc5d0774023a2345bc8abd838742b611bd",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot",
+   "sha256": "497eacca344ba165d63b98fe67f4976bd79471a134e485b59931a419251e65a9",
+   "shape": [
+    15,
+    93,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths",
+   "sha256": "3ae9c8097d2b49686c915477a8997e404ec57f158bae5690140496b4f5832b9a",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths_rest",
+   "sha256": "5143429e112f21fc87f8ab17d869381fd566c3921c86f23dd2ab210a24802f62",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_phot",
+   "sha256": "5ee7445b3b674bedba45fac049025b7edaafa6196ad4b537389e7b15fadaac17",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
+   "sha256": "1dff6edd1b3eb3a59149ff8c3fb9a0975d43340e2611cf4ffca83b012dbd4db4",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
   {
    "dtype": "float64",
    "kind": "array",

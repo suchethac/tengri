@@ -46,7 +46,11 @@ from typing import NamedTuple
 import numpy as np
 from jax import numpy as jnp
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LOG_MBH
+from tengri.components.agn._params import (
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
+)
 from tengri.components.agn._template_grid import scale_to_torus_power_native
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.host_array import device_table
@@ -474,7 +478,7 @@ def kd18_agnfitter_warmindex_sed_from_grid(
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = _DEFAULT_AGN_LOG_LEDD,
-    agn_gamma_warm: float = 2.5,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""AGNfitter-rX KD18-warmIndex disc SED at a single grid point.

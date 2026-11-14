@@ -51,6 +51,7 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
 )
+from tengri.utils.scale import is_float32_arithmetic
 
 __all__ = ["RadioPowerLawSEDComponent", "RadioPowerLawSEDComponentConfig"]
 
@@ -243,7 +244,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         # Float32: the linear ~1e44 erg/s values are ``inf``, so the kernels are handed the
         # log companions (they form the representable radio luminosity by ``pow10``). In
         # float64 the logs are withheld and the linear path is unchanged.
-        use_log = wave.dtype == jnp.float32
+        use_log = is_float32_arithmetic(wave)
         log_L_ir = inputs.get("log_L_ir") if use_log else None
         log_L_agn_bol = inputs.get("log_L_agn_bol") if use_log else None
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))

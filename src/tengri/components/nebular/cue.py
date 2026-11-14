@@ -126,6 +126,13 @@ from tengri.components.nebular._line_ingest import (
 from tengri.components.nebular._params import (
     CUE_GAS_EXTRA_PARAMS,
     CUE_IONSPEC_PARAMS,
+    DEFAULT_GAS_LOGCO,
+    DEFAULT_GAS_LOGN,
+    DEFAULT_GAS_LOGNO,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_LOGU,
 )
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
@@ -1344,7 +1351,7 @@ class CueBackend(NebularBackendDefaults):
         return {
             "neb_log_no": self.effective_log_no(
                 neb_logZ_gas=common["neb_logZ_gas"],
-                gas_logno=jnp.asarray(params.get("gas_logno", 0.0)),
+                gas_logno=jnp.asarray(params.get("gas_logno", DEFAULT_GAS_LOGNO)),
                 **({"gas_logz": jnp.asarray(params["gas_logz"])} if "gas_logz" in params else {}),
             )
         }
@@ -1449,7 +1456,14 @@ class CueBackend(NebularBackendDefaults):
         """Precompute ionizing spectrum parameters for all SSP (met, age)."""
         import numpy as np
 
-        from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+            require_ionizing_coverage,
+        )
+
+        # Coverage check (#3417, shared helper #3444), first so that no table or cache work
+        # runs on a grid that cannot give one. A truncated grid is refused, not read as dark.
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cue (CueBackend)")
 
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
@@ -1688,13 +1702,13 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights=None,
         ssp_log_ages_yr=None,
         log_z=None,
-        neb_logU=-3.0,
+        neb_logU=DEFAULT_NEB_LOGU,
         neb_logZ_gas=None,
         gas_logu=None,
-        gas_logn=2.0,
+        gas_logn=DEFAULT_GAS_LOGN,
         gas_logz=None,
-        gas_logno=0.0,
-        gas_logco=0.0,
+        gas_logno=DEFAULT_GAS_LOGNO,
+        gas_logco=DEFAULT_GAS_LOGCO,
         gas_logqion=None,
         ionspec_index1=None,
         ionspec_index2=None,
@@ -1805,9 +1819,9 @@ class CueBackend(NebularBackendDefaults):
         # explicitly. Matches ``predict_nebular_line_luminosities``'s own
         # default below.
         cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
-        neb_fesc=0.0,
-        neb_fesc_lya=1.0,
-        neb_fdust_frac=0.0,
+        neb_fesc=DEFAULT_NEB_FESC,
+        neb_fesc_lya=DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac=DEFAULT_NEB_FDUST_FRAC,
         template_data=None,
     ):
         """Low-level line prediction from resolved param dict."""
@@ -2002,11 +2016,11 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        gas_logn: float = 2.0,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
     ) -> dict:
         """Derive Cue parameters from SSP weights, shape clamped to the trained box.
 
@@ -2196,18 +2210,18 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
-        gas_logn: float = 2.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
         gas_logz: float | None = None,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
         gas_logqion: float | None = None,
         ionspec_index1: float | None = None,
         ionspec_index2: float | None = None,
@@ -2335,15 +2349,15 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         gas_logu: float | None = None,
-        gas_logn: float = 2.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
         gas_logz: float | None = None,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
         gas_logqion: float | None = None,
         ionspec_index1: float | None = None,
         ionspec_index2: float | None = None,
@@ -2447,11 +2461,11 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -2557,11 +2571,11 @@ class CueBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         template_data: Any | None = None,
         **neb_params,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:

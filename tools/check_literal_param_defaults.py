@@ -27,9 +27,10 @@ whether the two numbers currently happen to match.
 
 Scope
 -----
-Five trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
-``.../radio/``, ``.../stellar/``, ``.../igm/``, ``.../nebular/`` (#2297). A
-no-argument run makes one pass per tree and covers all five; the dust pass
+Six trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
+``.../radio/``, ``.../stellar/``, ``.../igm/``, ``.../nebular/`` (#2297), and
+``.../agn/`` (#2265). A no-argument run makes one pass per tree and covers all
+six; the dust pass
 alone covers emission models,
 attenuation laws, and their shared parameter table ``_params.py``, widened
 from the earlier ``dust/emission/``-only scope (#2265). That narrower scope
@@ -38,7 +39,7 @@ addressed template closures (``dl07_tabulated``, ``dale2014_emission_lnu``,
 the dust sweep to ``attenuation.py`` (e.g. ``kriek_conroy``, ``tea``),
 ``component.py``, ``_apply.py``, ``two_component.py``,
 ``energy_balance_precompute.py``, and other aggregation points. Pass
-``--scope`` to target a single different tree instead of all four.
+``--scope`` to target a single different tree instead of the default set.
 
 How the declared-name set is built
 -----------------------------------
@@ -122,6 +123,7 @@ DEFAULT_SCOPES: tuple[Path, ...] = (
     ROOT / "src" / "tengri" / "components" / "stellar",
     ROOT / "src" / "tengri" / "components" / "igm",
     ROOT / "src" / "tengri" / "components" / "nebular",
+    ROOT / "src" / "tengri" / "components" / "agn",
 )
 #: Existing literal-copy sites in the nebular tree that predate this guard's
 #: widening to it (#2297): one tab-separated ``<path>\t<description>`` per line,
@@ -409,8 +411,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--scope",
         default=None,
         help=(
-            "Directory to scan. Default: every swept tree -- dust/emission, "
-            "radio, stellar, igm (#2265)."
+            "Directory to scan. Default: every swept tree -- dust, radio, "
+            "stellar, igm, nebular, agn (#2265)."
         ),
     )
     parser.add_argument(

@@ -36,6 +36,13 @@ backend forward, for the ``FeaturePrecomp`` fast path (#2222).
 
 import jax.numpy as jnp
 
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_DIG_DELTA_LOGU,
+    DEFAULT_NEB_DIG_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.utils.scale import pow10
 
 
@@ -217,12 +224,12 @@ def mix_dig_emission(
     ssp_weights: jnp.ndarray,
     ssp_log_ages_yr: jnp.ndarray,
     log_z: float,
-    neb_logU: float = -3.0,
+    neb_logU: float = DEFAULT_NEB_LOGU,
     neb_logZ_gas: float | None = None,
-    neb_fesc: float = 0.0,
-    neb_fesc_lya: float = 1.0,
-    neb_dig_frac: float = 0.0,
-    neb_dig_delta_logU: float = -1.0,
+    neb_fesc: float = DEFAULT_NEB_FESC,
+    neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+    neb_dig_frac: float = DEFAULT_NEB_DIG_FRAC,
+    neb_dig_delta_logU: float = DEFAULT_NEB_DIG_DELTA_LOGU,
     line_sigma_aa: float = 0.0,
     *,
     dig_active: bool | None = None,
@@ -360,12 +367,12 @@ def mix_dig_line_luminosities(
     ssp_weights: jnp.ndarray,
     ssp_log_ages_yr: jnp.ndarray,
     log_z: float,
-    neb_logU: float = -3.0,
+    neb_logU: float = DEFAULT_NEB_LOGU,
     neb_logZ_gas: float | None = None,
-    neb_fesc: float = 0.0,
-    neb_fesc_lya: float = 1.0,
-    neb_dig_frac: float = 0.0,
-    neb_dig_delta_logU: float = -1.0,
+    neb_fesc: float = DEFAULT_NEB_FESC,
+    neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+    neb_dig_frac: float = DEFAULT_NEB_DIG_FRAC,
+    neb_dig_delta_logU: float = DEFAULT_NEB_DIG_DELTA_LOGU,
     line_sigma_aa: float = 0.0,
     *,
     dig_active: bool | None = None,

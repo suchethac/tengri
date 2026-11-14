@@ -27,7 +27,12 @@ from tengri.components.agn._phys import lines_to_sed
 
 pytestmark = pytest.mark.regression_bug
 
-KEY = jax.random.PRNGKey(0)
+
+@pytest.fixture
+def key():
+    """PRNG key for the sampled parameters, built inside each test rather than at import."""
+    return jax.random.PRNGKey(0)
+
 
 PHOT_BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "sdss_r", "wise_w1", "wise_w4", "herschel_250"]
 REL_TOL = 1e-4
@@ -58,9 +63,9 @@ def _assert_f32_matches_f64(f32, f64, rtol=REL_TOL):
 # ── Item 1: rest-frame photometry and absolute magnitudes ─────────────────────
 
 
-def test_phot_rest_fnu_float32_matches_float64(ssp_bare):
+def test_phot_rest_fnu_float32_matches_float64(ssp_bare, key):
     model = _phot_model(ssp_bare)
-    params = dict(model.spec.sample(KEY))
+    params = dict(model.spec.sample(key))
 
     ref = model.predict_observables(params)
     f32 = _float32_arm(lambda: model.predict_observables(params))

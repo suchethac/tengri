@@ -371,6 +371,7 @@ def test_alpha_axis_grid_without_table_never_takes_the_companion(tmp_path):
         f["ssp_lg_age_gyr"] = age - 9.0
         f["ssp_lgmet"] = logz
         f["ssp_alpha_fe"] = np.array([0.0, 0.2, 0.4])
+        f.attrs["metallicity_axis"] = "total Z: synthetic"
     with pytest.raises(ValueError, match=r"alpha/Fe"):
         _load_ssp_data(str(path))
 
@@ -396,18 +397,79 @@ def test_hand_built_ssp_declares_no_source_and_keeps_it_through_pytrees():
 # ---------------------------------------------------------------------------
 # Registry contract.
 # ---------------------------------------------------------------------------
-def test_every_catalog_grid_is_registered_with_a_table_or_pending():
+#: Hosted grids whose isochrones and IMF the surviving-mass registry states. The
+#: hosted catalog is larger; a grid outside this set is refused, never fitted
+#: silently (see the two tests below). A row removed by mistake would move its
+#: grid into the refused class without failing anything else, so the count is pinned.
+_N_HOSTED_WITH_METADATA = 38
+
+
+def _hosted_split():
     from tengri._data_setup import _KNOWN_SSPS
     from tengri.components.stellar.sps import mass_remaining_tables as mrt
 
-    for name in _KNOWN_SSPS:
-        entry = mrt.MASS_REMAINING_REGISTRY.get(mrt.canonical_grid_name(name))
-        assert entry is not None, f"{name} has no registry entry"
+    with_row = [
+        n for n in _KNOWN_SSPS if mrt.canonical_grid_name(n) in mrt.MASS_REMAINING_REGISTRY
+    ]
+    without = [n for n in _KNOWN_SSPS if n not in with_row]
+    return with_row, without
+
+
+def test_every_hosted_grid_with_metadata_has_a_table_or_is_pending():
+    from tengri.components.stellar.sps import mass_remaining_tables as mrt
+
+    with_row, _ = _hosted_split()
+    assert len(with_row) == _N_HOSTED_WITH_METADATA
+    for name in with_row:
+        entry = mrt.MASS_REMAINING_REGISTRY[mrt.canonical_grid_name(name)]
         assert entry.imf in ("chabrier", "kroupa", "salpeter")
         if entry.source in (mrt.PENDING, mrt.EMBEDDED):
             continue
         age, logz, tab = mrt.load_companion_table(entry.source, entry.isoc, entry.imf)
         assert tab.shape == (logz.size, age.size)
+
+
+def test_a_hosted_grid_without_metadata_is_refused_by_name():
+    """No registry row and no table in the file: refuse, naming the grid and the opt-in."""
+    from tengri.components.stellar.sps import mass_remaining_tables as mrt
+
+    _, without = _hosted_split()
+    assert without, "the hosted catalog has no grid outside the surviving-mass registry"
+    lg_age_gyr = np.linspace(-3.0, 1.1, 5)
+    lgmet = np.linspace(-2.0, 0.3, 3)
+    for name in without:
+        with pytest.raises(ValueError, match="no surviving-mass metadata") as info:
+            mrt.resolve_mass_remaining(
+                stem=name,
+                detected_imf="unknown",
+                lg_age_gyr=lg_age_gyr,
+                lgmet=lgmet,
+                embedded=None,
+                has_alpha_axis=False,
+                mode="table",
+            )
+        assert name in str(info.value)
+        assert "mass_remaining='dsps_fit'" in str(info.value)
+
+
+def test_a_hosted_grid_without_metadata_serves_its_own_table_or_the_stated_fit():
+    """The file's own table is used when present; the fit only when asked for by name."""
+    from tengri.components.stellar.sps import mass_remaining_tables as mrt
+
+    _, without = _hosted_split()
+    name = without[0]
+    lg_age_gyr = np.linspace(-3.0, 1.1, 5)
+    lgmet = np.linspace(-2.0, 0.3, 3)
+    own = np.full((3, 5), 0.7)
+    common = dict(
+        stem=name, detected_imf="unknown", lg_age_gyr=lg_age_gyr, lgmet=lgmet, has_alpha_axis=False
+    )
+    served = mrt.resolve_mass_remaining(**common, embedded=own, mode="table")
+    np.testing.assert_array_equal(served.table, own)
+    assert served.source == mrt.EMBEDDED
+    fitted = mrt.resolve_mass_remaining(**common, embedded=None, mode=mrt.MODE_DSPS_FIT)
+    assert fitted.table is None
+    assert fitted.source == mrt.SOURCE_DSPS_FIT
 
 
 def test_registry_pending_set_is_exactly_the_declared_one():

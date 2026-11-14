@@ -42,7 +42,9 @@ References
 
 """
 
+import jax
 import jax.numpy as jnp
+from jax.core import Tracer
 
 from tengri.components.dust.attenuation import select_law_kwargs, two_component_dust
 from tengri.components.stellar.sps.dsps_wrapper import (
@@ -170,7 +172,7 @@ def sed_from_sfh(
     # Metallicity interpolation
     if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
         # Scalar metallicity: convert to absolute log(Z)
-        log_z_abs = float(log_z) + LOG10_ZSUN  # solar offset
+        log_z_abs = log_z + LOG10_ZSUN  # solar offset (traced-safe: no host float())
         ssp_flux_at_z = interpolate_metallicity(
             ssp_data.ssp_flux,
             ssp_data.ssp_lgmet,
@@ -192,7 +194,7 @@ def sed_from_sfh(
         )
 
     # Dust attenuation
-    if dust_tau_bc > 0 or dust_tau_diff > 0:
+    def _two_component() -> jnp.ndarray:
         # ``dust_slope`` is this function's own defaulted argument, so it is
         # offered to every law -- and most laws have no slope to set. Narrow to
         # what the selected law declares (#2185): a slope-free law such as
@@ -209,7 +211,7 @@ def sed_from_sfh(
         # dict carrying "whatever its author remembered"; here the selected law
         # decides what survives, which is the property the rule wants.
         law_kw = select_law_kwargs(dust_law, dict(dust_slope=dust_slope))
-        dust_atten = two_component_dust(
+        return two_component_dust(
             ssp_data.ssp_wave,
             ssp_ages_yr,
             tau_v1=dust_tau_bc,
@@ -219,8 +221,11 @@ def sed_from_sfh(
             **law_kw,
             **dust_kwargs,
         )
-    else:
-        dust_atten = jnp.ones((len(ssp_ages_yr), len(ssp_data.ssp_wave)))
+
+    ones = jnp.ones((len(ssp_ages_yr), len(ssp_data.ssp_wave)))
+    dust_atten = _select_dust(
+        jnp.logical_or(dust_tau_bc > 0, dust_tau_diff > 0), _two_component, ones
+    )
 
     # CSP integral
     sed = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
@@ -228,9 +233,29 @@ def sed_from_sfh(
     return {
         "wavelength": ssp_data.ssp_wave,
         "sed": sed,
-        "stellar_mass": float(jnp.sum(weights)),
+        "stellar_mass": _host_scalar(jnp.sum(weights)),
         "weights": weights,
     }
+
+
+def _select_dust(gate, attenuate, ones: jnp.ndarray) -> jnp.ndarray:
+    """Return ``attenuate()`` where ``gate`` holds, else ``ones``.
+
+    A concrete gate keeps the eager Python branch, so the dust kernel is not built
+    for an unattenuated call. A traced gate (a fitted optical depth) goes through
+    ``lax.cond``; the attenuated branch is cast to ``ones``' dtype so both branches
+    agree.
+    """
+    if isinstance(gate, Tracer):
+        return jax.lax.cond(gate, lambda: attenuate().astype(ones.dtype), lambda: ones)
+    return attenuate() if bool(gate) else ones
+
+
+def _host_scalar(value):
+    """Return a concrete scalar as a Python float; keep a traced one as it is."""
+    if isinstance(value, Tracer):
+        return value
+    return float(value)
 
 
 def photometry_from_sfh(
