@@ -35,14 +35,12 @@ tests/crossval/test_bc03_csp_vs_agnfitter.py	bc03_pdva_stelib_chabrier.h5
 tests/crossval/test_dsps_csp_uv_dense_reference.py	bc03_from_cigale.h5
 tests/crossval/test_full_sed_crossval.py	cloudy_grid_pdva.h5
 tests/crossval/test_nebular_crossval.py	cloudy_grid_prsc.h5
-tests/integration/test_sed_model_build.py	fsps_mist_c3k_a_chabrier.h5
 tests/integration/test_user_scenarios.py	ssp_bpass_imf170_300_100.h5
 tests/physics/gradients/test_disc_block_gradient_contract.py	bc03_pdva_stelib_chabrier.h5
 tests/physics/gradients/test_disc_block_gradient_contract.py	ssp_prsc_bc03_chabrier.h5
 tests/physics/test_mass_remaining_tables.py	pgny_mist_c3k_chabrier.h5
 tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	cloudy_grid_mist.h5
 tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	cloudy_grid_prsc.h5
-tests/regression/bug/test_2426_cloudy_grid_isochrone_match.py	fsps_mist_c3k_a_chabrier.h5
 tests/regression/bug/test_2460_neb_logu_prior_within_grid_axis.py	cloudy_grid_prsc.h5
 tests/regression/bug/test_bug_1099_float32_ssp_overflow.py	bc03_pdva_stelib_chabrier.h5
 tests/regression/bug/test_bug_2346_nebular_freefree_one_thermal_term.py	cloudy_grid_prsc.h5

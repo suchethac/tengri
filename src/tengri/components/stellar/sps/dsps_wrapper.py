@@ -385,10 +385,10 @@ def load_ssp(
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
         without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``
-        the bare-stellar PRSC/MILES Chabrier grid, the same one
+        the bare-stellar MIST/C3K Chabrier grid, the same one
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
-        explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
+        explicitly: ``load_ssp("mist_c3k_a_chabrier_wNE")``.
     download : bool, optional
         Fetch the grid from the hosted catalog if it is not found locally.
         Default ``False``, which raises instead; a default-on fetch would
@@ -434,7 +434,7 @@ def load_ssp(
     --------
     >>> from tengri import load_ssp
     >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
-    >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
+    >>> ssp = load_ssp("mist_c3k_a_chabrier_wNE")  # nebular-baked demo grid
     >>> ssp = load_ssp(download=True)  # fetch it if this checkout lacks it
     """
     from pathlib import Path

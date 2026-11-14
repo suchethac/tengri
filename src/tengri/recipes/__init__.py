@@ -628,7 +628,7 @@ def dust_demo() -> dict:
     one knob at a time without touching the rest.
 
     **SSP requirement:** wNE (with-nebular-emission), i.e.
-    ``load_ssp("prsc_miles_chabrier_wNE")``. Uses the BakedIn nebular path
+    ``load_ssp("mist_c3k_a_chabrier_wNE")``. Uses the BakedIn nebular path
     bundled with the SSP, so optical emission lines render in the SED plots.
     (The bare-stellar ``load_ssp()`` default carries no baked nebular lines.)
 
@@ -655,7 +655,7 @@ def dust_demo() -> dict:
         from tengri import SEDModel, load_ssp, recipes
         from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
 
-        model = SEDModel.build(ssp_data=load_ssp("prsc_miles_chabrier_wNE"), **recipes.dust_demo())
+        model = SEDModel.build(ssp_data=load_ssp("mist_c3k_a_chabrier_wNE"), **recipes.dust_demo())
         sweep_parameter(
             model,
             "dust_tau_bc",

@@ -134,7 +134,28 @@ jobs:
       # dev has jupytext but NOT nbclient/ipykernel; docs has jupyter (which pulls
       # nbclient, nbformat, ipykernel, matplotlib-inline).
       - run: pip install -e ".[dev,docs]"
-      # Every grid the CI-executable notebooks load is tracked in git: fsps_prsc_miles_chabrier
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache
+        with:
+          path: data/fsps_mist_c3k_a_chabrier.h5
+          key: ssp-fsps_mist_c3k_a_chabrier-v1
+      - name: Download the default SSP grid (cache miss only)
+        id: ssp_download
+        if: steps.ssp_cache.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/fsps_mist_c3k_a_chabrier.h5
+          key: ssp-fsps_mist_c3k_a_chabrier-v1
+      # The default MIST grid is fetched above (#3465). Every other grid the CI-executable
+      # notebooks load is tracked in git: fsps_prsc_miles_chabrier
       # for the numbered spine, and ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0 for
       # notebooks 09/11/12/jwst_nonparametric_fits/stochastic_sfh_recovery. multimodel_bma_candels
       # is excluded via CI_UNEXECUTABLE because its three wNE grids (MIST/Padova/BaSTI) are

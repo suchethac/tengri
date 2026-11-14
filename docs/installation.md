@@ -55,11 +55,11 @@ On every backend, `import tengri` enables 64-bit precision globally (`jax_enable
 
 ## SSP grids
 
-Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. The default is FSPS with PARSEC isochrones and the MILES library (Chabrier IMF), bare-stellar so the Cue and Cloudy nebular backends can sit on top. It is the grid the quickstart notebook uses.
+Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. The default is FSPS with MIST isochrones and the C3K library (Chabrier IMF), bare-stellar so the Cue and Cloudy nebular backends can sit on top. The Padova grids (PARSEC, PADOVA) are still available by name, but they give old populations almost no far-UV, so they are not the default. It is the grid the quickstart notebook uses.
 
 ```python
 import tengri
-tengri.download_ssp()          # → data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()          # → data/fsps_mist_c3k_a_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()       # other grids
 ```
 
