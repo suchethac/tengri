@@ -178,3 +178,34 @@ def test_alpha_gradient_on_the_lut_matches_finite_difference(config):
     assert np.isfinite(g), "a non-finite d(spectrum)/d(met_alpha_fe) through the LUT"
     assert g != 0.0, "an identically zero d(spectrum)/d(met_alpha_fe) through the LUT"
     np.testing.assert_allclose(g, fd, rtol=1e-4)
+
+
+@pytest.mark.parametrize("alpha", [0.0, 0.3, 0.6])
+def test_pre_broadened_cube_route_equals_the_per_draw_route(alpha):
+    """With a free redshift and a fixed dispersion the cube is broadened once at build.
+
+    On a grid with an [alpha/Fe] axis that cube carries the axis, and the route that
+    uses it must give the spectrum of the per-draw route, which broadens the summed
+    spectrum instead. The per-draw result comes from the same model with the built
+    cube removed from the stellar component's state.
+    """
+    import dataclasses
+
+    from tengri.inference._model_cache import _default_owner
+
+    config = "free_z_sigma_fixed"
+    model = _model(_ssp4d(), config, alpha=True, approx=SpectrumPrecomp())
+    stellar = model._cached_component_chain[0]
+    cube = stellar._state.spec_ssp_broadened
+    assert cube is not None and np.ndim(cube) == 4, "the 4D pre-broadened cube was not built"
+    pre_broadened = _spectrum(model, config, alpha)
+
+    object.__setattr__(
+        stellar, "_state", dataclasses.replace(stellar._state, spec_ssp_broadened=None)
+    )
+    _default_owner.clear()
+    jax.clear_caches()
+    per_draw = _spectrum(model, config, alpha)
+    _default_owner.clear()
+
+    assert _rel_err(pre_broadened, per_draw) < 1e-10
