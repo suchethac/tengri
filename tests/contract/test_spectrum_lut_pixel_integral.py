@@ -420,6 +420,30 @@ _REST_CASES = [
 ]
 
 
+def test_calzetti_clip_zero_is_a_breakpoint():
+    """The Calzetti IR branch is clipped at zero near 3.115 um rest; the table splits there (#3413)."""
+    from tengri.components.dust.attenuation import calzetti, law_breakpoints
+
+    assert any(abs(bp - 31149.76) < 1.0 for bp in law_breakpoints("calzetti"))
+    assert float(calzetti(jnp.asarray(31160.0))) == 0.0
+    assert float(calzetti(jnp.asarray(31100.0))) > 0.0
+
+
+def test_segment_expansion_point_lies_in_its_segment():
+    """A pixel that straddles a breakpoint expands each part about a point inside that part (#3413)."""
+    from tengri.observation.spectrum import segment_centres
+
+    centres = np.array([30500.0, 31400.0])
+    cs = segment_centres(centres, [31149.76])
+    assert cs.shape == (2, 2)
+    # Pixel 0 (centre below the break) keeps its centre in segment 0.
+    assert cs[0, 0] == 30500.0
+    # Pixel 1 (centre above the break) keeps its centre in segment 1, and its segment 0 part
+    # is expanded about the midpoint of the pixel's part below the break, not the break itself.
+    assert cs[1, 1] == 31400.0
+    assert 30000.0 < cs[1, 0] < 31149.76
+
+
 @pytest.mark.parametrize(("family", "sigma_v", "resolution", "wave_obs"), _REST_CASES)
 def test_rest_frame_output_matches_exact_rest_sed(family, sigma_v, resolution, wave_obs):
     """spec_rest_fnu under the table equals the exact rest SED, every served family (#3413)."""

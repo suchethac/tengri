@@ -2098,13 +2098,16 @@ def source_segment_ids(wave_rest, breakpoints=()):
 def segment_centres(wave_centres, breakpoints=()):
     """Expansion point of every pixel in every source segment (#3413).
 
-    The pixel's rest-frame centre, clipped to lie strictly inside the segment, so that a
-    smooth factor evaluated there takes the branch of that segment.
+    The pixel's rest-frame centre when it lies in the segment. Otherwise the midpoint of
+    the part of the pixel that lies in the segment: a clipped centre sits on the breakpoint,
+    where a dust factor with a slope discontinuity (a law clipped at zero) has the wrong
+    slope for the segment's own mass, so the first-order expansion is wrong there (#3413).
+    A pixel with no part in the segment keeps the clipped centre; its moments are zero.
 
     Parameters
     ----------
     wave_centres : array_like, shape (n_pix,)
-        Rest-frame pixel centres [Angstrom].
+        Rest-frame pixel centres [Angstrom], increasing.
     breakpoints : sequence of float
         Increasing rest-frame breakpoints [Angstrom].
 
@@ -2117,7 +2120,19 @@ def segment_centres(wave_centres, breakpoints=()):
     bps = np.sort(np.asarray(breakpoints, dtype=np.float64))
     lower = np.concatenate([[-np.inf], bps]) + np.concatenate([[0.0], np.full(bps.size, _SEGMENT_EPS_AA)])
     upper = np.concatenate([bps, [np.inf]]) - np.concatenate([np.full(bps.size, _SEGMENT_EPS_AA), [0.0]])
-    return np.clip(centres[:, None], lower[None, :], upper[None, :])
+    clipped = np.clip(centres[:, None], lower[None, :], upper[None, :])
+    if bps.size == 0:
+        return clipped
+    mids = np.diff(centres) / 2.0
+    edges = np.concatenate([[centres[0] - mids[0]], centres[:-1] + mids, [centres[-1] + mids[-1]]])
+    pix_lo = edges[:-1][:, None]
+    pix_hi = edges[1:][:, None]
+    part_lo = np.maximum(pix_lo, lower[None, :])
+    part_hi = np.minimum(pix_hi, upper[None, :])
+    inside = (centres[:, None] >= lower[None, :]) & (centres[:, None] <= upper[None, :])
+    part_mid = 0.5 * (part_lo + part_hi)
+    has_part = part_hi > part_lo
+    return np.where(inside, centres[:, None], np.where(has_part, part_mid, clipped))
 
 
 def segment_pixel_moments(wave_rest, sed_rest, seg_ids, n_seg, wave_centres, centres_seg, lsf=None):

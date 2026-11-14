@@ -116,7 +116,7 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 #: Each entry was located by scanning the law on a fine grid. A pixel-moment spectrum table
 #: splits a pixel at each break, so a factor never straddles a jump inside a sub-interval.
 DUST_LAW_BREAKPOINTS_AA: dict[str, tuple[float, ...]] = {
-    "calzetti": (6300.0,),
+    "calzetti": (6300.0, 31149.76),
     "kriek_conroy": (6300.0,),
     "salim": (6300.0,),
     "tea": (6300.0,),
