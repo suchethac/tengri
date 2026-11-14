@@ -2432,6 +2432,56 @@ class _CompositePopulation(NamedTuple):
     wave: Any
     sed_intrinsic: Any
     derived_overrides: Any
+    #: ``(ia, fa)`` of ``met_alpha_fe`` on a 4D grid, else None (see ``alpha_bracket``).
+    alpha_bracket: Any = None
+
+
+# Photometry LUT fields that carry the [alpha/Fe] axis on a 4D grid, shaped
+# (n_met, n_alpha, n_age, ...). The alpha axis sits at position 1.
+_FIXED_Z_LUT_ALPHA_FIELDS = (
+    "ssp_phot",
+    "ssp_phot_moment",
+    "ssp_subband_phot",
+    "ssp_subband_waves_rest",
+    "ssp_subband_phot_igm",
+    "ssp_subband_waves_rest_igm",
+    "ssp_phot_lyc",
+    "ssp_phot_nolyc",
+)
+# Free-z table fields, shaped (n_z, n_met, n_alpha, n_age, ...): the alpha axis is at 2.
+_FREE_Z_TABLE_ALPHA_FIELDS = (
+    "ssp_phot_table",
+    "ssp_phot_moment_table",
+    "ssp_subband_phot_table",
+    "subband_waves_rest_table",
+    "ssp_subband_phot_igm_table",
+    "subband_waves_rest_igm_table",
+    "ssp_phot_lyc_table",
+    "ssp_phot_nolyc_table",
+)
+# Rest-band LUT fields, shaped (n_met, n_alpha, n_age, ...).
+_RESTBAND_ALPHA_FIELDS = (
+    "ssp_restband_phot",
+    "ssp_restband_subband_phot",
+    "ssp_restband_subband_waves",
+)
+
+
+def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
+    """Collapse the named [alpha/Fe] array fields of a LUT at the model's bracket.
+
+    Fields that are None are left alone. ``alpha_bracket`` is the ``(ia, fa)`` pair from
+    :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+    ia, fa = alpha_bracket
+    collapsed = {
+        name: collapse_alpha_axis(getattr(tables, name), ia, fa, axis=axis)
+        for name in names
+        if getattr(tables, name) is not None
+    }
+    return tables._replace(**collapsed)
 
 
 @dataclass(frozen=True)
@@ -3139,6 +3189,7 @@ class StellarSEDComponent:
                 joint_weights=joint_weights,
                 total_mass=total_mass,
                 _alpha_collapse_active=_alpha_collapse_active,
+                alpha_bracket=c.alpha_bracket,
                 _agb_dust_cube=_agb_dust_cube,
                 template_data=template_data,
                 ztable_data=ztable_data,
@@ -3161,6 +3212,7 @@ class StellarSEDComponent:
         joint_weights,
         total_mass,
         _alpha_collapse_active,
+        alpha_bracket,
         _agb_dust_cube,
         template_data,
         ztable_data,
@@ -3172,6 +3224,12 @@ class StellarSEDComponent:
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
             phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
+            if alpha_bracket is not None:
+                # 4D grid: the LUT carries the [alpha/Fe] axis at position 1. Collapse it at
+                # the model's bracket, so every contraction below sees the 3D layout.
+                phot_lut = _collapse_alpha_fields(
+                    phot_lut, _FIXED_Z_LUT_ALPHA_FIELDS, alpha_bracket, axis=1
+                )
             # Fixed-z path; LUT built at source's z in precompute()
             ssp_phot = phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
@@ -3312,6 +3370,12 @@ class StellarSEDComponent:
             # Use ztable_data if threaded as JIT input, otherwise fall
             # back to the closure (for non-JIT paths).
             ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
+            if alpha_bracket is not None:
+                # 4D grid: collapse the [alpha/Fe] axis (position 2 after z and metallicity)
+                # before the z read, so the reads below see the 3D layout.
+                ztable = _collapse_alpha_fields(
+                    ztable, _FREE_Z_TABLE_ALPHA_FIELDS, alpha_bracket, axis=2
+                )
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
 
@@ -3436,6 +3500,8 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            if alpha_bracket is not None:
+                rb = _collapse_alpha_fields(rb, _RESTBAND_ALPHA_FIELDS, alpha_bracket, axis=1)
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
                 jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
             )
@@ -3726,8 +3792,11 @@ class StellarSEDComponent:
             ssp_flux_for_csp = (
                 ssp.ssp_flux
             )  # 4D (n_met, n_alpha, n_age, n_wave); collapsed after each contraction
+            # The same bracket collapses the photometry LUTs in _precomputed_tables.
+            _alpha_bracket = (_alpha_ia, _alpha_fa)
         else:
             ssp_flux_for_csp = ssp.ssp_flux
+            _alpha_bracket = None
 
         # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
         # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
@@ -4428,6 +4497,7 @@ class StellarSEDComponent:
         return _CompositePopulation(
             ssp_flux_for_csp=ssp_flux_for_csp,
             alpha_collapse_active=_alpha_collapse_active,
+            alpha_bracket=_alpha_bracket,
             agb_dust_cube=_agb_dust_cube,
             joint_weights=joint_weights,
             total_mass=total_mass,

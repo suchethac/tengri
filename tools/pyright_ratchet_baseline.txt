@@ -46,7 +46,6 @@ pyright	src/tengri/observation/catalog.py	1
 pyright	src/tengri/observation/eline_marginalization.py	8
 pyright	src/tengri/observation/fiber_aperture.py	1
 pyright	src/tengri/observation/fiber_spectroscopy.py	1
-pyright	src/tengri/observation/filters/__init__.py	2
 pyright	src/tengri/observation/filters/custom.py	2
 pyright	src/tengri/observation/line_list.py	8
 pyright	src/tengri/observation/linear_marginal.py	3

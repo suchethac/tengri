@@ -1061,6 +1061,44 @@ def precompute_photometry_ztable(
     return table
 
 
+# z-table fields shaped (n_z, n_met, n_age, ...): on a 4D [alpha/Fe] grid each gains an
+# alpha axis after n_met. The other fields (eff_waves_rest_table, log10_flux_scale_table,
+# igm_trans_table, z_grid) do not depend on the SSP grid and are taken from plane 0.
+_ZTABLE_ALPHA_FIELDS = (
+    "ssp_phot_table",
+    "ssp_phot_moment_table",
+    "ssp_subband_phot_table",
+    "subband_waves_rest_table",
+    "ssp_phot_lyc_table",
+    "ssp_phot_nolyc_table",
+)
+
+
+def _alpha_plane_ztable(ssp_data, filter_waves, filter_trans, **kwargs) -> PhotometricZTable:
+    """Build the z-table of a 4D ``(n_met, n_alpha, n_age, n_wave)`` grid.
+
+    Runs the 3D builder once per [alpha/Fe] plane and stacks the plane tables on a new
+    axis after n_met, so every alpha-carrying field is ``(n_z, n_met, n_alpha, n_age, ...)``.
+    The quadrature is unchanged; only the template slab differs.
+    """
+    planes = [
+        _compute_photometry_ztable(
+            ssp_data._replace(ssp_flux=ssp_data.ssp_flux[:, k]),
+            filter_waves,
+            filter_trans,
+            **kwargs,
+        )
+        for k in range(ssp_data.ssp_flux.shape[1])
+    ]
+    first = planes[0]
+    stacked = {
+        name: jnp.asarray(np.stack([np.asarray(getattr(p, name)) for p in planes], axis=2))
+        for name in _ZTABLE_ALPHA_FIELDS
+        if getattr(first, name) is not None
+    }
+    return first._replace(**stacked)
+
+
 def _compute_photometry_ztable(
     ssp_data,
     filter_waves,
@@ -1130,6 +1168,19 @@ def _compute_photometry_ztable(
         z_grid = jnp.linspace(z_min, z_max, n_z)
     else:
         z_grid = jnp.asarray(z_grid)
+
+    if len(ssp_data.ssp_flux.shape) == 4:
+        return _alpha_plane_ztable(
+            ssp_data,
+            filter_waves,
+            filter_trans,
+            z_grid=z_grid,
+            apply_igm=apply_igm,
+            taylor_correction=taylor_correction,
+            n_subbands=n_subbands,
+            convention=convention,
+            lyc_gate=lyc_gate,
+        )
 
     n_z_pts = len(z_grid)
     n_filters = len(filter_waves)
