@@ -2206,6 +2206,10 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     age_kernel: str | None = None
     field_centering: float = 1.0
     use_alpha_grid: bool = False
+    #: True when [alpha/Fe] is a per-age ramp (``met_alpha_fe_old`` to ``met_alpha_fe_young``,
+    #: #2250, #1767) instead of the scalar ``met_alpha_fe``. Set by the model; on a 4D grid it
+    #: makes every alpha bracket per-age.
+    alpha_fe_evolving: bool = False
     lgmet_scatter: float = 0.2
     # Maximum number of declared ``met_bin_<i>`` parameters (the
     # largest ladder the grammar accepts). The physics derives the
@@ -2481,6 +2485,46 @@ _FLUX_WEIGHTED_WAVE_FIELDS = {
 
 #: Log the pre-broadened SSP cube's size at build above this many megabytes.
 _BROADENED_CUBE_LOG_MB = 300.0
+
+
+def _refuse_free_agb_with_evolving_alpha(evolving: bool) -> None:
+    """Refuse a free AGB dust-shell weight beside a per-age [alpha/Fe] on a 4D grid.
+
+    The free-weight path collapses the alpha axis with the scalar interpolation
+    :func:`~tengri.components.stellar.sps.dsps_wrapper.interpolate_alpha_only`, which has no
+    per-age form, so it would silently use one [alpha/Fe] node for every age.
+    """
+    if evolving:
+        raise ValueError(
+            "alpha_fe_evolving=True with a free AGB dust-shell weight (agb_dust_weight) is not "
+            "supported: the free-weight AGB path collapses [alpha/Fe] at one scalar. Fix the "
+            "AGB weight, or use a scalar met_alpha_fe."
+        )
+
+
+def _alpha_fe_at_ages(params, ssp, *, evolving: bool, t_universe_gyr):
+    """[alpha/Fe] that sets the alpha bracket: a scalar, or one value per SSP age.
+
+    Not evolving: the scalar ``met_alpha_fe`` (unchanged). Evolving: the linear lookback-time
+    ramp of :func:`~tengri.components.stellar.sps.dsps_wrapper.compute_alpha_fe_evolving`
+    from ``met_alpha_fe_old`` (oldest) to ``met_alpha_fe_young`` (present), with the age of the
+    universe at the model redshift ``t_universe_gyr`` [Gyr] as the ramp's full lookback.
+
+    Returns
+    -------
+    ndarray, shape () or (n_age,)
+        [alpha/Fe] (dimensionless).
+    """
+    if not evolving:
+        return jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+    from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
+
+    return compute_alpha_fe_evolving(
+        ssp.ssp_lg_age_gyr,
+        jnp.asarray(params["met_alpha_fe_old"]),
+        jnp.asarray(params["met_alpha_fe_young"]),
+        t_universe_gyr,
+    )
 
 
 def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
@@ -3846,7 +3890,12 @@ class StellarSEDComponent:
             # shared constant.
             from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket
 
-            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+            _alpha_fe_value = _alpha_fe_at_ages(
+                params,
+                ssp,
+                evolving=self.config.alpha_fe_evolving,
+                t_universe_gyr=t_obs_gyr,
+            )
             _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
             ssp_flux_for_csp = (
                 ssp.ssp_flux
@@ -3875,6 +3924,7 @@ class StellarSEDComponent:
         _csp_cube_is_4d = _alpha_collapse_active and _agb_dust_cube is None
         if _agb_dust_cube is not None:
             if _alpha_collapse_active:
+                _refuse_free_agb_with_evolving_alpha(self.config.alpha_fe_evolving)
                 from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
                 ssp_flux_for_csp = (
@@ -5133,6 +5183,7 @@ class StellarSEDComponent:
             params, ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux
         )
         if agb_dust_cube is not None and has_alpha_grid(ssp):
+            _refuse_free_agb_with_evolving_alpha(self.config.alpha_fe_evolving)
             from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
             _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
@@ -5150,8 +5201,14 @@ class StellarSEDComponent:
                 alpha_bracket,
                 collapse_alpha_axis,
             )
+            from tengri.cosmology import age_at_z
 
-            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+            _alpha_fe_value = _alpha_fe_at_ages(
+                params,
+                ssp,
+                evolving=self.config.alpha_fe_evolving,
+                t_universe_gyr=age_at_z(require_redshift(params, "compute_log_nion")),
+            )
             _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
             lnu_age_ion = collapse_alpha_axis(
                 jnp.einsum("ma,mkai->kai", joint_weights, ssp.ssp_flux[..., :n_ion]),

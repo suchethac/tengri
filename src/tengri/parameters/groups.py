@@ -292,6 +292,10 @@ def _alpha_fe_free_resolution(
     )
 
 
+#: The [alpha/Fe] parameters that share the grid gate: the scalar, and the per-age pair (#2250).
+_ALPHA_FE_GATED_PARAMS = ("met_alpha_fe", "met_alpha_fe_old", "met_alpha_fe_young")
+
+
 def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
     """Refuse an explicit ``met_alpha_fe`` prior that misses the grid; warn if it overhangs.
 
@@ -304,29 +308,30 @@ def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], s
     from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
     from tengri.config.exceptions import GridSupportWarning
 
-    dist = resolved.get(_ALPHA_FE_PARAM)
-    if dist is None or provenance.get(_ALPHA_FE_PARAM) != "user_prior":
-        return
     if ssp_data is None or not has_alpha_grid(ssp_data):
         return
     nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
     g_lo, g_hi = float(nodes.min()), float(nodes.max())
-    d_lo, d_hi = dist.bounds
-    if d_hi < g_lo or d_lo > g_hi:
-        raise ParameterError(
-            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
-            f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
-            "would be clipped onto an edge node. Choose a range inside the grid."
-        )
-    if d_lo < g_lo or d_hi > g_hi:
-        warnings.warn(
-            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
-            f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
-            "is clipped onto the edge nodes, so the prior mass there has no effect on "
-            "the SED.",
-            GridSupportWarning,
-            stacklevel=3,
-        )
+    for name in _ALPHA_FE_GATED_PARAMS:
+        dist = resolved.get(name)
+        if dist is None or provenance.get(name) != "user_prior":
+            continue
+        d_lo, d_hi = dist.bounds
+        if d_hi < g_lo or d_lo > g_hi:
+            raise ParameterError(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
+                f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
+                "would be clipped onto an edge node. Choose a range inside the grid."
+            )
+        if d_lo < g_lo or d_hi > g_hi:
+            warnings.warn(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
+                f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
+                "is clipped onto the edge nodes, so the prior mass there has no effect on "
+                "the SED.",
+                GridSupportWarning,
+                stacklevel=3,
+            )
 
 
 def _explicit_free(param_name: str, group_dict: dict) -> bool:
@@ -1576,10 +1581,17 @@ def parse_groups(**kwargs) -> Parameters:
         # channel (#2250). Without one an explicit FREE is refused by name; a
         # wildcard FREE leaves it pinned, and the partial-free notice names it.
         grid_free_prior = None
-        if param_name == _ALPHA_FE_PARAM:
+        if param_name in _ALPHA_FE_GATED_PARAMS:
             grid_free_prior, refusal = alpha_fe_free
-            if refusal is not None and _explicit_free(param_name, group_dict):
-                raise ParameterError(refusal)
+            if refusal is not None:
+                # The per-age pair shares the scalar's gate (#2250). A closed gate pins the
+                # parameter at 0.0 under a wildcard; its declared Uniform default would
+                # otherwise free it on every grid.
+                refusal = refusal.replace(_ALPHA_FE_PARAM, param_name)
+                if _explicit_free(param_name, group_dict):
+                    raise ParameterError(refusal)
+                if param_name != _ALPHA_FE_PARAM:
+                    grid_free_prior = Fixed(0.0)
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -3978,6 +3990,7 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "still works; this mixes the two.)"
         )
     _set_met_mode(met_dict.get("type"), result)
+    _translate_alpha_fe_evolving(met_dict, result)
 
     # ``met_bin_edges_log_yr`` is a structural setting (array of bin edges in
     # log Gyr) that only applies to metallicity-history modes (bins, bins_continuity).
@@ -3990,6 +4003,38 @@ def _translate_met(met_dict: dict, result: dict) -> None:
         _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
         _validate_met_ladder_keys(met_type, met_dict, len(met_dict["met_bin_edges_log_yr"]) - 1)
         result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
+
+
+def _translate_alpha_fe_evolving(met_dict: dict, result: dict) -> None:
+    """Route ``met={'alpha_fe_evolving': True, 'alpha_fe_old': ..., 'alpha_fe_young': ...}``.
+
+    The flag swaps the scalar ``met_alpha_fe`` for the pair ``met_alpha_fe_old`` (oldest
+    stars) and ``met_alpha_fe_young`` (present day), #2250. The two spellings are exclusive
+    and are refused by name when mixed; the pair is refused without the flag.
+
+    Raises
+    ------
+    ValueError
+        If the flag is not a bool, if ``alpha_fe`` and ``alpha_fe_evolving`` are both given,
+        or if ``alpha_fe_old`` / ``alpha_fe_young`` appear without the flag set to True.
+    """
+    evolving = met_dict.get("alpha_fe_evolving", False)
+    if not isinstance(evolving, bool):
+        raise ValueError(f"met['alpha_fe_evolving'] must be True or False, not {evolving!r}.")
+    pair = [k for k in ("alpha_fe_old", "alpha_fe_young") if k in met_dict]
+    if evolving:
+        if "alpha_fe" in met_dict:
+            raise ValueError(
+                "met group: 'alpha_fe' (a scalar [alpha/Fe]) and 'alpha_fe_evolving': True "
+                "are exclusive. Give alpha_fe_old and alpha_fe_young for a per-age ramp, or "
+                "alpha_fe for one [alpha/Fe] at every age."
+            )
+        result["alpha_fe_evolving"] = True
+    elif pair:
+        raise ValueError(
+            f"met group: {pair} need 'alpha_fe_evolving': True; without it the model has a "
+            "single scalar met_alpha_fe, so give alpha_fe instead."
+        )
 
 
 def _set_met_mode(met_mode, result: dict) -> None:
@@ -6126,7 +6171,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright: two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr"}),
+    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr", "alpha_fe_evolving"}),
     "dust_attenuation": frozenset(
         {
             "type",
@@ -6347,6 +6392,9 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # met={} entry is never forced onto call sites that diff against
         # from_groups.
         _Structural("type", "met_mode", "delta"),
+        # Per-age [alpha/Fe] ramp (#2250): the boolean that replaces the scalar
+        # ``alpha_fe`` with ``alpha_fe_old`` / ``alpha_fe_young`` in this group.
+        _Structural("alpha_fe_evolving", "alpha_fe_evolving", False),
         # Bin edges [log Gyr] for metallicity-history modes (bins, bins_continuity).
         # None falls back to _DEFAULT_MET_BIN_EDGES_LOG_YR. Only valid for types that
         # use lookback-time bins for metallicity history.
@@ -9521,7 +9569,9 @@ def parameters_to_groups(spec: Parameters) -> dict:
     #
     # The block emitted is ``met`` (#1720), which is the only spelling now:
     # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
-    use_met_block = getattr(spec, "met_mode", "delta") != "delta"
+    use_met_block = getattr(spec, "met_mode", "delta") != "delta" or bool(
+        getattr(spec, "alpha_fe_evolving", False)
+    )
     # A monolithic AGN model and the six sub-block selectors are mutually
     # exclusive surfaces: ``_translate_agn`` raises when a non-composable
     # ``agn['type']`` appears next to sub-block keys. So the moment the type is
