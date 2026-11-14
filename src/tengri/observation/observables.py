@@ -61,14 +61,17 @@ def build_observables_class(observation) -> type:
 
     Examples
     --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import Observation, Photometry
     >>> obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
     >>> Observables = build_observables_class(obs)
     >>> o = Observables(phot_fnu=jnp.array([1e-26]), phot_rest_fnu=jnp.array([2e-26]))
-    >>> o.phot_fnu
-    DeviceArray([1.e-26], dtype=float64)
-    >>> o.mag_apparent
-    DeviceArray([23.4], dtype=float64)
-    >>> o.spec_fnu  # raises AttributeError, spectroscopy not configured
+    >>> o.phot_fnu.tolist()
+    [1e-26]
+    >>> round(float(o.mag_apparent[0]), 1)
+    16.4
+    >>> hasattr(o, "spec_fnu")  # spectroscopy not configured
+    False
     """
     fields: list[tuple[str, Any]] = []
 

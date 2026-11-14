@@ -37,6 +37,7 @@ unchanged.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
 
@@ -44,7 +45,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
-from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.inference.likelihoods.gaussian import (
+    LOG_2PI,
+    diag_gaussian_log_normalization,
+    diag_gaussian_log_prob,
+    student_t_log_norm_per_point,
+)
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.noise import (
     censored_neg_log_likelihood as _censored_neg_log_lik,
@@ -101,6 +107,34 @@ def resolve_channel_data(baked, key, data_slice, data_args):
 # ─────────────────────────────────────────────────────────────────────
 # 1. Diagonal Gaussian, the workhorse
 # ─────────────────────────────────────────────────────────────────────
+
+
+def log_normalization_of(likelihood, data_args=None):
+    """Return the constant a likelihood's ``log_prob`` omits, or 0 with a warning (#3427).
+
+    Parameters
+    ----------
+    likelihood : Likelihood
+        Any cohort member or user likelihood.
+    data_args : dict, optional
+        The traced data bundle the likelihood reads its channels from.
+
+    Returns
+    -------
+    scalar
+        ``log p(d | params) - likelihood.log_prob(...)`` at any parameters, in nats. Zero
+        when the class does not implement :meth:`log_normalization`; the evidence then
+        omits that class's constant, and a warning says so.
+    """
+    method = getattr(likelihood, "log_normalization", None)
+    if method is None:
+        warnings.warn(
+            f"{type(likelihood).__name__} has no exact log normalization: log_evidence "
+            "omits its constant (#3427).",
+            stacklevel=3,
+        )
+        return 0.0
+    return method(data_args)
 
 
 @dataclass(frozen=True)
@@ -161,6 +195,26 @@ class GaussianLikelihood:
         return diag_gaussian_log_prob(
             prediction[self.channel], obs, err, sigma_floor=self.sigma_floor, presence=presence
         )
+
+    def log_normalization(self, data_args: Mapping[str, jnp.ndarray] | None = None):
+        """Return ``-sum_present log sigma_eff - (n_present/2) log 2 pi`` (#3427).
+
+        The fractional floor is a fixed float, so this depends on the data only. Absent
+        bands (presence 0) count in neither term.
+        """
+        obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
+        err = resolve_channel_data(self.err, self.err_key, self.data_slice, data_args)
+        presence = None
+        if (
+            data_args is not None
+            and self.presence_key is not None
+            and self.presence_key in data_args
+        ):
+            presence = data_args[self.presence_key]
+            if self.data_slice is not None:
+                presence = presence[self.data_slice[0] : self.data_slice[1]]
+        sigma_eff = jnp.hypot(err, self.sigma_floor * obs)
+        return diag_gaussian_log_normalization(sigma_eff, presence)
 
     def declared_parameters(self):
         return []
@@ -274,6 +328,16 @@ class StudentTLikelihood:
         """
         return derive_key(self, _STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY)
 
+    def log_normalization(self, data_args: Mapping[str, jnp.ndarray] | None = None):
+        """Return ``-(n/2) log 2 pi``, the constant :meth:`log_prob` omits (#3427).
+
+        The energy already carries ``sum log sigma_eff`` (a free calibration floor
+        included) and, for Student-t, the ``lgamma`` term (#2525), so only the ``2 pi``
+        constant is missing.
+        """
+        obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
+        return -0.5 * jnp.size(obs) * LOG_2PI
+
 
 _STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "obs": shape("per-galaxy data; program shape depends on length, not values"),
@@ -378,6 +442,20 @@ class CensoredLikelihood:
         """
         return derive_key(self, _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY)
 
+    def log_normalization(self, data_args: Mapping[str, jnp.ndarray] | None = None):
+        """Return the constant :meth:`log_prob` omits, from the detected bands (#3427).
+
+        Upper and lower limits are normalized CDFs already. Each detected band carries
+        ``-(1/2) log 2 pi``, and for Student-t detections the per-point ``lgamma`` term,
+        which :func:`~tengri.observation.noise.censored_neg_log_likelihood` leaves out.
+        """
+        mask = resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args)
+        n_detected = jnp.sum(mask == 0)
+        if self.dof is not None:
+            # The Student-t density carries its own -(1/2) log(nu pi); no separate 2 pi.
+            return n_detected * student_t_log_norm_per_point(self.dof)
+        return -0.5 * n_detected * LOG_2PI
+
 
 _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "obs": shape("per-galaxy data; program shape depends on length, not values"),
@@ -471,7 +549,7 @@ class MultivariateGaussianLikelihood:
             presence = data_args[self.presence_key]
             if self.data_slice is not None:
                 presence = presence[self.data_slice[0] : self.data_slice[1]]
-            diff = presence * diff
+            diff = jnp.where(presence > 0, diff, 0.0)
         if self.chol_data is None:
             return -0.5 * (diff @ self.cov_inv @ diff)
         factor = BandedMatrix(
@@ -494,6 +572,23 @@ class MultivariateGaussianLikelihood:
         vary it per Fitter.
         """
         return derive_key(self, _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY)
+
+    def log_normalization(self, data_args: Mapping[str, jnp.ndarray] | None = None):
+        """Return ``-(1/2) log det C - (n/2) log 2 pi`` (#3427).
+
+        The determinant comes from the banded Cholesky factor when one is given (twice
+        the sum of the log of its diagonal), otherwise from the dense inverse. The
+        covariance is per model, so this does not depend on the parameters.
+        """
+        obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
+        if self.chol_data is None:
+            log_det = -jnp.linalg.slogdet(self.cov_inv)[1]
+        else:
+            chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+            offsets = np.asarray(self.chol_offsets, dtype=int)
+            diagonal = chol[int(np.where(offsets == 0)[0][0])]
+            log_det = 2.0 * jnp.sum(jnp.log(diagonal))
+        return -0.5 * log_det - 0.5 * jnp.size(obs) * LOG_2PI
 
 
 _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {

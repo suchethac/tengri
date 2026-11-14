@@ -147,6 +147,22 @@ def test_upcast_preserves_stored_values(f32_any):
         ):
             stored = f[name][:]
             assert stored.dtype == np.float32, f"{name} is not float32 on disk"
+            if name == "ssp_flux":
+                # The #3406 repair replaces the recorded cells by design; all others must match.
+                keep = np.ones(stored.shape[:2], dtype=bool)
+                lgmet_axis = np.asarray(ssp.ssp_lgmet)
+                age_axis = np.asarray(ssp.ssp_lg_age_gyr)
+                for lg_met, lg_age in ssp.repaired_cells:
+                    keep[
+                        np.argmin(np.abs(lgmet_axis - lg_met)),
+                        np.argmin(np.abs(age_axis - lg_age)),
+                    ] = False
+                np.testing.assert_array_equal(
+                    np.asarray(loaded)[keep],
+                    stored.astype(np.float64)[keep],
+                    err_msg="ssp_flux altered on load outside the repaired cells",
+                )
+                continue
             np.testing.assert_array_equal(
                 np.asarray(loaded), stored.astype(np.float64), err_msg=f"{name} altered on load"
             )

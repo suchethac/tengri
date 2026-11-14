@@ -14,6 +14,7 @@ program serves every galaxy with the same structure.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -22,7 +23,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference._prediction import _build_prediction, _resolve_measured_line_defs
-from tengri.inference.likelihoods.gaussian import inv_noise_std, standardized_residual
+from tengri.inference.likelihoods.gaussian import (
+    LOG_2PI,
+    inv_noise_std,
+    standardized_residual,
+    student_t_log_norm_per_point,
+)
+from tengri.inference.likelihoods.protocol import log_normalization_of
 
 __all__ = [
     "DataTerm",
@@ -221,6 +228,7 @@ class DataTerm:
     options: DataTermOptions
     cache_key: tuple
     _log_lik: Callable = field(repr=False)
+    _log_norm: Callable | None = field(repr=False, default=None)
 
     def log_prob(self, params: Mapping, data_args: Mapping):
         """Evaluate ``log p(d | params)``.
@@ -238,6 +246,27 @@ class DataTerm:
             Log-likelihood [nats], rank 0.
         """
         return self._log_lik(params, data_args)
+
+    def log_normalization(self, data_args: Mapping):
+        """Return the constant :meth:`log_prob` omits, in nats (#3427).
+
+        ``log_prob(params, data_args) + log_normalization(data_args)`` is the exact log
+        density of the data. The constant depends on the data and the fixed structure
+        only: a free noise parameter's ``log sigma_eff`` is already inside ``log_prob``.
+
+        Parameters
+        ----------
+        data_args : dict
+            The traced data bundle, with the same structure as ``self.data_args``.
+
+        Returns
+        -------
+        scalar
+            The normalization [nats]. Zero when the term has no normalization to add.
+        """
+        if self._log_norm is None:
+            return 0.0
+        return self._log_norm(data_args)
 
 
 @dataclass(frozen=True, eq=False)
@@ -666,13 +695,46 @@ def build_data_term(
             censored_nll=censored_neg_log_likelihood,
         )
 
+    def log_norm(call_data_args):
+        """The constant ``log_lik`` omits, for the same structure (#3427)."""
+        if likelihood is not None:
+            return log_normalization_of(likelihood, call_data_args)
+        return _censored_fallthrough_normalization(
+            call_data_args,
+            noise_dof=noise_dof,
+            has_extra_channels=has_line_fluxes or has_line_ratios or has_indices,
+        )
+
     return DataTerm(
         data_args=data_args,
         likelihood=likelihood,
         options=options,
         cache_key=_data_term_cache_key(options, data_args),
         _log_lik=log_lik,
+        _log_norm=log_norm,
     )
+
+
+def _censored_fallthrough_normalization(data_args, *, noise_dof, has_extra_channels):
+    """Normalization of the censored fall-through: its detected photometric bands (#3427).
+
+    The fall-through's censored energy carries ``log sigma_eff`` for the detected bands
+    already. Its line-flux, line-ratio and index channels are chi-squared forms with no
+    normalization here, so their constants are not included and a warning says so.
+    """
+    if "data_mask" not in data_args:
+        return 0.0
+    if has_extra_channels:
+        warnings.warn(
+            "The censored fall-through has line-flux, line-ratio or index channels; their "
+            "normalization constants are not in log_evidence (#3427).",
+            stacklevel=3,
+        )
+    n_detected = jnp.sum(data_args["data_mask"] == 0)
+    if noise_dof is not None:
+        # The Student-t density carries its own -(1/2) log(nu pi); no separate 2 pi.
+        return n_detected * student_t_log_norm_per_point(noise_dof)
+    return -0.5 * n_detected * LOG_2PI
 
 
 def _signature_parameters(fn) -> set:

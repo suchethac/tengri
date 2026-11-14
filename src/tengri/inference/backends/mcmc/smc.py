@@ -369,6 +369,8 @@ def run_smc(
             n_particles,
         )
 
+    # The tempered sums omit the Gaussian normalization; the published ln Z adds it (#3427).
+    log_norm = context.log_evidence_normalization
     return Posterior(
         samples=samples_phys,
         params=best_params,
@@ -404,7 +406,7 @@ def run_smc(
             # log Z comes free with the weights. One value per independent
             # population: their SPREAD is the error bar, and no single run can
             # produce one.
-            "log_evidence": [float(v) for v in log_z],
+            "log_evidence": [float(v) + log_norm for v in log_z],
             "log_evidence_spread": (
                 float(jnp.max(log_z) - jnp.min(log_z)) if n_chains > 1 else None
             ),
