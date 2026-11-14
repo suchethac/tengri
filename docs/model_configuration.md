@@ -183,7 +183,7 @@ model = SEDModel.build(
 #  tengri.list_remote_ssps()), or remove met_alpha_fe, or hold it at Fixed(0.0)."
 ```
 
-To vary [alpha/Fe], pass an alpha-enhanced 4-D grid (a name containing `_afe`, listed by `tengri.list_remote_ssps()`) as `ssp_data`, then give `met_alpha_fe` its prior. `Fixed(0.0)`, the declared default, builds on any grid.
+To vary [alpha/Fe], pass an alpha-enhanced 4-D grid (a name containing `_afe`, listed by `tengri.list_remote_ssps()`) as `ssp_data`, then give `met_alpha_fe` an explicit prior. The prior is checked against the grid's [alpha/Fe] nodes: one with no overlap is refused, and one that extends past them is kept with a `GridSupportWarning`, since the lookup clips at the edge nodes. On such a grid the `FREE` refusal above also names the node range, e.g. `For this grid: alpha_fe: Uniform(-0.2, 0.6)`. `Fixed(0.0)`, the declared default, builds on any grid and is what every build uses unless a prior is given.
 
 `redshift` is the worked example of the opposite outcome: a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` frees it over that range rather than raising:
 
@@ -261,7 +261,7 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 - `'type'`: Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'met_bin_edges_log_yr'`: Lookback-time bin edges [log₁₀ yr] for metallicity-history modes (`'bins'` or `'bins_continuity'`). Default spans 1 Myr to 13.8 Gyr. Accepts an array of strictly increasing edge values (at least 2 edges). Mirroring `sfh={'bin_edges_gyr': [...]}` for non-parametric star formation histories.
-- `'alpha_fe_evolving'`: `True` replaces the single `alpha_fe` by a linear ramp in lookback time between `alpha_fe_young` (today) and `alpha_fe_old` (the oldest stars). Needs an SSP grid with an [α/Fe] axis; `alpha_fe` and `alpha_fe_evolving` cannot be given together. Default `False`.
+- `'alpha_fe_evolving'`: `True` replaces the single `alpha_fe` by a linear ramp in lookback time between `alpha_fe_young` (today) and `alpha_fe_old` (the oldest stars). Needs an SSP grid with an [α/Fe] axis; `alpha_fe` and `alpha_fe_evolving` cannot be given together. Both ends are fixed at 0.0 unless given explicit priors, which follow the same rule as `alpha_fe`. Default `False`.
 
 **Minimal example:**
 ```python
