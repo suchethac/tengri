@@ -406,6 +406,25 @@ def _projected_rest_sed(state) -> jnp.ndarray:
     return sum(jnp.asarray(state.derived.get(key, 0.0)) for key in _PROJECTED_SED_KEYS)
 
 
+def _pixel_table_rest_fnu(state, wave_obs, redshift) -> jnp.ndarray:
+    """Rest-frame F_nu at 10 pc of the full rest SED on a pixel table's edges (#3413).
+
+    The pixel-moment table integrates over the edges ``wave_obs / (1 + z)``. The rest-frame
+    output is the conserving mean of ``sed_intrinsic`` (every family, dust-attenuated, no
+    IGM, no instrument) over those edges, at z = 0 and d_L = 1 cm, then divided by the
+    10 pc distance factor in log space (float32-safe, #3361). This is the exact path's rest
+    SED, so no family is left out and no kernel is applied.
+    """
+    from tengri.observation.spectrum import project_spectrum
+    from tengri.utils.physics_constants import TEN_PC_CM
+
+    rest_edges = jnp.asarray(wave_obs) / (1.0 + redshift)
+    f_at_1cm = project_spectrum(
+        state.sed_intrinsic, state.wave, rest_edges, 0.0, 1.0, conserving=True
+    )
+    return apply_log10_scale(f_at_1cm, -2.0 * jnp.log10(TEN_PC_CM))
+
+
 def _sum_present(*terms):
     """Sum of the non-``None`` terms, or ``None`` when every term is absent (#3413)."""
     present = [t for t in terms if t is not None]
@@ -3241,6 +3260,14 @@ class Observation:
 
         # Log10 offset for the same reason as phot_rest_fnu (#3361).
         spec_rest_fnu = apply_log10_scale(total_spec_lnu, log10_flux_scale(0.0, TEN_PC_CM))
+        if sub_table is not None:
+            # A pixel-moment table's rest output is the exact rest SED on the table's pixel
+            # edges, with every served family and no instrument (#3413). The moments carry
+            # the instrument and sigma_v, which the rest frame does not have.
+            rest_z = jnp.asarray(
+                require_redshift(params, "observation.observation.predict_spectrum_via_precomp")
+            )
+            spec_rest_fnu = _pixel_table_rest_fnu(state, self.spectroscopy.wave_obs, rest_z)
 
         # IGM / DLA attenuation. Unlike the photometry LUT, the spectrum LUT is
         # per-pixel, so the observed-frame transmission is applied *exactly*:

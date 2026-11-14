@@ -357,3 +357,56 @@ def test_banded_resolution_on_point_samples_falls_back_to_exact():
     assert _spectrum_lut_for_auto(_family_model(ssp, "banded-point", None)) is None
     with pytest.warns(UserWarning, match="banded resolution matrix"):
         _family_model(ssp, "banded-point", SpectrumPrecomp())
+
+
+def _rest_fnu_pair(ssp, family, sigma_v, resolution, wave_obs):
+    """Rest-frame F_nu at 10 pc: the table's output and the exact rest SED, same edges (#3413).
+
+    The exact reference projects ``sed_intrinsic`` (every family, no instrument) on the
+    pixel edges ``wave_obs / (1 + z)``, the rest frame the table integrates over.
+    """
+    from tengri.observation.spectrum import project_spectrum
+    from tengri.utils.physics_constants import TEN_PC_CM
+
+    kw = {"sigma_v_override": sigma_v, "resolution_override": resolution, "wave_obs": wave_obs}
+    exact = _family_model(ssp, family, None, **kw)
+    lut = _family_model(ssp, family, SpectrumPrecomp(), **kw)
+    params = {"dust_tau_bc": jnp.asarray(0.5), "dust_tau_diff": jnp.asarray(0.3)}
+    exact_state = exact.predict_state(params)
+    rest_edges = np.asarray(wave_obs) / 1.1
+    ref = project_spectrum(
+        exact_state.sed_intrinsic,
+        exact_state.wave,
+        jnp.asarray(rest_edges),
+        0.0,
+        TEN_PC_CM,
+        conserving=True,
+    )
+    lut_state = lut.predict_state(params)
+    full = {**dict(lut.spec.get_fixed_values()), **params}
+    out = lut.observation.predict_spectrum_via_precomp(
+        lut_state, full, observables_type=None, sigma_lib_kms=0.0, lsf_scale=1.0, lsf_n_bins=16
+    )
+    return np.asarray(out["spec_rest_fnu"]), np.asarray(ref)
+
+
+_REST_CASES = [
+    pytest.param("agn", 150.0, 2000.0, _SDSS, id="agn-sv150-R2000"),
+    pytest.param("radio", 0.0, None, _PROJECTED_BANDS["radio"], id="radio-1-10cm"),
+    pytest.param("xray", 0.0, None, _PROJECTED_BANDS["xray"], id="xray-1-60A"),
+    pytest.param("cue-R2000-sv150", 150.0, 2000.0, _SDSS, id="cue-sv150-R2000"),
+]
+
+
+@pytest.mark.parametrize(("family", "sigma_v", "resolution", "wave_obs"), _REST_CASES)
+def test_rest_frame_output_matches_exact_rest_sed(family, sigma_v, resolution, wave_obs):
+    """spec_rest_fnu under the table equals the exact rest SED, every served family (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(family.startswith("cue"))
+    ssp = load_ssp_data(_BARE_SSP)
+    got, ref = _rest_fnu_pair(ssp, family, sigma_v, resolution, wave_obs)
+    assert np.all(np.isfinite(got))
+    err = _pixel_rel(got, ref)
+    print(f"\n{family}: rest-frame max rel err = {err:.3e}")
+    assert err <= _TOL, f"rest-frame max per-pixel rel err {err:.3e} > {_TOL:g}"
