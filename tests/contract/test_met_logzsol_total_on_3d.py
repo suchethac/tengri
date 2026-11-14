@@ -2,16 +2,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """On a 3-D SSP grid ``met_logzsol`` is the total metallicity, with no alpha fold (#3411).
 
-Before #3411 the ``"delta"`` branch read ``met_logzsol`` as [Fe/H] and shifted it
-by 0.75 * [alpha/Fe] on a 3-D grid, so a model at ``met_logzsol = x`` and
-``met_alpha_fe = 0.4`` was the same model as one at ``x + 0.3``. Both facts are
-pinned here: photometry at a given ``met_logzsol`` depends only on that value,
-and a 0.3 dex change in it changes the photometry. If the fold came back, the
-second assertion would fail, because the metallicity would be read twice.
+The build refuses a non-zero ``met_alpha_fe`` on a grid without an [alpha/Fe] axis,
+so the refusal alone cannot show that the stellar component ignores the value. These
+tests hand [alpha/Fe] = 0.4 to the two places that compute the metallicity weights,
+past the refusal: the compiled forward (through its fixed-value argument) and
+``compute_joint_weights``. Each must give the alpha = 0 result bit for bit. A term
+``0.75 * met_alpha_fe`` added to the metallicity in either place moves the photometry
+by a factor 1.54 on this grid.
 """
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -25,6 +27,7 @@ from tengri.utils.physics_constants import LOG10_ZSUN
 pytestmark = pytest.mark.contract
 
 X = -0.6
+ALPHA = 0.4
 
 
 @pytest.fixture(scope="module")
@@ -49,8 +52,8 @@ def observation():
     return tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r"]))
 
 
-def _photometry(ssp, observation, logzsol):
-    model = SEDModel.build(
+def _model(ssp, observation):
+    return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
         sfh={
@@ -60,22 +63,40 @@ def _photometry(ssp, observation, logzsol):
             "age_gyr": Fixed(3.0),
             "log_total_mass": Fixed(10.0),
         },
-        met={"logzsol": Fixed(logzsol), "alpha_fe": Fixed(0.0)},
+        met={"logzsol": Fixed(X), "alpha_fe": Fixed(0.0)},
         redshift=Fixed(0.1),
         neb={"type": "ssp"},
     )
-    return np.asarray(model.predict_photometry({}), dtype=np.float64)
 
 
-def test_the_same_met_logzsol_gives_the_same_photometry(ssp3d, observation):
-    first = _photometry(ssp3d, observation, X)
-    again = _photometry(ssp3d, observation, X)
-    assert np.array_equal(first, again)
+def _forward(model, **fixed_overrides):
+    """Photometry from the compiled forward with some fixed values replaced."""
+    fixed = dict(model.spec.get_fixed_values())
+    fixed.update({name: jnp.asarray(value) for name, value in fixed_overrides.items()})
+    kernel = model._get_or_build_predict_observables_jit()
+    out = kernel(
+        {}, fixed, model.ssp_data, model._template_data_for_jit(), model._ztable_data_for_jit()
+    )
+    return np.asarray(getattr(out, "photometry", out), dtype=np.float64)
 
 
-def test_a_shift_in_met_logzsol_is_not_absorbed_by_an_alpha_fold(ssp3d, observation):
-    """A 0.3 dex shift (= 0.75 * 0.4) must move the photometry: no fold reads it back."""
-    at_x = _photometry(ssp3d, observation, X)
-    shifted = _photometry(ssp3d, observation, X + 0.75 * 0.4)
-    assert not np.array_equal(at_x, shifted)
-    assert np.max(np.abs(shifted - at_x) / np.abs(at_x)) > 1e-3
+def test_alpha_reaching_apply_does_not_shift_the_metallicity(ssp3d, observation):
+    model = _model(ssp3d, observation)
+    assert np.array_equal(_forward(model, met_alpha_fe=ALPHA), _forward(model))
+
+
+def test_alpha_reaching_the_joint_weights_does_not_shift_the_metallicity(ssp3d, observation):
+    model = _model(ssp3d, observation)
+    stellar = model._build_component_chain()[0]
+    fixed = dict(model.spec.get_fixed_values())
+    at_zero = stellar.compute_joint_weights(fixed, ssp3d)
+    enhanced = stellar.compute_joint_weights({**fixed, "met_alpha_fe": jnp.asarray(ALPHA)}, ssp3d)
+    for a, b in zip(jax.tree_util.tree_leaves(enhanced), jax.tree_util.tree_leaves(at_zero)):
+        assert np.array_equal(np.asarray(a), np.asarray(b))
+
+
+def test_the_metallicity_the_fold_would_have_reached_gives_other_photometry(ssp3d, observation):
+    """The control: this grid tells ``met_logzsol`` from ``met_logzsol + 0.75 * 0.4``."""
+    model = _model(ssp3d, observation)
+    shifted = _forward(model, met_logzsol=X + 0.75 * ALPHA)
+    assert not np.allclose(shifted, _forward(model), rtol=1e-3, atol=0.0)

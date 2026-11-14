@@ -46,7 +46,7 @@ Real galaxies do not have solar-scaled abundance patterns. Alpha elements (O, Mg
 
 ## The 4D SSP Grid
 
-A four-dimensional SSP grid with axes $(\mathrm{[Fe/H]},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$ gives $\alpha$-enhanced stellar population synthesis. `met_alpha_fe` acts only on a grid that has an $[\alpha/\mathrm{Fe}]$ axis. The alpha-enhanced grids that tengri hosts (sMILES, BPASS v2.3, and the $\alpha$-MC library of Park et al. 2025, all named with `_afe` in `tengri.list_remote_ssps()`) have one, at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex. A 3D grid has none, so `met_alpha_fe` is refused at build on it, whatever its metallicity mode. On such a grid the interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$, four multiplications per wavelength pixel, and differentiable with respect to both $[\mathrm{M/H}]$ and $[\alpha/\mathrm{Fe}]$.
+A four-dimensional SSP grid with axes $(\log Z_{\rm total},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$ gives $\alpha$-enhanced stellar population synthesis. `met_alpha_fe` acts only on a grid that has an $[\alpha/\mathrm{Fe}]$ axis. The alpha-enhanced grids that tengri hosts (sMILES, BPASS v2.3, and the $\alpha$-MC library of Park et al. 2025, all named with `_afe` in `tengri.list_remote_ssps()`) have one, at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex. A 3D grid has none, so `met_alpha_fe` is refused at build on it, whatever its metallicity mode. On such a grid the interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$, four multiplications per wavelength pixel, and differentiable with respect to both $\log Z_{\rm total}$ and $[\alpha/\mathrm{Fe}]$.
 
 #### Metallicity convention.
 
@@ -78,7 +78,7 @@ Hearin, Andrew P., Jonás Chaves-Montero, Alex Alarcon, Matthew R. Becker, and A
 
 Knowles, Adam T., A. E. Sansom, C. Allende Prieto, and A. Vazdekis. 2023. "[sMILES: a library of semi-empirical MILES stellar spectra with variable \[$\alpha$/Fe\] abundances]{.nocase}." 523 (3): 3450--70. <https://doi.org/10.1093/mnras/stad1647>.
 
-Park, Minjung, Charlie Conroy, Benjamin D. Johnson, Joel Leja, Aaron Dotter, and Phillip A. Cargile. 2024. "$\alpha$-MC: Self-consistent $\alpha$-enhanced stellar population models covering a wide range of age, metallicity, and wavelength." *arXiv e-Prints*, arXiv:2410.21375. <https://doi.org/10.48550/arXiv.2410.21375>.
+Park, Minjung, Charlie Conroy, Benjamin D. Johnson, Joel Leja, Aaron Dotter, and Phillip A. Cargile. 2025. "$\alpha$-MC: Self-consistent $\alpha$-enhanced stellar population models covering a wide range of age, metallicity, and wavelength." *The Astrophysical Journal* 994: 165. arXiv:2410.21375. <https://doi.org/10.3847/1538-4357/ae0cba>.
 
 Robotham, A. S. G., S. Bellstedt, C. del P. Lagos, et al. 2020. "ProSpect: generating spectral energy distributions with complex star formation and metallicity histories." 495 (1): 905--31. <https://doi.org/10.1093/mnras/staa1116>.
 

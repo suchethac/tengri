@@ -70,6 +70,25 @@ def test_feh_axis_is_refused_case_insensitively_on_a_3d_grid(tmp_path):
         load_ssp_data(str(path))
 
 
+@pytest.mark.parametrize("spelling", ["[Fe/H] on every alpha plane", "Fe/H axis"])
+def test_bracketed_and_slashed_feh_spellings_get_the_same_pointer(tmp_path, spelling):
+    path = _write(tmp_path / "grid_alpha_kroupa.h5", attrs={"metallicity_axis": spelling})
+    with pytest.raises(TengriIOError, match=re.escape("grid_alpha_kroupa_totalz.h5")):
+        load_ssp_data(str(path))
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [np.array([b"total Z: one-element byte array"]), np.bytes_(b"total Z: bytes scalar")],
+    ids=["one_element_array", "bytes"],
+)
+def test_total_z_stored_as_bytes_or_a_one_element_array_loads(tmp_path, stored):
+    path = _write(tmp_path / "grid_alpha_chabrier.h5", attrs={"metallicity_axis": stored})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", MetallicityAxisAssumedWarning)
+        assert has_alpha_grid(load_ssp_data(str(path)))
+
+
 def test_total_z_axis_loads_and_is_an_alpha_grid(tmp_path):
     path = _write(
         tmp_path / "grid_alpha_chabrier.h5",

@@ -509,12 +509,15 @@ def _read_metallicity_axis(attrs) -> str | None:
     """Return the file's ``metallicity_axis`` attribute as a stripped string.
 
     ``None`` when the attribute is absent. h5py returns ``str`` for string
-    attributes; a ``bytes`` value from an older writer is decoded.
+    attributes; a ``bytes`` value from an older writer is decoded, and a
+    one-element array (some writers store strings that way) is unwrapped.
     """
     raw = attrs.get("metallicity_axis")
     if raw is None:
         return None
-    text = raw.decode() if isinstance(raw, bytes) else str(raw)
+    if isinstance(raw, np.ndarray) and raw.size == 1:
+        raw = raw.reshape(-1)[0]
+    text = raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
     return text.strip()
 
 
@@ -541,7 +544,7 @@ def _check_metallicity_axis(f, filename: str, stem: str, *, has_alpha_axis: bool
             )
         return
     lowered = axis.lower()
-    if lowered.startswith("feh"):
+    if lowered.startswith(("feh", "[fe/h]", "fe/h")):
         raise TengriIOError(
             f"SSP file '{filename}' is on a fixed-[Fe/H] metallicity axis "
             f"(metallicity_axis={axis!r}). tengri uses fixed total metallicity "
