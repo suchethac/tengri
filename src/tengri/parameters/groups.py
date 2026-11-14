@@ -191,6 +191,46 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
 }
 
 
+_ALPHA_FE_PARAM = "met_alpha_fe"
+
+
+def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
+    """Refuse an explicit ``met_alpha_fe`` prior that misses the grid; warn if it overhangs.
+
+    An explicit prior is always honored. A prior with no overlap with the grid's
+    [alpha/Fe] nodes is refused by name; one that extends past them is kept and
+    warned about once with :class:`GridSupportWarning`, naming the nodes.
+    """
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+    from tengri.config.exceptions import GridSupportWarning
+
+    dist = resolved.get(_ALPHA_FE_PARAM)
+    if dist is None or provenance.get(_ALPHA_FE_PARAM) != "user_prior":
+        return
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    g_lo, g_hi = float(nodes.min()), float(nodes.max())
+    d_lo, d_hi = dist.bounds
+    if d_hi < g_lo or d_lo > g_hi:
+        raise ParameterError(
+            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
+            f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
+            "would be clipped onto an edge node. Choose a range inside the grid."
+        )
+    if d_lo < g_lo or d_hi > g_hi:
+        warnings.warn(
+            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
+            f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
+            "is clipped onto the edge nodes, so the prior mass there has no effect on "
+            "the SED.",
+            GridSupportWarning,
+            stacklevel=3,
+        )
+
+
 def _expand_free(param_name: str, registry_default: Distribution) -> Distribution:
     """Resolve ``FREE`` for one parameter: its declared range, else the default.
 
@@ -1567,6 +1607,7 @@ def parse_groups(**kwargs) -> Parameters:
         provenance,
     )
     grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _check_alpha_fe_explicit_prior(resolved_kwargs, provenance, ssp_data)
     _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
