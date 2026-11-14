@@ -150,12 +150,29 @@ class TestSurvivingMassHelper:
         with pytest.raises(ValueError, match="ssp_mass_remaining"):
             predict_surviving_mass(sfr, T_LOOKBACK, ssp_no_mr)
 
-    def test_metallicity_interpolation(self):
-        """Higher Z (less mass loss in low-metallicity stars) should give same M_surv
-        if the synthetic table is constant across Z — i.e. log_z_zsun is wired."""
-        ssp = _make_synthetic_ssp()  # identical across metallicities by construction
+    def test_metallicity_is_read_relative_to_solar(self):
+        """``log_z_zsun`` selects the node at ``log_z_zsun + LOG10_ZSUN`` on the absolute axis.
+
+        The table rises with metallicity (0.5, 0.6, 0.7 at the three nodes), so each
+        node gives a different surviving mass and a value clipped to an end node
+        would be visible.
+        """
+        from tengri.utils.physics_constants import LOG10_ZSUN
+
+        base = _make_synthetic_ssp()
+        n_age = base.ssp_lg_age_gyr.shape[0]
+        table = jnp.asarray([0.5, 0.6, 0.7])[:, None] * jnp.ones((1, n_age))
+        ssp = base._replace(ssp_mass_remaining=table)
         sfr = gaussian(T_LOOKBACK, log_total_mass=10.0, peak_lbt=5e9, width=2e9)
-        m_at_minus2 = float(predict_surviving_mass(sfr, T_LOOKBACK, ssp, log_z_zsun=-2.0))
-        m_at_zero = float(predict_surviving_mass(sfr, T_LOOKBACK, ssp, log_z_zsun=0.0))
-        # Constant-across-Z table ⇒ identical regardless of log_z_zsun.
-        assert_allclose(m_at_minus2, m_at_zero, rtol=1e-6)
+        formed = float(jnp.trapezoid(sfr, T_LOOKBACK))
+
+        nodes = np.asarray(ssp.ssp_lgmet)
+        for node, fraction in zip(nodes, (0.5, 0.6, 0.7)):
+            m_surv = float(
+                predict_surviving_mass(sfr, T_LOOKBACK, ssp, log_z_zsun=float(node) - LOG10_ZSUN)
+            )
+            assert_allclose(m_surv / formed, fraction, rtol=1e-6)
+
+        halfway = 0.5 * (nodes[0] + nodes[1]) - LOG10_ZSUN
+        m_half = float(predict_surviving_mass(sfr, T_LOOKBACK, ssp, log_z_zsun=float(halfway)))
+        assert_allclose(m_half / formed, 0.55, rtol=1e-6)
