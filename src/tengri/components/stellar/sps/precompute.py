@@ -80,12 +80,13 @@ def _vectorized_interp(
         Target x-coordinates (e.g. filter wavelengths).
     xp_source : array, shape (n_source,)
         Source x-coordinates (must be sorted ascending).
-    yp_source : array, shape (n_met, n_age, n_source)
-        Source y-values for all metallicities and ages.
+    yp_source : array, shape (..., n_source)
+        Source y-values; the leading axes are the templates, e.g. (n_met, n_age) or
+        (n_met, n_alpha, n_age) on a grid with an [alpha/Fe] axis.
 
     Returns
     -------
-    array, shape (n_met, n_age, n_target)
+    array, shape (..., n_target)
         Interpolated values, with out-of-bounds set to 0.
 
     """
@@ -100,12 +101,12 @@ def _vectorized_interp(
     dx = np.where(dx > 0, dx, 1.0)
     frac = (xp_target - xp_source[idx]) / dx
 
-    # Vectorized gather: (n_met, n_age, n_target) via fancy indexing
-    result = (1.0 - frac) * yp_source[:, :, idx] + frac * yp_source[:, :, idx + 1]
+    # Vectorized gather over the template axes via fancy indexing on the last axis
+    result = (1.0 - frac) * yp_source[..., idx] + frac * yp_source[..., idx + 1]
 
     # Zero out-of-bounds (left and right)
     oob = (xp_target < xp_source[0]) | (xp_target > xp_source[-1])
-    result[:, :, oob] = 0.0
+    result[..., oob] = 0.0
 
     return result
 
@@ -213,7 +214,8 @@ class SpectroscopicPrecomputation(NamedTuple):
 
     Attributes
     ----------
-    ssp_on_pixels : array, shape (n_met, n_age, n_pix)
+    ssp_on_pixels : array, shape (n_met, n_age, n_pix) or (n_met, n_alpha, n_age, n_pix)
+        The fourth axis is present on a grid with an [alpha/Fe] axis.
         SSP flux interpolated to observed spectral pixel wavelengths
         in rest frame [erg/s/Hz/Msun], broadened by ``sigma_v_kms`` on the native
         rest grid first when that is set.

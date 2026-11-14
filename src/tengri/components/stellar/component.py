@@ -2477,6 +2477,22 @@ _FLUX_WEIGHTED_WAVE_FIELDS = {
 }
 
 
+def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
+    """Collapse one 4D [alpha/Fe] array at the model's bracket; a 3D array passes through.
+
+    Linear, so collapsing a template cube before a metallicity contraction gives the
+    same spectrum as contracting each alpha node and interpolating the results.
+    """
+    if x.ndim < 4:
+        return x
+    if alpha_bracket is None:
+        raise ValueError("a 4D [alpha/Fe] array reached the spectrum tables without a bracket")
+    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+    ia, fa = alpha_bracket
+    return collapse_alpha_axis(x, ia, fa, axis=axis)
+
+
 def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
     """Collapse the named [alpha/Fe] array fields of a LUT at the model's bracket.
 
@@ -3586,6 +3602,7 @@ class StellarSEDComponent:
                     total_mass=total_mass,
                     cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
                     template_data=template_data,
+                    alpha_bracket=alpha_bracket,
                 )
             )
 
@@ -4546,6 +4563,7 @@ class StellarSEDComponent:
         total_mass,
         cube_modified=False,
         template_data=None,
+        alpha_bracket=None,
     ):
         r"""Stellar spectrum LUT families at the pixels, with the velocity dispersion applied.
 
@@ -4567,7 +4585,7 @@ class StellarSEDComponent:
             Model rest wavelength grid [Angstrom].
         ssp_flux_for_csp : ndarray, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
             The SSP cube the per-draw sum uses (AGB-weighted). A 4D [alpha/Fe] cube is
-            passed uncollapsed and is supported only by the pre-broadened LUT route.
+            passed uncollapsed and is collapsed at ``alpha_bracket`` here.
         joint_weights : ndarray, shape (n_met, n_age)
             Metallicity-by-age weights.
         total_mass : float or traced scalar
@@ -4576,6 +4594,9 @@ class StellarSEDComponent:
             True when ``ssp_flux_for_csp`` differs from the library cube for this draw
             (alpha collapse, free AGB weight); the build-time broadened cube is then
             not valid and the per-draw broadening is used.
+        alpha_bracket : tuple or None
+            ``(ia, fa)`` of ``met_alpha_fe`` on a 4D grid, used to collapse a 4D
+            ``ssp_flux_for_csp`` or a 4D lookup table; None on a 3D grid.
 
         Returns
         -------
@@ -4588,8 +4609,6 @@ class StellarSEDComponent:
         ValueError
             If the model seeded no dispersion for a free sigma_v, or a concrete draw
             dispersion differs from the one the pre-broadened table was built with.
-        NotImplementedError
-            If a 4D [alpha/Fe] cube reaches the per-draw (free-redshift or unbroadened) route.
 
         Notes
         -----
@@ -4620,7 +4639,9 @@ class StellarSEDComponent:
                     f"the spectrum LUT was built with sigma_v_kms={lut.sigma_v_kms} but "
                     f"the draw has {float(seeded)}; rebuild the model."
                 )
-            on_pix = lut.ssp_on_pixels  # (n_met, n_age, n_pix), broadened at build
+            # (n_met, n_age, n_pix), broadened at build; (n_met, n_alpha, n_age, n_pix) on a
+            # 4D grid, collapsed at the bracket before the metallicity contraction.
+            on_pix = _collapse_alpha_plane(lut.ssp_on_pixels, alpha_bracket)
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
                     jnp.einsum("ma,map->p", joint_weights, on_pix), total_mass
@@ -4631,15 +4652,9 @@ class StellarSEDComponent:
                 "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
             }
 
-        if ssp_flux_for_csp.ndim == 4:
-            # A 4D [alpha/Fe] grid reaches here uncollapsed (the CSP einsums contract it over
-            # metallicity per alpha node, then interpolate; see ``apply``). The per-draw families
-            # below sum a 3D cube, so the free-redshift table and the unbroadened fixed-redshift
-            # LUT do not support a 4D grid yet (``cube_modified`` is True).
-            raise NotImplementedError(
-                "the per-draw spectrum LUT / free-redshift table path does not support a 4D "
-                "[alpha/Fe] SSP grid yet"
-            )
+        # A 4D [alpha/Fe] cube is collapsed at the bracket first: the per-draw families below
+        # are linear in the cube, so this equals contracting each alpha node and interpolating.
+        ssp_flux_for_csp = _collapse_alpha_plane(ssp_flux_for_csp, alpha_bracket)
         if lut is not None:
             spec_eff = jnp.asarray(lut.wave_rest_pixels)
         else:
