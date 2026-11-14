@@ -254,129 +254,19 @@ class TestSolarAlphaEquivalence:
             )
 
 
-# ── Convention differences: [Fe/H] vs [M/H] vs effective_metallicity ───
+# ── Convention differences: [Fe/H] vs [M/H] ───
 
 
 class TestConventionDifferences:
-    """Regression test comparing three metallicity conventions from the literature.
+    """Regression test comparing the [Fe/H] and [M/H] metallicity conventions.
 
     References:
     - Salaris et al. 1993: [M/H] grid convention
-    - Vazdekis et al. 2015: effective_metallicity approximation
-    - Our implementation: proper 4D grid support
+    - Knowles et al. 2023: sMILES, [M/H] grid convention
 
-    The three conventions:
-    1. [Fe/H] grid (our canonical): grid axis is iron abundance
-    2. [M/H] grid (sMILES): grid axis is total metallicity (Salaris corrected)
-    3. effective_metallicity (approximation): shift Z by 0.75×[α/Fe]
+    The tengri grid axis is total metallicity (#3411). The 0.75 [alpha/Fe]
+    approximation is removed; alpha enhancement needs a 4-D grid.
     """
-
-    def test_conventions_agree_at_solar_alpha(self):
-        """All three conventions should agree at [α/Fe] = 0.0.
-
-        At solar α-enhancement, all three approaches give identical results.
-        """
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            effective_metallicity,
-            salaris_mh_from_feh,
-        )
-
-        feh = -0.5
-        afe = 0.0
-
-        mh = salaris_mh_from_feh(feh, afe)
-        z_eff = float(effective_metallicity(feh, afe))
-
-        assert mh == pytest.approx(feh, abs=1e-10)
-        assert z_eff == pytest.approx(feh, abs=1e-10)
-
-    def test_effective_metallicity_is_linear_salaris_is_quadratic(self):
-        """effective_metallicity is linear in [α/Fe], Salaris is quadratic.
-
-        Vazdekis et al. 2015 vs Salaris et al. 1993: difference grows with [α/Fe]².
-        """
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            effective_metallicity,
-            salaris_mh_from_feh,
-        )
-
-        feh = 0.0
-        # Compute difference for several [α/Fe] values
-        diffs = []
-        for afe in [0.0, 0.2, 0.4, 0.6]:
-            mh = salaris_mh_from_feh(feh, afe)
-            z_eff = float(effective_metallicity(feh, afe))
-            diffs.append(abs(mh - z_eff))
-
-        # Difference should grow (quadratic term becomes more important)
-        assert diffs[0] < 0.01  # at [α/Fe]=0, both are zero offset
-        assert diffs[-1] > diffs[1]  # divergence grows with [α/Fe]
-
-    def test_conventions_diverge_at_high_alpha(self):
-        """At [α/Fe] = +0.4, the three conventions give different Z values.
-
-        Regression: why proper alpha grids matter (Salaris vs effective_metallicity).
-        The approximation and the exact conversion give different effective metallicities.
-        """
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            effective_metallicity,
-            salaris_mh_from_feh,
-        )
-
-        feh = -0.5
-        afe = 0.4
-
-        # Salaris exact: [M/H] = -0.5 + 0.265 + 0.033 = -0.203
-        mh_salaris = salaris_mh_from_feh(feh, afe)
-
-        # effective_metallicity approximation: [Z/H]_eff = -0.5 + 0.75×0.4 = -0.2
-        z_eff = float(effective_metallicity(feh, afe))
-
-        # They are close but NOT identical (differ by ~0.003 dex at [α/Fe]=0.4)
-        diff = abs(mh_salaris - z_eff)
-        assert diff > 1e-4, (
-            "Salaris and effective_metallicity should differ at [α/Fe]≠0 "
-            f"(Salaris={mh_salaris:.4f}, eff_met={z_eff:.4f}, diff={diff:.5f})"
-        )
-
-        # But within ~0.1 dex (same order of magnitude correction)
-        assert diff < 0.15
-
-    def test_4d_grid_vs_effective_met_3d(self, alpha_ssp_grid):
-        """4D grid interpolation and 3D+effective_metallicity give different SEDs.
-
-        Regression: the key test why proper 4D alpha grids are needed.
-        """
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            effective_metallicity,
-            interpolate_met_alpha,
-            interpolate_metallicity,
-        )
-
-        g = alpha_ssp_grid
-        feh = -0.5
-        afe = 0.4
-
-        # Method 1: proper 4D interpolation
-        sed_4d = interpolate_met_alpha(
-            g["ssp_flux"],
-            g["ssp_lgmet"],
-            g["ssp_alpha_fe"],
-            log_z=feh,
-            alpha_fe=afe,
-        )
-
-        # Method 2: effective_metallicity on 3D solar-alpha slice
-        z_eff = float(effective_metallicity(feh, afe))
-        ssp_3d = g["ssp_flux"][:, 1, :, :]  # solar α slice
-        sed_3d = interpolate_metallicity(ssp_3d, g["ssp_lgmet"], z_eff)
-
-        # They should be DIFFERENT (this is the whole point of proper alpha grids)
-        diff = float(jnp.sum(jnp.abs(sed_4d - sed_3d)))
-        assert diff > 0, (
-            "4D grid and 3D+effective_metallicity should give different SEDs "
-            "at [α/Fe] ≠ 0 — this is why proper alpha grids exist"
-        )
 
     def test_4d_at_solar_matches_interpolate_metallicity(self, alpha_ssp_grid):
         """4D at [α/Fe]=0.0 should match standard 3D interpolate_metallicity.

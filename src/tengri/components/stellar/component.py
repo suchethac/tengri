@@ -144,7 +144,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
-    effective_metallicity,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
 )
@@ -3758,18 +3757,10 @@ class StellarSEDComponent:
                 ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
-            # Apply alpha-Fe enhancement via effective_metallicity for
-            # 3D SSP grids (no native α axis): the α-shift is folded
-            # into log_z via the Salaris+05 / DSPS canonical relation.
-            # For 4D α-grid SSPs the α axis has already been collapsed
-            # above, so we use ``met_logzsol`` directly without the
-            # effective-Z approximation.
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
-            if _alpha_collapse_active:
-                log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
-            else:
-                log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
-                log_z_abs_scalar = log_z_eff + LOG10_ZSUN
+            # ``met_logzsol`` is the total metallicity on every grid. On a 4D
+            # grid the [alpha/Fe] axis has already been collapsed above; a 3D
+            # grid has no such axis and ``met_alpha_fe`` is refused at build.
+            log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
         elif self.config.metallicity_model == "ramp":
@@ -4840,10 +4831,7 @@ class StellarSEDComponent:
                 params, self.config, ssp.ssp_lg_age_gyr, _tab_lbt_yr, _tab_order
             )
         else:
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
-            log_z_abs_scalar = (
-                effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
-            )
+            log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
 
         # The age-integrand function both kernels consume: the field draw as the
         # piecewise-linear interpolant of its own lookback nodes (#2684), the

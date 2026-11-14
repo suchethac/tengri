@@ -41,7 +41,7 @@ ALPHA_FE_PARAMS: tuple[ParamDeclaration, ...] = (
         # Deliberately NO free_prior. [alpha/Fe] is only constrained when the
         # SSP carries an alpha-enhanced grid (StellarSEDComponent gates on
         # has_alpha_grid), so a wildcard cannot know whether freeing it is
-        # meaningful: on a standard grid it adds a barely-identified dimension.
+        # meaningful, and on a grid without an [alpha/Fe] axis it is refused at build.
         # Freeing [alpha/Fe] is a modeling decision, so it stays explicit:
         # pass met_alpha_fe=Uniform(-0.5, 1.0) when the grid supports it.
     ),

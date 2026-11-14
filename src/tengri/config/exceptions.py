@@ -538,36 +538,19 @@ class CueIonizingShapeWarning(AdvisoryWarning):
     """
 
 
-class DegenerateParameterPairWarning(AdvisoryWarning):
-    """Two freed parameters that enter the model only through one combination.
+class MetallicityAxisAssumedWarning(AdvisoryWarning):
+    """A 4-D SSP grid states no ``metallicity_axis``, so tengri assumes total Z.
 
-    Distinct from :class:`DeadGradientParameterWarning`: neither parameter is
-    dead: each moves the SED on its own. They are simply not *jointly*
-    identifiable, because the forward model reads only a single function of the
-    two. The likelihood is exactly flat along that combination, so the posterior
-    has a ridge rather than a mode.
+    Every alpha-enhanced grid tengri ships says which metallicity axis its nodes
+    sit on (fixed total Z, or fixed [Fe/H]) in the HDF5 attribute
+    ``metallicity_axis``. A grid that carries an [alpha/Fe] axis but no attribute
+    is loaded on the assumption that its nodes are fixed total metallicity, the
+    convention every tengri-built grid uses. The assumption is stated here, once,
+    because the same ``met_logzsol`` means a different total metallicity on a
+    fixed-[Fe/H] axis.
 
-    The measured instance is ``met_alpha_fe`` with ``met_logzsol`` on an SSP
-    grid carrying no [alpha/Fe] axis (issue #1095): [alpha/Fe] is folded into an
-    effective metallicity as ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``,
-    and an alpha-enhanced spectrum is *the same array* as a scaled-solar one at
-    0.75 dex higher metallicity; ``numpy.array_equal`` returns ``True``.
-
-    A flat direction is not merely a weak constraint. The Hessian is singular
-    there, so :func:`~tengri.inference.backends.laplace.run_laplace` clips the
-    eigenvalue to ``min_eigenvalue`` and (because ``cov = H^-1``) *assigns*
-    that direction variance ``1 / min_eigenvalue`` (issue #1515). The reported
-    error bar is an artifact of the floor.
-
-    Warns rather than raises: the forward model is correct, a degenerate pair is
-    a legitimate thing to sample if you want the ridge, and loading an
-    alpha-enhanced grid makes the same pair genuinely identifiable.
-
-    See Also
-    --------
-    tengri.components.stellar.sps.dsps_wrapper.has_alpha_grid
-        The 4D test that decides whether [alpha/Fe] is a real axis (#226) or a
-        reparameterization of metallicity.
+    Raised only for 4-D grids: a 3-D grid has no [alpha/Fe] axis, so the
+    attribute is not needed there.
     """
 
 
@@ -843,10 +826,10 @@ class LaplaceVarianceCeilingWarning(UserWarning):
     A clipped direction is usually one of three things, and the remedy differs:
 
     - **an exact degeneracy**: two parameters that enter the model only in
-      one combination, so the likelihood is flat along a ridge (``met_alpha_fe``
-      and ``met_logzsol`` are exactly this, see
-      :class:`DegenerateParameterPairWarning` and issue #1095). Fix the model,
-      not the floor: hold one of the pair fixed.
+      one combination, so the likelihood is flat along a ridge (the pair
+      ``met_logzsol`` and ``met_alpha_fe`` on a grid without an [alpha/Fe] axis
+      was exactly this, and is now refused at build, issue #1095). Fix the
+      model, not the floor: hold one of the pair fixed.
     - **a genuinely unconstrained parameter**: the data carry no information
       about it. The prior, not ``1 / min_eigenvalue``, is the honest answer;
       consider fixing it or reporting it as prior-dominated.

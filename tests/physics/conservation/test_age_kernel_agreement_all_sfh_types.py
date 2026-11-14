@@ -238,8 +238,8 @@ def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
         ssp_flux=interpolate_alpha_only(ssp4.ssp_flux, ssp4.ssp_alpha_fe, jnp.asarray(0.3)),
         ssp_alpha_fe=None,
     )
-    # The 3-D fast path folds [alpha/Fe] into the metallicity (effective Z); the 4-D
-    # apply collapsed the cube instead, so hand it alpha = 0.
+    # A 3-D grid has no [alpha/Fe] axis, so the fast path reads no alpha; the 4-D
+    # apply collapsed the cube at alpha = 0.3 instead, so hand the fast path alpha = 0.
     params["met_alpha_fe"] = jnp.asarray(0.0)
     jw_fast, _, _ = stellar.compute_joint_weights(params, ssp_data=flat)
     folded = np.einsum("ma,maw->w", np.asarray(jw_fast), np.asarray(flat.ssp_flux))
