@@ -215,14 +215,12 @@ from tengri.inference.data_term import (
 # ── Builders ─────────────────────────────────────────────────────────────
 
 
-def _build_data_neg_log_likelihood_fn(fitter):
-    """Return ``neg_log_lik(params, data_args) -> -log p(d|params)`` for a Fitter-like object.
+def build_data_term_for_fitter(fitter):
+    """Build the positive :class:`~tengri.inference.data_term.DataTerm` of a Fitter-like object.
 
-    Thin adapter over :func:`~tengri.inference.data_term.build_data_term`. The structural
-    options are read with defaults, so a bare stand-in works; the term itself is positive
-    and is negated here for the minimizers.
+    The structural options are read with defaults, so a bare stand-in works.
     """
-    term = build_data_term(
+    return build_data_term(
         fitter.model,
         spec=fitter.spec,
         data_args=fitter._data_args,
@@ -230,6 +228,15 @@ def _build_data_neg_log_likelihood_fn(fitter):
         likelihood=getattr(fitter, "_user_likelihood", None),
         fixed_values=getattr(fitter, "_fixed_values", None),
     )
+
+
+def _build_data_neg_log_likelihood_fn(fitter):
+    """Return ``neg_log_lik(params, data_args) -> -log p(d|params)`` for a Fitter-like object.
+
+    Thin adapter over :func:`~tengri.inference.data_term.build_data_term`; the term itself is
+    positive and is negated here for the minimizers.
+    """
+    term = build_data_term_for_fitter(fitter)
 
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
