@@ -4701,9 +4701,12 @@ class StellarSEDComponent:
 
         Restricted to the supported configuration: **delta** metallicity, a
         **closed-form parametric** SFH (with or without the GP field, #1204),
-        **no** alpha-Fe SSP grid; and raises for anything else, so the fast
-        path can never silently diverge from the exact forward. Callers must
-        fall back to the exact path.
+        and any [alpha/Fe] axis (the weights do not depend on [alpha/Fe]; the
+        alpha dependence is applied by the consumers, which contract the 4D
+        cube over metallicity and age and then collapse the alpha axis exactly
+        as :meth:`apply` does). Raises for anything else, so the fast path can
+        never silently diverge from the exact forward. Callers must fall back
+        to the exact path.
 
         The non-parametric families and the **tabulated** SFH are both refused
         via :data:`_FAST_PATH_UNSUPPORTED_SFH_FNS`, which carries a per-family
@@ -4731,7 +4734,7 @@ class StellarSEDComponent:
         ------
         ValueError
             For any configuration outside delta metallicity / closed-form
-            parametric SFH / no alpha-Fe grid: including the tabulated SFH
+            parametric SFH: including the tabulated SFH
             (#1395). The caller must use the exact forward there.
         """
         return self._joint_weights_impl(params, ssp_data)[:3]
@@ -4744,7 +4747,6 @@ class StellarSEDComponent:
         unless ``config.age_boundaries_yr`` is set.
         """
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
         from tengri.cosmology import age_at_z as _age_at_z
 
         ssp = ssp_data if ssp_data is not None else self.ssp_data
@@ -4774,10 +4776,6 @@ class StellarSEDComponent:
                     f"sfh_model={self.config.sfh_model!r}: {unsupported_reason}; "
                     f"use the exact forward."
                 )
-        if has_alpha_grid(ssp):
-            raise ValueError(
-                "compute_joint_weights does not support alpha-Fe SSP grids; use the exact forward."
-            )
 
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
@@ -5015,11 +5013,28 @@ class StellarSEDComponent:
                 ]
                 * agb_dust_cube[..., :n_ion]
             )
+            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+        elif has_alpha_grid(ssp):
+            # Same order as :meth:`apply`: contract over metallicity per age, collapse
+            # the [alpha/Fe] axis at met_alpha_fe, then sum over age.
+            from tengri.components.stellar.sps.dsps_wrapper import (
+                alpha_bracket,
+                collapse_alpha_axis,
+            )
+
+            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+            _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
+            lnu_age_ion = collapse_alpha_axis(
+                jnp.einsum("ma,mkai->kai", joint_weights, ssp.ssp_flux[..., :n_ion]),
+                _alpha_ia,
+                _alpha_fa,
+            )
+            sed_ion = jnp.sum(lnu_age_ion, axis=0)
         else:
             ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
             if agb_dust_cube is not None:
                 ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
-        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
