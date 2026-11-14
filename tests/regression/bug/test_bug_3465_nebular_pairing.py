@@ -3,7 +3,7 @@
 
 A wNE grid already carries nebular emission at a fixed logU. Every nebular mode other than
 baked-in is built on its bare twin when the grid has one (hr wNE -> hr noNE). A wNE grid
-without a twin keeps the old behaviour: Cue and CLOUDY refuse, CB19 refuses, and
+without a twin keeps the old behavior: Cue and CLOUDY refuse, CB19 refuses, and
 ``neb={'type': 'none'}`` warns that the emission stays in the flux.
 
 Tests on the hr grids name grids that exist only on this branch. Their failures on main are

@@ -760,11 +760,14 @@ NOTEBOOKS = {
                 "sfh.type",
                 "ssp.file",
                 "ssp.nebular",
+                "ssp.shape",
             ),
             why=(
                 "The pre-#2044 quickstart. Eleven spec keys differ from today's "
                 "because #2044 replaced the SFH family, the dust component, the "
                 "nebular treatment, the SSP grid and the dimension in one commit. "
+                "A twelfth, ssp.shape, differs since #3465 moved the quickstart to "
+                "the MIST c3k_hr nebular grid (13 Z x 107 ages x 10992 pixels). "
                 "Kept because 2026-08-17_quickstart_nuts_vs_hmc.md and the two "
                 "2026-08-30 reports measured THIS model. Four more used to be "
                 "listed here -- Rv, bump_strength, delta, slope -- and stopped "
