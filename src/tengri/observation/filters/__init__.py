@@ -240,6 +240,10 @@ _FACILITY_FROM_PREFIX: dict[str, str] = {
     # Millimeter.
     "planck": "Planck",
     "spt": "SPT",
+    # Radio.
+    "vla": "VLA",
+    "meerkat": "MeerKAT",
+    "lofar": "LOFAR",
 }
 
 
