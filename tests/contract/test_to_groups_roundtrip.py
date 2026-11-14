@@ -309,12 +309,21 @@ class TestToGroupsWildcardCollapse:
         # the spec carries ``age_frac`` alone, and its absolute ``age_gyr`` twin
         # is only present when the user names it.
         dpl_keys = {"alpha", "beta", "tau_gyr", "age_frac", "log_total_mass"}
-        # ``logzsol_scatter`` (lognormal MDF width, #506) is a delta-mode
-        # metallicity param, so like ``logzsol``/``alpha_fe`` it round-trips in
-        # the sfh group until a non-delta chemical-evolution mode is selected.
-        met_keys = {"logzsol", "alpha_fe", "logzsol_scatter"}
+        # ``logzsol_scatter`` is withheld while undeclared: an emitted default
+        # would be read back as a declared scatter and change the metallicity
+        # read, so the round-trip would not reproduce the original model.
+        met_keys = {"logzsol", "alpha_fe"}
         expected_keys = {"type"} | dpl_keys | met_keys
         assert set(sfh_dict.keys()) == expected_keys
+
+    def test_declared_scatter_still_round_trips(self):
+        """A scatter the user declares is emitted, so the reparse keeps the declaration."""
+        original = parse_groups(
+            sfh={"type": "dpl", "logzsol_scatter": Fixed(0.2)},
+            redshift=Fixed(0.1),
+        )
+        sfh_dict = original.to_groups()["sfh"]
+        assert "logzsol_scatter" in sfh_dict
 
 
 class TestToGroupsFlatBuilt:

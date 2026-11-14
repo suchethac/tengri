@@ -9724,7 +9724,45 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Only include if non-default
         result["n_grid"] = spec.n_grid
 
-    return result
+    return _without_undeclared_met_scatter(result, spec)
+
+
+def _without_undeclared_met_scatter(result: dict, spec: Parameters) -> dict:
+    """Withhold an undeclared metallicity scatter from the emitted groups.
+
+    The scatter decides how a metallicity is read from the SSP grid: an undeclared
+    scatter is read node-exactly, a declared one through the lognormal kernel
+    (``_met_scatter_declared``). A flat spec lists every parameter explicitly, so
+    the untouched default would be emitted as a user ``Fixed`` and read back as a
+    declaration, which changes the photometry of the round-tripped model. The key
+    is withheld unless the spec declares it; the grammar then fills in the same
+    registry default the original carried.
+
+    Parameters
+    ----------
+    result : dict
+        Nested-dict output of :func:`parameters_to_groups`.
+    spec : Parameters
+        The spec the output was emitted from.
+
+    Returns
+    -------
+    dict
+        ``result`` with the ``logzsol_scatter`` key removed from its groups when
+        the scatter is undeclared, otherwise ``result`` unchanged.
+    """
+    from tengri.forward.sed_model import _met_scatter_declared
+
+    if _met_scatter_declared(spec):
+        return result
+    return {
+        key: (
+            {k: v for k, v in value.items() if k != "logzsol_scatter"}
+            if isinstance(value, dict)
+            else value
+        )
+        for key, value in result.items()
+    }
 
 
 @cache
