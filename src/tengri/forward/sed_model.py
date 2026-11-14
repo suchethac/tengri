@@ -3278,6 +3278,28 @@ class SEDModel:
             return None
         return self._fixed_sigma_v_kms()
 
+    def _lattice_window_static(self, wave_obs_np):
+        """Static ln-lambda lattice for the velocity dispersion on this spectrum (#3436).
+
+        The redshift range is the fixed value, the catalog range, or the finite bounds of
+        the redshift prior. Returns ``None`` when the range is not static, so the projection
+        raises a clear error instead of spanning an unbounded lattice.
+        """
+        from tengri.observation.spectrum import lattice_span
+
+        if wave_obs_np is None:
+            return None
+        if self._catalog_z_range is not None:
+            z_lo, z_hi = self._catalog_z_range
+        elif self.z_fixed is not None:
+            z_lo = z_hi = float(self.z_fixed)
+        else:
+            bounds = getattr(self.spec.get_distribution("redshift"), "bounds", None)
+            if bounds is None or len(bounds) < 2 or not np.all(np.isfinite(bounds[:2])):
+                return None
+            z_lo, z_hi = float(bounds[0]), float(bounds[1])
+        return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), float(z_lo), float(z_hi))
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -7843,6 +7865,10 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
+        lattice_window = self._lattice_window_static(
+            w_np if w_np is not None else getattr(spectroscopy, "wave_obs", None)
+        )
+
         def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
             from tengri.cosmology import luminosity_distance
             from tengri.observation.observation import project_spectrum_kernel_split
@@ -7884,6 +7910,7 @@ class SEDModel:
                 conserving=conserving,
                 resolution_matrix=resolution_matrix,
                 nebular_lines=nebular_lines,
+                lattice_window=lattice_window,
             )
 
         if traced_grid:
@@ -11430,6 +11457,12 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
+        lattice_window = self._lattice_window_static(
+            None
+            if observation is None or not observation.can_do_spectroscopy
+            else observation.spectroscopy.wave_obs
+        )
+
         def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
@@ -11502,6 +11535,7 @@ class SEDModel:
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
+                    lattice_window=lattice_window,
                     observables_type=None if mixed_phot_lut else observables_type,
                 )
                 if mixed_phot_lut:
