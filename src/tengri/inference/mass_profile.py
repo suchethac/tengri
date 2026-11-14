@@ -111,7 +111,7 @@ from jax.scipy.special import logsumexp
 
 from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.utils.scale import pow10, present_noise, whiten
+from tengri.utils.scale import pow10, present_noise, representable_denominator, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -1449,7 +1449,15 @@ def _quad_nodes(
     a_c = pow10(center)
     curv = jnp.sqrt(A_ref) * a_c * jnp.log(10.0)
     slope = A_ref * jnp.abs(a_c - a_star) * a_c * jnp.log(10.0)
-    sigma_edge = 1.0 / jnp.maximum(curv, slope)
+    # Third kind (tools/check_zero_hiding_clamps.py): the denominator vanishes
+    # only if A_ref == 0, i.e. the prediction carries no amplitude information.
+    # There a_star = B_ref / A_ref is already non-finite upstream, so the
+    # degenerate case propagates NaN rather than returning a plausible window.
+    # The denominator is selected before it is divided (both where branches are
+    # differentiated, see representable_denominator), so no floor is needed.
+    den_edge = jnp.maximum(curv, slope)
+    den_ok = den_edge > representable_denominator(1e-20)
+    sigma_edge = jnp.where(den_ok, 1.0 / jnp.where(den_ok, den_edge, 1.0), jnp.nan)
     sigma_u = jnp.where(inside, sigma_in, sigma_edge)
     lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
     hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
@@ -1537,7 +1545,17 @@ def _log_mass_integral(
     return logsumexp(log_terms)
 
 
-def _profile_map_mass(fitter: Fitter, A_ref, a_star, ell_ref):
+def _profile_mass_state(fitter: Fitter):
+    """Bounds and prior that ``configure_profile_mass`` set on ``fitter``.
+
+    They are attached dynamically and are not declared on ``Fitter``, so they
+    are read here, once, through ``getattr`` (pyright ratchet, #3403).
+    """
+    ell_lo, ell_hi = getattr(fitter, "_profile_mass_bounds")  # noqa: B009
+    return ell_lo, ell_hi, getattr(fitter, "_profile_mass_prior")  # noqa: B009
+
+
+def _profile_map_mass(A_ref, a_star, ell_ref, ell_lo: float, ell_hi: float, mass_prior):
     """Conditional mode of ``log10(M)`` on the prior support, for the MAP point.
 
     The conditional density in ``ell`` is the Gaussian in the amplitude times the
@@ -1546,8 +1564,6 @@ def _profile_map_mass(fitter: Fitter, A_ref, a_star, ell_ref):
     lower edge (#3403, #3404). Other priors take the best node of the
     quadrature grid.
     """
-    ell_lo, ell_hi = fitter._profile_mass_bounds
-    mass_prior = fitter._profile_mass_prior
     if isinstance(mass_prior, Uniform):
         pos = a_star > 0
         a_safe = jnp.where(pos, a_star, 1.0)
@@ -2231,9 +2247,9 @@ def reinsert_profiled_mass(
             use_components=use_components,
             line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
         )
-        ell_map = _profile_map_mass(fitter, A_ref, a_star, ell_ref)
+        ell_lo, ell_hi, mass_prior = _profile_mass_state(fitter)
+        ell_map = _profile_map_mass(A_ref, a_star, ell_ref, ell_lo, ell_hi, mass_prior)
         posterior.params = {**posterior.params, mass_name: ell_map}
-        ell_lo, ell_hi = fitter._profile_mass_bounds
         at_bound = (
             abs(float(ell_map) - ell_lo) < _PROFILE_MASS_BOUND_TOL
             or abs(float(ell_map) - ell_hi) < _PROFILE_MASS_BOUND_TOL

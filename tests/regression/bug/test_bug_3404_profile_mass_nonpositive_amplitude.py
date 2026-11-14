@@ -108,6 +108,9 @@ def test_log_mass_integral_gradient_finite_for_non_positive_amplitude():
 
     grad = jax.grad(f)(jnp.asarray(-0.5))
     assert bool(jnp.isfinite(grad)), f"d log integral / d a_star = {grad}"
+    assert float(grad) != 0.0, (
+        "an identically zero d log integral / d a_star would mean the amplitude is ignored"
+    )
 
 
 def _non_detection_fitter(ssp_data):
