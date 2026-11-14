@@ -573,9 +573,10 @@ def collapse_lut_alpha(lut: EnergyBalanceLUT, ia, fa) -> EnergyBalanceLUT:
     ----------
     lut : EnergyBalanceLUT
         Table built from a 4D ``(n_met, n_alpha, n_age, n_wave)`` cube.
-    ia : ndarray, shape ()
-        Lower [alpha/Fe] node index of the bracket (:func:`alpha_bracket`).
-    fa : ndarray, shape ()
+    ia : ndarray, shape () or (n_age,)
+        Lower [alpha/Fe] node index of the bracket (:func:`alpha_bracket`); one per SSP
+        age under ``alpha_fe_evolving`` (the age axis follows the alpha axis in every family).
+    fa : ndarray, shape () or (n_age,)
         Interpolation fraction within the bracket, dimensionless.
 
     Returns

@@ -12072,7 +12072,6 @@ class SEDModel:
             needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
-            and not bool(getattr(self.spec, "alpha_fe_evolving", False))  # dust energy-balance LUT
             and not unsafe_free
             and self.ssp_data is not None
         ):

@@ -22,6 +22,8 @@ g. the per-age kernel :func:`collapse_alpha_axis` equals a loop over ages.
 
 from __future__ import annotations
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -36,7 +38,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_alpha_fe_evolving,
     has_alpha_grid,
 )
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import GridSupportWarning, ParameterError
 from tengri.cosmology import age_at_z
 from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
 from tengri.observation.spectral_indices import STANDARD_INDICES
@@ -429,24 +431,42 @@ def test_evolving_on_the_3d_slab_is_refused_by_name(ssp4d, observation):
         )
 
 
-def test_free_old_or_young_with_photometry_only_is_refused(ssp4d, photometry_only):
-    for name in ("alpha_fe_old", "alpha_fe_young"):
-        with pytest.raises(ParameterError, match=f"met_{name}"):
-            _model(
-                ssp4d,
-                photometry_only,
-                {"alpha_fe_evolving": True, name: tengri.FREE},
-            )
+# The pair follows met_alpha_fe's rule (owner ruling 2026-11-14): Fixed(0) by default on every
+# grid and with every observation, a bare FREE refused, a wildcard never frees it, and an explicit
+# prior honored and checked against the grid's [alpha/Fe] nodes.
 
 
-def test_free_old_with_spectroscopy_takes_the_grid_node_range(ssp4d, observation):
-    model = _model(
-        ssp4d,
-        observation,
-        {"alpha_fe_evolving": True, "alpha_fe_old": tengri.FREE, "alpha_fe_young": Fixed(0.0)},
-    )
-    dist = model.spec.get_distribution("met_alpha_fe_old")
-    assert tuple(float(b) for b in dist.bounds) == (-0.2, 0.6)
+@pytest.mark.parametrize("obs_name", ["observation", "photometry_only"])
+@pytest.mark.parametrize("name", ["alpha_fe_old", "alpha_fe_young"])
+def test_a_bare_free_on_either_end_is_refused(ssp4d, request, obs_name, name):
+    with pytest.raises(ParameterError, match=f"met_{name}"):
+        _model(
+            ssp4d,
+            request.getfixturevalue(obs_name),
+            {"alpha_fe_evolving": True, name: tengri.FREE},
+        )
+
+
+def test_the_pair_is_fixed_at_zero_by_default_and_a_wildcard_never_frees_it(ssp4d, observation):
+    for met in (
+        {"alpha_fe_evolving": True},
+        {"alpha_fe_evolving": True, "all_params": tengri.FREE},
+    ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = _model(ssp4d, observation, met).spec
+        for name in ("met_alpha_fe_old", "met_alpha_fe_young"):
+            assert name not in spec.free_params, (met, name)
+            assert spec.get_fixed_values()[name] == 0.0, (met, name)
+
+
+@pytest.mark.parametrize("name", ["alpha_fe_old", "alpha_fe_young"])
+def test_an_explicit_prior_on_either_end_is_checked_against_the_nodes(ssp4d, observation, name):
+    with pytest.raises(ParameterError, match="does not overlap"):
+        _model(ssp4d, observation, {"alpha_fe_evolving": True, name: Uniform(0.8, 1.0)})
+    with pytest.warns(GridSupportWarning, match=f"met_{name}"):
+        model = _model(ssp4d, observation, {"alpha_fe_evolving": True, name: Uniform(-0.4, 0.4)})
+    assert f"met_{name}" in model.spec.free_params
 
 
 # ── g. the per-age kernel ──────────────────────────────────────────────
@@ -642,27 +662,38 @@ def _attenuated(ssp, observation, met, approx=None, *, redshift=None):
     )
 
 
-def test_dusty_evolving_wave_precomp_photometry_agrees_with_exact(ssp4d, observation):
-    """The photometry LUT on the dusty evolving model, at free redshift, against the exact path.
+def _phot_and_absorbed(model, z):
+    """Photometry and absorbed luminosity at one redshift, through the path the model threads."""
+    params = {"redshift": z}
+    phot = np.asarray(model.predict_photometry(params))
+    props = model.predict_properties(
+        params, names=("l_dust_absorbed",), template_data=model._template_data_for_jit()
+    )
+    return phot, float(props["l_dust_absorbed"])
 
-    The dust energy-balance table is not built for an evolving [alpha/Fe]
-    (sed_model._energy_balance_lut), so the absorbed luminosity is exact by construction and
-    only the photometry LUT is tested here. The control is the same dust without an emission
-    model: a scalar model with dust emission on this 4-D grid raises in the energy-balance
-    table's contraction, which is not evolving-specific.
+
+def test_dusty_evolving_wave_precomp_agrees_with_exact(ssp4d, observation):
+    """The dusty evolving model on WavePrecomp, at free redshift, against the exact path.
+
+    The dust energy-balance table is built for the evolving [alpha/Fe] and collapsed at the
+    per-age bracket, so both the photometry and the absorbed luminosity come from tables.
+    The control is the scalar-[alpha/Fe] dusty model on the same grid and path.
     """
     free_z = Uniform(0.05, 0.3)
     exact = _dusty(ssp4d, observation, _evo_met(0.4, 0.0), None, redshift=free_z)
     lut = _dusty(ssp4d, observation, _evo_met(0.4, 0.0), WavePrecomp(), redshift=free_z)
-    c_exact = _attenuated(ssp4d, observation, {"alpha_fe": Fixed(0.25)}, None, redshift=free_z)
-    c_lut = _attenuated(
-        ssp4d, observation, {"alpha_fe": Fixed(0.25)}, WavePrecomp(), redshift=free_z
-    )
+    c_exact = _dusty(ssp4d, observation, {"alpha_fe": Fixed(0.25)}, None, redshift=free_z)
+    c_lut = _dusty(ssp4d, observation, {"alpha_fe": Fixed(0.25)}, WavePrecomp(), redshift=free_z)
     for z in (0.07, 0.2):
-        ctrl = _max_rel(
-            c_lut.predict_photometry({"redshift": z}), c_exact.predict_photometry({"redshift": z})
-        )
-        rel = _max_rel(
-            lut.predict_photometry({"redshift": z}), exact.predict_photometry({"redshift": z})
-        )
+        p_lut, a_lut = _phot_and_absorbed(lut, z)
+        p_ex, a_ex = _phot_and_absorbed(exact, z)
+        cp_lut, ca_lut = _phot_and_absorbed(c_lut, z)
+        cp_ex, ca_ex = _phot_and_absorbed(c_exact, z)
+        rel, ctrl = _max_rel(p_lut, p_ex), _max_rel(cp_lut, cp_ex)
         assert rel <= _lut_tolerance(ctrl), (z, rel, ctrl)
+        rel_a, ctrl_a = abs(a_lut / a_ex - 1.0), abs(ca_lut / ca_ex - 1.0)
+        assert rel_a <= _lut_tolerance(ctrl_a), (z, rel_a, ctrl_a)
+    built = getattr(lut, "_energy_balance_lut_cache", None)
+    assert built is not None and not isinstance(built, str), (
+        "the energy-balance table was not built"
+    )

@@ -2726,15 +2726,16 @@ class StellarSEDComponent:
             DerivedKey(
                 "stellar_alpha_bracket_index",
                 "",
-                "Lower [alpha/Fe] node index of met_alpha_fe on a 4D grid, shape (); the "
+                "Lower [alpha/Fe] node index on a 4D grid, shape () or (n_age,) under "
+                "alpha_fe_evolving; the "
                 "dust energy-balance LUT collapses its alpha axis at this bracket. Absent "
                 "on a 3D grid",
             ),
             DerivedKey(
                 "stellar_alpha_bracket_fraction",
                 "",
-                "Interpolation fraction within the [alpha/Fe] bracket, shape (); pairs with "
-                "stellar_alpha_bracket_index. Absent on a 3D grid",
+                "Interpolation fraction within the [alpha/Fe] bracket, shape () or (n_age,); "
+                "pairs with stellar_alpha_bracket_index. Absent on a 3D grid",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey(
