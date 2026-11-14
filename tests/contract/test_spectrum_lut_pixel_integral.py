@@ -379,7 +379,7 @@ def test_projected_family_matches_conserving_exact(family):
     assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
 
 
-@pytest.mark.parametrize("family", _PROJECTED)
+@pytest.mark.parametrize("family", [f for f in _PROJECTED if f != "dust-emission"])
 def test_projected_family_routes_to_table_under_auto(family):
     """A projected family is served: auto takes the pixel-moment table (#3413)."""
     from tengri import load_ssp_data
@@ -388,6 +388,26 @@ def test_projected_family_routes_to_table_under_auto(family):
     _require_data(False)
     ssp = load_ssp_data(_BARE_SSP)
     assert _spectrum_lut_for_auto(_family_model(ssp, family, None)) is not None
+
+
+def test_dust_emission_routes_exact_under_auto():
+    """Dust emission is slower on the table than exact, so auto keeps it exact (#3413)."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, "dust-emission", None)) is None
+
+
+def test_dust_emission_explicit_spectrum_precomp_still_serves():
+    """An explicit SpectrumPrecomp() keeps dust emission on the table (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    model = _family_model(ssp, "dust-emission", SpectrumPrecomp())
+    assert model._approx.get("spectrum_precomp") is True
 
 
 @pytest.mark.parametrize("family", _STATIC_REFUSED)

@@ -3225,7 +3225,12 @@ class SEDModel:
         - ``sigma_v_kms`` is Fixed (a free one broadens the stellar sum on the full
           model grid every draw, which is slower than the exact path);
         - no banded resolution matrix is attached (the LUT applies only a per-pixel
-          instrument kernel).
+          instrument kernel);
+        - no dust-emission component is declared: its light is projected per draw
+          from the full grid either way, so the table only adds its own stellar sum
+          and is slower than the exact path (#3413).
+
+        An explicit ``SpectrumPrecomp()`` is not routed through this check.
 
         Parameters
         ----------
@@ -3239,6 +3244,8 @@ class SEDModel:
         """
         spectro = getattr(observation, "spectroscopy", None)
         if spectro is None:
+            return False
+        if getattr(self.spec, "dust_emission", None):
             return False
         if self._spectrum_lut_needs_pixel_integral(observation):
             return False
