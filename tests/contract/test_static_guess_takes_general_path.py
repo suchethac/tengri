@@ -162,6 +162,13 @@ ALLOWLIST: dict[str, str] = {
     "utils/interpolation.py::concrete_canonical_numpy": (
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
     ),
+    "analysis/simulate.py::_host_scalar": (
+        "traced value is returned unchanged; only a concrete value becomes a Python float"
+    ),
+    "analysis/simulate.py::_select_dust": (
+        "traced gate takes jax.lax.cond over the same attenuation (general path); a concrete "
+        "gate takes the eager branch"
+    ),
     "utils/sed_quantities.py::_uv_anchor_plan": (
         "tracer → 'traced': the three cases are selected with jnp.where on the traced coverage "
         "(in-grid; masked-sum power-law fit; edge), the same values as the concrete plans, "
@@ -187,6 +194,10 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "
         "traced values at build (documented)"
+    ),
+    "observation/noise.py::apply_zp_floor": (
+        "GAP: a traced floor skips the sign/validity check, so a negative traced floor is not "
+        "refused; it is applied by the same arithmetic (hypot of noise and floor*|flux|)"
     ),
     "parameters/groups.py::_warn_free_redshift_onset_ceiling": (
         "GAP (warning only): Fixed redshift skips the onset-ceiling warning, including a catalog "
