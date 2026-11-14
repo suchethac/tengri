@@ -773,14 +773,19 @@ class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
     """A parameter named ``FREE`` by the user must actually free, or refuse."""
 
     def test_explicit_free_on_a_param_with_no_free_prior_raises(self):
-        """``met_alpha_fe`` declares no free prior: the SSP grid may not support it."""
-        with pytest.raises(ParameterError, match=r"no declared free prior") as exc:
+        """``met_alpha_fe`` is FREE only on a 4-D grid with a spectroscopic channel (#2250).
+
+        With no SSP grid and no observation the gate refuses by name, saying the
+        grid has no [alpha/Fe] axis, rather than the generic no-free-prior message.
+        """
+        with pytest.raises(ParameterError, match=r"FREE cannot be honored") as exc:
             tengri.parse_groups(
                 sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 met={"type": "table", "alpha_fe": FREE},
                 redshift=Fixed(0.1),
             )
         assert "met_alpha_fe" in str(exc.value)
+        assert "[alpha/Fe] axis" in str(exc.value)
 
     def test_wildcard_free_on_the_same_group_still_takes_the_adjudication_path(self):
         """The wildcard must never trip the new per-parameter error.
