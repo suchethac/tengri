@@ -1164,3 +1164,106 @@ def igm_absorption(
             b_turb_kms=dla_b_turb,
         )
     return transmission
+
+
+def igm_mean_absorption(
+    wave_obs: jnp.ndarray,
+    z: float,
+    *,
+    igm_patchy: bool = False,
+    igm_model: str = "inoue14",
+) -> jnp.ndarray:
+    r"""The part of :func:`igm_absorption` that depends on wavelength and redshift alone.
+
+    Patchy reionization is the Inoue+2014 transmission times a damping wing that
+    reads the free ``igm_x_HI`` and ``igm_bubble_mpc``. The mean part is therefore
+    the Inoue transmission whatever ``igm_model`` names, and ``igm_model='none'``
+    switches the mean part off as :func:`igm_absorption` does. DLA absorption is
+    not in this part (see :func:`igm_free_absorption`).
+
+    Parameters
+    ----------
+    wave_obs : ndarray, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
+    z : float
+        Source redshift [dimensionless].
+    igm_patchy : bool, optional
+        Whether the parent configuration is patchy. Default ``False``.
+    igm_model : str, optional
+        Mean-IGM registry key or alias. Default ``"inoue14"``.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Fixed transmission fraction [dimensionless, 0-1], float64 under x64.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The branches are on static structural flags only.
+    ``igm_mean_absorption * igm_free_absorption == igm_absorption`` for every
+    configuration (asserted in ``tests/contract/test_igm_exact_fold_patchy.py``).
+    """
+    if igm_model in ("none", None):
+        return jnp.ones_like(wave_obs)
+    if igm_patchy:
+        return igm_transmission(wave_obs, z)
+    return resolve_igm_model(igm_model)(wave_obs, z)
+
+
+def igm_free_absorption(
+    wave_obs: jnp.ndarray,
+    z: float,
+    *,
+    igm_x_HI: float = DEFAULT_IGM_X_HI,
+    igm_bubble_mpc: float = DEFAULT_IGM_BUBBLE_MPC,
+    igm_patchy: bool = False,
+    igm_model: str = "inoue14",
+    use_dla: bool = False,
+    dla_z: float = DEFAULT_DLA_Z,
+    dla_log_n_hi: float = DEFAULT_DLA_LOG_N_HI,
+    dla_temp: float = DEFAULT_DLA_TEMP,
+    dla_b_turb: float = DEFAULT_DLA_B_TURB,
+) -> jnp.ndarray:
+    r"""The part of :func:`igm_absorption` that reads free parameters.
+
+    The patchy damping wing :math:`\exp(-\tau_{\rm DW})` (which needs ``igm_x_HI``
+    and ``igm_bubble_mpc``) times the DLA factor, both taken from the same
+    arguments :func:`igm_absorption` takes. The product with
+    :func:`igm_mean_absorption` is the full transmission.
+
+    Parameters
+    ----------
+    wave_obs : ndarray, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
+    z : float
+        Source redshift [dimensionless].
+    igm_x_HI, igm_bubble_mpc, igm_patchy, igm_model, use_dla, dla_z, dla_log_n_hi, dla_temp, dla_b_turb
+        As for :func:`igm_absorption`.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Free transmission factor [dimensionless, 0-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The absorber knobs are runtime values and never gate a
+    Python branch; ``igm_x_HI = 0`` gives a damping factor of exactly one.
+    """
+    transmission = jnp.ones_like(wave_obs)
+    if igm_patchy and igm_model not in ("none", None):
+        transmission = transmission * jnp.exp(
+            -_damping_wing_tau(wave_obs, z, igm_x_HI, igm_bubble_mpc)
+        )
+    if use_dla:
+        from tengri.components.igm.dla import dla_transmission_obs
+
+        z_dla = jnp.where(dla_z > 0.0, dla_z, z)
+        transmission = transmission * dla_transmission_obs(
+            wave_obs,
+            z_dla=z_dla,
+            log_n_hi=dla_log_n_hi,
+            temp=dla_temp,
+            b_turb_kms=dla_b_turb,
+        )
+    return transmission

@@ -10,6 +10,7 @@ able to say which quadrature it used: ``observed_facts["igm_fold"]`` carries the
 declared mode beside the resolved one (``None`` when no fold was built).
 """
 
+import numpy as np
 import pytest
 
 import tengri
@@ -63,16 +64,17 @@ def test_explicit_exact_where_servable_is_reported_as_exact(ssp):
     assert fact == {"declared": "exact", "resolved": "exact"}
 
 
-def test_patchy_transmission_falls_back_to_node_under_auto_but_exact_raises(ssp):
-    """Free-parameter transmission cannot be folded exactly at build time.
+def test_patchy_transmission_resolves_to_exact_under_auto(ssp):
+    """Patchy reionization is folded exactly too (#3505).
 
-    ``"auto"`` takes the node fold and says so; naming ``"exact"`` still raises.
+    The fixed part is folded at build time and the free factor is applied at the nodes.
+
+    ``"auto"`` takes the exact fold and reports it; naming ``"exact"`` builds the same fold.
     """
     patchy = {"type": "inoue14", "patchy": True}
     fact, _ = _fold_facts(ssp, igm=patchy)
-    assert fact == {"declared": "auto", "resolved": "node"}
-    with pytest.raises(ValueError, match="fixed function of"):
-        _model(ssp, igm=patchy, igm_fold="exact").predict_photometry({})
+    assert fact == {"declared": "auto", "resolved": "exact"}
+    assert np.all(np.isfinite(_model(ssp, igm=patchy, igm_fold="exact").predict_photometry({})))
 
 
 def test_no_igm_component_reports_no_fold_with_the_declared_mode(ssp):

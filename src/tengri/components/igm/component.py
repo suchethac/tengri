@@ -790,8 +790,23 @@ class IGMSEDComponent(TemplateThreading):
 
         **JIT-compatible**: yes, pure array ops on published derived tensors.
         """
-        if derived.get("stellar_phot_lnu_per_age_subband_igm_precomp") is not None:
-            return derived  # mean-IGM build-time fold already present (#1135)
+        mean_folded = derived.get("stellar_phot_lnu_per_age_subband_igm_precomp")
+        if mean_folded is not None:
+            # The mean IGM is already in the build-time tensor (#1135, and for a
+            # patchy or DLA model the exact fold of the fixed part, #3505). Only
+            # the free factor is left, and only at the nodes the exact fold
+            # published, since those are where its tensor's flux is centred.
+            if not (self.config.igm_patchy or self.config.use_dla):
+                return derived
+            nodes = derived.get("stellar_subband_waves_rest_igm_precomp")
+            if nodes is None:
+                nodes = derived.get("stellar_subband_waves_rest_precomp")
+            if nodes is None:
+                return derived
+            free = igm_free_absorption_for_component(
+                self, params, nodes.reshape(-1) * (1.0 + z), z
+            ).reshape(nodes.shape)
+            return derived.with_(stellar_phot_lnu_per_age_subband_igm_precomp=mean_folded * free)
         sub_per_age = derived.get("stellar_phot_lnu_per_age_subband_precomp")
         node_waves = derived.get("stellar_subband_waves_rest_precomp")
         if sub_per_age is None or node_waves is None:
@@ -851,6 +866,56 @@ def igm_absorption_for_component(
         igm_model=component.config.igm_model,
         use_dla=component.config.use_dla,
         dla_z=dla_z,
+        dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
+        dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
+        dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
+    )
+
+
+def igm_free_absorption_for_component(
+    component: IGMSEDComponent,
+    params: Mapping[str, jnp.ndarray],
+    wave_obs: jnp.ndarray,
+    z: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""The free-parameter factor of :func:`igm_absorption` for one IGM component (#3505).
+
+    The patchy damping wing and the DLA factor, read with the knobs
+    :func:`igm_absorption_for_component` reads. Multiplying it by the mean factor
+    (:func:`~tengri.components.igm.igm.igm_mean_absorption`) reproduces the full
+    transmission.
+
+    Parameters
+    ----------
+    component : IGMSEDComponent
+        Supplies the static ``igm_model`` / ``igm_patchy`` / ``use_dla`` choice.
+    params : mapping
+        Evaluation parameters, with the same defaults as the full transmission.
+    wave_obs : ndarray, shape (...,)
+        Observed-frame wavelength(s) [Angstrom].
+    z : ndarray, shape ()
+        Source redshift [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (...,)
+        Free transmission factor [dimensionless, 0-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the knobs are traced free parameters.
+    """
+    from tengri.components.igm.igm import igm_free_absorption
+
+    return igm_free_absorption(
+        wave_obs,
+        z,
+        igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
+        igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
+        igm_patchy=component.config.igm_patchy,
+        igm_model=component.config.igm_model,
+        use_dla=component.config.use_dla,
+        dla_z=params.get("dla_z", DEFAULT_DLA_Z),
         dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
         dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
         dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),

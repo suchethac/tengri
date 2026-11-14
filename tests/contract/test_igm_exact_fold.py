@@ -257,11 +257,11 @@ def test_the_exact_fold_is_free_in_a_band_with_no_structure(ssp, observation):
 # fit at once. `"auto"` is the mode that could be: it asks for the exact fold
 # and accepts the node fold where the exact one is unavailable.
 #
-# The promise is one-sided and that is the whole risk. `"auto"` must never
-# raise where `"node"` would have worked, which means the fall-back has to know
-# every precondition the exact fold refuses on. A second, drifting copy of that
-# list breaks the promise at run time and only for the configuration that
-# happens to trigger it, so both read one predicate.
+# The promise is one-sided: `"auto"` must never raise where `"node"` would have
+# worked. Since #3505 the exact fold has no refusal of its own for a free
+# transmission (patchy reionization and DLAs fold their fixed part exactly and
+# apply the free factor at the nodes), so the fall-back needs only the absence
+# of templates or filters.
 
 
 def test_auto_is_an_accepted_value():
@@ -342,50 +342,20 @@ def _patchy_model(ssp, observation, fold):
     )
 
 
-def test_a_free_transmission_refuses_the_exact_fold(ssp, observation):
-    """The other precondition, pinned as a refusal before it is paired."""
-    with pytest.raises(ValueError) as excinfo:
-        _patchy_model(ssp, observation, "exact").predict_photometry({})
-    assert "node" in str(excinfo.value)
+def test_a_free_transmission_is_served_by_the_exact_fold(ssp, observation):
+    """The exact fold folds the fixed part and applies the free factor at the nodes (#3505).
 
-
-def test_auto_falls_back_to_the_node_fold_for_a_free_transmission(ssp, observation):
-    """Paired with the refusal above: same configuration, no raise."""
-    auto = _photometry(_patchy_model(ssp, observation, "auto"))
-    node = _photometry(_patchy_model(ssp, observation, "node"))
-    np.testing.assert_array_equal(auto, node)
-
-
-def test_the_refusals_and_the_fall_back_read_one_list_of_preconditions():
-    """A third refusal must not make "auto" raise.
-
-    ``"auto"`` promises to fall back wherever the exact fold cannot be built.
-    That promise is only as good as the fall-back's knowledge of what the
-    exact fold refuses on, and a refusal added to the exact fold alone would
-    break it silently -- for one configuration, at run time, with no
-    diagnostic. Both sides call ``_exact_fold_blocker``, so there is one list
-    rather than two that can drift.
+    Accuracy against the integrator is pinned in ``test_igm_exact_fold_patchy.py``.
     """
-    import ast
-    import inspect
-    import textwrap
+    exact = _photometry(_patchy_model(ssp, observation, "exact"))
+    assert np.all(np.isfinite(exact)) and np.all(exact > 0)
 
-    from tengri.forward import sed_model
 
-    exact_src = inspect.getsource(sed_model._fold_igm_exact_into_subbands)
-    resolver_src = inspect.getsource(sed_model._resolve_igm_fold)
-
-    assert "_exact_fold_blocker(" in exact_src, "the exact fold does not consult the predicate"
-    assert "_exact_fold_blocker(" in resolver_src, "the resolver does not consult the predicate"
-
-    raises = [
-        n for n in ast.walk(ast.parse(textwrap.dedent(exact_src))) if isinstance(n, ast.Raise)
-    ]
-    assert len(raises) == 1, (
-        f"the exact fold raises from {len(raises)} sites, but only the one "
-        "driven by _exact_fold_blocker is mirrored by the auto fall-back; the "
-        f"others are at lines {[n.lineno for n in raises]} of the function"
-    )
+def test_auto_takes_the_exact_fold_for_a_free_transmission(ssp, observation):
+    """``auto`` resolves to the exact fold for patchy reionization as for the mean IGM (#3505)."""
+    auto = _photometry(_patchy_model(ssp, observation, "auto"))
+    exact = _photometry(_patchy_model(ssp, observation, "exact"))
+    np.testing.assert_array_equal(auto, exact)
 
 
 def test_auto_falls_back_when_the_exact_fold_would_do_nothing_at_all():

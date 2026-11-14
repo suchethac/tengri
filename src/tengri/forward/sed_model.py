@@ -2484,16 +2484,19 @@ def _fold_igm_exact_into_subbands(
     if stellar_state is None or ssp_data is None or not filters:
         return stellar_state
 
-    blocker = _exact_fold_blocker(igm_comp, stellar_state)
-    if blocker is not None:
-        raise blocker
-
     from tengri.components.igm import exact_fold
+
+    cfg = getattr(igm_comp, "config", None)
+    # The fixed part of the transmission: patchy reionization is Inoue times a
+    # damping wing that reads free parameters, so its fixed part is Inoue (#3505).
+    mean_model = getattr(cfg, "igm_model", None)
+    if getattr(cfg, "igm_patchy", False) and mean_model not in ("none", None):
+        mean_model = "inoue14"
 
     def _partition(tensor):
         n_chunks = int(np.shape(tensor)[-1])
         return {
-            "igm_model": getattr(getattr(igm_comp, "config", None), "igm_model", None),
+            "igm_model": mean_model,
             "n_subbands": n_chunks - 1 if lyc_gate else n_chunks,
             "lyc_gate": lyc_gate,
             "convention": convention,
@@ -2539,49 +2542,6 @@ def _fold_igm_exact_into_subbands(
     return stellar_state
 
 
-def _exact_fold_blocker(igm_comp, stellar_state):
-    """Why the exact IGM fold cannot be built here, or ``None`` when it can.
-
-    One reading of the exact fold's preconditions, consulted by both the
-    refusal in :func:`_fold_igm_exact_into_subbands` and the ``"auto"``
-    resolution in :func:`_resolve_igm_fold`. The two ask the same question for
-    opposite purposes -- whether to raise, and whether to fall back -- and a
-    second copy of the list would drift. A drifted copy is not a cosmetic
-    problem: it leaves ``"auto"`` raising for a configuration it promised to
-    serve, at run time, for whoever happens to build that configuration.
-
-    Returns the exception *instance* rather than a flag, so each refusal's type
-    and wording stay beside the condition that produces them.
-
-    Parameters
-    ----------
-    igm_comp : IGMSEDComponent
-        Supplies the transmission configuration.
-    stellar_state : StellarSEDComponentState
-        Carrying either the fixed-z photometry LUT or the free-z z-table.
-
-    Returns
-    -------
-    Exception or None
-        The refusal to raise, or ``None`` when the exact fold can be built.
-
-    Notes
-    -----
-    **Build-time only.** Reads configuration, never parameter values.
-    """
-    cfg = getattr(igm_comp, "config", None)
-    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
-        return ValueError(
-            "igm_fold='exact' needs a transmission that is a fixed function of "
-            "(wavelength, redshift), so it can be folded in at build time. "
-            "Patchy reionization and discrete DLAs read free parameters and "
-            "change every call. Use igm_fold='node' (the default) for those, "
-            "or igm_fold='auto' to take that fall-back automatically."
-        )
-
-    return None
-
-
 def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
@@ -2616,8 +2576,8 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
     Notes
     -----
     **Build-time only.** Two distinct reasons send ``"auto"`` to the node fold
-    and both matter. The first is a refusal, shared with the exact fold through
-    :func:`_exact_fold_blocker`. The second is that the exact fold is a no-op
+    and both matter. The first is that the exact fold needs a template grid and
+    filters to fold into. The second is that the exact fold is a no-op
     without templates or filters, while the node fold is not -- resolving to
     ``"exact"`` there would skip a fold the node path would have applied, which
     no exception would announce.
@@ -2628,7 +2588,7 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
     if ssp_data is None or not filters:
         return "node"
 
-    return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
+    return "exact"
 
 
 def _fold_igm_into_subbands(
