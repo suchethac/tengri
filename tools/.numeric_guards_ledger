@@ -124,6 +124,6 @@ src/tengri/observation/spectrum.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/parameters/priors.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/utils/grid_interp.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/utils/interpolation.py | jnp.clip with floor 0.0 < 1e-20 -> 3
-src/tengri/utils/magnitudes.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/utils/magnitudes.py | jnp.maximum with floor 0.0 < 1e-20 -> 0
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/utils/sed_quantities.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2

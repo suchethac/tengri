@@ -592,9 +592,15 @@ def _linear_continuum(x, x_blue, x_red, f_blue, f_red):
 
 
 def _index_from_ratio(ratio: jnp.ndarray, feat_width: float, units: str) -> jnp.ndarray:
-    """EW ``W (1 - ratio)`` or magnitude ``-2.5 log10(ratio)`` from the mean ``F/F_C``."""
+    """EW ``W (1 - ratio)`` or magnitude ``-2.5 log10(ratio)`` from the mean ``F/F_C``.
+
+    A zero ratio (no flux in the feature) is +inf magnitude, not a floor value (#3433).
+    """
     if units == "mag":
-        return -2.5 * jnp.log10(jnp.maximum(ratio, representable_floor(1e-30)))
+        positive = ratio > 0
+        ratio_pos = jnp.where(positive, ratio, 1.0)
+        mag = -2.5 * jnp.log10(jnp.maximum(ratio_pos, representable_floor(1e-30)))
+        return jnp.where(positive, mag, jnp.where(ratio <= 0, jnp.inf, jnp.nan))
     return feat_width * (1.0 - ratio)
 
 

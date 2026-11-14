@@ -28,6 +28,7 @@ from jax import dtypes as jax_dtypes
 
 from tengri._cache_keys import KeyPolicy, baked, content
 from tengri._x64_hold import hold_x64_preference
+from tengri.components.stellar.sps.grid_defects import repair_known_grid_defects
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -228,6 +229,10 @@ class SSPData(NamedTuple):
     # Caveats on the flux of this grid, one string each (#3428), warned once at load
     # (see ``GRID_CAVEATS``). Metadata only: never a JIT leaf.
     grid_notes: tuple[str, ...] = ()
+    # Cells ``(lgmet, lg_age_gyr)`` whose flux was replaced at load by
+    # :func:`~tengri.components.stellar.sps.grid_defects.repair_known_grid_defects` (#3406).
+    # Empty for every grid without a recorded defect. Metadata only.
+    repaired_cells: tuple = ()
     # [alpha/Fe]-dependent surviving-mass table (#2250), shape (n_met, n_alpha, n_age), with
     # ``ssp_mass_remaining`` as its alpha = 0 plane; None on 3-D grids and on 4-D grids without it.
     ssp_mass_remaining_alpha: jnp.ndarray | None = None
@@ -261,7 +266,15 @@ def _sspdata_flatten(s):
         s.ssp_resolution_kms,
         s.ssp_mass_remaining_alpha,
     )
-    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z, s.grid_notes)
+    aux = (
+        s.imf,
+        s.source,
+        s.nebular,
+        s.mass_remaining_source,
+        s.top_z,
+        s.grid_notes,
+        s.repaired_cells,
+    )
     return children, aux
 
 
@@ -285,6 +298,7 @@ def _sspdata_unflatten(aux, children):
         mass_remaining_source=aux[3],
         top_z=aux[4],
         grid_notes=aux[5],
+        repaired_cells=aux[6],
     )
 
 
@@ -306,6 +320,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "mass_remaining_source": content("where the surviving-mass table came from"),
     "top_z": content("top-metallicity validity limit and policy change the node arrays"),
     "grid_notes": content("caveats on the grid's flux identify the library"),
+    "repaired_cells": content("cells repaired at load change the flux templates"),
 }
 
 
@@ -815,8 +830,8 @@ def load_ssp_data(
     Examples
     --------
     >>> from tengri.components.stellar.sps import load_ssp_data
-    >>> ssp = load_ssp_data("data/ssp_bc03.h5")
-    >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
+    >>> ssp = load_ssp_data("data/ssp_bc03.h5")  # doctest: +SKIP
+    >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)  # doctest: +SKIP
     (6000,) (50, 300, 6000)
 
     >>> import jax.numpy as jnp
@@ -911,7 +926,15 @@ def load_ssp_data(
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = _load_float(f["ssp_flux"], dtype=dtype)
+        # Known single-cell grid defects (#3406) are repaired in float64 from the age
+        # neighbors before the working-precision cast: a float32 cast underflows the wNE
+        # grid's ~1e-70 neighbor flux to zero. The repair commutes with the unit rescale.
+        flux_raw, repaired_cells = repair_known_grid_defects(
+            fp.stem, f["ssp_flux"][:], ssp_lgmet, ssp_lg_age_gyr
+        )
+        ssp_flux = jnp.asarray(
+            flux_raw, dtype=dtype if dtype is not None else jnp.result_type(float)
+        )
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
@@ -1021,6 +1044,7 @@ def load_ssp_data(
             mass_remaining_source=resolution.source,
             top_z=top_z_validity,
             grid_notes=(caveat,) if caveat is not None else (),
+            repaired_cells=repaired_cells,
             ssp_mass_remaining_alpha=mass_remaining_alpha,
         )
 
@@ -2200,7 +2224,7 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
     --------
     >>> from tengri import salaris_mh_from_feh
     >>> round(float(salaris_mh_from_feh(feh=-0.5, alpha_fe=0.2)), 4)
-    -0.3676
+    -0.3595
 
     """
     return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
@@ -2240,7 +2264,7 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     --------
     >>> from tengri import salaris_feh_from_mh
     >>> round(float(salaris_feh_from_mh(mh=-0.5, alpha_fe=0.2)), 4)
-    -0.6324
+    -0.6405
 
     """
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2

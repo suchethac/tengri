@@ -286,6 +286,7 @@ def run_laplace(
     importance_draws=0,
     importance_df=5.0,
     verbose=True,
+    log_evidence_normalization=0.0,
 ):
     """Run Laplace approximation from a MAP estimate.
 
@@ -331,6 +332,9 @@ def run_laplace(
         check. Default 5.0.
     verbose : bool
         Print progress.
+    log_evidence_normalization : float, optional
+        Gaussian normalization the log-likelihood omits [nats], added to the reported
+        ``log_evidence`` and ``log_evidence_is`` (#3427). Default 0.
 
     Returns
     -------
@@ -550,6 +554,7 @@ def run_laplace(
             importance_draws=int(importance_draws),
             importance_df=importance_df,
         )
+        importance_diagnostics["log_evidence_is"] += log_evidence_normalization
     else:
         # Draw samples from N(theta_MAP, H^{-1})
         samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
@@ -563,7 +568,9 @@ def run_laplace(
     # parameter and tilt model comparison toward higher-D models.
     loss_at_map = -float(logdensity_fn(theta_flat, data_args))
     log_det_h = jnp.sum(jnp.log(eigenvalues_clipped))
-    log_evidence = -loss_at_map - 0.5 * log_det_h
+    # The sampler's log-likelihood omits the Gaussian normalization; the published value adds
+    # it so it is the evidence of the exact density (#3427).
+    log_evidence = -loss_at_map - 0.5 * log_det_h + log_evidence_normalization
 
     if verbose:
         print(f"  Loss at MAP: {loss_at_map:.2f}")

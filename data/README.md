@@ -91,6 +91,12 @@ in a derivative work like tengri is permitted on the condition that the
 SVO service is cited. Users should cite Rodrigo et al. 2024 (SVO) when
 publishing tengri-based work that uses any of these curves.
 
+The radio top-hats `VLA_L_1p4GHz.dat`, `VLA_S_3GHz.dat`,
+`MeerKAT_L_1p28GHz.dat` and `LOFAR_HBA_144MHz.dat` are not SVO profiles. They
+are rectangular transmission curves generated from the published band edges
+(transmission 1 inside the band, 0 outside), sampled in frequency and
+converted to Angstrom. They load through the same registry as the SVO curves.
+
 ## Test / regression reference fixtures (`*.npz`)
 
 Reference outputs captured from specific upstream versions for detecting

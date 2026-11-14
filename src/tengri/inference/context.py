@@ -97,6 +97,11 @@ class InferenceContext:
         """The Parameters spec (free + fixed parameters)."""
         return self.fitter.spec
 
+    @property
+    def log_evidence_normalization(self) -> float:
+        """Gaussian normalization the log-likelihood omits, in nats (added to ``log_evidence``)."""
+        return self.fitter._log_evidence_normalization()
+
     # ── Objective and gradient (JIT-cached on the Fitter) ────────────────
     @property
     def neg_log_posterior_fn(self) -> Callable:
