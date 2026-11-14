@@ -25,6 +25,8 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
+import logging
+import math
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -2477,6 +2479,10 @@ _FLUX_WEIGHTED_WAVE_FIELDS = {
 }
 
 
+#: Log the pre-broadened SSP cube's size at build above this many megabytes.
+_BROADENED_CUBE_LOG_MB = 300.0
+
+
 def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
     """Collapse one 4D [alpha/Fe] array at the model's bracket; a 3D array passes through.
 
@@ -2990,11 +2996,18 @@ class StellarSEDComponent:
         if (
             spec_sigma_v_fixed is not None
             and spec_sigma_v_fixed > 0.0
-            and not has_alpha_grid(self.ssp_data)
             and self.agb_dust_ratio is None
         ):
             from tengri.components.stellar.sps.precompute import broaden_template_cube
 
+            # A grid with an [alpha/Fe] axis is broadened plane by plane (every leading
+            # axis is mapped over), so the cube is n_alpha times the 3D one.
+            cube_shape = tuple(self.ssp_data.ssp_flux.shape)
+            cube_mb = math.prod(cube_shape) * 8.0 / 1e6
+            if cube_mb > _BROADENED_CUBE_LOG_MB:
+                logging.getLogger(__name__).info(
+                    "pre-broadened SSP cube: shape %s, %.0f MB", cube_shape, cube_mb
+                )
             broadened = broaden_template_cube(
                 self.ssp_data.ssp_flux, self.ssp_data.ssp_wave, spec_sigma_v_fixed, spec_lsf_n_bins
             )
@@ -3600,7 +3613,7 @@ class StellarSEDComponent:
                     ssp_flux_for_csp=ssp_flux_for_csp,
                     joint_weights=joint_weights,
                     total_mass=total_mass,
-                    cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
+                    cube_modified=_agb_dust_cube is not None,
                     template_data=template_data,
                     alpha_bracket=alpha_bracket,
                 )
@@ -4680,7 +4693,9 @@ class StellarSEDComponent:
             # Free redshift, fixed sigma_v: the cube was broadened once at build, so the
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
-            cube = spec_state.spec_ssp_broadened
+            # On a grid with an [alpha/Fe] axis the broadened cube carries it; collapse it
+            # at the model's bracket first (broadening and the collapse are both linear).
+            cube = _collapse_alpha_plane(spec_state.spec_ssp_broadened, alpha_bracket)
             tot_b = jnp.einsum("ma,maw->w", joint_weights, cube)
             age_b = jnp.einsum("ma,maw->aw", joint_weights, cube)
             return {
