@@ -1868,6 +1868,11 @@ def _radio_mass_floor(spec) -> tuple[float, float]:
     hi = max(b[1] for b in mass_bounds)
     ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
     remaining = getattr(ssp, "ssp_mass_remaining", None)
+    # An embedded [alpha/Fe] table (#2250) holds the alpha = 0 plane too, so its minimum bounds
+    # the fraction at every alpha.
+    alpha_remaining = getattr(ssp, "ssp_mass_remaining_alpha", None)
+    if alpha_remaining is not None:
+        remaining = alpha_remaining
     offset = 0.0
     if remaining is not None:
         frac_min = float(np.min(np.asarray(remaining)))

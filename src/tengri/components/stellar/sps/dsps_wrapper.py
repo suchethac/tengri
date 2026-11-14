@@ -125,6 +125,9 @@ class SSPData(NamedTuple):
         at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
+    ssp_mass_remaining_alpha : array, shape (n_met, n_alpha, n_age), optional
+        Surviving-mass fraction on a 4D grid's [alpha/Fe] axis (#2250); its alpha = 0 plane is
+        ``ssp_mass_remaining``. ``None`` on 3D grids and on 4D grids without the table.
     mass_remaining_source : str, optional
         Provenance of ``ssp_mass_remaining``: ``"embedded"``,
         ``"companion:<file>"``, ``"dsps_fit"`` or ``"unspecified"`` (hand-built).
@@ -219,6 +222,9 @@ class SSPData(NamedTuple):
     # applied to it (:class:`~tengri.components.stellar.sps.top_z_validity.TopZValidity`),
     # or ``None`` when the grid has no limit on record. Metadata only: never a JIT leaf.
     top_z: tuple | None = None
+    # [alpha/Fe]-dependent surviving-mass table (#2250), shape (n_met, n_alpha, n_age), with
+    # ``ssp_mass_remaining`` as its alpha = 0 plane; None on 3-D grids and on 4-D grids without it.
+    ssp_mass_remaining_alpha: jnp.ndarray | None = None
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this SSPData instance.
@@ -247,6 +253,7 @@ def _sspdata_flatten(s):
         s.ssp_mass_remaining,
         s.ssp_alpha_fe,
         s.ssp_resolution_kms,
+        s.ssp_mass_remaining_alpha,
     )
     aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z)
     return children, aux
@@ -265,6 +272,7 @@ def _sspdata_unflatten(aux, children):
         ssp_mass_remaining=children[4],
         ssp_alpha_fe=children[5],
         ssp_resolution_kms=children[6],
+        ssp_mass_remaining_alpha=children[7],
         imf=aux[0],
         source=aux[1],
         nebular=aux[2],
@@ -284,6 +292,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "ssp_mass_remaining": content("stellar mass fractions define mass normalization"),
     "ssp_alpha_fe": content("alpha enhancement grid defines the stellar templates"),
     "ssp_resolution_kms": content("per-wavelength library resolution affects LSF subtraction"),
+    "ssp_mass_remaining_alpha": content("alpha-dependent surviving-mass table defines the mass"),
     "imf": content("initial mass function affects stellar population synthesis"),
     "source": content("source/library identity affects stellar templates"),
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
@@ -897,6 +906,23 @@ def load_ssp_data(
         alpha_fe = None
         if "ssp_alpha_fe" in f:
             alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
+        # The alpha-dependent surviving-mass table (#2250) is read only when the grid's own
+        # (n_met, n_age) table was used: a synthesized ``dsps_fit`` table has no alpha dependence.
+        mass_remaining_alpha = None
+        if (
+            alpha_fe is not None
+            and "ssp_mass_remaining_alpha" in f
+            and resolution.table is not None
+        ):
+            mass_remaining_alpha = _load_float(f["ssp_mass_remaining_alpha"], dtype=dtype)
+            _check_alpha_mass_remaining(
+                mass_remaining_alpha,
+                fp.name,
+                alpha_nodes=np.asarray(alpha_fe),
+                lgmet=np.asarray(ssp_lgmet),
+                n_age=ssp_lg_age_gyr.shape[0],
+                table_2d=np.asarray(mass_table, dtype=np.float64),
+            )
 
         ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
         top_z_validity = None
@@ -951,6 +977,41 @@ def load_ssp_data(
             nebular=nebular,
             mass_remaining_source=resolution.source,
             top_z=top_z_validity,
+            ssp_mass_remaining_alpha=mass_remaining_alpha,
+        )
+
+
+def _check_alpha_mass_remaining(
+    table,
+    filename: str,
+    *,
+    alpha_nodes: np.ndarray,
+    lgmet: np.ndarray,
+    n_age: int,
+    table_2d: np.ndarray,
+    atol: float = 1e-6,
+) -> None:
+    """Refuse an embedded [alpha/Fe] surviving-mass table that does not fit its grid (#2250).
+
+    The table must be (n_met, n_alpha, n_age). When the alpha = 0 node is on the grid, its plane
+    must equal the file's (n_met, n_age) table to ``atol``, since two tables that disagree would
+    make the surviving mass depend on which one is read.
+    """
+    expected = (lgmet.shape[0], alpha_nodes.shape[0], n_age)
+    if tuple(table.shape) != expected:
+        raise TengriIOError(
+            f"SSP file {filename}: 'ssp_mass_remaining_alpha' has shape {tuple(table.shape)}, "
+            f"expected (n_met, n_alpha, n_age) = {expected}."
+        )
+    zero_nodes = np.flatnonzero(np.isclose(alpha_nodes, 0.0, rtol=0.0, atol=1e-12))
+    if zero_nodes.size == 0:
+        return
+    plane = np.asarray(table[:, int(zero_nodes[0]), :], dtype=np.float64)
+    if not np.allclose(plane, table_2d, rtol=0.0, atol=atol):
+        raise TengriIOError(
+            f"SSP file {filename}: the alpha = 0 plane of 'ssp_mass_remaining_alpha' and the "
+            f"(n_met, n_age) 'ssp_mass_remaining' table disagree by more than {atol:g}. The two "
+            "tables must describe the same grid."
         )
 
 
@@ -1297,6 +1358,8 @@ def _synthesize_mass_remaining(
     filepath, ssp_lg_age_gyr: jnp.ndarray, ssp_lgmet: jnp.ndarray, imf_tag=None
 ) -> jnp.ndarray:
     """Evaluate the DSPS surviving-mass fit; reached only through the explicit opt-in.
+
+    The fit has no [alpha/Fe] dependence, so an alpha grid gets no ``ssp_mass_remaining_alpha``.
 
     Uses :func:`dsps.imf.surviving_mstar.surviving_mstar`, a 9-parameter
     sigmoid fit to FSPS with shipped per-IMF calibrations (Chabrier,
@@ -2879,6 +2942,7 @@ def predict_surviving_mass(
     t_lookback_yr: jnp.ndarray,
     ssp: "SSPData",
     log_z_zsun: float = 0.0,
+    alpha_fe: float = 0.0,
 ) -> jnp.ndarray:
     """Predict surviving stellar mass directly from an SFR(t) array.
 
@@ -2919,6 +2983,10 @@ def predict_surviving_mass(
         (solar). Subtract :data:`tengri.utils.physics_constants.LOG10_ZSUN`
         from an absolute :math:`\\log_{10}(Z)` to get it. A value outside the
         grid is held at the nearest end node.
+    alpha_fe : float, optional
+        [alpha/Fe] at which to evaluate the surviving-mass fraction, on a grid whose
+        ``ssp_mass_remaining_alpha`` table is present (#2250). Default 0.0; ignored
+        otherwise.
 
     Returns
     -------
@@ -2965,12 +3033,17 @@ def predict_surviving_mass(
             "computed without it. Load an SSP file with stellar-evolution "
             "mass-loss data (see tengri.load_ssp_data)."
         )
+    mass_table = ssp.ssp_mass_remaining
+    if ssp.ssp_mass_remaining_alpha is not None:
+        # Collapse the alpha table at the requested [alpha/Fe] first (n_met, n_age).
+        ia, fa = alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
+        mass_table = collapse_alpha_axis(ssp.ssp_mass_remaining_alpha, ia, fa, axis=1)
     # Mass-remaining fraction on the SSP age grid at the requested metallicity.
     from tengri.utils.physics_constants import LOG10_ZSUN
 
     # ``ssp_lgmet`` is absolute log10(Z); the argument is relative to solar.
     f_surv_on_ssp = interpolate_mass_remaining(
-        ssp.ssp_mass_remaining, ssp.ssp_lgmet, log_z_zsun + LOG10_ZSUN
+        mass_table, ssp.ssp_lgmet, log_z_zsun + LOG10_ZSUN
     )  # (n_age,)
     # Resample to the SFH lookback grid via linear interp in log10(age).
     # SSP ages are in log10(Gyr); SFH lookback is in linear yr. Convert both
