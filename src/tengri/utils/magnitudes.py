@@ -96,11 +96,14 @@ def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
     -----
     **JIT/grad/vmap-compatible**: yes.
 
-    Guards the logarithm against negative or zero values (which would produce
-    NaN or -inf) with :func:`~tengri.utils.scale.representable_floor`. The
-    literal floor was ``1e-300``, which is below float32's smallest subnormal
-    (1.4e-45) and therefore an exact no-op in the precision the guard exists to
-    protect (#1492).
+    A non-positive flux is no detection, so it maps to ``+inf`` (the limit of
+    -2.5 log10 F_ν as F_ν → 0), in every precision. Before #3433 the flux was
+    clamped to a floor first, so zero flux gave a finite magnitude that depended
+    on the dtype (46.2 in float32, 701.4 in float64). NaN stays NaN.
+
+    Positive flux below the representable floor is still clamped to it, as the
+    log guard always did, via :func:`~tengri.utils.scale.representable_floor`
+    (the literal ``1e-300`` is below float32's smallest subnormal, #1492).
 
     The zero-point is subtracted in the log domain rather than divided out.
     ``f_ν / 3.631e-20`` reaches ~2e47 for the L_ν values
@@ -109,12 +112,19 @@ def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
     float64 is unchanged: ``log10(a/b)`` and ``log10(a) - log10(b)`` agree to
     ~1e-16 relative.
 
+    The logarithm only ever sees a positive argument (a double-where), so the
+    gradient is finite on both branches.
+
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713: definition of AB system
     """
-    fnu_safe = jnp.maximum(fnu_cgs, representable_floor(1e-300))
-    return -2.5 * (jnp.log10(fnu_safe) - LOG10_MAGGIES_ZP_CGS)
+    positive = fnu_cgs > 0
+    fnu_pos = jnp.where(positive, fnu_cgs, 1.0)
+    mag = -2.5 * (
+        jnp.log10(jnp.maximum(fnu_pos, representable_floor(1e-300))) - LOG10_MAGGIES_ZP_CGS
+    )
+    return jnp.where(positive, mag, jnp.where(fnu_cgs <= 0, jnp.inf, jnp.nan))
 
 
 @jax.jit
@@ -196,16 +206,22 @@ def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
     previous linear clamp because ``log10`` is monotone:
     ``log10(max(x, f)) == max(log10(x), log10(f))``.
 
+    A non-positive luminosity has no flux at 10 pc, so it maps to ``+inf``, the
+    same rule as :func:`fnu_to_ab_mag` (#3433). NaN stays NaN.
+
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713
     """
+    positive = lnu > 0
+    lnu_pos = jnp.where(positive, lnu, 1.0)
     # f_ν = L_ν / (4π d²), evaluated as log10 f_ν = log10 L_ν - log10(4π d²).
     log_fnu_at_10pc = jnp.maximum(
-        jnp.log10(jnp.maximum(lnu, 0.0)) - LOG10_FOUR_PI_TEN_PC_CM2,
+        jnp.log10(lnu_pos) - LOG10_FOUR_PI_TEN_PC_CM2,
         math.log10(representable_floor(1e-300)),
     )
-    return -2.5 * (log_fnu_at_10pc - LOG10_MAGGIES_ZP_CGS)
+    mag = -2.5 * (log_fnu_at_10pc - LOG10_MAGGIES_ZP_CGS)
+    return jnp.where(positive, mag, jnp.where(lnu <= 0, jnp.inf, jnp.nan))
 
 
 @jax.jit

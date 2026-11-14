@@ -1395,6 +1395,7 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
         unravel_fn=unravel_fn,
         to_physical_fn=context.to_physical,
         model=context.model,
+        log_evidence_normalization=context.log_evidence_normalization,
         **kwargs,
     )
 

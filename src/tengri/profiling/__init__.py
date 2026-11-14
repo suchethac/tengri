@@ -11,6 +11,8 @@ Usage
 >>> from tengri.profiling import profile_pipeline, profile_memory
 """
 
+from tengri.profiling.memory import profile_memory
+from tengri.profiling.pipeline import profile_pipeline
 from tengri.profiling.timers import (
     OperationTimers,
     bench,
@@ -23,6 +25,8 @@ from tengri.profiling.timers import (
 __all__ = [
     "OperationTimers",
     "bench",
+    "profile_memory",
+    "profile_pipeline",
     "profiled",
     "tic",
     "timers",

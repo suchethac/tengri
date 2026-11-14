@@ -3432,6 +3432,17 @@ class Fitter:
             return build_profiled_loglikelihood_fn(self)
         return build_loglikelihood_fn(self)
 
+    def _log_evidence_normalization(self) -> float:
+        """Return the Gaussian normalization the log-likelihood omits, in nats (#3427).
+
+        Added to the nested-sampling and Laplace ``log_evidence``, so the published value
+        is the exact ``ln Z`` of the data density. Not used by the posterior.
+        """
+        from tengri.inference.loss_functions import build_data_term_for_fitter
+
+        term = build_data_term_for_fitter(self)
+        return float(term.log_normalization(self._data_args))
+
     def _get_or_build_loglikelihood_fn(self) -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         from tengri.inference.jit_engine import get_or_build_cached
@@ -4034,7 +4045,8 @@ class Fitter:
             - ``params`` : dict, Best-fit or posterior mean parameters.
             - ``method`` : str, Method used.
             - ``diagnostics`` : dict, Convergence/quality metrics.
-            - ``log_evidence`` : float or None, Bayesian evidence (NSS only).
+            - ``log_evidence`` : float or None, ln Z [nats] of the exact data density,
+              Gaussian normalization included (NSS and Laplace; #3427).
             - ``wall_time_s`` : float, Total runtime.
 
             The Posterior also has derived quantity methods:
