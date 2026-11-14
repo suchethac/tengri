@@ -109,9 +109,10 @@ def photometry_only():
     return tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r"]))
 
 
-def _model(ssp, observation, met, *, age_gyr=3.0, redshift=None):
+def _model(ssp, observation, met, *, age_gyr=3.0, redshift=None, **extra):
     redshift = Fixed(REDSHIFT) if redshift is None else redshift
     return SEDModel.build(
+        **extra,
         ssp_data=ssp,
         observation=observation,
         sfh={
@@ -496,3 +497,74 @@ def test_vector_bracket_length_mismatch_raises():
 
 def test_grid_check_helper_is_consistent(ssp4d):
     assert has_alpha_grid(ssp4d)
+
+
+# ── h. a free AGB dust-shell weight beside the per-age ramp ────────────
+
+
+@pytest.fixture(scope="module")
+def ssp4d_mist(ssp4d):
+    """The 4-D grid tagged as an FSPS MIST library, which the AGB dust-shell template requires."""
+    return SSPData(
+        ssp_wave=ssp4d.ssp_wave,
+        ssp_flux=ssp4d.ssp_flux,
+        ssp_lg_age_gyr=ssp4d.ssp_lg_age_gyr,
+        ssp_lgmet=ssp4d.ssp_lgmet,
+        ssp_alpha_fe=ssp4d.ssp_alpha_fe,
+        source="fsps_mist_synthetic_alpha",
+    )
+
+
+def _agb(ssp, observation, met, **kw):
+    """A model with a FREE AGB dust-shell weight (the grouped spelling of agb_dust_weight)."""
+    return _model(
+        ssp,
+        observation,
+        met,
+        agb_dust={"type": "fsps_shell", "weight": Uniform(0.0, 3.0)},
+        **kw,
+    )
+
+
+_AGB_WEIGHT = 1.5
+
+
+def test_agb_free_weight_with_the_evolving_ramp_evaluates(ssp4d_mist, observation):
+    """Regression: a free AGB weight beside alpha_fe_evolving used to raise at evaluation."""
+    model = _agb(ssp4d_mist, observation, _evo_met(0.4, 0.0))
+    assert model.spec.free_params == ["agb_dust_weight"]
+    pred = np.asarray(model.predict_photometry({"agb_dust_weight": _AGB_WEIGHT}))
+    assert np.all(np.isfinite(pred)) and np.all(pred > 0)
+
+
+@pytest.mark.parametrize("value", [0.0, 0.3])
+def test_agb_flat_ramp_equals_the_scalar_agb_model(ssp4d_mist, observation, value):
+    params = {"agb_dust_weight": _AGB_WEIGHT}
+    evo = _agb(ssp4d_mist, observation, _evo_met(value, value)).predict(params)
+    sca = _agb(ssp4d_mist, observation, {"alpha_fe": Fixed(value)}).predict(params)
+    np.testing.assert_allclose(
+        np.asarray(evo.photometry()), np.asarray(sca.photometry()), rtol=1e-10
+    )
+    np.testing.assert_allclose(np.asarray(evo.rest_sed()), np.asarray(sca.rest_sed()), rtol=1e-10)
+    for name in ("stellar_mass_surviving", "log_q_h"):
+        np.testing.assert_allclose(
+            np.asarray(evo.properties[name]), np.asarray(sca.properties[name]), rtol=1e-10
+        )
+
+
+def test_agb_each_age_row_equals_the_scalar_agb_model_at_that_alpha(ssp4d_mist, observation):
+    old, young = 0.5, 0.0
+    params = {"agb_dust_weight": _AGB_WEIGHT}
+    row = np.asarray(
+        _agb(ssp4d_mist, observation, _evo_met(old, young))
+        .predict_state(params)
+        .derived["lnu_age"]
+    )
+    alpha = _alpha_of_age(ssp4d_mist, old, young)
+    scalar = _agb(ssp4d_mist, observation, {"alpha_fe": Uniform(-0.2, 0.6)})
+    assert row.shape == (len(alpha), 1200)
+    for a, value in enumerate(alpha):
+        ref = np.asarray(
+            scalar.predict_state({**params, "met_alpha_fe": float(value)}).derived["lnu_age"]
+        )
+        np.testing.assert_allclose(row[a], ref[a], rtol=1e-10, atol=0)
