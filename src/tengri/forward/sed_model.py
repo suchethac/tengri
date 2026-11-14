@@ -11422,13 +11422,10 @@ class SEDModel:
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
         # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
-        # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
-        # which the exact spectrum reads.
+        # nebular grid does not change that: a spectrum keeps ``sed_nebular`` materialized
+        # (``must_materialize_sed``), so the grid never zeroes the continuum it reads.
         mixed_phot_lut = (
-            phot_lut
-            and observation.can_do_spectroscopy
-            and observation.can_do_photometry
-            and getattr(self, "_nebular_grid_table", None) is None
+            phot_lut and observation.can_do_spectroscopy and observation.can_do_photometry
         )
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
