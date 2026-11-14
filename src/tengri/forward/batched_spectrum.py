@@ -243,11 +243,6 @@ def require_model_spec(model, spec) -> SpectroBatchSpec:
     return spec
 
 
-# Catalog twins of fixed-z templates, keyed by (id(template), z span). The template is
-# kept in the value so its id cannot be reused while the twin is cached.
-_TWINS: dict[tuple[int, tuple[float, float]], tuple[Any, Any]] = {}
-
-
 def batched_template(model, spec):
     """Return the template that the batch of ``spec`` is evaluated on.
 
@@ -271,19 +266,18 @@ def batched_template(model, spec):
 
     Notes
     -----
-    Build-time Python, not JIT-compatible. The twin is built once per template and
-    span, so every entry point that takes the same template and bucket evaluates the
-    same model object and compiles once.
+    Build-time Python, not JIT-compatible. The twins are cached on the template
+    itself, keyed by span, so the template and its twins are freed together, and
+    every entry point that takes the same template and bucket evaluates the same
+    model object and compiles once.
     """
     span = getattr(spec, "z_span", None)
     if span is None or model._catalog_z_range is not None:
         return model
-    key = (id(model), span)
-    hit = _TWINS.get(key)
-    if hit is None:
-        hit = (model, model.with_catalog_z_range(span))
-        _TWINS[key] = hit
-    return hit[1]
+    twins = vars(model).setdefault("_batched_twins", {})
+    if span not in twins:
+        twins[span] = model.with_catalog_z_range(span)
+    return twins[span]
 
 
 def batched_template_for_batches(model, batches):

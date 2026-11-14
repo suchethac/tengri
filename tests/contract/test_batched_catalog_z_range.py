@@ -11,6 +11,9 @@ Runs on the synthetic narrow SSP (no ``data/ssp_*.h5`` needed).
 
 from __future__ import annotations
 
+import gc
+import weakref
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -27,7 +30,7 @@ from tengri import (
     Uniform,
     WavePrecomp,
 )
-from tengri.forward.batched_spectrum import make_batched_predict
+from tengri.forward.batched_spectrum import batched_template, make_batched_predict
 from tengri.inference.batched_spectro import batched_log_likelihood
 from tengri.observation.banded import gaussian_resolution_bands
 from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
@@ -319,6 +322,21 @@ def test_fixed_z_wave_precomp_batches_compile_once(synthetic_ssp, grid):
     with jtu.count_jit_compilation_cache_miss() as misses:
         predict(params, data_b)["phot_fnu"].block_until_ready()
     assert misses() == 0, f"second batch recompiled {misses()} programs"
+
+
+def test_catalog_twin_dies_with_its_template(synthetic_ssp, grid):
+    """The twin is cached on the template, so freeing the template frees the twin."""
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
+    [(spec, _, _)] = build_spectro_batches(
+        [_phot_record(grid, z) for z in _PHOT_ZS], model=template
+    )
+    twin_ref = weakref.ref(batched_template(template, spec))
+    assert twin_ref() is not None
+    assert batched_template(template, spec) is twin_ref()
+    assert batched_template(twin_ref(), spec) is twin_ref(), "a twin must return itself"
+    del template, spec
+    gc.collect()
+    assert twin_ref() is None, "the twin outlived its template"
 
 
 @pytest.mark.parametrize("z", [0.05, 0.2])
