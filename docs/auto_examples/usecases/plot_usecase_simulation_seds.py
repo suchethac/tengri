@@ -23,6 +23,7 @@ import numpy as np
 import tengri
 from tengri.plot import setup_style
 from tengri.units import LOG10_ZSUN
+from tengri.utils.cosmology import age_at_z
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -33,7 +34,9 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
 Z_OBS = 0.1
 N_GAL, N_T = 6, 60
-t_gyr = np.linspace(0.0, 12.5, N_T)
+# The history ends at the age of the universe at the observed redshift: SFR
+# after that time cannot reach the observer, and from_histories refuses it.
+t_gyr = np.linspace(0.0, float(age_at_z(Z_OBS)), N_T)
 
 # Stand-in for a snapshot's merger-tree histories: delayed-tau SFHs whose
 # formation timescale varies across the population, from a fast early-forming
