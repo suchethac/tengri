@@ -13,12 +13,31 @@ import pytest
 
 import tengri
 from tengri import load_ssp
-from tengri._data_setup import DEFAULT_SSP
+from tengri._data_setup import DEFAULT_SSP, data_dirs, find_data_str
 
 pytestmark = pytest.mark.regression_bug
 
 MIST_C3K = "fsps_mist_c3k_a_chabrier"
 LOG10_ZSUN = -1.8477  # Asplund+2009, matches the grid's solar node
+DEFAULT_GRID_FILE = "fsps_mist_c3k_a_chabrier.h5"
+
+
+def _require_default_grid() -> str:
+    """The default grid's path, or a failure that says how to fetch it. Never a skip.
+
+    CI fetches the grid into ``data/`` in a cached step (#3465), so its absence is a
+    setup error. A skip would report that as "not applicable here".
+    """
+    path = find_data_str(DEFAULT_GRID_FILE)
+    if path is None:
+        searched = ", ".join(str(d) for d in data_dirs()[:4])
+        pytest.fail(
+            f"default SSP grid {DEFAULT_GRID_FILE!r} is missing. Searched: {searched} "
+            '(and further ancestors). Fetch it with: python -c "from tengri._data_setup '
+            'import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)" '
+            "(or set TENGRI_DATA_DIR to the directory that holds it)."
+        )
+    return path
 
 
 def test_default_ssp_constant_is_mist_c3k():
@@ -31,6 +50,7 @@ def test_download_ssp_default_name_is_mist_c3k():
 
 
 def test_default_grid_old_population_fuv_minus_nuv_below_3_mag():
+    _require_default_grid()
     ssp = load_ssp()
     k = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - LOG10_ZSUN)))
     i = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr) - np.log10(10.0))))
