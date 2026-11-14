@@ -55,6 +55,17 @@ The resample mode is not a caller choice. :func:`~tengri.observation.batched.bui
 resolves it per galaxy from the template's ``resample`` setting, stores it in
 ``spec.conserving``, and every entry point here reads it from there.
 
+Photometry projection
+---------------------
+With ``approx=WavePrecomp(...)`` on the template, the batched photometry is projected
+through the same LUT call as the per-galaxy joint kernel (``predict_via_precomp``, beside
+the exact spectrum), with the galaxy's own traced redshift ``obs.z``. Without it, the
+exact projector :func:`~tengri.observation.photometry.project_photometry` is used. The
+LUT is used whatever the nebular setting: a model with a fast nebular grid
+(``enable_fast_nebular``) keeps the LUT photometry and the exact spectrum, which the
+per-galaxy joint kernel does not do. Its accuracy is the LUT's own (see
+``predict_via_precomp``), not the exact projector's.
+
 JIT note
 --------
 :func:`make_batched_predict` returns a jitted, vmapped function. The template
@@ -506,7 +517,13 @@ def predict_batched_observables(
 
     out: dict[str, jax.Array] = {}
     if spec.has_phot:
-        out["phot_fnu"] = project_photometry(state, full, observation.photometry, dl_cm=dl_cm)
+        if bool(model._approx.get("wave_precomp")):
+            # The per-galaxy joint kernel (SEDModel._forward, mixed_phot_lut) projects
+            # photometry through the same LUT call beside its exact spectrum.
+            lut_obs = observation.predict_via_precomp(state, full, observables_type=None)
+            out["phot_fnu"] = lut_obs["phot_fnu"]
+        else:
+            out["phot_fnu"] = project_photometry(state, full, observation.photometry, dl_cm=dl_cm)
     else:
         out["phot_fnu"] = jnp.zeros((0,))
 

@@ -46,11 +46,14 @@ _QUENCHED = (0.3, 10.0)
 #: Halpha re-pinned after the Cue float64 move (the float32 Cue pins were 9.566812979748e29,
 #: 1.161122427375e39, 4.544649942429e42; the new Halpha is -3.4e-6, -2.0e-6, +2.4e-6 relative,
 #: the float32 to float64 Cue rounding). Q_H is bit-identical: it does not go through Cue.
+#: Q_H (second entry) re-pinned 2026-11-15 after #3434 (in #3462): fixed metallicity carries
+#: no metallicity scatter, which raises Q_H by 0.90 / 1.44 / 1.42 % in the last three cases.
+#: Halpha is unchanged (within 4e-7). The values are from main debe80a55.
 _CUT_BASELINE = {
     (0.3, 10.0): (9.566780466105229e29, 5.022708261307399e50),
-    (1.0, 10.0): (1.1611200717310071e39, 1.3372329010187178e51),
-    (3.0, 1.0): (4.5446609399766484e42, 3.269331004026739e54),
-    (1.0, 5.0): (8.968849307789703e40, 6.499872e52),
+    (1.0, 10.0): (1.1611200717310071e39, 1.3492167736675826e51),
+    (3.0, 1.0): (4.5446609399766484e42, 3.316382552160136e54),
+    (1.0, 5.0): (8.968849307789703e40, 6.592457284943417e52),
 }
 #: Combine output of the cut at the last case above (tau = 1, age = 5): frozen from the tree
 #: before the change, float64 arithmetic.
