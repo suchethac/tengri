@@ -27,20 +27,11 @@ from tengri.components.stellar.sps import dsps_wrapper as dw
 
 pytestmark = pytest.mark.regression_bug
 
-# Shipped SSP grids with their own metallicity axis. Grids absent from the
-# local data dir are skipped.
+# Git-tracked SSP grids with their own metallicity axis. Untracked grids are absent
+# in CI, so they are not listed here (a skip there would hide the check).
 GRID_NAMES = (
-    "bc03_pdva_stelib_chabrier",
     "bpss_stars_c3k_a_chabrier",
-    "fsps_mist_c3k_a_chabrier",
-    "fsps_mist_miles_chabrier",
-    "fsps_prsc_c3k_a_chabrier",
     "fsps_prsc_miles_chabrier",
-    "pgny_mist_c3k_chabrier",
-    "ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0",
-    "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0",
-    "ssp_pdva_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0",
-    "ssp_prsc_bc03_chabrier",
     "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0",
 )
 DECLARED = 0.2

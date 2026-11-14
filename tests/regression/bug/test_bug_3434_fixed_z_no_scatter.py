@@ -27,7 +27,8 @@ from tengri.components.stellar.component import (
 pytestmark = pytest.mark.regression_bug
 
 REPO = Path(__file__).resolve().parents[3]
-GRIDS = ("fsps_mist_c3k_a_chabrier", "fsps_prsc_c3k_a_chabrier")
+# Git-tracked grid (the MIST and Padova c3k grids are untracked and absent in CI).
+GRIDS = ("fsps_prsc_miles_chabrier",)
 
 
 @pytest.fixture(scope="module", params=GRIDS)

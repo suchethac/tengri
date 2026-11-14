@@ -3,7 +3,7 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "signature_sha256": "b23f98826a0b616b36279df6defb3d04bc98bb2780166e4bbcb2f1d320223473",
+ "signature_sha256": "066b8e2cd2adc7ae9e84c6010ffe80727fd9c29de3a793c2c4e6d030b18e6499",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
