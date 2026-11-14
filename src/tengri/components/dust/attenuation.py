@@ -172,9 +172,10 @@ def power_law(
     .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
-    .. [2] CIGALE 2025.1, ``pcigale.sed_modules.dustatt_powerlaw`` (``alambda_av``,
-       ``uv_bump``), the power law with a UV bump that this curve reproduces up to the
-       normalization above.
+    .. [2] Boquien, M. et al. 2019, "CIGALE: a python Code Investigating GALaxy Emission",
+       A&A 622, A103, arXiv:1811.03094, doi:10.1051/0004-6361/201834156. The power law
+       with a UV bump is the pcigale ``dustatt_powerlaw`` module (``alambda_av``,
+       ``uv_bump``), which this curve reproduces up to the normalization above.
     """
     wave_um = wavelength / 1e4
     power = (wavelength / V_BAND_ANGSTROM) ** dust_slope
