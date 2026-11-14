@@ -1963,24 +1963,6 @@ class _CatalogFitterOriginal:
             from tengri.inference.backends.mcmc._shared import _resolve_chees_ensemble
 
             n_ensemble = _resolve_chees_ensemble(n_ensemble, n_chains)
-        # Refused here, before the MAP warm start spends anything, and refused by
-        # name rather than ignored. ChEES's kernel metric is a *diagonal*
-        # inverse_mass_matrix -- the identity under the default
-        # ``mass_matrix_estimation=None`` -- so there is no dense option to take.
-        # A caller who set it and silently got a diagonal would have no way to
-        # find out, which is the failure ``run_ghmc``'s ``target_accept_rate``
-        # records.
-        if is_chees and dense_mass_matrix:
-            raise ValueError(
-                "dense_mass_matrix=True is not available for method='mcmc_chees': "
-                "the ChEES kernel's metric is a diagonal inverse_mass_matrix, and "
-                "under the default mass_matrix_estimation=None it is the identity "
-                "for the whole run. The non-identity geometry ChEES is designed to "
-                "use is the analytic J^T N^-1 J + I metric: pass precondition=True, "
-                "which this path threads per galaxy. Use "
-                "method='mcmc_nuts'/'mcmc_hmc' if you specifically want a dense "
-                "mass matrix estimated from warmup instead."
-            )
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -2067,6 +2049,9 @@ class _CatalogFitterOriginal:
             verbose=verbose,
             spec=getattr(fitter, "spec", None),
         )
+        # ChEES's own kernel metric is diagonal. A dense request is served by a
+        # pilot-estimated metric inside the engine (chees_dense), not by use_dense.
+        chees_dense = bool(is_chees and dense_mass_matrix)
         if is_chees:
             use_dense = False
         elif verbose and not user_set_dense:
@@ -2091,6 +2076,7 @@ class _CatalogFitterOriginal:
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
             precondition=precondition,
+            chees_dense=chees_dense,
             mass_matrix_estimation=mass_matrix_estimation,
         )
 

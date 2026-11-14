@@ -270,19 +270,43 @@ class TestTheAdaptationConvention:
         assert sig.parameters["target_accept_rate"].default is AUTO
         assert pytest.approx(0.651) == CHEES_TARGET_ACCEPT_RATE
 
-    def test_chees_refuses_a_dense_mass_matrix_by_name(self):
-        """Its kernel metric is diagonal; a silently-ignored True is worse.
+    def test_chees_dense_metric_changes_the_draws_and_stays_finite(self):
+        """``chees_dense`` is applied, not silently ignored.
 
-        This is the failure ``run_ghmc``'s ``target_accept_rate`` records: an
-        argument the surface accepts and the kernel cannot use.
+        The dense metric is a linear change of variables estimated from a pilot run, so
+        the same key must give different draws with and without it. Both must be finite
+        and of the shared chain-flattened shape.
         """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 
-        cat = _CatalogFitterOriginal.__new__(_CatalogFitterOriginal)
-        with pytest.raises(ValueError, match="dense_mass_matrix"):
-            _CatalogFitterOriginal._run_native_mcmc(
-                cat, "mcmc_chees", key=None, dense_mass_matrix=True
-            )
+        dim, n_samples = 2, 12
+        kwargs = dict(
+            n_warmup=40,
+            n_burnin=5,
+            n_samples=n_samples,
+            n_chains=4,
+            n_ensemble=4,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        args = (
+            jnp.zeros(dim),
+            jax.random.PRNGKey(3),
+            jnp.ones(dim),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        diagonal_run, _ = build_catalog_mcmc_engine(None, "chees", **kwargs)
+        dense_run, _ = build_catalog_mcmc_engine(None, "chees", chees_dense=True, **kwargs)
+        diagonal, _ = diagonal_run(*args)
+        dense, _ = dense_run(*args)
+        assert dense.shape == (4 * n_samples, dim)
+        assert bool(jnp.all(jnp.isfinite(dense)))
+        assert not bool(jnp.allclose(diagonal, dense))
 
 
 # --------------------------------------------------------------------------
