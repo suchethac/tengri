@@ -431,6 +431,21 @@ def with_derived_catalog_z_range(model, redshifts):
     z_range = derived_catalog_z_range(redshifts)
     configs = tuple(model.approx_configs)
     wave = next((c for c in configs if isinstance(c, WavePrecomp)), None)
+    if wave is None:
+        # approx=None asked for the exact wave-grid path. The exact path cannot take a
+        # per-galaxy redshift: its fixed-z tables (and the luminosity distance) are built
+        # at the spec's redshift, and a Fixed value cannot be overridden at call time.
+        # The tabulated path is the only one that serves per-galaxy z, so it is used and
+        # this is logged, not silent.
+        logger.warning(
+            "exact model (approx=None) given WavePrecomp(catalog_z_range=%s) because the "
+            "catalog has per-galaxy redshifts; the exact path bakes the redshift into its "
+            "build-time tables (fitter.py _model_at_override_redshift; sed_model.py "
+            "_init_cosmology) and refuses call-time overrides of a Fixed redshift "
+            "(resolve.py refuse_fixed_overrides). The fit therefore runs on the "
+            "tabulated LUT, not the exact wave-grid path.",
+            z_range,
+        )
     others = tuple(c for c in configs if c is not wave)
     base = WavePrecomp() if wave is None else wave
     configured = dataclasses.replace(base, catalog_z_range=z_range)

@@ -210,3 +210,35 @@ def test_derived_range_is_applied_to_a_copy_and_the_user_model_is_untouched(
     # it shares the one compiled program the declared-range path already uses.
     declared = user.with_approx((WavePrecomp(catalog_z_range=configured._catalog_z_range),))
     assert configured.compile_signature() == declared.compile_signature()
+
+
+def test_exact_model_given_the_tabulated_path_logs_a_warning(
+    synthetic_ssp, simple_observation, caplog
+):
+    """approx=None is exact, so turning it into a LUT must be logged, never silent.
+
+    The exact path cannot take a per-galaxy redshift (its fixed-z tables are built at the
+    spec's z), so the tabulated path is used for this model; the WARNING says so.
+    """
+    import logging
+
+    from tengri import Fixed, Parameters, SEDModel
+    from tengri.inference.fitter import with_derived_catalog_z_range
+
+    spec = Parameters(
+        sfh_dpl_log_total_mass=Fixed(9.0),
+        sfh_dpl_alpha=Fixed(2.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
+        sfh_dpl_beta=Fixed(2.0),
+        sfh_dpl_tau_gyr=Fixed(3.0),
+        met_logzsol=Fixed(0.0),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        redshift=Fixed(0.1),
+        mean_sfh_type="dpl",
+    )
+    exact = SEDModel(spec, synthetic_ssp, observation=simple_observation)
+    assert exact.approx_configs == ()
+    with caplog.at_level(logging.WARNING, logger="tengri.inference.fitter"):
+        with_derived_catalog_z_range(exact, [0.05, 0.2])
+    assert any("exact model (approx=None)" in r.getMessage() for r in caplog.records)
