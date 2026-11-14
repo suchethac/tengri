@@ -85,6 +85,7 @@ LOG10_ZSUN_BY_LIBRARY: dict[str, float] = {
     "parsec": -1.8181,  # Bressan+ 2012, Zsun = 0.0152
     "padova": -1.7212,  # BC03 / CIGALE default, Zsun = 0.0190
     "basti": -1.6990,  # Pietrinferni+ 2004, Zsun = 0.0200
+    "m2005": -1.6990,  # Maraston 2005 Table 1, Z = 0.02 is [Z/H] = +0.00, Zsun = 0.0200
 }
 
 # ── Parameter maps: public → (internal, unit_scale, offset) ───────

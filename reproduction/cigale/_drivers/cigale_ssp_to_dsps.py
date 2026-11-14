@@ -125,6 +125,106 @@ def convert_flux_cigale_to_dsps(
 
 
 BC03_METALLICITIES = (0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05)
+M2005_METALLICITIES = (0.001, 0.01, 0.02, 0.04)
+
+
+def load_m2005_pickle(metallicity: float, imf: str = "salp") -> dict:
+    """Load a Maraston 2005 pickle from the installed pcigale's ``data/m2005``.
+
+    Parameters
+    ----------
+    metallicity : float
+        Metallicity value (one of 0.001, 0.01, 0.02, 0.04).
+    imf : str, optional
+        IMF identifier: ``"salp"`` (Salpeter) or ``"krou"`` (Kroupa). Default ``"salp"``.
+
+    Returns
+    -------
+    dict
+        Keys: 'wl' (nm), 'spec' (W/nm/Msun, shape (n_wave, n_age)), 't' (Myr),
+        'm_star' (total stellar mass per Msun formed, the pcigale ``info[0]`` row), 'imf'.
+    """
+    import pcigale.data
+
+    root = Path(pcigale.data.__file__).parent / "m2005"
+    filename = root / f"Z={metallicity}_imf={imf}.pickle"
+    if not filename.exists():
+        raise FileNotFoundError(f"M2005 pickle not found: {filename}")
+
+    with open(filename, "rb") as f:
+        ssp = pickle.load(f)
+
+    return {
+        "wl": ssp.wl,
+        "spec": ssp.spec,
+        "t": ssp.t,
+        "m_star": ssp.info[0, :],
+        "imf": ssp.imf,
+    }
+
+
+def _write_ssp_grid(
+    out_path: Path,
+    data_by_z: dict,
+    *,
+    metallicities: tuple[float, ...],
+    source: str,
+    imf_name: str | None,
+    dtype: type,
+) -> None:
+    """Convert loaded pcigale SSPs to Lsun/Hz/Msun and write the DSPS-layout HDF5 file."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    ref_wl = data_by_z[metallicities[0]]["wl"]
+    ref_t = data_by_z[metallicities[0]]["t"]
+    for z in metallicities[1:]:
+        assert np.allclose(data_by_z[z]["wl"], ref_wl), f"Wavelength grid mismatch at Z={z}"
+        assert np.allclose(data_by_z[z]["t"], ref_t), f"Age grid mismatch at Z={z}"
+
+    wl_angstrom = convert_wavelength_nm_to_angstrom(ref_wl)
+    age_gyr = convert_age_myr_to_gyr(ref_t)
+    lg_age_gyr = np.log10(age_gyr)
+
+    n_met = len(metallicities)
+    n_age = len(age_gyr)
+    n_wave = len(wl_angstrom)
+
+    flux_dsps = np.zeros((n_met, n_age, n_wave), dtype=dtype)
+    # Surviving stellar mass fraction per (met, age), pcigale info[0].
+    mass_remaining = np.zeros((n_met, n_age), dtype=dtype)
+
+    print("Converting units...")
+    for i_z, z in enumerate(metallicities):
+        spec_cigale = data_by_z[z]["spec"]  # W/nm/Msun, (n_wave, n_age)
+        spec_converted = convert_flux_cigale_to_dsps(spec_cigale, wl_angstrom)
+        flux_dsps[i_z, :, :] = spec_converted.T.astype(dtype)
+        mass_remaining[i_z, :] = data_by_z[z]["m_star"].astype(dtype)
+
+    lgmet = np.log10(np.array(metallicities, dtype=np.float64))
+
+    print(f"Writing to {out_path}...")
+    with h5py.File(out_path, "w") as f:
+        f.create_dataset("ssp_flux", data=flux_dsps, dtype=dtype)
+        f.create_dataset("ssp_lg_age_gyr", data=lg_age_gyr.astype(dtype), dtype=dtype)
+        f.create_dataset("ssp_lgmet", data=lgmet.astype(dtype), dtype=dtype)
+        f.create_dataset("ssp_wave", data=wl_angstrom.astype(dtype), dtype=dtype)
+        # tengri's SSPData loader reads this under ssp_mass_remaining (n_met, n_age).
+        f.create_dataset("ssp_mass_remaining", data=mass_remaining, dtype=dtype)
+
+        f.attrs["flux_units"] = "Lsun/Hz/Msun"
+        f.attrs["wave_units"] = "Angstrom"
+        f.attrs["n_met"] = n_met
+        f.attrs["n_age"] = n_age
+        f.attrs["n_wave"] = n_wave
+        f.attrs["source"] = source
+        if imf_name is not None:
+            f.attrs["imf"] = imf_name
+
+    print(f"Wrote {out_path}")
+    print(f"  Shape: ({n_met}, {n_age}, {n_wave}) [met, age, wave]")
+    print(f"  Metallicities (log10 Z): {lgmet}")
+    print(f"  Age range (Gyr): {age_gyr[0]:.6e} - {age_gyr[-1]:.6e}")
+    print(f"  Wave range (Å): {wl_angstrom[0]:.1f} - {wl_angstrom[-1]:.1f}")
 
 
 def repackage_bc03(
@@ -154,66 +254,55 @@ def repackage_bc03(
     dtype : type, optional
         Storage type of every dataset. Default ``np.float32``.
     """
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
     print(f"Loading BC03 {source_label} templates from CIGALE...")
     data_by_z = {}
     for z in metallicities:
         print(f"  Loading Z={z}...")
         data_by_z[z] = load_bc03_pickle(z, imf=imf)
+    _write_ssp_grid(
+        Path(out_path),
+        data_by_z,
+        metallicities=metallicities,
+        source=f"CIGALE BC03 {source_label} (repackaged)",
+        imf_name=imf_name,
+        dtype=dtype,
+    )
 
-    ref_wl = data_by_z[metallicities[0]]["wl"]
-    ref_t = data_by_z[metallicities[0]]["t"]
-    for z in metallicities[1:]:
-        assert np.allclose(data_by_z[z]["wl"], ref_wl), f"Wavelength grid mismatch at Z={z}"
-        assert np.allclose(data_by_z[z]["t"], ref_t), f"Age grid mismatch at Z={z}"
 
-    wl_angstrom = convert_wavelength_nm_to_angstrom(ref_wl)
-    age_gyr = convert_age_myr_to_gyr(ref_t)
-    lg_age_gyr = np.log10(age_gyr)
+def repackage_m2005(
+    out_path: str | Path,
+    *,
+    imf: str,
+    metallicities: tuple[float, ...] = M2005_METALLICITIES,
+) -> None:
+    """
+    Repackage CIGALE Maraston 2005 SSPs for one IMF as DSPS-shaped HDF5 (float64).
 
-    n_met = len(metallicities)
-    n_age = len(age_gyr)
-    n_wave = len(wl_angstrom)
+    Maraston 2005 (MNRAS 362, 799), Table 1: Z = 0.02 is the solar metallicity
+    ([Z/H] = +0.00), so ``log10(Z)`` nodes are absolute as for every grid here.
 
-    flux_dsps = np.zeros((n_met, n_age, n_wave), dtype=dtype)
-    # Surviving stellar mass fraction per (met, age), pcigale info[0]. For BC03
-    # info[0] + info[1] = 1 at every age (m_star + m_gas).
-    mass_remaining = np.zeros((n_met, n_age), dtype=dtype)
-
-    print("Converting units...")
-    for i_z, z in enumerate(metallicities):
-        spec_cigale = data_by_z[z]["spec"]  # W/nm/Msun, (n_wave, n_age)
-        spec_converted = convert_flux_cigale_to_dsps(spec_cigale, wl_angstrom)
-        flux_dsps[i_z, :, :] = spec_converted.T.astype(dtype)
-        mass_remaining[i_z, :] = data_by_z[z]["m_star"].astype(dtype)
-
-    lgmet = np.log10(np.array(metallicities, dtype=np.float64))
-
-    print(f"Writing to {out_path}...")
-    with h5py.File(out_path, "w") as f:
-        f.create_dataset("ssp_flux", data=flux_dsps, dtype=dtype)
-        f.create_dataset("ssp_lg_age_gyr", data=lg_age_gyr.astype(dtype), dtype=dtype)
-        f.create_dataset("ssp_lgmet", data=lgmet.astype(dtype), dtype=dtype)
-        f.create_dataset("ssp_wave", data=wl_angstrom.astype(dtype), dtype=dtype)
-        # tengri's SSPData loader reads this under ssp_mass_remaining (n_met, n_age).
-        f.create_dataset("ssp_mass_remaining", data=mass_remaining, dtype=dtype)
-
-        f.attrs["flux_units"] = "Lsun/Hz/Msun"
-        f.attrs["wave_units"] = "Angstrom"
-        f.attrs["n_met"] = n_met
-        f.attrs["n_age"] = n_age
-        f.attrs["n_wave"] = n_wave
-        f.attrs["source"] = f"CIGALE BC03 {source_label} (repackaged)"
-        if imf_name is not None:
-            f.attrs["imf"] = imf_name
-
-    print(f"Wrote {out_path}")
-    print(f"  Shape: ({n_met}, {n_age}, {n_wave}) [met, age, wave]")
-    print(f"  Metallicities (log10 Z): {lgmet}")
-    print(f"  Age range (Gyr): {age_gyr[0]:.6e} - {age_gyr[-1]:.6e}")
-    print(f"  Wave range (Å): {wl_angstrom[0]:.1f} - {wl_angstrom[-1]:.1f}")
+    Parameters
+    ----------
+    out_path : str or Path
+        Output HDF5 file path.
+    imf : str
+        CIGALE IMF tag: ``"salp"`` (Salpeter) or ``"krou"`` (Kroupa).
+    metallicities : tuple of float, optional
+        Subset of ``M2005_METALLICITIES`` to write. Default: all four.
+    """
+    imf_names = {"salp": "salpeter", "krou": "kroupa"}
+    if imf not in imf_names:
+        raise ValueError(f"M2005 IMF must be 'salp' or 'krou', got {imf!r}")
+    print(f"Loading M2005 {imf_names[imf]} templates from CIGALE...")
+    data_by_z = {z: load_m2005_pickle(z, imf=imf) for z in metallicities}
+    _write_ssp_grid(
+        Path(out_path),
+        data_by_z,
+        metallicities=metallicities,
+        source=f"CIGALE M2005 {imf_names[imf].capitalize()} (repackaged)",
+        imf_name=imf_names[imf],
+        dtype=np.float64,
+    )
 
 
 def repackage_bc03_chabrier(out_path: str | Path) -> None:
