@@ -370,10 +370,11 @@ _PROJECTED_FAMILIES = (
     "agn_spec_lnu_precomp",
     "radio_spec_lnu_precomp",
     "xray_spec_lnu_precomp",
+    "dust_emission_spec_lnu_precomp",
 )
 
 #: Full-grid SED keys of the stellar-kernel group that are not the stellar piece (#3413).
-_PROJECTED_SED_KEYS = ("sed_agn", "sed_radio", "sed_xray")
+_PROJECTED_SED_KEYS = ("sed_agn", "sed_radio", "sed_xray", "sed_dust_ir")
 
 
 def _sum_segments(values, n_pix):

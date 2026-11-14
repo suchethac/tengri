@@ -3474,11 +3474,6 @@ class SEDModel:
         spec = self.spec
         if getattr(spec, "apply_igm", False):
             return "IGM (igm)"
-        # Dust emission publishes a point-sampled family; its IR-band pixels also inherit the
-        # stellar pixel-moment error of ~1e-4 there, so it stays refused (#3413).
-        dust_em = getattr(spec, "dust_emission", None)
-        if dust_em not in (None, "off", "none"):
-            return f"dust emission ({dust_em})"
         return None
 
     def _spectrum_nebular_family(self) -> bool:

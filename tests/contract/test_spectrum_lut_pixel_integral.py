@@ -315,16 +315,16 @@ def _family_model(
     return type(base)(spec, ssp, observation=obs, approx=approx)
 
 
-_STATIC_REFUSED = ["igm", "dust-emission"]
-_PROJECTED = ["agn", "radio", "xray"]
+_STATIC_REFUSED = ["igm"]
+_PROJECTED = ["agn", "radio", "xray", "dust-emission"]
 
 
 #: Each projected family on a band where it is non-negligible: AGN on the optical SDSS grid,
-#: radio at 1-10 cm, X-ray at 1-60 Angstrom (#3413). Dust emission is refused (see
-#: ``_STATIC_REFUSED``): on a mid-IR band the stellar pixel moments alone miss by ~1e-4.
+#: radio at 1-10 cm, X-ray at 1-60 Angstrom, dust emission in the mid-IR (#3413).
 _PROJECTED_BANDS = {
     "radio": np.geomspace(1.0e8, 1.0e9, 60),
     "xray": np.geomspace(1.0, 60.0, 60),
+    "dust-emission": _IR,
 }
 
 
@@ -349,6 +349,19 @@ def test_projected_agn_matches_conserving_exact(resolution):
     ssp = load_ssp_data(_BARE_SSP)
     flux_err, jac_err = _family_pair_errors(ssp, "agn", 150.0, resolution)
     print(f"\nagn: flux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
+    assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
+    assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
+
+
+@pytest.mark.parametrize("resolution", [None, 2000.0], ids=["nores", "R2000"])
+def test_projected_dust_emission_on_sdss_matches_conserving_exact(resolution):
+    """Dust-emission light on the optical grid is served per draw (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    flux_err, jac_err = _family_pair_errors(ssp, "dust-emission", 150.0, resolution)
+    print(f"\ndust-emission SDSS: flux {flux_err:.3e}  gradient {jac_err:.3e}")
     assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
     assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
 
