@@ -732,14 +732,6 @@ def build_catalog_mcmc_engine(
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
 
     n_chains = max(1, int(n_chains))
-    if sampler not in ("chees", "ghmc") and n_chains != 1:
-        raise ValueError(
-            f"sampler={sampler!r} runs exactly one chain per galaxy in the catalog "
-            f"path, got n_chains={n_chains}. Window adaptation is per galaxy here, so "
-            "a second chain would have to re-run it; only the ChEES path adapts once "
-            "over an ensemble and can then sample several chains from it. Use "
-            "method='mcmc_chees' for a per-galaxy multi-chain R-hat."
-        )
     if sampler == "ghmc":
         _check_ghmc_counts(n_chains, int(n_superchains), int(n_folds))
         if not 0.0 <= float(rewhiten_at) < 1.0:
@@ -822,7 +814,13 @@ def build_catalog_mcmc_engine(
             sample_init = precond.to_latent(init_flat)
 
         warmup_key, chain_key = jax.random.split(gal_key)
-        chain_keys = jax.random.split(chain_key, n_chain)
+        if n_chains == 1:
+            chain_keys = jax.random.split(chain_key, n_chain)
+        else:
+            # Window adaptation runs once per galaxy; each chain gets its own key stream.
+            chain_keys = jax.random.split(chain_key, n_chains * n_chain).reshape(
+                n_chains, n_chain, 2
+            )
 
         def restore(positions):
             """Map draws out of the whitened coordinates. Identity when off.
@@ -920,6 +918,24 @@ def build_catalog_mcmc_engine(
                 use_dense=use_dense,
                 target_accept_rate=target_accept_rate,
             )
+        if n_chains == 1:
+            draws, _ = run_chain(
+                entry.chain_program,
+                adaptation,
+                sample_init,
+                warmup_key,
+                None,
+                chain_keys,
+                sample_logdensity,
+                sample_args,
+                n_warmup,
+                cfg,
+            )
+            positions, divergent = draws.position, draws.divergent
+
+            # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
+            return restore(positions[n_burnin:]), divergent[n_burnin:]
+
         draws, _ = run_chain(
             entry.chain_program,
             adaptation,
@@ -931,10 +947,11 @@ def build_catalog_mcmc_engine(
             sample_args,
             n_warmup,
             cfg,
+            float(ensemble_scale if chain_jitter is None else chain_jitter),
         )
-        positions, divergent = draws.position, draws.divergent
-
-        # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
-        return restore(positions[n_burnin:]), divergent[n_burnin:]
+        # Burn-in is per chain, so it is sliced before the chains are flattened together.
+        positions = restore(draws.position[:, n_burnin:])
+        divergent = draws.divergent[:, n_burnin:]
+        return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
     return run_one, unravel_fn

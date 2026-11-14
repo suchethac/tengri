@@ -732,6 +732,25 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
     return _sample_body(program, state, chain_keys, ld, params, cfg)
 
 
+def _run_jittered_chains(
+    program, state, init_flat, warmup_key, init_key, chain_keys, ld, params, cfg, chain_jitter
+):
+    """Sample ``chain_keys.shape[0]`` overdispersed chains from one adapted state.
+
+    The chains start at the adapted position plus independent Gaussian offsets, so a
+    split R-hat over them is a real test. The adaptation is kept: only the positions
+    are jittered. Families that do not start from warmup start at ``init_flat``.
+    """
+    n_chains, dim = chain_keys.shape[0], init_flat.shape[0]
+    base = state.position if program.starts_from_warmup else init_flat
+    chain_init_key = jax.random.fold_in(warmup_key, 0xC4A15)
+    starts = base[None, :] + chain_jitter * jax.random.normal(
+        chain_init_key, (n_chains, dim), dtype=base.dtype
+    )
+    states = jax.vmap(lambda p: program.init(p, ld, init_key, cfg))(starts)
+    return jax.vmap(lambda s, k: _sample_body(program, s, k, ld, params, cfg))(states, chain_keys)
+
+
 @functools.partial(jax.jit, static_argnums=(0, 1, 6, 8, 9))
 def run_chain(
     program,
@@ -744,6 +763,7 @@ def run_chain(
     data_args,
     n_warmup,
     cfg,
+    chain_jitter=None,
 ) -> tuple[Draw, tuple]:
     """Adapt, then sample, in one program; return ``(draws, params)``.
 
@@ -761,9 +781,10 @@ def run_chain(
         Key of the sampler state, read only by families that start from a fresh state
         (``starts_from_warmup=False``); None otherwise.
     chain_keys : ndarray, shape (n_iter, 2) or (n_chains, n_iter, 2)
-        One key per sampling step, used as given. The three-dimensional form, for an
-        ensemble adaptation, runs one chain per leading index from the first ``n_chains``
-        warmed states.
+        One key per sampling step, used as given. The three-dimensional form runs one
+        chain per leading index. For an ensemble adaptation the chains start from the
+        first ``n_chains`` warmed states. Otherwise every chain starts from the one
+        adapted state with its position jittered by ``chain_jitter``.
     ld2 : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree
@@ -772,12 +793,15 @@ def run_chain(
         Warmup steps.
     cfg : NUTSConfig (static)
         Family statics.
+    chain_jitter : float or None
+        Standard deviation of the overdispersed chain starts in the three-dimensional
+        ``chain_keys`` form without an ensemble adaptation. Unused otherwise.
 
     Returns
     -------
     draws : Draw
         Sampling outputs with leading axis ``n_iter``, or ``(n_chains, n_iter)`` for the
-        ensemble form.
+        three-dimensional ``chain_keys`` form.
     params : tuple
         ``(step_size, inverse_mass_matrix)`` tuned by the adaptation.
     """
@@ -796,6 +820,21 @@ def run_chain(
             states, chain_keys
         )
         return draws, params
+    if chain_keys.ndim == 3:
+        if chain_jitter is None:
+            raise ValueError("several chains from one adaptation need a chain_jitter scale")
+        return _run_jittered_chains(
+            program,
+            state,
+            init_flat,
+            warmup_key,
+            init_key,
+            chain_keys,
+            ld,
+            params,
+            cfg,
+            chain_jitter,
+        ), params
     if not program.starts_from_warmup:
         state = program.init(init_flat, ld, init_key, cfg)
     return _sample_body(program, state, chain_keys, ld, params, cfg), params

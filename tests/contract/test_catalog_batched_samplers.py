@@ -27,9 +27,26 @@ from __future__ import annotations
 
 import inspect
 
+import jax
+import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.contract
+
+
+def _gauss_ld(x, data_args):
+    """Standard-normal-shaped log-density centered on ``data_args["mu"]``."""
+    return -0.5 * jnp.sum((x - data_args["mu"]) ** 2)
+
+
+def _gauss_substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
+    """Per-galaxy ``data_args``: the galaxy's center only."""
+    return {"mu": data}
+
+
+def _gauss_flat(dim):
+    """The four-tuple ``flat_logdensity`` seam for a ``dim``-dimensional Gaussian target."""
+    return (_gauss_ld, lambda x: x, jnp.zeros(dim), {"mu": jnp.zeros(dim)})
 
 
 # --------------------------------------------------------------------------
@@ -132,20 +149,95 @@ class TestTheAdaptationConvention:
                 object(), "chees", n_warmup=10, n_burnin=0, n_samples=10, n_ensemble=1
             )
 
-    def test_window_adaptation_samplers_refuse_multiple_chains_by_name(self):
-        """NUTS/HMC adapt per galaxy, so a second chain would re-run warmup.
+    @pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+    def test_window_samplers_run_several_chains_from_one_adaptation(self, sampler):
+        """NUTS/HMC adapt once per galaxy and sample several overdispersed chains from it.
 
-        Refused rather than ignored: a caller who asked for four chains and got
-        one would have no way to find out, and would read a single chain's split
-        R-hat as a four-chain one.
+        The output contract matches the ChEES path: the chains are flattened to
+        ``(n_chains * n_samples, D)``. The chains must differ, or the split R-hat
+        over them measures nothing.
         """
+        import jax.numpy as jnp
+        import numpy as np
+
         from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 
-        for sampler in ("nuts", "hmc"):
-            with pytest.raises(ValueError, match="n_chains"):
-                build_catalog_mcmc_engine(
-                    object(), sampler, n_warmup=10, n_burnin=0, n_samples=10, n_chains=4
-                )
+        n_chains, n_samples, dim = 2, 12, 2
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            sampler,
+            n_warmup=40,
+            n_burnin=5,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        positions, divergent = run_one(
+            jnp.zeros(dim),
+            jax.random.PRNGKey(7),
+            jnp.ones(dim),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        assert positions.shape == (n_chains * n_samples, dim)
+        assert divergent.shape == (n_chains * n_samples,)
+        assert bool(jnp.all(jnp.isfinite(positions)))
+        chains = np.asarray(positions).reshape(n_chains, n_samples, dim)
+        assert not np.allclose(chains[0], chains[1])
+
+    def test_single_window_chain_is_the_direct_run_chain_program(self):
+        """``n_chains=1`` keeps the one-chain program, bit for bit.
+
+        The multi-chain form must not perturb the existing single-chain result:
+        the draws equal a direct ``run_chain`` call on the same key split.
+        """
+        import jax.numpy as jnp
+        import numpy as np
+
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+        from tengri.inference.backends.mcmc.chain_program import NUTSConfig, run_chain
+
+        n_warmup, n_burnin, n_samples, dim = 40, 5, 12, 2
+        n_chain = n_burnin + n_samples
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            "nuts",
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        gal_key = jax.random.PRNGKey(11)
+        data = jnp.ones(dim)
+        positions, _ = run_one(jnp.zeros(dim), gal_key, data, None, None, None, None, None, None)
+
+        warmup_key, chain_key = jax.random.split(gal_key)
+        chain_keys = jax.random.split(chain_key, n_chain)
+        entry = get_backend("mcmc_nuts")
+        adaptation = entry.adaptation_for({"pathfinder_warmstart": False})
+        cfg = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.85)
+        direct, _ = run_chain(
+            entry.chain_program,
+            adaptation,
+            jnp.zeros(dim),
+            warmup_key,
+            None,
+            chain_keys,
+            _gauss_ld,
+            {"mu": data},
+            n_warmup,
+            cfg,
+        )
+        np.testing.assert_array_equal(
+            np.asarray(positions), np.asarray(direct.position[n_burnin:])
+        )
 
     def test_the_catalog_docstring_names_all_three_conventions(self):
         """The rejected alternatives are recorded where the choice was made.
