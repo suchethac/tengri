@@ -24,6 +24,7 @@ from tengri.config.exceptions import warn_measured
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
 from tengri.utils.wave_unit import (
+    ascending_in_angstrom,
     check_wavelength_plausible,
     to_angstrom,
 )
@@ -181,7 +182,7 @@ def register_filter(
     trans: np.ndarray | list,
     *,
     overwrite: bool = False,
-    wave_unit: str = "AA",
+    wave_unit: str | None = None,
 ) -> None:
     """Register a filter in the in-memory user registry.
 
@@ -207,11 +208,14 @@ def register_filter(
         (built-in, SVO, synthetic, or user). If ``True``, silently replace
         an existing user-registered filter or shadow a built-in name.
         Default: ``False``.
-    wave_unit : str, optional
-        Unit of *wave_aa*: ``"AA"`` (default; ``"angstrom"`` is equivalent),
-        ``"nm"``, or ``"um"`` (``"micron"`` is equivalent). Matching is
+    wave_unit : str or None, optional
+        Unit of *wave_aa*: ``"AA"`` (``"angstrom"`` is equivalent), ``"nm"``,
+        ``"um"`` (``"micron"`` is equivalent), a frequency (``"Hz"``, ``"kHz"``,
+        ``"MHz"``, ``"GHz"``) or an energy (``"eV"``, ``"keV"``). Matching is
         case-insensitive. The array is converted to Angstrom here, once, at the
-        boundary. Default: ``"AA"``.
+        boundary, and reordered so wavelength increases with *trans* kept aligned.
+        ``None`` (default) means no unit was stated, which is read as Angstrom.
+        Pass ``"AA"`` explicitly to state Angstrom.
 
     Raises
     ------
@@ -222,7 +226,7 @@ def register_filter(
     ValueError
         If *wave_unit* is not an accepted name (the message lists them).
     ValueError
-        If the range lies wholly below 0.01 Å or above 1e9 Å once converted to
+        If the range lies wholly below 0.01 Å or above 3e11 Å once converted to
         Angstrom. This is refused, not warned, because it is nonsense for Angstrom.
     KeyError
         If *name* exists in a built-in registry and ``overwrite=False``.
@@ -230,9 +234,12 @@ def register_filter(
     Warns
     -----
     UserWarning
-        If ``wave_unit`` is Angstrom and the range lies wholly in 100-1340 Å,
-        which is most likely nanometers. A stated nm or um unit is never
+        If the unit was Angstrom or not stated and the range lies wholly in
+        100-1340 Å, which is most likely nanometers. A stated nm or um unit is never
         warned, because the unit is no longer in doubt.
+    UserWarning
+        If no unit was stated and the range lies wholly in 0.1-100 Å, which may be
+        keV. Pass ``wave_unit="keV"`` if so.
 
     Notes
     -----
@@ -297,8 +304,9 @@ def register_filter(
             f"wave and trans must have the same shape; got {wave.shape} and {trans.shape}."
         )
 
-    # Convert to Angstrom before anything else reads the numbers as Angstrom.
-    wave = to_angstrom(wave, wave_unit)
+    # Convert to Angstrom before anything else reads the numbers as Angstrom. A
+    # frequency or energy axis comes out descending; reverse it with its transmission.
+    wave, trans = ascending_in_angstrom(wave, "AA" if wave_unit is None else wave_unit, trans)
 
     wave, trans = _sanitize_filter_curve(wave, trans)
 
@@ -323,7 +331,7 @@ def register_filter_from_file(
     filepath: str | Path,
     *,
     overwrite: bool = False,
-    wave_unit: str = "AA",
+    wave_unit: str | None = None,
 ) -> None:
     """Register a filter from a two-column text file.
 
@@ -342,9 +350,11 @@ def register_filter_from_file(
         If ``False`` (default), raise if *name* already exists. If ``True``,
         silently replace an existing user-registered filter or shadow a
         built-in name. Default: ``False``.
-    wave_unit : str, optional
-        Unit of the wavelength column: ``"AA"`` (default), ``"nm"``, or
-        ``"um"``. Default: ``"AA"``.
+    wave_unit : str or None, optional
+        Unit of the wavelength column: ``"AA"``, ``"nm"``, ``"um"``, a frequency
+        (``"Hz"``, ``"kHz"``, ``"MHz"``, ``"GHz"``) or an energy (``"eV"``,
+        ``"keV"``). ``None`` (default) means no unit was stated; see
+        :func:`register_filter`.
 
     Raises
     ------
@@ -538,8 +548,11 @@ def load_filter_from_dsps_transmission_curve(
             f"got {type(dsps_curve).__name__}."
         )
 
-    wave = to_angstrom(np.asarray(dsps_curve.wave, dtype=np.float64), wave_unit)
-    trans = np.asarray(dsps_curve.transmission, dtype=np.float64)
+    wave, trans = ascending_in_angstrom(
+        np.asarray(dsps_curve.wave, dtype=np.float64),
+        wave_unit,
+        np.asarray(dsps_curve.transmission, dtype=np.float64),
+    )
 
     wave, trans = _sanitize_filter_curve(wave, trans)
 
