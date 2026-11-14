@@ -1058,6 +1058,8 @@ agn_torus_block, agn_attenuation_block : str
     )
     _tie_wave = None
     _tie_disc = None
+    # The tie disc before any reddening: the anchors' unit-area shape is normalized on it (#3407).
+    _tie_disc_intrinsic = None
     _tie_incl_native = None
     # The ledger's unobscured angle-integrated disc under the tie, and the polar-dust share the
     # tie takes off the disc (set below; only the ledger reads them).
@@ -1073,11 +1075,13 @@ agn_torus_block, agn_attenuation_block : str
     _split_fn = DISC_SPLIT_BLOCKS.get(agn_disc_block) if _tie_active else None
     _corona_fraction = None
 
+    def _disc_parts_raw(w):
+        """Disc part, corona and the corona's power share on ``w``, before any reddening."""
+        return _split_fn(w, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params)
+
     def _disc_parts(w):
         """Disc part, corona and the corona's power share on ``w``, reddened like the disc."""
-        _d, _h, _f = _split_fn(
-            w, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
-        )
+        _d, _h, _f = _disc_parts_raw(w)
         _ebv = jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
         return redden_disc(w, _d, _ebv), redden_disc(w, _h, _ebv), _f
 
@@ -1094,27 +1098,31 @@ agn_torus_block, agn_attenuation_block : str
         # axis, not resampled from the caller's grid, whose start would otherwise cut
         # the corona and move R. Without a library the tie degenerates onto the caller's
         # grid.
+        _ebv_disc = jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
         if _library_wave is None:
             _tie_wave = wave
             if _split_fn is None:
+                _tie_disc_intrinsic = _disc_block_lambda
                 _tie_disc = L_lambda_disc
             else:
-                _tie_disc, _, _corona_fraction = _disc_parts(wave)
+                _d_raw, _, _corona_fraction = _disc_parts_raw(wave)
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(wave, _d_raw, _ebv_disc)
         else:
             _tie_wave = jnp.asarray(_library_wave, dtype=wave.dtype)
             if _split_fn is None:
-                _tie_disc = redden_disc(
+                _d_raw = disc_fn(
                     _tie_wave,
-                    disc_fn(
-                        _tie_wave,
-                        agn_log_lbol=agn_log_lbol_eval,
-                        templates=disc_templates,
-                        **params,
-                    ),
-                    jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
+                    agn_log_lbol=agn_log_lbol_eval,
+                    templates=disc_templates,
+                    **params,
                 )
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(_tie_wave, _d_raw, _ebv_disc)
             else:
-                _tie_disc, _, _corona_fraction = _disc_parts(_tie_wave)
+                _d_raw, _, _corona_fraction = _disc_parts_raw(_tie_wave)
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(_tie_wave, _d_raw, _ebv_disc)
         if agn_torus_block == "skirtor":
             _disc_tie = skirtor_disc_dust_ratio(
                 _tie_wave,
@@ -1667,8 +1675,10 @@ agn_torus_block, agn_attenuation_block : str
             _a_disc, _a_corona, _ = _split_fn(
                 _anchor_wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
             )
+        # The unit-area shape is normalized on the un-reddened tie disc: a reddened integral would
+        # carry 1/T(agn_ebv_disc) into the anchors (#3407).
         _tie_native_integral = jnp.maximum(
-            jnp.trapezoid(_tie_disc, _tie_wave), representable_denominator(1e-30)
+            jnp.trapezoid(_tie_disc_intrinsic, _tie_wave), representable_denominator(1e-30)
         )
         _anchor_tied = (
             _a_disc
