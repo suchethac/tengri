@@ -200,7 +200,9 @@ def test_model_index_is_the_broadened_rest_sed_measurement(ssp):
                 jnp.asarray(lam), jnp.asarray(ref_flam * lam**2), STANDARD_INDICES[n]
             )
         )
-        assert got[i] == pytest.approx(ref, rel=2e-2), n
+        # The rest SED is resampled onto a uniform ln(lambda) grid for the reference; the
+        # worst index differs by 0.88 % (Fe5335, measured 2026-11-14), so 0.9 % is the precision.
+        assert got[i] == pytest.approx(ref, rel=9e-3), n
 
 
 def test_gradient_wrt_sigma_v_is_finite_at_zero_and_at_300(ssp):
@@ -212,10 +214,14 @@ def test_gradient_wrt_sigma_v_is_finite_at_zero_and_at_300(ssp):
         p["sigma_v_kms"] = s
         return model.predict_spectral_indices(p, defs)[k]
 
-    for s in (0.0, 300.0):
-        for k in range(len(INDEX_NAMES)):
-            g = float(jax.grad(f)(jnp.asarray(s), k))
-            assert np.isfinite(g), (s, INDEX_NAMES[k])
+    for k in range(len(INDEX_NAMES)):
+        g = float(jax.grad(f)(jnp.asarray(0.0), k))
+        # grad-assert: finite-only — even kernel in sigma_v, so the derivative is 0 here
+        assert np.isfinite(g), INDEX_NAMES[k]
+    for k in range(len(INDEX_NAMES)):
+        g = float(jax.grad(f)(jnp.asarray(300.0), k))
+        assert np.all(np.isfinite(g)), INDEX_NAMES[k]
+        assert np.any(g != 0.0), f"{INDEX_NAMES[k]} has a zero sigma_v derivative at 300 km/s"
 
 
 def test_approx_true_refuses_a_free_sigma_v(ssp):
