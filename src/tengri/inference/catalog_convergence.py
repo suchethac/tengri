@@ -142,6 +142,19 @@ def _free_sample_columns(posterior) -> dict:
     return {k: np.asarray(samples[k]) for k in free if k in samples}
 
 
+def _nonfinite_fit(posterior) -> str | None:
+    """Why a point fit is non-finite; ``None`` if its loss and parameters are finite (#3405)."""
+    loss = (getattr(posterior, "diagnostics", None) or {}).get("final_loss")
+    if loss is not None and not np.isfinite(float(loss)):
+        return f"final loss {float(loss)}"
+    bad = [
+        str(k)
+        for k, v in (getattr(posterior, "params", None) or {}).items()
+        if not np.all(np.isfinite(np.asarray(v)))
+    ]
+    return f"non-finite parameter(s) {', '.join(bad)}" if bad else None
+
+
 def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) -> GalaxyHealth:
     """Classify one galaxy's posterior into exactly one bucket.
 
@@ -175,6 +188,15 @@ def galaxy_health(posterior, *, index: int = 0, ess_floor: float | None = None) 
     recover from trips only the first. Requiring both would miss half of each.
     """
     from tengri.inference.backends.mcmc._shared import total_draws
+
+    # A fit that returned a NaN loss or parameter failed; it is not a frozen chain.
+    nonfinite = _nonfinite_fit(posterior)
+    if nonfinite is not None:
+        return GalaxyHealth(
+            index=index,
+            verdict="unconverged",
+            reason=f"returned a non-finite fit ({nonfinite})",
+        )
 
     diag = getattr(posterior, "diagnostics", None) or {}
     columns = _free_sample_columns(posterior)
@@ -327,12 +349,18 @@ class CatalogConvergence:
         pct = "n/a" if self.frac_converged is None else f"{100 * self.frac_converged:.1f} %"
         ess = "n/a" if self.min_ess_converged is None else f"{self.min_ess_converged:.2f}"
         div = "n/a" if self.divergence_rate is None else f"{self.divergence_rate:.4f}"
+        n_nonfinite = sum(
+            1
+            for row in self.per_galaxy
+            if row.reason and row.reason.startswith("returned a non-finite fit")
+        )
+        nonfinite = f", {n_nonfinite} returned a non-finite fit" if n_nonfinite else ""
         return (
             f"{self.n_converged}/{self.n_galaxies} galaxies converged ({pct}) at "
             f"max split-R-hat < {CATALOG_MAX_RHAT} with zero divergences; the worst "
-            f"ESS among them is {ess} draws. Also: {self.n_unconverged} moved and did "
-            f"not mix, {self.n_frozen} came back frozen (a posterior R-hat cannot "
-            f"fault), {self.n_refused} were refused before sampling. "
+            f"ESS among them is {ess} draws. Also: {self.n_unconverged - n_nonfinite} moved "
+            f"and did not mix{nonfinite}, {self.n_frozen} came back frozen (a posterior "
+            f"R-hat cannot fault), {self.n_refused} were refused before sampling. "
             f"Catalog divergence rate {div}."
         )
 

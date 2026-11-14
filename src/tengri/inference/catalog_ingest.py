@@ -269,8 +269,9 @@ def ingest_catalog(
                 f"(e.g., -99) to NaN before ingestion."
             )
     elif missing == "mask":
-        # Set NaN flux to finite placeholder (doesn't matter, presence=False)
-        flux_raw = np.nan_to_num(flux_raw, nan=0.0)
+        # Absent placeholder (presence=False): NaN and +/-inf alike. nan_to_num would
+        # turn +inf into 1.8e308, a finite value the likelihood then reads.
+        flux_raw = _zero_non_finite(flux_raw)
     else:
         raise ValueError(f"missing='{missing}' not in {{'error', 'mask'}}")
 
@@ -286,8 +287,8 @@ def ingest_catalog(
                 f"band(s) {j.tolist()}. This is always an error; an unknown "
                 f"uncertainty is not an absent band."
             )
-    # Set error NaN to 0 (for absent bands where flux was also NaN)
-    err_raw = np.nan_to_num(err_raw, nan=0.0)
+    # Set non-finite error to 0 (absent bands: their flux was NaN or inf)
+    err_raw = _zero_non_finite(err_raw)
 
     # Step 5b: CIGALE ``lim_flag`` encoding of limits / invalid bands
     censor_from_flag = None
@@ -471,7 +472,7 @@ def ingest_catalog(
                 )
         elif missing == "mask":
             # Set NaN line flux to finite placeholder
-            line_flux_obs = np.nan_to_num(line_flux_obs, nan=0.0)
+            line_flux_obs = _zero_non_finite(line_flux_obs)
 
         # Check error NaN – ALWAYS an error
         line_err_has_nan = ~np.isfinite(line_flux_err)
@@ -484,7 +485,7 @@ def ingest_catalog(
                     f"line(s) {j.tolist()}. This is always an error; an unknown "
                     f"uncertainty is not an absent line."
                 )
-        line_flux_err = np.nan_to_num(line_flux_err, nan=0.0)
+        line_flux_err = _zero_non_finite(line_flux_err)
 
     return CatalogArrays(
         flux=flux,
@@ -498,6 +499,11 @@ def ingest_catalog(
         line_flux_err=line_flux_err,
         line_censor=line_censor,
     )
+
+
+def _zero_non_finite(values: np.ndarray) -> np.ndarray:
+    """Replace every NaN and +/-inf by 0.0; finite values are returned unchanged."""
+    return np.where(np.isfinite(values), values, 0.0)
 
 
 def _convert_flux_unit(

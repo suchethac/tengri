@@ -37,7 +37,7 @@ from jax.tree_util import Partial
 # without importing ``inference/``, the layering runs
 # observation -> inference, never back (#1588). Re-exported here because every
 # likelihood in this module is written in terms of it.
-from tengri.utils.scale import whiten
+from tengri.utils.scale import present_noise, whiten
 
 __all__ = [
     "LOG_2PI",
@@ -215,11 +215,11 @@ def diag_gaussian_chi2(
     what lets a pure-float32 fit produce a finite likelihood; identical in
     float64 to the last bit.
     """
-    sigma_eff = jnp.hypot(sigma, sigma_floor * observed)
+    sigma_eff = jnp.hypot(present_noise(sigma, presence), sigma_floor * observed)
     r = standardized_residual(observed, predicted, sigma_eff)
     chi2_summand = r * r
     if presence is not None:
-        chi2_summand = presence * chi2_summand
+        chi2_summand = jnp.where(presence > 0, chi2_summand, 0.0)
     return jnp.sum(chi2_summand)
 
 
