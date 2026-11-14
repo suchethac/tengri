@@ -2467,20 +2467,49 @@ _RESTBAND_ALPHA_FIELDS = (
 )
 
 
+#: Sub-band wavelength field -> the sub-band flux field it is the flux-weighted mean of.
+_FLUX_WEIGHTED_WAVE_FIELDS = {
+    "ssp_subband_waves_rest": "ssp_subband_phot",
+    "ssp_subband_waves_rest_igm": "ssp_subband_phot_igm",
+    "subband_waves_rest_table": "ssp_subband_phot_table",
+    "subband_waves_rest_igm_table": "ssp_subband_phot_igm_table",
+    "ssp_restband_subband_waves": "ssp_restband_subband_phot",
+}
+
+
 def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
     """Collapse the named [alpha/Fe] array fields of a LUT at the model's bracket.
 
+    Fluxes are linear in the spectrum, so they are interpolated directly. A sub-band
+    wavelength is the flux-weighted mean wavelength of its sub-band, so the quantity
+    that is linear is ``wavelength * flux``: it is interpolated and divided by the
+    interpolated flux, which is the sub-band wavelength of the interpolated spectrum.
+    Where the interpolated flux is zero the wavelength is interpolated directly.
     Fields that are None are left alone. ``alpha_bracket`` is the ``(ia, fa)`` pair from
     :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`.
     """
     from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
     ia, fa = alpha_bracket
-    collapsed = {
-        name: collapse_alpha_axis(getattr(tables, name), ia, fa, axis=axis)
-        for name in names
-        if getattr(tables, name) is not None
-    }
+
+    def collapse(x):
+        return collapse_alpha_axis(x, ia, fa, axis=axis)
+
+    collapsed = {}
+    for name in names:
+        value = getattr(tables, name)
+        if value is None:
+            continue
+        flux_name = _FLUX_WEIGHTED_WAVE_FIELDS.get(name)
+        flux = getattr(tables, flux_name, None) if flux_name is not None else None
+        if flux is None:
+            collapsed[name] = collapse(value)
+            continue
+        den = collapse(flux)
+        nonzero = den != 0.0
+        collapsed[name] = jnp.where(
+            nonzero, collapse(value * flux) / jnp.where(nonzero, den, 1.0), collapse(value)
+        )
     return tables._replace(**collapsed)
 
 

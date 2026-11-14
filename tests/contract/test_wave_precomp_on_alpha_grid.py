@@ -178,6 +178,46 @@ def test_lut_on_node_equals_lut_of_the_node_slab(ssp4d, observation):
     np.testing.assert_allclose(_phot(m4, 0.2), _phot(m3, None), rtol=1e-12, atol=0)
 
 
+@pytest.mark.parametrize("redshift", [Fixed(0.1), Uniform(0.05, 0.5)], ids=["fixed_z", "free_z"])
+def test_dusty_lut_between_nodes_equals_the_lut_of_the_interpolated_cube(
+    ssp4d, observation, redshift
+):
+    """Under dust the tables' sub-band wavelengths matter; they must follow the spectrum.
+
+    At [alpha/Fe] = 0.3, between two nodes, the 4D model's table photometry must equal the
+    table photometry of a 3D model built on the cube interpolated at 0.3. Fluxes are
+    linear in the cube. A sub-band wavelength is a flux-weighted mean, so it agrees only
+    if ``wavelength * flux`` is interpolated, not the wavelength itself.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
+
+    dust = {"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
+
+    def build(ssp, alpha_spec):
+        met = {"logzsol": Fixed(-0.2), "all_params": Fixed(DEFAULT)}
+        if alpha_spec is not None:
+            met["alpha_fe"] = alpha_spec
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=observation,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+            met=met,
+            dust_attenuation=dust,
+            redshift=redshift,
+            neb={"type": "none"},
+            approx=WavePrecomp(),
+        )
+
+    flat = ssp4d._replace(
+        ssp_flux=interpolate_alpha_only(ssp4d.ssp_flux, ssp4d.ssp_alpha_fe, jnp.asarray(0.3)),
+        ssp_alpha_fe=None,
+    )
+    params = {} if isinstance(redshift, Fixed) else {"redshift": jnp.asarray(0.3)}
+    on_4d = np.asarray(build(ssp4d, Fixed(0.3)).predict_photometry(params))
+    on_flat = np.asarray(build(flat, None).predict_photometry(params))
+    np.testing.assert_allclose(on_4d, on_flat, rtol=1e-10, atol=0.0)
+
+
 def test_3d_slab_lut_matches_exact(ssp4d, observation):
     """The alpha-free path is unchanged in kind: the LUT agrees with the exact path on a slab."""
     slab = ssp4d._replace(ssp_flux=ssp4d.ssp_flux[:, 1], ssp_alpha_fe=None)
