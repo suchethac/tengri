@@ -44,16 +44,13 @@ References
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.core import Tracer
 
 from tengri.components.dust.attenuation import select_law_kwargs, two_component_dust
-from tengri.components.stellar.sps.dsps_wrapper import (
-    compute_csp_sed,
-    compute_csp_weights,
-    interpolate_metallicity,
-    interpolate_metallicity_evolving,
-)
-from tengri.cosmology import luminosity_distance
+from tengri.components.stellar.component import _mass_scale_lnu, tabulated_history_weights
+from tengri.cosmology import age_at_z, luminosity_distance
+from tengri.inference.history_ingest import _check_ssp_grid, _mass_weights
 from tengri.parameters.translate import LOG10_ZSUN
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -98,19 +95,23 @@ def sed_from_sfh(
     dust_tau_diff: float = 0.0,
     dust_law: str = "power_law",
     dust_slope: float = -0.7,
-    t_obs_gyr: float = 13.7,
+    t_obs_gyr: float | None = None,
+    redshift: float | None = None,
+    on_out_of_grid: str = "raise",
     **dust_kwargs,
 ):
     """Compute rest-frame SED from a tabulated star formation history.
 
-    Integrates composite stellar population (CSP) models over a tabulated SFH
-    and optional metallicity history. Useful for cosmological simulations,
-    semi-analytic models, or custom SFH specifications.
+    Builds the same SSP weights as :meth:`~tengri.Catalog.from_histories`
+    (:func:`~tengri.components.stellar.component.tabulated_history_weights`), so
+    the formed mass and SED agree with the catalog path for the same history.
 
     Parameters
     ----------
     t_gyr : ndarray, shape (n_t,)
         Cosmic time grid in Gyr (increasing, from early to late universe).
+        The SFR is zero outside this grid, and the grid is not clamped to its
+        edge values.
     sfr : ndarray, shape (n_t,)
         Star formation rate [Msun/yr] at each time point.
     ssp_data : SSPData
@@ -119,11 +120,12 @@ def sed_from_sfh(
         Stellar metallicity log10(Z/Zsun).
 
         - float: constant metallicity for all stars. Default: -0.3.
-        - ndarray shape (n_t,): metallicity history Z(t).
+        - ndarray shape (n_t,): metallicity history Z(t), on the same nodes as
+          ``t_gyr``.
 
     lgmet_scatter : float, optional
-        Lognormal scatter in metallicity [dex]. Used only when log_z is
-        scalar. Default: 0 (delta function).
+        Lognormal metallicity-distribution width [dex], applied with the same
+        kernel as the forward model. Default: 0.
     dust_tau_bc : float, optional
         Birth cloud V-band optical depth. Default: 0 (no dust).
     dust_tau_diff : float, optional
@@ -134,7 +136,15 @@ def sed_from_sfh(
     dust_slope : float, optional
         Power-law slope (for power_law curve). Default: -0.7.
     t_obs_gyr : float, optional
-        Age of universe at observation [Gyr]. Default: 13.7.
+        Age of universe at observation [Gyr], the lookback origin. Default:
+        ``age_at_z(redshift)``, or ``age_at_z(0)`` when no redshift is given.
+    redshift : float, optional
+        Source redshift. Sets the default ``t_obs_gyr``.
+    on_out_of_grid : {"raise", "warn", "ignore"}, optional
+        What to do when a metallicity is outside the SSP grid, where the lookup
+        would otherwise clip to the edge. Default: "raise", as in
+        :meth:`~tengri.Catalog.from_histories`. The check runs on concrete
+        inputs only; under ``jax.jit`` the lookup clips silently.
     **dust_kwargs
         Additional dust parameters (dust_bump_strength, dust_delta, etc.).
 
@@ -146,52 +156,37 @@ def sed_from_sfh(
         - "wavelength" : ndarray shape (n_wave,). Wavelength [Angstrom]
         - "sed" : ndarray shape (n_wave,). Luminosity density [erg/s/Hz]
         - "stellar_mass" : float. Total stellar mass formed [Msun]
-        - "weights" : ndarray shape (n_age,). CSP age weights
+        - "weights" : ndarray shape (n_age,). CSP age weights [Msun]
+
+    Raises
+    ------
+    ValueError
+        If a metallicity is outside the SSP grid under ``on_out_of_grid="raise"``.
 
     Notes
     -----
-    **JIT-compatible**: yes; the entire function is JAX-native and
-    compatible with jax.jit, jax.grad, and jax.vmap.
+    **JIT-compatible**: yes for the weights and SED. The metallicity grid check
+    is eager and is skipped for traced inputs.
 
-    **Metallicity evolution**: When log_z is an array, it is interpolated
-    onto the SSP age grid. The interpolation respects the optional
-    lgmet_scatter parameter.
+    Mass older than the oldest SSP template is kept and assigned to that
+    template, as in the forward model (#1522, #2714).
     """
-    # Convert SFH to SSP age weights via interpolation onto SSP age grid
-    ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0  # log10(age/yr)
-    ssp_ages_yr = 10.0**ssp_log_ages_yr
+    t_gyr = jnp.asarray(t_gyr)
+    sfr = jnp.asarray(sfr)
+    t_obs = age_at_z(0.0 if redshift is None else redshift) if t_obs_gyr is None else t_obs_gyr
 
-    # Convert cosmic time to lookback time
-    t_lookback_yr = (t_obs_gyr - t_gyr) * 1e9  # yr
-    log_t_lookback = jnp.log10(jnp.maximum(t_lookback_yr, 1.0))
-
-    # Interpolate SFR onto SSP age grid
-    sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_t_lookback[::-1], sfr[::-1])
-    weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
-
-    # Metallicity interpolation
-    if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
-        # Scalar metallicity: convert to absolute log(Z)
-        log_z_abs = log_z + LOG10_ZSUN  # solar offset (traced-safe: no host float())
-        ssp_flux_at_z = interpolate_metallicity(
-            ssp_data.ssp_flux,
-            ssp_data.ssp_lgmet,
-            log_z_abs,
-        )
-    else:
-        # Array metallicity history: interpolate onto SSP ages
-        log_z_array = jnp.asarray(log_z)
-        log_z_on_ssp = jnp.interp(
-            ssp_log_ages_yr,
-            log_t_lookback[::-1],
-            log_z_array[::-1],
-        )
-        log_z_abs = log_z_on_ssp + (-1.8477)
-        ssp_flux_at_z = interpolate_metallicity_evolving(
-            ssp_data.ssp_flux,
-            ssp_data.ssp_lgmet,
-            log_z_abs,
-        )
+    _check_metallicity_on_grid(t_gyr, sfr, log_z, ssp_data.ssp_lgmet, on_out_of_grid)
+    log_z_abs = jnp.asarray(log_z) + LOG10_ZSUN  # solar offset, traced-safe
+    joint_weights, total_mass = tabulated_history_weights(
+        t_gyr,
+        sfr,
+        ssp_data.ssp_lg_age_gyr,
+        ssp_data.ssp_lgmet,
+        t_obs,
+        log_z_abs,
+        lgmet_scatter,
+    )
+    ssp_ages_yr = 10.0 ** (ssp_data.ssp_lg_age_gyr + 9.0)
 
     # Dust attenuation
     def _two_component() -> jnp.ndarray:
@@ -227,15 +222,39 @@ def sed_from_sfh(
         jnp.logical_or(dust_tau_bc > 0, dust_tau_diff > 0), _two_component, ones
     )
 
-    # CSP integral
-    sed = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
+    # CSP integral: the joint weights sum to one, so the mass enters once here.
+    # The factor L_sun is applied last, as in the forward model (#1206).
+    ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_data.ssp_flux)
+    # Grouped through _mass_scale_lnu: a standalone total_mass * L_sun reaches
+    # 1.2e46, which is inf in float32.
+    sed = _mass_scale_lnu(jnp.einsum("aw,aw->w", ssp_flux_at_age, dust_atten), total_mass)
+    weights = joint_weights.sum(axis=0) * total_mass
 
     return {
         "wavelength": ssp_data.ssp_wave,
         "sed": sed,
-        "stellar_mass": _host_scalar(jnp.sum(weights)),
+        "stellar_mass": _host_scalar(total_mass),
         "weights": weights,
     }
+
+
+def _check_metallicity_on_grid(t_gyr, sfr, log_z, ssp_lgmet, policy) -> None:
+    """Refuse (or warn about) a metallicity outside the SSP grid, as ``from_histories`` does.
+
+    A scalar is one node carrying all the mass; a history is weighted by its
+    per-node stellar mass. Skipped for traced inputs, which have no values to check.
+    """
+    if any(isinstance(x, Tracer) for x in (t_gyr, sfr, log_z)):
+        return
+    log_z_np = np.asarray(log_z, dtype=float)
+    if log_z_np.ndim == 0:
+        logzsol = log_z_np.reshape(1, 1)
+        mass_w = np.ones((1, 1))
+    else:
+        logzsol = log_z_np.reshape(1, -1)
+        t_np = np.asarray(t_gyr, dtype=float).reshape(1, -1)
+        mass_w = _mass_weights(t_np, np.asarray(sfr, dtype=float).reshape(1, -1))
+    _check_ssp_grid(logzsol, mass_w, np.asarray(ssp_lgmet), policy)
 
 
 def _select_dust(gate, attenuate, ones: jnp.ndarray) -> jnp.ndarray:
@@ -312,6 +331,7 @@ def photometry_from_sfh(
         log_z=log_z,
         dust_tau_bc=dust_tau_bc,
         dust_tau_diff=dust_tau_diff,
+        redshift=redshift,
         **kwargs,
     )
     sed = result["sed"]
@@ -404,6 +424,7 @@ def spectrum_from_sfh(
         log_z=log_z,
         dust_tau_bc=dust_tau_bc,
         dust_tau_diff=dust_tau_diff,
+        redshift=redshift,
         **kwargs,
     )
     sed = result["sed"]

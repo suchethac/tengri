@@ -159,6 +159,26 @@ GRID_ORIGIN: dict[str, str] = {
     ),
 }
 
+#: Per-grid caveats on the flux itself (not the surviving mass). Each is warned once when the
+#: grid loads and recorded in ``SSPData.grid_notes`` (#3428). Keyed like
+#: ``MASS_REMAINING_REGISTRY``.
+GRID_CAVEATS: dict[str, str] = {
+    "bpss_stars_c3k_a_chabrier": (
+        "BPASS optical flux per unit mass in this grid is noisy above about 3 Gyr: it is not "
+        "monotone between neighboring age nodes, and at 6190 A neighboring-node changes reach "
+        "a factor of about 19 at some metallicities (measured on this file; at Z=1e-5, 10.0, "
+        "12.6 and 15.8 Gyr give 0.279, 0.433 and 0.150 of the 3.2 Gyr flux). Treat late-age "
+        "optical SEDs from this grid with caution."
+    ),
+}
+
+#: Surviving-mass mode a grid loads with when the caller passes no ``mass_remaining`` (#2800,
+#: #3428). Grids absent here default to ``"table"``. A grid listed here has no shipped table,
+#: and the mode named is the one its refusal message suggests.
+DEFAULT_MASS_REMAINING: dict[str, str] = {
+    "bpss_stars_c3k_a_chabrier": "dsps_fit",
+}
+
 #: Why a PENDING grid has no table, in the words of the refusal. Keyed by the registry
 #: ``isoc`` code.
 PENDING_REASON: dict[str, str] = {

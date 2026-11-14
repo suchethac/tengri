@@ -20,7 +20,7 @@ from tengri.inference.catalog_fitter import (
     _CatalogFitterOriginal as CatalogFitter,
 )
 from tengri.inference.catalog_ingest import ingest_catalog
-from tengri.inference.history_ingest import ingest_histories
+from tengri.inference.history_ingest import ingest_histories, refuse_history_past_obs_time
 from tengri.parameters.resolve import refuse_fixed_overrides
 from tengri.utils.batching import GALAXY_CHUNK_SIZE
 
@@ -153,6 +153,28 @@ def _stellar_config(fwd):
     """The StellarSEDComponent's config off a built ForwardModel, or None."""
     stellar = _stellar_component(fwd)
     return None if stellar is None else stellar.config
+
+
+def _history_redshifts(fwd, redshift, params, n_galaxies):
+    """Per-galaxy redshift the histories are evaluated at, or None when it is free (#3468).
+
+    The redshift is read from the ``redshift=`` argument, else a ``redshift``
+    column in ``params``, else the model's Fixed value. A free redshift with
+    neither is set only at predict time, so there is nothing to check yet.
+    """
+    if redshift is not None:
+        return np.broadcast_to(np.asarray(redshift, dtype=float), (n_galaxies,))
+    if params and "redshift" in params:
+        return np.broadcast_to(np.asarray(params["redshift"], dtype=float), (n_galaxies,))
+    from tengri.parameters.priors import Fixed
+
+    try:
+        dist = fwd.spec.get_distribution("redshift")
+    except (KeyError, AttributeError):
+        return None
+    if not isinstance(dist, Fixed):
+        return None
+    return np.full(n_galaxies, float(dist.value))
 
 
 def _warn_gas_left_at_default(fwd, hist, params):
@@ -793,6 +815,10 @@ class Catalog:
             on_out_of_grid=on_out_of_grid,
             ssp_lgmet=_ssp_lgmet(fwd),
             top_z=_ssp_top_z(fwd),
+        )
+
+        refuse_history_past_obs_time(
+            hist.t_gyr, _history_redshifts(fwd, redshift, params, hist.t_gyr.shape[0])
         )
 
         columns = {"sfh_t_gyr": hist.t_gyr, "sfh_sfr": hist.sfr}

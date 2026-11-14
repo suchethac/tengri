@@ -187,6 +187,11 @@ def run_smc(
     Posterior
         ``diagnostics`` carries ``n_temperatures``, ``log_evidence``,
         ``min_ancestor_ess``, ``gradients_per_draw`` and ``reached_target``.
+        ``min_ancestor_ess`` is the particle ESS of the ancestor resampling,
+        not an autocorrelation ESS; a value below 10 % of ``n_particles`` makes
+        the post-run check warn. ``n_divergent`` counts divergent *inner*
+        transitions, summed over particles, rungs and moves, and its denominator
+        is ``n_inner_transitions``, not the number of kept draws.
 
     Raises
     ------

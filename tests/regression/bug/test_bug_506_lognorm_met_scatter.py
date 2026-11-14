@@ -118,9 +118,12 @@ def test_sigma_to_zero_recovers_delta_metallicity():
     assert wide_diff > 1e-2, "wide MDF should differ from the delta limit"
 
 
-def test_fixed_default_is_byte_identical_to_historical():
-    """A model that does not free the scatter matches the historical fixed 0.1."""
-    m_default = SEDModel.build(
+def _fixed_met_model(scatter):
+    """Model with a declared (or, for ``None``, undeclared) metallicity scatter."""
+    met = {"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)}
+    if scatter is not None:
+        met["logzsol_scatter"] = Fixed(scatter)
+    return SEDModel.build(
         _synthetic_ssp(),
         sfh={
             "type": "delayed",
@@ -129,7 +132,7 @@ def test_fixed_default_is_byte_identical_to_historical():
             "log_total_mass": Fixed(10.0),
             "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        met=met,
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
@@ -139,12 +142,38 @@ def test_fixed_default_is_byte_identical_to_historical():
         },
         redshift=Fixed(0.1),
     )
-    assert "met_logzsol_scatter" not in list(m_default.spec.free_params)
-    p = dict(m_default.spec.sample(jax.random.PRNGKey(0)))
-    default_sed = np.asarray(m_default.predict_rest_sed(p).sed)
+
+
+def test_declared_fixed_0p1_is_byte_identical_to_historical():
+    """#3434 (owner ruling 2026-11-13): a declared scatter is the lognormal kernel.
+
+    A declared Fixed(0.1) reproduces the historical lognormal-0.1 SED.
+    """
+    m_declared = _fixed_met_model(0.1)
+    p = dict(m_declared.spec.sample(jax.random.PRNGKey(0)))
+    declared_sed = np.asarray(m_declared.predict_rest_sed(p).sed)
     at_0p1 = _sed(_model(Uniform(0.0, 0.6)), 0.1)
-    band = default_sed > default_sed.max() * 1e-6
-    assert np.allclose(default_sed[band], at_0p1[band], rtol=1e-6)
+    band = declared_sed > declared_sed.max() * 1e-6
+    assert np.allclose(declared_sed[band], at_0p1[band], rtol=1e-6)
+
+
+def test_undeclared_default_is_node_exact():
+    """#3434 (owner ruling 2026-11-13): an undeclared scatter is node-exact.
+
+    The metallicity weight at a node is one-hot, and the model does not free the
+    scatter.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import compute_lgmet_weights
+
+    m_default = _fixed_met_model(None)
+    assert "met_logzsol_scatter" not in list(m_default.spec.free_params)
+    lgmet = _synthetic_ssp().ssp_lgmet
+    w = np.asarray(compute_lgmet_weights(jnp.asarray(_LOG10_ZSUN), lgmet))
+    expected = np.zeros(lgmet.shape[0])
+    expected[2] = 1.0  # the solar node sits at index 2
+    np.testing.assert_allclose(w, expected, rtol=0.0, atol=1e-12)
+    p = dict(m_default.spec.sample(jax.random.PRNGKey(0)))
+    assert np.all(np.isfinite(np.asarray(m_default.predict_rest_sed(p).sed)))
 
 
 def test_sed_is_differentiable_wrt_scatter():
