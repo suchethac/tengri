@@ -10,7 +10,7 @@ once, before the spec is parsed.
 The rule:
 
 * neb omitted, or ``neb={'type': 'ssp'}``: baked-in. The grid is kept, wNE or not.
-* A wNE grid with a twin in :data:`~tengri._data_setup._BARE_TWIN_OF_WNE`: every other
+* A wNE grid with a twin in the ``_BARE_TWIN_OF_WNE`` table in ``tengri._data_setup``: every other
   mode, including ``neb={'type': 'none'}``, is built on the bare twin (logged at INFO).
 * A wNE grid without a twin: Cue and CLOUDY refuse (their own checks), CB19 refuses
   (:class:`~tengri.components.nebular.cloudy_cb19.CB19WNESSPError`), and
