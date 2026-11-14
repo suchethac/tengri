@@ -78,6 +78,7 @@ from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    AlphaFeUnconstrainedWarning,
     DeadGradientParameterWarning,
     FilterCoverageWarning,
     ParameterError,
@@ -1168,6 +1169,68 @@ def _warn_agn_dust_double_count(spec) -> None:
 #: intrinsic, so ``nebular_line_frac * sed_nebular`` would be the unattenuated
 #: line light, not the light in the spectrum.
 _DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
+
+
+#: Smallest resolving power that resolves the Mg b / Fe region (#3487).
+_ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
+#: Rest-frame window of the Mg b / Fe features that constrain [alpha/Fe] (#3487), [Angstrom].
+_ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
+
+
+def _alpha_fe_redshift_ends(spec) -> list[float]:
+    """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
+
+    A fixed redshift gives one value. A free redshift gives both ends of its prior
+    bounds, since a spectrum can cover the window at one end and not the other.
+    """
+    dist = spec.get_distribution("redshift")
+    if dist.is_fixed:
+        return [float(dist.value)]
+    return [float(bound) for bound in dist.bounds if bound is not None]
+
+
+def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[str, float]]:
+    """Return why an observation cannot constrain [alpha/Fe], and the measured values (#3487).
+
+    An empty list means it can: spectral indices, or a spectrum that resolves and covers
+    the Mg b / Fe window at every redshift the model can take.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter spec, read for the redshift distribution.
+    observation : Observation
+        The model's observation.
+
+    Returns
+    -------
+    findings : list of str
+        One phrase per reason the observation is blind to [alpha/Fe].
+    measurements : dict of str to float
+        The numbers behind the findings, for :func:`warn_measured`.
+    """
+    if observation.has_spectral_indices:
+        return [], {}
+    spectroscopy = observation.spectroscopy
+    if spectroscopy is None:
+        if observation.can_do_photometry:
+            return ["photometry only"], {}
+        return ["no spectrum and no spectral indices (line fluxes only)"], {}
+
+    findings: list[str] = []
+    measurements: dict[str, float] = {}
+    if spectroscopy.resolution is not None:
+        resolving_power = float(np.median(np.asarray(spectroscopy.resolution, dtype=float)))
+        if resolving_power < _ALPHA_FE_MIN_RESOLVING_POWER:
+            findings.append(f"R = {resolving_power:.0f}")
+            measurements["resolving_power"] = resolving_power
+    lo, hi = _ALPHA_FE_REST_WINDOW_AA
+    wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
+    for z in _alpha_fe_redshift_ends(spec):
+        rest = wave_obs / (1.0 + z)
+        if rest.min() > lo or rest.max() < hi:
+            findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
+    return findings, measurements
 
 
 def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
@@ -3635,6 +3698,7 @@ class SEDModel:
         self._validate_metallicity_bounds(spec, ssp_data)
         self._warn_young_top_metallicity(spec, ssp_data)
         self._refuse_alpha_fe_without_alpha_axis(spec, ssp_data)
+        self._warn_alpha_fe_unconstrained(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
@@ -4580,6 +4644,38 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _warn_alpha_fe_unconstrained(self, spec, ssp_data):
+        """Warn once per build when a free [alpha/Fe] has no observation to constrain it (#3487).
+
+        Runs after :meth:`_refuse_alpha_fe_without_alpha_axis`, so a free [alpha/Fe] on a
+        3-D grid has already been refused. Spectral indices always constrain it. Otherwise
+        a spectrum must resolve the Mg b / Fe window (R of at least 1000) and cover the
+        4800-5400 A rest-frame window at every redshift the model can take. Photometry,
+        line fluxes, and a spectrum that misses either test leave the posterior on the
+        prior. The warning names every free [alpha/Fe] parameter.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.parameters.groups import _ALPHA_FE_PARAMS
+
+        # A model built without an observation has nothing to fit yet, so nothing to judge.
+        if self.observation is None or ssp_data is None or not has_alpha_grid(ssp_data):
+            return
+        free = [name for name in _ALPHA_FE_PARAMS if name in spec.free_params]
+        if not free:
+            return
+        findings, measurements = _alpha_fe_observation_findings(spec, self.observation)
+        if not findings:
+            return
+        lo, hi = _ALPHA_FE_REST_WINDOW_AA
+        text = (
+            f"[alpha/Fe] is free ({', '.join(free)}), but the observation cannot constrain it: "
+            f"{'; '.join(findings)}. [alpha/Fe] is constrained by the Mg b / Fe features at "
+            f"{lo:.0f}-{hi:.0f} A rest frame, which needs a spectrum that resolves them "
+            f"(R >= {_ALPHA_FE_MIN_RESOLVING_POWER:.0f}) and covers that window, or spectral "
+            "indices. The posterior will follow the prior."
+        )
+        warn_measured(text, AlphaFeUnconstrainedWarning, stacklevel=3, **measurements)
 
     def _warn_young_top_metallicity(self, spec, ssp_data):
         """Warn once per build when the metallicity weights can reach the truncated top node.
