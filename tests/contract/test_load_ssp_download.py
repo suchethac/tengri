@@ -80,7 +80,7 @@ def test_download_true_fetches_on_miss(isolated_data_dir, monkeypatch):
     monkeypatch.setattr(dsps_wrapper, "load_ssp_data", fake_load)
 
     assert tengri.load_ssp("fsps_prsc_miles_chabrier", download=True) == "SSP"
-    assert loaded == [(str(fetched), {"mass_remaining": "table", "top_z": "clip"})], (
+    assert loaded == [(str(fetched), {"mass_remaining": "table", "top_z": "clip", "imf": None})], (
         f"got {loaded}"
     )
 

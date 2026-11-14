@@ -299,15 +299,16 @@ def test_sample_sfh_prior_requires_redshift_for_age_families(family):
         sample_sfh_prior(family, jax.random.PRNGKey(0), n=2)
 
 
-def test_sample_sfh_prior_other_families_need_no_redshift():
-    """A family with no age anchor is unchanged by the new argument.
+def test_sample_sfh_prior_unanchored_families_need_no_redshift():
+    """A family with neither an age anchor nor an age-bin ladder ignores the redshift.
 
     ``dpl`` is not such a family: its formation age is sampled as a fraction of
-    age(z) (#2748), so the redshift changes its draws. ``dirichlet`` has no
-    timing parameter at all.
+    age(z) (#2748), so the redshift changes its draws. The binned ``dirichlet``
+    is not one either: its ladder ends at age(z) (#3455), pinned in
+    ``test_bug_3455_prior_binned_age_at_z``.
     """
-    _, plain = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3)
-    _, with_z = sample_sfh_prior("dirichlet", jax.random.PRNGKey(0), n=3, redshift=_Z)
+    _, plain = sample_sfh_prior("top_hat", jax.random.PRNGKey(0), n=3)
+    _, with_z = sample_sfh_prior("top_hat", jax.random.PRNGKey(0), n=3, redshift=_Z)
     np.testing.assert_array_equal(np.asarray(plain), np.asarray(with_z))
 
 

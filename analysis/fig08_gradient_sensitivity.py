@@ -21,10 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (
     FIG_DIR,
     PAPER_FIG_DIR,
+    make_model,
     setup_matplotlib,
 )
-
-from tengri import Gaussian, Model, ParamSpec, Uniform, load_ssp_data
 
 
 def compute_jacobian(model, params, filter_names):
@@ -129,40 +128,13 @@ def plot_gradient_heatmap(jac, param_names, filter_names):
 def main():
     print("Computing end-to-end gradient sensitivity...")
 
-    # Use a star-forming galaxy at z=0.1 with all params free
-    spec_kwargs = dict(
-        sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
-        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
-        sfh_field_psd_sigma=Uniform(0.1, 4.0),
-        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-        met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
-        dust_tau_bc=Uniform(0.0, 2.0),
-        dust_tau_diff=Uniform(0.0, 1.0),
-        dust_slope=-0.7,
-        redshift=0.1,
-        stochastic=True,
-        n_grid=128,
-    )
-    spec = ParamSpec(**spec_kwargs)
-    ssp = load_ssp_data(
-        str(
-            Path(__file__).resolve().parent.parent
-            / "data"
-            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        )
-    )
-
+    # Star-forming galaxy at z=0.1 with all params free (same spec as make_model)
+    model = make_model("moderate", redshift=0.1, stochastic=True, n_grid=128, free_psd=True)
     filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    from tengri import Observation, Photometry
-
-    obs = Observation(photometry=Photometry.from_names(filter_names))
-    model = Model(spec, ssp, observation=obs)
 
     # Evaluate at a specific point
     key = jax.random.PRNGKey(7)
-    params = spec.sample(key)
+    params = model.spec.sample(key)
 
     # Physical params only (exclude psd_xi)
     param_names = [

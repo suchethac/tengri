@@ -61,7 +61,6 @@ from tengri import (
     plot,
     SEDModel,
     Spectroscopy,
-    SpectrumPrecomp,
     Uniform,
     WavePrecomp,
 )
@@ -146,13 +145,12 @@ def build(obs, approx=None):
     )
 
 
-# Both fits use lookup tables. Photometry-only gets WavePrecomp (SSP × filter
-# LUT). The joint model gets SpectrumPrecomp, which builds both LUT families
-# side by side — the SSP × filter table for the photometry channel and the
-# SSP × pixel table for the spectrum — so neither channel falls back to the
-# slow exact wave-grid integration.
+# Photometry is served from the SSP × filter lookup table (WavePrecomp). The
+# spectrum is integrated exactly over each pixel: at 260 pixels a pixel spans
+# several resolution elements, so it cannot be sampled at its center. The joint
+# fit uses the lookup table for its photometry and the exact spectrum.
 model_phot = build(obs_phot, approx=WavePrecomp())
-model_joint = build(obs_joint, approx=SpectrumPrecomp())
+model_joint = build(obs_joint)
 print(
     f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}",
     flush=True,
@@ -196,8 +194,8 @@ print(
 # %% [markdown]
 # ## Fit
 #
-# Both use `HMC_VALIDATED` with lookup tables: WavePrecomp for the photometry fit,
-# SpectrumPrecomp's dual LUT for the joint fit (photometry + spectrum).
+# Both use `HMC_VALIDATED`. The photometry fit runs on WavePrecomp; the joint fit
+# adds the exact spectrum.
 
 
 # %%
@@ -244,7 +242,8 @@ print(f"Total fitting time: {t_phot + t_joint:.1f}s", flush=True)
 #
 # The 68% credible width of each free parameter, normalized so the photometry-
 # only width is 1. Bars below 1 mean the joint fit tightened that parameter.
-# The largest gains are in metallicity and the dust split.
+# The largest gains are in stellar mass, the SFH peak time and the diffuse dust
+# optical depth.
 
 # %%
 params = model_joint.spec.free_params

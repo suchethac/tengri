@@ -39,10 +39,9 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._template_grid import scale_to_lbol_native
+from tengri.components.agn._template_grid import scale_to_torus_power_native
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.host_array import device_table
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "SloneNetzerGrid",
@@ -53,7 +52,11 @@ __all__ = [
     "slone_netzer_sed_from_grid",
 ]
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LBOL,
+    SN12_LOG_LEDD_ON_GRID,
+    SN12_LOG_MBH_GRID_CENTER,
+)
 
 
 def _load_slone_netzer_arrays(grid_path: str) -> dict:
@@ -179,8 +182,8 @@ def slone_netzer_sed_from_grid(
     # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
     # starts at 7.4, so the declared 7.0 would be silently clipped by the
     # jnp.clip below. 8.6 is the grid's center node.
-    agn_log_mbh: float = 8.6,
-    agn_log_ledd: float = -2.0,
+    agn_log_mbh: float = SN12_LOG_MBH_GRID_CENTER,
+    agn_log_ledd: float = SN12_LOG_LEDD_ON_GRID,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.
@@ -243,7 +246,8 @@ def slone_netzer_sed_from_grid(
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
     # Normalize on the template's native grid, before resampling (the caller's
     # grid never enters); the float32 factorization lives in the helper.
-    return scale_to_lbol_native(template, wave_grid, sed, 10.0**agn_log_lbol * _LSUN_ERG)
+    # Log-space power (#3183): the erg/s-scale linear power is never formed in float32.
+    return scale_to_torus_power_native(template, wave_grid, sed, agn_log_lbol, 1.0)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (

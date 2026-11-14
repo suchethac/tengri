@@ -7,10 +7,12 @@ The nebular emission is already part of the SSP flux arrays.
 """
 
 import warnings
+from typing import ClassVar
 
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key
+from tengri.components.nebular._shared import NebularBackendDefaults
 
 
 class BakedInNebularWarning(UserWarning):
@@ -56,7 +58,7 @@ class BakedInNebularBareError(ValueError):
     """
 
 
-class BakedInBackend:
+class BakedInBackend(NebularBackendDefaults):
     """Nebular backend for SSP files with pre-included emission.
 
     A no-op backend that returns zero additional nebular flux because the SSP
@@ -90,6 +92,51 @@ class BakedInBackend:
     and metallicity.
 
     """
+
+    config_name: ClassVar[str] = "baked_in"
+    supports_split_sed: ClassVar[bool] = False
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ()
+    carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = False
+    requires_instance: ClassVar[bool] = False
+    caches_filters: ClassVar[bool] = False
+
+    @classmethod
+    def precompute_check(cls, *, suppress_warning: bool) -> None:
+        """Construct once, so the ionizing-source warning fires at precompute as before."""
+        cls(ionizing_source_warning="suppress" if suppress_warning else "warn")
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return []
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the baked-in backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``_nebular_explicit`` and ``nebular_mode``.
+        ssp_data : SSPData or None
+            Stellar grid to check for nebular content.
+
+        Returns
+        -------
+        BakedInBackend
+            The backend instance.
+        """
+        # An explicit neb={'type': 'ssp'} or neb={'type': 'none'} states the baked-in choice,
+        # so the advisory is silenced. An omitted neb= keeps the advisory: it is the only
+        # signal that separates "no nebular emission" from "nebular emission never mentioned".
+        warning_mode = "suppress" if spec._nebular_explicit else "warn"
+        # An explicit neb={'type': 'none'} disables nebular emission, so the grid is not checked.
+        ssp_data_for_backend = (
+            None if (spec.nebular_mode == "off" and spec._nebular_explicit) else ssp_data
+        )
+        return cls(ionizing_source_warning=warning_mode, ssp_data=ssp_data_for_backend)
 
     def __init__(self, ionizing_source_warning: str = "warn", ssp_data=None) -> None:
         """Initialize BakedInBackend.

@@ -18,6 +18,7 @@ from tengri.components.nebular.component import (
     NebularSEDComponent,
     NebularSEDComponentConfig,
 )
+from tengri.config.exceptions import ConfigError
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
 from tengri.protocols import ForwardState
 
@@ -118,8 +119,7 @@ def test_unknown_backend_string_raises():
     Cue / CloudyGrid / shock are now supported (Phase II-3 closure);
     only truly unknown identifiers should fail.
     """
-    bad = NebularSEDComponent(
-        config=NebularSEDComponentConfig(name="nebular", backend="not_a_backend")
-    )
-    with pytest.raises((ValueError, KeyError, NotImplementedError)):
-        bad.declared_parameters()
+    with pytest.raises(ConfigError, match="not_a_backend"):
+        NebularSEDComponent(
+            config=NebularSEDComponentConfig(name="nebular", backend="not_a_backend")
+        )

@@ -74,8 +74,9 @@ def test_sed_from_sfh_array_metallicity(synthetic_ssp):
 
     t = jnp.linspace(0.5, 10.0, 50)
     sfr = jnp.exp(-t / 3.0) + 0.01
-    # Linearly enriching metallicity history
-    log_z_arr = jnp.linspace(-2.0, -0.3, 50)
+    # Linearly enriching metallicity history, inside the synthetic grid
+    # (log10(Z/Zsun) in [-1.5, 0.0]); an off-grid node is refused (#3467).
+    log_z_arr = jnp.linspace(-1.4, -0.3, 50)
     out = sed_from_sfh(t, sfr, synthetic_ssp, log_z=log_z_arr)
     assert "sed" in out
     assert out["sed"].shape == synthetic_ssp.ssp_wave.shape

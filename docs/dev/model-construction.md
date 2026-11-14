@@ -230,6 +230,12 @@ grammar type  ──►  _resolve_registry_component(domain, type)  ──►  _
 - **Pipeline order is derived, not hand-coded.** The orchestrator
   topologically sorts components by their declared `inputs`/`outputs` so, e.g.,
   dust runs after the nebular + shock components it reddens.
+- **The nebular backend is a second registry, keyed by config name.**
+  `nebular_backend_classes()` (`components/nebular/_models.py`) maps each
+  `config.backend` string to the class that declares its `config_name`,
+  `parameters()` and capabilities. The component and `SEDModel` ask the class;
+  an unknown name is refused at `NebularSEDComponentConfig` construction
+  ([ADR-0024](../adr/0024-nebular-backend-capabilities.md)).
 
 ### What stays orthogonal (not in `_REGISTRY`)
 

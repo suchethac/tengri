@@ -94,6 +94,13 @@ ALLOWLIST: dict[str, str] = {
         "lut.sigma_v_kms None and broadens the summed spectrum on the full model grid every "
         "draw), so no traced dispersion reaches the table route (#2958)"
     ),
+    "forward/ssp_guard.py::check_ssp_flux_not_splat": (
+        "a traced cube returns before the numpy comparison and is passed through unchanged "
+        "(the splat refusal of #3350 needs concrete values, so it runs only at SEDModel.__init__ "
+        "on host ssp_flux); the traced cube takes the ordinary general forward path, which "
+        "never forms a splat model constant, so the jit(vmap) XLA miscompile it guards against "
+        "is not reached by it"
+    ),
     "forward/sed_model.py::SEDModel.__init__": (
         "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),
@@ -155,6 +162,13 @@ ALLOWLIST: dict[str, str] = {
     "utils/interpolation.py::concrete_canonical_numpy": (
         "tracer -> None: the caller takes its original jnp formula (same arithmetic, general path)"
     ),
+    "analysis/simulate.py::_host_scalar": (
+        "traced value is returned unchanged; only a concrete value becomes a Python float"
+    ),
+    "analysis/simulate.py::_select_dust": (
+        "traced gate takes jax.lax.cond over the same attenuation (general path); a concrete "
+        "gate takes the eager branch"
+    ),
     "utils/sed_quantities.py::_uv_anchor_plan": (
         "tracer → 'traced': the three cases are selected with jnp.where on the traced coverage "
         "(in-grid; masked-sum power-law fit; edge), the same values as the concrete plans, "
@@ -180,6 +194,10 @@ ALLOWLIST: dict[str, str] = {
     "components/agn/fritz.py::_refuse_off_grid": (
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "
         "traced values at build (documented)"
+    ),
+    "observation/noise.py::apply_zp_floor": (
+        "GAP: a traced floor skips the sign/validity check, so a negative traced floor is not "
+        "refused; it is applied by the same arithmetic (hypot of noise and floor*|flux|)"
     ),
     "parameters/groups.py::_warn_free_redshift_onset_ceiling": (
         "GAP (warning only): Fixed redshift skips the onset-ceiling warning, including a catalog "

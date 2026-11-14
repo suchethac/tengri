@@ -381,6 +381,10 @@ _RECIPES = {
         _selectors("kubota_done", "fritz"),
         {**_BASE, "agn_lum_ratio": 0.3},
     ),
+    "polar_dust_library_torus": (
+        _selectors("kubota_done", "nenkova_agnfitter", atten="polar_dust"),
+        {**_BASE, "agn_polar_ebv": 0.2, "agn_cos_inc": 0.8},
+    ),
     "no_disc": (_selectors("none", "fritz"), _BASE),
 }
 
@@ -728,11 +732,6 @@ _NON_CONSERVING = {
     "cigale_joint_lines": (
         _selectors("multicolor", "simple", "analytic"),
         {**_BASE, "agn_norm": "cigale_joint"},
-        False,
-    ),
-    "polar_dust_library_torus": (
-        _selectors("kubota_done", "nenkova_agnfitter", atten="polar_dust"),
-        {**_BASE, "agn_polar_ebv": 0.2, "agn_cos_inc": 0.8},
         False,
     ),
     "cigale_joint_tie_on": (

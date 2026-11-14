@@ -273,6 +273,35 @@ def safe_ratio(num, den):
     return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
 
+def ratio_or_nan(num, den):
+    """Return ``num / den`` where ``den`` exceeds its representable floor, NaN elsewhere.
+
+    The zero-hiding normalizer (#1404): ``num / jnp.maximum(den, floor)`` returns
+    ``num / floor`` (garbage) or ``0.0`` (when ``num`` is also zero) for a
+    degenerate ``den``. A NaN states that the quantity is undefined and lets it
+    propagate to the caller. The denominator is selected before the divide, so
+    the unselected quotient never divides by a near-zero value and its
+    reverse-mode term stays finite.
+
+    Parameters
+    ----------
+    num : array_like
+        Numerator.
+    den : array_like
+        Denominator; entries at or below ``representable_denominator(1e-30)``
+        give NaN.
+
+    Returns
+    -------
+    ndarray
+        ``num / den`` where ``den > representable_denominator(1e-30)``, else NaN.
+        Bit-identical to ``num / jnp.maximum(den, floor)`` wherever ``den`` exceeds
+        the floor.
+    """
+    ok = den > representable_denominator(1e-30)
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
+
+
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 
@@ -323,6 +352,39 @@ def whiten(x, sigma):
     ``observation/`` can use it without importing ``inference/`` (#1588).
     """
     return jax.lax.optimization_barrier(x / sigma)
+
+
+def present_noise(noise, presence):
+    """``noise`` with absent cells set to 1.0, so whitening them is finite (#3405).
+
+    An absent band is stored with zero noise, and ``whiten`` of it is inf or NaN.
+    Callers mask the absent terms to zero after whitening; this keeps the
+    whitening itself finite, in the value and in the gradient. Where
+    ``presence`` is 1 the noise is returned unchanged, bit for bit.
+    """
+    return noise if presence is None else jnp.where(presence > 0, noise, jnp.ones_like(noise))
+
+
+def is_float32_arithmetic(grid) -> bool:
+    """Whether the forward arithmetic runs in float32 (#3401).
+
+    The float32 branches that avoid float32 overflow are selected by this predicate
+    rather than by the wavelength grid's dtype alone. A model built under float64 keeps
+    a float64 grid when it is evaluated with x64 off, so a grid-only test sends the
+    linear ``10**40`` path through float32 and overflows to inf.
+
+    Parameters
+    ----------
+    grid : array_like
+        Wavelength grid whose dtype is inspected [Angstrom].
+
+    Returns
+    -------
+    bool
+        True when the grid is float32 or ``jnp.result_type(float)`` is float32 (x64 off).
+        Static under tracing: it reads dtypes only.
+    """
+    return jnp.result_type(grid) == jnp.float32 or jnp.result_type(float) == jnp.float32
 
 
 def pow10(x):

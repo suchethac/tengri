@@ -36,7 +36,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import (
+    DEFAULT_AGN_BCNORM,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn.qsogen import compute_qsogen_sed as _compute_qsogen_sed
 from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
@@ -67,7 +71,7 @@ def _build_grid_qsogen(
     agn_tbb: float = 1240.0,
     agn_bbnorm: float = 3.96,
     agn_emline_scale: float = 1.0,
-    agn_bcnorm: float = 0.0,
+    agn_bcnorm: float = DEFAULT_AGN_BCNORM,
 ) -> PreintegratedGrid:
     """Preintegrate QSOgen over a 2D grid of (plslp1, E(B-V)).
 

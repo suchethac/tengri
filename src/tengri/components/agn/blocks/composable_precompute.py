@@ -44,7 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_TORUS_FRAC
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
@@ -797,7 +797,9 @@ def _build_agn_band_table(ctx: BandTableContext) -> tuple[dict | None, str | Non
         axis_grids[name] = axis
 
     agn_fixed = {k: v for k, v in fixed.items() if k.startswith("agn_") and np.ndim(v) == 0}
-    call_fixed = numeric_agn_kwargs(agn_fixed, agn_fixed.get("agn_torus_frac", 0.5))
+    call_fixed = numeric_agn_kwargs(
+        agn_fixed, agn_fixed.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC)
+    )
     fixed_values = {
         k: float(v) for k, v in call_fixed.items() if k not in axis_grids and k != "agn_lum_ratio"
     }

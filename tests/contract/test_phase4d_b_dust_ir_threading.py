@@ -25,6 +25,7 @@ from tengri import Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
+from tests._data_skip import requires_pahspec
 
 pytestmark = pytest.mark.contract
 
@@ -125,6 +126,7 @@ def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
     )
 
 
+@requires_pahspec
 def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
     """PAHspec emission self-loads; no dust-IR template threading (#871).
 
@@ -134,10 +136,7 @@ def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
     Phase 4-D-B adapter threading was removed with ``DustEmissionSEDComponent``).
     """
 
-    try:
-        model = _silent_build(_base_spec(dust_emission="draine2021_pah"), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError):
-        pytest.skip("PAHspec build unavailable")
+    model = _silent_build(_base_spec(dust_emission="draine2021_pah"), ssp_wneref, obs)
 
     td = model._template_data_for_jit()
     dust_ir = (td or {}).get("dust_ir", {}) or {}
@@ -207,14 +206,11 @@ def test_astrodust_component_re_radiates_far_ir(ssp_wneref, obs):
     )
 
 
+@requires_pahspec
 def test_jit_and_non_jit_paths_agree_with_pahspec(ssp_wneref, obs):
     """PAHspec dust: JIT and non-JIT paths agree after threading."""
 
-    try:
-        dust_cfg = "draine2021_pah"
-        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError):
-        pytest.skip("PAHspec template files not available")
+    model = _silent_build(_base_spec(dust_emission="draine2021_pah"), ssp_wneref, obs)
 
     params = {}
     via_jit = model.predict_observables_jit(params).phot_fnu

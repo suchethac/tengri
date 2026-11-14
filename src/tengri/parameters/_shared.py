@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from tengri.parameters.priors import Fixed, LogNormal, Uniform
 from tengri.protocols.component import ParamDeclaration
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -56,6 +57,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # see ``groups.py``), so freeing it here does not risk quietly
         # turning an unrelated group's wildcard into a photo-z fit.
         free_prior=Uniform(0.0, 20.0, "Source redshift", units="", default=0.1),
+        internal_name="redshift",
     ),
     ParamDeclaration(
         "met_logzsol",
@@ -63,6 +65,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "log10(Z/Zsun)",
         None,
         "",
+        internal_name="log_z_abs",
+        offset=LOG10_ZSUN,
     ),
     ParamDeclaration(
         "sigma_v_kms",
@@ -73,6 +77,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "sigma_v_kms must be in [0, 2000]",
         free_prior=Uniform(0.0, 2000.0, "Stellar velocity dispersion", units="km/s", default=0.0),
         units="km/s",
+        internal_name="sigma_v_kms",
     ),
     ParamDeclaration(
         "lsf_scale",
@@ -91,6 +96,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # diverges as lsf_scale -> 0).
         free_prior=Uniform(0.8, 1.2, "Instrument LSF scale", units="", default=1.0),
         units="",
+        internal_name="lsf_scale",
     ),
     ParamDeclaration(
         "line_flux_scaling",

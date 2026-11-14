@@ -147,11 +147,11 @@ _register(
                 # -0.9) silently introduced a ~0.85 dex offset in CIGALE
                 # comparisons: see #412 for the trace.
                 #
-                # "Solar" is Asplund 2009 Zsun = 0.0142 (= MIST). For SSP
-                # libraries built against a different Zsun reference (BC03 /
-                # Padova: 0.0190; PARSEC: 0.0152; BASTI: 0.0200) reason in
-                # absolute ``log_z_abs`` for bit-exact cross-code matches;
-                # see tengri.parameters.translate.LOG10_ZSUN_BY_LIBRARY.
+                # "Solar" is Asplund 2009 Zsun = 0.0142 on every SSP grid,
+                # whatever solar scale the library quotes for its own nodes
+                # (BC03 / Padova 0.0190, PARSEC 0.0152, BASTI 0.0200). For a
+                # bit-exact cross-code match convert the other code's
+                # metallicity to absolute Z first.
                 Uniform(-2.0, 0.2),
             ),
             "met_logzsol_scatter": MetParamDef(

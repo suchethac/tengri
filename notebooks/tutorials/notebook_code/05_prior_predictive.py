@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -36,6 +36,7 @@ from tengri import (
     Fixed,
     SEDModel,
     Observation,
+    Spectroscopy,
     Parameters,
     Photometry,
     Uniform,
@@ -71,8 +72,11 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
+)
 
 # %%
 # Good prior
@@ -90,7 +94,6 @@ spec_good = Parameters(
     mean_sfh_type="tsnorm",
 )
 model_good = SEDModel(spec_good, ssp_data, observation=obs)
-model_good.precompute_spectroscopy(WAVE_OBS)
 
 # %%
 # Sample 200 parameter sets from prior and forward-model each
@@ -196,7 +199,6 @@ spec_bad = Parameters(
     mean_sfh_type="tsnorm",
 )
 model_bad = SEDModel(spec_bad, ssp_data, observation=obs)
-model_bad.precompute_spectroscopy(WAVE_OBS)
 
 bad_spectra = []
 bad_phot = []

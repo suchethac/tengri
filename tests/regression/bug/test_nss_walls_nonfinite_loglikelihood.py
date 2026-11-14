@@ -72,6 +72,10 @@ class _ToyFitter:
         """Return the toy log-likelihood ``(params, data_args) -> scalar``."""
         return self._loglikelihood_fn
 
+    def _log_evidence_normalization(self):
+        """Return 0: the toy likelihood is a user function with no data term to normalize."""
+        return 0.0
+
 
 def _gaussian_loglik(params, data_args):
     """Finite Gaussian log-likelihood centered inside the prior."""

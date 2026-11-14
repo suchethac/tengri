@@ -47,7 +47,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.break_windows import BREAK_VACUUM_WINDOWS
-from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.scale import ratio_or_nan, representable_denominator, representable_floor
 
 #: Reference wavelength [Å] of the F_λ conversion ``F_λ ∝ F_ν (λ_ref/λ)²``. The
 #: proportionality constant cancels in every EW and magnitude index; the
@@ -592,9 +592,15 @@ def _linear_continuum(x, x_blue, x_red, f_blue, f_red):
 
 
 def _index_from_ratio(ratio: jnp.ndarray, feat_width: float, units: str) -> jnp.ndarray:
-    """EW ``W (1 - ratio)`` or magnitude ``-2.5 log10(ratio)`` from the mean ``F/F_C``."""
+    """EW ``W (1 - ratio)`` or magnitude ``-2.5 log10(ratio)`` from the mean ``F/F_C``.
+
+    A zero ratio (no flux in the feature) is +inf magnitude, not a floor value (#3433).
+    """
     if units == "mag":
-        return -2.5 * jnp.log10(jnp.maximum(ratio, representable_floor(1e-30)))
+        positive = ratio > 0
+        ratio_pos = jnp.where(positive, ratio, 1.0)
+        mag = -2.5 * jnp.log10(jnp.maximum(ratio_pos, representable_floor(1e-30)))
+        return jnp.where(positive, mag, jnp.where(ratio <= 0, jnp.inf, jnp.nan))
     return feat_width * (1.0 - ratio)
 
 
@@ -716,10 +722,11 @@ def _measure_slope(
     sy = jnp.sum(w * log_fnu)
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
-    denom = sxx - sx**2 / jnp.maximum(sw, representable_denominator(1e-30))
-    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, representable_denominator(1e-30))) / jnp.maximum(
-        denom, representable_denominator(1e-30)
-    )
+    # Undefined (NaN, not -2) when the window holds fewer than two grid points (#1404).
+    sw_ok = sw > representable_denominator(1e-30)
+    safe_sw = jnp.where(sw_ok, sw, 1.0)
+    denom = sxx - sx**2 / safe_sw
+    slope_fnu = ratio_or_nan(sxy - sx * sy / safe_sw, denom)
     return slope_fnu - 2.0
 
 
@@ -908,7 +915,9 @@ def stack_window_points(waves: list, integrands: list, n_met: int, n_age: int, d
     )
 
 
-def window_point_terms(joint_weights, transmission_at_points, points: WindowPoints, scale=1.0):
+def window_point_terms(
+    joint_weights, transmission_at_points, points: WindowPoints, scale=1.0, alpha=None
+):
     """SFH-weighted, dust-screened window integrand at every window grid point.
 
     :math:`\\sum_a T(a,\\lambda_p) \\sum_m w_{ma}\\,\\mathrm{SSP}_{ma}(\\lambda_p)
@@ -925,17 +934,42 @@ def window_point_terms(joint_weights, transmission_at_points, points: WindowPoin
     points : WindowPoints
     scale : float or ndarray, shape (), default 1.0
         See :func:`window_means_with_dust`.
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` from :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`
+        at ``met_alpha_fe``. Required when ``points.integrands`` carries an [alpha/Fe]
+        axis (4D table, shape ``(n_met, n_alpha, n_age, n_point)``) and ignored on a 3D
+        table. The metallicity contraction runs per [alpha/Fe] node first, the alpha
+        axis is then linearly interpolated at ``(ia, fa)``, and the age sum with the
+        transmission comes last: the order the exact forward uses.
 
     Returns
     -------
     ndarray, shape (n_point,)
+
+    Raises
+    ------
+    ValueError
+        If the table has an [alpha/Fe] axis and ``alpha`` is not given. There is no
+        silent fallback to one node.
     """
-    wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
+    if points.integrands.ndim == 4:
+        if alpha is None:
+            raise ValueError(
+                "window_point_terms: a 4D window table (with an [alpha/Fe] axis) needs "
+                "alpha=(ia, fa) from alpha_bracket; refusing to pick one node silently."
+            )
+        ia, fa = alpha
+        per_node = jnp.einsum("ma,mkap->kap", joint_weights * scale, points.integrands)
+        from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+        wint = collapse_alpha_axis(per_node, ia, fa, axis=0)
+    else:
+        wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
     return jnp.sum(transmission_at_points * wint, axis=0)
 
 
 def window_means_with_dust(
-    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0
+    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0, alpha=None
 ):
     """SFH-weighted window means with the dust screen applied inside each window.
 
@@ -959,12 +993,16 @@ def window_means_with_dust(
         product (~1e44) overflows float32 although every true value is in range
         (#2677). Entering through the weights puts the contraction between them.
 
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` [alpha/Fe] bracket for a 4D window table; see
+        :func:`window_point_terms`.
+
     Returns
     -------
     ndarray, shape (n_window,)
         Window means, per unit weight times ``scale`` [erg/s/Hz].
     """
-    per_point = window_point_terms(joint_weights, transmission_at_points, points, scale)
+    per_point = window_point_terms(joint_weights, transmission_at_points, points, scale, alpha)
     integral = jax.ops.segment_sum(per_point, points.window, num_segments=norms.shape[0])
     return integral / norms
 
@@ -1059,6 +1097,50 @@ def precompute_index_windows(
         names=tuple(names),
         points=stack_window_points(
             pt_waves, pt_integrands, ssp_flux.shape[0], ssp_flux.shape[1], ssp_flux.dtype
+        ),
+    )
+
+
+def stack_alpha_planes(per_plane: list):
+    """Stack per-[alpha/Fe]-node window tables on a new axis 1.
+
+    Each entry is the 3D result of :func:`precompute_index_windows` or
+    :func:`~tengri.observation.line_measurement.precompute_line_windows` for one node of
+    the [alpha/Fe] axis. The window recipe, the point grid and the window slots depend
+    only on the wavelength grid, so they are taken from the first plane and checked
+    against the rest. Window integrals and point integrands gain an [alpha/Fe] axis:
+    ``(n_met, n_alpha, n_age, ...)``.
+
+    Parameters
+    ----------
+    per_plane : list
+        One precomputation per [alpha/Fe] node, all built on the same wavelength grid
+        and index / line set.
+
+    Returns
+    -------
+    IndexWindowPrecomputation or LineWindowPrecomputation
+        The same type as the inputs, with the 4D tables.
+
+    Raises
+    ------
+    ValueError
+        If the planes do not share the window point grid.
+    """
+    first = per_plane[0]
+    for other in per_plane[1:]:
+        if not (
+            np.array_equal(np.asarray(other.points.waves), np.asarray(first.points.waves))
+            and np.array_equal(np.asarray(other.points.window), np.asarray(first.points.window))
+        ):
+            raise ValueError("stack_alpha_planes: the [alpha/Fe] planes differ in window grid")
+    return dataclasses.replace(
+        first,
+        window_integrals=jnp.stack([p.window_integrals for p in per_plane], axis=1),
+        points=WindowPoints(
+            waves=first.points.waves,
+            integrands=jnp.stack([p.points.integrands for p in per_plane], axis=1),
+            window=first.points.window,
         ),
     )
 
@@ -1205,6 +1287,7 @@ def measure_indices_from_window_lut(
     scale: jnp.ndarray,
     transmission_at_points: jnp.ndarray,
     precomp: IndexWindowPrecomputation,
+    alpha=None,
 ) -> jnp.ndarray:
     """Measure break/EW features from the per-(met,age) window LUT with dust.
 
@@ -1246,7 +1329,11 @@ def measure_indices_from_window_lut(
         ``precomp.points.waves``, so the screen acts inside each window as in the
         exact path (#2677).
     precomp : IndexWindowPrecomputation
-        Per-(met, age) window integrals from :func:`precompute_index_windows`.
+        Per-(met, age) window integrals from :func:`precompute_index_windows`, or the
+        4D per-[alpha/Fe] table from :func:`stack_alpha_planes`.
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` [alpha/Fe] bracket, required for a 4D table; see
+        :func:`window_point_terms`.
 
     Returns
     -------
@@ -1266,8 +1353,59 @@ def measure_indices_from_window_lut(
     ~17x per-evaluation win end-to-end (~58x for the measurement step in
     isolation).
     """
-    point_terms = scale * window_point_terms(joint_weights, transmission_at_points, precomp.points)
+    point_terms = scale * window_point_terms(
+        joint_weights, transmission_at_points, precomp.points, alpha=alpha
+    )
     return measure_indices_from_point_terms(point_terms, precomp)
+
+
+def broaden_index_sed(
+    wave_rest: jnp.ndarray,
+    flux: jnp.ndarray,
+    sigma_v_kms: jnp.ndarray | float,
+    n_bins: int = 16,
+) -> jnp.ndarray:
+    r"""Broaden a rest-frame SED by the model velocity dispersion before an index is measured.
+
+    Shared by :meth:`~tengri.SEDModel.predict_spectral_indices` (and so by the index
+    likelihood, which calls it). Lick indices are defined at :math:`\sigma = 0`
+    (Trager et al. 1998), while an observed index carries the dispersion of its
+    spectrum. Broadening the model SED by its own :math:`\sigma_v` makes the model
+    index directly comparable with that observed index (#3466).
+
+    The kernel is the spectrum path's Gaussian in :math:`\ln\lambda`
+    (:func:`~tengri.observation.spectrum.broaden_velocity_only`). The effective
+    width follows the spectrum path's quadrature rule,
+    :math:`\sigma_{\rm eff}^2 = \max(\sigma_{\rm inst}^2 - \sigma_{\rm lib}^2, 0)
+    + \sigma_v^2`, with the index system taken at the SSP library resolution. The
+    first term then vanishes and :math:`\sigma_{\rm eff} = \sigma_v`. An index
+    observation does not declare an instrument resolution.
+
+    Parameters
+    ----------
+    wave_rest : ndarray, shape (n,)
+        Rest-frame wavelengths [Angstrom], strictly increasing.
+    flux : ndarray, shape (n,)
+        Rest-frame SED, any consistent per-frequency or per-wavelength units.
+    sigma_v_kms : float or ndarray
+        Model velocity dispersion [km/s]. Non-positive returns ``flux`` unchanged,
+        bit-for-bit.
+    n_bins : int, default 16
+        Piecewise-constant segment count, as in the spectrum path.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Broadened SED, same units as ``flux``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, in ``sigma_v_kms``, including at
+    zero (the kernel is selected with ``jnp.where``).
+    """
+    from tengri.observation.spectrum import broaden_velocity_only
+
+    return broaden_velocity_only(flux, wave_rest, sigma_v_kms, n_bins)
 
 
 # ── Observed data container ───────────────────────────────────────
@@ -1302,6 +1440,18 @@ class SpectralIndexData:
 
     Notes
     -----
+    **Velocity-dispersion convention (#3466)**: ``values`` are the indices as
+    measured on the observed spectrum, at its own velocity dispersion. They are
+    not corrected to :math:`\\sigma = 0`. The model index that
+    :meth:`~tengri.SEDModel.predict_spectral_indices` returns is measured on the
+    rest-frame SED broadened by the model's ``sigma_v_kms`` (the default,
+    ``broaden=True``), so the two are compared like with like. Pass
+    ``broaden=False`` for the unbroadened, :math:`\\sigma = 0` model index, which
+    is the right comparison only for data already corrected to :math:`\\sigma = 0`.
+    ``sigma_v_kms`` is free in an index-only fit when declared the way the
+    spectrum path declares it, ``model.spec.merge_observation_params(
+    sigma_v_kms=Uniform(0.0, 2000.0))``.
+
     **Immutable container**: All fields are read-only by convention. Construct
     once with validated data, do not modify.
 

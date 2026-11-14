@@ -137,7 +137,7 @@ def main():
         widths[0],
         box_h,
         "Prior  θ",
-        ["ParamSpec", "SSP templates", "(MILES / MIST)"],
+        ["Parameters", "SSP templates", "(MILES / MIST)"],
         C_PRIOR,
     )
 

@@ -84,6 +84,7 @@ from tengri.observation.eline_marginalization import (
     eline_amplitude_names,
     model_line_match,
 )
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
 
 # Prefix of the per-line amplitude parameters of the fitted emission-line mode.
 _ELINE_AMP_PREFIX = "eline_amp_"
@@ -562,9 +563,9 @@ def _banded_operator(spec: SpectroBatchSpec, obs: SpectroBatch):
 
 
 def make_batched_predict(
-    model, spec: SpectroBatchSpec
+    model, spec: SpectroBatchSpec, chunk_size: int = GALAXY_CHUNK_SIZE
 ) -> Callable[[dict, SpectroBatch], dict[str, jax.Array]]:
-    """Return a jitted function mapping a batch of parameters and observations.
+    """Return a function mapping a batch of parameters and observations, in galaxy chunks.
 
     Parameters
     ----------
@@ -573,6 +574,10 @@ def make_batched_predict(
     spec : SpectroBatchSpec
         Static bucket key shared by every galaxy the function will receive. Its
         ``conserving`` flag is used for every galaxy.
+    chunk_size : int, optional
+        Galaxies per compiled chunk [galaxies]. Default 32. Peak memory scales with
+        the chunk: each galaxy holds one ``(n_age, n_wave)`` per-age cube, about
+        ``n_age * n_wave * 8`` bytes [bytes].
 
     Returns
     -------
@@ -583,8 +588,9 @@ def make_batched_predict(
 
     Notes
     -----
-    **JIT-compatible**: the returned function is jitted. One compile per
-    ``spec``; the batch and parameter arrays are traced.
+    **JIT-compatible**: each chunk is one jitted ``vmap`` kernel, driven from
+    Python through :func:`tengri.utils.batching.vmap_chunked`; one compile per
+    ``spec`` and per chunk shape. The batch and parameter arrays are traced.
     The template's component chain is built here, outside the trace, so that
     the first call does not build it inside ``jit``.
     """
@@ -593,7 +599,13 @@ def make_batched_predict(
     threaded = model.threaded_template_inputs()
     line_set = batched_line_set(model)
 
-    def one(p, o):
+    def one(pair):
+        p, o = pair
         return predict_batched_observables(model, p, o, spec, threaded=threaded, line_set=line_set)
 
-    return jax.jit(jax.vmap(one, in_axes=(0, 0)))
+    mapped = vmap_chunked(one, chunk_size=chunk_size)
+
+    def predict(params: dict, batch: SpectroBatch) -> dict[str, jax.Array]:
+        return mapped((params, batch))
+
+    return predict

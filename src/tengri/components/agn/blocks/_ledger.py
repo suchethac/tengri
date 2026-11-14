@@ -354,21 +354,14 @@ agn_attenuation_block : str
     bool
         ``True`` for ``'conserving'``, and for ``'cigale_joint'`` without a line block (it adds
         the lines on top, as CIGALE adds nebular emission); ``False`` for the recipes of
-        :func:`non_conserving_reason`, and for the ``polar_dust`` block beside a torus whose
-        library keeps its anisotropy (``TORUS_ANISOTROPY_BLOCKS``): the runner splits the dust
-        budget between the torus and the polar dust on the torus's sightline power, not its
-        angle-integrated power, so the pieces miss the accretion power by the anisotropy
-        (measured +2.5% for ``nenkova_agnfitter`` at ``cos i = 0.8``). The CIGALE
-        ``agn_ir_frac`` tie of the ``skirtor`` and ``fritz`` tori, which normalizes on
-        ``agn_power`` instead, is a traced condition the runner applies on top.
+        :func:`non_conserving_reason`. The CIGALE ``agn_ir_frac`` tie of the ``skirtor`` and
+        ``fritz`` tori, which normalizes on ``agn_power`` instead, is a traced condition the
+        runner applies on top. The polar-dust split budgets on the angle-integrated torus power,
+        so ``polar_dust`` beside an anisotropic library torus closes too (#3100).
     """
-    from tengri.components.agn.blocks._protocol import TORUS_ANISOTROPY_BLOCKS
-
     if non_conserving_reason(
         agn_disc_block=agn_disc_block, agn_torus_block=agn_torus_block, agn_norm=agn_norm
     ):
-        return False
-    if agn_attenuation_block == "polar_dust" and agn_torus_block in TORUS_ANISOTROPY_BLOCKS:
         return False
     has_lines = any(b != "none" for b in (agn_nlr_block, agn_blr_block, agn_feii_block))
     return agn_norm == "conserving" or (agn_norm == "cigale_joint" and not has_lines)

@@ -53,9 +53,12 @@ class Spectroscopy:
         Unit of ``wave_obs`` at construction: ``"AA"`` (default; ``"angstrom"``
         is equivalent), ``"nm"``, ``"um"`` or ``"micron"``, case-insensitive.
         Converted to Angstrom once, here; the stored ``wave_obs`` is always
-        Angstrom. A range wholly below 0.01 Å or above 1e9 Å is refused with
-        ``ValueError``. A range wholly in 100-1340 Å warns when the unit is
-        Angstrom. Not a field: it is not stored on the instance.
+        Angstrom. Frequency (``"Hz"``, ``"kHz"``, ``"MHz"``, ``"GHz"``) and energy
+        (``"eV"``, ``"keV"``) units are accepted, but they reverse the order, so a
+        flux and error array must be reversed with ``wave_obs``. A range wholly
+        below 0.01 Å or above 3e11 Å is refused with ``ValueError``. A range wholly
+        in 100-1340 Å warns when the unit is Angstrom. Not a field: it is not stored
+        on the instance.
     wave_obs_segment_sizes : tuple[int, ...] or None
         Pixel counts for each camera segment. Multi-camera spectrographs
         (e.g., DESI) concatenate camera grids that overlap at seams;

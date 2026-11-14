@@ -35,6 +35,7 @@ from tengri import (
 from tengri.components.stellar.sps.dsps_wrapper import SSPData, load_ssp_data
 from tengri.observation.banded import gaussian_resolution_bands
 from tests._data_skip import DATA_DIR
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 # ── SSP resolution (the same walk as bench/scripts/bench_compile_signature.py;
 # tests must not import bench/) ────────────────────────────────────────────
@@ -95,7 +96,7 @@ def build_photometry_star_forming():
     # while testing signature completeness (nebular handling is incidental).
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -122,7 +123,7 @@ def build_spectroscopy_simple():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -143,7 +144,7 @@ def build_agn_dust_emission():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -169,7 +170,7 @@ def build_nebular_shock():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -196,7 +197,7 @@ def build_per_screen_laws_themis():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -228,7 +229,7 @@ def build_from_config():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
@@ -259,7 +260,7 @@ def build_spectroscopy_resolution_matrix_covariance():
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_flux=nonsplat_flux((3, 25, 1600)) * 1e-20,
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )

@@ -209,10 +209,12 @@ def test_4d_at_scaled_solar_equals_3d(ssp, ssp4, obs, kernel):
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])
 def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
-    """The fast path refuses a 4-D library; on the collapsed 3-D cube it matches apply.
+    """The fast-path weights on a 4-D library, folded with the collapsed cube, match apply.
 
-    Compared as the stellar SED: the fast-path weights folded with the collapsed
-    flux cube must be proportional to the apply SED at every wavelength.
+    The joint weights do not depend on [alpha/Fe], so the 4-D library gives the
+    weights of its collapsed 3-D cube. Compared as the stellar SED: the weights
+    folded with the cube collapsed at the model's [alpha/Fe] must be proportional
+    to the apply SED at every wavelength.
     """
     sfh = _sfh_4d("delayed_5gyr")
     m = SEDModel.build(
@@ -232,16 +234,16 @@ def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
         value = getattr(m.spec.get_distribution(name), "default", None)
         if value is not None:
             params[name] = jnp.asarray(float(value))
-    with pytest.raises(ValueError, match="alpha-Fe"):
-        stellar.compute_joint_weights(params, ssp_data=ssp4)
+    jw_4d, _, _ = stellar.compute_joint_weights(params, ssp_data=ssp4)
     flat = ssp4._replace(
         ssp_flux=interpolate_alpha_only(ssp4.ssp_flux, ssp4.ssp_alpha_fe, jnp.asarray(0.3)),
         ssp_alpha_fe=None,
     )
-    # The 3-D fast path folds [alpha/Fe] into the metallicity (effective Z); the 4-D
-    # apply collapsed the cube instead, so hand it alpha = 0.
+    # A 3-D grid has no [alpha/Fe] axis, so the fast path reads no alpha; the 4-D
+    # apply collapsed the cube at alpha = 0.3 instead, so hand the fast path alpha = 0.
     params["met_alpha_fe"] = jnp.asarray(0.0)
     jw_fast, _, _ = stellar.compute_joint_weights(params, ssp_data=flat)
+    np.testing.assert_array_equal(np.asarray(jw_4d), np.asarray(jw_fast))
     folded = np.einsum("ma,maw->w", np.asarray(jw_fast), np.asarray(flat.ssp_flux))
     ok = folded > 0
     ratio = sed_apply[ok] / folded[ok]

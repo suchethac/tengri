@@ -7,8 +7,8 @@ node's formed-mass share in age interval ``j``), so the attenuated stellar SED
     sum_a L(a, lambda) T(a, lambda) = sum_j T_j(lambda) [sum_a F_j(a) L(a, lambda)]
 
 is the same sum taken in the other order. ``age_mixture='grouped'`` forms the two
-interval spectra ``L_j`` (folded into the stellar weight contraction, before any
-projection to the pipeline grid) and attenuates two spectra instead of every node;
+interval spectra ``L_j`` (from the per-age cube, before any projection to the pipeline
+grid) and attenuates two spectra instead of every node;
 ``'per_node'`` is the original path and stays selectable. The identity holds for the soft
 (``transition_width_dex > 0``) boundary and for the Lyman-continuum branch, whose
 observed/intrinsic factors are per-interval arrays mixed by the same ``F_j``. Agreement
@@ -367,3 +367,35 @@ def test_grouped_matches_per_node_cue_joint(ssp_data_fsps, lyc_fesc):
             _value_and_grad(m1, _cue_objective, p),
             f"cue fesc={lyc_fesc} point {i}",
         )
+
+
+def _spectrum_grad_flops(model):
+    p = {k: jnp.asarray(v, jnp.float64) for k, v in _SYNTH_POINTS[1].items()}
+
+    def loss(q):
+        return jnp.sum(model.predict_spectrum(q))
+
+    compiled = jax.jit(jax.grad(loss)).lower(p).compile()
+    return float(compiled.cost_analysis()["flops"])
+
+
+def test_grouped_spectrum_gradient_costs_no_more_than_per_node(ssp_data_fsps):
+    """Grouped is the same sum regrouped, so it must not cost more than per_node.
+
+    Folding the interval fractions into the (met, age) SSP contraction repeats that
+    contraction once per interval: on the FSPS grid a single-galaxy spectrum gradient
+    took 9.3 ms against 7.0 ms per_node, which put the weekly joint-NUTS parity test
+    over its time budget. Contracting the interval spectra from the per-age cube
+    costs n_interval x n_age x n_wave on top of the shared contraction instead
+    (6.0 ms). Compiled gradient FLOPs of a spectrum objective on the FSPS grid (15
+    metallicities), same model otherwise: folded grouped 68.4M, per_node 45.9M,
+    grouped from the age cube 41.7M.
+    """
+    from tengri import Observation, Spectroscopy
+
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 7000.0, 200)))
+    flops = {
+        mix: _spectrum_grad_flops(_synthetic_model(ssp_data_fsps, obs, 0.0, mix))
+        for mix in ("per_node", "grouped")
+    }
+    assert flops["grouped"] <= flops["per_node"], flops

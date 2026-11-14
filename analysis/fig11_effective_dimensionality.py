@@ -22,9 +22,9 @@ import jax
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import FIG_DIR, PAPER_FIG_DIR, get_observation, get_ssp, setup_matplotlib
+from common import FIG_DIR, PAPER_FIG_DIR, make_model, setup_matplotlib
 
-from tengri import Fitter, Gaussian, Model, ParamSpec, Uniform
+from tengri import Fitter
 
 
 def compute_fourier_kl(posterior_samples_xi, n_grid):
@@ -98,29 +98,12 @@ def main():
 
     print(f"Effective dimensionality analysis (n_grid={args.n_grid})")
 
-    ssp = get_ssp()
-    obs = get_observation()
-
-    spec = ParamSpec(
-        sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
-        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
-        met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
-        dust_tau_bc=Uniform(0.0, 2.0),
-        dust_tau_diff=Uniform(0.0, 1.0),
-        dust_slope=-0.7,
-        sfh_field_psd_sigma=1.0,
-        sfh_field_psd_tau_myr=50.0,
-        redshift=0.1,
-        stochastic=True,
-        n_grid=args.n_grid,
-    )
-    model = Model(spec, ssp, observation=obs)
+    # PSD fixed at the "moderate" regime (sigma=1.0, tau=50 Myr)
+    model = make_model("moderate", redshift=0.1, stochastic=True, n_grid=args.n_grid)
 
     # Generate mock
     key = jax.random.PRNGKey(42)
-    true_params = spec.sample(key)
+    true_params = model.spec.sample(key)
     mock = model.mock(true_params, snr=20.0, key=jax.random.fold_in(key, 1))
 
     # Fit with geoVI to get posterior samples

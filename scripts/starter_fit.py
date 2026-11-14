@@ -84,7 +84,7 @@ obs = Observation(photometry=Photometry.from_names(FILTER_NAMES))
 
 spec = Parameters(
     sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(1.0, 12.0),
+    sfh_tsnorm_peak_lbt_frac=Uniform(0.0804, 0.9645),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Gaussian(-0.3, 0.2),
     dust_tau_bc=Uniform(0.0, 4.0),

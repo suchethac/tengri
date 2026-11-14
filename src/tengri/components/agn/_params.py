@@ -1018,6 +1018,93 @@ DEFAULT_AGN_TAU_SKIRTOR = declared_default(PARAMS, "agn_tau_skirtor")
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
 DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
 
+#: Declared fallbacks read by the composable kwargs assembly (#2297). ``agn_polar_oa``'s
+#: declared default is the 0 sentinel "follow the torus's own opening angle".
+DEFAULT_AGN_TAU_TORUS = declared_default(PARAMS, "agn_tau_torus")
+DEFAULT_AGN_T_HOT = declared_default(PARAMS, "agn_T_hot")
+DEFAULT_AGN_FRAC_HOT = declared_default(PARAMS, "agn_frac_hot")
+DEFAULT_AGN_POLAR_OA = declared_default(PARAMS, "agn_polar_oa")
+
+#: Declared defaults for the AGN component tree's signature defaults and
+#: .get fallbacks (#2265). Each reads its declaration, so no block carries a
+#: second copy of a number the declaration already owns.
+DEFAULT_AGN_ADAF_ALPHA = declared_default(PARAMS, "agn_adaf_alpha")
+DEFAULT_AGN_ADAF_BETA = declared_default(PARAMS, "agn_adaf_beta")
+DEFAULT_AGN_ADAF_DELTA = declared_default(PARAMS, "agn_adaf_delta")
+DEFAULT_AGN_ALPHA = declared_default(PARAMS, "agn_alpha")
+DEFAULT_AGN_ASTAR = declared_default(PARAMS, "agn_astar")
+DEFAULT_AGN_A_CAT3D = declared_default(PARAMS, "agn_a_cat3d")
+DEFAULT_AGN_A_CAT3D_LOWFWD = declared_default(PARAMS, "agn_a_cat3d_lowfwd")
+DEFAULT_AGN_A_SPIN = declared_default(PARAMS, "agn_a_spin")
+DEFAULT_AGN_BCNORM = declared_default(PARAMS, "agn_bcnorm")
+DEFAULT_AGN_BLR_CF = declared_default(PARAMS, "agn_blr_cf")
+DEFAULT_AGN_BLR_LINE_EFFICIENCY = declared_default(PARAMS, "agn_blr_line_efficiency")
+DEFAULT_AGN_BLR_LOGN = declared_default(PARAMS, "agn_blr_logn")
+DEFAULT_AGN_BLR_LOGU = declared_default(PARAMS, "agn_blr_logU")
+DEFAULT_AGN_BLR_LOGZ = declared_default(PARAMS, "agn_blr_logZ")
+DEFAULT_AGN_CIGALE_ADAF_DELTA = declared_default(PARAMS, "agn_cigale_adaf_delta")
+DEFAULT_AGN_CIGALE_DISK_DELTA = declared_default(PARAMS, "agn_cigale_disk_delta")
+DEFAULT_AGN_EBV = declared_default(PARAMS, "agn_ebv")
+DEFAULT_AGN_EBV_DISC = declared_default(PARAMS, "agn_ebv_disc")
+DEFAULT_AGN_FE2_STRENGTH = declared_default(PARAMS, "agn_fe2_strength")
+DEFAULT_AGN_FRITZ_BETA = declared_default(PARAMS, "agn_fritz_beta")
+DEFAULT_AGN_FRITZ_GAMMA = declared_default(PARAMS, "agn_fritz_gamma")
+DEFAULT_AGN_FRITZ_OA = declared_default(PARAMS, "agn_fritz_oa")
+DEFAULT_AGN_FRITZ_R_RATIO = declared_default(PARAMS, "agn_fritz_r_ratio")
+DEFAULT_AGN_FRITZ_TAU = declared_default(PARAMS, "agn_fritz_tau")
+DEFAULT_AGN_FWD_CAT3D = declared_default(PARAMS, "agn_fwd_cat3d")
+DEFAULT_AGN_FWD_CAT3D_LOWFWD = declared_default(PARAMS, "agn_fwd_cat3d_lowfwd")
+DEFAULT_AGN_F_HARD = declared_default(PARAMS, "agn_f_hard")
+DEFAULT_AGN_GAMMA_HARD = declared_default(PARAMS, "agn_gamma_hard")
+DEFAULT_AGN_GAMMA_WARM = declared_default(PARAMS, "agn_gamma_warm")
+DEFAULT_AGN_GRAHSP_A_BC = declared_default(PARAMS, "agn_grahsp_a_bc")
+DEFAULT_AGN_GRAHSP_A_FEII = declared_default(PARAMS, "agn_grahsp_a_feii")
+DEFAULT_AGN_GRAHSP_A_LINES = declared_default(PARAMS, "agn_grahsp_a_lines")
+DEFAULT_AGN_GRAHSP_COOL_LAM_UM = declared_default(PARAMS, "agn_grahsp_cool_lam_um")
+DEFAULT_AGN_GRAHSP_COOL_WIDTH = declared_default(PARAMS, "agn_grahsp_cool_width")
+DEFAULT_AGN_GRAHSP_CUTOFF_NM = declared_default(PARAMS, "agn_grahsp_cutoff_nm")
+DEFAULT_AGN_GRAHSP_EBV = declared_default(PARAMS, "agn_grahsp_ebv")
+DEFAULT_AGN_GRAHSP_EBV_AGN = declared_default(PARAMS, "agn_grahsp_ebv_agn")
+DEFAULT_AGN_GRAHSP_FCOV = declared_default(PARAMS, "agn_grahsp_fcov")
+DEFAULT_AGN_GRAHSP_HOT_FCOV = declared_default(PARAMS, "agn_grahsp_hot_fcov")
+DEFAULT_AGN_GRAHSP_HOT_LAM_UM = declared_default(PARAMS, "agn_grahsp_hot_lam_um")
+DEFAULT_AGN_GRAHSP_HOT_WIDTH = declared_default(PARAMS, "agn_grahsp_hot_width")
+DEFAULT_AGN_GRAHSP_LINEWIDTH_KMS = declared_default(PARAMS, "agn_grahsp_linewidth_kms")
+DEFAULT_AGN_GRAHSP_NETZER_LOG_MBH = declared_default(PARAMS, "agn_grahsp_netzer_log_mbh")
+DEFAULT_AGN_GRAHSP_NETZER_LOG_MDOT = declared_default(PARAMS, "agn_grahsp_netzer_log_mdot")
+DEFAULT_AGN_GRAHSP_NETZER_SPIN = declared_default(PARAMS, "agn_grahsp_netzer_spin")
+DEFAULT_AGN_GRAHSP_PLBENDLOC_NM = declared_default(PARAMS, "agn_grahsp_plbendloc_nm")
+DEFAULT_AGN_GRAHSP_PLBENDWIDTH = declared_default(PARAMS, "agn_grahsp_plbendwidth")
+DEFAULT_AGN_GRAHSP_PLSLOPE = declared_default(PARAMS, "agn_grahsp_plslope")
+DEFAULT_AGN_GRAHSP_SI = declared_default(PARAMS, "agn_grahsp_si")
+DEFAULT_AGN_GRAHSP_TOR_CUTOFF_UM = declared_default(PARAMS, "agn_grahsp_tor_cutoff_um")
+DEFAULT_AGN_GRAHSP_TOR_TEMP = declared_default(PARAMS, "agn_grahsp_tor_temp")
+DEFAULT_AGN_GRAHSP_UVSLOPE = declared_default(PARAMS, "agn_grahsp_uvslope")
+DEFAULT_AGN_IR_FRAC = declared_default(PARAMS, "agn_ir_frac")
+DEFAULT_AGN_KT_HOT = declared_default(PARAMS, "agn_kt_hot")
+DEFAULT_AGN_KT_WARM = declared_default(PARAMS, "agn_kt_warm")
+DEFAULT_AGN_LOG_MDOT = declared_default(PARAMS, "agn_log_mdot")
+DEFAULT_AGN_LOG_NH_SILVA = declared_default(PARAMS, "agn_log_nh_silva")
+DEFAULT_AGN_NLR_ALPHA_PL = declared_default(PARAMS, "agn_nlr_alpha_pl")
+DEFAULT_AGN_NLR_CF = declared_default(PARAMS, "agn_nlr_cf")
+DEFAULT_AGN_NLR_FWHM_KMS = declared_default(PARAMS, "agn_nlr_fwhm_kms")
+DEFAULT_AGN_NLR_LINE_EFFICIENCY = declared_default(PARAMS, "agn_nlr_line_efficiency")
+DEFAULT_AGN_NLR_LOGN = declared_default(PARAMS, "agn_nlr_logn")
+DEFAULT_AGN_NLR_LOGU = declared_default(PARAMS, "agn_nlr_logU")
+DEFAULT_AGN_NLR_LOGZ = declared_default(PARAMS, "agn_nlr_logZ")
+DEFAULT_AGN_NLR_XI_D = declared_default(PARAMS, "agn_nlr_xi_d")
+DEFAULT_AGN_P_SKIRTOR = declared_default(PARAMS, "agn_p_skirtor")
+DEFAULT_AGN_Q_SKIRTOR = declared_default(PARAMS, "agn_q_skirtor")
+DEFAULT_AGN_RADIUS_RATIO = declared_default(PARAMS, "agn_radius_ratio")
+DEFAULT_AGN_R_WARM_RATIO = declared_default(PARAMS, "agn_r_warm_ratio")
+DEFAULT_AGN_TAU = declared_default(PARAMS, "agn_tau")
+DEFAULT_AGN_TORUS_FRAC = declared_default(PARAMS, "agn_torus_frac")
+DEFAULT_AGN_TV_NENKOVA = declared_default(PARAMS, "agn_tv_nenkova")
+DEFAULT_AGN_TV_SKIRTOR = declared_default(PARAMS, "agn_tv_skirtor")
+DEFAULT_AGN_T_MAX = declared_default(PARAMS, "agn_T_max")
+DEFAULT_AGN_T_TORUS = declared_default(PARAMS, "agn_T_torus")
+DEFAULT_AGN_T_WARM = declared_default(PARAMS, "agn_T_warm")
+
 #: Grid-backed AGN priors whose declared bound must equal the vendored grid's
 #: own axis extent exactly (Task 1, M-A: "declared priors/defaults disagree
 #: with the data they gate"). Read by ``tools/check_param_grid_extent.py``,
@@ -1294,16 +1381,109 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
     ),
 }
 
+#: Opt-in no-op for polar reddening: zero E(B-V) switches the stage off. This
+#: differs from the declared ``agn_polar_ebv`` (0.03) on purpose.
+POLAR_EBV_OFF = 0.0
+
+#: Slone & Netzer (2012) grid-center pins. These differ from the declared
+#: ``agn_log_mbh`` (7.0) and ``agn_log_ledd`` (-1.0) on purpose: the SN12 grid covers
+#: log_mbh [7.4, 9.8] and log_edd [-4, -1.9586], so the declared values would clip.
+SN12_LOG_MBH_GRID_CENTER = 8.6
+SN12_LOG_LEDD_ON_GRID = -2.0
+
 __all__ = [
+    "DEFAULT_AGN_ADAF_ALPHA",
+    "DEFAULT_AGN_ADAF_BETA",
+    "DEFAULT_AGN_ADAF_DELTA",
+    "DEFAULT_AGN_ALPHA",
+    "DEFAULT_AGN_ASTAR",
+    "DEFAULT_AGN_A_CAT3D",
+    "DEFAULT_AGN_A_CAT3D_LOWFWD",
+    "DEFAULT_AGN_A_SPIN",
+    "DEFAULT_AGN_BCNORM",
+    "DEFAULT_AGN_BLR_CF",
+    "DEFAULT_AGN_BLR_LINE_EFFICIENCY",
+    "DEFAULT_AGN_BLR_LOGN",
+    "DEFAULT_AGN_BLR_LOGU",
+    "DEFAULT_AGN_BLR_LOGZ",
+    "DEFAULT_AGN_CIGALE_ADAF_DELTA",
+    "DEFAULT_AGN_CIGALE_DISK_DELTA",
     "DEFAULT_AGN_COS_INC",
+    "DEFAULT_AGN_EBV",
+    "DEFAULT_AGN_EBV_DISC",
+    "DEFAULT_AGN_FE2_STRENGTH",
+    "DEFAULT_AGN_FRAC_HOT",
+    "DEFAULT_AGN_FRITZ_BETA",
+    "DEFAULT_AGN_FRITZ_GAMMA",
+    "DEFAULT_AGN_FRITZ_OA",
+    "DEFAULT_AGN_FRITZ_R_RATIO",
+    "DEFAULT_AGN_FRITZ_TAU",
+    "DEFAULT_AGN_FWD_CAT3D",
+    "DEFAULT_AGN_FWD_CAT3D_LOWFWD",
+    "DEFAULT_AGN_F_HARD",
+    "DEFAULT_AGN_GAMMA_HARD",
+    "DEFAULT_AGN_GAMMA_WARM",
+    "DEFAULT_AGN_GRAHSP_A_BC",
+    "DEFAULT_AGN_GRAHSP_A_FEII",
+    "DEFAULT_AGN_GRAHSP_A_LINES",
+    "DEFAULT_AGN_GRAHSP_COOL_LAM_UM",
+    "DEFAULT_AGN_GRAHSP_COOL_WIDTH",
+    "DEFAULT_AGN_GRAHSP_CUTOFF_NM",
+    "DEFAULT_AGN_GRAHSP_EBV",
+    "DEFAULT_AGN_GRAHSP_EBV_AGN",
+    "DEFAULT_AGN_GRAHSP_FCOV",
+    "DEFAULT_AGN_GRAHSP_HOT_FCOV",
+    "DEFAULT_AGN_GRAHSP_HOT_LAM_UM",
+    "DEFAULT_AGN_GRAHSP_HOT_WIDTH",
+    "DEFAULT_AGN_GRAHSP_LINEWIDTH_KMS",
+    "DEFAULT_AGN_GRAHSP_NETZER_LOG_MBH",
+    "DEFAULT_AGN_GRAHSP_NETZER_LOG_MDOT",
+    "DEFAULT_AGN_GRAHSP_NETZER_SPIN",
+    "DEFAULT_AGN_GRAHSP_PLBENDLOC_NM",
+    "DEFAULT_AGN_GRAHSP_PLBENDWIDTH",
+    "DEFAULT_AGN_GRAHSP_PLSLOPE",
+    "DEFAULT_AGN_GRAHSP_SI",
+    "DEFAULT_AGN_GRAHSP_TOR_CUTOFF_UM",
+    "DEFAULT_AGN_GRAHSP_TOR_TEMP",
+    "DEFAULT_AGN_GRAHSP_UVSLOPE",
+    "DEFAULT_AGN_IR_FRAC",
+    "DEFAULT_AGN_KT_HOT",
+    "DEFAULT_AGN_KT_WARM",
     "DEFAULT_AGN_LOG_LBOL",
     "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
+    "DEFAULT_AGN_LOG_MDOT",
+    "DEFAULT_AGN_LOG_NH_SILVA",
     "DEFAULT_AGN_LUM_RATIO",
+    "DEFAULT_AGN_NLR_ALPHA_PL",
+    "DEFAULT_AGN_NLR_CF",
+    "DEFAULT_AGN_NLR_FWHM_KMS",
+    "DEFAULT_AGN_NLR_LINE_EFFICIENCY",
+    "DEFAULT_AGN_NLR_LOGN",
+    "DEFAULT_AGN_NLR_LOGU",
+    "DEFAULT_AGN_NLR_LOGZ",
+    "DEFAULT_AGN_NLR_XI_D",
     "DEFAULT_AGN_OA_NENKOVA",
     "DEFAULT_AGN_OA_SKIRTOR",
+    "DEFAULT_AGN_POLAR_OA",
+    "DEFAULT_AGN_P_SKIRTOR",
+    "DEFAULT_AGN_Q_SKIRTOR",
+    "DEFAULT_AGN_RADIUS_RATIO",
+    "DEFAULT_AGN_R_WARM_RATIO",
+    "DEFAULT_AGN_TAU",
     "DEFAULT_AGN_TAU_SKIRTOR",
+    "DEFAULT_AGN_TAU_TORUS",
     "DEFAULT_AGN_THETA_TORUS",
+    "DEFAULT_AGN_TORUS_FRAC",
+    "DEFAULT_AGN_TV_NENKOVA",
+    "DEFAULT_AGN_TV_SKIRTOR",
+    "DEFAULT_AGN_T_HOT",
+    "DEFAULT_AGN_T_MAX",
+    "DEFAULT_AGN_T_TORUS",
+    "DEFAULT_AGN_T_WARM",
     "GRID_EXTENT_SOURCES",
     "PARAMS",
+    "POLAR_EBV_OFF",
+    "SN12_LOG_LEDD_ON_GRID",
+    "SN12_LOG_MBH_GRID_CENTER",
 ]

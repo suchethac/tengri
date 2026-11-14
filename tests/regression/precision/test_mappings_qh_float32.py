@@ -79,7 +79,11 @@ def _synthetic_grid():
 
 
 labels = ["cont", "inst"]
-with patch.object(mp, "_load_stellar_grid", return_value=(_synthetic_grid(), labels, 1, 0)):
+with patch.object(
+    mp,
+    "_load_stellar_grid",
+    return_value=mp.MappingsStellarLoad(_synthetic_grid(), labels, 1, 0),
+):
     backend = mp.MappingsPhotoStellarBackend(ssp_data=ssp, ionizing_source_warning="suppress")
 
 log_ages = jnp.asarray(np.asarray(ssp.ssp_lg_age_gyr, dtype=np.float64) + 9.0)

@@ -27,11 +27,10 @@ import pytest
 
 from tengri.config.exceptions import ParameterError
 from tengri.inference.fitter import (
-    _AUTO_D_THRESHOLD,
     _CANONICAL_METHODS,
-    _MCMC_AUTO_D_THRESHOLD,
     resolve_method,
 )
+from tengri.parameters.defaults import get_mcmc_auto_d
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -54,7 +53,7 @@ def _make_mock_model(spec: Parameters, n_filters: int = 3) -> MagicMock:
 
 @pytest.fixture(scope="module")
 def low_d_spec():
-    """A small DPL spec with few free params (D < _AUTO_D_THRESHOLD)."""
+    """A small DPL spec with few free params (D < the configured mcmc_auto_d)."""
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
@@ -67,7 +66,7 @@ def low_d_spec():
 
 @pytest.fixture(scope="module")
 def high_d_spec():
-    """A spec with many free params (D > _AUTO_D_THRESHOLD)."""
+    """A spec with many free params (D > the configured mcmc_auto_d)."""
     params: dict = {f"sfh_dpl_dummy_{i}": Uniform(0.0, 1.0) for i in range(25)}
     # We build a real dense_basis spec to get enough free parameters naturally
     return Parameters(
@@ -128,21 +127,12 @@ class TestResolveMethodCanonical:
 
 
 class TestThresholdConstants:
-    """Threshold constants must match the documented values in CLAUDE.md / docstrings."""
+    """The auto/mcmc threshold is the documented default in the defaults file."""
 
-    def test_auto_threshold_is_20(self) -> None:
-        assert _AUTO_D_THRESHOLD == 20, (
-            f"_AUTO_D_THRESHOLD changed from documented 20 to {_AUTO_D_THRESHOLD}"
+    def test_threshold_is_20(self) -> None:
+        assert get_mcmc_auto_d() == 20, (
+            f"[inference] mcmc_auto_d changed from documented 20 to {get_mcmc_auto_d()}"
         )
-
-    def test_mcmc_threshold_is_20(self) -> None:
-        assert _MCMC_AUTO_D_THRESHOLD == 20, (
-            f"_MCMC_AUTO_D_THRESHOLD changed from documented 20 to {_MCMC_AUTO_D_THRESHOLD}"
-        )
-
-    def test_auto_threshold_matches_mcmc_threshold(self) -> None:
-        """Both thresholds use the same value so 'auto' and 'mcmc' agree on the boundary."""
-        assert _AUTO_D_THRESHOLD == _MCMC_AUTO_D_THRESHOLD
 
 
 # ── "auto" dispatch routing — mock patching ───────────────────────
@@ -162,8 +152,8 @@ class TestAutoDispatchRouting:
 
     def test_auto_low_d_routes_to_nuts(self, low_d_spec: Parameters) -> None:
         """auto with D <= threshold should dispatch the mcmc_nuts backend."""
-        assert low_d_spec.n_free <= _AUTO_D_THRESHOLD, (
-            f"Precondition: low_d_spec.n_free={low_d_spec.n_free} > {_AUTO_D_THRESHOLD}"
+        assert low_d_spec.n_free <= get_mcmc_auto_d(), (
+            f"Precondition: low_d_spec.n_free={low_d_spec.n_free} > {get_mcmc_auto_d()}"
         )
         fitter = self._build_fitter(low_d_spec)
         # Mock the runner at the registry — that's the seam dispatch
@@ -218,9 +208,9 @@ class TestAutoDispatchRouting:
         from tengri.inference.fitter import Fitter
 
         mock_spec = MagicMock()
-        mock_spec.n_free = _AUTO_D_THRESHOLD + 5
-        mock_spec.n_latent = _AUTO_D_THRESHOLD + 5
-        mock_spec.free_params = [f"p{i}" for i in range(_AUTO_D_THRESHOLD + 5)]
+        mock_spec.n_free = get_mcmc_auto_d() + 5
+        mock_spec.n_latent = get_mcmc_auto_d() + 5
+        mock_spec.free_params = [f"p{i}" for i in range(get_mcmc_auto_d() + 5)]
         mock_model = _make_mock_model(mock_spec, n_filters=3)
         noise = jnp.ones(3) * 1e-19
         data = jnp.ones(3) * 1e-18
@@ -304,7 +294,7 @@ class TestMcmcDispatchRouting:
         return calls, restore
 
     def test_mcmc_low_d_routes_to_nuts(self, low_d_spec: Parameters) -> None:
-        assert low_d_spec.n_free <= _MCMC_AUTO_D_THRESHOLD
+        assert low_d_spec.n_free <= get_mcmc_auto_d()
         fitter = self._build_fitter_with_spec(low_d_spec)
         calls, restore = self._swap_mcmc_runners()
         try:
@@ -318,9 +308,9 @@ class TestMcmcDispatchRouting:
         from tengri.inference.fitter import Fitter
 
         mock_spec = MagicMock()
-        mock_spec.n_free = _MCMC_AUTO_D_THRESHOLD + 5
-        mock_spec.n_latent = _MCMC_AUTO_D_THRESHOLD + 5
-        mock_spec.free_params = [f"p{i}" for i in range(_MCMC_AUTO_D_THRESHOLD + 5)]
+        mock_spec.n_free = get_mcmc_auto_d() + 5
+        mock_spec.n_latent = get_mcmc_auto_d() + 5
+        mock_spec.free_params = [f"p{i}" for i in range(get_mcmc_auto_d() + 5)]
         mock_model = _make_mock_model(mock_spec, n_filters=3)
         noise = jnp.ones(3) * 1e-19
         data = jnp.ones(3) * 1e-18

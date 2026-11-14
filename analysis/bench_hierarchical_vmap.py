@@ -15,7 +15,16 @@ from jax.flatten_util import ravel_pytree
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, Observation, ParamSpec, Photometry, Uniform, load_ssp_data
+from tengri import (
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    Uniform,
+    WavePrecomp,
+    builders,
+    load_ssp_data,
+)
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 # ---------------------------------------------------------------------------
@@ -50,20 +59,29 @@ print("=" * 75)
 print("1. SINGLE GALAXY (fused kernel, stochastic D~137)")
 print("=" * 75)
 
-spec = ParamSpec(
-    sfh_dpl_alpha=Uniform(0.5, 3.0),
-    sfh_dpl_beta=Uniform(0.5, 3.0),
-    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
-    sfh_field_psd_sigma=Uniform(0.01, 1.0),
-    sfh_field_psd_tau_myr=Uniform(10, 500),
-    met_logzsol=Uniform(-2.0, 0.5),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 2.0),
-    dust_slope=Fixed(-0.7),
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    approx=WavePrecomp(),
+    # stochastic D~137: 9 scalar parameters + 128 GP modes
+    sfh={
+        "type": ["dpl", "field"],
+        "alpha": Uniform(0.5, 3.0),
+        "beta": Uniform(0.5, 3.0),
+        "tau_gyr": Uniform(0.5, 13.0),
+        "log_total_mass": Uniform(8.0, 12.0),
+        "psd_sigma": Uniform(0.01, 1.0),
+        "psd_tau_myr": Uniform(10, 500),
+    },
+    met={"logzsol": Uniform(-2.0, 0.5)},
+    dust_attenuation=builders.dust.two_component(
+        law="power_law", tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 2.0), slope=Fixed(-0.7)
+    ),
+    neb={"type": "ssp"},  # wNE SSP: nebular emission is baked in
     redshift=Fixed(0.1),
+    n_grid=128,
 )
-model = Model(spec, ssp, observation=obs, precompute=True)
+spec = model.spec
 key = jax.random.PRNGKey(0)
 params = spec.sample(key)
 

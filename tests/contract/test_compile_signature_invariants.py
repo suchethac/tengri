@@ -40,6 +40,7 @@ from tengri.forward import sed_model as sed_model_module
 from tengri.forward._signature_policy import SIGNATURE_POLICY
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
+from tests.contract._nonsplat_ssp import nonsplat_flux
 from tests.contract._signature_builds import (
     ALL_BUILDS,
     BARE_STELLAR_NAME,
@@ -59,8 +60,8 @@ def mock_ssp_data():
     n_met, n_age, n_wave = 8, 15, 200
     ssp = SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
-        ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
     return ssp
@@ -184,15 +185,15 @@ class TestCompileSignatureInvariants:
 
         ssp1 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )
 
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )
 
@@ -227,15 +228,15 @@ class TestCompileSignatureInvariants:
 
         ssp1 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )
 
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
-            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64) * 1.1,
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_flux=nonsplat_flux((n_met, n_age, n_wave)) * 1.1,
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )  # Different flux content
 
@@ -262,19 +263,19 @@ class TestCompileSignatureInvariants:
         different metallicity grids produce different signatures.
         """
         n_met, n_age, n_wave = 8, 15, 200
-        flux = jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64)
+        flux = nonsplat_flux((n_met, n_age, n_wave))
 
         ssp1 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
             ssp_flux=flux,
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
         )
 
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, n_wave),
             ssp_flux=flux,
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
             ssp_lgmet=jnp.linspace(-2.0, 0.5, n_met),  # Different metallicity grid
         )
 
@@ -518,8 +519,8 @@ def _mock_ssp() -> SSPData:
     n_met, n_age, n_wave = 8, 15, 200
     return SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
-        ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
 

@@ -60,7 +60,11 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._template_grid import (
     TorusTemplateGrid,
     cache_per_float_dtype,
@@ -149,7 +153,7 @@ def cat3d_wind_lowfwd_sed_from_grid(
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_a_cat3d_lowfwd: float = _DEFAULT_AGN_A_CAT3D_LOWFWD,
     agn_fwd_cat3d_lowfwd: float = _DEFAULT_AGN_FWD_CAT3D_LOWFWD,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""CAT3D-Wind low-fwd torus SED at a single ``(cos_inc, a, f_wd)``.
