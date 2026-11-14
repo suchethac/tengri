@@ -18,10 +18,10 @@ Conventions
 Examples
 --------
 >>> from tengri import units
->>> units.fnu_to_jy(1e-23)  # 1 erg/s/cm^2/Hz -> Jy
-DeviceArray(1.0, dtype=float64)
->>> units.ab_mag_to_fnu(25.0)  # AB mag -> F_nu cgs
-DeviceArray(3.6307805e-30, dtype=float64)
+>>> float(units.fnu_to_jy(1e-23))  # 1 erg/s/cm^2/Hz -> Jy
+1.0
+>>> round(float(units.ab_mag_to_fnu(25.0)) / 1e-30, 3)  # AB mag 25 -> F_nu cgs, in 1e-30
+3.631
 """
 
 from __future__ import annotations

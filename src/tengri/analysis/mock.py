@@ -112,13 +112,13 @@ def generate_mock(model, params, key=None, snr=20.0, noise=None):
     Examples
     --------
     >>> import jax.random
-    >>> from tengri.forward import SEDModel
-    >>> model = SEDModel(...)
-    >>> params = {'redshift': 0.1, ...}
+    >>> from tengri import SEDModel
+    >>> model = SEDModel(...)  # doctest: +SKIP
+    >>> params = {'redshift': 0.1, ...}  # doctest: +SKIP
     >>> key = jax.random.PRNGKey(42)
-    >>> mock = generate_mock(model, params, key=key, snr=10.0)
-    >>> print(f"True flux shape: {mock['flux_true'].shape}")
-    >>> print(f"Obs. flux shape: {mock['flux_obs'].shape}")
+    >>> mock = generate_mock(model, params, key=key, snr=10.0)  # doctest: +SKIP
+    >>> print(f"True flux shape: {mock['flux_true'].shape}")  # doctest: +SKIP
+    >>> print(f"Obs. flux shape: {mock['flux_obs'].shape}")  # doctest: +SKIP
     """
     flux_true = model.predict_photometry(params)
     if noise is None:
