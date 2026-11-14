@@ -16,6 +16,7 @@ Appendix A.1 for metallicity marginalization and precomputation schemes.
 """
 
 import hashlib
+import warnings
 import weakref
 from functools import cache
 from typing import NamedTuple
@@ -93,6 +94,7 @@ from tengri.components.stellar.sps.mass_remaining_tables import (
     fit_imf_params,
     resolve_mass_remaining,
 )
+from tengri.config.exceptions import MetallicityAxisAssumedWarning, TengriIOError
 from tengri.utils.interpolation import concrete_canonical_numpy
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
@@ -140,21 +142,17 @@ class SSPData(NamedTuple):
 
     Notes
     -----
-    **Metallicity convention**: ssp_lgmet is absolute log10(Z), NOT relative
-    to solar. To convert user-supplied log10(Z/Z_sun) to grid coordinates,
-    add LOG10_ZSUN ≈ −1.848.
+    **Metallicity convention**: ssp_lgmet is absolute log10(Z), the total
+    metallicity, on every grid. To convert user-supplied log10(Z/Z_sun) to grid
+    coordinates, add LOG10_ZSUN ≈ −1.848. The loader refuses a file whose
+    ``metallicity_axis`` attribute is on a fixed-[Fe/H] axis (#3411).
 
     **Alpha enhancement**: a 4D library carrying an [alpha/Fe] axis is
     supported. :func:`has_alpha_grid` detects one and
-    :func:`interpolate_alpha_only` collapses the axis at ``met_alpha_fe``,
-    after which ``met_logzsol`` is used directly rather than through the
-    effective-metallicity approximation. What is missing is a grid file, not
-    the code path: every library shipped here is 3D, so ``ssp_alpha_fe`` is
-    ``None`` in practice and ``met_alpha_fe`` is instead folded into an
-    effective metallicity, ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``.
-    On such a grid the two are exactly degenerate: an alpha-enhanced spectrum
-    *is* the scaled-solar array 0.75 dex higher in Z, so freeing
-    ``met_alpha_fe`` there samples a flat ridge rather than a mode.
+    :func:`interpolate_alpha_only` collapses the axis at ``met_alpha_fe``.
+    A 3D grid has no [alpha/Fe] axis: ``met_logzsol`` is the total
+    metallicity there, and ``met_alpha_fe`` has no effect, so the model
+    builder refuses a non-zero value rather than folding it in.
 
     **Survival mass**: ssp_mass_remaining encodes stellar mass loss due to
     stellar evolution (main-sequence turnoff, white dwarf cooling, etc.).
@@ -184,8 +182,7 @@ class SSPData(NamedTuple):
     ssp_resolution_kms: jnp.ndarray | None = None
     # Future: ssp_alpha_fe grid for alpha-enhanced templates (Vazdekis+2015, MIST)
     # When available, ssp_flux becomes (n_met, n_alpha, n_age, n_wave) and
-    # interpolation adds a third dimension. The current met_alpha_fe parameter
-    # uses effective_metallicity() as an approximation for 2D grids.
+    # interpolation adds a third dimension. A 3D grid has no such axis.
     ssp_alpha_fe: jnp.ndarray | None = None
     # Initial mass function the SSP was computed under, e.g. ``"chabrier"``,
     # ``"kroupa"``, ``"salpeter"``. Surfaced by :func:`load_ssp_data` from
@@ -508,6 +505,107 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
     return jnp.asarray(dataset[:], dtype=dtype if dtype is not None else jnp.result_type(float))
 
 
+def _read_metallicity_axis(attrs) -> str | None:
+    """Return the file's ``metallicity_axis`` attribute as a stripped string.
+
+    ``None`` when the attribute is absent. h5py returns ``str`` for string
+    attributes; a ``bytes`` value from an older writer is decoded, and a
+    one-element array (some writers store strings that way) is unwrapped.
+    """
+    raw = attrs.get("metallicity_axis")
+    if raw is None:
+        return None
+    if isinstance(raw, np.ndarray) and raw.size == 1:
+        raw = raw.reshape(-1)[0]
+    text = raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
+    return text.strip()
+
+
+def _check_metallicity_axis(f, filename: str, stem: str, *, has_alpha_axis: bool) -> None:
+    """Refuse a fixed-[Fe/H] SSP file; accept a fixed total-Z one (#3411).
+
+    tengri holds every metallicity node at fixed total Z. A file whose
+    ``metallicity_axis`` attribute begins with "feh" sits on a fixed-[Fe/H]
+    axis, where the same ``met_logzsol`` means a different total metallicity,
+    so it is refused with a pointer to the ``<stem>_totalz.h5`` variant
+    rather than converted here. A 4-D file with no attribute is loaded as
+    total Z and says so once.
+    """
+    axis = _read_metallicity_axis(f.attrs)
+    if axis is None:
+        if has_alpha_axis:
+            warnings.warn(
+                f"'{filename}' is an [alpha/Fe] grid with no 'metallicity_axis' "
+                "attribute: its metallicity nodes are assumed to be fixed total Z, "
+                "the convention of every grid tengri builds. Set the attribute to "
+                "'total Z' to silence this.",
+                MetallicityAxisAssumedWarning,
+                stacklevel=3,
+            )
+        return
+    lowered = axis.lower()
+    if lowered.startswith(("feh", "[fe/h]", "fe/h")):
+        raise TengriIOError(
+            f"SSP file '{filename}' is on a fixed-[Fe/H] metallicity axis "
+            f"(metallicity_axis={axis!r}). tengri uses fixed total metallicity "
+            "for every grid, so this file cannot be loaded as it is. Use the "
+            f"hosted total-Z variant '{stem}_totalz.h5' instead, available from "
+            "tengri.download_ssp() and the ssp-spectra page."
+        )
+    if lowered.startswith("total z"):
+        return
+    raise TengriIOError(
+        f"SSP file '{filename}' has an unrecognized metallicity_axis={axis!r}. "
+        "tengri accepts 'total Z' (fixed total metallicity) and refuses "
+        "fixed-[Fe/H] axes ('feh...'); no other value is loaded."
+    )
+
+
+def _check_alpha_grid_layout(f, filename: str) -> None:
+    """Refuse an SSP file whose [alpha/Fe] axis disagrees with its flux shape.
+
+    A 4-D ``ssp_flux`` must come with ``ssp_alpha_fe`` and a 3-D one must not
+    carry it. The four axes must match the flux shape, and ``ssp_alpha_fe``
+    (1-D) and ``ssp_lgmet`` must be strictly ascending, because the
+    interpolation bins on them. Only dataset shapes and small 1-D axes are
+    read here, so the flux array is not loaded.
+    """
+    flux_ds = f["ssp_flux"]
+    has_alpha = "ssp_alpha_fe" in f
+    if (flux_ds.ndim == 4) != has_alpha:
+        raise TengriIOError(
+            f"SSP file '{filename}': ssp_flux has {flux_ds.ndim} dimension(s) "
+            f"{tuple(flux_ds.shape)} but ssp_alpha_fe is "
+            f"{'present' if has_alpha else 'absent'}. A 4-D flux "
+            "(n_met, n_alpha, n_age, n_wave) requires ssp_alpha_fe, and a 3-D "
+            "flux (n_met, n_age, n_wave) must not carry it."
+        )
+    if not has_alpha:
+        return
+    alpha_fe = np.asarray(f["ssp_alpha_fe"][:])
+    lgmet = np.asarray(f["ssp_lgmet"][:])
+    if alpha_fe.ndim != 1:
+        raise TengriIOError(
+            f"SSP file '{filename}': ssp_alpha_fe must be 1-D, got shape {alpha_fe.shape}."
+        )
+    for name, axis in (("ssp_alpha_fe", alpha_fe), ("ssp_lgmet", lgmet)):
+        if not np.all(np.diff(axis) > 0):
+            raise TengriIOError(
+                f"SSP file '{filename}': {name} must be strictly ascending, got "
+                f"{np.asarray(axis).tolist()}."
+            )
+    n_met, n_alpha, n_age, _ = flux_ds.shape
+    expected = (lgmet.shape[0], alpha_fe.shape[0], f["ssp_lg_age_gyr"].shape[0])
+    if (n_met, n_alpha, n_age) != expected or flux_ds.shape[3] != f["ssp_wave"].shape[0]:
+        raise TengriIOError(
+            f"SSP file '{filename}': ssp_flux shape {tuple(flux_ds.shape)} does not "
+            f"match its axes (n_met={expected[0]} from ssp_lgmet, "
+            f"n_alpha={expected[1]} from ssp_alpha_fe, n_age={expected[2]} from "
+            f"ssp_lg_age_gyr, n_wave={f['ssp_wave'].shape[0]} from ssp_wave); "
+            "expected (n_met, n_alpha, n_age, n_wave)."
+        )
+
+
 def load_ssp_data(
     filepath: str,
     *,
@@ -729,6 +827,8 @@ def load_ssp_data(
     with h5py.File(filepath, "r") as f:
         ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"], dtype=dtype)
         ssp_lgmet = _load_float(f["ssp_lgmet"], dtype=dtype)
+        _check_alpha_grid_layout(f, fp.name)
+        _check_metallicity_axis(f, fp.name, fp.stem, has_alpha_axis="ssp_alpha_fe" in f)
 
         # IMF discovery (#307, #3285): the ``imf=`` argument wins, then the HDF5
         # attribute, then the filename tail. Surfaced as ``ssp.imf`` so model
@@ -1909,12 +2009,6 @@ def compute_csp_weights(
 
 # ── Alpha-element enhancement ─────────────────────────────────────
 
-# Coefficient converting [alpha/Fe] to total metallicity offset.
-# Alpha elements (O, Mg, Si, Ca, Ti) dominate the metal mass budget,
-# so [Z/H]_eff ≈ [Fe/H] + A * [alpha/Fe] with A ~ 0.75.
-# Reference: Thomas, Maraston & Bender 2003; Vazdekis et al. 2015.
-_ALPHA_TO_Z_COEFF = 0.75
-
 # Salaris relation coefficients (Salaris, Chieffi & Straniero 1993;
 # Knowles et al. 2023 Eq. 2). This is a semi-empirical fit to detailed
 # stellar interior models with different abundance mixtures.
@@ -2004,70 +2098,11 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
 
 
-@jax.jit
-def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
-    r"""Convert [Fe/H] + [alpha/Fe] to effective total metallicity.
-
-    Approximates the effect of alpha-element enhancement on the SED as
-    a shift in the total metallicity used for SSP interpolation. Used
-    when SSP templates are computed at fixed solar abundance ratios and
-    cannot vary [alpha/Fe] at runtime.
-
-    Parameters
-    ----------
-    log_z_fe : float
-        Iron abundance [Fe/H] (equivalently, log10(Z/Zsun) when
-        ``alpha_fe = 0``). [dex]
-    alpha_fe : float, optional
-        Alpha-element enhancement [alpha/Fe] relative to solar.
-        Default 0.0 (solar abundance ratios). [dex]
-
-    Returns
-    -------
-    float
-        Effective total metallicity log10(Z_eff/Zsun). Same units as
-        ``log_z_fe``. [dex]
-
-    Notes
-    -----
-    **JIT-compatible**: yes, pure arithmetic; decorated with ``@jax.jit``.
-    **Gradient-safe**: yes.
-
-    **Approximation** (Thomas, Maraston & Bender 2003 [1]_):
-    only valid for SSP grids that lack an explicit [alpha/Fe] axis. When
-    the grid does include one, prefer bilinear (Z, [alpha/Fe]) interpolation;
-    use :func:`has_alpha_grid` to test the SSP container at construction.
-
-    .. math::
-
-        [Z/H]_{\mathrm{eff}} = [\mathrm{Fe}/\mathrm{H}]
-        + 0.75 \, [\alpha/\mathrm{Fe}]
-
-    The coefficient 0.75 (``_ALPHA_TO_Z_COEFF``) is the empirical
-    enhancement-to-metallicity scaling adopted by the Vazdekis et al.
-    2015 [2]_ MILES library for E-MILES alpha-enhanced SSPs.
-
-    References
-    ----------
-    .. [1] Thomas, D., Maraston, C., Bender, R., 2003, MNRAS, 339, 897.
-    .. [2] Vazdekis, A. et al., 2015, MNRAS, 449, 1177.
-
-    Examples
-    --------
-    >>> from tengri import effective_metallicity
-    >>> round(float(effective_metallicity(-0.5, alpha_fe=0.3)), 4)
-    -0.275
-
-    """
-    return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
-
-
 def has_alpha_grid(ssp_data: SSPData) -> bool:
     """Check if SSP data includes an [alpha/Fe] grid dimension.
 
     When True, ssp_flux has shape (n_met, n_alpha, n_age, n_wave) and
-    proper bilinear (Z, [α/Fe]) interpolation should be used instead of
-    the effective_metallicity approximation.
+    proper bilinear (Z, [α/Fe]) interpolation is used.
 
     Parameters
     ----------
@@ -2172,9 +2207,8 @@ def interpolate_met_alpha(
     """Bilinear interpolation in (metallicity, [α/Fe]) for 4D SSP grids.
 
     This is the correct approach when alpha-enhanced SSP templates are
-    available (e.g., sMILES, BPASS v2.3, α-MC).  It replaces the
-    ``effective_metallicity()`` approximation, which is only valid when
-    α-enhanced templates are NOT available.
+    available (e.g., sMILES, BPASS v2.3, α-MC). A 3D grid has no [α/Fe]
+    axis to interpolate on, so the bilinear path does not apply to it.
 
     Parameters
     ----------

@@ -79,7 +79,6 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     AdvisoryWarning,
     DeadGradientParameterWarning,
-    DegenerateParameterPairWarning,
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
@@ -1043,8 +1042,7 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 #: zero. Maps parameter name -> the reason, for the warning below.
 #:
 #: Empty since #1822, and kept rather than deleted: the check costs nothing and
-#: the class of bug recurs (``met_alpha_fe`` raises the same warning from its own
-#: site, and #1206/#1764 are the earlier instances).
+#: the class of bug recurs (#1206 and #1764 are the earlier instances).
 #:
 #: ``agn_kt_warm`` was the sole entry. It reached the SED only via
 #: ``_nthcomp_lnu_interp``, whose ``custom_jvp`` supplied a ``gamma`` tangent and
@@ -1075,8 +1073,6 @@ def _warn_dead_gradient_params(spec) -> None:
     freed = [name for name in _DEAD_GRADIENT_PARAMS if name in set(spec.free_params)]
     if not freed:
         return
-
-    from tengri.config.exceptions import DeadGradientParameterWarning
 
     for name in freed:
         warnings.warn(
@@ -3633,7 +3629,7 @@ class SEDModel:
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
         self._warn_young_top_metallicity(spec, ssp_data)
-        self._validate_alpha_fe_identifiability(spec, ssp_data)
+        self._refuse_alpha_fe_without_alpha_axis(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
@@ -4468,7 +4464,7 @@ class SEDModel:
             # to all ages (either via SSP grid interpolation or effective-metallicity
             # calculation). Supporting a per-age ramp would require architectural
             # changes: propagating per-age arrays through the age-weight loop and
-            # modifying effective_metallicity / interpolate_alpha_only to work per-age.
+            # modifying interpolate_alpha_only to work per-age.
             raise NotImplementedError(
                 "alpha_fe_evolving=True is not yet supported (#1767). "
                 "The stellar component currently accepts only a scalar "
@@ -4780,84 +4776,45 @@ class SEDModel:
             z_min=z_min,
         )
 
-    def _validate_alpha_fe_identifiability(self, spec, ssp_data):
-        """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
+    def _refuse_alpha_fe_without_alpha_axis(self, spec, ssp_data):
+        """Refuse a non-zero ``met_alpha_fe`` on an SSP grid with no [alpha/Fe] axis.
 
         ``[alpha/Fe]`` is a real, independently-interpolated axis only when the
-        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226).
-        Without it, ``met_alpha_fe`` reaches the SED solely through
-        :func:`effective_metallicity`, and only from the ``"delta"`` metallicity
-        branch. That leaves two distinct failures, both silent today:
+        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226). A 3D
+        grid stores one scaled-solar template per metallicity node, and
+        ``met_logzsol`` is the total metallicity on it, so ``met_alpha_fe``
+        would have no effect. A parameter that is accepted and does nothing is
+        refused at build, whatever the metallicity mode (#3411).
 
-        * **Any non-delta metallicity model** never reads ``met_alpha_fe`` at
-          all. Measured on a 3D grid, sweeping 0.0 -> 0.6 under ``"ramp"`` and
-          ``"two_step"``: ``numpy.array_equal`` returns ``True`` and
-          ``d(sum SED)/d(alpha)`` is exactly ``0.0`` (issue #1764). The
-          parameter is still accepted as free, so the reported posterior is the
-          prior.
-        * **Delta metallicity** folds it in as a pure additive shift,
-          ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``, so freeing it
-          alongside ``met_logzsol`` gives an exactly flat ridge (issue #1095).
-
-        This check needs three facts that live in three objects, the grid
-        (``ssp_data``), the metallicity mode (``self._met_mode``), and which
-        parameters are free (``spec``), which is why it belongs here and not on
-        the parameter declaration: :class:`Parameters` cannot see ``ssp_data``,
-        so a guard placed there would fire falsely on every 4D grid.
-
-        Warns rather than raises, matching :meth:`_validate_metallicity_bounds`:
-        the forward model is correct in every case, and both configurations are
-        legitimate if the user wants them.
+        A free ``met_alpha_fe`` and a ``Fixed`` value other than zero are both
+        refused. ``Fixed(0.0)``, the declared default, builds silently.
         """
-        if ssp_data is None:
-            return  # synthetic / placeholder construction path
+        if ssp_data is None:  # synthetic / placeholder construction path
+            return
 
         distributions = getattr(spec, "_distributions", {})
         alpha_dist = distributions.get("met_alpha_fe")
-        if alpha_dist is None or alpha_dist.is_fixed:
+        if alpha_dist is None:
             return
 
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            _ALPHA_TO_Z_COEFF,
-            has_alpha_grid,
-        )
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         if has_alpha_grid(ssp_data):
             return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
 
-        met_mode = str(self._met_mode)
-        if met_mode != "delta":
-            warn_measured(
-                f"met_alpha_fe is free, but metallicity mode {met_mode!r} never "
-                f"reads it. On an SSP grid with no [alpha/Fe] axis the "
-                f"enhancement is applied only in the 'delta' branch, so "
-                f"d(SED)/d(met_alpha_fe) is exactly 0.0: no gradient-based "
-                f"sampler can move it and the reported posterior is the prior "
-                f"(issue #1764). Use met_mode='delta', pin met_alpha_fe with "
-                f"Fixed(...), or load an SSP grid carrying an [alpha/Fe] axis.",
-                DeadGradientParameterWarning,
-                gradient=0.0,
-                stacklevel=3,
-            )
+        if alpha_dist.is_fixed and float(alpha_dist.value) == 0.0:
             return
 
-        logzsol_dist = distributions.get("met_logzsol")
-        if logzsol_dist is not None and not logzsol_dist.is_fixed:
-            warn_measured(
-                f"met_alpha_fe and met_logzsol are both free, but this SSP grid "
-                f"has no [alpha/Fe] axis, so [alpha/Fe] enters only as an "
-                f"additive shift of the effective metallicity: log_z_eff = "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe. The pair is "
-                f"exactly degenerate, the likelihood is flat along "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe = const, and "
-                f"a Laplace fit assigns that direction the variance its "
-                f"eigenvalue floor implies rather than a measured one (issues "
-                f"#1095, #1515). Free one or the other, or load an SSP grid "
-                f"carrying an [alpha/Fe] axis.",
-                DegenerateParameterPairWarning,
-                coefficient=_ALPHA_TO_Z_COEFF,
-                stacklevel=3,
-            )
+        requested = f"Fixed({float(alpha_dist.value)})" if alpha_dist.is_fixed else "free"
+        grid_name = ssp_data.source or "in use"
+        raise ParameterError(
+            f"met_alpha_fe is {requested}, but the SSP grid {grid_name!r} has no [alpha/Fe] axis "
+            "(it is a 3-D grid). Its metallicity nodes are total Z and carry no "
+            "alpha-enhanced templates, so met_alpha_fe would not change the SED. "
+            "Use an alpha-enhanced 4-D grid (a name containing '_afe'; "
+            "see tengri.list_remote_ssps()), or remove met_alpha_fe, or hold it "
+            "at Fixed(0.0)."
+        )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.

@@ -46,15 +46,11 @@ Real galaxies do not have solar-scaled abundance patterns. Alpha elements (O, Mg
 
 ## The 4D SSP Grid
 
-A four-dimensional SSP grid with axes $(\mathrm{[Fe/H]},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$ gives $\alpha$-enhanced stellar population synthesis. `met_alpha_fe` acts only on a grid that has an $[\alpha/\mathrm{Fe}]$ axis. No grid that ships with tengri has one (`tengri.list_known_ssps()` lists the shipped grids), so on every shipped grid `met_alpha_fe` has no effect. The intended sources of $\alpha$-enhanced templates are sMILES (Knowles et al. 2023), BPASS v2.3 (Byrne et al. 2022), and the $\alpha$-MC library (Park et al. 2024), which provide SSPs at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex. On such a grid the interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$, four multiplications per wavelength pixel, and differentiable with respect to both $[\mathrm{M/H}]$ and $[\alpha/\mathrm{Fe}]$.
+A four-dimensional SSP grid with axes $(\log Z_{\rm total},\, [\alpha/\mathrm{Fe}],\, t_{\rm age},\, \lambda)$ gives $\alpha$-enhanced stellar population synthesis. `met_alpha_fe` acts only on a grid that has an $[\alpha/\mathrm{Fe}]$ axis. The alpha-enhanced grids that tengri hosts (sMILES, BPASS v2.3, and the $\alpha$-MC library of Park et al. 2025, all named with `_afe` in `tengri.list_remote_ssps()`) have one, at $[\alpha/\mathrm{Fe}] = \{-0.2, 0.0, +0.2, +0.4, +0.6\}$ dex. A 3D grid has none, so `met_alpha_fe` is refused at build on it, whatever its metallicity mode. On such a grid the interpolation is bilinear in $(\log Z, [\alpha/\mathrm{Fe}])$, four multiplications per wavelength pixel, and differentiable with respect to both $\log Z_{\rm total}$ and $[\alpha/\mathrm{Fe}]$.
 
 #### Metallicity convention.
 
-The internal grid axis uses $[\mathrm{Fe/H}]$ (iron abundance) rather than total metallicity $[\mathrm{M/H}]$. This convention is preferred because $[\mathrm{Fe/H}]$ is directly measured by spectroscopic surveys (SDSS, GALAH, APOGEE), is the native variable of MESA/MIST stellar evolution models used by $\alpha$-MC (Park et al. 2024), and interpolating at fixed $[\mathrm{Fe/H}]$ cleanly isolates the spectral effect of varying $[\alpha/\mathrm{Fe}]$ (since the iron-line blanketing is held constant). Libraries natively parameterized in $[\mathrm{M/H}]$ (e.g., sMILES) are converted at load time using the Salaris et al. (1993) relation: $$[\mathrm{M/H}] = [\mathrm{Fe/H}] + 0.66\,[\alpha/\mathrm{Fe}]
-+ 0.20\,[\alpha/\mathrm{Fe}]^2.
-
-$$ (eq-salaris)
- At $[\alpha/\mathrm{Fe}] = +0.4$ (typical for massive ellipticals), $[\mathrm{M/H}]$ exceeds $[\mathrm{Fe/H}]$ by ${\sim}0.30$ dex.
+Every grid holds its metallicity nodes at a fixed total metallicity. `ssp_lgmet` is $\log_{10} Z$ with $Z$ the total metallicity, and `met_logzsol` is $\log_{10}(Z/Z_\odot)$ with $Z_\odot = 0.0142$ on every grid. The loader reads the file's `metallicity_axis` attribute. A file on a fixed-$[\mathrm{Fe/H}]$ axis is refused, with a pointer to its `_totalz` variant, which holds the same spectra resampled to fixed total $Z$. tengri does not convert between the two conventions. On a fixed total-$Z$ grid, $[\alpha/\mathrm{Fe}]$ changes at fixed total $Z$, so an $\alpha$-rich population has less iron at the same `met_logzsol`.
 
 (app-sps-alpha-evolving)=
 
@@ -67,16 +63,6 @@ In the simplest mode, a single $[\alpha/\mathrm{Fe}]$ is applied uniformly to al
 
 $$ (eq-alpha-evolving)
  adding one free parameter ($[\alpha/\mathrm{Fe}]_{\rm old}$, with $[\alpha/\mathrm{Fe}]_{\rm young}$ typically fixed at 0.0). On a grid with an $[\alpha/\mathrm{Fe}]$ axis, each age bin receives its own bilinear interpolation; on a grid without one the parameters have no effect (see the next section).
-
-(app-sps-alpha-fallback)=
-
-## Effective-Metallicity Fallback
-
-When no $\alpha$-enhanced grid is available, tengri *optionally* applies the effective-metallicity approximation of Thomas et al. (2003; Vazdekis et al. 2015): $$[\mathrm{Z/H}]_{\rm eff} = [\mathrm{Fe/H}] + 0.75 \times
-[\alpha/\mathrm{Fe}],
-
-$$ (eq-alpha-correction)
- which shifts the total metallicity used for standard 3D SSP interpolation. On a grid without an $[\alpha/\mathrm{Fe}]$ axis, `met_alpha_fe` reaches the SED only through the effective-metallicity shift of the `delta` metallicity mode. Under any other metallicity mode a free `met_alpha_fe` is never read, and the build raises `DeadGradientParameterWarning`. Under `delta`, a free `met_alpha_fe` together with a free `met_logzsol` is an exact degenerate ridge, and the build raises `DegenerateParameterPairWarning`. Leave `met_alpha_fe` at its default, `Fixed(0.0)`, on a 3D grid. The default builds silently and applies no correction. The approximation is adequate for broadband photometry but breaks down for spectroscopic fitting, where the spectral signatures of $\alpha$-enhancement (e.g., Mg $b$ at 5177 Å, Ca triplet at 8498--8662 Å, UV iron-line blanketing at 1500--1900 Å) are qualitatively different from a simple metallicity shift.
 
 ## References
 
@@ -92,7 +78,7 @@ Hearin, Andrew P., Jonás Chaves-Montero, Alex Alarcon, Matthew R. Becker, and A
 
 Knowles, Adam T., A. E. Sansom, C. Allende Prieto, and A. Vazdekis. 2023. "[sMILES: a library of semi-empirical MILES stellar spectra with variable \[$\alpha$/Fe\] abundances]{.nocase}." 523 (3): 3450--70. <https://doi.org/10.1093/mnras/stad1647>.
 
-Park, Minjung, Charlie Conroy, Benjamin D. Johnson, Joel Leja, Aaron Dotter, and Phillip A. Cargile. 2024. "$\alpha$-MC: Self-consistent $\alpha$-enhanced stellar population models covering a wide range of age, metallicity, and wavelength." *arXiv e-Prints*, arXiv:2410.21375. <https://doi.org/10.48550/arXiv.2410.21375>.
+Park, Minjung, Charlie Conroy, Benjamin D. Johnson, Joel Leja, Aaron Dotter, and Phillip A. Cargile. 2025. "$\alpha$-MC: Self-consistent $\alpha$-enhanced stellar population models covering a wide range of age, metallicity, and wavelength." *The Astrophysical Journal* 994: 165. arXiv:2410.21375. <https://doi.org/10.3847/1538-4357/ae0cba>.
 
 Robotham, A. S. G., S. Bellstedt, C. del P. Lagos, et al. 2020. "ProSpect: generating spectral energy distributions with complex star formation and metallicity histories." 495 (1): 905--31. <https://doi.org/10.1093/mnras/staa1116>.
 
