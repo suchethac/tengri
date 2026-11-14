@@ -439,12 +439,13 @@ def test_evolving_on_the_3d_slab_is_refused_by_name(ssp4d, observation):
 @pytest.mark.parametrize("obs_name", ["observation", "photometry_only"])
 @pytest.mark.parametrize("name", ["alpha_fe_old", "alpha_fe_young"])
 def test_a_bare_free_on_either_end_is_refused(ssp4d, request, obs_name, name):
-    with pytest.raises(ParameterError, match=f"met_{name}"):
+    with pytest.raises(ParameterError, match=f"met_{name}") as err:
         _model(
             ssp4d,
             request.getfixturevalue(obs_name),
             {"alpha_fe_evolving": True, name: tengri.FREE},
         )
+    assert f"For this grid: {name}: Uniform(-0.2, 0.6)" in str(err.value)
 
 
 def test_the_pair_is_fixed_at_zero_by_default_and_a_wildcard_never_frees_it(ssp4d, observation):
