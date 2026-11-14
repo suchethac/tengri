@@ -1520,6 +1520,42 @@ def enforce_increasing_cosmic_time(t_cosmic_asc: jnp.ndarray) -> jnp.ndarray:
     return jnp.maximum.accumulate(t_cosmic_asc - ramp) + ramp
 
 
+def _dsps_kernel_scatter(lgmet_scatter):
+    """Scatter passed to the DSPS kernel: the declared value, else a finite nominal.
+
+    An undeclared scatter (``None`` or zero) is replaced so DSPS never sees a zero
+    bandwidth. Its kernel output is then discarded in favour of the node-exact read.
+    """
+    scatter = _scatter_value(lgmet_scatter)
+    return jnp.where(scatter > 0.0, scatter, _NOMINAL_LGMET_SCATTER)
+
+
+def _native_joint(dsps_joint, lgmet, lgmet_scatter, ssp_lgmet):
+    """Joint (n_met, n_age) weights of the DSPS-native kernel, normalized to 1.
+
+    Declared: DSPS's joint as is. Undeclared: the node-exact metallicity row for
+    ``lgmet`` times DSPS's age marginal, which the lognormal kernel leaves unchanged.
+    """
+    declared = _scatter_value(lgmet_scatter) > 0.0
+    age_marginal = dsps_joint.sum(axis=0)
+    age_marginal = age_marginal / jnp.maximum(age_marginal.sum(), 1e-300)
+    met_row = _lgmet_hermite_weights(jnp.asarray(lgmet), ssp_lgmet)
+    node_exact = met_row[:, None] * age_marginal[None, :]
+    return jnp.where(declared, dsps_joint, node_exact)
+
+
+def _met_table_weights(dsps_met_w, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet):
+    """Per-age metallicity weights (n_met, n_age), each column summing to 1.
+
+    Declared: DSPS's per-age lognormal columns. Undeclared: the node-exact read
+    of each age's own metallicity (#3434).
+    """
+    declared = _scatter_value(lgmet_scatter) > 0.0
+    kernel_w = dsps_met_w / dsps_met_w.sum(axis=0, keepdims=True)
+    node_exact = jax.vmap(lambda z: _lgmet_hermite_weights(z, ssp_lgmet))(lgmet_on_ssp_ages).T
+    return jnp.where(declared, kernel_w, node_exact)
+
+
 def compute_dsps_native_weights(
     sfr_on_ssp_ages: jnp.ndarray,
     ssp_ages_yr: jnp.ndarray,
@@ -1528,7 +1564,7 @@ def compute_dsps_native_weights(
     ssp_flux: jnp.ndarray,
     t_obs_gyr: float,
     lgmet: float,
-    lgmet_scatter: float = 0.1,
+    lgmet_scatter: float | None = None,
 ) -> tuple:
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
 
@@ -1570,8 +1606,8 @@ def compute_dsps_native_weights(
     lgmet : float
         log10(Z) metallicity of the galaxy (absolute, same units as ssp_lgmet).
     lgmet_scatter : float, optional
-        Gaussian scatter in log10(Z) (dex). Default 0.1 dex, the one scatter
-        default in tengri (``SFHConfig.lgmet_scatter``).
+        Gaussian scatter in log10(Z) (dex). ``None`` or zero is undeclared: the
+        metallicity reads the SSP grid node-exactly (#3434). Default None.
 
     Returns
     -------
@@ -1659,7 +1695,7 @@ def compute_dsps_native_weights(
             gal_t_table=t_cosmic_asc,
             gal_sfr_table=sfr_asc,
             gal_lgmet=lgmet,
-            gal_lgmet_scatter=lgmet_scatter,
+            gal_lgmet_scatter=_dsps_kernel_scatter(lgmet_scatter),
             ssp_lgmet=ssp_lgmet,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_flux=ssp_flux,
@@ -1676,7 +1712,7 @@ def compute_dsps_native_weights(
     # Use the joint directly.
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
 
-    joint = result.weights  # (n_met, n_age) sum=1
+    joint = _native_joint(result.weights, lgmet, lgmet_scatter, ssp_lgmet)  # (n_met, n_age)
     age_weights_norm = joint.sum(axis=0)  # (n_age,) sum=1
     age_weights_msun = age_weights_norm * jnp.maximum(total_mass, 0.0)
 
@@ -1787,7 +1823,7 @@ def compute_dsps_met_table_weights(
     ssp_lg_age_gyr: jnp.ndarray,
     ssp_flux: jnp.ndarray,
     t_obs_gyr: float,
-    lgmet_scatter: float = 0.1,
+    lgmet_scatter: float | None = None,
 ) -> tuple:
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
 
@@ -1824,7 +1860,8 @@ def compute_dsps_met_table_weights(
     t_obs_gyr : float
         Age of the universe in Gyr at the observation redshift.
     lgmet_scatter : float, optional
-        Gaussian scatter in log10(Z) per age bin (dex). Default 0.1 dex.
+        Gaussian scatter in log10(Z) per age bin (dex). ``None`` or zero is
+        undeclared: each age reads the SSP grid node-exactly (#3434). Default None.
 
     Returns
     -------
@@ -1868,7 +1905,7 @@ def compute_dsps_met_table_weights(
         gal_t_table=t_cosmic_asc,
         gal_sfr_table=sfr_asc,
         gal_lgmet_table=lgmet_asc,
-        gal_lgmet_scatter=lgmet_scatter,
+        gal_lgmet_scatter=_dsps_kernel_scatter(lgmet_scatter),
         ssp_lgmet=ssp_lgmet,
         ssp_lg_age_gyr=ssp_lg_age_gyr,
         ssp_flux=ssp_flux,
@@ -1894,8 +1931,7 @@ def compute_dsps_met_table_weights(
     # flux of one solar mass formed at that age. DSPS places a column whose
     # lognormal falls wholly off the grid on the nearest node, so no column sum
     # is zero.
-    met_w = result.lgmet_weights  # (n_met, n_age)
-    met_w = met_w / met_w.sum(axis=0, keepdims=True)
+    met_w = _met_table_weights(result.lgmet_weights, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet)
     ssp_flux_at_z = jnp.einsum("ma,maw->aw", met_w, ssp_flux)  # (n_age, n_wave) per Msun
 
     return age_weights_msun, ssp_flux_at_z
@@ -2595,6 +2631,16 @@ def _tw_cuml_kern(x, m, h):
     return val
 
 
+# Scatter used only to read the age marginal of the DSPS-native kernel, which
+# does not depend on the metallicity kernel. Never a physics default.
+_NOMINAL_LGMET_SCATTER = 0.1
+
+
+def _scatter_value(lgmet_scatter):
+    """Declared scatter as an array. ``None`` (undeclared) is zero (#3434)."""
+    return jnp.asarray(0.0 if lgmet_scatter is None else lgmet_scatter)
+
+
 def _dsps_lgmet_bin_edges(grid):
     """Metallicity bin edges of the DSPS kernel: ``dsps.utils._get_bin_edges``.
 
@@ -2611,7 +2657,7 @@ def _dsps_lgmet_bin_edges(grid):
 
 
 @jax.jit
-def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
+def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=None):
     """Metallicity weights of one parcel, on the fixed-Z rule (#3434).
 
     A declared scatter (``lgmet_scatter > 0``) gives the triweight-kernel weights:
@@ -2626,8 +2672,9 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
         Target log10(Z/Zsun) (dimensionless), a scalar.
     ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
-    lgmet_scatter : float
-        Declared metallicity scatter [dex]. Zero means undeclared. Default 0.1.
+    lgmet_scatter : float or None
+        Declared metallicity scatter [dex]. ``None`` or zero means undeclared, the
+        node-exact read. Default None: a function default is not a declaration.
 
     Returns
     -------
@@ -2641,8 +2688,9 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     scatter is zero, so the unselected kernel branch stays finite.
 
     """
-    declared = lgmet_scatter > 0.0
-    bandwidth = jnp.where(declared, lgmet_scatter, 1.0)
+    scatter = _scatter_value(lgmet_scatter)
+    declared = scatter > 0.0
+    bandwidth = jnp.where(declared, scatter, 1.0)
     edges = _dsps_lgmet_bin_edges(ssp_lgmet)
     # Evaluated once per edge, not once per (bin, side): bin k's upper edge is
     # bin k+1's lower edge, so the CDF is differenced on adjacent entries.
@@ -2657,7 +2705,7 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
 
 
 @jax.jit
-def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1):
+def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=None):
     """Interpolate SSP flux using triweight kernel over metallicity.
 
     C²-continuous gradients. Matches DSPS approach (Hearin+2023).
@@ -2670,8 +2718,9 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
     log_z : float
         Target log10(Z/Zsun).
-    lgmet_scatter : float
-        Kernel bandwidth [dex]. Default 0.1.
+    lgmet_scatter : float or None
+        Declared kernel bandwidth [dex]. ``None`` or zero is undeclared (node-exact
+        read). Default None.
 
     Returns
     -------
@@ -2689,7 +2738,9 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1
 
 
 @jax.jit
-def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, lgmet_scatter=0.1):
+def interpolate_metallicity_smooth_evolving(
+    ssp_flux, ssp_lgmet, log_z_per_age, lgmet_scatter=None
+):
     """Triweight metallicity interpolation with per-age Z.
 
     Parameters
@@ -2700,8 +2751,9 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
     log_z_per_age : array, shape (n_age,)
         Target log10(Z/Zsun) at each SSP age bin (dimensionless).
-    lgmet_scatter : float
-        Kernel bandwidth [dex]. Default 0.1.
+    lgmet_scatter : float or None
+        Declared kernel bandwidth [dex]. ``None`` or zero is undeclared (node-exact
+        read). Default None.
 
     Returns
     -------
@@ -2725,7 +2777,7 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
 
 
 @jax.jit
-def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgmet_scatter=0.1):
+def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgmet_scatter=None):
     """Smooth mass-remaining interpolation using triweight kernel.
 
     Interpolates the surviving mass fraction to a target metallicity
@@ -2739,8 +2791,9 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
     log_z : float
         Target log10(Z/Zsun).
-    lgmet_scatter : float
-        Kernel bandwidth [dex]. Default 0.1.
+    lgmet_scatter : float or None
+        Declared kernel bandwidth [dex]. ``None`` or zero is undeclared (node-exact
+        read). Default None.
 
     Returns
     -------

@@ -203,3 +203,18 @@ def test_dsps_wrapper_uses_dsps_bin_edges_not_a_local_copy():
     edges = np.asarray(dw._dsps_lgmet_bin_edges(jnp.asarray([-4.348, -2.0, -1.0])))
     assert edges[0] == LGMET_LO
     assert edges[-1] == LGMET_HI
+
+
+def test_default_scatter_is_undeclared_on_every_helper():
+    # A function default is not a declaration (#3434): with no scatter argument
+    # every helper reads the grid node-exactly, as an explicit zero does.
+    grid = np.array([-4.348, -3.0, -2.0, -1.0, -0.5, 0.0])
+    g = jnp.asarray(grid)
+    flux = jnp.eye(grid.size)[:, None, :]
+    for z in _query_scan(grid, 41):
+        ref = np.asarray(_lgmet_hermite_weights(jnp.asarray(float(z)), g))
+        np.testing.assert_allclose(
+            np.asarray(dw.compute_lgmet_weights(jnp.asarray(float(z)), g)), ref, atol=1e-10
+        )
+        row = np.asarray(dw.interpolate_metallicity_smooth(flux, g, jnp.asarray(float(z))))[0]
+        np.testing.assert_allclose(row, ref, atol=1e-10)
