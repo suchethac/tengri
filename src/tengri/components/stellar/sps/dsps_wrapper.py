@@ -2702,9 +2702,9 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
     ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
     ssp_lgmet : array, shape (n_met,)
-        SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
+        SSP metallicity grid, absolute log10(Z) [dex] on tengri grids, sorted ascending.
     log_z : float
-        Target log10(Z/Zsun).
+        Target metallicity [dex], in the units of ``ssp_lgmet``.
     lgmet_scatter : float
         Kernel bandwidth [dex]. Default 0.1.
 
@@ -2739,9 +2739,9 @@ def interpolate_metallicity_evolving(
     ssp_flux : array, shape (n_met, n_age, n_wave)
         Full SSP flux grid [Lsun/Hz/Msun].
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
+        Metallicity grid, absolute log10(Z) [dex] on tengri grids, sorted ascending.
     log_z_per_age : array, shape (n_age,)
-        Target log10(Z/Zsun) at each age bin (dimensionless).
+        Target metallicity at each age bin [dex], in the units of ``ssp_lgmet``.
 
     Returns
     -------
@@ -2799,9 +2799,9 @@ def interpolate_mass_remaining_evolving(
     ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
+        Metallicity grid, absolute log10(Z) [dex] on tengri grids, sorted ascending.
     log_z_per_age : array, shape (n_age,)
-        Target log10(Z/Zsun) at each age bin (dimensionless).
+        Target metallicity at each age bin [dex], in the units of ``ssp_lgmet``.
 
     Returns
     -------
@@ -2889,9 +2889,9 @@ def interpolate_mass_remaining(
     ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
+        Metallicity grid, absolute log10(Z) [dex] on tengri grids, sorted ascending.
     log_z : float
-        Target log10(Z/Zsun).
+        Target metallicity [dex], in the units of ``ssp_lgmet``.
 
     Returns
     -------
@@ -2979,9 +2979,10 @@ def predict_surviving_mass(
         ``ssp_mass_remaining`` is ``None``.
     log_z_zsun : float, optional
         Metallicity at which to evaluate the surviving-mass fraction,
-        :math:`\\log_{10}(Z/Z_\\odot)`. Default 0.0 (solar). Add
-        :data:`tengri.utils.physics_constants.LOG10_ZSUN` if you have
-        absolute :math:`\\log_{10}(Z)`.
+        :math:`\\log_{10}(Z/Z_\\odot)` with :math:`Z_\\odot = 0.0142`. Default 0.0
+        (solar). Subtract :data:`tengri.utils.physics_constants.LOG10_ZSUN`
+        from an absolute :math:`\\log_{10}(Z)` to get it. A value outside the
+        grid is held at the nearest end node.
     alpha_fe : float, optional
         [alpha/Fe] at which to evaluate the surviving-mass fraction, on a grid whose
         ``ssp_mass_remaining_alpha`` table is present (#2250). Default 0.0; ignored
@@ -3038,7 +3039,12 @@ def predict_surviving_mass(
         ia, fa = alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
         mass_table = collapse_alpha_axis(ssp.ssp_mass_remaining_alpha, ia, fa, axis=1)
     # Mass-remaining fraction on the SSP age grid at the requested metallicity.
-    f_surv_on_ssp = interpolate_mass_remaining(mass_table, ssp.ssp_lgmet, log_z_zsun)  # (n_age,)
+    from tengri.utils.physics_constants import LOG10_ZSUN
+
+    # ``ssp_lgmet`` is absolute log10(Z); the argument is relative to solar.
+    f_surv_on_ssp = interpolate_mass_remaining(
+        mass_table, ssp.ssp_lgmet, log_z_zsun + LOG10_ZSUN
+    )  # (n_age,)
     # Resample to the SFH lookback grid via linear interp in log10(age).
     # SSP ages are in log10(Gyr); SFH lookback is in linear yr. Convert both
     # to log10(yr) for the interp x-axis.
