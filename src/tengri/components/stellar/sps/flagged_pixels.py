@@ -13,6 +13,7 @@ uses, at least five sigma of the total broadening).
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 
 
@@ -84,3 +85,40 @@ def padded_node_slices(windows: list[np.ndarray]) -> tuple[np.ndarray, np.ndarra
         idx[row, : w.size] = w
         mask[row, : w.size] = True
     return idx, mask
+
+
+def slice_attenuated_stellar(dust, params, wave_rest, lnu_age, younger, idx, mask):
+    """Per-age attenuated stellar SED on one pixel's node window (#3413).
+
+    The exact path's contraction, on the window's nodes only: the sum over ages of
+    ``lnu_age * T(age, lambda)``, with the transmission the dust component's own two-component
+    screen (:meth:`compute_transmission`) evaluates on those wavelengths. The screen is
+    elementwise in wavelength, so the window values equal the full-grid values at the same
+    nodes.
+
+    Parameters
+    ----------
+    dust : object
+        A dust component with ``compute_transmission(params, wavelength, younger_fraction)``.
+    params : mapping
+        The draw's dust parameters.
+    wave_rest : array, shape (n_wave,)
+        Rest-frame model grid [Angstrom].
+    lnu_age : array, shape (n_age, n_wave)
+        The stellar per-age SED on the model grid (the exact path's ``lnu_age``).
+    younger : array, shape (1, n_age)
+        The stellar component's ``age_boundary_younger_fraction``.
+    idx, mask : ndarray
+        One pixel's padded node window from :func:`padded_node_slices`.
+
+    Returns
+    -------
+    sed_attenuated : array, shape (n_slice,)
+        Attenuated stellar SED on the window nodes, in the order of the window.
+    sed_intrinsic : array, shape (n_slice,)
+        Unattenuated stellar SED on the window nodes.
+    """
+    nodes = np.asarray(idx)[np.asarray(mask, dtype=bool)]
+    lnu_s = lnu_age[:, nodes]
+    transmission = dust.compute_transmission(params, wave_rest[nodes], younger)
+    return jnp.sum(lnu_s * transmission, axis=0), jnp.sum(lnu_s, axis=0)

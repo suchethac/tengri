@@ -1118,8 +1118,22 @@ def lattice_span(wave_obs, z_lo: float, z_hi: float) -> tuple[float, int]:
     edges = np.concatenate(
         [[w[0] - 0.5 * (w[1] - w[0])], mid, [w[-1] + 0.5 * (w[-1] - w[-2])]]
     )
-    lo = edges[0] / (1.0 + z_hi)
-    hi = edges[-1] / (1.0 + z_lo)
+    return lattice_window(edges[0] / (1.0 + z_hi), edges[-1] / (1.0 + z_lo))
+
+
+def lattice_window(lo: float, hi: float) -> tuple[float, int]:
+    """Static ln-lambda lattice covering the rest-frame range ``[lo, hi]`` [Angstrom] (#3413).
+
+    Widened by the kernel margin on each side. :func:`lattice_span` is this over the observed
+    pixel range; a flagged pixel's window is this over its padded rest-frame source range.
+
+    Returns
+    -------
+    origin : float
+        ``ln`` of the first lattice node [dimensionless].
+    n_cells : int
+        Number of lattice cells, so ``n_cells + 1`` nodes.
+    """
     h = _LATTICE_DLNLAMBDA
     k0 = int(np.floor(np.log(lo) / h)) - _lattice_pad_cells()
     k1 = int(np.ceil(np.log(hi) / h)) + _lattice_pad_cells()
@@ -1292,7 +1306,14 @@ def _lattice_instrument(g, lam_c, sigma_kms, n_bins):
 
 
 def lattice_correction_rest(
-    sed_rest, wave_rest, centres_rest, sigma_v_kms, *, conserving=True, instrument=None
+    sed_rest,
+    wave_rest,
+    centres_rest,
+    sigma_v_kms,
+    *,
+    conserving=True,
+    instrument=None,
+    span=None,
 ):
     r"""Velocity-dispersion correction of one rest-frame function, pixel means or values (#3451).
 
@@ -1317,13 +1338,16 @@ def lattice_correction_rest(
         (conserving only): ``resolution`` and ``sigma_lib_kms`` on ``wave_obs``, the
         observed-frame grid of the resolution, ``redshift``, ``lsf_scale`` (1 when the
         resolution is already divided by it) and ``n_bins``.
+    span : tuple of (float, int) or None, optional
+        Static lattice (:func:`lattice_window`). ``None`` takes the lattice over ``centres_rest``.
+        A flagged pixel passes its own window and the node slice of ``sed_rest`` (#3413).
 
     Returns
     -------
     ndarray, shape (n_pix,)
         The correction, in the units of ``sed_rest``.
     """
-    origin, n_cells = lattice_span(centres_rest, 0.0, 0.0)
+    origin, n_cells = lattice_span(centres_rest, 0.0, 0.0) if span is None else span
     h = _LATTICE_DLNLAMBDA
     scale_in, scale_out = _peak_factors(sed_rest)
     plain = _lattice_cell_means(wave_rest, sed_rest * scale_in, origin, n_cells, None)
