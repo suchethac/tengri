@@ -232,6 +232,109 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
     return free_prior if free_prior is not None else registry_default
 
 
+_ALPHA_FE_PARAM = "met_alpha_fe"
+
+
+def _alpha_fe_free_resolution(
+    ssp_data, spectroscopic_channel: bool
+) -> tuple[Uniform | None, str | None]:
+    """The grid-derived free prior for ``met_alpha_fe``, or why it cannot be freed.
+
+    [alpha/Fe] is constrained only by a spectrum or spectral indices (broadband
+    photometry moves broadband light by at most ~2 % at fixed total Z), and only
+    on an SSP grid with an [alpha/Fe] axis. Both must hold for FREE (#2250).
+
+    Parameters
+    ----------
+    ssp_data : SSPData or None
+        The SSP grid the model is built against.
+    spectroscopic_channel : bool
+        Whether the observation has a spectrum or spectral indices.
+
+    Returns
+    -------
+    prior : Uniform or None
+        ``Uniform(min, max)`` over the grid's [alpha/Fe] nodes, default 0.0,
+        when both conditions hold; otherwise None.
+    refusal : str or None
+        The message an explicit FREE gets when ``prior`` is None.
+    """
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return None, (
+            f"{_ALPHA_FE_PARAM!r}: FREE cannot be honored -- the SSP grid has no "
+            "[alpha/Fe] axis (it is a 3-D grid), so [alpha/Fe] would not change the "
+            "SED. Use an alpha-enhanced 4-D grid (a name containing '_afe'), or hold "
+            f"{_ALPHA_FE_PARAM} at Fixed(0.0)."
+        )
+    if not spectroscopic_channel:
+        return None, (
+            f"{_ALPHA_FE_PARAM!r}: FREE cannot be honored -- the observation has no "
+            "spectrum or spectral indices to constrain [alpha/Fe] (broadband photometry "
+            "cannot; emission-line fluxes do not count). Attach a spectroscopy or "
+            "spectral_indices observation, or pass an explicit prior, e.g. "
+            f"{_ALPHA_FE_PARAM}=Uniform(lo, hi), which overrides this."
+        )
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    lo, hi = float(nodes.min()), float(nodes.max())
+    return (
+        Uniform(
+            lo,
+            hi,
+            "Alpha-element enhancement [alpha/Fe] (grid range)",
+            units="dex",
+            default=min(max(0.0, lo), hi),
+        ),
+        None,
+    )
+
+
+def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
+    """Refuse an explicit ``met_alpha_fe`` prior that misses the grid; warn if it overhangs.
+
+    An explicit prior is always honored. A prior with no overlap with the grid's
+    [alpha/Fe] nodes is refused by name; one that extends past them is kept and
+    warned about once with :class:`GridSupportWarning`, naming the nodes.
+    """
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+    from tengri.config.exceptions import GridSupportWarning
+
+    dist = resolved.get(_ALPHA_FE_PARAM)
+    if dist is None or provenance.get(_ALPHA_FE_PARAM) != "user_prior":
+        return
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    g_lo, g_hi = float(nodes.min()), float(nodes.max())
+    d_lo, d_hi = dist.bounds
+    if d_hi < g_lo or d_lo > g_hi:
+        raise ParameterError(
+            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
+            f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
+            "would be clipped onto an edge node. Choose a range inside the grid."
+        )
+    if d_lo < g_lo or d_hi > g_hi:
+        warnings.warn(
+            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
+            f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
+            "is clipped onto the edge nodes, so the prior mass there has no effect on "
+            "the SED.",
+            GridSupportWarning,
+            stacklevel=3,
+        )
+
+
+def _explicit_free(param_name: str, group_dict: dict) -> bool:
+    """Whether the user wrote ``FREE`` for this parameter by name."""
+    key = _override_key_for(param_name, group_dict, warn=False)
+    return key is not None and group_dict[key] is FREE
+
+
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
     """Pick the fixed value used when wildcard-Fixed(DEFAULT) collapses a free param.
 
@@ -1138,11 +1241,21 @@ def parse_groups(**kwargs) -> Parameters:
     # SEDModel.build -- auto-resolution then falls back to its pre-#2426
     # behavior (see Parameters._default_cloudy_grid).
     ssp_data = kwargs.pop("ssp_data", None)
+    # Whether the observation carries a spectroscopic channel (spectrum or
+    # spectral indices). Read by :func:`_alpha_fe_free_resolution`: [alpha/Fe]
+    # is free only on an alpha-enhanced grid AND with such a channel (#2250).
+    # SEDModel.build derives it from the observation; direct callers default to
+    # False, which keeps met_alpha_fe pinned.
+    spectroscopic_channel = bool(kwargs.pop("spectroscopic_channel", False))
     # The build inputs, kept on the returned spec so that a model rebuilt at a
     # different Fixed redshift re-derives every redshift-dependent quantity
     # parse_groups computes (onset/age ceilings at age_at_z, nonparametric bin
     # edges scaled to age(z)) instead of keeping the first build's.
-    parse_inputs = {**kwargs, "ssp_data": ssp_data}
+    parse_inputs = {
+        **kwargs,
+        "ssp_data": ssp_data,
+        "spectroscopic_channel": spectroscopic_channel,
+    }
 
     # Redshift is required, and the question asked here is whether the caller
     # PASSED it -- not what its value is. A value-based sentinel cannot answer
@@ -1308,6 +1421,7 @@ def parse_groups(**kwargs) -> Parameters:
     # physics is pinned at defaults while the user believes it is being fitted.
     # Collected here and adjudicated by ``_check_wildcard_freed_something``.
     wildcard_free_outcome: dict[str, list[tuple[str, bool]]] = {}
+    alpha_fe_free = _alpha_fe_free_resolution(ssp_data, spectroscopic_channel)
 
     # Track if we've emitted the met_* suppression warning for this parse (#1796).
     # Emit once per parse even if multiple met_* params are suppressed.
@@ -1458,11 +1572,20 @@ def parse_groups(**kwargs) -> Parameters:
         if not wildcard_active and claiming_category is not None:
             claim_scope = wildcard_scopes.get(f"agn.{claiming_category}")
             wildcard_active = claim_scope is None or param_name in claim_scope
+        # [alpha/Fe] is free only on a grid with an alpha axis AND a spectroscopic
+        # channel (#2250). Without one an explicit FREE is refused by name; a
+        # wildcard FREE leaves it pinned, and the partial-free notice names it.
+        grid_free_prior = None
+        if param_name == _ALPHA_FE_PARAM:
+            grid_free_prior, refusal = alpha_fe_free
+            if refusal is not None and _explicit_free(param_name, group_dict):
+                raise ParameterError(refusal)
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
             structural_params.get_distribution(param_name),
             wildcard_active=wildcard_active,
+            grid_free_prior=grid_free_prior,
         )
 
         # Record whether an active wildcard-FREE actually freed this parameter.
@@ -1567,6 +1690,7 @@ def parse_groups(**kwargs) -> Parameters:
         provenance,
     )
     grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _check_alpha_fe_explicit_prior(resolved_kwargs, provenance, ssp_data)
     _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
@@ -8862,6 +8986,7 @@ def _resolve_value(
     registry_default: Distribution,
     *,
     wildcard_active: bool = True,
+    grid_free_prior: Distribution | None = None,
 ) -> tuple[Distribution, str]:
     """Resolve the final distribution for a single parameter.
 
@@ -8973,7 +9098,11 @@ def _resolve_value(
             # a configuration error, not a bug in the parameter -- the
             # message reads as "pass an explicit prior", never as "this is
             # broken".
-            expanded = _expand_free(param_name, registry_default)
+            expanded = (
+                grid_free_prior
+                if grid_free_prior is not None
+                else _expand_free(param_name, registry_default)
+            )
             check_free_gyr_alias(param_name, FREE)
             if expanded.is_fixed:
                 raise ParameterError(
@@ -9007,7 +9136,12 @@ def _resolve_value(
         wildcard = group_dict["*"]
         if wildcard is FREE:
             if wildcard_active:
-                return _expand_free(param_name, registry_default), "wildcard_free"
+                expanded = (
+                    grid_free_prior
+                    if grid_free_prior is not None
+                    else _expand_free(param_name, registry_default)
+                )
+                return expanded, "wildcard_free"
             # Param is not consumed by the active block selection. A wildcard
             # FREE here would create an unconstrained no-op nuisance dimension,
             # so collapse it to its fixed default instead (block-scoped

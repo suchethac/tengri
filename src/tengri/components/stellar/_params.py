@@ -38,12 +38,12 @@ ALPHA_FE_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
         internal_name="alpha_fe",
-        # Deliberately NO free_prior. [alpha/Fe] is only constrained when the
-        # SSP carries an alpha-enhanced grid (StellarSEDComponent gates on
-        # has_alpha_grid), so a wildcard cannot know whether freeing it is
-        # meaningful, and on a grid without an [alpha/Fe] axis it is refused at build.
-        # Freeing [alpha/Fe] is a modeling decision, so it stays explicit:
-        # pass met_alpha_fe=Uniform(-0.5, 1.0) when the grid supports it.
+        # Deliberately NO free_prior. The free range comes from the SSP grid's
+        # [alpha/Fe] nodes, and FREE is granted only when the grid has an
+        # alpha axis AND the observation has a spectroscopic channel (#2250).
+        # That gate lives in parameters/groups.py (_alpha_fe_free_resolution):
+        # without it a wildcard leaves this parameter pinned at 0.0, and an
+        # explicit FREE is refused by name. An explicit prior is always honored.
     ),
 )
 

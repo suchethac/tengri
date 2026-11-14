@@ -125,7 +125,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     "radio_mcch_z_slope": ("fixed-by-physics", "as radio_delv_mass_slope"),
     "xray_gamma_hmxb": ("fixed-by-physics", "Lehmer+2016 population constant; see xray_det_hmxb"),
     "xray_gamma_lmxb": ("fixed-by-physics", "Lehmer+2016 population constant; see xray_det_lmxb"),
-    "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
     # ── target-dependent: the bound is set by the source, not by physics ──
     # The SF-onset lookbacks that used to sit here are freed as fractions of
@@ -139,6 +138,15 @@ REFUSED: dict[str, tuple[str, str]] = {
         "absolute (log) luminosity; no galaxy-independent interval -- declaring "
         "it at all is itself the energy-balance opt-out (#2187-series), so a "
         "wildcard must never reach it and silently decouple the IR budget",
+    ),
+    # met_alpha_fe: freed only on a 4-D grid with a spectroscopic channel, with
+    # the grid's own [alpha/Fe] node range as the prior (#2250, parse_groups'
+    # _alpha_fe_free_resolution). The range is the grid's, so no registry
+    # free_prior is declared: a declared one would free it on every grid.
+    "met_alpha_fe": (
+        "target-dependent",
+        "conditional: free only on an [alpha/Fe] grid with a spectroscopic channel, "
+        "prior = the grid's node range (#2250); pinned at 0.0 otherwise",
     ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
