@@ -65,12 +65,13 @@ def test_table_sfh_is_seen_by_the_fast_path_guard():
     )
 
 
-def test_guard_still_covers_the_nonparametric_families():
-    """The #1395 rename must not drop the SFHs the guard already caught (#950).
+def test_binned_families_are_served_not_refused():
+    """The binned families are served by the fast path, so the guard no longer lists them.
 
-    ``psb_continuity_flex`` joined them with #2184: it wraps ``psb_continuity``
-    and is equally binned, but the map is keyed on the function object, so a
-    wrapper is a different key and was reaching the fast path unguarded.
+    This replaces the #950 lock that refused them. Since #3505 the fast path
+    integrates the binned SFHs on their bin-edge knots, the same ones ``apply``
+    uses; the parity of served weights with ``apply`` is asserted in
+    ``tests/components/stellar/test_joint_weights_binned_sfh.py``.
     """
     from tengri.components.stellar.sfh.nonparametric import (
         continuity,
@@ -79,9 +80,18 @@ def test_guard_still_covers_the_nonparametric_families():
         psb_continuity,
         psb_continuity_flex,
     )
+    from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
 
-    for fn in (continuity, continuity_flex, dirichlet, psb_continuity, psb_continuity_flex):
-        assert fn in C._FAST_PATH_UNSUPPORTED_SFH_FNS, f"{fn.__name__} fell out of the guard"
+    binned = (
+        continuity,
+        continuity_flex,
+        continuity_young_fraction,
+        dirichlet,
+        psb_continuity,
+        psb_continuity_flex,
+    )
+    for fn in binned:
+        assert fn not in C._FAST_PATH_UNSUPPORTED_SFH_FNS, f"{fn.__name__} is refused again"
 
 
 def test_table_sfh_placeholder_still_returns_zero():

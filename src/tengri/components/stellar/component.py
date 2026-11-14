@@ -292,12 +292,13 @@ def _fast_path_unsupported_sfh_fns():
     """Map each unsupported SFH function to *why* the fast path refuses it (#950, #1395).
 
     The SED-free :meth:`StellarSEDComponent.compute_joint_weights` fast path
-    integrates a closed-form SFR on a dense age grid. Two disjoint families
-    cannot be served that way, and they are kept apart here because the reason
-    a caller sees decides what they do next:
+    integrates the SFR on a dense, edge-resolved age grid. The binned families
+    (Leja+2019 continuity, Dirichlet, PSB) are served on their bin-edge knots, the
+    same ones :meth:`StellarSEDComponent.apply` uses (#3505), so they are not
+    listed here. The one family the fast path still cannot serve is the tabulated
+    SFH, whose history is supplied at apply and so is served by the runtime-table
+    route instead (#1396); the map keeps it as a backstop:
 
-    * the non-parametric families (Leja+2019 continuity, Dirichlet, PSB): the
-      fast path has no bin basis for them, and never did (#950);
     * the tabulated SFH: its registry ``fn`` is an all-zero *placeholder*,
       because the real history is wired in at
       :meth:`StellarSEDComponent.apply`, which the fast path never reaches.
@@ -318,24 +319,9 @@ def _fast_path_unsupported_sfh_fns():
         ``{sfh_fn: reason_str}``: the reason is interpolated into the
         ``ValueError`` raised by :meth:`StellarSEDComponent.compute_joint_weights`.
     """
-    from tengri.components.stellar.sfh.nonparametric import (
-        continuity,
-        continuity_flex,
-        dirichlet,
-        psb_continuity,
-        psb_continuity_flex,
-    )
     from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
-    from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
 
-    binned = "the fast path integrates a closed-form SFR and has no bin basis for it"
     return {
-        continuity: binned,
-        continuity_young_fraction: binned,
-        continuity_flex: binned,
-        dirichlet: binned,
-        psb_continuity: binned,
-        psb_continuity_flex: binned,
         _table_sfh_placeholder: (
             "the tabulated history is supplied at apply(), which the fast path never "
             "reaches, so the fast path would evaluate an all-zero placeholder and "
@@ -5013,11 +4999,12 @@ class StellarSEDComponent:
         never silently diverge from the exact forward. Callers must fall back
         to the exact path.
 
-        The non-parametric families and the **tabulated** SFH are both refused
-        via :data:`_FAST_PATH_UNSUPPORTED_SFH_FNS`, which carries a per-family
-        reason. The tabulated case is the one that used to slip through: its
-        registry ``fn`` is an all-zero placeholder, so the fast path returned
-        zero weights and zero mass, finite and unwarned (#1395).
+        The **tabulated** SFH is served by the runtime-table route; the
+        :data:`_FAST_PATH_UNSUPPORTED_SFH_FNS` backstop refuses it only if it
+        reaches the registry placeholder unrouted. The tabulated case is the one
+        that used to slip through: its registry ``fn`` is an all-zero placeholder,
+        so the fast path returned zero weights and zero mass, finite and unwarned
+        (#1395).
 
         Parameters
         ----------
