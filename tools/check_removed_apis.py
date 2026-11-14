@@ -227,6 +227,10 @@ _REMOVED_TENGRI_NAMES = {
         "`tengri.HierarchicalFitter` was removed -- use `tengri.PopulationFitter`"
     ),
     "SpectroscopyConfig": "`tengri.SpectroscopyConfig` was removed -- use `tengri.Spectroscopy`",
+    "effective_metallicity": (
+        "`tengri.effective_metallicity` was removed in #3411 -- met_logzsol is the total "
+        "metallicity on every grid; alpha enhancement needs a 4-D `_afe` grid"
+    ),
 }
 
 _PRECOMPUTE_METHOD_REASON = (

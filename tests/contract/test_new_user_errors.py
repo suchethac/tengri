@@ -192,7 +192,7 @@ def test_wne_guard_is_two_sided(synthetic_ssp_wide, monkeypatch, fake_logqion, m
     orig = ionspec.precompute_ionizing_params_table
 
     def rigged(*args, **kwargs):
-        result = orig(*args, **kwargs)
+        result = dict(orig(*args, **kwargs))  # never write into the shared table
         result["logqion_table"] = np.full_like(np.asarray(result["logqion_table"]), fake_logqion)
         return result
 

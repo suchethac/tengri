@@ -32,7 +32,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_FRAC_HOT,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_T_HOT,
+    DEFAULT_AGN_T_TORUS,
+    DEFAULT_AGN_T_WARM,
+    DEFAULT_AGN_TAU,
+    DEFAULT_AGN_TAU_TORUS,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     planck_lnu as _planck_lnu,
@@ -42,6 +51,7 @@ from tengri.components.agn._template_grid import (
     analytic_bolometric_nu,
     cache_per_float_dtype,
     native_bolometric_nu,
+    scale_by_torus_power,
 )
 from tengri.utils.grid_interp import library_lookup, resample_template
 
@@ -81,9 +91,9 @@ def _toy_integral(shape_fn: Callable) -> jnp.ndarray:
 def simple_torus(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_torus_frac: float = 0.5,
-    agn_T_torus: float = 1000.0,
-    agn_tau_torus: float = 5.0,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_T_torus: float = DEFAULT_AGN_T_TORUS,
+    agn_tau_torus: float = DEFAULT_AGN_TAU_TORUS,
     agn_tau_beta: float = 1.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -138,7 +148,6 @@ def simple_torus(
             stacklevel=2,
         )
         _WARNED.add("simple_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
 
     def _shape(wave):
         # Modified blackbody with silicate opacity
@@ -150,9 +159,7 @@ def simple_torus(
 
     # Normalize to L_bol * f_torus on a fixed internal grid, never on the caller's.
     integral_safe = _toy_integral(_shape)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
-    return l_nu_erg
+    return scale_by_torus_power(_shape(wavelength), integral_safe, agn_log_lbol, agn_torus_frac)
 
 
 # ── Model 2: Two-temperature torus (SKIRTOR-inspired) ─────────────
@@ -161,11 +168,11 @@ def simple_torus(
 def two_temperature_torus(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_torus_frac: float = 0.5,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_tau_torus: float = 5.0,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
+    agn_T_hot: float = DEFAULT_AGN_T_HOT,
+    agn_T_warm: float = DEFAULT_AGN_T_WARM,
+    agn_frac_hot: float = DEFAULT_AGN_FRAC_HOT,
+    agn_tau_torus: float = DEFAULT_AGN_TAU_TORUS,
     agn_tau_beta: float = 1.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -226,7 +233,6 @@ def two_temperature_torus(
             stacklevel=2,
         )
         _WARNED.add("two_temperature_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
 
     def _shape(wave):
         # Weighted mixture of two blackbodies with the silicate opacity.
@@ -241,9 +247,7 @@ def two_temperature_torus(
 
     # Normalize on a fixed internal grid, never on the caller's.
     integral_safe = _toy_integral(_shape)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
-    return l_nu_erg
+    return scale_by_torus_power(_shape(wavelength), integral_safe, agn_log_lbol, agn_torus_frac)
 
 
 # ── Nenkova+2008 CLUMPY torus ─────────────────────────────────────
@@ -344,8 +348,8 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
     def nenkova_grid(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_tau: float = 30.0,
-        agn_torus_frac: float = 0.5,
+        agn_tau: float = DEFAULT_AGN_TAU,
+        agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
         **_kwargs,
     ) -> jnp.ndarray:
         r"""Nenkova+2008 CLUMPY torus SED at a single equatorial optical depth.

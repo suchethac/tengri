@@ -52,6 +52,7 @@ import numpy as np
 import pytest
 
 from tengri import Fixed
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, requires_pahspec
 
 pytestmark = pytest.mark.regression_bug
 
@@ -105,7 +106,13 @@ def _building_block_types():
     return sorted(_valid_dust_emission_types() - _standalone_dust_emission_types())
 
 
-@pytest.mark.parametrize("name", _advertised_types())
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(name, marks=requires_pahspec) if name in PAHSPEC_EMISSION_TYPES else name
+        for name in _advertised_types()
+    ],
+)
 def test_every_advertised_dust_emission_type_runs_on_both_channels(
     name, synthetic_ssp, infrared_observation
 ):

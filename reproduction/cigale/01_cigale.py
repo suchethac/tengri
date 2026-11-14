@@ -274,7 +274,7 @@ registries = {
         _names(tengri.list_dust_laws()),
     ),
     "Dust IR emission": (
-        "dl2007 · dl2014 · dale2014 · casey2012 · schreiber2016",
+        "dl2007 · dl2014 · dale2014 · casey2012 · schreiber2016 · mbb",
         _names(tengri.list_dust_emission_models()),
     ),
     "AGN": (
@@ -282,7 +282,8 @@ registries = {
         _names(tengri.list_agn_models()),
     ),
     "X-ray": (
-        "xray (Yang+2020 corona + XRB + photoelectric N_H)",
+        "xray (Yang+2020 corona + XRB + photoelectric N_H) · "
+        "lopez24 (Lopez+2024 corona from L_12um)",
         _names(tengri.list_xray_models()),
     ),
     "Radio": (
@@ -299,6 +300,31 @@ for block, (cig, tng) in registries.items():
     print(f"\n{block}")
     print(f"  CIGALE  {cig}")
     print(f"  tengri  {', '.join(tng)}")
+
+
+# %% [markdown]
+# ### What this notebook does not compare
+#
+# The sections below pair every module of the table above that has a counterpart at
+# matched parameters. Five pieces of CIGALE are outside the comparison, and each reason
+# matters when choosing a configuration.
+#
+# * **`m2005`, `bpassv2` and `cb19` stellar populations.** The common SSP grid is CIGALE's
+#   BC03 Chabrier release only, so the stellar library is shared and is not under test. A
+#   model on another library has no matched grid here; run it through its own SSP file.
+# * **`skirtor2016` with `disk_type=2`.** The ADAF disc is not compared. The matched discs
+#   are `disk_type=0` (§9b) and `disk_type=1` (§9); tengri's `disc.adaf_lopez2024` is
+#   available for use but has no pcigale reference in this notebook.
+# * **`restframe_parameters`.** It derives indices, colours and band luminosities from a
+#   finished SED and adds no physical component, so there is nothing to reproduce. Measure
+#   those quantities on the tengri SED directly.
+# * **`fritz2006` away from δ = 0.** pcigale's δ tilts the disc's optical slope (default
+#   −0.36). The Fritz runs of §9e and §9f set δ = 0, the Schartmann disc of the SKIRTOR runs,
+#   so that only the torus differs between the codes; a CIGALE-matched Fritz model uses δ = 0.
+# * **`sfhstochastic_carvajal2025`.** A single realization has no counterpart, because
+#   both codes draw their own random field. The two are compared statistically (variance and
+#   autocorrelation over many draws) in `validate_carvajal2025_stochastic.py`, next to this
+#   notebook.
 
 
 # %% [markdown]
@@ -882,8 +908,8 @@ V.print_window_table(
 # |---|---|
 # | 912–1200 Å | 1.063× |
 # | 1200–3000 Å | 1.030× |
-# | 0.3–1 μm | 1.006× |
-# | stellar L_bol | 1.016× |
+# | 0.3–1 μm | 1.007× |
+# | stellar L_bol | 1.017× |
 # | Q_H (λ < 911.76 Å) | 1.150× |
 #
 # The 200–912 Å band is not quoted: with the nebular emitter on, both codes
@@ -1046,11 +1072,11 @@ assert abs(_q_shift_3 / _n_ly_c3 - 1.0) < 0.01, "a 0.5 Myr aging should reproduc
 # one CIGALE `sfhdelayed` + `bc03` chain per case. Table over the
 # GALEX-through-2MASS bands (`UV_TO_NIR`), since this comparison carries
 # no dust IR. The worst band ratio in the printed table is τ = 3 Gyr, age = 1 Gyr
-# (1.055×, SDSS u). The τ = 1 and 3 Gyr cases at age 1 Gyr
-# have one band each outside 5 % (worst 1.052× and 1.055×, both SDSS u), where the
+# (1.066×, SDSS u). The τ = 1 and 3 Gyr cases at age 1 Gyr
+# have one band each outside 5 % (worst 1.062× and 1.066×, both SDSS u), where the
 # youngest stars carry the §3 convention; the remaining five cases have none. Of
-# those five, τ = 1 Gyr at 10 Gyr ties τ = 0.3 Gyr at 10 Gyr at 1.044×, and the worst
-# band of the quiescent cases is in the GALEX far or near UV (printed per case). The
+# those five, the three 10 Gyr cases tie at 1.044× (GALEX NUV, GALEX FUV and SDSS u for
+# τ = 0.3, 1 and 3 Gyr), and the worst band of each case is printed. The
 # quiescent cases sit near unity because Cue counts ionizing photons from every
 # stellar age, so the old population supplies the nebular far-UV that CIGALE also
 # includes.
@@ -1672,7 +1698,7 @@ V.print_window_table(
 # weighted toward the wavelengths where CIGALE's 0.5 Myr older stars emit less
 # than tengri's. The two codes' attenuation *curves* are not the cause:
 # §4 measures them agreeing to 0.000 % away from the 1500–1800 Å crossover,
-# and the absorbed fractions they produce are printed below (0.359 for CIGALE, 0.357 for tengri).
+# and the absorbed fractions they produce are printed below (0.359 for CIGALE, 0.358 for tengri).
 # Since the IR is normalized to that anchor, it appears in the printed
 # 10–100 μm median as a floor under whatever the templates themselves do.
 #
@@ -2042,21 +2068,21 @@ plt.show()
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
 # the 8–1000 μm L_ν ratio locate each family's shape. Both implementations are normalized
 # on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 μm L_ν ratios printed
-# below lie between 1.0109× and 1.0141× across the sweep. The filter-by-filter tables show
+# below lie between 1.0111× and 1.0143× across the sweep. The filter-by-filter tables show
 # where shapes differ: no row has a band outside 5 % (`f_pah` matches CIGALE's 0.05
 # default). `dl2014` is compared as dust emission alone: at α = 1 the dust is only
 # part of the total beyond 250 μm, and the rest is the nebular free-free continuum, so
 # a total-SED ratio there measures the nebular continuum and not the dust. Each code's
 # twin without dust emission, at the same attenuation, is subtracted from its total;
-# the dust-only 8–1000 μm medians are 1.0119×, 1.0116× and 1.0116× for α = 1, 2 and 3,
+# the dust-only 8–1000 μm medians are 1.0121×, 1.0118× and 1.0118× for α = 1, 2 and 3,
 # with worst filter ratios 1.012×, 0.985× and 0.975×.
 # `schreiber2016` is the tabulated Schreiber et al. (2018) library as
 # CIGALE packages it: per unit dust mass, a dust-continuum and a PAH template at
 # each temperature (the library tabulates 15–99 K; pcigale accepts 15–60 K), mixed
 # by the PAH mass fraction `f_pah` as pcigale does and normalized to the absorbed
 # energy. At T = 25, 35 and 50 K
-# its 8–1000 μm ratio is 1.0115× each time, and its filter-by-filter median is 1.011×
-# each time, with worst cases of 1.020×, 1.020× and 1.037×.
+# its 8–1000 μm ratio is 1.0117×, 1.0117× and 1.0118×, and its filter-by-filter median is
+# 1.011×, 1.011× and 1.012×, with worst cases of 1.021×, 1.020× and 1.038×.
 
 # %%
 _peaks_6c = []
@@ -2408,6 +2434,127 @@ for _name, _cases in (
             np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
         )
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
+
+
+# %% [markdown]
+# ### §6d Single-temperature dust: CIGALE `mbb`
+#
+# CIGALE module `mbb` (`epsilon_mbb = 1`, `beta_mbb = 1.5`, energy balance on) ↔ tengri
+# `dust_emission={"type": "graybody"}` with `dust_beta_ir = 1.5` and
+# `dust_lambda_0_um = 200`. CIGALE's modified black body is the general-opacity form
+# $(1 - e^{-(\lambda_0/\lambda)^\beta})\,\nu^3/(e^{h\nu/kT} - 1)$ with
+# $\lambda_0 = 200\ \mu$m, normalized to the absorbed energy. tengri has two
+# single-temperature emitters. `graybody` is that general-opacity form and is the one that
+# matches `mbb`. The tengri type named `mbb` (alias `modified_blackbody`) is the optically
+# thin $\nu^\beta B_\nu(T)$, a different spectrum that carries more flux per unit energy
+# at 100–1000 μm: the name is shared and the model is not. Use `graybody` to reproduce
+# CIGALE's `mbb`.
+#
+# The cell sets T = 25, 35 and 50 K on the §6c fiducial (1e11 M☉, single-screen
+# Calzetti attenuation), so the absorbed-energy anchor of §6 sits under every ratio. The
+# left panel overlays the two codes (pcigale as the wide band, tengri `graybody` as the line),
+# the dotted line is tengri's optically thin `mbb`, and the lower panel gives the ratios.
+# The comparison is of dust emission alone, each code's total minus its own twin without
+# dust emission, as in §6c. The `graybody` medians over 8–1000 μm are 1.0108×, 1.0112× and
+# 1.0114× at 25, 35 and 50 K, the same 1.1 % as the §6 anchor, with a worst filter of 1.015×,
+# 1.015× and 1.016× and no band outside 5 %. The optically thin `mbb` has 8–1000 μm medians of
+# 1.0465×, 1.0466× and 0.789×, and over 100–1000 μm 0.532×, 0.377× and 0.245×.
+
+# %%
+from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
+
+_T_MBB = (25.0, 35.0, 50.0)
+_MBB_BETA = 1.5
+_MBB_TENGRI = {
+    "graybody": dict(
+        T=Uniform(10.0, 80.0, default=35.0),
+        beta_ir=Fixed(_MBB_BETA),
+        lambda_0_um=Fixed(200.0),
+    ),
+    "mbb": dict(T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(_MBB_BETA)),
+}
+with warnings.catch_warnings():
+    # The grid's oldest template (13.70 Gyr) is younger than the universe at z = 0, which sets
+    # the warning; these galaxies are 5 Gyr old, so no star sits beyond the oldest template.
+    warnings.simplefilter("ignore", SFHBeyondOldestTemplateWarning)
+    _m_mbb = {_k: _knob_model(_k, **_kw) for _k, _kw in _MBB_TENGRI.items()}
+_p_mbb = {_k: dict(_m.spec.sample(jax.random.PRNGKey(0))) for _k, _m in _m_mbb.items()}
+# Dust emission alone: each code's total minus its own twin without dust emission (as §6c).
+_w_twin_mbb_c, _L_twin_mbb_c = C.to_lnu(
+    C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN])
+)
+_w_twin_mbb_t, _L_twin_mbb_t = _w_twin_t, _L_twin_t  # the "none" twin built in §6c
+
+fig = plt.figure(figsize=(8, 5.6))
+gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.08)
+ax = fig.add_subplot(gs[0])
+ax_r = fig.add_subplot(gs[1], sharex=ax)
+_peaks_mbb = []
+_cases_mbb = []
+print("§6d mbb, dust emission alone (tengri / CIGALE, median over 8-1000 µm and 100-1000 µm):")
+for _T, _c in zip(_T_MBB, ["C0", "C1", "C3"]):
+    _sed_mbb = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            (
+                "mbb",
+                dict(epsilon_mbb=1.0, t_mbb=_T, beta_mbb=_MBB_BETA, energy_balance=True),
+            ),
+        ]
+    )
+    _w_c_raw, _L_c_tot = C.to_lnu(_sed_mbb)
+    _L_c_dust = (_L_c_tot - U.regrid(_w_twin_mbb_c, _L_twin_mbb_c, _w_c_raw)) * _KNOB_MASS
+    w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_dust)
+    ax.loglog(w_c, nl_c, color=_c, **_REF_KW)
+    _row = {}
+    for _kind, _ls in (("graybody", "-"), ("mbb", ":")):
+        _o = _m_mbb[_kind].predict_rest_sed({**_p_mbb[_kind], "dust_T": jnp.float64(_T)})
+        _w_t_raw = np.asarray(_o.wavelength)
+        _L_t_dust = np.asarray(_o.sed) - U.regrid(_w_twin_mbb_t, _L_twin_mbb_t, _w_t_raw)
+        w_t, nl_t = _nu_lnu(_w_t_raw, _L_t_dust)
+        _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c, np.nan)
+        _row[_kind] = (_band_median(_rk, w_c, 8.0, 1000.0), _band_median(_rk, w_c, 100.0, 1000.0))
+        _pos = (w_c >= 2e5) & (w_c > 0)
+        ax_r.plot(w_c[_pos], _rk[_pos], color=_c, ls=_ls, linewidth=1.1)
+        if _kind == "graybody":
+            ax.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"T = {_T:g} K")
+            _peaks_mbb.append(float(np.nanmax(nl_t)))
+            _cases_mbb.append(
+                (f"mbb T={_T:g} K (graybody, dust only)", _w_c_raw, _L_c_dust, _w_t_raw, _L_t_dust)
+            )
+        else:
+            ax.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, ls=":")
+    print(
+        f"    T={_T:g} K: graybody {_row['graybody'][0]:.4f}× / {_row['graybody'][1]:.4f}×; "
+        f"optically thin mbb {_row['mbb'][0]:.4f}× / {_row['mbb'][1]:.4f}×"
+    )
+    assert 0.98 < _row["graybody"][0] < 1.04 and 0.98 < _row["graybody"][1] < 1.04, _row
+ax.plot([], [], "k-", **_REF_KW, label="pcigale `mbb`")
+ax.plot([], [], "k-", lw=_TNG_LW, label="tengri `graybody`")
+ax.plot([], [], "k:", lw=_TNG_LW, label="tengri `mbb` (optically thin)")
+ax.set(xlim=(2e5, 1e7), ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax.set_ylim(max(_peaks_mbb) * 1e-3, max(_peaks_mbb) * 2.0)
+ax.legend(fontsize=8, frameon=False, loc="lower center")
+ax.tick_params(labelbottom=False)
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.set(xlim=(2e5, 1e7), ylim=(0.1, 3.0), xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_r.set_yscale("log")
+ax_r.set_yticks([0.2, 0.5, 1.0, 2.0])
+ax_r.set_yticklabels(["0.2", "0.5", "1", "2"])
+ax_r.minorticks_off()
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("cigale_06e_mbb_graybody.png")
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_mbb:
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+    )
+    V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6d {_label}", compact=True)
 
 
 # %% [markdown]
@@ -2996,9 +3143,10 @@ print(
 #
 # **Energy-balance normalization.** CIGALE ties disc, torus and polar dust to a
 # single `agn_power` reference through the fixed SKIRTOR template ratios. tengri's
-# default `agn_norm='cigale_joint'` does the same: the tie normalizes the disc
-# only (a corona, when the disc block carries one, rides on top; the
-# Schartmann disc has none), with the disc set to `agn_power × R`, where
+# default `agn_norm='cigale_joint'` does the same: the tie sets the disc (below the
+# library's 10 Å edge it takes the library ratio times the X-ray transmission, §9f; a corona,
+# when the disc block carries one, rides on top; the Schartmann disc has none), with the
+# disc set to `agn_power × R`, where
 # `R = η(i)·∫disc/∫dust` and `η(i) = cos i (1+2cos i)/3` is the Stalevski+2016
 # anisotropy factor. With `agn_ir_frac` set, `agn_power` is derived from
 # `L_absorbed × f/(1−f)`, as CIGALE derives it from `fracAGN`, so §6's energy
@@ -3710,12 +3858,23 @@ print(
 # viewing elevation is ψ = 90° − i, so the cell passes `agn_cos_inc = sin ψ`.
 # CIGALE's opening angle is the full angle and maps to tengri's half-angle via
 # `agn_fritz_oa = (180 − opening_angle) / 2`. Under `cigale_joint` the Fritz torus
-# carries the same `agn_ir_frac` tie as SKIRTOR. CIGALE's `fritz2006` carries a
+# carries the same `agn_ir_frac` tie as SKIRTOR. Its tied disc is the library's isotropic
+# ratio, as in pcigale's `fritz2006`, and it continues below the library's 10 Å edge with the
+# X-ray transmission, where pcigale has no disc (§9f). CIGALE's `fritz2006` carries a
 # disc-slope parameter δ whose default is −0.36; the cell passes `delta=0.0`, which
 # is the Schartmann disc of §9 and of the SKIRTOR runs, so the disc under the torus is
-# the same on both sides. The printed table gives band medians of
-# 1.009–1.010×, worst bands of 0.973–0.975× and
-# none of 12 IR bands outside 5 % in the three cases.
+# the same on both sides.
+#
+# The Fritz comparison agrees in these three cases. The printed table gives band medians of
+# 1.011×, 1.009× and 1.010×, worst bands 0.975×, 0.974× and 0.974×, and none of 12 IR bands
+# outside 5 %. Under `cigale_joint` the tied Fritz torus plus polar dust carries `agn_power`
+# at every ψ, as pcigale's `fritz2006` does: pcigale divides the dust by its own integral at
+# the chosen ψ and multiplies it by `agn_power`, so the library's per-inclination dust flux
+# does not enter the total. The cell prints the torus plus polar luminosity as a multiple of
+# `agn_power`, 1.011× at each of ψ = 0.001°, 40.1° and 89.99°, the same flat value as the
+# SKIRTOR cases above. The per-sightline spectral shape of the torus is the library's; only
+# the total is held. The untied path (`agn_ir_frac = 0`) and `agn_norm="independent"` keep the
+# library's anisotropy.
 
 # %%
 _AGN_SFH_9E = {
@@ -3819,6 +3978,11 @@ for _tau, _oa, _i in _skirtor_grid:
     _L_polar_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_polar"])
     _L_t_9e = _L_torus_t_9e + _L_polar_t_9e  # Sum torus + polar
     _cases_9e_sk.append((f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e))
+    _AGN_POWER_9e = float(_sed_c9e.info["agn.total_dust_luminosity"])
+    print(
+        f"§9e skirtor τ={_tau}, oa={_oa}°, i={_i}°: tengri torus + polar / agn_power = "
+        f"{_lbol_nu(_w_t_9e, _L_t_9e) / 1e7 / _AGN_POWER_9e:.3f}"
+    )
     _assert_comparable(_L_c9e, _L_t_9e, name=f"§9e skirtor {_tau},{_oa},{_i}")
 
 fig, (ax, ax_r), _ratios_9e_sk = V.sweep_fig(
@@ -3917,6 +4081,11 @@ for _tau, _oa, _psy in _fritz_grid:
     _L_polar_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_polar"])
     _L_t_9f = _L_torus_t_9f + _L_polar_t_9f  # Sum torus + polar
     _cases_9e_fr.append((f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f))
+    _AGN_POWER_9f = float(_sed_c9f.info["agn.total_dust_luminosity"])
+    print(
+        f"§9e fritz τ={_tau}, oa={_oa}°, ψ={_psy}°: tengri torus + polar / agn_power = "
+        f"{_lbol_nu(_w_t_9f, _L_t_9f) / 1e7 / _AGN_POWER_9f:.3f}"
+    )
     _assert_comparable(_L_c9f, _L_t_9f, name=f"§9e fritz {_tau},{_oa},{_psy}")
 
 fig, (ax, ax_r), _ratios_9e_fr = V.sweep_fig(
@@ -3933,6 +4102,304 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_fr:
         np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
     )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§9e {_label}", compact=True)
+
+
+# %% [markdown]
+# ### §9f The tied disc below the X-ray library edge
+#
+# The Fritz (2006) and SKIRTOR (Stalevski et al. 2016) libraries tabulate the disc against
+# inclination, and the first wavelength node of both is 10 Å (1.24 keV). pcigale's
+# `fritz2006` and `skirtor2016` write their AGN spectrum on the library's wavelength grid,
+# so neither has a disc shortward of that node: the grid has no point there. tengri extends
+# the tied disc below the edge with absorption. Under `agn_norm='cigale_joint'` the tied
+# disc factor is the library's own inclination ratio above 10 Å. Below it, the factor is
+# the ratio held at the edge times the X-ray transmission $T_X$ of the sightline
+# (Morrison & McCammon 1983 cross-section, column
+# $N_{\rm H} = 2.21\times10^{21}\,{\rm cm^{-2}}\,A_V$, with $A_V$ from the torus's own optical
+# transmission). The tied disc is therefore continuous across the edge up to $T_X$, and the
+# library's angular law carries across with it. The Fritz ratio is close to 1 for
+# cos i ≥ 0.70 and 0.39 at cos i = 0.30. The SKIRTOR ratio is anisotropic,
+# $\eta(i) = \cos i\,(1 + 2\cos i)/3$, which is 0.90, 0.56 and 0.16 at
+# $\cos i$ = 0.94, 0.70 and 0.30. An untied disc has no library ratio, and follows
+# $2\cos i$ times the transmission ($T$ above the edge, $T_X$ below it), which steps at the
+# edge where the library transmission and $T_X$ differ.
+#
+# The figure shows the tied factor (solid) and the untied factor (dashed) for Fritz on the
+# left and SKIRTOR on the right, at the three inclinations. The table prints the step
+# across the edge between 0.999 and 1.001 times 10 Å, $F(10^-)/[F(10^+)\,T_X]$, which is
+# between 1.0000 and 1.0032 for the tied disc of both tori at every inclination (the
+# 0.2 % separation of the two sample wavelengths accounts for the spread), and then the
+# shortest AGN wavelength of each pcigale module with the tied disc factor tengri carries
+# at 3 Å: pcigale has no grid point shortward of 10 Å, and tengri carries 0.37 (SKIRTOR) and
+# 0.999 (Fritz) at cos i = 0.70.
+
+# %%
+from tengri.components.agn.blocks import torus_library_transmission as _tlt
+
+_COS_EDGE = (0.94, 0.70, 0.30)
+_FRITZ_EDGE_PARAMS = {"agn_fritz_oa": 60.0}
+_wave_edge = jnp.asarray(np.geomspace(3.0, 30.0, 600))
+
+
+def _edge_sightline(torus, wave, cos_inc):
+    params = _FRITZ_EDGE_PARAMS if torus == "fritz" else {}
+    return _tlt.library_torus_sightline(torus, wave, cos_inc=cos_inc, params=params)
+
+
+print("§9f tied disc across the 10 Å library edge, F(10-)/[F(10+) T_X]:")
+print(
+    f"  {'torus':8s} {'cos i':>5s} {'library ratio':>13s} {'T_X':>8s} {'tied step':>10s} "
+    f"{'2cos i':>7s} {'eta(i)':>7s}"
+)
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.8), sharey=True)
+for _ax, _torus, _title in zip(axes, ("fritz", "skirtor"), ("Fritz 2006", "SKIRTOR")):
+    _edge = _tlt.library_edge_wavelength(_torus)
+    _w_pair = jnp.asarray([_edge * 0.999, _edge * 1.001])
+    for _ci, _col in zip(_COS_EDGE, ("C0", "C1", "C3")):
+        _s_pair = _edge_sightline(_torus, _w_pair, _ci)
+        _tied_pair = np.asarray(
+            _tlt.tied_incl_with_library_edge(_s_pair.ratio, _w_pair, _s_pair, _torus)
+        )
+        _t_x = float(np.asarray(_s_pair.transmission)[0])
+        _ratio_edge = float(np.asarray(_s_pair.ratio)[1])
+        _step = _tied_pair[0] / (_tied_pair[1] * _t_x)
+        _eta = _ci * (1.0 + 2.0 * _ci) / 3.0
+        print(
+            f"  {_torus:8s} {_ci:5.2f} {_ratio_edge:13.5g} {_t_x:8.4f} {_step:10.4f} "
+            f"{2.0 * _ci:7.2f} {_eta:7.3f}"
+        )
+        assert abs(_step - 1.0) < 1e-2, (_torus, _ci, _step)
+        _sight = _edge_sightline(_torus, _wave_edge, _ci)
+        _tied = np.asarray(
+            _tlt.tied_incl_with_library_edge(_sight.ratio, _wave_edge, _sight, _torus)
+        )
+        _ax.plot(
+            np.asarray(_wave_edge),
+            _tied,
+            color=_col,
+            lw=1.5,
+            label=rf"tied, $\cos i$ = {_ci:g}",
+        )
+        _ax.plot(
+            np.asarray(_wave_edge),
+            np.asarray(_sight.disc_factor),
+            color=_col,
+            lw=1.1,
+            ls="--",
+        )
+    _ax.axvline(_edge, color="0.4", lw=0.9, ls=":")
+    _ax.set(xscale="log", yscale="log", xlabel=r"$\lambda$ [Å]", title=_title)
+    _ax.set_xticks([3, 5, 10, 20, 30])
+    _ax.set_xticklabels(["3", "5", "10", "20", "30"])
+    _ax.minorticks_off()
+    _ax.set_ylim(1e-6, 4.0)
+    _ax.grid(True, alpha=0.3)
+axes[0].set_ylabel("disc inclination factor")
+axes[0].plot([], [], "k--", lw=1.1, label=r"untied, $2\cos i\,T$")
+axes[0].legend(fontsize=8, frameon=False, loc="lower right")
+fig.tight_layout()
+save_fig("cigale_09_tied_disc_edge.png")
+
+# pcigale's AGN spectrum lives on the library grid: count the wavelength points it has
+# shortward of the first node, and the tied disc tengri carries there at 3 Å.
+_sed_fr_edge = _cigale_fritz_sed(1.0, 100.0, 40.1)
+for _name, _sed_e, _torus in (
+    ("skirtor2016", sed_skirtor0, "skirtor"),
+    ("fritz2006", _sed_fr_edge, "fritz"),
+):
+    _w_e = np.asarray(_sed_e.wavelength_grid) * 10.0
+    _edge = _tlt.library_edge_wavelength(_torus)
+    _w3 = jnp.asarray([3.0])
+    _s3 = _edge_sightline(_torus, _w3, 0.70)
+    _t3 = float(np.asarray(_tlt.tied_incl_with_library_edge(_s3.ratio, _w3, _s3, _torus))[0])
+    print(
+        f"  pcigale {_name}: shortest AGN wavelength {_w_e.min():.2f} Å, "
+        f"{int((_w_e < _edge).sum())} points below the {_edge:g} Å node; "
+        f"tengri tied disc factor at 3 Å, cos i = 0.70: {_t3:.4g}"
+    )
+
+
+# %% [markdown]
+# ### §9g SKIRTOR normalization and the AGN-only shape
+#
+# Two checks on the SKIRTOR template as a stand-alone AGN, against `skirtor2016` with
+# `disk_type=0` (SKIRTOR's own disc, the one the library stores), at the §9 fiducial
+# (i = 30°, τ_9.7 = 7, oa = 40°, `fracAGN = 0.3`, `lambda_fracAGN="0/0"`).
+#
+# **Normalization mapping.** pcigale sets `agn_power = fracAGN/(1 − fracAGN) × L_dust,host`
+# and publishes the angle-integrated accretion power
+# $P_{\rm acc} = \frac{7/18}{\eta(30^\circ)}\,L_{\rm intrin,disc}\,{\rm agn\_power}
+# = 0.493\,L_{\rm intrin,disc}\,{\rm agn\_power}$. Here $\eta(i) = \cos i\,(1+2\cos i)/3$
+# (Stalevski et al. 2016) and 7/18 is its mean over the sphere. tengri's `agn_log_lbol` is
+# that same angle-integrated accretion power, so
+# `agn_log_lbol = log10(P_acc / L_sun)`. The cell prints each link of the chain; the
+# bolometric ratio below then tests the mapping against pcigale's own sightline luminosity.
+#
+# **AGN-only shape.** The AGN-only SED is each code's AGN minus the same host without it. For
+# tengri it is the SKIRTOR template's disc plus torus
+# (`create_skirtor_components_from_grid`, the library `torus.skirtor` reads) at `agn_log_lbol`
+# and `agn_cos_inc = cos 30°`, with no host, so no host quantity enters. The
+# shape is the mean $L_\nu$ over 1.0–1.2 μm divided by the mean over 5400–5600 Å, and the
+# bolometric ratio compares the AGN-only $\int L_\nu\,d\nu$. pcigale reddens the type-1
+# disc by $E(B-V) = 0.03$ and re-emits that energy as polar dust, which this tengri model
+# does not carry. The first row is therefore pcigale at its default `EBV = 0.03`; the second
+# row sets `EBV = 0` so the two share the disc and torus alone.
+#
+# The printed mapping factor is 0.4931, and pcigale's `agn_power` equals its
+# `agn.total_dust_luminosity` exactly. The product (7/18)/η(30°) × `lumin_intrin_disk` ×
+# `agn_power`, with `lumin_intrin_disk` read from the module, reproduces the published
+# accretion power to better than 0.1 %. `lumin_intrin_disk` is 2.77 at `EBV = 0.03` and 3.60
+# at `EBV = 0` (printed): pcigale normalizes the template so that the dust plus polar
+# re-emission integrates to one, and the polar re-emission only exists when E(B−V) > 0, so
+# the same `agn_power` corresponds to a smaller intrinsic disc when the polar screen is on.
+#
+# At the default `EBV = 0.03` the AGN-only NIR/V shape of
+# tengri is 0.960× of pcigale's, with the V level at 1.013×, the 1.0–1.2 μm level at 0.972×
+# and the bolometric ratio at 1.062×. At `EBV = 0` the shape is 1.005×, the levels 0.936× and
+# 0.940× and the bolometric ratio 0.921×. The first row's bolometric agreement is therefore
+# partly the polar-dust re-emission pcigale adds, which the composable model of §9 and §9c
+# carries through its `polar_dust` block. The origin of the 0.92–0.94× offset at `EBV = 0`
+# is not traced here; the shape is unaffected.
+
+# %%
+from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+
+_SK_I = 30.0
+_COS_SK = float(np.cos(np.radians(_SK_I)))
+_ETA_SK = _COS_SK * (1.0 + 2.0 * _COS_SK) / 3.0
+_K_ACC = (7.0 / 18.0) / _ETA_SK
+
+
+def _skirtor_dt0_params(ebv):
+    return dict(
+        t=7,
+        pl=1.0,
+        q=1.0,
+        oa=40,
+        R=20,
+        Mcl=0.97,
+        i=int(_SK_I),
+        disk_type=0,
+        delta=0,
+        fracAGN=0.3,
+        lambda_fracAGN="0/0",
+        law=0,
+        EBV=ebv,
+        temperature=100.0,
+        emissivity=1.6,
+    )
+
+
+def _cigale_skirtor_dt0(ebv):
+    return C.run_chain(
+        [
+            _sfh_args_d,
+            ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+            NEB_FIDUCIAL_CIGALE,
+            ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+            ("skirtor2016", _skirtor_dt0_params(ebv)),
+        ]
+    )
+
+
+_SKIRTOR_TEMPLATE_FN = create_skirtor_components_from_grid(
+    str(_CIGALE_DALE_PARENT / "data" / "skirtor_templates_v3.h5")
+)
+_W_TEMPLATE = np.logspace(2.0, 7.0, 6000)
+
+
+def _tengri_skirtor_template(log_lbol):
+    """(wavelength [Å], disc + torus L_ν [erg/s/Hz]) of the SKIRTOR template at i = 30°."""
+    parts = _SKIRTOR_TEMPLATE_FN(
+        _W_TEMPLATE,
+        agn_log_lbol=log_lbol,
+        frac_agn=1.0,
+        agn_tau_skirtor=7.0,
+        agn_p_skirtor=1.0,
+        agn_q_skirtor=1.0,
+        agn_oa_skirtor=40.0,
+        agn_radius_ratio=20.0,
+        agn_cos_inc=_COS_SK,
+    )
+    return _W_TEMPLATE, np.asarray(parts.total)
+
+
+def _window_mean(w, l_nu, lo, hi):
+    sel = (w >= lo) & (w <= hi)
+    return float(np.mean(l_nu[sel]))
+
+
+print(f"§9g mapping factor 0.493 = (7/18)/eta(30°) = {_K_ACC:.4f} (eta(30°) = {_ETA_SK:.4f})")
+_rows_9g = []
+for _ebv in (0.03, 0.0):
+    _sed_9g = _cigale_skirtor_dt0(_ebv)
+    _agn_power = 0.3 / 0.7 * float(_sed_9g.info["dust.luminosity"])  # W
+    _p_acc = float(_sed_9g.info["agn.accretion_power"])  # W
+    # lumin_intrin_disk is the module's own attribute, read from the module and not
+    # backed out of its output.
+    _mod_9g = C._get_module_class("skirtor2016")(name="skirtor2016", **_skirtor_dt0_params(_ebv))
+    _lintr = float(_mod_9g.lumin_intrin_disk)
+    _p_formula = _K_ACC * _lintr * _agn_power
+    assert abs(_p_formula / _p_acc - 1.0) < 1e-3, (_p_formula, _p_acc)
+    _log_lbol = float(np.log10(_p_acc * 1e7 / L_SUN))
+    print(
+        f"  EBV = {_ebv}: agn_power {_agn_power:.4e} W "
+        f"({_agn_power / float(_sed_9g.info['agn.total_dust_luminosity']):.4f} "
+        "of agn.total_dust_luminosity), "
+        f"lumin_intrin_disk {_lintr:.4f}, P_acc published {_p_acc:.4e} W, "
+        f"(7/18)/η(30°) × lumin_intrin_disk × agn_power {_p_formula:.4e} W, "
+        f"agn_log_lbol = {_log_lbol:.4f}"
+    )
+    _w_t_9g, _L_agn_t = _tengri_skirtor_template(_log_lbol)
+    _w_s, _L_s = C.to_lnu(_sed_9g)
+    _L_agn_c = _L_s - U.regrid(w_base, L_base, _w_s)
+    _L_agn_t_on_c = U.regrid(_w_t_9g, _L_agn_t, _w_s)
+    _nir_c = _window_mean(_w_s, _L_agn_c, 1.0e4, 1.2e4)
+    _v_c = _window_mean(_w_s, _L_agn_c, 5400.0, 5600.0)
+    _nir_t = _window_mean(_w_s, _L_agn_t_on_c, 1.0e4, 1.2e4)
+    _v_t = _window_mean(_w_s, _L_agn_t_on_c, 5400.0, 5600.0)
+    _bol_c = _lbol_nu(_w_s, _L_agn_c)
+    _bol_t = _lbol_nu(_w_t_9g, _L_agn_t)
+    _rows_9g.append(
+        (
+            _ebv,
+            (_nir_t / _v_t) / (_nir_c / _v_c),
+            _v_t / _v_c,
+            _nir_t / _nir_c,
+            _bol_t / _bol_c,
+            _bol_c / 1e7 / float(_sed_9g.info["agn.luminosity"]),
+        )
+    )
+    if _ebv == 0.03:
+        _plot_9g = (_w_s, _L_agn_c, _w_t_9g, _L_agn_t)
+print("§9g AGN-only SKIRTOR template, tengri / pcigale:")
+print(f"  {'EBV':>5s} {'NIR/V shape':>12s} {'V level':>8s} {'NIR level':>10s} {'bolometric':>11s}")
+for _e, _sh, _lv, _ln, _bl, _chk in _rows_9g:
+    print(f"  {_e:5.2f} {_sh:12.3f} {_lv:8.3f} {_ln:10.3f} {_bl:11.3f}")
+    assert abs(_chk - 1.0) < 2e-2, _chk  # pcigale's own sightline luminosity closes
+# Regression pins around the printed values (±0.03 on the shape, ±0.05 on the bolometric
+# ratio), to catch a change in either code; they are not a physics tolerance.
+for _row_9g, _shape, _bol in zip(_rows_9g, (0.960, 1.005), (1.062, 0.921)):
+    assert abs(_row_9g[1] - _shape) < 0.03 and abs(_row_9g[4] - _bol) < 0.05, _row_9g
+
+_wp_c, _Lp_c, _wp_t, _Lp_t = _plot_9g
+fig, ax, ax_r, _ratio_9g = U.overlay_ratio_fig(
+    _wp_c,
+    _Lp_c,
+    _wp_t,
+    _Lp_t,
+    title="§9g SKIRTOR AGN-only (i = 30°, τ_9.7 = 7)",
+    label_c="pcigale  skirtor2016 − host",
+    label_t="tengri  SKIRTOR template",
+    ratio_ylim=(0.5, 1.5),
+    xlim=(1e3, 1e6),
+    dyn_range=1e-4,
+    figsize=(8, 5.6),
+)
+for _lo, _hi in ((1.0e4, 1.2e4), (5400.0, 5600.0)):
+    ax.axvspan(_lo, _hi, color="0.8", alpha=0.5, lw=0)
+fig.tight_layout()
+save_fig("cigale_09_skirtor_agn_only.png")
 
 
 # %% [markdown]
@@ -4198,6 +4665,187 @@ save_fig("cigale_10b_xray_inclination.png")
 
 
 # %% [markdown]
+# ### §10c The `lopez24` X-ray module
+#
+# CIGALE's `lopez24` and tengri's `xray={"type": "lopez24"}` are the same kind of model,
+# an X-ray module, and not a dust emitter. Both build the host's hot-gas, high-mass and
+# low-mass X-ray-binary emission from the star-formation rate, stellar mass, age and
+# metallicity, and set the AGN corona from the AGN's mid-infrared luminosity rather than
+# from its UV disc (Lopez et al. 2024): $L_X(2\text{–}10\,{\rm keV}) = \nu L_\nu(12\,\mu{\rm m})
+# / 10^{\alpha_{\rm IRX}}$ (Asmus et al. 2015), with a power law of Γ = 1.8 and a 300 keV
+# cutoff. `alpha_irx` is the one AGN-side knob; the AGN's 12 μm luminosity comes from the
+# AGN component of each code.
+#
+# The cell builds the §9 AGN on both sides (SKIRTOR torus, Schartmann disc,
+# `fracAGN = agn_ir_frac = 0.3`, i = 30°, no polar dust) on a 1e11 M☉ host, and sweeps
+# `alpha_irx` ∈ {0, 0.3, 0.6} with N_H = 0 and no binary offsets. The corona is each
+# code's X-ray SED with and without the AGN (tengri) or its `xray.agn` component (pcigale). The
+# table prints the host (hot gas plus binaries) and corona ratios at 2 keV and as a median over
+# 0.5–10 keV, beside the ratio of the two codes' 12 μm luminosities. The corona ratio follows
+# the 12 μm ratio at the 0.1 % level, so what separates the two codes is the AGN's
+# mid-infrared luminosity (§9, torus 1.011×) and not the X-ray module.
+
+# %%
+_LOPEZ_MASS = 1e11
+_LOPEZ_ALPHAS = (0.0, 0.3, 0.6)
+
+
+def _cigale_lopez24(alpha_irx):
+    return C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dale2014", dict(alpha=2.0)),
+            (
+                "skirtor2016",
+                dict(
+                    t=7,
+                    pl=1.0,
+                    q=1.0,
+                    oa=40,
+                    R=20,
+                    Mcl=0.97,
+                    i=30,
+                    disk_type=1,
+                    delta=0.0,
+                    fracAGN=0.3,
+                    lambda_fracAGN="0/0",
+                    law=0,
+                    EBV=0.0,
+                    temperature=100.0,
+                    emissivity=1.6,
+                ),
+            ),
+            (
+                "lopez24",
+                dict(gam=1.8, E_cut=300.0, alpha_irx=alpha_irx, det_lmxb=0.0, det_hmxb=0.0),
+            ),
+        ]
+    )
+
+
+def _tengri_lopez24(alpha_irx, with_agn):
+    with warnings.catch_warnings():
+        # Same as §6d: the 5 Gyr host has no star beyond the grid's oldest template.
+        warnings.simplefilter("ignore", SFHBeyondOldestTemplateWarning)
+        return _build_tengri_lopez24(alpha_irx, with_agn)
+
+
+def _build_tengri_lopez24(alpha_irx, with_agn):
+    agn = (
+        {
+            "type": "composable",
+            "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+            "atten": {"type": "none"},
+            "agn_ir_frac": Fixed(0.3),
+            "agn_cos_inc": Fixed(_COS30),
+            "all_params": Fixed(DEFAULT),
+        }
+        if with_agn
+        else {"type": "none"}
+    )
+    return SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(float(np.log10(_LOPEZ_MASS))),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation=_AGN_DUSTATT_9E,
+        agn=agn,
+        xray={
+            "type": "lopez24",
+            "log_nh": Fixed(0.0),
+            "alpha_irx": Fixed(alpha_irx),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
+    ).predict_state({})
+
+
+def _cigale_xray_component(sed, key):
+    """(E [keV], L_nu [erg/s/Hz]) of a pcigale X-ray component at the 1e11 M☉ mass."""
+    w, l_nu = U.wnm_to_erg_per_hz_per_aa(
+        np.asarray(sed.wavelength_grid), np.asarray(sed.luminosities[key])
+    )
+    return 12.398 / w, l_nu * _LOPEZ_MASS
+
+
+def _on_energy(state, e_ref):
+    e_t = 12.398 / np.asarray(state.wave)
+    order = np.argsort(e_t)
+    return np.interp(e_ref, e_t[order], np.asarray(state.derived["sed_xray"])[order])
+
+
+def _ratio_stats(e_ref, l_c, l_t):
+    sel = (e_ref >= 0.5) & (e_ref <= 10.0) & (l_c > 0)
+    ratio = l_t / np.where(l_c > 0, l_c, np.nan)
+    return float(ratio[np.argmin(np.abs(e_ref - 2.0))]), float(np.nanmedian(ratio[sel]))
+
+
+fig = plt.figure(figsize=(8, 5.6))
+gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.08)
+ax = fig.add_subplot(gs[0])
+ax_r = fig.add_subplot(gs[1], sharex=ax)
+print("§10c lopez24, tengri / pcigale (2 keV, median 0.5-10 keV):")
+print(
+    f"  {'alpha_irx':>9s} {'L_12um':>7s} {'corona 2 keV':>13s} {'corona med':>11s} "
+    f"{'corona/L_12um':>14s} {'host 2 keV':>11s} {'host med':>9s}"
+)
+_gal_t = _tengri_lopez24(0.3, with_agn=False)
+for _alpha, _col in zip(_LOPEZ_ALPHAS, ("C0", "C1", "C3")):
+    _sed_l = _cigale_lopez24(_alpha)
+    _st_l = _tengri_lopez24(_alpha, with_agn=True)
+    _e_g, _L_g = _cigale_xray_component(_sed_l, "xray.galaxy")
+    _e_a, _L_a = _cigale_xray_component(_sed_l, "xray.agn")
+    _corona_t = _on_energy(_st_l, _e_a) - _on_energy(_gal_t, _e_a)
+    _host_t = _on_energy(_gal_t, _e_g)
+    _r12 = 10.0 ** (
+        float(np.asarray(_st_l.derived["log_L_12um"]))
+        - float(np.log10(float(_sed_l.info["agn.L_12um"]) * _LOPEZ_MASS * 1e7))
+    )
+    _cor2, _corm = _ratio_stats(_e_a, _L_a, _corona_t)
+    _host2, _hostm = _ratio_stats(_e_g, _L_g, _host_t)
+    print(
+        f"  {_alpha:9.1f} {_r12:7.4f} {_cor2:13.4f} {_corm:11.4f} {_cor2 / _r12:14.4f} "
+        f"{_host2:11.4f} {_hostm:9.4f}"
+    )
+    assert abs(_cor2 / _r12 - 1.0) < 5e-3, (_alpha, _cor2, _r12)
+    _o = np.argsort(_e_a)
+    ax.plot(_e_a[_o], _L_a[_o], color=_col, **_REF_KW)
+    ax.plot(
+        _e_a[_o],
+        _corona_t[_o],
+        color=_col,
+        lw=_TNG_LW,
+        label=rf"$\alpha_{{\rm IRX}}$ = {_alpha:g}",
+    )
+    _pos = _corona_t[_o] > 0
+    ax_r.plot(_e_a[_o][_pos], (_corona_t[_o] / _L_a[_o])[_pos], color=_col, lw=1.1)
+ax.plot([], [], "k-", **_REF_KW, label="pcigale `lopez24` corona")
+ax.plot([], [], "k-", lw=_TNG_LW, label="tengri `lopez24` corona")
+ax.set(xscale="log", yscale="log", ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set_xlim(0.3, 300.0)
+ax.set_ylim(1e22, 1e27)
+ax.legend(fontsize=8, frameon=False)
+ax.tick_params(labelbottom=False)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.set(xscale="log", ylim=(0.8, 1.25), xlabel=r"$E$ [keV]", ylabel="tengri/CIGALE")
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("cigale_10c_xray_lopez24.png")
+
+
+# %% [markdown]
 # ## §11 Radio
 #
 # CIGALE module `radio` (`qir_sf`, `alpha_sf`) ↔ tengri
@@ -4240,10 +4888,10 @@ save_fig("cigale_10b_xray_inclination.png")
 # 1.4276 GHz anchor. The remaining numbers share one base, Bell's TIR total at
 # exactly 1.4 GHz: the synchrotron is 0.9033 of it and the nebular continuum
 # 0.0583, so (synchrotron + nebular continuum) / Bell
-# total is 0.9616. It falls below 1 because the
+# total is 0.9615. It falls below 1 because the
 # thermal share removed from the total, which is the Murphy et al. (2011) term at
 # the TIR input (0.0967), exceeds the nebular continuum by
-# 0.0384.
+# 0.0385.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
@@ -5028,19 +5676,25 @@ plt.show()
 # |---|---|---|
 # | 1 | SSP | median residual 2.0–2.2e-8 at every age (float32 round-trip) |
 # | 2 | SFH | `delayed` median 1.00002×; `sfh2exp` median 1.00015×, 2 of 1969 points beyond 1 % (burst step); §2c median 1.000× except periodic exponential 0.999× and rectangular 0.993× |
-# | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.030×, 0.3–1 μm 1.006×, L_bol 1.016×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 1.001–1.018×, worst band 1.055× (τ = 3 Gyr, age = 1 Gyr) |
+# | 3 | stellar SED | energy-weighted 912–1200 Å 1.063×, 1200–3000 Å 1.030×, 0.3–1 μm 1.007×, L_bol 1.017×, Q_H 1.150× (age convention: a continuous convolution gives 1.009× of tengri's Q_H, and aging every star by 0.5 Myr gives 1.000× of CIGALE's); §3b band medians 1.001–1.018×, worst band 1.055× (τ = 3 Gyr, age = 1 Gyr) |
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
-# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0165× intrinsic and 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×); §5b band medians 0.997–1.000×; single-point maxima of 75–942 % over 0.1–1 μm sit on emission-line wings (line profile and grid sampling), not on the continuum |
-# | 6 | dust IR | 10–100 μm energy-weighted 1.012×; `L_absorbed` 1.0112× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0109–1.0141×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0119×, 1.0116×, 1.0116× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
-# | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0122× (0.3–1 μm), 1.0081× (3–8 μm), 1.0125× (10–100 μm), 1.0116× (100–1000 μm) |
+# | 5 | attenuation applied | energy-weighted 0.1–1 μm 1.0168× intrinsic and 0.9923× attenuated (912–1200 Å 1.0631×, 1.0571×); §5b band medians 0.997–1.000×; single-point maxima of 75–942 % over 0.1–1 μm sit on emission-line wings (line profile and grid sampling), not on the continuum |
+# | 6 | dust IR | 10–100 μm energy-weighted 1.013×; `L_absorbed` 1.0114× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0111–1.0143×, worst filter 1.043× (`dl2007`, qpah = 4.58); `dl2014` as dust emission alone 1.0121×, 1.0118×, 1.0118× at α = 1, 2, 3 with no band outside 5 %; `schreiber2016` 1.0115× |
+# | 6d | dust IR, `mbb` | dust emission alone, 8–1000 μm medians 1.0108×, 1.0112×, 1.0114× at T = 25, 35, 50 K with `graybody` (worst filter 1.015×, 1.015×, 1.016×, none outside 5 %); tengri's optically thin `mbb` 1.0465×, 1.0466×, 0.789× and, over 100–1000 μm, 0.532×, 0.377×, 0.245× |
+# | 7 | panchromatic | energy-weighted 1.0616× (912–1200 Å), 1.0614× (1250–3000 Å), 1.0125× (0.3–1 μm), 1.0081× (3–8 μm), 1.0127× (10–100 μm), 1.0118× (100–1000 μm) |
 # | 8 | nebular | Q_H 1.146× (shared SSP); raw Hα 1.12×, [O III] 0.96×, Hβ 1.12×, and per ionizing photon 0.974×, 0.834×, 0.978×; §8b at the six stable cases the largest ratio-of-ratios is 0.99× (Hα/Hβ), 2.06× ([O III]/Hβ) and 4.23× ([O II]/Hβ), with Z_gas = 0.041 degenerate in CIGALE's grid (18.87× and 44.38×); Hβ/Q_H at f_esc = 0.5 over f_esc = 0 is 0.3851 (tengri) and 0.3862 (CIGALE) against (1 − f)/(1 + 0.597 f) = 0.3851; Cue's [O III]/Hβ response to logU is 1.154 / 1.596 / 1.663 at the fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
-# | 9 | AGN, SKIRTOR | disc 1.0099×, torus 1.0111×, polar dust 1.0118× (§9); 1.0076×, 1.0147×, 0.9996× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
-# | 9 | AGN, Fritz | §9e band medians 1.009–1.010×, worst bands 0.973–0.975×, none of 12 bands outside 5 % |
+# | 9 | AGN, SKIRTOR | disc 1.0101×, torus 1.0113×, polar dust 1.0120× (§9); 1.0076×, 1.0150×, 0.9998× with the SKIRTOR disc (§9b); 1500–3000 Å full SED 1.027×, of which host 1.061× and disc 1.009×; §9d `R_faceon` 0.998154×, quadrature term 0.994058×, curve term 1.002761×, polar reference 0.996803× (`polar_law="bongiorno"`; 0.970908× with the default `"smc"`); §9e SKIRTOR grid band medians 1.011–1.012×, worst band 1.013× |
+# | 9 | AGN, Fritz | §9e band medians 1.011×, 1.009×, 1.010× (worst bands 0.975×, 0.974×, 0.974×; none of 12 bands outside 5 %): under `cigale_joint` tengri's torus plus polar dust is 1.011× of `agn_power` at every ψ, as pcigale holds it |
+# | 9 | AGN, tied disc edge | step across the 10 Å library edge, F(10⁻)/[F(10⁺) T_X], 1.0000–1.0032 for Fritz and SKIRTOR at cos i = 0.94, 0.70, 0.30; pcigale `fritz2006` and `skirtor2016` have 0 grid points shortward of 10 Å |
+# | 9 | AGN, SKIRTOR normalization | agn_log_lbol = log10(P_acc / L_sun) with P_acc = 0.4931 L_intrin,disc agn_power; AGN-only NIR/V shape 0.960×, V 1.013×, 1.0–1.2 μm 0.972×, bolometric 1.062× at E(B−V) = 0.03, and 1.005×, 0.936×, 0.940×, 0.921× at E(B−V) = 0 |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
-# | 11 | radio | synchrotron 1.0112× across 0.1–100 GHz against ×1.0112 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
+# | 10c | X-ray, `lopez24` | L_12μm 1.0115×, corona 1.0124× at 2 keV and as a 0.5–10 keV median for α_IRX = 0, 0.3, 0.6, corona over L_12μm 1.0009×; host (hot gas and binaries) 0.992× at 2 keV, 0.994× median |
+# | 11 | radio | synchrotron 1.0114× across 0.1–100 GHz against ×1.0114 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
 # | 11b | free-free | per ionizing photon Cue / CIGALE 1.04–1.08× (1.044× at 3 cm, 1.077× at 1 cm, 1.075× at 3 mm and 1 mm); against the analytic reference CIGALE 0.78–0.80× and Cue 0.83–0.86×; radio block / Cue 0.985–1.119× (0.985× at 3 and 1 cm, 1.043× at 3 mm, 1.119× at 1 mm); continuity through 1 mm: largest |d ln L_ν / d ln λ| 0.326 over 0.1–3 mm, flux ratio across 1 mm 0.9775 |
 # | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is 0.003283 for tengri and 0.000909 for CIGALE against Meiksin's Table 2 0.003277; redward of Lyβ the max \|ΔT\| is ≤ 2.8e-16 |
 # | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.99× (1 keV), 0.99× (5 keV); radio 1.02× (1.4 GHz), 1.02× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.02× / 1.09× / 1.07× / 1.04× |
+#
+# tengri's `graybody`, and not its optically thin `mbb`, is CIGALE's `mbb` (§6d).
 #
 # Four conventions account for most of the residuals and are stated where they are
 # measured. The age convention (§3) is exact in tengri and a 1 Myr discrete sum, equivalent

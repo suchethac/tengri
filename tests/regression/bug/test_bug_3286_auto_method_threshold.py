@@ -35,6 +35,7 @@ _N_LATENT = 10  # sits between a configured threshold of 5 and one of 50
 
 def _mock_fitter() -> Fitter:
     spec = MagicMock()
+    spec.eline_broad = False
     spec.n_free = _N_LATENT
     spec.n_latent = _N_LATENT
     spec.free_params = [f"p{i}" for i in range(_N_LATENT)]

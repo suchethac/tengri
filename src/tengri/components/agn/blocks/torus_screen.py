@@ -47,6 +47,8 @@ import math
 import jax.numpy as jnp
 
 from tengri.components.agn._params import (
+    DEFAULT_AGN_FRITZ_OA,
+    DEFAULT_AGN_FRITZ_TAU,
     DEFAULT_AGN_OA_NENKOVA,
     DEFAULT_AGN_OA_SKIRTOR,
     DEFAULT_AGN_TAU_SKIRTOR,
@@ -177,8 +179,8 @@ def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float,
     **JIT-compatible**: yes. The torus block name is a static Python string.
     """
     if torus_block == "fritz":
-        cone_half = params.get("agn_fritz_oa", 60.0)
-        return 90.0 - cone_half, params.get("agn_fritz_tau", 1.0), "fritz"
+        cone_half = params.get("agn_fritz_oa", DEFAULT_AGN_FRITZ_OA)
+        return 90.0 - cone_half, params.get("agn_fritz_tau", DEFAULT_AGN_FRITZ_TAU), "fritz"
     if torus_block == "skirtor":
         return (
             params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),

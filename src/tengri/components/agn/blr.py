@@ -40,6 +40,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_FE2_STRENGTH
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 from tengri.utils.host_array import device_table, host_array
 
@@ -687,7 +688,7 @@ def compute_blr_sed(
     l_disc_bol_erg: float,
     covering_fraction: float = 0.1,
     fwhm_kms: float = _BLR_FWHM_KMS,
-    agn_fe2_strength: float = 0.0,
+    agn_fe2_strength: float = DEFAULT_AGN_FE2_STRENGTH,
     line_efficiency: float = _BLR_LINE_EFFICIENCY_DEFAULT,
     **_kwargs,
 ) -> jnp.ndarray:
