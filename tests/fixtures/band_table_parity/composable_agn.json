@@ -3,7 +3,7 @@
   "agn_log_lbol": 12.45911003379033
  },
  "platform": "darwin-arm64",
- "signature_sha256": "34954b4170bdef8ded90e86cd638028fa43dbbecc99793e7e81bf67742573b30",
+ "signature_sha256": "f5b45c2db81666fc7ca85cd744568950df095855018e93bf3eaa675cd6d4b631",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: unknown reason (gate conditions appear satisfied)\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, agn\n  dust_emission_configured: False\n  free_params: agn_log_lbol\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
