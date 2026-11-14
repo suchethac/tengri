@@ -4303,8 +4303,18 @@ class StellarSEDComponent:
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
             # Surviving mass is the joint-weight contraction with each (age, Z) node
-            # at its own remaining-mass fraction.
-            mstar_surv_age = jnp.sum(joint_weights * ssp.ssp_mass_remaining, axis=0) * total_mass
+            # at its own remaining-mass fraction. On an [alpha/Fe] grid that embeds its alpha
+            # table (#2250) the fraction follows the alpha bracket; the 2-D table is the alpha = 0
+            # plane, so it is used otherwise.
+            if _alpha_collapse_active and ssp.ssp_mass_remaining_alpha is not None:
+                from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+                _mass_remaining = collapse_alpha_axis(
+                    ssp.ssp_mass_remaining_alpha, _alpha_ia, _alpha_fa, axis=1
+                )
+            else:
+                _mass_remaining = ssp.ssp_mass_remaining
+            mstar_surv_age = jnp.sum(joint_weights * _mass_remaining, axis=0) * total_mass
             mstar_surv = jnp.sum(mstar_surv_age)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
