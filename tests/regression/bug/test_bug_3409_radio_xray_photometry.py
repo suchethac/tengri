@@ -5,7 +5,7 @@ A model with a radio star-formation component and an X-ray component is observed
 through a 1.4 GHz top-hat, the shipped VLA L-band curve, and a 2-10 keV band given
 in keV. The photometry must be finite and positive. The 1.4 GHz flux density must
 equal the model's rest-frame L_nu at the rest frequency 1.4 GHz (1 + z), with the
-(1 + z) K-correction and 4 pi d_L^2 dimming, to 1 %.
+(1 + z) K-correction and 4 pi d_L^2 dimming, to 0.01 %.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from tengri import DEFAULT, Fixed, SEDModel
 from tengri.observation import Photometry
 from tengri.observation.filters.custom import register_filter, unregister_filter
 from tengri.utils.cosmology import luminosity_distance
+
+pytestmark = pytest.mark.regression_bug
 
 Z = 0.5
 C_AA = 2.99792458e18
@@ -109,7 +111,8 @@ def test_shipped_vla_l_band_matches_custom_tophat_to_one_percent(predicted):
     phot, _ = predicted
     shipped = phot[_NAMES.index(_SHIPPED_VLA)]
     custom = phot[_NAMES.index(_RADIO_TOPHAT)]
-    assert shipped == pytest.approx(custom, rel=1e-2)
+    # Measured on synthetic_ssp_wide (2026-11-14): |shipped/custom - 1| = 1.1e-6.
+    assert shipped == pytest.approx(custom, rel=1e-4)
 
 
 def test_radio_narrow_band_flux_matches_rest_lnu_with_k_correction(predicted):
@@ -118,4 +121,6 @@ def test_radio_narrow_band_flux_matches_rest_lnu_with_k_correction(predicted):
     nu_rest = 1.4e9 * (1.0 + Z)
     d_l_cm = float(luminosity_distance(Z))
     expected = (1.0 + Z) * _radio_lnu_at(state, nu_rest) / (4.0 * np.pi * d_l_cm**2)
-    assert observed == pytest.approx(expected, rel=1e-2)
+    # Measured on synthetic_ssp_wide (2026-11-14): |observed/expected - 1| = 3.5e-6,
+    # from the log-log interpolation on the radio grid.
+    assert observed == pytest.approx(expected, rel=1e-4)

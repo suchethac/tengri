@@ -19,6 +19,8 @@ from tengri.utils.physics_constants import C_AA, HC_KEV_ANGSTROM
 from tengri.utils.wave_unit import WAVE_CEILING_AA, to_angstrom
 from tengri.utils.wavelength import RADIO_WAVE_MAX
 
+pytestmark = pytest.mark.regression_bug
+
 
 @pytest.fixture
 def name():
