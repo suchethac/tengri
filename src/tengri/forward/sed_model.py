@@ -78,8 +78,8 @@ from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    AlphaFeUnconstrainedWarning,
     DeadGradientParameterWarning,
-    DegenerateParameterPairWarning,
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
@@ -1043,8 +1043,7 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 #: zero. Maps parameter name -> the reason, for the warning below.
 #:
 #: Empty since #1822, and kept rather than deleted: the check costs nothing and
-#: the class of bug recurs (``met_alpha_fe`` raises the same warning from its own
-#: site, and #1206/#1764 are the earlier instances).
+#: the class of bug recurs (#1206 and #1764 are the earlier instances).
 #:
 #: ``agn_kt_warm`` was the sole entry. It reached the SED only via
 #: ``_nthcomp_lnu_interp``, whose ``custom_jvp`` supplied a ``gamma`` tangent and
@@ -1075,8 +1074,6 @@ def _warn_dead_gradient_params(spec) -> None:
     freed = [name for name in _DEAD_GRADIENT_PARAMS if name in set(spec.free_params)]
     if not freed:
         return
-
-    from tengri.config.exceptions import DeadGradientParameterWarning
 
     for name in freed:
         warnings.warn(
@@ -1172,6 +1169,68 @@ def _warn_agn_dust_double_count(spec) -> None:
 #: intrinsic, so ``nebular_line_frac * sed_nebular`` would be the unattenuated
 #: line light, not the light in the spectrum.
 _DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
+
+
+#: Smallest resolving power that resolves the Mg b / Fe region (#3487).
+_ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
+#: Rest-frame window of the Mg b / Fe features that constrain [alpha/Fe] (#3487), [Angstrom].
+_ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
+
+
+def _alpha_fe_redshift_ends(spec) -> list[float]:
+    """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
+
+    A fixed redshift gives one value. A free redshift gives both ends of its prior
+    bounds, since a spectrum can cover the window at one end and not the other.
+    """
+    dist = spec.get_distribution("redshift")
+    if dist.is_fixed:
+        return [float(dist.value)]
+    return [float(bound) for bound in dist.bounds if bound is not None]
+
+
+def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[str, float]]:
+    """Return why an observation cannot constrain [alpha/Fe], and the measured values (#3487).
+
+    An empty list means it can: spectral indices, or a spectrum that resolves and covers
+    the Mg b / Fe window at every redshift the model can take.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter spec, read for the redshift distribution.
+    observation : Observation
+        The model's observation.
+
+    Returns
+    -------
+    findings : list of str
+        One phrase per reason the observation is blind to [alpha/Fe].
+    measurements : dict of str to float
+        The numbers behind the findings, for :func:`warn_measured`.
+    """
+    if observation.has_spectral_indices:
+        return [], {}
+    spectroscopy = observation.spectroscopy
+    if spectroscopy is None:
+        if observation.can_do_photometry:
+            return ["photometry only"], {}
+        return ["no spectrum and no spectral indices (line fluxes only)"], {}
+
+    findings: list[str] = []
+    measurements: dict[str, float] = {}
+    if spectroscopy.resolution is not None:
+        resolving_power = float(np.median(np.asarray(spectroscopy.resolution, dtype=float)))
+        if resolving_power < _ALPHA_FE_MIN_RESOLVING_POWER:
+            findings.append(f"R = {resolving_power:.0f}")
+            measurements["resolving_power"] = resolving_power
+    lo, hi = _ALPHA_FE_REST_WINDOW_AA
+    wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
+    for z in _alpha_fe_redshift_ends(spec):
+        rest = wave_obs / (1.0 + z)
+        if rest.min() > lo or rest.max() < hi:
+            findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
+    return findings, measurements
 
 
 def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
@@ -1872,6 +1931,11 @@ def _radio_mass_floor(spec) -> tuple[float, float]:
     hi = max(b[1] for b in mass_bounds)
     ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
     remaining = getattr(ssp, "ssp_mass_remaining", None)
+    # An embedded [alpha/Fe] table (#2250) holds the alpha = 0 plane too, so its minimum bounds
+    # the fraction at every alpha.
+    alpha_remaining = getattr(ssp, "ssp_mass_remaining_alpha", None)
+    if alpha_remaining is not None:
+        remaining = alpha_remaining
     offset = 0.0
     if remaining is not None:
         frac_min = float(np.min(np.asarray(remaining)))
@@ -3179,6 +3243,18 @@ class SEDModel:
             return 0.0
         return float(dist.bounds[0]) if dist.is_fixed else None
 
+    def _spectrum_lut_sigma_v_kms(self) -> float | None:
+        """The dispersion the spectrum table bakes at build, ``None`` when none is baked.
+
+        Only a ``SpectrumPrecomp`` build pre-broadens its SSP table by the fixed
+        ``sigma_v_kms`` (#3489). The value is keyed in :meth:`compile_signature`
+        because ``spec`` is keyed without its fixed values, so two such models
+        differing only in that dispersion would otherwise share one kernel.
+        """
+        if not self._approx.get("spectrum_precomp"):
+            return None
+        return self._fixed_sigma_v_kms()
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -3633,7 +3709,8 @@ class SEDModel:
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
         self._warn_young_top_metallicity(spec, ssp_data)
-        self._validate_alpha_fe_identifiability(spec, ssp_data)
+        self._refuse_alpha_fe_without_alpha_axis(spec, ssp_data)
+        self._warn_alpha_fe_unconstrained(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
@@ -4441,10 +4518,6 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for metallicity handling.
 
-        Raises
-        ------
-        NotImplementedError
-            If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
         self._met_mode = spec.met_mode
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
@@ -4460,24 +4533,9 @@ class SEDModel:
         else:
             delta.update(met_param_map)
 
-        self._alpha_fe_evolving = spec.alpha_fe_evolving
-        if self._alpha_fe_evolving:
-            # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
-            # through the stellar component's SED production pipeline. Currently the
-            # mechanism accepts only a scalar met_alpha_fe, which is applied uniformly
-            # to all ages (either via SSP grid interpolation or effective-metallicity
-            # calculation). Supporting a per-age ramp would require architectural
-            # changes: propagating per-age arrays through the age-weight loop and
-            # modifying effective_metallicity / interpolate_alpha_only to work per-age.
-            raise NotImplementedError(
-                "alpha_fe_evolving=True is not yet supported (#1767). "
-                "The stellar component currently accepts only a scalar "
-                "met_alpha_fe [alpha/Fe] applied uniformly to all ages. "
-                "To model alpha enhancement, use alpha_fe_evolving=False "
-                "(the default) and set met_alpha_fe to a Fixed or free scalar value. "
-                "Per-age alpha ramping from alpha_fe_old to alpha_fe_young requires "
-                "architectural extensions currently under development."
-            )
+        # #1767 / #2250: a per-age [alpha/Fe] ramp is carried by the stellar component
+        # (alpha bracket per SSP age, see StellarSEDComponent._alpha_fe_at_ages).
+        self._alpha_fe_evolving = bool(spec.alpha_fe_evolving)
 
         return delta
 
@@ -4598,6 +4656,38 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _warn_alpha_fe_unconstrained(self, spec, ssp_data):
+        """Warn once per build when a free [alpha/Fe] has no observation to constrain it (#3487).
+
+        Runs after :meth:`_refuse_alpha_fe_without_alpha_axis`, so a free [alpha/Fe] on a
+        3-D grid has already been refused. Spectral indices always constrain it. Otherwise
+        a spectrum must resolve the Mg b / Fe window (R of at least 1000) and cover the
+        4800-5400 A rest-frame window at every redshift the model can take. Photometry,
+        line fluxes, and a spectrum that misses either test leave the posterior on the
+        prior. The warning names every free [alpha/Fe] parameter.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.parameters.groups import _ALPHA_FE_PARAMS
+
+        # A model built without an observation has nothing to fit yet, so nothing to judge.
+        if self.observation is None or ssp_data is None or not has_alpha_grid(ssp_data):
+            return
+        free = [name for name in _ALPHA_FE_PARAMS if name in spec.free_params]
+        if not free:
+            return
+        findings, measurements = _alpha_fe_observation_findings(spec, self.observation)
+        if not findings:
+            return
+        lo, hi = _ALPHA_FE_REST_WINDOW_AA
+        text = (
+            f"[alpha/Fe] is free ({', '.join(free)}), but the observation cannot constrain it: "
+            f"{'; '.join(findings)}. [alpha/Fe] is constrained by the Mg b / Fe features at "
+            f"{lo:.0f}-{hi:.0f} A rest frame, which needs a spectrum that resolves them "
+            f"(R >= {_ALPHA_FE_MIN_RESOLVING_POWER:.0f}) and covers that window, or spectral "
+            "indices. The posterior will follow the prior."
+        )
+        warn_measured(text, AlphaFeUnconstrainedWarning, stacklevel=3, **measurements)
 
     def _warn_young_top_metallicity(self, spec, ssp_data):
         """Warn once per build when the metallicity weights can reach the truncated top node.
@@ -4780,84 +4870,53 @@ class SEDModel:
             z_min=z_min,
         )
 
-    def _validate_alpha_fe_identifiability(self, spec, ssp_data):
-        """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
+    def _refuse_alpha_fe_without_alpha_axis(self, spec, ssp_data):
+        """Refuse a non-zero ``met_alpha_fe`` on an SSP grid with no [alpha/Fe] axis.
 
         ``[alpha/Fe]`` is a real, independently-interpolated axis only when the
-        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226).
-        Without it, ``met_alpha_fe`` reaches the SED solely through
-        :func:`effective_metallicity`, and only from the ``"delta"`` metallicity
-        branch. That leaves two distinct failures, both silent today:
+        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226). A 3D
+        grid stores one scaled-solar template per metallicity node, and
+        ``met_logzsol`` is the total metallicity on it, so ``met_alpha_fe``
+        would have no effect. A parameter that is accepted and does nothing is
+        refused at build, whatever the metallicity mode (#3411).
 
-        * **Any non-delta metallicity model** never reads ``met_alpha_fe`` at
-          all. Measured on a 3D grid, sweeping 0.0 -> 0.6 under ``"ramp"`` and
-          ``"two_step"``: ``numpy.array_equal`` returns ``True`` and
-          ``d(sum SED)/d(alpha)`` is exactly ``0.0`` (issue #1764). The
-          parameter is still accepted as free, so the reported posterior is the
-          prior.
-        * **Delta metallicity** folds it in as a pure additive shift,
-          ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``, so freeing it
-          alongside ``met_logzsol`` gives an exactly flat ridge (issue #1095).
-
-        This check needs three facts that live in three objects, the grid
-        (``ssp_data``), the metallicity mode (``self._met_mode``), and which
-        parameters are free (``spec``), which is why it belongs here and not on
-        the parameter declaration: :class:`Parameters` cannot see ``ssp_data``,
-        so a guard placed there would fire falsely on every 4D grid.
-
-        Warns rather than raises, matching :meth:`_validate_metallicity_bounds`:
-        the forward model is correct in every case, and both configurations are
-        legitimate if the user wants them.
+        A free ``met_alpha_fe`` and a ``Fixed`` value other than zero are both
+        refused. ``Fixed(0.0)``, the declared default, builds silently.
         """
-        if ssp_data is None:
-            return  # synthetic / placeholder construction path
-
-        distributions = getattr(spec, "_distributions", {})
-        alpha_dist = distributions.get("met_alpha_fe")
-        if alpha_dist is None or alpha_dist.is_fixed:
+        if ssp_data is None:  # synthetic / placeholder construction path
             return
 
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            _ALPHA_TO_Z_COEFF,
-            has_alpha_grid,
-        )
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
+        distributions = getattr(spec, "_distributions", {})
+        if getattr(spec, "alpha_fe_evolving", False) and not has_alpha_grid(ssp_data):
+            raise ParameterError(
+                f"alpha_fe_evolving=True needs an SSP grid with an [alpha/Fe] axis, but the SSP "
+                f"grid {ssp_data.source or 'in use'!r} is a 3-D grid. A per-age [alpha/Fe] ramp "
+                "has no template to read on a 3-D grid. Use an alpha-enhanced 4-D grid (a name "
+                "containing '_afe'; see tengri.list_remote_ssps()), or set "
+                "alpha_fe_evolving=False."
+            )
+        alpha_dist = distributions.get("met_alpha_fe")
+        if alpha_dist is None:
+            return
 
         if has_alpha_grid(ssp_data):
             return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
 
-        met_mode = str(self._met_mode)
-        if met_mode != "delta":
-            warn_measured(
-                f"met_alpha_fe is free, but metallicity mode {met_mode!r} never "
-                f"reads it. On an SSP grid with no [alpha/Fe] axis the "
-                f"enhancement is applied only in the 'delta' branch, so "
-                f"d(SED)/d(met_alpha_fe) is exactly 0.0: no gradient-based "
-                f"sampler can move it and the reported posterior is the prior "
-                f"(issue #1764). Use met_mode='delta', pin met_alpha_fe with "
-                f"Fixed(...), or load an SSP grid carrying an [alpha/Fe] axis.",
-                DeadGradientParameterWarning,
-                gradient=0.0,
-                stacklevel=3,
-            )
+        if alpha_dist.is_fixed and float(alpha_dist.value) == 0.0:
             return
 
-        logzsol_dist = distributions.get("met_logzsol")
-        if logzsol_dist is not None and not logzsol_dist.is_fixed:
-            warn_measured(
-                f"met_alpha_fe and met_logzsol are both free, but this SSP grid "
-                f"has no [alpha/Fe] axis, so [alpha/Fe] enters only as an "
-                f"additive shift of the effective metallicity: log_z_eff = "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe. The pair is "
-                f"exactly degenerate, the likelihood is flat along "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe = const, and "
-                f"a Laplace fit assigns that direction the variance its "
-                f"eigenvalue floor implies rather than a measured one (issues "
-                f"#1095, #1515). Free one or the other, or load an SSP grid "
-                f"carrying an [alpha/Fe] axis.",
-                DegenerateParameterPairWarning,
-                coefficient=_ALPHA_TO_Z_COEFF,
-                stacklevel=3,
-            )
+        requested = f"Fixed({float(alpha_dist.value)})" if alpha_dist.is_fixed else "free"
+        grid_name = ssp_data.source or "in use"
+        raise ParameterError(
+            f"met_alpha_fe is {requested}, but the SSP grid {grid_name!r} has no [alpha/Fe] axis "
+            "(it is a 3-D grid). Its metallicity nodes are total Z and carry no "
+            "alpha-enhanced templates, so met_alpha_fe would not change the SED. "
+            "Use an alpha-enhanced 4-D grid (a name containing '_afe'; "
+            "see tengri.list_remote_ssps()), or remove met_alpha_fe, or hold it "
+            "at Fixed(0.0)."
+        )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -7291,15 +7350,21 @@ class SEDModel:
         from tengri._cache_keys import derive_key
         from tengri.forward._signature_policy import SIGNATURE_POLICY, SIGNATURE_VERSION
 
+        tail = (
+            ("x64", bool(jax.config.jax_enable_x64)),
+            ("backend", jax.default_backend()),
+            ("spec_resample_conserving", self._spectrum_resample_decision()),
+        )
+        # Present only when a spectrum table is baked, so models without one keep
+        # their signature (#3489).
+        lut_sigma_v_kms = self._spectrum_lut_sigma_v_kms()
+        if lut_sigma_v_kms is not None:
+            tail = (*tail, ("spec_lut_sigma_v_kms", lut_sigma_v_kms))
         signature = derive_key(
             self,
             SIGNATURE_POLICY,
             version=SIGNATURE_VERSION,
-            tail=(
-                ("x64", bool(jax.config.jax_enable_x64)),
-                ("backend", jax.default_backend()),
-                ("spec_resample_conserving", self._spectrum_resample_decision()),
-            ),
+            tail=tail,
         )
         self._signature_memo = signature
         return signature
@@ -9028,7 +9093,7 @@ class SEDModel:
             grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
             baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
-            GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
+            GP-field SFH) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
             use ``approx=False`` there. Slope indices are filled from the exact
             SED (they are not window-LUT-expressible).
@@ -9162,9 +9227,7 @@ class SEDModel:
             # under a joint-then-standalone call order). Same fix as
             # :meth:`_line_window_precomp`.
             with jax.ensure_compile_time_eval():
-                pc = precompute_index_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
-                )
+                pc = self._alpha_window_table(precompute_index_windows, index_defs)
             cache[key] = pc
         return pc
 
@@ -9190,11 +9253,52 @@ class SEDModel:
             # UnexpectedTracerError. Inputs are the concrete build-time SSP grid,
             # so this is a genuine compile-time constant.
             with jax.ensure_compile_time_eval():
-                pc = precompute_line_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs
-                )
+                pc = self._alpha_window_table(precompute_line_windows, line_defs)
             cache[key] = pc
         return pc
+
+    def _alpha_window_table(self, build, defs):
+        """Window table of ``build(ssp_wave, flux, defs)`` on the model's SSP grid.
+
+        A 3D grid is built directly. A 4D grid (``(n_met, n_alpha, n_age, n_wave)``) is built
+        one [alpha/Fe] plane at a time through the same 3D builder and stacked on axis 1 by
+        :func:`~tengri.observation.spectral_indices.stack_alpha_planes`; the consumers then
+        collapse that axis at ``met_alpha_fe``.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.observation.spectral_indices import stack_alpha_planes
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return build(ssp.ssp_wave, ssp.ssp_flux, defs)
+        return stack_alpha_planes(
+            [build(ssp.ssp_wave, ssp.ssp_flux[:, k], defs) for k in range(ssp.ssp_flux.shape[1])]
+        )
+
+    def _fast_alpha_bracket(self, full_params):
+        """``(ia, fa)`` of ``met_alpha_fe`` on the 4D grid's [alpha/Fe] axis, else ``None``.
+
+        Reads ``met_alpha_fe`` from the merged parameter dict (free or Fixed) with the same
+        default :meth:`StellarSEDComponent.apply` uses, so the fast path and the exact forward
+        collapse the alpha axis at the same node weights.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket, has_alpha_grid
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return None
+        from tengri.components.stellar.component import _alpha_fe_at_ages
+        from tengri.cosmology import age_at_z
+        from tengri.parameters.resolve import require_redshift
+
+        evolving = bool(getattr(self, "_alpha_fe_evolving", False))
+        t_universe_gyr = (
+            age_at_z(require_redshift(full_params, "_fast_alpha_bracket")) if evolving else None
+        )
+        alpha_fe = _alpha_fe_at_ages(
+            full_params, ssp, evolving=evolving, t_universe_gyr=t_universe_gyr
+        )
+        return alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
 
     def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
         r"""Return the stellar component, or raise if the chain is unsupported.
@@ -9316,7 +9420,9 @@ class SEDModel:
         # No mass scale: every break and EW index is a ratio of window means, so
         # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
         # galaxy and overflows float32 in the F_lambda conversion (#3149).
-        values = measure_indices_from_window_lut(joint_weights, 1.0, transmission, pc)
+        values = measure_indices_from_window_lut(
+            joint_weights, 1.0, transmission, pc, alpha=self._fast_alpha_bracket(full_params)
+        )
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
@@ -9597,7 +9703,12 @@ class SEDModel:
                     stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
-                joint_weights, total_mass, transmission, pc, log10_4pi_dl2
+                joint_weights,
+                total_mass,
+                transmission,
+                pc,
+                log10_4pi_dl2,
+                alpha=self._fast_alpha_bracket(full_params),
             )
             return fluxes * igm_T
 
@@ -12075,7 +12186,6 @@ class SEDModel:
             needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
-            and not bool(getattr(self.spec, "alpha_fe_evolving", False))
             and not unsafe_free
             and self.ssp_data is not None
         ):
@@ -12746,6 +12856,7 @@ class SEDModel:
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
+            alpha_fe_evolving=bool(getattr(self, "_alpha_fe_evolving", False)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),

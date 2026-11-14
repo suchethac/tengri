@@ -119,8 +119,8 @@ def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
             f"directions the data determine least well. Smallest unclipped "
             f"eigenvalue is {smallest_unclipped:.4g}. If a clipped direction is "
             f"an exact degeneracy (two parameters entering the model only in "
-            f"combination, as met_alpha_fe and met_logzsol do, #1095), hold "
-            f"one of the pair Fixed rather than lowering the floor.",
+            f"combination), hold one of the pair Fixed rather than lowering the "
+            f"floor.",
             LaplaceVarianceCeilingWarning,
             stacklevel=3,
             n_clipped=n_clipped,

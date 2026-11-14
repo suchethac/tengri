@@ -125,12 +125,9 @@ def test_4d_at_grid_node_matches_3d_slice(synthetic_4d_ssp, synthetic_3d_at_alph
     # α=0 is a grid node by construction
     sed_4d = _rest_sed(synthetic_4d_ssp, alpha_fe_value=0.0)
     sed_3d = _rest_sed(synthetic_3d_at_alpha_zero, alpha_fe_value=0.0)
-    # 4D path ignores effective_metallicity at α=0 (logically equivalent
-    # to 3D run); 3D path multiplies by effective_metallicity(log_z, 0).
-    # effective_metallicity(log_z, 0) == log_z by construction (see
-    # dsps_wrapper.effective_metallicity), so both branches feed the
-    # same gal_lgmet to DSPS. Difference is dominated by float64
-    # round-off in the linear interpolation.
+    # At α=0 the 4D path collapses the cube at a grid node and the 3D path reads
+    # the same total metallicity, so both feed the same gal_lgmet to DSPS.
+    # Difference is dominated by float64 round-off in the linear interpolation.
     np.testing.assert_allclose(sed_4d, sed_3d, rtol=1e-10, atol=0.0)
 
 

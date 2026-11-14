@@ -3,7 +3,7 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "signature_sha256": "409e659811e4545f4577fa46f02b5a4ce0dc8de8fea4243a7ae8eded2fc96ff3",
+ "signature_sha256": "c98bfd051350875b75e098329d06533cd260a366fa800b74bf64c5af45329e7e",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
