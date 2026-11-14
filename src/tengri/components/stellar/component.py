@@ -2694,6 +2694,19 @@ class StellarSEDComponent:
                 "log10(total_mass x L_sun): the float32-safe mass scale; the linear "
                 "erg/s form overflows float32",
             ),
+            DerivedKey(
+                "stellar_alpha_bracket_index",
+                "",
+                "Lower [alpha/Fe] node index of met_alpha_fe on a 4D grid, shape (); the "
+                "dust energy-balance LUT collapses its alpha axis at this bracket. Absent "
+                "on a 3D grid",
+            ),
+            DerivedKey(
+                "stellar_alpha_bracket_fraction",
+                "",
+                "Interpolation fraction within the [alpha/Fe] bracket, shape (); pairs with "
+                "stellar_alpha_bracket_index. Absent on a 3D grid",
+            ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey(
                 "age_boundary_younger_fraction",
@@ -4563,6 +4576,10 @@ class StellarSEDComponent:
             derived_overrides["age_boundary_younger_fraction"] = younger_fraction
         if lnu_interval is not None:
             derived_overrides["lnu_interval"] = lnu_interval
+        if _alpha_bracket is not None:
+            # The bracket the dust energy-balance LUT collapses its alpha axis at (#2250).
+            derived_overrides["stellar_alpha_bracket_index"] = _alpha_bracket[0]
+            derived_overrides["stellar_alpha_bracket_fraction"] = _alpha_bracket[1]
         return _CompositePopulation(
             ssp_flux_for_csp=ssp_flux_for_csp,
             alpha_collapse_active=_alpha_collapse_active,

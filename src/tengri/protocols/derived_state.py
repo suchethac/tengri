@@ -110,6 +110,13 @@ class DerivedState:
     #: 1e10 Msun galaxy and overflows float32 for any galaxy above ~9e4 Msun, so
     #: only the log form is published (#1206, #3149).
     log_stellar_mass_scale: jnp.ndarray | None = None
+    #: Lower [alpha/Fe] node index ``ia`` and fraction ``fa`` of the model's
+    #: ``met_alpha_fe`` on a 4D grid, shape () each: the bracket the stellar
+    #: component collapses its own cube at. Published only on a grid with an
+    #: [alpha/Fe] axis; the dust energy-balance LUT collapses its alpha axis at
+    #: the same bracket. ``None`` on a 3D grid.
+    stellar_alpha_bracket_index: jnp.ndarray | None = None
+    stellar_alpha_bracket_fraction: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
     #: Surviving mass per SSP age bin [Msun], shape (n_age,): ``age_weights`` times
