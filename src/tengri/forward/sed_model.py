@@ -243,6 +243,25 @@ def _nebular_continuum_consumers(chain):
     ]
 
 
+def _met_scatter_declared(spec) -> bool:
+    """True when the user declared the metallicity scatter (#3434).
+
+    A declaration is ``met_logzsol_scatter`` named by the user (a value, a prior,
+    or a wildcard ``FREE``) or the flat ``lgmet_scatter`` kwarg. The grammar fills
+    ``met_logzsol_scatter`` with its registry default whenever a ``met`` block
+    omits it, and that fill-in is recorded in ``_group_provenance`` as
+    ``registry_default``, so it does not count. A spec with no provenance (the flat
+    ``Parameters(...)`` escape hatch) falls back to ``_user_provided``.
+    """
+    flat_kwarg = getattr(spec, "_lgmet_scatter_for_fix", None) is not None
+    if flat_kwarg:
+        return True
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        return "met_logzsol_scatter" in getattr(spec, "_user_provided", frozenset())
+    return provenance.get("met_logzsol_scatter") in _SCATTER_DECLARING_PROVENANCE
+
+
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
 
@@ -1351,6 +1370,10 @@ def _validate_fracagn_requires_dust(spec) -> None:
 #: the grammar filling a slot in, which a guard about a *stated* value must
 #: not read as a statement.
 _USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+#: Provenance tags under which the user named a metallicity scatter: a value or
+#: prior (``user_*``), or a wildcard ``FREE`` that freed it (``wildcard_free``).
+#: A ``registry_default`` or wildcard ``Fixed(DEFAULT)`` fill-in is not a declaration.
+_SCATTER_DECLARING_PROVENANCE = _USER_PROVIDED_PROVENANCE | {"wildcard_free"}
 
 
 def _param_is_user_provided(spec, name: str) -> bool:
@@ -12857,7 +12880,8 @@ class SEDModel:
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             alpha_fe_evolving=bool(getattr(self, "_alpha_fe_evolving", False)),
-            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.1)),
+            lgmet_scatter_declared=_met_scatter_declared(self.spec),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             met_bin_edges_log_yr=getattr(self.spec, "met_bin_edges_log_yr", None),

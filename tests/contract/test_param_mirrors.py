@@ -329,7 +329,8 @@ class TestMirrorTargetValueConflictIsRefused:
         fwd = ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
 
         n = 3
-        t_gyr = np.concatenate([np.array([0.0]), np.linspace(1.0, 13.0, 9)])
+        # The model is at z = 0.1 (age 12.44 Gyr): the table must end inside it (#3468).
+        t_gyr = np.concatenate([np.array([0.0]), np.linspace(1.0, 12.0, 9)])
         sfr = np.ones((n, t_gyr.shape[0]))
         sfr[:, 0] = 0.0
         dust_delta = np.full(n, 0.1)

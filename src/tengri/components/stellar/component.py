@@ -144,6 +144,7 @@ from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
+    _lgmet_hermite_weights,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
     enforce_increasing_cosmic_time,
@@ -1416,6 +1417,18 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
     return _lgmet_weights_parcels(jnp.atleast_1d(log_z), lgmet_scatter, ssp_lgmet)[0]
 
 
+def _delta_met_weights(log_z, lgmet_scatter, ssp_lgmet, *, declared):
+    """Metallicity weights of the delta (fixed or constant Z) path (#3434).
+
+    The lognormal MDF of :func:`_lgmet_weights` applies only when the user
+    declared ``met_logzsol_scatter`` (a value or a prior). Otherwise the parcel
+    reads the SSP grid node-exactly in log Z via :func:`_lgmet_hermite_weights`.
+    """
+    if declared:
+        return _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet)
+    return _lgmet_hermite_weights(log_z, ssp_lgmet)
+
+
 def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
     r"""Lognormal-MDF weights for many parcels at once, one CDF call per bin *edge*.
 
@@ -1506,7 +1519,15 @@ def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
 
 
 def _joint_weights_cic_met_table(
-    age_yr, sfr, ssp_ages_yr, t_obs_gyr, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet
+    age_yr,
+    sfr,
+    ssp_ages_yr,
+    t_obs_gyr,
+    lgmet_on_ssp_ages,
+    lgmet_scatter,
+    ssp_lgmet,
+    *,
+    declared=True,
 ):
     r"""CIC joint (met, age) weights for a per-age metallicity table (#964).
 
@@ -1526,9 +1547,13 @@ def _joint_weights_cic_met_table(
     lgmet_on_ssp_ages : ndarray, shape (n_age,)
         log10(Z) absolute at each SSP age (ascending lookback).
     lgmet_scatter : float
-        Lognormal MDF scatter [dex].
+        Lognormal MDF scatter [dex]; used when ``declared``.
     ssp_lgmet : ndarray, shape (n_met,)
         SSP grid metallicities, log10(Z) absolute.
+    declared : bool, keyword-only, default True
+        Whether the user declared the metallicity scatter (#3434). When False,
+        each parcel's metallicity is read node-exactly by cubic Hermite, as the
+        delta path reads a fixed Z; when True the lognormal kernel is used.
 
     Returns
     -------
@@ -1548,7 +1573,12 @@ def _joint_weights_cic_met_table(
     lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
     lg_age = jnp.log10(jnp.maximum(age, 1e-30))
     lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
-    met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_parcel, n_met)
+    if declared:
+        met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_parcel, n_met)
+    else:
+        # No scatter declared (#3434): each parcel reads the SSP grid node-exactly
+        # at its own log Z, the same read the delta path takes for a fixed Z.
+        met_w = jax.vmap(lambda z: _lgmet_hermite_weights(z, ssp_lgmet))(lgmet_par)
     n_met = ssp_lgmet.shape[0]
     n_age = ssp_ages_yr.shape[0]
     joint = (
@@ -1726,6 +1756,82 @@ def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab
         ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
     )
     return lgmet_on_ssp_ages, met_log_age_yr, met_log_z_abs
+
+
+def tabulated_history_weights(
+    t_gyr, sfr, ssp_lg_age_gyr, ssp_lgmet, t_obs_gyr, log_z_abs, lgmet_scatter
+):
+    """Joint (metallicity, age) SSP weights and formed mass for a tabulated SFH.
+
+    The SED-free entry point for a simulation history. It runs the same chain as
+    the ``sfh_model='table'`` forward pass: :func:`_tabulated_sfh` (zero outside
+    the table, lookback from ``t_obs_gyr``), :func:`_cic_integrand` (dense grid
+    with the table's nodes as exact knots, extended past the oldest template),
+    then :func:`_age_weights_cic` for a scalar metallicity or
+    :func:`_joint_weights_cic_met_table` for a metallicity history. Callers that
+    want the same formed mass and SED as :meth:`Catalog.from_histories` should
+    come through here rather than building their own weights.
+
+    Parameters
+    ----------
+    t_gyr, sfr : ndarray, shape (n_t,)
+        Cosmic time [Gyr], strictly increasing, and SFR [Msun/yr] at those nodes.
+    ssp_lg_age_gyr : ndarray, shape (n_age,)
+        SSP grid log10(age/Gyr).
+    ssp_lgmet : ndarray, shape (n_met,)
+        SSP metallicity grid, absolute log10(Z).
+    t_obs_gyr : float
+        Cosmic age at the observation redshift [Gyr]: the lookback origin.
+    log_z_abs : float or ndarray, shape (n_t,)
+        Absolute log10(Z). A scalar is a constant metallicity; an array is a
+        metallicity history on the same nodes as ``t_gyr``.
+    lgmet_scatter : float
+        Metallicity-distribution width [dex]. Above zero it is a declared scatter
+        and the lognormal kernel applies; at zero (undeclared) a scalar metallicity
+        reads the SSP grid node-exactly by cubic Hermite, as the forward model does
+        (#3434). Metallicity histories always use the per-age lognormal kernel.
+
+    Returns
+    -------
+    joint_weights : ndarray, shape (n_met, n_age)
+        Normalized (sum = 1) joint weights.
+    total_mass : ndarray, shape ()
+        Formed stellar mass [Msun], the trapezoidal integral of the SFR.
+    """
+    ssp_ages_yr = 10.0 ** (jnp.asarray(ssp_lg_age_gyr) + 9.0)
+    t_obs = jnp.asarray(t_obs_gyr)
+    sfh_fn, tab_lbt_yr, tab_order = _tabulated_sfh({"sfh_t_gyr": t_gyr, "sfh_sfr": sfr}, t_obs)
+    age_yr, sfr_grid = _cic_integrand(ssp_ages_yr, sfh_fn, {}, None, tab_lbt_yr, t_obs)
+    # Declared scatter is read from the value here, since no spec is at hand. A
+    # scatter of zero is undeclared and takes the node-exact read (#3434). A traced
+    # scatter cannot be inspected, so the lognormal kernel is the general case.
+    try:
+        declared = float(lgmet_scatter) > 0.0
+    except jax.errors.ConcretizationTypeError:
+        declared = True
+    if jnp.ndim(log_z_abs) == 0:
+        age_w, total_mass = _age_weights_cic(age_yr, sfr_grid, ssp_ages_yr, t_obs)
+        lgmet_w = _delta_met_weights(
+            jnp.asarray(log_z_abs), lgmet_scatter, ssp_lgmet, declared=declared
+        )
+        return lgmet_w[:, None] * age_w[None, :], total_mass
+    # Same history-to-SSP-age mapping as _tabulated_lgmet_on_ssp_ages, with the
+    # Z nodes paired to the lookback-sorted SFR nodes by the same ``order``.
+    met_log_age_yr = jnp.log10(jnp.maximum(tab_lbt_yr, 1.0))
+    met_log_z_abs = jnp.asarray(log_z_abs)[tab_order]
+    lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
+        ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+    )
+    return _joint_weights_cic_met_table(
+        age_yr,
+        sfr_grid,
+        ssp_ages_yr,
+        t_obs,
+        lgmet_on_ssp_ages,
+        lgmet_scatter,
+        ssp_lgmet,
+        declared=declared,
+    )
 
 
 def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
@@ -2177,8 +2283,13 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     use_alpha_grid : bool
         Whether the SSP grid carries an α/Fe axis. Currently ``False``.
     lgmet_scatter : float
-        Gaussian scatter in log10(Z) (dex) for the DSPS triweight kernel.
-        Default 0.2 dex matches Prospector / DSPS convention.
+        Gaussian scatter in log10(Z) (dex) for the lognormal metallicity kernel.
+        Used only when ``lgmet_scatter_declared`` is True; the default is 0.1 dex,
+        the live registry default of ``met_logzsol_scatter`` (#3434).
+    lgmet_scatter_declared : bool
+        True when the user declared ``met_logzsol_scatter`` (a value or a prior).
+        False (default): no scatter, the delta path reads the SSP grid
+        node-exactly in log Z (#3434).
     age_boundaries_yr : tuple of float
         Static age boundaries [yr] for which to publish
         ``age_boundary_younger_fraction``, shape ``(n_boundary, n_age)``: per
@@ -2210,7 +2321,8 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     #: #2250, #1767) instead of the scalar ``met_alpha_fe``. Set by the model; on a 4D grid it
     #: makes every alpha bracket per-age.
     alpha_fe_evolving: bool = False
-    lgmet_scatter: float = 0.2
+    lgmet_scatter: float = 0.1
+    lgmet_scatter_declared: bool = False
     # Maximum number of declared ``met_bin_<i>`` parameters (the
     # largest ladder the grammar accepts). The physics derives the
     # bin count from ``met_bin_edges_log_yr`` (n_bins = len(edges) − 1),
@@ -4204,7 +4316,12 @@ class StellarSEDComponent:
             age_w_cic, total_mass = _age_weights_cic(
                 _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
             )
-            lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+            lgmet_w = _delta_met_weights(
+                log_z_abs_scalar,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
+                declared=self.config.lgmet_scatter_declared,
+            )
             joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
         else:  # ramp / chem_evol, per-age metallicity table
             # CIC joint weights on the dense integrand (#964), so the per-age
@@ -4219,6 +4336,7 @@ class StellarSEDComponent:
                 lgmet_on_ssp_ages,
                 lgmet_scatter,
                 ssp.ssp_lgmet,
+                declared=self.config.lgmet_scatter_declared,
             )
         # Guarded normalization: a degenerate SFH (empty star-formation
         # window, e.g. reversed const bounds) yields all-zero weights;
@@ -5070,12 +5188,18 @@ class StellarSEDComponent:
                 lgmet_on_ssp_ages,
                 lgmet_scatter,
                 ssp.ssp_lgmet,
+                declared=self.config.lgmet_scatter_declared,
             )
         else:
             age_w_cic, total_mass = _age_weights_cic(
                 _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
             )
-            lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+            lgmet_w = _delta_met_weights(
+                log_z_abs_scalar,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
+                declared=self.config.lgmet_scatter_declared,
+            )
             joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
             joint_weights = joint_weights / jnp.maximum(
                 joint_weights.sum(), representable_denominator(1e-300)
