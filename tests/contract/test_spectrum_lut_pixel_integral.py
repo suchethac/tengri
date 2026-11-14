@@ -32,6 +32,7 @@ _CUE_WEIGHTS = "data/cue_weights.npz"
 _SDSS = np.linspace(3800.0, 9200.0, 200)  # 27 Angstrom pixels
 _DESI = np.linspace(6000.0, 6048.0, 61)  # 0.8 Angstrom pixels
 _PRISM = np.geomspace(6000.0, 9000.0, 40)  # constant R_pix ~ 100
+_IR = np.geomspace(2.0e4, 2.0e5, 60)  # 3.9 % pixels across the Calzetti clip at 3.115 um rest
 
 _TWO_COMP_FREE = ("sfh_dpl_alpha", "dust_tau_bc", "dust_tau_diff")
 _SINGLE_FREE = ("sfh_dpl_alpha", "dust_tau_v")
@@ -174,6 +175,10 @@ _CASES = [
     pytest.param(
         _SDSS, None, 150.0, "two", True, id="sdss-2comp-cue-nores-sv150"
     ),
+    pytest.param(_IR, None, 0.0, "two", False, id="ir-2comp-nores-sv0"),
+    pytest.param(_IR, None, 150.0, "two", False, id="ir-2comp-nores-sv150"),
+    pytest.param(_IR, None, 0.0, "single", False, id="ir-1screen-nores-sv0"),
+    pytest.param(_IR, 100.0, 150.0, "two", False, id="ir-2comp-R100-sv150"),
     pytest.param(
         _SDSS, 2000.0, 0.0, "two", True, id="sdss-2comp-cue-R2000-sv0"
     ),
@@ -202,6 +207,52 @@ def test_pixel_integral_lut_matches_conserving_exact(
     print(f"\nflux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
     assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
     assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
+
+
+#: Pixels the table computes exactly per draw must match the exact path to rounding, on the
+#: flux and on the Jacobian (#3413).
+_FLAGGED_TOL = 1e-10
+
+_FLAGGED_CASES = [
+    pytest.param(_SDSS, None, 0.0, "two", False, id="sdss-2comp-6300A-jump"),
+    pytest.param(_SDSS, 2000.0, 150.0, "single", True, id="sdss-1screen-cue-R2000-sv150"),
+    pytest.param(_IR, None, 0.0, "two", False, id="ir-2comp"),
+    pytest.param(_IR, None, 0.0, "single", False, id="ir-1screen"),
+    pytest.param(_IR, 100.0, 150.0, "two", False, id="ir-2comp-R100-sv150"),
+]
+
+
+@pytest.mark.parametrize(
+    ("wave_obs", "resolution", "sigma_v", "dust_kind", "with_cue"), _FLAGGED_CASES
+)
+def test_flagged_pixels_are_exact(wave_obs, resolution, sigma_v, dust_kind, with_cue):
+    """Pixels next to a dust-law breakpoint or curvature are the exact path's, to rounding."""
+    from tengri import load_ssp_data
+
+    _require_data(with_cue)
+    ssp = load_ssp_data(_BARE_SSP)
+    names = _SINGLE_FREE if dust_kind == "single" else _TWO_COMP_FREE
+    exact = _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, None)
+    lut = _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, SpectrumPrecomp())
+    layout = lut._spectrum_flagged_pixels()
+    assert layout is not None and layout.pixels.size > 0
+    base = {
+        "sfh_dpl_alpha": jnp.asarray(1.5),
+        "dust_tau_bc": jnp.asarray(0.5),
+        "dust_tau_diff": jnp.asarray(0.3),
+        "dust_tau_v": jnp.asarray(0.5),
+    }
+    f_e, j_e = _flux_and_jacobian(exact, names, base)
+    f_l, j_l = _flux_and_jacobian(lut, names, base)
+    px = layout.pixels
+    flux_err = float(np.max(np.abs(f_l - f_e)[px] / np.abs(f_e)[px]))
+    floor = _FLOOR * np.max(np.abs(j_e), axis=0, keepdims=True)
+    jac_err = float(
+        np.max((np.abs(j_l - j_e) / np.maximum(np.abs(j_e), floor))[px])
+    )
+    print(f"\nflagged {px.tolist()}: flux {flux_err:.3e}  jacobian {jac_err:.3e}")
+    assert flux_err <= _FLAGGED_TOL, f"flagged flux rel err {flux_err:.3e}"
+    assert jac_err <= _FLAGGED_TOL, f"flagged Jacobian rel err {jac_err:.3e}"
 
 
 def _family_model(

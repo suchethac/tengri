@@ -841,6 +841,21 @@ def _with_pixel_mean_marker(families, lut):
     return families
 
 
+def _flagged_stellar_families(flagged, joint_weights, total_mass):
+    """Per-age stellar SED on the flagged pixels' node windows, the CSP contraction (#3413).
+
+    The same weighted sum of the library cube as the exact path's ``lnu_age``, on the nodes
+    of every flagged pixel's window only, concatenated. ``spec_flag_wave`` is the rest
+    wavelength of those nodes, which the dust component evaluates its screen on.
+    """
+    cube = jnp.asarray(flagged.ssp_cube)
+    per_age = jnp.einsum("ma,maw->aw", joint_weights, cube)
+    return {
+        "stellar_flag_lnu_age_precomp": _mass_scale_lnu(per_age, total_mass),
+        "spec_flag_wave": jnp.asarray(flagged.wave_nodes),
+    }
+
+
 def _lattice_dispersion_at_pixels(row, wave, centres_rest, sigma_v_kms):
     """Velocity-dispersion lattice correction of one rest row, read at the pixel centres (#3451).
 
@@ -2638,6 +2653,9 @@ class StellarSEDComponent:
         spec_lsf: tuple | None = None,
         spec_sigma_v_on_pixels: bool = False,
         spec_no_instrument: bool = False,
+        spec_screen_curves: tuple = (),
+        spec_model_wave=None,
+        spec_lsf_pixels: dict | None = None,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -2738,6 +2756,9 @@ class StellarSEDComponent:
                 lsf=spec_lsf,
                 sigma_v_on_pixels=spec_sigma_v_on_pixels,
                 no_instrument=spec_no_instrument,
+                screen_curves=spec_screen_curves,
+                model_wave=spec_model_wave,
+                lsf_pixels=spec_lsf_pixels,
             )
             state = _replace_state(
                 state,
@@ -2847,6 +2868,9 @@ class StellarSEDComponent:
         lsf: tuple | None = None,
         sigma_v_on_pixels: bool = False,
         no_instrument: bool = False,
+        screen_curves: tuple = (),
+        model_wave=None,
+        lsf_pixels: dict | None = None,
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
@@ -2887,6 +2911,9 @@ class StellarSEDComponent:
                 lsf=lsf,
                 sigma_v_on_pixels=sigma_v_on_pixels,
                 no_instrument=no_instrument,
+                screen_curves=screen_curves,
+                model_wave=model_wave,
+                lsf_pixels=lsf_pixels,
             )
             import numpy as np
 
@@ -4390,6 +4417,10 @@ class StellarSEDComponent:
                     jnp.einsum("ma,map->ap", joint_weights, on_m1), total_mass
                 )
                 families = _with_pixel_mean_marker(families, lut)
+                if lut.flagged is not None:
+                    families.update(
+                        _flagged_stellar_families(lut.flagged, joint_weights, total_mass)
+                    )
             return families
 
         if ssp_flux_for_csp.ndim == 4:

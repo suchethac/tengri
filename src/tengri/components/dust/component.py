@@ -934,6 +934,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     lambda w: jnp.exp(-tau_v * curve(w)), spec_eff
                 )
                 derived_overrides["dust_spec_transmission_slope_precomp"] = slope
+            flag_lnu = state.derived.get("stellar_flag_lnu_age_precomp")
+            if flag_lnu is not None:
+                # Pixels the table computes exactly (#3413): the stellar SED on their window
+                # nodes through this screen, elementwise as the full-grid ``attenuated``.
+                flag_wave = state.derived["spec_flag_wave"]
+                derived_overrides["dust_flag_stellar_precomp"] = jnp.sum(
+                    flag_lnu, axis=0
+                ) * jnp.exp(-tau_v * curve(flag_wave))
 
         return state.with_(
             sed_intrinsic=attenuated,

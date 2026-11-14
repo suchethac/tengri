@@ -1305,6 +1305,66 @@ def _lattice_instrument(g, lam_c, sigma_kms, n_bins):
     return _apply_lsf_variable_r(g, lam_c, sigma, n_bins, pad=_lattice_pad_cells())
 
 
+def lattice_bin_plan(span_window, span_global, sigma_global_kms, n_bins):
+    """Piecewise instrument-kernel plan of a window lattice inside the full lattice (#3413).
+
+    The variable-resolution kernel (:func:`_apply_lsf_variable_r`) splits the *whole* lattice
+    into ``n_bins`` raised-cosine bins and convolves each with its mean sigma, so the result at
+    a cell depends on the bins of the full lattice. A flagged pixel's window is a sub-range of
+    that lattice on the same ln-lambda cells; this returns the bins that reach the window, with
+    the full-lattice mean sigma of each and its weight on every window cell, so
+    :func:`lattice_correction_rest` reproduces the full-lattice result on the window.
+    Build-time (NumPy); the sigma curve must be static.
+
+    Parameters
+    ----------
+    span_window, span_global : tuple of (float, int)
+        Origin (ln lambda) and cell count of the window and of the full lattice.
+    sigma_global_kms : ndarray, shape (n_global,)
+        The kernel's effective sigma [km/s] at every full-lattice cell centre.
+    n_bins : int
+        Segment count of the variable-resolution kernel.
+
+    Returns
+    -------
+    sigma_pix : ndarray, shape (n_active,)
+        Mean kernel width of each bin that reaches the window [lattice cells].
+    weights : ndarray, shape (n_active, n_window)
+        Each bin's raised-cosine weight on the window cells, divided by the total weight.
+    """
+    h = _LATTICE_DLNLAMBDA
+    origin_w, n_w = span_window
+    origin_g, n_g = span_global
+    lam_c = np.exp(origin_g + h * (np.arange(n_g) + 0.5))
+    dlnwave = np.gradient(np.log(lam_c))
+    sigma = np.asarray(sigma_global_kms, dtype=np.float64)
+    width = n_g / n_bins
+    half_w = 0.75 * width
+    centers = (np.arange(n_bins) + 0.5) * width
+    pix_idx = np.arange(n_g, dtype=np.float64)
+    sigma_pix = np.empty(n_bins)
+    for b, center in enumerate(centers):
+        mask = (np.abs(pix_idx - center) < width).astype(np.float64)
+        n_in = max(mask.sum(), 1.0)
+        sigma_pix[b] = ((sigma * mask).sum() / n_in / _C_KM_S) / ((dlnwave * mask).sum() / n_in)
+    offset = int(round((origin_w - origin_g) / h))
+    cells = np.arange(n_w, dtype=np.float64) + offset
+    dist = np.abs(cells[None, :] - centers[:, None]) / half_w
+    weights = np.where(dist < 1.0, 0.5 * (1.0 + np.cos(np.pi * dist)), 0.0)
+    total = np.maximum(weights.sum(axis=0), 1e-30)
+    active = weights.max(axis=1) > 0.0
+    return sigma_pix[active], weights[active] / total[None, :]
+
+
+def _lattice_instrument_planned(g, sigma_pix, weights):
+    """Piecewise instrument kernel of a window lattice from its :func:`lattice_bin_plan`."""
+    pad = _lattice_pad_cells()
+    out = jnp.zeros_like(g)
+    for s_pix, w in zip(np.asarray(sigma_pix), np.asarray(weights), strict=True):
+        out = out + jnp.asarray(w) * _gaussian_fft_convolve(g, float(s_pix), pad)
+    return out
+
+
 def lattice_correction_rest(
     sed_rest,
     wave_rest,
@@ -1337,7 +1397,8 @@ def lattice_correction_rest(
         Instrument stage of the exact path, applied on the lattice to the broadened term
         (conserving only): ``resolution`` and ``sigma_lib_kms`` on ``wave_obs``, the
         observed-frame grid of the resolution, ``redshift``, ``lsf_scale`` (1 when the
-        resolution is already divided by it) and ``n_bins``.
+        resolution is already divided by it) and ``n_bins``. A ``plan`` entry
+        (:func:`lattice_bin_plan`) replaces the kernel's bins for a window lattice.
     span : tuple of (float, int) or None, optional
         Static lattice (:func:`lattice_window`). ``None`` takes the lattice over ``centres_rest``.
         A flagged pixel passes its own window and the node slice of ``sed_rest`` (#3413).
@@ -1355,12 +1416,16 @@ def lattice_correction_rest(
         plain, (jnp.asarray(sigma_v_kms) / _C_KM_S) / h, _lattice_pad_cells()
     )
     if instrument is not None and conserving:
-        lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
-        lam_obs = lam_c * (1.0 + instrument["redshift"])
-        sigma_lsf = _lattice_instrument_sigma(
-            {k: v for k, v in instrument.items() if k != "redshift"}, lam_obs
-        )
-        broad = _lattice_instrument(broad, lam_c, sigma_lsf, instrument["n_bins"])
+        plan = instrument.get("plan")
+        if plan is not None:
+            broad = _lattice_instrument_planned(broad, *plan)
+        else:
+            lam_c = jnp.exp(origin + h * (jnp.arange(n_cells, dtype=plain.dtype) + 0.5))
+            lam_obs = lam_c * (1.0 + instrument["redshift"])
+            sigma_lsf = _lattice_instrument_sigma(
+                {k: v for k, v in instrument.items() if k not in ("redshift", "plan")}, lam_obs
+            )
+            broad = _lattice_instrument(broad, lam_c, sigma_lsf, instrument["n_bins"])
     readout = _lattice_readout(
         broad - plain, origin, n_cells, jnp.asarray(centres_rest), conserving
     )

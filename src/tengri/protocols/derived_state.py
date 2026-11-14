@@ -458,6 +458,12 @@ class DerivedState:
     spec_source_breakpoints: jnp.ndarray | None = None
     spec_pixel_centres: jnp.ndarray | None = None
     spec_lsf_baked: jnp.ndarray | None = None
+    # Pixels the pixel-moment table computes exactly per draw (#3413): the rest wavelength of
+    # the nodes of their windows, the stellar per-age SED on those nodes, and the dust
+    # component's attenuated stellar SED there. Present only when the table flags a pixel.
+    spec_flag_wave: jnp.ndarray | None = None
+    stellar_flag_lnu_age_precomp: jnp.ndarray | None = None
+    dust_flag_stellar_precomp: jnp.ndarray | None = None
     # Stellar velocity dispersion [km/s] of the draw, seeded by the model before the chain
     # runs when ``approx=SpectrumPrecomp()`` is active. The stellar component broadens its
     # spectrum LUT family with it on the model grid; scalar.

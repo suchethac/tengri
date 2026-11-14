@@ -995,6 +995,37 @@ class DustSEDComponent(TemplateThreading):
             lyman_cutoff_aa=self.config.lyman_cutoff_aa,
         )  # (n_age, n_wave), in [0, 1]
 
+    def _flagged_stellar_sed(
+        self, params, wavelength, lnu_age, fractions, bc_law_params, diff_law_params
+    ) -> jnp.ndarray:
+        """Attenuated stellar SED on a set of nodes, in :meth:`apply`'s own order (#3413).
+
+        The screen is elementwise in wavelength, so this equals the full-grid
+        ``sed_attenuated`` at the same nodes: the interval contraction under
+        ``age_mixture='grouped'``, the per-node sum under ``'per_node'``.
+
+        Parameters
+        ----------
+        params : mapping
+            The draw's dust parameters.
+        wavelength : ndarray, shape (n_node,)
+            Rest wavelengths of the nodes [Angstrom].
+        lnu_age : ndarray, shape (n_age, n_node)
+            Per-age stellar SED on those nodes [erg/s/Hz].
+        fractions : ndarray, shape (n_interval, n_age)
+            :func:`interval_fractions` of the stellar component's younger fractions.
+        bc_law_params, diff_law_params : mapping
+            The resolved law parameters of the two screens.
+
+        Returns
+        -------
+        ndarray, shape (n_node,)
+        """
+        t_int = self._interval_transmissions(params, wavelength, bc_law_params, diff_law_params)
+        if self.config.age_mixture == "grouped":
+            return contract_intervals(t_int, interval_sums(fractions, lnu_age))
+        return jnp.sum(lnu_age * mix_intervals(fractions, t_int), axis=0)
+
     def _interval_transmissions(
         self, params, wavelength, bc_law_params, diff_law_params
     ) -> jnp.ndarray:
@@ -2453,6 +2484,19 @@ class DustSEDComponent(TemplateThreading):
                 )
                 derived_overrides["dust_spec_neb_transmission_slope_precomp"] = (
                     screen_value_and_slope(_neb_screen, spec_eff)[1]
+                )
+
+            flag_lnu = state.derived.get("stellar_flag_lnu_age_precomp")
+            if flag_lnu is not None:
+                # Pixels the table computes exactly (#3413): this screen on their window
+                # nodes, contracted as the exact path does for the stellar SED.
+                derived_overrides["dust_flag_stellar_precomp"] = self._flagged_stellar_sed(
+                    params,
+                    state.derived["spec_flag_wave"],
+                    flag_lnu,
+                    fractions,
+                    bc_law_params,
+                    diff_law_params,
                 )
 
             # IR re-emission is now handled by separate dust emission components.

@@ -425,6 +425,40 @@ def _pixel_table_rest_fnu(state, wave_obs, redshift) -> jnp.ndarray:
     return apply_log10_scale(f_at_1cm, -2.0 * jnp.log10(TEN_PC_CM))
 
 
+def _with_exact_flagged_pixels(total, stellar_table, state, flagged):
+    """Replace the stellar value of the flagged pixels by its exact per-draw value (#3413).
+
+    A pixel next to a dust-law breakpoint, or where a dust curve's curvature defeats the
+    table's first-order screen expansion, takes the exact path's stellar value: the
+    attenuated stellar SED on the pixel's window (published by the stellar and dust
+    components), its bin mean over the pixel's edges, and the lattice correction of the
+    table's velocity dispersion and instrument kernel. The table's own stellar value there
+    is swapped out; every other pixel, and the nebular and projected families, are untouched.
+
+    Parameters
+    ----------
+    total : array, shape (n_pix,)
+        The table's pixel sum [erg/s/Hz].
+    stellar_table : array, shape (n_pix,) or None
+        The stellar part of ``total`` as the table has it; ``None`` without a dust screen.
+    state : ForwardState
+        Carries ``dust_flag_stellar_precomp``.
+    flagged : FlaggedPixels or None
+
+    Returns
+    -------
+    array, shape (n_pix,)
+    """
+    attenuated = state.derived.get("dust_flag_stellar_precomp")
+    if flagged is None or stellar_table is None or attenuated is None:
+        return total
+    from tengri.components.stellar.sps.flagged_pixels import flagged_pixel_means
+
+    pixels = jnp.asarray(flagged.pixels)
+    exact = flagged_pixel_means(flagged, attenuated)
+    return total.at[pixels].add(exact - stellar_table[pixels])
+
+
 def _sum_present(*terms):
     """Sum of the non-``None`` terms, or ``None`` when every term is absent (#3413)."""
     present = [t for t in terms if t is not None]
@@ -3078,6 +3112,7 @@ class Observation:
         lsf_scale=1.0,
         lsf_n_bins=16,
         lattice_window=None,
+        flagged=None,
     ):
         """Project spectrum observables via the spectrum LUT.
 
@@ -3189,6 +3224,7 @@ class Observation:
         per_age_m1 = state.derived.get("stellar_spec_lnu_per_age_m1_precomp")
         nebular_m1 = state.derived.get("nebular_spec_lnu_m1_precomp")
         dust_attenuable_m1 = _sum_present(stellar_m1, nebular_m1)
+        stellar_table = None  # the stellar part of the attenuated table sum, as the table has it
 
         if t_bc is not None and t_diff is not None and per_age is not None:
             # Two-component (Charlot & Fall): each node mixes the young population
@@ -3217,17 +3253,22 @@ class Observation:
                 neb_m1 = nebular_m1 if nebular_m1 is not None else jnp.zeros_like(nebular_phi)
                 nebular_attenuated = nebular_attenuated + s_neb * neb_m1
             nebular_dust = nebular_attenuated
+            stellar_table = stellar_attenuated
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
             nebular_dust = nebular_phi * t_single
+            stellar_table = stellar_phi * t_single
             s_single = state.derived.get("dust_spec_transmission_slope_precomp")
             if s_single is not None:
                 att_m1 = dust_attenuable_m1 if dust_attenuable_m1 is not None else 0.0
                 neb_m1 = nebular_m1 if nebular_m1 is not None else 0.0
                 total_spec_lnu = total_spec_lnu + att_m1 * s_single
                 nebular_dust = nebular_dust + neb_m1 * s_single
+                stellar_table = stellar_table + (
+                    stellar_m1 * s_single if stellar_m1 is not None else 0.0
+                )
         # else: no dust LUT published, leave total_spec_lnu unattenuated.
 
         if sub_table is not None:
@@ -3236,6 +3277,12 @@ class Observation:
             n_pix = self.spectroscopy.wave_obs.shape[0]
             total_spec_lnu = _sum_segments(total_spec_lnu, n_pix)
             nebular_dust = _sum_segments(nebular_dust, n_pix)
+            total_spec_lnu = _with_exact_flagged_pixels(
+                total_spec_lnu,
+                None if stellar_table is None else _sum_segments(stellar_table, n_pix),
+                state,
+                flagged,
+            )
         # The instrument-only group (nebular, shock, AGN lines) of a pixel table is projected
         # exactly per draw from the full-grid SED (#3413), so its pixel moments leave the
         # stellar pixels. The rest-frame output keeps them.

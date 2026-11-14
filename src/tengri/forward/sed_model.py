@@ -3549,6 +3549,44 @@ class SEDModel:
         sigma_lib_model = _onto_model(_np.asarray(sigma_lib, dtype=_np.float64))
         return (resolution, sigma_lib_model, self._lsf_n_bins)
 
+    def _spectrum_lsf_pixels(self):
+        """The fixed instrument kernel as the exact conserving path reads it (#3413).
+
+        The flagged pixels' lattice correction takes its kernel width from the pixel-grid
+        resolution and library curves, interpolated at the lattice cells, as the exact
+        projection does; the table's baked kernel resamples them onto the model grid first.
+
+        Returns
+        -------
+        dict or None
+            ``resolution``, ``sigma_lib_kms``, ``lsf_scale``, ``n_bins`` and ``wave_obs``
+            (the observed pixel grid), or ``None`` without a baked instrument kernel.
+        """
+        if self._spectrum_lsf_model() is None:
+            return None
+        import numpy as _np
+
+        from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+        spectro = self.observation.spectroscopy
+        try:
+            scale = float(self.spec.get_distribution("lsf_scale").bounds[0])
+        except (AttributeError, KeyError):
+            scale = 1.0
+        sigma_lib = resolve_sigma_lib_kms(
+            spectro.wave_obs,
+            self._resample_z_ref(),
+            getattr(spectro, "sigma_lib_kms", 0.0),
+            self._sigma_lib_curve_for(self.ssp_data),
+        )
+        return {
+            "resolution": _np.asarray(spectro.resolution, dtype=_np.float64),
+            "sigma_lib_kms": _np.asarray(sigma_lib, dtype=_np.float64),
+            "lsf_scale": scale,
+            "n_bins": self._lsf_n_bins,
+            "wave_obs": _np.asarray(spectro.wave_obs, dtype=_np.float64),
+        }
+
     def _spectrum_breakpoints(self) -> tuple[float, ...]:
         """Rest-frame dust-law breakpoints a pixel-moment spectrum table splits at (#3413).
 
@@ -3568,6 +3606,50 @@ class SEDModel:
         laws += [screen[0] for screen in getattr(self, "_dust_screens", ())]
         points = {bp for law in laws for bp in law_breakpoints(law)}
         return tuple(sorted(points))
+
+    def _spectrum_screen_curves(self) -> tuple:
+        """The dust curves of the screens, for the table's curvature flag (#3413).
+
+        Each registered law is evaluated at build with its default arguments. A law that
+        needs arguments it cannot default (``TypeError``) is left out; its breakpoint pixels
+        are still flagged. Empty for a point table.
+
+        Returns
+        -------
+        tuple of callable
+            ``k(wavelength)`` of every distinct screen law.
+        """
+        if not self._spectrum_lut_pixel_integral():
+            return ()
+        from tengri.components.dust.attenuation import resolve_dust_law
+
+        names = {self._dust_law_bc, self._dust_law_diff}
+        names |= {screen[0] for screen in getattr(self, "_dust_screens", ())}
+        probe = jnp.asarray([5500.0, 6000.0])
+        curves = []
+        for name in sorted(n for n in names if n):
+            law = resolve_dust_law(name)
+            try:
+                law(probe)
+            except TypeError:
+                continue
+            curves.append(law)
+        return tuple(curves)
+
+    def _spectrum_flagged_pixels(self):
+        """Static layout of the pixels the spectrum table computes exactly per draw (#3413).
+
+        Returns
+        -------
+        FlaggedPixels or None
+            ``None`` without a pixel-moment table or without a flagged pixel.
+        """
+        chain = getattr(self, "_cached_component_chain", None)
+        if not chain or chain[0].name != "stellar":
+            return None
+        stellar_state = getattr(chain[0], "_state", None)
+        lut = getattr(stellar_state, "ssp_spec_lut", None)
+        return getattr(lut, "flagged", None)
 
     def _spectrum_lut_pixel_integral(self) -> bool:
         """Whether a fixed-redshift spectrum table stores the pixel mean (#3413).
@@ -11550,6 +11632,7 @@ class SEDModel:
             if observation is None or not observation.can_do_spectroscopy
             else observation.spectroscopy.wave_obs
         )
+        flagged_pixels = self._spectrum_flagged_pixels()
 
         def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
@@ -11593,6 +11676,7 @@ class SEDModel:
                         lsf_scale=self._get_lsf_scale(full),
                         lsf_n_bins=self._lsf_n_bins,
                         lattice_window=lattice_window,
+                        flagged=flagged_pixels,
                     )
                 )
                 if observation.can_do_photometry and phot_lut:
@@ -13353,6 +13437,9 @@ class SEDModel:
                         spec_lsf=self._spectrum_lsf_model(),
                         spec_sigma_v_on_pixels=self._spectrum_banded_pixel_integral(),
                         spec_no_instrument=self._spectrum_no_instrument(),
+                        spec_screen_curves=self._spectrum_screen_curves(),
+                        spec_lsf_pixels=self._spectrum_lsf_pixels(),
+                        spec_model_wave=np.asarray(self._rest_wavelength, dtype=np.float64),
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:

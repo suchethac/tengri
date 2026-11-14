@@ -263,6 +263,10 @@ class SpectroscopicPrecomputation(NamedTuple):
     #: applied to the pixel-level stellar sum at each draw, as the exact path does after a
     #: banded resolution matrix (#3413). ``sigma_v_kms`` then records the fixed value.
     sigma_v_on_pixels: bool = False
+    #: Static layout of the pixels the table computes exactly per draw: those next to a
+    #: dust-law breakpoint or where a dust curve's curvature defeats the first-order screen
+    #: expansion (#3413). ``None`` when no pixel is flagged.
+    flagged: "object | None" = None
 
 
 def precompute_photometry(
@@ -673,6 +677,9 @@ def precompute_spectroscopy(
     lsf=None,
     sigma_v_on_pixels=False,
     no_instrument=False,
+    screen_curves=(),
+    model_wave=None,
+    lsf_pixels=None,
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -710,6 +717,16 @@ def precompute_spectroscopy(
         Leave the templates un-broadened by ``sigma_v_kms``: the caller applies the velocity
         dispersion to the pixel sum (the exact path's order after a banded resolution
         matrix, #3413). The table still records ``sigma_v_kms``.
+    screen_curves : sequence of callable, default ()
+        The dust curves ``k(lambda)`` of the model's screens, evaluated at build to flag the
+        pixels whose curvature defeats the first-order screen expansion (#3413).
+    model_wave : array or None, default None
+        The rest-frame grid the exact path attenuates and integrates on, which may carry
+        nodes the library lacks. ``None`` takes the library grid.
+    lsf_pixels : dict or None, default None
+        The fixed instrument kernel on the pixel grid, as the exact path reads it
+        (``resolution``, ``sigma_lib_kms``, ``lsf_scale``, ``n_bins``, ``wave_obs``). The
+        flagged pixels' lattice correction takes its kernel width from it (#3413).
 
     Returns
     -------
@@ -745,6 +762,7 @@ def precompute_spectroscopy(
         ssp_flux_np = np.asarray(broaden_template_cube(ssp_flux_np, wave_ssp_np, sigma, n_bins))
     ssp_on_pixels_m1 = None
     source_breakpoints = None
+    flagged = None
     if pixel_integral:
         from tengri.observation.spectrum import segment_centres, source_segment_ids
 
@@ -778,6 +796,20 @@ def precompute_spectroscopy(
             c_flat = jnp.asarray(centres_seg.reshape(-1))
             m0 = m0 + c0
             m1 = m1 + c1 - c_flat * c0
+        flagged = _flagged_layout(
+            ssp_flux_np,
+            wave_ssp_np if model_wave is None else np.asarray(model_wave, dtype=np.float64),
+            wave_ssp_np,
+            wave_rest_np,
+            bps,
+            screen_curves,
+            sigma,
+            lsf if lsf_baked_diff else None,
+            lsf_pixels if lsf_baked_diff else None,
+            redshift,
+            correct=lsf_baked_diff or lattice_nores,
+            on_grid=on_grid,
+        )
         ssp_on_pixels_np = np.asarray(m0)
         ssp_on_pixels_m1 = jnp.asarray(m1)
         source_breakpoints = jnp.asarray(bps)
@@ -820,6 +852,77 @@ def precompute_spectroscopy(
         source_breakpoints=source_breakpoints,
         lsf_baked=bool(pixel_integral and lsf is not None),
         sigma_v_on_pixels=bool(sigma_v_on_pixels),
+        flagged=flagged,
+    )
+
+
+def _flagged_layout(
+    ssp_flux,
+    wave_model,
+    wave_ssp,
+    centres_rest,
+    bps,
+    screen_curves,
+    sigma,
+    lsf,
+    lsf_pixels,
+    redshift,
+    *,
+    correct,
+    on_grid,
+):
+    """Flag the pixels the first-order table cannot serve and lay out their windows (#3413).
+
+    A pixel is flagged when a dust-law breakpoint lies within the broadening's reach of its
+    source range, or when a screen curve's curvature across it exceeds
+    :data:`~tengri.components.stellar.sps.flagged_pixels.CURVATURE_BOUND`. Returns ``None``
+    when nothing is flagged.
+    """
+    from tengri.components.stellar.sps.flagged_pixels import (
+        build_flagged_pixels,
+        curvature_flag_mask,
+        flagged_pixel_mask,
+        kernel_reach_pad_aa,
+    )
+    from tengri.observation.spectrum import _FWHM_TO_SIGMA, _pixel_edges
+    from tengri.utils.physics_constants import C_KM_S
+
+    centres = np.asarray(centres_rest, dtype=np.float64)
+    edges = np.asarray(_pixel_edges(jnp.asarray(centres)))
+    sigma_inst = 0.0
+    instrument = None
+    if lsf is not None:
+        res = np.asarray(lsf[0], dtype=np.float64)
+        sigma_inst = float(C_KM_S / (_FWHM_TO_SIGMA * np.min(res)))
+        # The kernel of the exact path: pixel-grid curves, read at the lattice cells.
+        read = lsf_pixels or {
+            "resolution": lsf[0],
+            "sigma_lib_kms": lsf[1],
+            "lsf_scale": 1.0,
+            "n_bins": int(lsf[2]),
+            "wave_obs": np.asarray(wave_ssp) * (1.0 + redshift),
+        }
+        instrument = {
+            "resolution": jnp.asarray(read["resolution"]),
+            "sigma_lib_kms": jnp.asarray(read["sigma_lib_kms"]),
+            "lsf_scale": read["lsf_scale"],
+            "n_bins": int(read["n_bins"]),
+            "wave_obs": jnp.asarray(read["wave_obs"]),
+            "redshift": float(redshift),
+        }
+    width_kms = float(np.hypot(sigma if on_grid else 0.0, sigma_inst))
+    flags = flagged_pixel_mask(edges, bps, kernel_reach_pad_aa(centres, width_kms))
+    if len(screen_curves):
+        flags = flags | curvature_flag_mask(edges, screen_curves)
+    return build_flagged_pixels(
+        wave_model,
+        wave_ssp,
+        ssp_flux,
+        centres,
+        flags,
+        float(sigma) if correct else None,
+        instrument,
+        width_kms,
     )
 
 

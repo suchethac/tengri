@@ -121,3 +121,61 @@ def test_window_correction_matches_full_grid_at_flagged_pixel(sigma_kms):
     # Tolerance on the flux scale: the cumulative sum's float64 roundoff grows with the node
     # count of the window (about 1e-12 of the SED here) and is not a truncation error.
     assert abs(sliced - full[p]) <= 1e-10 * np.max(np.abs(sed_full))
+
+
+def test_curvature_flag_marks_wide_pixels_and_zero_crossings_only():
+    """A curve that bends over a wide pixel flags it; a narrow pixel on the same curve does not."""
+    from tengri.components.dust.attenuation import calzetti
+    from tengri.components.stellar.sps.flagged_pixels import curvature_flag_mask
+
+    narrow = np.linspace(5000.0, 5100.0, 11)  # 10 A pixels at 5000 A
+    assert not curvature_flag_mask(narrow, [calzetti]).any()
+    wide = np.geomspace(2e4, 2e5, 61)  # 3.9 % pixels in the mid-IR, curve nearing its zero
+    flags = curvature_flag_mask(wide, [calzetti])
+    kink = int(np.searchsorted(wide, 31149.76)) - 1
+    assert flags[: kink + 1].all()
+    assert not flags[kink + 1 :].any()  # above the clip the curve is identically zero
+
+
+def test_cube_interpolation_matches_model_grid_projection():
+    """The window cube is the exact path's interpolation of the library onto the model nodes."""
+    from tengri.components.stellar.sps.flagged_pixels import interpolate_cube_onto
+
+    wave_ssp = np.linspace(1000.0, 2000.0, 11)
+    cube = np.random.default_rng(0).uniform(size=(2, 3, 11))
+    nodes = np.array([900.0, 1000.0, 1234.5, 1500.0, 2000.0, 2100.0])
+    got = interpolate_cube_onto(wave_ssp, cube, nodes)
+    want = np.stack(
+        [[np.interp(nodes, wave_ssp, row, left=0.0, right=0.0) for row in plane] for plane in cube]
+    )
+    np.testing.assert_allclose(got, want, rtol=0.0, atol=1e-15)
+
+
+def test_bin_plan_reproduces_full_lattice_piecewise_kernel_on_a_window():
+    """A window convolved with its bin plan equals the full-lattice piecewise kernel there."""
+    from tengri.observation.spectrum import (
+        _LATTICE_DLNLAMBDA,
+        _lattice_instrument,
+        _lattice_instrument_planned,
+        _lattice_pad_cells,
+        lattice_bin_plan,
+    )
+
+    h = _LATTICE_DLNLAMBDA
+    n_g = 20000
+    origin_g = np.log(4000.0)
+    lam_c = np.exp(origin_g + h * (np.arange(n_g) + 0.5))
+    sigma = 40.0 + 120.0 * np.linspace(0.0, 1.0, n_g)  # km/s, varying along the lattice
+    w0, n_w = 9000, 1800
+    g_window = np.zeros(n_w)
+    g_window[n_w // 2 - 40 : n_w // 2 + 40] = np.hanning(80)
+    g_full = np.zeros(n_g)
+    g_full[w0 : w0 + n_w] = g_window
+    full = np.asarray(
+        _lattice_instrument(jnp.asarray(g_full), jnp.asarray(lam_c), jnp.asarray(sigma), 16)
+    )
+    plan = lattice_bin_plan((origin_g + w0 * h, n_w), (origin_g, n_g), sigma, 16)
+    got = np.asarray(_lattice_instrument_planned(jnp.asarray(g_window), *plan))
+    inner = slice(n_w // 2 - 300, n_w // 2 + 300)
+    assert _lattice_pad_cells() > 300
+    np.testing.assert_allclose(got[inner], full[w0:w0 + n_w][inner], rtol=0.0, atol=1e-12)
