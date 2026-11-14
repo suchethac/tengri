@@ -242,3 +242,11 @@ def test_exact_model_given_the_tabulated_path_logs_a_warning(
     with caplog.at_level(logging.WARNING, logger="tengri.inference.fitter"):
         with_derived_catalog_z_range(exact, [0.05, 0.2])
     assert any("exact model (approx=None)" in r.getMessage() for r in caplog.records)
+
+
+def test_non_finite_redshift_is_refused_naming_the_rows():
+    """A NaN or inf redshift has no place in a range; the error names the rows."""
+    from tengri.inference.fitter import derived_catalog_z_range
+
+    with pytest.raises(ValueError, match=r"row\(s\) \[1, 3\]"):
+        derived_catalog_z_range([0.1, float("nan"), 0.3, float("inf")])

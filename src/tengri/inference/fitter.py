@@ -399,6 +399,12 @@ def derived_catalog_z_range(redshifts, *, margin_frac=0.01, min_margin=1e-3):
     z = np.asarray(redshifts, dtype=float).ravel()
     if z.size == 0:
         raise ValueError("cannot derive a catalog_z_range from an empty redshift list")
+    bad = np.flatnonzero(~np.isfinite(z))
+    if bad.size:
+        raise ValueError(
+            f"per-galaxy redshift is not finite (NaN or inf) for row(s) {bad.tolist()}; "
+            "a catalog range cannot cover it. Fix or drop those rows before fitting."
+        )
     z_lo, z_hi = float(z.min()), float(z.max())
     pad = max(margin_frac * (z_hi - z_lo), min_margin)
     return (max(0.0, z_lo - pad), z_hi + pad)
