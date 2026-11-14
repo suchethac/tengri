@@ -954,10 +954,9 @@ def window_point_terms(
             )
         ia, fa = alpha
         per_node = jnp.einsum("ma,mkap->kap", joint_weights * scale, points.integrands)
-        # Same linear weights as dsps_wrapper.collapse_alpha_axis (axis 0 here).
-        wint = (1.0 - fa) * jnp.take(per_node, ia, axis=0) + fa * jnp.take(
-            per_node, ia + 1, axis=0
-        )
+        from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+        wint = collapse_alpha_axis(per_node, ia, fa, axis=0)
     else:
         wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
     return jnp.sum(transmission_at_points * wint, axis=0)

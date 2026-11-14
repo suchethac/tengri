@@ -194,7 +194,13 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
 _ALPHA_FE_PARAM = "met_alpha_fe"
 
 
-def _alpha_fe_grid_hint(ssp_data) -> str:
+#: The [alpha/Fe] parameters: the scalar and the per-age pair (#2250). Each is Fixed(0) by
+#: default on every grid (owner ruling 2026-11-14); an explicit prior is honored and checked
+#: against the grid's nodes.
+_ALPHA_FE_PARAMS = ("met_alpha_fe", "met_alpha_fe_old", "met_alpha_fe_young")
+
+
+def _alpha_fe_grid_hint(ssp_data, short_name: str = "alpha_fe") -> str:
     """Name the grid's [alpha/Fe] node range for a refusal, or ``""`` on a 3D grid."""
     import numpy as np
 
@@ -204,13 +210,15 @@ def _alpha_fe_grid_hint(ssp_data) -> str:
         return ""
     nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
     return (
-        f" For this grid: alpha_fe: Uniform({nodes.min():g}, {nodes.max():g}), "
+        f" For this grid: {short_name}: Uniform({nodes.min():g}, {nodes.max():g}), "
         "its [alpha/Fe] node range."
     )
 
 
 def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
-    """Refuse an explicit ``met_alpha_fe`` prior that misses the grid; warn if it overhangs.
+    """Refuse an explicit [alpha/Fe] prior that misses the grid; warn if it overhangs.
+
+    Covers ``met_alpha_fe`` and the per-age pair ``met_alpha_fe_old`` / ``_young``.
 
     An explicit prior is always honored. A prior with no overlap with the grid's
     [alpha/Fe] nodes is refused by name; one that extends past them is kept and
@@ -221,29 +229,30 @@ def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], s
     from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
     from tengri.config.exceptions import GridSupportWarning
 
-    dist = resolved.get(_ALPHA_FE_PARAM)
-    if dist is None or provenance.get(_ALPHA_FE_PARAM) != "user_prior":
-        return
     if ssp_data is None or not has_alpha_grid(ssp_data):
         return
     nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
     g_lo, g_hi = float(nodes.min()), float(nodes.max())
-    d_lo, d_hi = dist.bounds
-    if d_hi < g_lo or d_lo > g_hi:
-        raise ParameterError(
-            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
-            f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
-            "would be clipped onto an edge node. Choose a range inside the grid."
-        )
-    if d_lo < g_lo or d_hi > g_hi:
-        warnings.warn(
-            f"{_ALPHA_FE_PARAM}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
-            f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
-            "is clipped onto the edge nodes, so the prior mass there has no effect on "
-            "the SED.",
-            GridSupportWarning,
-            stacklevel=3,
-        )
+    for name in _ALPHA_FE_PARAMS:
+        dist = resolved.get(name)
+        if dist is None or provenance.get(name) != "user_prior":
+            continue
+        d_lo, d_hi = dist.bounds
+        if d_hi < g_lo or d_lo > g_hi:
+            raise ParameterError(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
+                f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
+                "would be clipped onto an edge node. Choose a range inside the grid."
+            )
+        if d_lo < g_lo or d_hi > g_hi:
+            warnings.warn(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
+                f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
+                "is clipped onto the edge nodes, so the prior mass there has no effect on "
+                "the SED.",
+                GridSupportWarning,
+                stacklevel=3,
+            )
 
 
 def _expand_free(param_name: str, registry_default: Distribution) -> Distribution:
@@ -1521,9 +1530,10 @@ def parse_groups(**kwargs) -> Parameters:
                 wildcard_active=wildcard_active,
             )
         except ParameterError as err:
-            if param_name != _ALPHA_FE_PARAM:
+            if param_name not in _ALPHA_FE_PARAMS:
                 raise
-            raise ParameterError(f"{err}{_alpha_fe_grid_hint(ssp_data)}") from err
+            hint = _alpha_fe_grid_hint(ssp_data, param_name.removeprefix("met_"))
+            raise ParameterError(f"{err}{hint}") from err
 
         # Record whether an active wildcard-FREE actually freed this parameter.
         # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
@@ -3915,6 +3925,7 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "still works; this mixes the two.)"
         )
     _set_met_mode(met_dict.get("type"), result)
+    _translate_alpha_fe_evolving(met_dict, result)
 
     # ``met_bin_edges_log_yr`` is a structural setting (array of bin edges in
     # log Gyr) that only applies to metallicity-history modes (bins, bins_continuity).
@@ -3927,6 +3938,38 @@ def _translate_met(met_dict: dict, result: dict) -> None:
         _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
         _validate_met_ladder_keys(met_type, met_dict, len(met_dict["met_bin_edges_log_yr"]) - 1)
         result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
+
+
+def _translate_alpha_fe_evolving(met_dict: dict, result: dict) -> None:
+    """Route ``met={'alpha_fe_evolving': True, 'alpha_fe_old': ..., 'alpha_fe_young': ...}``.
+
+    The flag swaps the scalar ``met_alpha_fe`` for the pair ``met_alpha_fe_old`` (oldest
+    stars) and ``met_alpha_fe_young`` (present day), #2250. The two spellings are exclusive
+    and are refused by name when mixed; the pair is refused without the flag.
+
+    Raises
+    ------
+    ValueError
+        If the flag is not a bool, if ``alpha_fe`` and ``alpha_fe_evolving`` are both given,
+        or if ``alpha_fe_old`` / ``alpha_fe_young`` appear without the flag set to True.
+    """
+    evolving = met_dict.get("alpha_fe_evolving", False)
+    if not isinstance(evolving, bool):
+        raise ValueError(f"met['alpha_fe_evolving'] must be True or False, not {evolving!r}.")
+    pair = [k for k in ("alpha_fe_old", "alpha_fe_young") if k in met_dict]
+    if evolving:
+        if "alpha_fe" in met_dict:
+            raise ValueError(
+                "met group: 'alpha_fe' (a scalar [alpha/Fe]) and 'alpha_fe_evolving': True "
+                "are exclusive. Give alpha_fe_old and alpha_fe_young for a per-age ramp, or "
+                "alpha_fe for one [alpha/Fe] at every age."
+            )
+        result["alpha_fe_evolving"] = True
+    elif pair:
+        raise ValueError(
+            f"met group: {pair} need 'alpha_fe_evolving': True; without it the model has a "
+            "single scalar met_alpha_fe, so give alpha_fe instead."
+        )
 
 
 def _set_met_mode(met_mode, result: dict) -> None:
@@ -6063,7 +6106,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright: two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr"}),
+    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr", "alpha_fe_evolving"}),
     "dust_attenuation": frozenset(
         {
             "type",
@@ -6284,6 +6327,9 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # met={} entry is never forced onto call sites that diff against
         # from_groups.
         _Structural("type", "met_mode", "delta"),
+        # Per-age [alpha/Fe] ramp (#2250): the boolean that replaces the scalar
+        # ``alpha_fe`` with ``alpha_fe_old`` / ``alpha_fe_young`` in this group.
+        _Structural("alpha_fe_evolving", "alpha_fe_evolving", False),
         # Bin edges [log Gyr] for metallicity-history modes (bins, bins_continuity).
         # None falls back to _DEFAULT_MET_BIN_EDGES_LOG_YR. Only valid for types that
         # use lookback-time bins for metallicity history.
@@ -9448,7 +9494,9 @@ def parameters_to_groups(spec: Parameters) -> dict:
     #
     # The block emitted is ``met`` (#1720), which is the only spelling now:
     # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
-    use_met_block = getattr(spec, "met_mode", "delta") != "delta"
+    use_met_block = getattr(spec, "met_mode", "delta") != "delta" or bool(
+        getattr(spec, "alpha_fe_evolving", False)
+    )
     # A monolithic AGN model and the six sub-block selectors are mutually
     # exclusive surfaces: ``_translate_agn`` raises when a non-composable
     # ``agn['type']`` appears next to sub-block keys. So the moment the type is

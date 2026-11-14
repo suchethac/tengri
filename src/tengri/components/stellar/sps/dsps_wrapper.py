@@ -2255,8 +2255,56 @@ def alpha_bracket(ssp_alpha_fe: jnp.ndarray, alpha_fe: float) -> tuple[jnp.ndarr
 def collapse_alpha_axis(x: jnp.ndarray, ia, fa, axis: int = 0) -> jnp.ndarray:
     """Linear interpolation of ``x`` along its [alpha/Fe] node ``axis``.
 
-    Uses the :func:`alpha_bracket` weights."""
-    return (1.0 - fa) * jnp.take(x, ia, axis=axis) + fa * jnp.take(x, ia + 1, axis=axis)
+    Uses the :func:`alpha_bracket` weights. A scalar bracket collapses the whole array to one
+    [alpha/Fe]. A bracket of shape ``(n_age,)`` (an age-dependent [alpha/Fe], see
+    :func:`~tengri.components.stellar.sps.dsps_wrapper.compute_alpha_fe_evolving`) collapses
+    each age ``a`` at its own node pair; the age axis must follow the alpha axis, so
+    ``x.shape[axis + 1] == n_age``, and the result has the alpha axis removed.
+
+    Parameters
+    ----------
+    x : array
+        Array with an [alpha/Fe] node axis at ``axis``.
+    ia : int array, scalar or shape (n_age,)
+        Lower node index of each bracket.
+    fa : float array, scalar or shape (n_age,)
+        Fraction of the way from node ``ia`` to node ``ia + 1``.
+    axis : int, default 0
+        Position of the [alpha/Fe] node axis in ``x``.
+
+    Returns
+    -------
+    array
+        ``x`` with the [alpha/Fe] axis removed.
+
+    Raises
+    ------
+    ValueError
+        If the bracket is a vector whose length is not ``x.shape[axis + 1]``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the scalar/vector branch is taken on the static ``jnp.ndim(ia)``.
+    **Gradient-safe**: yes, linear in ``fa``.
+    """
+    if jnp.ndim(ia) == 0:
+        return (1.0 - fa) * jnp.take(x, ia, axis=axis) + fa * jnp.take(x, ia + 1, axis=axis)
+    n_age = jnp.shape(ia)[0]
+    if x.shape[axis + 1] != n_age:
+        raise ValueError(
+            f"collapse_alpha_axis: a per-age bracket of length {n_age} needs the age axis "
+            f"(axis {axis + 1}) of length {n_age}, got x.shape={tuple(x.shape)} with "
+            f"alpha axis {axis}."
+        )
+    target = list(x.shape)
+    target[axis] = 1
+    age_shape = [1] * x.ndim
+    age_shape[axis + 1] = n_age
+    idx = jnp.broadcast_to(jnp.reshape(ia, age_shape), target)
+    wgt = jnp.broadcast_to(jnp.reshape(fa, age_shape), target)
+    lo = jnp.take_along_axis(x, idx, axis=axis)
+    hi = jnp.take_along_axis(x, idx + 1, axis=axis)
+    return jnp.squeeze((1.0 - wgt) * lo + wgt * hi, axis=axis)
 
 
 @jax.jit
