@@ -3243,6 +3243,18 @@ class SEDModel:
             return 0.0
         return float(dist.bounds[0]) if dist.is_fixed else None
 
+    def _spectrum_lut_sigma_v_kms(self) -> float | None:
+        """The dispersion the spectrum table bakes at build, ``None`` when none is baked.
+
+        Only a ``SpectrumPrecomp`` build pre-broadens its SSP table by the fixed
+        ``sigma_v_kms`` (#3489). The value is keyed in :meth:`compile_signature`
+        because ``spec`` is keyed without its fixed values, so two such models
+        differing only in that dispersion would otherwise share one kernel.
+        """
+        if not self._approx.get("spectrum_precomp"):
+            return None
+        return self._fixed_sigma_v_kms()
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -7338,15 +7350,21 @@ class SEDModel:
         from tengri._cache_keys import derive_key
         from tengri.forward._signature_policy import SIGNATURE_POLICY, SIGNATURE_VERSION
 
+        tail = (
+            ("x64", bool(jax.config.jax_enable_x64)),
+            ("backend", jax.default_backend()),
+            ("spec_resample_conserving", self._spectrum_resample_decision()),
+        )
+        # Present only when a spectrum table is baked, so models without one keep
+        # their signature (#3489).
+        lut_sigma_v_kms = self._spectrum_lut_sigma_v_kms()
+        if lut_sigma_v_kms is not None:
+            tail = (*tail, ("spec_lut_sigma_v_kms", lut_sigma_v_kms))
         signature = derive_key(
             self,
             SIGNATURE_POLICY,
             version=SIGNATURE_VERSION,
-            tail=(
-                ("x64", bool(jax.config.jax_enable_x64)),
-                ("backend", jax.default_backend()),
-                ("spec_resample_conserving", self._spectrum_resample_decision()),
-            ),
+            tail=tail,
         )
         self._signature_memo = signature
         return signature
