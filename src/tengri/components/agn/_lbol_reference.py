@@ -15,7 +15,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.utils.physics_constants import L_SUN
-from tengri.utils.scale import apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, is_float32_arithmetic
 
 #: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
 #: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
@@ -71,7 +71,7 @@ def reference_evaluation(
         The log10-space offset to apply to block outputs: ``agn_log_lbol -
         _AGN_LBOL_REF`` when ``use_ref`` is True, else 0.0.
     """
-    use_ref = wave.dtype == jnp.float32
+    use_ref = is_float32_arithmetic(wave)
     if use_ref:
         agn_log_lbol_eval = jnp.full_like(
             jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF

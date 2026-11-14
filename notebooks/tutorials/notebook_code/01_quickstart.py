@@ -46,6 +46,7 @@ from tengri import (
     Parameters,
     Uniform,
     load_ssp_data,
+    vmap_chunked,
 )
 
 import sys, os  # noqa: E401
@@ -341,7 +342,9 @@ plt.show()
 # problems. For D = 8, the two should agree. The NUTS run is the exact reference
 # that the 15-second Laplace result is compared against; on a laptop CPU it takes
 # about 15 to 20 minutes. The higher target acceptance keeps NUTS from diverging
-# on this posterior's curved SFH-shape degeneracy.
+# on this posterior's curved SFH-shape degeneracy, and the sampler starts from a
+# metric whitened by the curvature at the MAP point, which keeps the chain mixing
+# along that degeneracy.
 
 # %%
 # Run NUTS from MAP initialization
@@ -352,6 +355,7 @@ result_nuts_param = forward_param.fit(
     n_warmup=500,
     n_samples=1000,
     target_accept_rate=0.95,
+    precondition=0.5,
     init_from=result_map_param,
     verbose=False,
 )
@@ -563,12 +567,10 @@ mask_200 = t_gyr_s < 0.2
 if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
     t_inset = t_gyr_s[mask_200] * 1e3
     if result_lap_stoch.samples is not None:
-        n_samp = len(next(iter(result_lap_stoch.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result_lap_stoch.samples[k][i] for k in result_lap_stoch.samples}
-            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)[sfr_key_s])[mask_200])
-        sfh_arr = np.array(sfh_draws)
+        # Every posterior draw, evaluated in compiled chunks of draws.
+        sfh_arr = np.asarray(
+            vmap_chunked(lambda p: model_stoch.predict_sfh(p)[sfr_key_s])(result_lap_stoch.samples)
+        )[:, mask_200]
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
         inset.fill_between(t_inset, lo, hi, color=LAPLACE_COLOR, alpha=0.3, lw=0)

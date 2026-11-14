@@ -25,12 +25,38 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.plot import setup_style
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-ssp = tengri.load_ssp()
+# A [alpha/Fe] axis exists only on an alpha-enhanced (4-D) grid, and every
+# shipped 3-D grid refuses a non-zero met_alpha_fe. This synthetic grid stands
+# in for one: a Mg b-like absorption trough that deepens with [alpha/Fe], on the
+# five [alpha/Fe] nodes of the hosted _afe grids. It is for illustration, not a
+# stellar population model.
+ALPHA_NODES = np.array([-0.2, 0.0, 0.2, 0.4, 0.6])
+wave = jnp.linspace(3000.0, 10000.0, 600)
+ages = jnp.linspace(-1.0, 1.14, 40)
+continuum = 1e-3 * (1.0 + 0.2 * jnp.sin(jnp.linspace(0.0, 6.0, wave.size)))[None, :]
+trough = jnp.exp(-0.5 * ((wave - 5175.0) / 40.0) ** 2)
+flux = jnp.stack(
+    [
+        jnp.broadcast_to(continuum * (1.0 - 0.25 * (1.0 + a) * trough), (ages.size, wave.size))
+        for a in ALPHA_NODES
+    ],
+    axis=0,
+)  # (n_alpha, n_age, n_wave)
+flux = jnp.broadcast_to(flux[None], (3, *flux.shape))  # (n_met, n_alpha, n_age, n_wave)
+ssp = SSPData(
+    ssp_wave=wave,
+    ssp_flux=flux,
+    ssp_lg_age_gyr=ages,
+    ssp_lgmet=jnp.array([-1.5, -0.5, 0.0]) + LOG10_ZSUN,
+    ssp_alpha_fe=jnp.asarray(ALPHA_NODES),
+)
 model = tengri.SEDModel.build(
     ssp,
     sfh={
@@ -71,8 +97,6 @@ for met_alpha_fe in met_alpha_fe_values:
     ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
 ax.set_xlim(3000, 1e4)
-# Tighten y-limits to optical/optical-IR region with small margin
-ax.set_ylim(1e40, 2e44)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 

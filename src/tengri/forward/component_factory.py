@@ -330,6 +330,8 @@ def build_components(
     metallicity_model: str = "delta",
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
+    # Per-age [alpha/Fe] ramp (#2250): True makes the alpha bracket per SSP age.
+    alpha_fe_evolving: bool = False,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
     # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
@@ -694,6 +696,7 @@ def build_components(
                 field=field,
                 metallicity_model=metallicity_model,
                 n_grid=n_grid,
+                alpha_fe_evolving=alpha_fe_evolving,
                 lgmet_scatter=lgmet_scatter,
                 age_kernel=age_kernel,
                 field_centering=field_centering,

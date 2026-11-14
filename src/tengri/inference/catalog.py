@@ -22,6 +22,7 @@ from tengri.inference.catalog_fitter import (
 from tengri.inference.catalog_ingest import ingest_catalog
 from tengri.inference.history_ingest import ingest_histories
 from tengri.parameters.resolve import refuse_fixed_overrides
+from tengri.utils.batching import GALAXY_CHUNK_SIZE
 
 __all__ = ["Catalog"]
 
@@ -848,7 +849,7 @@ class Catalog:
         *,
         lines=None,
         properties=None,
-        chunk_size=1024,
+        chunk_size=GALAXY_CHUNK_SIZE,
         n_pad=None,
         noise=None,
         key=None,
@@ -868,7 +869,7 @@ class Catalog:
             path, which since #1396 serves tabulated histories.
         properties : sequence of str, optional
             Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
-        chunk_size : int, default 1024
+        chunk_size : int, default 32
             Galaxies per vmapped batch. Chunks are padded to a uniform width,
             so each channel costs one compile for the whole catalog.
         n_pad : int, optional
@@ -1162,7 +1163,7 @@ class Catalog:
 
         return columns, next(iter(lengths.values()))
 
-    def predict(self, param_table=None, *, chunk_size=1024, n_pad=None) -> np.ndarray:
+    def predict(self, param_table=None, *, chunk_size=GALAXY_CHUNK_SIZE, n_pad=None) -> np.ndarray:
         """Predict photometry for a catalog of parameters or histories.
 
         Evaluates the forward model on a table of per-galaxy columns, returning
@@ -1182,7 +1183,7 @@ class Catalog:
             model with that parameter ``FREE`` instead. Omit ``param_table``
             entirely on a catalog built by :meth:`from_histories`, which
             already carries its columns.
-        chunk_size : int, default 1024
+        chunk_size : int, default 32
             Galaxies evaluated per vmapped batch. Larger batches are faster
             but use more memory. Chunks are padded to a uniform width, so the
             whole catalog costs **one** compile regardless of how it divides.

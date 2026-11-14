@@ -1456,7 +1456,14 @@ class CueBackend(NebularBackendDefaults):
         """Precompute ionizing spectrum parameters for all SSP (met, age)."""
         import numpy as np
 
-        from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+            require_ionizing_coverage,
+        )
+
+        # Coverage check (#3417, shared helper #3444), first so that no table or cache work
+        # runs on a grid that cannot give one. A truncated grid is refused, not read as dark.
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cue (CueBackend)")
 
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
