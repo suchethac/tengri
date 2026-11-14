@@ -108,6 +108,51 @@ def test_default_leaves_the_errors_unchanged():
     np.testing.assert_allclose(cat.noise[0, 2], 0.6 * MJY, rtol=1e-12)
 
 
+def test_zero_error_detection_gets_the_floor():
+    """pcigale ``_add_model_error`` acts on err >= 0, so a detection with err == 0 is floored.
+
+    A detected band with error 0 and flux f has sigma = epsilon * |f|.
+    """
+    table = {
+        "sdss_g": np.array([4.0]),
+        "sdss_g_err": np.array([0.0]),
+        "sdss_r": np.array([2.0]),
+        "sdss_r_err": np.array([0.2]),
+        "sdss_i": np.array([6.0]),
+        "sdss_i_err": np.array([0.6]),
+    }
+    cat = _ingest(table, observed_relative_error=0.1)
+    assert cat.presence[0, 0]
+    np.testing.assert_allclose(cat.noise[0, 0], 0.1 * 4.0 * MJY, rtol=1e-12)
+    np.testing.assert_allclose(cat.noise[0, 0], _pcigale_sigma(0.0, 4.0 * MJY, 0.1), rtol=1e-12)
+
+
+def test_lim_flag_dropped_band_keeps_its_pre_floor_error():
+    """A band that lim_flag drops (flux below the -9990 sentinel) is absent and not floored.
+
+    The reference is the same ingest without the floor: the floor must not change a dropped
+    band's error or its presence, and it must still apply to the other rows.
+    """
+    table = {
+        "sdss_g": np.array([-9999.0, 4.0]),
+        "sdss_g_err": np.array([0.4, 0.4]),
+        "sdss_r": np.array([2.0, 2.0]),
+        "sdss_r_err": np.array([0.2, 0.2]),
+        "sdss_i": np.array([6.0, 6.0]),
+        "sdss_i_err": np.array([0.6, 0.6]),
+    }
+    floored = _ingest(table, observed_relative_error=0.1, lim_flag="none")
+    unfloored = _ingest(table, lim_flag="none")
+    assert not floored.presence[0, 0]
+    assert floored.presence[0, 0] == unfloored.presence[0, 0]
+    np.testing.assert_allclose(floored.noise[0, 0], unfloored.noise[0, 0], rtol=1e-12)
+    # Row 1 is a detection and is floored.
+    assert floored.presence[1, 0]
+    np.testing.assert_allclose(
+        floored.noise[1, 0], _pcigale_sigma(0.4 * MJY, 4.0 * MJY, 0.1), rtol=1e-12
+    )
+
+
 @pytest.mark.parametrize("bad", [-0.1, float("nan")])
 def test_observed_floor_must_be_non_negative(bad):
     table = {
