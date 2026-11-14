@@ -413,6 +413,22 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class AlphaFeUnconstrainedWarning(AdvisoryWarning):
+    """A free [alpha/Fe] has no observation that can constrain it (#3487).
+
+    [alpha/Fe] moves the Mg b and Fe features, roughly 4800-5400 A in the rest
+    frame. Only a spectrum that resolves those features (R of 1000 or more) and
+    covers that window, or observed spectral indices, constrains it. Broadband
+    photometry moves light by only about 1-2% at fixed total metallicity, so a
+    free [alpha/Fe] fitted to photometry, to line fluxes or to a low-resolution
+    or out-of-window spectrum follows its prior. The model still builds, so this
+    warns rather than refuses. The message names the parameter, what was found,
+    and the window.
+
+    Filter this category if the posterior is meant to follow the prior.
+    """
+
+
 class ZTableCoverageWarning(AdvisoryWarning):
     """A fitted redshift prior reaches past the redshift table by a support gap.
 
