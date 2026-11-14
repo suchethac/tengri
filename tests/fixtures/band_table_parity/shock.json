@@ -6,7 +6,7 @@
   "shock_velocity": 782.0199742671562
  },
  "platform": "darwin-arm64",
- "signature_sha256": "9c1b7682a837c675ceabe059c1dbb37d6e9b7ab1040480870d0518e05ca3dbef",
+ "signature_sha256": "4a738c38d79129bda5168702f5068b729d9920cf0098ad48ca5eae0a2a6fbc0d",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
