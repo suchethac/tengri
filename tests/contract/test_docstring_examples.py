@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Docstring examples in touched modules import names that exist (#3452).
 
 Also guards the removed-API stand-in: doctest collection of the package must
@@ -14,6 +15,8 @@ import importlib
 import pytest
 
 import tengri
+
+pytestmark = pytest.mark.contract
 
 TOUCHED_MODULES = (
     "tengri.analysis.mock",

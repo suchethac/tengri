@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The README quick-start Python blocks run, with a synthetic SSP (#3452).
 
 A new user copies these blocks in order, sharing one namespace. The only
@@ -11,6 +12,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.contract
 
 README = Path(__file__).resolve().parents[2] / "README.md"
 _FENCE = re.compile(r"^```python\n(.*?)^```", re.DOTALL | re.MULTILINE)
