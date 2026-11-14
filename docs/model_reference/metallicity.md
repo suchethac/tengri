@@ -62,7 +62,7 @@ In the simplest mode, a single $[\alpha/\mathrm{Fe}]$ is applied uniformly to al
 \times \frac{t_{\rm lb}}{t_{\rm universe}},
 
 $$ (eq-alpha-evolving)
- adding one free parameter ($[\alpha/\mathrm{Fe}]_{\rm old}$, with $[\alpha/\mathrm{Fe}]_{\rm young}$ typically fixed at 0.0). On a grid with an $[\alpha/\mathrm{Fe}]$ axis, each age bin receives its own bilinear interpolation; on a grid without one the parameters have no effect (see the next section).
+ with two parameters, $[\alpha/\mathrm{Fe}]_{\rm old}$ and $[\alpha/\mathrm{Fe}]_{\rm young}$. Both are fixed at 0.0 by default, like the scalar; either is free only through an explicit prior (for example ``'alpha_fe_old': Uniform(0.0, 0.4)``), which is checked against the grid's $[\alpha/\mathrm{Fe}]$ nodes. A bare ``FREE`` is refused and a wildcard never frees them. On a grid with an $[\alpha/\mathrm{Fe}]$ axis, each SSP age collapses the axis at its own $[\alpha/\mathrm{Fe}](t_{\rm lb})$, so the exact forward, the photometry and spectrum lookup tables, the dust energy-balance table and the spectral-index fast path all see the same per-age ramp. $t_{\rm universe}$ is the age of the universe at the model redshift. The flag and the two parameters are spelled in the metallicity group: ``met={'alpha_fe_evolving': True, 'alpha_fe_old': ..., 'alpha_fe_young': ...}``. It is exclusive with a scalar ``alpha_fe``. On a grid without an $[\alpha/\mathrm{Fe}]$ axis the evolving mode is refused at build; a non-zero scalar $[\alpha/\mathrm{Fe}]$ on such a grid is refused at build too (see the next section).
 
 ## References
 

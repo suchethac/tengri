@@ -4442,10 +4442,6 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for metallicity handling.
 
-        Raises
-        ------
-        NotImplementedError
-            If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
         self._met_mode = spec.met_mode
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
@@ -4461,24 +4457,9 @@ class SEDModel:
         else:
             delta.update(met_param_map)
 
-        self._alpha_fe_evolving = spec.alpha_fe_evolving
-        if self._alpha_fe_evolving:
-            # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
-            # through the stellar component's SED production pipeline. Currently the
-            # mechanism accepts only a scalar met_alpha_fe, which is applied uniformly
-            # to all ages (either via SSP grid interpolation or effective-metallicity
-            # calculation). Supporting a per-age ramp would require architectural
-            # changes: propagating per-age arrays through the age-weight loop and
-            # modifying interpolate_alpha_only to work per-age.
-            raise NotImplementedError(
-                "alpha_fe_evolving=True is not yet supported (#1767). "
-                "The stellar component currently accepts only a scalar "
-                "met_alpha_fe [alpha/Fe] applied uniformly to all ages. "
-                "To model alpha enhancement, use alpha_fe_evolving=False "
-                "(the default) and set met_alpha_fe to a Fixed or free scalar value. "
-                "Per-age alpha ramping from alpha_fe_old to alpha_fe_young requires "
-                "architectural extensions currently under development."
-            )
+        # #1767 / #2250: a per-age [alpha/Fe] ramp is carried by the stellar component
+        # (alpha bracket per SSP age, see StellarSEDComponent._alpha_fe_at_ages).
+        self._alpha_fe_evolving = bool(spec.alpha_fe_evolving)
 
         return delta
 
@@ -4797,12 +4778,20 @@ class SEDModel:
         if ssp_data is None:  # synthetic / placeholder construction path
             return
 
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
         distributions = getattr(spec, "_distributions", {})
+        if getattr(spec, "alpha_fe_evolving", False) and not has_alpha_grid(ssp_data):
+            raise ParameterError(
+                f"alpha_fe_evolving=True needs an SSP grid with an [alpha/Fe] axis, but the SSP "
+                f"grid {ssp_data.source or 'in use'!r} is a 3-D grid. A per-age [alpha/Fe] ramp "
+                "has no template to read on a 3-D grid. Use an alpha-enhanced 4-D grid (a name "
+                "containing '_afe'; see tengri.list_remote_ssps()), or set "
+                "alpha_fe_evolving=False."
+            )
         alpha_dist = distributions.get("met_alpha_fe")
         if alpha_dist is None:
             return
-
-        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         if has_alpha_grid(ssp_data):
             return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
@@ -9179,13 +9168,22 @@ class SEDModel:
         default :meth:`StellarSEDComponent.apply` uses, so the fast path and the exact forward
         collapse the alpha axis at the same node weights.
         """
-        from tengri.components.stellar.component import _ALPHA_FE_DEFAULT
         from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket, has_alpha_grid
 
         ssp = self.ssp_data
         if not has_alpha_grid(ssp):
             return None
-        alpha_fe = jnp.asarray(full_params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+        from tengri.components.stellar.component import _alpha_fe_at_ages
+        from tengri.cosmology import age_at_z
+        from tengri.parameters.resolve import require_redshift
+
+        evolving = bool(getattr(self, "_alpha_fe_evolving", False))
+        t_universe_gyr = (
+            age_at_z(require_redshift(full_params, "_fast_alpha_bracket")) if evolving else None
+        )
+        alpha_fe = _alpha_fe_at_ages(
+            full_params, ssp, evolving=evolving, t_universe_gyr=t_universe_gyr
+        )
         return alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
 
     def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
@@ -9237,11 +9235,6 @@ class SEDModel:
             raise ValueError(f"{caller}(approx=True) requires a stellar component.")
         if self._has_free_agb_dust_weight():
             raise self._free_agb_dust_lut_error(f"{caller}(approx=True) SSP window")
-        if getattr(self, "_alpha_fe_evolving", False):
-            raise ValueError(
-                f"{caller}(approx=True) does not support an evolving [alpha/Fe]; "
-                f"use the exact path (approx=None)."
-            )
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
@@ -12079,7 +12072,6 @@ class SEDModel:
             needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
-            and not bool(getattr(self.spec, "alpha_fe_evolving", False))
             and not unsafe_free
             and self.ssp_data is not None
         ):
@@ -12750,6 +12742,7 @@ class SEDModel:
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
+            alpha_fe_evolving=bool(getattr(self, "_alpha_fe_evolving", False)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),

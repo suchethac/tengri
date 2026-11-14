@@ -111,7 +111,8 @@ class DerivedState:
     #: only the log form is published (#1206, #3149).
     log_stellar_mass_scale: jnp.ndarray | None = None
     #: Lower [alpha/Fe] node index ``ia`` and fraction ``fa`` of the model's
-    #: ``met_alpha_fe`` on a 4D grid, shape () each: the bracket the stellar
+    #: ``met_alpha_fe`` on a 4D grid, shape () each, or (n_age,) each under
+    #: ``alpha_fe_evolving`` (one bracket per SSP age): the bracket the stellar
     #: component collapses its own cube at. Published only on a grid with an
     #: [alpha/Fe] axis; the dust energy-balance LUT collapses its alpha axis at
     #: the same bracket. ``None`` on a 3D grid.
