@@ -9,12 +9,11 @@ node for node.
 
 from __future__ import annotations
 
-from pathlib import Path
+import warnings
 
 import numpy as np
 import pytest
 
-from tengri._data_setup import find_data_str
 from tengri.components.stellar.sps.dsps_wrapper import (
     _LIBRARY_RESOLUTION_DATA_FILES,
     _detect_library_resolution_key,
@@ -25,26 +24,32 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 
 pytestmark = pytest.mark.contract
 
-#: Grids are located the way the loader locates them (``$TENGRI_DATA_DIR`` and the
-#: ancestors of the working directory), so a git worktree finds the parent checkout's data.
-HR_DEFAULT_GRID = find_data_str("ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-LR_GRID = find_data_str("ssp_mist_c3k_lr_chabrier_noNE.h5")
-C3K_A_GRID = find_data_str("fsps_mist_c3k_a_chabrier.h5")
-#: Alpha-MC lr grid on the total-Z axis (the fixed-[Fe/H] file is refused by the loader).
-_ALPHA_MC_LR_PATH = Path(
-    "/Users/suchethacooray/Projects/tengri-alpha-grids/formatted/totalz/"
-    "fsps_amist_c3k_lr_afe_chabrier_totalz.h5"
-)
-ALPHA_MC_LR_GRID = str(_ALPHA_MC_LR_PATH) if _ALPHA_MC_LR_PATH.is_file() else None
 
-requires_hr_grid = pytest.mark.skipif(
-    HR_DEFAULT_GRID is None, reason="C3K v2.3 hr default grid not found on this machine"
-)
-requires_lr_grid = pytest.mark.skipif(LR_GRID is None, reason="C3K v2.3 lr grid not found")
-requires_c3k_a_grid = pytest.mark.skipif(C3K_A_GRID is None, reason="C3K a grid not found")
-requires_alpha_mc_lr = pytest.mark.skipif(
-    ALPHA_MC_LR_GRID is None, reason="alpha-MC lr total-Z grid not found"
-)
+def _write_grid(tmp_path, stem: str, key: str, *, scale_wave: float = 1.0) -> str:
+    """A small synthetic SSP file named like a hosted grid, on the library's own wavelengths.
+
+    ``ssp_wave`` is the packaged reference table's wavelength column (times ``scale_wave``,
+    1.0 for a matching grid), so the loader's filename detection and its wavelength-match
+    guard run exactly as on the real file, without the multi-GB grid.
+    """
+    import h5py
+
+    wave, _ = _load_library_resolution_reference(key)
+    wave = np.asarray(wave, dtype=float) * scale_wave
+    n_met, n_age = 2, 3
+    path = tmp_path / f"{stem}.h5"
+    with h5py.File(path, "w") as f:
+        f["ssp_wave"] = wave
+        f["ssp_flux"] = np.full((n_met, n_age, wave.size), 1e-4)
+        f["ssp_lg_age_gyr"] = np.linspace(-2.0, 1.0, n_age)
+        f["ssp_lgmet"] = np.array([-2.5, -1.8])
+    return str(path)
+
+
+def _load(path):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return load_ssp_data(path, mass_remaining="dsps_fit")
 
 
 def _sigma_at(ssp, wave_aa: float) -> float:
@@ -116,17 +121,18 @@ class TestHrTable:
         assert np.all(sigma[~measured] < 0)
 
 
-@requires_hr_grid
 class TestHrDefaultGrid:
-    """The coming default C3K v2.3 grid receives the hr table."""
+    """A grid named like the coming default C3K v2.3 file, on the c3k_hr wavelengths."""
 
-    def test_gets_resolution_at_5000(self):
-        ssp = load_ssp_data(HR_DEFAULT_GRID)
+    STEM = "ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0"
+
+    def test_gets_resolution_at_5000(self, tmp_path):
+        ssp = _load(_write_grid(tmp_path, self.STEM, "c3k_hr"))
         assert ssp.ssp_resolution_kms is not None
         assert _sigma_at(ssp, 5000.0) == pytest.approx(42.4378, rel=1e-3)
 
-    def test_approximate_mask_outside_1001_25000(self):
-        ssp = load_ssp_data(HR_DEFAULT_GRID)
+    def test_approximate_mask_outside_1001_25000(self, tmp_path):
+        ssp = _load(_write_grid(tmp_path, self.STEM, "c3k_hr"))
         wave = np.asarray(ssp.ssp_wave)
         _, approximate = _resolve_ssp_resolution(ssp.ssp_wave, "c3k_hr")
         assert np.all(approximate[wave < 1000.0])
@@ -134,33 +140,28 @@ class TestHrDefaultGrid:
         assert not np.any(approximate[(wave > 1001.0) & (wave < 25000.0)])
         assert _sigma_at(ssp, 500.0) == pytest.approx(636.5667, rel=1e-3)
 
+    def test_mismatched_wavelengths_get_no_table(self, tmp_path):
+        ssp = _load(_write_grid(tmp_path, self.STEM, "c3k_hr", scale_wave=1.001))
+        assert ssp.ssp_resolution_kms is None
 
-@requires_lr_grid
+
 class TestLrGrid:
-    """A c3k_lr grid gets the lr table: R = 100 over the measured window."""
+    """c3k_lr grids, including the alpha-MC lr files, get the lr table: R = 100."""
 
-    def test_gets_lr_resolution(self):
-        ssp = load_ssp_data(LR_GRID)
+    @pytest.mark.parametrize(
+        "stem", ["ssp_mist_c3k_lr_chabrier_noNE", "fsps_amist_c3k_lr_afe_chabrier_totalz"]
+    )
+    def test_gets_lr_resolution(self, tmp_path, stem):
+        ssp = _load(_write_grid(tmp_path, stem, "c3k_lr"))
         assert ssp.ssp_resolution_kms is not None
         assert _sigma_at(ssp, 5000.0) == pytest.approx(1273.133, rel=1e-3)
 
 
-@requires_alpha_mc_lr
-class TestAlphaMcLrGrid:
-    """The alpha-MC lr grid shares the c3k_lr wavelength grid and gets its table."""
-
-    def test_wave_match_guard_passes_and_table_applies(self):
-        ssp = load_ssp_data(ALPHA_MC_LR_GRID)
-        assert ssp.ssp_resolution_kms is not None
-        assert _sigma_at(ssp, 5000.0) == pytest.approx(1273.133, rel=1e-3)
-
-
-@requires_c3k_a_grid
 class TestLegacyC3kA:
     """The c3k_a token still maps to the c3k_afe0.0 table."""
 
-    def test_c3k_a_grid_keeps_its_table(self):
-        ssp = load_ssp_data(C3K_A_GRID)
+    def test_c3k_a_grid_keeps_its_table(self, tmp_path):
+        ssp = _load(_write_grid(tmp_path, "fsps_mist_c3k_a_chabrier", "c3k_a"))
         assert ssp.ssp_resolution_kms is not None
         ref_wave, ref_sigma = _load_library_resolution_reference("c3k_a")
         assert ref_wave.shape[0] == 11149
