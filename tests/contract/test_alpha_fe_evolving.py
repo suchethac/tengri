@@ -42,7 +42,8 @@ from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
 from tengri.observation.spectral_indices import STANDARD_INDICES
 from tengri.parameters import Fixed
 from tengri.parameters.groups import parse_groups
-from tengri.utils.physics_constants import LOG10_ZSUN
+from tengri.utils.physics_constants import L_SUN, LOG10_ZSUN
+from tengri.utils.sed_quantities import compute_l_dust_absorbed
 
 pytestmark = pytest.mark.contract
 
@@ -247,9 +248,10 @@ def _max_rel(a, b):
     return float(np.max(np.abs(a / b - 1.0)))
 
 
-def _approx_model(ssp, observation, met, approx, *, redshift=None):
+def _approx_model(ssp, observation, met, approx, *, redshift=None, **extra):
     redshift = Fixed(REDSHIFT) if redshift is None else redshift
     return SEDModel.build(
+        **extra,
         ssp_data=ssp,
         observation=observation,
         sfh={
@@ -568,3 +570,99 @@ def test_agb_each_age_row_equals_the_scalar_agb_model_at_that_alpha(ssp4d_mist, 
             scalar.predict_state({**params, "met_alpha_fe": float(value)}).derived["lnu_age"]
         )
         np.testing.assert_allclose(row[a], ref[a], rtol=1e-10, atol=0)
+
+
+# ── i. dust energy balance on the evolving model ───────────────────────
+
+
+def _dusty(ssp, observation, met, approx=None, *, redshift=None):
+    """Two-component dust with a dale2014 emission model, the energy-balance template."""
+    return _approx_model(
+        ssp,
+        observation,
+        met,
+        approx,
+        redshift=redshift,
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    )
+
+
+_RTOL_TEMPLATE_BALANCE = 1e-7  # the census tolerance for a template emission model
+
+
+def test_dusty_evolving_exact_path_balances_absorbed_and_emitted(ssp4d, observation):
+    st = _dusty(ssp4d, observation, _evo_met(0.4, 0.0)).predict_state({})
+    d = st.derived
+    l_abs = float(d["L_absorbed"])
+    assert l_abs > 0.0
+    np.testing.assert_allclose(float(d["L_ir"]), l_abs, rtol=_RTOL_TEMPLATE_BALANCE)
+    nu = 2.99792458e18 / np.asarray(st.wave, dtype=np.float64)
+    emitted = -np.trapezoid(np.asarray(d["sed_dust_ir"], dtype=np.float64), nu)
+    np.testing.assert_allclose(emitted / l_abs, 1.0, rtol=_RTOL_TEMPLATE_BALANCE)
+
+
+def test_dusty_evolving_absorbed_is_the_per_age_composition(ssp4d, observation):
+    old, young = 0.4, 0.0
+    evo = _dusty(ssp4d, observation, _evo_met(old, young)).predict_state({})
+    attenuated = np.asarray(evo.derived["sed_dust_attenuated"], dtype=np.float64)
+    wave = jnp.asarray(evo.wave)
+    alpha = _alpha_of_age(ssp4d, old, young)
+    scalar = _dusty(ssp4d, observation, {"alpha_fe": Uniform(-0.2, 0.6)})
+    composed = np.zeros(attenuated.shape)
+    for a, value in enumerate(alpha):
+        row = scalar.predict_state({"met_alpha_fe": float(value)}).derived["lnu_age"]
+        composed = composed + np.asarray(row, dtype=np.float64)[a]
+    l_composed = float(
+        compute_l_dust_absorbed(jnp.asarray(composed), jnp.asarray(attenuated), wave)
+    )
+    # compute_l_dust_absorbed is in solar luminosities; the state publishes erg/s.
+    np.testing.assert_allclose(
+        l_composed * L_SUN, float(evo.derived["L_absorbed"]), rtol=_RTOL_TEMPLATE_BALANCE
+    )
+
+
+def _attenuated(ssp, observation, met, approx=None, *, redshift=None):
+    """The same two-component dust with no emission model: the photometric control for _dusty."""
+    return _approx_model(
+        ssp,
+        observation,
+        met,
+        approx,
+        redshift=redshift,
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+    )
+
+
+def test_dusty_evolving_wave_precomp_photometry_agrees_with_exact(ssp4d, observation):
+    """The photometry LUT on the dusty evolving model, at free redshift, against the exact path.
+
+    The dust energy-balance table is not built for an evolving [alpha/Fe]
+    (sed_model._energy_balance_lut), so the absorbed luminosity is exact by construction and
+    only the photometry LUT is tested here. The control is the same dust without an emission
+    model: a scalar model with dust emission on this 4-D grid raises in the energy-balance
+    table's contraction, which is not evolving-specific.
+    """
+    free_z = Uniform(0.05, 0.3)
+    exact = _dusty(ssp4d, observation, _evo_met(0.4, 0.0), None, redshift=free_z)
+    lut = _dusty(ssp4d, observation, _evo_met(0.4, 0.0), WavePrecomp(), redshift=free_z)
+    c_exact = _attenuated(ssp4d, observation, {"alpha_fe": Fixed(0.25)}, None, redshift=free_z)
+    c_lut = _attenuated(
+        ssp4d, observation, {"alpha_fe": Fixed(0.25)}, WavePrecomp(), redshift=free_z
+    )
+    for z in (0.07, 0.2):
+        ctrl = _max_rel(
+            c_lut.predict_photometry({"redshift": z}), c_exact.predict_photometry({"redshift": z})
+        )
+        rel = _max_rel(
+            lut.predict_photometry({"redshift": z}), exact.predict_photometry({"redshift": z})
+        )
+        assert rel <= _lut_tolerance(ctrl), (z, rel, ctrl)
