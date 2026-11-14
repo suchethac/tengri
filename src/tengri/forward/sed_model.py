@@ -3465,29 +3465,25 @@ class SEDModel:
     def _spectrum_lut_point_component(self) -> str | None:
         """Name of a declared component the pixel-moment table cannot carry, or ``None`` (#3413).
 
-        The table carries the stellar and nebular families with their dust screens. An IGM
-        transmission, an AGN, a radio, an X-ray or a dust-emission component publishes point
-        samples or a factor without a moment treatment, so a conserving table would be wrong
-        for it. Read from the declared spec, because the chain is not built yet.
+        The table carries the stellar and nebular families with their dust screens, and the
+        AGN, radio, X-ray and dust-emission light is projected per draw from the full grid
+        (#3413). An IGM transmission is a factor without a moment treatment yet, so a
+        conserving table would be wrong for it. Read from the declared spec, because the chain
+        is not built yet.
 
         Returns
         -------
         str or None
-            The first such component, in the order IGM, AGN, dust emission, radio, X-ray.
+            ``"IGM (igm)"`` or the dust-emission model when declared, otherwise ``None``.
         """
         spec = self.spec
         if getattr(spec, "apply_igm", False):
             return "IGM (igm)"
-        agn = getattr(spec, "agn_model", None)
-        if agn not in (None, "off", "none"):
-            return f"AGN ({agn})"
+        # Dust emission publishes a point-sampled family; its IR-band pixels also inherit the
+        # stellar pixel-moment error of ~1e-4 there, so it stays refused (#3413).
         dust_em = getattr(spec, "dust_emission", None)
         if dust_em not in (None, "off", "none"):
             return f"dust emission ({dust_em})"
-        if getattr(spec, "radio", False):
-            return "radio"
-        if getattr(spec, "xray", False):
-            return "X-ray"
         return None
 
     def _spectrum_nebular_family(self) -> bool:
@@ -11601,6 +11597,7 @@ class SEDModel:
                         sigma_lib_kms=lut_sigma_lib_kms,
                         lsf_scale=self._get_lsf_scale(full),
                         lsf_n_bins=self._lsf_n_bins,
+                        lattice_window=lattice_window,
                     )
                 )
                 if observation.can_do_photometry and phot_lut:

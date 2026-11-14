@@ -363,6 +363,18 @@ _SUBINTERVAL_FAMILIES = (
     "nebular_spec_lnu_precomp",
 )
 
+#: Point-sampled families a pixel-moment table leaves out of its sub-interval sum (#3413).
+#: Their light is the full-grid SED of the stellar-kernel group (``_PROJECTED_SED_KEYS``),
+#: projected per draw with the exact projector, so the kernel and the pixel mean are exact.
+_PROJECTED_FAMILIES = (
+    "agn_spec_lnu_precomp",
+    "radio_spec_lnu_precomp",
+    "xray_spec_lnu_precomp",
+)
+
+#: Full-grid SED keys of the stellar-kernel group that are not the stellar piece (#3413).
+_PROJECTED_SED_KEYS = ("sed_agn", "sed_radio", "sed_xray")
+
 
 def _sum_segments(values, n_pix):
     """Sum each pixel's source segments of a ``(n_pix * n_seg,)`` array (#3413)."""
@@ -377,6 +389,21 @@ def _has_instrument_only_sed(state) -> bool:
     """
     derived = state.derived
     return any(derived.get(key) is not None for key in _INSTRUMENT_ONLY_KEYS)
+
+
+def _has_projected_sed(state) -> bool:
+    """Whether a stellar-kernel family other than the stellar piece is on the full grid (#3413)."""
+    return any(state.derived.get(key) is not None for key in _PROJECTED_SED_KEYS)
+
+
+def _projected_rest_sed(state) -> jnp.ndarray:
+    """Rest-frame light of the stellar-kernel group other than the stellar piece (#3413).
+
+    AGN continuum, radio, X-ray and dust IR, each zero when its component is absent. The
+    exact path's split assigns them the stellar kernel; they are unattenuated (the single
+    screen does not touch them, measured on the exact decomposition).
+    """
+    return sum(jnp.asarray(state.derived.get(key, 0.0)) for key in _PROJECTED_SED_KEYS)
 
 
 def _sum_present(*terms):
@@ -2883,7 +2910,7 @@ class Observation:
         )
 
     def _lut_instrument_only_fnu(
-        self, state, params, *, sigma_lib_kms, lsf_scale, n_bins
+        self, state, params, *, sigma_lib_kms, lsf_scale, n_bins, lattice_window=None
     ):
         r"""Observed F_nu of the instrument-only group, projected exactly (#3413).
 
@@ -2918,16 +2945,21 @@ class Observation:
         )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         instrument_rest = _instrument_only_rest_sed(state)
+        projected = _has_projected_sed(state)
+        # The stellar-kernel group (AGN continuum, radio, X-ray, dust IR) rides in the same
+        # projection: the split gives it the stellar kernel and the instrument-only group the
+        # instrument alone, so one call is the exact path's projection of both (#3413).
+        sed_rest = instrument_rest + _projected_rest_sed(state) if projected else instrument_rest
         sigma_v = state.derived.get("spec_sigma_v_kms")
         sigma_v = 0.0 if sigma_v is None else sigma_v
-        if spectro.resolution is None and spectro.resolution_matrix is None:
+        if spectro.resolution is None and spectro.resolution_matrix is None and not projected:
             # Without an instrument kernel the instrument-only group takes no dispersion here,
             # as before the no-resolution lattice (#3436): the lattice would need a static
             # redshift range that this LUT path does not carry.
             sigma_v = 0.0
         return project_spectrum_kernel_split(
             state,
-            instrument_rest,
+            sed_rest,
             None,
             state.wave,
             spectro.wave_obs,
@@ -2941,6 +2973,7 @@ class Observation:
             conserving=True,
             resolution_matrix=spectro.resolution_matrix,
             nebular_lines=spectro.nebular_lines,
+            lattice_window=lattice_window,
         )
 
     def _lut_lsf_fnu(
@@ -3025,6 +3058,7 @@ class Observation:
         sigma_lib_kms=0.0,
         lsf_scale=1.0,
         lsf_n_bins=16,
+        lattice_window=None,
     ):
         """Project spectrum observables via the spectrum LUT.
 
@@ -3074,6 +3108,10 @@ class Observation:
 
         # Sum all *_spec_lnu_precomp contributions from components that published one.
         precomp_keys = [k for k in state.derived.field_names() if k.endswith("_spec_lnu_precomp")]
+        # A pixel-moment table leaves the point-sampled families out of its sub-interval sum:
+        # they are projected per draw from the full-grid SED below (#3413).
+        if state.derived.get("spec_source_breakpoints") is not None:
+            precomp_keys = [k for k in precomp_keys if k not in _PROJECTED_FAMILIES]
         precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
         if not precomp_contribs:
             raise ValueError(
@@ -3182,7 +3220,9 @@ class Observation:
         # The instrument-only group (nebular, shock, AGN lines) of a pixel table is projected
         # exactly per draw from the full-grid SED (#3413), so its pixel moments leave the
         # stellar pixels. The rest-frame output keeps them.
-        exact_instrument_only = sub_table is not None and _has_instrument_only_sed(state)
+        exact_instrument_only = sub_table is not None and (
+            _has_instrument_only_sed(state) or _has_projected_sed(state)
+        )
         observed_lnu, observed_neb = total_spec_lnu, nebular_dust
         if exact_instrument_only:
             observed_lnu = total_spec_lnu - nebular_dust
@@ -3274,6 +3314,7 @@ class Observation:
                 sigma_lib_kms=sigma_lib_kms,
                 lsf_scale=lsf_scale,
                 n_bins=lsf_n_bins,
+                lattice_window=lattice_window,
             )
 
         # Flux calibration, the same Chebyshev polynomial the exact path applies

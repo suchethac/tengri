@@ -198,11 +198,13 @@ def test_pixel_integral_lut_matches_conserving_exact(
     assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
 
 
-def _family_model(ssp, family, approx):
-    """Two-component dust, a Fixed-z conserving SDSS spectrum, plus one family (#3413)."""
+def _family_model(
+    ssp, family, approx, *, sigma_v_override=None, resolution_override=None, wave_obs=_SDSS
+):
+    """Two-component dust, a Fixed-z conserving spectrum, plus one family (#3413)."""
     from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform
 
-    spectro = {"wave_obs": jnp.asarray(_SDSS), "resample": "conserving"}
+    spectro = {"wave_obs": jnp.asarray(wave_obs), "resample": "conserving"}
     sigma_v = 0.0
     extra = {"neb": {"type": "none"}}
     if family in ("banded", "banded-point"):
@@ -227,9 +229,13 @@ def _family_model(ssp, family, approx):
     elif family == "radio":
         extra["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
     elif family == "xray":
-        extra["xray"] = {"type": "simple", "delta_alpha_ox": Uniform(-2.0, -1.0)}
+        extra["xray"] = {"type": "simple", "delta_alpha_ox": Fixed(-1.5)}
     elif family == "igm":
         extra["igm"] = {"type": "inoue"}
+    if sigma_v_override is not None:
+        sigma_v = sigma_v_override
+    if resolution_override is not None:
+        spectro["resolution"] = resolution_override
     obs = Observation(spectroscopy=Spectroscopy(**spectro))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -246,7 +252,66 @@ def _family_model(ssp, family, approx):
     return type(base)(spec, ssp, observation=obs, approx=approx)
 
 
-_STATIC_REFUSED = ["agn", "dust-emission", "radio", "xray", "igm"]
+_STATIC_REFUSED = ["igm", "dust-emission"]
+_PROJECTED = ["agn", "radio", "xray"]
+
+
+#: Each projected family on a band where it is non-negligible: AGN on the optical SDSS grid,
+#: radio at 1-10 cm, X-ray at 1-60 Angstrom (#3413). Dust emission is refused (see
+#: ``_STATIC_REFUSED``): on a mid-IR band the stellar pixel moments alone miss by ~1e-4.
+_PROJECTED_BANDS = {
+    "radio": np.geomspace(1.0e8, 1.0e9, 60),
+    "xray": np.geomspace(1.0, 60.0, 60),
+}
+
+
+def _family_pair_errors(ssp, family, sigma_v, resolution, wave_obs=_SDSS):
+    """LUT vs exact conserving errors for one projected family (flux, Jacobian)."""
+    names = ("dust_tau_bc", "dust_tau_diff")
+    kw = {"sigma_v_override": sigma_v, "resolution_override": resolution, "wave_obs": wave_obs}
+    exact = _family_model(ssp, family, None, **kw)
+    lut = _family_model(ssp, family, SpectrumPrecomp(), **kw)
+    base = {"dust_tau_bc": jnp.asarray(0.5), "dust_tau_diff": jnp.asarray(0.3)}
+    f_e, j_e = _flux_and_jacobian(exact, names, base)
+    f_l, j_l = _flux_and_jacobian(lut, names, base)
+    return _pixel_rel(f_l, f_e), _pixel_rel(j_l, j_e)
+
+
+@pytest.mark.parametrize("resolution", [None, 2000.0], ids=["nores", "R2000"])
+def test_projected_agn_matches_conserving_exact(resolution):
+    """AGN continuum light is served per draw, matching the exact conserving path (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    flux_err, jac_err = _family_pair_errors(ssp, "agn", 150.0, resolution)
+    print(f"\nagn: flux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
+    assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
+    assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
+
+
+@pytest.mark.parametrize("family", sorted(_PROJECTED_BANDS))
+def test_projected_family_matches_conserving_exact(family):
+    """Dust-emission, radio and X-ray light is served per draw on its own band (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    flux_err, jac_err = _family_pair_errors(ssp, family, 150.0, None, _PROJECTED_BANDS[family])
+    print(f"\n{family}: flux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
+    assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
+    assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
+
+
+@pytest.mark.parametrize("family", _PROJECTED)
+def test_projected_family_routes_to_table_under_auto(family):
+    """A projected family is served: auto takes the pixel-moment table (#3413)."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, family, None)) is not None
 
 
 @pytest.mark.parametrize("family", _STATIC_REFUSED)
