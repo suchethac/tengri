@@ -3236,7 +3236,8 @@ class SEDModel:
           instrument kernel);
         - the table computes at most :data:`SPECTRUM_LUT_MAX_FLAGGED_FRACTION` of the
           pixels exactly per draw (:meth:`_spectrum_flagged_fraction`); above it the
-          batched window pass costs more than the exact path (#3413);
+          batched window pass costs more than the exact path, and no flagged pixel lacks an
+          exact window, which would leave it on the first-order table (#3413);
         - no dust-emission component is declared: its light is projected per draw
           from the full grid either way, so the table only adds its own stellar sum
           and is slower than the exact path (#3413).
@@ -3271,7 +3272,25 @@ class SEDModel:
             return False
         if not flagged:
             return True
-        return self._spectrum_flagged_fraction() <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+        return self._spectrum_table_is_worthwhile()
+
+    def _spectrum_screen_depth_max(self) -> float:
+        """Largest total screen optical depth the model allows (#3413).
+
+        The fixed value or prior upper bound of the depth parameters, summed over the
+        screens of a two-component model (``tau_V`` alone under ``tauv_mu``), capped at 3 for
+        an unbounded prior. The table's flag sizes the first-order remainder at this depth.
+
+        Returns
+        -------
+        float
+        """
+        if getattr(self, "_dust_parameterization", "tau_bc_diff") == "tauv_mu":
+            names = ("dust_tau_v",)
+        else:
+            names = ("dust_tau_v", "dust_tau_bc", "dust_tau_diff")
+        depth = sum(min(self._max_plausible_tau(name), 3.0) for name in names)
+        return float(depth)
 
     def _spectrum_flagged_fraction(self) -> float:
         """Fraction of the spectrum's pixels a pixel-moment table computes exactly per draw.
@@ -3284,23 +3303,58 @@ class SEDModel:
         float
             Flagged pixels over all pixels, in [0, 1].
         """
+        return self._spectrum_flag_report()[0]
+
+    def _spectrum_table_is_worthwhile(self) -> bool:
+        """Whether a pixel-moment table beats the exact path and meets the accuracy bar (#3413).
+
+        False when more than :data:`SPECTRUM_LUT_MAX_FLAGGED_FRACTION` of the pixels are
+        flagged, or when a flagged pixel cannot get an exact window (it would be served by the
+        first-order table, outside the bar).
+
+        Returns
+        -------
+        bool
+        """
+        fraction, n_unwindowed = self._spectrum_flag_report()
+        return n_unwindowed == 0 and fraction <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+
+    def _spectrum_flag_report(self) -> tuple[float, int]:
+        """Flagged fraction and count of flagged pixels without an exact window.
+
+        Returns
+        -------
+        tuple of (float, int)
+            ``(0.0, 0)`` for a point table.
+        """
         if not self._spectrum_lut_pixel_integral():
-            return 0.0
+            return 0.0, 0
         import numpy as _np
 
-        from tengri.components.stellar.sps.flagged_pixels import table_flag_mask
+        from tengri.components.stellar.sps.flagged_pixels import (
+            table_flag_mask,
+            unwindowed_pixels,
+        )
 
         spectro = self.observation.spectroscopy
         centres = _np.asarray(spectro.wave_obs, dtype=_np.float64) / (1.0 + self._resample_z_ref())
         lsf = self._spectrum_lsf_model()
-        flags, _ = table_flag_mask(
+        flags, width_kms = table_flag_mask(
             centres,
             self._spectrum_breakpoints(),
             self._spectrum_screen_curves(),
             0.0 if self._spectrum_banded_pixel_integral() else (self._fixed_sigma_v_kms() or 0.0),
             None if lsf is None else float(_np.min(_np.asarray(lsf[0], dtype=_np.float64))),
+            self._spectrum_screen_depth_max(),
         )
-        return float(flags.mean())
+        wave_model = _np.asarray(
+            getattr(self, "_rest_wavelength", None)
+            if getattr(self, "_rest_wavelength", None) is not None
+            else self.ssp_data.ssp_wave,
+            dtype=_np.float64,
+        )
+        n_unwindowed = unwindowed_pixels(wave_model, centres, flags, width_kms).size
+        return float(flags.mean()), int(n_unwindowed)
 
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
@@ -4052,7 +4106,7 @@ class SEDModel:
         # path (#3413). The flag needs the dust laws and the instrument kernel.
         if (
             getattr(self, "_spectrum_promoted", False)
-            and self._spectrum_flagged_fraction() > SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+            and not self._spectrum_table_is_worthwhile()
         ):
             self._approx = self._approx.replace(spectrum_precomp=False)
 
@@ -13497,6 +13551,7 @@ class SEDModel:
                         spec_sigma_v_on_pixels=self._spectrum_banded_pixel_integral(),
                         spec_no_instrument=self._spectrum_no_instrument(),
                         spec_screen_curves=self._spectrum_screen_curves(),
+                        spec_screen_depth_max=self._spectrum_screen_depth_max(),
                         spec_lsf_pixels=self._spectrum_lsf_pixels(),
                         spec_model_wave=np.asarray(self._rest_wavelength, dtype=np.float64),
                     )

@@ -2656,6 +2656,7 @@ class StellarSEDComponent:
         spec_screen_curves: tuple = (),
         spec_model_wave=None,
         spec_lsf_pixels: dict | None = None,
+        spec_screen_depth_max: float = 0.0,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -2759,6 +2760,7 @@ class StellarSEDComponent:
                 screen_curves=spec_screen_curves,
                 model_wave=spec_model_wave,
                 lsf_pixels=spec_lsf_pixels,
+                screen_depth_max=spec_screen_depth_max,
             )
             state = _replace_state(
                 state,
@@ -2871,6 +2873,7 @@ class StellarSEDComponent:
         screen_curves: tuple = (),
         model_wave=None,
         lsf_pixels: dict | None = None,
+        screen_depth_max: float = 0.0,
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
@@ -2914,6 +2917,7 @@ class StellarSEDComponent:
                 screen_curves=screen_curves,
                 model_wave=model_wave,
                 lsf_pixels=lsf_pixels,
+                screen_depth_max=screen_depth_max,
             )
             import numpy as np
 

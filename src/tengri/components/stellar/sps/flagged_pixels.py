@@ -144,7 +144,7 @@ CURVATURE_BOUND = 1e-4
 _CURVATURE_SUBNODES = 9
 
 
-def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
+def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None, depth=None):
     r"""Pixels where a dust curve's curvature defeats the first-order screen expansion.
 
     The table carries :math:`T(c) M_0 + T'(c) M_1`; the remainder is
@@ -156,6 +156,12 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
     the pixel still moves the pixel's source mean; the scale is the curve over the pixel
     itself. Each pixel's sub-grid spacing is one eighth of its own width.
 
+    With ``depth`` the measure is taken on the transmission :math:`e^{-\tau k}` at that optical
+    depth instead of on :math:`k`. The remainder of the screen's expansion is
+    :math:`\tfrac12 T''\,\overline{S(\mu-c)^2}` with :math:`T''/T = (\tau k')^2 - \tau k''`,
+    so a steep curve (the SMC law in the far-UV) leaves a remainder that grows as
+    :math:`\tau^2` even where :math:`k''` is small.
+
     Parameters
     ----------
     edges_rest : ndarray, shape (n_pix + 1,)
@@ -166,6 +172,9 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
         Relative remainder above which a pixel is flagged.
     pad_aa : float or ndarray, shape (n_pix,), optional
         Half-width [Angstrom] of each pixel's source reach. Default 0 (the pixel alone).
+    depth : float, optional
+        Optical depth :math:`\tau` at which to take the transmission. Default ``None``: the
+        curve itself.
 
     Returns
     -------
@@ -178,6 +187,8 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
     )
     u = np.linspace(0.0, 1.0, _CURVATURE_SUBNODES)
     flags = np.zeros(n_pix, dtype=bool)
+    if depth is not None:
+        curves = [_transmission_of(curve, float(depth)) for curve in curves]
     for curve in curves:
         for p in range(n_pix):
             width = edges[p + 1] - edges[p]
@@ -194,6 +205,11 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
     return flags
 
 
+def _transmission_of(curve, depth):
+    """``exp(-depth * curve(lambda))`` as a curve."""
+    return lambda lam: jnp.exp(-depth * curve(lam))
+
+
 def kernel_reach_pad_aa(centres_rest, sigma_kms, reach=_SIGMA_REACH):
     """Per-pixel half-width [Angstrom] of ``reach`` sigmas at the pixel's wavelength."""
     return np.asarray(centres_rest, dtype=np.float64) * np.expm1(
@@ -201,7 +217,9 @@ def kernel_reach_pad_aa(centres_rest, sigma_kms, reach=_SIGMA_REACH):
     )
 
 
-def table_flag_mask(centres_rest, breakpoints, screen_curves, sigma_v_kms, resolution_min):
+def table_flag_mask(
+    centres_rest, breakpoints, screen_curves, sigma_v_kms, resolution_min, depth_max=0.0
+):
     """Pixels a pixel-moment table computes exactly, and the width of their windows.
 
     The table build and the ``approx="auto"`` routing share this: the flag depends on the
@@ -220,6 +238,10 @@ def table_flag_mask(centres_rest, breakpoints, screen_curves, sigma_v_kms, resol
         Velocity dispersion that the lattice correction applies [km/s]; 0 when none.
     resolution_min : float or None
         Smallest resolving power of the instrument kernel, ``None`` without one.
+    depth_max : float, default 0
+        Largest total screen optical depth the model allows (a fixed value or the prior's
+        upper bound). The transmission's curvature at this depth flags the pixels where a
+        steep curve defeats the first-order expansion (see :func:`curvature_flag_mask`).
 
     Returns
     -------
@@ -239,6 +261,10 @@ def table_flag_mask(centres_rest, breakpoints, screen_curves, sigma_v_kms, resol
     flags = flagged_pixel_mask(edges, np.sort(np.asarray(breakpoints, dtype=np.float64)), reach_pad)
     if len(screen_curves):
         flags = flags | curvature_flag_mask(edges, screen_curves, pad_aa=reach_pad)
+        if depth_max > 0.0:
+            flags = flags | curvature_flag_mask(
+                edges, screen_curves, pad_aa=reach_pad, depth=depth_max
+            )
     return flags, width_kms
 
 
@@ -354,10 +380,7 @@ def build_flagged_pixels(
     for p in pixels:
         lo, hi = edges[p] - pad[p], edges[p + 1] + pad[p]
         win = node_window(wave, lo, hi)
-        # A pixel with no model node in reach, or one whose window reaches the ionizing side
-        # of the Lyman edge (the nebular gas gate is not in the window SED), cannot get an
-        # exact window. It stays with the table and is reported, never dropped silently.
-        if win.size == 0 or lo < LYMAN_LIMIT_AA:
+        if not _can_window(win, lo):
             unwindowed.append(int(p))
             continue
         first, last = max(int(win[0]) - 1, 0), min(int(win[-1]) + 2, wave.size)
@@ -397,6 +420,40 @@ def build_flagged_pixels(
         plan_sigma=plan_sigma,
         plan_weights=plan_weights,
     )
+
+
+def _can_window(win, lo):
+    """Whether a pixel can get an exact node window.
+
+    A pixel with no model node in reach, or one whose window reaches the ionizing side of the
+    Lyman edge (the nebular gas gate is not in the window SED), cannot. It stays with the
+    table and is reported, never dropped silently.
+    """
+    return win.size > 0 and lo >= LYMAN_LIMIT_AA
+
+
+def unwindowed_pixels(wave_model, centres_rest, flags, sigma_window_kms):
+    """Flagged pixels that cannot get an exact window, so the table would serve them.
+
+    The same test as :func:`build_flagged_pixels`, known before any table is built.
+
+    Returns
+    -------
+    ndarray of int
+        Indices of the flagged pixels without a window.
+    """
+    from tengri.observation.spectrum import _pixel_edges
+
+    wave = np.asarray(wave_model, dtype=np.float64)
+    centres = np.asarray(centres_rest, dtype=np.float64)
+    edges = np.asarray(_pixel_edges(jnp.asarray(centres)))
+    pad = kernel_reach_pad_aa(centres, sigma_window_kms, _WINDOW_SIGMAS)
+    bad = [
+        int(p)
+        for p in np.flatnonzero(np.asarray(flags))
+        if not _can_window(node_window(wave, edges[p] - pad[p], edges[p + 1] + pad[p]), edges[p] - pad[p])
+    ]
+    return np.asarray(bad, dtype=np.int64)
 
 
 def padded_window_rows(windows, wave_nodes):

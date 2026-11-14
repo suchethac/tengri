@@ -680,6 +680,7 @@ def precompute_spectroscopy(
     screen_curves=(),
     model_wave=None,
     lsf_pixels=None,
+    screen_depth_max=0.0,
 ) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
@@ -727,6 +728,10 @@ def precompute_spectroscopy(
         The fixed instrument kernel on the pixel grid, as the exact path reads it
         (``resolution``, ``sigma_lib_kms``, ``lsf_scale``, ``n_bins``, ``wave_obs``). The
         flagged pixels' lattice correction takes its kernel width from it (#3413).
+    screen_depth_max : float, default 0.0
+        Largest total screen optical depth the model allows. A steep curve defeats the
+        first-order expansion in proportion to the depth squared, so the transmission's
+        curvature at this depth also flags pixels (#3413).
 
     Returns
     -------
@@ -809,6 +814,7 @@ def precompute_spectroscopy(
             redshift,
             correct=lsf_baked_diff or lattice_nores,
             on_grid=on_grid,
+            depth_max=screen_depth_max,
         )
         ssp_on_pixels_np = np.asarray(m0)
         ssp_on_pixels_m1 = jnp.asarray(m1)
@@ -870,6 +876,7 @@ def _flagged_layout(
     *,
     correct,
     on_grid,
+    depth_max=0.0,
 ):
     """Flag the pixels the first-order table cannot serve and lay out their windows (#3413).
 
@@ -908,6 +915,7 @@ def _flagged_layout(
         screen_curves,
         sigma if on_grid else 0.0,
         None if lsf is None else float(np.min(np.asarray(lsf[0], dtype=np.float64))),
+        depth_max,
     )
     return build_flagged_pixels(
         wave_model,

@@ -34,6 +34,7 @@ _DESI = np.linspace(6000.0, 6048.0, 61)  # 0.8 Angstrom pixels
 _PRISM = np.geomspace(6000.0, 9000.0, 40)  # constant R_pix ~ 100
 _IR = np.geomspace(2.0e4, 2.0e5, 60)  # 3.9 % pixels across the Calzetti clip at 3.115 um rest
 _UV = np.linspace(1000.0, 3500.0, 100)  # 25 Angstrom pixels, the hd23 tabulated-node band
+_UV_FAR = np.linspace(1500.0, 3500.0, 80)  # 25 Angstrom pixels, clear of the Lyman edge
 
 _TWO_COMP_FREE = ("sfh_dpl_alpha", "dust_tau_bc", "dust_tau_diff")
 _SINGLE_FREE = ("sfh_dpl_alpha", "dust_tau_v")
@@ -407,11 +408,14 @@ def test_dust_emission_routes_exact_under_auto():
 @pytest.mark.parametrize(
     ("wave_obs", "dust_kind", "resolution", "served"),
     [
-        pytest.param(_SDSS, "single", None, True, id="calzetti-sdss-1pct-flagged"),
+        pytest.param(_SDSS, "single", None, True, id="calzetti-sdss-flagged-under-cut"),
         pytest.param(_SDSS, "single", 2000.0, True, id="calzetti-sdss-R2000"),
-        pytest.param(_SDSS, "single:hd23_mwrv31", None, False, id="hd23-sdss-30pct-flagged"),
-        pytest.param(_UV, "single:hd23_mwrv31", None, False, id="hd23-uv-93pct-flagged"),
+        pytest.param(_SDSS, "single:hd23_mwrv31", None, False, id="hd23-sdss-flagged-over-cut"),
+        pytest.param(_UV, "single:hd23_mwrv31", None, False, id="hd23-uv-flagged-over-cut"),
         pytest.param(_SDSS, "single:hd23_mwrv31", 2000.0, False, id="hd23-sdss-R2000"),
+        # A flagged pixel at the Lyman edge has no exact window, so the first-order table
+        # would serve it outside the bar: auto goes exact whatever the flagged share.
+        pytest.param(_UV, "single:smc", None, False, id="smc-uv-lyman-edge-pixel"),
     ],
 )
 def test_heavily_flagged_spectrum_routes_by_flagged_fraction_under_auto(
@@ -429,13 +433,13 @@ def test_heavily_flagged_spectrum_routes_by_flagged_fraction_under_auto(
     _require_data(False)
     ssp = load_ssp_data(_BARE_SSP)
     exact = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, None)
-    fraction = exact._spectrum_flagged_fraction()
-    assert (fraction <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION) is served
+    fraction, n_unwindowed = exact._spectrum_flag_report()
+    assert (n_unwindowed == 0 and fraction <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION) is served
     assert (_spectrum_lut_for_auto(exact) is not None) is served
     lut = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, SpectrumPrecomp())
     layout = lut._spectrum_flagged_pixels()
     built = 0 if layout is None else layout.pixels.size
-    assert built / wave_obs.size == pytest.approx(fraction)
+    assert (built + n_unwindowed) / wave_obs.size == pytest.approx(fraction)
 
 
 @pytest.mark.parametrize(
@@ -667,6 +671,10 @@ _LAW_KINK_CASES = [
     pytest.param("single:reddy15", _UV, id="reddy15-uv"),
     pytest.param("single:hd23_mwrv31", _UV, id="hd23-uv"),
     pytest.param("single:hd23_mwrv31", _SDSS, id="hd23-sdss"),
+    # A steep curve: the remainder grows as tau^2 even where the curve's curvature is small,
+    # 3.4e-4 at tau_V = 0.5 in the far-UV before the flag used the transmission at tau_max.
+    pytest.param("single:smc", _UV_FAR, id="smc-uv"),
+    pytest.param("single:lmc", _UV_FAR, id="lmc-uv"),
 ]
 
 
