@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import tengri.components.stellar.component as stellar
+import tengri.components.stellar.properties as stellar
 import tengri.forward.prediction as prediction
 import tengri.utils.sed_quantities as sq
 from tengri.utils.sed_quantities import compute_rest_uv_color

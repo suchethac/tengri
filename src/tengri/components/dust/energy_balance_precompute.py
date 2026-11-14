@@ -69,6 +69,7 @@ __all__ = [
     "EnergyBalanceLUT",
     "build_energy_balance_lut",
     "build_energy_balance_lut_over_z",
+    "collapse_lut_alpha",
     "lut_l_absorbed_stellar",
     "lut_l_absorbed_stellar_log10",
     "nebular_grid_absorbed_log10",
@@ -549,6 +550,59 @@ def _lut_contract(
         tau_diff,
         redshift,
     )
+
+
+#: Families whose ``(n_met, n_alpha, n_age)`` leading block carries the [alpha/Fe] axis at
+#: position 1. The ``B`` families are intrinsic, so they never carry a redshift axis.
+_B_ALPHA_FIELDS = ("B", "B_fesc", "B_old", "B_fesc_old")
+#: The ``G`` families: alpha at position 1 of ``(n_met, n_alpha, n_age, n_tau_bc, n_tau_diff)``,
+#: and at position 2 once a leading ``ln(1+z)`` axis is present (``lut.ln1pz`` set).
+_G_ALPHA_FIELDS = ("G", "G_fesc", "G_old", "G_fesc_old")
+
+
+def collapse_lut_alpha(lut: EnergyBalanceLUT, ia, fa) -> EnergyBalanceLUT:
+    """Collapse the [alpha/Fe] axis of every family of a 4D-grid table at one bracket.
+
+    The table is linear in the SSP cube, so collapsing its alpha axis at the model's
+    bracket gives the table of the collapsed cube (the one the exact path integrates).
+    Every array family is interpolated with
+    :func:`~tengri.components.stellar.sps.dsps_wrapper.collapse_alpha_axis`; ``None``
+    families are left alone.
+
+    Parameters
+    ----------
+    lut : EnergyBalanceLUT
+        Table built from a 4D ``(n_met, n_alpha, n_age, n_wave)`` cube.
+    ia : ndarray, shape () or (n_age,)
+        Lower [alpha/Fe] node index of the bracket (:func:`alpha_bracket`); one per SSP
+        age under ``alpha_fe_evolving`` (the age axis follows the alpha axis in every family).
+    fa : ndarray, shape () or (n_age,)
+        Interpolation fraction within the bracket, dimensionless.
+
+    Returns
+    -------
+    EnergyBalanceLUT
+        A new table with ``B*`` shaped ``(n_met, n_age)`` (``(n_z, ...)`` axis leading the
+        ``G*`` families when ``ln1pz`` is set) and the alpha axis removed.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, ``ia`` and ``fa`` may be traced. **Gradient-safe**: yes, the
+    collapse is linear in ``fa``.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+    g_axis = 1 if lut.ln1pz is None else 2
+    updates = {}
+    for name in _B_ALPHA_FIELDS:
+        value = getattr(lut, name)
+        if value is not None:
+            updates[name] = collapse_alpha_axis(value, ia, fa, axis=1)
+    for name in _G_ALPHA_FIELDS:
+        value = getattr(lut, name)
+        if value is not None:
+            updates[name] = collapse_alpha_axis(value, ia, fa, axis=g_axis)
+    return lut._replace(**updates)
 
 
 def lut_l_absorbed_stellar_log10(

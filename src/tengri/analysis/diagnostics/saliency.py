@@ -154,7 +154,7 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
             p[name] = flat[i]
         return forward_model.predict_photometry(p)
 
-    flat = jnp.array([float(params[n]) for n in param_names])
+    flat = jnp.stack([jnp.asarray(params[n], dtype=float) for n in param_names])
     jac = jax.jacobian(predict_from_flat)(flat)  # (n_filters, n_params)
 
     return jac, param_names

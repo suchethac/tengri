@@ -76,10 +76,10 @@ from tengri.utils.physics_constants import LOG10_ZSUN
 # ``LOG10_ZSUN`` is imported from physics_constants above and re-exported
 # here: this remains the canonical import path for the rest of the tree.
 
-# Per-SSP-library solar Z values (kept as a reference dict so downstream
-# code or audits can look up the right Zsun if they need to translate
-# between conventions). Not consumed by the forward model directly: the
-# public surface uses LOG10_ZSUN above.
+# The solar Z each SSP library quotes for its own nodes. These are labels only:
+# ``met_logzsol`` is log10(Z_total / 0.0142) on every grid (LOG10_ZSUN above,
+# #3411), and no computation reads this dict. It is kept for audits that
+# translate another code's solar-relative metallicity to absolute Z.
 LOG10_ZSUN_BY_LIBRARY: dict[str, float] = {
     "mist": -1.8477,  # Asplund 2009, Zsun = 0.0142
     "parsec": -1.8181,  # Bressan+ 2012, Zsun = 0.0152

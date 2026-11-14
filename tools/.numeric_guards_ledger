@@ -88,8 +88,9 @@ src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e
 src/tengri/components/stellar/age_boundary.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/components/stellar/age_boundary.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/stellar/component.py | jnp.clip with floor 0.0 < 1e-20 -> 1
-src/tengri/components/stellar/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 5
+src/tengri/components/stellar/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 4
 src/tengri/components/stellar/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
+src/tengri/components/stellar/properties.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/stellar/sfh/chemical_evolution.py | jnp.clip with floor -4.0 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/dense_basis.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/dense_basis.py | jnp.maximum with floor 0.0 < 1e-20 -> 5

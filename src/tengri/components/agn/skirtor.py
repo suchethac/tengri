@@ -37,7 +37,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_RADIUS_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
@@ -635,13 +644,13 @@ def _skirtor_grid_sed(
     wavelength: jnp.ndarray,
     grid_data: SKIRTORGrid,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_radius_ratio: float = 20.0,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""SKIRTOR torus :math:`L_\nu` interpolated from a threaded grid.
@@ -794,13 +803,13 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     def skirtor_grid(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_tau_skirtor: float = 7.0,
-        agn_p_skirtor: float = 1.0,
-        agn_q_skirtor: float = 1.0,
-        agn_oa_skirtor: float = 40.0,
-        agn_radius_ratio: float = 20.0,
+        agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+        agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+        agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+        agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+        agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
         agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-        agn_torus_frac: float = 0.5,
+        agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
         **_kwargs,
     ) -> jnp.ndarray:
         """SKIRTOR torus from template grid interpolation.
@@ -1039,11 +1048,11 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     def skirtor_components(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_tau_skirtor: float = 7.0,
-        agn_p_skirtor: float = 1.0,
-        agn_q_skirtor: float = 1.0,
-        agn_oa_skirtor: float = 40.0,
-        agn_radius_ratio: float = 20.0,
+        agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+        agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+        agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+        agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+        agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
         agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
@@ -1141,11 +1150,11 @@ def skirtor_disc_dust_ratio(
     disc_lambda_unreddened: jnp.ndarray,
     disc_ext_fac: jnp.ndarray,
     *,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_radius_ratio: float = 20.0,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     incl_wave: jnp.ndarray | None = None,
     _template=None,
@@ -1678,12 +1687,12 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
     def fn(
         wavelength,
         agn_log_lbol,
-        agn_tau_skirtor=7.0,
-        agn_p_skirtor=1.0,
-        agn_q_skirtor=1.0,
-        agn_oa_skirtor=40.0,
-        agn_radius_ratio=20.0,
-        agn_cos_inc=0.86602540378443864,
+        agn_tau_skirtor=DEFAULT_AGN_TAU_SKIRTOR,
+        agn_p_skirtor=DEFAULT_AGN_P_SKIRTOR,
+        agn_q_skirtor=DEFAULT_AGN_Q_SKIRTOR,
+        agn_oa_skirtor=DEFAULT_AGN_OA_SKIRTOR,
+        agn_radius_ratio=DEFAULT_AGN_RADIUS_RATIO,
+        agn_cos_inc=DEFAULT_AGN_COS_INC,
         frac_agn=1.0,
         **_kwargs,
     ):
@@ -1846,12 +1855,12 @@ def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
 def skirtor_disc_attenuation_from_grid(
     grid: SKIRTORDiscAttenGrid | None,
     wavelength: jnp.ndarray,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,  # cos(30 deg)
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_radius_ratio: float = DEFAULT_AGN_RADIUS_RATIO,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,  # cos(30 deg)
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Wavelength-dependent disc attenuation factor at a chosen inclination.

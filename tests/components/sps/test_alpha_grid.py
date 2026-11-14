@@ -22,7 +22,6 @@ import pytest
 from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     compute_alpha_fe_evolving,
-    effective_metallicity,
     has_alpha_grid,
     interpolate_met_alpha,
     interpolate_met_alpha_evolving,
@@ -486,37 +485,3 @@ class TestComputeAlphaFeEvolving:
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
         assert grad_jax > 0  # more alpha_old → higher total
-
-
-# ── Effective metallicity (backward compatibility) ────────────────
-
-
-class TestEffectiveMetallicity:
-    """Bounds test: effective_metallicity backward compatibility with 3D grids."""
-
-    def test_solar_alpha_is_identity(self):
-        """[α/Fe] = 0 should leave metallicity unchanged.
-
-        Bounds test: zero [α/Fe] offset.
-        """
-        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
-
-        assert float(effective_metallicity(-0.5, 0.0)) == pytest.approx(-0.5)
-
-    def test_positive_alpha_increases_z(self):
-        """Positive [α/Fe] should increase effective Z.
-
-        Bounds test: physical direction (more alpha → higher effective Z).
-        """
-
-        z_eff = effective_metallicity(-0.5, 0.4)
-        assert float(z_eff) > -0.5
-
-    def test_coefficient_is_0_75(self):
-        """The conversion coefficient should be 0.75.
-
-        Bounds test: standard approximation formula magnitude.
-        """
-
-        z_eff = effective_metallicity(0.0, 1.0)
-        assert float(z_eff) == pytest.approx(0.75, abs=0.01)

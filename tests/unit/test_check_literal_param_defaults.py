@@ -119,12 +119,11 @@ def test_nebular_tree_passes_with_its_baseline() -> None:
 
 
 @pytest.mark.unit
-def test_baseline_suppresses_only_listed_sites() -> None:
+def test_baseline_suppresses_only_listed_sites(tmp_path: Path) -> None:
     """A baseline key matches one exact site; an unlisted literal site is not suppressed."""
     from tools.check_literal_param_defaults import _load_baseline, _site_key
 
-    baseline = _load_baseline()
-    shock_site = _site_key(
+    listed = _site_key(
         Path("src/tengri/components/nebular/shock.py"),
         "compute_shock_sed(): shock_log_density = 0.0  (signature default)",
     )
@@ -132,6 +131,11 @@ def test_baseline_suppresses_only_listed_sites() -> None:
         Path("src/tengri/components/nebular/shock.py"),
         "compute_shock_sed(): shock_log_density = 0.5  (signature default)",
     )
+    # The real baseline is empty since #2265, so the suppression check runs on a
+    # synthetic one that lists a single site.
+    baseline_file = tmp_path / "baseline.txt"
+    baseline_file.write_text(f"# header\n{listed}\n")
+    baseline = _load_baseline(baseline_file)
 
-    assert shock_site in baseline
+    assert listed in baseline
     assert new_site not in baseline
