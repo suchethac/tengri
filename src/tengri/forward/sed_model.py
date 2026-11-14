@@ -6794,12 +6794,27 @@ class SEDModel:
             If ``z_range`` is not an ordered pair of finite values, or this model
             has no ``WavePrecomp`` configured (the redshift table is that LUT).
 
+        Examples
+        --------
+        >>> fixed = SEDModel.build(  # doctest: +SKIP
+        ...     ssp_data=ssp,
+        ...     observation=obs,
+        ...     redshift=Fixed(0.05),
+        ...     approx=WavePrecomp(),
+        ... )
+        >>> twin = fixed.with_catalog_z_range((0.0, 0.3))  # doctest: +SKIP
+        >>> twin.z_fixed is None  # doctest: +SKIP
+        True
+
+        See Also
+        --------
+        with_fixed_redshift : The fixed-redshift counterpart, for a different value.
+
         Notes
         -----
-        Build-time only: costs one model construction, the same as
-        :meth:`with_fixed_redshift`. The copy's compile signature depends on
-        ``z_range``, so two spans compile separately. **JIT-compatible**: no, this
-        is a build-time Python method.
+        Costs one model construction, the same as :meth:`with_fixed_redshift`. The
+        copy's compile signature depends on ``z_range``, so two spans compile
+        separately. **JIT-compatible**: no (build-time).
         """
         z_lo, z_hi = (float(z_range[0]), float(z_range[1]))
         if not (np.isfinite(z_lo) and np.isfinite(z_hi) and z_lo <= z_hi):

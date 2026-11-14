@@ -301,6 +301,11 @@ def batched_template_for_batches(model, batches):
     ValueError
         If the buckets carry different ``z_span`` values. They then come from
         different builds and would need different twins; build the catalog in one call.
+
+    Notes
+    -----
+    Build-time Python, not JIT-compatible. Delegates to :func:`batched_template`, so
+    the twin is cached on the template and shared by every bucket of the call.
     """
     if not batches:
         return model
