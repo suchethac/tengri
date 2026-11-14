@@ -82,6 +82,7 @@ from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
@@ -407,6 +408,8 @@ class NebularGridTable:
     cont_subband_waves_rest: jnp.ndarray | None = None
     band_filter_waves: tuple = ()
     band_filter_trans: tuple = ()
+    #: Bandpass weight the band channels were integrated with (#3505).
+    band_convention: FilterConvention = FilterConvention.BESSELL
 
     @property
     def serves_split_bands(self) -> bool:
@@ -1377,6 +1380,7 @@ def precompute_nebular_grid(
     # The band channels can be split (lines + continuum) only where the model
     # carries the filters the photometry is projected through.
     can_split = filter_waves is not None and filter_trans is not None
+    convention = getattr(neb_state, "filter_convention", FilterConvention.BESSELL)
 
     def _split_row(p, state, neg_log_qh):
         """(continuum, line waves, log line luminosities), each per unit Q_H."""
@@ -1585,6 +1589,7 @@ def precompute_nebular_grid(
             request=request,
             n_z=n_z,
             n_subbands=n_subbands if collect_sed else None,
+            convention=convention,
         )
     dust_channels = _build_dust_channels(
         model,
@@ -1598,6 +1603,7 @@ def precompute_nebular_grid(
         dust_component=dust_component,
         eb_tau_grids=eb_tau_grids,
         n_subbands=n_subbands,
+        convention=convention,
     )
 
     return NebularGridTable(
@@ -1627,6 +1633,7 @@ def _split_band_fields(
     request,
     n_z,
     n_subbands=None,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """The redshift-dependent band channels of :class:`NebularGridTable`.
 
@@ -1675,7 +1682,9 @@ def _split_band_fields(
                 jnp.asarray(sed_line_waves), unit, jnp.asarray(wave_np), 0.0, sigma
             )
         )(jnp.eye(n_lines))
-        kernel = rendered_line_band_kernel(profiles, wave_np, filter_waves, filter_trans, ref_z)
+        kernel = rendered_line_band_kernel(
+            profiles, wave_np, filter_waves, filter_trans, ref_z, convention=convention
+        )
     else:
         z_lo, z_hi, n_default = request
         if z_hi <= z_lo:
@@ -1683,7 +1692,9 @@ def _split_band_fields(
         lnz = ln1pz_grid(z_lo, z_hi, max(2, int(n_z if n_z is not None else n_default)))
         kernel = None
 
-    table = continuum_ztable(cont_nodes, wave_np, filter_waves, filter_trans, lnz)
+    table = continuum_ztable(
+        cont_nodes, wave_np, filter_waves, filter_trans, lnz, convention=convention
+    )
     zero = np.all(table <= 0.0, axis=0)  # (n_z, n_filter): exactly dark at every node
     positive = table[table > 0.0]
     floor = 1e-3 * float(positive.min()) if positive.size else 1e-300
@@ -1704,7 +1715,9 @@ def _split_band_fields(
         frac = np.zeros((lnz.size, n_filt, k))
         lam = np.zeros_like(frac)
         for iz, z in enumerate(np.expm1(lnz)):
-            phi, lam_z = _nebular_subband_channels(mid, wave_np, filters_np, float(z), k)
+            phi, lam_z = _nebular_subband_channels(
+                mid, wave_np, filters_np, float(z), k, convention
+            )
             tot = phi[0].sum(axis=-1, keepdims=True)
             frac[iz] = np.where(tot > 0.0, phi[0] / np.where(tot > 0.0, tot, 1.0), 1.0 / k)
             lam[iz] = lam_z[0]
@@ -1737,6 +1750,7 @@ def _split_band_fields(
         "cont_keep": jnp.asarray(~zero),
         "band_filter_waves": tuple(jnp.asarray(fw) for fw in filter_waves),
         "band_filter_trans": tuple(jnp.asarray(ft) for ft in filter_trans),
+        "band_convention": convention,
     }
 
 
@@ -1977,7 +1991,11 @@ def reconstruct_nebular_phot(
         kernel = table.line_band_kernel_fixed
     else:
         kernel = delta_line_band_kernel(
-            redshift, table.sed_line_waves, table.band_filter_waves, table.band_filter_trans
+            redshift,
+            table.sed_line_waves,
+            table.band_filter_waves,
+            table.band_filter_trans,
+            convention=table.band_convention,
         )
     lit = kernel > 0.0
     safe = jnp.where(lit, kernel, 1.0)

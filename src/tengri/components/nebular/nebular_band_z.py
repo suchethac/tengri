@@ -174,7 +174,14 @@ def continuum_ztable(
     return out
 
 
-def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshift):
+def rendered_line_band_kernel(
+    profiles,
+    wave,
+    filter_waves,
+    filter_trans,
+    redshift,
+    convention: FilterConvention = FilterConvention.BESSELL,
+):
     """Band response of each rendered unit-luminosity line at one redshift.
 
     The exact response of a line to a filter, for a build-time-constant redshift:
@@ -208,7 +215,14 @@ def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshi
     def _one(profile):
         return jnp.stack(
             [
-                lnu_filter_integral(profile, wave, jnp.asarray(fw), jnp.asarray(ft), redshift)
+                lnu_filter_integral(
+                    profile,
+                    wave,
+                    jnp.asarray(fw),
+                    jnp.asarray(ft),
+                    redshift,
+                    convention=convention,
+                )
                 for fw, ft in zip(filter_waves, filter_trans, strict=True)
             ]
         )

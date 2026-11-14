@@ -24,6 +24,7 @@ import jax
 import numpy as np
 
 from tengri.config.exceptions import DeadPrecomputeAxisWarning
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -222,6 +223,7 @@ def precompute_template_photometry(
     dl_cm: float = 1.0,
     energy_normalize: bool = True,
     units: str = "lnu",
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PreintegratedGrid:
     """Preintegrate any template grid through photometric filters.
 
@@ -281,6 +283,7 @@ def precompute_template_photometry(
         dl_cm=dl_cm,
         axes=tuple(np.asarray(ax) for ax in axes),
         energy_normalize=energy_normalize,
+        convention=convention,
     )
 
 

@@ -83,6 +83,7 @@ from tengri.components.nebular._shared import (
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import TengriIOError
 from tengri.protocols.component import declared_default
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -837,6 +838,7 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         dl_cm: float,
         fixed: dict[int, float] | None = None,
         *,
+        convention: FilterConvention = FilterConvention.BESSELL,
         neb_logn: float = 2.0,
     ) -> None:
         """Preintegrate MAPPINGS V lines through filters; expose CLOUDY-shaped surface.
@@ -946,6 +948,7 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
             filter_waves,
             filter_trans,
             redshift,
+            convention=convention,
             axes=surface_axes,
         )
 

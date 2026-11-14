@@ -91,6 +91,8 @@ class BandTableContext:
     atten_free_ok: Any
     agn_axis_grids: Any
     ask: Callable[[str, str], Any]
+    #: Bandpass weight of the observation the band tables integrate with (#3505).
+    convention: Any = None
 
 
 @runtime_checkable

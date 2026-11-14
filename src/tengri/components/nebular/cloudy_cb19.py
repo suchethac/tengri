@@ -195,6 +195,7 @@ from tengri.components.nebular._shared import (
 )
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -953,6 +954,7 @@ class CB19Backend(NebularBackendDefaults):
         dl_cm: float,
         fixed: dict[int, float] | None = None,
         *,
+        convention: FilterConvention = FilterConvention.BESSELL,
         neb_log_nH: float = DEFAULT_NEB_LOG_NH,
         neb_co: float = DEFAULT_NEB_CO,
         neb_dno: float = DEFAULT_NEB_DNO,
@@ -1078,6 +1080,7 @@ class CB19Backend(NebularBackendDefaults):
             filter_waves,
             filter_trans,
             redshift,
+            convention=convention,
             axes=surface_axes,
         )
 

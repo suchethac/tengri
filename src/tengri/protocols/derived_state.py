@@ -455,6 +455,9 @@ class DerivedState:
     # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
     phot_filter_waves_padded: jnp.ndarray | None = None
     phot_filter_trans_padded: jnp.ndarray | None = None
+    # The bandpass weight ``phot_filter_*_padded`` are integrated with: a
+    # ``FilterConvention`` (a str enum), read by the additive projections (#3505).
+    phot_filter_convention: str | None = None
     # Spectrum pixel effective wavelengths in the rest frame (published
     # when approx=SpectrumPrecomp() is set). Per-pixel effective
     # wavelengths in the galaxy rest frame, computed as observed wavelengths

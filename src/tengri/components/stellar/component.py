@@ -2496,6 +2496,8 @@ class StellarSEDComponentState(SEDComponentState):
     # for fixed-z and free-z (redshift is applied inside the integral).
     phot_fw_padded: Any | None = None
     phot_ft_padded: Any | None = None
+    #: Bandpass weight of the padded curves above, read by the runtime projections (#3505).
+    phot_convention: Any | None = None
     #: Number of SSP wavelength bins in the ionizing region (lambda < 2*911.76 A),
     #: a static structural constant of the fixed SSP grid. Computed at build time
     #: (concrete grid) and carried as static meta so :meth:`apply` can integrate
@@ -2998,7 +3000,9 @@ class StellarSEDComponent:
             # projection (published to state.derived in ``apply``). Static and
             # shared by the fixed-z and free-z LUT paths.
             fw_pad, ft_pad, _ = pad_filters(filter_list, filter_trans_list)
-            state = _replace_state(state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad)
+            state = _replace_state(
+                state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad, phot_convention=convention
+            )
 
             # Dispatch: fixed-z LUT or free-z ztable
             if redshift_spec is None or redshift_spec.get("mode") == "fixed":
@@ -3554,6 +3558,7 @@ class StellarSEDComponent:
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+                derived_overrides["phot_filter_convention"] = self._state.phot_convention
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
             # Free-z path: local monotone cubic Hermite (PCHIP) read of the
@@ -3694,6 +3699,7 @@ class StellarSEDComponent:
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+                derived_overrides["phot_filter_convention"] = self._state.phot_convention
 
         # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
         # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc: the galaxy

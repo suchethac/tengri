@@ -34,6 +34,7 @@ from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -85,6 +86,7 @@ def precompute_dl07_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate DL07 templates through filter curves.
 
@@ -146,6 +148,7 @@ def precompute_dl07_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
+        convention=convention,
         energy_normalize=True,
     )
 
@@ -157,6 +160,7 @@ def precompute_dl07_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
+        convention=convention,
         energy_normalize=True,
     )
 
@@ -294,6 +298,7 @@ def _precompute_dl07_like_photometry(
     wave_key: str,
     redshift: float = 0.0,
     powerlaw_weight: np.ndarray | None = None,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Shared precompute for DL07-shape models (Astrodust, THEMIS).
 
@@ -354,6 +359,7 @@ def _precompute_dl07_like_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(q_grid, umin_grid),
+        convention=convention,
         energy_normalize=False,
     )
     powerlaw_preint = preintegrate_grid(
@@ -364,6 +370,7 @@ def _precompute_dl07_like_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(q_grid, umin_grid),
+        convention=convention,
         energy_normalize=False,
     )
 
@@ -440,6 +447,7 @@ def precompute_astrodust_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate Astrodust+PAH templates (Hensley & Draine 2023).
 
@@ -460,6 +468,7 @@ def precompute_astrodust_photometry(
         wave_key="wavelength_aa",
         redshift=redshift,
         powerlaw_weight=r_power,
+        convention=convention,
     )
 
 
@@ -481,6 +490,7 @@ def precompute_draine2021_pah_photometry(
     ionization: str = "st",
     size_distribution: str = "std",
     slab: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     r"""Pre-integrate Draine+2021 PAHspec templates through filter curves.
 
@@ -562,6 +572,7 @@ def precompute_draine2021_pah_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(lgU_grid,),
+        convention=convention,
         energy_normalize=True,
     )
 
@@ -618,6 +629,7 @@ def precompute_themis_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate THEMIS templates (Jones+2017). Free param: ``dust_qhac``."""
     return _precompute_dl07_like_photometry(
@@ -627,6 +639,7 @@ def precompute_themis_photometry(
         q_key="qhac_grid",
         wave_key="wavelength_aa",
         redshift=redshift,
+        convention=convention,
     )
 
 
@@ -646,6 +659,7 @@ def precompute_dl14_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate DL14 templates (Draine+2014).
 
@@ -682,6 +696,7 @@ def precompute_dl14_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(qpah_grid, umin_grid),
+        convention=convention,
         energy_normalize=False,
     )
     powerlaw_preint = preintegrate_grid(
@@ -692,6 +707,7 @@ def precompute_dl14_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(qpah_grid, umin_grid, alpha_grid),
+        convention=convention,
         energy_normalize=False,
     )
 
@@ -818,6 +834,7 @@ def precompute_bosa_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate BOSA templates (Boquien & Salim 2021).
 
@@ -840,6 +857,7 @@ def precompute_bosa_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(log_ltir_grid, log_ssfr_grid),
+        convention=convention,
         energy_normalize=True,
     )
     return {
@@ -895,6 +913,7 @@ def precompute_dale2014_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Pre-integrate Dale+2014 templates through filter curves.
 
@@ -913,6 +932,7 @@ def precompute_dale2014_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(alpha_grid,),
+        convention=convention,
         energy_normalize=True,
     )
     return {"phot": preint.phot, "alpha_grid": alpha_grid}
@@ -1019,6 +1039,7 @@ def precompute_shape(
     parameters: Any,
     *,
     model: str,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> dict:
     """Band fluxes of a template dust model over its free shape axes, for a linear lookup.
 
@@ -1060,6 +1081,7 @@ def precompute_shape(
         redshift=redshift,
         dl_cm=1.0,
         axes=(alpha,),
+        convention=convention,
         energy_normalize=False,
     )
     _, _, fixed = collapse_fixed_axes(preint, AXIS_PARAMS[model], parameters, origin=model)
@@ -1186,6 +1208,7 @@ def precompute(
     axes: tuple[np.ndarray, ...] | None = None,
     wavelength: np.ndarray | None = None,
     units: str = "lnu",
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> Any:
     """Build preintegrated grid for a template-based dust-emission model.
 
@@ -1231,13 +1254,22 @@ def precompute(
     **Gradient-safe**: no, precomputation is an offline preparation step.
     """
     if model is not None:
-        return precompute_shape(filter_waves, filter_trans, redshift, parameters, model=model)
+        return precompute_shape(
+            filter_waves,
+            filter_trans,
+            redshift,
+            parameters,
+            model=model,
+            convention=convention,
+        )
     if model_name is None:
         raise ValueError("precompute requires model_name (or model for a free-shape table)")
     if model_name in ("draine_li2007", "dl07"):
         if templates is None:
             raise ValueError("DL07 precompute requires 'templates' dict")
-        return precompute_dl07_photometry(templates, filter_waves, filter_trans, redshift=redshift)
+        return precompute_dl07_photometry(
+            templates, filter_waves, filter_trans, redshift=redshift, convention=convention
+        )
 
     # Generic template path (Dale2014, DL14, Astrodust, BOSA, THEMIS)
     if grid is None or wavelength is None or axes is None:
@@ -1252,6 +1284,7 @@ def precompute(
         axes=axes,
         redshift=redshift,
         dl_cm=1.0,
+        convention=convention,
         energy_normalize=_GENERIC_ENERGY_NORMALIZE.get(model_name, True),
         units=units,
     )
@@ -1498,7 +1531,9 @@ def _emission_band_response(ctx):
             unit = _template_at(z, 1.0)
             live, ok = _probe_at(z)
             return {
-                "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
+                "R": lnu_filter_integral_batch(
+                    unit, wave, fw_pad, ft_pad, z, convention=ctx.convention
+                ),
                 "live": live,
                 "ok": ok,
                 "log_window_fraction": {
@@ -1523,7 +1558,9 @@ def _emission_band_response(ctx):
         # not constant-fold the union-grid sort of a baked filter array. Evaluated
         # eagerly, the template and the per-filter sort dispatched ~60 compiles.
         rest_values = jax.jit(
-            lambda w, fw, ft: lnu_filter_integral_batch(_template_at(0.0, 1.0), w, fw, ft, 0.0)
+            lambda w, fw, ft: lnu_filter_integral_batch(
+                _template_at(0.0, 1.0), w, fw, ft, 0.0, convention=ctx.convention
+            )
         )(wave, fw_pad, ft_pad)
         response = {
             "ln1pz": built["ln1pz"],
@@ -1588,8 +1625,12 @@ def _emission_shape_table(ctx):
                 [np.asarray(w, dtype=np.float64) for w in ctx.filters[0]],
                 [np.asarray(t, dtype=np.float64) for t in ctx.filters[1]],
             )
-            preint = module.precompute(*filter_args, redshift, ctx.spec, model=key)
-            rest_preint = module.precompute(*filter_args, 0.0, ctx.spec, model=key)
+            preint = module.precompute(
+                *filter_args, redshift, ctx.spec, model=key, convention=ctx.convention
+            )
+            rest_preint = module.precompute(
+                *filter_args, 0.0, ctx.spec, model=key, convention=ctx.convention
+            )
             table = {
                 **module.table_arrays(preint, key),
                 "rest": module.table_arrays(rest_preint, key),

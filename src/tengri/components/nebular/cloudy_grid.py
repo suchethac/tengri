@@ -135,6 +135,7 @@ from tengri.components.nebular._shared import (
     ssp_log_age_yr_axis,
 )
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
@@ -640,6 +641,8 @@ class CloudyGridBackend(NebularBackendDefaults):
         redshift: float,
         dl_cm: float,
         fixed: dict[int, float] | None = None,
+        *,
+        convention: FilterConvention = FilterConvention.BESSELL,
     ) -> None:
         """Preintegrate CLOUDY continuum + lines through photometric filters.
 
@@ -698,6 +701,7 @@ class CloudyGridBackend(NebularBackendDefaults):
             filter_trans,
             redshift,
             dl_cm,
+            convention=convention,
             axes=(
                 np.asarray(self.grid.cont_log_met),
                 np.asarray(self.grid.cont_log_age),
@@ -711,6 +715,7 @@ class CloudyGridBackend(NebularBackendDefaults):
             filter_waves,
             filter_trans,
             redshift,
+            convention=convention,
             axes=(
                 np.asarray(self.grid.line_log_met),
                 np.asarray(self.grid.line_log_age),

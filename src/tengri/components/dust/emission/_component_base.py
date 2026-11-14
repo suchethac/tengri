@@ -51,6 +51,17 @@ _PRECOMP_UNITS: dict[str, str] = {
 }
 
 
+def _padded_convention(state):
+    """The bandpass weight of the padded filter curves a state carries (#3505).
+
+    The stellar component publishes it beside the curves; a model without it falls back
+    to the photon-counting default, as the filter integral itself does.
+    """
+    from tengri.utils.filter_convention import FilterConvention
+
+    return FilterConvention(state.derived.get("phot_filter_convention") or "bessell")
+
+
 def _apply_diffuse_screen(
     sed_ir: jnp.ndarray,
     published: Mapping[str, Any],
@@ -679,7 +690,14 @@ class EmissionComponent(SEDModelComponent):
                         p, "components.dust.emission._component_base._apply_photometry_precomp"
                     )
                 )
-                phot_lnu = lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, redshift)
+                phot_lnu = lnu_filter_integral_batch(
+                    sed_ir,
+                    state.wave,
+                    fw_pad,
+                    ft_pad,
+                    redshift,
+                    convention=_padded_convention(state),
+                )
             else:
                 # Fallback: effective wavelength sample (no padded curves)
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
@@ -725,7 +743,9 @@ class EmissionComponent(SEDModelComponent):
         if fw_pad is not None:
             from tengri.observation.photometry import lnu_filter_integral_batch
 
-            return lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, 0.0)
+            return lnu_filter_integral_batch(
+                sed_ir, state.wave, fw_pad, ft_pad, 0.0, convention=_padded_convention(state)
+            )
         rest_eff = state.derived.get("filter_restband_eff_waves")
         if rest_eff is None:
             rest_eff = filter_eff_waves
