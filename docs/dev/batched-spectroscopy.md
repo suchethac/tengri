@@ -66,11 +66,13 @@ of them is a new bucket and a new compile.
 `check_template_model` in `forward/batched_spectrum.py` refuses a template before any
 batch is evaluated. Each refusal below is raised as a `ValueError` unless noted.
 
+The redshift is not a refusal: a free, fixed or `catalog_z_range` template evaluates each
+galaxy at its own `obs.z`. A galaxy whose `z` lies outside the template's `catalog_z_range`
+is refused at `build_spectro_batches(..., model=...)`, naming its index, its `z` and the range.
+
 | Refused setting | Reason | What lifts it |
 |---|---|---|
 | No spectroscopy configured | There is nothing to evaluate | Configure `Spectroscopy` |
-| Fixed redshift | The batch's `obs.z` must be the only redshift | Build with a free redshift |
-| `catalog_z_range` | A per-galaxy redshift window in `WavePrecomp` | Build with a free redshift and without `catalog_z_range` |
 | `SpectrumPrecomp` spectrum LUT | The LUT bakes the observation grid | Build with `spectrum_precomp` off |
 | A template `Spectroscopy.covariance` | The batched path reads each galaxy's own covariance; a template covariance would be ignored | Build the template without one and give every `GalaxySpectrum` its `covariance=BandedMatrix` (carried by the `chol_data` leaf) |
 | `eline_mode='marginalized'` with `eline_prior_type='cloudy'` | The Cloudy-prior line marginal is not evaluated in batch | Use `eline_prior_type='flat'`, or `eline_mode='fitted'` or `'off'` |

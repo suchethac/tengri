@@ -17,13 +17,16 @@ chosen from the static grid kind, never from a traced grid: under a trace
 ``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``False`` (unknown),
 which sends the grid down the general path (#2847).
 
-Why the redshift is free in the template
-----------------------------------------
-The template model must have its redshift free. A fixed redshift is baked
-into the model's luminosity distance and into the stellar redshift
-interpolation, so a per-galaxy ``obs.z`` could not reach them. The per-galaxy
-redshift enters through the parameter dictionary instead, and any ``redshift``
-key in ``params`` is ignored in favor of ``obs.z``.
+Redshift of each galaxy
+-----------------------
+Every galaxy is evaluated at its own ``obs.z``, whatever the template's redshift
+setting: a free redshift, a fixed redshift or a ``catalog_z_range`` window
+(``WavePrecomp(catalog_z_range=...)``). The per-galaxy redshift enters through the
+parameter dictionary, and any ``redshift`` key in ``params`` is ignored in favor of
+``obs.z``. A fixed template's value is overridden the same way, so the batch never
+reads the template's fixed redshift. Each galaxy's ``z`` must lie inside the template's
+``catalog_z_range`` when it has one (:func:`~tengri.observation.batched.build_spectro_batches`
+checks this at build time).
 
 Per-galaxy SFH bin edges
 ------------------------
@@ -56,7 +59,8 @@ JIT note
 --------
 :func:`make_batched_predict` returns a jitted, vmapped function. The template
 model's spectrum LUT must be off (:func:`check_template_model` refuses it), and
-the template's structure, not its grid, sets the compile. The per-call arrays
+the template's structure, not its grid, sets the compile. The redshift is a traced
+per-galaxy leaf, so galaxies at different redshifts share one compile. The per-call arrays
 are the batch and the parameters, so one compile serves every batch that shares
 a :class:`~tengri.observation.batched.SpectroBatchSpec`.
 """
@@ -105,15 +109,15 @@ def check_template_model(model) -> None:
     Parameters
     ----------
     model : SEDModel
-        Template model. Its redshift must be free, its spectroscopy must be
-        configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
-        line fluxes, line ratios, spectral indices, emission lines with a Cloudy
+        Template model. Its spectroscopy must be configured, and it must not use the
+        spectrum LUT, line fluxes, line ratios, spectral indices, emission lines with a Cloudy
         prior, broad emission lines (``eline_broad``), a spectral covariance or a
         Student-t or calibration-floor noise model. Emission lines with
         ``eline_mode='fitted'`` or ``'marginalized'`` (flat or model-centered prior) and
-        ``eline_broad=False`` are accepted. A pixel covariance is a per-galaxy input
-        (:class:`~tengri.observation.batched.GalaxySpectrum`) and the template
-        must not carry one.
+        ``eline_broad=False`` are accepted. The redshift may be free, fixed or a
+        ``catalog_z_range`` window: each galaxy's ``obs.z`` is the redshift used. A pixel
+        covariance is a per-galaxy input (:class:`~tengri.observation.batched.GalaxySpectrum`)
+        and the template must not carry one.
 
     Raises
     ------
@@ -130,16 +134,6 @@ def check_template_model(model) -> None:
     observation = getattr(model, "observation", None)
     if observation is None or not observation.can_do_spectroscopy:
         raise ValueError("template model has no spectroscopy configured")
-    if model.z_fixed is not None:
-        raise ValueError(
-            "template model has a fixed redshift; build it with redshift free "
-            "so the per-galaxy obs.z is the only redshift the batch uses"
-        )
-    if getattr(model, "_catalog_z_range", None) is not None:
-        raise ValueError(
-            "template model has a catalog_z_range (a per-galaxy redshift window in "
-            "WavePrecomp); build it with redshift free and without catalog_z_range"
-        )
     if bool(model._approx.get("spectrum_precomp")):
         raise ValueError(
             "template model uses the SpectrumPrecomp spectrum LUT, which bakes the "
@@ -408,7 +402,8 @@ def predict_batched_observables(
     Parameters
     ----------
     model : SEDModel
-        Template model with a free redshift (see :func:`check_template_model`).
+        Template model (see :func:`check_template_model`). Its redshift may be free,
+        fixed or a ``catalog_z_range`` window; the galaxy is evaluated at ``obs.z``.
     params : dict
         Free parameter values for this galaxy. A ``redshift`` key is ignored;
         the redshift is ``obs.z``.

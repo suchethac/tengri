@@ -1122,6 +1122,37 @@ def _require_common_covariance_offsets(galaxies: Sequence[GalaxySpectrum]) -> No
             )
 
 
+def _require_z_in_window(galaxies: Sequence[GalaxySpectrum], z_window: tuple) -> None:
+    """Refuse any galaxy whose redshift lies outside the template's ``catalog_z_range``.
+
+    Parameters
+    ----------
+    galaxies : sequence of GalaxySpectrum
+        Per-galaxy observations, in catalog order.
+    z_window : tuple of float
+        ``(z_min, z_max)`` [dimensionless] of the template's ``catalog_z_range``.
+
+    Raises
+    ------
+    ValueError
+        If a galaxy's ``z`` is not finite or lies outside ``[z_min, z_max]``; the message
+        names the galaxy index, its ``z`` and the range.
+
+    Notes
+    -----
+    Build-time check. The template's per-galaxy redshift table covers only its window, so
+    a galaxy outside it would be evaluated on the table's edge without warning.
+    """
+    z_min, z_max = z_window
+    for index, galaxy in enumerate(galaxies):
+        z = float(galaxy.z)
+        if not z_min <= z <= z_max:
+            raise ValueError(
+                f"galaxy {index} has z={z} outside the template's catalog_z_range "
+                f"[{z_min}, {z_max}]; widen catalog_z_range or drop the galaxy"
+            )
+
+
 def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
     """Refuse scalar or per-pixel resolutions when the template is banded.
 
@@ -1181,7 +1212,9 @@ def build_spectro_batches(
         ``(lo, hi)`` [Angstrom]. When given, every galaxy's padded grid divided
         by ``1 + z`` must lie inside it, or a ``ValueError`` is raised.
     model : SEDModel, optional
-        Template model. When given, each galaxy's flux-conserving flag is resolved
+        Template model. When the template carries a ``catalog_z_range``, every
+        galaxy's ``z`` must lie inside it, or a ``ValueError`` is raised. When given,
+        each galaxy's flux-conserving flag is resolved
         from the template's ``resample`` mode with the same rule as
         :meth:`~tengri.observation.observation.Observation.predict`, and every
         padded bucket is checked with :func:`padding_exact`. Without it the
@@ -1201,7 +1234,9 @@ def build_spectro_batches(
     ValueError
         If a galaxy is malformed (the message names its index), if its padded
         rest-frame grid leaves ``rest_wave_range``, if ``quantum`` is not a
-        positive integer, if ``lsf_n_bins`` disagrees with the template, or if
+        positive integer, if ``lsf_n_bins`` disagrees with the template, if a galaxy's
+        ``z`` lies outside the template's ``catalog_z_range`` (the message names the
+        galaxy index, its ``z`` and the range), or if
         padding would change the real pixels of a galaxy (the message names the
         galaxies, their n_real and n_max, the reason, and the remedy).
 
@@ -1245,6 +1280,9 @@ def build_spectro_batches(
             )
         lsf_n_bins = policy.lsf_n_bins
         _require_banded_records(model, galaxies)
+        z_window = getattr(model, "_catalog_z_range", None)
+        if z_window is not None:
+            _require_z_in_window(galaxies, z_window)
         if model.spec.foreground_ebmv_mw > 0.0:
             missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
             if missing:
