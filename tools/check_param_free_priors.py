@@ -148,6 +148,10 @@ REFUSED: dict[str, tuple[str, str]] = {
         "conditional: free only on an [alpha/Fe] grid with a spectroscopic channel, "
         "prior = the grid's node range (#2250); pinned at 0.0 otherwise",
     ),
+    "met_alpha_fe_old": (
+        "target-dependent",
+        "as met_alpha_fe: the per-age pair shares the same gate and grid node range (#2250)",
+    ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",

@@ -22,7 +22,7 @@ Tuples exported here
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ParamDeclaration
 
 # Empty for now: kept as the canonical "stellar's own _params.py"
@@ -50,12 +50,14 @@ ALPHA_FE_PARAMS: tuple[ParamDeclaration, ...] = (
 EVOLVING_ALPHA_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "met_alpha_fe_old",
-        Uniform(0.0, 0.6),
+        Fixed(0.0),
         "[alpha/Fe] of oldest stars (at t_lookback = t_universe). "
         "Typically +0.3 to +0.5 for massive ellipticals.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
         internal_name="alpha_fe_old",
+        # No free_prior: FREE is granted by the gate in parameters/groups.py
+        # (_alpha_fe_free_resolution) with the grid's node range (#2250).
     ),
     ParamDeclaration(
         "met_alpha_fe_young",
