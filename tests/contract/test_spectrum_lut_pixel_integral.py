@@ -526,6 +526,35 @@ def test_reddy15_clip_zero_is_a_breakpoint():
     assert float(reddy15(jnp.asarray(25700.0))) > 0.0
 
 
+@pytest.mark.parametrize(
+    "wave_obs", [pytest.param(_SDSS, id="sdss"), pytest.param(_UV, id="uv")]
+)
+def test_hd23_flagged_pixels_are_exact(wave_obs):
+    """Every hd23 pixel the table flags is the exact path's to the flagged bar (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    dust_kind = "single:hd23_mwrv31"
+    exact = _model(ssp, wave_obs, None, 150.0, dust_kind, False, None)
+    lut = _model(ssp, wave_obs, None, 150.0, dust_kind, False, SpectrumPrecomp())
+    layout = lut._spectrum_flagged_pixels()
+    assert layout is not None and layout.pixels.size > 0
+    base = {
+        "sfh_dpl_alpha": jnp.asarray(1.5),
+        "dust_tau_v": jnp.asarray(0.5),
+    }
+    f_e, j_e = _flux_and_jacobian(exact, _SINGLE_FREE, base)
+    f_l, j_l = _flux_and_jacobian(lut, _SINGLE_FREE, base)
+    px = layout.pixels
+    flux_err = float(np.max(np.abs(f_l - f_e)[px] / np.abs(f_e)[px]))
+    floor = _FLOOR * np.max(np.abs(j_e), axis=0, keepdims=True)
+    jac_err = float(np.max((np.abs(j_l - j_e) / np.maximum(np.abs(j_e), floor))[px]))
+    print(f"\nhd23 flagged {px.tolist()}: flux {flux_err:.3e}  jacobian {jac_err:.3e}")
+    assert flux_err <= _FLAGGED_TOL, f"flagged flux rel err {flux_err:.3e}"
+    assert jac_err <= _FLAGGED_TOL, f"flagged Jacobian rel err {jac_err:.3e}"
+
+
 #: Single-screen laws whose tabulated or piecewise curve has a kink the table must split (#3413).
 #: Each band is the one where the law sat closest to the bar before the reach-aware flag.
 _LAW_KINK_CASES = [

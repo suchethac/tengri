@@ -13,6 +13,7 @@ uses, at least five sigma of the total broadening).
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import jax.numpy as jnp
@@ -284,19 +285,27 @@ def build_flagged_pixels(
         return None
     edges = np.asarray(_pixel_edges(jnp.asarray(centres)))
     pad = kernel_reach_pad_aa(centres, sigma_window_kms, _WINDOW_SIGMAS)
-    kept, windows, spans = [], [], []
+    kept, windows, spans, unwindowed = [], [], [], []
     for p in pixels:
         lo, hi = edges[p] - pad[p], edges[p + 1] + pad[p]
         win = node_window(wave, lo, hi)
-        # A pixel with no model node in reach carries no stellar light; one whose window
-        # reaches the ionizing side of the Lyman edge sees the gas gate of the nebular
-        # backend, which the window SED does not apply. Both stay with the table.
+        # A pixel with no model node in reach, or one whose window reaches the ionizing side
+        # of the Lyman edge (the nebular gas gate is not in the window SED), cannot get an
+        # exact window. It stays with the table and is reported, never dropped silently.
         if win.size == 0 or lo < LYMAN_LIMIT_AA:
+            unwindowed.append(int(p))
             continue
         first, last = max(int(win[0]) - 1, 0), min(int(win[-1]) + 2, wave.size)
         kept.append(p)
         windows.append(np.arange(first, last, dtype=np.int64))
         spans.append(lattice_window(lo, hi))
+    if unwindowed:
+        warnings.warn(
+            f"{len(unwindowed)} flagged spectrum pixel(s) {unwindowed} have no exact node window "
+            "(no model node in reach, or the window reaches the Lyman edge) and are served by "
+            "the first-order table (#3413).",
+            stacklevel=2,
+        )
     if not kept:
         return None
     pixels = np.asarray(kept)
