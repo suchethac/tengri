@@ -1196,19 +1196,25 @@ _ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
 _ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
 
 
-def _alpha_fe_redshift_ends(spec) -> list[float]:
+def _alpha_fe_redshift_ends(spec, catalog_z_range=None) -> list[float]:
     """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
 
-    A fixed redshift gives one value. A free redshift gives both ends of its prior
-    bounds, since a spectrum can cover the window at one end and not the other.
+    A catalog model's redshift is runtime (its Fixed spec value is a placeholder), so
+    both ends of the catalog range are checked. Otherwise a fixed redshift gives one
+    value and a free redshift both ends of its prior bounds, since a spectrum can cover
+    the window at one end and not the other.
     """
+    if catalog_z_range is not None:
+        return [float(catalog_z_range[0]), float(catalog_z_range[1])]
     dist = spec.get_distribution("redshift")
     if dist.is_fixed:
         return [float(dist.value)]
     return [float(bound) for bound in dist.bounds if bound is not None]
 
 
-def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[str, float]]:
+def _alpha_fe_observation_findings(
+    spec, observation, catalog_z_range=None
+) -> tuple[list[str], dict[str, float]]:
     """Return why an observation cannot constrain [alpha/Fe], and the measured values (#3487).
 
     An empty list means it can: spectral indices, or a spectrum that resolves and covers
@@ -1220,6 +1226,8 @@ def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[s
         The model's parameter spec, read for the redshift distribution.
     observation : Observation
         The model's observation.
+    catalog_z_range : tuple of float or None
+        ``(z_lo, z_hi)`` of a catalog model, whose spec redshift is a placeholder.
 
     Returns
     -------
@@ -1245,7 +1253,7 @@ def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[s
             measurements["resolving_power"] = resolving_power
     lo, hi = _ALPHA_FE_REST_WINDOW_AA
     wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
-    for z in _alpha_fe_redshift_ends(spec):
+    for z in _alpha_fe_redshift_ends(spec, catalog_z_range):
         rest = wave_obs / (1.0 + z)
         if rest.min() > lo or rest.max() < hi:
             findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
@@ -4699,7 +4707,9 @@ class SEDModel:
         free = [name for name in _ALPHA_FE_PARAMS if name in spec.free_params]
         if not free:
             return
-        findings, measurements = _alpha_fe_observation_findings(spec, self.observation)
+        findings, measurements = _alpha_fe_observation_findings(
+            spec, self.observation, self._catalog_z_range
+        )
         if not findings:
             return
         lo, hi = _ALPHA_FE_REST_WINDOW_AA
