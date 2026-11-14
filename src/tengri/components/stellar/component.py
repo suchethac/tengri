@@ -3131,6 +3131,43 @@ class StellarSEDComponent:
         sed_intrinsic = c.sed_intrinsic
         derived_overrides = c.derived_overrides
 
+        derived_overrides.update(
+            self._precomputed_tables(
+                state=state,
+                params=params,
+                wave=wave,
+                ssp_flux_for_csp=ssp_flux_for_csp,
+                joint_weights=joint_weights,
+                total_mass=total_mass,
+                _alpha_collapse_active=_alpha_collapse_active,
+                _agb_dust_cube=_agb_dust_cube,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+        )
+
+        # ── 12. Assemble new state ──────────────────────────────────────
+        return state.with_(
+            sed_intrinsic=sed_intrinsic,
+            derived=state.derived.with_(**derived_overrides),
+        )
+
+    def _precomputed_tables(
+        self,
+        *,
+        state: ForwardState,
+        params: Mapping[str, jnp.ndarray],
+        wave,
+        ssp_flux_for_csp,
+        joint_weights,
+        total_mass,
+        _alpha_collapse_active,
+        _agb_dust_cube,
+        template_data,
+        ztable_data,
+    ) -> dict:
+        """Publish the precomputed photometry, spectrum and sub-band tables (phase F)."""
+        derived_overrides: dict = {}
         # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
@@ -3458,11 +3495,7 @@ class StellarSEDComponent:
                 )
             )
 
-        # ── 12. Assemble new state ──────────────────────────────────────
-        return state.with_(
-            sed_intrinsic=sed_intrinsic,
-            derived=state.derived.with_(**derived_overrides),
-        )
+        return derived_overrides
 
     def _sfh_on_ssp_ages(
         self,

@@ -1,6 +1,6 @@
 # 2026-11-13: StellarSEDComponent.apply runs by phase
 
-**Status:** Step 2 of #3294. Phase B extracted (first commit); phases C to E extracted together as one method (second commit); phase F untouched.
+**Status:** Phases B to F are private methods of `apply`; phase G stays in `apply`.
 **Issue:** #3294
 **Related:** #2933 (open draft, edits phase F), `2026-11-12-nebular-backend-capabilities.md`
 
@@ -21,7 +21,8 @@ unpacking and the `return`.
 | C. Metallicity | §4 (alpha collapse, AGB cube, ten branches) | `lgmet_on_ssp_ages`, `log_metallicity_history`, `ssp_flux_for_csp`, `_agb_dust_cube`, `_alpha_collapse_active` |
 | D. Joint weights and SED | §6, §7 | `joint_weights`, `total_mass`, `ssp_flux_at_age`, `age_weights`, `sed_intrinsic`, `lnu_age`, `lnu_interval`, `sfh_grid_pub`, `log10_mass_scale` |
 | E. Derived quantities | §8 to §11b, `derived_overrides` | `derived_overrides`, `sed_intrinsic`, `lnu_age` (projected) |
-| F. Photometry, spectrum, state | §12b, §12b-rest, §12c, §12 | `state.with_(...)`; out of scope, unchanged |
+| F. Photometry, spectrum | §12b, §12b-rest, §12c | `derived_overrides` entries, returned by `_precomputed_tables` |
+| G. State assembly | §12 | `state.with_(...)`, stays in `apply` |
 
 ## Method plan
 
@@ -39,10 +40,15 @@ unpacking and the `return`.
   with phase F; it is comment text only.
 - The method has no early return. Arguments are the phase-A `ssp`, `ssp_ages_yr`, `n_grid`, the phase-B
   values, and `self`, `params`, `state`. Nothing is read through closures or `self` scratch attributes.
+- `_precomputed_tables(self, *, state, params, wave, ssp_flux_for_csp, joint_weights, total_mass,
+  _alpha_collapse_active, _agb_dust_cube, template_data, ztable_data) -> dict` (phase F). It starts from
+  an empty `derived_overrides` dict and returns it; `apply` merges it with `derived_overrides.update(...)`
+  before phase G. Phase F reads no key that an earlier phase wrote: the one key it reads back,
+  `stellar_subband_waves_rest_precomp`, is written earlier in the same branch. The 12b and 12c
+  comments moved with it. `_interp`, `_per_age` and `_interp_phi_num` stay closures inside the method.
+  `z` is rebound on the free-redshift branch, and `apply` does not read it after phase F.
 
 ## Not touched
 
-- Phase F, including its `_interp`, `_per_age` and `_interp_phi_num` closures and the
-  `state.with_` return.
 - Every numeric expression, branch condition and comment in the moved text.
 - The `_SUPPORTED_SFH` tuple (a test greps for it).
