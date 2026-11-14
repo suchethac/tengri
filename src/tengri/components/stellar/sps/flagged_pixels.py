@@ -16,6 +16,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -204,39 +205,62 @@ def kernel_reach_pad_aa(centres_rest, sigma_kms, reach=_SIGMA_REACH):
 class FlaggedPixels:
     """Static layout of the pixels the table computes exactly per draw (#3413).
 
+    The windows are padded to one node count and one lattice cell count, so the per-draw
+    path is a single batched pass over the flagged pixels whose traced size does not depend
+    on how many are flagged.
+
     Attributes
     ----------
     pixels : ndarray of int, shape (n_flag,)
         Flagged pixel indices.
     nodes : ndarray of int, shape (n_nodes,)
         Model-grid node indices of every flagged pixel's window, concatenated.
-    offsets : tuple of int
-        ``offsets[k]:offsets[k + 1]`` addresses pixel ``k``'s window in ``nodes``.
-    spans : tuple of (float, int)
-        Each window's ln-lambda lattice (:func:`~tengri.observation.spectrum.lattice_window`).
     wave_nodes : ndarray, shape (n_nodes,)
         Rest wavelength of every window node [Angstrom].
     ssp_cube : ndarray, shape (n_met, n_age, n_nodes)
         The library SSP cube interpolated onto the window nodes [Lsun/Hz/Msun].
+    node_rows : ndarray of int, shape (n_flag, n_win)
+        Each pixel's window as indices into ``nodes``; padding repeats the window's last node.
+    wave_rows : ndarray, shape (n_flag, n_win)
+        Window wavelengths [Angstrom]; padding continues the grid upward in 1 Angstrom steps.
+    n_valid : ndarray of int, shape (n_flag,)
+        Real node count of each window.
+    edges : ndarray, shape (n_flag, 2)
+        Rest-frame edges of each flagged pixel [Angstrom].
+    origins : ndarray, shape (n_flag,)
+        ln-lambda origin of each window lattice
+        (:func:`~tengri.observation.spectrum.lattice_window`).
+    n_cells : int
+        Cell count shared by every window lattice.
     centres_rest : ndarray, shape (n_pix,)
         Rest-frame pixel centres [Angstrom].
     sigma_v_kms : float or None
         Velocity dispersion of the lattice correction, ``None`` when the table has none.
-    instruments : tuple of (dict or None)
-        Per flagged pixel, the instrument stage of the correction as
-        :func:`~tengri.observation.spectrum.lattice_correction_rest` takes it. A kernel whose
-        width varies with wavelength carries the pixel's bins of the full lattice (``plan``).
+    instrument : dict or None
+        The instrument stage of the correction as
+        :func:`~tengri.observation.spectrum.lattice_correction_rest` takes it.
+    plan_sigma : ndarray, shape (n_bin,) or None
+        A kernel whose width varies with wavelength: the mean width of each bin of the full
+        lattice that reaches a window [lattice cells].
+    plan_weights : ndarray, shape (n_flag, n_bin, n_cells) or None
+        Each bin's weight on every window cell.
     """
 
     pixels: np.ndarray
     nodes: np.ndarray
-    offsets: tuple
-    spans: tuple
     wave_nodes: np.ndarray
     ssp_cube: np.ndarray
+    node_rows: np.ndarray
+    wave_rows: np.ndarray
+    n_valid: np.ndarray
+    edges: np.ndarray
+    origins: np.ndarray
+    n_cells: int
     centres_rest: np.ndarray
     sigma_v_kms: float | None
-    instruments: tuple
+    instrument: dict | None
+    plan_sigma: np.ndarray | None
+    plan_weights: np.ndarray | None
 
 
 def interpolate_cube_onto(wave_ssp, ssp_flux, wave_nodes):
@@ -309,48 +333,137 @@ def build_flagged_pixels(
     if not kept:
         return None
     pixels = np.asarray(kept)
-    instruments = _window_instruments(instrument, spans, lattice_window(edges[0], edges[-1]))
+    origins = np.asarray([o for o, _ in spans])
+    n_cells = max(n for _, n in spans)
     nodes = np.concatenate(windows)
-    offsets = tuple(int(x) for x in np.concatenate([[0], np.cumsum([w.size for w in windows])]))
+    wave_nodes = wave[nodes]
+    node_rows, wave_rows, n_valid = padded_window_rows(windows, wave_nodes)
+    plan_sigma, plan_weights = _window_plans(instrument, origins, n_cells, edges)
     return FlaggedPixels(
         pixels=pixels,
         nodes=nodes,
-        offsets=offsets,
-        spans=tuple(spans),
-        wave_nodes=wave[nodes],
-        ssp_cube=interpolate_cube_onto(wave_ssp, ssp_flux, wave[nodes]),
+        wave_nodes=wave_nodes,
+        ssp_cube=interpolate_cube_onto(wave_ssp, ssp_flux, wave_nodes),
+        node_rows=node_rows,
+        wave_rows=wave_rows,
+        n_valid=n_valid,
+        edges=np.stack([edges[pixels], edges[pixels + 1]], axis=1),
+        origins=origins,
+        n_cells=int(n_cells),
         centres_rest=centres,
         sigma_v_kms=sigma_v_kms,
-        instruments=instruments,
+        instrument=instrument,
+        plan_sigma=plan_sigma,
+        plan_weights=plan_weights,
     )
 
 
-def _window_instruments(instrument, spans, span_global):
-    """The instrument stage of each window; a wavelength-varying kernel gets its bin plan.
+def padded_window_rows(windows, wave_nodes):
+    """Stack per-pixel windows of the concatenated node array into padded rows.
 
-    The kernel's bins are those of the full lattice (``span_global``), so a window reproduces
-    the full-lattice result only with the weights of those bins on its own cells.
+    Parameters
+    ----------
+    windows : list of ndarray
+        Model-grid node indices of each window.
+    wave_nodes : ndarray, shape (sum of window sizes,)
+        Rest wavelength of the concatenated window nodes [Angstrom].
+
+    Returns
+    -------
+    node_rows : ndarray of int, shape (n_flag, n_win)
+        Indices into the concatenated array; padding repeats the window's last node.
+    wave_rows : ndarray, shape (n_flag, n_win)
+        Window wavelengths, strictly increasing: padding continues upward in 1 Angstrom steps
+        past the last real node (the per-draw cumulative ignores it).
+    n_valid : ndarray of int, shape (n_flag,)
+    """
+    sizes = np.asarray([w.size for w in windows])
+    length = int(sizes.max())
+    starts = np.concatenate([[0], np.cumsum(sizes)[:-1]])
+    col = np.arange(length)[None, :]
+    last = (starts + sizes - 1)[:, None]
+    node_rows = np.minimum(starts[:, None] + col, last)
+    tail = np.where(col < sizes[:, None], 0.0, col - sizes[:, None] + 1.0)
+    wave_rows = wave_nodes[node_rows] + tail
+    return node_rows.astype(np.int64), wave_rows, sizes.astype(np.int64)
+
+
+def _window_plans(instrument, origins, n_cells, edges):
+    """Bin plans of a wavelength-varying instrument kernel on every window, else ``(None, None)``.
+
+    The kernel's bins are those of the full lattice, so a window reproduces the full-lattice
+    result only with the weights of those bins on its own cells.
     """
     from tengri.observation.spectrum import (
         _LATTICE_DLNLAMBDA,
         _lattice_instrument_sigma,
-        lattice_bin_plan,
+        lattice_bin_plans,
+        lattice_window,
     )
 
     if instrument is None:
-        return tuple(None for _ in spans)
-    origin, n_cells = span_global
-    lam_c = np.exp(origin + _LATTICE_DLNLAMBDA * (np.arange(n_cells) + 0.5))
+        return None, None
+    origin, n_global = lattice_window(edges[0], edges[-1])
+    lam_c = np.exp(origin + _LATTICE_DLNLAMBDA * (np.arange(n_global) + 0.5))
     reads = {k: v for k, v in instrument.items() if k != "redshift"}
     sigma = np.asarray(
         _lattice_instrument_sigma(reads, jnp.asarray(lam_c * (1.0 + instrument["redshift"])))
     )
     if sigma.ndim == 0:
-        return tuple(instrument for _ in spans)
-    return tuple(
-        {**instrument, "plan": lattice_bin_plan(span, span_global, sigma, instrument["n_bins"])}
-        for span in spans
+        return None, None
+    return lattice_bin_plans(origins, n_cells, (origin, n_global), sigma, instrument["n_bins"])
+
+
+def _masked_cumulative(wave, sed, n_valid, x):
+    """:func:`~tengri.observation.spectrum._cumulative_flux` on a padded window row.
+
+    Only the first ``n_valid`` nodes are real: the padded intervals add nothing and ``x`` is
+    clamped to the last real node, so the result equals the cumulative of the unpadded window.
+    """
+    h = jnp.diff(wave)
+    h_real = jnp.where(jnp.arange(h.shape[0]) < n_valid - 1, h, 0.0)
+    node_cum = jnp.concatenate([jnp.zeros(1), jnp.cumsum(0.5 * (sed[1:] + sed[:-1]) * h_real)])
+    e = jnp.clip(x, wave[0], wave[n_valid - 1])
+    i = jnp.clip(jnp.searchsorted(wave, e, side="right") - 1, 0, n_valid - 2)
+    t = e - wave[i]
+    f0 = sed[i]
+    return node_cum[i] + f0 * t + 0.5 * (sed[i + 1] - f0) / h[i] * t * t
+
+
+def _window_pixel_mean(layout, wave, sed, n_valid, edges, origin, weights):
+    """Exact pixel mean of one padded window row plus its lattice correction."""
+    from tengri.observation.spectrum import (
+        _C_KM_S,
+        _LATTICE_DLNLAMBDA,
+        _gaussian_fft_convolve,
+        _lattice_edge_readout,
+        _lattice_instrument_sigma,
+        _lattice_pad_cells,
+        _peak_factors,
     )
+
+    h = _LATTICE_DLNLAMBDA
+    scale_in, scale_out = _peak_factors(sed)
+    scaled = sed * scale_in
+    cum_pix = _masked_cumulative(wave, scaled, n_valid, edges)
+    value = (cum_pix[1] - cum_pix[0]) / (edges[1] - edges[0]) * scale_out
+    if layout.sigma_v_kms is None:
+        return value
+    pad = _lattice_pad_cells()
+    nodes = jnp.exp(origin + h * jnp.arange(layout.n_cells + 1, dtype=jnp.result_type(float)))
+    cum = _masked_cumulative(wave, scaled, n_valid, nodes)
+    plain = (cum[1:] - cum[:-1]) / h
+    broad = _gaussian_fft_convolve(plain, (jnp.asarray(layout.sigma_v_kms) / _C_KM_S) / h, pad)
+    if weights is not None:
+        sigma_pix = jnp.asarray(layout.plan_sigma)
+        stack = jax.vmap(lambda s: _gaussian_fft_convolve(broad, s, pad))(sigma_pix)
+        broad = jnp.sum(weights * stack, axis=0)
+    elif layout.instrument is not None:
+        reads = {k: v for k, v in layout.instrument.items() if k != "redshift"}
+        sigma_lsf = _lattice_instrument_sigma(reads, jnp.asarray(1.0))
+        broad = _gaussian_fft_convolve(broad, (sigma_lsf / _C_KM_S) / h, pad)
+    correction = _lattice_edge_readout(broad - plain, origin, layout.n_cells, edges)[0]
+    return value + correction * scale_out
 
 
 def flagged_pixel_means(layout, sed_nodes):
@@ -359,7 +472,8 @@ def flagged_pixel_means(layout, sed_nodes):
     The exact conserving path's value of the pixel: the bin mean of the SED over the pixel's
     edges (:func:`~tengri.observation.spectrum._flux_conserving_resample`) plus, when the
     table carries a velocity dispersion or an instrument kernel, the lattice correction on
-    the pixel's own window.
+    the pixel's own window. Every flagged pixel is one row of a single ``vmap``, so the traced
+    graph does not grow with the flagged count.
 
     Parameters
     ----------
@@ -372,28 +486,19 @@ def flagged_pixel_means(layout, sed_nodes):
     array, shape (n_flag,)
         One value per flagged pixel [erg/s/Hz].
     """
-    from tengri.observation.spectrum import _flux_conserving_resample, lattice_correction_rest
+    n_win = layout.node_rows.shape[1]
+    real = jnp.arange(n_win)[None, :] < jnp.asarray(layout.n_valid)[:, None]
+    sed_rows = jnp.where(real, sed_nodes[jnp.asarray(layout.node_rows)], 0.0)
+    weights = None if layout.plan_weights is None else jnp.asarray(layout.plan_weights)
 
-    n_pix = layout.centres_rest.size
-    out = []
-    for k, p in enumerate(layout.pixels):
-        lo_pix, hi_pix = max(int(p) - 1, 0), min(int(p) + 2, n_pix)
-        centres = jnp.asarray(layout.centres_rest[lo_pix:hi_pix])
-        a, b = layout.offsets[k], layout.offsets[k + 1]
-        wave_k = jnp.asarray(layout.wave_nodes[a:b])
-        sed_k = sed_nodes[a:b]
-        value = _flux_conserving_resample(wave_k, sed_k, centres)[int(p) - lo_pix]
-        if layout.sigma_v_kms is not None:
-            value = (
-                value
-                + lattice_correction_rest(
-                    sed_k,
-                    wave_k,
-                    centres,
-                    layout.sigma_v_kms,
-                    instrument=layout.instruments[k],
-                    span=layout.spans[k],
-                )[int(p) - lo_pix]
-            )
-        out.append(value)
-    return jnp.stack(out)
+    def row(wave, sed, n_valid, edges, origin, w):
+        return _window_pixel_mean(layout, wave, sed, n_valid, edges, origin, w)
+
+    return jax.vmap(row, in_axes=(0, 0, 0, 0, 0, None if weights is None else 0))(
+        jnp.asarray(layout.wave_rows),
+        sed_rows,
+        jnp.asarray(layout.n_valid),
+        jnp.asarray(layout.edges),
+        jnp.asarray(layout.origins),
+        weights,
+    )

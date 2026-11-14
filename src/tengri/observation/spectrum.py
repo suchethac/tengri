@@ -1167,34 +1167,42 @@ def _lattice_cell_means(wave_rest, sed_rest, origin, n_cells, edge_aa):
     return (cum[1:] - cum[:-1]) / h
 
 
+def _lattice_edge_readout(g, origin, n_cells, edges):
+    """Pixel means between ``edges`` [Angstrom] of lattice cell means ``g`` (see below).
+
+    The conserving readout of :func:`_lattice_readout`: the cumulative integral is exact at
+    the lattice nodes (the cell means are its differences) and cubic Hermite between them,
+    with the node slopes taken from the neighbouring cell means. ``origin`` may be traced.
+    """
+    h = _LATTICE_DLNLAMBDA
+    le = jnp.log(edges)
+    zero = jnp.zeros((1,), dtype=g.dtype)
+    cum = jnp.concatenate([zero, jnp.cumsum(g * h)])
+    slope = jnp.concatenate([g[:1], 0.5 * (g[1:] + g[:-1]), g[-1:]])
+    kb = jnp.clip(jnp.floor((le - origin) / h).astype(jnp.int32), 0, n_cells - 1)
+    t = (le - (origin + kb * h)) / h
+    t2 = t * t
+    t3 = t2 * t
+    cum_edge = (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * cum[kb]
+        + (t3 - 2.0 * t2 + t) * h * slope[kb]
+        + (3.0 * t2 - 2.0 * t3) * cum[kb + 1]
+        + (t3 - t2) * h * slope[kb + 1]
+    )
+    return (cum_edge[1:] - cum_edge[:-1]) / (edges[1:] - edges[:-1])
+
+
 def _lattice_readout(g, origin, n_cells, wave_query, conserving):
     """Pixel values of lattice cell means ``g`` (mean of lambda F per cell), before dimming.
 
-    Conserving: pixel means of F from the cumulative integral, which is exact at the lattice
-    nodes (the cell means are its differences) and cubic Hermite between them, with the node
-    slopes taken from the neighbouring cell means. A linear interpolation of the cumulative
-    left the pixel means of a 0.5 Angstrom feature several 1e-3 of the peak off the exact
-    integral (#3451).
+    Conserving: pixel means of F from the cumulative integral (:func:`_lattice_edge_readout`).
+    A linear interpolation of the cumulative left the pixel means of a 0.5 Angstrom feature
+    several 1e-3 of the peak off the exact integral (#3451).
     Point: F at the pixel centres from the cell centres.
     """
     h = _LATTICE_DLNLAMBDA
     if conserving:
-        edges = _pixel_edges(wave_query)
-        le = jnp.log(edges)
-        zero = jnp.zeros((1,), dtype=g.dtype)
-        cum = jnp.concatenate([zero, jnp.cumsum(g * h)])
-        slope = jnp.concatenate([g[:1], 0.5 * (g[1:] + g[:-1]), g[-1:]])
-        kb = jnp.clip(jnp.floor((le - origin) / h).astype(jnp.int32), 0, n_cells - 1)
-        t = (le - (origin + kb * h)) / h
-        t2 = t * t
-        t3 = t2 * t
-        cum_edge = (
-            (2.0 * t3 - 3.0 * t2 + 1.0) * cum[kb]
-            + (t3 - 2.0 * t2 + t) * h * slope[kb]
-            + (3.0 * t2 - 2.0 * t3) * cum[kb + 1]
-            + (t3 - t2) * h * slope[kb + 1]
-        )
-        return (cum_edge[1:] - cum_edge[:-1]) / (edges[1:] - edges[:-1])
+        return _lattice_edge_readout(g, origin, n_cells, _pixel_edges(wave_query))
     ell_c = origin + h * (jnp.arange(n_cells, dtype=g.dtype) + 0.5)
     return jnp.interp(jnp.log(wave_query), ell_c, g / jnp.exp(ell_c))
 
@@ -1305,6 +1313,39 @@ def _lattice_instrument(g, lam_c, sigma_kms, n_bins):
     return _apply_lsf_variable_r(g, lam_c, sigma, n_bins, pad=_lattice_pad_cells())
 
 
+def _bin_sigma_cells(span_global, sigma_global_kms, n_bins):
+    """Mean kernel width [lattice cells] of each of the variable-resolution kernel's bins."""
+    h = _LATTICE_DLNLAMBDA
+    origin_g, n_g = span_global
+    lam_c = np.exp(origin_g + h * (np.arange(n_g) + 0.5))
+    dlnwave = np.gradient(np.log(lam_c))
+    sigma = np.asarray(sigma_global_kms, dtype=np.float64)
+    width = n_g / n_bins
+    centers = (np.arange(n_bins) + 0.5) * width
+    pix_idx = np.arange(n_g, dtype=np.float64)
+    mask = (np.abs(pix_idx[None, :] - centers[:, None]) < width).astype(np.float64)
+    n_in = np.maximum(mask.sum(axis=1), 1.0)
+    return ((mask @ sigma) / n_in / _C_KM_S) / ((mask @ dlnwave) / n_in)
+
+
+def _bin_weights(origins_w, n_w, span_global, n_bins):
+    """Raised-cosine weight of each bin on every window cell, normalised over the bins.
+
+    Returns an array of shape ``(n_window, n_bins, n_w)``.
+    """
+    h = _LATTICE_DLNLAMBDA
+    origin_g, n_g = span_global
+    width = n_g / n_bins
+    half_w = 0.75 * width
+    centers = (np.arange(n_bins) + 0.5) * width
+    offset = np.rint((np.asarray(origins_w, dtype=np.float64) - origin_g) / h)
+    cells = np.arange(n_w, dtype=np.float64)[None, :] + offset[:, None]
+    dist = np.abs(cells[:, None, :] - centers[None, :, None]) / half_w
+    weights = np.where(dist < 1.0, 0.5 * (1.0 + np.cos(np.pi * dist)), 0.0)
+    total = np.maximum(weights.sum(axis=1, keepdims=True), 1e-30)
+    return weights / total
+
+
 def lattice_bin_plan(span_window, span_global, sigma_global_kms, n_bins):
     """Piecewise instrument-kernel plan of a window lattice inside the full lattice (#3413).
 
@@ -1332,28 +1373,35 @@ def lattice_bin_plan(span_window, span_global, sigma_global_kms, n_bins):
     weights : ndarray, shape (n_active, n_window)
         Each bin's raised-cosine weight on the window cells, divided by the total weight.
     """
-    h = _LATTICE_DLNLAMBDA
     origin_w, n_w = span_window
-    origin_g, n_g = span_global
-    lam_c = np.exp(origin_g + h * (np.arange(n_g) + 0.5))
-    dlnwave = np.gradient(np.log(lam_c))
-    sigma = np.asarray(sigma_global_kms, dtype=np.float64)
-    width = n_g / n_bins
-    half_w = 0.75 * width
-    centers = (np.arange(n_bins) + 0.5) * width
-    pix_idx = np.arange(n_g, dtype=np.float64)
-    sigma_pix = np.empty(n_bins)
-    for b, center in enumerate(centers):
-        mask = (np.abs(pix_idx - center) < width).astype(np.float64)
-        n_in = max(mask.sum(), 1.0)
-        sigma_pix[b] = ((sigma * mask).sum() / n_in / _C_KM_S) / ((dlnwave * mask).sum() / n_in)
-    offset = int(round((origin_w - origin_g) / h))
-    cells = np.arange(n_w, dtype=np.float64) + offset
-    dist = np.abs(cells[None, :] - centers[:, None]) / half_w
-    weights = np.where(dist < 1.0, 0.5 * (1.0 + np.cos(np.pi * dist)), 0.0)
-    total = np.maximum(weights.sum(axis=0), 1e-30)
+    sigma_pix = _bin_sigma_cells(span_global, sigma_global_kms, n_bins)
+    weights = _bin_weights([origin_w], n_w, span_global, n_bins)[0]
     active = weights.max(axis=1) > 0.0
-    return sigma_pix[active], weights[active] / total[None, :]
+    return sigma_pix[active], weights[active]
+
+
+def lattice_bin_plans(origins_w, n_w, span_global, sigma_global_kms, n_bins):
+    """:func:`lattice_bin_plan` of many windows of one common cell count, as stacked arrays.
+
+    The bins that reach any of the windows are kept (a bin that misses one window has zero
+    weight on it), so every window shares one ``sigma_pix`` and the weights stack.
+
+    Parameters
+    ----------
+    origins_w : array_like, shape (n_window,)
+        Origin (ln lambda) of each window lattice.
+    n_w : int
+        Cell count shared by every window.
+
+    Returns
+    -------
+    sigma_pix : ndarray, shape (n_active,)
+    weights : ndarray, shape (n_window, n_active, n_w)
+    """
+    sigma_pix = _bin_sigma_cells(span_global, sigma_global_kms, n_bins)
+    weights = _bin_weights(origins_w, n_w, span_global, n_bins)
+    active = weights.max(axis=(0, 2)) > 0.0
+    return sigma_pix[active], weights[:, active, :]
 
 
 def _lattice_instrument_planned(g, sigma_pix, weights):
