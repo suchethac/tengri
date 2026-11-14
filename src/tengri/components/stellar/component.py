@@ -2487,21 +2487,6 @@ _FLUX_WEIGHTED_WAVE_FIELDS = {
 _BROADENED_CUBE_LOG_MB = 300.0
 
 
-def _refuse_free_agb_with_evolving_alpha(evolving: bool) -> None:
-    """Refuse a free AGB dust-shell weight beside a per-age [alpha/Fe] on a 4D grid.
-
-    The free-weight path collapses the alpha axis with the scalar interpolation
-    :func:`~tengri.components.stellar.sps.dsps_wrapper.interpolate_alpha_only`, which has no
-    per-age form, so it would silently use one [alpha/Fe] node for every age.
-    """
-    if evolving:
-        raise ValueError(
-            "alpha_fe_evolving=True with a free AGB dust-shell weight (agb_dust_weight) is not "
-            "supported: the free-weight AGB path collapses [alpha/Fe] at one scalar. Fix the "
-            "AGB weight, or use a scalar met_alpha_fe."
-        )
-
-
 def _alpha_fe_at_ages(params, ssp, *, evolving: bool, t_universe_gyr):
     """[alpha/Fe] that sets the alpha bracket: a scalar, or one value per SSP age.
 
@@ -3936,8 +3921,13 @@ class StellarSEDComponent:
         # 3D model; a Fixed weight or no AGB shell keeps the shared 4D constant.
         _csp_cube_is_4d = _alpha_collapse_active and _agb_dust_cube is None
         if _agb_dust_cube is not None:
-            if _alpha_collapse_active:
-                _refuse_free_agb_with_evolving_alpha(self.config.alpha_fe_evolving)
+            if _alpha_collapse_active and self.config.alpha_fe_evolving:
+                # Per-age [alpha/Fe]: the ratio has no alpha axis, so the 4D cube takes it
+                # plane by plane and the CSP collapses each age at its own bracket.
+                _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
+                ssp_flux_for_csp = ssp.ssp_flux * _agb_dust_cube
+                _csp_cube_is_4d = True
+            elif _alpha_collapse_active:
                 from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
                 ssp_flux_for_csp = (
@@ -5196,11 +5186,14 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
+        evolving_alpha = has_alpha_grid(ssp) and self.config.alpha_fe_evolving
         agb_dust_cube = self._agb_dust_cube_ratio(
-            params, ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux
+            params,
+            ssp.ssp_flux
+            if evolving_alpha
+            else (ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux),
         )
-        if agb_dust_cube is not None and has_alpha_grid(ssp):
-            _refuse_free_agb_with_evolving_alpha(self.config.alpha_fe_evolving)
+        if agb_dust_cube is not None and has_alpha_grid(ssp) and not evolving_alpha:
             from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
             _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
@@ -5227,8 +5220,11 @@ class StellarSEDComponent:
                 t_universe_gyr=age_at_z(require_redshift(params, "compute_log_nion")),
             )
             _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
+            ssp_flux_ion = ssp.ssp_flux[..., :n_ion]
+            if agb_dust_cube is not None:
+                ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
             lnu_age_ion = collapse_alpha_axis(
-                jnp.einsum("ma,mkai->kai", joint_weights, ssp.ssp_flux[..., :n_ion]),
+                jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_ion),
                 _alpha_ia,
                 _alpha_fa,
             )
