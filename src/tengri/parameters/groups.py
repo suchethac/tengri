@@ -194,6 +194,21 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
 _ALPHA_FE_PARAM = "met_alpha_fe"
 
 
+def _alpha_fe_grid_hint(ssp_data) -> str:
+    """Name the grid's [alpha/Fe] node range for a refusal, or ``""`` on a 3D grid."""
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return ""
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    return (
+        f" For this grid: alpha_fe: Uniform({nodes.min():g}, {nodes.max():g}), "
+        "its [alpha/Fe] node range."
+    )
+
+
 def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
     """Refuse an explicit ``met_alpha_fe`` prior that misses the grid; warn if it overhangs.
 
@@ -1498,12 +1513,17 @@ def parse_groups(**kwargs) -> Parameters:
         if not wildcard_active and claiming_category is not None:
             claim_scope = wildcard_scopes.get(f"agn.{claiming_category}")
             wildcard_active = claim_scope is None or param_name in claim_scope
-        final_dist, tag = _resolve_value(
-            param_name,
-            group_dict,
-            structural_params.get_distribution(param_name),
-            wildcard_active=wildcard_active,
-        )
+        try:
+            final_dist, tag = _resolve_value(
+                param_name,
+                group_dict,
+                structural_params.get_distribution(param_name),
+                wildcard_active=wildcard_active,
+            )
+        except ParameterError as err:
+            if param_name != _ALPHA_FE_PARAM:
+                raise
+            raise ParameterError(f"{err}{_alpha_fe_grid_hint(ssp_data)}") from err
 
         # Record whether an active wildcard-FREE actually freed this parameter.
         # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
