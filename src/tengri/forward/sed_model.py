@@ -196,11 +196,6 @@ _FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
 )
 
 
-def _is_concrete_zero(value) -> bool:
-    """True when ``value`` is a concrete zero; a traced value is never known to be zero."""
-    return not isinstance(value, jax.core.Tracer) and float(value) == 0.0
-
-
 def _nebular_continuum_consumers(chain):
     """Components that read ``sed_nebular``, excluding the nebular component itself.
 
@@ -9103,7 +9098,9 @@ class SEDModel:
         )
 
         if approx:
-            if broaden and not _is_concrete_zero(sigma_v_kms):
+            # Decided from the spec, not the value: under jit sigma_v is a tracer even when
+            # it is Fixed at 0, and the window LUT is exact for that case.
+            if broaden and self._fixed_sigma_v_kms() != 0.0:
                 raise ValueError(
                     "predict_spectral_indices(approx=True) measures the window LUT, which "
                     "does not broaden the SED by sigma_v_kms. Use approx=False, or pass "

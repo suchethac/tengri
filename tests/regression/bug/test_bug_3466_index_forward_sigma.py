@@ -218,10 +218,32 @@ def test_gradient_wrt_sigma_v_is_finite_at_zero_and_at_300(ssp):
             assert np.isfinite(g), (s, INDEX_NAMES[k])
 
 
-def test_approx_true_refuses_a_broadened_measurement(ssp):
+def test_approx_true_refuses_a_free_sigma_v(ssp):
     model = _index_model(ssp)
     with pytest.raises(ValueError, match="broaden"):
         model.predict_spectral_indices(_params(model, 300.0), _defs(), approx=True)
+
+
+def test_approx_true_refuses_a_fixed_nonzero_sigma_v(ssp):
+    from tengri import Fixed
+
+    base = _index_model(ssp, sigma_free=False)
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(300.0))
+    model = SEDModel(spec, ssp, observation=base.observation)
+    p = {name: 0.5 for name in model.spec.free_params}
+    with pytest.raises(ValueError, match="broaden"):
+        model.predict_spectral_indices(p, _defs(), approx=True)
+
+
+def test_approx_true_works_under_jit_with_the_default_fixed_zero_sigma_v(ssp):
+    model = _index_model(ssp, sigma_free=False)
+    defs = _defs()
+    p = dict(model.spec.sample(jax.random.PRNGKey(7)))
+    exact = np.asarray(model.predict_spectral_indices(p, defs, approx=False))
+    fast_jit = jax.jit(lambda q: model.predict_spectral_indices(q, defs, approx=True))
+    fast = np.asarray(fast_jit(p))
+    assert np.all(np.isfinite(fast))
+    np.testing.assert_allclose(fast, exact, rtol=0.0, atol=1e-6)
 
 
 def test_index_only_fit_recovers_sigma_v_within_its_posterior_sd(ssp):
