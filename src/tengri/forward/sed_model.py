@@ -3221,7 +3221,7 @@ class SEDModel:
             z_lo, z_hi = float(bounds[0]), float(bounds[1])
         return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), float(z_lo), float(z_hi))
 
-    def _spectrum_lut_serves_exactly(self, observation) -> bool:
+    def _spectrum_lut_serves_exactly(self, observation, *, flagged: bool = True) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
         The single source of truth for the ``approx="auto"`` routing of a
@@ -3247,6 +3247,9 @@ class SEDModel:
         ----------
         observation : Observation or None
             Observation whose spectroscopy configures the pixels.
+        flagged : bool, default True
+            Apply the flagged-fraction condition. A joint model still under construction has
+            no dust laws yet, so its promotion asks without it and applies it once built.
 
         Returns
         -------
@@ -3266,6 +3269,8 @@ class SEDModel:
             return False
         if self._fixed_sigma_v_kms() is None:
             return False
+        if not flagged:
+            return True
         return self._spectrum_flagged_fraction() <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION
 
     def _spectrum_flagged_fraction(self) -> float:
@@ -3406,7 +3411,7 @@ class SEDModel:
         bool
             True if the spectrum channel must not be promoted onto the LUT.
         """
-        if self._spectrum_lut_serves_exactly(observation):
+        if self._spectrum_lut_serves_exactly(observation, flagged=False):
             return False
         if self._fixed_sigma_v_kms() is None and not self._spectrum_lut_needs_pixel_integral(
             observation
@@ -3960,6 +3965,7 @@ class SEDModel:
                 "spectrum_precomp"
             ) and not self._joint_spectrum_lut_promotion_blocked(observation):
                 self._approx = self._approx.replace(spectrum_precomp=True)
+                self._spectrum_promoted = True
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
@@ -4040,6 +4046,15 @@ class SEDModel:
 
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
+
+        # A spectrum table that a joint model promoted (not an explicit SpectrumPrecomp) is
+        # dropped when it would flag more pixels than it can serve faster than the exact
+        # path (#3413). The flag needs the dust laws and the instrument kernel.
+        if (
+            getattr(self, "_spectrum_promoted", False)
+            and self._spectrum_flagged_fraction() > SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+        ):
+            self._approx = self._approx.replace(spectrum_precomp=False)
 
         # ── Observation calibration coefficients ──────────────────
         # ``cal_c1..cN`` are dynamic, their count is the spectroscopy
@@ -6653,7 +6668,7 @@ class SEDModel:
         )
         if spectroscopy is None:
             return None
-        return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
+        return self._spectrum_decided_conserving(self.observation)
 
     def _resample_z_ref(self) -> float:
         """Redshift at which ``resample="auto"`` is decided (#2530, #3171).

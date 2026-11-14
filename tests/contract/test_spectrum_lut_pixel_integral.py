@@ -438,6 +438,51 @@ def test_heavily_flagged_spectrum_routes_by_flagged_fraction_under_auto(
     assert built / wave_obs.size == pytest.approx(fraction)
 
 
+@pytest.mark.parametrize(
+    ("dust_kind", "promoted"),
+    [pytest.param("single", True, id="calzetti"), pytest.param("single:hd23_mwrv31", False, id="hd23")],
+)
+def test_joint_promotion_follows_the_flagged_fraction(dust_kind, promoted):
+    """A joint model promotes its spectrum onto the table only below the flagged crossover (#3413)."""
+    from tengri import (
+        DEFAULT,
+        Fixed,
+        Observation,
+        Photometry,
+        SEDModel,
+        Spectroscopy,
+        Uniform,
+        WavePrecomp,
+        load_ssp_data,
+    )
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]),
+        spectroscopy=Spectroscopy(
+            wave_obs=jnp.asarray(_SDSS), resample="conserving", resolution=None
+        ),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        base = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": "dpl",
+                "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation=_dust(dust_kind),
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+        joint = type(base)(spec, ssp, observation=obs, approx=WavePrecomp())
+    assert bool(joint._approx.get("spectrum_precomp")) is promoted
+
+
 def test_explicit_spectrum_precomp_serves_a_heavily_flagged_spectrum():
     """An explicit SpectrumPrecomp() stays on the table above the crossover (#3413)."""
     from tengri import load_ssp_data
