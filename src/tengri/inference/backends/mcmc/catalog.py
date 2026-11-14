@@ -564,7 +564,7 @@ def _masked_covariance(draws, mask):
 
     Rows outside ``mask`` are excluded even when non-finite, so a divergent or NaN pilot
     draw cannot reach the covariance. With fewer than two selected rows the result is
-    zero, which the caller's sample-count check then refuses.
+    NaN, which the caller's Cholesky finiteness check then refuses.
 
     Parameters
     ----------
@@ -581,9 +581,17 @@ def _masked_covariance(draws, mask):
     weight = mask.astype(draws.dtype)
     count = jnp.sum(weight)
     kept = jnp.where(mask[:, None], draws, 0.0)
-    mean = jnp.sum(weight[:, None] * kept, axis=0) / jnp.maximum(count, 1.0)
+    mean = jnp.where(
+        count > 0.5,
+        jnp.sum(weight[:, None] * kept, axis=0) / jnp.maximum(count, 1.0),
+        jnp.nan,
+    )
     centered = jnp.where(mask[:, None], draws - mean, 0.0)
-    return (centered.T @ centered) / jnp.maximum(count - 1.0, 1.0)
+    return jnp.where(
+        count > 1.5,
+        (centered.T @ centered) / jnp.maximum(count - 1.0, 1.0),
+        jnp.nan,
+    )
 
 
 def _dense_metric_factor(draws, mask, shrinkage=CATALOG_DENSE_SHRINKAGE):
