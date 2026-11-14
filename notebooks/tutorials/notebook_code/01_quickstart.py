@@ -19,7 +19,7 @@
 # tengri combines Information Field Theory correlated-field priors with
 # differentiable stellar population synthesis and JIT-compiled variational
 # inference. This notebook fits a galaxy spectrum two ways: first a smooth
-# parametric SFH (8 free parameters), then a bursty stochastic SFH
+# parametric SFH (7 free parameters), then a bursty stochastic SFH
 # (138 free parameters). The MAP and Laplace fits take seconds on a laptop CPU.
 # Part A also runs an exact NUTS reference, which takes about 15 to 20 minutes.
 # No GPU required.
@@ -96,24 +96,24 @@ print(
 # %% [markdown]
 # ## Part A: A Smooth Galaxy Spectrum
 #
-# We start with the simplest useful model: a truncated skew-normal SFH
-# (Bellstedt+2020) with 8 free parameters. This is comparable to what
+# We start with the simplest useful model: a double power-law SFH
+# (Carnall et al. 2018) with 7 free parameters. This is comparable to what
 # Prospector or BAGPIPES would fit — but fully differentiable and much faster.
 
 # %%
 # Define the parameter specification
 spec_param = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
-    sfh_tsnorm_peak_lbt_frac=Uniform(0.0362663, 0.870392),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+    sfh_dpl_alpha=Uniform(0.1, 5.0),
+    sfh_dpl_beta=Uniform(0.1, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
+    sfh_dpl_age_frac=Fixed(1.0),  # formation at the Big Bang
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type="tsnorm",
+    mean_sfh_type="dpl",
 )
 print(f"Free parameters ({spec_param.n_free}):")
 for name in spec_param.free_params:
@@ -148,13 +148,12 @@ print(f"Forward model: {t_raw:.1f} ms (raw)  →  {t_jit:.0f} µs (JIT-compiled)
 # Generate a mock galaxy spectrum
 key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
-# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+# Override the DPL SFH to a typical star-forming galaxy (SFR peaks ~3 Gyr ago, still forming stars now)
 true_params_param = {**true_params_param}
-true_params_param["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
-true_params_param["sfh_tsnorm_peak_lbt_frac"] = jnp.array(3.0 / age_at_z(0.1))
-true_params_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_params_param["sfh_tsnorm_skew"] = jnp.array(0.3)
-true_params_param["sfh_tsnorm_trunc"] = jnp.array(2.0)
+true_params_param["sfh_dpl_log_total_mass"] = jnp.array(10.5)
+true_params_param["sfh_dpl_alpha"] = jnp.array(0.5)
+true_params_param["sfh_dpl_beta"] = jnp.array(2.0)
+true_params_param["sfh_dpl_tau_gyr"] = jnp.array(5.2)
 mock_param = model_param.mock_spectrum(true_params_param, WAVE_OBS, snr=30.0, key=key)
 
 print("True parameters:")
@@ -289,7 +288,7 @@ plt.show()
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(model_param, result_lap_param, true_params=true_params_param, ax=ax,
          color=LAPLACE_COLOR, label="Laplace", method="Laplace")
-ax.set_title("SFH Recovery — Parametric (D = 8)")
+ax.set_title("SFH Recovery — Parametric (D = 7)")
 # 200 Myr inset — truth + posterior SFH draws
 sfh_true_param = model_param.predict_sfh(true_params_param)
 t_gyr_p = np.array(sfh_true_param["t_gyr"])
@@ -385,7 +384,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle(
-        f"Laplace ({t_lap:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 8",
+        f"Laplace ({t_lap:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
         y=1.02,
     )
     plt.savefig(os.path.join(FIGDIR, "fig05_laplace_vs_nuts.png"), dpi=150, bbox_inches="tight")
@@ -403,7 +402,7 @@ for name, res, t in [
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]
-# **Part A Takeaway**: For an 8-parameter model, the Laplace approximation and
+# **Part A Takeaway**: For a 7-parameter model, the Laplace approximation and
 # NUTS give closely matching posteriors, and the Laplace step adds only seconds
 # to the MAP fit. For low-dimensional problems where you want exact MCMC
 # guarantees, NUTS works, but its cost grows quickly with dimension. Now let's
