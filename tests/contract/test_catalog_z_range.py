@@ -152,3 +152,61 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
     assert m_lo.compile_signature() == m_hi.compile_signature(), (
         "two Fixed(z) values under catalog_z_range must share the compile signature"
     )
+
+
+def test_derived_range_covers_every_redshift_with_a_stated_margin():
+    """A catalog with per-galaxy z and no declared range gets one derived from the table.
+
+    The margin is 1% of the span, at least 1e-3, and the lower edge is clipped at z=0.
+    """
+    from tengri.inference.fitter import derived_catalog_z_range
+
+    lo, hi = derived_catalog_z_range([0.1, 0.5, 0.3])
+    assert lo == pytest.approx(0.1 - 0.004)
+    assert hi == pytest.approx(0.5 + 0.004)
+
+    # A tiny span is padded by the 1e-3 floor, not by 1% of nothing.
+    lo, hi = derived_catalog_z_range([0.2, 0.2001])
+    assert lo == pytest.approx(0.2 - 1e-3)
+    assert hi == pytest.approx(0.2001 + 1e-3)
+
+    # The lower edge never goes below zero.
+    lo, _ = derived_catalog_z_range([0.0005, 0.001])
+    assert lo == 0.0
+
+
+def test_derived_range_is_applied_to_a_copy_and_the_user_model_is_untouched(
+    synthetic_ssp, simple_observation
+):
+    from tengri import Fixed, Parameters, SEDModel
+    from tengri.inference.fitter import derived_catalog_z_range, with_derived_catalog_z_range
+
+    spec = Parameters(
+        sfh_dpl_log_total_mass=Fixed(9.0),
+        sfh_dpl_alpha=Fixed(2.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
+        sfh_dpl_beta=Fixed(2.0),
+        sfh_dpl_tau_gyr=Fixed(3.0),
+        met_logzsol=Fixed(0.0),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        redshift=Fixed(0.1),
+        mean_sfh_type="dpl",
+    )
+    user = SEDModel(spec, synthetic_ssp, observation=simple_observation)
+    assert user._catalog_z_range is None
+    redshifts = [0.05, 0.2, 0.4]
+
+    configured = with_derived_catalog_z_range(user, redshifts)
+
+    assert configured is not user
+    assert user._catalog_z_range is None, "the caller's model was mutated"
+    assert configured._catalog_z_range == pytest.approx(derived_catalog_z_range(redshifts))
+    lo, hi = configured._catalog_z_range
+    assert lo <= min(redshifts) and max(redshifts) <= hi
+    # A model that already declares its range is returned as it is.
+    assert with_derived_catalog_z_range(configured, redshifts) is configured
+    # The derived clone has the compile key of a model that declares the same range, so
+    # it shares the one compiled program the declared-range path already uses.
+    declared = user.with_approx((WavePrecomp(catalog_z_range=configured._catalog_z_range),))
+    assert configured.compile_signature() == declared.compile_signature()

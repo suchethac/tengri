@@ -542,3 +542,41 @@ def test_chees_dense_mass_matrix_runs_quietly_and_agrees_with_diagonal(
                 f"galaxy {i}, {name}: dense {b.mean():.4f} vs diagonal {a.mean():.4f}, "
                 f"3 combined SE = {3.0 * combined:.4f}"
             )
+
+
+def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
+    synthetic_ssp, simple_observation
+):
+    """Per-galaxy z with no ``catalog_z_range`` derives one and runs batched.
+
+    The range comes from the catalog's own redshifts, so the batched program serves every
+    galaxy. The user's model is left as it was.
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model(synthetic_ssp, simple_observation)
+    assert model._catalog_z_range is None
+    galaxies = _catalog_from_truths(model, _DISTINCT_TRUTHS, jax.random.PRNGKey(0))
+    # Inside the synthetic SSP's observed-frame band coverage; 0.2 pushes band_0 off the grid.
+    redshifts = (0.02, 0.05, 0.1)
+    for galaxy, z in zip(galaxies, redshifts, strict=True):
+        galaxy["redshift"] = jnp.array(z)
+
+    cat = CatalogFitter(model, galaxies, data_type="photometry")
+    run_kwargs = dict(
+        key=jax.random.PRNGKey(1),
+        forward_chunk_size=3,
+        n_warmup=15,
+        n_burnin=5,
+        n_samples=15,
+        verbose=False,
+    )
+    cp = cat.run("mcmc_nuts", **run_kwargs)
+
+    assert cp.n_galaxies == len(galaxies)
+    lo, hi = cat._catalog_z_range()
+    assert lo <= min(redshifts) and hi >= max(redshifts)
+    assert model._catalog_z_range is None, "the caller's model was mutated"
+    for i in range(len(galaxies)):
+        for name in model.spec.free_params:
+            assert np.all(np.isfinite(np.asarray(cp[i].samples[name])))

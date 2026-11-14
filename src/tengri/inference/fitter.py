@@ -43,6 +43,7 @@ marker lines to jump. In order:
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
 import threading
 import time
@@ -371,6 +372,70 @@ def _model_catalog_z_range(model):
         except (AttributeError, IndexError):
             return None
     return getattr(model, "_catalog_z_range", None)
+
+
+def derived_catalog_z_range(redshifts, *, margin_frac=0.01, min_margin=1e-3):
+    """The ``catalog_z_range`` that covers a catalog's per-galaxy redshifts.
+
+    Parameters
+    ----------
+    redshifts : array_like, shape (n_galaxies,)
+        Per-galaxy redshifts [dimensionless].
+    margin_frac : float
+        Padding on each side, as a fraction of the redshift span.
+    min_margin : float
+        Floor on the padding, so a narrow catalog is still padded [dimensionless].
+
+    Returns
+    -------
+    tuple of float
+        ``(z_min, z_max)``, with ``z_min`` clipped at zero.
+
+    Raises
+    ------
+    ValueError
+        If ``redshifts`` is empty.
+    """
+    z = np.asarray(redshifts, dtype=float).ravel()
+    if z.size == 0:
+        raise ValueError("cannot derive a catalog_z_range from an empty redshift list")
+    z_lo, z_hi = float(z.min()), float(z.max())
+    pad = max(margin_frac * (z_hi - z_lo), min_margin)
+    return (max(0.0, z_lo - pad), z_hi + pad)
+
+
+def with_derived_catalog_z_range(model, redshifts):
+    """Return ``model`` with a ``catalog_z_range`` covering ``redshifts``, never mutating it.
+
+    A model that already declares a range is returned as it is. Otherwise the range is set
+    on a clone built through :meth:`with_approx`, keeping the model's other precompute
+    configs. The clone's ``WavePrecomp`` carries the runtime-redshift table that lets one
+    compiled program serve every galaxy.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The model the batch fit is built on. Never mutated.
+    redshifts : array_like, shape (n_galaxies,)
+        Per-galaxy redshifts [dimensionless].
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        ``model`` itself, or the configured clone.
+    """
+    if _model_catalog_z_range(model) is not None:
+        return model
+    from tengri.forward.sed_model import WavePrecomp
+
+    z_range = derived_catalog_z_range(redshifts)
+    configs = tuple(model.approx_configs)
+    wave = next((c for c in configs if isinstance(c, WavePrecomp)), None)
+    others = tuple(c for c in configs if c is not wave)
+    base = WavePrecomp() if wave is None else wave
+    configured = dataclasses.replace(base, catalog_z_range=z_range)
+    logger.info("catalog_z_range derived from the catalog's redshifts: [%.6f, %.6f]", *z_range)
+    return model.with_approx((*others, configured))
 
 
 def fit_surface_ctor_names() -> frozenset[str]:

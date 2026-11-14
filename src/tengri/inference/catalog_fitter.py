@@ -1006,6 +1006,14 @@ class _CatalogFitterOriginal:
         self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
+        # Per-galaxy redshifts run as a runtime input, which needs the model's
+        # runtime-redshift table. A model without a declared catalog_z_range gets a
+        # configured clone whose range covers this catalog; the caller's model is kept.
+        per_galaxy_z = [g["redshift"] for g in self.galaxies if "redshift" in g]
+        if per_galaxy_z:
+            from tengri.inference.fitter import with_derived_catalog_z_range
+
+            self.model = with_derived_catalog_z_range(self.model, per_galaxy_z)
         # For the #1671 bias advisory in run(): the exact reference when
         # resolution produced a LUT clone. Deferred to run() so construction
         # stays cheap; priced once for the whole catalog (the probe caches on
@@ -1264,14 +1272,6 @@ class _CatalogFitterOriginal:
         # dropped in silence -- that is how per-galaxy line fluxes reached the
         # objective on mcmc_nuts and not on map (#1599).
         self._refuse_unsupported_channels(resolved)
-        _has_pg_z = any("redshift" in g for g in self.galaxies)
-        if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
-            raise ValueError(
-                "Batched per-galaxy redshift requires a catalog_z_range so ONE "
-                "compiled program serves all redshifts. Build the model with "
-                "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
-                "method='map' (sequential, recompiles per redshift). See #1337."
-            )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
                 resolved,
