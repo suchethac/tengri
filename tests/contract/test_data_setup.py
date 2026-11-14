@@ -5,9 +5,11 @@ import os
 
 import pytest
 
-from tengri._data_setup import download_ssp, list_known_ssps
+from tengri._data_setup import DEFAULT_SSP, download_ssp, list_known_ssps
 
 pytestmark = pytest.mark.contract
+
+DEFAULT_FILENAME = f"{DEFAULT_SSP}.h5"
 
 
 @pytest.mark.unit
@@ -32,7 +34,7 @@ def test_list_known_ssps_returns_copy():
 def test_download_ssp_skips_existing(tmp_path, monkeypatch):
     """Verify that download_ssp skips existing files without calling urlopen."""
     # Pre-create the target file with non-zero size
-    target_file = tmp_path / "fsps_prsc_miles_chabrier.h5"
+    target_file = tmp_path / DEFAULT_FILENAME
     target_file.write_bytes(b"existing data")
     mtime_before = target_file.stat().st_mtime
 
@@ -86,7 +88,7 @@ def test_download_ssp_uses_env_var(tmp_path, monkeypatch):
     result = download_ssp(force=True)
 
     # Verify file was created in the env var directory
-    expected_path = tmp_path / "fsps_prsc_miles_chabrier.h5"
+    expected_path = tmp_path / DEFAULT_FILENAME
     assert result == expected_path
     assert expected_path.exists()
     assert expected_path.stat().st_size == 16
@@ -150,9 +152,9 @@ def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
     result = download_ssp(force=True)
 
     # Verify file was created in data/ directory (relative to tmp_path)
-    expected_file = tmp_path / "data" / "fsps_prsc_miles_chabrier.h5"
+    expected_file = tmp_path / "data" / DEFAULT_FILENAME
     assert expected_file.exists()
-    assert result.name == "fsps_prsc_miles_chabrier.h5"
+    assert result.name == DEFAULT_FILENAME
     assert result.parent.name == "data"
 
 

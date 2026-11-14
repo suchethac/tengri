@@ -451,10 +451,13 @@ SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 #: ``tengri.load_ssp()`` loads. It is *bare-stellar* (no baked-in nebular
 #: emission): it is present in the hosted catalog, in :data:`_KNOWN_SSPS`, and
 #: is the grid the Cue/CloudyGrid nebular backends and every
-#: ``tengri.recipes.*`` config require. The ``_wNE_*`` (with-Nebular-Emission)
-#: grids are produced locally, are not shipped from the catalog, and must be
-#: named explicitly (``load_ssp("prsc_miles_chabrier_wNE")``).
-DEFAULT_SSP = "fsps_prsc_miles_chabrier"
+#: ``tengri.recipes.*`` config require. It is the MIST isochrone grid with the
+#: C3K spectral library (#3465): the Padova grids give old populations almost no
+#: far-UV, so they are not the default; they remain available by name. The
+#: ``_wNE_*`` (with-Nebular-Emission) grids are produced locally, are not shipped
+#: from the catalog, and must be named explicitly
+#: (``load_ssp("mist_c3k_a_chabrier_wNE")``).
+DEFAULT_SSP = "fsps_mist_c3k_a_chabrier"
 
 # Short alias → filename, matches the live public catalog. The catalog
 # only ships *bare-stellar* SSPs; the ``_wNE_*`` variants in local ``data/``
@@ -867,8 +870,8 @@ def download_ssp(
     ----------
     name : str, optional
         Short SSP identifier (see ``list_known_ssps()``) or a bare catalog
-        filename ending in ``.h5``. Defaults to ``"fsps_prsc_miles_chabrier"``
-        (FSPS PARSEC tracks + MILES library, Chabrier IMF, bare-stellar,
+        filename ending in ``.h5``. Defaults to ``"fsps_mist_c3k_a_chabrier"``
+        (FSPS MIST tracks + C3K library, Chabrier IMF, bare-stellar,
         Cue/CloudyGrid-compatible).
     dest : path-like, optional
         Target directory. Defaults to :func:`download_dir`, ``$TENGRI_DATA_DIR``
@@ -896,7 +899,7 @@ def download_ssp(
     Examples
     --------
     >>> import tengri
-    >>> tengri.download_ssp()  # default FSPS PARSEC+MILES grid → data/
+    >>> tengri.download_ssp()  # default FSPS MIST+C3K grid → data/
     >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")
     """
     # Resolve target directory
