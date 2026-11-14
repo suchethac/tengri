@@ -21,10 +21,31 @@ from reproduction.beagle._drivers import beagle_matrix as M, beagle_output as O,
 
 pytestmark = pytest.mark.contract
 
-SMOKE_FITS = (
-    Path.home() / "beagle" / "BEAGLE-general" / "results" / "smoke_bc03_mock" / "smoke_bc03.fits"
-)
 TEMPLATE_LINE = re.compile(r"^TEMPLATES( NEBULAR)? = ", re.MULTILINE)
+
+
+def _synthetic_mock_file(path: Path, n_obj: int = 3, n_wl: int = 2198) -> Path:
+    """A tiny ``--mock`` output FITS with the extensions ``parse_mock_output`` reads."""
+    from astropy.io import fits
+
+    wl = np.geomspace(1000.0, 10000.0, n_wl)
+    flam = np.full((n_obj, n_wl), 1e-20, dtype=np.float32)
+    hdus = [
+        fits.PrimaryHDU(),
+        fits.BinTableHDU.from_columns(
+            [
+                fits.Column(name="luminosity_distance", format="1D", array=np.full(n_obj, 1e26)),
+                fits.Column(name="M_star", format="1E", array=np.linspace(9.0, 10.0, n_obj)),
+            ],
+            name="GALAXY PROPERTIES",
+        ),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="wl", format=f"{n_wl}D", array=wl[None, :])], name="FULL SED WL"
+        ),
+        fits.ImageHDU(data=flam, name="FULL SED"),
+    ]
+    fits.HDUList(hdus).writeto(path, overwrite=True)
+    return path
 
 
 def test_unset_workdir_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,10 +105,8 @@ def test_param_rejects_tabs() -> None:
         B.Param("redshift", "type:from_file", prior="prior:\tx").render()
 
 
-def test_parser_round_trips_smoke_fits() -> None:
-    if not SMOKE_FITS.is_file():
-        pytest.skip(f"no local BEAGLE smoke output at {SMOKE_FITS}")
-    parsed = O.parse_mock_output(SMOKE_FITS)
+def test_parser_round_trips_mock_fits(tmp_path: Path) -> None:
+    parsed = O.parse_mock_output(_synthetic_mock_file(tmp_path / "mock.fits"))
     assert parsed.sed_lnu is not None
     assert parsed.sed_lnu.shape == (3, 2198)
     assert np.all(np.isfinite(parsed.sed_lnu))
@@ -98,9 +117,8 @@ def test_parser_round_trips_smoke_fits() -> None:
 
 
 def test_cache_round_trip_preserves_arrays(tmp_path: Path) -> None:
-    if not SMOKE_FITS.is_file():
-        pytest.skip(f"no local BEAGLE smoke output at {SMOKE_FITS}")
-    parsed = O.parse_mock_output(SMOKE_FITS, provenance={"image": "test"})
+    mock = _synthetic_mock_file(tmp_path / "mock.fits")
+    parsed = O.parse_mock_output(mock, provenance={"image": "test"})
     O.save_cache(tmp_path, "smoke", parsed)
     loaded = O.load_cache(tmp_path, "smoke")
     assert np.array_equal(loaded.sed_lnu, parsed.sed_lnu)

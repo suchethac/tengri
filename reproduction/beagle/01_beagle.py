@@ -1428,20 +1428,20 @@ plt.show()
 #
 # Entries 1 to 6 are cited as the BEAGLE Terms of Use require.
 #
-# 1. Chevallard J., Charlot S., 2016, "Modelling and interpreting spectral energy distributions of galaxies with BEAGLE", MNRAS 462, 1415. doi:10.1093/mnras/stw1756, arXiv:1603.03037.
-# 2. Bruzual G., Charlot S., 2003, "Stellar population synthesis at the resolution of 2003", MNRAS 344, 1000. doi:10.1046/j.1365-8711.2003.06897.x, arXiv:astro-ph/0309134.
-# 3. Gutkin J., Charlot S., Bruzual G., 2016, "Modelling the nebular emission from primeval to present-day star-forming galaxies", MNRAS 462, 1757. doi:10.1093/mnras/stw1716, arXiv:1607.06086.
-# 4. Calzetti D., Kinney A. L., Storchi-Bergmann T., 1994, "Dust extinction of the stellar continua in starburst galaxies: The ultraviolet and optical extinction law", ApJ 429, 582. doi:10.1086/174346.
-# 5. Charlot S., Fall S. M., 2000, "A Simple Model for the Absorption of Starlight by Dust in Galaxies", ApJ 539, 718. doi:10.1086/309250, arXiv:astro-ph/0003128.
-# 6. Chevallard J., Charlot S., Wandelt B., Wild V., 2013, "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies", MNRAS 432, 2061. doi:10.1093/mnras/stt523, arXiv:1303.6631.
-# 7. Pei Y. C., 1992, "Interstellar dust from the Milky Way to the Magellanic Clouds", ApJ 395, 130. doi:10.1086/171637.
-# 8. Inoue A. K., Shimizu I., Iwata I., Tanaka M., 2014, "An updated analytic model for attenuation by the intergalactic medium", MNRAS 442, 1805. doi:10.1093/mnras/stu936, arXiv:1402.0677.
-# 9. Feltre A., Charlot S., Gutkin J., 2016, "Nuclear activity versus star formation: emission-line diagnostics at ultraviolet and optical wavelengths", MNRAS 456, 3354. doi:10.1093/mnras/stv2794, arXiv:1511.08217.
-# 10. Vidal-García A., Plat A., Curtis-Lake E., Feltre A., Hirschmann M., Chevallard J., Charlot S., 2024, "BEAGLE-AGN I: Simultaneous constraints on the properties of gas in star-forming and AGN narrow-line regions in galaxies", MNRAS 527, 7217. doi:10.1093/mnras/stad3252, arXiv:2211.13648.
-# 11. Plat A., Charlot S., Bruzual G., Feltre A., Vidal-García A., Morisset C., Chevallard J., Todt H., 2019, "Constraints on the production and escape of ionizing radiation from the emission-line spectra of metal-poor star-forming galaxies", MNRAS 490, 978. doi:10.1093/mnras/stz2616, arXiv:1909.07386.
-# 12. Pacifici C. et al., 2023, "The Art of Measuring Physical Parameters in Galaxies: A Critical Assessment of Spectral Energy Distribution Fitting Techniques", ApJ 944, 141. doi:10.3847/1538-4357/acacff, arXiv:2212.01915.
-# 13. Planck Collaboration, 2016, "Planck 2015 results. XIII. Cosmological parameters", A&A 594, A13. doi:10.1051/0004-6361/201525830, arXiv:1502.01589.
-# 14. Ferland G. J. et al., 2017, "The 2017 Release of Cloudy", RMxAA 53, 385, arXiv:1705.10877.
+# 1. Chevallard J., Charlot S., 2016, "Modelling and interpreting spectral energy distributions of galaxies with BEAGLE", MNRAS 462, 1415. doi:`10.1093/mnras/stw1756`, arXiv:`1603.03037`.
+# 2. Bruzual G., Charlot S., 2003, "Stellar population synthesis at the resolution of 2003", MNRAS 344, 1000. doi:`10.1046/j.1365-8711.2003.06897.x`, arXiv:`astro-ph/0309134`.
+# 3. Gutkin J., Charlot S., Bruzual G., 2016, "Modelling the nebular emission from primeval to present-day star-forming galaxies", MNRAS 462, 1757. doi:`10.1093/mnras/stw1716`, arXiv:`1607.06086`.
+# 4. Calzetti D., Kinney A. L., Storchi-Bergmann T., 1994, "Dust extinction of the stellar continua in starburst galaxies: The ultraviolet and optical extinction law", ApJ 429, 582. doi:`10.1086/174346`.
+# 5. Charlot S., Fall S. M., 2000, "A Simple Model for the Absorption of Starlight by Dust in Galaxies", ApJ 539, 718. doi:`10.1086/309250`, arXiv:`astro-ph/0003128`.
+# 6. Chevallard J., Charlot S., Wandelt B., Wild V., 2013, "Insights into the content and spatial distribution of dust from the integrated spectral properties of galaxies", MNRAS 432, 2061. doi:`10.1093/mnras/stt523`, arXiv:`1303.6631`.
+# 7. Pei Y. C., 1992, "Interstellar dust from the Milky Way to the Magellanic Clouds", ApJ 395, 130. doi:`10.1086/171637`.
+# 8. Inoue A. K., Shimizu I., Iwata I., Tanaka M., 2014, "An updated analytic model for attenuation by the intergalactic medium", MNRAS 442, 1805. doi:`10.1093/mnras/stu936`, arXiv:`1402.0677`.
+# 9. Feltre A., Charlot S., Gutkin J., 2016, "Nuclear activity versus star formation: emission-line diagnostics at ultraviolet and optical wavelengths", MNRAS 456, 3354. doi:`10.1093/mnras/stv2794`, arXiv:`1511.08217`.
+# 10. Vidal-García A., Plat A., Curtis-Lake E., Feltre A., Hirschmann M., Chevallard J., Charlot S., 2024, "BEAGLE-AGN I: Simultaneous constraints on the properties of gas in star-forming and AGN narrow-line regions in galaxies", MNRAS 527, 7217. doi:`10.1093/mnras/stad3252`, arXiv:`2211.13648`.
+# 11. Plat A., Charlot S., Bruzual G., Feltre A., Vidal-García A., Morisset C., Chevallard J., Todt H., 2019, "Constraints on the production and escape of ionizing radiation from the emission-line spectra of metal-poor star-forming galaxies", MNRAS 490, 978. doi:`10.1093/mnras/stz2616`, arXiv:`1909.07386`.
+# 12. Pacifici C. et al., 2023, "The Art of Measuring Physical Parameters in Galaxies: A Critical Assessment of Spectral Energy Distribution Fitting Techniques", ApJ 944, 141. doi:`10.3847/1538-4357/acacff`, arXiv:`2212.01915`.
+# 13. Planck Collaboration, 2016, "Planck 2015 results. XIII. Cosmological parameters", A&A 594, A13. doi:`10.1051/0004-6361/201525830`, arXiv:`1502.01589`.
+# 14. Ferland G. J. et al., 2017, "The 2017 Release of Cloudy", RMxAA 53, 385, arXiv:`1705.10877`.
 # 15. Osterbrock D. E., Ferland G. J., 2006, *Astrophysics of Gaseous Nebulae and Active Galactic Nuclei*, 2nd ed., University Science Books.
 
 # %%

@@ -207,6 +207,8 @@ ALLOWED_PHRASES = (
     # (code_outputs/BEAGLE_summary_catalogue_z{1,3}.fits). The literal must match the bytes on
     # disk, so the upstream spelling is kept; the scope is the compound file name only.
     "BEAGLE_summary_catalogue_z",
+    # list of forbidden spellings in a test that bans them
+    "this was fixed|catalogue|colour|normalis",
 )
 
 
