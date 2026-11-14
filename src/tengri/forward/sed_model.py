@@ -1171,8 +1171,6 @@ def _warn_agn_dust_double_count(spec) -> None:
 _DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
 
 
-#: Parameters that set [alpha/Fe]: the fixed-alpha name and the evolving pair's ends (#3487).
-_ALPHA_FE_FREE_NAMES = ("met_alpha_fe", "met_alpha_fe_old", "met_alpha_fe_young")
 #: Smallest resolving power that resolves the Mg b / Fe region (#3487).
 _ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
 #: Rest-frame window of the Mg b / Fe features that constrain [alpha/Fe] (#3487), [Angstrom].
@@ -1201,7 +1199,7 @@ def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[s
     ----------
     spec : Parameters
         The model's parameter spec, read for the redshift distribution.
-    observation : Observation or None
+    observation : Observation
         The model's observation.
 
     Returns
@@ -1211,8 +1209,6 @@ def _alpha_fe_observation_findings(spec, observation) -> tuple[list[str], dict[s
     measurements : dict of str to float
         The numbers behind the findings, for :func:`warn_measured`.
     """
-    if observation is None:
-        return ["no observation"], {}
     if observation.has_spectral_indices:
         return [], {}
     spectroscopy = observation.spectroscopy
@@ -4660,10 +4656,12 @@ class SEDModel:
         prior. The warning names every free [alpha/Fe] parameter.
         """
         from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.parameters.groups import _ALPHA_FE_PARAMS
 
-        if ssp_data is None or not has_alpha_grid(ssp_data):
+        # A model built without an observation has nothing to fit yet, so nothing to judge.
+        if self.observation is None or ssp_data is None or not has_alpha_grid(ssp_data):
             return
-        free = [name for name in _ALPHA_FE_FREE_NAMES if name in spec.free_params]
+        free = [name for name in _ALPHA_FE_PARAMS if name in spec.free_params]
         if not free:
             return
         findings, measurements = _alpha_fe_observation_findings(spec, self.observation)
