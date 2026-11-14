@@ -17,10 +17,21 @@ import numpy as np
 import pytest
 from jax._src import test_util as jtu
 
-from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, Uniform, WavePrecomp
+from tengri import (
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    Spectroscopy,
+    Uniform,
+    WavePrecomp,
+)
+from tengri.forward.batched_spectrum import make_batched_predict
 from tengri.inference.batched_spectro import batched_log_likelihood
 from tengri.observation.banded import gaussian_resolution_bands
 from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+from tengri.observation.photometry import FilterCurve
 from tests.contract.test_batched_spectrum_forward import _N_DIAG, _R_BANDED, _banded, _grid
 
 pytestmark = pytest.mark.contract
@@ -175,3 +186,95 @@ def test_second_batch_with_new_redshifts_compiles_nothing(window_model, grid):
     with jtu.count_jit_compilation_cache_miss() as misses:
         fn(params, data_b).block_until_ready()
     assert misses() == 0, f"second batch recompiled {misses()} programs"
+
+
+# ── (5) photometry at the galaxy's own z for fixed-z and catalog_z_range templates ──
+
+_N_FILT = 3
+_PHOT_LUT = WavePrecomp(z_min=0.0, z_max=0.6, n_z=_N_Z)
+
+
+def _filters():
+    centers = np.linspace(4800.0, 8000.0, _N_FILT)
+    return tuple(
+        FilterCurve(
+            wave=jnp.linspace(c * 0.84, c * 1.16, 40),
+            trans=jnp.sin(jnp.linspace(0.0, np.pi, 40)) * 0.6,
+            name=f"b{k}",
+        )
+        for k, c in enumerate(centers)
+    )
+
+
+def _phot_model(ssp, wave, *, redshift, approx=None):
+    """Spectroscopic template with photometry; ``approx`` selects the optional LUT path."""
+    spectroscopy = Spectroscopy(wave_obs=jnp.asarray(wave), resample="conserving", **_banded(wave))
+    observation = Observation(spectroscopy=spectroscopy, photometry=Photometry(filters=_filters()))
+    kwargs = {} if approx is None else {"approx": approx}
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=observation,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), _MASS: Uniform(8.0, 12.0)},
+        neb={"type": "none"},
+        redshift=redshift,
+        **kwargs,
+    )
+
+
+def _phot_record(wave, z):
+    """One galaxy with photometry; the photometry values are inert for the phot_fnu check."""
+    phot_flux = np.full(_N_FILT, 1e-30)
+    return GalaxySpectrum(
+        wave=wave,
+        flux=np.ones(wave.size),
+        ivar=np.ones(wave.size),
+        resolution=gaussian_resolution_bands(jnp.asarray(wave), _R_BANDED, _N_DIAG),
+        z=z,
+        phot_flux=phot_flux,
+        phot_err=0.05 * phot_flux,
+    )
+
+
+def _batched_phot(template, wave, z):
+    """Batched ``phot_fnu`` of one galaxy at its own ``z`` under ``template``."""
+    [(spec, batch, _)] = build_spectro_batches([_phot_record(wave, z)], model=template)
+    out = make_batched_predict(template, spec)({_MASS: jnp.asarray([_MASS_VALUE])}, batch)
+    return np.asarray(out["phot_fnu"])[0]
+
+
+_FIXED_LUT_XFAIL = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "fixed-z WavePrecomp bakes stellar_phot_lnu_precomp at the template's fixed z "
+        "(components/stellar/component.py, fixed-z LUT branch, z_source = fixed value); "
+        "the batched path reads that LUT for every galaxy, so obs.z is ignored in photometry"
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "approx",
+    [None, pytest.param(_PHOT_LUT, marks=_FIXED_LUT_XFAIL)],
+    ids=["exact", "wave_precomp"],
+)
+def test_fixed_z_photometry_uses_obs_z(synthetic_ssp, grid, approx):
+    """A template fixed at 0.05 gives galaxy photometry at its own z (0.2), not the fixed one."""
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=approx)
+    per_galaxy = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.2), approx=approx)
+    batched = _batched_phot(template, grid, 0.2)
+    reference = np.asarray(per_galaxy.predict_photometry({_MASS: _MASS_VALUE}))
+    np.testing.assert_allclose(batched, reference, rtol=1e-10, atol=0.0)
+
+
+@pytest.mark.parametrize("z", [0.05, 0.2])
+def test_catalog_z_range_photometry_uses_obs_z(synthetic_ssp, grid, z):
+    """A catalog_z_range template gives photometry at each galaxy's z, on the LUT."""
+    template = _phot_model(
+        synthetic_ssp,
+        grid,
+        redshift=Uniform(*_CATALOG_RANGE),
+        approx=WavePrecomp(catalog_z_range=_CATALOG_RANGE, n_z=_N_Z),
+    )
+    batched = _batched_phot(template, grid, z)
+    reference = np.asarray(template.predict_photometry({_MASS: _MASS_VALUE, "redshift": z}))
+    np.testing.assert_allclose(batched, reference, rtol=1e-10, atol=0.0)
