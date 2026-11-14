@@ -377,29 +377,6 @@ def get_ssp_content_hash(ssp_data: SSPData) -> int:
     return digest
 
 
-#: Identity of the flux arrays loaded as :data:`~tengri._data_setup.DEFAULT_SSP` (#3465),
-#: keyed by ``id`` and validated by a weakref to the array, as the content-hash cache is. A
-#: flag on SSPData would sit in the NamedTuple, where the cache key walks it positionally and
-#: every compile signature would change. Only the build path reads it, before any JIT.
-_DEFAULT_SELECTED_FLUX: dict[int, weakref.ref] = {}
-
-
-def mark_default_selected(ssp: "SSPData") -> "SSPData":
-    """Record that ``ssp`` was loaded as the default grid and return it unchanged."""
-    flux = ssp.ssp_flux
-    key = id(flux)
-    _DEFAULT_SELECTED_FLUX[key] = weakref.ref(
-        flux, lambda _ref, k=key: _DEFAULT_SELECTED_FLUX.pop(k, None)
-    )
-    return ssp
-
-
-def is_default_selected(ssp: "SSPData") -> bool:
-    """True iff ``ssp`` is the grid :func:`load_ssp` returned for the default name."""
-    ref = _DEFAULT_SELECTED_FLUX.get(id(ssp.ssp_flux))
-    return ref is not None and ref() is ssp.ssp_flux
-
-
 _LOAD_SSP_PRESETS: dict[str, str] = {
     # Short alias → full filename. Bare-stellar entries come from
     # ``_KNOWN_SSPS`` (the auto-fetch catalog); wNE entries are produced
@@ -518,16 +495,13 @@ def load_ssp(
         mass_remaining = _default_mass_remaining(name)
 
     if name is None:
-        # The default is the named grid DEFAULT_SSP, tagged so the build path can tell it
-        # from a grid the user named (#3465).
-        return mark_default_selected(
-            load_ssp(
-                DEFAULT_SSP,
-                download=download,
-                mass_remaining=mass_remaining,
-                top_z=top_z,
-                imf=imf,
-            )
+        # The default is the named grid DEFAULT_SSP (#3465).
+        return load_ssp(
+            DEFAULT_SSP,
+            download=download,
+            mass_remaining=mass_remaining,
+            top_z=top_z,
+            imf=imf,
         )
     if name in _LOAD_SSP_PRESETS:
         # Produced locally, not hosted; so there is nothing to fall back to.
