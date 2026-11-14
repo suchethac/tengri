@@ -71,8 +71,14 @@ def _nion(m, p):
 
 def test_line_table_reconstructs_exact_across_sfh_and_metallicity(ssp_data_fsps):
     m, lw = _model(ssp_data_fsps)
-    table = precompute_line_per_qh(m, lw, met_lo=_MET_LO, met_hi=_MET_HI, n_met=40)
-    assert table.line_per_qh.shape == (40, len(_LINES))
+    # n_met = 80 (was 40) since #3434 (in #3462): the forward interpolates metallicity with
+    # node-exact cubic Hermite, which curves inside each SSP node cell. Measured worst error
+    # (this test's 8 draws): before #3462, n_met = 40 gave 4.55e-3; now n_met = 40 gives
+    # 6.07e-3 at logzsol 0.052 (the near-solar cell), n_met = 80 gives 4.47e-3, and
+    # n_met = 160 stays at 4.53e-3: the SFH-shape floor the bar below states. #3516 tracks
+    # matching the table's metallicity interpolation to the forward's.
+    table = precompute_line_per_qh(m, lw, met_lo=_MET_LO, met_hi=_MET_HI, n_met=80)
+    assert table.line_per_qh.shape == (80, len(_LINES))
 
     base = dict(m.spec.sample(jax.random.PRNGKey(0)))
     key = jax.random.PRNGKey(11)
