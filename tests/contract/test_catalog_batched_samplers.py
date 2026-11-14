@@ -29,6 +29,7 @@ import inspect
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -441,3 +442,54 @@ class TestTheTreeDepthCapReachesWarmup:
         src = inspect.getsource(nuts.run_nuts)
         tuning = src[src.index("    tuning = ") : src.index("adapt_key = (")]
         assert "max_num_doublings" in tuning
+
+
+def test_stuck_pilot_falls_back_to_its_own_draws(monkeypatch):
+    """A pilot that returns constant draws cannot define a metric; the galaxy keeps them.
+
+    The constant pilot has a zero covariance, so the Cholesky factor is not finite. The
+    galaxy must then return exactly the pilot's post-burn-in draws, all finite, and not
+    NaN. The pilot is replaced by a stub so that the stuck state is exact; the final pass
+    is the real ChEES scan and must still run.
+    """
+    from tengri.inference.backends.mcmc import catalog as catalog_mod
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    real_scan = catalog_mod._chees_scan
+    dim, n_burnin, n_samples, n_chains, pilot_value = 2, 5, 12, 4, 0.5
+    n_chain = n_burnin + n_samples
+    calls = []
+
+    def stuck_pilot_then_real(*args):
+        calls.append(None)
+        if len(calls) > 1:
+            return real_scan(*args)
+        n_chains_arg, n_chain_arg = args[7], args[8]
+        positions = jnp.full((n_chains_arg, n_chain_arg, dim), pilot_value)
+        divergent = jnp.zeros((n_chains_arg, n_chain_arg), dtype=bool)
+        return positions, divergent, None, None, None
+
+    monkeypatch.setattr(catalog_mod, "_chees_scan", stuck_pilot_then_real)
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        "chees",
+        n_warmup=40,
+        n_burnin=n_burnin,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        n_ensemble=4,
+        chees_dense=True,
+        flat_logdensity=_gauss_flat(dim),
+        substitute=_gauss_substitute,
+    )
+    positions, divergent = run_one(
+        jnp.zeros(dim), jax.random.PRNGKey(9), jnp.ones(dim), None, None, None, None, None, None
+    )
+
+    assert len(calls) == 2, "the dense final pass must still be attempted"
+    assert positions.shape == (n_chains * n_samples, dim)
+    assert bool(jnp.all(jnp.isfinite(positions)))
+    np.testing.assert_array_equal(
+        np.asarray(positions), np.full((n_chains * n_samples, dim), pilot_value)
+    )
+    assert not bool(jnp.any(divergent))

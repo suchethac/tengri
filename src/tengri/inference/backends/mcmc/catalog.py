@@ -559,24 +559,53 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
     return max(1, int(n_chains))
 
 
-def _dense_metric_factor(draws, shrinkage=CATALOG_DENSE_SHRINKAGE):
-    """Lower Cholesky factor ``L`` with ``L L^T = Sigma``, the shrunk covariance of ``draws``.
+def _masked_covariance(draws, mask):
+    """Sample covariance of the rows of ``draws`` selected by ``mask``, with unbiased scaling.
+
+    Rows outside ``mask`` are excluded even when non-finite, so a divergent or NaN pilot
+    draw cannot reach the covariance. With fewer than two selected rows the result is
+    zero, which the caller's sample-count check then refuses.
 
     Parameters
     ----------
     draws : ndarray, shape (n, D)
         Pilot positions in the sampled coordinates.
+    mask : ndarray, shape (n,), bool
+        True for the rows that may enter the covariance.
+
+    Returns
+    -------
+    ndarray, shape (D, D)
+        Covariance of the selected rows.
+    """
+    weight = mask.astype(draws.dtype)
+    count = jnp.sum(weight)
+    kept = jnp.where(mask[:, None], draws, 0.0)
+    mean = jnp.sum(weight[:, None] * kept, axis=0) / jnp.maximum(count, 1.0)
+    centered = jnp.where(mask[:, None], draws - mean, 0.0)
+    return (centered.T @ centered) / jnp.maximum(count - 1.0, 1.0)
+
+
+def _dense_metric_factor(draws, mask, shrinkage=CATALOG_DENSE_SHRINKAGE):
+    """Lower Cholesky factor ``L`` with ``L L^T = Sigma``, the shrunk covariance of the pilot.
+
+    Parameters
+    ----------
+    draws : ndarray, shape (n, D)
+        Pilot positions in the sampled coordinates.
+    mask : ndarray, shape (n,), bool
+        Rows that may enter the covariance (finite and not divergent).
     shrinkage : float
         Weight ``a`` of the diagonal target in ``Sigma = (1 - a) S + a diag(S)``.
 
     Returns
     -------
     factor : ndarray, shape (D, D)
-        Lower Cholesky factor of ``Sigma``; non-finite when the pilot is non-finite or
-        ``Sigma`` is not positive definite, which the caller reports.
+        Lower Cholesky factor of ``Sigma``; non-finite when ``Sigma`` is not positive
+        definite (a stuck pilot has ``S = 0``), which the caller reports.
     """
     dim = draws.shape[-1]
-    cov = jnp.cov(draws, rowvar=False).reshape(dim, dim)
+    cov = _masked_covariance(draws, mask).reshape(dim, dim)
     shrunk = (1.0 - shrinkage) * cov + shrinkage * jnp.diag(jnp.diag(cov))
     return jnp.linalg.cholesky(0.5 * (shrunk + shrunk.T))
 
@@ -940,28 +969,35 @@ def build_catalog_mcmc_engine(
             positions, divergent = chees_pass(sample_init, sample_logdensity, sample_args, ck)
             if chees_dense:
                 # A dense metric from a pilot: the diagonal ChEES above runs over this
-                # galaxy's own ensemble, and its burned-in draws give the covariance
-                # Sigma. The final pass samples zeta with y = L zeta, L L^T = Sigma, so
-                # the sampled y has the dense inverse mass matrix Sigma. No BlackJAX
-                # mass-matrix path is entered, so the trajectory floor stays on.
-                pilot = positions[:, n_burnin:].reshape(-1, sample_init.shape[-1])
-                factor = _dense_metric_factor(pilot)
-                metric_ok = jnp.all(jnp.isfinite(factor))
-                factor = jnp.where(metric_ok, factor, jnp.eye(factor.shape[0], dtype=factor.dtype))
+                # galaxy's own ensemble, and its post-burn-in, non-divergent draws give
+                # the covariance Sigma. The final pass samples zeta with y = L zeta,
+                # L L^T = Sigma, so y has the dense inverse mass matrix Sigma. No
+                # BlackJAX mass-matrix path is entered, so the trajectory floor stays on.
+                dim = sample_init.shape[-1]
+                pilot_burn = max(n_burnin, n_chain // 2)
+                pilot = positions[:, pilot_burn:].reshape(-1, dim)
+                usable = ~divergent[:, pilot_burn:].reshape(-1) & jnp.all(
+                    jnp.isfinite(pilot), axis=-1
+                )
+                factor = _dense_metric_factor(pilot, usable)
+                # A pilot with fewer than D+1 usable draws, or a covariance that is not
+                # positive definite (a stuck pilot), cannot define a metric. That galaxy
+                # keeps the pilot's own draws, the diagonal run it already has.
+                metric_ok = (jnp.sum(usable) >= dim + 1) & jnp.all(jnp.isfinite(factor))
+                factor = jnp.where(metric_ok, factor, jnp.eye(dim, dtype=factor.dtype))
                 final_keys = jax.random.split(
-                    jax.random.fold_in(chain_key, 1), n_chains * n_chain
+                    jax.random.fold_in(warmup_key, 1), n_chains * n_chain
                 ).reshape(n_chains, n_chain, 2)
-                positions, divergent = chees_pass(
+                dense_positions, dense_divergent = chees_pass(
                     jax.scipy.linalg.solve_triangular(factor, sample_init, lower=True),
                     _dense_logdensity,
                     (factor, sample_args),
                     final_keys,
                 )
                 # Back to the sampled coordinates y, then restore() maps them out.
-                positions = positions @ factor.T
-                # A galaxy whose pilot could not be factorized is reported, not sampled.
-                positions = jnp.where(metric_ok, positions, jnp.nan)
-                divergent = divergent | ~metric_ok
+                dense_positions = dense_positions @ factor.T
+                positions = jnp.where(metric_ok, dense_positions, positions)
+                divergent = jnp.where(metric_ok, dense_divergent, divergent)
             positions = restore(positions[:, n_burnin:])
             divergent = divergent[:, n_burnin:]
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
