@@ -13,8 +13,8 @@ component.
     comparison here.
   - `cigale_driver.py` — instantiate `pcigale.sed_modules` and read
     out SEDs, attenuation curves, SFH curves.
-  - `cigale_ssp_to_dsps.py` — one-off repackaging of CIGALE's BC03 Chabrier
-    templates into the DSPS HDF5 layout tengri reads.
+  - `cigale_ssp_to_dsps.py` — repackaging of CIGALE's BC03 Chabrier and
+    Salpeter templates into the DSPS HDF5 layout tengri reads.
   - `consistency_audit.py` — wavelength-resolved CIGALE vs tengri
     ratio statistics for every section, runnable on its own.
 - **`_drivers/data/bc03_from_cigale.h5`** — the shared SSP file. Both
@@ -61,13 +61,15 @@ runs use the persistent cache and finish in well under a minute.
 ## Regenerating the BC03 templates
 
 ```bash
-python -m reproduction.cigale._drivers.cigale_ssp_to_dsps
+python -m reproduction.cigale._drivers.cigale_ssp_to_dsps            # Chabrier
+python -m reproduction.cigale._drivers.cigale_ssp_to_dsps --imf salp  # Salpeter
 ```
 
 It reads all six metallicities from the installed pcigale's
-`data/bc03/Z=*_imf=chab.pickle` and writes
-`_drivers/data/bc03_from_cigale.h5`; both paths are fixed, so there are no
-arguments. Re-run it after any change to the unit conversion.
+`data/bc03/Z=*_imf={chab,salp}.pickle` and writes
+`_drivers/data/bc03_from_cigale.h5` (Chabrier, float32) or
+`_drivers/data/bc03_salpeter_from_cigale.h5` (Salpeter, float64, with an
+`imf="salpeter"` attribute). Re-run it after any change to the unit conversion.
 
 The output HDF5 has the DSPS-compatible shape:
 
