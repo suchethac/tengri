@@ -334,7 +334,10 @@ def test_exact_igm_fixed_z_4d_as_accurate_as_3d(ssp4d_uv, uv_observation):
     exact3 = _igm_model(slab, uv_observation, alpha_spec=None, redshift=Fixed(3.5), approx=None)
     err3 = _worst_rel(lut3, exact3, (None,), (None,))
     assert err4 < IGM_RTOL, f"4D exact-IGM fixed-z error {err4:.3e} >= {IGM_RTOL}"
-    assert err4 <= 2.0 * err3, f"4D error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+    # The floor keeps the bound meaningful when both errors are at round-off.
+    assert err4 <= max(2.0 * err3, 1e-12), (
+        f"4D error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+    )
 
 
 def test_exact_igm_free_z_4d_as_accurate_as_3d(ssp4d_uv, uv_observation):
@@ -356,7 +359,10 @@ def test_exact_igm_free_z_4d_as_accurate_as_3d(ssp4d_uv, uv_observation):
     exact3 = _igm_model(slab, uv_observation, alpha_spec=None, redshift=z_spec, approx=None)
     err3 = _worst_rel(lut3, exact3, (None,), zs)
     assert err4 < IGM_RTOL, f"4D exact-IGM free-z error {err4:.3e} >= {IGM_RTOL}"
-    assert err4 <= 2.0 * err3, f"4D free-z error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+    # The floor keeps the bound meaningful when both errors are at round-off.
+    assert err4 <= max(2.0 * err3, 1e-12), (
+        f"4D free-z error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+    )
 
 
 @pytest.mark.parametrize("redshift", [Fixed(3.5), Uniform(2.5, 4.0)], ids=["fixed_z", "free_z"])

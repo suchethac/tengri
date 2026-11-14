@@ -133,7 +133,8 @@ def test_spectrum_precomp_matches_exact_within_control(config):
         _model(_slab(ssp, 1), config, alpha=False, approx=SpectrumPrecomp()), config
     )
     control = _rel_err(control_lut, control_exact)
-    tol = min(2.0 * control, TOL_CEILING)
+    # The floor keeps the bound meaningful when the control is at round-off.
+    tol = min(max(2.0 * control, 1e-12), TOL_CEILING)
     assert control > 0.0, "the 3D control shows no LUT error; the tolerance would be vacuous"
 
     exact4 = _model(ssp, config, alpha=True, approx=None)
