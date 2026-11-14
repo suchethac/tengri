@@ -262,6 +262,7 @@ def precompute_photometry(
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
     lyc_gate: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
@@ -317,6 +318,12 @@ def precompute_photometry(
         exactly ``1.0``; #2439, #2427). Default False. Threaded straight to
         :func:`~tengri.utils.grid_interp.preintegrate_grid`; see its
         ``lyc_gate`` parameter for what it changes.
+    convention : FilterConvention, optional
+        Bandpass weight of the photometry the LUT serves: ``BESSELL`` (photon
+        counting, ``w = 1/lambda``, default) or ``ENERGY`` (``w = 1/lambda**2``,
+        the CIGALE convention). Must match the convention of the exact path, so
+        the LUT and :func:`~tengri.observation.photometry.compute_flux_density`
+        integrate the same band.
 
     Returns
     -------
@@ -349,6 +356,7 @@ def precompute_photometry(
         taylor=taylor_correction,
         n_subbands=n_subbands,
         lyc_gate=lyc_gate,
+        convention=convention,
     )
 
     # Collapse fixed axes if provided
@@ -401,6 +409,7 @@ def precompute_restband_photometry(
     filter_trans,
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> RestBandPrecomputation:
     r"""Preintegrate the SSP grid through each filter placed in the **rest** frame.
 
@@ -442,6 +451,8 @@ def precompute_restband_photometry(
         (#1122). 0 disables it, leaving the screen evaluated at the pivot.
     fixed : dict[int, float], optional
         Axis index → fixed value, collapsed at build time (axis 0 = lgmet).
+    convention : FilterConvention, optional
+        Bandpass weight, as for :func:`precompute_photometry` (default ``BESSELL``).
 
     Returns
     -------
@@ -466,6 +477,7 @@ def precompute_restband_photometry(
         ),
         taylor=False,  # the rest band uses the quadrature, never the Taylor form
         n_subbands=n_subbands,
+        convention=convention,
     )
     if fixed:
         preint = slice_fixed_axes(preint, fixed)
@@ -1675,6 +1687,7 @@ def precompute(
     ssp_data,
     dl_cm: float,
     taylor_correction: bool = True,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ):
     """Protocol-shaped wrapper around :func:`precompute_photometry`.
 
@@ -1724,6 +1737,7 @@ def precompute(
         dl_cm=dl_cm,
         taylor_correction=taylor_correction,
         fixed=fixed,
+        convention=convention,
     )
 
 

@@ -130,6 +130,7 @@ from tengri.protocols.component import (
     SEDComponentState,
     declared_default,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.scale import log10_add
 
 __all__ = [
@@ -252,6 +253,8 @@ class AGNSEDComponentState(SEDComponentState):
     name: str = "agn"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
+    #: Bandpass weight the cached passbands are integrated with (#3505).
+    filter_convention: Any = FilterConvention.BESSELL
     skirtor_templates: Any | None = None
     #: ``{"<category>/<name>": pytree}`` for every selected block that
     #: declared a ``template_loader``. See ``collect_block_templates``.
@@ -686,6 +689,7 @@ class AGNSEDComponent(TemplateThreading):
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
+        convention: FilterConvention = FilterConvention.BESSELL,
     ) -> AGNSEDComponentState:
         r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
@@ -752,6 +756,7 @@ class AGNSEDComponent(TemplateThreading):
             name=self.name,
             filter_waves=filter_waves,
             filter_trans=filter_trans,
+            filter_convention=convention,
             skirtor_templates=skirtor_templates,
             block_templates=block_templates,
             torus_below_index=torus_below_index,
@@ -1357,7 +1362,14 @@ class AGNSEDComponent(TemplateThreading):
                 else:
                     agn_phot_lnu_precomp = jnp.asarray(
                         [
-                            lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                            lnu_filter_integral(
+                                L_agn,
+                                state.wave,
+                                fw,
+                                ft,
+                                redshift=z,
+                                convention=self._state.filter_convention,
+                            )
                             for fw, ft in zip(
                                 self._state.filter_waves,
                                 self._state.filter_trans,
@@ -1372,7 +1384,14 @@ class AGNSEDComponent(TemplateThreading):
                 # physical quantity from the exact path (769 % in des_g at z=0.5).
                 agn_restband_lnu_precomp = jnp.asarray(
                     [
-                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
+                        lnu_filter_integral(
+                            L_agn,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=0.0,
+                            convention=self._state.filter_convention,
+                        )
                         for fw, ft in zip(
                             self._state.filter_waves,
                             self._state.filter_trans,

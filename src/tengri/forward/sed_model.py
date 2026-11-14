@@ -3312,20 +3312,12 @@ class SEDModel:
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
 
-        The WavePrecomp LUT bakes the filter-convolution convention at build time
-        (ADR-0017). Only the photon-counting Bessell weight is threaded through the
-        component preintegration so far; refuse the energy convention rather than
-        silently producing Bessell fluxes. Shared by the single-object and the
-        composite ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
+        The LUT bakes the observation's filter-convolution convention in at build
+        time (ADR-0017); every LUT builder takes it as an argument, so the photon
+        (Bessell) and energy (CIGALE) conventions are both served (#3505). Shared by
+        the single-object and the composite ``(WavePrecomp, SpectrumPrecomp)`` paths
+        (#610).
         """
-        _phot = getattr(self.observation, "photometry", None)
-        _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
-        if _conv != FilterConvention.BESSELL:
-            raise NotImplementedError(
-                f"approx=WavePrecomp(...) currently supports only the photon-counting "
-                f"'bessell' convention, got convention={_conv!r}. Use the exact path "
-                f"(approx=None) for the energy/CIGALE convention."
-            )
         self._approx = self._approx.replace(wave_precomp=True)
 
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
@@ -13069,6 +13061,8 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
+        # Bandpass weight the photometry LUT bakes in (#3505): the observation's own.
+        photo_convention = FilterConvention.BESSELL
         redshift_spec = None  # photometry z-table spec
         spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
@@ -13091,6 +13085,7 @@ class SEDModel:
                         strict=False,
                     )
                 )
+                photo_convention = self.observation.photometry.convention
 
                 # Redshift spec for photometry
                 if not runtime_z:
@@ -13175,6 +13170,7 @@ class SEDModel:
                         filters=filters,
                         redshift_spec=redshift_spec,
                         lyc_gate=lyc_mask_live,
+                        convention=photo_convention,
                     )
                 elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
                     isinstance(comp, NebularSEDComponent) and filters is not None
@@ -13186,6 +13182,7 @@ class SEDModel:
                         wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
+                        convention=photo_convention,
                     )
                 elif isinstance(comp, IGMSEDComponent):
                     igm_state = comp.precompute_band_factors(

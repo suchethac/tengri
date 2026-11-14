@@ -47,6 +47,7 @@ from tengri.parameters.timing import (
     published_timing_gyr,
     resolve_timing_fracs,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.host_array import device_table, host_array
 
 
@@ -2878,6 +2879,7 @@ class StellarSEDComponent:
         lyc_gate: bool = False,
         spec_sigma_v_fixed: float | None = None,
         spec_lsf_n_bins: int = 16,
+        convention: FilterConvention = FilterConvention.BESSELL,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -3016,6 +3018,7 @@ class StellarSEDComponent:
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
+                    convention=convention,
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
@@ -3038,6 +3041,7 @@ class StellarSEDComponent:
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
+                    convention=convention,
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
 
@@ -3062,6 +3066,7 @@ class StellarSEDComponent:
                     filter_waves=filter_list,
                     filter_trans=filter_trans_list,
                     n_subbands=int(approx.get("n_subbands", 0)),
+                    convention=convention,
                 ),
             )
 

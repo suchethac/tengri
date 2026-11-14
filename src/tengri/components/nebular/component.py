@@ -55,6 +55,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.scale import log10_magnitude
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
@@ -240,6 +241,8 @@ class NebularSEDComponentState(SEDComponentState):
     name: str = "nebular"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
+    #: Bandpass weight the cached passbands are integrated with (#3505).
+    filter_convention: Any = FilterConvention.BESSELL
 
 
 @dataclass(frozen=True)
@@ -441,6 +444,7 @@ class NebularSEDComponent(TemplateThreading):
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
+        convention: FilterConvention = FilterConvention.BESSELL,
     ) -> NebularSEDComponentState:
         r"""Construct the backend handle and cache filters when wave_precomp on.
 
@@ -476,6 +480,7 @@ class NebularSEDComponent(TemplateThreading):
             name=self.name,
             filter_waves=cached_filter_waves,
             filter_trans=cached_filter_trans,
+            filter_convention=convention,
         )
 
     def _common_backend_kwargs(self, state, params, log_z) -> dict:
@@ -1095,7 +1100,14 @@ class NebularSEDComponent(TemplateThreading):
             else:
                 nebular_phot_lnu_precomp = jnp.asarray(
                     [
-                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
+                        lnu_filter_integral(
+                            nebular_sed,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=z,
+                            convention=self._state.filter_convention,
+                        )
                         for fw, ft in zip(
                             self._state.filter_waves,
                             self._state.filter_trans,
@@ -1111,7 +1123,14 @@ class NebularSEDComponent(TemplateThreading):
                 # physical quantity from the exact path (769 % in des_g at z=0.5).
                 derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
                     [
-                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
+                        lnu_filter_integral(
+                            nebular_sed,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=0.0,
+                            convention=self._state.filter_convention,
+                        )
                         for fw, ft in zip(
                             self._state.filter_waves,
                             self._state.filter_trans,
