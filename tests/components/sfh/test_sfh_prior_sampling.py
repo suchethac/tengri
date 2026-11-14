@@ -76,9 +76,27 @@ def test_composed_tsnorm_burst() -> None:
     chex.assert_tree_all_finite(curves)
 
 
-def test_field_modulator_rejected() -> None:
-    with pytest.raises(NotImplementedError, match="field"):
-        sample_sfh_prior(["tsnorm", "field"], jax.random.PRNGKey(0))
+def test_field_modulator_is_served() -> None:
+    """The GP field draws one latent per curve, so the fan varies and stays physical (#3505)."""
+    age, curves = sample_sfh_prior(["dpl", "field"], jax.random.PRNGKey(0), n=4)
+    chex.assert_shape(curves, (4, age.shape[0]))
+    chex.assert_tree_all_finite(curves)
+    assert bool(jnp.all(curves >= 0.0))
+    assert not bool(jnp.allclose(curves[0], curves[1]))
+
+
+def test_field_with_negligible_amplitude_is_the_smooth_family() -> None:
+    """With the PSD amplitude pinned near zero the modulation is one, so the smooth fan returns.
+
+    The field's parameters come after the smooth family's in the draw order, so the
+    smooth draws are identical to a lone ``dpl`` draw with the same key.
+    """
+    key = jax.random.PRNGKey(4)
+    _, base = sample_sfh_prior("dpl", key, n=4)
+    _, modulated = sample_sfh_prior(
+        ["dpl", "field"], key, n=4, sfh_field_psd_sigma=Uniform(1e-9, 2e-9)
+    )
+    chex.assert_trees_all_close(modulated, base, rtol=1e-6)
 
 
 def test_unknown_family_raises_keyerror() -> None:

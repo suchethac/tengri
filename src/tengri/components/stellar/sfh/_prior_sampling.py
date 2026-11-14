@@ -89,14 +89,6 @@ def _draw_internal_kwargs(
     """
     family_list = [family] if isinstance(family, str) else list(family)
 
-    if any(name in ("field",) for name in family_list):
-        # Field modulator depends on a latent xi vector + GP machinery; not in v1 scope.
-        raise NotImplementedError(
-            "sample_sfh_prior does not yet support the 'field' (GP) modulator. "
-            "Use a smooth family (e.g. 'tsnorm', 'dpl') for the prior fan; the "
-            "stochastic-field demo lives in notebooks/02_sed_anatomy.py."
-        )
-
     internal_kwargs: dict[str, jnp.ndarray] = {}
     param_map: dict[str, tuple[str, float, float]] = {}
     sampled_fracs: dict[str, jnp.ndarray] = {}
@@ -121,6 +113,42 @@ def _draw_internal_kwargs(
     return family_list, internal_kwargs
 
 
+def _draw_field_modulation(
+    key: jax.Array,
+    n: int,
+    internal_kwargs: dict[str, jnp.ndarray],
+    age_grid_yr: jnp.ndarray,
+) -> dict[str, jnp.ndarray]:
+    """Draw the GP latents and their lognormal correction for the field modulator (#3505).
+
+    One latent vector per draw, on the age grid, pushed through
+    :func:`~tengri.components.stellar.sfh.registry.compute_field_gp` with that draw's
+    own PSD amplitude and timescale. The composed SFH multiplies the pair in as
+    ``exp(gp_x - k0_half)``, the map the forward model applies to its lookback grid.
+    The age grid must be uniform in log10 age, as the forward grid is; the default
+    grid is.
+
+    Returns
+    -------
+    dict
+        ``{"gp_x": (n, n_age), "k0_half": (n,)}``, keyed for the composed closure.
+    """
+    from tengri.components.stellar.sfh.registry import compute_field_gp
+
+    n_age = int(age_grid_yr.shape[0])
+    log_age = jnp.log10(age_grid_yr)
+    d_log_age = float(log_age[1] - log_age[0])
+    xi = jax.random.normal(jax.random.fold_in(key, 7), (n, n_age))
+
+    def _one(xi_i, psd_sigma, psd_tau_yr):
+        return compute_field_gp(
+            xi_i, psd_sigma, psd_tau_yr, n_age, d_log_age, log_age_grid=log_age
+        )
+
+    gp_x, k0_half = jax.vmap(_one)(xi, internal_kwargs["psd_sigma"], internal_kwargs["psd_tau_yr"])
+    return {"gp_x": gp_x, "k0_half": jnp.reshape(k0_half, (n,))}
+
+
 def sample_sfh_prior(
     family: str | list[str],
     key: jax.Array,
@@ -136,8 +164,8 @@ def sample_sfh_prior(
     ----------
     family : str or list[str]
         Registered SFH model name (e.g. ``"tsnorm"``, ``"dpl"``) or a
-        composed list (e.g. ``["tsnorm", "burst"]``). The ``"field"``
-        modulator is intentionally not supported here: see notes.
+        composed list (e.g. ``["tsnorm", "burst"]``, ``["dpl", "field"]``).
+        The ``"field"`` modulator draws one GP latent per curve on the age grid.
     key : jax.Array
         JAX PRNG key.
     n : int, optional
@@ -172,8 +200,6 @@ def sample_sfh_prior(
         If `family` is not a registered SFH model.
     ValueError
         If `family` is age-anchored and `redshift` is not given.
-    NotImplementedError
-        If `family` includes the ``"field"`` GP modulator.
 
     Notes
     -----
@@ -228,6 +254,10 @@ def sample_sfh_prior(
     family_list, internal_kwargs = _draw_internal_kwargs(
         family, key, n, prior_overrides, redshift=redshift
     )
+    if "field" in family_list:
+        internal_kwargs.update(
+            _draw_field_modulation(key, n, internal_kwargs, jnp.asarray(age_grid_yr))
+        )
     # `settings` carries non-fittable knobs (e.g. sfh_field_ngrid). For the
     # families we currently support, it is empty and can be ignored.
     del family_list, settings

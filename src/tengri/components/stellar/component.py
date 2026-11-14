@@ -1180,7 +1180,7 @@ def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
     return t_pub, s_pub * history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
 
 
-def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr):
+def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr, *, field=False):
     """Pin a tabulated history's formed mass on EVERY age kernel (#2621).
 
     The table family declares no ``log_total_mass`` in the SFH kwargs, so
@@ -1191,7 +1191,10 @@ def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr):
     ``[0, age(z)]`` (trapezoid of the table rows, plus the interpolated value at
     ``age(z)``). Not applied when the kernel measured nothing.
     """
-    if tab_lbt_yr is None:
+    if tab_lbt_yr is None or field:
+        # With the GP field the table fixes the MEAN mass only: the lognormal
+        # correction makes its expectation the table integral, and each draw keeps
+        # the mass its own modulation forms (owner ruling, 2026-11-15, #3505).
         return total_mass
     if "sfh_table_log_total_mass" in params:
         target = 10.0 ** jnp.asarray(params["sfh_table_log_total_mass"])
@@ -3874,11 +3877,6 @@ class StellarSEDComponent:
         _tab_lbt_yr = None
         _tab_order = None
         if isinstance(sfh_model, str) and sfh_model == "table":
-            if self.config.field:
-                raise NotImplementedError(
-                    "sfh_model='table' with field=True is not supported: the "
-                    "GP field draw modulates parametric SFHs only (#996)."
-                )
             # Shared with compute_joint_weights so the exact forward and the
             # SED-free fast path cannot read a simulation history differently
             # (#1395/#1396).
@@ -4342,7 +4340,9 @@ class StellarSEDComponent:
         # renormalize within the surviving support (#2521).
         measured_total_mass = total_mass
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
-        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
+        total_mass = _pin_table_mass(
+            total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr, field=self.config.field
+        )
         # Eager loud-signal guard (#2644): a declared mass was requested
         # (``log_total_mass`` present) but nothing formed. Same
         # eager-only / ConcretizationTypeError-guarded pattern as the
@@ -5112,11 +5112,6 @@ class StellarSEDComponent:
         _tab_lbt_yr = None
         _tab_order = None
         if self.config.sfh_model == "table":
-            if self.config.field:
-                raise NotImplementedError(
-                    "sfh_model='table' with field=True is not supported: the "
-                    "GP field draw modulates parametric SFHs only (#996)."
-                )
             sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
 
         # On the flat-form path, lgmet_scatter kwarg sets the Fixed default for
@@ -5145,7 +5140,9 @@ class StellarSEDComponent:
             n_grid = self.config.n_grid
             log_age_grid = make_log_age_grid(n_grid)
             sfh_lbt_grid = 10.0**log_age_grid
-            sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+            # ``sfh_fn`` is the routed history: the runtime table for a tabulated
+            # SFH (#3505), else the registry function.
+            sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
             sfr_history = _apply_gp_field(
                 sfr_history, params, n_grid, log_age_grid, self.config.field_centering
             )
@@ -5207,7 +5204,9 @@ class StellarSEDComponent:
         # function never sees a composite (list) ``sfh_model``: indexing
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
-        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
+        total_mass = _pin_table_mass(
+            total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr, field=self.config.field
+        )
         return joint_weights, total_mass, ssp_ages_yr, younger_fraction
 
     def _agb_dust_cube_ratio(self, params, ssp_flux):
