@@ -196,6 +196,11 @@ _FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
 )
 
 
+def _is_concrete_zero(value) -> bool:
+    """True when ``value`` is a concrete zero; a traced value is never known to be zero."""
+    return not isinstance(value, jax.core.Tracer) and float(value) == 0.0
+
+
 def _nebular_continuum_consumers(chain):
     """Components that read ``sed_nebular``, excluding the nebular component itself.
 
@@ -8991,7 +8996,15 @@ class SEDModel:
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
     def predict_spectral_indices(
-        self, params, index_defs, *, state=None, approx=False, fast=UNSET, fixed_values=None
+        self,
+        params,
+        index_defs,
+        *,
+        state=None,
+        approx=False,
+        fast=UNSET,
+        fixed_values=None,
+        broaden=True,
     ):
         """Predict spectral index values from the model SED.
 
@@ -9037,6 +9050,15 @@ class SEDModel:
             Spelled ``fast`` until 2026-08.
         fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
+        broaden : bool, default True
+            Measure each index on the rest-frame SED broadened by the model's
+            ``sigma_v_kms`` (#3466), so the model index is comparable with an observed
+            index measured at its own dispersion. ``broaden=False`` measures the
+            unbroadened SED, the :math:`\\sigma = 0` index, for data already corrected
+            to :math:`\\sigma = 0`. At ``sigma_v_kms = 0`` the two are identical. The
+            broadening is :func:`~tengri.observation.spectral_indices.broaden_index_sed`.
+            The window-LUT path (``approx=True``) does not broaden, so it raises for a
+            broadened measurement with a nonzero ``sigma_v_kms``.
 
         Returns
         -------
@@ -9057,7 +9079,7 @@ class SEDModel:
         :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
-        from tengri.observation.spectral_indices import measure_index_jax
+        from tengri.observation.spectral_indices import broaden_index_sed, measure_index_jax
 
         approx = resolve_renamed_flag(
             approx,
@@ -9071,7 +9093,22 @@ class SEDModel:
         # grid path gutted (#1665). Same guard as predict_spectrum, this
         # consumer was simply missing from that census.
 
+        # The model's own velocity dispersion (#3466), read from the merged params so a
+        # Fixed or evaluation-time sigma_v_kms is seen the same way as a free one. Only a
+        # broadened measurement needs it, so broaden=False never reads it.
+        sigma_v_kms = (
+            self._get_sigma_v_kms(self._evaluation_params(params, fixed_values))
+            if broaden
+            else 0.0
+        )
+
         if approx:
+            if broaden and not _is_concrete_zero(sigma_v_kms):
+                raise ValueError(
+                    "predict_spectral_indices(approx=True) measures the window LUT, which "
+                    "does not broaden the SED by sigma_v_kms. Use approx=False, or pass "
+                    "broaden=False for the sigma = 0 index (#3466)."
+                )
             return self._feature_fast_indices(params, tuple(index_defs), fixed_values=fixed_values)
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -9095,6 +9132,8 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
+        if broaden:
+            flux_rest = broaden_index_sed(wave_rest, flux_rest, sigma_v_kms)
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]
         return jnp.array(indices)

@@ -1271,6 +1271,55 @@ def measure_indices_from_window_lut(
     return measure_indices_from_point_terms(point_terms, precomp)
 
 
+def broaden_index_sed(
+    wave_rest: jnp.ndarray,
+    flux: jnp.ndarray,
+    sigma_v_kms: jnp.ndarray | float,
+    n_bins: int = 16,
+) -> jnp.ndarray:
+    r"""Broaden a rest-frame SED by the model velocity dispersion before an index is measured.
+
+    Shared by :meth:`~tengri.SEDModel.predict_spectral_indices` (and so by the index
+    likelihood, which calls it). Lick indices are defined at :math:`\sigma = 0`
+    (Trager et al. 1998), while an observed index carries the dispersion of its
+    spectrum. Broadening the model SED by its own :math:`\sigma_v` makes the model
+    index directly comparable with that observed index (#3466).
+
+    The kernel is the spectrum path's Gaussian in :math:`\ln\lambda`
+    (:func:`~tengri.observation.spectrum.broaden_velocity_only`). The effective
+    width follows the spectrum path's quadrature rule,
+    :math:`\sigma_{\rm eff}^2 = \max(\sigma_{\rm inst}^2 - \sigma_{\rm lib}^2, 0)
+    + \sigma_v^2`, with the index system taken at the SSP library resolution. The
+    first term then vanishes and :math:`\sigma_{\rm eff} = \sigma_v`. An index
+    observation does not declare an instrument resolution.
+
+    Parameters
+    ----------
+    wave_rest : ndarray, shape (n,)
+        Rest-frame wavelengths [Angstrom], strictly increasing.
+    flux : ndarray, shape (n,)
+        Rest-frame SED, any consistent per-frequency or per-wavelength units.
+    sigma_v_kms : float or ndarray
+        Model velocity dispersion [km/s]. Non-positive returns ``flux`` unchanged,
+        bit-for-bit.
+    n_bins : int, default 16
+        Piecewise-constant segment count, as in the spectrum path.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Broadened SED, same units as ``flux``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, in ``sigma_v_kms``, including at
+    zero (the kernel is selected with ``jnp.where``).
+    """
+    from tengri.observation.spectrum import broaden_velocity_only
+
+    return broaden_velocity_only(flux, wave_rest, sigma_v_kms, n_bins)
+
+
 # ── Observed data container ───────────────────────────────────────
 
 
@@ -1303,6 +1352,18 @@ class SpectralIndexData:
 
     Notes
     -----
+    **Velocity-dispersion convention (#3466)**: ``values`` are the indices as
+    measured on the observed spectrum, at its own velocity dispersion. They are
+    not corrected to :math:`\\sigma = 0`. The model index that
+    :meth:`~tengri.SEDModel.predict_spectral_indices` returns is measured on the
+    rest-frame SED broadened by the model's ``sigma_v_kms`` (the default,
+    ``broaden=True``), so the two are compared like with like. Pass
+    ``broaden=False`` for the unbroadened, :math:`\\sigma = 0` model index, which
+    is the right comparison only for data already corrected to :math:`\\sigma = 0`.
+    ``sigma_v_kms`` is free in an index-only fit when declared the way the
+    spectrum path declares it, ``model.spec.merge_observation_params(
+    sigma_v_kms=Uniform(0.0, 2000.0))``.
+
     **Immutable container**: All fields are read-only by convention. Construct
     once with validated data, do not modify.
 
