@@ -8979,7 +8979,7 @@ class SEDModel:
             grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
             baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
-            GP-field SFH, an evolving [alpha/Fe]) **raises** ``ValueError`` rather than
+            GP-field SFH) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
             use ``approx=False`` there. Slope indices are filled from the exact
             SED (they are not window-LUT-expressible).
