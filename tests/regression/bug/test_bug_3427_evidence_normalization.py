@@ -44,6 +44,8 @@ from tengri.inference.likelihoods import (
     StudentTLikelihood,
 )
 
+pytestmark = pytest.mark.regression_bug
+
 _BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 _TRUE_LOGM = 10.0
 _GRID = np.linspace(9.0, 11.0, 20001)

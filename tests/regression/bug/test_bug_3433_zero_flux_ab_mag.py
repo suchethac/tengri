@@ -110,6 +110,7 @@ def test_grad_finite_at_positive_flux():
     """d m / d F_nu is finite where the flux is positive."""
     grad = jax.grad(lambda f: fnu_to_ab_mag(f))(jnp.asarray(1.5e-19, dtype=jnp.float64))
     assert bool(jnp.isfinite(grad))
+    assert bool(grad != 0.0)
 
 
 def test_grad_finite_at_zero_flux():
@@ -121,3 +122,5 @@ def test_grad_finite_at_zero_flux():
         jnp.asarray([0.0, 1.5e-19], dtype=jnp.float64)
     )
     assert bool(jnp.all(jnp.isfinite(grad)))
+    # The positive-flux entry carries the gradient; the zero-flux entry is zero by construction.
+    assert bool(jnp.any(grad != 0.0))
