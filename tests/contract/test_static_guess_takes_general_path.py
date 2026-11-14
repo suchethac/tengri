@@ -165,6 +165,11 @@ ALLOWLIST: dict[str, str] = {
     "analysis/simulate.py::_host_scalar": (
         "traced value is returned unchanged; only a concrete value becomes a Python float"
     ),
+    "analysis/simulate.py::_check_metallicity_on_grid": (
+        "a traced history or metallicity skips only the off-grid refusal/warning, which needs "
+        "values to compare with the grid; the SED itself is computed by the same "
+        "tabulated_history_weights call as a concrete input (#3467, #3462)"
+    ),
     "analysis/simulate.py::_select_dust": (
         "traced gate takes jax.lax.cond over the same attenuation (general path); a concrete "
         "gate takes the eager branch"
