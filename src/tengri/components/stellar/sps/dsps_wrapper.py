@@ -1275,6 +1275,8 @@ def _detect_nebular(h5_file, filename: str) -> str:
 _LIBRARY_RESOLUTION_DATA_FILES: dict[str, str] = {
     "miles": "miles.dat",
     "c3k_a": "c3k_afe0.0.dat",
+    "c3k_hr": "c3k_hr.dat",
+    "c3k_lr": "c3k_lr.dat",
 }
 
 
