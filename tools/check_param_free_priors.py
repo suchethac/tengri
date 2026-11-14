@@ -127,6 +127,7 @@ REFUSED: dict[str, tuple[str, str]] = {
     "xray_gamma_lmxb": ("fixed-by-physics", "Lehmer+2016 population constant; see xray_det_lmxb"),
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
+    "met_alpha_fe_old": ("fixed-by-physics", "as met_alpha_fe"),
     # ── target-dependent: the bound is set by the source, not by physics ──
     # The SF-onset lookbacks that used to sit here are freed as fractions of
     # the age of the universe at z (#2748, *_frac); their *_gyr names are

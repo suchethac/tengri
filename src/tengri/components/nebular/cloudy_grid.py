@@ -134,6 +134,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
@@ -753,6 +754,7 @@ class CloudyGridBackend(NebularBackendDefaults):
 
         This avoids recomputing the ionizing integral at every inference step.
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cloudy (CloudyGridBackend)")
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
         # class keeps its ionizing continuum, so no physics heuristic can

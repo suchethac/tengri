@@ -11,12 +11,16 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
+from tengri.config.exceptions import ConfigError
 from tengri.utils.host_array import host_array
 
 # numpy < 2.0 compat: numpy 2.0 removed `trapz`; numpy >= 1.26 provides `trapezoid`.
@@ -64,7 +68,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: of the key, so the young-only tables written under version 3 are never served.
 _IONSPEC_CACHE_VERSION = 4
 
-_IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
+_IONSPEC_TABLE_CACHE: dict[tuple, Mapping] = {}
 
 #: :func:`~tengri.components.lyc.edge_trapezoid` traced once per integrand shape. The
 #: table builder calls it from NumPy code, once per fitted bin and once per chunk of old
@@ -446,6 +450,44 @@ HI_LIMIT = LYMAN_LIMIT_AA
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
+
+
+def require_ionizing_coverage(ssp_wave, *, backend: str) -> None:
+    """Refuse an SSP wavelength axis with no point at or below the Lyman limit (#3444).
+
+    Parameters
+    ----------
+    ssp_wave : array_like, shape (n_wave,)
+        SSP wavelength axis [Angstrom].
+    backend : str
+        Name of the photoionized backend that asks, quoted in the error.
+
+    Raises
+    ------
+    ConfigError
+        If no wavelength is at or below ``HI_LIMIT`` [Angstrom]. Such a grid has no
+        ionizing spectrum, so the backend cannot predict nebular emission from it.
+
+    Notes
+    -----
+    The mask is the same ``wave <= HI_LIMIT`` the ionizing-table builder uses, so the
+    check and the builder cannot disagree. Pure NumPy, no JAX transform.
+    """
+    wave_axis = np.asarray(ssp_wave, dtype=np.float64)
+    if np.any(wave_axis <= HI_LIMIT):
+        return
+    raise ConfigError(
+        f"neb backend '{backend}' cannot use this SSP grid: its wavelength axis "
+        f"starts at {wave_axis.min():.6g} A, above the Lyman limit at {HI_LIMIT:.0f} A, "
+        "so it carries no ionizing spectrum from which to predict nebular emission. "
+        "A grid truncated above the limit is not a dark grid, so the build is refused.\n"
+        "\n"
+        "Fix (one of):\n"
+        "  1. Use an SSP grid whose wavelength axis extends below 912 A.\n"
+        "  2. Use a nebular backend that does not need the ionizing spectrum.\n"
+        "  3. Drop the nebular emission: neb={'type': 'none'}."
+    )
+
 
 # Cue-emulator range of the 7 ionizing-shape parameters, used to clip the
 # auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is never
@@ -924,13 +966,30 @@ def _share_nearest_fit(
         logq[im, todo] = exact
 
 
+def _memoize_ionspec_table(key: tuple, table: dict) -> Mapping:
+    """Store ``table`` in the process memo as a read-only mapping and return it.
+
+    The memo is shared by every model built on the same SSP content, and callers
+    key their own bookkeeping on the identity of the entry, so the same object is
+    returned every time. It must therefore not be writable: the mapping refuses
+    assignment and the arrays are marked read-only. A caller that wants to change
+    a field copies first (``dict(table)``).
+    """
+    for value in table.values():
+        if isinstance(value, np.ndarray):
+            value.setflags(write=False)
+    frozen = MappingProxyType(table)
+    _IONSPEC_TABLE_CACHE[key] = frozen
+    return frozen
+
+
 def precompute_ionizing_params_table(
     ssp_wave: np.ndarray,
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
     ssp_log_age_yr: np.ndarray | None = None,
     max_log_age: float | None = None,
-) -> dict:
+) -> Mapping:
     """Precompute Cue ionizing parameters for a full SSP grid.
 
     Batch-fits piecewise power laws to (metallicity, age) SSP spectra. Bins up to
@@ -1020,8 +1079,7 @@ def precompute_ionizing_params_table(
         return cached
     disk_cached = _load_ionspec_disk(key)
     if disk_cached is not None:
-        _IONSPEC_TABLE_CACHE[key] = disk_cached
-        return disk_cached
+        return _memoize_ionspec_table(key, disk_cached)
 
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
@@ -1109,9 +1167,8 @@ def precompute_ionizing_params_table(
         "n_met": n_met,
         "n_age": n_age,
     }
-    _IONSPEC_TABLE_CACHE[key] = result
     _store_ionspec_disk(key, result)
-    return result
+    return _memoize_ionspec_table(key, result)
 
 
 def _cell_fraction(target, grid, idx):

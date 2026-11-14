@@ -67,9 +67,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 
 from tengri.protocols.component import ForwardState, ParamDeclaration
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, _check_chunk_size
 
 __all__ = ["PopulationSEDModel"]
 
@@ -403,15 +405,22 @@ class PopulationSEDModel:
         self,
         state: ForwardState,
         params: Mapping[str, Any],
+        *,
+        chunk_size: int = GALAXY_CHUNK_SIZE,
     ) -> ForwardState:
-        """Forward-time batched SED across the population (via ``jax.vmap``).
+        """Forward-time batched SED across the population, in galaxy chunks.
 
         Each population-level parameter is either ``shared`` (one value,
-        broadcast across the N galaxies via vmap ``in_axes=None``) or
-        per-galaxy (an array of length N, vmap ``in_axes=0``). The
-        returned :class:`ForwardState` has a leading ``N_galaxies``
-        axis on every per-galaxy quantity (``sed_intrinsic``,
-        ``sed_observed``, ``sed_attenuated``, etc.).
+        broadcast to every galaxy) or per-galaxy (an array of length N,
+        mapped over the galaxy axis). The returned :class:`ForwardState`
+        has a leading ``N_galaxies`` axis on every array leaf
+        (``sed_intrinsic``, ``sed_observed``, ``sed_attenuated``, ...).
+
+        The population is evaluated ``chunk_size`` galaxies at a time: the
+        per-galaxy axis is padded to a whole number of chunks, reshaped to
+        ``(n_chunks, chunk_size)`` and looped with :func:`jax.lax.map`, each
+        chunk a ``vmap`` of :meth:`predict_one`. The padding is trimmed
+        before return.
 
         See ``docs/internal/plans/2026-05-22-population-sed-batched-forward.md``
         for the design rationale.
@@ -425,6 +434,13 @@ class PopulationSEDModel:
             Per-parameter values. Shared params are scalars; per-galaxy
             params are length-N arrays. ``parameter_axes(params)``
             returns the vmap-axis dict.
+        chunk_size : int, default ``GALAXY_CHUNK_SIZE`` (32)
+            Galaxies per compiled chunk. Peak memory scales with this:
+            each galaxy holds one ``(n_age, n_wave)`` per-age cube, about
+            8 MB on the tutorial 02 model, so a chunk of 32 holds about
+            256 MB of cubes where the unchunked population of N = 1000
+            holds about 8 GB. Must be a positive int; ``None`` and
+            non-int values raise ``ValueError``.
 
         Returns
         -------
@@ -432,23 +448,62 @@ class PopulationSEDModel:
             Batched state: every per-galaxy quantity has a leading
             ``N_galaxies`` axis.
 
+        Raises
+        ------
+        ValueError
+            If ``chunk_size`` is not a positive int, or no parameter is
+            per-galaxy (there is no galaxy axis to map over).
+
         Notes
         -----
-        JIT/grad/vmap-compatible.
+        JIT/grad/vmap-compatible: the chunk loop is one ``lax.map``, so
+        the traced program holds one chunk body whatever N is, and
+        ``run`` may sit inside an outer ``jit``, ``grad`` or ``vmap``
+        with no unrolling. The template's ``run`` must be traceable (the
+        same requirement as the unchunked ``vmap``).
+
+        Chunking is not bit-neutral: XLA compiles a different kernel for
+        each chunk shape, so changing ``chunk_size`` can move the last
+        bit (about 1 ULP). Pin ``chunk_size`` when bit-for-bit
+        reproducibility matters.
 
         Notes (composability)
         ---------------------
-        This method is the default convenience path; it vmaps
-        :meth:`predict_one` over the galaxy axis. For multi-device
-        sharding, catalog × hierarchical fits, or any case where you
-        need to compose outer batching, call :meth:`predict_one`
+        This method is the default convenience path; it maps
+        :meth:`predict_one` over the galaxy axis in chunks. For
+        multi-device sharding, catalog × hierarchical fits, or any case
+        where you need to compose outer batching, call :meth:`predict_one`
         directly with your own ``vmap`` / ``pmap`` / ``shard_map``.
         The :attr:`batched_axes` property publishes the axis layout
         so external code can stay axis-aware.
         """
-        import jax
-
         in_axes_params = self.parameter_axes(params)
-        # State is broadcast across the population (one wavelength grid,
-        # one upstream state); params follow their per-parameter axes.
-        return jax.vmap(self.predict_one, in_axes=(None, in_axes_params))(state, params)
+        per_galaxy = {name: value for name, value in params.items() if in_axes_params[name] == 0}
+        shared_params = {name: value for name, value in params.items() if name not in per_galaxy}
+
+        _check_chunk_size(chunk_size)
+        leaves = jax.tree_util.tree_leaves(per_galaxy)
+        if not leaves:
+            raise ValueError("PopulationSEDModel.run: no per-galaxy parameter to map over")
+        n_galaxies = leaves[0].shape[0]
+        size = min(chunk_size, n_galaxies)
+        n_chunks = -(-n_galaxies // size)
+        n_padded = n_chunks * size
+        # Padding rows are copies of galaxy 0 (a real, finite row) and are trimmed below.
+        source = jnp.where(jnp.arange(n_padded) < n_galaxies, jnp.arange(n_padded), 0)
+        chunked = jax.tree_util.tree_map(
+            lambda x: x[source].reshape((n_chunks, size, *x.shape[1:])), per_galaxy
+        )
+
+        def _one_chunk(params_chunk):
+            def _one_galaxy(params_one):
+                return self.predict_one(state, {**shared_params, **params_one})
+
+            return jax.vmap(_one_galaxy)(params_chunk)
+
+        # ``lax.map`` compiles one chunk body and loops it: the same program inside or
+        # outside an outer jit/grad, with no per-chunk copies in the trace.
+        out = jax.lax.map(_one_chunk, chunked)
+        return jax.tree_util.tree_map(
+            lambda y: y.reshape((n_padded, *y.shape[2:]))[:n_galaxies], out
+        )

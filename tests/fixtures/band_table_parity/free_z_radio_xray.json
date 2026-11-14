@@ -5,7 +5,7 @@
   "xray_delta_alpha_ox": -1.8986232452627305
  },
  "platform": "darwin-arm64",
- "signature_sha256": "1248587b2289a970db650fd82e52f0a1f3952860f4dfdd47b84dacfbbfb8809b",
+ "signature_sha256": "b3475b59f8fbe816f27225ef99b0d32a74c1ab94bf9ed535fc7383600fc4394e",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n  - radio: ENGAGED\n  - xray: DECLINED\n    Reason: free xray parameters: ['xray_delta_alpha_ox']\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission, agn, radio, xray\n  dust_emission_configured: True\n  free_params: redshift, sfh_dpl_log_total_mass, xray_delta_alpha_ox\n  igm_fold: declared=auto, resolved=None\n  redshift_free: True\n  wave_precomp_enabled: True\n  ztable_enabled: True",
  "tree": [
   {

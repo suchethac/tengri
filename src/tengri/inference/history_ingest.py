@@ -157,11 +157,11 @@ def met_to_logzsol(met, met_unit):
     where :math:`Z` is the metal mass fraction [dimensionless] and
     :math:`\\log_{10} Z_\\odot = -1.848`.
 
-    Per-library solar references differ (BC03/Padova 0.0190, PARSEC 0.0152,
-    BASTI 0.0200; see ``LOG10_ZSUN_BY_LIBRARY``). This function deliberately
-    uses the one constant the forward model uses, so ingest and forward agree;
-    a caller pinning a cross-code comparison should pass ``log_z_abs`` and do
-    its own offset.
+    The solar value is 0.0142 on every SSP grid, the one constant the forward
+    model uses, so ingest and forward agree. Libraries quote their own nodes
+    against other solar scales (BC03/Padova 0.0190, PARSEC 0.0152, BASTI
+    0.0200; ``LOG10_ZSUN_BY_LIBRARY``); a caller pinning a cross-code
+    comparison should pass ``log_z_abs``.
     """
     if met_unit not in MET_UNITS:
         raise ValueError(

@@ -371,6 +371,7 @@ def test_alpha_axis_grid_without_table_never_takes_the_companion(tmp_path):
         f["ssp_lg_age_gyr"] = age - 9.0
         f["ssp_lgmet"] = logz
         f["ssp_alpha_fe"] = np.array([0.0, 0.2, 0.4])
+        f.attrs["metallicity_axis"] = "total Z: synthetic"
     with pytest.raises(ValueError, match=r"alpha/Fe"):
         _load_ssp_data(str(path))
 
