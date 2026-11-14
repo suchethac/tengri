@@ -526,18 +526,33 @@ def test_reddy15_clip_zero_is_a_breakpoint():
     assert float(reddy15(jnp.asarray(25700.0))) > 0.0
 
 
+#: Flagged-pixel diagnostic with an instrument kernel applied. The instrument stage alone is
+#: exact to 6e-16; the 4.4e-10 left at R = 2000 is the round-off of the lattice cumulative
+#: (the cumulative integral that the lattice cell means difference), so the bar is 1e-9 there.
+_FLAGGED_TOL_INSTRUMENT = 1e-9
+
+
 @pytest.mark.parametrize(
-    "wave_obs", [pytest.param(_SDSS, id="sdss"), pytest.param(_UV, id="uv")]
+    ("wave_obs", "resolution", "tol"),
+    [
+        pytest.param(_SDSS, None, _FLAGGED_TOL, id="sdss"),
+        pytest.param(_UV, None, _FLAGGED_TOL, id="uv"),
+        pytest.param(_SDSS, 2000.0, _FLAGGED_TOL_INSTRUMENT, id="sdss-R2000"),
+    ],
 )
-def test_hd23_flagged_pixels_are_exact(wave_obs):
-    """Every hd23 pixel the table flags is the exact path's to the flagged bar (#3413)."""
+def test_hd23_flagged_pixels_are_exact(wave_obs, resolution, tol):
+    """Every hd23 pixel the table flags is the exact path's to the flagged bar (#3413).
+
+    With an instrument kernel the bar is 1e-9: the kernel stage is exact to 6e-16, and the
+    4.4e-10 measured at R = 2000 is the lattice cumulative's round-off.
+    """
     from tengri import load_ssp_data
 
     _require_data(False)
     ssp = load_ssp_data(_BARE_SSP)
     dust_kind = "single:hd23_mwrv31"
-    exact = _model(ssp, wave_obs, None, 150.0, dust_kind, False, None)
-    lut = _model(ssp, wave_obs, None, 150.0, dust_kind, False, SpectrumPrecomp())
+    exact = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, None)
+    lut = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, SpectrumPrecomp())
     layout = lut._spectrum_flagged_pixels()
     assert layout is not None and layout.pixels.size > 0
     base = {
@@ -551,8 +566,8 @@ def test_hd23_flagged_pixels_are_exact(wave_obs):
     floor = _FLOOR * np.max(np.abs(j_e), axis=0, keepdims=True)
     jac_err = float(np.max((np.abs(j_l - j_e) / np.maximum(np.abs(j_e), floor))[px]))
     print(f"\nhd23 flagged {px.tolist()}: flux {flux_err:.3e}  jacobian {jac_err:.3e}")
-    assert flux_err <= _FLAGGED_TOL, f"flagged flux rel err {flux_err:.3e}"
-    assert jac_err <= _FLAGGED_TOL, f"flagged Jacobian rel err {jac_err:.3e}"
+    assert flux_err <= tol, f"flagged flux rel err {flux_err:.3e}"
+    assert jac_err <= tol, f"flagged Jacobian rel err {jac_err:.3e}"
 
 
 #: Single-screen laws whose tabulated or piecewise curve has a kink the table must split (#3413).
